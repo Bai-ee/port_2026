@@ -380,7 +380,8 @@ const StackedSlidesSection = () => {
                           ))}
                         </div>
                         <div data-quote-section style={quoteSectionStyle}>
-                          <div className="section-header-block" style={workHistoryHeaderStyle}>
+                          <div className="section-header-block" data-hover-item style={workHistoryHeaderStyle}>
+                            <img data-hover-image src="https://picsum.photos/seed/balli-benefits/600/700" alt="" style={{ display: 'none' }} />
                             <span style={workHistoryEyebrowStyle}>What You Get</span>
                             <h2 style={workHistoryHeadlineStyle}>Here's What You Get With Me In The Loop</h2>
                           </div>
@@ -404,7 +405,8 @@ const StackedSlidesSection = () => {
                         </ul>
 
                         <div id="work-history-shell" style={workHistoryShellStyle}>
-                          <div className="section-header-block" style={workHistoryHeaderStyle}>
+                          <div className="section-header-block" data-hover-item style={workHistoryHeaderStyle}>
+                            <img data-hover-image src="https://picsum.photos/seed/balli-experience/600/700" alt="" style={{ display: 'none' }} />
                             <span style={workHistoryEyebrowStyle}>Background</span>
                             <h2 style={workHistoryHeadlineStyle}>Selected Experience</h2>
                           </div>
@@ -426,7 +428,8 @@ const StackedSlidesSection = () => {
                         </div>
 
                         <div id="testimonials-shell" style={testimonialsShellStyle}>
-                          <div className="section-header-block" style={workHistoryHeaderStyle}>
+                          <div className="section-header-block" data-hover-item style={workHistoryHeaderStyle}>
+                            <img data-hover-image src="https://picsum.photos/seed/balli-clients/600/700" alt="" style={{ display: 'none' }} />
                             <span style={workHistoryEyebrowStyle}>Social Proof</span>
                             <h2 style={workHistoryHeadlineStyle}>What Clients Say</h2>
                           </div>
@@ -468,7 +471,8 @@ const StackedSlidesSection = () => {
                         </div>
 
                         <div id="rate-cards-shell" style={rateCardShellStyle}>
-                          <div className="section-header-block" style={rateCardHeaderStyle}>
+                          <div className="section-header-block" data-hover-item style={rateCardHeaderStyle}>
+                            <img data-hover-image src="https://picsum.photos/seed/balli-engage/600/700" alt="" style={{ display: 'none' }} />
                             <span style={rateCardEyebrowStyle}>The Process</span>
                             <h2 style={rateCardHeadlineStyle}>How to Engage...</h2>
                             <p style={rateCardSubtextStyle}>No deck, no intake form, no agency runaround. Here's how most engagements actually start.</p>
