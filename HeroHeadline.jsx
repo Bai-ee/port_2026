@@ -55,7 +55,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       <div
         id="hero-panel-top-left"
         ref={topLeftRef}
-        style={{ ...glass, top: topEdge, left: edge, width: '50vw', maxWidth: '50vw', background: 'none', backdropFilter: 'none', WebkitBackdropFilter: 'none', border: 'none', boxShadow: 'none', padding: 0 }}
+        style={{ ...glass, top: topEdge, left: edge, width: 'max(55vw, 240px)', maxWidth: 'max(55vw, 240px)', background: 'none', backdropFilter: 'none', WebkitBackdropFilter: 'none', border: 'none', boxShadow: 'none', padding: 0 }}
       >
         <h1 style={{
           fontWeight: 700,
@@ -64,7 +64,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
           lineHeight: 1.05,
           color: textColor,
           margin: 0,
-          fontSize: 'clamp(3.4rem, 4.8vw, 4.4rem)',
+          fontSize: 'clamp(1.9rem, 9.3vw, 4.4rem)',
           textTransform: 'none',
         }}>
           Creative Technologist<br />& Digital Media<br />Consultant
