@@ -45,9 +45,11 @@ const HorizontalGallery = () => {
     const viewport = viewportRef.current;
     const canvas = canvasRef.current;
 
-    const ctx = gsap.context(() => {
+    const ctx = gsap.context(() => {}, section);
+    const media = gsap.matchMedia();
+
+    const createGalleryScrollTrigger = (isMobile) => {
       const getDistance = () => Math.max(0, track.scrollWidth - window.innerWidth);
-      const isMobile = window.innerWidth < 768;
       const getTravelDistance = () => {
         const baseDistance = Math.max(getDistance(), window.innerWidth * (isMobile ? 0.65 : 0.85));
         return Math.max(window.innerHeight * 0.8, baseDistance);
@@ -62,7 +64,7 @@ const HorizontalGallery = () => {
         paused: true,
       });
 
-      ScrollTrigger.create({
+      const scrollTrigger = ScrollTrigger.create({
         trigger: stage,
         pin: true,
         start: () => `top-=${window.innerHeight * 0.28} top`,
@@ -81,7 +83,16 @@ const HorizontalGallery = () => {
           moveTween.progress(eased);
         },
       });
-    }, section);
+
+      return () => {
+        scrollTrigger.kill();
+        moveTween.kill();
+        gsap.set(track, { x: 0 });
+      };
+    };
+
+    media.add('(max-width: 767px)', () => createGalleryScrollTrigger(true));
+    media.add('(min-width: 768px)', () => createGalleryScrollTrigger(false));
 
     const particleRenderer = createSharedParticleGalleryRenderer({
       canvas,
@@ -92,20 +103,75 @@ const HorizontalGallery = () => {
 
     const refresh = () => ScrollTrigger.refresh();
     let frameId = 0;
+    let isLoopActive = false;
+    let isVisible = false;
 
     const renderFrame = (time) => {
+      if (!isLoopActive) {
+        return;
+      }
+
       particleRenderer.render(time * 0.001);
       frameId = window.requestAnimationFrame(renderFrame);
     };
 
+    const stopRenderLoop = () => {
+      isLoopActive = false;
+
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+        frameId = 0;
+      }
+    };
+
+    const startRenderLoop = () => {
+      if (isLoopActive || !isVisible || document.hidden) {
+        return;
+      }
+
+      isLoopActive = true;
+      frameId = window.requestAnimationFrame(renderFrame);
+    };
+
+    const visibilityObserver = new IntersectionObserver(
+      ([entry]) => {
+        isVisible = entry?.isIntersecting ?? false;
+
+        if (isVisible) {
+          startRenderLoop();
+          return;
+        }
+
+        stopRenderLoop();
+      },
+      {
+        root: null,
+        threshold: 0,
+        rootMargin: '200px 0px',
+      }
+    );
+
+    const handleDocumentVisibility = () => {
+      if (document.hidden) {
+        stopRenderLoop();
+        return;
+      }
+
+      startRenderLoop();
+    };
+
     requestAnimationFrame(refresh);
     window.addEventListener('resize', refresh);
-    frameId = window.requestAnimationFrame(renderFrame);
+    document.addEventListener('visibilitychange', handleDocumentVisibility);
+    visibilityObserver.observe(stage);
 
     return () => {
-      window.cancelAnimationFrame(frameId);
+      stopRenderLoop();
+      visibilityObserver.disconnect();
+      document.removeEventListener('visibilitychange', handleDocumentVisibility);
       window.removeEventListener('resize', refresh);
       particleRenderer.dispose();
+      media.revert();
       ctx.revert();
     };
   }, []);

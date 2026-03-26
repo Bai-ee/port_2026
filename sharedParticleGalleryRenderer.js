@@ -322,20 +322,39 @@ export const createSharedParticleGalleryRenderer = ({
   params = {},
 }) => {
   const baseParams = { ...DEFAULT_PARAMS, ...params };
+  const isMobile = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia('(max-width: 767px), (pointer: coarse)').matches
+    : false;
+  const prefersReducedMotion = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    : false;
+  const particleCountScale = prefersReducedMotion ? 0.45 : isMobile ? 0.72 : 1;
+  const maxDpr = prefersReducedMotion ? 1 : isMobile ? 1.1 : 1.5;
   const renderer = new THREE.WebGLRenderer({
     canvas,
-    antialias: true,
+    antialias: !isMobile && !prefersReducedMotion,
     alpha: true,
     powerPreference: 'high-performance',
   });
   const geometry = new THREE.SphereGeometry(baseParams.particleSize, 12, 12);
   const material = createMaterial();
   const systems = SYSTEM_PRESETS.map((preset) => {
+    const optimizedCount = Math.max(
+      240,
+      Math.round((preset.particleCount ?? baseParams.particleCount) * particleCountScale)
+    );
+
     return createParticleSystem({
       geometry,
       material,
-      baseParams,
-      preset,
+      baseParams: {
+        ...baseParams,
+        particleCount: optimizedCount,
+      },
+      preset: {
+        ...preset,
+        particleCount: optimizedCount,
+      },
     });
   });
 
@@ -350,7 +369,7 @@ export const createSharedParticleGalleryRenderer = ({
   const syncDisplaySize = () => {
     const nextWidth = Math.max(1, Math.round(container.clientWidth));
     const nextHeight = Math.max(1, Math.round(container.clientHeight));
-    const nextRatio = Math.min(window.devicePixelRatio || 1, 1.5);
+    const nextRatio = Math.min(window.devicePixelRatio || 1, maxDpr);
 
     if (
       nextWidth === displayWidth &&
@@ -391,28 +410,35 @@ export const createSharedParticleGalleryRenderer = ({
     }
   };
 
-  const renderWindow = (windowElement, system, containerRect) => {
-    if (!windowElement) {
-      return;
-    }
-
-    const rect = windowElement.getBoundingClientRect();
+  const getVisibleBounds = (rect, containerRect) => {
     const visibleLeft = Math.max(0, rect.left - containerRect.left);
-    const visibleTop = Math.max(0, rect.top - containerRect.top);
     const visibleRight = Math.min(containerRect.width, rect.right - containerRect.left);
     const visibleBottom = Math.min(containerRect.height, rect.bottom - containerRect.top);
     const visibleWidth = visibleRight - visibleLeft;
-    const visibleHeight = visibleBottom - visibleTop;
+    const visibleHeight = visibleBottom - Math.max(0, rect.top - containerRect.top);
 
     if (visibleWidth <= 1 || visibleHeight <= 1) {
+      return null;
+    }
+
+    return {
+      visibleLeft,
+      visibleBottom,
+      visibleWidth,
+      visibleHeight,
+    };
+  };
+
+  const renderWindow = (system, bounds) => {
+    if (!bounds) {
       return;
     }
 
-    system.camera.aspect = visibleWidth / visibleHeight;
+    system.camera.aspect = bounds.visibleWidth / bounds.visibleHeight;
     system.camera.updateProjectionMatrix();
 
-    renderer.setViewport(visibleLeft, displayHeight - visibleBottom, visibleWidth, visibleHeight);
-    renderer.setScissor(visibleLeft, displayHeight - visibleBottom, visibleWidth, visibleHeight);
+    renderer.setViewport(bounds.visibleLeft, displayHeight - bounds.visibleBottom, bounds.visibleWidth, bounds.visibleHeight);
+    renderer.setScissor(bounds.visibleLeft, displayHeight - bounds.visibleBottom, bounds.visibleWidth, bounds.visibleHeight);
     renderer.render(system.scene, system.camera);
   };
 
@@ -434,8 +460,20 @@ export const createSharedParticleGalleryRenderer = ({
     const containerRect = container.getBoundingClientRect();
 
     systems.forEach((system, index) => {
+      const windowElement = windows[index];
+
+      if (!windowElement) {
+        return;
+      }
+
+      const bounds = getVisibleBounds(windowElement.getBoundingClientRect(), containerRect);
+
+      if (!bounds) {
+        return;
+      }
+
       updateSystem(system, elapsed + index * 0.17);
-      renderWindow(windows[index], system, containerRect);
+      renderWindow(system, bounds);
     });
   };
 

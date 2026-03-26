@@ -3,24 +3,34 @@ import gsap from 'gsap';
 
 const items = [
   {
-    image: 'https://assets.codepen.io/16327/portrait-image-8.jpg',
-    title: 'restart reverse scrub pin markers overwrite modifiers',
+    index: '01',
+    image: 'https://picsum.photos/seed/balli-workflow/600/700',
+    title: 'AI Workflows Designed Around Human Judgment',
+    category: 'Systems Design',
   },
   {
-    image: 'https://assets.codepen.io/16327/portrait-image-3.jpg',
-    title: 'toggleActions start end once refresh from to',
+    index: '02',
+    image: 'https://picsum.photos/seed/balli-interactive/600/700',
+    title: 'Interactive Builds Shipped at Campaign Speed',
+    category: 'Interactive',
   },
   {
-    image: 'https://assets.codepen.io/16327/portrait-image-1.jpg',
-    title: 'ScrollSmoother Flip Draggable SplitText InertiaPlugin',
+    index: '03',
+    image: 'https://picsum.photos/seed/balli-motion/600/700',
+    title: 'Motion Interfaces That Hold Attention',
+    category: 'Motion Design',
   },
   {
-    image: 'https://assets.codepen.io/16327/portrait-image-14.jpg',
-    title: 'onComplete onUpdate quickSetter quickTo utils.toArray',
+    index: '04',
+    image: 'https://picsum.photos/seed/balli-data/600/700',
+    title: 'Data Stories That Explain Themselves',
+    category: 'Visualization',
   },
   {
-    image: 'https://assets.codepen.io/16327/portrait-image-6.jpg',
-    title: 'Power2 Power3 Power4 Back Elastic Bounce Expo Sine',
+    index: '05',
+    image: 'https://picsum.photos/seed/balli-strategy/600/700',
+    title: 'Strategy That Survives Contact with Reality',
+    category: 'Consulting',
   },
 ];
 
@@ -100,9 +110,11 @@ const HoverRevealList = () => {
         {items.map((item) => (
           <li key={item.title} data-hover-item style={itemStyle}>
             <img data-hover-image src={item.image} alt="" style={imageStyle} />
+            <span style={indexStyle}>{item.index}</span>
             <div style={textWrapStyle}>
               <h3 style={titleStyle}>{item.title}</h3>
             </div>
+            <span style={categoryStyle}>{item.category}</span>
           </li>
         ))}
       </ul>
@@ -112,7 +124,7 @@ const HoverRevealList = () => {
 
 const sectionStyle = {
   position: 'relative',
-  minHeight: '100vh',
+  minHeight: '100dvh',
   marginTop: 0,
   padding: '0 0 10rem',
   boxSizing: 'border-box',
@@ -127,40 +139,66 @@ const listStyle = {
 
 const itemStyle = {
   position: 'relative',
-  display: 'block',
+  display: 'grid',
+  gridTemplateColumns: '3rem 1fr auto',
+  alignItems: 'center',
+  gap: '0 clamp(1rem, 2.5vw, 2.5rem)',
   width: '100%',
-  padding: '2rem clamp(1.5rem, 4vw, 3rem)',
-  borderBottom: '1px solid rgba(245, 241, 223, 0.18)',
+  padding: 'clamp(1.4rem, 2.5vw, 2rem) clamp(1.5rem, 4vw, 3rem)',
+  borderBottom: '1px solid rgba(245, 241, 223, 0.12)',
   boxSizing: 'border-box',
+  cursor: 'default',
 };
 
 const imageStyle = {
   position: 'fixed',
   top: 0,
   left: 0,
-  width: 'clamp(220px, 24vw, 360px)',
-  height: 'clamp(220px, 24vw, 360px)',
+  width: 'clamp(200px, 22vw, 320px)',
+  height: 'clamp(240px, 26vw, 380px)',
   objectFit: 'cover',
   zIndex: 30,
   opacity: 0,
   visibility: 'hidden',
   pointerEvents: 'none',
-  borderRadius: '1.25rem',
-  boxShadow: '0 24px 80px rgba(0, 0, 0, 0.42)',
+  borderRadius: '1rem',
+  boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
+};
+
+const indexStyle = {
+  fontSize: '0.68rem',
+  fontWeight: 500,
+  letterSpacing: '0.06em',
+  color: 'rgba(245, 241, 223, 0.28)',
+  fontVariantNumeric: 'tabular-nums',
+  alignSelf: 'center',
 };
 
 const textWrapStyle = {
-  maxWidth: '72rem',
+  minWidth: 0,
 };
 
 const titleStyle = {
   margin: 0,
   color: '#f5f1df',
-  fontSize: 'clamp(1.3rem, 2.2vw, 2.4rem)',
+  fontSize: 'clamp(1.2rem, 2vw, 2.2rem)',
   lineHeight: 1.05,
   fontWeight: 700,
   letterSpacing: '-0.04em',
   fontFamily: "'Aldrich', system-ui, -apple-system, sans-serif",
+  whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+};
+
+const categoryStyle = {
+  fontSize: '0.72rem',
+  fontWeight: 500,
+  letterSpacing: '0.1em',
+  textTransform: 'uppercase',
+  color: 'rgba(245, 241, 223, 0.35)',
+  whiteSpace: 'nowrap',
+  alignSelf: 'center',
 };
 
 export default HoverRevealList;

@@ -78,22 +78,74 @@ const HomePage = () => {
 
     // Auto-scroll to pinned section when user scrolls >10% of hero
     let autoScrolling = false;
+    let snapTween = null;
+    const runSnap = (targetY) => {
+      if (Math.abs(window.scrollY - targetY) < 2) {
+        return;
+      }
+
+      autoScrolling = true;
+
+      if (snapTween) {
+        snapTween.kill();
+        snapTween = null;
+      }
+
+      snapTween = gsap.to(window, {
+        scrollTo: targetY,
+        duration: 0.65,
+        ease: 'power2.out',
+        autoKill: false,
+        overwrite: 'auto',
+        onComplete: () => {
+          autoScrolling = false;
+          snapTween = null;
+        },
+        onInterrupt: () => {
+          autoScrolling = false;
+          snapTween = null;
+        },
+      });
+    };
+
     const snapTrigger = ScrollTrigger.create({
       trigger: '#hero-section',
       start: () => `top+=${window.innerHeight * 0.1} top`,
       onEnter: () => {
         if (autoScrolling) return;
-        autoScrolling = true;
+
         const panel = document.querySelector('[data-stack-panel]');
         if (!panel) return;
+
+        const panelTrigger = ScrollTrigger.getById('stacked-slides-pin');
         const headerH = window.innerWidth < 768 ? 48 : 64;
-        const targetY = panel.getBoundingClientRect().top + window.scrollY - headerH;
-        gsap.to(window, {
-          scrollTo: targetY,
-          duration: 0.8,
-          ease: 'power1.inOut',
-          onComplete: () => { autoScrolling = false; },
-        });
+        const fallbackTarget = panel.getBoundingClientRect().top + window.scrollY - headerH;
+        const targetY = panelTrigger ? panelTrigger.start : fallbackTarget;
+        runSnap(targetY);
+      },
+    });
+
+    const reverseSnapTrigger = ScrollTrigger.create({
+      trigger: '#hero-section',
+      start: () => {
+        const panelTrigger = ScrollTrigger.getById('stacked-slides-pin');
+        const reverseSnapThreshold = Math.max(28, window.innerHeight * 0.04);
+
+        if (!panelTrigger) {
+          return reverseSnapThreshold;
+        }
+
+        return panelTrigger.start - reverseSnapThreshold;
+      },
+      invalidateOnRefresh: true,
+      onLeaveBack: () => {
+        if (autoScrolling) return;
+
+        const openingTarget = heroSectionRef.current
+          ? heroSectionRef.current.offsetTop
+          : 0;
+
+        runSnap(openingTarget);
       },
     });
 
@@ -103,14 +155,18 @@ const HomePage = () => {
 
     return () => {
       clearTimeout(timer);
+      if (snapTween) {
+        snapTween.kill();
+      }
       tl.kill();
       snapTrigger.kill();
+      reverseSnapTrigger.kill();
     };
   }, []);
 
 
   return (
-    <div style={{ position: 'relative', width: '100vw', minHeight: '100vh', background: 'transparent', overflowX: 'hidden' }}>
+    <div style={{ position: 'relative', width: '100vw', minHeight: '100dvh', background: 'transparent', overflowX: 'hidden' }}>
       <FontSelector />
       <LoopControls params={params} onParamsChange={setParams} backgroundColor={canvasBackground} onBackgroundChange={setCanvasBackground} textColor={textColor} onTextColorChange={setTextColor} />
       {/* Hero Section */}
@@ -120,7 +176,7 @@ const HomePage = () => {
         style={{
           position: 'relative',
           width: '100vw',
-          height: '100vh',
+          height: '100dvh',
           overflow: 'hidden',
           background: 'transparent',
         }}

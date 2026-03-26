@@ -1,10 +1,46 @@
-import React, { useRef, useMemo, useEffect } from 'react';
+import React, { useRef, useMemo, useEffect, useState } from 'react';
 import { Canvas, useFrame, extend, useThree } from '@react-three/fiber';
 import { OrbitControls, Effects } from '@react-three/drei';
 import { UnrealBloomPass } from 'three-stdlib';
 import * as THREE from 'three';
 
 extend({ UnrealBloomPass });
+
+const MOBILE_MEDIA_QUERY = '(max-width: 767px), (pointer: coarse)';
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+
+const useMediaMatch = (query) => {
+  const getMatches = () => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return false;
+    }
+
+    return window.matchMedia(query).matches;
+  };
+
+  const [matches, setMatches] = useState(getMatches);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return undefined;
+    }
+
+    const mediaQuery = window.matchMedia(query);
+    const updateMatches = (event) => setMatches(event.matches);
+
+    setMatches(mediaQuery.matches);
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', updateMatches);
+      return () => mediaQuery.removeEventListener('change', updateMatches);
+    }
+
+    mediaQuery.addListener(updateMatches);
+    return () => mediaQuery.removeListener(updateMatches);
+  }, [query]);
+
+  return matches;
+};
 
 // Component to set scene background color
 const SceneBackground = ({ color }) => {
@@ -52,6 +88,7 @@ const ParticleSwarm = ({ params = {} }) => {
     tireSpinSpeed: 0.5, // speed of tire rotation (0 = static, up to 5 = very fast)
     // Animation params
     animationSpeed: 1.0,
+    sphereSegments: 16,
   };
 
   const PARAMS = useMemo(() => ({ ...defaultParams, ...params }), [params]);
@@ -95,7 +132,9 @@ const ParticleSwarm = ({ params = {} }) => {
         }
     `
 }), []);
-  const geometry = useMemo(() => new THREE.SphereGeometry(PARAMS.particleSize, 16, 16), [PARAMS.particleSize]);
+  const geometry = useMemo(() => {
+    return new THREE.SphereGeometry(PARAMS.particleSize, PARAMS.sphereSegments, PARAMS.sphereSegments);
+  }, [PARAMS.particleSize, PARAMS.sphereSegments]);
   const addControl = (id, l, min, max, val) => {
       return PARAMS[id] !== undefined ? PARAMS[id] : val;
   };
@@ -205,6 +244,55 @@ const ParticleSwarm = ({ params = {} }) => {
 };
 
 export default function App({ params = {}, backgroundColor = '#1a1a1a' }) {
+  const isMobile = useMediaMatch(MOBILE_MEDIA_QUERY);
+  const prefersReducedMotion = useMediaMatch(REDUCED_MOTION_QUERY);
+
+  const qualityProfile = useMemo(() => {
+    if (prefersReducedMotion) {
+      return {
+        antialias: false,
+        autoRotate: false,
+        dpr: [1, 1],
+        particleScale: 0.32,
+        sphereSegments: 8,
+      };
+    }
+
+    if (isMobile) {
+      return {
+        antialias: false,
+        autoRotate: false,
+        dpr: [1, 1.15],
+        particleScale: 0.55,
+        sphereSegments: 10,
+      };
+    }
+
+    return {
+      antialias: true,
+      autoRotate: true,
+      dpr: [1, 1.5],
+      particleScale: 1,
+      sphereSegments: 16,
+    };
+  }, [isMobile, prefersReducedMotion]);
+
+  const optimizedParams = useMemo(() => {
+    const resolvedParticleCount = params.particleCount ?? 25000;
+    const resolvedAnimationSpeed = params.animationSpeed ?? 1;
+
+    return {
+      ...params,
+      particleCount: Math.max(400, Math.round(resolvedParticleCount * qualityProfile.particleScale)),
+      sphereSegments: qualityProfile.sphereSegments,
+      tireSpinSpeed: prefersReducedMotion ? 0 : params.tireSpinSpeed,
+      animationSpeed: prefersReducedMotion ? Math.min(resolvedAnimationSpeed, 1) : resolvedAnimationSpeed,
+    };
+  }, [params, prefersReducedMotion, qualityProfile]);
+
+  const bloomStrength = optimizedParams.bloomStrength ?? 1.8;
+  const bloomEnabled = !isMobile && !prefersReducedMotion && bloomStrength > 0;
+
   return (
     <div
       style={{
@@ -212,23 +300,30 @@ export default function App({ params = {}, backgroundColor = '#1a1a1a' }) {
         top: 0,
         left: 0,
         width: '100vw',
-        height: '100vh',
+        height: '100dvh',
         background: 'transparent',
         zIndex: 1,
         pointerEvents: 'none',
       }}
     >
-      <Canvas camera={{ position: [0, 0, 100], fov: 60 }} style={{ pointerEvents: 'none', background: 'transparent' }} gl={{ alpha: false, antialias: true, preserveDrawingBuffer: true }}>
+      <Canvas
+        camera={{ position: [0, 0, 100], fov: 60 }}
+        dpr={qualityProfile.dpr}
+        style={{ pointerEvents: 'none', background: 'transparent' }}
+        gl={{ alpha: false, antialias: qualityProfile.antialias, powerPreference: 'high-performance' }}
+      >
         <SceneBackground color={backgroundColor} />
-        <ParticleSwarm params={params} />
-        <OrbitControls autoRotate={true} enableZoom={false} enablePan={false} enableRotate={false} />
-        <Effects disableGamma>
+        <ParticleSwarm params={optimizedParams} />
+        <OrbitControls autoRotate={qualityProfile.autoRotate} enableZoom={false} enablePan={false} enableRotate={false} />
+        {bloomEnabled ? (
+          <Effects disableGamma>
             <unrealBloomPass
-              threshold={params.bloomThreshold ?? 0}
-              strength={params.bloomStrength ?? 1.8}
-              radius={params.bloomRadius ?? 0.4}
+              threshold={optimizedParams.bloomThreshold ?? 0}
+              strength={bloomStrength}
+              radius={optimizedParams.bloomRadius ?? 0.4}
             />
-        </Effects>
+          </Effects>
+        ) : null}
       </Canvas>
     </div>
   );

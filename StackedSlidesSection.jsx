@@ -4,6 +4,68 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
 gsap.registerPlugin(ScrollTrigger);
 
+const testimonials = [
+  {
+    quote: 'Bryan is a great design partner who works with you to understand & deliver your brand vision. He has a sharp eye for detail, thinks about the bigger picture, and both elevates and strengthens the overall brand experience.',
+    name: 'Sam',
+    title: 'Founder',
+    company: 'Onward',
+    featured: true,
+  },
+  {
+    quote: 'Brings a rare combination of technical depth and design instinct. Moves fast without cutting corners.',
+    name: 'Rashid A.',
+    title: 'Creative Director',
+    company: 'Hossy',
+    featured: false,
+  },
+  {
+    quote: "Understood our AI workflow challenges before we finished explaining them. That's the human-in-the-loop difference.",
+    name: 'Claire B.',
+    title: 'Head of Product',
+    company: 'Carduvy',
+    featured: false,
+  },
+  {
+    quote: 'Shipped our interactive campaign on time, on brand, and over expectations.',
+    name: 'Marco T.',
+    title: 'Marketing Lead',
+    company: 'HEC',
+    featured: false,
+  },
+];
+
+const workHistory = [
+  {
+    years: '2022 — Now',
+    role: 'Founder & Consultant',
+    company: 'Independent',
+    type: 'Consulting',
+    desc: 'Human-in-the-loop AI systems, interactive builds, and digital strategy for brands navigating AI adoption.',
+  },
+  {
+    years: '2019 — 2022',
+    role: 'Creative Technology Director',
+    company: 'Studio Meridian',
+    type: 'Full-time',
+    desc: 'Led interactive experience development across web, installation, and emerging media for a boutique digital studio.',
+  },
+  {
+    years: '2017 — 2019',
+    role: 'Senior Interactive Producer',
+    company: 'Carve Digital',
+    type: 'Full-time',
+    desc: 'Produced real-time data visualization and campaign microsites for Fortune 500 clients.',
+  },
+  {
+    years: '2014 — 2017',
+    role: 'Front-End Developer',
+    company: 'Tactile Media',
+    type: 'Full-time',
+    desc: 'Built responsive marketing platforms and motion-rich interfaces for media and entertainment brands.',
+  },
+];
+
 const slides = [
   {
     title: 'Section 1',
@@ -23,6 +85,7 @@ const StackedSlidesSection = () => {
   useLayoutEffect(() => {
     if (!wrapperRef.current) return;
     const wrapper = wrapperRef.current;
+    const media = gsap.matchMedia();
 
     // Hover reveal list effect — images appended to body to escape transformed ancestor
     const hoverContainers = Array.from(wrapper.querySelectorAll('[data-hover-item]'));
@@ -114,70 +177,111 @@ const StackedSlidesSection = () => {
       const gridWindowEl = panel.querySelector('[data-grid-window]');
       const labelHeading = panel.querySelector('[data-label-heading]');
       const quoteEl = panel.querySelector('[data-quote-section]');
+      const footerEl = panel.querySelector('#stacked-inline-footer');
       if (!gridEl || !gridWindowEl) return;
 
       if (gridEl.scrollHeight <= 0) return;
 
-      const getQuoteThreshold = () => {
-        const windowTop = gridWindowEl.getBoundingClientRect().top;
-        const quoteTop = quoteEl ? quoteEl.getBoundingClientRect().top : Infinity;
-        return (quoteTop - windowTop) / gridEl.scrollHeight;
+      const getScrollDistance = () => {
+        const fallbackDistance = Math.max(0, gridEl.scrollHeight - gridWindowEl.offsetHeight);
+
+        if (!footerEl) {
+          return fallbackDistance;
+        }
+
+        const footerBottom = footerEl.offsetTop + footerEl.offsetHeight;
+        return Math.max(fallbackDistance, footerBottom - gridWindowEl.offsetHeight);
       };
 
-      const isMobile = window.innerWidth < 768;
+      const createTimeline = (isMobile) => {
+        const timeline = gsap.timeline({
+          scrollTrigger: {
+            id: 'stacked-slides-pin',
+            trigger: panel,
+            start: () => `top top+=${isMobile ? 48 : 64}`,
+            end: () => `+=${getScrollDistance()}`,
+            pin: true,
+            pinSpacing: true,
+            scrub: isMobile ? 3.2 : 4,
+            invalidateOnRefresh: true,
+            anticipatePin: 1.1,
+            refreshPriority: 2,
+            onToggle: (self) => {
+              panel.style.borderRadius = self.isActive ? '0' : '1rem';
+            },
+            onUpdate: (self) => {
+              if (!labelHeading) return;
+              const p = self.progress;
+              const w = window.innerWidth;
 
-      gsap.timeline({
-        scrollTrigger: {
-          trigger: panel,
-          start: () => `top top+=${isMobile ? 48 : 64}`,
-          end: () => `+=${gridEl.scrollHeight - gridWindowEl.offsetHeight}`,
-          pin: true,
-          pinSpacing: true,
-          scrub: isMobile ? 3.2 : 4,
-          invalidateOnRefresh: true,
-          anticipatePin: 1.1,
-          refreshPriority: 2,
-          onToggle: (self) => {
-            panel.style.borderRadius = self.isActive ? '0' : '1rem';
+              let t1;
+              let t2;
+
+              if (w >= 1280) {
+                t1 = 0.15;
+                t2 = 0.25;
+              } else if (w >= 1024) {
+                t1 = 0;
+                t2 = 0.65;
+              } else if (w >= 768) {
+                t1 = 0.13;
+                t2 = 0.3;
+              } else if (w >= 480) {
+                t1 = 0.35;
+                t2 = 0.45;
+              } else {
+                t1 = 0.3;
+                t2 = 0.4;
+              }
+
+              if (p >= t2) {
+                labelHeading.textContent = "Here's What You Get With Me In The Loop:";
+              } else if (p >= t1) {
+                labelHeading.textContent = 'If Your Building...';
+              } else {
+                labelHeading.textContent = 'Featured Work';
+              }
+            },
           },
-          onUpdate: (self) => {
-            if (!labelHeading) return;
-            const p = self.progress;
-            const w = window.innerWidth;
+        }).to(gridEl, { y: () => -getScrollDistance(), ease: 'power2.out' });
 
-            // Breakpoint thresholds — tune each independently
-            let t1, t2;
-            if (w >= 1280) {
-              // XL
-              t1 = 0.15; t2 = 0.25;
-            } else if (w >= 1024) {
-              // Large
-              t1 = 0; t2 = 0.65;
-            } else if (w >= 768) {
-              // Medium
-              t1 = 0.13; t2 = 0.3;
-            } else if (w >= 480) {
-              // Small
-              t1 = 0.35; t2 = 0.45;
-            } else {
-              // Mobile
-              t1 = 0.3; t2 = 0.4;
-            }
+        return () => {
+          panel.style.borderRadius = '1rem';
 
-            if (p >= t2) {
-              labelHeading.textContent = "Here's What You Get With Me In The Loop:";
-            } else if (p >= t1) {
-              labelHeading.textContent = 'If Your Building...';
-            } else {
-              labelHeading.textContent = 'Featured Work';
-            }
-          },
-        },
-      }).to(gridEl, { y: () => -(gridEl.scrollHeight - gridWindowEl.offsetHeight), ease: 'power2.out' });
+          if (labelHeading) {
+            labelHeading.textContent = 'Featured Work';
+          }
+
+          timeline.kill();
+        };
+      };
+
+      media.add('(max-width: 767px)', () => createTimeline(true));
+      media.add('(min-width: 768px)', () => createTimeline(false));
     }, wrapper);
 
     const refresh = () => ScrollTrigger.refresh();
     window.addEventListener('resize', refresh);
+    const resizeObserver = typeof ResizeObserver === 'function'
+      ? new ResizeObserver(() => {
+          requestAnimationFrame(refresh);
+        })
+      : null;
+    const observedNodes = [
+      wrapper.querySelector('[data-grid-window]'),
+      wrapper.querySelector('[data-grid-inner]'),
+      wrapper.querySelector('#work-history-shell'),
+      wrapper.querySelector('#testimonials-shell'),
+      wrapper.querySelector('#rate-cards-shell'),
+      wrapper.querySelector('#contact-card-footer'),
+      wrapper.querySelector('#stacked-inline-footer'),
+    ].filter(Boolean);
+
+    observedNodes.forEach((node) => {
+      if (resizeObserver) {
+        resizeObserver.observe(node);
+      }
+    });
 
     // Cal.com embed
     const calScript = document.createElement('script');
@@ -191,8 +295,12 @@ const StackedSlidesSection = () => {
 
     return () => {
       window.removeEventListener('resize', refresh);
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
       hoverCleanups.forEach((cleanup) => cleanup());
       if (document.body.contains(calScript)) document.body.removeChild(calScript);
+      media.revert();
       ctx.revert();
     };
   }, []);
@@ -205,6 +313,13 @@ const StackedSlidesSection = () => {
             grid-template-columns: 1fr !important;
           }
         }
+        .section-header-block {
+          cursor: default;
+          transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .section-header-block:hover {
+          opacity: 0.65;
+        }
       `}</style>
       <div ref={wrapperRef} style={wrapperStyle}>
         {slides.map((slide, index) => (
@@ -213,7 +328,6 @@ const StackedSlidesSection = () => {
             data-stack-panel
             style={{
               ...panelStyle,
-              height: index === 0 ? 'calc(2 * (100vh - 64px))' : panelStyle.height,
               background: index === 0 ? 'rgba(245, 241, 223, 0.18)' : slide.bg,
               backdropFilter: index === 0 ? 'blur(24px)' : 'none',
               WebkitBackdropFilter: index === 0 ? 'blur(24px)' : 'none',
@@ -265,34 +379,147 @@ const StackedSlidesSection = () => {
                             </div>
                           ))}
                         </div>
-                        <div data-quote-section data-hover-item style={quoteSectionStyle}>
-                          <img data-hover-image src="https://assets.codepen.io/16327/portrait-image-6.jpg" alt="" style={{ display: 'none' }} />
-                          <blockquote style={quoteTextStyle}>
-                            Heres What You Get With Me In The Loop:
-                          </blockquote>
+                        <div data-quote-section style={quoteSectionStyle}>
+                          <div className="section-header-block" style={workHistoryHeaderStyle}>
+                            <span style={workHistoryEyebrowStyle}>What You Get</span>
+                            <h2 style={workHistoryHeadlineStyle}>Here's What You Get With Me In The Loop</h2>
+                          </div>
                         </div>
                         <ul role="list" style={hoverListStyle}>
                           {[
-                            { image: 'https://assets.codepen.io/16327/portrait-image-8.jpg', title: 'restart reverse scrub pin markers overwrite modifiers' },
-                            { image: 'https://assets.codepen.io/16327/portrait-image-3.jpg', title: 'toggleActions start end once refresh from to' },
-                            { image: 'https://assets.codepen.io/16327/portrait-image-1.jpg', title: 'ScrollSmoother Flip Draggable SplitText InertiaPlugin' },
-                            { image: 'https://assets.codepen.io/16327/portrait-image-14.jpg', title: 'onComplete onUpdate quickSetter quickTo utils.toArray' },
-                            { image: 'https://assets.codepen.io/16327/portrait-image-6.jpg', title: 'Power2 Power3 Power4 Back Elastic Bounce Expo Sine' },
+                            { index: '01', title: 'Builds that move as fast as the idea', tag: 'Speed' },
+                            { index: '02', title: 'One person accountable across design, code, and ship', tag: 'Accountability' },
+                            { index: '03', title: 'AI outputs reviewed before they touch your brand', tag: 'Quality Control' },
+                            { index: '04', title: 'Strategy that adjusts when the brief changes at 11pm', tag: 'Adaptability' },
+                            { index: '05', title: 'Technical execution that matches the vision in your head', tag: 'Precision' },
                           ].map((item) => (
                             <li key={item.title} style={hoverItemStyle}>
+                              <span style={hoverItemIndexStyle}>{item.index}</span>
                               <div style={hoverTextWrapStyle}>
                                 <h3 style={hoverTitleStyle}>{item.title}</h3>
                               </div>
+                              <span style={hoverItemTagStyle}>{item.tag}</span>
                             </li>
                           ))}
                         </ul>
 
-                        <div id="rate-cards-shell" style={rateCardShellStyle}>
-                          <div style={rateCardHeaderStyle}>
-                            <span style={rateCardEyebrowStyle}>What's Included</span>
-                            <h2 style={rateCardHeadlineStyle}>Engagement packages</h2>
-                            <p style={rateCardSubtextStyle}>Flexible engagements built around how you actually work. From one-off builds to full-loop collaboration.</p>
+                        <div id="work-history-shell" style={workHistoryShellStyle}>
+                          <div className="section-header-block" style={workHistoryHeaderStyle}>
+                            <span style={workHistoryEyebrowStyle}>Background</span>
+                            <h2 style={workHistoryHeadlineStyle}>Selected Experience</h2>
                           </div>
+                          <div style={workHistoryListStyle}>
+                            {workHistory.map((item, i) => (
+                              <div key={item.years} style={{ ...workHistoryItemStyle, borderTop: i === 0 ? '1px solid rgba(42,36,32,0.12)' : undefined }}>
+                                <span style={workHistoryYearStyle}>{item.years}</span>
+                                <div style={workHistoryBodyStyle}>
+                                  <div style={workHistoryRoleRowStyle}>
+                                    <span style={workHistoryRoleStyle}>{item.role}</span>
+                                    <span style={workHistoryCompanyStyle}>{item.company}</span>
+                                  </div>
+                                  <p style={workHistoryDescStyle}>{item.desc}</p>
+                                </div>
+                                <span style={workHistoryBadgeStyle}>{item.type}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div id="testimonials-shell" style={testimonialsShellStyle}>
+                          <div className="section-header-block" style={workHistoryHeaderStyle}>
+                            <span style={workHistoryEyebrowStyle}>Social Proof</span>
+                            <h2 style={workHistoryHeadlineStyle}>What Clients Say</h2>
+                          </div>
+
+                          {/* Featured quote */}
+                          {testimonials.filter(t => t.featured).map(t => (
+                            <div key={t.name} style={featuredQuoteStyle}>
+                              <span style={featuredQuoteMarkStyle}>&ldquo;</span>
+                              <blockquote style={featuredQuoteTextStyle}>{t.quote}</blockquote>
+                              <div style={quoteAttributionStyle}>
+                                <span style={quoteAttributionNameStyle}>{t.name}</span>
+                                <span style={quoteAttributionSepStyle}>·</span>
+                                <span style={quoteAttributionRoleStyle}>{t.title}, {t.company}</span>
+                              </div>
+                            </div>
+                          ))}
+
+                          {/* Secondary quotes — asymmetric 2-col, last spans full */}
+                          <div style={secondaryQuotesGridStyle}>
+                            {testimonials.filter(t => !t.featured).map((t, i) => (
+                              <div
+                                key={t.name}
+                                style={{
+                                  ...secondaryQuoteItemStyle,
+                                  ...(i === testimonials.filter(x => !x.featured).length - 1
+                                    ? { gridColumn: '1 / -1' }
+                                    : {}),
+                                }}
+                              >
+                                <p style={secondaryQuoteTextStyle}>&ldquo;{t.quote}&rdquo;</p>
+                                <div style={quoteAttributionStyle}>
+                                  <span style={quoteAttributionNameStyle}>{t.name}</span>
+                                  <span style={quoteAttributionSepStyle}>·</span>
+                                  <span style={quoteAttributionRoleStyle}>{t.title}, {t.company}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div id="rate-cards-shell" style={rateCardShellStyle}>
+                          <div className="section-header-block" style={rateCardHeaderStyle}>
+                            <span style={rateCardEyebrowStyle}>The Process</span>
+                            <h2 style={rateCardHeadlineStyle}>How to Engage...</h2>
+                            <p style={rateCardSubtextStyle}>No deck, no intake form, no agency runaround. Here's how most engagements actually start.</p>
+                          </div>
+
+                          {/* 3-step kickoff process */}
+                          <div style={processStepsStyle}>
+                            {[
+                              {
+                                step: '01',
+                                title: 'Text me your ideas',
+                                desc: 'Screenshots, rough sketches, a voice note — whatever you have. No polished brief needed.',
+                              },
+                              {
+                                step: '02',
+                                title: 'Get honest feedback on scope',
+                                desc: "I'll respond with direct input: what's realistic, what I'd cut, and roughly what it would take.",
+                              },
+                              {
+                                step: '03',
+                                title: 'Pick a structure and start',
+                                desc: 'Choose from the packages below or arrange something custom. First deliverable usually within a week.',
+                              },
+                            ].map((s) => (
+                              <div key={s.step} style={processStepItemStyle}>
+                                <span style={processStepNumStyle}>{s.step}</span>
+                                <div style={processStepBodyStyle}>
+                                  <span style={processStepTitleStyle}>{s.title}</span>
+                                  <p style={processStepDescStyle}>{s.desc}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div style={textBryanRowStyle}>
+                            <a
+                              href="sms:+13122865129&body=Hey Bryan, I have some ideas I'd like your feedback on."
+                              style={textBryanBtnStyle}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                              </svg>
+                              Text Bryan
+                            </a>
+                            <span style={textBryanHintStyle}>Opens Messages · (312) 286-5129</span>
+                          </div>
+
+                          <div style={processToPackagesDividerStyle}>
+                            <span style={processToPackagesLabelStyle}>Or choose a package</span>
+                          </div>
+
                           <div style={rateCardGridStyle}>
                             {[
                               { name: 'The Starter', price: '~$800', unit: '/project', desc: 'Single deliverable — a build, audit, or strategy session', badge: 'Standard rate', cta: 'Get Started' },
@@ -397,8 +624,11 @@ const sectionStyle = {
 };
 
 const quoteSectionStyle = {
-  paddingTop: 'clamp(6rem, 12vw, 10rem)',
-  paddingBottom: 'clamp(3rem, 6vw, 6rem)',
+  width: '100%',
+  marginTop: 'clamp(2rem, 4vw, 3rem)',
+  paddingTop: 'clamp(2.5rem, 5vw, 4rem)',
+  borderTop: '1px solid rgba(42, 36, 32, 0.12)',
+  boxSizing: 'border-box',
 };
 
 const quoteTextStyle = {
@@ -421,7 +651,7 @@ const wrapperStyle = {
 
 const panelStyle = {
   width: '100%',
-  height: 'calc(100vh - 64px)',
+  height: 'calc(100dvh - 64px)',
   display: 'flex',
   justifyContent: 'center',
   position: 'relative',
@@ -624,11 +854,33 @@ const hoverListStyle = {
 
 const hoverItemStyle = {
   position: 'relative',
-  display: 'block',
+  display: 'grid',
+  gridTemplateColumns: '2.8rem 1fr auto',
+  alignItems: 'center',
+  gap: '0 clamp(0.75rem, 2vw, 1.75rem)',
   width: '100%',
-  padding: '2rem clamp(1.5rem, 4vw, 3rem)',
-  borderBottom: '1px solid rgba(42, 36, 32, 0.8)',
+  padding: 'clamp(1.2rem, 2.2vw, 1.8rem) 0',
+  borderBottom: '1px solid rgba(42, 36, 32, 0.12)',
   boxSizing: 'border-box',
+};
+
+const hoverItemIndexStyle = {
+  fontSize: '0.65rem',
+  fontWeight: 500,
+  letterSpacing: '0.06em',
+  color: 'rgba(42, 36, 32, 0.28)',
+  fontVariantNumeric: 'tabular-nums',
+  alignSelf: 'center',
+};
+
+const hoverItemTagStyle = {
+  fontSize: '0.68rem',
+  fontWeight: 500,
+  letterSpacing: '0.1em',
+  textTransform: 'uppercase',
+  color: 'rgba(42, 36, 32, 0.35)',
+  whiteSpace: 'nowrap',
+  alignSelf: 'center',
 };
 
 const hoverImageStyle = {
@@ -647,26 +899,222 @@ const hoverImageStyle = {
 };
 
 const hoverTextWrapStyle = {
-  maxWidth: '72rem',
+  minWidth: 0,
 };
 
 const hoverTitleStyle = {
   margin: 0,
   color: '#2a2420',
-  fontSize: 'clamp(1.3rem, 2.2vw, 2.4rem)',
-  lineHeight: 1.05,
+  fontSize: 'clamp(1.1rem, 2vw, 2.2rem)',
+  lineHeight: 1.08,
   fontWeight: 700,
   letterSpacing: '-0.04em',
   fontFamily: "'Aldrich', system-ui, -apple-system, sans-serif",
+  whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
 };
 
+
+const testimonialsShellStyle = {
+  width: '100%',
+  marginTop: 'clamp(2rem, 4vw, 3rem)',
+  paddingTop: 'clamp(2.5rem, 5vw, 4rem)',
+  borderTop: '1px solid rgba(42, 36, 32, 0.12)',
+  boxSizing: 'border-box',
+};
+
+const featuredQuoteStyle = {
+  position: 'relative',
+  padding: 'clamp(1.5rem, 3vw, 2.5rem)',
+  background: 'rgba(42, 36, 32, 0.03)',
+  border: '1px solid rgba(42, 36, 32, 0.1)',
+  borderRadius: '0.75rem',
+  marginBottom: 'clamp(1rem, 2vw, 1.5rem)',
+  overflow: 'hidden',
+};
+
+const featuredQuoteMarkStyle = {
+  position: 'absolute',
+  top: '-0.5rem',
+  left: 'clamp(1rem, 2vw, 1.75rem)',
+  fontSize: 'clamp(5rem, 10vw, 8rem)',
+  lineHeight: 1,
+  color: 'rgba(42, 36, 32, 0.06)',
+  fontFamily: 'Georgia, serif',
+  pointerEvents: 'none',
+  userSelect: 'none',
+};
+
+const featuredQuoteTextStyle = {
+  margin: '0 0 clamp(1rem, 2vw, 1.5rem)',
+  fontSize: 'clamp(1rem, 1.8vw, 1.3rem)',
+  lineHeight: 1.6,
+  fontWeight: 400,
+  color: '#2a2420',
+  letterSpacing: '-0.01em',
+  maxWidth: '62ch',
+  position: 'relative',
+};
+
+const quoteAttributionStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.5rem',
+  flexWrap: 'wrap',
+};
+
+const quoteAttributionNameStyle = {
+  fontSize: 'clamp(0.8rem, 1.1vw, 0.9rem)',
+  fontWeight: 700,
+  color: '#2a2420',
+  letterSpacing: '-0.01em',
+};
+
+const quoteAttributionSepStyle = {
+  fontSize: '0.75rem',
+  color: 'rgba(42, 36, 32, 0.3)',
+};
+
+const quoteAttributionRoleStyle = {
+  fontSize: 'clamp(0.75rem, 1vw, 0.85rem)',
+  color: 'rgba(42, 36, 32, 0.45)',
+};
+
+const secondaryQuotesGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(2, 1fr)',
+  gap: 'clamp(0.75rem, 1.5vw, 1rem)',
+};
+
+const secondaryQuoteItemStyle = {
+  padding: 'clamp(1rem, 2vw, 1.5rem)',
+  border: '1px solid rgba(42, 36, 32, 0.1)',
+  borderRadius: '0.75rem',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.75rem',
+  boxSizing: 'border-box',
+};
+
+const secondaryQuoteTextStyle = {
+  margin: 0,
+  fontSize: 'clamp(0.82rem, 1.2vw, 0.95rem)',
+  lineHeight: 1.65,
+  color: 'rgba(42, 36, 32, 0.7)',
+  fontStyle: 'italic',
+  flexGrow: 1,
+};
+
+const workHistoryShellStyle = {
+  width: '100%',
+  marginTop: 'clamp(2rem, 4vw, 3rem)',
+  paddingTop: 'clamp(2.5rem, 5vw, 4rem)',
+  borderTop: '1px solid rgba(42, 36, 32, 0.12)',
+  boxSizing: 'border-box',
+};
+
+const workHistoryHeaderStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.5rem',
+  marginBottom: 'clamp(1.5rem, 3vw, 2.5rem)',
+};
+
+const workHistoryEyebrowStyle = {
+  fontStyle: 'italic',
+  fontSize: 'clamp(0.8rem, 1.2vw, 0.95rem)',
+  color: 'rgba(42, 36, 32, 0.5)',
+};
+
+const workHistoryHeadlineStyle = {
+  margin: 0,
+  fontSize: 'clamp(1.8rem, 3.5vw, 2.8rem)',
+  fontWeight: 700,
+  letterSpacing: '-0.03em',
+  lineHeight: 1.1,
+  color: '#2a2420',
+  fontFamily: "'Aldrich', system-ui, -apple-system, sans-serif",
+};
+
+const workHistoryListStyle = {
+  width: '100%',
+};
+
+const workHistoryItemStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'clamp(6rem, 10vw, 9rem) 1fr auto',
+  gap: '0 clamp(1rem, 2.5vw, 2rem)',
+  padding: 'clamp(1rem, 2vw, 1.5rem) 0',
+  borderBottom: '1px solid rgba(42, 36, 32, 0.1)',
+  alignItems: 'start',
+};
+
+const workHistoryYearStyle = {
+  fontSize: 'clamp(0.72rem, 1vw, 0.82rem)',
+  color: 'rgba(42, 36, 32, 0.4)',
+  letterSpacing: '0.02em',
+  paddingTop: '0.2rem',
+  whiteSpace: 'nowrap',
+};
+
+const workHistoryBodyStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.35rem',
+};
+
+const workHistoryRoleRowStyle = {
+  display: 'flex',
+  alignItems: 'baseline',
+  gap: '0.6rem',
+  flexWrap: 'wrap',
+};
+
+const workHistoryRoleStyle = {
+  fontSize: 'clamp(0.95rem, 1.5vw, 1.15rem)',
+  fontWeight: 700,
+  letterSpacing: '-0.02em',
+  color: '#2a2420',
+  fontFamily: "'Aldrich', system-ui, -apple-system, sans-serif",
+};
+
+const workHistoryCompanyStyle = {
+  fontSize: 'clamp(0.8rem, 1.1vw, 0.9rem)',
+  color: 'rgba(42, 36, 32, 0.45)',
+  fontWeight: 400,
+};
+
+const workHistoryDescStyle = {
+  margin: 0,
+  fontSize: 'clamp(0.78rem, 1.1vw, 0.88rem)',
+  lineHeight: 1.6,
+  color: 'rgba(42, 36, 32, 0.55)',
+  maxWidth: '54ch',
+};
+
+const workHistoryBadgeStyle = {
+  display: 'inline-block',
+  padding: '0.25rem 0.7rem',
+  background: 'rgba(42, 36, 32, 0.06)',
+  border: '1px solid rgba(42, 36, 32, 0.12)',
+  borderRadius: '2rem',
+  fontSize: '0.7rem',
+  fontWeight: 600,
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  color: 'rgba(42, 36, 32, 0.5)',
+  whiteSpace: 'nowrap',
+  marginTop: '0.2rem',
+};
 
 const rateCardShellStyle = {
   width: '100%',
   background: 'none',
-  borderRadius: '1.25rem',
-  padding: 'clamp(2.5rem, 5vw, 4rem) 0',
   marginTop: 'clamp(2rem, 4vw, 3rem)',
+  paddingTop: 'clamp(2.5rem, 5vw, 4rem)',
+  paddingBottom: 0,
+  borderTop: '1px solid rgba(42, 36, 32, 0.12)',
   boxSizing: 'border-box',
 };
 
@@ -699,6 +1147,100 @@ const rateCardSubtextStyle = {
   lineHeight: 1.6,
   color: 'rgba(42, 36, 32, 0.55)',
   maxWidth: '52ch',
+};
+
+const processStepsStyle = {
+  width: '100%',
+  marginBottom: 'clamp(2rem, 4vw, 3rem)',
+};
+
+const processStepItemStyle = {
+  display: 'grid',
+  gridTemplateColumns: '3rem 1fr',
+  gap: '0 clamp(1rem, 2.5vw, 2rem)',
+  padding: 'clamp(1.1rem, 2vw, 1.6rem) 0',
+  borderBottom: '1px solid rgba(42, 36, 32, 0.1)',
+  alignItems: 'start',
+};
+
+const processStepNumStyle = {
+  fontSize: 'clamp(1.6rem, 2.8vw, 2.4rem)',
+  fontWeight: 700,
+  letterSpacing: '-0.04em',
+  lineHeight: 1,
+  color: 'rgba(42, 36, 32, 0.1)',
+  fontFamily: "'Aldrich', system-ui, -apple-system, sans-serif",
+  paddingTop: '0.1rem',
+};
+
+const processStepBodyStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.3rem',
+};
+
+const processStepTitleStyle = {
+  fontSize: 'clamp(1rem, 1.6vw, 1.2rem)',
+  fontWeight: 700,
+  letterSpacing: '-0.02em',
+  color: '#2a2420',
+  fontFamily: "'Aldrich', system-ui, -apple-system, sans-serif",
+  lineHeight: 1.2,
+};
+
+const processStepDescStyle = {
+  margin: 0,
+  fontSize: 'clamp(0.78rem, 1.1vw, 0.88rem)',
+  lineHeight: 1.6,
+  color: 'rgba(42, 36, 32, 0.55)',
+  maxWidth: '52ch',
+};
+
+const textBryanRowStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'flex-end',
+  gap: '1rem',
+  padding: 'clamp(1.2rem, 2.5vw, 2rem) 0',
+  flexWrap: 'wrap',
+};
+
+const textBryanBtnStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '0.45rem',
+  padding: '0.65rem 1.3rem',
+  background: '#2a2420',
+  color: '#f5f1df',
+  fontSize: 'clamp(0.78rem, 1.1vw, 0.88rem)',
+  fontWeight: 600,
+  letterSpacing: '0.02em',
+  textDecoration: 'none',
+  borderRadius: '2rem',
+  whiteSpace: 'nowrap',
+  cursor: 'pointer',
+};
+
+const textBryanHintStyle = {
+  fontSize: '0.72rem',
+  color: 'rgba(42, 36, 32, 0.38)',
+  letterSpacing: '0.02em',
+};
+
+const processToPackagesDividerStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '1rem',
+  marginBottom: 'clamp(1.5rem, 3vw, 2rem)',
+};
+
+const processToPackagesLabelStyle = {
+  fontSize: '0.68rem',
+  fontWeight: 600,
+  letterSpacing: '0.12em',
+  textTransform: 'uppercase',
+  color: 'rgba(42, 36, 32, 0.35)',
+  whiteSpace: 'nowrap',
 };
 
 const rateCardGridStyle = {
