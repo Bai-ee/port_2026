@@ -1,0 +1,33 @@
+{
+  "params": {
+    "scale": 90,
+    "chaos": 1.55,
+    "flow": 3,
+    "particleCount": 25000,
+    "particleSize": 0.1,
+    "speedMult": 0.1,
+    "bloomThreshold": 0.7,
+    "bloomStrength": 0,
+    "bloomRadius": 0.6,
+    "hueSpeed": 0.02,
+    "waveAmplitude": 0.5,
+    "saturation": 0.75,
+    "lightness": 0.55,
+    "torusMajorRadius": 2,
+    "torusTubeRadius": 0.5,
+    "torusSegments": 100,
+    "torusSegmentsDepth": 50,
+    "rotationX": -2.44159265358979,
+    "rotationY": -3.14159265358979,
+    "rotationZ": -3.09159265358979,
+    "tireSpinAxis": "z",
+    "tireSpinSpeed": 1.4,
+    "animationSpeed": 0.1
+  },
+  "colorPalette": {
+    "dominant": "#0a0e27",
+    "secondary": "#1e3a8a",
+    "accent": "#f59e0b"
+  },
+  "headlineText": "IN THE LOOP"
+}
