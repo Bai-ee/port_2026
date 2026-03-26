@@ -47,13 +47,17 @@ const HorizontalGallery = () => {
 
     const ctx = gsap.context(() => {
       const getDistance = () => Math.max(0, track.scrollWidth - window.innerWidth);
-      const getTravelDistance = () => Math.max(getDistance(), window.innerWidth * 0.85);
+      const isMobile = window.innerWidth < 768;
+      const getTravelDistance = () => {
+        const baseDistance = Math.max(getDistance(), window.innerWidth * (isMobile ? 0.65 : 0.85));
+        return Math.max(window.innerHeight * 0.8, baseDistance);
+      };
 
       gsap.set(track, { x: 0 });
 
       const moveTween = gsap.to(track, {
         x: () => -getDistance(),
-        ease: 'none',
+        ease: 'power2.out',
         duration: 1,
         paused: true,
       });
@@ -63,17 +67,18 @@ const HorizontalGallery = () => {
         pin: true,
         start: () => `top-=${window.innerHeight * 0.28} top`,
         end: (self) => self.start + getTravelDistance(),
-        scrub: 1.45,
+        scrub: isMobile ? 3.5 : 4.2,
         invalidateOnRefresh: true,
-        anticipatePin: 1,
+        anticipatePin: 1.2,
+        refreshPriority: 1,
         onRefresh: () => {
           gsap.set(track, { x: 0 });
           moveTween.progress(0);
         },
         onUpdate: (self) => {
           const moveProgress = (self.scroll() - self.start) / getTravelDistance();
-
-          moveTween.progress(gsap.utils.clamp(0, 1, moveProgress));
+          const eased = gsap.utils.clamp(0, 1, moveProgress);
+          moveTween.progress(eased);
         },
       });
     }, section);
@@ -143,7 +148,7 @@ const sectionStyle = {
   marginTop: 'clamp(-12rem, -16vw, -6rem)',
   zIndex: 9,
   paddingTop: 'clamp(18rem, 30vw, 28rem)',
-  paddingBottom: 'clamp(12rem, 18vw, 18rem)',
+  paddingBottom: 'clamp(0rem, 100vw - 768px, 18rem)',
 };
 
 const topSpacerStyle = {

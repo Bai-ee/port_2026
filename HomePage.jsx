@@ -10,8 +10,9 @@ import StackedSlidesSection from './StackedSlidesSection';
 import FontSelector from './FontSelector';
 import LoopControls from './LoopControls';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { ScrollToPlugin } from 'gsap/ScrollToPlugin';
 
-gsap.registerPlugin(ScrollTrigger);
+gsap.registerPlugin(ScrollTrigger, ScrollToPlugin);
 
 const HomePage = () => {
   const [params, setParams] = useState({
@@ -52,12 +53,59 @@ const HomePage = () => {
     window.history.scrollRestoration = 'manual';
     window.scrollTo(0, 0);
 
-    // Refresh ScrollTrigger after a delay to ensure DOM is ready
+    // Opacity-only intro — no transforms so ScrollTrigger pin positions are unaffected
+    const headline = document.querySelector('#hero-panel-top-left');
+    const canvas = heroSectionRef.current?.querySelector('canvas');
+    const contentSection = contentSectionRef.current;
+    const nav = document.querySelector('#site-nav');
+
+    const panelHeadline  = document.querySelector('#panel-hero-headline');
+    const panelCta       = document.querySelector('#panel-hero-cta');
+    const panelGrid      = document.querySelector('#stacked-grid-row');
+    const serviceItems   = gsap.utils.toArray('[data-service-item]');
+
+    gsap.set([headline, canvas, nav], { autoAlpha: 0 });
+    gsap.set([panelHeadline, panelCta, panelGrid, ...serviceItems], { autoAlpha: 0 });
+
+    const tl = gsap.timeline({ delay: 0.2 });
+    tl.to(headline,      { autoAlpha: 1, duration: 1.2, ease: 'power2.out' })
+      .to(canvas,        { autoAlpha: 1, duration: 1.2, ease: 'power2.out' }, '<0.25')
+      .to(nav,           { autoAlpha: 1, duration: 1.2, ease: 'power2.out' }, '<0.25')
+      .to(panelHeadline, { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '0.5')
+      .to(panelCta,      { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '<0.15')
+      .to(serviceItems,  { autoAlpha: 1, duration: 0.5, ease: 'power2.out', stagger: 0.1 }, '<0.15')
+      .to(panelGrid,     { autoAlpha: 1, duration: 0.6, ease: 'power2.out', stagger: 0.06 }, '<0.15');
+
+    // Auto-scroll to pinned section when user scrolls >10% of hero
+    let autoScrolling = false;
+    const snapTrigger = ScrollTrigger.create({
+      trigger: '#hero-section',
+      start: () => `top+=${window.innerHeight * 0.1} top`,
+      onEnter: () => {
+        if (autoScrolling) return;
+        autoScrolling = true;
+        const panel = document.querySelector('[data-stack-panel]');
+        if (!panel) return;
+        const headerH = window.innerWidth < 768 ? 48 : 64;
+        const targetY = panel.getBoundingClientRect().top + window.scrollY - headerH;
+        gsap.to(window, {
+          scrollTo: targetY,
+          duration: 0.8,
+          ease: 'power1.inOut',
+          onComplete: () => { autoScrolling = false; },
+        });
+      },
+    });
+
     const timer = setTimeout(() => {
       ScrollTrigger.refresh();
     }, 100);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      tl.kill();
+      snapTrigger.kill();
+    };
   }, []);
 
 
@@ -98,9 +146,9 @@ const HomePage = () => {
         }}
       >
         <StackedSlidesSection />
-        <HorizontalGallery />
-        <HoverRevealList />
-        <HorizontalTextSection />
+        {/* <HorizontalGallery /> */}
+        {/* <HoverRevealList /> */}
+        {/* <HorizontalTextSection /> */}
       </section>
     </div>
   );
