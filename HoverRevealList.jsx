@@ -185,7 +185,7 @@ const titleStyle = {
   lineHeight: 1.05,
   fontWeight: 700,
   letterSpacing: '-0.04em',
-  fontFamily: "'Aldrich', system-ui, -apple-system, sans-serif",
+  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   whiteSpace: 'nowrap',
   overflow: 'hidden',
   textOverflow: 'ellipsis',

@@ -84,7 +84,7 @@ const headingStyle = {
   lineHeight: 1.05,
   letterSpacing: '-0.05em',
   color: '#f5f1df',
-  fontFamily: "'Aldrich', system-ui, -apple-system, sans-serif",
+  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
 };
 
 export default HorizontalTextSection;

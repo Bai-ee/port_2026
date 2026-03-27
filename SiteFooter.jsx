@@ -64,7 +64,10 @@ const SiteFooter = () => {
               onChange={(e) => setEmail(e.target.value)}
               style={footerInputStyle}
             />
-            <button style={footerSubmitStyle}>Subscribe</button>
+            <button className="cta-pill-btn" style={footerSubmitStyle}>
+              <img src="/img/profile2_400x400.png?v=1774582808" style={footerSubmitAvatarStyle} alt="" />
+              Subscribe
+            </button>
           </div>
         </div>
 
@@ -120,7 +123,7 @@ const footerWordmarkStyle = {
   letterSpacing: '-0.03em',
   color: '#f5f1df',
   textDecoration: 'none',
-  fontFamily: "'Aldrich', system-ui, -apple-system, sans-serif",
+  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
 };
 
 const footerDescStyle = {
@@ -231,15 +234,28 @@ const footerInputStyle = {
 };
 
 const footerSubmitStyle = {
-  padding: '0.75rem 1.4rem',
-  background: 'rgba(245, 241, 223, 0.12)',
-  border: '1px solid rgba(245, 241, 223, 0.2)',
-  borderRadius: '0.5rem',
-  color: '#f5f1df',
-  fontSize: '0.88rem',
-  fontWeight: 600,
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '0.5rem',
+  padding: '0.25rem 0.75rem 0.25rem 0.25rem',
+  background: 'linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)',
+  borderRadius: '999px',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1)',
+  color: '#ffffff',
+  fontSize: '0.875rem',
+  fontWeight: 700,
   cursor: 'pointer',
   whiteSpace: 'nowrap',
+};
+
+const footerSubmitAvatarStyle = {
+  width: '1.75rem',
+  height: '1.75rem',
+  borderRadius: '50%',
+  objectFit: 'cover',
+  border: '2px solid rgba(255,255,255,0.35)',
+  flexShrink: 0,
+  display: 'block',
 };
 
 const footerBottomStyle = {

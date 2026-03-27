@@ -1,37 +1,48 @@
 import React, { useLayoutEffect, useRef } from 'react';
 import gsap from 'gsap';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
-
-gsap.registerPlugin(ScrollTrigger);
 
 const testimonials = [
   {
-    quote: 'Bryan is a great design partner who works with you to understand & deliver your brand vision. He has a sharp eye for detail, thinks about the bigger picture, and both elevates and strengthens the overall brand experience.',
-    name: 'Sam',
-    title: 'Founder',
-    company: 'Onward',
-    featured: true,
+    quote: 'Transforms ideas into polished, high-impact experiences. Strong across devices, highly responsive, and consistently delivers under pressure.',
+    name: 'Melissa Hsiao',
+    title: 'Industry Lead',
+    company: 'TikTok',
+    img: '/img/melissa.jpg',
   },
   {
-    quote: 'Brings a rare combination of technical depth and design instinct. Moves fast without cutting corners.',
-    name: 'Rashid A.',
-    title: 'Creative Director',
-    company: 'Hossy',
-    featured: false,
+    quote: 'Rare ability to operate across both design and development. Pixel-perfect execution with deep technical ownership across platforms.',
+    name: 'Jeanne Cheung',
+    title: 'Director, Design Management',
+    company: 'HBO Max',
+    img: '/img/jeanne.jpg',
   },
   {
-    quote: "Understood our AI workflow challenges before we finished explaining them. That's the human-in-the-loop difference.",
-    name: 'Claire B.',
-    title: 'Head of Product',
-    company: 'Carduvy',
-    featured: false,
+    quote: 'Brings expert-level creative and technical thinking across platforms. Pushes concepts further and executes with precision.',
+    name: 'Eric Farias',
+    title: 'Senior Art Director',
+    company: 'Epsilon',
+    img: '/img/eric.jpg',
   },
   {
-    quote: 'Shipped our interactive campaign on time, on brand, and over expectations.',
-    name: 'Marco T.',
-    title: 'Marketing Lead',
-    company: 'HEC',
-    featured: false,
+    quote: 'A go-to for complex creative builds across desktop, mobile, and video. Combines technical depth with strong design instincts.',
+    name: 'Vanessa D\'Amore',
+    title: 'Sr. Product Manager (AI, SaaS, Integrations)',
+    company: 'TST',
+    img: '/img/vanessa.jpg',
+  },
+  {
+    quote: 'A knowledge hub for custom creative systems—able to design, build, and troubleshoot across evolving tech stacks and environments.',
+    name: 'Vanessa D\'Amore',
+    title: 'Sr. Product Manager (AI, SaaS, Integrations)',
+    company: 'TST',
+    img: '/img/vanessa.jpg',
+  },
+  {
+    quote: 'Moves seamlessly between concept and execution across devices—bringing clarity, speed, and craftsmanship to complex builds.',
+    name: 'Eric Farias',
+    title: 'Senior Art Director',
+    company: 'Epsilon',
+    img: '/img/eric.jpg',
   },
 ];
 
@@ -75,9 +86,15 @@ const slides = [
     headlineText: 'Your Human in the Loop',
     supportText: 'Chat with Bryan',
     gridItems: Array(9).fill(null).map((_, i) => ({ id: i })),
-    serviceItems: Array(3).fill(null).map((_, i) => ({ id: i })),
+    serviceItems: [
+      { id: 0, label: 'Product Development' },
+      { id: 1, label: 'Agentic Automation' },
+      { id: 2, label: 'Decentralized Ecosystems' },
+    ],
   },
 ];
+
+const getInitials = (name) => name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
 
 const StackedSlidesSection = () => {
   const wrapperRef = useRef(null);
@@ -85,7 +102,6 @@ const StackedSlidesSection = () => {
   useLayoutEffect(() => {
     if (!wrapperRef.current) return;
     const wrapper = wrapperRef.current;
-    const media = gsap.matchMedia();
 
     // Hover reveal list effect — images appended to body to escape transformed ancestor
     const hoverContainers = Array.from(wrapper.querySelectorAll('[data-hover-item]'));
@@ -167,122 +183,6 @@ const StackedSlidesSection = () => {
       });
     });
 
-    const ctx = gsap.context(() => {
-      const panel = wrapper.querySelector('[data-stack-panel]');
-      if (!panel) return;
-      const innerPanel = panel.querySelector('[data-stack-inner]');
-      if (!innerPanel) return;
-
-      const gridEl = panel.querySelector('[data-grid-inner]');
-      const gridWindowEl = panel.querySelector('[data-grid-window]');
-      const labelHeading = panel.querySelector('[data-label-heading]');
-      const quoteEl = panel.querySelector('[data-quote-section]');
-      const footerEl = panel.querySelector('#stacked-inline-footer');
-      if (!gridEl || !gridWindowEl) return;
-
-      if (gridEl.scrollHeight <= 0) return;
-
-      const getScrollDistance = () => {
-        const fallbackDistance = Math.max(0, gridEl.scrollHeight - gridWindowEl.offsetHeight);
-
-        if (!footerEl) {
-          return fallbackDistance;
-        }
-
-        const footerBottom = footerEl.offsetTop + footerEl.offsetHeight;
-        return Math.max(fallbackDistance, footerBottom - gridWindowEl.offsetHeight);
-      };
-
-      const createTimeline = (isMobile) => {
-        const timeline = gsap.timeline({
-          scrollTrigger: {
-            id: 'stacked-slides-pin',
-            trigger: panel,
-            start: () => `top top+=${isMobile ? 48 : 64}`,
-            end: () => `+=${getScrollDistance()}`,
-            pin: true,
-            pinSpacing: true,
-            scrub: isMobile ? 3.2 : 4,
-            invalidateOnRefresh: true,
-            anticipatePin: 1.1,
-            refreshPriority: 2,
-            onToggle: (self) => {
-              panel.style.borderRadius = self.isActive ? '0' : '1rem';
-            },
-            onUpdate: (self) => {
-              if (!labelHeading) return;
-              const p = self.progress;
-              const w = window.innerWidth;
-
-              let t1;
-              let t2;
-
-              if (w >= 1280) {
-                t1 = 0.15;
-                t2 = 0.25;
-              } else if (w >= 1024) {
-                t1 = 0;
-                t2 = 0.65;
-              } else if (w >= 768) {
-                t1 = 0.13;
-                t2 = 0.3;
-              } else if (w >= 480) {
-                t1 = 0.35;
-                t2 = 0.45;
-              } else {
-                t1 = 0.3;
-                t2 = 0.4;
-              }
-
-              if (p >= t2) {
-                labelHeading.textContent = "Here's What You Get With Me In The Loop:";
-              } else if (p >= t1) {
-                labelHeading.textContent = 'If Your Building...';
-              } else {
-                labelHeading.textContent = 'Featured Work';
-              }
-            },
-          },
-        }).to(gridEl, { y: () => -getScrollDistance(), ease: 'power2.out' });
-
-        return () => {
-          panel.style.borderRadius = '1rem';
-
-          if (labelHeading) {
-            labelHeading.textContent = 'Featured Work';
-          }
-
-          timeline.kill();
-        };
-      };
-
-      media.add('(max-width: 767px)', () => createTimeline(true));
-      media.add('(min-width: 768px)', () => createTimeline(false));
-    }, wrapper);
-
-    const refresh = () => ScrollTrigger.refresh();
-    window.addEventListener('resize', refresh);
-    const resizeObserver = typeof ResizeObserver === 'function'
-      ? new ResizeObserver(() => {
-          requestAnimationFrame(refresh);
-        })
-      : null;
-    const observedNodes = [
-      wrapper.querySelector('[data-grid-window]'),
-      wrapper.querySelector('[data-grid-inner]'),
-      wrapper.querySelector('#work-history-shell'),
-      wrapper.querySelector('#testimonials-shell'),
-      wrapper.querySelector('#rate-cards-shell'),
-      wrapper.querySelector('#contact-card-footer'),
-      wrapper.querySelector('#stacked-inline-footer'),
-    ].filter(Boolean);
-
-    observedNodes.forEach((node) => {
-      if (resizeObserver) {
-        resizeObserver.observe(node);
-      }
-    });
-
     // Cal.com embed
     const calScript = document.createElement('script');
     calScript.type = 'text/javascript';
@@ -294,14 +194,8 @@ const StackedSlidesSection = () => {
     document.body.appendChild(calScript);
 
     return () => {
-      window.removeEventListener('resize', refresh);
-      if (resizeObserver) {
-        resizeObserver.disconnect();
-      }
       hoverCleanups.forEach((cleanup) => cleanup());
       if (document.body.contains(calScript)) document.body.removeChild(calScript);
-      media.revert();
-      ctx.revert();
     };
   }, []);
 
@@ -348,18 +242,24 @@ const StackedSlidesSection = () => {
                           <a
                             id="panel-hero-cta"
                             href="#"
+                            className="cta-pill-btn"
                             style={ctaStyle}
                             data-cal-link="bryan-balli-5w12w7/30min"
                             data-cal-namespace="30min"
                             data-cal-config='{"layout":"month_view","useSlotsViewOnSmallScreen":"true"}'
-                          >{slide.supportText} ↗</a>
+                          >
+                            <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
+                            {slide.supportText}
+                            <span style={ctaIconStyle}>↗</span>
+                          </a>
                         </div>
                       </div>
                       {slide.serviceItems && (
                         <div style={servicesRowStyle}>
                           {slide.serviceItems.map((item) => (
                             <div key={item.id} data-service-item style={serviceItemStyle}>
-                              <div style={servicePlaceholderStyle} />
+                              <div style={serviceVisualZoneStyle} />
+                              <span style={serviceLabelStyle}>{item.label}</span>
                             </div>
                           ))}
                         </div>
@@ -373,216 +273,55 @@ const StackedSlidesSection = () => {
                     <div data-grid-window style={gridWindowStyle}>
                       <div data-grid-inner style={gridInnerContainerStyle}>
                         <div id="stacked-grid-row" style={gridRowStyle}>
-                          {slide.gridItems.map((item) => (
-                            <div key={item.id} style={gridItemStyle}>
-                              <div style={gridPlaceholderStyle}></div>
-                            </div>
-                          ))}
-                        </div>
-                        <div data-quote-section style={quoteSectionStyle}>
-                          <div className="section-header-block" data-hover-item style={workHistoryHeaderStyle}>
-                            <img data-hover-image src="https://picsum.photos/seed/balli-benefits/600/700" alt="" style={{ display: 'none' }} />
-                            <span style={workHistoryEyebrowStyle}>What You Get</span>
-                            <h2 style={workHistoryHeadlineStyle}>Here's What You Get With Me In The Loop</h2>
-                          </div>
-                        </div>
-                        <ul role="list" style={hoverListStyle}>
-                          {[
-                            { index: '01', title: 'Builds that move as fast as the idea', tag: 'Speed' },
-                            { index: '02', title: 'One person accountable across design, code, and ship', tag: 'Accountability' },
-                            { index: '03', title: 'AI outputs reviewed before they touch your brand', tag: 'Quality Control' },
-                            { index: '04', title: 'Strategy that adjusts when the brief changes at 11pm', tag: 'Adaptability' },
-                            { index: '05', title: 'Technical execution that matches the vision in your head', tag: 'Precision' },
-                          ].map((item) => (
-                            <li key={item.title} style={hoverItemStyle}>
-                              <span style={hoverItemIndexStyle}>{item.index}</span>
-                              <div style={hoverTextWrapStyle}>
-                                <h3 style={hoverTitleStyle}>{item.title}</h3>
-                              </div>
-                              <span style={hoverItemTagStyle}>{item.tag}</span>
-                            </li>
-                          ))}
-                        </ul>
+                          {slide.gridItems.map((item, index) => {
+                            const isQuoteCard = index % 2 === 1;
+                            const testimonial = testimonials[Math.floor(index / 2) % testimonials.length];
 
-                        <div id="work-history-shell" style={workHistoryShellStyle}>
-                          <div className="section-header-block" data-hover-item style={workHistoryHeaderStyle}>
-                            <img data-hover-image src="https://picsum.photos/seed/balli-experience/600/700" alt="" style={{ display: 'none' }} />
-                            <span style={workHistoryEyebrowStyle}>Background</span>
-                            <h2 style={workHistoryHeadlineStyle}>Selected Experience</h2>
-                          </div>
-                          <div style={workHistoryListStyle}>
-                            {workHistory.map((item, i) => (
-                              <div key={item.years} style={{ ...workHistoryItemStyle, borderTop: i === 0 ? '1px solid rgba(42,36,32,0.12)' : undefined }}>
-                                <span style={workHistoryYearStyle}>{item.years}</span>
-                                <div style={workHistoryBodyStyle}>
-                                  <div style={workHistoryRoleRowStyle}>
-                                    <span style={workHistoryRoleStyle}>{item.role}</span>
-                                    <span style={workHistoryCompanyStyle}>{item.company}</span>
+                            if (isQuoteCard) {
+                              return (
+                                <article key={item.id} style={testimonialCardStyle}>
+                                  <p style={testimonialCardQuoteStyle}>&ldquo;{testimonial.quote}&rdquo;</p>
+                                  <div style={testimonialCardAuthorRowStyle}>
+                                    <img src={testimonial.img} alt={testimonial.name} style={testimonialCardAvatarStyle} />
+                                    <div style={testimonialCardMetaStyle}>
+                                      <span style={testimonialCardNameStyle}>{testimonial.name}</span>
+                                      <span style={testimonialCardCompanyStyle}>{testimonial.title} · {testimonial.company}</span>
+                                    </div>
                                   </div>
-                                  <p style={workHistoryDescStyle}>{item.desc}</p>
-                                </div>
-                                <span style={workHistoryBadgeStyle}>{item.type}</span>
+                                </article>
+                              );
+                            }
+
+                            return (
+                              <div key={item.id} style={gridItemStyle}>
+                                <div style={gridPlaceholderStyle}></div>
                               </div>
-                            ))}
-                          </div>
+                            );
+                          })}
                         </div>
-
-                        <div id="testimonials-shell" style={testimonialsShellStyle}>
-                          <div className="section-header-block" data-hover-item style={workHistoryHeaderStyle}>
-                            <img data-hover-image src="https://picsum.photos/seed/balli-clients/600/700" alt="" style={{ display: 'none' }} />
-                            <span style={workHistoryEyebrowStyle}>Social Proof</span>
-                            <h2 style={workHistoryHeadlineStyle}>What Clients Say</h2>
-                          </div>
-
-                          {/* Featured quote */}
-                          {testimonials.filter(t => t.featured).map(t => (
-                            <div key={t.name} style={featuredQuoteStyle}>
-                              <span style={featuredQuoteMarkStyle}>&ldquo;</span>
-                              <blockquote style={featuredQuoteTextStyle}>{t.quote}</blockquote>
-                              <div style={quoteAttributionStyle}>
-                                <span style={quoteAttributionNameStyle}>{t.name}</span>
-                                <span style={quoteAttributionSepStyle}>·</span>
-                                <span style={quoteAttributionRoleStyle}>{t.title}, {t.company}</span>
-                              </div>
-                            </div>
-                          ))}
-
-                          {/* Secondary quotes — asymmetric 2-col, last spans full */}
-                          <div style={secondaryQuotesGridStyle}>
-                            {testimonials.filter(t => !t.featured).map((t, i) => (
-                              <div
-                                key={t.name}
-                                style={{
-                                  ...secondaryQuoteItemStyle,
-                                  ...(i === testimonials.filter(x => !x.featured).length - 1
-                                    ? { gridColumn: '1 / -1' }
-                                    : {}),
-                                }}
-                              >
-                                <p style={secondaryQuoteTextStyle}>&ldquo;{t.quote}&rdquo;</p>
-                                <div style={quoteAttributionStyle}>
-                                  <span style={quoteAttributionNameStyle}>{t.name}</span>
-                                  <span style={quoteAttributionSepStyle}>·</span>
-                                  <span style={quoteAttributionRoleStyle}>{t.title}, {t.company}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div id="rate-cards-shell" style={rateCardShellStyle}>
-                          <div className="section-header-block" data-hover-item style={rateCardHeaderStyle}>
-                            <img data-hover-image src="https://picsum.photos/seed/balli-engage/600/700" alt="" style={{ display: 'none' }} />
-                            <span style={rateCardEyebrowStyle}>The Process</span>
-                            <h2 style={rateCardHeadlineStyle}>How to Engage...</h2>
-                            <p style={rateCardSubtextStyle}>No deck, no intake form, no agency runaround. Here's how most engagements actually start.</p>
-                          </div>
-
-                          {/* 3-step kickoff process */}
-                          <div style={processStepsStyle}>
-                            {[
-                              {
-                                step: '01',
-                                title: 'Text me your ideas',
-                                desc: 'Screenshots, rough sketches, a voice note — whatever you have. No polished brief needed.',
-                              },
-                              {
-                                step: '02',
-                                title: 'Get honest feedback on scope',
-                                desc: "I'll respond with direct input: what's realistic, what I'd cut, and roughly what it would take.",
-                              },
-                              {
-                                step: '03',
-                                title: 'Pick a structure and start',
-                                desc: 'Choose from the packages below or arrange something custom. First deliverable usually within a week.',
-                              },
-                            ].map((s) => (
-                              <div key={s.step} style={processStepItemStyle}>
-                                <span style={processStepNumStyle}>{s.step}</span>
-                                <div style={processStepBodyStyle}>
-                                  <span style={processStepTitleStyle}>{s.title}</span>
-                                  <p style={processStepDescStyle}>{s.desc}</p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-
-                          <div style={textBryanRowStyle}>
-                            <a
-                              href="sms:+13122865129&body=Hey Bryan, I have some ideas I'd like your feedback on."
-                              style={textBryanBtnStyle}
-                            >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                              </svg>
-                              Text Bryan
-                            </a>
-                            <span style={textBryanHintStyle}>Opens Messages · (312) 286-5129</span>
-                          </div>
-
-                          <div style={processToPackagesDividerStyle}>
-                            <span style={processToPackagesLabelStyle}>Or choose a package</span>
-                          </div>
-
-                          <div style={rateCardGridStyle}>
-                            {[
-                              { name: 'The Starter', price: '~$800', unit: '/project', desc: 'Single deliverable — a build, audit, or strategy session', badge: 'Standard rate', cta: 'Get Started' },
-                              { name: 'The Builder', price: '~$2,400', unit: '/project', desc: 'Multi-phase build with rounds of revision and handoff', badge: 'Most popular', cta: 'Get Started' },
-                              { name: 'The Operator', price: '~$3,800', unit: '/mo', desc: 'Ongoing human-in-the-loop support, builds + iteration cycles', badge: 'Save vs. hourly', cta: 'Get Started' },
-                              { name: 'The Partner', price: 'Custom', unit: '', desc: 'Full-scope embedded collaboration — strategy, builds, systems', badge: 'Best value', cta: "Let's Talk" },
-                            ].map((plan) => (
-                              <div key={plan.name} style={rateCardItemStyle}>
-                                <h3 style={rateCardNameStyle}>{plan.name}</h3>
-                                <div style={rateCardPriceRowStyle}>
-                                  <span style={rateCardPriceStyle}>{plan.price}</span>
-                                  {plan.unit && <span style={rateCardUnitStyle}>{plan.unit}</span>}
-                                </div>
-                                <p style={rateCardDescStyle}>{plan.desc}</p>
-                                <span style={rateCardBadgeStyle}>{plan.badge}</span>
-                                <a
-                                  href="#"
-                                  style={rateCardCtaStyle}
-                                  data-cal-link="bryan-balli-5w12w7/30min"
-                                  data-cal-namespace="30min"
-                                  data-cal-config='{"layout":"month_view","useSlotsViewOnSmallScreen":"true"}'
-                                >{plan.cta}</a>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div id="contact-card-footer" style={contactCardStyle}>
-                          <div style={contactCardLeftStyle}>
-                            <span style={contactCardEyebrowStyle}>Get Started Today</span>
-                            <h2 style={contactCardHeadlineStyle}>Ready to work with a human in the loop?</h2>
-                            <p style={contactCardSubtextStyle}>Book a free intro call — no commitment required. I'll come prepared.</p>
-                          </div>
-                          <div style={contactCardRightStyle}>
-                            <a
-                              href="#"
-                              style={contactCardPrimaryBtnStyle}
-                              data-cal-link="bryan-balli-5w12w7/30min"
-                              data-cal-namespace="30min"
-                              data-cal-config='{"layout":"month_view","useSlotsViewOnSmallScreen":"true"}'
-                            >Book a Call</a>
-                            <a href="#" style={contactCardSecondaryLinkStyle}>Contact Me →</a>
-                          </div>
-                        </div>
-
                         {/* Inline footer */}
                         <div id="stacked-inline-footer" style={inlineFooterStyle}>
                           <div style={inlineFooterDividerStyle} />
                           <div style={inlineFooterNewsletterStyle}>
-                            <h3 style={inlineFooterHeadingStyle}>Stay In Touch</h3>
-                            <p style={inlineFooterSubStyle}>Updates on projects, tools, and thinking on human-AI collaboration.</p>
-                            <div style={inlineFooterFormStyle}>
-                              <input
-                                type="email"
-                                placeholder="Your email address"
-                                style={inlineFooterInputStyle}
-                              />
-                              <button style={inlineFooterSubmitStyle}>Subscribe</button>
+                            <img src="/img/sig.png" alt="Bryan Balli signature" style={inlineFooterSignatureStyle} />
+                            <h3 style={inlineFooterHeadingStyle}>BRYAN BALLI</h3>
+                            <p style={inlineFooterSubStyle}>Experienced Creative Technologist<br />&amp; Digital Media Consultant.</p>
+                            <div style={aboutMeBlockStyle}>
+                              <p style={aboutMeQuoteStyle}>&ldquo;I&rsquo;ve spent a decade building at the intersection of design, code, and emerging technology — from interactive campaigns for global brands to AI-native systems for founders who need a human in the loop.&rdquo;</p>
+                              <span style={aboutMeBylineStyle}>— Chicago, IL</span>
                             </div>
+                            <a
+                              href="#"
+                              className="cta-pill-btn"
+                              style={ctaStyle}
+                              data-cal-link="bryan-balli-5w12w7/30min"
+                              data-cal-namespace="30min"
+                              data-cal-config='{"layout":"month_view","useSlotsViewOnSmallScreen":"true"}'
+                            >
+                              <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
+                              Chat with Bryan
+                              <span style={ctaIconStyle}>↗</span>
+                            </a>
                           </div>
                           <div style={inlineFooterDividerStyle} />
                           <div style={inlineFooterBottomStyle}>
@@ -641,7 +380,7 @@ const quoteTextStyle = {
   fontWeight: 700,
   lineHeight: 1.08,
   letterSpacing: '-0.04em',
-  fontFamily: "'Aldrich', system-ui, -apple-system, sans-serif",
+  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   color: '#2a2420',
   maxWidth: '18ch',
 };
@@ -655,35 +394,24 @@ const wrapperStyle = {
 
 const panelStyle = {
   width: '100%',
-  height: 'calc(100dvh - 64px)',
+  minHeight: 'calc(100dvh - 64px)',
   display: 'flex',
   justifyContent: 'center',
   position: 'relative',
   boxSizing: 'border-box',
-  overflow: 'hidden',
+  overflow: 'visible',
   borderRadius: '1rem',
 };
 
 const contentStyle = {
   width: '100%',
-  height: '100%',
+  height: 'auto',
 };
 
 const innerStyle = {
-  height: '100%',
-  display: 'flex',
-  flexDirection: 'column',
-  overflowX: 'visible',
-};
-
-const longInnerStyle = {
   height: 'auto',
-  minHeight: '100%',
   display: 'flex',
   flexDirection: 'column',
-  alignItems: 'center',
-  paddingBottom: '14vh',
-  boxSizing: 'border-box',
 };
 
 const headingStyle = {
@@ -692,7 +420,7 @@ const headingStyle = {
   margin: '0 auto',
   lineHeight: 0.9,
   letterSpacing: '-0.05em',
-  fontFamily: "'Aldrich', system-ui, -apple-system, sans-serif",
+  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   textAlign: 'center',
 };
 
@@ -719,14 +447,11 @@ const paragraphStyle = {
 };
 
 const gridWindowStyle = {
-  flex: 1,
-  overflow: 'hidden',
-  overflowX: 'visible',
+  overflow: 'visible',
 };
 
 const gridLayoutStyle = {
   width: '100%',
-  height: '100%',
   display: 'flex',
   flexDirection: 'column',
   paddingTop: 0,
@@ -779,17 +504,34 @@ const supportTextStyle = {
 const ctaStyle = {
   display: 'inline-flex',
   alignItems: 'center',
-  gap: '0.4rem',
-  padding: '0.6rem 1.2rem',
-  fontSize: 'clamp(0.7rem, 1.1vw, 0.8rem)',
-  fontWeight: 600,
-  letterSpacing: '0.04em',
+  gap: '0.5rem',
+  padding: '0.25rem 0.75rem 0.25rem 0.25rem',
+  fontSize: 'clamp(0.8rem, 1.1vw, 0.875rem)',
+  fontWeight: 700,
+  letterSpacing: '0.01em',
   textDecoration: 'none',
-  color: '#f5f1df',
-  background: '#2a2420',
-  borderRadius: '2rem',
+  color: '#ffffff',
+  background: 'linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)',
+  borderRadius: '999px',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1)',
   whiteSpace: 'nowrap',
   cursor: 'pointer',
+};
+
+const ctaAvatarStyle = {
+  width: '1.75rem',
+  height: '1.75rem',
+  borderRadius: '50%',
+  objectFit: 'cover',
+  border: '2px solid rgba(255,255,255,0.35)',
+  flexShrink: 0,
+  display: 'block',
+};
+
+const ctaIconStyle = {
+  fontSize: '0.7rem',
+  opacity: 0.75,
+  marginLeft: '0.1rem',
 };
 
 const gridInnerContainerStyle = {
@@ -801,7 +543,7 @@ const gridInnerContainerStyle = {
 
 const gridRowStyle = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(3, 1fr)',
+  gridTemplateColumns: '1fr',
   gap: 'clamp(0.7rem, 1.4vw, 1.05rem)',
   width: '100%',
   marginTop: '50px',
@@ -822,6 +564,72 @@ const gridPlaceholderStyle = {
   border: '1px solid rgba(42, 36, 32, 0.2)',
 };
 
+const testimonialCardStyle = {
+  background: 'transparent',
+  borderRadius: '0.5rem',
+  aspectRatio: '16 / 9',
+  padding: 'clamp(1.5rem, 4vw, 3rem)',
+  border: '1px solid rgba(42, 36, 32, 0.1)',
+  display: 'flex',
+  flexDirection: 'column',
+  justifyContent: 'center',
+  alignItems: 'center',
+  gap: 'clamp(0.75rem, 1.5vw, 1.25rem)',
+  boxSizing: 'border-box',
+  overflow: 'hidden',
+  textAlign: 'center',
+};
+
+const testimonialCardQuoteStyle = {
+  margin: 0,
+  fontSize: 'clamp(1rem, 2.4vw, 1.75rem)',
+  lineHeight: 1.4,
+  letterSpacing: '-0.02em',
+  fontStyle: 'italic',
+  fontWeight: 400,
+  color: 'rgba(42, 36, 32, 0.82)',
+  textWrap: 'balance',
+};
+
+const testimonialCardAuthorRowStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '0.6rem',
+};
+
+const testimonialCardAvatarStyle = {
+  width: '2rem',
+  height: '2rem',
+  borderRadius: '50%',
+  objectFit: 'cover',
+  border: '1px solid rgba(42, 36, 32, 0.14)',
+  flexShrink: 0,
+  display: 'block',
+};
+
+const testimonialCardMetaStyle = {
+  display: 'flex',
+  alignItems: 'baseline',
+  gap: '0.5rem',
+  flexWrap: 'wrap',
+  justifyContent: 'center',
+};
+
+const testimonialCardNameStyle = {
+  fontSize: 'clamp(0.78rem, 1vw, 0.875rem)',
+  fontWeight: 600,
+  letterSpacing: '-0.01em',
+  color: 'rgba(42, 36, 32, 0.75)',
+};
+
+const testimonialCardCompanyStyle = {
+  fontSize: 'clamp(0.72rem, 0.9vw, 0.8rem)',
+  fontWeight: 400,
+  letterSpacing: '0.02em',
+  color: 'rgba(42, 36, 32, 0.38)',
+};
+
 const featuredWorkLabelStyle = {
   width: '100%',
   paddingTop: 'clamp(1.4rem, 3.5vw, 2.8rem)',
@@ -836,16 +644,29 @@ const servicesRowStyle = {
 };
 
 const serviceItemStyle = {
-  height: 'clamp(60px, 8vh, 120px)',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 'clamp(0.4rem, 0.8vw, 0.6rem)',
+  height: 'clamp(130px, 16vh, 200px)',
   overflow: 'hidden',
 };
 
-const servicePlaceholderStyle = {
+const serviceVisualZoneStyle = {
+  flex: 1,
   width: '100%',
-  height: '100%',
-  backgroundColor: 'rgba(42, 36, 32, 0.08)',
+  backgroundColor: 'rgba(42, 36, 32, 0.06)',
   borderRadius: '0.5rem',
-  border: '1px solid rgba(42, 36, 32, 0.2)',
+  border: '1px solid rgba(42, 36, 32, 0.1)',
+};
+
+const serviceLabelStyle = {
+  fontSize: 'clamp(0.7rem, 0.95vw, 0.82rem)',
+  fontWeight: 500,
+  letterSpacing: '0.01em',
+  color: 'rgba(42, 36, 32, 0.65)',
+  whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
 };
 
 const hoverListStyle = {
@@ -913,7 +734,7 @@ const hoverTitleStyle = {
   lineHeight: 1.08,
   fontWeight: 700,
   letterSpacing: '-0.04em',
-  fontFamily: "'Aldrich', system-ui, -apple-system, sans-serif",
+  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   whiteSpace: 'nowrap',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
@@ -1038,7 +859,7 @@ const workHistoryHeadlineStyle = {
   letterSpacing: '-0.03em',
   lineHeight: 1.1,
   color: '#2a2420',
-  fontFamily: "'Aldrich', system-ui, -apple-system, sans-serif",
+  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
 };
 
 const workHistoryListStyle = {
@@ -1080,7 +901,7 @@ const workHistoryRoleStyle = {
   fontWeight: 700,
   letterSpacing: '-0.02em',
   color: '#2a2420',
-  fontFamily: "'Aldrich', system-ui, -apple-system, sans-serif",
+  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
 };
 
 const workHistoryCompanyStyle = {
@@ -1142,7 +963,7 @@ const rateCardHeadlineStyle = {
   letterSpacing: '-0.03em',
   lineHeight: 1.1,
   color: '#2a2420',
-  fontFamily: "'Aldrich', system-ui, -apple-system, sans-serif",
+  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
 };
 
 const rateCardSubtextStyle = {
@@ -1173,7 +994,7 @@ const processStepNumStyle = {
   letterSpacing: '-0.04em',
   lineHeight: 1,
   color: 'rgba(42, 36, 32, 0.1)',
-  fontFamily: "'Aldrich', system-ui, -apple-system, sans-serif",
+  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   paddingTop: '0.1rem',
 };
 
@@ -1188,7 +1009,7 @@ const processStepTitleStyle = {
   fontWeight: 700,
   letterSpacing: '-0.02em',
   color: '#2a2420',
-  fontFamily: "'Aldrich', system-ui, -apple-system, sans-serif",
+  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   lineHeight: 1.2,
 };
 
@@ -1270,7 +1091,7 @@ const rateCardNameStyle = {
   fontWeight: 700,
   letterSpacing: '-0.02em',
   color: '#7a6a3a',
-  fontFamily: "'Aldrich', system-ui, -apple-system, sans-serif",
+  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
 };
 
 const rateCardPriceRowStyle = {
@@ -1313,16 +1134,18 @@ const rateCardBadgeStyle = {
 const rateCardCtaStyle = {
   display: 'inline-flex',
   alignItems: 'center',
-  justifyContent: 'center',
-  padding: '0.75rem 1.2rem',
-  border: '1.5px solid rgba(42, 36, 32, 0.3)',
-  borderRadius: '0.5rem',
-  color: '#2a2420',
-  fontSize: '0.88rem',
-  fontWeight: 600,
+  gap: '0.75rem',
+  padding: '0.45rem 1.6rem 0.45rem 0.45rem',
+  borderRadius: '2rem',
+  color: '#ffffff',
+  background: 'linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1)',
+  fontSize: 'clamp(0.9rem, 1.3vw, 1rem)',
+  fontWeight: 700,
   textDecoration: 'none',
   cursor: 'pointer',
   marginTop: '0.5rem',
+  whiteSpace: 'nowrap',
 };
 
 const contactCardStyle = {
@@ -1362,7 +1185,7 @@ const contactCardHeadlineStyle = {
   lineHeight: 1.1,
   letterSpacing: '-0.03em',
   color: '#f5f1df',
-  fontFamily: "'Aldrich', system-ui, -apple-system, sans-serif",
+  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
 };
 
 const contactCardSubtextStyle = {
@@ -1383,13 +1206,16 @@ const contactCardRightStyle = {
 const contactCardPrimaryBtnStyle = {
   display: 'inline-flex',
   alignItems: 'center',
-  padding: '0.8rem 1.8rem',
-  fontSize: 'clamp(0.8rem, 1.1vw, 0.9rem)',
-  fontWeight: 600,
-  letterSpacing: '0.02em',
-  color: '#f5f1df',
-  border: '1.5px solid rgba(245, 241, 223, 0.5)',
-  borderRadius: '0.5rem',
+  gap: '0.75rem',
+  padding: '0.45rem 1.6rem 0.45rem 0.45rem',
+  fontSize: 'clamp(0.9rem, 1.3vw, 1rem)',
+  fontWeight: 700,
+  letterSpacing: '0.01em',
+  color: '#ffffff',
+  background: 'linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)',
+  border: '1px solid rgba(255,255,255,0.22)',
+  borderRadius: '2rem',
+  boxShadow: '0 0 14px 3px rgba(0,200,228,0.22), 0 2px 6px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1)',
   textDecoration: 'none',
   whiteSpace: 'nowrap',
   cursor: 'pointer',
@@ -1406,8 +1232,8 @@ const contactCardSecondaryLinkStyle = {
 
 const inlineFooterStyle = {
   width: '100%',
-  paddingTop: 'clamp(1rem, 2vw, 1.5rem)',
-  paddingBottom: 'clamp(2rem, 4vw, 3rem)',
+  paddingTop: 'clamp(2.5rem, 5vw, 4.5rem)',
+  paddingBottom: 'clamp(3rem, 6vw, 5rem)',
   boxSizing: 'border-box',
 };
 
@@ -1415,14 +1241,14 @@ const inlineFooterDividerStyle = {
   width: '100%',
   height: '1px',
   background: 'rgba(42, 36, 32, 0.12)',
-  margin: 'clamp(1.5rem, 3vw, 2.5rem) 0',
+  margin: 'clamp(2.5rem, 5vw, 4rem) 0',
 };
 
 const inlineFooterNewsletterStyle = {
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
-  gap: '0.75rem',
+  gap: 'clamp(1rem, 2vw, 1.5rem)',
   textAlign: 'center',
 };
 
@@ -1434,11 +1260,44 @@ const inlineFooterHeadingStyle = {
   color: '#2a2420',
 };
 
+const inlineFooterSignatureStyle = {
+  width: 'min(110px, 31vw)',
+  height: 'auto',
+  display: 'block',
+};
+
 const inlineFooterSubStyle = {
   margin: 0,
   fontSize: 'clamp(0.8rem, 1.1vw, 0.88rem)',
   color: 'rgba(42, 36, 32, 0.5)',
   maxWidth: '36ch',
+};
+
+const aboutMeBlockStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: '0.75rem',
+  maxWidth: '54ch',
+};
+
+const aboutMeQuoteStyle = {
+  margin: 0,
+  fontSize: 'clamp(1rem, 2.4vw, 1.75rem)',
+  lineHeight: 1.4,
+  letterSpacing: '-0.02em',
+  fontStyle: 'italic',
+  fontWeight: 400,
+  color: 'rgba(42, 36, 32, 0.82)',
+  textAlign: 'center',
+  textWrap: 'balance',
+};
+
+const aboutMeBylineStyle = {
+  fontSize: 'clamp(0.78rem, 1vw, 0.875rem)',
+  fontWeight: 500,
+  letterSpacing: '0.01em',
+  color: 'rgba(42, 36, 32, 0.4)',
 };
 
 const inlineFooterFormStyle = {
@@ -1462,13 +1321,17 @@ const inlineFooterInputStyle = {
 };
 
 const inlineFooterSubmitStyle = {
-  padding: '0.75rem 1.4rem',
-  background: '#2a2420',
-  border: 'none',
-  borderRadius: '0.5rem',
-  color: '#f5f1df',
-  fontSize: '0.88rem',
-  fontWeight: 600,
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '0.75rem',
+  padding: '0.45rem 1.6rem 0.45rem 0.45rem',
+  background: 'linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)',
+  border: '1px solid rgba(255,255,255,0.22)',
+  borderRadius: '2rem',
+  boxShadow: '0 0 14px 3px rgba(0,200,228,0.22), 0 2px 6px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1)',
+  color: '#ffffff',
+  fontSize: 'clamp(0.9rem, 1.3vw, 1rem)',
+  fontWeight: 700,
   cursor: 'pointer',
   whiteSpace: 'nowrap',
 };

@@ -1,16 +1,48 @@
 import React, { useState, useEffect } from 'react';
 
-const Header = ({ logoRef }) => {
+const Header = ({ logoRef, onOpenPage }) => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   useEffect(() => {
     const handleResize = () => {
-      setIsMobile(window.innerWidth < 768);
+      const nextIsMobile = window.innerWidth < 768;
+      setIsMobile(nextIsMobile);
+      if (!nextIsMobile) {
+        setIsMenuOpen(false);
+      }
     };
 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    if (!isMenuOpen) {
+      return undefined;
+    }
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setIsMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isMenuOpen]);
+
+  // const navItems = [
+  //   { label: 'Work', href: '#content-section' },
+  //   { label: 'About', pageId: 'value' },
+  //   { label: 'Process', pageId: 'engage' },
+  //   { label: 'Contact', pageId: 'contact' },
+  // ];
+
+  const openPage = (pageId) => {
+    setIsMenuOpen(false);
+    onOpenPage?.(pageId);
+  };
 
   const headerStyle = {
     position: 'fixed',
@@ -55,6 +87,8 @@ const Header = ({ logoRef }) => {
   };
 
   const navItemStyle = {
+    border: 'none',
+    background: 'none',
     fontSize: 'clamp(0.62rem, 1.1vw, 0.72rem)',
     fontWeight: 600,
     letterSpacing: '0.12em',
@@ -83,32 +117,94 @@ const Header = ({ logoRef }) => {
     transition: 'all 0.3s ease',
   };
 
+  const mobileMenuOverlayStyle = {
+    position: 'fixed',
+    inset: '80px 1rem auto',
+    zIndex: 260,
+    background: 'rgba(245, 241, 223, 0.18)',
+    backdropFilter: 'blur(24px)',
+    WebkitBackdropFilter: 'blur(24px)',
+    boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.45), inset 0 1px 0 rgba(255,255,255,0.6), 0 24px 70px rgba(42,36,32,0.15)',
+    borderRadius: '1.25rem',
+    padding: '1rem',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.6rem',
+  };
+
+  const mobileNavItemStyle = {
+    border: 'none',
+    background: 'rgba(255,255,255,0.34)',
+    color: '#2a2420',
+    borderRadius: '0.95rem',
+    padding: '0.95rem 1rem',
+    textAlign: 'left',
+    fontSize: '0.86rem',
+    fontWeight: 700,
+    letterSpacing: '0.04em',
+    cursor: 'pointer',
+  };
+
   return (
-    <header id="site-nav" style={headerStyle}>
-      <div ref={logoRef} aria-hidden="true" style={anchorStyle} />
+    <>
+      <header id="site-nav" style={headerStyle}>
+        <div ref={logoRef} aria-hidden="true" style={anchorStyle} />
 
-      <a href="/" id="site-nav-wordmark" style={logoStyle}>Bryan Balli</a>
+        <a href="/" id="site-nav-wordmark" style={logoStyle}>Bryan Balli</a>
 
-      {isMobile ? (
-        <button
-          data-nav-hamburger
-          style={hamburgerStyle}
-          onClick={() => {}}
-          aria-label="Toggle menu"
-        >
-          <div style={hamburgerLineStyle} />
-          <div style={hamburgerLineStyle} />
-          <div style={hamburgerLineStyle} />
-        </button>
-      ) : (
-        <nav id="site-nav-links" style={navItemsStyle}>
-          <a href="#" style={navItemStyle}>Work</a>
-          <a href="#" style={navItemStyle}>About</a>
-          <a href="#" style={navItemStyle}>Process</a>
-          <a href="#" style={navItemStyle}>Contact</a>
-        </nav>
-      )}
-    </header>
+        {isMobile ? (
+          /*
+          <button
+            data-nav-hamburger
+            style={hamburgerStyle}
+            onClick={() => setIsMenuOpen((value) => !value)}
+            aria-label="Toggle menu"
+            aria-expanded={isMenuOpen}
+          >
+            <div style={{ ...hamburgerLineStyle, transform: isMenuOpen ? 'translateY(7px) rotate(45deg)' : 'none' }} />
+            <div style={{ ...hamburgerLineStyle, opacity: isMenuOpen ? 0 : 1 }} />
+            <div style={{ ...hamburgerLineStyle, transform: isMenuOpen ? 'translateY(-7px) rotate(-45deg)' : 'none' }} />
+          </button>
+          */
+          null
+        ) : (
+          /*
+          <nav id="site-nav-links" style={navItemsStyle}>
+            {navItems.map((item) => (
+              item.pageId ? (
+                <button key={item.label} type="button" style={navItemStyle} onClick={() => openPage(item.pageId)}>
+                  {item.label}
+                </button>
+              ) : (
+                <a key={item.label} href={item.href} style={navItemStyle}>
+                  {item.label}
+                </a>
+              )
+            ))}
+          </nav>
+          */
+          null
+        )}
+      </header>
+
+      {/*
+      {isMobile && isMenuOpen ? (
+        <div style={mobileMenuOverlayStyle}>
+          {navItems.map((item) => (
+            item.pageId ? (
+              <button key={item.label} type="button" style={mobileNavItemStyle} onClick={() => openPage(item.pageId)}>
+                {item.label}
+              </button>
+            ) : (
+              <a key={item.label} href={item.href} style={{ ...mobileNavItemStyle, display: 'block', textDecoration: 'none' }} onClick={() => setIsMenuOpen(false)}>
+                {item.label}
+              </a>
+            )
+          ))}
+        </div>
+      ) : null}
+      */}
+    </>
   );
 };
 

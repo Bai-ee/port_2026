@@ -7,12 +7,9 @@ import HorizontalTextSection from './HorizontalTextSection';
 import HorizontalGallery from './HorizontalGallery';
 import HoverRevealList from './HoverRevealList';
 import StackedSlidesSection from './StackedSlidesSection';
-import FontSelector from './FontSelector';
-import LoopControls from './LoopControls';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { ScrollToPlugin } from 'gsap/ScrollToPlugin';
-
-gsap.registerPlugin(ScrollTrigger, ScrollToPlugin);
+// import FontSelector from './FontSelector';
+// import LoopControls from './LoopControls';
+import PortfolioModal from './PortfolioModal';
 
 const HomePage = () => {
   const [params, setParams] = useState({
@@ -40,11 +37,12 @@ const HomePage = () => {
     tireSpinAxis: 'z',
     tireSpinSpeed: 0,
     animationSpeed: 3.4,
-    opacity: 1,
+    opacity: 0.1,
   });
 
-  const [canvasBackground, setCanvasBackground] = useState('#cac2a5');
+  const [canvasBackground, setCanvasBackground] = useState('#ffffff');
   const [textColor, setTextColor] = useState('#000000');
+  const [activePageId, setActivePageId] = useState(null);
   const headerLogoRef = useRef(null);
   const heroSectionRef = useRef(null);
   const contentSectionRef = useRef(null);
@@ -56,7 +54,6 @@ const HomePage = () => {
     // Opacity-only intro — no transforms so ScrollTrigger pin positions are unaffected
     const headline = document.querySelector('#hero-panel-top-left');
     const canvas = heroSectionRef.current?.querySelector('canvas');
-    const contentSection = contentSectionRef.current;
     const nav = document.querySelector('#site-nav');
 
     const panelHeadline  = document.querySelector('#panel-hero-headline');
@@ -76,99 +73,16 @@ const HomePage = () => {
       .to(serviceItems,  { autoAlpha: 1, duration: 0.5, ease: 'power2.out', stagger: 0.1 }, '<0.15')
       .to(panelGrid,     { autoAlpha: 1, duration: 0.6, ease: 'power2.out', stagger: 0.06 }, '<0.15');
 
-    // Auto-scroll to pinned section when user scrolls >10% of hero
-    let autoScrolling = false;
-    let snapTween = null;
-    const runSnap = (targetY) => {
-      if (Math.abs(window.scrollY - targetY) < 2) {
-        return;
-      }
-
-      autoScrolling = true;
-
-      if (snapTween) {
-        snapTween.kill();
-        snapTween = null;
-      }
-
-      snapTween = gsap.to(window, {
-        scrollTo: targetY,
-        duration: 0.65,
-        ease: 'power2.out',
-        autoKill: false,
-        overwrite: 'auto',
-        onComplete: () => {
-          autoScrolling = false;
-          snapTween = null;
-        },
-        onInterrupt: () => {
-          autoScrolling = false;
-          snapTween = null;
-        },
-      });
-    };
-
-    const snapTrigger = ScrollTrigger.create({
-      trigger: '#hero-section',
-      start: () => `top+=${window.innerHeight * 0.1} top`,
-      onEnter: () => {
-        if (autoScrolling) return;
-
-        const panel = document.querySelector('[data-stack-panel]');
-        if (!panel) return;
-
-        const panelTrigger = ScrollTrigger.getById('stacked-slides-pin');
-        const headerH = window.innerWidth < 768 ? 48 : 64;
-        const fallbackTarget = panel.getBoundingClientRect().top + window.scrollY - headerH;
-        const targetY = panelTrigger ? panelTrigger.start : fallbackTarget;
-        runSnap(targetY);
-      },
-    });
-
-    const reverseSnapTrigger = ScrollTrigger.create({
-      trigger: '#hero-section',
-      start: () => {
-        const panelTrigger = ScrollTrigger.getById('stacked-slides-pin');
-        const reverseSnapThreshold = Math.max(28, window.innerHeight * 0.04);
-
-        if (!panelTrigger) {
-          return reverseSnapThreshold;
-        }
-
-        return panelTrigger.start - reverseSnapThreshold;
-      },
-      invalidateOnRefresh: true,
-      onLeaveBack: () => {
-        if (autoScrolling) return;
-
-        const openingTarget = heroSectionRef.current
-          ? heroSectionRef.current.offsetTop
-          : 0;
-
-        runSnap(openingTarget);
-      },
-    });
-
-    const timer = setTimeout(() => {
-      ScrollTrigger.refresh();
-    }, 100);
-
     return () => {
-      clearTimeout(timer);
-      if (snapTween) {
-        snapTween.kill();
-      }
       tl.kill();
-      snapTrigger.kill();
-      reverseSnapTrigger.kill();
     };
   }, []);
 
 
   return (
     <div style={{ position: 'relative', width: '100vw', minHeight: '100dvh', background: 'transparent', overflowX: 'hidden' }}>
-      <FontSelector />
-      <LoopControls params={params} onParamsChange={setParams} backgroundColor={canvasBackground} onBackgroundChange={setCanvasBackground} textColor={textColor} onTextColorChange={setTextColor} />
+      {/* <FontSelector /> */}
+      {/* <LoopControls params={params} onParamsChange={setParams} backgroundColor={canvasBackground} onBackgroundChange={setCanvasBackground} textColor={textColor} onTextColorChange={setTextColor} /> */}
       {/* Hero Section */}
       <section
         ref={heroSectionRef}
@@ -186,7 +100,7 @@ const HomePage = () => {
       </section>
 
       {/* Header/Nav */}
-      <Header logoRef={headerLogoRef} />
+      <Header logoRef={headerLogoRef} onOpenPage={setActivePageId} />
 
       {/* Content Section */}
       <section
@@ -206,6 +120,7 @@ const HomePage = () => {
         {/* <HoverRevealList /> */}
         {/* <HorizontalTextSection /> */}
       </section>
+      <PortfolioModal activePageId={activePageId} onClose={() => setActivePageId(null)} onOpenPage={setActivePageId} />
     </div>
   );
 };

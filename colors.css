@@ -1,3 +1,51 @@
+/* CTA pill button — animated comet border */
+@property --cta-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes cta-border-spin {
+  to { --cta-angle: 360deg; }
+}
+
+.cta-pill-btn {
+  position: relative;
+  isolation: isolate;
+}
+
+.cta-pill-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 2px;
+  background: conic-gradient(
+    from var(--cta-angle),
+    transparent 0deg,
+    transparent 180deg,
+    hsla(185, 100%, 58%, 0.12) 200deg,
+    hsla(200, 100%, 62%, 0.35) 225deg,
+    hsla(225, 100%, 64%, 0.6)  250deg,
+    hsla(250, 100%, 66%, 0.78) 275deg,
+    hsla(275, 100%, 66%, 0.88) 300deg,
+    hsla(300, 100%, 68%, 0.94) 322deg,
+    hsla(320, 80%, 80%, 0.97)  338deg,
+    rgba(255, 255, 255, 1)     350deg,
+    transparent                358deg
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: cta-border-spin 2.4s linear infinite;
+  pointer-events: none;
+}
+
 /* Yellow Color Palette */
 :root, .light, .light-theme {
   --yellow-1: #fefdfa;
