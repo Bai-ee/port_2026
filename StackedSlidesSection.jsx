@@ -1,5 +1,9 @@
-import React, { useLayoutEffect, useRef } from 'react';
+import React, { useLayoutEffect, useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
+import { createSharedParticleGalleryRenderer } from './sharedParticleGalleryRenderer';
+import HoloSwarmWindow from './HoloSwarmWindow';
+import ProductSwarmWindow from './ProductSwarmWindow';
+import DecentSwarmWindow from './DecentSwarmWindow';
 
 const testimonials = [
   {
@@ -96,8 +100,133 @@ const slides = [
 
 const getInitials = (name) => name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
 
+const FILTERS = ['All', 'Web & Interactive', 'Motion', 'AI Systems', 'Strategy', 'Visualization'];
+
+const PARTICLE_DEFAULTS = {
+  scale: 60,
+  particleCount: 3000,
+  particleSize: 1,
+  speedMult: 0.5,
+  animationSpeed: 6,
+  hueSpeed: 0.15,
+  waveAmplitude: 6,
+  chaos: 0,
+  saturation: 1,
+  lightness: 1,
+};
+
+const PARTICLE_SLIDERS = [
+  { key: 'scale',          label: 'Scale',        min: 5,     max: 60,   step: 1     },
+  { key: 'particleCount',  label: 'Count',        min: 100,   max: 3000, step: 50    },
+  { key: 'particleSize',   label: 'Size',         min: 0.02,  max: 1.0,  step: 0.01  },
+  { key: 'speedMult',      label: 'Speed',        min: 0.01,  max: 0.5,  step: 0.005 },
+  { key: 'animationSpeed', label: 'Anim Speed',   min: 0.1,   max: 6.0,  step: 0.1   },
+  { key: 'hueSpeed',       label: 'Hue Speed',    min: 0.001, max: 0.15, step: 0.001 },
+  { key: 'waveAmplitude',  label: 'Wave',         min: 0.0,   max: 6.0,  step: 0.1   },
+  { key: 'chaos',          label: 'Chaos',        min: 0.0,   max: 5.0,  step: 0.05  },
+  { key: 'saturation',     label: 'Saturation',   min: 0.0,   max: 1.0,  step: 0.01  },
+  { key: 'lightness',      label: 'Lightness',    min: 0.1,   max: 1.0,  step: 0.01  },
+];
+
+const PRESET_KINDS = ['torus', 'vortex', 'lattice', 'sphere', 'ribbon', 'orbits', 'cloud', 'helix'];
+
 const StackedSlidesSection = () => {
   const wrapperRef = useRef(null);
+  const filterDropdownRef = useRef(null);
+  const servicesViewportRef = useRef(null);
+  const servicesCanvasRef = useRef(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [activeFilter, setActiveFilter] = useState('All');
+  const [particleParams, setParticleParams] = useState(PARTICLE_DEFAULTS);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Set initial hidden state
+  useEffect(() => {
+    const el = filterDropdownRef.current;
+    if (!el) return;
+    gsap.set(el, { height: 0, overflow: 'hidden' });
+    gsap.set(el.querySelectorAll('.filter-chip'), { opacity: 0, y: 6 });
+  }, []);
+
+  // Animate open / close
+  useEffect(() => {
+    const el = filterDropdownRef.current;
+    if (!el) return;
+    const pills = el.querySelectorAll('.filter-chip');
+
+    if (filterOpen) {
+      gsap.set(el, { overflow: 'hidden' });
+      gsap.set(el, { height: 'auto' });
+      gsap.from(el, { height: 0, duration: 0.35, ease: 'power2.out' });
+      gsap.fromTo(
+        pills,
+        { opacity: 0, y: 6 },
+        { opacity: 1, y: 0, duration: 0.22, ease: 'power2.out', stagger: 0.055, delay: 0.12 }
+      );
+    } else {
+      gsap.to(pills, { opacity: 0, y: 4, duration: 0.1, stagger: { each: 0.03, from: 'end' } });
+      gsap.to(el, { height: 0, duration: 0.28, ease: 'power2.in', delay: 0.08 });
+    }
+  }, [filterOpen]);
+
+  // Three.js particle renderer for service thumbnails
+  useEffect(() => {
+    const viewport = servicesViewportRef.current;
+    const canvas = servicesCanvasRef.current;
+    if (!viewport || !canvas) return;
+
+    const particleRenderer = createSharedParticleGalleryRenderer({
+      canvas,
+      container: viewport,
+      getWindows: () => Array.from(viewport.querySelectorAll('[data-particle-window]')),
+      params: particleParams,
+    });
+
+    let frameId = 0;
+    let isLoopActive = false;
+    let isVisible = false;
+
+    const renderFrame = (time) => {
+      if (!isLoopActive) return;
+      particleRenderer.render(time * 0.001);
+      frameId = window.requestAnimationFrame(renderFrame);
+    };
+
+    const stopRenderLoop = () => {
+      isLoopActive = false;
+      if (frameId) { window.cancelAnimationFrame(frameId); frameId = 0; }
+    };
+
+    const startRenderLoop = () => {
+      if (isLoopActive || !isVisible || document.hidden) return;
+      isLoopActive = true;
+      frameId = window.requestAnimationFrame(renderFrame);
+    };
+
+    const visibilityObserver = new IntersectionObserver(
+      ([entry]) => {
+        isVisible = entry?.isIntersecting ?? false;
+        if (isVisible) { startRenderLoop(); return; }
+        stopRenderLoop();
+      },
+      { root: null, threshold: 0, rootMargin: '100px 0px' }
+    );
+
+    const handleDocumentVisibility = () => {
+      if (document.hidden) { stopRenderLoop(); return; }
+      startRenderLoop();
+    };
+
+    document.addEventListener('visibilitychange', handleDocumentVisibility);
+    visibilityObserver.observe(viewport);
+
+    return () => {
+      stopRenderLoop();
+      visibilityObserver.disconnect();
+      document.removeEventListener('visibilitychange', handleDocumentVisibility);
+      particleRenderer.dispose();
+    };
+  }, [particleParams]);
 
   useLayoutEffect(() => {
     if (!wrapperRef.current) return;
@@ -206,6 +335,17 @@ const StackedSlidesSection = () => {
           #stacked-grid-row {
             grid-template-columns: 1fr !important;
           }
+          #stacked-grid-row > * {
+            height: 250px !important;
+            aspect-ratio: unset !important;
+          }
+          [data-service-item] {
+            height: auto !important;
+          }
+          [data-service-item] > div {
+            aspect-ratio: 16 / 9 !important;
+            flex: none !important;
+          }
         }
         .section-header-block {
           cursor: default;
@@ -213,6 +353,13 @@ const StackedSlidesSection = () => {
         }
         .section-header-block:hover {
           opacity: 0.65;
+        }
+        .deliverables-toggle:hover {
+          opacity: 0.7;
+        }
+        .filter-chip:hover {
+          background: rgba(42, 36, 32, 0.1) !important;
+          color: #2a2420 !important;
         }
       `}</style>
       <div ref={wrapperRef} style={wrapperStyle}>
@@ -255,20 +402,72 @@ const StackedSlidesSection = () => {
                         </div>
                       </div>
                       {slide.serviceItems && (
-                        <div style={servicesRowStyle}>
-                          {slide.serviceItems.map((item) => (
-                            <div key={item.id} data-service-item style={serviceItemStyle}>
-                              <div style={serviceVisualZoneStyle} />
-                              <span style={serviceLabelStyle}>{item.label}</span>
-                            </div>
-                          ))}
+                        <div ref={servicesViewportRef} style={servicesViewportStyle}>
+                          <canvas ref={servicesCanvasRef} style={servicesCanvasStyle} />
+                          <button
+                            type="button"
+                            onClick={() => setSettingsOpen(o => !o)}
+                            style={particleGearButtonStyle}
+                            title="Particle settings"
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                            </svg>
+                          </button>
+                          <div style={servicesRowStyle}>
+                            {slide.serviceItems.map((item) => (
+                              <div key={item.id} data-service-item style={serviceItemStyle}>
+                                {item.id === 0 ? (
+                                  <ProductSwarmWindow style={serviceVisualZoneStyle} />
+                                ) : item.id === 1 ? (
+                                  <HoloSwarmWindow style={serviceVisualZoneStyle} />
+                                ) : (
+                                  <DecentSwarmWindow style={serviceVisualZoneStyle} />
+                                )}
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
                     <div data-featured-work-label style={featuredWorkLabelStyle}>
-                      <h2 data-label-heading style={{ ...headingStyle, fontSize: 'clamp(1.4rem, 3.5vw, 2.45rem)', textAlign: 'left', margin: 0 }}>
-                        Featured Work
-                      </h2>
+                      <button
+                        type="button"
+                        className="deliverables-toggle"
+                        style={deliverablesToggleStyle}
+                        onClick={() => setFilterOpen(prev => !prev)}
+                        aria-expanded={filterOpen}
+                      >
+                        <h2 data-label-heading style={{ ...headingStyle, fontSize: 'clamp(1.4rem, 3.5vw, 2.45rem)', textAlign: 'left', margin: 0 }}>
+                          Deliverables
+                        </h2>
+                        <svg
+                          width="18" height="18"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          style={{ transform: filterOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.28s cubic-bezier(0.16, 1, 0.3, 1)', flexShrink: 0, color: '#2a2420' }}
+                          aria-hidden="true"
+                        >
+                          <polyline points="9 6 15 12 9 18" />
+                        </svg>
+                      </button>
+                      <div ref={filterDropdownRef} style={filterDropdownStyle}>
+                        {FILTERS.map((f) => (
+                          <button
+                            key={f}
+                            type="button"
+                            className="filter-chip"
+                            style={{ ...filterChipStyle, ...(activeFilter === f ? filterChipActiveStyle : {}) }}
+                            onClick={() => setActiveFilter(f)}
+                          >
+                            {f}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                     <div data-grid-window style={gridWindowStyle}>
                       <div data-grid-inner style={gridInnerContainerStyle}>
@@ -292,9 +491,18 @@ const StackedSlidesSection = () => {
                               );
                             }
 
+                            const isFirst = index === 0;
                             return (
                               <div key={item.id} style={gridItemStyle}>
-                                <div style={gridPlaceholderStyle}></div>
+                                {isFirst ? (
+                                  <img
+                                    src="/img/fast_poker.png"
+                                    alt="Fast Poker"
+                                    style={gridFeatureImageStyle}
+                                  />
+                                ) : (
+                                  <div style={gridPlaceholderStyle} />
+                                )}
                               </div>
                             );
                           })}
@@ -357,6 +565,70 @@ const StackedSlidesSection = () => {
           </section>
         ))}
       </div>
+
+      {/* Particle debug panel */}
+      {settingsOpen && (
+        <div style={debugPanelStyle}>
+          <div style={debugPanelHeaderStyle}>
+            <span style={debugPanelTitleStyle}>Particle Settings</span>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <button
+                type="button"
+                style={debugPanelSmallBtnStyle}
+                onClick={() => {
+                  navigator.clipboard?.writeText(JSON.stringify(particleParams, null, 2));
+                }}
+                title="Copy JSON"
+              >
+                Copy
+              </button>
+              <button
+                type="button"
+                style={debugPanelSmallBtnStyle}
+                onClick={() => setParticleParams(PARTICLE_DEFAULTS)}
+              >
+                Reset
+              </button>
+              <button
+                type="button"
+                style={{ ...debugPanelSmallBtnStyle, padding: '0.2rem 0.45rem' }}
+                onClick={() => setSettingsOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          <div style={debugPanelPresetsStyle}>
+            {slides[0].serviceItems.map((item, i) => (
+              <span key={item.id} style={debugPresetTagStyle}>
+                {item.label.split(' ')[0]}:{' '}
+                <em>{item.id === 1 ? 'brain (svg)' : PRESET_KINDS[i % 2 === 0 ? 0 : 2]}</em>
+              </span>
+            ))}
+          </div>
+
+          <div style={debugSlidersStyle}>
+            {PARTICLE_SLIDERS.map(({ key, label, min, max, step }) => (
+              <div key={key} style={debugSliderRowStyle}>
+                <div style={debugSliderLabelRowStyle}>
+                  <span style={debugSliderLabelStyle}>{label}</span>
+                  <span style={debugSliderValueStyle}>{particleParams[key]}</span>
+                </div>
+                <input
+                  type="range"
+                  min={min}
+                  max={max}
+                  step={step}
+                  value={particleParams[key]}
+                  onChange={(e) => setParticleParams(prev => ({ ...prev, [key]: parseFloat(e.target.value) }))}
+                  style={debugRangeStyle}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   );
 };
@@ -546,7 +818,7 @@ const gridRowStyle = {
   gridTemplateColumns: '1fr',
   gap: 'clamp(0.7rem, 1.4vw, 1.05rem)',
   width: '100%',
-  marginTop: '50px',
+  marginTop: 0,
 };
 
 const gridItemStyle = {
@@ -554,6 +826,14 @@ const gridItemStyle = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
+};
+
+const gridFeatureImageStyle = {
+  width: '100%',
+  height: '100%',
+  objectFit: 'cover',
+  borderRadius: '0.5rem',
+  display: 'block',
 };
 
 const gridPlaceholderStyle = {
@@ -632,8 +912,65 @@ const testimonialCardCompanyStyle = {
 
 const featuredWorkLabelStyle = {
   width: '100%',
-  paddingTop: 'clamp(1.4rem, 3.5vw, 2.8rem)',
-  paddingBottom: 'clamp(2rem, 4vw, 3.5rem)',
+  paddingTop: 0,
+  paddingBottom: 'clamp(1rem, 2vw, 1.5rem)',
+};
+
+const deliverablesToggleStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  width: '100%',
+  background: 'none',
+  border: 'none',
+  padding: 0,
+  cursor: 'pointer',
+  textAlign: 'left',
+  transition: 'opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
+};
+
+const filterDropdownStyle = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: '0.5rem',
+  paddingTop: 'clamp(0.75rem, 1.5vw, 1rem)',
+  paddingBottom: 'clamp(1rem, 2vw, 1.5rem)',
+};
+
+const filterChipStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  padding: '0.35rem 0.9rem',
+  background: 'rgba(42, 36, 32, 0.05)',
+  border: '1px solid rgba(42, 36, 32, 0.15)',
+  borderRadius: '2rem',
+  fontSize: 'clamp(0.72rem, 1vw, 0.82rem)',
+  fontWeight: 500,
+  letterSpacing: '0.01em',
+  color: 'rgba(42, 36, 32, 0.6)',
+  cursor: 'pointer',
+  transition: 'background 0.18s ease, color 0.18s ease',
+};
+
+const filterChipActiveStyle = {
+  background: '#2a2420',
+  border: '1px solid #2a2420',
+  color: '#f5f1df',
+};
+
+const servicesViewportStyle = {
+  position: 'relative',
+  width: '100%',
+};
+
+const servicesCanvasStyle = {
+  position: 'absolute',
+  inset: 0,
+  width: '100%',
+  height: '100%',
+  pointerEvents: 'none',
+  zIndex: 2,
+  filter: 'brightness(1.1) contrast(1.08)',
 };
 
 const servicesRowStyle = {
@@ -654,10 +991,11 @@ const serviceItemStyle = {
 const serviceVisualZoneStyle = {
   flex: 1,
   width: '100%',
-  backgroundColor: 'rgba(42, 36, 32, 0.06)',
+  backgroundColor: 'transparent',
   borderRadius: '0.5rem',
   border: '1px solid rgba(42, 36, 32, 0.1)',
 };
+
 
 const serviceLabelStyle = {
   fontSize: 'clamp(0.7rem, 0.95vw, 0.82rem)',
@@ -1358,6 +1696,121 @@ const inlineFooterLegalLinkStyle = {
   fontSize: '0.78rem',
   color: 'rgba(42, 36, 32, 0.4)',
   textDecoration: 'none',
+  cursor: 'pointer',
+};
+
+const particleGearButtonStyle = {
+  position: 'absolute',
+  top: '0.5rem',
+  right: '0.5rem',
+  zIndex: 10,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: '1.75rem',
+  height: '1.75rem',
+  background: 'rgba(42, 36, 32, 0.55)',
+  border: '1px solid rgba(42, 36, 32, 0.2)',
+  borderRadius: '0.4rem',
+  color: 'rgba(245, 241, 223, 0.8)',
+  cursor: 'pointer',
+  backdropFilter: 'blur(6px)',
+};
+
+const debugPanelStyle = {
+  position: 'fixed',
+  top: '50%',
+  right: '1.25rem',
+  transform: 'translateY(-50%)',
+  zIndex: 10000,
+  width: '260px',
+  background: 'rgba(18, 15, 12, 0.96)',
+  border: '1px solid rgba(255,255,255,0.1)',
+  borderRadius: '0.875rem',
+  boxShadow: '0 24px 64px rgba(0,0,0,0.55)',
+  backdropFilter: 'blur(16px)',
+  color: '#f5f1df',
+  fontFamily: "system-ui, -apple-system, sans-serif",
+  fontSize: '0.8rem',
+  overflow: 'hidden',
+};
+
+const debugPanelHeaderStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  padding: '0.75rem 1rem',
+  borderBottom: '1px solid rgba(255,255,255,0.08)',
+};
+
+const debugPanelTitleStyle = {
+  fontSize: '0.75rem',
+  fontWeight: 600,
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  color: 'rgba(245,241,223,0.6)',
+};
+
+const debugPanelSmallBtnStyle = {
+  background: 'rgba(255,255,255,0.08)',
+  border: '1px solid rgba(255,255,255,0.12)',
+  borderRadius: '0.3rem',
+  color: 'rgba(245,241,223,0.7)',
+  fontSize: '0.68rem',
+  padding: '0.2rem 0.6rem',
+  cursor: 'pointer',
+};
+
+const debugPanelPresetsStyle = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: '0.35rem',
+  padding: '0.6rem 1rem',
+  borderBottom: '1px solid rgba(255,255,255,0.06)',
+};
+
+const debugPresetTagStyle = {
+  fontSize: '0.65rem',
+  color: 'rgba(245,241,223,0.4)',
+  background: 'rgba(255,255,255,0.06)',
+  borderRadius: '0.25rem',
+  padding: '0.1rem 0.4rem',
+};
+
+const debugSlidersStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 0,
+  padding: '0.5rem 1rem 1rem',
+  maxHeight: '60vh',
+  overflowY: 'auto',
+};
+
+const debugSliderRowStyle = {
+  paddingTop: '0.55rem',
+  paddingBottom: '0.1rem',
+};
+
+const debugSliderLabelRowStyle = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  marginBottom: '0.25rem',
+};
+
+const debugSliderLabelStyle = {
+  fontSize: '0.72rem',
+  color: 'rgba(245,241,223,0.65)',
+};
+
+const debugSliderValueStyle = {
+  fontSize: '0.7rem',
+  fontVariantNumeric: 'tabular-nums',
+  color: 'rgba(245,241,223,0.45)',
+};
+
+const debugRangeStyle = {
+  width: '100%',
+  accentColor: '#f5f1df',
   cursor: 'pointer',
 };
 
