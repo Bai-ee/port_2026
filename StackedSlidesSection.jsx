@@ -135,6 +135,7 @@ const StackedSlidesSection = () => {
   const filterDropdownRef = useRef(null);
   const servicesViewportRef = useRef(null);
   const servicesCanvasRef = useRef(null);
+  const [pokerHovered, setPokerHovered] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState('All');
   const [particleParams, setParticleParams] = useState(PARTICLE_DEFAULTS);
@@ -361,6 +362,11 @@ const StackedSlidesSection = () => {
           background: rgba(42, 36, 32, 0.1) !important;
           color: #2a2420 !important;
         }
+        @media (max-width: 767px) {
+          [data-label-heading] {
+            color: #000000 !important;
+          }
+        }
       `}</style>
       <div ref={wrapperRef} style={wrapperStyle}>
         {slides.map((slide, index) => (
@@ -493,12 +499,17 @@ const StackedSlidesSection = () => {
 
                             const isFirst = index === 0;
                             return (
-                              <div key={item.id} style={gridItemStyle}>
+                              <div
+                                key={item.id}
+                                style={isFirst ? { ...gridItemStyle, aspectRatio: 'auto', backgroundColor: 'rgba(42, 36, 32, 0.08)', border: '1px solid rgba(42, 36, 32, 0.2)', borderRadius: '0.5rem' } : gridItemStyle}
+                                onPointerEnter={isFirst ? () => setPokerHovered(true) : undefined}
+                                onPointerLeave={isFirst ? () => setPokerHovered(false) : undefined}
+                              >
                                 {isFirst ? (
                                   <img
-                                    src="/img/fast_poker.png"
+                                    src={pokerHovered ? '/img/fast_poker.png' : '/img/fast_poker_BW.png'}
                                     alt="Fast Poker"
-                                    style={gridFeatureImageStyle}
+                                    style={pokerHovered ? { ...gridFeatureImageStyle, mixBlendMode: 'normal' } : gridFeatureImageStyle}
                                   />
                                 ) : (
                                   <div style={gridPlaceholderStyle} />
@@ -830,10 +841,12 @@ const gridItemStyle = {
 
 const gridFeatureImageStyle = {
   width: '100%',
-  height: '100%',
-  objectFit: 'cover',
+  height: 'auto',
+  maxWidth: '100%',
+  objectFit: 'contain',
   borderRadius: '0.5rem',
   display: 'block',
+  mixBlendMode: 'difference'
 };
 
 const gridPlaceholderStyle = {
