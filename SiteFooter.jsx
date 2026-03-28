@@ -5,17 +5,100 @@ const SiteFooter = () => {
 
   return (
     <footer id="site-footer" style={footerStyle}>
+      <style>{`
+        #site-footer .footer-bullet-list {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+          display: flex;
+          flex-direction: column;
+          gap: 1.1rem;
+        }
+        #site-footer .footer-bullet-list li {
+          display: flex;
+          gap: 0.75rem;
+          align-items: flex-start;
+          font-size: clamp(0.85rem, 1.3vw, 0.93rem);
+          line-height: 1.65;
+          color: rgba(245, 241, 223, 0.72);
+        }
+        #site-footer .footer-bullet-list li .bullet-mark {
+          flex-shrink: 0;
+          width: 1.25rem;
+          height: 1.25rem;
+          margin-top: 0.1em;
+          border-radius: 50%;
+          border: 1.5px solid rgba(245, 241, 223, 0.3);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        #site-footer .footer-bullet-list li .bullet-mark::after {
+          content: '';
+          width: 5px;
+          height: 5px;
+          border-radius: 50%;
+          background: rgba(245, 241, 223, 0.55);
+          display: block;
+        }
+        @media (max-width: 767px) {
+          #site-footer .footer-top {
+            flex-direction: column;
+            gap: 3rem;
+          }
+          #site-footer .footer-brand-col {
+            max-width: 100% !important;
+          }
+          #site-footer .footer-nav-grid {
+            flex-direction: row;
+            gap: 2.5rem;
+          }
+        }
+      `}</style>
+
       <div style={footerInnerStyle}>
 
         {/* Top grid */}
-        <div style={footerTopStyle}>
+        <div className="footer-top" style={footerTopStyle}>
 
-          {/* Left — brand */}
-          <div style={footerBrandColStyle}>
+          {/* Left — quote */}
+          <div className="footer-brand-col" style={footerBrandColStyle}>
             <a href="/" style={footerWordmarkStyle}>Bryan Balli</a>
-            <p style={footerDescStyle}>
-              Creative technologist & digital media consultant. Human-in-the-loop AI systems, interactive builds, and digital strategy.
+
+            <p style={footerQuoteIntroStyle}>
+              With me in the loop, you get all the deliverables needed to launch your digital products and cross-platform marketing campaigns.
             </p>
+            <p style={footerQuoteFollowStyle}>
+              But what you really secure is time back.
+            </p>
+
+            <ul className="footer-bullet-list">
+              <li>
+                <span className="bullet-mark" />
+                <span>My availability extends beyond working hours, accommodating your flow-state to keep us moving forward</span>
+              </li>
+              <li>
+                <span className="bullet-mark" />
+                <span>Your rough ideas become usable, identifying key insights that drive design strategy</span>
+              </li>
+              <li>
+                <span className="bullet-mark" />
+                <span>Decisions stay simple, providing clear reasoning instead of endless iterations</span>
+              </li>
+              <li>
+                <span className="bullet-mark" />
+                <span>Confidence through consistency becomes our default, with one conversation translating across desktop, mobile, social, email, and print collateral</span>
+              </li>
+              <li>
+                <span className="bullet-mark" />
+                <span>Agentic workflows are identified, QA'd, and maintained, introducing automation solutions that dynamically grow with your business</span>
+              </li>
+            </ul>
+
+            <p style={footerClosingStyle}>
+              You secure a Creative Technologist with experience spanning design strategy and front end development, shaped by work with major brands through established agencies from San Francisco to Chicago, to remote, international teams.
+            </p>
+
             <div style={footerSocialsStyle}>
               <a href="#" style={footerSocialBtnStyle} aria-label="LinkedIn">in</a>
               <a href="#" style={footerSocialBtnStyle} aria-label="Twitter">𝕏</a>
@@ -24,7 +107,7 @@ const SiteFooter = () => {
           </div>
 
           {/* Right — nav columns */}
-          <div style={footerNavGridStyle}>
+          <div className="footer-nav-grid" style={footerNavGridStyle}>
             <div style={footerNavColStyle}>
               <span style={footerNavHeadingStyle}>Work</span>
               <a href="#" style={footerNavLinkStyle}>Featured Projects</a>
@@ -104,17 +187,18 @@ const footerInnerStyle = {
 
 const footerTopStyle = {
   display: 'flex',
-  gap: 'clamp(3rem, 8vw, 8rem)',
+  gap: 'clamp(3rem, 6vw, 6rem)',
   flexWrap: 'wrap',
   marginBottom: 'clamp(3rem, 6vw, 5rem)',
+  alignItems: 'flex-start',
 };
 
 const footerBrandColStyle = {
   display: 'flex',
   flexDirection: 'column',
-  gap: '1rem',
-  flex: '1 1 260px',
-  maxWidth: '340px',
+  gap: '1.25rem',
+  flex: '1 1 300px',
+  maxWidth: '560px',
 };
 
 const footerWordmarkStyle = {
@@ -126,17 +210,35 @@ const footerWordmarkStyle = {
   fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
 };
 
-const footerDescStyle = {
+const footerQuoteIntroStyle = {
   margin: 0,
-  fontSize: 'clamp(0.8rem, 1.2vw, 0.9rem)',
+  fontSize: 'clamp(0.88rem, 1.4vw, 1rem)',
+  lineHeight: 1.7,
+  color: 'rgba(245, 241, 223, 0.85)',
+  fontWeight: 400,
+};
+
+const footerQuoteFollowStyle = {
+  margin: 0,
+  fontSize: 'clamp(0.9rem, 1.5vw, 1.05rem)',
+  lineHeight: 1.5,
+  color: '#f5f1df',
+  fontWeight: 600,
+  letterSpacing: '-0.01em',
+};
+
+const footerClosingStyle = {
+  margin: 0,
+  fontSize: 'clamp(0.8rem, 1.2vw, 0.88rem)',
   lineHeight: 1.65,
-  color: 'rgba(245, 241, 223, 0.45)',
+  color: 'rgba(245, 241, 223, 0.42)',
+  fontStyle: 'italic',
 };
 
 const footerSocialsStyle = {
   display: 'flex',
   gap: '0.6rem',
-  marginTop: '0.5rem',
+  marginTop: '0.25rem',
 };
 
 const footerSocialBtnStyle = {
@@ -157,7 +259,7 @@ const footerSocialBtnStyle = {
 const footerNavGridStyle = {
   display: 'flex',
   gap: 'clamp(2rem, 6vw, 6rem)',
-  flex: '1 1 auto',
+  flex: '0 0 auto',
   flexWrap: 'wrap',
 };
 

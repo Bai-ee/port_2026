@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useRef } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
@@ -20,13 +20,58 @@ const glass = {
 
 const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
   const topLeftRef = useRef(null);
+  const [layoutMetrics, setLayoutMetrics] = useState({
+    centerY: '50vh',
+    gapHeight: '70vh',
+    maxWidth: '42rem',
+  });
 
   useLayoutEffect(() => {
     const el = topLeftRef.current;
     if (!el) return;
 
+    let frame = 0;
+
+    const updateLayout = () => {
+      const nav = document.querySelector('#site-nav');
+      const contentSection = document.querySelector('#content-section');
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const navBottom = nav?.getBoundingClientRect().bottom ?? 64;
+      const contentTop = contentSection?.getBoundingClientRect().top ?? viewportHeight;
+      const gapTop = Math.max(0, navBottom);
+      const gapBottom = Math.max(gapTop + 1, contentTop);
+      const gapHeight = Math.max(gapBottom - gapTop, 180);
+      const centerY = gapTop + gapHeight / 2;
+      const sideGutter = Math.max(viewportWidth * 0.1, (viewportWidth - 810) / 2);
+      const maxWidth = Math.max(Math.min(viewportWidth - (sideGutter * 2), 672), 240);
+
+      setLayoutMetrics((current) => {
+        const next = {
+          centerY: `${centerY}px`,
+          gapHeight: `${gapHeight}px`,
+          maxWidth: `${maxWidth}px`,
+        };
+
+        if (
+          current.centerY === next.centerY &&
+          current.gapHeight === next.gapHeight &&
+          current.maxWidth === next.maxWidth
+        ) {
+          return current;
+        }
+
+        return next;
+      });
+    };
+
+    const scheduleLayoutUpdate = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(updateLayout);
+    };
+
     const ctx = gsap.context(() => {
-      gsap.set(el, { autoAlpha: 1, filter: 'blur(0px)' });
+      gsap.set(el, { autoAlpha: 1, filter: 'blur(0px)', yPercent: -50 });
 
       gsap.to(el, {
         y: -60,
@@ -42,12 +87,37 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       });
     });
 
-    return () => ctx.revert();
+    scheduleLayoutUpdate();
+
+    const resizeObserver = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(scheduleLayoutUpdate)
+      : null;
+
+    const nav = document.querySelector('#site-nav');
+    const contentSection = document.querySelector('#content-section');
+
+    if (nav) {
+      resizeObserver?.observe(nav);
+    }
+
+    if (contentSection) {
+      resizeObserver?.observe(contentSection);
+    }
+
+    resizeObserver?.observe(document.body);
+    window.addEventListener('resize', scheduleLayoutUpdate);
+    window.addEventListener('orientationchange', scheduleLayoutUpdate);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', scheduleLayoutUpdate);
+      window.removeEventListener('orientationchange', scheduleLayoutUpdate);
+      resizeObserver?.disconnect();
+      ctx.revert();
+    };
   }, []);
 
   const edge = 'max(10vw, calc((100vw - 810px) / 2))';
-  const topEdge = 'clamp(10rem, 19vh, 22rem)';
-  const botEdge = 'clamp(1.5rem, 3vh, 2.5rem)';
 
   return (
     <>
@@ -55,7 +125,20 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       <div
         id="hero-panel-top-left"
         ref={topLeftRef}
-        style={{ ...glass, top: topEdge, left: edge, width: 'max(55vw, 240px)', maxWidth: 'max(55vw, 240px)', background: 'none', backdropFilter: 'none', WebkitBackdropFilter: 'none', border: 'none', boxShadow: 'none', padding: 0 }}
+        style={{
+          ...glass,
+          '--hero-gap-height': layoutMetrics.gapHeight,
+          top: layoutMetrics.centerY,
+          left: edge,
+          width: 'min(82vw, 42rem)',
+          maxWidth: layoutMetrics.maxWidth,
+          background: 'none',
+          backdropFilter: 'none',
+          WebkitBackdropFilter: 'none',
+          border: 'none',
+          boxShadow: 'none',
+          padding: 0,
+        }}
       >
         <h1 style={{
           fontWeight: 700,
@@ -64,7 +147,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
           lineHeight: 1.05,
           color: textColor,
           margin: 0,
-          fontSize: 'clamp(1.9rem, 9.3vw, 4.4rem)',
+          fontSize: 'clamp(1.9rem, min(9.3vw, calc(var(--hero-gap-height) / 4.15)), 4.4rem)',
           textTransform: 'none',
         }}>
           Creative Technologist<br />& Digital Media<br />Consultant

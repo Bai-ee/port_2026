@@ -5,6 +5,16 @@ import HoloSwarmWindow from './HoloSwarmWindow';
 import ProductSwarmWindow from './ProductSwarmWindow';
 import DecentSwarmWindow from './DecentSwarmWindow';
 
+const agencyLogos = [
+  { src: '/img/agencies/publicis.png', alt: 'Publicis', scale: 2 },
+  { src: '/img/agencies/epsilon.png', alt: 'Epsilon' },
+  { src: '/img/agencies/conversant.png', alt: 'Conversant' },
+  { src: '/img/agencies/ANNTAYLOR.png', alt: 'Ann Taylor', scale: 0.67 },
+  { src: '/img/agencies/GAP.png', alt: 'Gap', scale: 2 },
+  { src: '/img/agencies/MAZDA.png', alt: 'Mazda' },
+  { src: '/img/agencies/alliance.png', alt: 'Alliance Data' },
+];
+
 const testimonials = [
   {
     quote: 'Transforms ideas into polished, high-impact experiences. Strong across devices, highly responsive, and consistently delivers under pressure.',
@@ -100,7 +110,7 @@ const slides = [
 
 const getInitials = (name) => name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
 
-const FILTERS = ['All', 'Web & Interactive', 'Motion', 'AI Systems', 'Strategy', 'Visualization'];
+const FILTERS = ['All', 'Agentic Services', 'Brand Guides', 'Logo Development', 'Marketing Automation', 'Print Media', 'Promo Videos', 'Saas', 'UI & UX', 'Websites'];
 
 const PARTICLE_DEFAULTS = {
   scale: 60,
@@ -135,6 +145,9 @@ const StackedSlidesSection = () => {
   const filterDropdownRef = useRef(null);
   const servicesViewportRef = useRef(null);
   const servicesCanvasRef = useRef(null);
+  const marqueeShellRef = useRef(null);
+  const marqueeTrackRef = useRef(null);
+  const marqueeSetRef = useRef(null);
   const [pokerHovered, setPokerHovered] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState('All');
@@ -228,6 +241,123 @@ const StackedSlidesSection = () => {
       particleRenderer.dispose();
     };
   }, [particleParams]);
+
+  useEffect(() => {
+    const shell = marqueeShellRef.current;
+    const track = marqueeTrackRef.current;
+    const set = marqueeSetRef.current;
+    if (!shell || !track || !set) return;
+
+    let itemWidth = 0;
+    let offset = 0;
+    let frameId = 0;
+    let measureFrameId = 0;
+    let lastTime = 0;
+    let isVisible = false;
+
+    const applyTransform = () => {
+      track.style.transform = `translate3d(${offset}px, 0, 0)`;
+    };
+
+    const measure = () => {
+      itemWidth = set.getBoundingClientRect().width;
+      if (!itemWidth) return;
+
+      offset = itemWidth ? -((Math.abs(offset) % itemWidth)) : 0;
+      applyTransform();
+    };
+
+    const scheduleMeasure = () => {
+      cancelAnimationFrame(measureFrameId);
+      measureFrameId = requestAnimationFrame(measure);
+    };
+
+    const stop = () => {
+      if (!frameId) return;
+      cancelAnimationFrame(frameId);
+      frameId = 0;
+      lastTime = 0;
+    };
+
+    const tick = (time) => {
+      if (!isVisible || document.hidden || !itemWidth) {
+        stop();
+        return;
+      }
+
+      if (!lastTime) {
+        lastTime = time;
+      }
+
+      const delta = Math.min((time - lastTime) / 1000, 0.05);
+      lastTime = time;
+      offset -= delta * 42;
+
+      if (offset <= -itemWidth) {
+        offset += itemWidth;
+      }
+
+      applyTransform();
+      frameId = requestAnimationFrame(tick);
+    };
+
+    const start = () => {
+      if (frameId || document.hidden || !isVisible || !itemWidth) return;
+      lastTime = 0;
+      frameId = requestAnimationFrame(tick);
+    };
+
+    const handleVisibility = () => {
+      if (document.hidden) {
+        stop();
+        return;
+      }
+
+      start();
+    };
+
+    const intersectionObserver = new IntersectionObserver(
+      ([entry]) => {
+        isVisible = entry?.isIntersecting ?? false;
+
+        if (isVisible) {
+          start();
+          return;
+        }
+
+        stop();
+      },
+      { root: null, threshold: 0, rootMargin: '120px 0px' }
+    );
+
+    const resizeObserver = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(scheduleMeasure)
+      : null;
+
+    const images = Array.from(set.querySelectorAll('img'));
+    const onImageLoad = () => scheduleMeasure();
+
+    images.forEach((image) => {
+      if (!image.complete) {
+        image.addEventListener('load', onImageLoad);
+      }
+    });
+
+    resizeObserver?.observe(shell);
+    resizeObserver?.observe(set);
+    intersectionObserver.observe(shell);
+    document.addEventListener('visibilitychange', handleVisibility);
+    scheduleMeasure();
+
+    return () => {
+      stop();
+      cancelAnimationFrame(measureFrameId);
+      resizeObserver?.disconnect();
+      intersectionObserver.disconnect();
+      document.removeEventListener('visibilitychange', handleVisibility);
+      images.forEach((image) => image.removeEventListener('load', onImageLoad));
+    };
+  }, []);
 
   useLayoutEffect(() => {
     if (!wrapperRef.current) return;
@@ -366,6 +496,9 @@ const StackedSlidesSection = () => {
           [data-label-heading] {
             color: #000000 !important;
           }
+          [data-filter-dropdown] {
+            justify-content: center;
+          }
         }
       `}</style>
       <div ref={wrapperRef} style={wrapperStyle}>
@@ -461,7 +594,7 @@ const StackedSlidesSection = () => {
                           <polyline points="9 6 15 12 9 18" />
                         </svg>
                       </button>
-                      <div ref={filterDropdownRef} style={filterDropdownStyle}>
+                      <div ref={filterDropdownRef} data-filter-dropdown style={filterDropdownStyle}>
                         {FILTERS.map((f) => (
                           <button
                             key={f}
@@ -501,18 +634,20 @@ const StackedSlidesSection = () => {
                             return (
                               <div
                                 key={item.id}
-                                style={isFirst ? { ...gridItemStyle, aspectRatio: 'auto', backgroundColor: 'rgba(42, 36, 32, 0.08)', border: '1px solid rgba(42, 36, 32, 0.2)', borderRadius: '0.5rem' } : gridItemStyle}
-                                onPointerEnter={isFirst ? () => setPokerHovered(true) : undefined}
-                                onPointerLeave={isFirst ? () => setPokerHovered(false) : undefined}
+                                style={{ ...gridItemStyle, aspectRatio: isFirst ? 'auto' : '16/9', backgroundColor: 'rgba(42, 36, 32, 0.08)', border: '1px solid rgba(42, 36, 32, 0.2)', borderRadius: '0.5rem' }}
                               >
                                 {isFirst ? (
                                   <img
-                                    src={pokerHovered ? '/img/fast_poker.png' : '/img/fast_poker_BW.png'}
+                                    src="/img/fast_poker_BW.png"
                                     alt="Fast Poker"
-                                    style={pokerHovered ? { ...gridFeatureImageStyle, mixBlendMode: 'normal' } : gridFeatureImageStyle}
+                                    style={gridFeatureImageStyle}
                                   />
                                 ) : (
-                                  <div style={gridPlaceholderStyle} />
+                                  <img
+                                    src={`/img/port/frame_${Math.floor(index / 2)}.png`}
+                                    alt={`Project frame ${Math.floor(index / 2)}`}
+                                    style={gridFrameImageStyle}
+                                  />
                                 )}
                               </div>
                             );
@@ -521,26 +656,57 @@ const StackedSlidesSection = () => {
                         {/* Inline footer */}
                         <div id="stacked-inline-footer" style={inlineFooterStyle}>
                           <div style={inlineFooterDividerStyle} />
-                          <div style={inlineFooterNewsletterStyle}>
+                          <div id="inline-footer-value-block" style={inlineFooterNewsletterStyle}>
                             <img src="/img/sig.png" alt="Bryan Balli signature" style={inlineFooterSignatureStyle} />
-                            <h3 style={inlineFooterHeadingStyle}>BRYAN BALLI</h3>
-                            <p style={inlineFooterSubStyle}>Experienced Creative Technologist<br />&amp; Digital Media Consultant.</p>
-                            <div style={aboutMeBlockStyle}>
-                              <p style={aboutMeQuoteStyle}>&ldquo;I&rsquo;ve spent a decade building at the intersection of design, code, and emerging technology — from interactive campaigns for global brands to AI-native systems for founders who need a human in the loop.&rdquo;</p>
-                              <span style={aboutMeBylineStyle}>— Chicago, IL</span>
+
+                            <p style={footerValueIntroStyle}>
+                              &ldquo;With me in the loop, you get all the high-impact deliverables needed to launch your digital products and cross-platform marketing campaigns.&rdquo;
+                            </p>
+                            <p style={footerBridgeLabelStyle}>
+                              But what you really secure is time back.
+                            </p>
+
+                            <ul id="inline-footer-bullet-list" style={footerBulletListStyle}>
+                              <li style={footerBulletItemStyle}>My availability extends beyond working hours, accommodating your flow-state to keep us moving forward</li>
+                              <li style={footerBulletItemStyle}>Your rough ideas become usable, identifying key insights that drive design strategy</li>
+                              <li style={footerBulletItemStyle}>Decisions stay simple, providing clear reasoning instead of endless iterations</li>
+                              <li style={footerBulletItemStyle}>Confidence through consistency becomes our default, with one conversation translating across desktop, mobile, social, email, and print collateral</li>
+                              <li style={footerBulletItemStyle}>Agentic workflows are identified, QA&rsquo;d, and maintained, introducing automation solutions that dynamically grow with your business</li>
+                            </ul>
+
+                            <div id="agency-marquee-shell" ref={marqueeShellRef} style={agencyMarqueeShellStyle}>
+                              <div ref={marqueeTrackRef} style={agencyMarqueeTrackStyle}>
+                                <div ref={marqueeSetRef} style={agencyMarqueeSetStyle}>
+                                  {agencyLogos.map((logo) => (
+                                    <img key={`agency-a-${logo.alt}`} src={logo.src} alt={logo.alt} style={logo.scale ? { ...agencyLogoStyle, height: `${22 * logo.scale}px` } : agencyLogoStyle} />
+                                  ))}
+                                </div>
+                                <div aria-hidden="true" style={agencyMarqueeSetStyle}>
+                                  {agencyLogos.map((logo) => (
+                                    <img key={`agency-b-${logo.alt}`} src={logo.src} alt="" style={logo.scale ? { ...agencyLogoStyle, height: `${22 * logo.scale}px` } : agencyLogoStyle} />
+                                  ))}
+                                </div>
+                              </div>
                             </div>
-                            <a
-                              href="#"
-                              className="cta-pill-btn"
-                              style={ctaStyle}
-                              data-cal-link="bryan-balli-5w12w7/30min"
-                              data-cal-namespace="30min"
-                              data-cal-config='{"layout":"month_view","useSlotsViewOnSmallScreen":"true"}'
-                            >
-                              <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
-                              Chat with Bryan
-                              <span style={ctaIconStyle}>↗</span>
-                            </a>
+
+                            <div id="inline-footer-credit-row" style={inlineFooterCreditRowStyle}>
+                              <div style={inlineFooterCreditLineStyle}>
+                                <span style={testimonialCardNameStyle}>Bryan Balli</span>
+                                <span style={testimonialCardCompanyStyle}>Creative Technologist · Chicago</span>
+                              </div>
+                              <a
+                                href="#"
+                                className="cta-pill-btn"
+                                style={ctaStyle}
+                                data-cal-link="bryan-balli-5w12w7/30min"
+                                data-cal-namespace="30min"
+                                data-cal-config='{"layout":"month_view","useSlotsViewOnSmallScreen":"true"}'
+                              >
+                                <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
+                                Chat with Bryan
+                                <span style={ctaIconStyle}>↗</span>
+                              </a>
+                            </div>
                           </div>
                           <div style={inlineFooterDividerStyle} />
                           <div style={inlineFooterBottomStyle}>
@@ -839,6 +1005,13 @@ const gridItemStyle = {
   justifyContent: 'center',
 };
 
+const gridFrameImageStyle = {
+  width: '100%',
+  height: '100%',
+  objectFit: 'contain',
+  display: 'block',
+};
+
 const gridFeatureImageStyle = {
   width: '100%',
   height: 'auto',
@@ -846,7 +1019,6 @@ const gridFeatureImageStyle = {
   objectFit: 'contain',
   borderRadius: '0.5rem',
   display: 'block',
-  mixBlendMode: 'difference'
 };
 
 const gridPlaceholderStyle = {
@@ -1599,8 +1771,9 @@ const inlineFooterNewsletterStyle = {
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
-  gap: 'clamp(1rem, 2vw, 1.5rem)',
+  gap: 'clamp(1.1rem, 2.2vw, 1.75rem)',
   textAlign: 'center',
+  width: '100%',
 };
 
 const inlineFooterHeadingStyle = {
@@ -1651,6 +1824,74 @@ const aboutMeBylineStyle = {
   color: 'rgba(42, 36, 32, 0.4)',
 };
 
+const footerValueIntroStyle = {
+  margin: 0,
+  fontSize: 'clamp(1rem, 2.4vw, 1.75rem)',
+  lineHeight: 1.4,
+  letterSpacing: '-0.02em',
+  fontStyle: 'italic',
+  fontWeight: 400,
+  color: 'rgba(42, 36, 32, 0.82)',
+  textAlign: 'center',
+  maxWidth: '100%',
+  textWrap: 'balance',
+};
+
+const footerValueFollowStyle = {
+  margin: 0,
+  fontSize: 'clamp(0.95rem, 1.5vw, 1.1rem)',
+  lineHeight: 1.4,
+  color: '#2a2420',
+  fontWeight: 600,
+  letterSpacing: '-0.01em',
+  textAlign: 'center',
+  maxWidth: '36ch',
+};
+
+const footerBridgeLabelStyle = {
+  margin: 0,
+  fontSize: '0.7rem',
+  fontWeight: 600,
+  letterSpacing: '0.14em',
+  textTransform: 'uppercase',
+  color: 'rgba(42, 36, 32, 0.38)',
+  textAlign: 'center',
+};
+
+const footerBulletListStyle = {
+  listStyle: 'none',
+  margin: 0,
+  padding: 0,
+  display: 'flex',
+  flexDirection: 'column',
+  width: '100%',
+  maxWidth: '54ch',
+  textAlign: 'left',
+};
+
+const footerBulletItemStyle = {
+  fontSize: 'clamp(0.78rem, 1vw, 0.85rem)',
+  lineHeight: 1.5,
+  color: 'rgba(42, 36, 32, 0.72)',
+  padding: '0.75rem 0',
+  borderTop: '1px solid rgba(42, 36, 32, 0.1)',
+};
+
+const footerBulletMarkStyle = {};
+
+const footerClosingStyle = {
+  margin: 0,
+  fontSize: 'clamp(0.78rem, 1vw, 0.875rem)',
+  lineHeight: 1.6,
+  color: 'rgba(42, 36, 32, 0.42)',
+  fontWeight: 500,
+  fontStyle: 'italic',
+  letterSpacing: '0.01em',
+  textAlign: 'center',
+  width: '100%',
+  maxWidth: '54ch',
+};
+
 const inlineFooterFormStyle = {
   display: 'flex',
   gap: '0.5rem',
@@ -1685,6 +1926,53 @@ const inlineFooterSubmitStyle = {
   fontWeight: 700,
   cursor: 'pointer',
   whiteSpace: 'nowrap',
+};
+
+const agencyMarqueeShellStyle = {
+  width: '100%',
+  maxWidth: '325px',
+  overflow: 'hidden',
+  maskImage: 'linear-gradient(to right, transparent 0%, black 15%, black 85%, transparent 100%)',
+  WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 15%, black 85%, transparent 100%)',
+};
+
+const agencyMarqueeTrackStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  width: 'max-content',
+  willChange: 'transform',
+  backfaceVisibility: 'hidden',
+  transform: 'translate3d(0, 0, 0)',
+};
+
+const agencyMarqueeSetStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '2rem',
+  paddingRight: '2rem',
+  flexShrink: 0,
+};
+
+const agencyLogoStyle = {
+  height: '22px',
+  width: 'auto',
+  display: 'block',
+  opacity: 0.45,
+  filter: 'grayscale(1)',
+  flexShrink: 0,
+};
+
+const inlineFooterCreditRowStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: '1.25rem',
+};
+
+const inlineFooterCreditLineStyle = {
+  display: 'flex',
+  alignItems: 'baseline',
+  gap: '0.5rem',
 };
 
 const inlineFooterBottomStyle = {
