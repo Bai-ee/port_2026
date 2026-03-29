@@ -96,7 +96,7 @@ const slides = [
     layout: 'grid',
     headlineText: 'Digital Media Consultant',
     supportText: 'Chat with Bryan',
-    gridItems: Array(7).fill(null).map((_, i) => ({ id: i })),
+    gridItems: Array(15).fill(null).map((_, i) => ({ id: i })),
     serviceItems: [
       { id: 0, label: 'Product Development' },
       { id: 1, label: 'Agentic Automation' },
@@ -549,9 +549,43 @@ const StackedSlidesSection = () => {
                       )}
                     </div>
                     <div data-featured-work-label style={featuredWorkLabelStyle}>
-                      <h2 data-label-heading style={{ ...headingStyle, fontSize: 'clamp(1.4rem, 3.5vw, 2.45rem)', textAlign: 'left', margin: 0 }}>
-                        Featured Work
-                      </h2>
+                      <button
+                        type="button"
+                        className="deliverables-toggle"
+                        style={deliverablesToggleStyle}
+                        onClick={() => setFilterOpen(prev => !prev)}
+                        aria-expanded={filterOpen}
+                      >
+                        <h2 data-label-heading style={{ ...headingStyle, fontSize: 'clamp(1.4rem, 3.5vw, 2.45rem)', textAlign: 'left', margin: 0 }}>
+                          Featured Work
+                        </h2>
+                        <svg
+                          width="18" height="18"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          style={{ transform: filterOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.28s cubic-bezier(0.16, 1, 0.3, 1)', flexShrink: 0, color: '#2a2420' }}
+                          aria-hidden="true"
+                        >
+                          <polyline points="9 6 15 12 9 18" />
+                        </svg>
+                      </button>
+                      <div ref={filterDropdownRef} data-filter-dropdown style={filterDropdownStyle}>
+                        {FILTERS.map((f) => (
+                          <button
+                            key={f}
+                            type="button"
+                            className="filter-chip"
+                            style={{ ...filterChipStyle, ...(activeFilter === f ? filterChipActiveStyle : {}) }}
+                            onClick={() => setActiveFilter(f)}
+                          >
+                            {f}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                     <div data-grid-window style={gridWindowStyle}>
                       <div data-grid-inner style={gridInnerContainerStyle}>
@@ -581,19 +615,11 @@ const StackedSlidesSection = () => {
                                 key={item.id}
                                 style={{ ...gridItemStyle, aspectRatio: 'auto', backgroundColor: 'rgba(42, 36, 32, 0.08)', border: '1px solid rgba(42, 36, 32, 0.2)', borderRadius: '0.5rem' }}
                               >
-                                {isFirst ? (
-                                  <img
-                                    src="/img/port/frame_3.png"
-                                    alt="Featured Work"
-                                    style={gridFeatureImageStyle}
-                                  />
-                                ) : (
-                                  <img
-                                    src={`/img/port/frame_${index === 6 ? 8 : index === 4 ? 7 : index === 2 ? 6 : Math.floor(index / 2)}.png`}
-                                    alt={`Project frame ${Math.floor(index / 2)}`}
-                                    style={gridFrameImageStyle}
-                                  />
-                                )}
+                                <img
+                                  src={`/img/port/frame_${Math.floor(index / 2) + 1}.png`}
+                                  alt={`Project frame ${Math.floor(index / 2) + 1}`}
+                                  style={isFirst ? gridFeatureImageStyle : gridFrameImageStyle}
+                                />
                               </div>
                             );
                           })}
