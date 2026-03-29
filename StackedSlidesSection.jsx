@@ -1,9 +1,6 @@
 import React, { useLayoutEffect, useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { createSharedParticleGalleryRenderer } from './sharedParticleGalleryRenderer';
-import HoloSwarmWindow from './HoloSwarmWindow';
-import ProductSwarmWindow from './ProductSwarmWindow';
-import DecentSwarmWindow from './DecentSwarmWindow';
 
 const agencyLogos = [
   { src: '/img/agencies/publicis.png', alt: 'Publicis', scale: 2 },
@@ -99,7 +96,7 @@ const slides = [
     layout: 'grid',
     headlineText: 'Your Human in the Loop',
     supportText: 'Chat with Bryan',
-    gridItems: Array(9).fill(null).map((_, i) => ({ id: i })),
+    gridItems: Array(13).fill(null).map((_, i) => ({ id: i })),
     serviceItems: [
       { id: 0, label: 'Product Development' },
       { id: 1, label: 'Agentic Automation' },
@@ -555,15 +552,7 @@ const StackedSlidesSection = () => {
                           </button>
                           <div style={servicesRowStyle}>
                             {slide.serviceItems.map((item) => (
-                              <div key={item.id} data-service-item style={serviceItemStyle}>
-                                {item.id === 0 ? (
-                                  <ProductSwarmWindow style={serviceVisualZoneStyle} />
-                                ) : item.id === 1 ? (
-                                  <HoloSwarmWindow style={serviceVisualZoneStyle} />
-                                ) : (
-                                  <DecentSwarmWindow style={serviceVisualZoneStyle} />
-                                )}
-                              </div>
+                              <div key={item.id} data-service-item style={{ ...serviceItemStyle, borderRadius: '0.5rem', border: '1px solid rgba(42, 36, 32, 0.2)', backgroundColor: 'rgba(42, 36, 32, 0.08)' }} />
                             ))}
                           </div>
                         </div>
@@ -634,17 +623,17 @@ const StackedSlidesSection = () => {
                             return (
                               <div
                                 key={item.id}
-                                style={{ ...gridItemStyle, aspectRatio: isFirst ? 'auto' : '16/9', backgroundColor: 'rgba(42, 36, 32, 0.08)', border: '1px solid rgba(42, 36, 32, 0.2)', borderRadius: '0.5rem' }}
+                                style={{ ...gridItemStyle, aspectRatio: 'auto', backgroundColor: 'rgba(42, 36, 32, 0.08)', border: '1px solid rgba(42, 36, 32, 0.2)', borderRadius: '0.5rem' }}
                               >
                                 {isFirst ? (
                                   <img
-                                    src="/img/fast_poker_BW.png"
-                                    alt="Fast Poker"
+                                    src="/img/port/frame_6.png"
+                                    alt="Featured Work"
                                     style={gridFeatureImageStyle}
                                   />
                                 ) : (
                                   <img
-                                    src={`/img/port/frame_${Math.floor(index / 2)}.png`}
+                                    src={`/img/port/frame_${index === 12 ? 7 : index === 10 ? 6 : index === 8 ? 4 : index === 4 ? 5 : Math.floor(index / 2)}.png`}
                                     alt={`Project frame ${Math.floor(index / 2)}`}
                                     style={gridFrameImageStyle}
                                   />
@@ -663,15 +652,16 @@ const StackedSlidesSection = () => {
                               &ldquo;With me in the loop, you get all the high-impact deliverables needed to launch your digital products and cross-platform marketing campaigns.&rdquo;
                             </p>
                             <p style={footerBridgeLabelStyle}>
-                              But what you really secure is time back.
+                              But what you really get...
                             </p>
 
                             <ul id="inline-footer-bullet-list" style={footerBulletListStyle}>
-                              <li style={footerBulletItemStyle}>My availability extends beyond working hours, accommodating your flow-state to keep us moving forward</li>
-                              <li style={footerBulletItemStyle}>Your rough ideas become usable, identifying key insights that drive design strategy</li>
-                              <li style={footerBulletItemStyle}>Decisions stay simple, providing clear reasoning instead of endless iterations</li>
-                              <li style={footerBulletItemStyle}>Confidence through consistency becomes our default, with one conversation translating across desktop, mobile, social, email, and print collateral</li>
-                              <li style={footerBulletItemStyle}>Agentic workflows are identified, QA&rsquo;d, and maintained, introducing automation solutions that dynamically grow with your business</li>
+                              <li style={footerBulletItemStyle}>Availability outside of working hours</li>
+                              <li style={footerBulletItemStyle}>Your rough ideas become usable</li>
+                              <li style={footerBulletItemStyle}>Key insights become strategy</li>
+                              <li style={footerBulletItemStyle}>Design decisions create consistency</li>
+                              <li style={footerBulletItemStyle}>Consistency creates product confidence</li>
+                              <li style={footerBulletItemStyle}>Agentic workflows become identified</li>
                             </ul>
 
                             <div id="agency-marquee-shell" ref={marqueeShellRef} style={agencyMarqueeShellStyle}>
@@ -1007,8 +997,10 @@ const gridItemStyle = {
 
 const gridFrameImageStyle = {
   width: '100%',
-  height: '100%',
+  height: 'auto',
+  maxWidth: '100%',
   objectFit: 'contain',
+  borderRadius: '0.5rem',
   display: 'block',
 };
 
@@ -1866,7 +1858,7 @@ const footerBulletListStyle = {
   flexDirection: 'column',
   width: '100%',
   maxWidth: '54ch',
-  textAlign: 'left',
+  textAlign: 'center',
 };
 
 const footerBulletItemStyle = {
