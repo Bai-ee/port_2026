@@ -150,7 +150,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
           fontSize: 'clamp(1.9rem, min(9.3vw, calc(var(--hero-gap-height) / 4.15)), 4.4rem)',
           textTransform: 'none',
         }}>
-          Creative Technologist<br />& Digital Media<br />Consultant
+          YOUR HUMAN<br />IN THE LOOP
         </h1>
       </div>
 
