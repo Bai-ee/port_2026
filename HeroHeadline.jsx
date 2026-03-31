@@ -147,10 +147,10 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
           lineHeight: 1.05,
           color: textColor,
           margin: 0,
-          fontSize: 'clamp(1.9rem, min(9.3vw, calc(var(--hero-gap-height) / 4.15)), 4.4rem)',
+          fontSize: 'clamp(2.53rem, min(12.4vw, calc(var(--hero-gap-height) / 3.11)), 5.87rem)',
           textTransform: 'none',
         }}>
-          YOUR HUMAN<br />IN THE LOOP
+          YOUR<br />HUMAN<br />IN THE<br />LOOP
         </h1>
       </div>
 

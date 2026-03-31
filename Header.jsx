@@ -150,7 +150,10 @@ const Header = ({ logoRef, onOpenPage }) => {
       <header id="site-nav" style={headerStyle}>
         <div ref={logoRef} aria-hidden="true" style={anchorStyle} />
 
-        <a href="/" id="site-nav-wordmark" style={logoStyle}>Bryan Balli</a>
+        <div id="site-nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <img src="/img/sig.png" alt="" aria-hidden="true" style={{ height: 'clamp(2rem, 4vw, 2.8rem)', width: 'auto', display: 'block' }} />
+          <a href="/" id="site-nav-wordmark" style={logoStyle}>Bryan Balli</a>
+        </div>
 
         {isMobile ? (
           /*

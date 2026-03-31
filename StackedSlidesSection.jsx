@@ -107,7 +107,7 @@ const slides = [
 
 const getInitials = (name) => name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
 
-const FILTERS = ['All', 'Agentic Services', 'Brand Guides', 'Logo Development', 'Marketing Automation', 'Print Media', 'Promo Videos', 'Saas', 'UI & UX', 'Websites'];
+const FILTERS = ['All', 'Agentic Automation', 'Decentralized Ecosystems', 'SaaS', 'Brand Development', 'UI / UX', 'Video Production', 'Marketing', 'Print Collateral'];
 
 const PARTICLE_DEFAULTS = {
   scale: 60,
@@ -485,16 +485,23 @@ const StackedSlidesSection = () => {
         .deliverables-toggle:hover {
           opacity: 0.7;
         }
-        .filter-chip:hover {
-          background: rgba(42, 36, 32, 0.1) !important;
-          color: #2a2420 !important;
-        }
         @media (max-width: 767px) {
           [data-label-heading] {
             color: #000000 !important;
           }
           [data-filter-dropdown] {
             justify-content: center;
+          }
+          #hero-panel-filter-pills {
+            gap: 0.25rem !important;
+            padding-top: 0.35rem !important;
+            padding-bottom: 0.35rem !important;
+            justify-content: center;
+          }
+          #hero-panel-filter-pills .filter-chip {
+            padding: 0.15rem 0.45rem !important;
+            font-size: 0.52rem !important;
+            border-radius: 999px !important;
           }
         }
       `}</style>
@@ -537,16 +544,18 @@ const StackedSlidesSection = () => {
                           </a>
                         </div>
                       </div>
-                      {slide.serviceItems && (
-                        <div style={servicesRowStyle}>
-                          {slide.serviceItems.map((item) => (
-                            <div key={item.id} data-service-item style={serviceItemStyle}>
-                              <div style={serviceVisualZoneStyle} />
-                              <span style={serviceLabelStyle}>{item.label}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      <div id="hero-panel-filter-pills" style={filterDropdownStyle}>
+                        {FILTERS.map((f) => (
+                          <button
+                            key={f}
+                            type="button"
+                            className="filter-chip"
+                            style={{ ...filterChipStyle, ...(activeFilter === f ? filterChipActiveStyle : {}) }}
+                          >
+                            {f}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                     <div data-featured-work-label style={featuredWorkLabelStyle}>
                       <button
@@ -557,7 +566,7 @@ const StackedSlidesSection = () => {
                         aria-expanded={filterOpen}
                       >
                         <h2 data-label-heading style={{ ...headingStyle, fontSize: 'clamp(1.4rem, 3.5vw, 2.45rem)', textAlign: 'left', margin: 0 }}>
-                          Featured Work
+                          Recent Projects
                         </h2>
                         <svg
                           width="18" height="18"
@@ -573,19 +582,6 @@ const StackedSlidesSection = () => {
                           <polyline points="9 6 15 12 9 18" />
                         </svg>
                       </button>
-                      <div ref={filterDropdownRef} data-filter-dropdown style={filterDropdownStyle}>
-                        {FILTERS.map((f) => (
-                          <button
-                            key={f}
-                            type="button"
-                            className="filter-chip"
-                            style={{ ...filterChipStyle, ...(activeFilter === f ? filterChipActiveStyle : {}) }}
-                            onClick={() => setActiveFilter(f)}
-                          >
-                            {f}
-                          </button>
-                        ))}
-                      </div>
                     </div>
                     <div data-grid-window style={gridWindowStyle}>
                       <div data-grid-inner style={gridInnerContainerStyle}>
@@ -613,7 +609,7 @@ const StackedSlidesSection = () => {
                             return (
                               <div
                                 key={item.id}
-                                style={{ ...gridItemStyle, aspectRatio: 'auto', backgroundColor: 'rgba(42, 36, 32, 0.08)', border: '1px solid rgba(42, 36, 32, 0.2)', borderRadius: '0.5rem' }}
+                                style={{ ...gridItemStyle, overflow: 'hidden', backgroundColor: 'rgba(42, 36, 32, 0.08)', border: '1px solid rgba(42, 36, 32, 0.2)', borderRadius: '0.5rem' }}
                               >
                                 <img
                                   src={`/img/port/frame_${Math.floor(index / 2) + 1}.png`}
@@ -979,19 +975,15 @@ const gridItemStyle = {
 
 const gridFrameImageStyle = {
   width: '100%',
-  height: 'auto',
-  maxWidth: '100%',
-  objectFit: 'contain',
-  borderRadius: '0.5rem',
+  height: '100%',
+  objectFit: 'cover',
   display: 'block',
 };
 
 const gridFeatureImageStyle = {
   width: '100%',
-  height: 'auto',
-  maxWidth: '100%',
-  objectFit: 'contain',
-  borderRadius: '0.5rem',
+  height: '100%',
+  objectFit: 'cover',
   display: 'block',
 };
 
@@ -1107,8 +1099,8 @@ const filterChipStyle = {
   fontWeight: 500,
   letterSpacing: '0.01em',
   color: 'rgba(42, 36, 32, 0.6)',
-  cursor: 'pointer',
-  transition: 'background 0.18s ease, color 0.18s ease',
+  cursor: 'default',
+  pointerEvents: 'none',
 };
 
 const filterChipActiveStyle = {
