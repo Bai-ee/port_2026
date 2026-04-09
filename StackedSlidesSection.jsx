@@ -5,9 +5,12 @@ import { createSharedParticleGalleryRenderer } from './sharedParticleGalleryRend
 
 gsap.registerPlugin(ScrollTrigger);
 
-// Normalize mobile scroll — prevents iOS momentum stutter and aligns
-// touch events with GSAP's internal ticker for smooth scrubbing.
-ScrollTrigger.normalizeScroll({ allowNestedScroll: true });
+const MOBILE_SCROLL_MEDIA_QUERY = '(max-width: 767px), (pointer: coarse)';
+
+const isTouchScrollDevice = () =>
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia(MOBILE_SCROLL_MEDIA_QUERY).matches;
 
 const agencyLogos = [
   { src: '/img/agencies/publicis.png', alt: 'Publicis', scale: 2 },
@@ -271,7 +274,7 @@ const StackedSlidesSection = () => {
     const shell = marqueeShellRef.current;
     const track = marqueeTrackRef.current;
     const set = marqueeSetRef.current;
-    if (!shell || !track || !set) return;
+    if (!shell || !track || !set || isTouchScrollDevice()) return;
 
     let itemWidth = 0;
     let offset = 0;

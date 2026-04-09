@@ -9,8 +9,10 @@ import HorizontalGallery from './HorizontalGallery';
 import HoverRevealList from './HoverRevealList';
 import StackedSlidesSection from './StackedSlidesSection';
 // import FontSelector from './FontSelector';
-import LoopControls from './LoopControls';
+// import LoopControls from './LoopControls';
 import PortfolioModal from './PortfolioModal';
+
+const MOBILE_SCROLL_MEDIA_QUERY = '(max-width: 767px), (pointer: coarse)';
 
 const HERO_PARAMS_START = {
   scale: 200,
@@ -97,6 +99,11 @@ const HomePage = () => {
   }, [params]);
 
   useLayoutEffect(() => {
+    const isTouchScrollDevice =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia(MOBILE_SCROLL_MEDIA_QUERY).matches;
+
     window.history.scrollRestoration = 'manual';
     window.scrollTo(0, 0);
 
@@ -131,7 +138,7 @@ const HomePage = () => {
       trigger: '#hero-section',
       start: 'top top',
       end: 'bottom top',
-      scrub: 0.75,
+      scrub: isTouchScrollDevice ? true : 0.45,
       invalidateOnRefresh: true,
       onUpdate: (self) => {
         isScrollMorphActiveRef.current = true;
@@ -157,7 +164,7 @@ const HomePage = () => {
   return (
     <div style={{ position: 'relative', width: '100vw', minHeight: '100dvh', background: 'transparent', overflowX: 'hidden' }}>
       {/* <FontSelector /> */}
-      <LoopControls params={params} onParamsChange={setParams} backgroundColor={canvasBackground} onBackgroundChange={setCanvasBackground} textColor={textColor} onTextColorChange={setTextColor} />
+      {/* <LoopControls params={params} onParamsChange={setParams} backgroundColor={canvasBackground} onBackgroundChange={setCanvasBackground} textColor={textColor} onTextColorChange={setTextColor} /> */}
       {/* Hero Section */}
       <section
         ref={heroSectionRef}

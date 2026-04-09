@@ -4,6 +4,8 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
 gsap.registerPlugin(ScrollTrigger);
 
+const MOBILE_SCROLL_MEDIA_QUERY = '(max-width: 767px), (pointer: coarse)';
+
 const glass = {
   backdropFilter: 'blur(18px)',
   WebkitBackdropFilter: 'blur(18px)',
@@ -29,6 +31,10 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
   useLayoutEffect(() => {
     const el = topLeftRef.current;
     if (!el) return;
+    const isTouchScrollDevice =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia(MOBILE_SCROLL_MEDIA_QUERY).matches;
 
     let frame = 0;
 
@@ -74,22 +80,22 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       gsap.set(el, { autoAlpha: 1, filter: 'blur(0px)', yPercent: -50 });
 
       gsap.to(el, {
-        y: -60,
+        y: isTouchScrollDevice ? -24 : -60,
         opacity: 0,
-        filter: 'blur(10px)',
         ease: 'none',
+        ...(isTouchScrollDevice ? {} : { filter: 'blur(10px)' }),
         scrollTrigger: {
           trigger: '#hero-section',
           start: 'top top',
           end: 'center top',
-          scrub: true,
+          scrub: isTouchScrollDevice ? true : 0.2,
         },
       });
     });
 
     scheduleLayoutUpdate();
 
-    const resizeObserver = typeof ResizeObserver !== 'undefined'
+    const resizeObserver = !isTouchScrollDevice && typeof ResizeObserver !== 'undefined'
       ? new ResizeObserver(scheduleLayoutUpdate)
       : null;
 
@@ -104,7 +110,6 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       resizeObserver?.observe(contentSection);
     }
 
-    resizeObserver?.observe(document.body);
     window.addEventListener('resize', scheduleLayoutUpdate);
     window.addEventListener('orientationchange', scheduleLayoutUpdate);
 
