@@ -1,6 +1,13 @@
 import React, { useLayoutEffect, useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { createSharedParticleGalleryRenderer } from './sharedParticleGalleryRenderer';
+
+gsap.registerPlugin(ScrollTrigger);
+
+// Normalize mobile scroll — prevents iOS momentum stutter and aligns
+// touch events with GSAP's internal ticker for smooth scrubbing.
+ScrollTrigger.normalizeScroll({ allowNestedScroll: true });
 
 const agencyLogos = [
   { src: '/img/agencies/publicis.png', alt: 'Publicis', scale: 2 },
@@ -114,7 +121,7 @@ const PORTFOLIO_IMAGES = [
   '/img/port/frame_5.png',
   '/img/port/fast_poker_ui_1.png',
   '/img/port/frame_1.png',
-  '/img/port/edittrax.png',
+  '/img/port/frame_7.png',
   '/img/port/claire.png',
   '/img/port/cq_figma.png',
   '/img/port/cq_guide.png',
@@ -240,6 +247,13 @@ const StackedSlidesSection = () => {
       startRenderLoop();
     };
 
+    // Pause WebGL loop while the user is actively scrolling on mobile
+    // to prevent GPU contention and reduce scroll stutter.
+    const onScrollStart = () => stopRenderLoop();
+    const onScrollEnd = () => { if (isVisible && !document.hidden) startRenderLoop(); };
+    ScrollTrigger.addEventListener('scrollStart', onScrollStart);
+    ScrollTrigger.addEventListener('scrollEnd', onScrollEnd);
+
     document.addEventListener('visibilitychange', handleDocumentVisibility);
     visibilityObserver.observe(viewport);
 
@@ -247,6 +261,8 @@ const StackedSlidesSection = () => {
       stopRenderLoop();
       visibilityObserver.disconnect();
       document.removeEventListener('visibilitychange', handleDocumentVisibility);
+      ScrollTrigger.removeEventListener('scrollStart', onScrollStart);
+      ScrollTrigger.removeEventListener('scrollEnd', onScrollEnd);
       particleRenderer.dispose();
     };
   }, [particleParams]);
@@ -468,6 +484,15 @@ const StackedSlidesSection = () => {
   return (
     <section style={sectionStyle}>
       <style>{`
+        @media (max-width: 767px) {
+          /* Drop backdrop-filter on mobile — it forces a compositing layer flush
+             on every scroll frame and is the #1 cause of scroll stutter on iOS. */
+          [data-stack-panel] {
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            background: rgba(245, 241, 223, 0.95) !important;
+          }
+        }
         @media (max-width: 767px) {
           #stacked-grid-row {
             grid-template-columns: 1fr !important;
