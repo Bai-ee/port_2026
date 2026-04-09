@@ -59,10 +59,11 @@ const HomePage = () => {
     const panelHeadline  = document.querySelector('#panel-hero-headline');
     const panelCta       = document.querySelector('#panel-hero-cta');
     const panelGrid      = document.querySelector('#stacked-grid-row');
-    const serviceItems   = gsap.utils.toArray('[data-service-item]');
+    const pills          = gsap.utils.toArray('#hero-panel-filter-pills .filter-chip');
 
     gsap.set([headline, canvas, nav], { autoAlpha: 0 });
-    gsap.set([panelHeadline, panelCta, panelGrid, ...serviceItems], { autoAlpha: 0 });
+    gsap.set([panelHeadline, panelCta, panelGrid], { autoAlpha: 0 });
+    gsap.set(pills, { autoAlpha: 0, y: 8 });
 
     const tl = gsap.timeline({ delay: 0.2 });
     tl.to(headline,      { autoAlpha: 1, duration: 1.2, ease: 'power2.out' })
@@ -70,14 +71,13 @@ const HomePage = () => {
       .to(nav,           { autoAlpha: 1, duration: 1.2, ease: 'power2.out' }, '<0.25')
       .to(panelHeadline, { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '0.5')
       .to(panelCta,      { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '<0.15')
-      .to(serviceItems,  { autoAlpha: 1, duration: 0.5, ease: 'power2.out', stagger: 0.1 }, '<0.15')
-      .to(panelGrid,     { autoAlpha: 1, duration: 0.6, ease: 'power2.out', stagger: 0.06 }, '<0.15');
+      .to(panelGrid,     { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '<0.15')
+      .to(pills,         { autoAlpha: 1, y: 0, duration: 0.45, ease: 'power2.out', stagger: 0.055 }, '<0.2');
 
     return () => {
       tl.kill();
     };
   }, []);
-
 
   return (
     <div style={{ position: 'relative', width: '100vw', minHeight: '100dvh', background: 'transparent', overflowX: 'hidden' }}>

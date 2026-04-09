@@ -96,7 +96,7 @@ const slides = [
     layout: 'grid',
     headlineText: 'Digital Media Consultant',
     supportText: 'Chat with Bryan',
-    gridItems: Array(15).fill(null).map((_, i) => ({ id: i })),
+    gridItems: Array(17).fill(null).map((_, i) => ({ id: i })),
     serviceItems: [
       { id: 0, label: 'Product Development' },
       { id: 1, label: 'Agentic Automation' },
@@ -107,7 +107,19 @@ const slides = [
 
 const getInitials = (name) => name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
 
-const FILTERS = ['All', 'Agentic Automation', 'Decentralized Ecosystems', 'SaaS', 'Brand Development', 'UI / UX', 'Video Production', 'Marketing', 'Print Collateral'];
+const FILTERS = ['All', 'Agentic Automation', 'Decentralized Ecosystems', 'SaaS', 'Brand Development', 'UI / UX', 'Audio / Video', 'Marketing', 'Print Collateral', 'Social Media', 'Websites & Dashboards'];
+
+const PORTFOLIO_IMAGES = [
+  '/img/port/frame_3.png',
+  '/img/port/frame_5.png',
+  '/img/port/fast_poker_ui_1.png',
+  '/img/port/frame_1.png',
+  '/img/port/edittrax.png',
+  '/img/port/claire.png',
+  '/img/port/cq_figma.png',
+  '/img/port/cq_guide.png',
+  '/img/port/viva.png',
+];
 
 const PARTICLE_DEFAULTS = {
   scale: 60,
@@ -440,14 +452,11 @@ const StackedSlidesSection = () => {
       });
     });
 
-    // Cal.com embed
+    // Calendly embed
     const calScript = document.createElement('script');
     calScript.type = 'text/javascript';
-    calScript.innerHTML = `
-      (function (C, A, L) { let p = function (a, ar) { a.q.push(ar); }; let d = C.document; C.Cal = C.Cal || function () { let cal = C.Cal; let ar = arguments; if (!cal.loaded) { cal.ns = {}; cal.q = cal.q || []; d.head.appendChild(d.createElement("script")).src = A; cal.loaded = true; } if (ar[0] === L) { const api = function () { p(api, arguments); }; const namespace = ar[1]; api.q = api.q || []; if(typeof namespace === "string"){cal.ns[namespace] = cal.ns[namespace] || api;p(cal.ns[namespace], ar);p(cal, ["initNamespace", namespace]);} else p(cal, ar); return;} p(cal, ar); }; })(window, "https://app.cal.com/embed/embed.js", "init");
-      Cal("init", "30min", {origin:"https://app.cal.com"});
-      Cal.ns["30min"]("ui", {"hideEventTypeDetails":false,"layout":"month_view"});
-    `;
+    calScript.src = 'https://assets.calendly.com/assets/external/widget.js';
+    calScript.async = true;
     document.body.appendChild(calScript);
 
     return () => {
@@ -485,12 +494,38 @@ const StackedSlidesSection = () => {
         .deliverables-toggle:hover {
           opacity: 0.7;
         }
+        #inline-footer-bullet-list li:last-child {
+          padding-bottom: 0 !important;
+        }
+        @media (max-width: 767px) {
+          #inline-footer-bottom {
+            justify-content: center !important;
+          }
+        }
         @media (max-width: 767px) {
           [data-label-heading] {
             color: #000000 !important;
           }
           [data-filter-dropdown] {
             justify-content: center;
+          }
+          #panel-hero-text-row {
+            grid-template-columns: 1fr !important;
+            gap: clamp(0.5rem, 2vw, 0.75rem) !important;
+          }
+          #panel-hero-headline-col {
+            width: 100% !important;
+            align-items: center !important;
+          }
+          #panel-hero-headline {
+            width: 100% !important;
+            text-align: center !important;
+            margin-bottom: clamp(0.5rem, 2vw, 0.85rem) !important;
+          }
+          #panel-hero-cta {
+            width: 100% !important;
+            justify-content: center !important;
+            box-sizing: border-box !important;
           }
           #hero-panel-filter-pills {
             gap: 0.25rem !important;
@@ -524,19 +559,18 @@ const StackedSlidesSection = () => {
                 {slide.layout === 'grid' ? (
                   <div style={gridLayoutStyle}>
                     <div style={textCenteringStyle}>
-                      <div style={textRowStyle}>
-                        <div style={textColumnStyle}>
+                      <div id="panel-hero-text-row" style={textRowStyle}>
+                        <div id="panel-hero-headline-col" style={textColumnStyle}>
                           <h2 id="panel-hero-headline" style={{ ...headingStyle, fontSize: 'clamp(1.4rem, 3.5vw, 2.45rem)', textAlign: 'left', margin: 0 }}>{slide.headlineText}</h2>
                         </div>
                         <div style={textColumnRightStyle}>
                           <a
                             id="panel-hero-cta"
-                            href="#"
+                            href="https://calendly.com/bballi/30min"
+                            target="_blank"
+                            rel="noopener noreferrer"
                             className="cta-pill-btn"
                             style={ctaStyle}
-                            data-cal-link="bryan-balli-5w12w7/30min"
-                            data-cal-namespace="30min"
-                            data-cal-config='{"layout":"month_view","useSlotsViewOnSmallScreen":"true"}'
                           >
                             <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
                             {slide.supportText}
@@ -565,7 +599,7 @@ const StackedSlidesSection = () => {
                         onClick={() => setFilterOpen(prev => !prev)}
                         aria-expanded={filterOpen}
                       >
-                        <h2 data-label-heading style={{ ...headingStyle, fontSize: 'clamp(1.4rem, 3.5vw, 2.45rem)', textAlign: 'left', margin: 0 }}>
+                        <h2 data-label-heading style={{ ...headingStyle, fontSize: 'clamp(1.4rem, 3.5vw, 2.45rem)', textAlign: 'left', margin: 0, opacity: 0 }}>
                           Recent Projects
                         </h2>
                         <svg
@@ -576,7 +610,7 @@ const StackedSlidesSection = () => {
                           strokeWidth="2"
                           strokeLinecap="round"
                           strokeLinejoin="round"
-                          style={{ transform: filterOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.28s cubic-bezier(0.16, 1, 0.3, 1)', flexShrink: 0, color: '#2a2420' }}
+                          style={{ transform: filterOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.28s cubic-bezier(0.16, 1, 0.3, 1)', flexShrink: 0, color: '#2a2420', opacity: 0 }}
                           aria-hidden="true"
                         >
                           <polyline points="9 6 15 12 9 18" />
@@ -612,7 +646,7 @@ const StackedSlidesSection = () => {
                                 style={{ ...gridItemStyle, overflow: 'hidden', backgroundColor: 'rgba(42, 36, 32, 0.08)', border: '1px solid rgba(42, 36, 32, 0.2)', borderRadius: '0.5rem' }}
                               >
                                 <img
-                                  src={`/img/port/frame_${Math.floor(index / 2) + 1}.png`}
+                                  src={PORTFOLIO_IMAGES[Math.floor(index / 2) % PORTFOLIO_IMAGES.length]}
                                   alt={`Project frame ${Math.floor(index / 2) + 1}`}
                                   style={isFirst ? gridFeatureImageStyle : gridFrameImageStyle}
                                 />
@@ -630,17 +664,36 @@ const StackedSlidesSection = () => {
                               &ldquo;With me in the loop, you get all the high-impact deliverables needed to launch your digital products and cross-platform marketing campaigns.&rdquo;
                             </p>
                             <p style={footerBridgeLabelStyle}>
-                              But what you really get...
+                              But what matters most:
                             </p>
 
                             <ul id="inline-footer-bullet-list" style={footerBulletListStyle}>
-                              <li style={footerBulletItemStyle}>Availability outside of working hours</li>
-                              <li style={footerBulletItemStyle}>Your rough ideas become usable</li>
-                              <li style={footerBulletItemStyle}>Key insights become strategy</li>
-                              <li style={footerBulletItemStyle}>Design decisions create consistency</li>
-                              <li style={footerBulletItemStyle}>Consistency creates product confidence</li>
-                              <li style={footerBulletItemStyle}>Agentic workflows become identified</li>
+                              <li style={footerBulletItemStyle}>Your Rough Ideas Ship</li>
+                              <li style={footerBulletItemStyle}>Key Insights Become Design Strategy</li>
+                              <li style={footerBulletItemStyle}>Design Decisions Create Consistency</li>
+                              <li style={footerBulletItemStyle}>Consistency Becomes Product Confidence</li>
+                              <li style={footerBulletItemStyle}>Agentic Workflows Are Identified</li>
+                              <li style={footerBulletItemStyle}>Handoffs Scale</li>
                             </ul>
+
+                            <div style={{ ...inlineFooterDividerStyle, margin: 0 }} />
+
+                            <div id="inline-footer-credit-row" style={inlineFooterCreditRowStyle}>
+                              <div style={inlineFooterCreditLineStyle}>
+                                <span style={{ ...testimonialCardNameStyle, fontWeight: 400, lineHeight: 1.55 }}><strong style={{ fontWeight: 700 }}>Bryan Balli</strong> is an experienced Creative Technologist spanning engineering and creative roles at leading agencies and brands—from Chicago, San Francisco and on remote international teams. Currently consulting friends, family and business' alike.</span>
+                              </div>
+                              <a
+                                href="https://calendly.com/bballi/30min"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="cta-pill-btn"
+                                style={ctaStyle}
+                              >
+                                <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
+                                Chat with Bryan
+                                <span style={ctaIconStyle}>↗</span>
+                              </a>
+                            </div>
 
                             <div id="agency-marquee-shell" ref={marqueeShellRef} style={agencyMarqueeShellStyle}>
                               <div ref={marqueeTrackRef} style={agencyMarqueeTrackStyle}>
@@ -656,32 +709,12 @@ const StackedSlidesSection = () => {
                                 </div>
                               </div>
                             </div>
-
-                            <div id="inline-footer-credit-row" style={inlineFooterCreditRowStyle}>
-                              <div style={inlineFooterCreditLineStyle}>
-                                <span style={testimonialCardNameStyle}>Bryan Balli</span>
-                                <span style={testimonialCardCompanyStyle}>Creative Technologist · Chicago</span>
-                              </div>
-                              <a
-                                href="#"
-                                className="cta-pill-btn"
-                                style={ctaStyle}
-                                data-cal-link="bryan-balli-5w12w7/30min"
-                                data-cal-namespace="30min"
-                                data-cal-config='{"layout":"month_view","useSlotsViewOnSmallScreen":"true"}'
-                              >
-                                <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
-                                Chat with Bryan
-                                <span style={ctaIconStyle}>↗</span>
-                              </a>
-                            </div>
                           </div>
-                          <div style={inlineFooterDividerStyle} />
-                          <div style={inlineFooterBottomStyle}>
-                            <span style={inlineFooterCopyrightStyle}>© 2026 Bryan Balli · All rights reserved</span>
+                          <div style={{ ...inlineFooterDividerStyle, margin: 'clamp(1.5rem, 3vw, 2.5rem) 0' }} />
+                          <div id="inline-footer-bottom" style={inlineFooterBottomStyle}>
                             <div style={inlineFooterLegalStyle}>
-                              <a href="#" style={inlineFooterLegalLinkStyle}>Privacy</a>
-                              <a href="#" style={inlineFooterLegalLinkStyle}>Terms</a>
+                              <a href="https://www.linkedin.com/in/bryanballi" style={inlineFooterLegalLinkStyle}>LinkedIn</a>
+                              <a href="https://x.com/bai_ee" style={inlineFooterLegalLinkStyle}>𝕏</a>
                             </div>
                           </div>
                         </div>
@@ -1737,7 +1770,7 @@ const inlineFooterNewsletterStyle = {
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
-  gap: 'clamp(1.1rem, 2.2vw, 1.75rem)',
+  gap: 'clamp(1.25rem, 2.5vw, 2rem)',
   textAlign: 'center',
   width: '100%',
 };
@@ -1816,11 +1849,10 @@ const footerValueFollowStyle = {
 
 const footerBridgeLabelStyle = {
   margin: 0,
-  fontSize: '0.7rem',
+  fontSize: 'clamp(0.78rem, 1vw, 0.875rem)',
   fontWeight: 600,
-  letterSpacing: '0.14em',
-  textTransform: 'uppercase',
-  color: 'rgba(42, 36, 32, 0.38)',
+  letterSpacing: '-0.01em',
+  color: 'rgba(42, 36, 32, 0.75)',
   textAlign: 'center',
 };
 
@@ -1932,7 +1964,7 @@ const inlineFooterCreditRowStyle = {
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
-  gap: '1.25rem',
+  gap: 'clamp(1.25rem, 2.5vw, 2rem)',
 };
 
 const inlineFooterCreditLineStyle = {
@@ -1960,7 +1992,7 @@ const inlineFooterLegalStyle = {
 };
 
 const inlineFooterLegalLinkStyle = {
-  fontSize: '0.78rem',
+  fontSize: '1.4rem',
   color: 'rgba(42, 36, 32, 0.4)',
   textDecoration: 'none',
   cursor: 'pointer',

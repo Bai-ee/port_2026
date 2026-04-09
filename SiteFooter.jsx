@@ -75,11 +75,11 @@ const SiteFooter = () => {
             <ul className="footer-bullet-list">
               <li>
                 <span className="bullet-mark" />
-                <span>My availability extends beyond working hours, accommodating your flow-state to keep us moving forward</span>
+                <span>Rough ideas ship</span>
               </li>
               <li>
                 <span className="bullet-mark" />
-                <span>Your rough ideas become usable, identifying key insights that drive design strategy</span>
+                <span>My availability extends beyond working hours, accommodating your flow-state to keep us moving forward</span>
               </li>
               <li>
                 <span className="bullet-mark" />
@@ -121,11 +121,10 @@ const SiteFooter = () => {
               <a href="#" style={footerNavLinkStyle}>How It Works</a>
               <a href="#" style={footerNavLinkStyle}>Contact</a>
               <a
-                href="#"
+                href="https://calendly.com/bballi/30min"
+                target="_blank"
+                rel="noopener noreferrer"
                 style={footerNavLinkStyle}
-                data-cal-link="bryan-balli-5w12w7/30min"
-                data-cal-namespace="30min"
-                data-cal-config='{"layout":"month_view","useSlotsViewOnSmallScreen":"true"}'
               >Book a Call</a>
             </div>
           </div>

@@ -303,18 +303,18 @@ export default function App({ params = {}, backgroundColor = '#1a1a1a' }) {
         height: '100dvh',
         background: 'transparent',
         zIndex: 1,
-        pointerEvents: 'none',
+        pointerEvents: 'auto',
       }}
     >
       <Canvas
         camera={{ position: [0, 0, 100], fov: 60 }}
         dpr={qualityProfile.dpr}
-        style={{ pointerEvents: 'none', background: 'transparent' }}
+        style={{ pointerEvents: 'auto', background: 'transparent', cursor: 'grab' }}
         gl={{ alpha: false, antialias: qualityProfile.antialias, powerPreference: 'high-performance' }}
       >
         <SceneBackground color={backgroundColor} />
         <ParticleSwarm params={optimizedParams} />
-        <OrbitControls autoRotate={qualityProfile.autoRotate} enableZoom={false} enablePan={false} enableRotate={false} />
+        <OrbitControls autoRotate={qualityProfile.autoRotate} enableZoom enablePan={false} enableRotate enableDamping dampingFactor={0.08} rotateSpeed={0.45} zoomSpeed={0.75} minDistance={45} maxDistance={180} />
         {bloomEnabled ? (
           <Effects disableGamma>
             <unrealBloomPass

@@ -114,12 +114,11 @@ const renderPageBody = (pageId) => {
               <p style={priceStyle}>{plan.price}{plan.unit ? <span style={unitStyle}>{plan.unit}</span> : null}</p>
               <p style={copyStyle}>{plan.desc}</p>
               <a
-                href="#"
                 className="cta-pill-btn"
                 style={primaryButtonStyle}
-                data-cal-link="bryan-balli-5w12w7/30min"
-                data-cal-namespace="30min"
-                data-cal-config='{"layout":"month_view","useSlotsViewOnSmallScreen":"true"}'
+                href="https://calendly.com/bballi/30min"
+                target="_blank"
+                rel="noopener noreferrer"
               >
                 <img src="/img/profile2_400x400.png?v=1774582808" style={avatarStyle} alt="" />
                 {plan.cta}
