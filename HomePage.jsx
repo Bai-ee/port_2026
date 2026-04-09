@@ -145,8 +145,8 @@ const HomePage = () => {
         scrollTrigger: {
           trigger: '#hero-section',
           start: 'top top',
-          end: isTouchScrollDevice ? '35% top' : '42% top',
-          scrub: isTouchScrollDevice ? 0.55 : 0.75,
+          end: isTouchScrollDevice ? '32% top' : '42% top',
+          scrub: isTouchScrollDevice ? true : 0.75,
           invalidateOnRefresh: true,
         },
       })
