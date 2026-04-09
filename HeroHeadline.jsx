@@ -23,7 +23,7 @@ const glass = {
 const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
   const topLeftRef = useRef(null);
   const [layoutMetrics, setLayoutMetrics] = useState({
-    gapTop: '64px',
+    top: '50vh',
     gapHeight: '70vh',
     maxWidth: '42rem',
   });
@@ -40,26 +40,30 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
 
     const updateLayout = () => {
       const nav = document.querySelector('#site-nav');
-      const contentSection = document.querySelector('#content-section');
+      const contentAnchor =
+        document.querySelector('#panel-hero-text-row') ??
+        document.querySelector('#content-section');
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
       const navBottom = nav?.getBoundingClientRect().bottom ?? 64;
-      const contentTop = contentSection?.getBoundingClientRect().top ?? viewportHeight;
+      const contentTop = contentAnchor?.getBoundingClientRect().top ?? viewportHeight;
       const gapTop = Math.max(0, navBottom);
       const gapBottom = Math.max(gapTop + 1, contentTop);
       const gapHeight = Math.max(gapBottom - gapTop, 180);
+      const headlineHeight = el.getBoundingClientRect().height || 0;
+      const centeredTop = gapTop + Math.max((gapHeight - headlineHeight) / 2, 0);
       const sideGutter = Math.max(viewportWidth * 0.1, (viewportWidth - 810) / 2);
       const maxWidth = Math.max(Math.min(viewportWidth - (sideGutter * 2), 672), 240);
 
       setLayoutMetrics((current) => {
         const next = {
-          gapTop: `${gapTop}px`,
+          top: `${centeredTop}px`,
           gapHeight: `${gapHeight}px`,
           maxWidth: `${maxWidth}px`,
         };
 
         if (
-          current.gapTop === next.gapTop &&
+          current.top === next.top &&
           current.gapHeight === next.gapHeight &&
           current.maxWidth === next.maxWidth
         ) {
@@ -95,20 +99,24 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
 
     scheduleLayoutUpdate();
 
-    const resizeObserver = !isTouchScrollDevice && typeof ResizeObserver !== 'undefined'
+    const resizeObserver = typeof ResizeObserver !== 'undefined'
       ? new ResizeObserver(scheduleLayoutUpdate)
       : null;
 
     const nav = document.querySelector('#site-nav');
-    const contentSection = document.querySelector('#content-section');
+    const contentAnchor =
+      document.querySelector('#panel-hero-text-row') ??
+      document.querySelector('#content-section');
 
     if (nav) {
       resizeObserver?.observe(nav);
     }
 
-    if (contentSection) {
-      resizeObserver?.observe(contentSection);
+    if (contentAnchor) {
+      resizeObserver?.observe(contentAnchor);
     }
+
+    resizeObserver?.observe(el);
 
     window.addEventListener('resize', scheduleLayoutUpdate);
     window.addEventListener('orientationchange', scheduleLayoutUpdate);
@@ -133,9 +141,8 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
         style={{
           ...glass,
           '--hero-gap-height': layoutMetrics.gapHeight,
-          top: layoutMetrics.gapTop,
+          top: layoutMetrics.top,
           left: edge,
-          height: layoutMetrics.gapHeight,
           width: 'min(82vw, 42rem)',
           maxWidth: layoutMetrics.maxWidth,
           background: 'none',
@@ -144,8 +151,6 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
           border: 'none',
           boxShadow: 'none',
           padding: 0,
-          display: 'flex',
-          alignItems: 'center',
         }}
       >
         <h1 style={{
