@@ -57,7 +57,7 @@ const SceneBackground = ({ color }) => {
   return null;
 };
 
-const ParticleSwarm = ({ params = {} }) => {
+const ParticleSwarm = ({ params = {}, liveParamsRef = null }) => {
   const meshRef = useRef();
   const groupRef = useRef();
   const defaultParams = {
@@ -91,9 +91,8 @@ const ParticleSwarm = ({ params = {} }) => {
     sphereSegments: 16,
   };
 
-  const PARAMS = useMemo(() => ({ ...defaultParams, ...params }), [params]);
-  const count = PARAMS.particleCount;
-  const speedMult = PARAMS.speedMult * PARAMS.animationSpeed;
+  const staticParams = useMemo(() => ({ ...defaultParams, ...params }), [params]);
+  const count = staticParams.particleCount;
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const target = useMemo(() => new THREE.Vector3(), []);
   const pColor = useMemo(() => new THREE.Color(), []);
@@ -133,16 +132,18 @@ const ParticleSwarm = ({ params = {} }) => {
     `
 }), []);
   const geometry = useMemo(() => {
-    return new THREE.SphereGeometry(PARAMS.particleSize, PARAMS.sphereSegments, PARAMS.sphereSegments);
-  }, [PARAMS.particleSize, PARAMS.sphereSegments]);
+    return new THREE.SphereGeometry(1, staticParams.sphereSegments, staticParams.sphereSegments);
+  }, [staticParams.sphereSegments]);
   const addControl = (id, l, min, max, val) => {
-      return PARAMS[id] !== undefined ? PARAMS[id] : val;
+      return staticParams[id] !== undefined ? staticParams[id] : val;
   };
   const setInfo = () => {};
   const annotate = () => {};
 
   useFrame((state) => {
     if (!meshRef.current || !groupRef.current) return;
+    const PARAMS = liveParamsRef?.current ?? staticParams;
+    const speedMult = PARAMS.speedMult * PARAMS.animationSpeed;
     const time = state.clock.getElapsedTime() * speedMult;
     const THREE_LIB = THREE;
 
@@ -228,6 +229,7 @@ const ParticleSwarm = ({ params = {} }) => {
 
         positions[i].lerp(target, 0.1);
         dummy.position.copy(positions[i]);
+        dummy.scale.setScalar(PARAMS.particleSize);
         dummy.updateMatrix();
         meshRef.current.setMatrixAt(i, dummy.matrix);
         meshRef.current.setColorAt(i, pColor);
@@ -243,7 +245,7 @@ const ParticleSwarm = ({ params = {} }) => {
   );
 };
 
-export default function App({ params = {}, backgroundColor = '#1a1a1a' }) {
+export default function App({ params = {}, liveParamsRef = null, backgroundColor = '#1a1a1a' }) {
   const isMobile = useMediaMatch(MOBILE_MEDIA_QUERY);
   const prefersReducedMotion = useMediaMatch(REDUCED_MOTION_QUERY);
 
@@ -303,17 +305,17 @@ export default function App({ params = {}, backgroundColor = '#1a1a1a' }) {
         height: '100dvh',
         background: 'transparent',
         zIndex: 1,
-        pointerEvents: 'auto',
+        pointerEvents: 'none',
       }}
     >
       <Canvas
         camera={{ position: [0, 0, 100], fov: 60 }}
         dpr={qualityProfile.dpr}
-        style={{ pointerEvents: 'auto', background: 'transparent', cursor: 'grab' }}
+        style={{ pointerEvents: 'none', background: 'transparent', cursor: 'default' }}
         gl={{ alpha: false, antialias: qualityProfile.antialias, powerPreference: 'high-performance' }}
       >
         <SceneBackground color={backgroundColor} />
-        <ParticleSwarm params={optimizedParams} />
+        <ParticleSwarm params={optimizedParams} liveParamsRef={liveParamsRef} />
         <OrbitControls autoRotate={qualityProfile.autoRotate} enableZoom enablePan={false} enableRotate enableDamping dampingFactor={0.08} rotateSpeed={0.45} zoomSpeed={0.75} minDistance={45} maxDistance={180} />
         {bloomEnabled ? (
           <Effects disableGamma>

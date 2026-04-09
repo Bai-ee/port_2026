@@ -485,15 +485,6 @@ const StackedSlidesSection = () => {
     <section style={sectionStyle}>
       <style>{`
         @media (max-width: 767px) {
-          /* Drop backdrop-filter on mobile — it forces a compositing layer flush
-             on every scroll frame and is the #1 cause of scroll stutter on iOS. */
-          [data-stack-panel] {
-            backdrop-filter: none !important;
-            -webkit-backdrop-filter: none !important;
-            background: rgba(245, 241, 223, 0.95) !important;
-          }
-        }
-        @media (max-width: 767px) {
           #stacked-grid-row {
             grid-template-columns: 1fr !important;
           }
@@ -547,7 +538,8 @@ const StackedSlidesSection = () => {
             text-align: center !important;
             margin-bottom: clamp(0.5rem, 2vw, 0.85rem) !important;
           }
-          #panel-hero-cta {
+          #panel-hero-cta,
+          #footer-cta {
             width: 100% !important;
             justify-content: center !important;
             box-sizing: border-box !important;
@@ -586,7 +578,7 @@ const StackedSlidesSection = () => {
                     <div style={textCenteringStyle}>
                       <div id="panel-hero-text-row" style={textRowStyle}>
                         <div id="panel-hero-headline-col" style={textColumnStyle}>
-                          <h2 id="panel-hero-headline" style={{ ...headingStyle, fontSize: 'clamp(1.4rem, 3.5vw, 2.45rem)', textAlign: 'left', margin: 0 }}>{slide.headlineText}</h2>
+                          <h2 id="panel-hero-headline" style={{ ...headingStyle, fontSize: 'clamp(1.4rem, 3.5vw, 2.45rem)', textAlign: 'left', margin: 0, whiteSpace: 'nowrap' }}>{slide.headlineText}</h2>
                         </div>
                         <div style={textColumnRightStyle}>
                           <a
@@ -695,19 +687,19 @@ const StackedSlidesSection = () => {
                             <ul id="inline-footer-bullet-list" style={footerBulletListStyle}>
                               <li style={footerBulletItemStyle}>Your Rough Ideas Ship</li>
                               <li style={footerBulletItemStyle}>Key Insights Become Design Strategy</li>
-                              <li style={footerBulletItemStyle}>Design Decisions Create Consistency</li>
-                              <li style={footerBulletItemStyle}>Consistency Becomes Product Confidence</li>
-                              <li style={footerBulletItemStyle}>Agentic Workflows Are Identified</li>
-                              <li style={footerBulletItemStyle}>Handoffs Scale</li>
+                              <li style={footerBulletItemStyle}>Designs Become Consistent</li>
+                              <li style={footerBulletItemStyle}>Consistency Becomes Confidence</li>
+                              <li style={footerBulletItemStyle}>Automations Are Identified</li>
                             </ul>
 
                             <div style={{ ...inlineFooterDividerStyle, margin: 0 }} />
 
                             <div id="inline-footer-credit-row" style={inlineFooterCreditRowStyle}>
                               <div style={inlineFooterCreditLineStyle}>
-                                <span style={{ ...testimonialCardNameStyle, fontWeight: 400, lineHeight: 1.55 }}><strong style={{ fontWeight: 700 }}>Bryan Balli</strong> is an experienced Creative Technologist spanning engineering and creative roles at leading agencies and brands—from Chicago, San Francisco and on remote international teams. Currently consulting friends, family and business' alike.</span>
+                                <span style={{ ...testimonialCardNameStyle, fontWeight: 400, lineHeight: 1.55 }}><strong style={{ fontWeight: 700 }}>Bryan Balli</strong> is an experienced Creative Technologist spanning engineering and creative roles at leading agencies and brands—from Chicago, San Francisco and on remote international teams.</span>
                               </div>
                               <a
+                                id="footer-cta"
                                 href="https://calendly.com/bballi/30min"
                                 target="_blank"
                                 rel="noopener noreferrer"
@@ -980,7 +972,7 @@ const ctaStyle = {
   display: 'inline-flex',
   alignItems: 'center',
   gap: '0.5rem',
-  padding: '0.25rem 0.75rem 0.25rem 0.25rem',
+  padding: '0.5rem 0.75rem 0.5rem 0.25rem',
   fontSize: 'clamp(0.8rem, 1.1vw, 0.875rem)',
   fontWeight: 700,
   letterSpacing: '0.01em',

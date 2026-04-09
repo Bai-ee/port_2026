@@ -1,5 +1,6 @@
-import React, { useState, useRef, useLayoutEffect } from 'react';
+import React, { useState, useRef, useLayoutEffect, useEffect } from 'react';
 import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import App from './ox.jsx';
 import HeroHeadline from './HeroHeadline';
 import Header from './Header';
@@ -8,37 +9,75 @@ import HorizontalGallery from './HorizontalGallery';
 import HoverRevealList from './HoverRevealList';
 import StackedSlidesSection from './StackedSlidesSection';
 // import FontSelector from './FontSelector';
-// import LoopControls from './LoopControls';
+import LoopControls from './LoopControls';
 import PortfolioModal from './PortfolioModal';
 
-const HomePage = () => {
-  const [params, setParams] = useState({
-    scale: 190,
-    chaos: 1.55,
-    flow: 0,
-    particleCount: 25000,
-    particleSize: 1,
-    speedMult: 0.43,
-    bloomThreshold: 1,
-    bloomStrength: 0,
-    bloomRadius: 1,
-    hueOffset: 0.5,
-    hueSpeed: 0.02,
-    waveAmplitude: 0.5,
-    saturation: 0.8,
-    lightness: 0.55,
-    torusMajorRadius: 0.7,
-    torusTubeRadius: 2,
-    torusSegments: 100,
-    torusSegmentsDepth: 50,
-    rotationX: -2.14159265358979,
-    rotationY: -2.14159265358979,
-    rotationZ: -3.14159265358979,
-    tireSpinAxis: 'z',
-    tireSpinSpeed: 0,
-    animationSpeed: 3.4,
-    opacity: 0.1,
+const HERO_PARAMS_START = {
+  scale: 200,
+  chaos: 0,
+  flow: 0.37,
+  particleCount: 25000,
+  particleSize: 0.2,
+  speedMult: 0.44,
+  bloomThreshold: 0.8,
+  bloomStrength: 0,
+  bloomRadius: 1,
+  hueOffset: 0.36,
+  hueSpeed: 0.02,
+  waveAmplitude: 7,
+  saturation: 0.75,
+  lightness: 0.4,
+  torusMajorRadius: 0.5,
+  torusTubeRadius: 0.1,
+  torusSegments: 100,
+  torusSegmentsDepth: 50,
+  rotationX: -2.14159265358979,
+  rotationY: -2.14159265358979,
+  rotationZ: -3.14159265358979,
+  tireSpinAxis: 'z',
+  tireSpinSpeed: 0,
+  animationSpeed: 2.4,
+  opacity: 0.23,
+};
+
+// Original params — hero transitions into this as it scrolls out
+const HERO_PARAMS_END = {
+  scale: 190,
+  chaos: 1.55,
+  flow: 0,
+  particleSize: 1,
+  speedMult: 0.43,
+  bloomThreshold: 1,
+  hueOffset: 0.5,
+  waveAmplitude: 0.5,
+  saturation: 0.8,
+  lightness: 0.55,
+  torusMajorRadius: 0.7,
+  torusTubeRadius: 2,
+  animationSpeed: 3.4,
+  opacity: 0.1,
+};
+
+const interpolateHeroParams = (start, end, progress) => {
+  const next = { ...start };
+
+  Object.keys(end).forEach((key) => {
+    const startValue = start[key];
+    const endValue = end[key];
+
+    if (typeof startValue === 'number' && typeof endValue === 'number') {
+      next[key] = startValue + (endValue - startValue) * progress;
+      return;
+    }
+
+    next[key] = progress < 0.5 ? startValue : endValue;
   });
+
+  return next;
+};
+
+const HomePage = () => {
+  const [params, setParams] = useState(HERO_PARAMS_START);
 
   const [canvasBackground, setCanvasBackground] = useState('#ffffff');
   const [textColor, setTextColor] = useState('#000000');
@@ -46,6 +85,16 @@ const HomePage = () => {
   const headerLogoRef = useRef(null);
   const heroSectionRef = useRef(null);
   const contentSectionRef = useRef(null);
+  const paramsRef = useRef(HERO_PARAMS_START);
+  const isScrollMorphActiveRef = useRef(false);
+
+  useEffect(() => {
+    if (isScrollMorphActiveRef.current) {
+      return;
+    }
+
+    paramsRef.current = params;
+  }, [params]);
 
   useLayoutEffect(() => {
     window.history.scrollRestoration = 'manual';
@@ -74,15 +123,41 @@ const HomePage = () => {
       .to(panelGrid,     { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '<0.15')
       .to(pills,         { autoAlpha: 1, y: 0, duration: 0.45, ease: 'power2.out', stagger: 0.055 }, '<0.2');
 
+    // Scrub hero params directly from scroll progress to keep the transition
+    // tied to the gesture instead of firing a one-shot time tween.
+    const heroProxy = { progress: 0 };
+
+    const heroST = ScrollTrigger.create({
+      trigger: '#hero-section',
+      start: 'top top',
+      end: 'bottom top',
+      scrub: 0.75,
+      invalidateOnRefresh: true,
+      onUpdate: (self) => {
+        isScrollMorphActiveRef.current = true;
+        heroProxy.progress = self.progress;
+        paramsRef.current = interpolateHeroParams(HERO_PARAMS_START, HERO_PARAMS_END, heroProxy.progress);
+      },
+      onLeaveBack: () => {
+        paramsRef.current = HERO_PARAMS_START;
+      },
+      onScrubComplete: () => {
+        isScrollMorphActiveRef.current = false;
+        setParams(paramsRef.current);
+      },
+    });
+
     return () => {
       tl.kill();
+      heroST.kill();
+      isScrollMorphActiveRef.current = false;
     };
   }, []);
 
   return (
     <div style={{ position: 'relative', width: '100vw', minHeight: '100dvh', background: 'transparent', overflowX: 'hidden' }}>
       {/* <FontSelector /> */}
-      {/* <LoopControls params={params} onParamsChange={setParams} backgroundColor={canvasBackground} onBackgroundChange={setCanvasBackground} textColor={textColor} onTextColorChange={setTextColor} /> */}
+      <LoopControls params={params} onParamsChange={setParams} backgroundColor={canvasBackground} onBackgroundChange={setCanvasBackground} textColor={textColor} onTextColorChange={setTextColor} />
       {/* Hero Section */}
       <section
         ref={heroSectionRef}
@@ -95,7 +170,7 @@ const HomePage = () => {
           background: 'transparent',
         }}
       >
-        <App params={params} backgroundColor={canvasBackground} />
+        <App params={params} liveParamsRef={paramsRef} backgroundColor={canvasBackground} />
         <HeroHeadline headerLogoRef={headerLogoRef} textColor={textColor} />
       </section>
 
