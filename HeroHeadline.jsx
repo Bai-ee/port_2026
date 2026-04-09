@@ -22,6 +22,7 @@ const glass = {
 
 const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
   const topLeftRef = useRef(null);
+  const headlineContentRef = useRef(null);
   const [layoutMetrics, setLayoutMetrics] = useState({
     top: '50vh',
     gapHeight: '70vh',
@@ -30,7 +31,8 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
 
   useLayoutEffect(() => {
     const el = topLeftRef.current;
-    if (!el) return;
+    const contentEl = headlineContentRef.current;
+    if (!el || !contentEl) return;
     const isTouchScrollDevice =
       typeof window !== 'undefined' &&
       typeof window.matchMedia === 'function' &&
@@ -50,7 +52,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       const gapTop = Math.max(0, navBottom);
       const gapBottom = Math.max(gapTop + 1, contentTop);
       const gapHeight = Math.max(gapBottom - gapTop, 180);
-      const headlineHeight = el.getBoundingClientRect().height || 0;
+      const headlineHeight = contentEl.getBoundingClientRect().height || 0;
       const centeredTop = gapTop + Math.max((gapHeight - headlineHeight) / 2, 0);
       const sideGutter = Math.max(viewportWidth * 0.1, (viewportWidth - 810) / 2);
       const maxWidth = Math.max(Math.min(viewportWidth - (sideGutter * 2), 672), 240);
@@ -80,9 +82,10 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
     };
 
     const ctx = gsap.context(() => {
-      gsap.set(el, { autoAlpha: 1, filter: 'blur(0px)' });
+      gsap.set(el, { autoAlpha: 1 });
+      gsap.set(contentEl, { autoAlpha: 1, y: 0, filter: 'blur(0px)' });
 
-      gsap.to(el, {
+      gsap.to(contentEl, {
         y: isTouchScrollDevice ? -24 : -60,
         opacity: 0,
         ease: 'none',
@@ -116,7 +119,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       resizeObserver?.observe(contentAnchor);
     }
 
-    resizeObserver?.observe(el);
+    resizeObserver?.observe(contentEl);
 
     window.addEventListener('resize', scheduleLayoutUpdate);
     window.addEventListener('orientationchange', scheduleLayoutUpdate);
@@ -153,18 +156,20 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
           padding: 0,
         }}
       >
-        <h1 style={{
-          fontWeight: 700,
-          fontFamily: 'system-ui, -apple-system, sans-serif',
-          letterSpacing: '-0.02em',
-          lineHeight: 1.05,
-          color: textColor,
-          margin: 0,
-          fontSize: 'clamp(2.53rem, min(12.4vw, calc(var(--hero-gap-height) / 3.11)), 5.87rem)',
-          textTransform: 'none',
-        }}>
-          YOUR<br />HUMAN<br />IN THE<br />LOOP
-        </h1>
+        <div ref={headlineContentRef}>
+          <h1 style={{
+            fontWeight: 700,
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            letterSpacing: '-0.02em',
+            lineHeight: 1.05,
+            color: textColor,
+            margin: 0,
+            fontSize: 'clamp(2.53rem, min(12.4vw, calc(var(--hero-gap-height) / 3.11)), 5.87rem)',
+            textTransform: 'none',
+          }}>
+            YOUR<br />HUMAN<br />IN THE<br />LOOP
+          </h1>
+        </div>
       </div>
 
 
