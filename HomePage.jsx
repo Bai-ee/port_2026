@@ -111,6 +111,7 @@ const HomePage = () => {
     const headline = document.querySelector('#hero-panel-top-left');
     const canvas = heroSectionRef.current?.querySelector('canvas');
     const nav = document.querySelector('#site-nav');
+    const contentSection = contentSectionRef.current;
 
     const panelHeadline  = document.querySelector('#panel-hero-headline');
     const panelCta       = document.querySelector('#panel-hero-cta');
@@ -129,6 +130,37 @@ const HomePage = () => {
       .to(panelCta,      { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '<0.15')
       .to(panelGrid,     { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '<0.15')
       .to(pills,         { autoAlpha: 1, y: 0, duration: 0.45, ease: 'power2.out', stagger: 0.055 }, '<0.2');
+
+    // Smooth the initial hero-to-content handoff without hijacking native scroll.
+    // The content section eases upward while the fixed hero layer subtly lifts/fades,
+    // so the first interaction feels like one continuous page movement.
+    if (contentSection) {
+      const initialContentLift = isTouchScrollDevice ? 46 : 64;
+      const heroTravel = isTouchScrollDevice ? -30 : -42;
+
+      gsap.set(contentSection, { y: initialContentLift, force3D: true, willChange: 'transform' });
+      gsap.set([headline, canvas, nav], { force3D: true, willChange: 'transform, opacity' });
+
+      gsap.timeline({
+        scrollTrigger: {
+          trigger: '#hero-section',
+          start: 'top top',
+          end: isTouchScrollDevice ? '35% top' : '42% top',
+          scrub: isTouchScrollDevice ? 0.55 : 0.75,
+          invalidateOnRefresh: true,
+        },
+      })
+        .to(contentSection, { y: 0, ease: 'none' }, 0)
+        .to(
+          [headline, canvas, nav],
+          {
+            y: heroTravel,
+            opacity: (_index, target) => (target === nav ? 0.92 : 0.72),
+            ease: 'none',
+          },
+          0
+        );
+    }
 
     // Scrub hero params directly from scroll progress to keep the transition
     // tied to the gesture instead of firing a one-shot time tween.
