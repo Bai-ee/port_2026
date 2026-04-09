@@ -1,6 +1,6 @@
 import React, { useLayoutEffect, useRef } from 'react';
-import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import gsap from 'gsap';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -34,64 +34,89 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       window.matchMedia(MOBILE_SCROLL_MEDIA_QUERY).matches;
 
     let frame = 0;
-    let isScheduled = false;
+    let trigger = null;
+    const metricsRef = { current: null };
 
-    const updateLayout = () => {
+    const measureLayout = () => {
       const nav = document.querySelector('#site-nav');
       const contentAnchor =
         document.querySelector('#panel-hero-text-row') ??
         document.querySelector('#content-section');
+
+      if (!nav || !contentAnchor) {
+        return null;
+      }
+
       const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
       const navBottom = nav?.getBoundingClientRect().bottom ?? 64;
-      const contentTop = contentAnchor?.getBoundingClientRect().top ?? viewportHeight;
-      const gapTop = Math.max(0, navBottom);
-      const gapBottom = Math.max(gapTop + 1, contentTop);
-      const gapHeight = Math.max(gapBottom - gapTop, 180);
       const headlineHeight = contentEl.getBoundingClientRect().height || 0;
-      const centeredTop = gapTop + Math.max((gapHeight - headlineHeight) / 2, 0);
       const sideGutter = Math.max(viewportWidth * 0.1, (viewportWidth - 810) / 2);
       const maxWidth = Math.max(Math.min(viewportWidth - (sideGutter * 2), 672), 240);
-      el.style.top = `${centeredTop}px`;
-      el.style.maxWidth = `${maxWidth}px`;
-      el.style.setProperty('--hero-gap-height', `${gapHeight}px`);
+
+      metricsRef.current = {
+        navBottom,
+        contentStartTop: contentAnchor.getBoundingClientRect().top,
+        headlineHeight,
+        maxWidth,
+      };
+
+      return metricsRef.current;
     };
 
-    const scheduleLayoutUpdate = () => {
-      if (isScheduled) return;
-      isScheduled = true;
+    const applyLayout = (scrollDelta = 0, progress = 0) => {
+      const metrics = metricsRef.current ?? measureLayout();
+      if (!metrics) return;
+
+      const currentContentTop = metrics.contentStartTop - scrollDelta;
+      const gapTop = Math.max(0, metrics.navBottom);
+      const gapBottom = Math.max(gapTop + 1, currentContentTop);
+      const gapHeight = Math.max(gapBottom - gapTop, 180);
+      const centeredTop = gapTop + Math.max((gapHeight - metrics.headlineHeight) / 2, 0);
+      const travelY = isTouchScrollDevice ? -24 : -60;
+
+      el.style.top = `${centeredTop}px`;
+      el.style.maxWidth = `${metrics.maxWidth}px`;
+      el.style.setProperty('--hero-gap-height', `${gapHeight}px`);
+
+      contentEl.style.transform = `translate3d(0, ${travelY * progress}px, 0)`;
+      contentEl.style.opacity = `${1 - progress}`;
+      contentEl.style.filter = isTouchScrollDevice ? 'blur(0px)' : `blur(${10 * progress}px)`;
+    };
+
+    const scheduleRefresh = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
-        isScheduled = false;
-        updateLayout();
+        measureLayout();
+        const scrollDelta = trigger ? Math.max(trigger.scroll() - trigger.start, 0) : 0;
+        const progress = trigger ? trigger.progress : 0;
+        applyLayout(scrollDelta, progress);
       });
     };
 
-    const ctx = gsap.context(() => {
-      gsap.set(el, { autoAlpha: 1 });
-      gsap.set(contentEl, { autoAlpha: 1, y: 0, filter: 'blur(0px)' });
+    gsap.set(el, { autoAlpha: 1 });
+    gsap.set(contentEl, { autoAlpha: 1, y: 0, filter: 'blur(0px)' });
 
-      gsap.to(contentEl, {
-        y: isTouchScrollDevice ? -24 : -60,
-        opacity: 0,
-        ease: 'none',
-        ...(isTouchScrollDevice ? {} : { filter: 'blur(10px)' }),
-        scrollTrigger: {
-          trigger: '#hero-section',
-          start: 'top top',
-          end: isTouchScrollDevice ? '28% top' : 'center top',
-          scrub: isTouchScrollDevice ? true : 0.2,
-          invalidateOnRefresh: true,
-          onUpdate: updateLayout,
-          onRefresh: updateLayout,
-        },
-      });
+    measureLayout();
+
+    trigger = ScrollTrigger.create({
+      trigger: '#hero-section',
+      start: 'top top',
+      end: isTouchScrollDevice ? '28% top' : 'center top',
+      scrub: isTouchScrollDevice ? true : 0.2,
+      invalidateOnRefresh: true,
+      onUpdate: (self) => {
+        applyLayout(Math.max(self.scroll() - self.start, 0), self.progress);
+      },
+      onRefresh: (self) => {
+        measureLayout();
+        applyLayout(Math.max(self.scroll() - self.start, 0), self.progress);
+      },
     });
 
-    scheduleLayoutUpdate();
+    scheduleRefresh();
 
     const resizeObserver = typeof ResizeObserver !== 'undefined'
-      ? new ResizeObserver(scheduleLayoutUpdate)
+      ? new ResizeObserver(scheduleRefresh)
       : null;
 
     const nav = document.querySelector('#site-nav');
@@ -109,15 +134,15 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
 
     resizeObserver?.observe(contentEl);
 
-    window.addEventListener('resize', scheduleLayoutUpdate);
-    window.addEventListener('orientationchange', scheduleLayoutUpdate);
+    window.addEventListener('resize', scheduleRefresh);
+    window.addEventListener('orientationchange', scheduleRefresh);
 
     return () => {
       cancelAnimationFrame(frame);
-      window.removeEventListener('resize', scheduleLayoutUpdate);
-      window.removeEventListener('orientationchange', scheduleLayoutUpdate);
+      window.removeEventListener('resize', scheduleRefresh);
+      window.removeEventListener('orientationchange', scheduleRefresh);
       resizeObserver?.disconnect();
-      ctx.revert();
+      trigger?.kill();
     };
   }, []);
 

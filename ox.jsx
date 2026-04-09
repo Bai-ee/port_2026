@@ -57,9 +57,10 @@ const SceneBackground = ({ color }) => {
   return null;
 };
 
-const ParticleSwarm = ({ params = {}, liveParamsRef = null }) => {
+const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {} }) => {
   const meshRef = useRef();
   const groupRef = useRef();
+  const frameBudgetRef = useRef(0);
   const defaultParams = {
     scale: 55,
     chaos: 0.8,
@@ -142,6 +143,15 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null }) => {
 
   useFrame((state) => {
     if (!meshRef.current || !groupRef.current) return;
+    const targetFrameInterval = runtimeProfile.targetFrameInterval ?? 0;
+    if (targetFrameInterval > 0) {
+      frameBudgetRef.current += state.clock.getDelta();
+      if (frameBudgetRef.current < targetFrameInterval) {
+        return;
+      }
+      frameBudgetRef.current = 0;
+    }
+
     const PARAMS = liveParamsRef?.current ?? staticParams;
     const speedMult = PARAMS.speedMult * PARAMS.animationSpeed;
     const time = state.clock.getElapsedTime() * speedMult;
@@ -227,7 +237,7 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null }) => {
         color.setHSL(hue, PARAMS.saturation, PARAMS.lightness + wave * 0.15);
         // USER CODE END
 
-        positions[i].lerp(target, 0.1);
+        positions[i].lerp(target, runtimeProfile.positionLerp ?? 0.1);
         dummy.position.copy(positions[i]);
         dummy.scale.setScalar(PARAMS.particleSize);
         dummy.updateMatrix();
@@ -255,8 +265,12 @@ export default function App({ params = {}, liveParamsRef = null, backgroundColor
         antialias: false,
         autoRotate: false,
         dpr: [1, 1],
-        particleScale: 0.32,
-        sphereSegments: 8,
+        enableControls: false,
+        particleScale: 0.08,
+        powerPreference: 'default',
+        positionLerp: 0.18,
+        sphereSegments: 6,
+        targetFrameInterval: 1 / 20,
       };
     }
 
@@ -264,9 +278,13 @@ export default function App({ params = {}, liveParamsRef = null, backgroundColor
       return {
         antialias: false,
         autoRotate: false,
-        dpr: [1, 1.15],
-        particleScale: 0.55,
-        sphereSegments: 10,
+        dpr: [1, 1],
+        enableControls: false,
+        particleScale: 0.14,
+        powerPreference: 'default',
+        positionLerp: 0.16,
+        sphereSegments: 6,
+        targetFrameInterval: 1 / 24,
       };
     }
 
@@ -274,8 +292,12 @@ export default function App({ params = {}, liveParamsRef = null, backgroundColor
       antialias: true,
       autoRotate: true,
       dpr: [1, 1.5],
+      enableControls: true,
       particleScale: 1,
+      powerPreference: 'high-performance',
+      positionLerp: 0.1,
       sphereSegments: 16,
+      targetFrameInterval: 0,
     };
   }, [isMobile, prefersReducedMotion]);
 
@@ -312,11 +334,13 @@ export default function App({ params = {}, liveParamsRef = null, backgroundColor
         camera={{ position: [0, 0, 100], fov: 60 }}
         dpr={qualityProfile.dpr}
         style={{ pointerEvents: 'none', background: 'transparent', cursor: 'default' }}
-        gl={{ alpha: false, antialias: qualityProfile.antialias, powerPreference: 'high-performance' }}
+        gl={{ alpha: false, antialias: qualityProfile.antialias, powerPreference: qualityProfile.powerPreference }}
       >
         <SceneBackground color={backgroundColor} />
-        <ParticleSwarm params={optimizedParams} liveParamsRef={liveParamsRef} />
-        <OrbitControls autoRotate={qualityProfile.autoRotate} enableZoom enablePan={false} enableRotate enableDamping dampingFactor={0.08} rotateSpeed={0.45} zoomSpeed={0.75} minDistance={45} maxDistance={180} />
+        <ParticleSwarm params={optimizedParams} liveParamsRef={liveParamsRef} runtimeProfile={qualityProfile} />
+        {qualityProfile.enableControls ? (
+          <OrbitControls autoRotate={qualityProfile.autoRotate} enableZoom enablePan={false} enableRotate enableDamping dampingFactor={0.08} rotateSpeed={0.45} zoomSpeed={0.75} minDistance={45} maxDistance={180} />
+        ) : null}
         {bloomEnabled ? (
           <Effects disableGamma>
             <unrealBloomPass
