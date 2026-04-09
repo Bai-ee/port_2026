@@ -60,7 +60,6 @@ const SceneBackground = ({ color }) => {
 const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {} }) => {
   const meshRef = useRef();
   const groupRef = useRef();
-  const frameBudgetRef = useRef(0);
   const defaultParams = {
     scale: 55,
     chaos: 0.8,
@@ -143,15 +142,6 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {} 
 
   useFrame((state) => {
     if (!meshRef.current || !groupRef.current) return;
-    const targetFrameInterval = runtimeProfile.targetFrameInterval ?? 0;
-    if (targetFrameInterval > 0) {
-      frameBudgetRef.current += state.clock.getDelta();
-      if (frameBudgetRef.current < targetFrameInterval) {
-        return;
-      }
-      frameBudgetRef.current = 0;
-    }
-
     const PARAMS = liveParamsRef?.current ?? staticParams;
     const speedMult = PARAMS.speedMult * PARAMS.animationSpeed;
     const time = state.clock.getElapsedTime() * speedMult;
@@ -266,11 +256,10 @@ export default function App({ params = {}, liveParamsRef = null, backgroundColor
         autoRotate: false,
         dpr: [1, 1],
         enableControls: false,
-        particleScale: 0.08,
+        particleScale: 0.18,
         powerPreference: 'default',
-        positionLerp: 0.18,
-        sphereSegments: 6,
-        targetFrameInterval: 1 / 20,
+        positionLerp: 0.16,
+        sphereSegments: 8,
       };
     }
 
@@ -280,11 +269,10 @@ export default function App({ params = {}, liveParamsRef = null, backgroundColor
         autoRotate: false,
         dpr: [1, 1],
         enableControls: false,
-        particleScale: 0.14,
+        particleScale: 0.24,
         powerPreference: 'default',
-        positionLerp: 0.16,
-        sphereSegments: 6,
-        targetFrameInterval: 1 / 24,
+        positionLerp: 0.14,
+        sphereSegments: 8,
       };
     }
 
@@ -297,7 +285,6 @@ export default function App({ params = {}, liveParamsRef = null, backgroundColor
       powerPreference: 'high-performance',
       positionLerp: 0.1,
       sphereSegments: 16,
-      targetFrameInterval: 0,
     };
   }, [isMobile, prefersReducedMotion]);
 
@@ -310,9 +297,13 @@ export default function App({ params = {}, liveParamsRef = null, backgroundColor
       particleCount: Math.max(400, Math.round(resolvedParticleCount * qualityProfile.particleScale)),
       sphereSegments: qualityProfile.sphereSegments,
       tireSpinSpeed: prefersReducedMotion ? 0 : params.tireSpinSpeed,
-      animationSpeed: prefersReducedMotion ? Math.min(resolvedAnimationSpeed, 1) : resolvedAnimationSpeed,
+      animationSpeed: prefersReducedMotion
+        ? Math.min(resolvedAnimationSpeed, 1)
+        : isMobile
+          ? Math.min(resolvedAnimationSpeed, 1.8)
+          : resolvedAnimationSpeed,
     };
-  }, [params, prefersReducedMotion, qualityProfile]);
+  }, [isMobile, params, prefersReducedMotion, qualityProfile]);
 
   const bloomStrength = optimizedParams.bloomStrength ?? 1.8;
   const bloomEnabled = !isMobile && !prefersReducedMotion && bloomStrength > 0;

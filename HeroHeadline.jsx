@@ -35,47 +35,31 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
 
     let frame = 0;
     let trigger = null;
-    const metricsRef = { current: null };
 
-    const measureLayout = () => {
+    const applyLayout = (progress = 0) => {
       const nav = document.querySelector('#site-nav');
       const contentAnchor =
         document.querySelector('#panel-hero-text-row') ??
         document.querySelector('#content-section');
 
       if (!nav || !contentAnchor) {
-        return null;
+        return;
       }
 
       const viewportWidth = window.innerWidth;
       const navBottom = nav?.getBoundingClientRect().bottom ?? 64;
+      const contentTop = contentAnchor.getBoundingClientRect().top;
       const headlineHeight = contentEl.getBoundingClientRect().height || 0;
       const sideGutter = Math.max(viewportWidth * 0.1, (viewportWidth - 810) / 2);
       const maxWidth = Math.max(Math.min(viewportWidth - (sideGutter * 2), 672), 240);
-
-      metricsRef.current = {
-        navBottom,
-        contentStartTop: contentAnchor.getBoundingClientRect().top,
-        headlineHeight,
-        maxWidth,
-      };
-
-      return metricsRef.current;
-    };
-
-    const applyLayout = (scrollDelta = 0, progress = 0) => {
-      const metrics = metricsRef.current ?? measureLayout();
-      if (!metrics) return;
-
-      const currentContentTop = metrics.contentStartTop - scrollDelta;
-      const gapTop = Math.max(0, metrics.navBottom);
-      const gapBottom = Math.max(gapTop + 1, currentContentTop);
+      const gapTop = Math.max(0, navBottom);
+      const gapBottom = Math.max(gapTop + 1, contentTop);
       const gapHeight = Math.max(gapBottom - gapTop, 180);
-      const centeredTop = gapTop + Math.max((gapHeight - metrics.headlineHeight) / 2, 0);
+      const centeredTop = gapTop + Math.max((gapHeight - headlineHeight) / 2, 0);
       const travelY = isTouchScrollDevice ? -24 : -60;
 
       el.style.top = `${centeredTop}px`;
-      el.style.maxWidth = `${metrics.maxWidth}px`;
+      el.style.maxWidth = `${maxWidth}px`;
       el.style.setProperty('--hero-gap-height', `${gapHeight}px`);
 
       contentEl.style.transform = `translate3d(0, ${travelY * progress}px, 0)`;
@@ -86,17 +70,13 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
     const scheduleRefresh = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
-        measureLayout();
-        const scrollDelta = trigger ? Math.max(trigger.scroll() - trigger.start, 0) : 0;
         const progress = trigger ? trigger.progress : 0;
-        applyLayout(scrollDelta, progress);
+        applyLayout(progress);
       });
     };
 
     gsap.set(el, { autoAlpha: 1 });
     gsap.set(contentEl, { autoAlpha: 1, y: 0, filter: 'blur(0px)' });
-
-    measureLayout();
 
     trigger = ScrollTrigger.create({
       trigger: '#hero-section',
@@ -105,11 +85,10 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       scrub: isTouchScrollDevice ? true : 0.2,
       invalidateOnRefresh: true,
       onUpdate: (self) => {
-        applyLayout(Math.max(self.scroll() - self.start, 0), self.progress);
+        applyLayout(self.progress);
       },
       onRefresh: (self) => {
-        measureLayout();
-        applyLayout(Math.max(self.scroll() - self.start, 0), self.progress);
+        applyLayout(self.progress);
       },
     });
 
