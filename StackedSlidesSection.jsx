@@ -484,6 +484,76 @@ const StackedSlidesSection = () => {
     };
   }, []);
 
+  useLayoutEffect(() => {
+    if (!wrapperRef.current) return;
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    const isTouch = isTouchScrollDevice();
+    const wrapper = wrapperRef.current;
+
+    const ctx = gsap.context(() => {
+      const cardOffset = isTouch ? 18 : 26;
+      const blockOffset = isTouch ? 24 : 34;
+      const gridCards = gsap.utils
+        .toArray('#stacked-grid-row > *', wrapper)
+        .filter((card) => card.getBoundingClientRect().top > window.innerHeight * 0.82);
+      const revealBlocks = gsap.utils
+        .toArray('[data-grid-window], #stacked-inline-footer, #inline-footer-value-block, #agency-marquee-shell, #inline-footer-bottom', wrapper)
+        .filter((block, index, all) => all.indexOf(block) === index);
+
+      if (gridCards.length) {
+        gsap.set(gridCards, { autoAlpha: 0, y: cardOffset, willChange: 'transform, opacity' });
+
+        ScrollTrigger.batch(gridCards, {
+          start: 'top 92%',
+          end: 'bottom 64%',
+          onEnter: (batch) => {
+            gsap.to(batch, {
+              autoAlpha: 1,
+              y: 0,
+              duration: isTouch ? 0.45 : 0.65,
+              ease: 'power2.out',
+              stagger: isTouch ? 0.045 : 0.07,
+              overwrite: true,
+            });
+          },
+          onLeaveBack: (batch) => {
+            gsap.to(batch, {
+              autoAlpha: 0,
+              y: cardOffset,
+              duration: 0.24,
+              ease: 'power1.out',
+              stagger: 0.03,
+              overwrite: true,
+            });
+          },
+        });
+      }
+
+      revealBlocks.forEach((block) => {
+        gsap.fromTo(
+          block,
+          { y: blockOffset, autoAlpha: 0.001 },
+          {
+            y: 0,
+            autoAlpha: 1,
+            ease: 'none',
+            scrollTrigger: {
+              trigger: block,
+              start: 'top 94%',
+              end: 'top 68%',
+              scrub: isTouch ? 0.35 : 0.55,
+              invalidateOnRefresh: true,
+            },
+          }
+        );
+      });
+    }, wrapper);
+
+    return () => ctx.revert();
+  }, []);
+
   return (
     <section style={sectionStyle}>
       <style>{`
