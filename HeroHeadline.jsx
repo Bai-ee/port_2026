@@ -23,7 +23,7 @@ const glass = {
 const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
   const topLeftRef = useRef(null);
   const [layoutMetrics, setLayoutMetrics] = useState({
-    centerY: '50vh',
+    gapTop: '64px',
     gapHeight: '70vh',
     maxWidth: '42rem',
   });
@@ -48,19 +48,18 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       const gapTop = Math.max(0, navBottom);
       const gapBottom = Math.max(gapTop + 1, contentTop);
       const gapHeight = Math.max(gapBottom - gapTop, 180);
-      const centerY = gapTop + gapHeight / 2;
       const sideGutter = Math.max(viewportWidth * 0.1, (viewportWidth - 810) / 2);
       const maxWidth = Math.max(Math.min(viewportWidth - (sideGutter * 2), 672), 240);
 
       setLayoutMetrics((current) => {
         const next = {
-          centerY: `${centerY}px`,
+          gapTop: `${gapTop}px`,
           gapHeight: `${gapHeight}px`,
           maxWidth: `${maxWidth}px`,
         };
 
         if (
-          current.centerY === next.centerY &&
+          current.gapTop === next.gapTop &&
           current.gapHeight === next.gapHeight &&
           current.maxWidth === next.maxWidth
         ) {
@@ -77,7 +76,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
     };
 
     const ctx = gsap.context(() => {
-      gsap.set(el, { autoAlpha: 1, filter: 'blur(0px)', yPercent: -50 });
+      gsap.set(el, { autoAlpha: 1, filter: 'blur(0px)' });
 
       gsap.to(el, {
         y: isTouchScrollDevice ? -24 : -60,
@@ -89,6 +88,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
           start: 'top top',
           end: isTouchScrollDevice ? '28% top' : 'center top',
           scrub: isTouchScrollDevice ? true : 0.2,
+          onUpdate: scheduleLayoutUpdate,
         },
       });
     });
@@ -133,8 +133,9 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
         style={{
           ...glass,
           '--hero-gap-height': layoutMetrics.gapHeight,
-          top: layoutMetrics.centerY,
+          top: layoutMetrics.gapTop,
           left: edge,
+          height: layoutMetrics.gapHeight,
           width: 'min(82vw, 42rem)',
           maxWidth: layoutMetrics.maxWidth,
           background: 'none',
@@ -143,6 +144,8 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
           border: 'none',
           boxShadow: 'none',
           padding: 0,
+          display: 'flex',
+          alignItems: 'center',
         }}
       >
         <h1 style={{
