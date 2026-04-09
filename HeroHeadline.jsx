@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useRef, useState } from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
@@ -23,11 +23,6 @@ const glass = {
 const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
   const topLeftRef = useRef(null);
   const headlineContentRef = useRef(null);
-  const [layoutMetrics, setLayoutMetrics] = useState({
-    top: '50vh',
-    gapHeight: '70vh',
-    maxWidth: '42rem',
-  });
 
   useLayoutEffect(() => {
     const el = topLeftRef.current;
@@ -39,6 +34,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       window.matchMedia(MOBILE_SCROLL_MEDIA_QUERY).matches;
 
     let frame = 0;
+    let isScheduled = false;
 
     const updateLayout = () => {
       const nav = document.querySelector('#site-nav');
@@ -56,29 +52,19 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       const centeredTop = gapTop + Math.max((gapHeight - headlineHeight) / 2, 0);
       const sideGutter = Math.max(viewportWidth * 0.1, (viewportWidth - 810) / 2);
       const maxWidth = Math.max(Math.min(viewportWidth - (sideGutter * 2), 672), 240);
-
-      setLayoutMetrics((current) => {
-        const next = {
-          top: `${centeredTop}px`,
-          gapHeight: `${gapHeight}px`,
-          maxWidth: `${maxWidth}px`,
-        };
-
-        if (
-          current.top === next.top &&
-          current.gapHeight === next.gapHeight &&
-          current.maxWidth === next.maxWidth
-        ) {
-          return current;
-        }
-
-        return next;
-      });
+      el.style.top = `${centeredTop}px`;
+      el.style.maxWidth = `${maxWidth}px`;
+      el.style.setProperty('--hero-gap-height', `${gapHeight}px`);
     };
 
     const scheduleLayoutUpdate = () => {
+      if (isScheduled) return;
+      isScheduled = true;
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(updateLayout);
+      frame = requestAnimationFrame(() => {
+        isScheduled = false;
+        updateLayout();
+      });
     };
 
     const ctx = gsap.context(() => {
@@ -95,7 +81,9 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
           start: 'top top',
           end: isTouchScrollDevice ? '28% top' : 'center top',
           scrub: isTouchScrollDevice ? true : 0.2,
-          onUpdate: scheduleLayoutUpdate,
+          invalidateOnRefresh: true,
+          onUpdate: updateLayout,
+          onRefresh: updateLayout,
         },
       });
     });
@@ -143,11 +131,11 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
         ref={topLeftRef}
         style={{
           ...glass,
-          '--hero-gap-height': layoutMetrics.gapHeight,
-          top: layoutMetrics.top,
+          '--hero-gap-height': '70vh',
+          top: '50vh',
           left: edge,
           width: 'min(82vw, 42rem)',
-          maxWidth: layoutMetrics.maxWidth,
+          maxWidth: '42rem',
           background: 'none',
           backdropFilter: 'none',
           WebkitBackdropFilter: 'none',
