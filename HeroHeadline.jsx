@@ -87,7 +87,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
         scrollTrigger: {
           trigger: '#hero-section',
           start: 'top top',
-          end: 'center top',
+          end: isTouchScrollDevice ? '28% top' : 'center top',
           scrub: isTouchScrollDevice ? true : 0.2,
         },
       });
