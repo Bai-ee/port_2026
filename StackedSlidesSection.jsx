@@ -131,6 +131,57 @@ const PORTFOLIO_IMAGES = [
   '/img/port/viva.png',
 ];
 
+const AUTOMATION_CAPABILITIES = [
+  {
+    badge: 'R',
+    badgeColor: '#ff6b2c',
+    title: 'Reddit & Community',
+    body: 'Finds relevant threads and drafts reply ideas and post concepts for review before publishing.',
+  },
+  {
+    badge: 'SEO',
+    badgeColor: '#8b5cf6',
+    title: 'SEO Content',
+    body: 'Surfaces keyword opportunities and drafts landing pages, blog outlines, and content directions for approval.',
+  },
+  {
+    badge: 'X',
+    badgeColor: '#111111',
+    title: 'X (Twitter)',
+    body: 'Generates post and thread drafts you can edit, refine, and publish yourself across your content calendar.',
+  },
+  {
+    badge: 'in',
+    badgeColor: '#2563eb',
+    title: 'LinkedIn',
+    body: 'Suggests thought-leadership angles and drafts professional posts ready for personalization and sharing.',
+  },
+  {
+    badge: 'HN',
+    badgeColor: '#f97316',
+    title: 'Hacker News',
+    body: 'Identifies the right moments to share, then drafts launch comments and supporting copy for technical audiences.',
+  },
+  {
+    badge: 'FX',
+    badgeColor: '#38bdf8',
+    title: 'SEO Issue Fixes',
+    body: 'Audits broken pages, missing metadata, and structural gaps, then turns findings into prioritized action items.',
+  },
+  {
+    badge: 'GSC',
+    badgeColor: '#f59e0b',
+    title: 'Google Search Console',
+    body: 'Uses search data to identify ranking opportunities, pages needing a boost, and where to focus updates next.',
+  },
+  {
+    badge: 'GA4',
+    badgeColor: '#fb923c',
+    title: 'Google Analytics',
+    body: 'Connects to GA4 to surface what is working, which journeys convert, and where experience improvements matter most.',
+  },
+];
+
 const PARTICLE_DEFAULTS = {
   scale: 60,
   particleCount: 3000,
@@ -595,6 +646,9 @@ const StackedSlidesSection = () => {
           [data-label-heading] {
             color: #000000 !important;
           }
+          [data-capability-grid] > div:last-child {
+            grid-template-columns: 1fr !important;
+          }
           [data-filter-dropdown] {
             justify-content: center;
           }
@@ -744,6 +798,25 @@ const StackedSlidesSection = () => {
                             );
                           })}
                         </div>
+                        <section data-capability-grid style={capabilitySectionStyle}>
+                          <div style={capabilitySectionHeaderStyle}>
+                            <span style={capabilityEyebrowStyle}>What Else Gets Built Into The Workflow</span>
+                            <h3 style={capabilityHeadingStyle}>Distribution, search, and insight loops can be automated too.</h3>
+                          </div>
+                          <div style={capabilityGridStyle}>
+                            {AUTOMATION_CAPABILITIES.map((item) => (
+                              <article key={item.title} style={capabilityCardStyle}>
+                                <div style={{ ...capabilityBadgeStyle, color: item.badgeColor }}>
+                                  {item.badge}
+                                </div>
+                                <div style={capabilityContentStyle}>
+                                  <h4 style={capabilityCardTitleStyle}>{item.title}</h4>
+                                  <p style={capabilityCardBodyStyle}>{item.body}</p>
+                                </div>
+                              </article>
+                            ))}
+                          </div>
+                        </section>
                         {/* Inline footer */}
                         <div id="stacked-inline-footer" style={inlineFooterStyle}>
                           <div style={inlineFooterDividerStyle} />
@@ -1087,6 +1160,99 @@ const gridRowStyle = {
   gap: 'clamp(0.7rem, 1.4vw, 1.05rem)',
   width: '100%',
   marginTop: 0,
+};
+
+const capabilitySectionStyle = {
+  width: '100%',
+  marginTop: 'clamp(2rem, 4vw, 3rem)',
+  paddingTop: 'clamp(2rem, 4vw, 3rem)',
+  borderTop: '1px solid rgba(42, 36, 32, 0.12)',
+  boxSizing: 'border-box',
+};
+
+const capabilitySectionHeaderStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.5rem',
+  marginBottom: 'clamp(1rem, 2vw, 1.5rem)',
+  maxWidth: '44rem',
+};
+
+const capabilityEyebrowStyle = {
+  fontSize: 'clamp(0.7rem, 1vw, 0.82rem)',
+  fontWeight: 600,
+  letterSpacing: '0.08em',
+  textTransform: 'uppercase',
+  color: 'rgba(42, 36, 32, 0.42)',
+};
+
+const capabilityHeadingStyle = {
+  margin: 0,
+  fontSize: 'clamp(1.3rem, 2.8vw, 2rem)',
+  lineHeight: 1.08,
+  letterSpacing: '-0.04em',
+  fontWeight: 700,
+  color: '#2a2420',
+  textWrap: 'balance',
+};
+
+const capabilityGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  gap: 'clamp(0.75rem, 1.6vw, 1rem)',
+  width: '100%',
+};
+
+const capabilityCardStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'auto 1fr',
+  gap: 'clamp(0.8rem, 1.5vw, 1rem)',
+  alignItems: 'start',
+  padding: 'clamp(1rem, 2vw, 1.35rem)',
+  minHeight: 'clamp(8.25rem, 16vw, 10rem)',
+  borderRadius: '1.1rem',
+  border: '1px solid rgba(212, 196, 171, 0.82)',
+  background: 'rgba(255,255,255,0.5)',
+  boxShadow: '0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4)',
+  boxSizing: 'border-box',
+};
+
+const capabilityBadgeStyle = {
+  width: 'clamp(2.4rem, 4vw, 2.9rem)',
+  height: 'clamp(2.4rem, 4vw, 2.9rem)',
+  borderRadius: '0.85rem',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  background: 'rgba(42, 36, 32, 0.05)',
+  fontSize: 'clamp(0.72rem, 1vw, 0.85rem)',
+  fontWeight: 800,
+  letterSpacing: '-0.02em',
+  flexShrink: 0,
+};
+
+const capabilityContentStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.45rem',
+  minWidth: 0,
+};
+
+const capabilityCardTitleStyle = {
+  margin: 0,
+  fontSize: 'clamp(1rem, 1.6vw, 1.2rem)',
+  lineHeight: 1.15,
+  fontWeight: 700,
+  letterSpacing: '-0.03em',
+  color: '#2a2420',
+};
+
+const capabilityCardBodyStyle = {
+  margin: 0,
+  fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)',
+  lineHeight: 1.55,
+  color: 'rgba(42, 36, 32, 0.6)',
+  maxWidth: '34ch',
 };
 
 const gridItemStyle = {
