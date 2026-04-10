@@ -78,6 +78,24 @@ const interpolateHeroParams = (start, end, progress) => {
   return next;
 };
 
+const heroGradientStyle = {
+  position: 'absolute',
+  inset: 0,
+  zIndex: 2,
+  pointerEvents: 'none',
+  opacity: 0,
+  background: [
+    'radial-gradient(72% 68% at 18% 22%, rgba(196, 124, 86, 0.22) 0%, rgba(196, 124, 86, 0) 62%)',
+    'radial-gradient(82% 78% at 78% 70%, rgba(102, 184, 164, 0.18) 0%, rgba(102, 184, 164, 0) 66%)',
+    'linear-gradient(135deg, rgba(214, 191, 123, 0.14) 0%, rgba(255, 255, 255, 0) 38%, rgba(171, 148, 218, 0.12) 100%)',
+  ].join(', '),
+  mixBlendMode: 'multiply',
+  filter: 'blur(6px) saturate(1.04)',
+  transformOrigin: '50% 50%',
+  willChange: 'transform, opacity',
+  animation: 'heroGradientDrift 18s ease-in-out infinite alternate',
+};
+
 const HomePage = () => {
   const [params, setParams] = useState(HERO_PARAMS_START);
 
@@ -109,6 +127,7 @@ const HomePage = () => {
 
     // Opacity-only intro — no transforms so ScrollTrigger pin positions are unaffected
     const headline = document.querySelector('#hero-panel-top-left');
+    const gradient = document.querySelector('#hero-gradient-overlay');
     const canvas = heroSectionRef.current?.querySelector('canvas');
     const nav = document.querySelector('#site-nav');
     const panelHeadline  = document.querySelector('#panel-hero-headline');
@@ -116,15 +135,20 @@ const HomePage = () => {
     const panelGrid      = document.querySelector('#stacked-grid-row');
     const pills          = gsap.utils.toArray('#hero-panel-filter-pills .filter-chip');
 
-    gsap.set([headline, canvas, nav], { autoAlpha: 0 });
+    gsap.set([gradient, headline, canvas, nav], { autoAlpha: 0 });
     gsap.set([panelHeadline, panelCta, panelGrid], { autoAlpha: 0 });
     gsap.set(pills, { autoAlpha: 0, y: 8 });
 
     const tl = gsap.timeline({ delay: 0.2 });
-    tl.to(headline,      { autoAlpha: 1, duration: 1.2, ease: 'power2.out' })
-      .to(canvas,        { autoAlpha: 1, duration: 1.2, ease: 'power2.out' }, '<0.25')
-      .to(nav,           { autoAlpha: 1, duration: 1.2, ease: 'power2.out' }, '<0.25')
-      .to(panelHeadline, { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '0.5')
+    tl.fromTo(
+        gradient,
+        { autoAlpha: 0, scale: 1.08 },
+        { autoAlpha: 1, scale: 1, duration: 1.1, ease: 'power2.out' }
+      )
+      .to(canvas,        { autoAlpha: 1, duration: 1.2, ease: 'power2.out' }, '<0.1')
+      .to(nav,           { autoAlpha: 1, duration: 1.2, ease: 'power2.out' }, '<0.2')
+      .to(headline,      { autoAlpha: 1, duration: 1.05, ease: 'power2.out' }, '0.32')
+      .to(panelHeadline, { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '0.58')
       .to(panelCta,      { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '<0.15')
       .to(panelGrid,     { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '<0.15')
       .to(pills,         { autoAlpha: 1, y: 0, duration: 0.45, ease: 'power2.out', stagger: 0.055 }, '<0.2');
@@ -162,6 +186,16 @@ const HomePage = () => {
 
   return (
     <div style={{ position: 'relative', width: '100vw', minHeight: '100dvh', background: 'transparent', overflowX: 'hidden' }}>
+      <style>{`
+        @keyframes heroGradientDrift {
+          0% {
+            transform: translate3d(0, 0, 0) scale(1);
+          }
+          100% {
+            transform: translate3d(1.5%, -1.2%, 0) scale(1.04);
+          }
+        }
+      `}</style>
       {/* <FontSelector /> */}
       {/* <LoopControls params={params} onParamsChange={setParams} backgroundColor={canvasBackground} onBackgroundChange={setCanvasBackground} textColor={textColor} onTextColorChange={setTextColor} /> */}
       {/* Hero Section */}
@@ -176,6 +210,7 @@ const HomePage = () => {
           background: 'transparent',
         }}
       >
+        <div id="hero-gradient-overlay" style={heroGradientStyle} />
         <App params={params} liveParamsRef={paramsRef} backgroundColor={canvasBackground} />
         <HeroHeadline headerLogoRef={headerLogoRef} textColor={textColor} />
       </section>
