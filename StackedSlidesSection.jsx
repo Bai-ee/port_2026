@@ -2,6 +2,20 @@ import React, { useLayoutEffect, useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { createSharedParticleGalleryRenderer } from './sharedParticleGalleryRenderer';
+import { BrainIcon } from './components/ui/brain';
+import {
+  Bot,
+  BriefcaseBusiness,
+  ChartColumnIncreasing,
+  FolderKanban,
+  LaptopMinimalCheck,
+  MessageSquareMore,
+  Search,
+  Settings2,
+  ShieldCheck,
+  Workflow,
+  ArrowRightLeft,
+} from 'lucide-react';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -133,54 +147,133 @@ const PORTFOLIO_IMAGES = [
 
 const AUTOMATION_CAPABILITIES = [
   {
+    badge: 'CP',
+    badgeColor: '#14b8a6',
+    icon: 'workflow',
+    previewImage: '/img/port/frame_5.png',
+    title: 'Creative Pipelines',
+    body: 'Automates content creation in real time, aligning every post with your brand’s voice while driving consistent engagement.',
+  },
+  {
+    badge: 'CB',
+    badgeColor: '#6366f1',
+    icon: 'brain',
+    previewImage: '/img/port/cq_guide.png',
+    title: 'Company Brain',
+    body: 'Centralizes your entire operating stack into a structured, searchable system that powers faster decisions and smarter execution.',
+  },
+  {
+    badge: 'IKA',
+    badgeColor: '#0ea5e9',
+    icon: 'message',
+    previewImage: '/img/port/cq_figma.png',
+    title: 'Internal Knowledge Assistant',
+    body: 'Instantly answers team questions by pulling from your documents, conversations, and data—eliminating bottlenecks and repetitive work.',
+  },
+  {
+    badge: 'ESA',
+    badgeColor: '#8b5cf6',
+    icon: 'book',
+    previewImage: '/img/port/frame_8.png',
+    title: 'Executive Support Automation',
+    body: 'Prepares meetings, surfaces insights, and drafts communications so you walk into every decision fully informed.',
+  },
+  {
+    badge: 'DOE',
+    badgeColor: '#10b981',
+    icon: 'settings',
+    previewImage: '/img/port/frame_6.png',
+    title: 'Daily Operations Engine',
+    body: 'Runs core business tasks automatically—email triage, task tracking, reporting, and team updates—without manual oversight.',
+  },
+  {
+    badge: 'EMA',
+    badgeColor: '#ec4899',
+    icon: 'arrow',
+    previewImage: '/img/port/edittrax.png',
+    title: 'Email Marketing Automation',
+    body: 'Builds, schedules, and optimizes campaigns across regions while learning and improving from feedback over time.',
+  },
+  {
+    badge: 'AIR',
+    badgeColor: '#f97316',
+    icon: 'search',
+    previewImage: '/img/port/claire.png',
+    title: 'AI-Powered Research',
+    body: 'Generates deep consumer insights, competitive analysis, and market validation in hours instead of weeks.',
+  },
+  {
+    badge: 'FTP',
+    badgeColor: '#f59e0b',
+    icon: 'chart',
+    previewImage: '/img/port/frame_7.png',
+    title: 'Financial & Tax Processing',
+    body: 'Organizes transactions, corrects discrepancies, and produces reporting-ready outputs aligned with accounting workflows.',
+  },
+  {
+    badge: 'CM',
+    badgeColor: '#ef4444',
+    icon: 'shield',
+    previewImage: '/img/port/frame_4.png',
+    title: 'Compliance Monitoring',
+    body: 'Continuously checks deadlines, filings, and regulatory requirements to ensure nothing critical is missed.',
+  },
+  {
+    badge: 'DIA',
+    badgeColor: '#22c55e',
+    icon: 'folder',
+    previewImage: '/img/port/fast_poker_style.png',
+    title: 'Distribution & Insight Automation',
+    body: 'Unifies social publishing, SEO fixes, search visibility, and performance reporting into one continuous system that surfaces what to ship, where to publish, and what to improve next.',
+  },
+  {
+    badge: 'RPD',
+    badgeColor: '#06b6d4',
+    icon: 'laptop',
+    previewImage: '/img/port/critters_game1.png',
+    title: 'Rapid Product Development',
+    body: 'Builds and deploys functional tools, integrations, and experiences from concept to launch in a fraction of the time.',
+  },
+  {
+    badge: 'SIS',
+    badgeColor: '#a855f7',
+    icon: 'bot',
+    previewImage: '/img/port/viva.png',
+    title: 'Self-Improving Systems',
+    body: 'Continuously refines workflows, tools, and outputs based on feedback, increasing performance over time.',
+  },
+  {
     badge: 'R',
     badgeColor: '#ff6b2c',
+    icon: 'message',
+    previewImage: '/img/port/ponke.png',
     title: 'Reddit & Community',
     body: 'Finds relevant threads and drafts reply ideas and post concepts for review before publishing.',
   },
   {
     badge: 'SEO',
     badgeColor: '#8b5cf6',
+    icon: 'search',
+    previewImage: '/img/port/ntr.png',
     title: 'SEO Content',
     body: 'Surfaces keyword opportunities and drafts landing pages, blog outlines, and content directions for approval.',
   },
-  {
-    badge: 'X',
-    badgeColor: '#111111',
-    title: 'X (Twitter)',
-    body: 'Generates post and thread drafts you can edit, refine, and publish yourself across your content calendar.',
-  },
-  {
-    badge: 'in',
-    badgeColor: '#2563eb',
-    title: 'LinkedIn',
-    body: 'Suggests thought-leadership angles and drafts professional posts ready for personalization and sharing.',
-  },
-  {
-    badge: 'HN',
-    badgeColor: '#f97316',
-    title: 'Hacker News',
-    body: 'Identifies the right moments to share, then drafts launch comments and supporting copy for technical audiences.',
-  },
-  {
-    badge: 'FX',
-    badgeColor: '#38bdf8',
-    title: 'SEO Issue Fixes',
-    body: 'Audits broken pages, missing metadata, and structural gaps, then turns findings into prioritized action items.',
-  },
-  {
-    badge: 'GSC',
-    badgeColor: '#f59e0b',
-    title: 'Google Search Console',
-    body: 'Uses search data to identify ranking opportunities, pages needing a boost, and where to focus updates next.',
-  },
-  {
-    badge: 'GA4',
-    badgeColor: '#fb923c',
-    title: 'Google Analytics',
-    body: 'Connects to GA4 to surface what is working, which journeys convert, and where experience improvements matter most.',
-  },
 ];
+
+const AUTOMATION_ICON_COMPONENTS = {
+  arrow: ArrowRightLeft,
+  book: BriefcaseBusiness,
+  bot: Bot,
+  brain: BrainIcon,
+  chart: ChartColumnIncreasing,
+  folder: FolderKanban,
+  laptop: LaptopMinimalCheck,
+  message: MessageSquareMore,
+  search: Search,
+  settings: Settings2,
+  shield: ShieldCheck,
+  workflow: Workflow,
+};
 
 const PARTICLE_DEFAULTS = {
   scale: 60,
@@ -325,7 +418,7 @@ const StackedSlidesSection = () => {
     const shell = marqueeShellRef.current;
     const track = marqueeTrackRef.current;
     const set = marqueeSetRef.current;
-    if (!shell || !track || !set || isTouchScrollDevice()) return;
+    if (!shell || !track || !set) return;
 
     let itemWidth = 0;
     let offset = 0;
@@ -370,7 +463,7 @@ const StackedSlidesSection = () => {
 
       const delta = Math.min((time - lastTime) / 1000, 0.05);
       lastTime = time;
-      offset -= delta * 42;
+      offset -= delta * (isTouchScrollDevice() ? 28 : 42);
 
       if (offset <= -itemWidth) {
         offset += itemWidth;
@@ -441,24 +534,36 @@ const StackedSlidesSection = () => {
   useLayoutEffect(() => {
     if (!wrapperRef.current) return;
     const wrapper = wrapperRef.current;
+    const isTouchPointer = isTouchScrollDevice();
+    let activeTouchOverlay = null;
+    const closeActiveTouchOverlay = () => {
+      if (activeTouchOverlay) {
+        activeTouchOverlay.reverse();
+      }
+    };
 
     // Hover reveal list effect — images appended to body to escape transformed ancestor
     const hoverContainers = Array.from(wrapper.querySelectorAll('[data-hover-item]'));
     const hoverCleanups = [];
 
+    if (isTouchPointer) {
+      window.addEventListener('scroll', closeActiveTouchOverlay, { passive: true });
+      window.addEventListener('touchmove', closeActiveTouchOverlay, { passive: true });
+    }
+
     hoverContainers.forEach((container) => {
       const src = container.querySelector('[data-hover-image]')?.src;
-      if (!src) return;
+      const hasPlaceholder = Boolean(container.querySelector('[data-hover-placeholder]'));
+      if (!src && !hasPlaceholder) return;
 
-      const image = document.createElement('img');
-      image.src = src;
+      const image = src ? document.createElement('img') : document.createElement('div');
+      if (src) image.src = src;
       Object.assign(image.style, {
         position: 'fixed',
         top: '0',
         left: '0',
         width: 'clamp(220px, 24vw, 360px)',
         height: 'clamp(220px, 24vw, 360px)',
-        objectFit: 'cover',
         zIndex: '9999',
         opacity: '0',
         visibility: 'hidden',
@@ -466,28 +571,70 @@ const StackedSlidesSection = () => {
         borderRadius: '1.25rem',
         boxShadow: '0 24px 80px rgba(0,0,0,0.42)',
       });
+      if (src) {
+        Object.assign(image.style, {
+          objectFit: 'cover',
+        });
+      } else {
+        Object.assign(image.style, {
+          background: 'rgba(255,255,255,0.94)',
+          border: '1px solid rgba(42, 36, 32, 0.12)',
+        });
+      }
       document.body.appendChild(image);
 
-      gsap.set(image, { xPercent: -50, yPercent: -50, autoAlpha: 0 });
+      gsap.set(image, {
+        xPercent: isTouchPointer ? -50 : -100,
+        yPercent: isTouchPointer ? -50 : -100,
+        autoAlpha: 0,
+      });
 
       let firstEnter = false;
       const setX = gsap.quickTo(image, 'x', { duration: 0.4, ease: 'power3' });
       const setY = gsap.quickTo(image, 'y', { duration: 0.4, ease: 'power3' });
+      let isOpen = false;
 
-      const align = (event) => {
-        const rect = container.getBoundingClientRect();
-        let itemCenterY = rect.top + rect.height / 2 + 140;
-        const imageSize = Math.min(window.innerWidth * 0.24, 360);
-        itemCenterY = Math.min(window.innerHeight - imageSize / 2, itemCenterY);
+      const align = (point) => {
+        const imageRect = image.getBoundingClientRect();
+        const imageWidth = imageRect.width || Math.min(window.innerWidth * 0.24, 360);
+        const imageHeight = imageRect.height || Math.min(window.innerWidth * 0.24, 360);
+        const cursorOffset = 20;
+        const minX = imageWidth + 12;
+        const minY = imageHeight + 12;
+        const maxX = window.innerWidth - 12;
+        const maxY = window.innerHeight - 12;
+        const targetX = Math.min(Math.max(point.clientX - cursorOffset, minX), maxX);
+        const targetY = Math.min(Math.max(point.clientY - cursorOffset, minY), maxY);
 
         if (firstEnter) {
-          setX(event.clientX, event.clientX);
-          setY(itemCenterY, itemCenterY);
+          setX(targetX, targetX);
+          setY(targetY, targetY);
           firstEnter = false;
           return;
         }
-        setX(event.clientX);
-        setY(itemCenterY);
+        setX(targetX);
+        setY(targetY);
+      };
+
+      const alignToContainer = () => {
+        const rect = container.getBoundingClientRect();
+        const imageRect = image.getBoundingClientRect();
+        const imageWidth = imageRect.width || Math.min(window.innerWidth * 0.24, 360);
+        const imageHeight = imageRect.height || Math.min(window.innerWidth * 0.24, 360);
+        const headerOffset = 88;
+        const cardGap = 14;
+        const targetX = Math.min(
+          Math.max(rect.left + rect.width / 2, imageWidth / 2 + 12),
+          window.innerWidth - imageWidth / 2 - 12
+        );
+        let targetY = rect.top - cardGap;
+        targetY = Math.max(targetY, headerOffset + imageHeight);
+        targetY = Math.min(targetY, window.innerHeight - 12);
+
+        align({
+          clientX: targetX,
+          clientY: targetY,
+        });
       };
 
       const startFollow = () => document.addEventListener('mousemove', align);
@@ -498,7 +645,12 @@ const StackedSlidesSection = () => {
         ease: 'none',
         paused: true,
         duration: 0.12,
-        onReverseComplete: stopFollow,
+        onStart: () => { isOpen = true; },
+        onReverseComplete: () => {
+          isOpen = false;
+          stopFollow();
+          if (activeTouchOverlay === fade) activeTouchOverlay = null;
+        },
       });
 
       const onEnter = (event) => {
@@ -509,13 +661,44 @@ const StackedSlidesSection = () => {
       };
 
       const onLeave = () => fade.reverse();
+      const onTap = (event) => {
+        if (!isTouchPointer) return;
+        event.preventDefault();
+        event.stopPropagation();
 
-      container.addEventListener('mouseenter', onEnter);
-      container.addEventListener('mouseleave', onLeave);
+        if (activeTouchOverlay && activeTouchOverlay !== fade) {
+          activeTouchOverlay.reverse();
+        }
+
+        if (isOpen) {
+          fade.reverse();
+          return;
+        }
+
+        firstEnter = true;
+        activeTouchOverlay = fade;
+        fade.play();
+        alignToContainer();
+      };
+      const onDocumentTap = (event) => {
+        if (!isTouchPointer || !isOpen) return;
+        if (container.contains(event.target)) return;
+        fade.reverse();
+      };
+
+      if (!isTouchPointer) {
+        container.addEventListener('mouseenter', onEnter);
+        container.addEventListener('mouseleave', onLeave);
+      } else {
+        container.addEventListener('click', onTap);
+        document.addEventListener('click', onDocumentTap);
+      }
 
       hoverCleanups.push(() => {
         container.removeEventListener('mouseenter', onEnter);
         container.removeEventListener('mouseleave', onLeave);
+        container.removeEventListener('click', onTap);
+        document.removeEventListener('click', onDocumentTap);
         stopFollow();
         fade.kill();
         document.body.removeChild(image);
@@ -530,6 +713,11 @@ const StackedSlidesSection = () => {
     document.body.appendChild(calScript);
 
     return () => {
+      closeActiveTouchOverlay();
+      if (isTouchPointer) {
+        window.removeEventListener('scroll', closeActiveTouchOverlay);
+        window.removeEventListener('touchmove', closeActiveTouchOverlay);
+      }
       hoverCleanups.forEach((cleanup) => cleanup());
       if (document.body.contains(calScript)) document.body.removeChild(calScript);
     };
@@ -546,6 +734,9 @@ const StackedSlidesSection = () => {
     const ctx = gsap.context(() => {
       const cardOffset = isTouch ? 18 : 26;
       const blockOffset = isTouch ? 24 : 34;
+      const featuredHeader = wrapper.querySelector('[data-featured-work-label]');
+      const capabilityHeader = wrapper.querySelector('[data-capability-header]');
+      const capabilityCards = gsap.utils.toArray('[data-capability-card]', wrapper);
       const gridCards = gsap.utils
         .toArray('#stacked-grid-row > *', wrapper)
         .filter((card) => card.getBoundingClientRect().top > window.innerHeight * 0.82);
@@ -582,6 +773,75 @@ const StackedSlidesSection = () => {
         });
       }
 
+      if (featuredHeader) {
+        gsap.fromTo(
+          featuredHeader,
+          { autoAlpha: 0, y: blockOffset },
+          {
+            autoAlpha: 1,
+            y: 0,
+            duration: isTouch ? 0.45 : 0.65,
+            ease: 'power2.out',
+            overwrite: true,
+            scrollTrigger: {
+              trigger: featuredHeader,
+              start: 'top 90%',
+              toggleActions: 'play none none reverse',
+              invalidateOnRefresh: true,
+            },
+          }
+        );
+      }
+
+      if (capabilityHeader) {
+        gsap.fromTo(
+          capabilityHeader,
+          { autoAlpha: 0, y: blockOffset },
+          {
+            autoAlpha: 1,
+            y: 0,
+            duration: isTouch ? 0.45 : 0.65,
+            ease: 'power2.out',
+            overwrite: true,
+            scrollTrigger: {
+              trigger: capabilityHeader,
+              start: 'top 90%',
+              toggleActions: 'play none none reverse',
+              invalidateOnRefresh: true,
+            },
+          }
+        );
+      }
+
+      if (capabilityCards.length) {
+        gsap.set(capabilityCards, { autoAlpha: 0, y: cardOffset, willChange: 'transform, opacity' });
+
+        ScrollTrigger.batch(capabilityCards, {
+          start: 'top 92%',
+          end: 'bottom 64%',
+          onEnter: (batch) => {
+            gsap.to(batch, {
+              autoAlpha: 1,
+              y: 0,
+              duration: isTouch ? 0.45 : 0.65,
+              ease: 'power2.out',
+              stagger: isTouch ? 0.045 : 0.07,
+              overwrite: true,
+            });
+          },
+          onLeaveBack: (batch) => {
+            gsap.to(batch, {
+              autoAlpha: 0,
+              y: cardOffset,
+              duration: 0.24,
+              ease: 'power1.out',
+              stagger: 0.03,
+              overwrite: true,
+            });
+          },
+        });
+      }
+
       revealBlocks.forEach((block) => {
         gsap.fromTo(
           block,
@@ -589,12 +849,13 @@ const StackedSlidesSection = () => {
           {
             y: 0,
             autoAlpha: 1,
-            ease: 'none',
+            duration: isTouch ? 0.45 : 0.65,
+            ease: 'power2.out',
+            overwrite: true,
             scrollTrigger: {
               trigger: block,
               start: 'top 94%',
-              end: 'top 68%',
-              scrub: isTouch ? 0.35 : 0.55,
+              toggleActions: 'play none none reverse',
               invalidateOnRefresh: true,
             },
           }
@@ -714,7 +975,7 @@ const StackedSlidesSection = () => {
                             target="_blank"
                             rel="noopener noreferrer"
                             className="cta-pill-btn"
-                            style={ctaStyle}
+                            style={heroCtaStyle}
                           >
                             <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
                             {slide.supportText}
@@ -735,31 +996,38 @@ const StackedSlidesSection = () => {
                         ))}
                       </div>
                     </div>
+                    <section data-capability-grid style={capabilitySectionStyle}>
+                      <div data-capability-header style={capabilitySectionHeaderStyle}>
+                        <span style={capabilityEyebrowStyle}>Agentic Automations</span>
+                      </div>
+                      <div style={capabilityGridStyle}>
+                        {AUTOMATION_CAPABILITIES.map((item) => {
+                          const Icon = AUTOMATION_ICON_COMPONENTS[item.icon];
+
+                          return (
+                            <article
+                              key={item.title}
+                              data-capability-card
+                              data-hover-item
+                              style={capabilityCardStyle}
+                            >
+                              <div data-hover-placeholder aria-hidden="true" style={{ display: 'none' }} />
+                              <div style={{ ...capabilityBadgeStyle, color: item.badgeColor }}>
+                                {Icon ? <Icon size={20} strokeWidth={2.1} /> : item.badge}
+                              </div>
+                              <div style={capabilityContentStyle}>
+                                <h4 style={capabilityCardTitleStyle}>{item.title}</h4>
+                                <p style={capabilityCardBodyStyle}>{item.body}</p>
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    </section>
                     <div data-featured-work-label style={featuredWorkLabelStyle}>
-                      <button
-                        type="button"
-                        className="deliverables-toggle"
-                        style={deliverablesToggleStyle}
-                        onClick={() => setFilterOpen(prev => !prev)}
-                        aria-expanded={filterOpen}
-                      >
-                        <h2 data-label-heading style={{ ...headingStyle, fontSize: 'clamp(1.4rem, 3.5vw, 2.45rem)', textAlign: 'left', margin: 0, opacity: 0 }}>
-                          Recent Projects
-                        </h2>
-                        <svg
-                          width="18" height="18"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          style={{ transform: filterOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.28s cubic-bezier(0.16, 1, 0.3, 1)', flexShrink: 0, color: '#2a2420', opacity: 0 }}
-                          aria-hidden="true"
-                        >
-                          <polyline points="9 6 15 12 9 18" />
-                        </svg>
-                      </button>
+                      <div style={capabilitySectionHeaderStyle}>
+                        <span style={capabilityEyebrowStyle}>Featured Work</span>
+                      </div>
                     </div>
                     <div data-grid-window style={gridWindowStyle}>
                       <div data-grid-inner style={gridInnerContainerStyle}>
@@ -798,25 +1066,6 @@ const StackedSlidesSection = () => {
                             );
                           })}
                         </div>
-                        <section data-capability-grid style={capabilitySectionStyle}>
-                          <div style={capabilitySectionHeaderStyle}>
-                            <span style={capabilityEyebrowStyle}>What Else Gets Built Into The Workflow</span>
-                            <h3 style={capabilityHeadingStyle}>Distribution, search, and insight loops can be automated too.</h3>
-                          </div>
-                          <div style={capabilityGridStyle}>
-                            {AUTOMATION_CAPABILITIES.map((item) => (
-                              <article key={item.title} style={capabilityCardStyle}>
-                                <div style={{ ...capabilityBadgeStyle, color: item.badgeColor }}>
-                                  {item.badge}
-                                </div>
-                                <div style={capabilityContentStyle}>
-                                  <h4 style={capabilityCardTitleStyle}>{item.title}</h4>
-                                  <p style={capabilityCardBodyStyle}>{item.body}</p>
-                                </div>
-                              </article>
-                            ))}
-                          </div>
-                        </section>
                         {/* Inline footer */}
                         <div id="stacked-inline-footer" style={inlineFooterStyle}>
                           <div style={inlineFooterDividerStyle} />
@@ -1075,7 +1324,9 @@ const gridLayoutStyle = {
 };
 
 const textCenteringStyle = {
-  height: 'clamp(14rem, calc(9rem + 3vw + 8vh), 20rem)',
+  minHeight: 'clamp(11rem, 18vw, 14rem)',
+  paddingTop: 'clamp(1rem, 2vw, 1.5rem)',
+  paddingBottom: 'clamp(1rem, 2vw, 1.5rem)',
   flexShrink: 0,
   display: 'flex',
   flexDirection: 'column',
@@ -1117,8 +1368,9 @@ const supportTextStyle = {
 const ctaStyle = {
   display: 'inline-flex',
   alignItems: 'center',
+  justifyContent: 'center',
   gap: '0.5rem',
-  padding: '0.5rem 0.75rem 0.5rem 0.25rem',
+  padding: '0.5rem 0.75rem',
   fontSize: 'clamp(0.8rem, 1.1vw, 0.875rem)',
   fontWeight: 700,
   letterSpacing: '0.01em',
@@ -1129,6 +1381,11 @@ const ctaStyle = {
   boxShadow: '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1)',
   whiteSpace: 'nowrap',
   cursor: 'pointer',
+};
+
+const heroCtaStyle = {
+  ...ctaStyle,
+  width: 'min(100%, 14.75rem)',
 };
 
 const ctaAvatarStyle = {
@@ -1164,8 +1421,8 @@ const gridRowStyle = {
 
 const capabilitySectionStyle = {
   width: '100%',
-  marginTop: 'clamp(2rem, 4vw, 3rem)',
-  paddingTop: 'clamp(2rem, 4vw, 3rem)',
+  marginTop: 0,
+  paddingTop: 'clamp(1.25rem, 2.5vw, 1.85rem)',
   borderTop: '1px solid rgba(42, 36, 32, 0.12)',
   boxSizing: 'border-box',
 };
@@ -1352,8 +1609,49 @@ const testimonialCardCompanyStyle = {
 
 const featuredWorkLabelStyle = {
   width: '100%',
-  paddingTop: 0,
+  marginTop: 'clamp(2rem, 4vw, 3rem)',
+  paddingTop: 'clamp(2rem, 4vw, 3rem)',
+  borderTop: '1px solid rgba(42, 36, 32, 0.12)',
   paddingBottom: 'clamp(1rem, 2vw, 1.5rem)',
+  boxSizing: 'border-box',
+};
+
+const featurePreviewSectionStyle = {
+  width: '100%',
+  marginBottom: 'clamp(1.5rem, 3vw, 2.5rem)',
+};
+
+const featurePreviewGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(12, minmax(0, 1fr))',
+  gridAutoRows: 'clamp(3.8rem, 6vw, 5.6rem)',
+  gap: 'clamp(0.7rem, 1.4vw, 1.05rem)',
+  width: '100%',
+};
+
+const featurePreviewCardStyle = {
+  gridColumn: 'span 4',
+  gridRow: 'span 3',
+  borderRadius: '1rem',
+  overflow: 'hidden',
+  border: '1px solid rgba(42, 36, 32, 0.12)',
+  background: 'rgba(255,255,255,0.46)',
+  boxShadow: '0 1px 0 rgba(255,255,255,0.55), inset 0 1px 0 rgba(255,255,255,0.32)',
+};
+
+const featurePreviewCardWideStyle = {
+  gridColumn: 'span 8',
+};
+
+const featurePreviewCardTallStyle = {
+  gridRow: 'span 4',
+};
+
+const featurePreviewImageStyle = {
+  width: '100%',
+  height: '100%',
+  objectFit: 'cover',
+  display: 'block',
 };
 
 const deliverablesToggleStyle = {
@@ -2221,12 +2519,17 @@ const inlineFooterCreditRowStyle = {
   flexDirection: 'column',
   alignItems: 'center',
   gap: 'clamp(1.25rem, 2.5vw, 2rem)',
+  width: '100%',
+  maxWidth: '54ch',
 };
 
 const inlineFooterCreditLineStyle = {
   display: 'flex',
   alignItems: 'baseline',
   gap: '0.5rem',
+  width: '100%',
+  justifyContent: 'center',
+  textAlign: 'center',
 };
 
 const inlineFooterBottomStyle = {
