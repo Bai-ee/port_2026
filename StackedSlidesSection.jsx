@@ -1158,9 +1158,9 @@ const StackedSlidesSection = () => {
                           <div style={capabilitySectionHeaderStyle}>
                             <span style={capabilityEyebrowStyle}>Testimonials</span>
                           </div>
-                          <div id="testimonials-grid" style={{ marginTop: 'clamp(1.25rem, 2.5vw, 2rem)', display: 'flex', flexDirection: 'column', gap: 'clamp(0.75rem, 1.5vw, 1rem)' }}>
+                          <div id="testimonials-grid" style={{ marginTop: 'clamp(1.25rem, 2.5vw, 2rem)', display: 'flex', flexDirection: 'column', gap: 'clamp(0.75rem, 1.5vw, 1rem)', width: '100%', minWidth: 0 }}>
                             {[testimonials[0], testimonials[1], testimonials[2], testimonials[3]].map((t) => (
-                              <article key={t.name + t.company} style={{ ...secondaryQuoteItemStyle, aspectRatio: '19 / 6', flexDirection: 'row', alignItems: 'center', gap: 'clamp(1.5rem, 3vw, 2.5rem)', padding: 'clamp(1.5rem, 3vw, 2.5rem)' }}>
+                              <article key={t.name + t.company} style={{ ...secondaryQuoteItemStyle, width: '100%', boxSizing: 'border-box', aspectRatio: '19 / 6', flexDirection: 'row', alignItems: 'center', gap: 'clamp(1.5rem, 3vw, 2.5rem)', padding: 'clamp(1.5rem, 3vw, 2.5rem)' }}>
                                 <img src={t.img} alt={t.name} style={{ ...testimonialCardAvatarStyle, flexShrink: 0, width: 'clamp(2.5rem, 4vw, 3.5rem)', height: 'clamp(2.5rem, 4vw, 3.5rem)' }} />
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                   <p style={{ ...featuredQuoteTextStyle, fontSize: 'clamp(0.9rem, 1.4vw, 1.15rem)', margin: '0 0 0.65rem' }}>{t.quote}</p>
