@@ -20,11 +20,17 @@ import {
 gsap.registerPlugin(ScrollTrigger);
 
 const MOBILE_SCROLL_MEDIA_QUERY = '(max-width: 767px), (pointer: coarse)';
+const NARROW_SCROLL_MEDIA_QUERY = '(max-width: 680px) and (pointer: coarse)';
 
 const isTouchScrollDevice = () =>
   typeof window !== 'undefined' &&
   typeof window.matchMedia === 'function' &&
   window.matchMedia(MOBILE_SCROLL_MEDIA_QUERY).matches;
+
+const isNarrowTouchViewport = () =>
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia(NARROW_SCROLL_MEDIA_QUERY).matches;
 
 const agencyLogos = [
   { src: '/img/agencies/publicis.png', alt: 'Publicis', scale: 2 },
@@ -535,23 +541,13 @@ const StackedSlidesSection = () => {
     if (!wrapperRef.current) return;
     const wrapper = wrapperRef.current;
     const isTouchPointer = isTouchScrollDevice();
-    let activeTouchOverlay = null;
-    const closeActiveTouchOverlay = () => {
-      if (activeTouchOverlay) {
-        activeTouchOverlay.reverse();
-      }
-    };
 
     // Hover reveal list effect — images appended to body to escape transformed ancestor
     const hoverContainers = Array.from(wrapper.querySelectorAll('[data-hover-item]'));
     const hoverCleanups = [];
 
-    if (isTouchPointer) {
-      window.addEventListener('scroll', closeActiveTouchOverlay, { passive: true });
-      window.addEventListener('touchmove', closeActiveTouchOverlay, { passive: true });
-    }
-
     hoverContainers.forEach((container) => {
+      if (isTouchPointer) return;
       const src = container.querySelector('[data-hover-image]')?.src;
       const hasPlaceholder = Boolean(container.querySelector('[data-hover-placeholder]'));
       if (!src && !hasPlaceholder) return;
@@ -584,15 +580,14 @@ const StackedSlidesSection = () => {
       document.body.appendChild(image);
 
       gsap.set(image, {
-        xPercent: isTouchPointer ? -50 : -100,
-        yPercent: isTouchPointer ? -50 : -100,
+        xPercent: -100,
+        yPercent: -100,
         autoAlpha: 0,
       });
 
       let firstEnter = false;
       const setX = gsap.quickTo(image, 'x', { duration: 0.4, ease: 'power3' });
       const setY = gsap.quickTo(image, 'y', { duration: 0.4, ease: 'power3' });
-      let isOpen = false;
 
       const align = (point) => {
         const imageRect = image.getBoundingClientRect();
@@ -616,27 +611,6 @@ const StackedSlidesSection = () => {
         setY(targetY);
       };
 
-      const alignToContainer = () => {
-        const rect = container.getBoundingClientRect();
-        const imageRect = image.getBoundingClientRect();
-        const imageWidth = imageRect.width || Math.min(window.innerWidth * 0.24, 360);
-        const imageHeight = imageRect.height || Math.min(window.innerWidth * 0.24, 360);
-        const headerOffset = 88;
-        const cardGap = 14;
-        const targetX = Math.min(
-          Math.max(rect.left + rect.width / 2, imageWidth / 2 + 12),
-          window.innerWidth - imageWidth / 2 - 12
-        );
-        let targetY = rect.top - cardGap;
-        targetY = Math.max(targetY, headerOffset + imageHeight);
-        targetY = Math.min(targetY, window.innerHeight - 12);
-
-        align({
-          clientX: targetX,
-          clientY: targetY,
-        });
-      };
-
       const startFollow = () => document.addEventListener('mousemove', align);
       const stopFollow = () => document.removeEventListener('mousemove', align);
 
@@ -645,12 +619,7 @@ const StackedSlidesSection = () => {
         ease: 'none',
         paused: true,
         duration: 0.12,
-        onStart: () => { isOpen = true; },
-        onReverseComplete: () => {
-          isOpen = false;
-          stopFollow();
-          if (activeTouchOverlay === fade) activeTouchOverlay = null;
-        },
+        onReverseComplete: stopFollow,
       });
 
       const onEnter = (event) => {
@@ -661,44 +630,12 @@ const StackedSlidesSection = () => {
       };
 
       const onLeave = () => fade.reverse();
-      const onTap = (event) => {
-        if (!isTouchPointer) return;
-        event.preventDefault();
-        event.stopPropagation();
-
-        if (activeTouchOverlay && activeTouchOverlay !== fade) {
-          activeTouchOverlay.reverse();
-        }
-
-        if (isOpen) {
-          fade.reverse();
-          return;
-        }
-
-        firstEnter = true;
-        activeTouchOverlay = fade;
-        fade.play();
-        alignToContainer();
-      };
-      const onDocumentTap = (event) => {
-        if (!isTouchPointer || !isOpen) return;
-        if (container.contains(event.target)) return;
-        fade.reverse();
-      };
-
-      if (!isTouchPointer) {
-        container.addEventListener('mouseenter', onEnter);
-        container.addEventListener('mouseleave', onLeave);
-      } else {
-        container.addEventListener('click', onTap);
-        document.addEventListener('click', onDocumentTap);
-      }
+      container.addEventListener('mouseenter', onEnter);
+      container.addEventListener('mouseleave', onLeave);
 
       hoverCleanups.push(() => {
         container.removeEventListener('mouseenter', onEnter);
         container.removeEventListener('mouseleave', onLeave);
-        container.removeEventListener('click', onTap);
-        document.removeEventListener('click', onDocumentTap);
         stopFollow();
         fade.kill();
         document.body.removeChild(image);
@@ -713,11 +650,6 @@ const StackedSlidesSection = () => {
     document.body.appendChild(calScript);
 
     return () => {
-      closeActiveTouchOverlay();
-      if (isTouchPointer) {
-        window.removeEventListener('scroll', closeActiveTouchOverlay);
-        window.removeEventListener('touchmove', closeActiveTouchOverlay);
-      }
       hoverCleanups.forEach((cleanup) => cleanup());
       if (document.body.contains(calScript)) document.body.removeChild(calScript);
     };
@@ -727,6 +659,7 @@ const StackedSlidesSection = () => {
     if (!wrapperRef.current) return;
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (isNarrowTouchViewport()) return;
 
     const isTouch = isTouchScrollDevice();
     const wrapper = wrapperRef.current;
@@ -1324,9 +1257,7 @@ const gridLayoutStyle = {
 };
 
 const textCenteringStyle = {
-  minHeight: 'clamp(11rem, 18vw, 14rem)',
-  paddingTop: 'clamp(1rem, 2vw, 1.5rem)',
-  paddingBottom: 'clamp(1rem, 2vw, 1.5rem)',
+  height: 'clamp(14rem, calc(9rem + 3vw + 8vh), 20rem)',
   flexShrink: 0,
   display: 'flex',
   flexDirection: 'column',

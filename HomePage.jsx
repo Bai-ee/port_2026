@@ -12,7 +12,7 @@ import StackedSlidesSection from './StackedSlidesSection';
 // import LoopControls from './LoopControls';
 import PortfolioModal from './PortfolioModal';
 
-const MOBILE_SCROLL_MEDIA_QUERY = '(max-width: 767px), (pointer: coarse)';
+const SIMPLE_SCROLL_MEDIA_QUERY = '(max-width: 680px) and (pointer: coarse)';
 
 const HERO_PARAMS_START = {
   scale: 200,
@@ -99,10 +99,10 @@ const HomePage = () => {
   }, [params]);
 
   useLayoutEffect(() => {
-    const isTouchScrollDevice =
+    const useSimpleScrollViewport =
       typeof window !== 'undefined' &&
       typeof window.matchMedia === 'function' &&
-      window.matchMedia(MOBILE_SCROLL_MEDIA_QUERY).matches;
+      window.matchMedia(SIMPLE_SCROLL_MEDIA_QUERY).matches;
 
     window.history.scrollRestoration = 'manual';
     window.scrollTo(0, 0);
@@ -137,7 +137,7 @@ const HomePage = () => {
       trigger: '#hero-section',
       start: 'top top',
       end: 'bottom top',
-      scrub: isTouchScrollDevice ? true : 0.45,
+      scrub: useSimpleScrollViewport ? 0.25 : 0.45,
       invalidateOnRefresh: true,
       onUpdate: (self) => {
         isScrollMorphActiveRef.current = true;

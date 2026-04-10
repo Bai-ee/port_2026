@@ -4,7 +4,7 @@ import gsap from 'gsap';
 
 gsap.registerPlugin(ScrollTrigger);
 
-const MOBILE_SCROLL_MEDIA_QUERY = '(max-width: 767px), (pointer: coarse)';
+const SIMPLE_SCROLL_MEDIA_QUERY = '(max-width: 680px) and (pointer: coarse)';
 
 const glass = {
   backdropFilter: 'blur(18px)',
@@ -28,15 +28,20 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
     const el = topLeftRef.current;
     const contentEl = headlineContentRef.current;
     if (!el || !contentEl) return;
-    const isTouchScrollDevice =
+    const useSimpleScrollViewport =
       typeof window !== 'undefined' &&
       typeof window.matchMedia === 'function' &&
-      window.matchMedia(MOBILE_SCROLL_MEDIA_QUERY).matches;
+      window.matchMedia(SIMPLE_SCROLL_MEDIA_QUERY).matches;
 
     let frame = 0;
     let trigger = null;
+    const metrics = {
+      centeredTop: 0,
+      maxWidth: 0,
+      gapHeight: 180,
+    };
 
-    const applyLayout = (progress = 0) => {
+    const updateMetrics = () => {
       const nav = document.querySelector('#site-nav');
       const contentAnchor =
         document.querySelector('#panel-hero-text-row') ??
@@ -56,21 +61,36 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       const gapBottom = Math.max(gapTop + 1, contentTop);
       const gapHeight = Math.max(gapBottom - gapTop, 180);
       const centeredTop = gapTop + Math.max((gapHeight - headlineHeight) / 2, 0);
-      const travelY = isTouchScrollDevice ? -24 : -60;
 
-      el.style.top = `${centeredTop}px`;
-      el.style.maxWidth = `${maxWidth}px`;
-      el.style.setProperty('--hero-gap-height', `${gapHeight}px`);
+      metrics.centeredTop = centeredTop;
+      metrics.maxWidth = maxWidth;
+      metrics.gapHeight = gapHeight;
+    };
 
-      contentEl.style.transform = `translate3d(0, ${travelY * progress}px, 0)`;
-      contentEl.style.opacity = `${1 - progress}`;
-      contentEl.style.filter = isTouchScrollDevice ? 'blur(0px)' : `blur(${10 * progress}px)`;
+    const applyLayout = (progress = 0) => {
+      const travelY = useSimpleScrollViewport ? -32 : -60;
+
+      el.style.position = useSimpleScrollViewport ? 'absolute' : 'fixed';
+      el.style.top = `${metrics.centeredTop}px`;
+      el.style.maxWidth = `${metrics.maxWidth}px`;
+      el.style.setProperty('--hero-gap-height', `${metrics.gapHeight}px`);
+
+      if (useSimpleScrollViewport) {
+        contentEl.style.transform = `translate3d(0, ${travelY * progress}px, 0)`;
+        contentEl.style.opacity = `${1 - progress}`;
+        contentEl.style.filter = 'blur(0px)';
+      } else {
+        contentEl.style.transform = `translate3d(0, ${travelY * progress}px, 0)`;
+        contentEl.style.opacity = `${1 - progress}`;
+        contentEl.style.filter = `blur(${10 * progress}px)`;
+      }
     };
 
     const scheduleRefresh = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         const progress = trigger ? trigger.progress : 0;
+        updateMetrics();
         applyLayout(progress);
       });
     };
@@ -81,13 +101,14 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
     trigger = ScrollTrigger.create({
       trigger: '#hero-section',
       start: 'top top',
-      end: isTouchScrollDevice ? '28% top' : 'center top',
-      scrub: isTouchScrollDevice ? true : 0.2,
+      end: useSimpleScrollViewport ? '35% top' : 'center top',
+      scrub: useSimpleScrollViewport ? 0.18 : 0.2,
       invalidateOnRefresh: true,
       onUpdate: (self) => {
         applyLayout(self.progress);
       },
       onRefresh: (self) => {
+        updateMetrics();
         applyLayout(self.progress);
       },
     });

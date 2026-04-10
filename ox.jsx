@@ -6,6 +6,7 @@ import * as THREE from 'three';
 
 extend({ UnrealBloomPass });
 
+const SIMPLE_SCROLL_MEDIA_QUERY = '(max-width: 680px) and (pointer: coarse)';
 const MOBILE_MEDIA_QUERY = '(max-width: 767px), (pointer: coarse)';
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
 
@@ -246,6 +247,7 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {} 
 };
 
 export default function App({ params = {}, liveParamsRef = null, backgroundColor = '#1a1a1a' }) {
+  const useSimpleScrollViewport = useMediaMatch(SIMPLE_SCROLL_MEDIA_QUERY);
   const isMobile = useMediaMatch(MOBILE_MEDIA_QUERY);
   const prefersReducedMotion = useMediaMatch(REDUCED_MOTION_QUERY);
 
