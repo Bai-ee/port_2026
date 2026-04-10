@@ -176,7 +176,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
         <div ref={headlineContentRef}>
           <h1 style={{
             fontWeight: 700,
-            fontFamily: "'Space Grotesk', system-ui, sans-serif",
+            fontFamily: "'Doto', 'Space Mono', monospace",
             letterSpacing: '-0.02em',
             lineHeight: 1.05,
             color: textColor,
