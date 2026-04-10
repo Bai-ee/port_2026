@@ -137,7 +137,39 @@ const slides = [
 
 const getInitials = (name) => name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
 
-const FILTERS = ['All', 'Agentic Automation', 'Decentralized Ecosystems', 'SaaS', 'Brand Development', 'UI / UX', 'Audio / Video', 'Marketing', 'Print Collateral', 'Social Media', 'Websites & Dashboards'];
+const FILTERS = ['Agentic Automation', 'Decentralization', 'Content', 'Brand Systems', 'Physical'];
+
+const FILTER_WORK_LABEL = {
+  default: 'Selected Work',
+  'Agentic Automation': 'Custom Dashboards & Briefs',
+};
+
+const FILTER_COPY = {
+  default: {
+    headline: 'CUSTOM DASHBOARDS',
+    support: 'Agentic systems delivering real-time data.',
+  },
+  'Agentic Automation': {
+    headline: 'Systems that run without you',
+    support: '',
+  },
+  'Decentralization': {
+    headline: 'Products built on ownership, not platforms',
+    support: '',
+  },
+  'Content': {
+    headline: 'Content systems that scale, not posts',
+    support: '',
+  },
+  'Brand Systems': {
+    headline: 'Identity that holds across everything',
+    support: '',
+  },
+  'Physical': {
+    headline: 'Digital thinking, applied to the real world',
+    support: '',
+  },
+};
 
 const PORTFOLIO_IMAGES = [
   '/img/port/frame_3.png',
@@ -157,14 +189,16 @@ const AUTOMATION_CAPABILITIES = [
     badgeColor: '#14b8a6',
     icon: 'workflow',
     previewImage: '/img/port/frame_5.png',
+    previewVideo: '/vid/creative_pipeline.mov',
     title: 'Creative Pipelines',
-    body: 'Automates content creation in real time, aligning every post with your brand’s voice while driving consistent engagement.',
+    body: "Automates content creation in real time, aligning every post with your brand's voice while driving consistent engagement.",
   },
   {
     badge: 'CB',
     badgeColor: '#6366f1',
     icon: 'brain',
     previewImage: '/img/port/cq_guide.png',
+    previewVideo: '/vid/company_brain.mov',
     title: 'Company Brain',
     body: 'Centralizes your entire operating stack into a structured, searchable system that powers faster decisions and smarter execution.',
   },
@@ -173,6 +207,7 @@ const AUTOMATION_CAPABILITIES = [
     badgeColor: '#0ea5e9',
     icon: 'message',
     previewImage: '/img/port/cq_figma.png',
+    previewVideo: '/vid/knowledge_assistant.mov',
     title: 'Internal Knowledge Assistant',
     body: 'Instantly answers team questions by pulling from your documents, conversations, and data—eliminating bottlenecks and repetitive work.',
   },
@@ -181,6 +216,7 @@ const AUTOMATION_CAPABILITIES = [
     badgeColor: '#8b5cf6',
     icon: 'book',
     previewImage: '/img/port/frame_8.png',
+    previewVideo: '/vid/Executive_support.mov',
     title: 'Executive Support Automation',
     body: 'Prepares meetings, surfaces insights, and drafts communications so you walk into every decision fully informed.',
   },
@@ -189,6 +225,7 @@ const AUTOMATION_CAPABILITIES = [
     badgeColor: '#10b981',
     icon: 'settings',
     previewImage: '/img/port/frame_6.png',
+    previewVideo: '/vid/Daily_operations.mov',
     title: 'Daily Operations Engine',
     body: 'Runs core business tasks automatically—email triage, task tracking, reporting, and team updates—without manual oversight.',
   },
@@ -197,6 +234,7 @@ const AUTOMATION_CAPABILITIES = [
     badgeColor: '#ec4899',
     icon: 'arrow',
     previewImage: '/img/port/edittrax.png',
+    previewVideo: '/vid/email_marketing.mov',
     title: 'Email Marketing Automation',
     body: 'Builds, schedules, and optimizes campaigns across regions while learning and improving from feedback over time.',
   },
@@ -205,6 +243,7 @@ const AUTOMATION_CAPABILITIES = [
     badgeColor: '#f97316',
     icon: 'search',
     previewImage: '/img/port/claire.png',
+    previewVideo: '/vid/ai_research.mov',
     title: 'AI-Powered Research',
     body: 'Generates deep consumer insights, competitive analysis, and market validation in hours instead of weeks.',
   },
@@ -213,6 +252,7 @@ const AUTOMATION_CAPABILITIES = [
     badgeColor: '#f59e0b',
     icon: 'chart',
     previewImage: '/img/port/frame_7.png',
+    previewVideo: '/vid/Financial_Tax.mov',
     title: 'Financial & Tax Processing',
     body: 'Organizes transactions, corrects discrepancies, and produces reporting-ready outputs aligned with accounting workflows.',
   },
@@ -221,6 +261,7 @@ const AUTOMATION_CAPABILITIES = [
     badgeColor: '#ef4444',
     icon: 'shield',
     previewImage: '/img/port/frame_4.png',
+    previewVideo: '/vid/compliance.mov',
     title: 'Compliance Monitoring',
     body: 'Continuously checks deadlines, filings, and regulatory requirements to ensure nothing critical is missed.',
   },
@@ -229,6 +270,7 @@ const AUTOMATION_CAPABILITIES = [
     badgeColor: '#22c55e',
     icon: 'folder',
     previewImage: '/img/port/fast_poker_style.png',
+    previewVideo: '/vid/distribution_insight.mov',
     title: 'Distribution & Insight Automation',
     body: 'Unifies social publishing, SEO fixes, search visibility, and performance reporting into one continuous system that surfaces what to ship, where to publish, and what to improve next.',
   },
@@ -237,6 +279,7 @@ const AUTOMATION_CAPABILITIES = [
     badgeColor: '#06b6d4',
     icon: 'laptop',
     previewImage: '/img/port/critters_game1.png',
+    previewVideo: '/vid/rapid_product_dev.mov',
     title: 'Rapid Product Development',
     body: 'Builds and deploys functional tools, integrations, and experiences from concept to launch in a fraction of the time.',
   },
@@ -245,6 +288,7 @@ const AUTOMATION_CAPABILITIES = [
     badgeColor: '#a855f7',
     icon: 'bot',
     previewImage: '/img/port/viva.png',
+    previewVideo: '/vid/self_improving.mov',
     title: 'Self-Improving Systems',
     body: 'Continuously refines workflows, tools, and outputs based on feedback, increasing performance over time.',
   },
@@ -253,6 +297,7 @@ const AUTOMATION_CAPABILITIES = [
     badgeColor: '#ff6b2c',
     icon: 'message',
     previewImage: '/img/port/ponke.png',
+    previewVideo: '/vid/conversations_to_be_in.mov',
     title: 'Reddit & Community',
     body: 'Finds relevant threads and drafts reply ideas and post concepts for review before publishing.',
   },
@@ -261,6 +306,7 @@ const AUTOMATION_CAPABILITIES = [
     badgeColor: '#8b5cf6',
     icon: 'search',
     previewImage: '/img/port/ntr.png',
+    previewVideo: '/vid/seo_content.mov',
     title: 'SEO Content',
     body: 'Surfaces keyword opportunities and drafts landing pages, blog outlines, and content directions for approval.',
   },
@@ -314,14 +360,17 @@ const StackedSlidesSection = () => {
   const filterDropdownRef = useRef(null);
   const servicesViewportRef = useRef(null);
   const servicesCanvasRef = useRef(null);
+  const stickyCTARef = useRef(null);
   const marqueeShellRef = useRef(null);
   const marqueeTrackRef = useRef(null);
   const marqueeSetRef = useRef(null);
   const [pokerHovered, setPokerHovered] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [activeFilter, setActiveFilter] = useState('All');
+  const [activeFilter, setActiveFilter] = useState('Agentic Automation');
+  const [filterCopy, setFilterCopy] = useState(FILTER_COPY.default);
   const [particleParams, setParticleParams] = useState(PARTICLE_DEFAULTS);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [activeMobileCapability, setActiveMobileCapability] = useState(null);
 
   // Set initial hidden state
   useEffect(() => {
@@ -419,6 +468,25 @@ const StackedSlidesSection = () => {
       particleRenderer.dispose();
     };
   }, [particleParams]);
+
+  useEffect(() => {
+    if (!isTouchScrollDevice() || activeMobileCapability === null) return undefined;
+
+    const closePreview = () => setActiveMobileCapability(null);
+    const handlePointerDown = (event) => {
+      if (!event.target.closest('[data-capability-card]')) {
+        closePreview();
+      }
+    };
+
+    window.addEventListener('scroll', closePreview, { passive: true });
+    document.addEventListener('pointerdown', handlePointerDown, true);
+
+    return () => {
+      window.removeEventListener('scroll', closePreview);
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+    };
+  }, [activeMobileCapability]);
 
   useEffect(() => {
     const shell = marqueeShellRef.current;
@@ -540,7 +608,8 @@ const StackedSlidesSection = () => {
   useLayoutEffect(() => {
     if (!wrapperRef.current) return;
     const wrapper = wrapperRef.current;
-    const isTouchPointer = isTouchScrollDevice();
+    const isTouchPointer = isTouchScrollDevice() ||
+      (typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches);
 
     // Hover reveal list effect — images appended to body to escape transformed ancestor
     const hoverContainers = Array.from(wrapper.querySelectorAll('[data-hover-item]'));
@@ -548,18 +617,32 @@ const StackedSlidesSection = () => {
 
     hoverContainers.forEach((container) => {
       if (isTouchPointer) return;
+      const videoSrc = container.getAttribute('data-hover-video-src');
       const src = container.querySelector('[data-hover-image]')?.src;
       const hasPlaceholder = Boolean(container.querySelector('[data-hover-placeholder]'));
-      if (!src && !hasPlaceholder) return;
+      if (!videoSrc && !src && !hasPlaceholder) return;
+      const preferredSide = container.getAttribute('data-hover-side') || 'left';
 
-      const image = src ? document.createElement('img') : document.createElement('div');
-      if (src) image.src = src;
+      let image;
+      if (videoSrc) {
+        image = document.createElement('video');
+        image.src = videoSrc;
+        image.muted = true;
+        image.loop = true;
+        image.playsInline = true;
+        image.preload = 'metadata';
+      } else if (src) {
+        image = document.createElement('img');
+        image.src = src;
+      } else {
+        image = document.createElement('div');
+      }
       Object.assign(image.style, {
         position: 'fixed',
         top: '0',
         left: '0',
-        width: 'clamp(220px, 24vw, 360px)',
-        height: 'clamp(220px, 24vw, 360px)',
+        width: 'clamp(240px, 26vw, 420px)',
+        aspectRatio: '16 / 9',
         zIndex: '9999',
         opacity: '0',
         visibility: 'hidden',
@@ -567,7 +650,7 @@ const StackedSlidesSection = () => {
         borderRadius: '1.25rem',
         boxShadow: '0 24px 80px rgba(0,0,0,0.42)',
       });
-      if (src) {
+      if (videoSrc || src) {
         Object.assign(image.style, {
           objectFit: 'cover',
         });
@@ -580,8 +663,8 @@ const StackedSlidesSection = () => {
       document.body.appendChild(image);
 
       gsap.set(image, {
-        xPercent: -100,
-        yPercent: -100,
+        xPercent: 0,
+        yPercent: 0,
         autoAlpha: 0,
       });
 
@@ -591,15 +674,17 @@ const StackedSlidesSection = () => {
 
       const align = (point) => {
         const imageRect = image.getBoundingClientRect();
-        const imageWidth = imageRect.width || Math.min(window.innerWidth * 0.24, 360);
-        const imageHeight = imageRect.height || Math.min(window.innerWidth * 0.24, 360);
+        const imageWidth = imageRect.width || Math.min(window.innerWidth * 0.26, 420);
+        const imageHeight = imageRect.height || (imageWidth * 9) / 16;
         const cursorOffset = 20;
-        const minX = imageWidth + 12;
-        const minY = imageHeight + 12;
-        const maxX = window.innerWidth - 12;
-        const maxY = window.innerHeight - 12;
-        const targetX = Math.min(Math.max(point.clientX - cursorOffset, minX), maxX);
-        const targetY = Math.min(Math.max(point.clientY - cursorOffset, minY), maxY);
+        const minX = 12;
+        const minY = 12;
+        const maxX = window.innerWidth - imageWidth - 12;
+        const maxY = window.innerHeight - imageHeight - 12;
+        const targetX = preferredSide === 'right'
+          ? Math.min(Math.max(point.clientX + cursorOffset, minX), maxX)
+          : Math.min(Math.max(point.clientX - imageWidth - cursorOffset, minX), maxX);
+        const targetY = Math.min(Math.max(point.clientY - imageHeight - cursorOffset, minY), maxY);
 
         if (firstEnter) {
           setX(targetX, targetX);
@@ -627,9 +712,13 @@ const StackedSlidesSection = () => {
         fade.play();
         startFollow();
         align(event);
+        if (videoSrc) image.play().catch(() => {});
       };
 
-      const onLeave = () => fade.reverse();
+      const onLeave = () => {
+        fade.reverse();
+        if (videoSrc) image.pause();
+      };
       container.addEventListener('mouseenter', onEnter);
       container.addEventListener('mouseleave', onLeave);
 
@@ -638,6 +727,7 @@ const StackedSlidesSection = () => {
         container.removeEventListener('mouseleave', onLeave);
         stopFollow();
         fade.kill();
+        if (videoSrc && image.tagName === 'VIDEO') image.pause();
         document.body.removeChild(image);
       });
     });
@@ -668,8 +758,6 @@ const StackedSlidesSection = () => {
       const cardOffset = isTouch ? 18 : 26;
       const blockOffset = isTouch ? 24 : 34;
       const featuredHeader = wrapper.querySelector('[data-featured-work-label]');
-      const capabilityHeader = wrapper.querySelector('[data-capability-header]');
-      const capabilityCards = gsap.utils.toArray('[data-capability-card]', wrapper);
       const gridCards = gsap.utils
         .toArray('#stacked-grid-row > *', wrapper)
         .filter((card) => card.getBoundingClientRect().top > window.innerHeight * 0.82);
@@ -726,55 +814,6 @@ const StackedSlidesSection = () => {
         );
       }
 
-      if (capabilityHeader) {
-        gsap.fromTo(
-          capabilityHeader,
-          { autoAlpha: 0, y: blockOffset },
-          {
-            autoAlpha: 1,
-            y: 0,
-            duration: isTouch ? 0.45 : 0.65,
-            ease: 'power2.out',
-            overwrite: true,
-            scrollTrigger: {
-              trigger: capabilityHeader,
-              start: 'top 90%',
-              toggleActions: 'play none none reverse',
-              invalidateOnRefresh: true,
-            },
-          }
-        );
-      }
-
-      if (capabilityCards.length) {
-        gsap.set(capabilityCards, { autoAlpha: 0, y: cardOffset, willChange: 'transform, opacity' });
-
-        ScrollTrigger.batch(capabilityCards, {
-          start: 'top 92%',
-          end: 'bottom 64%',
-          onEnter: (batch) => {
-            gsap.to(batch, {
-              autoAlpha: 1,
-              y: 0,
-              duration: isTouch ? 0.45 : 0.65,
-              ease: 'power2.out',
-              stagger: isTouch ? 0.045 : 0.07,
-              overwrite: true,
-            });
-          },
-          onLeaveBack: (batch) => {
-            gsap.to(batch, {
-              autoAlpha: 0,
-              y: cardOffset,
-              duration: 0.24,
-              ease: 'power1.out',
-              stagger: 0.03,
-              overwrite: true,
-            });
-          },
-        });
-      }
-
       revealBlocks.forEach((block) => {
         gsap.fromTo(
           block,
@@ -799,9 +838,100 @@ const StackedSlidesSection = () => {
     return () => ctx.revert();
   }, []);
 
+  // Capability section — header + cards fade up on scroll, runs on all devices
+  useLayoutEffect(() => {
+    if (!wrapperRef.current) return;
+    if (typeof window === 'undefined') return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    const wrapper = wrapperRef.current;
+    const isTouch = isTouchScrollDevice();
+    const offset = isTouch ? 18 : 26;
+
+    const ctx = gsap.context(() => {
+      const header = wrapper.querySelector('[data-capability-header]');
+      const cards = gsap.utils.toArray('[data-capability-card]', wrapper);
+
+      if (header) {
+        gsap.set(header, { autoAlpha: 0, y: offset });
+        gsap.to(header, {
+          autoAlpha: 1,
+          y: 0,
+          duration: isTouch ? 0.45 : 0.65,
+          ease: 'power2.out',
+          overwrite: true,
+          scrollTrigger: {
+            trigger: header,
+            start: 'top 90%',
+            toggleActions: 'play none none reverse',
+            invalidateOnRefresh: true,
+          },
+        });
+      }
+
+      if (!cards.length) return;
+
+      gsap.set(cards, { autoAlpha: 0, y: offset, willChange: 'transform, opacity' });
+
+      ScrollTrigger.batch(cards, {
+        start: 'top 92%',
+        onEnter: (batch) =>
+          gsap.to(batch, {
+            autoAlpha: 1,
+            y: 0,
+            duration: isTouch ? 0.45 : 0.6,
+            ease: 'power2.out',
+            stagger: isTouch ? 0.05 : 0.08,
+            overwrite: true,
+          }),
+        onLeaveBack: (batch) =>
+          gsap.to(batch, {
+            autoAlpha: 0,
+            y: offset,
+            duration: 0.22,
+            ease: 'power1.out',
+            stagger: 0.03,
+            overwrite: true,
+          }),
+      });
+    }, wrapper);
+
+    return () => ctx.revert();
+  }, []);
+
+  // Sticky CTA — appears just before #panel-hero-cta passes the nav,
+  // disappears once #footer-cta scrolls into view.
+  useLayoutEffect(() => {
+    const sticky = stickyCTARef.current;
+    if (!sticky) return;
+
+    gsap.set(sticky, { autoAlpha: 0, pointerEvents: 'none' });
+
+    const ctaST = ScrollTrigger.create({
+      trigger: '#panel-hero-cta',
+      start: 'bottom 72px',
+      endTrigger: '#footer-cta',
+      end: 'top bottom',
+      onEnter: () => gsap.to(sticky, { autoAlpha: 1, pointerEvents: 'auto', duration: 0.22, ease: 'power2.out' }),
+      onLeaveBack: () => gsap.to(sticky, { autoAlpha: 0, pointerEvents: 'none', duration: 0.18, ease: 'power2.in' }),
+      onLeave: () => gsap.to(sticky, { autoAlpha: 0, pointerEvents: 'none', duration: 0.18, ease: 'power2.in' }),
+      onEnterBack: () => gsap.to(sticky, { autoAlpha: 1, pointerEvents: 'auto', duration: 0.22, ease: 'power2.out' }),
+    });
+
+    return () => ctaST.kill();
+  }, []);
+
   return (
     <section style={sectionStyle}>
       <style>{`
+        :root {
+          --font-grotesk: 'Space Grotesk', system-ui, sans-serif;
+          --font-mono: 'Space Mono', monospace;
+          --font-doto: 'Doto', monospace;
+        }
+        .font-doto {
+          font-family: 'Doto', monospace;
+        }
         @media (max-width: 767px) {
           #stacked-grid-row {
             grid-template-columns: 1fr !important;
@@ -832,11 +962,6 @@ const StackedSlidesSection = () => {
           padding-bottom: 0 !important;
         }
         @media (max-width: 767px) {
-          #inline-footer-bottom {
-            justify-content: center !important;
-          }
-        }
-        @media (max-width: 767px) {
           [data-label-heading] {
             color: #000000 !important;
           }
@@ -865,15 +990,21 @@ const StackedSlidesSection = () => {
             justify-content: center !important;
             box-sizing: border-box !important;
           }
+          #hero-cta-sticky {
+            left: max(10vw, calc((100% - 810px) / 2)) !important;
+            right: max(10vw, calc((100% - 810px) / 2)) !important;
+            justify-content: center !important;
+            box-sizing: border-box !important;
+          }
           #hero-panel-filter-pills {
-            gap: 0.25rem !important;
-            padding-top: 0.35rem !important;
-            padding-bottom: 0.35rem !important;
+            gap: 0.4rem !important;
+            padding-top: 0.45rem !important;
+            padding-bottom: 0.5rem !important;
             justify-content: center;
           }
           #hero-panel-filter-pills .filter-chip {
-            padding: 0.15rem 0.45rem !important;
-            font-size: 0.52rem !important;
+            padding: 0.3rem 0.7rem !important;
+            font-size: 0.64rem !important;
             border-radius: 999px !important;
           }
         }
@@ -899,7 +1030,7 @@ const StackedSlidesSection = () => {
                     <div style={textCenteringStyle}>
                       <div id="panel-hero-text-row" style={textRowStyle}>
                         <div id="panel-hero-headline-col" style={textColumnStyle}>
-                          <h2 id="panel-hero-headline" style={{ ...headingStyle, fontSize: 'clamp(1.4rem, 3.5vw, 2.45rem)', textAlign: 'left', margin: 0, whiteSpace: 'nowrap' }}>{slide.headlineText}</h2>
+                          <h2 id="panel-hero-headline" style={{ ...headingStyle, fontSize: 'clamp(1.4rem, 3.5vw, 2.45rem)', fontWeight: 300, textAlign: 'left', margin: 0, whiteSpace: 'nowrap' }}>{slide.headlineText}</h2>
                         </div>
                         <div style={textColumnRightStyle}>
                           <a
@@ -923,6 +1054,10 @@ const StackedSlidesSection = () => {
                             type="button"
                             className="filter-chip"
                             style={{ ...filterChipStyle, ...(activeFilter === f ? filterChipActiveStyle : {}) }}
+                            onClick={() => {
+                              setActiveFilter(f);
+                              setFilterCopy(FILTER_COPY[f] ?? FILTER_COPY.default);
+                            }}
                           >
                             {f}
                           </button>
@@ -931,20 +1066,49 @@ const StackedSlidesSection = () => {
                     </div>
                     <section data-capability-grid style={capabilitySectionStyle}>
                       <div data-capability-header style={capabilitySectionHeaderStyle}>
-                        <span style={capabilityEyebrowStyle}>Agentic Automations</span>
+                        <span style={capabilityEyebrowStyle}>{filterCopy.headline}</span>
+                        {filterCopy.support && (
+                          <p id="panel-capability-support" style={{ margin: '0.35rem 0 0', fontSize: 'clamp(0.72rem, 1.2vw, 0.85rem)', lineHeight: 1.45, color: 'rgba(42,36,32,0.55)', fontWeight: 400 }}>{filterCopy.support}</p>
+                        )}
                       </div>
                       <div style={capabilityGridStyle}>
-                        {AUTOMATION_CAPABILITIES.map((item) => {
+                        {AUTOMATION_CAPABILITIES.map((item, index) => {
                           const Icon = AUTOMATION_ICON_COMPONENTS[item.icon];
+                          const isMobileCapabilityOpen = isTouchScrollDevice() && activeMobileCapability === item.title;
 
                           return (
                             <article
                               key={item.title}
                               data-capability-card
                               data-hover-item
-                              style={capabilityCardStyle}
+                              data-hover-side={index % 2 === 0 ? 'left' : 'right'}
+                              data-hover-video-src={item.previewVideo || undefined}
+                              style={{
+                                ...capabilityCardStyle,
+                                zIndex: isMobileCapabilityOpen ? 6 : 1,
+                              }}
+                              onClick={() => {
+                                if (!isTouchScrollDevice()) return;
+                                setActiveMobileCapability((current) => (current === item.title ? null : item.title));
+                              }}
                             >
                               <div data-hover-placeholder aria-hidden="true" style={{ display: 'none' }} />
+                              {isMobileCapabilityOpen ? (
+                                <div style={mobileCapabilityPreviewStyle} aria-hidden="true">
+                                  {item.previewVideo ? (
+                                    <video
+                                      src={item.previewVideo}
+                                      autoPlay
+                                      muted
+                                      loop
+                                      playsInline
+                                      style={mobileCapabilityPreviewImageStyle}
+                                    />
+                                  ) : (
+                                    <img src={item.previewImage} alt="" style={mobileCapabilityPreviewImageStyle} />
+                                  )}
+                                </div>
+                              ) : null}
                               <div style={{ ...capabilityBadgeStyle, color: item.badgeColor }}>
                                 {Icon ? <Icon size={20} strokeWidth={2.1} /> : item.badge}
                               </div>
@@ -959,49 +1123,59 @@ const StackedSlidesSection = () => {
                     </section>
                     <div data-featured-work-label style={featuredWorkLabelStyle}>
                       <div style={capabilitySectionHeaderStyle}>
-                        <span style={capabilityEyebrowStyle}>Featured Work</span>
+                        <span style={capabilityEyebrowStyle}>{FILTER_WORK_LABEL[activeFilter] ?? FILTER_WORK_LABEL.default}</span>
                       </div>
                     </div>
                     <div data-grid-window style={gridWindowStyle}>
                       <div data-grid-inner style={gridInnerContainerStyle}>
+                        {activeFilter === 'Agentic Automation' ? (
+                          <video
+                            src="/vid/dashboard.mov"
+                            autoPlay
+                            muted
+                            loop
+                            playsInline
+                            style={{ width: '100%', borderRadius: '0.75rem', display: 'block', objectFit: 'cover' }}
+                          />
+                        ) : (
                         <div id="stacked-grid-row" style={gridRowStyle}>
-                          {slide.gridItems.map((item, index) => {
-                            const isQuoteCard = index % 2 === 1;
-                            const testimonial = testimonials[Math.floor(index / 2) % testimonials.length];
-
-                            if (isQuoteCard) {
-                              return (
-                                <article key={item.id} style={testimonialCardStyle}>
-                                  <p style={testimonialCardQuoteStyle}>&ldquo;{testimonial.quote}&rdquo;</p>
-                                  <div style={testimonialCardAuthorRowStyle}>
-                                    <img src={testimonial.img} alt={testimonial.name} style={testimonialCardAvatarStyle} />
-                                    <div style={testimonialCardMetaStyle}>
-                                      <span style={testimonialCardNameStyle}>{testimonial.name}</span>
-                                      <span style={testimonialCardCompanyStyle}>{testimonial.title} · {testimonial.company}</span>
-                                    </div>
+                          {PORTFOLIO_IMAGES.map((src, index) => (
+                            <div
+                              key={src}
+                              style={{ ...gridItemStyle, overflow: 'hidden', backgroundColor: 'rgba(42, 36, 32, 0.08)', border: '1px solid rgba(42, 36, 32, 0.2)', borderRadius: '0.5rem' }}
+                            >
+                              <img
+                                src={src}
+                                alt={`Project frame ${index + 1}`}
+                                style={index === 0 ? gridFeatureImageStyle : gridFrameImageStyle}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        )}
+                        {/* Testimonials */}
+                        <div id="testimonials-section" style={testimonialsShellStyle}>
+                          <div style={capabilitySectionHeaderStyle}>
+                            <span style={capabilityEyebrowStyle}>Testimonials</span>
+                          </div>
+                          <div id="testimonials-grid" style={{ marginTop: 'clamp(1.25rem, 2.5vw, 2rem)', display: 'flex', flexDirection: 'column', gap: 'clamp(0.75rem, 1.5vw, 1rem)' }}>
+                            {[testimonials[0], testimonials[1], testimonials[2], testimonials[3]].map((t) => (
+                              <article key={t.name + t.company} style={{ ...secondaryQuoteItemStyle, aspectRatio: '19 / 6', flexDirection: 'row', alignItems: 'center', gap: 'clamp(1.5rem, 3vw, 2.5rem)', padding: 'clamp(1.5rem, 3vw, 2.5rem)' }}>
+                                <img src={t.img} alt={t.name} style={{ ...testimonialCardAvatarStyle, flexShrink: 0, width: 'clamp(2.5rem, 4vw, 3.5rem)', height: 'clamp(2.5rem, 4vw, 3.5rem)' }} />
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <p style={{ ...featuredQuoteTextStyle, fontSize: 'clamp(0.9rem, 1.4vw, 1.15rem)', margin: '0 0 0.65rem' }}>{t.quote}</p>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                                    <span style={quoteAttributionNameStyle}>{t.name}</span>
+                                    <span style={{ color: 'rgba(42,36,32,0.3)', fontSize: '0.75rem' }}>·</span>
+                                    <span style={quoteAttributionRoleStyle}>{t.title}, {t.company}</span>
                                   </div>
-                                </article>
-                              );
-                            }
-
-                            const isFirst = index === 0;
-                            return (
-                              <div
-                                key={item.id}
-                                style={{ ...gridItemStyle, overflow: 'hidden', backgroundColor: 'rgba(42, 36, 32, 0.08)', border: '1px solid rgba(42, 36, 32, 0.2)', borderRadius: '0.5rem' }}
-                              >
-                                <img
-                                  src={PORTFOLIO_IMAGES[Math.floor(index / 2) % PORTFOLIO_IMAGES.length]}
-                                  alt={`Project frame ${Math.floor(index / 2) + 1}`}
-                                  style={isFirst ? gridFeatureImageStyle : gridFrameImageStyle}
-                                />
-                              </div>
-                            );
-                          })}
+                                </div>
+                              </article>
+                            ))}
+                          </div>
                         </div>
                         {/* Inline footer */}
                         <div id="stacked-inline-footer" style={inlineFooterStyle}>
-                          <div style={inlineFooterDividerStyle} />
                           <div id="inline-footer-value-block" style={inlineFooterNewsletterStyle}>
                             <img src="/img/sig.png" alt="Bryan Balli signature" style={inlineFooterSignatureStyle} />
 
@@ -1013,18 +1187,17 @@ const StackedSlidesSection = () => {
                             </p>
 
                             <ul id="inline-footer-bullet-list" style={footerBulletListStyle}>
-                              <li style={footerBulletItemStyle}>Your Rough Ideas Ship</li>
-                              <li style={footerBulletItemStyle}>Key Insights Become Design Strategy</li>
+                              <li style={footerBulletItemStyle}>Rough Ideas Ship</li>
+                              <li style={footerBulletItemStyle}>Insights Become Strategy</li>
                               <li style={footerBulletItemStyle}>Designs Become Consistent</li>
-                              <li style={footerBulletItemStyle}>Consistency Becomes Confidence</li>
-                              <li style={footerBulletItemStyle}>Automations Are Identified</li>
+                              <li style={footerBulletItemStyle}>Consistency Creates Confidence</li>
                             </ul>
 
-                            <div style={{ ...inlineFooterDividerStyle, margin: 0 }} />
+                            <div style={inlineFooterInnerDividerStyle} />
 
                             <div id="inline-footer-credit-row" style={inlineFooterCreditRowStyle}>
                               <div style={inlineFooterCreditLineStyle}>
-                                <span style={{ ...testimonialCardNameStyle, fontWeight: 400, lineHeight: 1.55 }}><strong style={{ fontWeight: 700 }}>Bryan Balli</strong> is an experienced Creative Technologist spanning engineering and creative roles at leading agencies and brands—from Chicago, San Francisco and on remote international teams.</span>
+                                <span style={{ ...testimonialCardNameStyle, fontWeight: 400, lineHeight: 1.55, fontSize: 'clamp(0.9rem, 1.4vw, 1.15rem)' }}><strong style={{ fontWeight: 700 }}>Bryan Balli</strong> is an experienced Creative Technologist spanning engineering and creative roles at leading agencies and brands—from Chicago, San Francisco and on remote international teams.</span>
                               </div>
                               <a
                                 id="footer-cta"
@@ -1055,7 +1228,6 @@ const StackedSlidesSection = () => {
                               </div>
                             </div>
                           </div>
-                          <div style={{ ...inlineFooterDividerStyle, margin: 'clamp(1.5rem, 3vw, 2.5rem) 0' }} />
                           <div id="inline-footer-bottom" style={inlineFooterBottomStyle}>
                             <div style={inlineFooterLegalStyle}>
                               <a href="https://www.linkedin.com/in/bryanballi" style={inlineFooterLegalLinkStyle}>LinkedIn</a>
@@ -1152,6 +1324,30 @@ const StackedSlidesSection = () => {
           </div>
         </div>
       )}
+
+      {/* Sticky CTA — mirrors #panel-hero-cta, shown via ScrollTrigger */}
+      <a
+        id="hero-cta-sticky"
+        ref={stickyCTARef}
+        href="https://calendly.com/bballi/30min"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="cta-pill-btn"
+        style={{
+          ...ctaStyle,
+          position: 'fixed',
+          top: '74px',
+          right: 'max(10vw, calc((100% - 810px) / 2))',
+          left: 'auto',
+          zIndex: 240,
+          visibility: 'hidden',
+          opacity: 0,
+        }}
+      >
+        <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
+        Chat with Bryan
+        <span style={ctaIconStyle}>↗</span>
+      </a>
     </section>
   );
 };
@@ -1175,7 +1371,7 @@ const quoteTextStyle = {
   fontWeight: 700,
   lineHeight: 1.08,
   letterSpacing: '-0.04em',
-  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  fontFamily: "'Space Grotesk', system-ui, sans-serif",
   color: '#2a2420',
   maxWidth: '18ch',
 };
@@ -1215,7 +1411,7 @@ const headingStyle = {
   margin: '0 auto',
   lineHeight: 0.9,
   letterSpacing: '-0.05em',
-  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  fontFamily: "'Space Grotesk', system-ui, sans-serif",
   textAlign: 'center',
 };
 
@@ -1269,6 +1465,7 @@ const textRowStyle = {
   display: 'grid',
   gridTemplateColumns: '1fr 1fr',
   gap: 'clamp(1.4rem, 2.8vw, 2.1rem)',
+  alignItems: 'center',
   width: '100%',
 };
 
@@ -1367,11 +1564,12 @@ const capabilitySectionHeaderStyle = {
 };
 
 const capabilityEyebrowStyle = {
-  fontSize: 'clamp(0.7rem, 1vw, 0.82rem)',
-  fontWeight: 600,
+  fontSize: 'clamp(0.88rem, 1.4vw, 1.1rem)',
+  fontFamily: "'Space Mono', monospace",
+  fontWeight: 700,
   letterSpacing: '0.08em',
   textTransform: 'uppercase',
-  color: 'rgba(42, 36, 32, 0.42)',
+  color: 'rgba(42, 36, 32, 0.75)',
 };
 
 const capabilityHeadingStyle = {
@@ -1392,6 +1590,7 @@ const capabilityGridStyle = {
 };
 
 const capabilityCardStyle = {
+  position: 'relative',
   display: 'grid',
   gridTemplateColumns: 'auto 1fr',
   gap: 'clamp(0.8rem, 1.5vw, 1rem)',
@@ -1403,6 +1602,7 @@ const capabilityCardStyle = {
   background: 'rgba(255,255,255,0.5)',
   boxShadow: '0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4)',
   boxSizing: 'border-box',
+  overflow: 'visible',
 };
 
 const capabilityBadgeStyle = {
@@ -1441,6 +1641,29 @@ const capabilityCardBodyStyle = {
   lineHeight: 1.55,
   color: 'rgba(42, 36, 32, 0.6)',
   maxWidth: '34ch',
+};
+
+const mobileCapabilityPreviewStyle = {
+  position: 'absolute',
+  left: '50%',
+  bottom: 'calc(100% + 0.7rem)',
+  transform: 'translateX(-50%)',
+  width: 'min(78vw, 20rem)',
+  aspectRatio: '16 / 9',
+  borderRadius: '1.2rem',
+  overflow: 'hidden',
+  background: 'rgba(255, 255, 255, 0.96)',
+  border: '1px solid rgba(212, 196, 171, 0.82)',
+  boxShadow: '0 24px 80px rgba(42, 36, 32, 0.18)',
+  zIndex: 10,
+  pointerEvents: 'none',
+};
+
+const mobileCapabilityPreviewImageStyle = {
+  width: '100%',
+  height: '100%',
+  objectFit: 'cover',
+  display: 'block',
 };
 
 const gridItemStyle = {
@@ -1601,24 +1824,24 @@ const deliverablesToggleStyle = {
 const filterDropdownStyle = {
   display: 'flex',
   flexWrap: 'wrap',
-  gap: '0.5rem',
-  paddingTop: 'clamp(0.75rem, 1.5vw, 1rem)',
-  paddingBottom: 'clamp(1rem, 2vw, 1.5rem)',
+  gap: '0.7rem',
+  paddingTop: 'clamp(0.9rem, 1.8vw, 1.15rem)',
+  paddingBottom: 'clamp(1.15rem, 2.4vw, 1.7rem)',
 };
 
 const filterChipStyle = {
   display: 'inline-flex',
   alignItems: 'center',
-  padding: '0.35rem 0.9rem',
+  padding: '0.48rem 1.1rem',
   background: 'rgba(42, 36, 32, 0.05)',
   border: '1px solid rgba(42, 36, 32, 0.15)',
   borderRadius: '2rem',
-  fontSize: 'clamp(0.72rem, 1vw, 0.82rem)',
-  fontWeight: 500,
-  letterSpacing: '0.01em',
+  fontFamily: "'Space Mono', monospace",
+  fontSize: 'clamp(0.75rem, 1vw, 0.82rem)',
+  fontWeight: 400,
+  letterSpacing: '0.04em',
   color: 'rgba(42, 36, 32, 0.6)',
-  cursor: 'default',
-  pointerEvents: 'none',
+  cursor: 'pointer',
 };
 
 const filterChipActiveStyle = {
@@ -1698,7 +1921,8 @@ const hoverItemStyle = {
 
 const hoverItemIndexStyle = {
   fontSize: '0.65rem',
-  fontWeight: 500,
+  fontFamily: "'Space Mono', monospace",
+  fontWeight: 400,
   letterSpacing: '0.06em',
   color: 'rgba(42, 36, 32, 0.28)',
   fontVariantNumeric: 'tabular-nums',
@@ -1707,7 +1931,8 @@ const hoverItemIndexStyle = {
 
 const hoverItemTagStyle = {
   fontSize: '0.68rem',
-  fontWeight: 500,
+  fontFamily: "'Space Mono', monospace",
+  fontWeight: 400,
   letterSpacing: '0.1em',
   textTransform: 'uppercase',
   color: 'rgba(42, 36, 32, 0.35)',
@@ -1741,7 +1966,7 @@ const hoverTitleStyle = {
   lineHeight: 1.08,
   fontWeight: 700,
   letterSpacing: '-0.04em',
-  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  fontFamily: "'Space Grotesk', system-ui, sans-serif",
   whiteSpace: 'nowrap',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
@@ -1866,7 +2091,7 @@ const workHistoryHeadlineStyle = {
   letterSpacing: '-0.03em',
   lineHeight: 1.1,
   color: '#2a2420',
-  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  fontFamily: "'Space Grotesk', system-ui, sans-serif",
 };
 
 const workHistoryListStyle = {
@@ -1908,7 +2133,7 @@ const workHistoryRoleStyle = {
   fontWeight: 700,
   letterSpacing: '-0.02em',
   color: '#2a2420',
-  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  fontFamily: "'Space Grotesk', system-ui, sans-serif",
 };
 
 const workHistoryCompanyStyle = {
@@ -1931,8 +2156,9 @@ const workHistoryBadgeStyle = {
   background: 'rgba(42, 36, 32, 0.06)',
   border: '1px solid rgba(42, 36, 32, 0.12)',
   borderRadius: '2rem',
+  fontFamily: "'Space Mono', monospace",
   fontSize: '0.7rem',
-  fontWeight: 600,
+  fontWeight: 400,
   letterSpacing: '0.06em',
   textTransform: 'uppercase',
   color: 'rgba(42, 36, 32, 0.5)',
@@ -1970,7 +2196,7 @@ const rateCardHeadlineStyle = {
   letterSpacing: '-0.03em',
   lineHeight: 1.1,
   color: '#2a2420',
-  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  fontFamily: "'Space Grotesk', system-ui, sans-serif",
 };
 
 const rateCardSubtextStyle = {
@@ -2001,7 +2227,7 @@ const processStepNumStyle = {
   letterSpacing: '-0.04em',
   lineHeight: 1,
   color: 'rgba(42, 36, 32, 0.1)',
-  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  fontFamily: "'Space Grotesk', system-ui, sans-serif",
   paddingTop: '0.1rem',
 };
 
@@ -2016,7 +2242,7 @@ const processStepTitleStyle = {
   fontWeight: 700,
   letterSpacing: '-0.02em',
   color: '#2a2420',
-  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  fontFamily: "'Space Grotesk', system-ui, sans-serif",
   lineHeight: 1.2,
 };
 
@@ -2068,7 +2294,8 @@ const processToPackagesDividerStyle = {
 
 const processToPackagesLabelStyle = {
   fontSize: '0.68rem',
-  fontWeight: 600,
+  fontFamily: "'Space Mono', monospace",
+  fontWeight: 400,
   letterSpacing: '0.12em',
   textTransform: 'uppercase',
   color: 'rgba(42, 36, 32, 0.35)',
@@ -2098,7 +2325,7 @@ const rateCardNameStyle = {
   fontWeight: 700,
   letterSpacing: '-0.02em',
   color: '#7a6a3a',
-  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  fontFamily: "'Space Grotesk', system-ui, sans-serif",
 };
 
 const rateCardPriceRowStyle = {
@@ -2192,7 +2419,7 @@ const contactCardHeadlineStyle = {
   lineHeight: 1.1,
   letterSpacing: '-0.03em',
   color: '#f5f1df',
-  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  fontFamily: "'Space Grotesk', system-ui, sans-serif",
 };
 
 const contactCardSubtextStyle = {
@@ -2255,9 +2482,11 @@ const inlineFooterNewsletterStyle = {
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
-  gap: 'clamp(1.25rem, 2.5vw, 2rem)',
+  gap: 'clamp(1rem, 2vw, 1.55rem)',
   textAlign: 'center',
   width: '100%',
+  maxWidth: '46rem',
+  margin: '0 auto',
 };
 
 const inlineFooterHeadingStyle = {
@@ -2311,13 +2540,13 @@ const aboutMeBylineStyle = {
 const footerValueIntroStyle = {
   margin: 0,
   fontSize: 'clamp(1rem, 2.4vw, 1.75rem)',
-  lineHeight: 1.4,
+  lineHeight: 1.36,
   letterSpacing: '-0.02em',
   fontStyle: 'italic',
   fontWeight: 400,
   color: 'rgba(42, 36, 32, 0.82)',
   textAlign: 'center',
-  maxWidth: '100%',
+  maxWidth: '32ch',
   textWrap: 'balance',
 };
 
@@ -2334,11 +2563,12 @@ const footerValueFollowStyle = {
 
 const footerBridgeLabelStyle = {
   margin: 0,
-  fontSize: 'clamp(0.78rem, 1vw, 0.875rem)',
+  fontSize: 'clamp(0.9rem, 1.4vw, 1.15rem)',
   fontWeight: 600,
   letterSpacing: '-0.01em',
   color: 'rgba(42, 36, 32, 0.75)',
   textAlign: 'center',
+  marginTop: 'clamp(0.15rem, 0.4vw, 0.35rem)',
 };
 
 const footerBulletListStyle = {
@@ -2348,16 +2578,16 @@ const footerBulletListStyle = {
   display: 'flex',
   flexDirection: 'column',
   width: '100%',
-  maxWidth: '54ch',
+  maxWidth: '42rem',
   textAlign: 'center',
 };
 
 const footerBulletItemStyle = {
-  fontSize: 'clamp(0.78rem, 1vw, 0.85rem)',
-  lineHeight: 1.5,
-  color: 'rgba(42, 36, 32, 0.72)',
-  padding: '0.75rem 0',
-  borderTop: '1px solid rgba(42, 36, 32, 0.1)',
+  fontSize: 'clamp(0.9rem, 1.4vw, 1.15rem)',
+  lineHeight: 1.45,
+  color: 'rgba(42, 36, 32, 0.74)',
+  padding: '0.85rem 0',
+  borderTop: '1px solid rgba(42, 36, 32, 0.12)',
 };
 
 const footerBulletMarkStyle = {};
@@ -2449,9 +2679,9 @@ const inlineFooterCreditRowStyle = {
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
-  gap: 'clamp(1.25rem, 2.5vw, 2rem)',
+  gap: 'clamp(1rem, 2vw, 1.4rem)',
   width: '100%',
-  maxWidth: '54ch',
+  maxWidth: '42rem',
 };
 
 const inlineFooterCreditLineStyle = {
@@ -2463,12 +2693,21 @@ const inlineFooterCreditLineStyle = {
   textAlign: 'center',
 };
 
+const inlineFooterInnerDividerStyle = {
+  width: '100%',
+  maxWidth: '42rem',
+  height: '1px',
+  background: 'rgba(42, 36, 32, 0.12)',
+  margin: 0,
+};
+
 const inlineFooterBottomStyle = {
   display: 'flex',
-  justifyContent: 'space-between',
+  justifyContent: 'center',
   alignItems: 'center',
   flexWrap: 'wrap',
   gap: '0.75rem',
+  marginTop: 'clamp(1.5rem, 3vw, 2.5rem)',
 };
 
 const inlineFooterCopyrightStyle = {
@@ -2519,7 +2758,7 @@ const debugPanelStyle = {
   boxShadow: '0 24px 64px rgba(0,0,0,0.55)',
   backdropFilter: 'blur(16px)',
   color: '#f5f1df',
-  fontFamily: "system-ui, -apple-system, sans-serif",
+  fontFamily: "'Space Grotesk', system-ui, sans-serif",
   fontSize: '0.8rem',
   overflow: 'hidden',
 };
@@ -2534,7 +2773,8 @@ const debugPanelHeaderStyle = {
 
 const debugPanelTitleStyle = {
   fontSize: '0.75rem',
-  fontWeight: 600,
+  fontFamily: "'Space Mono', monospace",
+  fontWeight: 400,
   letterSpacing: '0.06em',
   textTransform: 'uppercase',
   color: 'rgba(245,241,223,0.6)',

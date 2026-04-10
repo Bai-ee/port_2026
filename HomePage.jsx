@@ -52,12 +52,12 @@ const HERO_PARAMS_END = {
   bloomThreshold: 1,
   hueOffset: 0.5,
   waveAmplitude: 0.5,
-  saturation: 0.8,
+  saturation: 1,
   lightness: 0.55,
   torusMajorRadius: 0.7,
   torusTubeRadius: 2,
   animationSpeed: 3.4,
-  opacity: 0.1,
+  opacity: 0.18,
 };
 
 const interpolateHeroParams = (start, end, progress) => {

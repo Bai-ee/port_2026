@@ -236,8 +236,10 @@ const footerClosingStyle = {
 
 const footerSocialsStyle = {
   display: 'flex',
+  justifyContent: 'center',
   gap: '0.6rem',
   marginTop: '0.25rem',
+  width: '100%',
 };
 
 const footerSocialBtnStyle = {

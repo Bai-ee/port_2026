@@ -52,14 +52,18 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       }
 
       const viewportWidth = window.innerWidth;
-      const navBottom = nav?.getBoundingClientRect().bottom ?? 64;
-      const contentTop = contentAnchor.getBoundingClientRect().top;
+      const scrollY = window.scrollY || 0;
+
+      // Use document-relative positions so metrics don't shift mid-scroll
+      const navHeight = nav.getBoundingClientRect().height ?? 64;
+      const contentDocTop = contentAnchor.getBoundingClientRect().top + scrollY;
       const headlineHeight = contentEl.getBoundingClientRect().height || 0;
       const sideGutter = Math.max(viewportWidth * 0.1, (viewportWidth - 810) / 2);
       const maxWidth = Math.max(Math.min(viewportWidth - (sideGutter * 2), 672), 240);
-      const gapTop = Math.max(0, navBottom);
-      const gapBottom = Math.max(gapTop + 1, contentTop);
-      const gapHeight = Math.max(gapBottom - gapTop, 180);
+
+      // These are fixed viewport coords for position:fixed
+      const gapTop = navHeight;
+      const gapHeight = Math.max(contentDocTop - navHeight, 180);
       const centeredTop = gapTop + Math.max((gapHeight - headlineHeight) / 2, 0);
 
       metrics.centeredTop = centeredTop;
@@ -172,12 +176,12 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
         <div ref={headlineContentRef}>
           <h1 style={{
             fontWeight: 700,
-            fontFamily: 'system-ui, -apple-system, sans-serif',
+            fontFamily: "'Space Grotesk', system-ui, sans-serif",
             letterSpacing: '-0.02em',
             lineHeight: 1.05,
             color: textColor,
             margin: 0,
-            fontSize: 'clamp(2.53rem, min(12.4vw, calc(var(--hero-gap-height) / 3.11)), 5.87rem)',
+            fontSize: 'clamp(3.37rem, min(16.53vw, calc(var(--hero-gap-height) / 2.33)), 7.83rem)',
             textTransform: 'none',
           }}>
             YOUR<br />HUMAN<br />IN THE<br />LOOP

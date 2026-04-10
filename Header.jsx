@@ -79,6 +79,19 @@ const Header = ({ logoRef, onOpenPage }) => {
     whiteSpace: 'nowrap',
   };
 
+  const socialLinkStyle = {
+    marginLeft: 'auto',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: 'clamp(0.9rem, 1.4vw, 1rem)',
+    fontWeight: 500,
+    letterSpacing: '-0.02em',
+    color: 'rgba(42, 36, 32, 0.42)',
+    textDecoration: 'none',
+    lineHeight: 1,
+  };
+
   const navItemsStyle = {
     display: isMobile ? 'none' : 'flex',
     gap: 'clamp(1.2rem, 3vw, 2.4rem)',
@@ -152,8 +165,17 @@ const Header = ({ logoRef, onOpenPage }) => {
 
         <div id="site-nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <img src="/img/sig.png" alt="" aria-hidden="true" style={{ height: 'clamp(2rem, 4vw, 2.8rem)', width: 'auto', display: 'block' }} />
-          <a href="/" id="site-nav-wordmark" style={logoStyle}>Bryan Balli</a>
         </div>
+
+        <a
+          href="https://www.linkedin.com/in/bryanballi"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={socialLinkStyle}
+          aria-label="LinkedIn"
+        >
+          LinkedIn
+        </a>
 
         {isMobile ? (
           /*
