@@ -137,7 +137,7 @@ const slides = [
 
 const getInitials = (name) => name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
 
-const FILTERS = ['Agentic Automation', 'Decentralization', 'Content', 'Brand Systems', 'Physical'];
+const FILTERS = ['Agentic Automation', 'Decentralization', 'Content', 'Brand Systems', 'Brand Marketing & UX'];
 
 const FILTER_WORK_LABEL = {
   default: 'Selected Work',
@@ -165,7 +165,7 @@ const FILTER_COPY = {
     headline: 'Identity that holds across everything',
     support: '',
   },
-  'Physical': {
+  'Brand Marketing & UX': {
     headline: 'Digital thinking, applied to the real world',
     support: '',
   },
@@ -1008,9 +1008,10 @@ const StackedSlidesSection = () => {
             justify-content: center;
           }
           #hero-panel-filter-pills .filter-chip {
-            padding: 0.3rem 0.7rem !important;
-            font-size: 0.64rem !important;
+            padding: 0.25rem 0.55rem !important;
+            font-size: 0.58rem !important;
             border-radius: 999px !important;
+            letter-spacing: 0.02em !important;
           }
         }
       `}</style>
