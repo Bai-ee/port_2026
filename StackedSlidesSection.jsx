@@ -137,7 +137,7 @@ const slides = [
 
 const getInitials = (name) => name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
 
-const FILTERS = ['Agentic Automation', 'Decentralization', 'Content', 'Brand Systems', 'Brand Marketing & UX'];
+const FILTERS = ['Agentic Automation', 'Decentralization', 'Brand Marketing', 'UX'];
 
 const FILTER_WORK_LABEL = {
   default: 'Selected Work',
@@ -157,15 +157,11 @@ const FILTER_COPY = {
     headline: 'Products built on ownership, not platforms',
     support: '',
   },
-  'Content': {
-    headline: 'Content systems that scale, not posts',
-    support: '',
-  },
-  'Brand Systems': {
+  'Brand Marketing': {
     headline: 'Identity that holds across everything',
     support: '',
   },
-  'Brand Marketing & UX': {
+  'UX': {
     headline: 'Digital thinking, applied to the real world',
     support: '',
   },
