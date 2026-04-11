@@ -147,11 +147,11 @@ const FILTER_WORK_LABEL = {
 const FILTER_COPY = {
   default: {
     headline: 'CUSTOM DASHBOARDS',
-    support: 'All solutions start with a simple dashboard. From here, we layer in add-ons, deliver custom requests, and personalized solutions.',
+    support: 'All services start with a simple dashboard. Track what matters and make custom requests from there, your human is in the loop.',
   },
   'Agentic Automation': {
     headline: 'CUSTOM DASHBOARDS',
-    support: 'All solutions start with a simple dashboard. From here, we layer in add-ons, deliver custom requests, and personalized solutions.',
+    support: 'All services start with a simple dashboard. Track what matters and make custom requests from there, your human is in the loop.',
   },
   'Decentralization': {
     headline: 'Products built on ownership, not platforms',
@@ -184,16 +184,14 @@ const PORTFOLIO_IMAGES = [
 ];
 
 const CMO_TABLE_ROWS = [
-  { task: 'Bryan in the loop',     value: 'Direct oversight' },
-  { task: 'Actionable Intelligence',  value: 'Social, reviews, relevant events' },
-  { task: 'Content strategy',     value: 'What to post today, tomorrow, next week' },
-  { task: 'Ready-to-post copy', value: 'All platforms covered' },
-  { task: 'Visual assets',         value: 'Post-ready images and video' },
-  { task: 'Quality checked',       value: 'Brand-safe, verified' },
-  { task: 'Trend awareness',       value: 'Live + competitor signals' },
-  { task: 'Community insights',    value: 'What people are saying' },
-  { task: 'Performance tracking',  value: "What's working" },
-  { task: 'History',               value: 'Past runs + decisions' },
+  { task: 'Help',             value: 'Human in the loop' },
+  { task: 'Signals',          value: 'Social, reviews, events' },
+  { task: 'Trend visibility', value: 'Live signals' },
+  { task: 'Community insight',value: 'What people say' },
+  { task: 'Post strategy',    value: 'Trends & signals' },
+  { task: 'Copy',             value: 'Across platforms' },
+  { task: 'Media',            value: 'Images and video' },
+  { task: 'Verified output',  value: 'Quality checks' },
 ];
 
 const AUTOMATION_CAPABILITIES = [
@@ -204,7 +202,7 @@ const AUTOMATION_CAPABILITIES = [
     tablePreview: true,
     previewVideo: '/vid/dashboard.mov',
     title: 'Marketing Dashboard',
-    body: 'Save hours as you monitor, adapt, and grow your brand with actionable data, alongside a human partner in the AI loop.',
+    body: 'Create your dashboard. From here you preview, monitor, build, and connect.',
   },
   {
     badge: 'CP',
@@ -743,21 +741,19 @@ const StackedSlidesSection = () => {
             <p style="margin:0 0 0.7rem;font-size:0.6rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:rgba(42,36,32,0.4);font-family:'Space Mono',monospace;">Marketing Dashboard</p>
             <table style="width:100%;border-collapse:collapse;font-size:0.78rem;flex:1;">
               <thead><tr style="border-bottom:1.5px solid rgba(42,36,32,0.15);">
-                <th style="text-align:left;padding:0.3rem 0.4rem;font-weight:600;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;">Content</th>
+                <th style="text-align:left;padding:0.3rem 0.4rem;font-weight:600;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;">What you get</th>
                 <th style="width:1.2rem;"></th>
-                <th style="text-align:right;padding:0.3rem 0.4rem;font-weight:600;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;">Delivered</th>
+                <th style="text-align:right;padding:0.3rem 0.4rem;font-weight:600;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;">Powered by</th>
               </tr></thead>
               <tbody>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Bryan in the loop</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Direct oversight</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Actionable Intelligence</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Social, reviews, relevant events</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Content strategy</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Content to post today</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Ready-to-post copy</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">All platforms covered</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Visual assets</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Post-ready images and video</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Quality checked</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Brand-safe, verified</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Trend awareness</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Live + competitor signals</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Community insights</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Content people are saying</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Performance tracking</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Content's working</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">History</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Past runs + decisions</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Help</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Human in the loop</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Signals</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Social, reviews, events</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Trend visibility</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Live signals</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Community insight</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">What people say</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Post strategy</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Trends &amp; signals</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Copy</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Across platforms</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Media</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Images and video</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Verified output</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Quality checks</td></tr>
               </tbody>
             </table>
           </div>`;
@@ -1272,9 +1268,9 @@ const StackedSlidesSection = () => {
                                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem', fontFamily: "'Space Grotesk', system-ui, sans-serif", flex: 1 }}>
                                         <thead>
                                           <tr style={{ borderBottom: '1px solid rgba(42,36,32,0.15)' }}>
-                                            <th style={{ textAlign: 'left', padding: '0.28rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.45)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Content</th>
+                                            <th style={{ textAlign: 'left', padding: '0.28rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.45)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>What you get</th>
                                             <th style={{ width: '1.2rem' }} />
-                                            <th style={{ textAlign: 'right', padding: '0.28rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.45)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Delivered</th>
+                                            <th style={{ textAlign: 'right', padding: '0.28rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.45)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Powered by</th>
                                           </tr>
                                         </thead>
                                         <tbody>
@@ -1331,7 +1327,7 @@ const StackedSlidesSection = () => {
                                 {item.tablePreview && (
                                   <div className="cmo-table-inner" style={{ marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
                                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
-                                      <thead><tr><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Content</th><th style={{ width: '1.5rem' }} /><th style={{ textAlign: 'right', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Delivered</th></tr></thead>
+                                      <thead><tr><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>What you get</th><th style={{ width: '1.5rem' }} /><th style={{ textAlign: 'right', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Powered by</th></tr></thead>
                                       <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500 }}>{row.task}</td><td style={{ padding: '0.32rem 0.2rem', color: 'rgba(42,36,32,0.3)', fontSize: '0.7rem', textAlign: 'center' }}>→</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
                                     </table>
                                     <div onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', marginTop: '0.85rem', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10 }}>
@@ -1345,7 +1341,7 @@ const StackedSlidesSection = () => {
                               {item.tablePreview && (
                                 <div id="cmo-dashboard-table" className="cmo-table-outer" style={{ gridColumn: '1 / -1', marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
                                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
-                                    <thead><tr><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Content</th><th style={{ width: '1.5rem' }} /><th style={{ textAlign: 'right', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Delivered</th></tr></thead>
+                                    <thead><tr><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>What you get</th><th style={{ width: '1.5rem' }} /><th style={{ textAlign: 'right', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Powered by</th></tr></thead>
                                     <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500 }}>{row.task}</td><td style={{ padding: '0.32rem 0.2rem', color: 'rgba(42,36,32,0.3)', fontSize: '0.7rem', textAlign: 'center' }}>→</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
                                   </table>
                                   <div onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', marginTop: '0.85rem', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10 }}>
