@@ -61,6 +61,9 @@ const SceneBackground = ({ color }) => {
 const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {} }) => {
   const meshRef = useRef();
   const groupRef = useRef();
+  const simTimeRef = useRef(0);
+  const hiddenRef = useRef(typeof document !== 'undefined' ? document.hidden : false);
+  const smoothedParamsRef = useRef(null);
   const defaultParams = {
     scale: 55,
     chaos: 0.8,
@@ -141,15 +144,55 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {} 
   const setInfo = () => {};
   const annotate = () => {};
 
-  useFrame((state) => {
+  useEffect(() => {
+    smoothedParamsRef.current = { ...staticParams };
+  }, [staticParams]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') {
+      return undefined;
+    }
+
+    const handleVisibilityChange = () => {
+      hiddenRef.current = document.hidden;
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
+
+  useFrame((state, delta) => {
     if (!meshRef.current || !groupRef.current) return;
-    const PARAMS = liveParamsRef?.current ?? staticParams;
+    if (hiddenRef.current) return;
+    const clampedDelta = Math.min(delta, runtimeProfile.maxDelta ?? 1 / 30);
+    const targetParams = liveParamsRef?.current ?? staticParams;
+    const nextParams = smoothedParamsRef.current ?? { ...targetParams };
+    const smoothing = 1 - Math.exp(-clampedDelta * (runtimeProfile.paramSmoothing ?? 10));
+
+    Object.keys(targetParams).forEach((key) => {
+      const targetValue = targetParams[key];
+      const currentValue = nextParams[key];
+
+      if (typeof targetValue === 'number' && Number.isFinite(targetValue)) {
+        const baseValue = typeof currentValue === 'number' && Number.isFinite(currentValue)
+          ? currentValue
+          : targetValue;
+        nextParams[key] = baseValue + (targetValue - baseValue) * smoothing;
+        return;
+      }
+
+      nextParams[key] = targetValue;
+    });
+
+    smoothedParamsRef.current = nextParams;
+    const PARAMS = nextParams;
     const speedMult = PARAMS.speedMult * PARAMS.animationSpeed;
-    const time = state.clock.getElapsedTime() * speedMult;
+    simTimeRef.current += clampedDelta;
+    const time = simTimeRef.current * speedMult;
     const THREE_LIB = THREE;
 
     // Calculate animated tire spin (independent from master animation speed)
-    const spinAngle = state.clock.getElapsedTime() * PARAMS.tireSpinSpeed;
+    const spinAngle = simTimeRef.current * PARAMS.tireSpinSpeed;
 
     // Apply static tilt + animated spin
     let rotX = PARAMS.rotationX;
@@ -262,6 +305,8 @@ export default function App({ params = {}, liveParamsRef = null, backgroundColor
         powerPreference: 'default',
         positionLerp: 0.16,
         sphereSegments: 8,
+        maxDelta: 1 / 60,
+        paramSmoothing: 12,
       };
     }
 
@@ -275,6 +320,8 @@ export default function App({ params = {}, liveParamsRef = null, backgroundColor
         powerPreference: 'default',
         positionLerp: 0.14,
         sphereSegments: 8,
+        maxDelta: 1 / 60,
+        paramSmoothing: 12,
       };
     }
 
@@ -287,6 +334,8 @@ export default function App({ params = {}, liveParamsRef = null, backgroundColor
       powerPreference: 'high-performance',
       positionLerp: 0.1,
       sphereSegments: 16,
+      maxDelta: 1 / 45,
+      paramSmoothing: 10,
     };
   }, [isMobile, prefersReducedMotion]);
 

@@ -147,11 +147,11 @@ const FILTER_WORK_LABEL = {
 const FILTER_COPY = {
   default: {
     headline: 'CUSTOM DASHBOARDS',
-    support: 'Spend 5 minutes a day reviewing real-time data that effects your business to save hours.',
+    support: 'All solutions start with a simple dashboard. From here, we layer in add-ons, deliver custom requests, and personalized solutions.',
   },
   'Agentic Automation': {
     headline: 'CUSTOM DASHBOARDS',
-    support: 'Spend 5 minutes a day reviewing real-time data that effects your business to save hours.',
+    support: 'All solutions start with a simple dashboard. From here, we layer in add-ons, deliver custom requests, and personalized solutions.',
   },
   'Decentralization': {
     headline: 'Products built on ownership, not platforms',
@@ -184,13 +184,16 @@ const PORTFOLIO_IMAGES = [
 ];
 
 const CMO_TABLE_ROWS = [
-  { task: 'Full time marketing hire',    cost: '$5,000/mo' },
-  { task: 'SEO agency',                  cost: '$4,000/mo' },
-  { task: 'Content writer',              cost: '$1,500/mo' },
-  { task: 'Social media manager',        cost: '$1,500/mo' },
-  { task: 'Reddit & community growth',   cost: '$1,000/mo' },
-  { task: 'AI search visibility (GEO)',  cost: 'not possible' },
-  { task: '24/7 availability',           cost: 'not possible' },
+  { task: 'Bryan in the loop',     value: 'Direct oversight' },
+  { task: 'Actionable Intelligence',  value: 'Social, reviews, relevant events' },
+  { task: 'Content strategy',     value: 'What to post today, tomorrow, next week' },
+  { task: 'Ready-to-post copy', value: 'All platforms covered' },
+  { task: 'Visual assets',         value: 'Post-ready images and video' },
+  { task: 'Quality checked',       value: 'Brand-safe, verified' },
+  { task: 'Trend awareness',       value: 'Live + competitor signals' },
+  { task: 'Community insights',    value: 'What people are saying' },
+  { task: 'Performance tracking',  value: "What's working" },
+  { task: 'History',               value: 'Past runs + decisions' },
 ];
 
 const AUTOMATION_CAPABILITIES = [
@@ -199,8 +202,9 @@ const AUTOMATION_CAPABILITIES = [
     badgeColor: '#0ea5e9',
     icon: 'chart',
     tablePreview: true,
-    title: 'Custom CMO Dashboard',
-    body: 'A live briefing surface that pulls this week\'s key metrics across reach, engagement, leads, email, and paid — so your CMO review takes 5 minutes, not 50.',
+    previewVideo: '/vid/dashboard.mov',
+    title: 'Marketing Dashboard',
+    body: 'Save hours as you monitor, adapt, and grow your brand with actionable data, alongside a human partner in the AI loop.',
   },
   {
     badge: 'CP',
@@ -715,6 +719,8 @@ const StackedSlidesSection = () => {
       if (!videoSrc && !src && !hasPlaceholder && !isTablePreview) return;
       const preferredSide = container.getAttribute('data-hover-side') || 'left';
 
+      const useNativeRatio = container.hasAttribute('data-hover-native-ratio');
+
       let image;
       if (videoSrc) {
         image = document.createElement('video');
@@ -723,25 +729,35 @@ const StackedSlidesSection = () => {
         image.loop = true;
         image.playsInline = true;
         image.preload = 'metadata';
+        if (useNativeRatio) {
+          image.addEventListener('loadedmetadata', () => {
+            if (image.videoWidth && image.videoHeight) {
+              image.style.aspectRatio = `${image.videoWidth} / ${image.videoHeight}`;
+            }
+          }, { once: true });
+        }
       } else if (isTablePreview) {
         image = document.createElement('div');
         image.innerHTML = `
           <div style="padding:1.1rem;font-family:'Space Grotesk',system-ui,sans-serif;height:100%;box-sizing:border-box;display:flex;flex-direction:column;">
-            <p style="margin:0 0 0.7rem;font-size:0.6rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:rgba(42,36,32,0.4);font-family:'Space Mono',monospace;">Custom CMO Dashboard</p>
+            <p style="margin:0 0 0.7rem;font-size:0.6rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:rgba(42,36,32,0.4);font-family:'Space Mono',monospace;">Marketing Dashboard</p>
             <table style="width:100%;border-collapse:collapse;font-size:0.78rem;flex:1;">
               <thead><tr style="border-bottom:1.5px solid rgba(42,36,32,0.15);">
-                <th style="text-align:left;padding:0.3rem 0.4rem;font-weight:600;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;">What needs doing</th>
-                <th style="text-align:right;padding:0.3rem 0.4rem;font-weight:600;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;">With CMO</th>
+                <th style="text-align:left;padding:0.3rem 0.4rem;font-weight:600;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;">Content</th>
+                <th style="width:1.2rem;"></th>
+                <th style="text-align:right;padding:0.3rem 0.4rem;font-weight:600;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;">Delivered</th>
               </tr></thead>
               <tbody>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Full time marketing hire</td><td style="padding:0.38rem 0.4rem;text-align:right;color:#10b981;font-weight:600;">$5,000/mo</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">SEO agency</td><td style="padding:0.38rem 0.4rem;text-align:right;color:#10b981;font-weight:600;">$4,000/mo</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Content writer</td><td style="padding:0.38rem 0.4rem;text-align:right;color:#10b981;font-weight:600;">$1,500/mo</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Social media manager</td><td style="padding:0.38rem 0.4rem;text-align:right;color:#10b981;font-weight:600;">$1,500/mo</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Reddit &amp; community growth</td><td style="padding:0.38rem 0.4rem;text-align:right;color:#10b981;font-weight:600;">$1,000/mo</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">AI search visibility (GEO)</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.35);font-style:italic;">not possible</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">24/7 availability</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.35);font-style:italic;">not possible</td></tr>
-                <tr style="border-top:1.5px solid rgba(42,36,32,0.18);"><td style="padding:0.5rem 0.4rem;color:#2a2420;font-weight:700;">Total per month</td><td style="padding:0.5rem 0.4rem;text-align:right;color:#10b981;font-weight:800;font-size:0.9rem;">$99/mo</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Bryan in the loop</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Direct oversight</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Actionable Intelligence</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Social, reviews, relevant events</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Content strategy</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Content to post today</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Ready-to-post copy</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">All platforms covered</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Visual assets</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Post-ready images and video</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Quality checked</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Brand-safe, verified</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Trend awareness</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Live + competitor signals</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Community insights</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Content people are saying</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Performance tracking</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Content's working</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">History</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Past runs + decisions</td></tr>
               </tbody>
             </table>
           </div>`;
@@ -882,7 +898,7 @@ const StackedSlidesSection = () => {
         .toArray('#stacked-grid-row > *', wrapper)
         .filter((card) => card.getBoundingClientRect().top > window.innerHeight * 0.82);
       const revealBlocks = gsap.utils
-        .toArray('[data-grid-window], #stacked-inline-footer, #inline-footer-value-block, #agency-marquee-shell, #inline-footer-bottom', wrapper)
+        .toArray('[data-grid-window], #stacked-inline-footer, #inline-footer-value-block, #agency-marquee-shell, #inline-footer-bottom, #panel-additional-content-header', wrapper)
         .filter((block, index, all) => all.indexOf(block) === index);
 
       if (gridCards.length) {
@@ -1132,6 +1148,35 @@ const StackedSlidesSection = () => {
             letter-spacing: 0.02em !important;
           }
         }
+        .cmo-table-inner { display: none; }
+        .cmo-table-outer { display: block; }
+        @media (min-width: 900px) {
+          #cmo-dashboard-card {
+            grid-template-columns: auto 1fr !important;
+            align-items: stretch !important;
+          }
+          #cmo-dashboard-card [data-hover-item] {
+            pointer-events: none !important;
+          }
+          #cmo-dashboard-card .cmo-video-thumb {
+            width: clamp(20.5rem, 7vw, 5rem) !important;
+            grid-row: 1 / -1 !important;
+            align-self: start !important;
+          }
+          #cmo-dashboard-table {
+            grid-column: 2 / 3 !important;
+          }
+          .cmo-table-inner { display: flex; flex-direction: column; flex: 1; }
+          .cmo-table-outer { display: none !important; }
+          #cmo-dashboard-card > div:last-child {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+          }
+          #cmo-dashboard-card .cmo-table-inner table {
+            flex: 1;
+          }
+        }
       `}</style>
       <div ref={wrapperRef} style={wrapperStyle}>
         {slides.map((slide, index) => (
@@ -1189,8 +1234,8 @@ const StackedSlidesSection = () => {
                       </div>
                     </div>
                     <section data-capability-grid style={capabilitySectionStyle}>
-                      <div data-capability-header style={capabilitySectionHeaderStyle}>
-                        <span style={capabilityEyebrowStyle}>Agentic Solutions</span>
+                      <div data-capability-header style={{ ...capabilitySectionHeaderStyle, maxWidth: 'none' }}>
+                        <span style={capabilityEyebrowStyle}>Agentic Automation</span>
                         {filterCopy.support && (
                           <p id="panel-capability-support" style={{ margin: '0.35rem 0 0', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', lineHeight: 1.55, color: 'rgba(42, 36, 32, 0.6)', fontWeight: 400 }}>{filterCopy.support}</p>
                         )}
@@ -1204,12 +1249,13 @@ const StackedSlidesSection = () => {
                             <React.Fragment key={item.title}>
                             <article
                               data-capability-card
-                              data-hover-item
-                              data-hover-side={index % 2 === 0 ? 'left' : 'right'}
-                              data-hover-video-src={item.previewVideo || undefined}
-                              {...(item.tablePreview ? { 'data-hover-table': 'true' } : {})}
+                              {...(!item.tablePreview && { 'data-hover-item': true })}
+                              {...(!item.tablePreview && { 'data-hover-side': index % 2 === 0 ? 'left' : 'right' })}
+                              {...(!item.tablePreview && { 'data-hover-video-src': item.previewVideo || undefined })}
+                              {...(item.tablePreview ? { id: 'cmo-dashboard-card' } : {})}
                               style={{
                                 ...capabilityCardStyle,
+                                ...(item.tablePreview ? { gridColumn: '1 / -1' } : {}),
                                 zIndex: isMobileCapabilityOpen ? 6 : 1,
                               }}
                               onClick={() => {
@@ -1222,25 +1268,23 @@ const StackedSlidesSection = () => {
                                 <div style={mobileCapabilityPreviewStyle} aria-hidden="true">
                                   {item.tablePreview ? (
                                     <div style={{ width: '100%', height: '100%', background: '#f5f1df', borderRadius: '0.75rem', padding: '1rem', boxSizing: 'border-box', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-                                      <p style={{ margin: '0 0 0.6rem', fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.4)', fontFamily: "'Space Mono', monospace" }}>Custom CMO Dashboard</p>
+                                      <p style={{ margin: '0 0 0.6rem', fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.4)', fontFamily: "'Space Mono', monospace" }}>Marketing Dashboard</p>
                                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem', fontFamily: "'Space Grotesk', system-ui, sans-serif", flex: 1 }}>
                                         <thead>
                                           <tr style={{ borderBottom: '1px solid rgba(42,36,32,0.15)' }}>
-                                            <th style={{ textAlign: 'left', padding: '0.28rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.45)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>What needs doing</th>
-                                            <th style={{ textAlign: 'right', padding: '0.28rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.45)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>With CMO</th>
+                                            <th style={{ textAlign: 'left', padding: '0.28rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.45)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Content</th>
+                                            <th style={{ width: '1.2rem' }} />
+                                            <th style={{ textAlign: 'right', padding: '0.28rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.45)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Delivered</th>
                                           </tr>
                                         </thead>
                                         <tbody>
                                           {CMO_TABLE_ROWS.map((row) => (
                                             <tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}>
                                               <td style={{ padding: '0.38rem 0.4rem', color: '#2a2420', fontWeight: 500 }}>{row.task}</td>
-                                              <td style={{ padding: '0.38rem 0.4rem', textAlign: 'right', color: row.cost === 'not possible' ? 'rgba(42,36,32,0.35)' : '#10b981', fontWeight: 600, fontStyle: row.cost === 'not possible' ? 'italic' : 'normal' }}>{row.cost}</td>
+                                              <td style={{ padding: '0.38rem 0.2rem', color: 'rgba(42,36,32,0.3)', fontSize: '0.7rem', textAlign: 'center' }}>→</td>
+                                              <td style={{ padding: '0.38rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td>
                                             </tr>
                                           ))}
-                                          <tr style={{ borderTop: '1.5px solid rgba(42,36,32,0.18)' }}>
-                                            <td style={{ padding: '0.5rem 0.4rem', color: '#2a2420', fontWeight: 700 }}>Total per month</td>
-                                            <td style={{ padding: '0.5rem 0.4rem', textAlign: 'right', color: '#10b981', fontWeight: 800, fontSize: '0.85rem' }}>$99/mo</td>
-                                          </tr>
                                         </tbody>
                                       </table>
                                     </div>
@@ -1258,36 +1302,64 @@ const StackedSlidesSection = () => {
                                   )}
                                 </div>
                               ) : null}
-                              <div style={{ ...capabilityBadgeStyle, color: item.badgeColor }}>
-                                {Icon ? <Icon size={20} strokeWidth={2.1} /> : item.badge}
-                              </div>
+                              {item.tablePreview ? (
+                                <div
+                                  data-hover-item
+                                  data-hover-video-src={item.previewVideo}
+                                  data-hover-native-ratio
+                                  data-hover-side="right"
+                                  style={{ display: 'inline-block', flexShrink: 0, cursor: 'pointer' }}
+                                >
+                                  <video
+                                    className="cmo-video-thumb"
+                                    src={item.previewVideo}
+                                    autoPlay
+                                    muted
+                                    loop
+                                    playsInline
+                                    style={{ width: 'clamp(3.5rem, 7vw, 5rem)', aspectRatio: 'auto', borderRadius: '0.5rem', objectFit: 'cover', display: 'block', flexShrink: 0, pointerEvents: 'none' }}
+                                  />
+                                </div>
+                              ) : (
+                                <div style={{ ...capabilityBadgeStyle, color: item.badgeColor }}>
+                                  {Icon ? <Icon size={20} strokeWidth={2.1} /> : item.badge}
+                                </div>
+                              )}
                               <div style={capabilityContentStyle}>
                                 <h4 style={capabilityCardTitleStyle}>{item.title}</h4>
-                                <p style={capabilityCardBodyStyle}>{item.body}</p>
+                                <p style={{ ...capabilityCardBodyStyle, ...(item.tablePreview ? { maxWidth: 'none' } : {}) }}>{item.body}</p>
+                                {item.tablePreview && (
+                                  <div className="cmo-table-inner" style={{ marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
+                                      <thead><tr><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Content</th><th style={{ width: '1.5rem' }} /><th style={{ textAlign: 'right', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Delivered</th></tr></thead>
+                                      <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500 }}>{row.task}</td><td style={{ padding: '0.32rem 0.2rem', color: 'rgba(42,36,32,0.3)', fontSize: '0.7rem', textAlign: 'center' }}>→</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
+                                    </table>
+                                    <div onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', marginTop: '0.85rem', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10 }}>
+                                      <span style={{ fontSize: '1rem', lineHeight: 1, flexShrink: 0 }}>🌐</span>
+                                      <input readOnly value="yourbusiness.com" style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.45)', fontFamily: "'Space Grotesk', system-ui, sans-serif", cursor: 'default', minWidth: 0 }} />
+                                      <button className="cta-pill-btn" style={{ ...ctaStyle, border: 'none', flexShrink: 0, background: 'rgba(255,255,255,0.72)', color: '#2a2420', boxShadow: '0 1px 4px rgba(42,36,32,0.1), inset 0 1px 0 rgba(255,255,255,0.6)' }}>Create Dashboard<span style={ctaIconStyle}>↗</span></button>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
+                              {item.tablePreview && (
+                                <div id="cmo-dashboard-table" className="cmo-table-outer" style={{ gridColumn: '1 / -1', marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
+                                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
+                                    <thead><tr><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Content</th><th style={{ width: '1.5rem' }} /><th style={{ textAlign: 'right', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Delivered</th></tr></thead>
+                                    <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500 }}>{row.task}</td><td style={{ padding: '0.32rem 0.2rem', color: 'rgba(42,36,32,0.3)', fontSize: '0.7rem', textAlign: 'center' }}>→</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
+                                  </table>
+                                  <div onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', marginTop: '0.85rem', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10 }}>
+                                    <span style={{ fontSize: '1rem', lineHeight: 1, flexShrink: 0 }}>🌐</span>
+                                    <input readOnly value="yourbusiness.com" style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.45)', fontFamily: "'Space Grotesk', system-ui, sans-serif", cursor: 'default', minWidth: 0 }} />
+                                    <button className="cta-pill-btn" style={{ ...ctaStyle, border: 'none', flexShrink: 0, background: 'rgba(255,255,255,0.72)', color: '#2a2420', boxShadow: '0 1px 4px rgba(42,36,32,0.1), inset 0 1px 0 rgba(255,255,255,0.6)' }}>Create Dashboard<span style={ctaIconStyle}>↗</span></button>
+                                  </div>
+                                </div>
+                              )}
                             </article>
                             {item.tablePreview && (
-                              <div id="cmo-dashboard-table" style={{ width: '100%', gridColumn: '1 / -1', padding: 'clamp(1rem, 2vw, 1.5rem)', background: 'rgba(42,36,32,0.03)', border: '1px solid rgba(42,36,32,0.1)', borderRadius: '0.75rem', boxSizing: 'border-box' }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
-                                  <thead>
-                                    <tr style={{ borderBottom: '1.5px solid rgba(42,36,32,0.15)' }}>
-                                      <th style={{ textAlign: 'left', padding: '0.3rem 0.5rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>What needs doing</th>
-                                      <th style={{ textAlign: 'right', padding: '0.3rem 0.5rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>With CMO</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {CMO_TABLE_ROWS.map((row) => (
-                                      <tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}>
-                                        <td style={{ padding: '0.4rem 0.5rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500 }}>{row.task}</td>
-                                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: row.cost === 'not possible' ? 'rgba(42,36,32,0.3)' : '#10b981', fontWeight: 600, fontStyle: row.cost === 'not possible' ? 'italic' : 'normal' }}>{row.cost}</td>
-                                      </tr>
-                                    ))}
-                                    <tr style={{ borderTop: '1.5px solid rgba(42,36,32,0.15)' }}>
-                                      <td style={{ padding: '0.5rem 0.5rem', color: '#2a2420', fontWeight: 700 }}>Total per month</td>
-                                      <td style={{ padding: '0.5rem 0.5rem', textAlign: 'right', color: '#10b981', fontWeight: 800, fontSize: '1rem' }}>$99/mo</td>
-                                    </tr>
-                                  </tbody>
-                                </table>
+                              <div id="panel-additional-content-header" style={{ ...capabilitySectionHeaderStyle, gridColumn: '1 / -1', borderTop: '1px solid rgba(42, 36, 32, 0.12)', paddingTop: 'clamp(1.25rem, 2.5vw, 1.85rem)', marginTop: 'clamp(0.5rem, 1vw, 0.75rem)' }}>
+                                <span style={capabilityEyebrowStyle}>Add-Ons</span>
+                                <p style={{ margin: '0.35rem 0 0', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', lineHeight: 1.55, color: 'rgba(42, 36, 32, 0.6)', fontWeight: 400 }}>Supporting work, context, and collateral.</p>
                               </div>
                             )}
                             </React.Fragment>
@@ -1295,24 +1367,9 @@ const StackedSlidesSection = () => {
                         })}
                       </div>
                     </section>
-                    <div data-featured-work-label style={featuredWorkLabelStyle}>
-                      <div style={capabilitySectionHeaderStyle}>
-                        <span style={capabilityEyebrowStyle}>{FILTER_WORK_LABEL[activeFilter] ?? FILTER_WORK_LABEL.default}</span>
-                      </div>
-                    </div>
                     <div data-grid-window style={gridWindowStyle}>
                       <div data-grid-inner style={gridInnerContainerStyle}>
-                        {activeFilter === 'Agentic Automation' ? (
-                          <video
-                            src="/vid/dashboard.mov"
-                            autoPlay
-                            muted
-                            loop
-                            playsInline
-                            style={{ width: '100%', borderRadius: '0.75rem', display: 'block', objectFit: 'cover' }}
-                          />
-                        ) : (
-                        <div id="stacked-grid-row" style={gridRowStyle}>
+                        {/* <div id="stacked-grid-row" style={gridRowStyle}>
                           {PORTFOLIO_IMAGES.map((src, index) => (
                             <div
                               key={src}
@@ -1325,8 +1382,7 @@ const StackedSlidesSection = () => {
                               />
                             </div>
                           ))}
-                        </div>
-                        )}
+                        </div> */}
                         {/* Testimonials */}
                         <div id="testimonials-section" style={testimonialsShellStyle}>
                           <div style={capabilitySectionHeaderStyle}>
@@ -1770,7 +1826,7 @@ const capabilityCardStyle = {
   gap: 'clamp(0.8rem, 1.5vw, 1rem)',
   alignItems: 'start',
   padding: 'clamp(1rem, 2vw, 1.35rem)',
-  minHeight: 'clamp(8.25rem, 16vw, 10rem)',
+  minHeight: 'clamp(7rem, 14vw, 9rem)',
   borderRadius: '1.1rem',
   border: '1px solid rgba(212, 196, 171, 0.82)',
   background: 'rgba(255,255,255,0.5)',

@@ -177,10 +177,42 @@ const HomePage = () => {
       },
     });
 
+    const syncHeroFromScroll = () => {
+      requestAnimationFrame(() => {
+        heroST.refresh();
+        heroProxy.progress = heroST.progress;
+        paramsRef.current = interpolateHeroParams(HERO_PARAMS_START, HERO_PARAMS_END, heroProxy.progress);
+        if (!isScrollMorphActiveRef.current) {
+          setParams(paramsRef.current);
+        }
+      });
+    };
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        syncHeroFromScroll();
+      }
+    };
+
+    const handlePageShow = () => {
+      syncHeroFromScroll();
+    };
+
+    const handleFocus = () => {
+      syncHeroFromScroll();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pageshow', handlePageShow);
+    window.addEventListener('focus', handleFocus);
+
     return () => {
       tl.kill();
       heroST.kill();
       isScrollMorphActiveRef.current = false;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pageshow', handlePageShow);
+      window.removeEventListener('focus', handleFocus);
     };
   }, []);
 

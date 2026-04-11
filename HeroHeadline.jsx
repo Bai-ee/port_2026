@@ -142,6 +142,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
     window.addEventListener('orientationchange', scheduleRefresh);
     document.addEventListener('visibilitychange', scheduleRefresh);
     window.addEventListener('pageshow', scheduleRefresh);
+    window.addEventListener('focus', scheduleRefresh);
 
     return () => {
       cancelAnimationFrame(frame);
@@ -149,6 +150,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       window.removeEventListener('orientationchange', scheduleRefresh);
       document.removeEventListener('visibilitychange', scheduleRefresh);
       window.removeEventListener('pageshow', scheduleRefresh);
+      window.removeEventListener('focus', scheduleRefresh);
       resizeObserver?.disconnect();
       trigger?.kill();
     };
