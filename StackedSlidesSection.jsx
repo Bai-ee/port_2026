@@ -184,12 +184,13 @@ const PORTFOLIO_IMAGES = [
 ];
 
 const CMO_TABLE_ROWS = [
-  { metric: 'Organic Reach',    week: '42,800',  prev: '38,200', delta: '+12%', up: true },
-  { metric: 'Engagement Rate',  week: '4.2%',    prev: '3.8%',   delta: '+10%', up: true },
-  { metric: 'Lead Gen',         week: '284',     prev: '241',    delta: '+18%', up: true },
-  { metric: 'Email Opens',      week: '31%',     prev: '28%',    delta: '+11%', up: true },
-  { metric: 'Ad ROAS',          week: '3.4×',    prev: '2.9×',   delta: '+17%', up: true },
-  { metric: 'Churn Rate',       week: '1.1%',    prev: '1.4%',   delta: '-21%', up: true },
+  { task: 'Full time marketing hire',    cost: '$5,000/mo' },
+  { task: 'SEO agency',                  cost: '$4,000/mo' },
+  { task: 'Content writer',              cost: '$1,500/mo' },
+  { task: 'Social media manager',        cost: '$1,500/mo' },
+  { task: 'Reddit & community growth',   cost: '$1,000/mo' },
+  { task: 'AI search visibility (GEO)',  cost: 'not possible' },
+  { task: '24/7 availability',           cost: 'not possible' },
 ];
 
 const AUTOMATION_CAPABILITIES = [
@@ -726,21 +727,21 @@ const StackedSlidesSection = () => {
         image = document.createElement('div');
         image.innerHTML = `
           <div style="padding:1.1rem;font-family:'Space Grotesk',system-ui,sans-serif;height:100%;box-sizing:border-box;display:flex;flex-direction:column;">
-            <p style="margin:0 0 0.7rem;font-size:0.6rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:rgba(42,36,32,0.4);font-family:'Space Mono',monospace;">CMO Weekly Brief</p>
-            <table style="width:100%;border-collapse:collapse;font-size:0.75rem;flex:1;">
-              <thead><tr style="border-bottom:1px solid rgba(42,36,32,0.12);">
-                <th style="text-align:left;padding:0.28rem 0.35rem;font-weight:600;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;">Metric</th>
-                <th style="text-align:right;padding:0.28rem 0.35rem;font-weight:600;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;">This Week</th>
-                <th style="text-align:right;padding:0.28rem 0.35rem;font-weight:600;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;">Prev</th>
-                <th style="text-align:right;padding:0.28rem 0.35rem;font-weight:600;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;">Δ</th>
+            <p style="margin:0 0 0.7rem;font-size:0.6rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:rgba(42,36,32,0.4);font-family:'Space Mono',monospace;">Custom CMO Dashboard</p>
+            <table style="width:100%;border-collapse:collapse;font-size:0.78rem;flex:1;">
+              <thead><tr style="border-bottom:1.5px solid rgba(42,36,32,0.15);">
+                <th style="text-align:left;padding:0.3rem 0.4rem;font-weight:600;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;">What needs doing</th>
+                <th style="text-align:right;padding:0.3rem 0.4rem;font-weight:600;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;">With CMO</th>
               </tr></thead>
               <tbody>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.35rem;color:#2a2420;font-weight:500;">Organic Reach</td><td style="padding:0.38rem 0.35rem;text-align:right;font-weight:600;color:#2a2420;">42,800</td><td style="padding:0.38rem 0.35rem;text-align:right;color:rgba(42,36,32,0.4);">38,200</td><td style="padding:0.38rem 0.35rem;text-align:right;color:#10b981;font-weight:700;">+12%</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.35rem;color:#2a2420;font-weight:500;">Engagement Rate</td><td style="padding:0.38rem 0.35rem;text-align:right;font-weight:600;color:#2a2420;">4.2%</td><td style="padding:0.38rem 0.35rem;text-align:right;color:rgba(42,36,32,0.4);">3.8%</td><td style="padding:0.38rem 0.35rem;text-align:right;color:#10b981;font-weight:700;">+10%</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.35rem;color:#2a2420;font-weight:500;">Lead Gen</td><td style="padding:0.38rem 0.35rem;text-align:right;font-weight:600;color:#2a2420;">284</td><td style="padding:0.38rem 0.35rem;text-align:right;color:rgba(42,36,32,0.4);">241</td><td style="padding:0.38rem 0.35rem;text-align:right;color:#10b981;font-weight:700;">+18%</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.35rem;color:#2a2420;font-weight:500;">Email Opens</td><td style="padding:0.38rem 0.35rem;text-align:right;font-weight:600;color:#2a2420;">31%</td><td style="padding:0.38rem 0.35rem;text-align:right;color:rgba(42,36,32,0.4);">28%</td><td style="padding:0.38rem 0.35rem;text-align:right;color:#10b981;font-weight:700;">+11%</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.35rem;color:#2a2420;font-weight:500;">Ad ROAS</td><td style="padding:0.38rem 0.35rem;text-align:right;font-weight:600;color:#2a2420;">3.4×</td><td style="padding:0.38rem 0.35rem;text-align:right;color:rgba(42,36,32,0.4);">2.9×</td><td style="padding:0.38rem 0.35rem;text-align:right;color:#10b981;font-weight:700;">+17%</td></tr>
-                <tr><td style="padding:0.38rem 0.35rem;color:#2a2420;font-weight:500;">Churn Rate</td><td style="padding:0.38rem 0.35rem;text-align:right;font-weight:600;color:#2a2420;">1.1%</td><td style="padding:0.38rem 0.35rem;text-align:right;color:rgba(42,36,32,0.4);">1.4%</td><td style="padding:0.38rem 0.35rem;text-align:right;color:#10b981;font-weight:700;">-21%</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Full time marketing hire</td><td style="padding:0.38rem 0.4rem;text-align:right;color:#10b981;font-weight:600;">$5,000/mo</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">SEO agency</td><td style="padding:0.38rem 0.4rem;text-align:right;color:#10b981;font-weight:600;">$4,000/mo</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Content writer</td><td style="padding:0.38rem 0.4rem;text-align:right;color:#10b981;font-weight:600;">$1,500/mo</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Social media manager</td><td style="padding:0.38rem 0.4rem;text-align:right;color:#10b981;font-weight:600;">$1,500/mo</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Reddit &amp; community growth</td><td style="padding:0.38rem 0.4rem;text-align:right;color:#10b981;font-weight:600;">$1,000/mo</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">AI search visibility (GEO)</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.35);font-style:italic;">not possible</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">24/7 availability</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.35);font-style:italic;">not possible</td></tr>
+                <tr style="border-top:1.5px solid rgba(42,36,32,0.18);"><td style="padding:0.5rem 0.4rem;color:#2a2420;font-weight:700;">Total per month</td><td style="padding:0.5rem 0.4rem;text-align:right;color:#10b981;font-weight:800;font-size:0.9rem;">$99/mo</td></tr>
               </tbody>
             </table>
           </div>`;
@@ -1220,26 +1221,26 @@ const StackedSlidesSection = () => {
                               {isMobileCapabilityOpen ? (
                                 <div style={mobileCapabilityPreviewStyle} aria-hidden="true">
                                   {item.tablePreview ? (
-                                    <div style={{ width: '100%', height: '100%', background: '#f5f1df', borderRadius: '0.75rem', padding: '1rem', boxSizing: 'border-box', overflowY: 'auto' }}>
-                                      <p style={{ margin: '0 0 0.6rem', fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.4)', fontFamily: "'Space Mono', monospace" }}>CMO Weekly Brief</p>
-                                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
+                                    <div style={{ width: '100%', height: '100%', background: '#f5f1df', borderRadius: '0.75rem', padding: '1rem', boxSizing: 'border-box', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+                                      <p style={{ margin: '0 0 0.6rem', fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.4)', fontFamily: "'Space Mono', monospace" }}>Custom CMO Dashboard</p>
+                                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem', fontFamily: "'Space Grotesk', system-ui, sans-serif", flex: 1 }}>
                                         <thead>
-                                          <tr style={{ borderBottom: '1px solid rgba(42,36,32,0.12)' }}>
-                                            <th style={{ textAlign: 'left', padding: '0.3rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.45)', fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Metric</th>
-                                            <th style={{ textAlign: 'right', padding: '0.3rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.45)', fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>This Week</th>
-                                            <th style={{ textAlign: 'right', padding: '0.3rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.45)', fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Prev</th>
-                                            <th style={{ textAlign: 'right', padding: '0.3rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.45)', fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Δ</th>
+                                          <tr style={{ borderBottom: '1px solid rgba(42,36,32,0.15)' }}>
+                                            <th style={{ textAlign: 'left', padding: '0.28rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.45)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>What needs doing</th>
+                                            <th style={{ textAlign: 'right', padding: '0.28rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.45)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>With CMO</th>
                                           </tr>
                                         </thead>
                                         <tbody>
                                           {CMO_TABLE_ROWS.map((row) => (
-                                            <tr key={row.metric} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}>
-                                              <td style={{ padding: '0.4rem 0.4rem', color: '#2a2420', fontWeight: 500 }}>{row.metric}</td>
-                                              <td style={{ padding: '0.4rem 0.4rem', textAlign: 'right', color: '#2a2420', fontWeight: 600 }}>{row.week}</td>
-                                              <td style={{ padding: '0.4rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.45)' }}>{row.prev}</td>
-                                              <td style={{ padding: '0.4rem 0.4rem', textAlign: 'right', color: row.up ? '#10b981' : '#ef4444', fontWeight: 700 }}>{row.delta}</td>
+                                            <tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}>
+                                              <td style={{ padding: '0.38rem 0.4rem', color: '#2a2420', fontWeight: 500 }}>{row.task}</td>
+                                              <td style={{ padding: '0.38rem 0.4rem', textAlign: 'right', color: row.cost === 'not possible' ? 'rgba(42,36,32,0.35)' : '#10b981', fontWeight: 600, fontStyle: row.cost === 'not possible' ? 'italic' : 'normal' }}>{row.cost}</td>
                                             </tr>
                                           ))}
+                                          <tr style={{ borderTop: '1.5px solid rgba(42,36,32,0.18)' }}>
+                                            <td style={{ padding: '0.5rem 0.4rem', color: '#2a2420', fontWeight: 700 }}>Total per month</td>
+                                            <td style={{ padding: '0.5rem 0.4rem', textAlign: 'right', color: '#10b981', fontWeight: 800, fontSize: '0.85rem' }}>$99/mo</td>
+                                          </tr>
                                         </tbody>
                                       </table>
                                     </div>
