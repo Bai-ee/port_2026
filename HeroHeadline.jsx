@@ -140,11 +140,15 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
 
     window.addEventListener('resize', scheduleRefresh);
     window.addEventListener('orientationchange', scheduleRefresh);
+    document.addEventListener('visibilitychange', scheduleRefresh);
+    window.addEventListener('pageshow', scheduleRefresh);
 
     return () => {
       cancelAnimationFrame(frame);
       window.removeEventListener('resize', scheduleRefresh);
       window.removeEventListener('orientationchange', scheduleRefresh);
+      document.removeEventListener('visibilitychange', scheduleRefresh);
+      window.removeEventListener('pageshow', scheduleRefresh);
       resizeObserver?.disconnect();
       trigger?.kill();
     };

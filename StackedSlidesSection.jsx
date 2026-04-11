@@ -137,7 +137,7 @@ const slides = [
 
 const getInitials = (name) => name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
 
-const FILTERS = ['Agentic Automation', 'Decentralization', 'Brand Marketing', 'Digital Marketing', 'Brand Development', 'UI'];
+const FILTERS = ['Digital Marketing', 'Brand Development', 'UI', 'Agentic Automation', 'Decentralization'];
 
 const FILTER_WORK_LABEL = {
   default: 'Selected Work',
@@ -146,32 +146,28 @@ const FILTER_WORK_LABEL = {
 
 const FILTER_COPY = {
   default: {
-    headline: 'CUSTOM DASHBOARDS',
-    support: 'Agentic systems delivering real-time data.',
+    headline: 'Agentic systems, built around your workflow',
+    support: 'Custom dashboards and briefs delivering real-time data.',
   },
   'Agentic Automation': {
-    headline: 'Systems that run without you',
-    support: '',
+    headline: 'Agentic systems, built around your workflow',
+    support: 'Custom dashboards and briefs delivering real-time data.',
   },
   'Decentralization': {
     headline: 'Products built on ownership, not platforms',
-    support: '',
-  },
-  'Brand Marketing': {
-    headline: 'Identity that holds across everything',
-    support: '',
+    support: 'On-chain infrastructure with real-world application.',
   },
   'Digital Marketing': {
     headline: 'Digital thinking, applied to the real world',
-    support: '',
+    support: 'Campaigns, content, and strategy that compound over time.',
   },
   'Brand Development': {
     headline: 'Brands built to scale across every channel',
-    support: '',
+    support: 'Identity systems that hold from launch to growth.',
   },
   'UI': {
     headline: 'Interfaces that feel as good as they look',
-    support: '',
+    support: 'Design-led builds with engineering depth baked in.',
   },
 };
 
@@ -989,9 +985,7 @@ const StackedSlidesSection = () => {
             align-items: center !important;
           }
           #panel-hero-headline {
-            width: 100% !important;
-            text-align: center !important;
-            margin-bottom: clamp(0.5rem, 2vw, 0.85rem) !important;
+            display: none !important;
           }
           #panel-hero-cta,
           #footer-cta {
@@ -1040,7 +1034,7 @@ const StackedSlidesSection = () => {
                     <div style={textCenteringStyle}>
                       <div id="panel-hero-text-row" style={textRowStyle}>
                         <div id="panel-hero-headline-col" style={textColumnStyle}>
-                          <h2 id="panel-hero-headline" style={{ ...headingStyle, fontSize: 'clamp(1.4rem, 3.5vw, 2.45rem)', fontWeight: 300, textAlign: 'left', margin: 0, whiteSpace: 'nowrap', display: 'none' }}>{slide.headlineText}</h2>
+                          <h2 id="panel-hero-headline" style={{ ...headingStyle, fontSize: 'clamp(1.4rem, 3.5vw, 2.45rem)', fontWeight: 300, textAlign: 'left', margin: 0, whiteSpace: 'nowrap' }}>{slide.headlineText}</h2>
                         </div>
                         <div style={textColumnRightStyle}>
                           <a
@@ -1076,7 +1070,7 @@ const StackedSlidesSection = () => {
                     </div>
                     <section data-capability-grid style={capabilitySectionStyle}>
                       <div data-capability-header style={capabilitySectionHeaderStyle}>
-                        <span style={capabilityEyebrowStyle}>{filterCopy.headline}</span>
+                        <span style={capabilityEyebrowStyle}>Agentic Automation</span>
                         {filterCopy.support && (
                           <p id="panel-capability-support" style={{ margin: '0.35rem 0 0', fontSize: 'clamp(0.72rem, 1.2vw, 0.85rem)', lineHeight: 1.45, color: 'rgba(42,36,32,0.55)', fontWeight: 400 }}>{filterCopy.support}</p>
                         )}
@@ -1658,7 +1652,7 @@ const mobileCapabilityPreviewStyle = {
   left: '50%',
   bottom: 'calc(100% + 0.7rem)',
   transform: 'translateX(-50%)',
-  width: 'min(78vw, 20rem)',
+  width: '90vw',
   aspectRatio: '16 / 9',
   borderRadius: '1.2rem',
   overflow: 'hidden',
@@ -1833,8 +1827,9 @@ const deliverablesToggleStyle = {
 
 const filterDropdownStyle = {
   display: 'flex',
-  flexWrap: 'wrap',
-  gap: '0.7rem',
+  flexWrap: 'nowrap',
+  justifyContent: 'center',
+  gap: '0.5rem',
   paddingTop: 'clamp(0.9rem, 1.8vw, 1.15rem)',
   paddingBottom: 'clamp(1.15rem, 2.4vw, 1.7rem)',
 };
@@ -1842,12 +1837,12 @@ const filterDropdownStyle = {
 const filterChipStyle = {
   display: 'inline-flex',
   alignItems: 'center',
-  padding: '0.48rem 1.1rem',
+  padding: '0.38rem 0.85rem',
   background: 'rgba(42, 36, 32, 0.05)',
   border: '1px solid rgba(42, 36, 32, 0.15)',
   borderRadius: '2rem',
   fontFamily: "'Space Mono', monospace",
-  fontSize: 'clamp(0.75rem, 1vw, 0.82rem)',
+  fontSize: '0.72rem',
   fontWeight: 400,
   letterSpacing: '0.04em',
   color: 'rgba(42, 36, 32, 0.6)',
