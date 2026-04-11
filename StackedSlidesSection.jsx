@@ -146,12 +146,12 @@ const FILTER_WORK_LABEL = {
 
 const FILTER_COPY = {
   default: {
-    headline: 'Agentic systems, built around your workflow',
-    support: 'Custom dashboards and briefs delivering real-time data.',
+    headline: 'CUSTOM DASHBOARDS',
+    support: 'Spend 5 minutes a day reviewing real-time data that effects your business to save hours.',
   },
   'Agentic Automation': {
-    headline: 'Agentic systems, built around your workflow',
-    support: 'Custom dashboards and briefs delivering real-time data.',
+    headline: 'CUSTOM DASHBOARDS',
+    support: 'Spend 5 minutes a day reviewing real-time data that effects your business to save hours.',
   },
   'Decentralization': {
     headline: 'Products built on ownership, not platforms',
@@ -183,7 +183,24 @@ const PORTFOLIO_IMAGES = [
   '/img/port/viva.png',
 ];
 
+const CMO_TABLE_ROWS = [
+  { metric: 'Organic Reach',    week: '42,800',  prev: '38,200', delta: '+12%', up: true },
+  { metric: 'Engagement Rate',  week: '4.2%',    prev: '3.8%',   delta: '+10%', up: true },
+  { metric: 'Lead Gen',         week: '284',     prev: '241',    delta: '+18%', up: true },
+  { metric: 'Email Opens',      week: '31%',     prev: '28%',    delta: '+11%', up: true },
+  { metric: 'Ad ROAS',          week: '3.4×',    prev: '2.9×',   delta: '+17%', up: true },
+  { metric: 'Churn Rate',       week: '1.1%',    prev: '1.4%',   delta: '-21%', up: true },
+];
+
 const AUTOMATION_CAPABILITIES = [
+  {
+    badge: 'CD',
+    badgeColor: '#0ea5e9',
+    icon: 'chart',
+    tablePreview: true,
+    title: 'Custom CMO Dashboard',
+    body: 'A live briefing surface that pulls this week\'s key metrics across reach, engagement, leads, email, and paid — so your CMO review takes 5 minutes, not 50.',
+  },
   {
     badge: 'CP',
     badgeColor: '#14b8a6',
@@ -693,7 +710,8 @@ const StackedSlidesSection = () => {
       const videoSrc = container.getAttribute('data-hover-video-src');
       const src = container.querySelector('[data-hover-image]')?.src;
       const hasPlaceholder = Boolean(container.querySelector('[data-hover-placeholder]'));
-      if (!videoSrc && !src && !hasPlaceholder) return;
+      const isTablePreview = container.hasAttribute('data-hover-table');
+      if (!videoSrc && !src && !hasPlaceholder && !isTablePreview) return;
       const preferredSide = container.getAttribute('data-hover-side') || 'left';
 
       let image;
@@ -704,6 +722,28 @@ const StackedSlidesSection = () => {
         image.loop = true;
         image.playsInline = true;
         image.preload = 'metadata';
+      } else if (isTablePreview) {
+        image = document.createElement('div');
+        image.innerHTML = `
+          <div style="padding:1.1rem;font-family:'Space Grotesk',system-ui,sans-serif;height:100%;box-sizing:border-box;display:flex;flex-direction:column;">
+            <p style="margin:0 0 0.7rem;font-size:0.6rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:rgba(42,36,32,0.4);font-family:'Space Mono',monospace;">CMO Weekly Brief</p>
+            <table style="width:100%;border-collapse:collapse;font-size:0.75rem;flex:1;">
+              <thead><tr style="border-bottom:1px solid rgba(42,36,32,0.12);">
+                <th style="text-align:left;padding:0.28rem 0.35rem;font-weight:600;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;">Metric</th>
+                <th style="text-align:right;padding:0.28rem 0.35rem;font-weight:600;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;">This Week</th>
+                <th style="text-align:right;padding:0.28rem 0.35rem;font-weight:600;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;">Prev</th>
+                <th style="text-align:right;padding:0.28rem 0.35rem;font-weight:600;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;">Δ</th>
+              </tr></thead>
+              <tbody>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.35rem;color:#2a2420;font-weight:500;">Organic Reach</td><td style="padding:0.38rem 0.35rem;text-align:right;font-weight:600;color:#2a2420;">42,800</td><td style="padding:0.38rem 0.35rem;text-align:right;color:rgba(42,36,32,0.4);">38,200</td><td style="padding:0.38rem 0.35rem;text-align:right;color:#10b981;font-weight:700;">+12%</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.35rem;color:#2a2420;font-weight:500;">Engagement Rate</td><td style="padding:0.38rem 0.35rem;text-align:right;font-weight:600;color:#2a2420;">4.2%</td><td style="padding:0.38rem 0.35rem;text-align:right;color:rgba(42,36,32,0.4);">3.8%</td><td style="padding:0.38rem 0.35rem;text-align:right;color:#10b981;font-weight:700;">+10%</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.35rem;color:#2a2420;font-weight:500;">Lead Gen</td><td style="padding:0.38rem 0.35rem;text-align:right;font-weight:600;color:#2a2420;">284</td><td style="padding:0.38rem 0.35rem;text-align:right;color:rgba(42,36,32,0.4);">241</td><td style="padding:0.38rem 0.35rem;text-align:right;color:#10b981;font-weight:700;">+18%</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.35rem;color:#2a2420;font-weight:500;">Email Opens</td><td style="padding:0.38rem 0.35rem;text-align:right;font-weight:600;color:#2a2420;">31%</td><td style="padding:0.38rem 0.35rem;text-align:right;color:rgba(42,36,32,0.4);">28%</td><td style="padding:0.38rem 0.35rem;text-align:right;color:#10b981;font-weight:700;">+11%</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.35rem;color:#2a2420;font-weight:500;">Ad ROAS</td><td style="padding:0.38rem 0.35rem;text-align:right;font-weight:600;color:#2a2420;">3.4×</td><td style="padding:0.38rem 0.35rem;text-align:right;color:rgba(42,36,32,0.4);">2.9×</td><td style="padding:0.38rem 0.35rem;text-align:right;color:#10b981;font-weight:700;">+17%</td></tr>
+                <tr><td style="padding:0.38rem 0.35rem;color:#2a2420;font-weight:500;">Churn Rate</td><td style="padding:0.38rem 0.35rem;text-align:right;font-weight:600;color:#2a2420;">1.1%</td><td style="padding:0.38rem 0.35rem;text-align:right;color:rgba(42,36,32,0.4);">1.4%</td><td style="padding:0.38rem 0.35rem;text-align:right;color:#10b981;font-weight:700;">-21%</td></tr>
+              </tbody>
+            </table>
+          </div>`;
       } else if (src) {
         image = document.createElement('img');
         image.src = src;
@@ -726,6 +766,12 @@ const StackedSlidesSection = () => {
       if (videoSrc || src) {
         Object.assign(image.style, {
           objectFit: 'cover',
+        });
+      } else if (isTablePreview) {
+        Object.assign(image.style, {
+          background: '#f5f1df',
+          border: '1px solid rgba(42, 36, 32, 0.12)',
+          overflow: 'hidden',
         });
       } else {
         Object.assign(image.style, {
@@ -1143,9 +1189,9 @@ const StackedSlidesSection = () => {
                     </div>
                     <section data-capability-grid style={capabilitySectionStyle}>
                       <div data-capability-header style={capabilitySectionHeaderStyle}>
-                        <span style={capabilityEyebrowStyle}>Agentic Automation</span>
+                        <span style={capabilityEyebrowStyle}>Agentic Solutions</span>
                         {filterCopy.support && (
-                          <p id="panel-capability-support" style={{ margin: '0.35rem 0 0', fontSize: 'clamp(0.72rem, 1.2vw, 0.85rem)', lineHeight: 1.45, color: 'rgba(42,36,32,0.55)', fontWeight: 400 }}>{filterCopy.support}</p>
+                          <p id="panel-capability-support" style={{ margin: '0.35rem 0 0', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', lineHeight: 1.55, color: 'rgba(42, 36, 32, 0.6)', fontWeight: 400 }}>{filterCopy.support}</p>
                         )}
                       </div>
                       <div style={capabilityGridStyle}>
@@ -1160,6 +1206,7 @@ const StackedSlidesSection = () => {
                               data-hover-item
                               data-hover-side={index % 2 === 0 ? 'left' : 'right'}
                               data-hover-video-src={item.previewVideo || undefined}
+                              {...(item.tablePreview ? { 'data-hover-table': 'true' } : {})}
                               style={{
                                 ...capabilityCardStyle,
                                 zIndex: isMobileCapabilityOpen ? 6 : 1,
@@ -1172,7 +1219,31 @@ const StackedSlidesSection = () => {
                               <div data-hover-placeholder aria-hidden="true" style={{ display: 'none' }} />
                               {isMobileCapabilityOpen ? (
                                 <div style={mobileCapabilityPreviewStyle} aria-hidden="true">
-                                  {item.previewVideo ? (
+                                  {item.tablePreview ? (
+                                    <div style={{ width: '100%', height: '100%', background: '#f5f1df', borderRadius: '0.75rem', padding: '1rem', boxSizing: 'border-box', overflowY: 'auto' }}>
+                                      <p style={{ margin: '0 0 0.6rem', fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.4)', fontFamily: "'Space Mono', monospace" }}>CMO Weekly Brief</p>
+                                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
+                                        <thead>
+                                          <tr style={{ borderBottom: '1px solid rgba(42,36,32,0.12)' }}>
+                                            <th style={{ textAlign: 'left', padding: '0.3rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.45)', fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Metric</th>
+                                            <th style={{ textAlign: 'right', padding: '0.3rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.45)', fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>This Week</th>
+                                            <th style={{ textAlign: 'right', padding: '0.3rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.45)', fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Prev</th>
+                                            <th style={{ textAlign: 'right', padding: '0.3rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.45)', fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Δ</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {CMO_TABLE_ROWS.map((row) => (
+                                            <tr key={row.metric} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}>
+                                              <td style={{ padding: '0.4rem 0.4rem', color: '#2a2420', fontWeight: 500 }}>{row.metric}</td>
+                                              <td style={{ padding: '0.4rem 0.4rem', textAlign: 'right', color: '#2a2420', fontWeight: 600 }}>{row.week}</td>
+                                              <td style={{ padding: '0.4rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.45)' }}>{row.prev}</td>
+                                              <td style={{ padding: '0.4rem 0.4rem', textAlign: 'right', color: row.up ? '#10b981' : '#ef4444', fontWeight: 700 }}>{row.delta}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  ) : item.previewVideo ? (
                                     <video
                                       src={item.previewVideo}
                                       autoPlay
@@ -1641,12 +1712,12 @@ const capabilitySectionHeaderStyle = {
 };
 
 const capabilityEyebrowStyle = {
-  fontSize: 'clamp(0.88rem, 1.4vw, 1.1rem)',
-  fontFamily: "'Space Mono', monospace",
+  fontSize: 'clamp(1rem, 1.6vw, 1.2rem)',
+  fontFamily: "'Space Grotesk', system-ui, sans-serif",
   fontWeight: 700,
-  letterSpacing: '0.08em',
-  textTransform: 'uppercase',
-  color: 'rgba(42, 36, 32, 0.75)',
+  letterSpacing: '-0.03em',
+  textTransform: 'none',
+  color: '#2a2420',
 };
 
 const capabilityHeadingStyle = {
