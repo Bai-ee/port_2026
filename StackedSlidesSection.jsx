@@ -137,7 +137,7 @@ const slides = [
 
 const getInitials = (name) => name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
 
-const FILTERS = ['Agentic Automation', 'Decentralization', 'Brand Marketing', 'UX'];
+const FILTERS = ['Agentic Automation', 'Decentralization', 'Brand Marketing', 'Digital Marketing', 'Brand Development', 'UI'];
 
 const FILTER_WORK_LABEL = {
   default: 'Selected Work',
@@ -161,8 +161,16 @@ const FILTER_COPY = {
     headline: 'Identity that holds across everything',
     support: '',
   },
-  'UX': {
+  'Digital Marketing': {
     headline: 'Digital thinking, applied to the real world',
+    support: '',
+  },
+  'Brand Development': {
+    headline: 'Brands built to scale across every channel',
+    support: '',
+  },
+  'UI': {
+    headline: 'Interfaces that feel as good as they look',
     support: '',
   },
 };
@@ -1032,7 +1040,7 @@ const StackedSlidesSection = () => {
                     <div style={textCenteringStyle}>
                       <div id="panel-hero-text-row" style={textRowStyle}>
                         <div id="panel-hero-headline-col" style={textColumnStyle}>
-                          <h2 id="panel-hero-headline" style={{ ...headingStyle, fontSize: 'clamp(1.4rem, 3.5vw, 2.45rem)', fontWeight: 300, textAlign: 'left', margin: 0, whiteSpace: 'nowrap' }}>{slide.headlineText}</h2>
+                          <h2 id="panel-hero-headline" style={{ ...headingStyle, fontSize: 'clamp(1.4rem, 3.5vw, 2.45rem)', fontWeight: 300, textAlign: 'left', margin: 0, whiteSpace: 'nowrap', display: 'none' }}>{slide.headlineText}</h2>
                         </div>
                         <div style={textColumnRightStyle}>
                           <a
