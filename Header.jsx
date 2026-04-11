@@ -80,7 +80,6 @@ const Header = ({ logoRef, onOpenPage }) => {
   };
 
   const socialLinkStyle = {
-    marginLeft: 'auto',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -89,6 +88,29 @@ const Header = ({ logoRef, onOpenPage }) => {
     letterSpacing: '-0.02em',
     color: 'rgba(42, 36, 32, 0.42)',
     textDecoration: 'none',
+    lineHeight: 1,
+  };
+
+  const actionGroupStyle = {
+    marginLeft: 'auto',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '1rem',
+  };
+
+  const loginLinkStyle = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '0.65rem 1rem',
+    borderRadius: '999px',
+    background: 'rgba(255,255,255,0.34)',
+    border: '1px solid rgba(42, 36, 32, 0.1)',
+    color: '#2a2420',
+    textDecoration: 'none',
+    fontSize: '0.84rem',
+    fontWeight: 700,
+    letterSpacing: '0.01em',
     lineHeight: 1,
   };
 
@@ -167,15 +189,20 @@ const Header = ({ logoRef, onOpenPage }) => {
           <img src="/img/sig.png" alt="" aria-hidden="true" style={{ height: 'clamp(2rem, 4vw, 2.8rem)', width: 'auto', display: 'block' }} />
         </div>
 
-        <a
-          href="https://www.linkedin.com/in/bryanballi"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={socialLinkStyle}
-          aria-label="LinkedIn"
-        >
-          LinkedIn
-        </a>
+        <div style={actionGroupStyle}>
+          <a
+            href="https://www.linkedin.com/in/bryanballi"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={socialLinkStyle}
+            aria-label="LinkedIn"
+          >
+            LinkedIn
+          </a>
+          <a href="/login" style={loginLinkStyle}>
+            Client Login
+          </a>
+        </div>
 
         {isMobile ? (
           /*

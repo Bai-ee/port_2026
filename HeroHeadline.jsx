@@ -106,7 +106,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       trigger: '#hero-section',
       start: 'top top',
       end: useSimpleScrollViewport ? '35% top' : 'center top',
-      scrub: useSimpleScrollViewport ? 0.18 : 0.2,
+      scrub: true,
       invalidateOnRefresh: true,
       onUpdate: (self) => {
         applyLayout(self.progress);

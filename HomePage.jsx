@@ -161,7 +161,7 @@ const HomePage = () => {
       trigger: '#hero-section',
       start: 'top top',
       end: 'bottom top',
-      scrub: useSimpleScrollViewport ? 0.25 : 0.45,
+      scrub: true,
       invalidateOnRefresh: true,
       onUpdate: (self) => {
         isScrollMorphActiveRef.current = true;
@@ -170,10 +170,13 @@ const HomePage = () => {
       },
       onLeaveBack: () => {
         paramsRef.current = HERO_PARAMS_START;
+        setParams(HERO_PARAMS_START);
       },
-      onScrubComplete: () => {
-        isScrollMorphActiveRef.current = false;
-        setParams(paramsRef.current);
+      onToggle: (self) => {
+        if (!self.isActive) {
+          isScrollMorphActiveRef.current = false;
+          setParams(paramsRef.current);
+        }
       },
     });
 

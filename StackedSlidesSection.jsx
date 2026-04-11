@@ -137,37 +137,39 @@ const slides = [
 
 const getInitials = (name) => name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
 
-const FILTERS = ['Digital Marketing', 'Brand Development', 'UI', 'Agentic Automation', 'Decentralization'];
+const FILTERS = ['Digital Marketing', 'Brand Development', 'Creative Technology', 'Agentic Automation', 'Decentralization'];
 
 const FILTER_WORK_LABEL = {
   default: 'Selected Work',
   'Agentic Automation': 'Custom Dashboards & Briefs',
 };
 
+const SHARED_SUPPORT = 'All services start with a simple dashboard. Track what matters and make custom requests from there, your human is in the loop.';
+
 const FILTER_COPY = {
   default: {
     headline: 'CUSTOM DASHBOARDS',
-    support: 'All services start with a simple dashboard. Track what matters and make custom requests from there, your human is in the loop.',
+    support: SHARED_SUPPORT,
   },
   'Agentic Automation': {
     headline: 'CUSTOM DASHBOARDS',
-    support: 'All services start with a simple dashboard. Track what matters and make custom requests from there, your human is in the loop.',
+    support: SHARED_SUPPORT,
   },
   'Decentralization': {
     headline: 'Products built on ownership, not platforms',
-    support: 'On-chain infrastructure with real-world application.',
+    support: SHARED_SUPPORT,
   },
   'Digital Marketing': {
     headline: 'Digital thinking, applied to the real world',
-    support: 'Campaigns, content, and strategy that compound over time.',
+    support: SHARED_SUPPORT,
   },
   'Brand Development': {
     headline: 'Brands built to scale across every channel',
-    support: 'Identity systems that hold from launch to growth.',
+    support: SHARED_SUPPORT,
   },
-  'UI': {
+  'Creative Technology': {
     headline: 'Interfaces that feel as good as they look',
-    support: 'Design-led builds with engineering depth baked in.',
+    support: SHARED_SUPPORT,
   },
 };
 
@@ -457,6 +459,9 @@ const StackedSlidesSection = () => {
   const marqueeShellRef = useRef(null);
   const marqueeTrackRef = useRef(null);
   const marqueeSetRef = useRef(null);
+  const agentMarqueeShellRef = useRef(null);
+  const agentMarqueeTrackRef = useRef(null);
+  const agentMarqueeSetRef = useRef(null);
   const [pokerHovered, setPokerHovered] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState('Agentic Automation');
@@ -695,6 +700,92 @@ const StackedSlidesSection = () => {
       intersectionObserver.disconnect();
       document.removeEventListener('visibilitychange', handleVisibility);
       images.forEach((image) => image.removeEventListener('load', onImageLoad));
+    };
+  }, []);
+
+  useEffect(() => {
+    const shell = agentMarqueeShellRef.current;
+    const track = agentMarqueeTrackRef.current;
+    const set = agentMarqueeSetRef.current;
+    if (!shell || !track || !set) return;
+
+    let itemWidth = 0;
+    let offset = 0;
+    let frameId = 0;
+    let measureFrameId = 0;
+    let lastTime = 0;
+    let isVisible = false;
+
+    const applyTransform = () => {
+      track.style.transform = `translate3d(${offset}px, 0, 0)`;
+    };
+
+    const measure = () => {
+      itemWidth = set.getBoundingClientRect().width;
+      if (!itemWidth) return;
+      offset = itemWidth ? -((Math.abs(offset) % itemWidth)) : 0;
+      applyTransform();
+    };
+
+    const scheduleMeasure = () => {
+      cancelAnimationFrame(measureFrameId);
+      measureFrameId = requestAnimationFrame(measure);
+    };
+
+    const stop = () => {
+      if (!frameId) return;
+      cancelAnimationFrame(frameId);
+      frameId = 0;
+      lastTime = 0;
+    };
+
+    const tick = (time) => {
+      if (!isVisible || document.hidden || !itemWidth) { stop(); return; }
+      if (!lastTime) lastTime = time;
+      const delta = Math.min((time - lastTime) / 1000, 0.05);
+      lastTime = time;
+      offset -= delta * (isTouchScrollDevice() ? 28 : 42);
+      if (offset <= -itemWidth) offset += itemWidth;
+      applyTransform();
+      frameId = requestAnimationFrame(tick);
+    };
+
+    const start = () => {
+      if (frameId || document.hidden || !isVisible || !itemWidth) return;
+      lastTime = 0;
+      frameId = requestAnimationFrame(tick);
+    };
+
+    const handleVisibility = () => {
+      if (document.hidden) { stop(); return; }
+      start();
+    };
+
+    const intersectionObserver = new IntersectionObserver(
+      ([entry]) => {
+        isVisible = entry?.isIntersecting ?? false;
+        if (isVisible) { start(); return; }
+        stop();
+      },
+      { root: null, threshold: 0, rootMargin: '120px 0px' }
+    );
+
+    const resizeObserver = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(scheduleMeasure)
+      : null;
+
+    resizeObserver?.observe(shell);
+    resizeObserver?.observe(set);
+    intersectionObserver.observe(shell);
+    document.addEventListener('visibilitychange', handleVisibility);
+    scheduleMeasure();
+
+    return () => {
+      stop();
+      cancelAnimationFrame(measureFrameId);
+      resizeObserver?.disconnect();
+      intersectionObserver.disconnect();
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, []);
 
@@ -1231,7 +1322,16 @@ const StackedSlidesSection = () => {
                     </div>
                     <section data-capability-grid style={capabilitySectionStyle}>
                       <div data-capability-header style={{ ...capabilitySectionHeaderStyle, maxWidth: 'none' }}>
-                        <span style={capabilityEyebrowStyle}>Agentic Automation</span>
+                        <div id="agent-marquee-shell" ref={agentMarqueeShellRef} style={{ width: '100%', overflow: 'hidden', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
+                          <div ref={agentMarqueeTrackRef} style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', backfaceVisibility: 'hidden', transform: 'translate3d(0, 0, 0)' }}>
+                            <div ref={agentMarqueeSetRef} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
+                              <span style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(2rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{activeFilter}</span>
+                            </div>
+                            <div aria-hidden="true" style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
+                              <span style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(2rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{activeFilter}</span>
+                            </div>
+                          </div>
+                        </div>
                         {filterCopy.support && (
                           <p id="panel-capability-support" style={{ margin: '0.35rem 0 0', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', lineHeight: 1.55, color: 'rgba(42, 36, 32, 0.6)', fontWeight: 400 }}>{filterCopy.support}</p>
                         )}
