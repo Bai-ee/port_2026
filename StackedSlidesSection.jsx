@@ -1201,8 +1201,8 @@ const StackedSlidesSection = () => {
                           const isMobileCapabilityOpen = isTouchScrollDevice() && activeMobileCapability === item.title;
 
                           return (
+                            <React.Fragment key={item.title}>
                             <article
-                              key={item.title}
                               data-capability-card
                               data-hover-item
                               data-hover-side={index % 2 === 0 ? 'left' : 'right'}
@@ -1263,34 +1263,34 @@ const StackedSlidesSection = () => {
                               </div>
                               <div style={capabilityContentStyle}>
                                 <h4 style={capabilityCardTitleStyle}>{item.title}</h4>
-                                {item.tablePreview ? (
-                                  <div style={{ marginTop: '0.75rem', width: '100%' }}>
-                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.68rem, 1vw, 0.78rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
-                                      <thead>
-                                        <tr style={{ borderBottom: '1px solid rgba(42,36,32,0.15)' }}>
-                                          <th style={{ textAlign: 'left', padding: '0.22rem 0.3rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.55rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>What needs doing</th>
-                                          <th style={{ textAlign: 'right', padding: '0.22rem 0.3rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.55rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>With CMO</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {CMO_TABLE_ROWS.map((row) => (
-                                          <tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.06)' }}>
-                                            <td style={{ padding: '0.28rem 0.3rem', color: 'rgba(42,36,32,0.7)', fontWeight: 500 }}>{row.task}</td>
-                                            <td style={{ padding: '0.28rem 0.3rem', textAlign: 'right', color: row.cost === 'not possible' ? 'rgba(42,36,32,0.3)' : '#10b981', fontWeight: 600, fontStyle: row.cost === 'not possible' ? 'italic' : 'normal' }}>{row.cost}</td>
-                                          </tr>
-                                        ))}
-                                        <tr style={{ borderTop: '1.5px solid rgba(42,36,32,0.15)' }}>
-                                          <td style={{ padding: '0.35rem 0.3rem', color: '#2a2420', fontWeight: 700 }}>Total per month</td>
-                                          <td style={{ padding: '0.35rem 0.3rem', textAlign: 'right', color: '#10b981', fontWeight: 800 }}>$99/mo</td>
-                                        </tr>
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                ) : (
-                                  <p style={capabilityCardBodyStyle}>{item.body}</p>
-                                )}
+                                <p style={capabilityCardBodyStyle}>{item.body}</p>
                               </div>
                             </article>
+                            {item.tablePreview && (
+                              <div id="cmo-dashboard-table" style={{ width: '100%', gridColumn: '1 / -1', padding: 'clamp(1rem, 2vw, 1.5rem)', background: 'rgba(42,36,32,0.03)', border: '1px solid rgba(42,36,32,0.1)', borderRadius: '0.75rem', boxSizing: 'border-box' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
+                                  <thead>
+                                    <tr style={{ borderBottom: '1.5px solid rgba(42,36,32,0.15)' }}>
+                                      <th style={{ textAlign: 'left', padding: '0.3rem 0.5rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>What needs doing</th>
+                                      <th style={{ textAlign: 'right', padding: '0.3rem 0.5rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>With CMO</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {CMO_TABLE_ROWS.map((row) => (
+                                      <tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}>
+                                        <td style={{ padding: '0.4rem 0.5rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500 }}>{row.task}</td>
+                                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: row.cost === 'not possible' ? 'rgba(42,36,32,0.3)' : '#10b981', fontWeight: 600, fontStyle: row.cost === 'not possible' ? 'italic' : 'normal' }}>{row.cost}</td>
+                                      </tr>
+                                    ))}
+                                    <tr style={{ borderTop: '1.5px solid rgba(42,36,32,0.15)' }}>
+                                      <td style={{ padding: '0.5rem 0.5rem', color: '#2a2420', fontWeight: 700 }}>Total per month</td>
+                                      <td style={{ padding: '0.5rem 0.5rem', textAlign: 'right', color: '#10b981', fontWeight: 800, fontSize: '1rem' }}>$99/mo</td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                            </React.Fragment>
                           );
                         })}
                       </div>
