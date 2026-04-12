@@ -1,10 +1,7 @@
 import React, { useRef, useMemo, useEffect, useState } from 'react';
-import { Canvas, useFrame, extend, useThree } from '@react-three/fiber';
-import { OrbitControls, Effects } from '@react-three/drei';
-import { UnrealBloomPass } from 'three-stdlib';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
-
-extend({ UnrealBloomPass });
 
 const SIMPLE_SCROLL_MEDIA_QUERY = '(max-width: 680px) and (pointer: coarse)';
 const MOBILE_MEDIA_QUERY = '(max-width: 767px), (pointer: coarse)';
@@ -356,9 +353,6 @@ export default function App({ params = {}, liveParamsRef = null, backgroundColor
     };
   }, [isMobile, params, prefersReducedMotion, qualityProfile]);
 
-  const bloomStrength = optimizedParams.bloomStrength ?? 1.8;
-  const bloomEnabled = !isMobile && !prefersReducedMotion && bloomStrength > 0;
-
   return (
     <div
       style={{
@@ -376,21 +370,15 @@ export default function App({ params = {}, liveParamsRef = null, backgroundColor
         camera={{ position: [0, 0, 100], fov: 60 }}
         dpr={qualityProfile.dpr}
         style={{ pointerEvents: 'none', background: 'transparent', cursor: 'default' }}
-        gl={{ alpha: false, antialias: qualityProfile.antialias, powerPreference: qualityProfile.powerPreference }}
+        gl={{ alpha: true, antialias: qualityProfile.antialias, powerPreference: qualityProfile.powerPreference }}
+        onCreated={({ gl }) => {
+          gl.setClearColor(0x000000, 0);
+        }}
       >
         <SceneBackground color={backgroundColor} />
         <ParticleSwarm params={optimizedParams} liveParamsRef={liveParamsRef} runtimeProfile={qualityProfile} />
         {qualityProfile.enableControls ? (
           <OrbitControls autoRotate={qualityProfile.autoRotate} enableZoom enablePan={false} enableRotate enableDamping dampingFactor={0.08} rotateSpeed={0.45} zoomSpeed={0.75} minDistance={45} maxDistance={180} />
-        ) : null}
-        {bloomEnabled ? (
-          <Effects disableGamma>
-            <unrealBloomPass
-              threshold={optimizedParams.bloomThreshold ?? 0}
-              strength={bloomStrength}
-              radius={optimizedParams.bloomRadius ?? 0.4}
-            />
-          </Effects>
         ) : null}
       </Canvas>
     </div>

@@ -1,9 +1,9 @@
 const fb = require('./firebase-admin.cjs');
 
-function normalizeUrl(input) {
+function normalizeOptionalUrl(input) {
   const raw = String(input || '').trim();
   if (!raw) {
-    throw new Error('Website URL is required.');
+    return null;
   }
 
   const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
@@ -24,9 +24,26 @@ function slugify(value) {
     .slice(0, 48);
 }
 
-function deriveCompanyName({ companyName, hostname }) {
+function deriveCompanyName({ companyName, hostname, displayName, email }) {
   if (companyName && String(companyName).trim()) {
     return String(companyName).trim();
+  }
+
+  if (!hostname) {
+    if (displayName && String(displayName).trim()) {
+      return String(displayName).trim();
+    }
+
+    const emailRoot = String(email || '').split('@')[0]?.trim();
+    if (emailRoot) {
+      return emailRoot
+        .split(/[.\-_]/g)
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ');
+    }
+
+    return 'Client';
   }
 
   const root = hostname.replace(/^www\./, '').split('.')[0] || 'Client';
@@ -77,7 +94,13 @@ async function queueInitialBriefRun({ clientId, uid, websiteUrl }) {
 }
 
 async function provisionClientForUser({ uid, email, displayName, companyName, websiteUrl, ideaDescription }) {
-  const normalized = normalizeUrl(websiteUrl);
+  const normalized = normalizeOptionalUrl(websiteUrl);
+  const trimmedIdeaDescription = String(ideaDescription || '').trim();
+
+  if (!normalized && !trimmedIdeaDescription) {
+    throw new Error('Provide a website URL or an idea / project / request.');
+  }
+
   const userRef = fb.adminDb.collection('users').doc(uid);
   const existingUser = await userRef.get();
   const existingClientId = existingUser.exists ? existingUser.data()?.clientId : null;
@@ -94,9 +117,12 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
 
   const resolvedCompanyName = deriveCompanyName({
     companyName,
-    hostname: normalized.hostname,
+    hostname: normalized?.hostname || '',
+    displayName,
+    email,
   });
-  const clientId = `${slugify(resolvedCompanyName || normalized.hostname)}-${uid.slice(0, 8)}`;
+  const clientKey = slugify(resolvedCompanyName || normalized?.hostname || email || 'client');
+  const clientId = `${clientKey}-${uid.slice(0, 8)}`;
   const clientRef = fb.adminDb.collection('clients').doc(clientId);
   const memberRef = clientRef.collection('members').doc(uid);
   const onboardingRef = clientRef.collection('system').doc('onboarding');
@@ -111,12 +137,14 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
     ownerDisplayName: displayName || '',
     companyName: resolvedCompanyName,
     dashboardTitle: buildDashboardTitle(resolvedCompanyName),
-    dashboardDescription: `Initial discovery and dashboard setup for ${normalized.hostname} is in progress.`,
-    websiteUrl: normalized.websiteUrl,
-    normalizedOrigin: normalized.origin,
-    normalizedHost: normalized.hostname,
+    dashboardDescription: normalized
+      ? `Initial discovery and dashboard setup for ${normalized.hostname} is in progress.`
+      : 'Initial intake is recorded and your dashboard setup is pending review.',
+    websiteUrl: normalized?.websiteUrl || '',
+    normalizedOrigin: normalized?.origin || '',
+    normalizedHost: normalized?.hostname || '',
     status: 'provisioning',
-    onboardingStatus: 'brief_queued',
+    onboardingStatus: normalized ? 'brief_queued' : 'intake_received',
     pipelineType: 'scout-brief',
     activeModules: [],
     activeAddOns: [],
@@ -140,17 +168,18 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
   };
 
   const onboardingPayload = {
-    state: 'brief_queued',
-    sourceUrl: normalized.websiteUrl,
-    queuedAt: now,
+    state: normalized ? 'brief_queued' : 'intake_received',
+    sourceUrl: normalized?.websiteUrl || '',
+    ideaDescription: trimmedIdeaDescription,
+    queuedAt: normalized ? now : null,
     updatedAt: now,
   };
 
   const clientConfigPayload = {
     clientId,
     sourceInputs: {
-      websiteUrl: normalized.websiteUrl,
-      ideaDescription: String(ideaDescription || '').trim(),
+      websiteUrl: normalized?.websiteUrl || '',
+      ideaDescription: trimmedIdeaDescription,
       uploadedImageRefs: [],
     },
     ingestionConfig: null,
@@ -175,7 +204,9 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
     updatedAt: now,
     provisioningState: {
       startedAt: now,
-      message: 'Initial brief run is queued and will be processed shortly.',
+      message: normalized
+        ? 'Initial brief run is queued and will be processed shortly.'
+        : 'Your request has been received and dashboard setup is pending review.',
     },
     errorState: null,
   };
@@ -195,8 +226,8 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
         role: 'owner',
         dashboardTitle: clientPayload.dashboardTitle,
         dashboardDescription: clientPayload.dashboardDescription,
-        onboardingStatus: 'brief_queued',
-        websiteUrl: normalized.websiteUrl,
+        onboardingStatus: normalized ? 'brief_queued' : 'intake_received',
+        websiteUrl: normalized?.websiteUrl || '',
         updatedAt: now,
         createdAt: existingUser.exists ? existingUser.data()?.createdAt || now : now,
         lastLoginAt: now,
@@ -205,37 +236,40 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
     ),
   ]);
 
-  const run = await queueInitialBriefRun({
-    clientId,
-    uid,
-    websiteUrl: normalized.websiteUrl,
-  });
+  let run = null;
+  if (normalized?.websiteUrl) {
+    run = await queueInitialBriefRun({
+      clientId,
+      uid,
+      websiteUrl: normalized.websiteUrl,
+    });
 
-  await Promise.all([
-    clientRef.set(
-      {
-        latestRunId: run.runId,
-        latestRunStatus: run.status,
-        updatedAt: now,
-      },
-      { merge: true }
-    ),
-    dashboardStateRef.set(
-      {
-        latestRunId: run.runId,
-        latestRunStatus: run.status,
-        updatedAt: now,
-      },
-      { merge: true }
-    ),
-  ]);
+    await Promise.all([
+      clientRef.set(
+        {
+          latestRunId: run.runId,
+          latestRunStatus: run.status,
+          updatedAt: now,
+        },
+        { merge: true }
+      ),
+      dashboardStateRef.set(
+        {
+          latestRunId: run.runId,
+          latestRunStatus: run.status,
+          updatedAt: now,
+        },
+        { merge: true }
+      ),
+    ]);
+  }
 
   return {
     clientId,
     client: {
       ...clientPayload,
-      latestRunId: run.runId,
-      latestRunStatus: run.status,
+      latestRunId: run?.runId || null,
+      latestRunStatus: run?.status || null,
     },
     initialRun: run,
     alreadyProvisioned: false,

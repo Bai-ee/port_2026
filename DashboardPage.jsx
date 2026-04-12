@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from './AuthContext';
+import InternalPageBackground from './InternalPageBackground';
 
 const tiles = [
   {
@@ -253,6 +254,7 @@ const DashboardPage = () => {
 
   return (
     <div data-dashboard-theme={theme} style={shellStyle}>
+      <InternalPageBackground />
       <style>{dashboardCss}</style>
       <main id="founders-shell">
         <header id="founders-top-strip">
@@ -644,6 +646,8 @@ const formatClock = (date) =>
 
 const shellStyle = {
   minHeight: '100dvh',
+  position: 'relative',
+  overflow: 'hidden',
 };
 
 const dashboardCss = `
@@ -681,7 +685,7 @@ const dashboardCss = `
     --dot-grid-color: rgba(0,0,0,0.065);
   }
   [data-dashboard-theme] {
-    background: var(--page);
+    background: transparent;
     color: var(--text-primary);
     min-height: 100dvh;
     transition: background 300ms var(--ease), color 300ms var(--ease);
@@ -689,10 +693,14 @@ const dashboardCss = `
   }
   [data-dashboard-theme] * { box-sizing: border-box; }
   #founders-shell {
+    position: relative;
+    z-index: 1;
     max-width: 1440px;
     margin: 0 auto;
     padding: 40px 48px 96px;
-    background-image: radial-gradient(circle, var(--dot-grid-color) 0.8px, transparent 0.8px);
+    background-image:
+      linear-gradient(180deg, rgba(245, 241, 223, 0.08), rgba(245, 241, 223, 0.04)),
+      radial-gradient(circle, var(--dot-grid-color) 0.8px, transparent 0.8px);
     background-size: 16px 16px;
   }
   #founders-top-strip {

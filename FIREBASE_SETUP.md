@@ -32,6 +32,18 @@ In `Firestore Database`:
 1. Create database
 2. Start in production or test mode
 3. After creation, apply the rules from `firestore.rules`
+4. Create composite indexes (required — queries will return 500 without them):
+
+   - Collection: `brief_runs` | Fields: `status ASC, createdAt ASC`
+     (used by worker `findNextQueuedRun`)
+   - Collection: `brief_runs` | Fields: `status ASC, createdAt DESC`
+     (used by admin brief-run listing)
+
+   Create via Firebase Console → Firestore → Indexes → Add Index, or deploy with:
+   ```
+   firebase deploy --only firestore:indexes
+   ```
+   (uses `firestore.indexes.json` in the repo root)
 
 ## 4. Add local environment variables
 
@@ -49,6 +61,9 @@ NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=your_measurement_id
 FIREBASE_ADMIN_PROJECT_ID=your_project_id
 FIREBASE_ADMIN_CLIENT_EMAIL=firebase-adminsdk-xxxxx@your_project_id.iam.gserviceaccount.com
 FIREBASE_ADMIN_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+
+# Worker auth — required for automated worker invocations
+WORKER_SECRET=your_worker_secret_here
 ```
 
 You can also start from `.env.example`.
@@ -110,10 +125,21 @@ Example `clients/{clientId}` shape:
 - `/api/clients/provision` authenticated provisioning endpoint
 - `/api/dashboard/bootstrap` authenticated dashboard bootstrap endpoint
 - `/api/admin/brief-runs` admin-only queue inspection endpoint
+- `/api/admin/clients` admin-only client list endpoint
+- `/api/admin/requeue` admin-only run requeue endpoint
+- `/api/admin/client-configs` admin-only client config inspection endpoint
+- `/api/worker/run-brief` worker endpoint — requires `WORKER_SECRET` header or admin token
 
 ## 7. Vercel setup
 
-Add all `NEXT_PUBLIC_FIREBASE_*` variables and the three `FIREBASE_ADMIN_*` variables to Vercel before testing the API routes in production.
+1. Add all env vars to Vercel project settings (Settings → Environment Variables):
+   - All 7 `NEXT_PUBLIC_FIREBASE_*` client vars
+   - `FIREBASE_ADMIN_PROJECT_ID`, `FIREBASE_ADMIN_CLIENT_EMAIL`, `FIREBASE_ADMIN_PRIVATE_KEY`
+   - `WORKER_SECRET` (generate a strong random string, e.g. `openssl rand -hex 32`)
+   - `ANTHROPIC_API_KEY` (required for worker pipeline execution)
+   - Scout-specific vars if using the Not The Rug pipeline: `INSTAGRAM_ACCESS_TOKEN`, `NOT_THE_RUG_INSTAGRAM_USER_ID`, `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, `REDDIT_USER_AGENT`, `NWS_USER_AGENT`
+
+2. **Plan requirement**: `/api/worker/run-brief` sets `maxDuration = 300` (5 minutes). This requires Vercel **Pro or Enterprise** plan. On the Hobby plan, the function is killed at 60 seconds — the pipeline will not complete.
 
 ## 8. Admin whitelist
 

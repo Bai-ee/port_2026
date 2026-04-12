@@ -4,8 +4,6 @@ import React, { useState, useRef, useLayoutEffect, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-
-const App = dynamic(() => import('./ox.jsx'), { ssr: false });
 import HeroHeadline from './HeroHeadline';
 import Header from './Header';
 import HorizontalTextSection from './HorizontalTextSection';
@@ -15,6 +13,8 @@ import StackedSlidesSection from './StackedSlidesSection';
 // import FontSelector from './FontSelector';
 // import LoopControls from './LoopControls';
 import PortfolioModal from './PortfolioModal';
+
+const AppCanvas = dynamic(() => import('./ox.jsx'), { ssr: false });
 
 const SIMPLE_SCROLL_MEDIA_QUERY = '(max-width: 680px) and (pointer: coarse)';
 
@@ -255,7 +255,7 @@ const HomePage = () => {
       >
         <div id="hero-gradient-overlay" style={heroGradientStyle} />
         <div id="hero-canvas-wrapper" ref={canvasWrapperRef} style={{ position: 'absolute', inset: 0 }}>
-          <App params={params} liveParamsRef={paramsRef} backgroundColor={canvasBackground} />
+          <AppCanvas params={params} liveParamsRef={paramsRef} backgroundColor={canvasBackground} />
         </div>
         <HeroHeadline headerLogoRef={headerLogoRef} textColor={textColor} />
       </section>

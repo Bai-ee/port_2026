@@ -3,8 +3,10 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import {
   createUserWithEmailAndPassword,
+  GoogleAuthProvider,
   onAuthStateChanged,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signOut,
   updateProfile,
 } from 'firebase/auth';
@@ -12,6 +14,11 @@ import { doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './firebase';
 
 const AuthContext = createContext(null);
+const googleProvider = typeof window !== 'undefined' ? new GoogleAuthProvider() : null;
+
+if (googleProvider) {
+  googleProvider.setCustomParameters({ prompt: 'select_account' });
+}
 
 const getAuthHeaders = async (user) => {
   const token = await user.getIdToken();
@@ -136,6 +143,38 @@ export const AuthProvider = ({ children }) => {
 
       const credential = await signInWithEmailAndPassword(auth, email, password);
       await upsertUserProfile(credential.user);
+      return credential.user;
+    },
+    signInWithGoogle: async ({ provisioningPayload } = {}) => {
+      if (!auth || !googleProvider) {
+        throw new Error('Firebase is not configured.');
+      }
+
+      const credential = await signInWithPopup(auth, googleProvider);
+      const resolvedDisplayName = provisioningPayload?.displayName?.trim()
+        || credential.user.displayName
+        || '';
+
+      await upsertUserProfile(credential.user, {
+        displayName: resolvedDisplayName,
+        photoURL: credential.user.photoURL || '',
+        ...(provisioningPayload
+          ? {
+              dashboardTitle: 'Provisioning Dashboard',
+              dashboardDescription: 'Your client workspace is being provisioned.',
+            }
+          : null),
+      });
+
+      if (provisioningPayload) {
+        await provisionClientForSignup(credential.user, {
+          displayName: resolvedDisplayName,
+          companyName: provisioningPayload.companyName || '',
+          websiteUrl: provisioningPayload.websiteUrl || '',
+          ideaDescription: provisioningPayload.ideaDescription || '',
+        });
+      }
+
       return credential.user;
     },
     signOutUser: async () => {
