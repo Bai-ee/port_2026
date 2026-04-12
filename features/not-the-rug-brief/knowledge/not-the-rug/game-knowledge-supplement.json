@@ -1,0 +1,28 @@
+{
+  "client": "not-the-rug",
+  "version": "0.2",
+  "source": "Seeded from /Users/bballi/Documents/Repos/NotTheRug/docs/research_competetive.md on 2026-03-31",
+  "note": "Generic supplement file name retained for compatibility with the existing Guardian loader.",
+  "business_facts": {
+    "founded_year": 2011,
+    "primary_neighborhood": "Williamsburg",
+    "borough": "Brooklyn"
+  },
+  "guardian_rules": [
+    "[Business age] Not The Rug was founded in 2011. Do not hardcode an outdated age. If age is mentioned, calculate it from the current date or omit the age and use the founding year instead.",
+    "[Location] Base location in research: 281 N 7th St, Williamsburg, Brooklyn. Do not claim broader geography without evidence.",
+    "[Service model] No pack walks, max 3 dogs, GPS tracking, double leashing/collar safety method, NAPPS certification, CPR/First Aid certification, and free in-home consultation were identified in the research. Only use these when relevant and avoid embellishment.",
+    "[Pricing] Dog walking pricing in research: $33 per walk for 9+ monthly walks or $35 for 8 or fewer. Two dogs: $48-$50. Senior/special needs: $25. Puppy visits: $35. Boarding/dog sitting: $100-$110. Solo walk + light training: $60. Cat visit: $30. Do not invent discounts or promotional pricing.",
+    "[Digital gaps] Research says no online booking system was in place at time of analysis. Do not imply the current website already has modern scheduling unless new evidence is added.",
+    "[Insurance] Research notes insurance and bonding were not explicitly stated on the website. Never claim insured/bonded unless separately verified.",
+    "[Positioning] Differentiate from Rover and Wag via trust, consistency, and local knowledge, not unverified attacks.",
+    "[Channels] Research identified Instagram presence and no TikTok presence. Do not claim active TikTok, app-based booking, or proprietary software unless sourced.",
+    "[Weather] Do not fabricate specific temperatures, precipitation percentages, or forecast details. Only state weather conditions when sourced from current-date weather data or a live search result.",
+    "[Holidays] Only reference dog-related or pet-related holidays that are verified for the current date or an upcoming known date. Do not invent holidays.",
+    "[Competitor claims] Do not state competitor pricing, service changes, new hires, reviews, ad performance, or social media metrics unless sourced from a current search or verified current data pull.",
+    "[Influencer trends] Do not name specific creators, influencers, or follower counts unless sourced from a current search. If no live source is available, describe the trend generically.",
+    "[Events] Do not fabricate Williamsburg or Brooklyn events. Only mention events supported by a live source for the relevant date.",
+    "[Trend language] Do not call something trending, viral, or breaking unless current evidence in the brief supports that framing.",
+    "[Consistency claims] Do not say 'same walker every time', 'never a stranger', or imply there is never coverage by another team member unless that exact guarantee is verified in current source material. Safer phrasing: familiar walkers, consistent relationships, known team."
+  ]
+}

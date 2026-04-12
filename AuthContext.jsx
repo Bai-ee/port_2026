@@ -1,3 +1,5 @@
+'use client';
+
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import {
   createUserWithEmailAndPassword,
@@ -10,6 +12,29 @@ import { doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './firebase';
 
 const AuthContext = createContext(null);
+
+const getAuthHeaders = async (user) => {
+  const token = await user.getIdToken();
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+  };
+};
+
+const provisionClientForSignup = async (user, payload) => {
+  const response = await fetch('/api/clients/provision', {
+    method: 'POST',
+    headers: await getAuthHeaders(user),
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.error || 'Client provisioning failed.');
+  }
+
+  return data;
+};
 
 const upsertUserProfile = async (user, profile = {}) => {
   if (!db || !user) return;
@@ -77,7 +102,7 @@ export const AuthProvider = ({ children }) => {
     userProfile,
     loading,
     isFirebaseConfigured,
-    signUp: async ({ email, password, displayName }) => {
+    signUp: async ({ email, password, displayName, companyName, websiteUrl, ideaDescription }) => {
       if (!auth) {
         throw new Error('Firebase is not configured.');
       }
@@ -91,8 +116,15 @@ export const AuthProvider = ({ children }) => {
       await upsertUserProfile(credential.user, {
         displayName: displayName || credential.user.displayName || '',
         createdAt: serverTimestamp(),
-        dashboardTitle: 'Custom Dashboard',
-        dashboardDescription: 'Your client workspace is connected to Firebase Auth and Firestore.',
+        dashboardTitle: 'Provisioning Dashboard',
+        dashboardDescription: 'Your client workspace is being provisioned.',
+      });
+
+      await provisionClientForSignup(credential.user, {
+        displayName: displayName || credential.user.displayName || '',
+        companyName: companyName || '',
+        websiteUrl: websiteUrl || '',
+        ideaDescription: ideaDescription || '',
       });
 
       return credential.user;

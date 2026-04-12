@@ -1,0 +1,149 @@
+{
+  "client": "not-the-rug",
+  "version": "0.1",
+  "source": "Structured from doc-update-recommendations.md on 2026-03-31",
+  "competitor_monitoring": {
+    "platform_competitors": {
+      "names": ["Rover", "Wag"],
+      "check_daily": [
+        "New promotions, pricing changes, or subscription offers",
+        "App store rating changes or notable recent reviews",
+        "Blog posts, press releases, or social campaigns",
+        "Service area expansions into Brooklyn or Williamsburg"
+      ]
+    },
+    "regional_competitors": {
+      "names": ["Swifto", "POOCHi", "Happy Pants NYC", "Strutting Mutts", "Williamsburg Dog Walking", "Dogger NYC", "Brooklyn Bark"],
+      "check_daily": [
+        "Instagram post frequency and engagement patterns",
+        "New services, pricing changes, or seasonal offers",
+        "Google review volume and rating changes",
+        "Website changes such as landing pages or booking flow updates",
+        "Press coverage or influencer partnerships"
+      ]
+    },
+    "signals_that_matter": [
+      "Competitor weaknesses surfaced in recent negative reviews",
+      "Competitor strengths worth learning from",
+      "Gaps no competitor is filling that Not The Rug could own"
+    ]
+  },
+  "seasonal_content_calendar": {
+    "01": [
+      "New-year routine reset for dog owners",
+      "Cold weather paw care",
+      "Salt season safety"
+    ],
+    "02": [
+      "Cold weather paw care",
+      "Love Your Pet Day",
+      "Winter routine consistency"
+    ],
+    "03": [
+      "National Puppy Day",
+      "Spring schedule shifts",
+      "Rainy-day walking adjustments"
+    ],
+    "04": [
+      "National Pet Day",
+      "Spring allergy conversations for dogs",
+      "Cherry blossom / park traffic content"
+    ],
+    "05": [
+      "Summer heat prep",
+      "Memorial Day travel demand",
+      "Long-weekend boarding and sitting"
+    ],
+    "06": [
+      "Heat safety",
+      "Hydration and shoulder-hours content",
+      "School-year schedule changes"
+    ],
+    "07": [
+      "Heat advisories",
+      "Paw burn prevention",
+      "Fourth of July fireworks anxiety"
+    ],
+    "08": [
+      "National Dog Day",
+      "Late-summer heat safety",
+      "Back-to-routine preparation"
+    ],
+    "09": [
+      "National Dog Walker Appreciation Day",
+      "Back-to-school walk demand",
+      "Routine restart for families"
+    ],
+    "10": [
+      "Adopt a Shelter Dog Month",
+      "Fall walking season",
+      "Halloween pet safety"
+    ],
+    "11": [
+      "Holiday travel boarding demand",
+      "Cold-weather transition",
+      "Pre-holiday schedule planning"
+    ],
+    "12": [
+      "Holiday travel demand",
+      "Year-in-review content",
+      "Walker tipping etiquette"
+    ]
+  },
+  "local_context": {
+    "dog_parks_and_routes": [
+      "McCarren Park",
+      "Domino Park",
+      "Marcy Playground area",
+      "East River State Park / Bushwick Inlet Park"
+    ],
+    "route_disruptors": [
+      "Smorgasburg crowds on Kent Ave",
+      "Brooklyn Flea seasonal foot traffic",
+      "Bedford Ave street fairs",
+      "Film shoots",
+      "Construction projects"
+    ],
+    "weather_patterns": [
+      "East River wind corridor makes waterfront walks colder",
+      "Flood-prone intersections during heavy rain",
+      "Summer heat island effect on concrete-heavy blocks"
+    ],
+    "referral_ecosystem": [
+      "Neighborhood vets",
+      "Groomers",
+      "Pet stores",
+      "Trainers"
+    ],
+    "hashtags": [
+      "#dogsofbrooklyn",
+      "#williamsburgdogs",
+      "#brooklyndogwalker",
+      "#greenpointdogs"
+    ]
+  },
+  "social_proof_benchmarks": {
+    "recorded_at": "2026-03",
+    "not_the_rug": {
+      "instagram_followers": 1362,
+      "instagram_posts": 1321,
+      "yelp_reviews": 34,
+      "yelp_photos": 162,
+      "google_rating": 5.0
+    },
+    "competitor_notes": [
+      {
+        "name": "Swifto",
+        "notable": "Claims 500K+ walks"
+      },
+      {
+        "name": "POOCHi",
+        "notable": "Building-specific pages"
+      },
+      {
+        "name": "Happy Pants NYC",
+        "notable": "Dog running service"
+      }
+    ]
+  }
+}

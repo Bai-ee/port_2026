@@ -1,5 +1,6 @@
 node_modules/
 dist/
+.next/
 .DS_Store
 *.log
 npm-debug.log*
@@ -9,3 +10,4 @@ yarn-debug.log*
 .env.*
 !.env.example
 public/img/port_videos/
+features/not-the-rug-brief/data/

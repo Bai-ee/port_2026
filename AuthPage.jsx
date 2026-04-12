@@ -1,21 +1,33 @@
-import React, { useMemo, useState } from 'react';
-import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
+'use client';
+
+import React, { Suspense, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from './AuthContext';
 
-const AuthPage = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
+const AuthPageInner = () => {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, signIn, signUp, isFirebaseConfigured } = useAuth();
   const [mode, setMode] = useState('signin');
-  const [form, setForm] = useState({ displayName: '', email: '', password: '' });
+  const [form, setForm] = useState({
+    displayName: '',
+    companyName: '',
+    websiteUrl: '',
+    ideaDescription: '',
+    email: '',
+    password: '',
+  });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const redirectPath = useMemo(() => location.state?.from?.pathname || '/dashboard', [location.state]);
+  const redirectPath = useMemo(() => searchParams.get('redirect') || '/dashboard', [searchParams]);
 
-  if (user) {
-    return <Navigate to={redirectPath} replace />;
-  }
+  useEffect(() => {
+    if (user) {
+      router.replace(redirectPath);
+    }
+  }, [user, redirectPath, router]);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -33,12 +45,15 @@ const AuthPage = () => {
       } else {
         await signUp({
           displayName: form.displayName.trim(),
+          companyName: form.companyName.trim(),
+          websiteUrl: form.websiteUrl.trim(),
+          ideaDescription: form.ideaDescription.trim(),
           email: form.email,
           password: form.password,
         });
       }
 
-      navigate(redirectPath, { replace: true });
+      router.replace(redirectPath);
     } catch (nextError) {
       setError(nextError?.message || 'Authentication failed.');
     } finally {
@@ -50,19 +65,21 @@ const AuthPage = () => {
     <div style={shellStyle}>
       <div style={gradientStyle} />
       <div style={cardStyle}>
-        <Link to="/" style={backLinkStyle}>Back to site</Link>
+        <Link href="/" style={backLinkStyle}>Back to site</Link>
         <div style={brandStyle}>
           <img src="/img/sig.png" alt="" aria-hidden="true" style={sigStyle} />
           <span style={eyebrowStyle}>Client Access</span>
         </div>
         <h1 style={titleStyle}>{mode === 'signin' ? 'Log in to your dashboard' : 'Create your account'}</h1>
         <p style={copyStyle}>
-          Sign in to access a private client dashboard powered by Firebase Authentication and Firestore.
+          {mode === 'signin'
+            ? 'Sign in to access your private client dashboard.'
+            : 'Create an account, submit your site URL, and the initial dashboard brief will be queued automatically.'}
         </p>
 
         {!isFirebaseConfigured ? (
           <div style={warningStyle}>
-            Firebase is not configured yet. Add the `VITE_FIREBASE_*` variables to `.env.local` before signing in.
+            Firebase is not configured yet. Add the `NEXT_PUBLIC_FIREBASE_*` variables to `.env.local` before signing in.
           </div>
         ) : null}
 
@@ -77,10 +94,39 @@ const AuthPage = () => {
 
         <form style={formStyle} onSubmit={handleSubmit}>
           {mode === 'signup' ? (
-            <label style={labelStyle}>
-              Name
-              <input name="displayName" value={form.displayName} onChange={handleChange} style={inputStyle} placeholder="Bryan Balli" />
-            </label>
+            <>
+              <label style={labelStyle}>
+                Name
+                <input name="displayName" value={form.displayName} onChange={handleChange} style={inputStyle} placeholder="Bryan Balli" required />
+              </label>
+              <label style={labelStyle}>
+                Company / Project
+                <input name="companyName" value={form.companyName} onChange={handleChange} style={inputStyle} placeholder="Human In The Loop" required />
+              </label>
+              <label style={labelStyle}>
+                Website URL
+                <input
+                  name="websiteUrl"
+                  type="url"
+                  value={form.websiteUrl}
+                  onChange={handleChange}
+                  style={inputStyle}
+                  placeholder="https://your-site.com"
+                  required
+                />
+              </label>
+              <label style={labelStyle}>
+                What are you working on?
+                <textarea
+                  name="ideaDescription"
+                  value={form.ideaDescription}
+                  onChange={handleChange}
+                  style={textareaStyle}
+                  placeholder="Describe your idea, product, or project…"
+                  rows={3}
+                />
+              </label>
+            </>
           ) : null}
           <label style={labelStyle}>
             Email
@@ -235,6 +281,14 @@ const inputStyle = {
   fontSize: '1rem',
 };
 
+const textareaStyle = {
+  ...inputStyle,
+  resize: 'vertical',
+  minHeight: '4.5rem',
+  fontFamily: 'inherit',
+  lineHeight: 1.5,
+};
+
 const errorStyle = {
   padding: '0.8rem 1rem',
   borderRadius: '0.95rem',
@@ -257,5 +311,11 @@ const submitStyle = {
   cursor: 'pointer',
   marginTop: '0.4rem',
 };
+
+const AuthPage = () => (
+  <Suspense>
+    <AuthPageInner />
+  </Suspense>
+);
 
 export default AuthPage;

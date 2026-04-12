@@ -1,0 +1,75 @@
+{
+  "client": "not-the-rug",
+  "version": "0.2",
+  "source": "Seeded from /Users/bballi/Documents/Repos/NotTheRug/docs/research_competetive.md on 2026-03-31",
+  "usage_rule": "Use these terms naturally when helpful. Guardian validates restricted terms and factual notes.",
+  "terms": {
+    "Williamsburg": {
+      "definition": "Primary neighborhood for the business in Brooklyn.",
+      "usage": "Use local specificity only when it serves the point."
+    },
+    "Greenpoint": {
+      "definition": "Nearby neighborhood and likely service/SEO target.",
+      "usage": "Use when discussing local reach, routines, or neighborhood pages."
+    },
+    "GPS tracking": {
+      "definition": "Walk verification and route visibility used as a trust signal.",
+      "guardian_note": "Do not mention live tracking, screenshots, or app features unless Scout surfaced them."
+    },
+    "Free in-home consultation": {
+      "definition": "Introductory meet-and-greet for new clients.",
+      "guardian_note": "Do not imply same-day availability or guaranteed booking from consultation alone."
+    },
+    "No pack walks": {
+      "definition": "Operational differentiator emphasizing safer, more controlled walks.",
+      "guardian_note": "Do not turn this into a blanket attack on other walkers."
+    },
+    "Senior visit": {
+      "definition": "Shorter visit format for older or special-needs dogs.",
+      "guardian_note": "Avoid medical claims or treatment language."
+    },
+    "Solo walk + light training": {
+      "definition": "Higher-touch service for dogs needing extra structure.",
+      "guardian_note": "Do not imply certified behavioral treatment or formal training credentials unless sourced."
+    },
+    "heat advisory": {
+      "definition": "A high-heat condition that can change safe walk timing, route choice, and paw safety considerations.",
+      "usage": "Use when flagging weather-driven schedule or safety recommendations in a brief.",
+      "guardian_note": "Only mention specific temperatures or forecast details when sourced from current weather data."
+    },
+    "salt season": {
+      "definition": "Winter period when salted sidewalks increase paw irritation risk.",
+      "usage": "Use in seasonal content or route-planning advice during cold months."
+    },
+    "shoulder hours": {
+      "definition": "Earlier morning and later evening windows that are safer during extreme heat or cold.",
+      "usage": "Use when recommending walk timing adjustments."
+    },
+    "dog-related holidays": {
+      "definition": "Dog or pet calendar moments that can become content hooks when they align with the current date.",
+      "guardian_note": "Only reference holidays that are verified for the current date or an upcoming known date."
+    },
+    "platform competitors": {
+      "definition": "Gig-economy pet care marketplaces such as Rover and Wag.",
+      "guardian_note": "Use the Anti-Platform Without Ranting pillar. Never present stale pricing or metrics as current."
+    },
+    "local competitors": {
+      "definition": "NYC dog walking businesses like Swifto, POOCHi, and Happy Pants NYC that compete for overlapping demand.",
+      "guardian_note": "Only cite current competitor details when supported by live sourcing."
+    }
+  },
+  "restricted_terms": {
+    "insured and bonded": {
+      "definition": "Coverage status was not verified in the source research.",
+      "guardian_rule": "Do not publish this claim unless it is confirmed and added to the knowledge base."
+    },
+    "veterinarian approved": {
+      "definition": "Medical endorsement claim not verified in research.",
+      "guardian_rule": "Never publish unless specifically sourced."
+    },
+    "24/7 availability": {
+      "definition": "Always-on service promise not supported by current research.",
+      "guardian_rule": "Do not promise round-the-clock availability."
+    }
+  }
+}

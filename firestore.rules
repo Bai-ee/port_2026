@@ -1,8 +1,40 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Helper: get the caller's user doc
+    function callerClientId() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientId;
+    }
+
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /clients/{clientId} {
+      allow read: if request.auth != null && callerClientId() == clientId;
+      allow write: if false;
+    }
+
+    match /clients/{clientId}/members/{memberId} {
+      allow read: if request.auth != null && request.auth.uid == memberId;
+      allow write: if false;
+    }
+
+    // Source of truth for pipeline behavior — server-owned, client read-only.
+    match /client_configs/{clientId} {
+      allow read: if request.auth != null && callerClientId() == clientId;
+      allow write: if false;
+    }
+
+    // Normalized dashboard state — the only collection dashboard renders from.
+    match /dashboard_state/{clientId} {
+      allow read: if request.auth != null && callerClientId() == clientId;
+      allow write: if false;
+    }
+
+    // brief_runs is admin/server-only — no direct client reads.
+    match /brief_runs/{runId} {
+      allow read, write: if false;
     }
   }
 }

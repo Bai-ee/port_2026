@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 const Header = ({ logoRef, onOpenPage }) => {
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [isMobile, setIsMobile] = useState(false); // SSR-safe: real value set in useEffect below
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -13,6 +13,7 @@ const Header = ({ logoRef, onOpenPage }) => {
       }
     };
 
+    handleResize(); // set real value on mount
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);

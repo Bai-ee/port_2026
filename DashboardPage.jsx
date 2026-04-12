@@ -1,5 +1,7 @@
+'use client';
+
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 import { useAuth } from './AuthContext';
 
 const tiles = [
@@ -159,11 +161,30 @@ const memoryNodes = Array.from({ length: 96 }, (_, index) => {
   return '';
 });
 
+async function fetchDashboardBootstrap(user) {
+  const token = await user.getIdToken();
+  const response = await fetch('/api/dashboard/bootstrap', {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.error || 'Could not load dashboard data.');
+  }
+
+  return data;
+}
+
 const DashboardPage = () => {
   const { user, userProfile, signOutUser } = useAuth();
   const [theme, setTheme] = useState('light');
   const [localTime, setLocalTime] = useState(() => formatClock(new Date()));
   const [countdownHours, setCountdownHours] = useState(14);
+  const [bootstrap, setBootstrap] = useState({ userProfile: null, client: null, dashboardState: null, recentRuns: [] });
+  const [bootstrapLoading, setBootstrapLoading] = useState(true);
+  const [bootstrapError, setBootstrapError] = useState('');
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -174,17 +195,68 @@ const DashboardPage = () => {
     return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!user) {
+      setBootstrapLoading(false);
+      setBootstrap({ userProfile: null, client: null, recentRuns: [] });
+      return undefined;
+    }
+
+    setBootstrapLoading(true);
+    setBootstrapError('');
+
+    fetchDashboardBootstrap(user)
+      .then((data) => {
+        if (!cancelled) {
+          setBootstrap(data);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setBootstrapError(error instanceof Error ? error.message : 'Could not load dashboard data.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setBootstrapLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  const client = bootstrap.client;
+  const recentRuns = bootstrap.recentRuns || [];
+  const displayProfile = bootstrap.userProfile || userProfile;
+  const currentRun = recentRuns[0] || null;
+
+  // ── Canonical display model (dashboard_state/{clientId}) ──────────────────
+  // All operational state derives from dashboardState first.
+  // client fields are used only for stable identity (companyName, normalizedHost).
+  const dashboardState = bootstrap.dashboardState;
+  const clientStatus = dashboardState?.status || client?.status || 'provisioning';
+  const latestRunStatus = dashboardState?.latestRunStatus || currentRun?.status || null;
+  const headline = dashboardState?.headline || null;
+  const summaryCards = dashboardState?.summaryCards || [];
+  const latestInsights = dashboardState?.latestInsights || [];
+  const provisioningState = dashboardState?.provisioningState || null;
+  const errorState = dashboardState?.errorState || null;
+
   const founderLabel = useMemo(() => {
-    const displayName = userProfile?.displayName || user?.displayName || 'B. ALLI';
+    const displayName = displayProfile?.displayName || user?.displayName || 'B. ALLI';
     return `@${displayName.toUpperCase()}`;
-  }, [user?.displayName, userProfile?.displayName]);
+  }, [displayProfile?.displayName, user?.displayName]);
 
   return (
     <div data-dashboard-theme={theme} style={shellStyle}>
       <style>{dashboardCss}</style>
       <main id="founders-shell">
         <header id="founders-top-strip">
-          <Link to="/" id="founders-brand">
+          <Link href="/" id="founders-brand">
             <span className="mark" />
             FOUNDERS / SYSTEM PANEL
           </Link>
@@ -200,23 +272,29 @@ const DashboardPage = () => {
             <button type="button" data-theme="dark" className={theme === 'dark' ? 'is-active' : ''} onClick={() => setTheme('dark')}>DARK</button>
             <button type="button" data-theme="light" className={theme === 'light' ? 'is-active' : ''} onClick={() => setTheme('light')}>LIGHT</button>
           </div>
-          <div className="env">ENV · PROD · <span className="v">CLIENT AUTH LIVE</span></div>
+          <div className="env">ENV · PROD · <span className="v">{
+            latestRunStatus === 'queued' ? 'INITIAL BRIEF QUEUED' :
+            latestRunStatus === 'running' ? 'BRIEF RUNNING' :
+            latestRunStatus === 'succeeded' ? 'BRIEF COMPLETE' :
+            latestRunStatus === 'failed' ? 'BRIEF FAILED' :
+            'CLIENT AUTH LIVE'
+          }</span></div>
         </header>
 
         <section id="founders-hero-shell">
           <div id="founders-hero-numeric-shell">
-            <div className="hero-label">SYSTEMS ONLINE — REAL-TIME</div>
+            <div className="hero-label">{client?.companyName ? `${client.companyName.toUpperCase()} — REAL-TIME` : 'SYSTEMS ONLINE — REAL-TIME'}</div>
             <div id="founders-hero-numeric">
-              <span id="founders-hero-num-val">14</span>
+              <span id="founders-hero-num-val">{String(recentRuns.length || 1).padStart(2, '0')}</span>
               <span className="denom">/14</span>
             </div>
             <div id="founders-hero-caption">
               <span className="status-dot" />
-              <span>ALL SUBSYSTEMS NOMINAL</span>
+              <span>{clientStatus === 'provisioning' ? 'CLIENT PROVISIONING ACTIVE' : clientStatus === 'error' ? 'SETUP REQUIRES ATTENTION' : 'ALL SUBSYSTEMS NOMINAL'}</span>
               <span className="sep">·</span>
-              <span>LAST SYNC 0.2S AGO</span>
+              <span>{latestRunStatus ? `LATEST RUN ${String(latestRunStatus).toUpperCase()}` : 'WAITING FOR INITIAL RUN'}</span>
               <span className="sep">·</span>
-              <span>UPTIME 99.98%</span>
+              <span>{client?.normalizedHost || 'NO SOURCE URL'}</span>
             </div>
           </div>
 
@@ -224,16 +302,69 @@ const DashboardPage = () => {
             <div className="meta-row"><span className="label">LOCAL TIME</span><span className="value">{localTime}</span></div>
             <div className="meta-row"><span className="label">FOUNDER</span><span className="value">{founderLabel}</span></div>
             <div className="meta-row"><span className="label">BUILD</span><span className="value">0.14.2 STABLE</span></div>
-            <div className="meta-row"><span className="label">CYCLES TODAY</span><span className="value">1,284</span></div>
+            <div className="meta-row"><span className="label">CLIENT</span><span className="value">{client?.companyName || 'UNASSIGNED'}</span></div>
             <div className="meta-row"><span className="label">ACCOUNT</span><span className="value">{user?.email || 'SIGNED IN'}</span></div>
           </div>
         </section>
 
         <section id="capability-section">
           <div id="capability-section-header">
-            <h2>{userProfile?.dashboardTitle || 'An operating stack that runs itself.'}</h2>
-            <div className="count">14 SUBSYSTEMS · ALWAYS-ON</div>
+            <h2>{client?.dashboardTitle || displayProfile?.dashboardTitle || 'An operating stack that runs itself.'}</h2>
+            <div className="count">
+              {bootstrapLoading
+                ? 'LOADING CLIENT STATE'
+                : bootstrapError
+                  ? 'CLIENT STATE ERROR'
+                  : clientStatus === 'provisioning'
+                    ? 'INITIALIZATION IN PROGRESS'
+                    : headline || client?.websiteUrl || '14 SUBSYSTEMS · ALWAYS-ON'}
+            </div>
           </div>
+
+          {bootstrapError ? <div className="db-alert">{bootstrapError}</div> : null}
+          {!bootstrapError && errorState ? (
+            <div className="db-alert" id="dashboard-error-banner">
+              {errorState.message}{errorState.retryPending ? ' Retry is pending.' : ''}
+            </div>
+          ) : null}
+          {!bootstrapError && !errorState && !bootstrapLoading && clientStatus === 'provisioning' ? (
+            <div className="db-alert db-alert-muted" id="dashboard-provisioning-banner">
+              {provisioningState?.message || 'Your intelligence stack is being initialized. This typically takes a few minutes.'}
+            </div>
+          ) : null}
+
+          {clientStatus === 'active' && (headline || summaryCards.length > 0 || latestInsights.length > 0) ? (
+            <section id="signal-panel">
+              {headline ? (
+                <div id="signal-headline-row">
+                  <span className="signal-label">PRIORITY SIGNAL</span>
+                  <p id="signal-headline-text">{headline}</p>
+                </div>
+              ) : null}
+              {summaryCards.length > 0 ? (
+                <div id="signal-cards-row">
+                  {summaryCards.map((card, i) => (
+                    <div className="signal-card" key={`card-${i}`} id={`signal-card-${card.type || i}`}>
+                      <div className="signal-card-label">{card.label}</div>
+                      <p className="signal-card-value">{card.value}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {latestInsights.length > 0 ? (
+                <div id="signal-insights-row">
+                  <div className="signal-label">CONTENT OPPORTUNITIES</div>
+                  {latestInsights.map((insight, i) => (
+                    <div className="signal-insight-row" key={`insight-${i}`} id={`signal-insight-${i}`}>
+                      <span className="signal-insight-priority">[{String(insight.priority || 'MED').toUpperCase()}]</span>
+                      <span className="signal-insight-topic">{insight.topic}</span>
+                      {insight.whyNow ? <span className="signal-insight-why">{insight.whyNow}</span> : null}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </section>
+          ) : null}
 
           <div id="capability-grid">
             {tiles.map((tile) => (
@@ -732,6 +863,18 @@ const dashboardCss = `
     color: var(--text-secondary);
     white-space: nowrap;
   }
+  .db-alert {
+    margin: 0 0 20px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-display);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .db-alert-muted {
+    color: var(--text-secondary);
+  }
   #capability-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
@@ -1160,6 +1303,69 @@ const dashboardCss = `
       padding-top: 24px;
     }
   }
+  #signal-panel {
+    margin-bottom: 32px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    padding: 24px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .signal-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    display: block;
+  }
+  #signal-headline-row { border-bottom: 1px solid var(--border); padding-bottom: 20px; }
+  #signal-headline-text {
+    font-size: 13px;
+    color: var(--text-display);
+    line-height: 1.55;
+    max-width: 80ch;
+  }
+  #signal-cards-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 12px;
+  }
+  .signal-card {
+    border: 1px solid var(--border);
+    padding: 14px 16px;
+    background: var(--surface-raised);
+  }
+  .signal-card-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+  }
+  .signal-card-value {
+    font-size: 12px;
+    color: var(--text-display);
+    line-height: 1.5;
+    white-space: pre-wrap;
+  }
+  .signal-insight-row {
+    display: grid;
+    grid-template-columns: 52px 1fr auto;
+    gap: 12px;
+    align-items: baseline;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .signal-insight-row:last-child { border-bottom: none; }
+  .signal-insight-priority { color: var(--text-secondary); font-size: 9px; }
+  .signal-insight-topic { color: var(--text-display); }
+  .signal-insight-why { color: var(--text-secondary); font-size: 10px; text-align: right; max-width: 40ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   @media (max-width: 900px) {
     #founders-shell { padding: 32px 24px 64px; }
     #capability-grid { grid-template-columns: 1fr; }

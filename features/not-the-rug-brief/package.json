@@ -1,0 +1,20 @@
+{
+  "name": "not-the-rug-brief",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Portable Not The Rug daily brief pipeline",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "ntr": "node run.js --client not-the-rug",
+    "weather": "node weather.js --client not-the-rug",
+    "reviews": "node reviews.js --client not-the-rug",
+    "instagram": "node instagram.js --client not-the-rug",
+    "reddit": "node reddit.js --client not-the-rug"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
+    "dotenv": "^17.3.1",
+    "uuid": "^13.0.0"
+  }
+}

@@ -1,0 +1,39 @@
+const fb = require('./firebase-admin.cjs');
+
+async function verifyRequestUser(req) {
+  const authHeader = req.headers.authorization || req.headers.Authorization;
+
+  if (!authHeader || !String(authHeader).startsWith('Bearer ')) {
+    throw new Error('Unauthorized: missing bearer token.');
+  }
+
+  const token = String(authHeader).slice(7);
+  const decoded = await fb.adminAuth.verifyIdToken(token);
+
+  if (!decoded.uid) {
+    throw new Error('Unauthorized: invalid token.');
+  }
+
+  return decoded;
+}
+
+async function verifyAdminRequest(req) {
+  const decoded = await verifyRequestUser(req);
+  const email = decoded.email;
+
+  if (!email) {
+    throw new Error('Forbidden: token has no email claim.');
+  }
+
+  const adminSnapshot = await fb.adminDb.collection('admins').doc(email).get();
+  if (!adminSnapshot.exists) {
+    throw new Error('Forbidden: admin access required.');
+  }
+
+  return decoded;
+}
+
+module.exports = {
+  verifyAdminRequest,
+  verifyRequestUser,
+};

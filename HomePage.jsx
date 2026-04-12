@@ -1,7 +1,11 @@
+'use client';
+
 import React, { useState, useRef, useLayoutEffect, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import App from './ox.jsx';
+
+const App = dynamic(() => import('./ox.jsx'), { ssr: false });
 import HeroHeadline from './HeroHeadline';
 import Header from './Header';
 import HorizontalTextSection from './HorizontalTextSection';
@@ -104,6 +108,7 @@ const HomePage = () => {
   const [activePageId, setActivePageId] = useState(null);
   const headerLogoRef = useRef(null);
   const heroSectionRef = useRef(null);
+  const canvasWrapperRef = useRef(null);
   const contentSectionRef = useRef(null);
   const paramsRef = useRef(HERO_PARAMS_START);
   const isScrollMorphActiveRef = useRef(false);
@@ -126,18 +131,21 @@ const HomePage = () => {
     window.scrollTo(0, 0);
 
     // Opacity-only intro — no transforms so ScrollTrigger pin positions are unaffected
-    const headline = document.querySelector('#hero-panel-top-left');
-    const gradient = document.querySelector('#hero-gradient-overlay');
-    const canvas = heroSectionRef.current?.querySelector('canvas');
-    const nav = document.querySelector('#site-nav');
-    const panelHeadline  = document.querySelector('#panel-hero-headline');
-    const panelCta       = document.querySelector('#panel-hero-cta');
-    const panelGrid      = document.querySelector('#stacked-grid-row');
-    const pills          = gsap.utils.toArray('#hero-panel-filter-pills .filter-chip');
+    // canvasWrapperRef targets a stable div that is always in the DOM at mount time.
+    // Querying 'canvas' directly fails when the dynamic @react-three/fiber component
+    // hasn't mounted yet — the wrapper approach avoids that race.
+    const headline     = document.querySelector('#hero-panel-top-left');
+    const gradient     = document.querySelector('#hero-gradient-overlay');
+    const canvasWrapper = canvasWrapperRef.current;
+    const nav          = document.querySelector('#site-nav');
+    const panelHeadline = document.querySelector('#panel-hero-headline');
+    const panelCta      = document.querySelector('#panel-hero-cta');
+    const panelGrid     = document.querySelector('#stacked-grid-row');
+    const pills         = gsap.utils.toArray('#hero-panel-filter-pills .filter-chip');
 
-    gsap.set([gradient, headline, canvas, nav], { autoAlpha: 0 });
-    gsap.set([panelHeadline, panelCta, panelGrid], { autoAlpha: 0 });
-    gsap.set(pills, { autoAlpha: 0, y: 8 });
+    gsap.set([gradient, headline, canvasWrapper, nav].filter(Boolean), { autoAlpha: 0 });
+    gsap.set([panelHeadline, panelCta, panelGrid].filter(Boolean), { autoAlpha: 0 });
+    if (pills.length) gsap.set(pills, { autoAlpha: 0, y: 8 });
 
     const tl = gsap.timeline({ delay: 0.2 });
     tl.fromTo(
@@ -145,7 +153,7 @@ const HomePage = () => {
         { autoAlpha: 0, scale: 1.08 },
         { autoAlpha: 1, scale: 1, duration: 1.1, ease: 'power2.out' }
       )
-      .to(canvas,        { autoAlpha: 1, duration: 1.2, ease: 'power2.out' }, '<0.1')
+      .to(canvasWrapper, { autoAlpha: 1, duration: 1.2, ease: 'power2.out' }, '<0.1')
       .to(nav,           { autoAlpha: 1, duration: 1.2, ease: 'power2.out' }, '<0.2')
       .to(headline,      { autoAlpha: 1, duration: 1.05, ease: 'power2.out' }, '0.32')
       .to(panelHeadline, { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '0.58')
@@ -246,7 +254,9 @@ const HomePage = () => {
         }}
       >
         <div id="hero-gradient-overlay" style={heroGradientStyle} />
-        <App params={params} liveParamsRef={paramsRef} backgroundColor={canvasBackground} />
+        <div id="hero-canvas-wrapper" ref={canvasWrapperRef} style={{ position: 'absolute', inset: 0 }}>
+          <App params={params} liveParamsRef={paramsRef} backgroundColor={canvasBackground} />
+        </div>
         <HeroHeadline headerLogoRef={headerLogoRef} textColor={textColor} />
       </section>
 
