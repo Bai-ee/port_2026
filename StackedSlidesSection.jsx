@@ -1,4 +1,5 @@
 import React, { useLayoutEffect, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { createSharedParticleGalleryRenderer } from './sharedParticleGalleryRenderer';
@@ -8,6 +9,7 @@ import {
   BriefcaseBusiness,
   ChartColumnIncreasing,
   FolderKanban,
+  Globe,
   LaptopMinimalCheck,
   MessageSquareMore,
   Search,
@@ -450,6 +452,25 @@ const PARTICLE_SLIDERS = [
 
 const PRESET_KINDS = ['torus', 'vortex', 'lattice', 'sphere', 'ribbon', 'orbits', 'cloud', 'helix'];
 
+// ── Homepage URL helpers ──────────────────────────────────────────────────────
+
+function normalizeHomepageUrl(raw) {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return '';
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
+function isValidHomepageUrl(raw) {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return false;
+  try {
+    const url = new URL(normalizeHomepageUrl(trimmed));
+    return url.hostname.includes('.') && url.hostname.length > 3;
+  } catch {
+    return false;
+  }
+}
+
 const StackedSlidesSection = () => {
   const wrapperRef = useRef(null);
   const filterDropdownRef = useRef(null);
@@ -469,6 +490,22 @@ const StackedSlidesSection = () => {
   const [particleParams, setParticleParams] = useState(PARTICLE_DEFAULTS);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeMobileCapability, setActiveMobileCapability] = useState(null);
+  const [homepageUrl, setHomepageUrl] = useState('');
+  const [urlIsValid, setUrlIsValid] = useState(false);
+  const router = useRouter();
+
+  const handleHomepageUrlChange = (e) => {
+    const val = e.target.value;
+    setHomepageUrl(val);
+    setUrlIsValid(isValidHomepageUrl(val));
+  };
+
+  const handleCreateDashboard = () => {
+    if (!urlIsValid) return;
+    const normalized = normalizeHomepageUrl(homepageUrl);
+    const params = new URLSearchParams({ mode: 'create', url: normalized });
+    router.push(`/login?${params.toString()}`);
+  };
 
   // Set initial hidden state
   useEffect(() => {
@@ -1431,9 +1468,19 @@ const StackedSlidesSection = () => {
                                       <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500 }}>{row.task}</td><td style={{ padding: '0.32rem 0.2rem', color: 'rgba(42,36,32,0.3)', fontSize: '0.7rem', textAlign: 'center' }}>→</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
                                     </table>
                                     <div onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', marginTop: '0.85rem', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10 }}>
-                                      <span style={{ fontSize: '1rem', lineHeight: 1, flexShrink: 0 }}>🌐</span>
-                                      <input readOnly value="yourbusiness.com" style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.45)', fontFamily: "'Space Grotesk', system-ui, sans-serif", cursor: 'default', minWidth: 0 }} />
-                                      <button className="cta-pill-btn" style={{ ...ctaStyle, border: 'none', flexShrink: 0, background: 'rgba(255,255,255,0.72)', color: '#2a2420', boxShadow: '0 1px 4px rgba(42,36,32,0.1), inset 0 1px 0 rgba(255,255,255,0.6)' }}>Create Dashboard<span style={ctaIconStyle}>↗</span></button>
+                                      <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
+                                      <input
+                                        value={homepageUrl}
+                                        onChange={handleHomepageUrlChange}
+                                        placeholder="yourbusiness.com"
+                                        style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }}
+                                      />
+                                      <button
+                                        className="cta-pill-btn"
+                                        onClick={handleCreateDashboard}
+                                        disabled={!urlIsValid}
+                                        style={urlIsValid ? { ...ctaStyle, flexShrink: 0 } : { ...ctaStyle, border: 'none', flexShrink: 0, background: 'rgba(255,255,255,0.72)', color: '#2a2420', boxShadow: '0 1px 4px rgba(42,36,32,0.1), inset 0 1px 0 rgba(255,255,255,0.6)', opacity: 0.65, cursor: 'default' }}
+                                      >Create Dashboard<span style={ctaIconStyle}>↗</span></button>
                                     </div>
                                   </div>
                                 )}
@@ -1445,9 +1492,19 @@ const StackedSlidesSection = () => {
                                     <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500 }}>{row.task}</td><td style={{ padding: '0.32rem 0.2rem', color: 'rgba(42,36,32,0.3)', fontSize: '0.7rem', textAlign: 'center' }}>→</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
                                   </table>
                                   <div onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', marginTop: '0.85rem', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10 }}>
-                                    <span style={{ fontSize: '1rem', lineHeight: 1, flexShrink: 0 }}>🌐</span>
-                                    <input readOnly value="yourbusiness.com" style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.45)', fontFamily: "'Space Grotesk', system-ui, sans-serif", cursor: 'default', minWidth: 0 }} />
-                                    <button className="cta-pill-btn" style={{ ...ctaStyle, border: 'none', flexShrink: 0, background: 'rgba(255,255,255,0.72)', color: '#2a2420', boxShadow: '0 1px 4px rgba(42,36,32,0.1), inset 0 1px 0 rgba(255,255,255,0.6)' }}>Create Dashboard<span style={ctaIconStyle}>↗</span></button>
+                                    <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
+                                    <input
+                                      value={homepageUrl}
+                                      onChange={handleHomepageUrlChange}
+                                      placeholder="yourbusiness.com"
+                                      style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }}
+                                    />
+                                    <button
+                                      className="cta-pill-btn"
+                                      onClick={handleCreateDashboard}
+                                      disabled={!urlIsValid}
+                                      style={urlIsValid ? { ...ctaStyle, flexShrink: 0 } : { ...ctaStyle, border: 'none', flexShrink: 0, background: 'rgba(255,255,255,0.72)', color: '#2a2420', boxShadow: '0 1px 4px rgba(42,36,32,0.1), inset 0 1px 0 rgba(255,255,255,0.6)', opacity: 0.65, cursor: 'default' }}
+                                    >Create Dashboard<span style={ctaIconStyle}>↗</span></button>
                                   </div>
                                 </div>
                               )}
