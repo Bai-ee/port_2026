@@ -503,7 +503,7 @@ const StackedSlidesSection = () => {
   const handleCreateDashboard = () => {
     if (!urlIsValid) return;
     const normalized = normalizeHomepageUrl(homepageUrl);
-    const params = new URLSearchParams({ mode: 'create', url: normalized });
+    const params = new URLSearchParams({ flow: 'homepage-create', url: normalized });
     router.push(`/login?${params.toString()}`);
   };
 

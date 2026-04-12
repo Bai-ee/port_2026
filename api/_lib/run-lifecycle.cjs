@@ -112,7 +112,7 @@ function buildDashboardProjection(clientId, pipelineResult, runId) {
       }))
     : [];
 
-  return {
+  const base = {
     clientId,
     status: 'active',
     headline: scoutPriorityAction || null,
@@ -124,6 +124,17 @@ function buildDashboardProjection(clientId, pipelineResult, runId) {
     provisioningState: null,
     errorState: null,
   };
+
+  // Merge free-tier intake modules when present (pipelineType: 'free-tier-intake')
+  if (pipelineResult.pipelineType === 'free-tier-intake') {
+    if (pipelineResult.snapshot) base.snapshot = pipelineResult.snapshot;
+    if (pipelineResult.signals) base.signals = pipelineResult.signals;
+    if (pipelineResult.strategy) base.strategy = pipelineResult.strategy;
+    if (pipelineResult.outputsPreview) base.outputsPreview = pipelineResult.outputsPreview;
+    if (pipelineResult.systemPreview) base.systemPreview = pipelineResult.systemPreview;
+  }
+
+  return base;
 }
 
 /**
@@ -145,6 +156,14 @@ async function completeRun(runId, clientId, pipelineResult) {
   const dashboardStateRef = fb.adminDb.collection('dashboard_state').doc(clientId);
   const clientRef = fb.adminDb.collection('clients').doc(clientId);
   const now = fb.FieldValue.serverTimestamp();
+
+  // Stale-write guard: if the run was cancelled while the pipeline was executing,
+  // skip the dashboard projection write entirely. The cancelled state is authoritative.
+  const runSnap = await runRef.get();
+  if (runSnap.exists && runSnap.data()?.status === 'cancelled') {
+    console.log(`[completeRun] Run ${runId} was cancelled mid-flight — dashboard write skipped.`);
+    return;
+  }
 
   // Stored in brief_runs — full admin-visible output.
   // moduleSnapshot intentionally excludes the raw brief (could be very large).
@@ -397,6 +416,70 @@ async function requeueRun(runId) {
   return { runId, clientId, status: 'queued' };
 }
 
+// ── Cancel ────────────────────────────────────────────────────────────────────
+
+/**
+ * Cancel an active (queued or running) intake run.
+ *
+ * Sets run status to 'cancelled' atomically. Resets dashboard_state so the
+ * frontend unlocks the website input (latestRunStatus: 'cancelled' → isRunActive = false).
+ *
+ * Safe to call while a worker is mid-pipeline: completeRun checks for 'cancelled'
+ * before writing the dashboard projection, so stale writes are prevented.
+ *
+ * @param {string} runId
+ * @param {string} clientId
+ */
+async function cancelRun(runId, clientId) {
+  const runRef = fb.adminDb.collection('brief_runs').doc(runId);
+  const clientRunRef = fb.adminDb
+    .collection('clients').doc(clientId)
+    .collection('brief_runs').doc(runId);
+  const dashboardStateRef = fb.adminDb.collection('dashboard_state').doc(clientId);
+  const clientRef = fb.adminDb.collection('clients').doc(clientId);
+  const now = fb.FieldValue.serverTimestamp();
+  const cancelledAt = new Date().toISOString();
+
+  // Atomic status transition — only cancel if currently queued or running
+  await fb.adminDb.runTransaction(async (tx) => {
+    const runDoc = await tx.get(runRef);
+    if (!runDoc.exists) throw new Error(`Run ${runId} not found.`);
+    const run = runDoc.data();
+    if (!['queued', 'running'].includes(run.status)) {
+      throw new Error(`Run ${runId} cannot be cancelled — status is "${run.status}".`);
+    }
+    tx.update(runRef, {
+      status: 'cancelled',
+      cancelledAt: now,
+      workerLease: null,
+      updatedAt: now,
+    });
+  });
+
+  // Mirror + reset dashboard in parallel (non-transactional — acceptable here)
+  await Promise.all([
+    clientRunRef.set(
+      { status: 'cancelled', cancelledAt: now, workerLease: null, updatedAt: now },
+      { merge: true }
+    ),
+    dashboardStateRef.set(
+      {
+        latestRunStatus: 'cancelled',
+        provisioningState: null,
+        errorState: null,
+        updatedAt: now,
+      },
+      { merge: true }
+    ),
+    clientRef.set(
+      { latestRunStatus: 'cancelled', status: 'provisioning', updatedAt: now },
+      { merge: true }
+    ),
+  ]);
+
+  return { runId, clientId, status: 'cancelled', cancelledAt };
+}
+
 // ── Query ─────────────────────────────────────────────────────────────────────
 
 /**
@@ -419,13 +502,40 @@ async function findNextQueuedRun() {
   return { id: doc.id, ...doc.data() };
 }
 
+// ── Progress update ───────────────────────────────────────────────────────────
+
+/**
+ * Write lightweight progress fields to a running brief_run.
+ * Non-atomic: fire-and-forget from the worker. Never throws to the caller.
+ *
+ * @param {string} runId
+ * @param {string} clientId
+ * @param {object} progress - { stage, progressLabel, currentUrl?, pagesFetched?, ... }
+ */
+async function updateRunProgress(runId, clientId, progress) {
+  const now = fb.FieldValue.serverTimestamp();
+  const update = {
+    progress: { ...progress, updatedAt: now },
+    updatedAt: now,
+  };
+  await Promise.all([
+    fb.adminDb.collection('brief_runs').doc(runId).set(update, { merge: true }),
+    fb.adminDb
+      .collection('clients').doc(clientId)
+      .collection('brief_runs').doc(runId)
+      .set(update, { merge: true }),
+  ]);
+}
+
 module.exports = {
   MAX_ATTEMPTS,
   LEASE_TIMEOUT_MS,
   claimRun,
   completeRun,
   failRun,
+  cancelRun,
   requeueStaleRun,
   requeueRun,
   findNextQueuedRun,
+  updateRunProgress,
 };

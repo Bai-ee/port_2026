@@ -12,11 +12,17 @@ const {
   completeRun,
   failRun,
   findNextQueuedRun,
+  updateRunProgress,
 } = require('../../../../api/_lib/run-lifecycle.cjs');
 
 // Lazy-loaded: avoids pulling the full pipeline at module init time
 function getPipeline() {
   return require('../../../../features/not-the-rug-brief/runtime');
+}
+
+// Lazy-loaded: free-tier intake pipeline (fetch + synthesize, no web search)
+function getIntakePipeline() {
+  return require('../../../../features/scout-intake/runner');
 }
 
 const WORKER_SECRET = process.env.WORKER_SECRET;
@@ -93,11 +99,28 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Failed to load client config.', runId }, { status: 500 });
   }
 
-  // Step 6 — Execute pipeline
+  // Step 6 — Execute pipeline (route by pipelineType)
+  const pipelineType = claimedRun.pipelineType || 'scout-brief';
+  console.log(`[${new Date().toISOString()}] WORKER: pipelineType=${pipelineType} for ${clientId}`);
+
+  // Progress callback — writes stage telemetry to the run doc; non-fatal
+  const onProgress = async (stage, label, extra = {}) => {
+    try {
+      await updateRunProgress(runId, clientId, { stage, progressLabel: label, ...extra });
+    } catch {
+      // never block the pipeline on a telemetry write failure
+    }
+  };
+
   let pipelineResult;
   try {
-    const { runClientPipeline } = getPipeline();
-    pipelineResult = await runClientPipeline({ clientId, clientConfig });
+    if (pipelineType === 'free-tier-intake') {
+      const { runIntakePipeline } = getIntakePipeline();
+      pipelineResult = await runIntakePipeline({ clientId, clientConfig, onProgress });
+    } else {
+      const { runClientPipeline } = getPipeline();
+      pipelineResult = await runClientPipeline({ clientId, clientConfig });
+    }
   } catch (err) {
     console.error(`[WORKER] Pipeline threw for ${clientId}: ${err.message}`);
     const pipelineErr = new Error(err.message || 'Pipeline threw an unhandled error.');

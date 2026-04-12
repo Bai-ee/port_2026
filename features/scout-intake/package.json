@@ -1,0 +1,8 @@
+{
+  "name": "scout-intake",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Free-tier website intake pipeline — fetch, synthesize, normalize",
+  "main": "runner.js",
+  "type": "commonjs"
+}

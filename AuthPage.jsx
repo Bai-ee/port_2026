@@ -3,6 +3,7 @@
 import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Globe, Lock } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import InternalPageBackground from './InternalPageBackground';
 import { internalPageGlassCardStyle } from './pageSurfaceSystem';
@@ -20,6 +21,7 @@ const AuthPageInner = () => {
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [isHomepageCreate, setIsHomepageCreate] = useState(false);
 
   const redirectPath = useMemo(() => searchParams.get('redirect') || '/dashboard', [searchParams]);
 
@@ -60,15 +62,18 @@ const AuthPageInner = () => {
     };
   }, []);
 
-  // Read ?mode=create and ?url=... from homepage handoff — runs once on mount only
+  // Detect homepage-create flow — runs once on mount
   const onboardingInitRef = useRef(false);
   useEffect(() => {
     if (onboardingInitRef.current) return;
     onboardingInitRef.current = true;
-    const modeParam = searchParams.get('mode');
+    const flow = searchParams.get('flow');
     const urlParam = searchParams.get('url');
-    if (modeParam === 'create') setMode('create');
-    if (urlParam) setForm((current) => ({ ...current, websiteUrl: urlParam }));
+    if (flow === 'homepage-create') {
+      setIsHomepageCreate(true);
+      setMode('create');
+      if (urlParam) setForm((current) => ({ ...current, websiteUrl: urlParam }));
+    }
   }, [searchParams]);
 
   useEffect(() => {
@@ -222,145 +227,221 @@ const AuthPageInner = () => {
           </div>
         </div>
 
-        <p id="auth-copy" style={copyStyle}>
-          {mode === 'signin'
-            ? 'Sign in to access your dashboard.'
-            : 'Create your dashboard and make requests.'}
-        </p>
+        {isHomepageCreate ? (
+          /* ── Homepage-create streamlined variant ─────────────────────────── */
+          <>
+            <p id="auth-copy" style={copyStyle}>Create your account to activate your dashboard.</p>
 
-        {!isFirebaseConfigured ? (
-          <div id="auth-firebase-warning" style={warningStyle}>
-            Firebase is not configured yet. Add the `NEXT_PUBLIC_FIREBASE_*` variables to `.env.local` before signing in.
-          </div>
-        ) : null}
+            {!isFirebaseConfigured ? (
+              <div id="auth-firebase-warning" style={warningStyle}>
+                Firebase is not configured yet. Add the `NEXT_PUBLIC_FIREBASE_*` variables to `.env.local` before signing in.
+              </div>
+            ) : null}
 
-        {/* Wanda Tab Bar — true sliding segmented control */}
-        <div id="auth-mode-tab-bar" style={tabBarStyle}>
-          <div
-            id="auth-tab-indicator"
-            style={{
-              ...tabIndicatorStyle,
-              left: mode === 'signin' ? '4px' : 'calc(50%)',
-            }}
-          />
-          <button
-            id="auth-tab-signin"
-            type="button"
-            style={{
-              ...tabButtonStyle,
-              color: mode === 'signin' ? '#f5f1df' : '#2a2420',
-            }}
-            onClick={() => setMode('signin')}
-          >
-            Sign In
-          </button>
-          <button
-            id="auth-tab-create"
-            type="button"
-            style={{
-              ...tabButtonStyle,
-              color: mode === 'create' ? '#f5f1df' : '#2a2420',
-            }}
-            onClick={() => setMode('create')}
-          >
-            Create Dashboard
-          </button>
-        </div>
+            {/* Captured website — read-only, locked */}
+            <div id="auth-captured-url" style={capturedUrlStyle}>
+              <Globe size={14} strokeWidth={1.5} style={{ flexShrink: 0, color: 'rgba(42,36,32,0.45)' }} aria-hidden="true" />
+              <span id="auth-captured-url-text" style={capturedUrlTextStyle}>{form.websiteUrl}</span>
+              <span style={capturedUrlBadgeStyle}>
+                <Lock size={10} strokeWidth={2} aria-hidden="true" />
+                CAPTURED
+              </span>
+            </div>
 
-        <form id="auth-form" style={formStyle} onSubmit={handleSubmit}>
-          {mode === 'create' ? (
-            <>
+            <form id="auth-form" style={formStyle} onSubmit={handleSubmit}>
               <label style={labelStyle}>
-                <span style={labelTextStyle}>Website URL</span>
+                <span style={labelTextStyle}>Email</span>
                 <input
-                  id="auth-form-url"
-                  name="websiteUrl"
-                  type="url"
-                  value={form.websiteUrl}
+                  id="auth-form-email"
+                  name="email"
+                  type="email"
+                  value={form.email}
                   onChange={handleChange}
                   style={inputStyle}
-                  placeholder="Enter your website (optional)"
+                  placeholder="Your email address"
+                  required
                 />
               </label>
               <label style={labelStyle}>
-                <span style={labelTextStyle}>Idea / Request</span>
-                <textarea
-                  id="auth-form-idea"
-                  name="ideaDescription"
-                  value={form.ideaDescription}
+                <span style={labelTextStyle}>Password</span>
+                <input
+                  id="auth-form-password"
+                  name="password"
+                  type="password"
+                  value={form.password}
                   onChange={handleChange}
-                  style={textareaStyle}
-                  placeholder="Describe your project (required if no website)"
-                  rows={1}
+                  style={inputStyle}
+                  placeholder="Create a password"
+                  required
+                  minLength={6}
                 />
               </label>
-            </>
-          ) : null}
 
-          <label style={labelStyle}>
-            <span style={labelTextStyle}>Email</span>
-            <input
-              id="auth-form-email"
-              name="email"
-              type="email"
-              value={form.email}
-              onChange={handleChange}
-              style={inputStyle}
-              placeholder="Your email address"
-              required
-            />
-          </label>
-          <label style={labelStyle}>
-            <span style={labelTextStyle}>Password</span>
-            <input
-              id="auth-form-password"
-              name="password"
-              type="password"
-              value={form.password}
-              onChange={handleChange}
-              style={inputStyle}
-              placeholder={mode === 'signin' ? 'Enter your password' : 'Create a password'}
-              required
-              minLength={6}
-            />
-          </label>
+              {error ? (
+                <div id="auth-error" style={errorStyle}>[ERROR: {error}]</div>
+              ) : null}
 
-          {error ? (
-            <div id="auth-error" style={errorStyle}>[ERROR: {error}]</div>
-          ) : null}
+              <button
+                type="submit"
+                id="auth-submit-btn"
+                className="cta-pill-btn"
+                style={submitStyle}
+                disabled={submitting || !isFirebaseConfigured}
+              >
+                {submitting ? 'Working…' : 'Create Dashboard'}
+              </button>
 
-          <button
-            type="submit"
-            id="auth-submit-btn"
-            className="cta-pill-btn"
-            style={submitStyle}
-            disabled={submitting || !isFirebaseConfigured}
-          >
-            {submitting ? 'Working…' : mode === 'signin' ? 'Enter Dashboard' : 'Create Dashboard'}
-          </button>
+              <div id="auth-divider" style={dividerStyle}>
+                <span style={dividerLineStyle} />
+                <span style={dividerLabelStyle}>or</span>
+                <span style={dividerLineStyle} />
+              </div>
 
-          <div id="auth-divider" style={dividerStyle}>
-            <span style={dividerLineStyle} />
-            <span style={dividerLabelStyle}>or</span>
-            <span style={dividerLineStyle} />
-          </div>
+              <button
+                type="button"
+                id="auth-google-btn"
+                style={googleButtonStyle}
+                onClick={handleGoogle}
+                disabled={submitting || !isFirebaseConfigured}
+              >
+                <GoogleLogo />
+                <span>Create Dashboard with Google</span>
+              </button>
+            </form>
+          </>
+        ) : (
+          /* ── General auth variant — full experience unchanged ─────────────── */
+          <>
+            <p id="auth-copy" style={copyStyle}>
+              {mode === 'signin'
+                ? 'Sign in to access your dashboard.'
+                : 'Create your dashboard and make requests.'}
+            </p>
 
-          <button
-            type="button"
-            id="auth-google-btn"
-            style={googleButtonStyle}
-            onClick={handleGoogle}
-            disabled={submitting || !isFirebaseConfigured}
-          >
-            <svg id="auth-google-logo" width="18" height="18" viewBox="0 0 48 48" style={{ flexShrink: 0 }} aria-hidden="true">
-              <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-              <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-              <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-              <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.36-8.16 2.36-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-            </svg>
-            <span>{mode === 'signin' ? 'Continue with Google' : 'Create Dashboard with Google'}</span>
-          </button>
-        </form>
+            {!isFirebaseConfigured ? (
+              <div id="auth-firebase-warning" style={warningStyle}>
+                Firebase is not configured yet. Add the `NEXT_PUBLIC_FIREBASE_*` variables to `.env.local` before signing in.
+              </div>
+            ) : null}
+
+            {/* Wanda Tab Bar */}
+            <div id="auth-mode-tab-bar" style={tabBarStyle}>
+              <div
+                id="auth-tab-indicator"
+                style={{
+                  ...tabIndicatorStyle,
+                  left: mode === 'signin' ? '4px' : 'calc(50%)',
+                }}
+              />
+              <button
+                id="auth-tab-signin"
+                type="button"
+                style={{ ...tabButtonStyle, color: mode === 'signin' ? '#f5f1df' : '#2a2420' }}
+                onClick={() => setMode('signin')}
+              >
+                Sign In
+              </button>
+              <button
+                id="auth-tab-create"
+                type="button"
+                style={{ ...tabButtonStyle, color: mode === 'create' ? '#f5f1df' : '#2a2420' }}
+                onClick={() => setMode('create')}
+              >
+                Create Dashboard
+              </button>
+            </div>
+
+            <form id="auth-form" style={formStyle} onSubmit={handleSubmit}>
+              {mode === 'create' ? (
+                <>
+                  <label style={labelStyle}>
+                    <span style={labelTextStyle}>Website URL</span>
+                    <input
+                      id="auth-form-url"
+                      name="websiteUrl"
+                      type="url"
+                      value={form.websiteUrl}
+                      onChange={handleChange}
+                      style={inputStyle}
+                      placeholder="Enter your website (optional)"
+                    />
+                  </label>
+                  <label style={labelStyle}>
+                    <span style={labelTextStyle}>Idea / Request</span>
+                    <textarea
+                      id="auth-form-idea"
+                      name="ideaDescription"
+                      value={form.ideaDescription}
+                      onChange={handleChange}
+                      style={textareaStyle}
+                      placeholder="Describe your project (required if no website)"
+                      rows={1}
+                    />
+                  </label>
+                </>
+              ) : null}
+
+              <label style={labelStyle}>
+                <span style={labelTextStyle}>Email</span>
+                <input
+                  id="auth-form-email"
+                  name="email"
+                  type="email"
+                  value={form.email}
+                  onChange={handleChange}
+                  style={inputStyle}
+                  placeholder="Your email address"
+                  required
+                />
+              </label>
+              <label style={labelStyle}>
+                <span style={labelTextStyle}>Password</span>
+                <input
+                  id="auth-form-password"
+                  name="password"
+                  type="password"
+                  value={form.password}
+                  onChange={handleChange}
+                  style={inputStyle}
+                  placeholder={mode === 'signin' ? 'Enter your password' : 'Create a password'}
+                  required
+                  minLength={6}
+                />
+              </label>
+
+              {error ? (
+                <div id="auth-error" style={errorStyle}>[ERROR: {error}]</div>
+              ) : null}
+
+              <button
+                type="submit"
+                id="auth-submit-btn"
+                className="cta-pill-btn"
+                style={submitStyle}
+                disabled={submitting || !isFirebaseConfigured}
+              >
+                {submitting ? 'Working…' : mode === 'signin' ? 'Enter Dashboard' : 'Create Dashboard'}
+              </button>
+
+              <div id="auth-divider" style={dividerStyle}>
+                <span style={dividerLineStyle} />
+                <span style={dividerLabelStyle}>or</span>
+                <span style={dividerLineStyle} />
+              </div>
+
+              <button
+                type="button"
+                id="auth-google-btn"
+                style={googleButtonStyle}
+                onClick={handleGoogle}
+                disabled={submitting || !isFirebaseConfigured}
+              >
+                <GoogleLogo />
+                <span>{mode === 'signin' ? 'Continue with Google' : 'Create Dashboard with Google'}</span>
+              </button>
+            </form>
+          </>
+        )}
       </div>
     </div>
   );
@@ -654,6 +735,56 @@ const googleButtonStyle = {
   fontFamily: '"Space Grotesk", system-ui, sans-serif',
   letterSpacing: '0.01em',
   boxShadow: '0 1px 3px rgba(42,36,32,0.08)',
+};
+
+// ── Shared sub-components ─────────────────────────────────────────────────────
+
+const GoogleLogo = () => (
+  <svg width="18" height="18" viewBox="0 0 48 48" style={{ flexShrink: 0 }} aria-hidden="true">
+    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.36-8.16 2.36-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+  </svg>
+);
+
+// ── Homepage-create captured URL display ──────────────────────────────────────
+
+const capturedUrlStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.5rem',
+  marginTop: '1rem',
+  padding: '0.6rem 0.75rem',
+  borderRadius: '0.75rem',
+  background: 'rgba(255,255,255,0.55)',
+  border: '1px solid rgba(42, 36, 32, 0.1)',
+  overflow: 'hidden',
+};
+
+const capturedUrlTextStyle = {
+  flex: 1,
+  fontSize: '0.82rem',
+  color: 'rgba(42, 36, 32, 0.72)',
+  fontFamily: '"Space Grotesk", system-ui, sans-serif',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+};
+
+const capturedUrlBadgeStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '0.25rem',
+  flexShrink: 0,
+  fontSize: '0.6rem',
+  fontFamily: '"Space Mono", monospace',
+  letterSpacing: '0.07em',
+  textTransform: 'uppercase',
+  color: 'rgba(42, 36, 32, 0.4)',
+  background: 'rgba(42, 36, 32, 0.06)',
+  borderRadius: '999px',
+  padding: '0.2rem 0.5rem',
 };
 
 const AuthPage = () => (

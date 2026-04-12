@@ -70,7 +70,7 @@ async function queueInitialBriefRun({ clientId, uid, websiteUrl }) {
     trigger: 'signup',
     source: 'system',
     status: 'queued',
-    pipelineType: 'scout-brief',
+    pipelineType: 'free-tier-intake',
     attempts: 0,
     workerLease: null,
     startedAt: null,
@@ -145,7 +145,7 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
     normalizedHost: normalized?.hostname || '',
     status: 'provisioning',
     onboardingStatus: normalized ? 'brief_queued' : 'intake_received',
-    pipelineType: 'scout-brief',
+    pipelineType: 'free-tier-intake',
     activeModules: [],
     activeAddOns: [],
     pricingTier: 'starter',
@@ -313,7 +313,107 @@ async function getDashboardBootstrap(uid) {
   };
 }
 
+/**
+ * Update a client's source URL and queue a fresh free-tier intake run.
+ * Clears existing intake data from dashboard_state so the terminal shows
+ * fresh progress on the next poll.
+ *
+ * @param {object} options
+ * @param {string} options.clientId
+ * @param {string} options.uid       - requestor uid (stored on run doc)
+ * @param {string} options.websiteUrl - raw URL string (will be normalized)
+ * @returns {{ clientId, runId, status: 'queued', websiteUrl }}
+ */
+async function reseedIntakeForClient({ clientId, uid, websiteUrl }) {
+  const normalized = normalizeOptionalUrl(websiteUrl);
+  if (!normalized) throw new Error('Invalid website URL.');
+
+  const runRef = fb.adminDb.collection('brief_runs').doc();
+  const runId = runRef.id;
+  const now = fb.FieldValue.serverTimestamp();
+
+  const runPayload = {
+    runId,
+    id: runId,
+    clientId,
+    requestedByUid: uid,
+    trigger: 'reseed',
+    source: 'user',
+    status: 'queued',
+    pipelineType: 'free-tier-intake',
+    attempts: 0,
+    workerLease: null,
+    startedAt: null,
+    completedAt: null,
+    error: null,
+    summary: null,
+    artifactRefs: [],
+    providerUsage: null,
+    moduleSnapshot: null,
+    sourceUrl: normalized.websiteUrl,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await Promise.all([
+    // Update clients doc with new URL + queued state
+    fb.adminDb.collection('clients').doc(clientId).set(
+      {
+        websiteUrl: normalized.websiteUrl,
+        normalizedOrigin: normalized.origin,
+        normalizedHost: normalized.hostname,
+        latestRunId: runId,
+        latestRunStatus: 'queued',
+        status: 'provisioning',
+        updatedAt: now,
+      },
+      { merge: true }
+    ),
+
+    // Update client_configs sourceInputs
+    fb.adminDb.collection('client_configs').doc(clientId).set(
+      {
+        sourceInputs: { websiteUrl: normalized.websiteUrl },
+        updatedAt: now,
+      },
+      { merge: true }
+    ),
+
+    // Reset dashboard_state — clear intake fields, set provisioning
+    fb.adminDb.collection('dashboard_state').doc(clientId).set(
+      {
+        clientId,
+        status: 'provisioning',
+        snapshot: null,
+        signals: null,
+        strategy: null,
+        outputsPreview: null,
+        systemPreview: null,
+        headline: null,
+        summaryCards: [],
+        latestInsights: [],
+        latestRunId: runId,
+        latestRunStatus: 'queued',
+        errorState: null,
+        provisioningState: {
+          startedAt: now,
+          message: `Re-running intake for ${normalized.hostname}...`,
+        },
+        updatedAt: now,
+      },
+      { merge: true }
+    ),
+
+    // Create brief_run + mirror to subcollection
+    runRef.set(runPayload),
+    fb.adminDb.collection('clients').doc(clientId).collection('brief_runs').doc(runId).set(runPayload),
+  ]);
+
+  return { clientId, runId, status: 'queued', websiteUrl: normalized.websiteUrl };
+}
+
 module.exports = {
   getDashboardBootstrap,
   provisionClientForUser,
+  reseedIntakeForClient,
 };

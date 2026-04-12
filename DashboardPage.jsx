@@ -1,9 +1,21 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { Globe } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import InternalPageBackground from './InternalPageBackground';
+import { internalPageGlassCardStyle } from './pageSurfaceSystem';
+
+// ── Free-tier module IDs ──────────────────────────────────────────────────────
+// These tiles reflect what the free-tier intake actually produces.
+// All others are rendered as PREVIEW / PRO TIER.
+const FREE_TIER_TILE_IDS = new Set([
+  'creative-pipelines',
+  'ai-research',
+  'distribution-insight',
+  'reddit-community',
+]);
 
 const tiles = [
   {
@@ -13,7 +25,7 @@ const tiles = [
     title: 'Content that sounds like you.',
     description: 'Posts drafted in real time, aligned to brand voice.',
     status: 'LIVE',
-    metric: '28 DRAFTS READY',
+    metric: 'BRAND READY',
     viz: 'segbars',
   },
   {
@@ -22,8 +34,8 @@ const tiles = [
     label: 'COMPANY BRAIN',
     title: 'Searchable, structured, stateful.',
     description: 'Your stack indexed and queryable.',
-    status: 'INDEXED',
-    metric: '2,847 DOCS · 14 DOMAINS',
+    status: 'PREVIEW',
+    metric: 'PRO TIER',
     viz: 'memory',
   },
   {
@@ -32,8 +44,8 @@ const tiles = [
     label: 'KNOWLEDGE ASSISTANT',
     title: 'Answers from your data.',
     description: 'Team asks, system pulls from your docs.',
-    status: 'ACTIVE',
-    metric: '142 QUERIES / DAY',
+    status: 'PREVIEW',
+    metric: 'PRO TIER',
     viz: 'qa',
   },
   {
@@ -42,8 +54,8 @@ const tiles = [
     label: 'EXECUTIVE SUPPORT',
     title: 'Walk in already briefed.',
     description: 'Every meeting prepared before you sit down.',
-    status: '4 TODAY',
-    metric: '3 BRIEFS READY',
+    status: 'PREVIEW',
+    metric: 'PRO TIER',
     viz: 'meetings',
   },
   {
@@ -52,8 +64,8 @@ const tiles = [
     label: 'DAILY OPERATIONS',
     title: 'Core tasks run themselves.',
     description: 'Triage, tracking, reports — no oversight.',
-    status: 'AUTONOMOUS',
-    metric: '23 ACTIONS / H',
+    status: 'PREVIEW',
+    metric: 'PRO TIER',
     viz: 'rings',
   },
   {
@@ -62,8 +74,8 @@ const tiles = [
     label: 'EMAIL MARKETING',
     title: 'Campaigns that learn.',
     description: 'Builds, schedules, optimizes across regions.',
-    status: 'SENDING',
-    metric: '+4.2% W/W',
+    status: 'PREVIEW',
+    metric: 'PRO TIER',
     viz: 'spark',
   },
   {
@@ -72,8 +84,8 @@ const tiles = [
     label: 'AI RESEARCH',
     title: 'Weeks of insight in hours.',
     description: 'Deep consumer and market analysis on demand.',
-    status: 'SYNTHESIZING',
-    metric: '6 SOURCES',
+    status: 'LIVE',
+    metric: 'BRAND READY',
     viz: 'countdown',
   },
   {
@@ -82,8 +94,8 @@ const tiles = [
     label: 'FINANCIAL & TAX',
     title: 'Books reconciled nightly.',
     description: 'Transactions sorted, flagged, report-ready.',
-    status: 'SYNCED · QBO',
-    metric: '4 REPORTS READY',
+    status: 'PREVIEW',
+    metric: 'PRO TIER',
     viz: 'stats',
   },
   {
@@ -92,8 +104,8 @@ const tiles = [
     label: 'COMPLIANCE MONITORING',
     title: 'Nothing critical gets missed.',
     description: 'Deadlines, filings, rules — watched continuously.',
-    status: 'WATCHING',
-    metric: '1 NEEDS ACTION',
+    status: 'PREVIEW',
+    metric: 'PRO TIER',
     viz: 'deadlines',
   },
   {
@@ -102,8 +114,8 @@ const tiles = [
     label: 'DISTRIBUTION & INSIGHT',
     title: 'One loop for everything.',
     description: 'Publishing, SEO, rankings — unified.',
-    status: 'UNIFIED',
-    metric: '10 SEO FIXES / WK',
+    status: 'LIVE',
+    metric: 'BRAND READY',
     viz: 'table',
   },
   {
@@ -112,8 +124,8 @@ const tiles = [
     label: 'RAPID PRODUCT DEV',
     title: 'Concept to launch, fast.',
     description: 'Tools and integrations shipped on demand.',
-    status: 'BUILDING',
-    metric: '3 IN FLIGHT',
+    status: 'PREVIEW',
+    metric: 'PRO TIER',
     viz: 'pipeline',
   },
   {
@@ -122,8 +134,8 @@ const tiles = [
     label: 'SELF-IMPROVING',
     title: 'Every run smarter.',
     description: 'Workflows refine themselves from feedback.',
-    status: 'LEARNING',
-    metric: '212 ITERATIONS',
+    status: 'PREVIEW',
+    metric: 'PRO TIER',
     viz: 'delta',
   },
   {
@@ -132,8 +144,8 @@ const tiles = [
     label: 'REDDIT & COMMUNITY',
     title: 'Conversations to be in.',
     description: 'Finds threads, drafts replies for review.',
-    status: 'SCANNING',
-    metric: '4 DRAFTS READY',
+    status: 'LIVE',
+    metric: 'BRAND READY',
     viz: 'threads',
   },
   {
@@ -142,18 +154,10 @@ const tiles = [
     label: 'SEO CONTENT',
     title: 'Keywords to capture.',
     description: 'Opportunities surfaced, drafts ready.',
-    status: 'DRAFTING',
-    metric: '8 OPPORTUNITIES',
+    status: 'PREVIEW',
+    metric: 'PRO TIER',
     viz: 'keywords',
   },
-];
-
-const activityRows = [
-  { time: '09:42:12', tag: 'BRAIN', message: 'Indexed 4 new docs from /strategy', badge: '[OK]' },
-  { time: '09:42:08', tag: 'PIPELINES', message: 'LinkedIn draft #214 routed for review', badge: '[READY]' },
-  { time: '09:41:55', tag: 'FINANCE', message: 'Flagged 1 duplicate Stripe charge for $48.00' },
-  { time: '09:41:40', tag: 'COMPLIANCE', message: 'CA sales tax deadline in 6 days — briefing created' },
-  { time: '09:41:22', tag: 'RESEARCH', message: 'Competitor teardown complete — 12 insights extracted', badge: '[OK]' },
 ];
 
 const memoryNodes = Array.from({ length: 96 }, (_, index) => {
@@ -162,167 +166,1097 @@ const memoryNodes = Array.from({ length: 96 }, (_, index) => {
   return '';
 });
 
+const WORK_NEEDED_LABEL = 'Work is Needed';
+const CONTACT_HUMAN_LABEL = 'Contact your human in the loop';
+
+const buildUnavailableDescription = (subject) => `Insufficient source evidence to determine ${subject} reliably.`;
+
+const buildWorkNeededRows = (reason) => [
+  { key: 'status', label: 'Status', value: WORK_NEEDED_LABEL },
+  { key: 'next-step', label: 'Next Step', value: CONTACT_HUMAN_LABEL },
+  ...(reason ? [{ key: 'reason', label: 'Reason', value: reason }] : []),
+];
+
+const PRICING_MODAL_OPTIONS = [
+  {
+    id: 'onboarded',
+    label: 'Onboarded',
+    price: 'Current',
+    summary: 'Existing free dashboard access for intake, brand intelligence, and baseline operating visibility.',
+  },
+  {
+    id: 'growth',
+    label: 'Growth',
+    price: 'Placeholder',
+    summary: 'Expanded automation, deeper research loops, and higher-touch publishing support. Final pricing content will be updated later.',
+  },
+  {
+    id: 'operator',
+    label: 'Operator',
+    price: 'Placeholder',
+    summary: 'Full-stack operating support across content, intelligence, and system workflows. Final pricing content will be updated later.',
+  },
+];
+
 async function fetchDashboardBootstrap(user) {
   const token = await user.getIdToken();
   const response = await fetch('/api/dashboard/bootstrap', {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers: { Authorization: `Bearer ${token}` },
   });
-
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(data?.error || 'Could not load dashboard data.');
-  }
-
+  if (!response.ok) throw new Error(data?.error || 'Could not load dashboard data.');
   return data;
 }
+
+// ── Modal step builder ───────────────────────────────────────────────────────
+// Converts run state + progress into human-readable build steps for the modal.
+// Step states: 'done' | 'active' | 'pending' | 'waiting' | 'sub' | 'pending-sub' | 'error'
+
+function buildModalSteps(run, dashboardState, latestRunStatus, client) {
+  const progress = run?.progress || {};
+  const stage = progress?.stage;
+  const stageOrder = ['fetch', 'analyze', 'synthesize', 'normalize'];
+  const idx = stageOrder.indexOf(stage);
+
+  const host = client?.normalizedHost
+    || (run?.sourceUrl
+      ? (() => { try { return new URL(run.sourceUrl).hostname.replace(/^www\./, ''); } catch { return run.sourceUrl; } })()
+      : null)
+    || '—';
+
+  const pageCount = progress?.pagesFetched;
+  const pages = Array.isArray(progress?.pages) ? progress.pages : [];
+
+  if (latestRunStatus === 'failed') {
+    return [
+      { state: 'error', text: dashboardState?.errorState?.message || 'Setup encountered an issue.' },
+    ];
+  }
+
+  if (latestRunStatus === 'queued') {
+    return [
+      { state: 'waiting', text: `Starting up for ${host}` },
+      { state: 'pending', text: 'Fetch pages' },
+      { state: 'pending', text: 'Extract site content' },
+      { state: 'pending', text: 'Analyze brand & voice' },
+      { state: 'pending', text: 'Build content strategy' },
+      { state: 'pending', text: 'Write dashboard modules' },
+    ];
+  }
+
+  // Running — worker claimed but no stage written yet
+  if (idx < 0) {
+    return [
+      { state: 'waiting', text: 'Starting pipeline...' },
+      { state: 'pending', text: 'Fetch pages' },
+      { state: 'pending', text: 'Extract site content' },
+      { state: 'pending', text: 'Analyze brand & voice' },
+      { state: 'pending', text: 'Write dashboard modules' },
+    ];
+  }
+
+  const steps = [];
+
+  // fetch (idx 0)
+  steps.push({
+    state: idx > 0 ? 'done' : 'active',
+    text: idx > 0 ? `Connected — ${host}` : `Connecting to ${host}...`,
+  });
+
+  // analyze (idx 1) — pages fetched + evidence
+  if (idx >= 1) {
+    steps.push({
+      state: 'done',
+      text: pageCount ? `${pageCount} page${pageCount !== 1 ? 's' : ''} discovered` : 'Pages discovered',
+    });
+    for (const p of pages.slice(0, 4)) {
+      const label = (p.title || p.headline || '').slice(0, 52);
+      if (label) steps.push({ state: 'sub', text: `"${label}"`, indent: true });
+    }
+    if (idx === 1) {
+      steps.push({ state: 'active', text: 'Extracting headlines & content...' });
+      steps.push({ state: 'pending', text: 'Analyze brand & voice' });
+      steps.push({ state: 'pending', text: 'Write dashboard modules' });
+    }
+  }
+
+  if (idx > 1) {
+    steps.push({ state: 'done', text: 'Site content extracted' });
+  }
+
+  // synthesize (idx 2)
+  if (idx >= 2) {
+    if (idx === 2) {
+      steps.push({ state: 'active', text: 'Analyzing brand & voice...' });
+      steps.push({ state: 'pending-sub', text: 'Mapping tone & positioning', indent: true });
+      steps.push({ state: 'pending-sub', text: 'Generating content angles', indent: true });
+      steps.push({ state: 'pending-sub', text: 'Identifying brand signals', indent: true });
+      steps.push({ state: 'pending', text: 'Write dashboard modules' });
+    } else {
+      steps.push({ state: 'done', text: 'Brand analysis complete' });
+    }
+  }
+
+  // normalize (idx 3)
+  if (idx >= 3) {
+    steps.push({ state: 'active', text: 'Writing dashboard modules...' });
+  }
+
+  return steps;
+}
+
+// ── Intake build terminal log ─────────────────────────────────────────────────
+// Produces IDE-style terminal log lines for the intake build modal.
+// Each line: { type, prefix, text, cursor? }
+// Types: system | dim | info | fetch | ok | ai | build | error | active | countdown
+
+function _termHost(run, client) {
+  return client?.normalizedHost
+    || (run?.sourceUrl ? (() => { try { return new URL(run.sourceUrl).hostname.replace(/^www\./, ''); } catch { return run.sourceUrl; } })() : null)
+    || '—';
+}
+
+function _termPath(url) {
+  try { return new URL(url).pathname || '/'; } catch { return url || '/'; }
+}
+
+function buildTerminalLog(run, dashboardState, latestRunStatus, client, countdown) {
+  const lines = [];
+  const add = (type, prefix, text, cursor = false) => lines.push({ type, prefix, text, cursor });
+
+  const progress = run?.progress || {};
+  const stage = progress?.stage;
+  const stageOrder = ['fetch', 'analyze', 'synthesize', 'normalize'];
+  const idx = stageOrder.indexOf(stage);
+  const host = _termHost(run, client);
+  const runId = run?.id ? `${run.id.slice(0, 8)}…` : '—';
+  const trigger = run?.trigger || 'provision';
+  const pages = Array.isArray(progress?.pages) ? progress.pages : [];
+  const pageCount = progress?.pagesFetched || pages.length || 0;
+
+  // ── Header ──
+  add('system', '$', `founders/intake — run ${runId}`);
+  add('dim', '', '─'.repeat(46));
+  add('info', 'site', host);
+  add('info', 'trigger', trigger);
+  add('dim', '', '─'.repeat(46));
+
+  // ── Failed ──
+  if (latestRunStatus === 'failed') {
+    const msg = dashboardState?.errorState?.message || 'unknown pipeline error';
+    add('error', '[ERR]', msg);
+    add('error', '✗', 'build failed');
+    add('dim', '', 'update the website url below to retry');
+    return lines;
+  }
+
+  // ── Queued ──
+  if (latestRunStatus === 'queued') {
+    add('ok', '✓', 'intake request received');
+    add('ok', '✓', `run ${runId} registered`);
+    add('info', 'queue', `target: ${host}`);
+    add('dim', '', '─'.repeat(46));
+    add('info', 'sys', 'locating available worker…');
+    add('active', '▶', 'waiting for worker to start…', true);
+    add('dim', '', '');
+    add('dim', '·', '[FETCH]  crawl site pages');
+    add('dim', '·', '[AI]     analyze content & brand');
+    add('dim', '·', '[BUILD]  write dashboard modules');
+    return lines;
+  }
+
+  // ── Succeeded ──
+  if (latestRunStatus === 'succeeded') {
+    add('ok', '✓', 'worker claimed job');
+    add('ok', '✓', 'headless chromium initialized');
+    add('fetch', '[FETCH]', `connected to ${host}`);
+    const pl = pageCount ? `${pageCount} page${pageCount !== 1 ? 's' : ''}` : 'pages';
+    add('ok', '✓', `${pl} crawled successfully`);
+    for (const p of pages.slice(0, 6)) {
+      const path = _termPath(p.url);
+      const title = (p.title || p.headline || '').slice(0, 48);
+      add('fetch', '  →', title ? `${path}  "${title}"` : path);
+    }
+    add('ok', '✓', 'site content extracted');
+    add('ai', '[AI]', 'gpt-4o: reading headlines & copy blocks');
+    add('ai', '[AI]', 'gpt-4o: analyzing brand voice & tone');
+    add('ai', '[AI]', 'gpt-4o: mapping content strategy');
+    add('ai', '[AI]', 'gpt-4o: identifying distribution angles');
+    add('ok', '✓', 'brand intelligence synthesized');
+    add('build', '[BUILD]', 'writing modules to firestore');
+    add('build', '  →', 'creative-pipelines');
+    add('build', '  →', 'ai-research');
+    add('build', '  →', 'distribution-insight');
+    add('build', '  →', 'reddit-community');
+    add('ok', '✓', 'all modules written');
+    add('ok', '✓', 'dashboard data ready');
+    add('dim', '', '─'.repeat(46));
+    if (countdown > 0) {
+      add('countdown', '▶', `launching dashboard in ${countdown}…`);
+    } else {
+      add('countdown', '▶', 'launching…');
+    }
+    return lines;
+  }
+
+  // ── Running ──
+  add('ok', '✓', 'worker claimed job');
+  add('ok', '✓', 'headless chromium initialized');
+
+  if (idx < 0) {
+    add('active', '[→]', `connecting to ${host}…`, true);
+    add('dim', '·', '[FETCH]  crawl site pages');
+    add('dim', '·', '[AI]     analyze content & brand');
+    add('dim', '·', '[BUILD]  write dashboard modules');
+    return lines;
+  }
+
+  // fetch — show pages as they arrive
+  add('fetch', '[FETCH]', `connected to ${host}`);
+  if (idx === 0) {
+    // Show pages already fetched (incremental progress from onPageFetched emits)
+    for (const p of pages.slice(0, 6)) {
+      const label = (p.title || p.headline || p.type || '').slice(0, 52);
+      add('fetch', '  →', label ? `${p.type}  "${label}"` : p.type);
+    }
+    const stillFetching = pageCount === 0 || pages.length === 0;
+    add('active', '[→]', stillFetching ? 'crawling pages — discovering content…' : `${pageCount} page${pageCount !== 1 ? 's' : ''} — scanning for more…`, true);
+    add('dim', '·', '[AI]     analyze content & brand');
+    add('dim', '·', '[BUILD]  write dashboard modules');
+    return lines;
+  }
+
+  // analyze+
+  const pl = pageCount ? `${pageCount} page${pageCount !== 1 ? 's' : ''}` : 'pages';
+  add('ok', '✓', `${pl} discovered`);
+  for (const p of pages.slice(0, 6)) {
+    const path = _termPath(p.url);
+    const title = (p.title || p.headline || '').slice(0, 48);
+    add('fetch', '  →', title ? `${path}  "${title}"` : path);
+  }
+
+  if (idx === 1) {
+    add('ai', '[AI]', 'gpt-4o: reading page content…');
+    add('active', '[AI]', 'extracting headlines & brand signals…', true);
+    add('dim', '·', '[AI]     analyze brand & voice');
+    add('dim', '·', '[BUILD]  write dashboard modules');
+    return lines;
+  }
+
+  // synthesize+
+  add('ok', '✓', 'site content extracted');
+  add('ai', '[AI]', 'gpt-4o: analyzing brand voice & tone');
+  add('ai', '[AI]', 'gpt-4o: mapping content strategy');
+  add('ai', '[AI]', 'gpt-4o: identifying distribution angles');
+
+  if (idx === 2) {
+    add('active', '[AI]', 'synthesizing brand intelligence…', true);
+    add('dim', '·', '[BUILD]  write dashboard modules');
+    return lines;
+  }
+
+  // normalize
+  add('ok', '✓', 'brand analysis complete');
+  add('ok', '✓', 'content strategy ready');
+  add('build', '[BUILD]', 'writing module: creative-pipelines');
+  add('build', '[BUILD]', 'writing module: ai-research');
+  add('build', '[BUILD]', 'writing module: distribution-insight');
+  add('build', '[BUILD]', 'writing module: reddit-community');
+  add('active', '[BUILD]', 'finalizing dashboard data…', true);
+
+  return lines;
+}
+
+// ── Terminal line builder ─────────────────────────────────────────────────────
+// Converts run state + progress fields into displayable terminal log lines.
+
+function buildTerminalLines(run, dashboardState, latestRunStatus, client) {
+  const siteUrl = run?.sourceUrl
+    ? (() => { try { return new URL(run.sourceUrl).hostname.replace(/^www\./, ''); } catch { return run.sourceUrl; } })()
+    : client?.normalizedHost || '...';
+
+  const progress = run?.progress || null;
+
+  if (!run) {
+    return [
+      { tag: 'SYSTEM', text: 'Waiting for intake run to start...', type: 'dim' },
+    ];
+  }
+
+  if (latestRunStatus === 'queued') {
+    return [
+      { tag: 'QUEUE', text: `Intake queued for ${siteUrl}`, type: 'label' },
+      { tag: 'QUEUE', text: `Run ID: ${String(run.id || '').slice(-10)}`, type: 'dim' },
+      { tag: 'QUEUE', text: 'Waiting for worker to claim run...', type: 'dim', active: true },
+    ];
+  }
+
+  if (latestRunStatus === 'running') {
+    const stage = progress?.stage;
+    const stageOrder = ['fetch', 'analyze', 'synthesize', 'normalize'];
+    const currentIdx = stageOrder.indexOf(stage);
+
+    const lines = [
+      { tag: 'START', text: `Intake started · ${siteUrl}`, type: 'label' },
+    ];
+
+    // fetch: show crawl line — active while fetching, ok once past
+    if (currentIdx >= 0) {
+      lines.push({
+        tag: 'FETCH',
+        text: `Crawling ${siteUrl}...`,
+        type: currentIdx === 0 ? 'active' : 'ok',
+        active: currentIdx === 0,
+      });
+    }
+
+    // analyze: show page count + compact evidence + active analyze line
+    if (currentIdx >= 1) {
+      const count = progress.pagesFetched;
+      const types = Array.isArray(progress.pagesDiscovered) ? progress.pagesDiscovered.join(' · ') : '';
+      lines.push({
+        tag: 'FETCH',
+        text: `${count} page${count !== 1 ? 's' : ''} fetched${types ? ` · ${types}` : ''}`,
+        type: 'ok',
+      });
+
+      // Compact page evidence — title + primary heading per page
+      if (Array.isArray(progress.pages)) {
+        for (const page of progress.pages.slice(0, 4)) {
+          const titleText = (page.title || '').slice(0, 70);
+          if (titleText) {
+            lines.push({ tag: page.type.toUpperCase().slice(0, 7), text: `"${titleText}"`, type: 'dim' });
+          }
+          const headlineText = (page.headline || '').slice(0, 70);
+          if (headlineText) {
+            lines.push({ tag: '', text: `→ ${headlineText}`, type: 'dim' });
+          }
+        }
+      }
+
+      // FIX Issue 1: always show an active line during analyze stage
+      if (currentIdx === 1) {
+        lines.push({ tag: 'ANALYZE', text: 'Extracting site structure...', type: 'active', active: true });
+      }
+    }
+
+    // synthesize
+    if (currentIdx >= 2) {
+      lines.push({
+        tag: 'SYNTH',
+        text: 'Building brand intelligence...',
+        type: currentIdx === 2 ? 'active' : 'ok',
+        active: currentIdx === 2,
+      });
+    }
+
+    // normalize
+    if (currentIdx >= 3) {
+      lines.push({ tag: 'WRITE', text: 'Writing dashboard modules...', type: 'active', active: true });
+    }
+
+    // Fallback: worker claimed but no stage written yet
+    if (currentIdx < 0) {
+      lines.push({ tag: 'PROC', text: progress?.progressLabel || 'Processing...', type: 'active', active: true });
+    }
+
+    return lines;
+  }
+
+  if (latestRunStatus === 'succeeded') {
+    const prog = run?.progress || {};
+    const cost = run?.providerUsage?.estimatedCostUsd;
+    const count = prog.pagesFetched || (dashboardState?.snapshot ? 3 : null);
+    const types = Array.isArray(prog.pagesDiscovered) ? prog.pagesDiscovered.join(' · ') : 'homepage';
+
+    const lines = [
+      { tag: 'DONE', text: `Intake complete · ${siteUrl}`, type: 'label' },
+      { tag: 'FETCH', text: `${count ? `${count} pages · ` : ''}${types}`, type: 'ok' },
+    ];
+
+    // Show first page evidence from stored progress
+    if (Array.isArray(prog.pages) && prog.pages.length > 0) {
+      const hp = prog.pages.find((p) => p.type === 'homepage') || prog.pages[0];
+      if (hp?.headline) {
+        lines.push({ tag: hp.type.toUpperCase().slice(0, 7), text: `→ "${hp.headline.slice(0, 70)}"`, type: 'dim' });
+      }
+    }
+
+    lines.push(
+      { tag: 'SYNTH', text: 'Brand intelligence built', type: 'ok' },
+      { tag: 'WRITE', text: '5 dashboard modules populated', type: 'ok' },
+      { tag: 'OK', text: `Run complete${cost ? ` · $${cost}` : ''}`, type: 'success' },
+    );
+
+    return lines;
+  }
+
+  if (latestRunStatus === 'cancelled') {
+    return [
+      { tag: 'CANCEL', text: `Run cancelled · ${siteUrl}`, type: 'label' },
+      { tag: 'INFO', text: 'Enter a new website URL below and rerun to restart intake.', type: 'dim' },
+    ];
+  }
+
+  if (latestRunStatus === 'failed') {
+    const errorMsg = dashboardState?.errorState?.message || 'Setup encountered an issue.';
+    const lines = [
+      { tag: 'ERROR', text: `Intake failed · ${siteUrl}`, type: 'label' },
+      { tag: 'ERROR', text: errorMsg, type: 'error' },
+    ];
+    if (dashboardState?.errorState?.retryPending) {
+      lines.push({ tag: 'INFO', text: 'Retry is pending — this will run automatically.', type: 'dim' });
+    }
+    return lines;
+  }
+
+  return [{ tag: 'SYSTEM', text: 'No recent intake runs.', type: 'dim' }];
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 const DashboardPage = () => {
   const { user, userProfile, signOutUser } = useAuth();
   const [theme, setTheme] = useState('light');
-  const [localTime, setLocalTime] = useState(() => formatClock(new Date()));
   const [countdownHours, setCountdownHours] = useState(14);
+  const [showTierModal, setShowTierModal] = useState(false);
   const [bootstrap, setBootstrap] = useState({ userProfile: null, client: null, dashboardState: null, recentRuns: [] });
   const [bootstrapLoading, setBootstrapLoading] = useState(true);
   const [bootstrapError, setBootstrapError] = useState('');
+  const cancelledRef = useRef(false);
+  const prevRunStatusRef = useRef(null);
+  const terminalOutputRef = useRef(null);
+  const terminalLengthRef = useRef(0);
+  const prevLogLengthRef = useRef(0);
+  const prevStatusForRevealRef = useRef(null);
+  const [completionCountdown, setCompletionCountdown] = useState(null);
+  const [revealedLineCount, setRevealedLineCount] = useState(null);
+  const modalMarqueeTrackRef = useRef(null);
+  const modalMarqueeOffsetRef = useRef(0);
+  const modalMarqueeAnimRef = useRef(null);
+  const modalMarqueePrevTimeRef = useRef(null);
+  const heroMarqueeShellRef = useRef(null);
+  const heroMarqueeTrackRef = useRef(null);
+  const heroMarqueeCopyRef = useRef(null);
+  const [heroMarqueeCopies, setHeroMarqueeCopies] = useState(2);
+  const [reseedUrl, setReseedUrl] = useState('');
+  const [reseedLoading, setReseedLoading] = useState(false);
+  const [reseedError, setReseedError] = useState('');
+  const [reseedSuccess, setReseedSuccess] = useState(false);
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [cancelError, setCancelError] = useState('');
 
+  // Clock tick
   useEffect(() => {
     const timer = window.setInterval(() => {
-      setLocalTime(formatClock(new Date()));
-      setCountdownHours((current) => (current <= 9 ? 14 : current - 1));
+      setCountdownHours((c) => (c <= 9 ? 14 : c - 1));
     }, 1000);
-
     return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
+    if (!showTierModal) return undefined;
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setShowTierModal(false);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [showTierModal]);
 
+  // Bootstrap fetch (stable reference)
+  const doBootstrap = useCallback(() => {
+    if (!user) return;
+    fetchDashboardBootstrap(user)
+      .then((data) => { if (!cancelledRef.current) setBootstrap(data); })
+      .catch((err) => { if (!cancelledRef.current) setBootstrapError(err instanceof Error ? err.message : 'Could not load dashboard data.'); });
+  }, [user]);
+
+  // Initial load
+  useEffect(() => {
+    cancelledRef.current = false;
     if (!user) {
       setBootstrapLoading(false);
       setBootstrap({ userProfile: null, client: null, recentRuns: [] });
-      return undefined;
+      return () => { cancelledRef.current = true; };
     }
-
     setBootstrapLoading(true);
     setBootstrapError('');
-
     fetchDashboardBootstrap(user)
-      .then((data) => {
-        if (!cancelled) {
-          setBootstrap(data);
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setBootstrapError(error instanceof Error ? error.message : 'Could not load dashboard data.');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setBootstrapLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
+      .then((data) => { if (!cancelledRef.current) setBootstrap(data); })
+      .catch((err) => { if (!cancelledRef.current) setBootstrapError(err instanceof Error ? err.message : 'Could not load dashboard data.'); })
+      .finally(() => { if (!cancelledRef.current) setBootstrapLoading(false); });
+    return () => { cancelledRef.current = true; };
   }, [user]);
 
+  // ── Derived state ─────────────────────────────────────────────────────────
   const client = bootstrap.client;
   const recentRuns = bootstrap.recentRuns || [];
   const displayProfile = bootstrap.userProfile || userProfile;
   const currentRun = recentRuns[0] || null;
-
-  // ── Canonical display model (dashboard_state/{clientId}) ──────────────────
-  // All operational state derives from dashboardState first.
-  // client fields are used only for stable identity (companyName, normalizedHost).
   const dashboardState = bootstrap.dashboardState;
   const clientStatus = dashboardState?.status || client?.status || 'provisioning';
   const latestRunStatus = dashboardState?.latestRunStatus || currentRun?.status || null;
-  const headline = dashboardState?.headline || null;
-  const summaryCards = dashboardState?.summaryCards || [];
-  const latestInsights = dashboardState?.latestInsights || [];
   const provisioningState = dashboardState?.provisioningState || null;
   const errorState = dashboardState?.errorState || null;
 
-  const founderLabel = useMemo(() => {
-    const displayName = displayProfile?.displayName || user?.displayName || 'B. ALLI';
-    return `@${displayName.toUpperCase()}`;
-  }, [displayProfile?.displayName, user?.displayName]);
+  // Free-tier intake fields
+  const snapshot = dashboardState?.snapshot || null;
+  const signals = dashboardState?.signals || null;
+  const strategy = dashboardState?.strategy || null;
+  const brandOverview = snapshot?.brandOverview || null;
+  const brandTone = snapshot?.brandTone || null;
+  const visualIdentity = snapshot?.visualIdentity || null;
+  const outputsPreview = dashboardState?.outputsPreview || null;
+  const capabilityHeadline = client?.dashboardTitle || displayProfile?.dashboardTitle || 'An operating stack that runs itself.';
 
+  // Legacy compat fields (pre-intake runs)
+  const headline = dashboardState?.headline || null;
+  const summaryCards = dashboardState?.summaryCards || [];
+  const latestInsights = dashboardState?.latestInsights || [];
+
+  const hasIntakeData = Boolean(brandOverview?.headline);
+  const isRunActive = latestRunStatus === 'queued' || latestRunStatus === 'running';
+
+  // Show terminal modal during active builds, failures, and the post-completion countdown.
+  const showIntakeModal = !bootstrapLoading && (isRunActive || latestRunStatus === 'failed' || completionCountdown !== null);
+
+  // Polling while a run is in-flight
+  useEffect(() => {
+    if (!user || !isRunActive) return undefined;
+    const interval = setInterval(() => {
+      fetchDashboardBootstrap(user)
+        .then((data) => { if (!cancelledRef.current) setBootstrap(data); })
+        .catch(() => {});
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [user, isRunActive]);
+
+  // Seed reseedUrl from client websiteUrl once loaded
+  useEffect(() => {
+    if (client?.websiteUrl && !reseedUrl) {
+      setReseedUrl(client.websiteUrl);
+    }
+  }, [client?.websiteUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Detect run completion → start 3-second countdown before revealing dashboard
+  useEffect(() => {
+    if (latestRunStatus === prevRunStatusRef.current) return;
+    if (latestRunStatus === 'succeeded' && (prevRunStatusRef.current === 'running' || prevRunStatusRef.current === 'queued')) {
+      setCompletionCountdown(3);
+    }
+    prevRunStatusRef.current = latestRunStatus;
+  }, [latestRunStatus]);
+
+  // Tick countdown down to 0, then clear it (modal unmounts)
+  useEffect(() => {
+    if (completionCountdown === null || completionCountdown <= 0) {
+      if (completionCountdown === 0) setCompletionCountdown(null);
+      return undefined;
+    }
+    const t = setTimeout(() => setCompletionCountdown((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [completionCountdown]);
+
+  // Reveal succeeded lines one by one — each line appears 120ms after the previous.
+  // Uses terminalLengthRef (updated after the useMemo below) to avoid a
+  // "cannot access before initialization" error from referencing terminalLog here.
+  useEffect(() => {
+    if (revealedLineCount === null) return undefined;
+    if (revealedLineCount >= terminalLengthRef.current) {
+      setRevealedLineCount(null);
+      return undefined;
+    }
+    const t = setTimeout(() => setRevealedLineCount((c) => c + 1), 120);
+    return () => clearTimeout(t);
+  }, [revealedLineCount]);
+
+  // Auto-scroll embedded terminal to bottom on new lines
+  useEffect(() => {
+    if (terminalOutputRef.current) {
+      terminalOutputRef.current.scrollTop = terminalOutputRef.current.scrollHeight;
+    }
+  }, [showIntakeModal, completionCountdown, revealedLineCount]);
+
+  // Marquee rAF for modal — exact same implementation as AuthPage
+  useEffect(() => {
+    if (!showIntakeModal) return undefined;
+    const SPEED = 72;
+    const tick = (timestamp) => {
+      if (modalMarqueePrevTimeRef.current === null) modalMarqueePrevTimeRef.current = timestamp;
+      const delta = Math.min(timestamp - modalMarqueePrevTimeRef.current, 64);
+      modalMarqueePrevTimeRef.current = timestamp;
+      const track = modalMarqueeTrackRef.current;
+      if (track && track.children[0]) {
+        const singleWidth = track.children[0].offsetWidth;
+        modalMarqueeOffsetRef.current -= SPEED * (delta / 1000);
+        if (modalMarqueeOffsetRef.current <= -singleWidth) modalMarqueeOffsetRef.current += singleWidth;
+        track.style.transform = `translate3d(${modalMarqueeOffsetRef.current}px, 0, 0)`;
+      }
+      modalMarqueeAnimRef.current = requestAnimationFrame(tick);
+    };
+    modalMarqueeAnimRef.current = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(modalMarqueeAnimRef.current); modalMarqueePrevTimeRef.current = null; };
+  }, [showIntakeModal]);
+
+  useEffect(() => {
+    const shell = heroMarqueeShellRef.current;
+    const track = heroMarqueeTrackRef.current;
+    const firstCopy = heroMarqueeCopyRef.current;
+    if (!shell || !track || !firstCopy) return undefined;
+
+    const SPEED = 60;
+    let frameId = null;
+
+    const updateMarqueeMetrics = () => {
+      frameId = null;
+      const copyWidth = firstCopy.getBoundingClientRect().width;
+      const shellWidth = shell.getBoundingClientRect().width;
+      if (!copyWidth || !shellWidth) return;
+
+      track.style.setProperty('--hero-marquee-width', `${copyWidth}px`);
+      track.style.setProperty('--hero-marquee-duration', `${Math.max(copyWidth / SPEED, 10)}s`);
+
+      const requiredCopies = Math.max(2, Math.ceil(shellWidth / copyWidth) + 2);
+      setHeroMarqueeCopies((prev) => (prev === requiredCopies ? prev : requiredCopies));
+    };
+
+    const scheduleUpdate = () => {
+      if (frameId !== null) cancelAnimationFrame(frameId);
+      frameId = requestAnimationFrame(updateMarqueeMetrics);
+    };
+
+    scheduleUpdate();
+
+    const resizeObserver = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(() => scheduleUpdate())
+      : null;
+
+    resizeObserver?.observe(shell);
+    resizeObserver?.observe(firstCopy);
+
+    if (document.fonts?.ready) {
+      document.fonts.ready.then(() => scheduleUpdate()).catch(() => {});
+    }
+
+    window.addEventListener('resize', scheduleUpdate);
+
+    return () => {
+      window.removeEventListener('resize', scheduleUpdate);
+      resizeObserver?.disconnect();
+      if (frameId !== null) cancelAnimationFrame(frameId);
+    };
+  }, [capabilityHeadline]);
+
+  const handleReseed = useCallback(async () => {
+    if (!user || !reseedUrl.trim() || reseedLoading) return;
+    setReseedLoading(true);
+    setReseedError('');
+    setReseedSuccess(false);
+    try {
+      const token = await user.getIdToken();
+      // No provisioned client yet → provision; otherwise reseed
+      const isFirstRun = !client;
+      const endpoint = isFirstRun ? '/api/clients/provision' : '/api/dashboard/reseed-intake';
+      const body = isFirstRun
+        ? { websiteUrl: reseedUrl.trim(), displayName: user.displayName || '', companyName: '' }
+        : { websiteUrl: reseedUrl.trim() };
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Request failed.');
+      setReseedSuccess(true);
+      doBootstrap();
+    } catch (err) {
+      setReseedError(err instanceof Error ? err.message : 'Request failed.');
+    } finally {
+      setReseedLoading(false);
+    }
+  }, [user, client, reseedUrl, reseedLoading, doBootstrap]);
+
+  const handleCancelRun = useCallback(async () => {
+    if (!user || cancelLoading) return;
+    setCancelLoading(true);
+    setCancelError('');
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/dashboard/cancel-intake', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Cancel failed.');
+      setReseedSuccess(false);
+      doBootstrap();
+    } catch (err) {
+      setCancelError(err instanceof Error ? err.message : 'Cancel failed.');
+    } finally {
+      setCancelLoading(false);
+    }
+  }, [user, cancelLoading, doBootstrap]);
+
+  const terminalLines = useMemo(
+    () => buildTerminalLines(currentRun, dashboardState, latestRunStatus, client),
+    [currentRun, dashboardState, latestRunStatus, client]
+  );
+
+  const terminalLog = useMemo(
+    () => buildTerminalLog(currentRun, dashboardState, latestRunStatus, client, completionCountdown),
+    [currentRun, dashboardState, latestRunStatus, client, completionCountdown]
+  );
+
+  // Keep ref in sync so the reveal effect (declared above) can read the current length
+  terminalLengthRef.current = terminalLog.length;
+
+  // General line-by-line reveal trigger — fires on status change or log growth.
+  // Declared after terminalLog useMemo so we can reference it directly.
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    const currLen = terminalLog.length;
+    const prevLen = prevLogLengthRef.current;
+    const statusChanged = latestRunStatus !== prevStatusForRevealRef.current;
+
+    prevLogLengthRef.current = currLen;
+    prevStatusForRevealRef.current = latestRunStatus;
+
+    if (statusChanged) {
+      // New status — reveal all lines fresh from the start
+      setRevealedLineCount(0);
+    } else if (currLen > prevLen) {
+      // New lines added within same status — reveal only the new ones
+      setRevealedLineCount(prevLen);
+    }
+    // Same length, same status (e.g. countdown tick) — no reveal change
+  }, [latestRunStatus, terminalLog]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // During the succeeded reveal, slice to how many lines have been unlocked so far
+  const displayedTerminalLines = revealedLineCount !== null
+    ? terminalLog.slice(0, revealedLineCount)
+    : terminalLog;
+
+  const intakeTerminalStatus = isRunActive
+    ? 'Processing'
+    : latestRunStatus === 'succeeded'
+      ? 'Complete'
+      : latestRunStatus === 'failed'
+        ? 'Error'
+        : latestRunStatus === 'cancelled'
+          ? 'Cancelled'
+          : 'Ready';
+  const resolvedPrioritySignal = headline || '';
+  const resolvedDraftPost = outputsPreview?.samplePost || summaryCards.find((card) => card.label === 'Draft Post')?.value || '';
+  const resolvedContentAngle = strategy?.contentAngles?.[0]?.angle || summaryCards.find((card) => card.label === 'Content Angle')?.value || '';
+  const resolvedIndustry = brandOverview?.industry || '';
+  const resolvedBusinessModel = brandOverview?.businessModel || '';
+  const resolvedOpportunities = (strategy?.opportunityMap?.length ? strategy.opportunityMap : latestInsights.length ? latestInsights : []).slice(0, 4);
+  const hasBrandToneData = Boolean(brandTone?.primary || brandTone?.secondary || brandTone?.writingStyle || brandTone?.tags?.length);
+  const hasStyleGuideData = Boolean(visualIdentity?.summary || visualIdentity?.colorPalette || visualIdentity?.styleNotes);
+  const hasIndustryData = Boolean(resolvedIndustry);
+  const hasBusinessModelData = Boolean(resolvedBusinessModel);
+  const hasPrioritySignalData = Boolean(resolvedPrioritySignal);
+  const hasDraftPostData = Boolean(resolvedDraftPost);
+  const hasContentAngleData = Boolean(resolvedContentAngle);
+  const hasOpportunitiesData = resolvedOpportunities.length > 0;
+  const intakeCapabilityCards = [
+    {
+      id: 'intake-terminal',
+      number: '08',
+      label: 'INTAKE TERMINAL',
+      title: 'Intake Terminal',
+      description: terminalLines[0]?.text || 'No recent intake runs.',
+      placeholderLabel: intakeTerminalStatus.toUpperCase(),
+      rows: terminalLines.slice(0, 6).map((line, index) => ({
+        key: `terminal-${index}`,
+        label: line.tag || `STEP ${index + 1}`,
+        value: line.text,
+      })),
+      footerLeft: intakeTerminalStatus.toUpperCase(),
+      footerRight: latestRunStatus === 'succeeded' ? 'Latest Run' : 'Run Status',
+    },
+    {
+      id: 'brand-tone',
+      number: 'BT',
+      label: 'BRAND TONE',
+      title: 'Brand Tone',
+      description: hasBrandToneData
+        ? brandTone?.writingStyle || 'Voice system, tone markers, and writing rules pulled from intake.'
+        : buildUnavailableDescription('brand tone'),
+      placeholderLabel: 'VOICE PREVIEW',
+      rows: hasBrandToneData
+        ? [
+            { key: 'primary', label: 'Primary', value: brandTone?.primary || 'Pending' },
+            { key: 'secondary', label: 'Secondary', value: brandTone?.secondary || 'Pending' },
+            { key: 'tags', label: 'Tags', value: brandTone?.tags?.slice(0, 3).join(' · ') || 'Pending' },
+          ]
+        : buildWorkNeededRows('Not enough long-form copy or repeated messaging was fetched to infer voice confidently.'),
+      footerLeft: hasBrandToneData ? 'Live' : WORK_NEEDED_LABEL,
+      footerRight: hasBrandToneData ? 'Intake Data' : 'Contact Human',
+    },
+    {
+      id: 'style-guide',
+      number: 'SG',
+      label: 'STYLE GUIDE',
+      title: 'Style Guide',
+      description: hasStyleGuideData
+        ? visualIdentity?.summary || 'Visual direction, palette cues, and style notes pulled from intake.'
+        : buildUnavailableDescription('visual style guide'),
+      placeholderLabel: 'STYLE SNAPSHOT',
+      rows: hasStyleGuideData
+        ? [
+            { key: 'palette', label: 'Palette', value: visualIdentity?.colorPalette || 'Pending' },
+            { key: 'notes', label: 'Style', value: visualIdentity?.styleNotes || 'Pending' },
+            { key: 'summary', label: 'Direction', value: visualIdentity?.summary || 'Pending' },
+          ]
+        : buildWorkNeededRows('Visual system cues were too limited or inconsistent across fetched pages.'),
+      footerLeft: hasStyleGuideData ? 'Live' : WORK_NEEDED_LABEL,
+      footerRight: hasStyleGuideData ? 'Guide Ready' : 'Contact Human',
+    },
+    {
+      id: 'industry',
+      number: 'IN',
+      label: 'INDUSTRY',
+      title: 'Industry',
+      description: hasIndustryData
+        ? resolvedIndustry
+        : buildUnavailableDescription('industry'),
+      placeholderLabel: 'MARKET CATEGORY',
+      rows: hasIndustryData
+        ? [
+            { key: 'sector', label: 'Sector', value: resolvedIndustry },
+          ]
+        : buildWorkNeededRows('Fetched pages did not clearly identify the market category or service vertical.'),
+      footerLeft: hasIndustryData ? 'Live' : WORK_NEEDED_LABEL,
+      footerRight: hasIndustryData ? 'Positioning Context' : 'Contact Human',
+    },
+    {
+      id: 'business-model',
+      number: 'BM',
+      label: 'MODEL',
+      title: 'Business Model',
+      description: hasBusinessModelData
+        ? resolvedBusinessModel
+        : buildUnavailableDescription('business model'),
+      placeholderLabel: 'REVENUE MODEL',
+      rows: hasBusinessModelData
+        ? [
+            { key: 'model', label: 'Structure', value: resolvedBusinessModel },
+          ]
+        : buildWorkNeededRows('No pricing, packaging, or service structure was clear in fetched pages.'),
+      footerLeft: hasBusinessModelData ? 'Live' : WORK_NEEDED_LABEL,
+      footerRight: hasBusinessModelData ? 'Commercial Setup' : 'Contact Human',
+    },
+    {
+      id: 'priority-signal',
+      number: 'PS',
+      label: 'PRIORITY SIGNAL',
+      title: 'Priority Signal',
+      description: hasPrioritySignalData
+        ? resolvedPrioritySignal
+        : buildUnavailableDescription('priority signal'),
+      placeholderLabel: 'SIGNAL BRIEF',
+      rows: hasPrioritySignalData
+        ? [
+            { key: 'focus', label: 'Focus', value: resolvedPrioritySignal },
+            { key: 'channel', label: 'Channel', value: strategy?.postStrategy?.formats?.join(' · ') || 'Derived from intake strategy' },
+          ]
+        : buildWorkNeededRows('The crawl did not surface enough validated positioning or urgency signals.'),
+      footerLeft: hasPrioritySignalData ? 'Live' : WORK_NEEDED_LABEL,
+      footerRight: hasPrioritySignalData ? 'Campaign Direction' : 'Contact Human',
+    },
+    {
+      id: 'draft-post',
+      number: 'DP',
+      label: 'DRAFT POST',
+      title: 'Draft Post',
+      description: hasDraftPostData
+        ? resolvedDraftPost
+        : buildUnavailableDescription('draft post'),
+      placeholderLabel: 'POST DRAFT',
+      rows: hasDraftPostData
+        ? [
+            { key: 'post', label: 'Draft', value: resolvedDraftPost },
+          ]
+        : buildWorkNeededRows('There is not enough trustworthy brand voice and offer clarity to draft credibly.'),
+      footerLeft: hasDraftPostData ? 'Live' : WORK_NEEDED_LABEL,
+      footerRight: hasDraftPostData ? 'Ready To Edit' : 'Contact Human',
+    },
+    {
+      id: 'content-angle',
+      number: 'CA',
+      label: 'CONTENT ANGLE',
+      title: 'Content Angle',
+      description: hasContentAngleData
+        ? resolvedContentAngle
+        : buildUnavailableDescription('content angle'),
+      placeholderLabel: 'ANGLE LOCKED',
+      rows: hasContentAngleData
+        ? [
+            { key: 'angle', label: 'Angle', value: resolvedContentAngle },
+            { key: 'format', label: 'Format', value: strategy?.contentAngles?.[0]?.format || 'Pending' },
+          ]
+        : buildWorkNeededRows('Audience/problem framing is too thin to establish a reliable angle.'),
+      footerLeft: hasContentAngleData ? 'Live' : WORK_NEEDED_LABEL,
+      footerRight: hasContentAngleData ? 'Publishing Cue' : 'Contact Human',
+    },
+    {
+      id: 'content-opportunities',
+      number: 'CO',
+      label: 'CONTENT OPPORTUNITIES',
+      title: 'Content Opportunities',
+      description: hasOpportunitiesData
+        ? 'High-priority growth opportunities surfaced from intake and strategy normalization.'
+        : buildUnavailableDescription('content opportunities'),
+      placeholderLabel: 'OPPORTUNITY MAP',
+      rows: hasOpportunitiesData
+        ? resolvedOpportunities.map((op, index) => ({
+            key: `op-${index}`,
+            label: `[${String(op.priority || 'medium').slice(0, 4).toUpperCase()}]`,
+            value: `${op.topic || op.opportunity}${op.whyNow || op.why ? ` — ${op.whyNow || op.why}` : ''}`,
+          }))
+        : buildWorkNeededRows('The current intake did not surface enough concrete evidence to suggest high-confidence opportunities.'),
+      footerLeft: hasOpportunitiesData ? 'Live' : WORK_NEEDED_LABEL,
+      footerRight: hasOpportunitiesData ? `${resolvedOpportunities.length} Active` : 'Contact Human',
+    },
+  ];
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div data-dashboard-theme={theme} style={shellStyle}>
       <InternalPageBackground />
       <style>{dashboardCss}</style>
-      <main id="founders-shell">
-        <header id="founders-top-strip">
-          <Link href="/" id="founders-brand">
-            <span className="mark" />
-            FOUNDERS / SYSTEM PANEL
+      <header id="founders-top-strip">
+        <div id="founders-top-strip-inner">
+          <Link href="/" id="founders-brand" aria-label="Back to homepage">
+            <img src="/img/sig.png" alt="" aria-hidden="true" />
           </Link>
-          <nav id="founders-top-nav" aria-label="Dashboard sections">
-            <a href="#founders-hero-shell" className="is-active">OVERVIEW</a>
-            <a href="#capability-section">PIPELINES</a>
-            <a href="#capability-section">BRAIN</a>
-            <a href="#capability-section">FINANCE</a>
-            <a href="#activity-console">INSIGHTS</a>
-            <button type="button" onClick={signOutUser} className="logout-link">SIGN OUT</button>
-          </nav>
-          <div id="theme-toggle" role="group" aria-label="Theme">
-            <button type="button" data-theme="dark" className={theme === 'dark' ? 'is-active' : ''} onClick={() => setTheme('dark')}>DARK</button>
-            <button type="button" data-theme="light" className={theme === 'light' ? 'is-active' : ''} onClick={() => setTheme('light')}>LIGHT</button>
+          <div id="founders-top-actions">
+            <Link href="/" id="founders-linkedin">
+              Homepage
+            </Link>
+            <button type="button" id="founders-login-link" onClick={signOutUser}>
+              Logout
+            </button>
+            <a
+              id="founders-chat-cta"
+              href="https://calendly.com/bballi/30min"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Chat with Bryan
+              <span id="founders-chat-cta-icon">↗</span>
+            </a>
           </div>
-          <div className="env">ENV · PROD · <span className="v">{
-            latestRunStatus === 'queued' ? 'INITIAL BRIEF QUEUED' :
-            latestRunStatus === 'running' ? 'BRIEF RUNNING' :
-            latestRunStatus === 'succeeded' ? 'BRIEF COMPLETE' :
-            latestRunStatus === 'failed' ? 'BRIEF FAILED' :
-            'CLIENT AUTH LIVE'
-          }</span></div>
-        </header>
+          <div id="founders-hidden-controls" aria-hidden="true">
+            <div id="theme-toggle" role="group" aria-label="Theme">
+              <button type="button" data-theme="dark" className={theme === 'dark' ? 'is-active' : ''} onClick={() => setTheme('dark')}>DARK</button>
+              <button type="button" data-theme="light" className={theme === 'light' ? 'is-active' : ''} onClick={() => setTheme('light')}>LIGHT</button>
+            </div>
+            <button type="button" id="founders-signout" onClick={signOutUser}>Sign Out</button>
+          </div>
+        </div>
+      </header>
+      <main id="founders-shell">
 
+        {/* ── Hero ── */}
         <section id="founders-hero-shell">
           <div id="founders-hero-numeric-shell">
-            <div className="hero-label">{client?.companyName ? `${client.companyName.toUpperCase()} — REAL-TIME` : 'SYSTEMS ONLINE — REAL-TIME'}</div>
-            <div id="founders-hero-numeric">
-              <span id="founders-hero-num-val">{String(recentRuns.length || 1).padStart(2, '0')}</span>
-              <span className="denom">/14</span>
-            </div>
-            <div id="founders-hero-caption">
-              <span className="status-dot" />
-              <span>{clientStatus === 'provisioning' ? 'CLIENT PROVISIONING ACTIVE' : clientStatus === 'error' ? 'SETUP REQUIRES ATTENTION' : 'ALL SUBSYSTEMS NOMINAL'}</span>
-              <span className="sep">·</span>
-              <span>{latestRunStatus ? `LATEST RUN ${String(latestRunStatus).toUpperCase()}` : 'WAITING FOR INITIAL RUN'}</span>
-              <span className="sep">·</span>
-              <span>{client?.normalizedHost || 'NO SOURCE URL'}</span>
+            <div id="founders-hero-numeric" aria-label="Dashboard headline">
+              <div id="founders-hero-marquee-shell" ref={heroMarqueeShellRef}>
+                <div id="founders-hero-marquee-track" ref={heroMarqueeTrackRef}>
+                  {Array.from({ length: heroMarqueeCopies }).map((_, index) => (
+                    <span
+                      key={`hero-marquee-copy-${index}`}
+                      className="founders-hero-marquee-copy"
+                      ref={index === 0 ? heroMarqueeCopyRef : null}
+                      aria-hidden={index > 0 ? 'true' : undefined}
+                    >
+                      {capabilityHeadline} <span className="founders-hero-marquee-sep">/</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 
           <div id="founders-hero-meta">
-            <div className="meta-row"><span className="label">LOCAL TIME</span><span className="value">{localTime}</span></div>
-            <div className="meta-row"><span className="label">FOUNDER</span><span className="value">{founderLabel}</span></div>
-            <div className="meta-row"><span className="label">BUILD</span><span className="value">0.14.2 STABLE</span></div>
-            <div className="meta-row"><span className="label">CLIENT</span><span className="value">{client?.companyName || 'UNASSIGNED'}</span></div>
-            <div className="meta-row"><span className="label">ACCOUNT</span><span className="value">{user?.email || 'SIGNED IN'}</span></div>
+            <div className="meta-row">
+              <span className="label">CLIENT</span>
+              <span className="value">{client?.companyName || 'UNASSIGNED'}</span>
+            </div>
+            <div className="meta-row">
+              <span className="label">ACCOUNT</span>
+              <span className="value">{user?.email || 'SIGNED IN'}</span>
+            </div>
+            <div className="meta-row">
+              <span className="label">TIER</span>
+              <button
+                id="tier-trigger-btn"
+                type="button"
+                onClick={() => setShowTierModal(true)}
+              >
+                Onboarded
+              </button>
+            </div>
+            <div className="meta-row meta-row-source">
+              <div className="meta-row-source-body">
+                <div id="reseed-control-row">
+                  <div id="dashboard-source-cta-row">
+                    <Globe id="dashboard-source-cta-icon" size={15} strokeWidth={1.5} aria-hidden="true" />
+                    <input
+                      id="reseed-url-input"
+                      type="url"
+                      value={reseedUrl}
+                      onChange={(e) => { setReseedUrl(e.target.value); setReseedError(''); setReseedSuccess(false); }}
+                      placeholder="yourbusiness.com"
+                      disabled={reseedLoading || isRunActive}
+                      spellCheck={false}
+                    />
+                    <button
+                      id="reseed-run-btn"
+                      className="cta-pill-btn"
+                      type="button"
+                      onClick={handleReseed}
+                      disabled={reseedLoading || isRunActive || !reseedUrl.trim()}
+                    >
+                      <span className="reseed-run-btn-label-desktop">
+                        {reseedLoading ? 'Queueing...' :
+                         latestRunStatus === 'queued' ? 'Intake Queued' :
+                         latestRunStatus === 'running' ? 'Intake Running' :
+                         client ? 'Update & Rerun' : 'Create Dashboard'}
+                      </span>
+                      <span className="reseed-run-btn-label-mobile">
+                        {reseedLoading ? 'Queueing...' : 'Rerun'}
+                      </span>
+                      <span id="reseed-run-btn-icon">↗</span>
+                    </button>
+                  </div>
+                </div>
+                {isRunActive ? (
+                  <div id="reseed-active-row">
+                    <span id="reseed-run-status-label">
+                      {latestRunStatus === 'queued' ? 'RUN IS QUEUED — WAITING FOR WORKER' : 'RUN IN PROGRESS — PROCESSING'}
+                    </span>
+                    <button
+                      id="reseed-cancel-btn"
+                      type="button"
+                      onClick={handleCancelRun}
+                      disabled={cancelLoading}
+                    >
+                      {cancelLoading ? 'CANCELLING...' : 'RESET & CHANGE WEBSITE'}
+                    </button>
+                  </div>
+                ) : null}
+                {cancelError ? <div id="reseed-error-msg">{cancelError}</div> : null}
+                {reseedError ? <div id="reseed-error-msg">{reseedError}</div> : null}
+              </div>
+            </div>
           </div>
         </section>
 
+        {/* ── Capability section ── */}
         <section id="capability-section">
-          <div id="capability-section-header">
-            <h2>{client?.dashboardTitle || displayProfile?.dashboardTitle || 'An operating stack that runs itself.'}</h2>
-            <div className="count">
-              {bootstrapLoading
-                ? 'LOADING CLIENT STATE'
-                : bootstrapError
-                  ? 'CLIENT STATE ERROR'
-                  : clientStatus === 'provisioning'
-                    ? 'INITIALIZATION IN PROGRESS'
-                    : headline || client?.websiteUrl || '14 SUBSYSTEMS · ALWAYS-ON'}
-            </div>
-          </div>
-
           {bootstrapError ? <div className="db-alert">{bootstrapError}</div> : null}
           {!bootstrapError && errorState ? (
             <div className="db-alert" id="dashboard-error-banner">
@@ -335,80 +1269,227 @@ const DashboardPage = () => {
             </div>
           ) : null}
 
-          {clientStatus === 'active' && (headline || summaryCards.length > 0 || latestInsights.length > 0) ? (
-            <section id="signal-panel">
-              {headline ? (
-                <div id="signal-headline-row">
-                  <span className="signal-label">PRIORITY SIGNAL</span>
-                  <p id="signal-headline-text">{headline}</p>
-                </div>
-              ) : null}
-              {summaryCards.length > 0 ? (
-                <div id="signal-cards-row">
-                  {summaryCards.map((card, i) => (
-                    <div className="signal-card" key={`card-${i}`} id={`signal-card-${card.type || i}`}>
-                      <div className="signal-card-label">{card.label}</div>
-                      <p className="signal-card-value">{card.value}</p>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-              {latestInsights.length > 0 ? (
-                <div id="signal-insights-row">
-                  <div className="signal-label">CONTENT OPPORTUNITIES</div>
-                  {latestInsights.map((insight, i) => (
-                    <div className="signal-insight-row" key={`insight-${i}`} id={`signal-insight-${i}`}>
-                      <span className="signal-insight-priority">[{String(insight.priority || 'MED').toUpperCase()}]</span>
-                      <span className="signal-insight-topic">{insight.topic}</span>
-                      {insight.whyNow ? <span className="signal-insight-why">{insight.whyNow}</span> : null}
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-            </section>
-          ) : null}
-
+          {/* ── Capability grid ── */}
           <div id="capability-grid">
-            {tiles.map((tile) => (
-              <article className="tile" id={`tile-${tile.number}-${tile.id}`} key={tile.id}>
+            {intakeCapabilityCards.map((card) => (
+              <article
+                className={`tile tile-intake-card${hasIntakeData ? ' tile-ready' : ''}`}
+                id={`tile-${card.id}`}
+                key={card.id}
+              >
                 <div className="tile-number">
-                  <span>{tile.number} / {tile.label}</span>
+                  <span>{card.number} / {card.label}</span>
                   <span className="power-dot lamp" />
                 </div>
-                <h3 className="tile-heading">{tile.title}</h3>
-                <p className="tile-description">{tile.description}</p>
-                <div className="tile-viz">{renderViz(tile.viz, countdownHours)}</div>
+                <div className={`tile-intake-placeholder tile-intake-placeholder-${card.id}`}>
+                  <span>{card.placeholderLabel}</span>
+                </div>
+                <div className="tile-intake-body">
+                  <h3 className="tile-heading tile-intake-heading">{card.title}</h3>
+                  <p className="tile-description tile-intake-description">{card.description}</p>
+                  <div className="tile-intake-table-wrap">
+                    <table className="tile-intake-table">
+                      <thead>
+                        <tr>
+                          <th>Field</th>
+                          <th>Value</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {card.rows.map((row) => (
+                          <tr key={`${card.id}-${row.key}`}>
+                            <td>{row.label}</td>
+                            <td>{row.value}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
                 <div className="tile-foot">
-                  <span className="status-live">{tile.status}</span>
-                  <span>{tile.metric}</span>
+                  <span className="status-live">{card.footerLeft}</span>
+                  <span>{card.footerRight}</span>
                 </div>
               </article>
             ))}
+            {tiles.map((tile) => {
+              const isFreeTier = FREE_TIER_TILE_IDS.has(tile.id);
+              const isReady = isFreeTier && hasIntakeData;
+              const tileStatus = isReady ? tile.status : isFreeTier ? 'INITIALIZING' : 'PREVIEW';
+              const tileMetric = isReady ? tile.metric : isFreeTier ? '—' : 'PRO TIER';
+              return (
+                <article
+                  className={`tile${!isFreeTier ? ' tile-preview' : ''}${isReady ? ' tile-ready' : ''}`}
+                  id={`tile-${tile.number}-${tile.id}`}
+                  key={tile.id}
+                >
+                  <div className="tile-number">
+                    <span>{tile.number} / {tile.label}</span>
+                    <span className={`power-dot lamp${!isFreeTier ? ' power-dot-dim' : ''}`} />
+                  </div>
+                  <h3 className="tile-heading">{tile.title}</h3>
+                  <p className="tile-description">{tile.description}</p>
+                  <div className="tile-viz">{renderViz(tile.viz, countdownHours)}</div>
+                  <div className="tile-foot">
+                    <span className={`status-live${!isFreeTier ? ' status-preview' : ''}`}>{tileStatus}</span>
+                    <span>{tileMetric}</span>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         </section>
 
-        <section id="activity-console">
-          <div id="activity-console-head">
-            <h3>SYSTEM ACTIVITY — LAST 60S</h3>
-            <div id="activity-count-val">17</div>
-            <div className="sub">EVENTS / MIN</div>
-          </div>
-          <div id="activity-log-stream">
-            {activityRows.map((row) => (
-              <div className="log-line" key={`${row.time}-${row.tag}`}>
-                <span className="time">{row.time}</span>
-                <span className="tag">{row.tag}</span>
-                <span className="msg">
-                  {row.message} {row.badge ? <span className="ok">{row.badge}</span> : null}
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
       </main>
+
+      {/* ── Intake build modal — auth card shell + embedded terminal ── */}
+      {showIntakeModal ? (
+        <div id="intake-modal-overlay" role="dialog" aria-modal="true" aria-label="Dashboard build in progress">
+
+          {/* Card: exact auth cardStyle */}
+          <div
+            id="intake-modal-card"
+            style={{
+              position: 'relative',
+              zIndex: 2,
+              width: '100%',
+              maxWidth: '30rem',
+              padding: 'clamp(1.25rem, 5vw, 2rem)',
+              borderRadius: '1.1rem',
+              boxSizing: 'border-box',
+              ...internalPageGlassCardStyle,
+              background: 'rgba(255, 252, 248, 0.97)',
+              boxShadow: `${internalPageGlassCardStyle.boxShadow}, 0 30px 90px rgba(42,36,32,0.12)`,
+            }}
+          >
+
+            {/* Brand row — exact auth brandStyle */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', justifyContent: 'space-between' }}>
+              <img src="/img/sig.png" alt="" aria-hidden="true" style={{ width: '2.75rem', height: 'auto', display: 'block' }} />
+              <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.44)', fontWeight: 700, fontFamily: '"Space Mono", monospace' }}>
+                Client Access
+              </span>
+              {/* Status orb — same shape as auth back button */}
+              <span
+                id="intake-modal-status-orb"
+                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '2.4rem', height: '2.4rem', borderRadius: '999px', background: 'rgba(255,255,255,0.34)', border: '1px solid rgba(42,36,32,0.12)' }}
+                aria-hidden="true"
+              >
+                <span style={{
+                  width: '0.46rem', height: '0.46rem', borderRadius: '999px',
+                  background: latestRunStatus === 'failed' ? '#D71921' : completionCountdown !== null ? '#4A9E5C' : latestRunStatus === 'queued' ? '#D4A843' : '#4A9E5C',
+                  animation: isRunActive ? 'status-pulse 1.4s ease-in-out infinite' : 'none',
+                }} />
+              </span>
+            </div>
+
+            {/* Marquee — exact auth titleViewport/Track/titleStyle */}
+            <div style={{ width: '100%', overflow: 'hidden', margin: '0 0 0.7rem' }}>
+              <div ref={modalMarqueeTrackRef} style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform' }}>
+                {(['a', 'b']).map((k) => (
+                  <span key={k} aria-hidden={k === 'b' ? 'true' : undefined} style={{ margin: 0, flexShrink: 0, color: '#2a2420', fontSize: 'clamp(2rem, 8.5vw, 7rem)', lineHeight: 1, letterSpacing: '-0.04em', fontFamily: '"Doto", "Space Mono", monospace', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                    {completionCountdown !== null
+                      ? 'DASHBOARD READY\u00A0\u00A0\u00B7\u00A0\u00A0'
+                      : latestRunStatus === 'failed'
+                        ? 'BUILD FAILED\u00A0\u00A0\u00B7\u00A0\u00A0SETUP REQUIRED\u00A0\u00A0\u00B7\u00A0\u00A0'
+                        : 'BUILDING YOUR DASHBOARD\u00A0\u00A0\u00B7\u00A0\u00A0PROCESSING WEBSITE\u00A0\u00A0\u00B7\u00A0\u00A0'}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Copy — exact auth copyStyle */}
+            <p id="intake-modal-copy" style={{ margin: 0, color: 'rgba(42,36,32,0.66)', lineHeight: 1.6, fontFamily: '"Space Grotesk", system-ui, sans-serif', textAlign: 'center' }}>
+              {completionCountdown !== null
+                ? `Dashboard launching in ${completionCountdown}…`
+                : latestRunStatus === 'queued'
+                  ? 'Creating Your Dashboard'
+                  : latestRunStatus === 'running'
+                    ? 'Analyzing your site and building brand intelligence.'
+                    : 'Setup encountered an issue. Update the website URL below to retry.'}
+            </p>
+
+
+            {/* ── Embedded terminal panel ── */}
+            <div id="intake-modal-terminal-embed" ref={terminalOutputRef}>
+              {displayedTerminalLines.map((line, i) => (
+                <div key={`tl-${i}`} className={`term-line term-${line.type}`}>
+                  <span className="term-pfx">{line.prefix}</span>
+                  <span className="term-msg">{line.text}</span>
+                  {line.cursor ? <span className="term-caret" /> : null}
+                </div>
+              ))}
+            </div>
+
+            {/* Footer */}
+            <div id="intake-modal-footer">
+              {client?.normalizedHost
+                || (currentRun?.sourceUrl ? (() => { try { return new URL(currentRun.sourceUrl).hostname.replace(/^www\./, ''); } catch { return currentRun.sourceUrl; } })() : null)
+                || '\u00A0'}
+            </div>
+
+          </div>
+        </div>
+      ) : null}
+
+      {showTierModal ? (
+        <div
+          id="tier-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Pricing options"
+          onClick={() => setShowTierModal(false)}
+        >
+          <div
+            id="tier-modal-card"
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              position: 'relative',
+              zIndex: 2,
+              width: '100%',
+              maxWidth: '44rem',
+              padding: 'clamp(1.25rem, 5vw, 2rem)',
+              borderRadius: '1.1rem',
+              boxSizing: 'border-box',
+              ...internalPageGlassCardStyle,
+              background: 'rgba(255, 252, 248, 0.97)',
+              boxShadow: `${internalPageGlassCardStyle.boxShadow}, 0 30px 90px rgba(42,36,32,0.12)`,
+            }}
+          >
+            <div id="tier-modal-top">
+              <div id="tier-modal-brand-row">
+                <img src="/img/sig.png" alt="" aria-hidden="true" style={{ width: '2.75rem', height: 'auto', display: 'block' }} />
+                <span id="tier-modal-eyebrow">Client Access</span>
+                <button id="tier-modal-close" type="button" onClick={() => setShowTierModal(false)} aria-label="Close pricing modal">✕</button>
+              </div>
+              <div id="tier-modal-title-wrap">
+                <h2 id="tier-modal-title">Pricing Options</h2>
+                <p id="tier-modal-summary">Current tier and upgrade paths. This content is placeholder copy and will be updated later.</p>
+              </div>
+            </div>
+
+            <div id="tier-modal-grid">
+              {PRICING_MODAL_OPTIONS.map((option) => (
+                <article className="tier-option-card" key={option.id} id={`tier-option-${option.id}`}>
+                  <div className="tier-option-head">
+                    <span className="tier-option-label">{option.label}</span>
+                    <span className="tier-option-price">{option.price}</span>
+                  </div>
+                  <p className="tier-option-summary">{option.summary}</p>
+                </article>
+              ))}
+            </div>
+
+            <div id="tier-modal-footer">Placeholder pricing modal — content to be updated.</div>
+          </div>
+        </div>
+      ) : null}
+
     </div>
   );
 };
+
+// ── Tile viz renderers ────────────────────────────────────────────────────────
 
 const renderViz = (type, countdownHours) => {
   switch (type) {
@@ -477,11 +1558,7 @@ const renderViz = (type, countdownHours) => {
                 <circle className="ring-bg" cx="29" cy="29" r="24" fill="none" strokeWidth="4" />
                 <circle
                   className={`ring-fill ring-fill-${tone} stroke-lit`}
-                  cx="29"
-                  cy="29"
-                  r="24"
-                  fill="none"
-                  strokeWidth="4"
+                  cx="29" cy="29" r="24" fill="none" strokeWidth="4"
                   strokeDasharray="150.8"
                   strokeDashoffset={150.8 - ((150.8 * percent) / 100)}
                   transform="rotate(-90 29 29)"
@@ -636,19 +1713,9 @@ const renderViz = (type, countdownHours) => {
   }
 };
 
-const formatClock = (date) =>
-  date.toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  });
+const shellStyle = { minHeight: '100dvh', position: 'relative', overflow: 'hidden' };
 
-const shellStyle = {
-  minHeight: '100dvh',
-  position: 'relative',
-  overflow: 'hidden',
-};
+// ── CSS ───────────────────────────────────────────────────────────────────────
 
 const dashboardCss = `
   :root {
@@ -697,104 +1764,160 @@ const dashboardCss = `
     z-index: 1;
     max-width: 1440px;
     margin: 0 auto;
-    padding: 40px 48px 96px;
+    padding: 116px 48px 96px;
     background-image:
       linear-gradient(180deg, rgba(245, 241, 223, 0.08), rgba(245, 241, 223, 0.04)),
       radial-gradient(circle, var(--dot-grid-color) 0.8px, transparent 0.8px);
     background-size: 16px 16px;
   }
   #founders-top-strip {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 200;
+    min-height: 64px;
+    background: rgba(245, 241, 223, 0.18);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.45), inset 0 -1px 0 rgba(42,36,32,0.08);
+  }
+  #founders-top-strip-inner {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 24px;
-    padding-bottom: 28px;
-    border-bottom: 1px solid var(--border);
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-secondary);
-    flex-wrap: wrap;
+    min-height: 64px;
+    width: 100%;
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 0 48px;
+    flex-wrap: nowrap;
+    box-sizing: border-box;
   }
   #founders-brand {
-    color: var(--text-display);
     display: flex;
     align-items: center;
     text-decoration: none;
   }
-  #founders-brand .mark {
-    display: inline-block;
-    width: 11px;
-    height: 11px;
-    border: 1.5px solid var(--text-display);
-    margin-right: 10px;
-    position: relative;
+  #founders-brand img {
+    height: clamp(2rem, 4vw, 2.8rem);
+    width: auto;
+    display: block;
   }
-  #founders-brand .mark::after {
-    content: "";
+  #founders-top-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  #founders-linkedin {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(0.9rem, 1.4vw, 1rem);
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    color: rgba(42, 36, 32, 0.42);
+    text-decoration: none;
+    line-height: 1;
+  }
+  #founders-login-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.65rem 1rem;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.34);
+    border: 1px solid rgba(42, 36, 32, 0.1);
+    color: #2a2420;
+    text-decoration: none;
+    font-size: 0.84rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    line-height: 1;
+  }
+  #founders-chat-cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    padding: 0.65rem 1rem;
+    border-radius: 999px;
+    background:
+      linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%),
+      linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1);
+    color: #ffffff;
+    text-decoration: none;
+    font-size: 0.84rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  #founders-chat-cta-icon {
+    font-size: 0.72rem;
+    opacity: 0.82;
+  }
+  #founders-hidden-controls {
     position: absolute;
-    inset: 2px;
-    background: var(--text-display);
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
-  #founders-top-nav {
-    display: flex;
-    gap: 24px;
-    flex-wrap: wrap;
-    align-items: center;
-  }
-  #founders-top-nav a,
-  #founders-top-nav .logout-link {
-    color: var(--text-disabled);
-    text-decoration: none;
-    font-family: inherit;
-    font-size: inherit;
-    letter-spacing: inherit;
-    text-transform: inherit;
-    cursor: pointer;
-  }
-  #founders-top-nav a.is-active {
-    color: var(--text-display);
-  }
-  #founders-top-nav a.is-active::before { content: "[ "; color: var(--text-secondary); }
-  #founders-top-nav a.is-active::after { content: " ]"; color: var(--text-secondary); }
   #theme-toggle {
     display: inline-flex;
-    border: 1px solid var(--border-visible);
+    border: 1px solid rgba(42, 36, 32, 0.1);
     border-radius: 999px;
     overflow: hidden;
     padding: 2px;
+    background: rgba(255,255,255,0.34);
   }
   #theme-toggle button {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.1em;
-    padding: 6px 14px;
-    color: var(--text-secondary);
+    font-family: var(--font-ui);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 0.65rem 0.92rem;
+    color: rgba(42, 36, 32, 0.48);
     border-radius: 999px;
   }
   #theme-toggle button.is-active {
-    background: var(--text-display);
-    color: var(--page);
+    background: #2a2420;
+    color: #f5f1df;
   }
-  .env .v { color: var(--text-display); }
+  #founders-signout {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.65rem 1rem;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.34);
+    border: 1px solid rgba(42, 36, 32, 0.1);
+    color: #2a2420;
+    font-size: 0.84rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    line-height: 1;
+    cursor: pointer;
+  }
   #founders-hero-shell {
     display: grid;
     grid-template-columns: 1.5fr 1fr;
     gap: 64px;
-    padding: 80px 0 80px;
     border-bottom: 1px solid var(--border);
-    align-items: end;
+    align-items: center;
   }
   .hero-label,
   .meta-row .label,
-  #capability-section-header .count,
   .tile-number,
-  .tile-foot,
-  #activity-console-head h3,
-  #activity-console-head .sub,
-  .log-line .tag,
-  .log-line .time {
+  .tile-foot {
     font-family: var(--font-mono);
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -806,6 +1929,13 @@ const dashboardCss = `
     color: var(--text-secondary);
     margin-bottom: 24px;
   }
+  #founders-hero-numeric-shell {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 100%;
+    min-width: 0;
+  }
   #founders-hero-numeric {
     font-family: var(--font-display);
     font-weight: 400;
@@ -813,8 +1943,47 @@ const dashboardCss = `
     line-height: 0.9;
     color: var(--text-display);
     letter-spacing: -0.03em;
+    width: 100%;
+    min-width: 0;
   }
-  #founders-hero-numeric .denom { color: var(--text-disabled); }
+  #founders-hero-marquee-shell {
+    width: 100%;
+    overflow: hidden;
+    min-width: 0;
+    mask-image: linear-gradient(90deg, transparent 0, rgba(0,0,0,0.94) 8%, rgba(0,0,0,0.94) 92%, transparent 100%);
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, rgba(0,0,0,0.94) 8%, rgba(0,0,0,0.94) 92%, transparent 100%);
+  }
+  #founders-hero-marquee-track {
+    display: flex;
+    align-items: center;
+    width: max-content;
+    will-change: transform;
+    transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+    animation: founders-hero-marquee var(--hero-marquee-duration, 16s) linear infinite;
+  }
+  .founders-hero-marquee-copy {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2em;
+    padding-right: 0.2em;
+    white-space: nowrap;
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    line-height: inherit;
+    letter-spacing: inherit;
+    text-transform: uppercase;
+    color: inherit;
+  }
+  .founders-hero-marquee-sep {
+    color: var(--text-disabled);
+  }
+  @keyframes founders-hero-marquee {
+    from { transform: translate3d(0, 0, 0); }
+    to { transform: translate3d(calc(-1 * var(--hero-marquee-width, 0px)), 0, 0); }
+  }
   #founders-hero-caption {
     font-family: var(--font-mono);
     font-size: 12px;
@@ -837,7 +2006,13 @@ const dashboardCss = `
     width: 9px;
     height: 9px;
     display: inline-block;
+    flex-shrink: 0;
   }
+  @keyframes status-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+  .status-dot-pulse { animation: status-pulse 1.4s ease-in-out infinite; }
   #founders-hero-meta { display: flex; flex-direction: column; }
   .meta-row {
     display: flex;
@@ -846,31 +2021,34 @@ const dashboardCss = `
     padding: 14px 0;
     border-bottom: 1px solid var(--border);
   }
-  .meta-row:last-child { border-bottom: none; }
-  .meta-row .label { font-size: 11px; color: var(--text-secondary); }
-  .meta-row .value { font-family: var(--font-mono); font-size: 14px; color: var(--text-display); }
-  #capability-section { padding: 80px 0 0; }
-  #capability-section-header {
+  .meta-row-source {
+    display: block;
+  }
+  .meta-row-source .label {
+    display: block;
+    margin-bottom: 10px;
+  }
+  .meta-row-source-body {
     display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    margin-bottom: 40px;
-    gap: 24px;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 10px;
   }
-  #capability-section-header h2 {
-    font-weight: 300;
-    font-size: clamp(28px, 3.4vw, 42px);
+  .meta-row:last-child { border-bottom: none; }
+  .meta-row .label { font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .value { font-family: var(--font-mono); font-size: 14px; color: var(--text-display); }
+  #tier-trigger-btn {
+    border: none;
+    background: none;
+    padding: 0;
+    font-family: var(--font-mono);
+    font-size: 14px;
     color: var(--text-display);
-    letter-spacing: -0.02em;
-    line-height: 1.05;
-    max-width: 680px;
+    text-decoration: underline;
+    text-underline-offset: 0.18em;
+    cursor: pointer;
   }
-  #capability-section-header .count {
-    font-size: 11px;
-    color: var(--text-secondary);
-    white-space: nowrap;
-  }
+  .meta-value-wrap { font-size: 11px; max-width: 28ch; text-align: right; line-height: 1.4; white-space: normal; }
+  #capability-section { padding: 80px 0 0; }
   .db-alert {
     margin: 0 0 20px;
     padding: 14px 16px;
@@ -880,15 +2058,16 @@ const dashboardCss = `
     font-size: 12px;
     line-height: 1.5;
   }
-  .db-alert-muted {
-    color: var(--text-secondary);
-  }
+  .db-alert-muted { color: var(--text-secondary); }
   #capability-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
     gap: 1px;
     background: var(--border);
     border: 1px solid var(--border);
+    border-radius: 28px;
+    overflow: hidden;
+    isolation: isolate;
   }
   .tile {
     aspect-ratio: 16 / 9;
@@ -906,6 +2085,133 @@ const dashboardCss = `
     row-gap: 4px;
     overflow: hidden;
   }
+  .tile-preview {
+    opacity: 0.55;
+  }
+  .tile-intake-card {
+    aspect-ratio: auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+  }
+  .tile-intake-placeholder {
+    width: 100%;
+    height: 96px;
+    border-radius: 12px;
+    border: 1px solid rgba(42, 36, 32, 0.1);
+    background:
+      linear-gradient(135deg, rgba(255,255,255,0.75), rgba(255,255,255,0.22)),
+      linear-gradient(135deg, rgba(93, 201, 184, 0.24), rgba(156, 129, 225, 0.22) 55%, rgba(240, 114, 185, 0.18));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.45);
+    overflow: hidden;
+  }
+  .tile-intake-placeholder-style-guide {
+    background:
+      linear-gradient(135deg, rgba(255,255,255,0.78), rgba(255,255,255,0.24)),
+      linear-gradient(135deg, rgba(244, 195, 120, 0.24), rgba(144, 197, 234, 0.22) 52%, rgba(177, 151, 241, 0.2));
+  }
+  .tile-intake-placeholder-industry {
+    background:
+      linear-gradient(135deg, rgba(255,255,255,0.78), rgba(255,255,255,0.24)),
+      linear-gradient(135deg, rgba(182, 212, 137, 0.22), rgba(126, 188, 242, 0.2) 50%, rgba(244, 195, 120, 0.18));
+  }
+  .tile-intake-placeholder-business-model {
+    background:
+      linear-gradient(135deg, rgba(255,255,255,0.8), rgba(255,255,255,0.22)),
+      linear-gradient(135deg, rgba(255, 208, 132, 0.18), rgba(243, 162, 186, 0.18) 48%, rgba(150, 184, 244, 0.18));
+  }
+  .tile-intake-placeholder-priority-signal {
+    background:
+      linear-gradient(135deg, rgba(255,255,255,0.78), rgba(255,255,255,0.24)),
+      linear-gradient(135deg, rgba(125, 214, 184, 0.22), rgba(126, 188, 242, 0.2) 48%, rgba(255, 208, 132, 0.18));
+  }
+  .tile-intake-placeholder-draft-post {
+    background:
+      linear-gradient(135deg, rgba(255,255,255,0.8), rgba(255,255,255,0.22)),
+      linear-gradient(135deg, rgba(242, 186, 118, 0.2), rgba(246, 138, 177, 0.18) 50%, rgba(162, 141, 236, 0.18));
+  }
+  .tile-intake-placeholder-content-angle {
+    background:
+      linear-gradient(135deg, rgba(255,255,255,0.78), rgba(255,255,255,0.22)),
+      linear-gradient(135deg, rgba(114, 205, 214, 0.2), rgba(148, 191, 244, 0.2) 52%, rgba(191, 164, 245, 0.18));
+  }
+  .tile-intake-placeholder-content-opportunities {
+    background:
+      linear-gradient(135deg, rgba(255,255,255,0.8), rgba(255,255,255,0.22)),
+      linear-gradient(135deg, rgba(129, 210, 178, 0.2), rgba(242, 202, 127, 0.18) 50%, rgba(152, 183, 244, 0.18));
+  }
+  .tile-intake-placeholder span {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(42,36,32,0.52);
+  }
+  .tile-intake-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+  }
+  .tile-intake-heading {
+    grid-area: auto;
+    margin: 0;
+  }
+  .tile-intake-description {
+    grid-area: auto;
+    margin-top: 0;
+    max-width: none;
+  }
+  .tile-intake-table-wrap {
+    margin-top: 2px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+  .tile-intake-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    table-layout: fixed;
+  }
+  .tile-intake-table th {
+    text-align: left;
+    padding: 0 6px 8px 0;
+    font-weight: 600;
+    color: rgba(42,36,32,0.42);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-family: var(--font-mono);
+    border-bottom: 1px solid var(--border);
+  }
+  .tile-intake-table th:last-child,
+  .tile-intake-table td:last-child {
+    padding-right: 0;
+  }
+  .tile-intake-table td {
+    padding: 8px 6px 8px 0;
+    color: var(--text-display);
+    border-bottom: 1px solid rgba(42,36,32,0.08);
+    vertical-align: top;
+    line-height: 1.45;
+    word-break: break-word;
+  }
+  .tile-intake-table td:first-child {
+    width: 88px;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .tile-intake-table tr:last-child td {
+    border-bottom: none;
+  }
   .tile-number {
     grid-area: num;
     font-size: 10px;
@@ -920,6 +2226,7 @@ const dashboardCss = `
     height: 6px;
     display: inline-block;
   }
+  .power-dot-dim { background: var(--text-disabled) !important; box-shadow: none !important; }
   .tile-heading {
     grid-area: head;
     font-weight: 400;
@@ -933,7 +2240,8 @@ const dashboardCss = `
     font-size: 11.5px;
     color: var(--text-secondary);
     line-height: 1.45;
-    max-width: 32ch;
+    width: 100%;
+    max-width: none;
     margin-top: 6px;
   }
   .tile-viz {
@@ -956,6 +2264,9 @@ const dashboardCss = `
     justify-content: space-between;
     gap: 12px;
     align-self: end;
+    font-family: var(--font-mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
   .status-live {
     display: inline-flex;
@@ -968,6 +2279,7 @@ const dashboardCss = `
     height: 5px;
     display: inline-block;
   }
+  .status-preview::before { background: var(--text-disabled) !important; box-shadow: none !important; }
   .segbar-wrap, .qa-wrap, .mtg-wrap, .spark-wrap, .countdown-wrap, .stat-wrap, .deadline-wrap, .pipeline-wrap, .delta-wrap, .thread-wrap, .kw-wrap {
     width: 100%;
   }
@@ -993,11 +2305,7 @@ const dashboardCss = `
     gap: 5px;
     aspect-ratio: 16 / 7;
   }
-  .memory-node {
-    background: var(--border);
-    border-radius: 999px;
-    aspect-ratio: 1;
-  }
+  .memory-node { background: var(--border); border-radius: 999px; aspect-ratio: 1; }
   .memory-node.on { background: var(--text-primary); }
   .memory-node.hot { background: var(--text-display); }
   .qa-q {
@@ -1024,7 +2332,9 @@ const dashboardCss = `
     background: var(--text-display);
     vertical-align: -1px;
     margin-left: 2px;
+    animation: blink 1s step-start infinite;
   }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
   .mtg-row {
     display: grid;
     grid-template-columns: 42px 1fr auto;
@@ -1041,20 +2351,8 @@ const dashboardCss = `
   .mtg-row .title { color: var(--text-display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mtg-row .badge { color: var(--success); font-size: 8.5px; display: inline-flex; align-items: center; gap: 5px; }
   .mtg-row .badge.pending { color: var(--warning); }
-  .mtg-row .badge::before {
-    content: "";
-    width: 5px;
-    height: 5px;
-    background: currentColor;
-    border-radius: 999px;
-  }
-  .rings {
-    display: flex;
-    gap: 10px;
-    width: 100%;
-    justify-content: space-around;
-    align-items: center;
-  }
+  .mtg-row .badge::before { content: ""; width: 5px; height: 5px; background: currentColor; border-radius: 999px; }
+  .rings { display: flex; gap: 10px; width: 100%; justify-content: space-around; align-items: center; }
   .ring-cell { text-align: center; }
   .ring-bg { stroke: var(--border); }
   .ring-fill-display { stroke: var(--text-display); }
@@ -1062,230 +2360,456 @@ const dashboardCss = `
   .ring-fill-success { stroke: var(--success); }
   .ring-val { font-family: var(--font-mono); font-size: 12px; color: var(--text-display); margin-top: 6px; }
   .ring-label { font-family: var(--font-mono); font-size: 8.5px; color: var(--text-secondary); margin-top: 1px; letter-spacing: 0.08em; text-transform: uppercase; }
-  .spark-val {
-    font-family: var(--font-mono);
-    font-size: 24px;
-    color: var(--text-display);
-    line-height: 1;
-    margin-bottom: 4px;
-  }
-  .spark-val .unit, .countdown .unit, .countdown-meta, .chip {
-    font-family: var(--font-mono);
-    text-transform: uppercase;
-  }
+  .spark-val { font-family: var(--font-mono); font-size: 24px; color: var(--text-display); line-height: 1; margin-bottom: 4px; }
+  .spark-val .unit, .countdown .unit, .countdown-meta, .chip { font-family: var(--font-mono); text-transform: uppercase; }
   .spark-val .unit { font-size: 9px; color: var(--text-secondary); margin-left: 5px; letter-spacing: 0.08em; }
   .spark-svg { width: 100%; height: 38px; display: block; margin: 2px 0 10px; }
   .spark-grid { stroke: var(--border); }
   .spark-line { stroke: var(--text-display); }
   .spark-dot { fill: var(--text-display); }
   .chips { display: flex; gap: 4px; }
-  .chip {
-    border: 1px solid var(--border-visible);
-    padding: 2px 9px;
-    font-size: 9px;
-    color: var(--text-secondary);
-    border-radius: 999px;
-    letter-spacing: 0.08em;
-  }
+  .chip { border: 1px solid var(--border-visible); padding: 2px 9px; font-size: 9px; color: var(--text-secondary); border-radius: 999px; letter-spacing: 0.08em; }
   .chip.on { color: var(--text-display); border-color: var(--text-display); }
-  .countdown {
-    font-family: var(--font-display);
-    font-size: clamp(60px, 7vw, 84px);
-    line-height: 0.9;
-    color: var(--text-display);
-    letter-spacing: -0.02em;
-  }
-  .countdown .unit {
-    font-size: 13px;
-    color: var(--text-secondary);
-    margin-left: 6px;
-    letter-spacing: 0.08em;
-  }
+  .countdown { font-family: var(--font-display); font-size: clamp(60px, 7vw, 84px); line-height: 0.9; color: var(--text-display); letter-spacing: -0.02em; }
+  .countdown .unit { font-size: 13px; color: var(--text-secondary); margin-left: 6px; letter-spacing: 0.08em; }
   .countdown-meta { font-size: 9px; color: var(--text-secondary); margin-top: 8px; letter-spacing: 0.08em; }
-  .stat-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    padding: 7px 0;
-    border-bottom: 1px solid var(--border);
-  }
+  .stat-row { display: flex; justify-content: space-between; align-items: baseline; padding: 7px 0; border-bottom: 1px solid var(--border); }
   .stat-row:last-child { border-bottom: none; }
-  .stat-row .label { font-size: 9.5px; color: var(--text-secondary); letter-spacing: 0.08em; text-transform: uppercase; }
-  .stat-row .value { font-size: 12px; color: var(--text-display); }
+  .stat-row .label { font-size: 9.5px; color: var(--text-secondary); letter-spacing: 0.08em; text-transform: uppercase; font-family: var(--font-mono); }
+  .stat-row .value { font-size: 12px; color: var(--text-display); font-family: var(--font-mono); }
   .stat-row .value.warn { color: var(--warning); }
   .deadline-row { margin-bottom: 10px; }
-  .deadline-head {
-    display: flex;
-    justify-content: space-between;
-    font-size: 9px;
-    margin-bottom: 4px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-  }
+  .deadline-head { display: flex; justify-content: space-between; font-size: 9px; margin-bottom: 4px; letter-spacing: 0.06em; text-transform: uppercase; }
   .deadline-head .name { color: var(--text-secondary); }
   .deadline-head .days { color: var(--text-display); }
   .deadline-head .days.warn { color: var(--warning); }
-  .deadline-bar, .kw-bar, .delta-bar-before, .delta-bar-after {
-    height: 3px;
-    background: var(--border);
-    position: relative;
-  }
-  .deadline-bar > .fill, .kw-bar > .fill, .delta-bar-before > .fill, .delta-bar-after > .fill {
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-  }
-  .deadline-bar > .fill, .kw-bar > .fill, .delta-bar-after > .fill { background: var(--text-display); }
+  .deadline-bar, .kw-bar, .delta-bar-before, .delta-bar-after { height: 3px; background: var(--border); position: relative; }
+  .deadline-bar > .fill, .kw-bar > .fill, .delta-bar-after > .fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--text-display); }
   .deadline-bar > .fill.warn { background: var(--warning); }
-  .delta-bar-before > .fill { background: var(--text-secondary); }
-  .mini-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 10px;
-  }
-  .mini-table th {
-    text-align: left;
-    padding: 4px 6px 6px 0;
-    color: var(--text-secondary);
-    font-size: 8.5px;
-    border-bottom: 1px solid var(--border-visible);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    font-weight: 400;
-  }
-  .mini-table td {
-    padding: 7px 6px 7px 0;
-    color: var(--text-display);
-    border-bottom: 1px solid var(--border);
-  }
+  .delta-bar-before > .fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--text-secondary); }
+  .mini-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+  .mini-table th { text-align: left; padding: 4px 6px 6px 0; color: var(--text-secondary); font-size: 8.5px; border-bottom: 1px solid var(--border-visible); letter-spacing: 0.08em; text-transform: uppercase; font-weight: 400; }
+  .mini-table td { padding: 7px 6px 7px 0; color: var(--text-display); border-bottom: 1px solid var(--border); }
   .mini-table tr:last-child td { border-bottom: none; }
   .num { text-align: right; padding-right: 0; }
   .delta-up { color: var(--success); }
   .delta-down { color: var(--accent); }
-  .pipeline {
-    display: flex;
-    align-items: center;
-    width: 100%;
-    padding: 4px 0;
-  }
-  .pipe-stop {
-    width: 10px;
-    height: 10px;
-    background: var(--border);
-    border-radius: 999px;
-    flex-shrink: 0;
-  }
+  .pipeline { display: flex; align-items: center; width: 100%; padding: 4px 0; }
+  .pipe-stop { width: 10px; height: 10px; background: var(--border); border-radius: 999px; flex-shrink: 0; }
   .pipe-stop.done { background: var(--text-display); }
-  .pipe-stop.active {
-    width: 16px;
-    height: 16px;
-    background: var(--text-display);
-    border: 3px solid var(--surface);
-    outline: 1px solid var(--text-display);
-  }
+  .pipe-stop.active { width: 16px; height: 16px; background: var(--text-display); border: 3px solid var(--surface); outline: 1px solid var(--text-display); }
   .pipe-line { flex: 1; height: 1px; background: var(--border); }
   .pipe-line.done { background: var(--text-display); }
-  .pipe-labels {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 12px;
-    font-family: var(--font-mono);
-    font-size: 8.5px;
-    color: var(--text-disabled);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-  }
+  .pipe-labels { display: flex; justify-content: space-between; margin-top: 12px; font-family: var(--font-mono); font-size: 8.5px; color: var(--text-disabled); letter-spacing: 0.1em; text-transform: uppercase; }
   .pipe-labels .active { color: var(--text-display); }
   .delta-pair { margin-bottom: 10px; }
-  .delta-label {
-    font-size: 9px;
-    color: var(--text-secondary);
-    margin-bottom: 4px;
-    display: flex;
-    justify-content: space-between;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-  }
+  .delta-label { font-size: 9px; color: var(--text-secondary); margin-bottom: 4px; display: flex; justify-content: space-between; letter-spacing: 0.06em; text-transform: uppercase; }
   .delta-label .pct { color: var(--success); }
   .delta-bar-before { margin-bottom: 3px; }
-  .thread-row {
-    display: grid;
-    grid-template-columns: 68px 1fr auto;
-    gap: 9px;
-    padding: 6px 0;
-    border-bottom: 1px solid var(--border);
-    align-items: baseline;
-    font-size: 9px;
-  }
+  .thread-row { display: grid; grid-template-columns: 68px 1fr auto; gap: 9px; padding: 6px 0; border-bottom: 1px solid var(--border); align-items: baseline; font-size: 9px; font-family: var(--font-mono); }
   .thread-row:last-child { border-bottom: none; }
   .thread-row .sub { color: var(--text-secondary); text-transform: uppercase; }
-  .thread-row .title {
-    color: var(--text-display);
-    font-family: var(--font-ui);
-    font-size: 11px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+  .thread-row .title { color: var(--text-display); font-family: var(--font-ui); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .thread-row .drafts { color: var(--warning); text-transform: uppercase; }
   .thread-row .drafts.watch { color: var(--text-disabled); }
   .kw-row { margin-bottom: 8px; }
-  .kw-head {
-    display: flex;
-    justify-content: space-between;
-    font-size: 9px;
-    color: var(--text-display);
-    margin-bottom: 4px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-  }
+  .kw-head { display: flex; justify-content: space-between; font-size: 9px; color: var(--text-display); margin-bottom: 4px; letter-spacing: 0.06em; text-transform: uppercase; }
   .kw-head .vol { color: var(--text-secondary); }
-  #activity-console {
-    margin-top: 40px;
-    padding: 36px 40px;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    display: grid;
-    grid-template-columns: 220px 1fr;
-    gap: 48px;
+
+  /* ── Responsive ── */
+  @media (max-width: 1200px) {
+    #founders-hero-shell { grid-template-columns: 1fr; gap: 32px; }
   }
-  #activity-console-head h3 {
-    font-weight: 400;
-    font-size: 11px;
-    color: var(--text-secondary);
-    margin-bottom: 14px;
+  @media (max-width: 900px) {
+    #founders-shell { padding: 104px 24px 64px; }
+    #founders-top-strip-inner { padding: 0 24px; }
+    #dashboard-source-cta-row { width: 100%; }
+    #capability-grid { grid-template-columns: 1fr; }
+    .tile { aspect-ratio: auto; min-height: 220px; grid-template-areas: "num" "head" "desc" "viz" "foot"; grid-template-columns: 1fr; row-gap: 14px; }
+    .tile-description { }
+    #intake-identity-row { grid-template-columns: 1fr; gap: 16px; }
   }
-  #activity-count-val {
-    font-family: var(--font-display);
-    font-size: 68px;
-    line-height: 0.9;
-    color: var(--text-display);
+  @media (max-width: 620px) {
+    #founders-shell { padding-top: 96px; }
+    #founders-top-strip-inner {
+      gap: 16px;
+      padding: 0 16px;
+    }
+    #founders-top-actions { gap: 0.75rem; }
+    #founders-linkedin { font-size: 0.92rem; }
+    #founders-login-link { padding: 0.62rem 0.9rem; font-size: 0.8rem; }
+    #founders-chat-cta { padding: 0.62rem 0.9rem; font-size: 0.8rem; gap: 0.35rem; }
+    #capability-section { padding-top: 0; }
+    .reseed-run-btn-label-desktop { display: none; }
+    .reseed-run-btn-label-mobile { display: inline; }
+    #reseed-run-btn-icon { display: none; }
   }
-  #activity-console-head .sub {
-    font-size: 10px;
-    color: var(--text-secondary);
-    margin-top: 6px;
+
+  #reseed-control-row {
+    display: block;
   }
-  #activity-log-stream {
+  #dashboard-source-cta-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 5.6px 5.6px 5.6px 12px;
+    background: rgba(255,255,255,0.45);
+    border: 1px solid rgba(42,36,32,0.12);
+    border-radius: 999px;
+    box-shadow: 0 1px 4px rgba(42,36,32,0.07);
+    box-sizing: border-box;
+    position: relative;
+    z-index: 10;
+    flex-wrap: nowrap;
+  }
+  #dashboard-source-cta-icon {
+    flex-shrink: 0;
+    color: rgba(42,36,32,0.45);
+  }
+  #reseed-url-input {
+    flex: 1;
+    min-width: 0;
+    max-width: none;
+    background: transparent;
+    border: none;
+    color: rgba(42,36,32,0.75);
+    font-family: var(--font-ui);
+    font-size: clamp(0.75rem, 1.1vw, 0.88rem);
+    padding: 0;
+    outline: none;
+  }
+  #reseed-url-input::placeholder { color: rgba(42,36,32,0.38); }
+  #reseed-url-input:disabled { opacity: 0.45; cursor: not-allowed; }
+  #reseed-run-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+    min-width: 6.75rem;
+    padding: 0.5rem 0.75rem;
+    font-size: clamp(0.8rem, 1.1vw, 0.875rem);
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    text-decoration: none;
+    color: #2a2420;
+    background: rgba(255,255,255,0.92);
+    border: 1px solid rgba(42,36,32,0.08);
+    border-radius: 999px;
+    box-shadow: none;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 150ms;
+  }
+  #reseed-run-btn:disabled {
+    background: rgba(255,255,255,0.72);
+    color: #2a2420;
+    box-shadow: 0 1px 4px rgba(42,36,32,0.1), inset 0 1px 0 rgba(255,255,255,0.6);
+    opacity: 0.65;
+    cursor: default;
+  }
+  .reseed-run-btn-label-mobile { display: none; }
+  #reseed-run-btn-icon {
+    font-size: 0.7rem;
+    opacity: 0.75;
+    margin-left: 0.1rem;
+  }
+  #reseed-active-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  #reseed-run-status-label {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--warning);
+  }
+  #reseed-cancel-btn {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 6px 14px;
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-visible);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 150ms, border-color 150ms;
+  }
+  #reseed-cancel-btn:hover:not(:disabled) {
+    color: var(--text-display);
+    border-color: var(--text-secondary);
+  }
+  #reseed-cancel-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  #reseed-error-msg {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent);
+  }
+  @media (max-width: 620px) {
+    #dashboard-source-cta-row {
+      gap: 6px;
+      padding: 5.6px 5.6px 5.6px 10px;
+    }
+    #reseed-run-btn {
+      min-width: 5.5rem;
+      min-height: 2.15rem;
+      padding: 0.5rem 0.85rem;
+      gap: 0;
+    }
+    .reseed-run-btn-label-desktop { display: none; }
+    .reseed-run-btn-label-mobile {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+    }
+  }
+
+  /* ── Intake build modal ── */
+  #intake-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+  }
+  /* Status row */
+  #intake-modal-status-row {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    margin-top: 0.75rem;
+    font-family: "Space Mono", monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(42, 36, 32, 0.5);
+    flex-wrap: wrap;
+  }
+  #intake-modal-status-row .status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    flex-shrink: 0;
+    display: inline-block;
+  }
+  #intake-modal-status-label { color: rgba(42, 36, 32, 0.72); }
+  #intake-modal-sep { color: rgba(42, 36, 32, 0.28); }
+  #intake-modal-host-label { color: rgba(42, 36, 32, 0.44); }
+  /* Embedded terminal panel */
+  #intake-modal-terminal-embed {
+    background: #1a1a1a;
+    border-radius: 0.55rem;
+    padding: 0.7rem 0.85rem 0.8rem;
+    margin-top: 0.85rem;
+    height: 9rem;
     display: flex;
     flex-direction: column;
-    gap: 11px;
-    border-left: 1px solid var(--border);
-    padding-left: 32px;
+    gap: 0.1rem;
+    max-height: 11rem;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.08) transparent;
   }
-  .log-line {
+  #intake-modal-terminal-embed::-webkit-scrollbar { width: 3px; }
+  #intake-modal-terminal-embed::-webkit-scrollbar-track { background: transparent; }
+  #intake-modal-terminal-embed::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+  /* Log line */
+  .term-line {
     display: grid;
-    grid-template-columns: 74px 110px 1fr;
-    gap: 16px;
+    grid-template-columns: 3.6rem 1fr;
+    gap: 0.5em;
+    font-family: "Space Mono", monospace;
+    font-size: 0.68rem;
+    line-height: 1.65;
     align-items: baseline;
   }
-  .log-line .time { color: var(--text-disabled); }
-  .log-line .tag { color: var(--text-secondary); }
-  .log-line .msg { color: var(--text-display); }
-  .log-line .ok { color: var(--success); margin-left: 6px; }
+  .term-pfx { text-align: right; white-space: nowrap; font-size: 0.64rem; letter-spacing: 0.02em; }
+  .term-msg { word-break: break-word; }
+  /* One Dark palette */
+  .term-system .term-pfx, .term-system .term-msg { color: #3a3a3a; }
+  .term-dim .term-pfx, .term-dim .term-msg { color: #333; }
+  .term-info .term-pfx { color: #4b5263; }
+  .term-info .term-msg { color: #6a6f7a; }
+  .term-fetch .term-pfx { color: #56b6c2; }
+  .term-fetch .term-msg { color: #7ab8bd; }
+  .term-ok .term-pfx { color: #98c379; }
+  .term-ok .term-msg { color: #5d8a44; }
+  .term-ai .term-pfx { color: #c678dd; }
+  .term-ai .term-msg { color: #8c52b8; }
+  .term-build .term-pfx { color: #e5c07b; }
+  .term-build .term-msg { color: #a8843c; }
+  .term-error .term-pfx { color: #e06c75; }
+  .term-error .term-msg { color: #a84f57; }
+  .term-active .term-pfx { color: #61afef; }
+  .term-active .term-msg { color: #dde1e8; font-weight: 700; }
+  .term-countdown .term-pfx { color: #e5c07b; }
+  .term-countdown .term-msg { color: #e5c07b; font-weight: 700; font-size: 0.72rem; letter-spacing: 0.03em; }
+  /* Blinking block caret */
+  .term-caret {
+    display: inline-block;
+    width: 0.45em;
+    height: 0.95em;
+    background: #61afef;
+    vertical-align: text-bottom;
+    margin-left: 2px;
+    animation: blink 1s step-start infinite;
+  }
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+  /* Footer */
+  #intake-modal-footer {
+    font-family: "Space Mono", monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(42, 36, 32, 0.32);
+    margin-top: 0.9rem;
+    border-top: 1px solid rgba(212, 196, 171, 0.4);
+    padding-top: 0.75rem;
+  }
+  @media (max-width: 480px) {
+    #intake-modal-overlay { padding: 1rem; align-items: flex-start; padding-top: 1.5rem; }
+    #intake-modal-card { width: 100%; box-sizing: border-box; }
+  }
+
+  /* ── Tier modal ── */
+  #tier-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 360;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    background: rgba(32, 28, 24, 0.18);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  #tier-modal-top {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  #tier-modal-brand-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    justify-content: space-between;
+  }
+  #tier-modal-eyebrow {
+    font-size: 0.82rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(42,36,32,0.44);
+    font-weight: 700;
+    font-family: "Space Mono", monospace;
+  }
+  #tier-modal-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.34);
+    border: 1px solid rgba(42,36,32,0.12);
+    color: rgba(42,36,32,0.58);
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+  #tier-modal-title-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+  #tier-modal-title {
+    margin: 0;
+    color: #2a2420;
+    font-size: clamp(2rem, 8.5vw, 4.5rem);
+    line-height: 1;
+    letter-spacing: -0.04em;
+    font-family: "Doto", "Space Mono", monospace;
+    font-weight: 700;
+  }
+  #tier-modal-summary {
+    margin: 0;
+    color: rgba(42,36,32,0.66);
+    line-height: 1.6;
+    font-family: "Space Grotesk", system-ui, sans-serif;
+  }
+  #tier-modal-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 1.25rem;
+  }
+  .tier-option-card {
+    padding: 16px;
+    border-radius: 1rem;
+    border: 1px solid rgba(212, 196, 171, 0.82);
+    background: rgba(255,255,255,0.52);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .tier-option-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: baseline;
+  }
+  .tier-option-label {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #2a2420;
+    letter-spacing: -0.03em;
+  }
+  .tier-option-price {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(42,36,32,0.56);
+  }
+  .tier-option-summary {
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.55;
+    color: rgba(42,36,32,0.68);
+  }
+  #tier-modal-footer {
+    font-family: "Space Mono", monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(42, 36, 32, 0.32);
+    margin-top: 1rem;
+    border-top: 1px solid rgba(212, 196, 171, 0.4);
+    padding-top: 0.75rem;
+  }
+  @media (max-width: 780px) {
+    #tier-modal-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 480px) {
+    #tier-modal-overlay { padding: 1rem; align-items: flex-start; padding-top: 1.5rem; }
+    #tier-modal-card { width: 100%; box-sizing: border-box; }
+  }
+
+  /* ── Lamp effects ── */
   .lamp {
     box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 12%, transparent), 0 0 10px color-mix(in srgb, currentColor 55%, transparent);
   }
@@ -1294,106 +2818,6 @@ const dashboardCss = `
   }
   .stroke-lit {
     filter: drop-shadow(0 0 3px color-mix(in srgb, currentColor 55%, transparent));
-  }
-  @media (max-width: 1200px) {
-    #founders-hero-shell {
-      grid-template-columns: 1fr;
-      gap: 32px;
-    }
-    #activity-console {
-      grid-template-columns: 1fr;
-      gap: 24px;
-    }
-    #activity-log-stream {
-      border-left: none;
-      border-top: 1px solid var(--border);
-      padding-left: 0;
-      padding-top: 24px;
-    }
-  }
-  #signal-panel {
-    margin-bottom: 32px;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    padding: 24px 28px;
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-  }
-  .signal-label {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--text-secondary);
-    margin-bottom: 8px;
-    display: block;
-  }
-  #signal-headline-row { border-bottom: 1px solid var(--border); padding-bottom: 20px; }
-  #signal-headline-text {
-    font-size: 13px;
-    color: var(--text-display);
-    line-height: 1.55;
-    max-width: 80ch;
-  }
-  #signal-cards-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 12px;
-  }
-  .signal-card {
-    border: 1px solid var(--border);
-    padding: 14px 16px;
-    background: var(--surface-raised);
-  }
-  .signal-card-label {
-    font-family: var(--font-mono);
-    font-size: 9px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--text-secondary);
-    margin-bottom: 8px;
-  }
-  .signal-card-value {
-    font-size: 12px;
-    color: var(--text-display);
-    line-height: 1.5;
-    white-space: pre-wrap;
-  }
-  .signal-insight-row {
-    display: grid;
-    grid-template-columns: 52px 1fr auto;
-    gap: 12px;
-    align-items: baseline;
-    padding: 8px 0;
-    border-bottom: 1px solid var(--border);
-    font-family: var(--font-mono);
-    font-size: 11px;
-  }
-  .signal-insight-row:last-child { border-bottom: none; }
-  .signal-insight-priority { color: var(--text-secondary); font-size: 9px; }
-  .signal-insight-topic { color: var(--text-display); }
-  .signal-insight-why { color: var(--text-secondary); font-size: 10px; text-align: right; max-width: 40ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  @media (max-width: 900px) {
-    #founders-shell { padding: 32px 24px 64px; }
-    #capability-grid { grid-template-columns: 1fr; }
-    .tile {
-      aspect-ratio: auto;
-      min-height: 220px;
-      grid-template-areas:
-        "num"
-        "head"
-        "desc"
-        "viz"
-        "foot";
-      grid-template-columns: 1fr;
-      row-gap: 14px;
-    }
-    .tile-description { max-width: none; }
-    .log-line {
-      grid-template-columns: 1fr;
-      gap: 4px;
-    }
   }
 `;
 

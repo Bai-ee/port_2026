@@ -2,6 +2,8 @@
 
 This file defines the default background treatment for non-homepage product pages and the surface language that sits above it.
 
+For the broader canonical UI template set, including `#auth-card`, `[data-capability-card]`, `#panel-hero-cta`, `#hero-panel-filter-pills`, and `#cmo-dashboard-table`, see [docs/UI_STARTING_POINT_STYLE_GUIDE.md](/Users/bballi/Documents/Repos/Bballi_Portfolio/docs/UI_STARTING_POINT_STYLE_GUIDE.md:1).
+
 ## Intent
 
 New internal pages should keep the homepage motion identity without carrying the full hero intensity.

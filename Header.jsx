@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from './AuthContext';
 
 const Header = ({ logoRef, onOpenPage }) => {
+  const { user } = useAuth();
   const [isMobile, setIsMobile] = useState(false); // SSR-safe: real value set in useEffect below
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -200,8 +202,8 @@ const Header = ({ logoRef, onOpenPage }) => {
           >
             LinkedIn
           </a>
-          <a href="/login" style={loginLinkStyle}>
-            Client Login
+          <a href={user ? '/dashboard' : '/login'} style={loginLinkStyle}>
+            {user ? 'Go to Dashboard' : 'Client Login'}
           </a>
         </div>
 
