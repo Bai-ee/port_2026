@@ -192,6 +192,18 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
           }}>
             YOUR<br />HUMAN<br />IN THE<br />LOOP
           </h1>
+          <p id="hero-subheadline" style={{
+            margin: '1rem 0 0',
+            fontFamily: "'Space Grotesk', system-ui, sans-serif",
+            fontSize: 'clamp(0.7rem, 1vw, 0.82rem)',
+            lineHeight: 1.5,
+            color: textColor,
+            opacity: 0.85,
+            fontWeight: 400,
+            maxWidth: '42ch',
+          }}>
+            I step into your business, map what's working, fix what's not, and build what's missing, across design, content, and systems.
+          </p>
         </div>
       </div>
 
