@@ -30,21 +30,21 @@ PUBLIC_OUTPUT_PATH = ROOT / "public" / "output" / "final_mockup.png"
 # Use --debug to generate a visual confirmation overlay before any production run.
 
 DESKTOP_BOX: Tuple[int, int, int, int] = (
-    155,   # X  — left edge of iMac screen glass
-    150,   # Y  — top edge of iMac screen glass (text-centroid calibrated)
+    159,   # X  — left edge of iMac screen glass
+    145,   # Y  — top edge of iMac screen glass (text-centroid calibrated)
     707,   # WIDTH  (locked)
     418,   # HEIGHT (locked)
 )
 
 IPAD_BOX: Tuple[int, int, int, int] = (
-    889,   # X  — left edge of iPad screen content area
+    887,   # X  — left edge of iPad screen content area
     308,   # Y  — top edge of iPad screen content area
     298,   # WIDTH  (locked)
     437,   # HEIGHT (locked)
 )
 
 IPHONE_BOX: Tuple[int, int, int, int] = (
-    1257,  # X  — left edge of iPhone screen content area
+    1254,  # X  — left edge of iPhone screen content area
     470,   # Y  — top edge of iPhone screen content area
     138,   # WIDTH  (locked)
     307,   # HEIGHT (locked)
@@ -54,6 +54,13 @@ SCREEN_BOXES: Dict[str, Tuple[int, int, int, int]] = {
     "desktop": DESKTOP_BOX,
     "ipad": IPAD_BOX,
     "iphone": IPHONE_BOX,
+}
+
+# Corner radii per device (pixels at template resolution). 0 = sharp corners.
+SCREEN_CORNER_RADII: Dict[str, int] = {
+    "desktop": 0,
+    "ipad": 7,
+    "iphone": 11,
 }
 
 # Debug overlay colors
@@ -127,10 +134,18 @@ def paste_into_template(
     template: Image.Image,
     image: Image.Image,
     box: Tuple[int, int, int, int],
+    corner_radius: int = 0,
 ) -> None:
     x, y, width, height = box
     fitted = resize_and_fit(image, width, height)
-    template.paste(fitted, (x, y))
+    if corner_radius > 0:
+        mask = Image.new("L", (width, height), 0)
+        ImageDraw.Draw(mask).rounded_rectangle(
+            [0, 0, width - 1, height - 1], radius=corner_radius, fill=255
+        )
+        template.paste(fitted, (x, y), mask)
+    else:
+        template.paste(fitted, (x, y))
 
 
 # ── Main generation ────────────────────────────────────────────────────────────
@@ -144,7 +159,7 @@ def generate_mockup(
     public_output_path: Path,
     debug: bool = False,
 ) -> Path:
-    template, images = load_images(desktop_path, ipad_path, iphone_path, template_path)
+    template = Image.open(template_path).convert("RGBA")
 
     if debug:
         debug_path = output_path.parent / "debug_overlay.png"
@@ -155,8 +170,14 @@ def generate_mockup(
         print("Review debug_overlay.png to confirm X/Y coordinates before running in production.")
         return debug_path
 
+    images = {
+        "desktop": Image.open(desktop_path).convert("RGBA"),
+        "ipad": Image.open(ipad_path).convert("RGBA"),
+        "iphone": Image.open(iphone_path).convert("RGBA"),
+    }
+
     for device_name, box in SCREEN_BOXES.items():
-        paste_into_template(template, images[device_name], box)
+        paste_into_template(template, images[device_name], box, corner_radius=SCREEN_CORNER_RADII.get(device_name, 0))
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     public_output_path.parent.mkdir(parents=True, exist_ok=True)

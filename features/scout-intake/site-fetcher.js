@@ -157,6 +157,153 @@ function extractContactClues(html) {
   return [...new Set(clues)].slice(0, 4);
 }
 
+// ── Site meta (OG / social / brand graphics) — homepage only ─────────────────
+
+/**
+ * Extract OG, Twitter Card, and brand identity metadata from raw HTML.
+ * All URLs are resolved against baseUrl. Fields not found are null.
+ * Only called for the homepage page evidence — other pages skip this.
+ *
+ * @param {string} html    - Raw HTML of the homepage
+ * @param {string} baseUrl - Absolute URL used to resolve relative hrefs
+ * @returns {object} siteMeta
+ */
+function extractSiteMeta(html, baseUrl) {
+  // Try each pattern in order; return the first non-empty content value.
+  function metaContent(patterns) {
+    for (const re of patterns) {
+      const m = html.match(re);
+      const val = m?.[1]?.trim();
+      if (val) return decodeEntities(val);
+    }
+    return null;
+  }
+
+  function resolveUrl(href) {
+    if (!href) return null;
+    try { return new URL(href, baseUrl).toString(); } catch { return null; }
+  }
+
+  // ── title ─────────────────────────────────────────────────────────────────
+  const title =
+    metaContent([
+      /<meta[^>]*property\s*=\s*['"]og:title['"][^>]*content\s*=\s*['"]([^'"]{1,300})['"]/i,
+      /<meta[^>]*content\s*=\s*['"]([^'"]{1,300})['"][^>]*property\s*=\s*['"]og:title['"]/i,
+      /<meta[^>]*name\s*=\s*['"]twitter:title['"][^>]*content\s*=\s*['"]([^'"]{1,300})['"]/i,
+      /<meta[^>]*content\s*=\s*['"]([^'"]{1,300})['"][^>]*name\s*=\s*['"]twitter:title['"]/i,
+    ]) || extractTitle(html) || null;
+
+  // ── description ───────────────────────────────────────────────────────────
+  const description =
+    metaContent([
+      /<meta[^>]*property\s*=\s*['"]og:description['"][^>]*content\s*=\s*['"]([^'"]{1,600})['"]/i,
+      /<meta[^>]*content\s*=\s*['"]([^'"]{1,600})['"][^>]*property\s*=\s*['"]og:description['"]/i,
+      /<meta[^>]*name\s*=\s*['"]twitter:description['"][^>]*content\s*=\s*['"]([^'"]{1,600})['"]/i,
+      /<meta[^>]*content\s*=\s*['"]([^'"]{1,600})['"][^>]*name\s*=\s*['"]twitter:description['"]/i,
+    ]) || extractMetaDescription(html) || null;
+
+  // ── siteName ──────────────────────────────────────────────────────────────
+  const siteName =
+    metaContent([
+      /<meta[^>]*property\s*=\s*['"]og:site_name['"][^>]*content\s*=\s*['"]([^'"]{1,200})['"]/i,
+      /<meta[^>]*content\s*=\s*['"]([^'"]{1,200})['"][^>]*property\s*=\s*['"]og:site_name['"]/i,
+    ]) || (() => { try { return new URL(baseUrl).hostname; } catch { return null; } })();
+
+  // ── ogImage ───────────────────────────────────────────────────────────────
+  const ogImageRaw = metaContent([
+    /<meta[^>]*property\s*=\s*['"]og:image['"][^>]*content\s*=\s*['"]([^'"]{4,1000})['"]/i,
+    /<meta[^>]*content\s*=\s*['"]([^'"]{4,1000})['"][^>]*property\s*=\s*['"]og:image['"]/i,
+    /<meta[^>]*property\s*=\s*['"]og:image:secure_url['"][^>]*content\s*=\s*['"]([^'"]{4,1000})['"]/i,
+    /<meta[^>]*content\s*=\s*['"]([^'"]{4,1000})['"][^>]*property\s*=\s*['"]og:image:secure_url['"]/i,
+    /<meta[^>]*name\s*=\s*['"]twitter:image['"][^>]*content\s*=\s*['"]([^'"]{4,1000})['"]/i,
+    /<meta[^>]*content\s*=\s*['"]([^'"]{4,1000})['"][^>]*name\s*=\s*['"]twitter:image['"]/i,
+  ]);
+  const ogImage = resolveUrl(ogImageRaw);
+
+  // ── ogImageAlt ────────────────────────────────────────────────────────────
+  const ogImageAlt = metaContent([
+    /<meta[^>]*property\s*=\s*['"]og:image:alt['"][^>]*content\s*=\s*['"]([^'"]{1,300})['"]/i,
+    /<meta[^>]*content\s*=\s*['"]([^'"]{1,300})['"][^>]*property\s*=\s*['"]og:image:alt['"]/i,
+    /<meta[^>]*name\s*=\s*['"]twitter:image:alt['"][^>]*content\s*=\s*['"]([^'"]{1,300})['"]/i,
+    /<meta[^>]*content\s*=\s*['"]([^'"]{1,300})['"][^>]*name\s*=\s*['"]twitter:image:alt['"]/i,
+  ]);
+
+  // ── favicon — only from link[rel=icon] tags; never guess /favicon.ico ────
+  let favicon = null;
+  // Try rel-first ordering, then href-first ordering
+  const faviconPatterns = [
+    /<link[^>]*rel\s*=\s*['"][^'"]*(?:shortcut\s+)?icon[^'"]*['"][^>]*href\s*=\s*['"]([^'"]+)['"]/gi,
+    /<link[^>]*href\s*=\s*['"]([^'"]+)['"][^>]*rel\s*=\s*['"][^'"]*(?:shortcut\s+)?icon[^'"]*['"]/gi,
+  ];
+  for (const re of faviconPatterns) {
+    if (favicon) break;
+    let fm;
+    while ((fm = re.exec(html)) !== null) {
+      const resolved = resolveUrl(fm[1].trim());
+      if (resolved) { favicon = resolved; break; }
+    }
+  }
+
+  // ── appleTouchIcon — prefer largest declared size ─────────────────────────
+  let appleTouchIcon = null;
+  let bestSize = -1;
+  const aticRe = /<link[^>]*rel\s*=\s*['"]apple-touch-icon(?:-precomposed)?['"][^>]*>/gi;
+  let aim;
+  while ((aim = aticRe.exec(html)) !== null) {
+    const tag = aim[0];
+    const hrefM = tag.match(/href\s*=\s*['"]([^'"]+)['"]/i);
+    if (!hrefM) continue;
+    const sizesM = tag.match(/sizes\s*=\s*['"](\d+)x\d+['"]/i);
+    const size = sizesM ? parseInt(sizesM[1], 10) : 0;
+    if (size >= bestSize) {
+      bestSize = size;
+      appleTouchIcon = resolveUrl(hrefM[1].trim());
+    }
+  }
+
+  // ── themeColor ────────────────────────────────────────────────────────────
+  const themeColor = metaContent([
+    /<meta[^>]*name\s*=\s*['"]theme-color['"][^>]*content\s*=\s*['"]([^'"]{1,50})['"]/i,
+    /<meta[^>]*content\s*=\s*['"]([^'"]{1,50})['"][^>]*name\s*=\s*['"]theme-color['"]/i,
+  ]);
+
+  // ── canonical ─────────────────────────────────────────────────────────────
+  const canonicalRaw = (() => {
+    const m =
+      html.match(/<link[^>]*rel\s*=\s*['"]canonical['"][^>]*href\s*=\s*['"]([^'"]+)['"]/i) ||
+      html.match(/<link[^>]*href\s*=\s*['"]([^'"]+)['"][^>]*rel\s*=\s*['"]canonical['"]/i);
+    return m?.[1] || null;
+  })();
+  const canonical = resolveUrl(canonicalRaw);
+
+  // ── locale ────────────────────────────────────────────────────────────────
+  const locale =
+    metaContent([
+      /<meta[^>]*property\s*=\s*['"]og:locale['"][^>]*content\s*=\s*['"]([^'"]{1,20})['"]/i,
+      /<meta[^>]*content\s*=\s*['"]([^'"]{1,20})['"][^>]*property\s*=\s*['"]og:locale['"]/i,
+    ]) || (() => { const m = html.match(/<html[^>]*lang\s*=\s*['"]([^'"]{1,20})['"]/i); return m?.[1] || null; })();
+
+  // ── og:type ───────────────────────────────────────────────────────────────
+  const ogType = metaContent([
+    /<meta[^>]*property\s*=\s*['"]og:type['"][^>]*content\s*=\s*['"]([^'"]{1,50})['"]/i,
+    /<meta[^>]*content\s*=\s*['"]([^'"]{1,50})['"][^>]*property\s*=\s*['"]og:type['"]/i,
+  ]);
+
+  return {
+    title,
+    description,
+    siteName,
+    ogImage,
+    ogImageAlt,
+    favicon,
+    appleTouchIcon,
+    themeColor,
+    canonical,
+    locale,
+    type: ogType,
+  };
+}
+
 // ── Page discovery ────────────────────────────────────────────────────────────
 
 /**
@@ -236,7 +383,7 @@ async function fetchPage(url, timeoutMs = FETCH_TIMEOUT_MS) {
 // ── Page evidence builder ─────────────────────────────────────────────────────
 
 function buildPageEvidence(url, type, html) {
-  return {
+  const evidence = {
     url,
     type,
     title: extractTitle(html),
@@ -248,7 +395,18 @@ function buildPageEvidence(url, type, html) {
     bodyParagraphs: extractBodyParagraphs(html),
     socialLinks: extractSocialLinks(html),
     contactClues: extractContactClues(html),
+    // Raw HTML preserved for downstream CSS extraction (design-system-extractor.js).
+    // Stripped before Firestore write by normalize.js — never persisted.
+    _rawHtml: html,
   };
+
+  // siteMeta is homepage-only: OG image, favicon, theme-color, etc.
+  // Stored as a top-level field so it survives after _rawHtml is stripped.
+  if (type === 'homepage') {
+    evidence.siteMeta = extractSiteMeta(html, url);
+  }
+
+  return evidence;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -335,4 +493,4 @@ async function fetchSiteEvidence(websiteUrl, { onPageFetched } = {}) {
   };
 }
 
-module.exports = { fetchSiteEvidence };
+module.exports = { fetchSiteEvidence, extractSiteMeta };

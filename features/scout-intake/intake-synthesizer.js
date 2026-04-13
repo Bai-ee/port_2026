@@ -67,6 +67,19 @@ function formatEvidenceForPrompt(evidence) {
     }
     if (page.socialLinks?.length) lines.push(`Social: ${page.socialLinks.join(', ')}`);
     if (page.contactClues?.length) lines.push(`Contact: ${page.contactClues.join(', ')}`);
+
+    // Homepage brand identity hints from OG / meta tags (useful for thin/SPA sites)
+    if (page.type === 'homepage' && page.siteMeta) {
+      const sm = page.siteMeta;
+      const ogLines = [
+        sm.siteName ? `Brand name: ${sm.siteName}` : null,
+        sm.title && sm.title !== page.title ? `OG title: ${sm.title}` : null,
+        sm.description && sm.description !== page.metaDescription ? `OG description: ${sm.description}` : null,
+        sm.themeColor ? `Brand color: ${sm.themeColor}` : null,
+      ].filter(Boolean);
+      if (ogLines.length) lines.push(...ogLines);
+    }
+
     lines.push('');
   }
 

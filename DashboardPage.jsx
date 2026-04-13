@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import gsap from 'gsap';
 import Link from 'next/link';
 import { Globe } from 'lucide-react';
 import { useAuth } from './AuthContext';
@@ -16,6 +17,143 @@ const FREE_TIER_TILE_IDS = new Set([
   'distribution-insight',
   'reddit-community',
 ]);
+
+// Dev mock for the style-guide tile — used when extractor is not yet wired.
+// Matches the shape returned by synthesizeStyleGuide() in normalize.js.
+// Remove SG_MOCK fallback once visualIdentity.styleGuide is populated by the pipeline.
+const SG_MOCK = {
+  summary: 'Playfair Display over Inter on warm cream with card-based framing',
+  confidence: 'high',
+  typography: {
+    fontFamilies: [
+      { family: 'Playfair Display', role: 'heading', source: 'google-fonts' },
+      { family: 'Inter',            role: 'body',    source: 'google-fonts' },
+    ],
+    headingSystem: { fontFamily: 'Playfair Display', fontSize: '48px', fontWeight: '700', lineHeight: '1.1' },
+    bodySystem:    { fontFamily: 'Inter',            fontSize: '16px', fontWeight: '400', lineHeight: '1.6' },
+  },
+  colors: {
+    primary:   { hex: '#C3B99A', role: 'brand accent', shades: ['#F5F1EA','#E8E0D0','#C3B99A','#9E9178','#7A6E5C'] },
+    secondary: { hex: '#4A7C7E', role: 'highlight',    shades: ['#D6E8E9','#A8CDD0','#4A7C7E','#326163','#1D3C3E'] },
+    tertiary:  { hex: '#D4956A', role: 'warm accent',  shades: ['#FAE8DB','#ECC5A4','#D4956A','#B5724A','#8C5335'] },
+    neutral:   { hex: '#FAF7F2', role: 'background',   shades: ['#FFFFFF','#FAF7F2','#F0EBE3','#E0D8CE','#C8BCAD'] },
+    mode: 'light',
+  },
+  layout: {
+    layoutType: 'flex', contentWidth: 'contained', maxWidth: '1200px',
+    framing: 'card-based', grid: '12-column', borderRadius: '8px',
+  },
+  motion: {
+    level: 'moderate', durations: ['200ms','400ms'],
+    scrollPatterns: ['GSAP ScrollTrigger'], prefersReducedMotion: true,
+  },
+};
+
+// Compute SVG cubic-bezier path: (0,h) → (w,0), SVG y-down so (1-y) flips.
+// roundTrip=true appends the reversed bezier C so the dot travels forward then
+// back along the identical curve — no jump at the end of the animation.
+function _sgEasingPath(easing, w, h, roundTrip = false) {
+  const PRESETS = {
+    // CSS named eases
+    'ease':           [0.25, 0.1, 0.25, 1.0],
+    'ease-in':        [0.42, 0, 1.0, 1.0],
+    'ease-out':       [0, 0, 0.58, 1.0],
+    'ease-in-out':    [0.42, 0, 0.58, 1.0],
+    'linear':         [0, 0, 1, 1],
+    // GSAP power eases (cubic-bezier approximations from easings.net)
+    'none':           [0, 0, 1, 1],
+    'power1':         [0.5, 1, 0.89, 1],
+    'power1.in':      [0.11, 0, 0.5, 0],
+    'power1.out':     [0.5, 1, 0.89, 1],
+    'power1.inout':   [0.45, 0, 0.55, 1],
+    'power2':         [0.33, 1, 0.68, 1],
+    'power2.in':      [0.32, 0, 0.67, 0],
+    'power2.out':     [0.33, 1, 0.68, 1],
+    'power2.inout':   [0.65, 0, 0.35, 1],
+    'power3':         [0.25, 1, 0.5, 1],
+    'power3.in':      [0.5, 0, 0.75, 0],
+    'power3.out':     [0.25, 1, 0.5, 1],
+    'power3.inout':   [0.76, 0, 0.24, 1],
+    'power4':         [0.22, 1, 0.36, 1],
+    'power4.in':      [0.64, 0, 0.78, 0],
+    'power4.out':     [0.22, 1, 0.36, 1],
+    'power4.inout':   [0.83, 0, 0.17, 1],
+    'expo.in':        [0.7, 0, 0.84, 0],
+    'expo.out':       [0.16, 1, 0.3, 1],
+    'expo.inout':     [0.87, 0, 0.13, 1],
+    'sine.in':        [0.12, 0, 0.39, 0],
+    'sine.out':       [0.61, 1, 0.88, 1],
+    'sine.inout':     [0.37, 0, 0.63, 1],
+    'circ.in':        [0.55, 0, 1, 0.45],
+    'circ.out':       [0, 0.55, 0.45, 1],
+    'circ.inout':     [0.85, 0, 0.15, 1],
+  };
+  const key = (easing || '').toLowerCase().trim().replace(/\.inout\b/, '.inout');
+  let [x1, y1, x2, y2] = PRESETS[key] || PRESETS['ease-in-out'];
+  const m = (easing || '').match(/cubic-bezier\(\s*([\d.]+),\s*([\d.-]+),\s*([\d.]+),\s*([\d.]+)\s*\)/);
+  if (m) [x1, y1, x2, y2] = m.slice(1).map(Number);
+  const c1x = x1 * w, c1y = (1 - y1) * h;
+  const c2x = x2 * w, c2y = (1 - y2) * h;
+  const fwd = `M 0,${h} C ${c1x},${c1y} ${c2x},${c2y} ${w},0`;
+  if (!roundTrip) return fwd;
+  // Reverse bezier: swap control points so the dot retraces the same curve back to start
+  return `${fwd} C ${c2x},${c2y} ${c1x},${c1y} 0,${h}`;
+}
+// Extract cubic-bezier control points as a keySplines string for <animateMotion>.
+function _sgEasingSpline(easing) {
+  const PRESETS = {
+    // CSS named eases
+    'ease':           [0.25, 0.1, 0.25, 1.0],
+    'ease-in':        [0.42, 0, 1.0, 1.0],
+    'ease-out':       [0, 0, 0.58, 1.0],
+    'ease-in-out':    [0.42, 0, 0.58, 1.0],
+    'linear':         [0, 0, 1, 1],
+    // GSAP power eases (cubic-bezier approximations from easings.net)
+    'none':           [0, 0, 1, 1],
+    'power1':         [0.5, 1, 0.89, 1],
+    'power1.in':      [0.11, 0, 0.5, 0],
+    'power1.out':     [0.5, 1, 0.89, 1],
+    'power1.inout':   [0.45, 0, 0.55, 1],
+    'power2':         [0.33, 1, 0.68, 1],
+    'power2.in':      [0.32, 0, 0.67, 0],
+    'power2.out':     [0.33, 1, 0.68, 1],
+    'power2.inout':   [0.65, 0, 0.35, 1],
+    'power3':         [0.25, 1, 0.5, 1],
+    'power3.in':      [0.5, 0, 0.75, 0],
+    'power3.out':     [0.25, 1, 0.5, 1],
+    'power3.inout':   [0.76, 0, 0.24, 1],
+    'power4':         [0.22, 1, 0.36, 1],
+    'power4.in':      [0.64, 0, 0.78, 0],
+    'power4.out':     [0.22, 1, 0.36, 1],
+    'power4.inout':   [0.83, 0, 0.17, 1],
+    'expo.in':        [0.7, 0, 0.84, 0],
+    'expo.out':       [0.16, 1, 0.3, 1],
+    'expo.inout':     [0.87, 0, 0.13, 1],
+    'sine.in':        [0.12, 0, 0.39, 0],
+    'sine.out':       [0.61, 1, 0.88, 1],
+    'sine.inout':     [0.37, 0, 0.63, 1],
+    'circ.in':        [0.55, 0, 1, 0.45],
+    'circ.out':       [0, 0.55, 0.45, 1],
+    'circ.inout':     [0.85, 0, 0.15, 1],
+  };
+  const key = (easing || '').toLowerCase().trim().replace(/\.inout\b/, '.inout');
+  let [x1, y1, x2, y2] = PRESETS[key] || PRESETS['ease-in-out'];
+  const m = (easing || '').match(/cubic-bezier\(\s*([\d.]+),\s*([\d.-]+),\s*([\d.]+),\s*([\d.]+)\s*\)/);
+  if (m) [x1, y1, x2, y2] = m.slice(1).map(Number);
+  return `${x1} ${y1} ${x2} ${y2}`;
+}
+// Map an extracted easing value to a human-readable label.
+// When tech is GSAP, convert CSS ease names to their GSAP power equivalent.
+function _sgGsapName(easing, isGsap) {
+  const raw = (easing || '').trim();
+  if (raw.length > 24) return 'cubic-bezier';
+  if (!isGsap) return raw;
+  const CSS_TO_GSAP = {
+    'ease': 'power1.inOut', 'ease-in': 'power1.in',
+    'ease-out': 'power1.out', 'ease-in-out': 'power1.inOut', 'linear': 'none',
+  };
+  return CSS_TO_GSAP[raw.toLowerCase()] || raw;
+}
 
 const tiles = [
   {
@@ -158,7 +296,143 @@ const tiles = [
     metric: 'PRO TIER',
     viz: 'keywords',
   },
+  // ── Reserved add-on cards (mirror commented add-ons in StackedSlidesSection.jsx) ──
+  {
+    id: 'multi-agent-pipeline',
+    number: '15',
+    label: 'MULTI-AGENT PIPELINE',
+    title: 'Scout, Scribe, Guardian, Reporter.',
+    description: 'Four-stage agent architecture running daily on raw market signals.',
+    status: 'PREVIEW',
+    metric: 'PRO TIER',
+    viz: 'segbars',
+  },
+  {
+    id: 'hyperlocal-signals',
+    number: '16',
+    label: 'HYPERLOCAL SIGNALS',
+    title: 'Live multi-source intelligence.',
+    description: 'X, Instagram, Reddit, reviews, and weather — normalized and synthesized.',
+    status: 'PREVIEW',
+    metric: 'PRO TIER',
+    viz: 'spark',
+  },
+  {
+    id: 'platform-content-gen',
+    number: '17',
+    label: 'PLATFORM CONTENT GEN',
+    title: 'Platform-native drafts.',
+    description: 'Instagram, X, Facebook, Discord — formatted and voiced per channel.',
+    status: 'PREVIEW',
+    metric: 'PRO TIER',
+    viz: 'threads',
+  },
+  {
+    id: 'brand-safety-gate',
+    number: '18',
+    label: 'BRAND SAFETY GATE',
+    title: 'Four-check quality gate.',
+    description: 'Restricted terms, competitor mentions, factual accuracy, voice scoring.',
+    status: 'PREVIEW',
+    metric: 'PRO TIER',
+    viz: 'deadlines',
+  },
+  {
+    id: 'founder-daily-brief',
+    number: '19',
+    label: 'FOUNDER DAILY BRIEF',
+    title: 'One brief, every morning.',
+    description: 'Priority action, signals, drafts, QA — delivered on schedule.',
+    status: 'PREVIEW',
+    metric: 'PRO TIER',
+    viz: 'meetings',
+  },
+  {
+    id: 'admin-dashboard-history',
+    number: '20',
+    label: 'ADMIN & BRIEF HISTORY',
+    title: 'Every run, on the record.',
+    description: 'Real-time dashboard with full archive of past briefs and metrics.',
+    status: 'PREVIEW',
+    metric: 'PRO TIER',
+    viz: 'table',
+  },
+  {
+    id: 'image-generation',
+    number: '21',
+    label: 'IMAGE GENERATION',
+    title: 'Post images on autopilot.',
+    description: 'Canvas-based generator with logo controls and live preview.',
+    status: 'PREVIEW',
+    metric: 'PRO TIER',
+    viz: 'rings',
+  },
+  {
+    id: 'knowledge-file-config',
+    number: '22',
+    label: 'KNOWLEDGE FILE CONFIG',
+    title: 'Four files, new vertical.',
+    description: 'Swap JSON knowledge files to onboard a brand — no code changes.',
+    status: 'PREVIEW',
+    metric: 'PRO TIER',
+    viz: 'memory',
+  },
 ];
+
+// Upgrade-overlay descriptions — mirror AUTOMATION_CAPABILITIES body text in
+// StackedSlidesSection.jsx (including commented reserved cards) so dashboard
+// blocked tiles align with homepage add-ons.
+const UPGRADE_TILE_DESCRIPTIONS = {
+  'creative-pipelines':      "Automates content creation in real time, aligning every post with your brand's voice while driving consistent engagement.",
+  'company-brain':           'Centralizes your entire operating stack into a structured, searchable system that powers faster decisions and smarter execution.',
+  'knowledge-assistant':     'Instantly answers team questions by pulling from your documents, conversations, and data—eliminating bottlenecks and repetitive work.',
+  'executive-support':       'Prepares meetings, surfaces insights, and drafts communications so you walk into every decision fully informed.',
+  'daily-operations':        'Runs core business tasks automatically—email triage, task tracking, reporting, and team updates—without manual oversight.',
+  'email-marketing':         'Builds, schedules, and optimizes campaigns across regions while learning and improving from feedback over time.',
+  'ai-research':             'Generates deep consumer insights, competitive analysis, and market validation in hours instead of weeks.',
+  'financial-tax':           'Organizes transactions, corrects discrepancies, and produces reporting-ready outputs aligned with accounting workflows.',
+  'compliance':              'Continuously checks deadlines, filings, and regulatory requirements to ensure nothing critical is missed.',
+  'distribution-insight':    'Unifies social publishing, SEO fixes, search visibility, and performance reporting into one continuous system that surfaces what to ship, where to publish, and what to improve next.',
+  'rapid-product':           'Builds and deploys functional tools, integrations, and experiences from concept to launch in a fraction of the time.',
+  'self-improving':          'Continuously refines workflows, tools, and outputs based on feedback, increasing performance over time.',
+  'reddit-community':        'Finds relevant threads and drafts reply ideas and post concepts for review before publishing.',
+  'seo-content':             'Surfaces keyword opportunities and drafts landing pages, blog outlines, and content directions for approval.',
+  'multi-agent-pipeline':    'A four-stage agent architecture — Scout, Scribe, Guardian, Reporter — runs automatically each day, taking raw market data from five sources and producing a founder-ready content brief with zero manual input.',
+  'hyperlocal-signals':      'Scout pulls live data from X/Twitter, Instagram, Reddit, customer reviews, and weather APIs, normalizes them into a unified intelligence format, and trims context to ~5K tokens before synthesis — optimized to under $0.10 per full run.',
+  'platform-content-gen':    "Scribe reads the day's brief and produces ready-to-publish drafts for Instagram, X/Twitter, Facebook, and Discord — each formatted to platform conventions and constrained by brand voice rules defined in client knowledge files.",
+  'brand-safety-gate':       'Guardian runs four sequential validation checks on every piece of generated content: restricted term scanning, competitor mention detection, factual accuracy, and brand voice scoring — outputting a readiness verdict and 0–100 quality score before anything moves forward.',
+  'founder-daily-brief':     "Reporter transforms the day's intelligence, content drafts, and QA results into a formatted HTML briefing — with operational context, review insights, Reddit signals, competitor activity, and content opportunities — delivered to the admin dashboard on schedule.",
+  'admin-dashboard-history': 'A real-time web dashboard surfaces the latest pipeline run: priority action, weather impact, content angle, Guardian verdict, and cost per run. A full archive of past runs lets the team compare briefs, track signal trends, and trigger fresh runs on demand.',
+  'image-generation':        'A canvas-based generator handles post image production — with configurable presets, logo placement controls, and live preview. Completed renders upload to Firebase Storage and attach automatically to the current brief run.',
+  'knowledge-file-config':   'The entire system adapts to a new client by swapping four JSON files: brand voice rules, intelligence config, business facts, and a restricted-terms glossary. No code changes required to onboard a new brand or vertical.',
+};
+
+// Upgrade-overlay titles — must match AUTOMATION_CAPABILITIES in StackedSlidesSection.jsx
+// so dashboard blocked tiles align with homepage add-ons.
+const UPGRADE_TILE_TITLES = {
+  'creative-pipelines':      'Creative Pipelines',
+  'company-brain':           'Company Brain',
+  'knowledge-assistant':     'Internal Knowledge Assistant',
+  'executive-support':       'Executive Support Automation',
+  'daily-operations':        'Daily Operations Engine',
+  'email-marketing':         'Email Marketing Automation',
+  'ai-research':             'AI-Powered Research',
+  'financial-tax':           'Financial & Tax Processing',
+  'compliance':              'Compliance Monitoring',
+  'distribution-insight':    'Distribution & Insight Automation',
+  'rapid-product':           'Rapid Product Development',
+  'self-improving':          'Self-Improving Systems',
+  'reddit-community':        'Reddit & Community',
+  'seo-content':             'SEO Content',
+  'multi-agent-pipeline':    'Multi-Agent Intelligence Pipeline',
+  'hyperlocal-signals':      'Hyperlocal Signal Aggregation',
+  'platform-content-gen':    'Platform-Specific Content Generation',
+  'brand-safety-gate':       'Brand Safety & Quality Gate',
+  'founder-daily-brief':     'Founder-Facing Daily Brief',
+  'admin-dashboard-history': 'Admin Dashboard & Brief History',
+  'image-generation':        'Image Generation & Asset Management',
+  'knowledge-file-config':   'Knowledge-File Client Configuration',
+};
 
 const memoryNodes = Array.from({ length: 96 }, (_, index) => {
   if ([6, 23, 41, 55, 78].includes(index)) return 'hot';
@@ -841,8 +1115,12 @@ const DashboardPage = () => {
   const strategy = dashboardState?.strategy || null;
   const brandOverview = snapshot?.brandOverview || null;
   const brandTone = snapshot?.brandTone || null;
-  const visualIdentity = snapshot?.visualIdentity || null;
-  const outputsPreview = dashboardState?.outputsPreview || null;
+  const siteMeta = dashboardState?.siteMeta || null;
+  const visualIdentity  = snapshot?.visualIdentity || null;
+  const styleGuideData  = visualIdentity?.styleGuide ?? null;
+  const sgDisplayData   = styleGuideData ?? SG_MOCK;
+  const isStyleGuideMock = styleGuideData === null;
+  const outputsPreview  = dashboardState?.outputsPreview || null;
   // Intelligence-first SEO data: prefer intelligence source, fall back to dashboardState.seoAudit
   const intelligencePayload = bootstrap.intelligence || null;
   const seoAudit = intelligencePayload?.dashboardSeoAudit ?? dashboardState?.seoAudit ?? null;
@@ -872,6 +1150,47 @@ const DashboardPage = () => {
     }, 4000);
     return () => clearInterval(interval);
   }, [user, isRunActive]);
+
+  // Inject Google Fonts for the style-guide type specimen
+  useEffect(() => {
+    const families = (sgDisplayData?.typography?.fontFamilies || [])
+      .filter((f) => f.source === 'google-fonts')
+      .map((f) => f.family);
+    if (!families.length) return;
+    const id = 'sg-google-fonts-link';
+    if (document.getElementById(id)) return;
+    const query = families
+      .map((fam) => `family=${encodeURIComponent(fam)}:wght@400;600;700`)
+      .join('&');
+    const link = document.createElement('link');
+    link.id = id;
+    link.rel = 'stylesheet';
+    link.href = `https://fonts.googleapis.com/css2?${query}&display=swap`;
+    document.head.appendChild(link);
+  }, [sgDisplayData]);
+
+  // GSAP: style-guide layout quadrant — desktop → mobile viewport animation
+  // Animates the frame width so flex-wrap causes columns to actually reflow:
+  // at desktop width (100%) all columns fit in one row side-by-side;
+  // at mobile width (~36%) they wrap to stacked, overflow:hidden clips to show 1 col.
+  useEffect(() => {
+    const el = document.getElementById('sg-rg-demo');
+    if (!el) return undefined;
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        el,
+        { width: '100%' },
+        {
+          width: '36%',
+          duration: 1.6,
+          ease: 'power2.inOut',
+          repeat: -1,
+          yoyo: true,
+        }
+      );
+    });
+    return () => ctx.revert();
+  }, [sgDisplayData]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1167,7 +1486,7 @@ const DashboardPage = () => {
   const resolvedBusinessModel = brandOverview?.businessModel || '';
   const resolvedOpportunities = (strategy?.opportunityMap?.length ? strategy.opportunityMap : latestInsights.length ? latestInsights : []).slice(0, 4);
   const hasBrandToneData = Boolean(brandTone?.primary || brandTone?.secondary || brandTone?.writingStyle || brandTone?.tags?.length);
-  const hasStyleGuideData = Boolean(visualIdentity?.summary || visualIdentity?.colorPalette || visualIdentity?.styleNotes);
+  const hasStyleGuideData = Boolean(visualIdentity?.summary || visualIdentity?.colorPalette || visualIdentity?.styleNotes || visualIdentity?.styleGuide);
   const hasIndustryData = Boolean(resolvedIndustry);
   const hasBusinessModelData = Boolean(resolvedBusinessModel);
   const hasPrioritySignalData = Boolean(resolvedPrioritySignal);
@@ -1380,6 +1699,114 @@ const DashboardPage = () => {
       footerLeft: intakeTerminalStatus.toUpperCase(),
       footerRight: latestRunStatus === 'succeeded' ? 'Latest Run' : 'Run Status',
     },
+    (() => {
+      const hasSiteMeta = siteMeta && typeof siteMeta === 'object' && Object.values(siteMeta).some((v) => v);
+      const NOT_PROVIDED = 'Not provided';
+      const siteMetaRows = hasSiteMeta
+        ? [
+            { key: 'og-title',       label: 'Title',        value: siteMeta.title        || NOT_PROVIDED },
+            { key: 'og-description', label: 'OG Text',      value: siteMeta.description  || NOT_PROVIDED },
+            { key: 'og-site-name',   label: 'Site Name',    value: siteMeta.siteName     || NOT_PROVIDED },
+            { key: 'og-image-alt',   label: 'Image Alt',    value: siteMeta.ogImageAlt   || NOT_PROVIDED },
+            { key: 'og-type',        label: 'OG Type',      value: siteMeta.type         || NOT_PROVIDED },
+            { key: 'og-locale',      label: 'Locale',       value: siteMeta.locale       || NOT_PROVIDED },
+            { key: 'og-theme',       label: 'Theme Color',  value: siteMeta.themeColor   || NOT_PROVIDED },
+            { key: 'og-favicon',     label: 'Favicon',      value: siteMeta.favicon         ? 'Present' : NOT_PROVIDED },
+            { key: 'og-apple-icon',  label: 'Apple Icon',   value: siteMeta.appleTouchIcon  ? 'Present' : NOT_PROVIDED },
+            { key: 'og-canonical',   label: 'Canonical',    value: siteMeta.canonical    || NOT_PROVIDED },
+          ]
+        : null;
+
+      return {
+        id: 'brand-tone',
+        number: 'BT',
+        label: hasSiteMeta ? 'SITE META' : 'BRAND TONE',
+        title: hasSiteMeta ? 'Site Meta' : 'Brand Tone',
+        description: hasSiteMeta
+          ? (siteMeta.description || siteMeta.title || 'Open Graph, Twitter Card, and favicon metadata pulled from the homepage.')
+          : (hasBrandToneData
+              ? brandTone?.writingStyle || 'Voice system, tone markers, and writing rules pulled from intake.'
+              : buildUnavailableDescription('brand tone')),
+        placeholderLabel: hasSiteMeta ? 'NO OG IMAGE PROVIDED' : 'VOICE PREVIEW',
+        rows: hasSiteMeta
+          ? siteMetaRows
+          : hasBrandToneData
+            ? [
+                { key: 'primary', label: 'Primary', value: brandTone?.primary || 'Pending' },
+                { key: 'secondary', label: 'Secondary', value: brandTone?.secondary || 'Pending' },
+                { key: 'tags', label: 'Tags', value: brandTone?.tags?.slice(0, 3).join(' · ') || 'Pending' },
+              ]
+            : buildWorkNeededRows('Not enough long-form copy or repeated messaging was fetched to infer voice confidently.'),
+        footerLeft: hasSiteMeta ? 'Live' : (hasBrandToneData ? 'Live' : WORK_NEEDED_LABEL),
+        footerRight: hasSiteMeta ? 'OG Meta' : (hasBrandToneData ? 'Intake Data' : 'Contact Human'),
+      };
+    })(),
+    {
+      id: 'style-guide',
+      number: 'SG',
+      label: 'STYLE GUIDE',
+      title: 'Style Guide',
+      description: sgDisplayData.summary || (hasStyleGuideData
+        ? 'Visual direction, palette cues, and style notes pulled from intake.'
+        : buildUnavailableDescription('visual style guide')),
+      placeholderLabel: 'STYLE SNAPSHOT',
+      rows: [
+        {
+          key: 'sg-heading',
+          label: 'Heading',
+          value: [
+            sgDisplayData.typography?.headingSystem?.fontFamily,
+            sgDisplayData.typography?.headingSystem?.fontWeight,
+            sgDisplayData.typography?.headingSystem?.fontSize,
+          ].filter(Boolean).join(' · ') || 'Pending',
+        },
+        {
+          key: 'sg-body',
+          label: 'Body',
+          value: [
+            sgDisplayData.typography?.bodySystem?.fontFamily,
+            sgDisplayData.typography?.bodySystem?.fontSize,
+          ].filter(Boolean).join(' · ') || 'Pending',
+        },
+        {
+          key: 'sg-primary',
+          label: 'Primary',
+          value: sgDisplayData.colors?.primary
+            ? `${sgDisplayData.colors.primary.hex} · ${sgDisplayData.colors.primary.role}`
+            : 'Pending',
+        },
+        {
+          key: 'sg-secondary',
+          label: 'Secondary',
+          value: sgDisplayData.colors?.secondary?.hex || 'Pending',
+        },
+        {
+          key: 'sg-neutral',
+          label: 'Neutral',
+          value: sgDisplayData.colors?.neutral?.hex || 'Pending',
+        },
+        {
+          key: 'sg-layout',
+          label: 'Layout',
+          value: [
+            sgDisplayData.layout?.grid,
+            sgDisplayData.layout?.maxWidth,
+            sgDisplayData.layout?.borderRadius && `r${sgDisplayData.layout.borderRadius}`,
+          ].filter(Boolean).join(' · ') || 'Pending',
+        },
+        {
+          key: 'sg-motion',
+          label: 'Motion',
+          value: [
+            sgDisplayData.motion?.level,
+            sgDisplayData.motion?.scrollPatterns?.[0],
+            sgDisplayData.motion?.durations?.join('–'),
+          ].filter(Boolean).join(' · ') || 'Pending',
+        },
+      ],
+      footerLeft: hasStyleGuideData ? 'Live' : WORK_NEEDED_LABEL,
+      footerRight: hasStyleGuideData ? 'Guide Ready' : 'Contact Human',
+    },
     {
       id: 'seo-performance',
       number: 'SP',
@@ -1394,44 +1821,6 @@ const DashboardPage = () => {
       footerAction: (hasSeoAuditData || isSeoError) && hasWebsiteUrl
         ? { label: isSeoError ? 'Retry' : 'Re-run', onClick: handleSeoRerun, loading: seoRerunLoading }
         : null,
-    },
-    {
-      id: 'brand-tone',
-      number: 'BT',
-      label: 'BRAND TONE',
-      title: 'Brand Tone',
-      description: hasBrandToneData
-        ? brandTone?.writingStyle || 'Voice system, tone markers, and writing rules pulled from intake.'
-        : buildUnavailableDescription('brand tone'),
-      placeholderLabel: 'VOICE PREVIEW',
-      rows: hasBrandToneData
-        ? [
-            { key: 'primary', label: 'Primary', value: brandTone?.primary || 'Pending' },
-            { key: 'secondary', label: 'Secondary', value: brandTone?.secondary || 'Pending' },
-            { key: 'tags', label: 'Tags', value: brandTone?.tags?.slice(0, 3).join(' · ') || 'Pending' },
-          ]
-        : buildWorkNeededRows('Not enough long-form copy or repeated messaging was fetched to infer voice confidently.'),
-      footerLeft: hasBrandToneData ? 'Live' : WORK_NEEDED_LABEL,
-      footerRight: hasBrandToneData ? 'Intake Data' : 'Contact Human',
-    },
-    {
-      id: 'style-guide',
-      number: 'SG',
-      label: 'STYLE GUIDE',
-      title: 'Style Guide',
-      description: hasStyleGuideData
-        ? visualIdentity?.summary || 'Visual direction, palette cues, and style notes pulled from intake.'
-        : buildUnavailableDescription('visual style guide'),
-      placeholderLabel: 'STYLE SNAPSHOT',
-      rows: hasStyleGuideData
-        ? [
-            { key: 'palette', label: 'Palette', value: visualIdentity?.colorPalette || 'Pending' },
-            { key: 'notes', label: 'Style', value: visualIdentity?.styleNotes || 'Pending' },
-            { key: 'summary', label: 'Direction', value: visualIdentity?.summary || 'Pending' },
-          ]
-        : buildWorkNeededRows('Visual system cues were too limited or inconsistent across fetched pages.'),
-      footerLeft: hasStyleGuideData ? 'Live' : WORK_NEEDED_LABEL,
-      footerRight: hasStyleGuideData ? 'Guide Ready' : 'Contact Human',
     },
     {
       id: 'industry',
@@ -1702,13 +2091,288 @@ const DashboardPage = () => {
                   <span className="power-dot lamp" />
                 </div>
                 <div className={`tile-intake-placeholder tile-intake-placeholder-${card.id}`}>
-                  {card.id === 'intake-terminal' && intakeMockupSrc ? (
+                  {card.id === 'style-guide' ? (
+                    <div id="sg-preview-shell" className="sg-preview">
+                      {sgDisplayData?.confidence === 'low' ? (
+                        <div className="sg-empty">
+                          <span className="sg-empty-label">NO CSS EXTRACTED</span>
+                          <span className="sg-empty-msg">Site may be JS-rendered or stylesheet-free</span>
+                        </div>
+                      ) : (() => {
+                        const sgHead = sgDisplayData.typography?.headingSystem;
+                        const sgBody = sgDisplayData.typography?.bodySystem;
+                        const headName = sgHead?.fontFamily?.split(',')[0].replace(/["']/g, '').trim() || 'Heading';
+                        const LEVELS = ['none', 'minimal', 'moderate', 'heavy'];
+                        const levelIdx = LEVELS.indexOf(sgDisplayData.motion?.level || 'minimal');
+                        return (
+                          <>
+                            {isStyleGuideMock && <span className="sg-demo-watermark">DEMO</span>}
+
+                            {/* TYPE — H1 sample + P sample */}
+                            <div className="sg-quad sg-q-type">
+                              <p className="sg-h1" style={{ fontFamily: sgHead?.fontFamily || 'serif' }}>
+                                {headName}
+                              </p>
+                              <p className="sg-p" style={{ fontFamily: sgBody?.fontFamily || 'sans-serif' }}>
+                                The quick brown fox jumps over the lazy dog and the paragraph text continues here.
+                              </p>
+                            </div>
+
+                            {/* COLOR — full-bleed equal bands */}
+                            <div className="sg-quad sg-q-color">
+                              {[
+                                sgDisplayData.colors?.primary,
+                                sgDisplayData.colors?.secondary,
+                                sgDisplayData.colors?.tertiary,
+                                sgDisplayData.colors?.neutral,
+                              ].filter(Boolean).map((color, ci) => (
+                                <div
+                                  key={ci}
+                                  className="sg-swatch"
+                                  style={{ background: color.hex }}
+                                  title={color.role}
+                                />
+                              ))}
+                            </div>
+
+                            {/* LAYOUT — data-driven responsive grid: desktop → mobile */}
+                            <div className="sg-quad sg-q-layout">
+                              {(() => {
+                                const gridType  = sgDisplayData.layout?.grid         || '12-column';
+                                const cWidth    = sgDisplayData.layout?.contentWidth || 'contained';
+                                const framing   = sgDisplayData.layout?.framing      || 'open';
+                                const bradius   = sgDisplayData.layout?.borderRadius || '2px';
+                                const maxWidth  = sgDisplayData.layout?.maxWidth;
+
+                                const COL_MAP  = { '12-column': 3, 'auto-fit': 4, 'masonry': 3, 'minimal': 2, 'none': 1, 'custom': 2 };
+                                const colCount = COL_MAP[gridType] ?? 3;
+
+                                const isFullBleed = cWidth === 'full-bleed';
+                                const isCard      = framing === 'card-based' || framing === 'boxed';
+                                const isMasonry   = gridType === 'masonry';
+                                const MASONRY_H   = ['30px', '20px', '36px', '24px'];
+
+                                const label = [
+                                  gridType.replace('-column', ''),
+                                  maxWidth && maxWidth !== 'none' ? maxWidth : null,
+                                ].filter(Boolean).join(' · ');
+
+                                return (
+                                  <>
+                                    <div id="sg-rg-demo" className={`sg-rg${isFullBleed ? ' sg-rg--fullbleed' : ''}`}>
+                                      <div className="sg-rg-nav" />
+                                      <div
+                                        className="sg-rg-cols"
+                                        style={{ '--sg-col-min-w': colCount <= 1 ? '0px' : '30px' }}
+                                      >
+                                        {Array.from({ length: colCount }, (_, i) => (
+                                          <div
+                                            key={i}
+                                            className={`sg-rg-col${isCard ? ' sg-rg-col--card' : ''}`}
+                                            style={{
+                                              borderRadius: bradius,
+                                              ...(isMasonry ? { height: MASONRY_H[i] ?? '28px', flex: 'none', width: `${Math.round(100 / colCount)}%` } : {}),
+                                            }}
+                                          />
+                                        ))}
+                                      </div>
+                                    </div>
+                                    <span className="sg-grid-label">{label}</span>
+                                  </>
+                                );
+                              })()}
+                            </div>
+
+                            {/* MOTION — easing curve SVG + tech label */}
+                            <div className="sg-quad sg-q-motion">
+                              {(() => {
+                                const primaryEasing = sgDisplayData.motion?.easings?.[0] || 'ease-in-out';
+                                const animDur = sgDisplayData.motion?.durations?.[0] || '400ms';
+                                const p = sgDisplayData.motion?.scrollPatterns || [];
+                                const motionTech = p.some(s => /gsap/i.test(s)) ? 'GSAP'
+                                  : p.some(s => /lenis/i.test(s)) ? 'Lenis'
+                                  : p.some(s => /aos/i.test(s)) ? 'AOS'
+                                  : p.some(s => /framer/i.test(s)) ? 'Framer'
+                                  : p.length ? p[0].split(' ')[0] : 'CSS';
+                                // Forward-only path: drawn as the visible curve
+                                const curvePath    = _sgEasingPath(primaryEasing, 80, 80);
+                                // Round-trip path: forward + reversed bezier, no jump at end
+                                const rtPath       = _sgEasingPath(primaryEasing, 80, 80, true);
+                                const easingSpline = _sgEasingSpline(primaryEasing);
+                                // Show GSAP power name when tech is GSAP, otherwise CSS name
+                                const easingLabel  = _sgGsapName(primaryEasing, motionTech === 'GSAP');
+                                return (
+                                  <>
+                                    <svg className="sg-ease-svg" viewBox="-3 -3 86 86" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                      {/* Axes */}
+                                      <line x1="0" y1="0" x2="0" y2="80" stroke="rgba(42,36,32,0.14)" strokeWidth="0.75"/>
+                                      <line x1="0" y1="80" x2="80" y2="80" stroke="rgba(42,36,32,0.14)" strokeWidth="0.75"/>
+                                      {/* Linear reference diagonal */}
+                                      <line x1="0" y1="80" x2="80" y2="0" stroke="rgba(42,36,32,0.1)" strokeWidth="0.75" strokeDasharray="3 3"/>
+                                      {/* Visible easing curve (forward only) */}
+                                      <path d={curvePath} stroke="rgba(42,36,32,0.82)" strokeWidth="2" strokeLinecap="round"/>
+                                      {/* Hidden round-trip path — dot travels forward then retraces back, no restart jump */}
+                                      <path id="sg-ease-rt-path" d={rtPath} stroke="none" fill="none"/>
+                                      {/* Animated dot: 3s total (1.5s forward + 1.5s reverse), easing both ways */}
+                                      <circle r="3.5" fill="rgba(42,36,32,0.8)">
+                                        <animateMotion dur="3s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.5;1" keySplines={`${easingSpline};${easingSpline}`}>
+                                          <mpath xlinkHref="#sg-ease-rt-path"/>
+                                        </animateMotion>
+                                      </circle>
+                                      {/* Endpoint dots */}
+                                      <circle cx="0" cy="80" r="2.5" fill="rgba(42,36,32,0.3)"/>
+                                      <circle cx="80" cy="0" r="2.5" fill="rgba(42,36,32,0.3)"/>
+                                    </svg>
+                                    <div className="sg-motion-meta">
+                                      <span className="sg-motion-easing">{easingLabel}</span>
+                                      <span className="sg-motion-sep">·</span>
+                                      <span className="sg-motion-dur">{animDur}</span>
+                                    </div>
+                                  </>
+                                );
+                              })()}
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  ) : card.id === 'intake-terminal' && intakeMockupSrc ? (
                     <img
                       className="tile-intake-mockup-image"
                       src={intakeMockupSrc}
                       alt="Generated multi-device website mockup"
                       onError={() => setIntakeMockupSrc(null)}
                     />
+                  ) : card.id === 'seo-performance' && hasSeoAuditData ? (() => {
+                    const sc  = seoAudit?.scores ?? {};
+                    const cwv = seoAudit?.coreWebVitals ?? {};
+                    const lab = seoAudit?.labCoreWebVitals ?? {};
+                    const scoreRings = [
+                      ['Performance',    sc.performance],
+                      ['SEO',            sc.seo],
+                      ['Accessibility',  sc.accessibility],
+                      ['Best Practices', sc.bestPractices],
+                    ].filter(([, v]) => v != null);
+                    const lcpMs   = cwv.lcp?.p75  ?? lab.lcp?.p75;
+                    const inpMs   = cwv.inp?.p75;
+                    const clsVal  = cwv.cls?.p75  ?? lab.cls?.p75;
+                    const ttfbMs  = cwv.ttfb?.p75 ?? lab.ttfb?.p75;
+                    // Goodness percentage: 100 = best, 0 = worst. Bar fill shows quality level.
+                    const goodnessPct = (key, raw) => {
+                      if (raw == null) return 0;
+                      switch (key) {
+                        case 'lcp':  return Math.max(2, Math.min(100, (1 - raw / 8000) * 100));
+                        case 'inp':  return Math.max(2, Math.min(100, (1 - raw / 1000) * 100));
+                        case 'cls':  return Math.max(2, Math.min(100, (1 - raw / 0.5)  * 100));
+                        case 'ttfb': return Math.max(2, Math.min(100, (1 - raw / 3000) * 100));
+                        default:     return 0;
+                      }
+                    };
+                    const cwvItems = [
+                      lcpMs  != null && { key: 'lcp', label: 'Largest Contentful Paint', display: `${(lcpMs / 1000).toFixed(1)}s`, cat: cwv.lcp?.category ?? lab.lcp?.category, pct: goodnessPct('lcp', lcpMs)  },
+                      inpMs  != null && { key: 'inp', label: 'Interaction to Next Paint', display: `${inpMs}ms`,                    cat: cwv.inp?.category,                       pct: goodnessPct('inp', inpMs)  },
+                      clsVal != null && { key: 'cls', label: 'Cumulative Layout Shift',   display: Number(clsVal).toFixed(2),       cat: cwv.cls?.category ?? lab.cls?.category,  pct: goodnessPct('cls', clsVal) },
+                    ].filter(Boolean);
+                    const diagItems = (seoAudit?.diagnostics ?? []).slice(0, 2);
+                    const scoreColor = (v) => v >= 90 ? 'success' : v >= 50 ? 'warning' : 'danger';
+                    const cwvColor   = (c) => c === 'FAST' ? 'success' : c === 'AVERAGE' ? 'warning' : c === 'SLOW' ? 'danger' : null;
+                    const catLabel   = (c) => c === 'FAST' ? 'Fast' : c === 'AVERAGE' ? 'Average' : c === 'SLOW' ? 'Slow' : null;
+                    const circ = 150.8;
+                    return (
+                      <div id="seo-perf-viz-shell">
+                        <div id="seo-perf-rings-row">
+                          {scoreRings.map(([label, score]) => (
+                            <div className="seo-ring-cell" key={label}>
+                              <svg className="seo-ring-svg" viewBox="0 0 58 58">
+                                <circle className="ring-bg" cx="29" cy="29" r="24" fill="none" strokeWidth="4" />
+                                <circle
+                                  className={`ring-fill ring-fill-${scoreColor(score)} stroke-lit`}
+                                  cx="29" cy="29" r="24" fill="none" strokeWidth="4"
+                                  strokeDasharray={circ}
+                                  strokeDashoffset={circ - (circ * score / 100)}
+                                  transform="rotate(-90 29 29)"
+                                />
+                              </svg>
+                              <div className="ring-val">{score}</div>
+                              <div className="ring-label">{label}</div>
+                            </div>
+                          ))}
+                        </div>
+                        {cwvItems.length > 0 && (
+                          <div id="seo-perf-cwv-row">
+                            {cwvItems.map(({ key, label, display, cat, pct }) => {
+                              const tone = cwvColor(cat);
+                              const cLabel = catLabel(cat);
+                              return (
+                                <div className="seo-cwv-item" key={key}>
+                                  <div className="seo-cwv-head">
+                                    <span className="seo-cwv-label">{label}</span>
+                                    <span className={`seo-cwv-val${tone ? ` seo-cwv-val--${tone}` : ''}`}>
+                                      {display}{cLabel ? ` · ${cLabel}` : ''}
+                                    </span>
+                                  </div>
+                                  <div className="seo-cwv-bar-track">
+                                    <div
+                                      className={`seo-cwv-bar-fill${tone ? ` seo-cwv-bar-fill--${tone}` : ''}`}
+                                      style={{ width: `${pct}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        {diagItems.length > 0 && (() => {
+                          // Parse a numeric value from strings like "0.2 S", "1,234 KiB", "3.1 s"
+                          const parseNum = (str) => {
+                            if (str == null) return null;
+                            const n = parseFloat(String(str).replace(/,/g, ''));
+                            return isNaN(n) ? null : n;
+                          };
+                          const diagNums = diagItems.map((d) => parseNum(d.value));
+                          const maxNum   = Math.max(...diagNums.filter((n) => n != null), 0.001);
+                          return (
+                            <div id="seo-perf-diag-row">
+                              <span id="seo-perf-diag-heading">Diagnostics</span>
+                              <div id="seo-perf-diag-cards">
+                                {diagItems.map((d, i) => {
+                                  const num = diagNums[i];
+                                  const barPct = num != null ? Math.max(4, (num / maxNum) * 100) : null;
+                                  return (
+                                    <div className="seo-diag-card" key={d.id}>
+                                      <div className="seo-diag-card-val">{d.value}</div>
+                                      <div className="seo-diag-card-label">{d.label}</div>
+                                      {barPct != null && (
+                                        <div className="seo-diag-bar-track">
+                                          <div className="seo-diag-bar-fill" style={{ width: `${barPct}%` }} />
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    );
+                  })() : card.id === 'brand-tone' && siteMeta?.ogImage ? (
+                    <div id="bt-preview-shell">
+                      <img
+                        id="bt-og-image"
+                        src={siteMeta.ogImage}
+                        alt={siteMeta.ogImageAlt || ''}
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      />
+                      {siteMeta.favicon && (
+                        <img
+                          id="bt-favicon"
+                          src={siteMeta.favicon}
+                          alt=""
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                      )}
+                    </div>
                   ) : (
                     <span>{card.placeholderLabel}</span>
                   )}
@@ -1765,19 +2429,67 @@ const DashboardPage = () => {
               const isReady = isFreeTier && hasIntakeData;
               const tileStatus = isReady ? tile.status : isFreeTier ? 'INITIALIZING' : 'PREVIEW';
               const tileMetric = isReady ? tile.metric : isFreeTier ? '—' : 'PRO TIER';
+              const isBlocked = true;
+              const upgradeTitle = UPGRADE_TILE_TITLES[tile.id] || tile.label;
+              const resolvedDescription = UPGRADE_TILE_DESCRIPTIONS[tile.id] || tile.description;
+              const tileRows = [
+                { key: 'tier',    label: 'Tier',    value: isFreeTier ? 'Free Tier' : 'Pro Tier' },
+                { key: 'status',  label: 'Status',  value: tileStatus },
+                { key: 'metric',  label: 'Metric',  value: tileMetric },
+                { key: 'module',  label: 'Module',  value: tile.label || 'Not provided' },
+                { key: 'summary', label: 'Summary', value: resolvedDescription || 'Not provided' },
+              ];
               return (
                 <article
-                  className={`tile${!isFreeTier ? ' tile-preview' : ''}${isReady ? ' tile-ready' : ''}`}
+                  className={`tile tile-intake-card${!isFreeTier ? ' tile-preview' : ''}${isReady ? ' tile-ready' : ''}${isBlocked ? ' tile-blocked' : ''}`}
                   id={`tile-${tile.number}-${tile.id}`}
                   key={tile.id}
                 >
+                  {isBlocked ? (
+                    <div className="tile-blocked-overlay" aria-hidden="false">
+                      <div className="tile-blocked-inner">
+                        <h3 className="tile-heading tile-intake-heading tile-blocked-title">{upgradeTitle}</h3>
+                        <p className="tile-description tile-intake-description tile-blocked-description">{resolvedDescription}</p>
+                        <button
+                          type="button"
+                          className="cta-pill-btn tile-blocked-upgrade-btn"
+                          id={`tile-${tile.id}-upgrade-btn`}
+                          onClick={() => setShowTierModal(true)}
+                        >
+                          Upgrade Tier
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="tile-number">
                     <span>{tile.number} / {tile.label}</span>
                     <span className={`power-dot lamp${!isFreeTier ? ' power-dot-dim' : ''}`} />
                   </div>
-                  <h3 className="tile-heading">{tile.title}</h3>
-                  <p className="tile-description">{tile.description}</p>
-                  <div className="tile-viz">{renderViz(tile.viz, countdownHours)}</div>
+                  <div className="tile-intake-placeholder tile-intake-placeholder-draft-post">
+                    {renderViz(tile.viz, countdownHours)}
+                  </div>
+                  <div className="tile-intake-body">
+                    <h3 className="tile-heading tile-intake-heading">{tile.title}</h3>
+                    <p className="tile-description tile-intake-description">{resolvedDescription}</p>
+                    <div className="tile-intake-table-wrap">
+                      <table className="tile-intake-table">
+                        <thead>
+                          <tr>
+                            <th>Field</th>
+                            <th>Value</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {tileRows.map((row) => (
+                            <tr key={`${tile.id}-${row.key}`}>
+                              <td>{row.label}</td>
+                              <td>{row.value}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                   <div className="tile-foot">
                     <span className={`status-live${!isFreeTier ? ' status-preview' : ''}`}>{tileStatus}</span>
                     <span>{tileMetric}</span>
@@ -1853,7 +2565,7 @@ const DashboardPage = () => {
                 : latestRunStatus === 'queued'
                   ? 'Creating Your Dashboard'
                   : latestRunStatus === 'running'
-                    ? 'Analyzing your site and building brand intelligence.'
+                    ? 'Creating Your Dashboard. You can close this window and come back.'
                     : 'Setup encountered an issue. Update the website URL below to retry.'}
             </p>
 
@@ -2509,7 +3221,7 @@ const dashboardCss = `
   .db-alert-muted { color: var(--text-secondary); }
   #capability-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 1px;
     background: var(--border);
     border: 1px solid var(--border);
@@ -2534,7 +3246,7 @@ const dashboardCss = `
     overflow: hidden;
   }
   .tile-preview {
-    opacity: 0.55;
+    opacity: 1;
   }
   .tile-intake-card {
     aspect-ratio: auto;
@@ -2543,6 +3255,14 @@ const dashboardCss = `
     flex-direction: column;
     gap: 12px;
     padding: 16px;
+  }
+  .tile-intake-card > .tile-number,
+  .tile-intake-card > .tile-foot {
+    align-self: stretch;
+    width: 100%;
+  }
+  .tile-intake-card > .tile-foot {
+    margin-top: auto;
   }
   .tile-intake-card--wide {
     grid-column: 1 / -1;
@@ -2583,9 +3303,9 @@ const dashboardCss = `
     overflow: hidden;
   }
   .tile-intake-placeholder-style-guide {
-    background:
-      linear-gradient(135deg, rgba(255,255,255,0.78), rgba(255,255,255,0.24)),
-      linear-gradient(135deg, rgba(244, 195, 120, 0.24), rgba(144, 197, 234, 0.22) 52%, rgba(177, 151, 241, 0.2));
+    align-items: stretch;
+    justify-content: stretch;
+    padding: 0;
   }
   .tile-intake-placeholder-industry {
     background:
@@ -2606,6 +3326,108 @@ const dashboardCss = `
     background:
       linear-gradient(135deg, rgba(255,255,255,0.8), rgba(255,255,255,0.22)),
       linear-gradient(135deg, rgba(242, 186, 118, 0.2), rgba(246, 138, 177, 0.18) 50%, rgba(162, 141, 236, 0.18));
+    padding: clamp(14px, 3.5%, 28px);
+  }
+  .tile-intake-placeholder-draft-post > * {
+    max-width: 100%;
+    max-height: 100%;
+  }
+  .tile-blocked { position: relative; }
+  .tile-blocked .tile-number,
+  .tile-blocked .tile-foot {
+    position: relative;
+    z-index: 5;
+  }
+  .tile-blocked-overlay {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 4;
+    border-radius: inherit;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: 0;
+    background: rgba(255, 252, 248, 0.38);
+    backdrop-filter: blur(14px) saturate(118%);
+    -webkit-backdrop-filter: blur(14px) saturate(118%);
+    border: 1px solid rgba(42, 36, 32, 0.08);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.5);
+    -webkit-mask-image: linear-gradient(to bottom,
+      transparent 0,
+      transparent 44px,
+      #000 64px,
+      #000 calc(100% - 52px),
+      transparent calc(100% - 32px),
+      transparent 100%);
+    mask-image: linear-gradient(to bottom,
+      transparent 0,
+      transparent 44px,
+      #000 64px,
+      #000 calc(100% - 52px),
+      transparent calc(100% - 32px),
+      transparent 100%);
+  }
+  .tile-blocked-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    /* top padding approximates: tile-number strip (~24px) + gap (12px)
+       + placeholder height (66.67% of width from aspect-ratio 1536/1024)
+       + gap (12px) — so content lands where the live card's heading sits */
+    padding: calc(66.67% + 48px) 16px 16px;
+    text-align: left;
+    gap: 10px;
+    width: 100%;
+    max-width: 100%;
+  }
+  .tile-blocked-title {
+    margin: 0;
+    max-width: 36ch;
+  }
+  .tile-blocked-description {
+    margin: 0;
+    max-width: 52ch;
+    opacity: 0.82;
+  }
+  .tile-blocked-upgrade-btn {
+    appearance: none;
+    border: 1px solid transparent;
+    background: rgba(255, 252, 248, 0.92);
+    color: #2a2420;
+    font-family: "Space Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 10px 18px;
+    border-radius: 999px;
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(42, 36, 32, 0.12);
+    transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+  }
+  .tile-blocked-upgrade-btn:hover {
+    background: #faf7f2;
+    color: #2a2420;
+    transform: translateY(-1px);
+    box-shadow: 0 10px 22px rgba(42, 36, 32, 0.16);
+  }
+  [data-dashboard-theme="dark"] .tile-blocked-overlay {
+    background: rgba(22, 20, 18, 0.42);
+    border-color: rgba(255,255,255,0.08);
+  }
+  [data-dashboard-theme="dark"] .tile-blocked-title { color: #faf7f2; }
+  [data-dashboard-theme="dark"] .tile-blocked-upgrade-btn {
+    background: rgba(22, 20, 18, 0.72);
+    color: #faf7f2;
+    border-color: transparent;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+  }
+  [data-dashboard-theme="dark"] .tile-blocked-upgrade-btn:hover {
+    background: rgba(22, 20, 18, 0.88);
+    color: #faf7f2;
   }
   .tile-intake-placeholder-content-angle {
     background:
@@ -2616,6 +3438,47 @@ const dashboardCss = `
     background:
       linear-gradient(135deg, rgba(255,255,255,0.8), rgba(255,255,255,0.22)),
       linear-gradient(135deg, rgba(129, 210, 178, 0.2), rgba(242, 202, 127, 0.18) 50%, rgba(152, 183, 244, 0.18));
+  }
+  .tile-intake-placeholder-seo-performance {
+    align-items: stretch;
+    justify-content: stretch;
+    padding: 0;
+  }
+  .tile-intake-placeholder-brand-tone {
+    align-items: stretch;
+    justify-content: stretch;
+    padding: 0;
+  }
+  #bt-preview-shell {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    border-radius: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #bt-og-image {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    object-position: center;
+  }
+  #bt-favicon {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.9);
+    box-shadow: 0 1px 6px rgba(0,0,0,0.18);
+    object-fit: contain;
+    padding: 3px;
   }
   .tile-intake-placeholder span {
     font-family: var(--font-mono);
@@ -2630,6 +3493,209 @@ const dashboardCss = `
     height: 100%;
     object-fit: cover;
     object-position: center;
+  }
+
+  /* ── Style Guide Preview ── */
+  #sg-preview-shell {
+    width: 100%;
+    height: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    overflow: hidden;
+    position: relative;
+    box-sizing: border-box;
+  }
+  .sg-demo-watermark {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    font-family: var(--font-mono);
+    font-size: 6px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(42,36,32,0.35);
+    background: rgba(255,255,255,0.55);
+    border: 1px solid rgba(42,36,32,0.12);
+    border-radius: 2px;
+    padding: 2px 4px;
+    z-index: 2;
+    pointer-events: none;
+  }
+  .sg-quad {
+    overflow: hidden;
+    box-sizing: border-box;
+  }
+
+  /* TYPE — top-left */
+  .sg-q-type {
+    border-right: 1px solid rgba(42,36,32,0.1);
+    border-bottom: 1px solid rgba(42,36,32,0.1);
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 5px;
+  }
+  .sg-h1 {
+    margin: 0;
+    font-size: 19px;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.025em;
+    color: rgba(42,36,32,0.9);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .sg-p {
+    margin: 0;
+    font-size: 8px;
+    line-height: 1.55;
+    color: rgba(42,36,32,0.52);
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+  }
+
+  /* COLOR — top-right, full-bleed equal bands */
+  .sg-q-color {
+    border-bottom: 1px solid rgba(42,36,32,0.1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .sg-swatch {
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+  }
+
+  /* LAYOUT — bottom-left: viewport-resize grid demo */
+  .sg-q-layout {
+    border-right: 1px solid rgba(42,36,32,0.1);
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 6px;
+    overflow: hidden;
+  }
+  .sg-rg {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-height: 0;
+    overflow: hidden;
+    /* Device-frame border to sell the "viewport" metaphor */
+    border: 1px solid rgba(42,36,32,0.22);
+    border-radius: 3px;
+    /* GSAP animates width: 100% → 36% — flex-wrap then causes column reflow */
+  }
+  .sg-rg-nav {
+    height: 7px;
+    background: rgba(42,36,32,0.28);
+    border-radius: 2px 2px 0 0;
+    flex-shrink: 0;
+  }
+  .sg-rg-cols {
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;        /* columns reflow naturally as frame narrows */
+    align-content: stretch; /* rows share height equally; clipped rows stay hidden */
+    gap: 3px;
+    padding: 4px;
+    overflow: hidden;
+    min-height: 0;
+  }
+  .sg-rg-col {
+    /* flex-basis = --sg-col-min-w; at desktop all N cols fit in 1 row;
+       at mobile (36% width) each col can't share a row → wraps to stacked */
+    flex: 1 1 var(--sg-col-min-w, 30px);
+    min-width: var(--sg-col-min-w, 30px);
+    background: rgba(42,36,32,0.1);
+    border-radius: 1px;
+    min-height: 12px;
+  }
+  /* card-based / boxed framing: blocks look like cards */
+  .sg-rg-col--card {
+    background: rgba(255,255,255,0.55);
+    border: 1px solid rgba(42,36,32,0.12);
+  }
+  /* full-bleed: nav bar goes edge-to-edge, no margin */
+  .sg-rg--fullbleed .sg-rg-nav { border-radius: 0; }
+  .sg-grid-label {
+    font-family: var(--font-mono);
+    font-size: 6.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(42,36,32,0.4);
+    flex-shrink: 0;
+  }
+
+  /* MOTION — bottom-right: full-bleed easing curve + meta row */
+  .sg-q-motion {
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .sg-ease-svg {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    display: block;
+    overflow: visible;
+  }
+  .sg-motion-meta {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+  .sg-motion-tech,
+  .sg-motion-easing,
+  .sg-motion-dur {
+    font-family: var(--font-mono);
+    font-size: 6.5px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: rgba(42,36,32,0.45);
+  }
+  .sg-motion-sep {
+    font-family: var(--font-mono);
+    font-size: 6.5px;
+    color: rgba(42,36,32,0.22);
+  }
+
+  /* Empty state */
+  .sg-empty {
+    grid-column: 1 / -1;
+    grid-row: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 16px;
+  }
+  .sg-empty-label {
+    font-family: var(--font-mono);
+    font-size: 7px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(42,36,32,0.38);
+  }
+  .sg-empty-msg {
+    font-size: 7px;
+    color: rgba(42,36,32,0.42);
+    text-align: center;
+    letter-spacing: 0.04em;
+    line-height: 1.4;
   }
   .tile-intake-body {
     display: flex;
@@ -2867,8 +3933,164 @@ const dashboardCss = `
   .ring-fill-display { stroke: var(--text-display); }
   .ring-fill-warning { stroke: var(--warning); }
   .ring-fill-success { stroke: var(--success); }
+  .ring-fill-danger  { stroke: var(--accent); }
   .ring-val { font-family: var(--font-mono); font-size: 12px; color: var(--text-display); margin-top: 6px; }
   .ring-label { font-family: var(--font-mono); font-size: 8.5px; color: var(--text-secondary); margin-top: 1px; letter-spacing: 0.08em; text-transform: uppercase; }
+
+  /* ── SEO + Performance viz shell ── */
+  #seo-perf-viz-shell {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 10px 12px;
+    box-sizing: border-box;
+  }
+  #seo-perf-rings-row {
+    display: flex;
+    gap: 6px;
+    justify-content: space-around;
+    align-items: center;
+    width: 100%;
+  }
+  .seo-ring-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+  .seo-ring-svg {
+    display: block;
+    width: clamp(34px, 6vw, 52px);
+    height: clamp(34px, 6vw, 52px);
+  }
+  #seo-perf-cwv-row {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    width: 100%;
+  }
+  .seo-cwv-item {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .seo-cwv-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .seo-cwv-label {
+    font-family: var(--font-mono);
+    font-size: 8px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+  .seo-cwv-val {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-primary);
+    letter-spacing: 0.04em;
+  }
+  .seo-cwv-val--success { color: var(--success); }
+  .seo-cwv-val--warning { color: var(--warning); }
+  .seo-cwv-val--danger  { color: var(--accent); }
+  .seo-cwv-bar-track {
+    width: 100%;
+    height: 3px;
+    background: var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .seo-cwv-bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: var(--text-secondary);
+    transition: width 600ms var(--ease);
+  }
+  .seo-cwv-bar-fill--success { background: var(--success); }
+  .seo-cwv-bar-fill--warning { background: var(--warning); }
+  .seo-cwv-bar-fill--danger  { background: var(--accent); }
+  #seo-perf-diag-row {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding-top: 7px;
+    border-top: 1px solid var(--border);
+  }
+  #seo-perf-diag-heading {
+    font-family: var(--font-mono);
+    font-size: 7px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 2px;
+  }
+  #seo-perf-diag-cards {
+    display: flex;
+    gap: 6px;
+    width: 100%;
+  }
+  .seo-diag-card {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 5px 7px 6px;
+    border-radius: 6px;
+    background: transparent;
+    border: 1px solid var(--border);
+    min-width: 0;
+    overflow: hidden;
+  }
+  .seo-diag-card-val {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--warning);
+    letter-spacing: 0.01em;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .seo-diag-card-label {
+    font-family: var(--font-mono);
+    font-size: 7px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.3;
+  }
+  .seo-diag-bar-track {
+    width: 100%;
+    height: 3px;
+    background: var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+    margin-top: 3px;
+  }
+  .seo-diag-bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: var(--warning);
+    transition: width 600ms var(--ease);
+  }
+  @media (max-width: 480px) {
+    .seo-ring-svg { width: 30px; height: 30px; }
+    #seo-perf-rings-row { gap: 3px; }
+    .ring-val { font-size: 9px; margin-top: 3px; }
+    .ring-label { font-size: 6px; }
+    .seo-cwv-label { font-size: 6.5px; }
+    .seo-cwv-val { font-size: 7.5px; }
+    #seo-perf-viz-shell { gap: 7px; padding: 8px 8px; }
+  }
   .spark-val { font-family: var(--font-mono); font-size: 24px; color: var(--text-display); line-height: 1; margin-bottom: 4px; }
   .spark-val .unit, .countdown .unit, .countdown-meta, .chip { font-family: var(--font-mono); text-transform: uppercase; }
   .spark-val .unit { font-size: 9px; color: var(--text-secondary); margin-left: 5px; letter-spacing: 0.08em; }
@@ -2933,10 +4155,13 @@ const dashboardCss = `
     #founders-shell { padding: 104px 24px 64px; }
     #founders-top-strip-inner { padding: 0 24px; }
     #dashboard-source-cta-row { width: 100%; }
-    #capability-grid { grid-template-columns: 1fr; }
+    #capability-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .tile { aspect-ratio: auto; min-height: 220px; grid-template-areas: "num" "head" "desc" "viz" "foot"; grid-template-columns: 1fr; row-gap: 14px; }
     .tile-description { }
     #intake-identity-row { grid-template-columns: 1fr; gap: 16px; }
+  }
+  @media (max-width: 520px) {
+    #capability-grid { grid-template-columns: 1fr; }
   }
   @media (max-width: 620px) {
     #founders-shell { padding-top: 96px; }
@@ -3190,7 +4415,7 @@ const dashboardCss = `
     padding-top: 0.75rem;
   }
   @media (max-width: 480px) {
-    #intake-modal-overlay { padding: 1rem; align-items: flex-start; padding-top: 1.5rem; }
+    #intake-modal-overlay { padding: 1rem; align-items: center; }
     #intake-modal-card { width: 100%; box-sizing: border-box; }
   }
 

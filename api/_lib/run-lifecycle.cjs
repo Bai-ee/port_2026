@@ -172,6 +172,7 @@ function buildDashboardProjection(clientId, pipelineResult, runId) {
     if (pipelineResult.strategy) base.strategy = pipelineResult.strategy;
     if (pipelineResult.outputsPreview) base.outputsPreview = pipelineResult.outputsPreview;
     if (pipelineResult.systemPreview) base.systemPreview = pipelineResult.systemPreview;
+    if (pipelineResult.siteMeta) base.siteMeta = pipelineResult.siteMeta;
   }
 
   return base;

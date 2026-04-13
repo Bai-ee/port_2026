@@ -325,6 +325,10 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
 
   // ── Stage 4: Normalize ────────────────────────────────────────────────────
   await emitProgress('normalize', 'Writing dashboard modules...');
+
+  // Pull siteMeta from homepage evidence — extracted by site-fetcher, never in LLM output.
+  const siteMeta = evidence.pages.find((p) => p.type === 'homepage')?.siteMeta || null;
+
   let normalized;
   try {
     normalized = normalizeIntakeResult(synthesisResult.intake, {
@@ -334,6 +338,7 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
       pipelineRunId,
       artifactRefs,
       warnings,
+      siteMeta,
     });
   } catch (err) {
     return {
