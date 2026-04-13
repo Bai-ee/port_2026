@@ -19,7 +19,7 @@ const PYTHON_BIN = require('fs').existsSync(path.join(ROOT, '.venv', 'bin', 'pyt
 
 const REQUIRED_VARIANTS = {
   desktop: 'desktop',
-  ipad: 'ipad',
+  ipad: 'tablet',
   iphone: 'mobile',
 };
 

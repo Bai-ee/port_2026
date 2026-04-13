@@ -39,12 +39,12 @@ const SCREENSHOT_VARIANTS = [
     primary: false,
   },
   {
-    id: 'ipad',
-    label: 'iPad',
-    storageSuffix: 'ipad',
+    id: 'tablet',
+    label: 'Tablet',
+    storageSuffix: 'tablet',
     viewport: {
-      width: 820,
-      height: 1180,
+      width: 768,
+      height: 1024,
       deviceScaleFactor: 2,
       isMobile: true,
       hasTouch: true,
@@ -195,8 +195,9 @@ async function captureScreenshotBuffer({ clientId, runId, targetUrl, variant }) 
         },
         waitForTimeout: config.postLoadWaitMs,
         options: {
-          fullPage: true,
-          type: 'png',
+          fullPage: false,
+          type: 'jpeg',
+          quality: 70,
         },
       }),
     });

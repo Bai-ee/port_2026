@@ -36,6 +36,8 @@ const LEASE_TIMEOUT_MS = 10 * 60 * 1000; // 10 min — stale lease window for ad
 async function claimRun(runId) {
   const runRef = fb.adminDb.collection('brief_runs').doc(runId);
   let capturedRunData = null;
+  let clientRunRef = null;
+  let claimUpdate = null;
 
   await fb.adminDb.runTransaction(async (tx) => {
     const runDoc = await tx.get(runRef);
@@ -60,13 +62,26 @@ async function claimRun(runId) {
     const leasedAt = new Date().toISOString();
     const leaseExpiresAt = new Date(Date.now() + LEASE_TIMEOUT_MS).toISOString();
 
-    tx.update(runRef, {
+    claimUpdate = {
       status: 'running',
       attempts: fb.FieldValue.increment(1),
       startedAt: fb.FieldValue.serverTimestamp(),
       updatedAt: fb.FieldValue.serverTimestamp(),
       workerLease: { workerId, leasedAt, leaseExpiresAt },
-    });
+    };
+
+    tx.update(runRef, claimUpdate);
+
+    // Mirror the claim to the client-scoped run doc so bootstrap reads
+    // (clients/{clientId}/brief_runs) see status: 'running' in real time.
+    // Without this, the dashboard terminal stays on the queued branch for the
+    // entire run and only flips to succeeded when completeRun writes both docs.
+    if (run.clientId) {
+      clientRunRef = fb.adminDb
+        .collection('clients').doc(run.clientId)
+        .collection('brief_runs').doc(runId);
+      tx.set(clientRunRef, claimUpdate, { merge: true });
+    }
   });
 
   return {

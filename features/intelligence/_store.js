@@ -29,11 +29,11 @@ function masterRef(clientId) {
 }
 
 function sourcesCol(clientId) {
-  return intelligenceCol(clientId).collection('sources');
+  return masterRef(clientId).collection('sources');
 }
 
 function eventsCol(clientId) {
-  return intelligenceCol(clientId).collection('events');
+  return masterRef(clientId).collection('events');
 }
 
 // ── Read helpers ──────────────────────────────────────────────────────────────

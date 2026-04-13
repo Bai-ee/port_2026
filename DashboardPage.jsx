@@ -827,7 +827,11 @@ const DashboardPage = () => {
   const dashboardState = bootstrap.dashboardState;
   const homepageDeviceMockup = dashboardState?.artifacts?.homepageDeviceMockup || null;
   const clientStatus = dashboardState?.status || client?.status || 'provisioning';
-  const latestRunStatus = dashboardState?.latestRunStatus || currentRun?.status || null;
+  // Prefer the live run status from brief_runs (polled every 4s) over the cached
+  // dashboardState.latestRunStatus — the cached value is written as 'queued' at
+  // provisioning and only flips to 'succeeded' at completion, so it never reports
+  // 'running' and would lock the terminal on the queued branch mid-run.
+  const latestRunStatus = currentRun?.status || dashboardState?.latestRunStatus || null;
   const provisioningState = dashboardState?.provisioningState || null;
   const errorState = dashboardState?.errorState || null;
 
@@ -1109,23 +1113,37 @@ const DashboardPage = () => {
 
   // General line-by-line reveal trigger — fires on status change or log growth.
   // Declared after terminalLog useMemo so we can reference it directly.
+  //
+  // Flash-avoidance rule: only reset revealedLineCount to 0 on the INITIAL mount
+  // (no prior status yet). Mid-run status transitions (queued → running →
+  // succeeded) previously wiped the terminal to empty and re-revealed from zero,
+  // which read as a "refresh" flash. Instead, treat every non-initial transition
+  // like content growth — keep what's on screen and reveal only the new delta.
   // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
     const currLen = terminalLog.length;
     const prevLen = prevLogLengthRef.current;
-    const statusChanged = latestRunStatus !== prevStatusForRevealRef.current;
+    const isInitialReveal = prevStatusForRevealRef.current === null && latestRunStatus !== null;
 
     prevLogLengthRef.current = currLen;
     prevStatusForRevealRef.current = latestRunStatus;
 
-    if (statusChanged) {
-      // New status — reveal all lines fresh from the start
+    if (isInitialReveal) {
+      // First time we have a status — reveal from the start
       setRevealedLineCount(0);
     } else if (currLen > prevLen) {
-      // New lines added within same status — reveal only the new ones
-      setRevealedLineCount(prevLen);
+      // New lines appended (stage advance or status transition that grew the log)
+      // — keep prior content on screen and reveal just the new ones.
+      //
+      // If the reveal is idle (null = all lines visible), kick it from prevLen
+      // so the new lines animate in. If a reveal is already in flight, leave it
+      // alone — the interval reads terminalLengthRef.current each tick and will
+      // keep going until the new total is reached, so jumping the counter would
+      // only cause hidden lines to pop in all at once.
+      setRevealedLineCount((c) => (c === null ? prevLen : c));
     }
-    // Same length, same status (e.g. countdown tick) — no reveal change
+    // Same or shrinking length, same status (countdown tick, line content swap
+    // in place) — do not touch revealedLineCount, avoids flashing.
   }, [latestRunStatus, terminalLog]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // During the succeeded reveal, slice to how many lines have been unlocked so far
@@ -2464,8 +2482,8 @@ const dashboardCss = `
     gap: 10px;
   }
   .meta-row:last-child { border-bottom: none; }
-  .meta-row .label { font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; }
-  .meta-row .value { font-family: var(--font-mono); font-size: 14px; color: var(--text-display); }
+  .meta-row .label { font-size: 0.72rem; color: var(--text-secondary); font-family: var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .value { font-family: var(--font-mono); font-size: clamp(0.82rem, 1.1vw, 0.95rem); color: var(--text-display); }
   #tier-trigger-btn {
     border: none;
     background: none;
@@ -2635,11 +2653,13 @@ const dashboardCss = `
     margin-top: 2px;
     padding-top: 10px;
     border-top: 1px solid var(--border);
+    height: 180px;
+    overflow-y: auto;
   }
   .tile-intake-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 12px;
+    font-size: clamp(0.82rem, 1.1vw, 0.95rem);
     table-layout: fixed;
   }
   .tile-intake-table th {
@@ -2693,17 +2713,17 @@ const dashboardCss = `
   .power-dot-dim { background: var(--text-disabled) !important; box-shadow: none !important; }
   .tile-heading {
     grid-area: head;
-    font-weight: 400;
-    font-size: 16px;
+    font-weight: 700;
+    font-size: clamp(1rem, 1.6vw, 1.2rem);
     line-height: 1.2;
     color: var(--text-display);
-    letter-spacing: -0.01em;
+    letter-spacing: -0.03em;
   }
   .tile-description {
     grid-area: desc;
-    font-size: 11.5px;
+    font-size: clamp(0.82rem, 1.1vw, 0.95rem);
     color: var(--text-secondary);
-    line-height: 1.45;
+    line-height: 1.55;
     width: 100%;
     max-width: none;
     margin-top: 6px;
