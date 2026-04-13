@@ -1,114 +1,18 @@
-'use client';
+import { createRequire } from 'module';
+import OpsOverviewPage from '../../OpsOverviewPage';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { useAuth } from '../../AuthContext';
-import AdminPage from '../../AdminPage';
+const require = createRequire(import.meta.url);
+const { buildOpsOverview } = require('../../api/_lib/ops-overview.cjs');
 
-export default function AdminRoute() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
-  const [adminStatus, setAdminStatus] = useState('checking'); // 'checking' | 'authorized' | 'denied'
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
-  useEffect(() => {
-    if (!loading && !user) {
-      router.replace('/login?redirect=/admin');
-    }
-  }, [user, loading, router]);
-
-  useEffect(() => {
-    if (loading || !user) return;
-
-    let cancelled = false;
-
-    user.getIdToken()
-      .then((token) =>
-        fetch('/api/admin/clients?limit=1', {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-      )
-      .then((res) => {
-        if (!cancelled) {
-          setAdminStatus(res.status === 200 ? 'authorized' : 'denied');
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setAdminStatus('denied');
-      });
-
-    return () => { cancelled = true; };
-  }, [user, loading]);
-
-  if (loading || (user && adminStatus === 'checking')) {
-    return (
-      <div style={shellStyle}>
-        <span style={labelStyle}>CHECKING ACCESS…</span>
-      </div>
-    );
+export default async function AdminRoute() {
+  try {
+    const initialData = await buildOpsOverview();
+    return <OpsOverviewPage initialData={initialData} />;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to load ops overview.';
+    return <OpsOverviewPage initialError={message} />;
   }
-
-  if (!user) return null;
-
-  if (adminStatus === 'denied') {
-    return (
-      <div style={shellStyle}>
-        <div style={denyCardStyle}>
-          <div style={denyTitleStyle}>ACCESS DENIED</div>
-          <div style={denyBodyStyle}>Admin credentials required for this route.</div>
-          <Link href="/dashboard" style={denyLinkStyle}>← Return to dashboard</Link>
-        </div>
-      </div>
-    );
-  }
-
-  return <AdminPage />;
 }
-
-const shellStyle = {
-  minHeight: '100dvh',
-  display: 'grid',
-  placeItems: 'center',
-  background: '#000',
-  fontFamily: '"Space Mono", monospace',
-};
-
-const labelStyle = {
-  fontSize: 11,
-  letterSpacing: '0.1em',
-  textTransform: 'uppercase',
-  color: '#666',
-};
-
-const denyCardStyle = {
-  padding: '32px 40px',
-  border: '1px solid #222',
-  background: '#111',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 12,
-  maxWidth: 360,
-};
-
-const denyTitleStyle = {
-  fontFamily: '"Space Mono", monospace',
-  fontSize: 13,
-  letterSpacing: '0.1em',
-  textTransform: 'uppercase',
-  color: '#D71921',
-};
-
-const denyBodyStyle = {
-  fontSize: 12,
-  color: '#666',
-  lineHeight: 1.5,
-};
-
-const denyLinkStyle = {
-  fontSize: 11,
-  fontFamily: '"Space Mono", monospace',
-  letterSpacing: '0.08em',
-  textTransform: 'uppercase',
-  color: '#999',
-  textDecoration: 'none',
-};

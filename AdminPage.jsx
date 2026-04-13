@@ -23,7 +23,7 @@ async function adminFetch(user, path, options = {}) {
 
 // ── AdminPage ──────────────────────────────────────────────────────────────────
 
-const TABS = ['CLIENTS', 'QUEUE', 'FAILED'];
+const TABS = ['CLIENTS', 'QUEUE', 'FAILED', 'INTELLIGENCE'];
 
 const AdminPage = () => {
   const { user, signOutUser } = useAuth();
@@ -42,6 +42,15 @@ const AdminPage = () => {
 
   // Action status: { runId, action, status: 'pending'|'ok'|'error', message }
   const [actionStatus, setActionStatus] = useState(null);
+
+  // Intelligence panel state
+  const [intelClientList, setIntelClientList]           = useState([]);
+  const [intelClientListLoading, setIntelClientListLoading] = useState(false);
+  const [selectedIntelClientId, setSelectedIntelClientId]   = useState('');
+  const [intelData, setIntelData]                       = useState(null);
+  const [intelDataLoading, setIntelDataLoading]         = useState(false);
+  const [intelDataError, setIntelDataError]             = useState('');
+  const [intelActionStatus, setIntelActionStatus]       = useState(null);
 
   // ── Data loaders ─────────────────────────────────────────────────────────────
 
@@ -73,11 +82,46 @@ const AdminPage = () => {
     }
   }, [user]);
 
+  const loadIntelClientList = useCallback(async () => {
+    if (!user) return;
+    setIntelClientListLoading(true);
+    try {
+      const data = await adminFetch(user, '/api/admin/clients');
+      const list = data.clients || [];
+      setIntelClientList(list);
+      setSelectedIntelClientId((prev) => prev || (list.length > 0 ? list[0].clientId : ''));
+    } catch {
+      // silent — selector degrades gracefully
+    } finally {
+      setIntelClientListLoading(false);
+    }
+  }, [user]);
+
+  const loadIntelData = useCallback(async (clientId) => {
+    if (!user || !clientId) return;
+    setIntelDataLoading(true);
+    setIntelDataError('');
+    try {
+      const data = await adminFetch(user, `/api/admin/intelligence?clientId=${encodeURIComponent(clientId)}`);
+      setIntelData(data.clients?.[0] ?? null);
+    } catch (err) {
+      setIntelDataError(err.message);
+      setIntelData(null);
+    } finally {
+      setIntelDataLoading(false);
+    }
+  }, [user]);
+
   useEffect(() => {
-    if (tab === 'CLIENTS') loadClients();
-    if (tab === 'QUEUE') loadRuns('queue');
-    if (tab === 'FAILED') loadRuns('failed');
-  }, [tab, loadClients, loadRuns]);
+    if (tab === 'CLIENTS')      loadClients();
+    if (tab === 'QUEUE')        loadRuns('queue');
+    if (tab === 'FAILED')       loadRuns('failed');
+    if (tab === 'INTELLIGENCE') loadIntelClientList();
+  }, [tab, loadClients, loadRuns, loadIntelClientList]);
+
+  useEffect(() => {
+    if (tab === 'INTELLIGENCE' && selectedIntelClientId) loadIntelData(selectedIntelClientId);
+  }, [selectedIntelClientId, loadIntelData, tab]);
 
   // ── Detail panel ─────────────────────────────────────────────────────────────
 
@@ -127,6 +171,44 @@ const AdminPage = () => {
     }
   };
 
+  const handleSourceAction = async (clientId, sourceId, action) => {
+    setIntelActionStatus({ sourceId, action, status: 'pending' });
+    try {
+      await adminFetch(user, '/api/admin/intelligence/update-source', {
+        method: 'POST',
+        body: JSON.stringify({ clientId, sourceId, action }),
+      });
+      setIntelActionStatus({
+        sourceId,
+        action,
+        status: 'ok',
+        message: action === 'rerun' ? 'Queued.' : 'Updated.',
+      });
+      loadIntelData(clientId);
+    } catch (err) {
+      setIntelActionStatus({ sourceId, action, status: 'error', message: err.message });
+    }
+  };
+
+  const handleToggleInjection = async (clientId, enabled) => {
+    setIntelActionStatus({ sourceId: null, action: 'toggle-injection', status: 'pending' });
+    try {
+      await adminFetch(user, '/api/admin/intelligence/toggle-injection', {
+        method: 'POST',
+        body: JSON.stringify({ clientId, enabled }),
+      });
+      setIntelActionStatus({
+        sourceId: null,
+        action: 'toggle-injection',
+        status: 'ok',
+        message: `Injection ${enabled ? 'enabled' : 'disabled'}.`,
+      });
+      loadIntelData(clientId);
+    } catch (err) {
+      setIntelActionStatus({ sourceId: null, action: 'toggle-injection', status: 'error', message: err.message });
+    }
+  };
+
   const handleRunNow = async (runId) => {
     setActionStatus({ runId, action: 'run', status: 'pending', message: '' });
     try {
@@ -173,7 +255,7 @@ const AdminPage = () => {
               key={t}
               type="button"
               className={`admin-tab${tab === t ? ' is-active' : ''}`}
-              onClick={() => { setTab(t); setDetail(null); setActionStatus(null); }}
+              onClick={() => { setTab(t); setDetail(null); setActionStatus(null); setIntelActionStatus(null); }}
             >
               {t}
             </button>
@@ -424,6 +506,283 @@ const AdminPage = () => {
               </table>
             ) : null}
             {runsLoading ? <div className="admin-loading">LOADING…</div> : null}
+          </section>
+        ) : null}
+
+        {/* ── INTELLIGENCE TAB ──────────────────────────────────────────── */}
+        {tab === 'INTELLIGENCE' ? (
+          <section id="intelligence-panel-shell">
+            <div className="section-head">
+              <span className="section-title">INTELLIGENCE</span>
+              <button
+                type="button"
+                className="admin-refresh"
+                onClick={() => {
+                  loadIntelClientList();
+                  if (selectedIntelClientId) loadIntelData(selectedIntelClientId);
+                }}
+              >REFRESH</button>
+            </div>
+
+            {/* Client selector */}
+            <div id="intelligence-client-selector">
+              <span className="intel-label">CLIENT</span>
+              <select
+                className="intel-select"
+                value={selectedIntelClientId}
+                onChange={(e) => setSelectedIntelClientId(e.target.value)}
+                disabled={intelClientListLoading}
+              >
+                {intelClientList.length === 0 && <option value="">—</option>}
+                {intelClientList.map((c) => (
+                  <option key={c.clientId} value={c.clientId}>
+                    {c.companyName || c.clientId}{c.websiteUrl ? ` · ${c.websiteUrl}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Action status */}
+            {intelActionStatus ? (
+              <div
+                id="intel-action-banner"
+                className={`action-banner action-banner-${intelActionStatus.status}`}
+              >
+                {intelActionStatus.sourceId ? `[${intelActionStatus.sourceId}] ` : ''}
+                {intelActionStatus.action.toUpperCase()}
+                {' · '}
+                {intelActionStatus.status === 'pending' ? 'WORKING…' : null}
+                {intelActionStatus.status === 'ok' ? (intelActionStatus.message || 'DONE.') : null}
+                {intelActionStatus.status === 'error' ? `ERROR: ${intelActionStatus.message}` : null}
+                <button type="button" className="banner-dismiss" onClick={() => setIntelActionStatus(null)}>✕</button>
+              </div>
+            ) : null}
+
+            {intelDataError ? <div className="admin-error">{intelDataError}</div> : null}
+            {intelDataLoading ? <div className="admin-loading">LOADING INTELLIGENCE…</div> : null}
+
+            {!intelDataLoading && intelData ? (
+              <>
+                {/* Client identity */}
+                <div id="intelligence-client-identity" className="intel-identity-row">
+                  <div className="intel-identity-name">{intelData.companyName || intelData.clientId}</div>
+                  <div className="intel-identity-meta">
+                    {intelData.websiteUrl ? (
+                      <a href={intelData.websiteUrl} target="_blank" rel="noopener noreferrer" className="intel-link">
+                        {intelData.websiteUrl}
+                      </a>
+                    ) : null}
+                    {intelData.intelligence?.master?.meta ? (
+                      <>
+                        <span className="cell-dim">·</span>
+                        <span className="cell-dim">v{intelData.intelligence.master.meta.schemaVersion || '—'}</span>
+                        <span className="cell-dim">·</span>
+                        <span className="cell-dim">updated {formatDate(intelData.intelligence.master.meta.updatedAt)}</span>
+                        <span className="cell-dim">·</span>
+                        <span className="cell-dim">~{intelData.intelligence.master.meta.briefingTokenEst ?? '?'} tokens</span>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* Pipeline injection toggle */}
+                <div id="intelligence-injection-toggle" className="intel-injection-row">
+                  <span className="intel-label">PIPELINE INJECTION</span>
+                  <span className={`status-badge ${intelData.intelligence?.master?.meta?.pipelineInjection ? 'status-active' : 'status-failed'}`}>
+                    {intelData.intelligence?.master?.meta?.pipelineInjection ? 'ENABLED' : 'DISABLED'}
+                  </span>
+                  <button
+                    type="button"
+                    className="admin-action-btn"
+                    disabled={intelActionStatus?.status === 'pending'}
+                    onClick={() => handleToggleInjection(
+                      intelData.clientId,
+                      !intelData.intelligence?.master?.meta?.pipelineInjection
+                    )}
+                  >
+                    {intelData.intelligence?.master?.meta?.pipelineInjection ? 'DISABLE' : 'ENABLE'}
+                  </button>
+                </div>
+
+                {/* Sources table */}
+                {intelData.intelligence?.sources?.length > 0 ? (
+                  <div className="intel-section">
+                    <div className="intel-section-label">SOURCES</div>
+                    <table className="admin-table" id="intelligence-sources-table">
+                      <thead>
+                        <tr>
+                          <th>SOURCE</th>
+                          <th>STATUS</th>
+                          <th>ENABLED</th>
+                          <th>COST (USD)</th>
+                          <th>FETCHED</th>
+                          <th>REFRESH</th>
+                          <th>ACTIONS</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {intelData.intelligence.sources.map((src) => {
+                          const settings = intelData.intelligence.sourceSettings?.[src.id] || {};
+                          return (
+                            <tr key={src.id} id={`intelligence-source-row-${src.id}`}>
+                              <td className="cell-primary">
+                                <div className="cell-id">{src.id}</div>
+                                <div className="cell-sub">{src.provider}</div>
+                              </td>
+                              <td>
+                                <span className={`status-badge status-${src.status}`}>{src.status}</span>
+                              </td>
+                              <td>
+                                <span className={`status-badge ${settings.enabled !== false ? 'status-active' : 'status-failed'}`}>
+                                  {settings.enabled !== false ? 'YES' : 'NO'}
+                                </span>
+                              </td>
+                              <td className="cell-dim cell-num">
+                                {typeof src.cost?.usd === 'number' ? `$${src.cost.usd.toFixed(6)}` : '—'}
+                              </td>
+                              <td className="cell-dim">{formatDate(src.fetchedAt)}</td>
+                              <td className="cell-dim">{settings.refreshPolicy || '—'}</td>
+                              <td className="cell-actions">
+                                <button
+                                  type="button"
+                                  className="admin-action-btn"
+                                  disabled={intelActionStatus?.status === 'pending'}
+                                  onClick={() => handleSourceAction(intelData.clientId, src.id, 'rerun')}
+                                >RE-RUN</button>
+                                {settings.enabled !== false ? (
+                                  <button
+                                    type="button"
+                                    className="admin-action-btn admin-action-btn-secondary"
+                                    disabled={intelActionStatus?.status === 'pending'}
+                                    onClick={() => handleSourceAction(intelData.clientId, src.id, 'disable')}
+                                  >DISABLE</button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="admin-action-btn"
+                                    disabled={intelActionStatus?.status === 'pending'}
+                                    onClick={() => handleSourceAction(intelData.clientId, src.id, 'enable')}
+                                  >ENABLE</button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="admin-empty">No intelligence sources for this client.</div>
+                )}
+
+                {/* Cost ledger */}
+                {intelData.intelligence?.master?.ledger ? (
+                  <div id="intelligence-cost-ledger" className="intel-section">
+                    <div className="intel-section-label">COST LEDGER (30D)</div>
+                    <div className="intel-ledger-grid">
+                      <div className="intel-ledger-item">
+                        <div className="intel-ledger-value">
+                          ${(intelData.intelligence.master.ledger.totals?.usd30d ?? 0).toFixed(6)}
+                        </div>
+                        <div className="intel-ledger-key">TOTAL USD</div>
+                      </div>
+                      <div className="intel-ledger-item">
+                        <div className="intel-ledger-value">
+                          {intelData.intelligence.master.ledger.totals?.quotaUnits30d ?? 0}
+                        </div>
+                        <div className="intel-ledger-key">QUOTA UNITS</div>
+                      </div>
+                      <div className="intel-ledger-item">
+                        <div className="intel-ledger-value">
+                          {intelData.intelligence.master.ledger.totals?.auditsCount30d ?? 0}
+                        </div>
+                        <div className="intel-ledger-key">AUDITS</div>
+                      </div>
+                    </div>
+                    {intelData.intelligence.master.ledger.byProvider &&
+                     Object.keys(intelData.intelligence.master.ledger.byProvider).length > 0 ? (
+                      <div className="intel-by-provider">
+                        {Object.entries(intelData.intelligence.master.ledger.byProvider).map(([provider, d]) => (
+                          <div key={provider} className="intel-provider-row">
+                            <span className="cf-key">{provider}</span>
+                            <span className="cf-val">
+                              ${(d.usd ?? 0).toFixed(6)} · {d.count ?? 0} runs · last {formatDate(d.lastFetchedAt)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {/* Scout briefing preview */}
+                {intelData.intelligence?.master?.digest ? (
+                  <div id="intelligence-briefing-preview" className="intel-section">
+                    <div className="intel-section-label">SCOUT BRIEFING PREVIEW</div>
+                    <div className="intel-briefing-meta">
+                      ~{intelData.intelligence.master.digest.totalTokenEst ?? '?'} tokens
+                      {' · '}
+                      generated {formatDate(intelData.intelligence.master.digest.generatedAt)}
+                    </div>
+                    <textarea
+                      className="intel-briefing-text"
+                      readOnly
+                      value={
+                        (intelData.intelligence.master.digest.briefingBullets || []).join('\n') ||
+                        '(no briefing bullets)'
+                      }
+                    />
+                  </div>
+                ) : null}
+
+                {/* Recent events */}
+                {intelData.intelligence?.recentEvents?.length > 0 ? (
+                  <div id="intelligence-recent-events" className="intel-section">
+                    <div className="intel-section-label">
+                      RECENT EVENTS ({intelData.intelligence.recentEvents.length})
+                    </div>
+                    <table className="admin-table">
+                      <thead>
+                        <tr>
+                          <th>AT</th>
+                          <th>SOURCE</th>
+                          <th>KIND</th>
+                          <th>PROVIDER</th>
+                          <th>USD</th>
+                          <th>DURATION</th>
+                          <th>NOTE</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {intelData.intelligence.recentEvents.map((ev, i) => (
+                          <tr key={i}>
+                            <td className="cell-dim">{formatDate(ev.at)}</td>
+                            <td className="cell-mono cell-id-sm">{ev.sourceId || '—'}</td>
+                            <td>
+                              <span className={`status-badge ${ev.kind === 'error' ? 'status-error' : ev.kind === 'fetch' ? 'status-active' : 'status-queued'}`}>
+                                {ev.kind}
+                              </span>
+                            </td>
+                            <td className="cell-dim">{ev.provider || '—'}</td>
+                            <td className="cell-dim cell-num">
+                              {typeof ev.usd === 'number' ? `$${ev.usd.toFixed(6)}` : '—'}
+                            </td>
+                            <td className="cell-dim cell-num">
+                              {ev.durationMs != null ? `${ev.durationMs}ms` : '—'}
+                            </td>
+                            <td className="cell-dim">{ev.note || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : null}
+              </>
+            ) : null}
+
+            {!intelDataLoading && !intelData && !intelDataError && selectedIntelClientId ? (
+              <div className="admin-empty">No intelligence data for this client.</div>
+            ) : null}
           </section>
         ) : null}
 
@@ -786,11 +1145,128 @@ const adminCss = `
   .cf-key { font-family: var(--font-mono); color: var(--text-secondary); font-size: 10px; }
   .cf-val { color: var(--text-display); word-break: break-all; line-height: 1.4; }
   .cf-err { color: var(--accent); }
+  /* ── Intelligence panel ────────────────────────────────────────────── */
+  #intelligence-client-selector {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .intel-select {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    background: var(--surface-raised);
+    border: 1px solid var(--border-visible);
+    color: var(--text-display);
+    padding: 6px 12px;
+    min-width: 320px;
+    cursor: pointer;
+  }
+  .intel-label {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-disabled);
+    flex-shrink: 0;
+  }
+  .intel-identity-row {
+    margin-bottom: 20px;
+    padding: 16px;
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+  }
+  .intel-identity-name {
+    font-size: 15px;
+    color: var(--text-display);
+    margin-bottom: 6px;
+  }
+  .intel-identity-meta {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    font-size: 11px;
+  }
+  .intel-link {
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-decoration: none;
+  }
+  .intel-link:hover { color: var(--text-primary); }
+  .intel-injection-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+    padding: 12px 16px;
+    border: 1px solid var(--border-visible);
+  }
+  .intel-section { margin-bottom: 32px; }
+  .intel-section-label {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-disabled);
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+  }
+  .intel-ledger-grid {
+    display: flex;
+    gap: 32px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .intel-ledger-item { display: flex; flex-direction: column; gap: 4px; }
+  .intel-ledger-value {
+    font-family: var(--font-mono);
+    font-size: 20px;
+    color: var(--text-display);
+  }
+  .intel-ledger-key {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    color: var(--text-disabled);
+    text-transform: uppercase;
+  }
+  .intel-by-provider { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; }
+  .intel-provider-row {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 8px;
+    align-items: baseline;
+    font-size: 11px;
+  }
+  .intel-briefing-meta {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-disabled);
+    margin-bottom: 8px;
+  }
+  .intel-briefing-text {
+    width: 100%;
+    min-height: 160px;
+    max-height: 400px;
+    background: var(--surface);
+    border: 1px solid var(--border-visible);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 12px;
+    resize: vertical;
+    line-height: 1.6;
+  }
   @media (max-width: 900px) {
     #admin-content { padding: 24px 20px; }
     #admin-header { padding: 16px 20px; }
     .admin-table th, .admin-table td { padding-right: 8px; font-size: 11px; }
     #config-view-panel, #run-detail-panel { grid-template-columns: 1fr; }
+    .intel-select { min-width: 0; width: 100%; }
+    .intel-ledger-grid { gap: 20px; }
   }
 `;
 

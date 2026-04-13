@@ -116,7 +116,7 @@ export async function POST(request) {
   try {
     if (pipelineType === 'free-tier-intake') {
       const { runIntakePipeline } = getIntakePipeline();
-      pipelineResult = await runIntakePipeline({ clientId, clientConfig, onProgress });
+      pipelineResult = await runIntakePipeline({ clientId, clientConfig, onProgress, runId });
     } else {
       const { runClientPipeline } = getPipeline();
       pipelineResult = await runClientPipeline({ clientId, clientConfig });
@@ -133,7 +133,10 @@ export async function POST(request) {
   if (pipelineResult.status === 'failed') {
     const stageErr = new Error(pipelineResult.error || 'Pipeline returned failed status.');
     stageErr.stage = pipelineResult.failedStage || 'pipeline';
-    await failRun(runId, clientId, stageErr, attempts);
+    await failRun(runId, clientId, stageErr, attempts, {
+      artifactRefs: pipelineResult.artifactRefs,
+      warnings: pipelineResult.warnings,
+    });
     console.log(`[WORKER] Run ${runId} failed at stage: ${stageErr.stage}`);
     return NextResponse.json({
       ok: false,

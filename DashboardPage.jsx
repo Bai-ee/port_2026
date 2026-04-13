@@ -171,6 +171,13 @@ const CONTACT_HUMAN_LABEL = 'Contact your human in the loop';
 
 const buildUnavailableDescription = (subject) => `Insufficient source evidence to determine ${subject} reliably.`;
 
+const fmtBytes = (bytes) => {
+  if (bytes == null) return '—';
+  if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
+  if (bytes >= 1_000)     return `${(bytes / 1_000).toFixed(0)} KB`;
+  return `${bytes} B`;
+};
+
 const buildWorkNeededRows = (reason) => [
   { key: 'status', label: 'Status', value: WORK_NEEDED_LABEL },
   { key: 'next-step', label: 'Next Step', value: CONTACT_HUMAN_LABEL },
@@ -208,6 +215,15 @@ async function fetchDashboardBootstrap(user) {
   return data;
 }
 
+async function checkMockupAvailability() {
+  const response = await fetch('/output/final_mockup.png', {
+    method: 'HEAD',
+    cache: 'no-store',
+  });
+  if (!response.ok) return null;
+  return `/output/final_mockup.png?v=${Date.now()}`;
+}
+
 // ── Modal step builder ───────────────────────────────────────────────────────
 // Converts run state + progress into human-readable build steps for the modal.
 // Step states: 'done' | 'active' | 'pending' | 'waiting' | 'sub' | 'pending-sub' | 'error'
@@ -215,7 +231,7 @@ async function fetchDashboardBootstrap(user) {
 function buildModalSteps(run, dashboardState, latestRunStatus, client) {
   const progress = run?.progress || {};
   const stage = progress?.stage;
-  const stageOrder = ['fetch', 'analyze', 'synthesize', 'normalize'];
+  const stageOrder = ['fetch', 'analyze', 'synthesize', 'compose', 'normalize'];
   const idx = stageOrder.indexOf(stage);
 
   const host = client?.normalizedHost
@@ -239,6 +255,7 @@ function buildModalSteps(run, dashboardState, latestRunStatus, client) {
       { state: 'pending', text: 'Fetch pages' },
       { state: 'pending', text: 'Extract site content' },
       { state: 'pending', text: 'Analyze brand & voice' },
+      { state: 'pending', text: 'Render device mockup' },
       { state: 'pending', text: 'Build content strategy' },
       { state: 'pending', text: 'Write dashboard modules' },
     ];
@@ -251,6 +268,7 @@ function buildModalSteps(run, dashboardState, latestRunStatus, client) {
       { state: 'pending', text: 'Fetch pages' },
       { state: 'pending', text: 'Extract site content' },
       { state: 'pending', text: 'Analyze brand & voice' },
+      { state: 'pending', text: 'Render device mockup' },
       { state: 'pending', text: 'Write dashboard modules' },
     ];
   }
@@ -276,6 +294,7 @@ function buildModalSteps(run, dashboardState, latestRunStatus, client) {
     if (idx === 1) {
       steps.push({ state: 'active', text: 'Extracting headlines & content...' });
       steps.push({ state: 'pending', text: 'Analyze brand & voice' });
+      steps.push({ state: 'pending', text: 'Render device mockup' });
       steps.push({ state: 'pending', text: 'Write dashboard modules' });
     }
   }
@@ -291,14 +310,27 @@ function buildModalSteps(run, dashboardState, latestRunStatus, client) {
       steps.push({ state: 'pending-sub', text: 'Mapping tone & positioning', indent: true });
       steps.push({ state: 'pending-sub', text: 'Generating content angles', indent: true });
       steps.push({ state: 'pending-sub', text: 'Identifying brand signals', indent: true });
+      steps.push({ state: 'pending', text: 'Render device mockup' });
       steps.push({ state: 'pending', text: 'Write dashboard modules' });
     } else {
       steps.push({ state: 'done', text: 'Brand analysis complete' });
     }
   }
 
-  // normalize (idx 3)
+  // compose (idx 3)
   if (idx >= 3) {
+    if (idx === 3) {
+      steps.push({ state: 'active', text: 'Rendering device mockup...' });
+      steps.push({ state: 'pending-sub', text: 'Downloading desktop, tablet, and mobile captures', indent: true });
+      steps.push({ state: 'pending-sub', text: 'Compositing into clay template', indent: true });
+      steps.push({ state: 'pending', text: 'Write dashboard modules' });
+    } else {
+      steps.push({ state: 'done', text: 'Device mockup rendered' });
+    }
+  }
+
+  // normalize (idx 4)
+  if (idx >= 4) {
     steps.push({ state: 'active', text: 'Writing dashboard modules...' });
   }
 
@@ -326,7 +358,7 @@ function buildTerminalLog(run, dashboardState, latestRunStatus, client, countdow
 
   const progress = run?.progress || {};
   const stage = progress?.stage;
-  const stageOrder = ['fetch', 'analyze', 'synthesize', 'normalize'];
+  const stageOrder = ['fetch', 'analyze', 'synthesize', 'compose', 'normalize'];
   const idx = stageOrder.indexOf(stage);
   const host = _termHost(run, client);
   const runId = run?.id ? `${run.id.slice(0, 8)}…` : '—';
@@ -361,6 +393,7 @@ function buildTerminalLog(run, dashboardState, latestRunStatus, client, countdow
     add('dim', '', '');
     add('dim', '·', '[FETCH]  crawl site pages');
     add('dim', '·', '[AI]     analyze content & brand');
+    add('dim', '·', '[MOCK]   render clay device mockup');
     add('dim', '·', '[BUILD]  write dashboard modules');
     return lines;
   }
@@ -378,11 +411,13 @@ function buildTerminalLog(run, dashboardState, latestRunStatus, client, countdow
       add('fetch', '  →', title ? `${path}  "${title}"` : path);
     }
     add('ok', '✓', 'site content extracted');
+    add('ok', '✓', 'desktop / tablet / mobile screenshots captured');
     add('ai', '[AI]', 'gpt-4o: reading headlines & copy blocks');
     add('ai', '[AI]', 'gpt-4o: analyzing brand voice & tone');
     add('ai', '[AI]', 'gpt-4o: mapping content strategy');
     add('ai', '[AI]', 'gpt-4o: identifying distribution angles');
     add('ok', '✓', 'brand intelligence synthesized');
+    add('mock', '[MOCK]', 'rendered intake device mockup');
     add('build', '[BUILD]', 'writing modules to firestore');
     add('build', '  →', 'creative-pipelines');
     add('build', '  →', 'ai-research');
@@ -421,7 +456,9 @@ function buildTerminalLog(run, dashboardState, latestRunStatus, client, countdow
     }
     const stillFetching = pageCount === 0 || pages.length === 0;
     add('active', '[→]', stillFetching ? 'crawling pages — discovering content…' : `${pageCount} page${pageCount !== 1 ? 's' : ''} — scanning for more…`, true);
+    add('active', '[SCREEN]', 'capturing desktop / tablet / mobile screens…', true);
     add('dim', '·', '[AI]     analyze content & brand');
+    add('dim', '·', '[MOCK]   render clay device mockup');
     add('dim', '·', '[BUILD]  write dashboard modules');
     return lines;
   }
@@ -438,26 +475,38 @@ function buildTerminalLog(run, dashboardState, latestRunStatus, client, countdow
   if (idx === 1) {
     add('ai', '[AI]', 'gpt-4o: reading page content…');
     add('active', '[AI]', 'extracting headlines & brand signals…', true);
+    add('active', '[SCREEN]', 'capturing desktop / tablet / mobile screens…', true);
     add('dim', '·', '[AI]     analyze brand & voice');
+    add('dim', '·', '[MOCK]   render clay device mockup');
     add('dim', '·', '[BUILD]  write dashboard modules');
     return lines;
   }
 
   // synthesize+
   add('ok', '✓', 'site content extracted');
+  add('ok', '✓', 'desktop / tablet / mobile screenshots captured');
   add('ai', '[AI]', 'gpt-4o: analyzing brand voice & tone');
   add('ai', '[AI]', 'gpt-4o: mapping content strategy');
   add('ai', '[AI]', 'gpt-4o: identifying distribution angles');
 
   if (idx === 2) {
     add('active', '[AI]', 'synthesizing brand intelligence…', true);
+    add('dim', '·', '[MOCK]   render clay device mockup');
+    add('dim', '·', '[BUILD]  write dashboard modules');
+    return lines;
+  }
+
+  // compose+
+  add('ok', '✓', 'brand analysis complete');
+  add('ok', '✓', 'content strategy ready');
+  if (idx === 3) {
+    add('active', '[MOCK]', 'rendering clay device mockup…', true);
     add('dim', '·', '[BUILD]  write dashboard modules');
     return lines;
   }
 
   // normalize
-  add('ok', '✓', 'brand analysis complete');
-  add('ok', '✓', 'content strategy ready');
+  add('ok', '✓', 'device mockup rendered');
   add('build', '[BUILD]', 'writing module: creative-pipelines');
   add('build', '[BUILD]', 'writing module: ai-research');
   add('build', '[BUILD]', 'writing module: distribution-insight');
@@ -493,7 +542,7 @@ function buildTerminalLines(run, dashboardState, latestRunStatus, client) {
 
   if (latestRunStatus === 'running') {
     const stage = progress?.stage;
-    const stageOrder = ['fetch', 'analyze', 'synthesize', 'normalize'];
+    const stageOrder = ['fetch', 'analyze', 'synthesize', 'compose', 'normalize'];
     const currentIdx = stageOrder.indexOf(stage);
 
     const lines = [
@@ -508,6 +557,9 @@ function buildTerminalLines(run, dashboardState, latestRunStatus, client) {
         type: currentIdx === 0 ? 'active' : 'ok',
         active: currentIdx === 0,
       });
+      if (currentIdx === 0) {
+        lines.push({ tag: 'SCREEN', text: 'Capturing desktop, tablet, and mobile screenshots...', type: 'active', active: true });
+      }
     }
 
     // analyze: show page count + compact evidence + active analyze line
@@ -538,10 +590,17 @@ function buildTerminalLines(run, dashboardState, latestRunStatus, client) {
       if (currentIdx === 1) {
         lines.push({ tag: 'ANALYZE', text: 'Extracting site structure...', type: 'active', active: true });
       }
+
+      // Screenshot runs concurrently with fetch+analyze; show as active background task
+      if (currentIdx <= 1) {
+        lines.push({ tag: 'SCREEN', text: 'Capturing desktop, tablet, and mobile screenshots...', type: 'active', active: true });
+      }
     }
 
     // synthesize
     if (currentIdx >= 2) {
+      // Screenshot completes before synthesize — show as done
+      lines.push({ tag: 'SCREEN', text: 'Desktop, tablet, and mobile screenshots captured', type: 'ok' });
       lines.push({
         tag: 'SYNTH',
         text: 'Building brand intelligence...',
@@ -550,8 +609,18 @@ function buildTerminalLines(run, dashboardState, latestRunStatus, client) {
       });
     }
 
-    // normalize
+    // compose
     if (currentIdx >= 3) {
+      lines.push({
+        tag: 'MOCK',
+        text: 'Rendering clay device mockup...',
+        type: currentIdx === 3 ? 'active' : 'ok',
+        active: currentIdx === 3,
+      });
+    }
+
+    // normalize
+    if (currentIdx >= 4) {
       lines.push({ tag: 'WRITE', text: 'Writing dashboard modules...', type: 'active', active: true });
     }
 
@@ -583,7 +652,9 @@ function buildTerminalLines(run, dashboardState, latestRunStatus, client) {
     }
 
     lines.push(
+      { tag: 'SCREEN', text: 'Desktop, tablet, and mobile screenshots captured', type: 'ok' },
       { tag: 'SYNTH', text: 'Brand intelligence built', type: 'ok' },
+      { tag: 'MOCK', text: 'Clay device mockup rendered', type: 'ok' },
       { tag: 'WRITE', text: '5 dashboard modules populated', type: 'ok' },
       { tag: 'OK', text: `Run complete${cost ? ` · $${cost}` : ''}`, type: 'success' },
     );
@@ -613,6 +684,52 @@ function buildTerminalLines(run, dashboardState, latestRunStatus, client) {
   return [{ tag: 'SYSTEM', text: 'No recent intake runs.', type: 'dim' }];
 }
 
+/**
+ * Scripted terminal lines for the SEO rerun + narrator flow.
+ * Stages advance based on elapsed time from when Re-run was clicked.
+ * @param {'start'|'fetch'|'audit'|'narrator'|'write'} stage
+ * @param {string} [websiteUrl]
+ */
+function buildSeoRerunTerminalLines(stage, websiteUrl) {
+  const host = websiteUrl
+    ? (() => { try { return new URL(websiteUrl).hostname.replace(/^www\./, ''); } catch { return websiteUrl; } })()
+    : '...';
+
+  const ok   = (tag, text) => ({ tag, text, type: 'ok' });
+  const act  = (tag, text) => ({ tag, text, type: 'active', active: true });
+  const dim  = (tag, text) => ({ tag, text, type: 'dim' });
+
+  const base = [ok('SEO', `PageSpeed Insights audit · ${host}`)];
+
+  if (stage === 'start') {
+    return [act('SEO', `Triggering PageSpeed Insights audit for ${host}...`)];
+  }
+  if (stage === 'fetch') {
+    return [...base, act('FETCH', 'Fetching mobile performance data from Google PSI...')];
+  }
+  if (stage === 'audit') {
+    return [...base, ok('FETCH', 'Mobile data received'), act('AUDIT', 'Running Lighthouse analysis...')];
+  }
+  if (stage === 'narrator') {
+    return [
+      ...base,
+      ok('FETCH', 'Mobile data received'),
+      ok('AUDIT', 'Lighthouse analysis complete'),
+      act('AI', 'Generating SEO performance summary for card...'),
+    ];
+  }
+  if (stage === 'write') {
+    return [
+      ...base,
+      ok('FETCH', 'Mobile data received'),
+      ok('AUDIT', 'Lighthouse analysis complete'),
+      ok('AI',    'SEO performance summary generated'),
+      act('WRITE', 'Writing results to database...'),
+    ];
+  }
+  return [dim('SEO', `Running SEO audit for ${host}...`)];
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 const DashboardPage = () => {
@@ -620,7 +737,7 @@ const DashboardPage = () => {
   const [theme, setTheme] = useState('light');
   const [countdownHours, setCountdownHours] = useState(14);
   const [showTierModal, setShowTierModal] = useState(false);
-  const [bootstrap, setBootstrap] = useState({ userProfile: null, client: null, dashboardState: null, recentRuns: [] });
+  const [bootstrap, setBootstrap] = useState({ userProfile: null, client: null, dashboardState: null, recentRuns: [], intelligence: null });
   const [bootstrapLoading, setBootstrapLoading] = useState(true);
   const [bootstrapError, setBootstrapError] = useState('');
   const cancelledRef = useRef(false);
@@ -645,6 +762,20 @@ const DashboardPage = () => {
   const [reseedSuccess, setReseedSuccess] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [cancelError, setCancelError] = useState('');
+  const [seoRerunLoading, setSeoRerunLoading] = useState(false);
+  const [seoRerunStage,   setSeoRerunStage]   = useState(null);
+  const [intakeMockupSrc, setIntakeMockupSrc] = useState(null);
+
+  // Advance scripted terminal stages during SEO rerun
+  useEffect(() => {
+    if (!seoRerunLoading) { setSeoRerunStage(null); return; }
+    setSeoRerunStage('start');
+    const t1 = setTimeout(() => setSeoRerunStage('fetch'),    10_000);
+    const t2 = setTimeout(() => setSeoRerunStage('audit'),    25_000);
+    const t3 = setTimeout(() => setSeoRerunStage('narrator'), 38_000);
+    const t4 = setTimeout(() => setSeoRerunStage('write'),    52_000);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
+  }, [seoRerunLoading]);
 
   // Clock tick
   useEffect(() => {
@@ -694,6 +825,7 @@ const DashboardPage = () => {
   const displayProfile = bootstrap.userProfile || userProfile;
   const currentRun = recentRuns[0] || null;
   const dashboardState = bootstrap.dashboardState;
+  const homepageDeviceMockup = dashboardState?.artifacts?.homepageDeviceMockup || null;
   const clientStatus = dashboardState?.status || client?.status || 'provisioning';
   const latestRunStatus = dashboardState?.latestRunStatus || currentRun?.status || null;
   const provisioningState = dashboardState?.provisioningState || null;
@@ -707,6 +839,12 @@ const DashboardPage = () => {
   const brandTone = snapshot?.brandTone || null;
   const visualIdentity = snapshot?.visualIdentity || null;
   const outputsPreview = dashboardState?.outputsPreview || null;
+  // Intelligence-first SEO data: prefer intelligence source, fall back to dashboardState.seoAudit
+  const intelligencePayload = bootstrap.intelligence || null;
+  const seoAudit = intelligencePayload?.dashboardSeoAudit ?? dashboardState?.seoAudit ?? null;
+  const isFromIntelligence  = Boolean(intelligencePayload?.dashboardSeoAudit != null);
+  const intelligenceSummary = intelligencePayload?.psiSummary || null;
+  const psiNarrative        = intelligencePayload?.psiNarrative || null;
   const capabilityHeadline = client?.dashboardTitle || displayProfile?.dashboardTitle || 'An operating stack that runs itself.';
 
   // Legacy compat fields (pre-intake runs)
@@ -730,6 +868,37 @@ const DashboardPage = () => {
     }, 4000);
     return () => clearInterval(interval);
   }, [user, isRunActive]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const refreshMockup = async () => {
+      if (homepageDeviceMockup?.downloadUrl) {
+        if (!cancelled) {
+          setIntakeMockupSrc(homepageDeviceMockup.downloadUrl);
+        }
+        return;
+      }
+
+      try {
+        const src = await checkMockupAvailability();
+        if (!cancelled) {
+          setIntakeMockupSrc(src);
+        }
+      } catch {
+        if (!cancelled) {
+          setIntakeMockupSrc(null);
+        }
+      }
+    };
+
+    refreshMockup();
+    const interval = setInterval(refreshMockup, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [homepageDeviceMockup?.downloadUrl]);
 
   // Seed reseedUrl from client websiteUrl once loaded
   useEffect(() => {
@@ -897,10 +1066,38 @@ const DashboardPage = () => {
     }
   }, [user, cancelLoading, doBootstrap]);
 
+  const handleSeoRerun = useCallback(async () => {
+    if (!user || seoRerunLoading) return;
+    setSeoRerunLoading(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/intelligence/rerun', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceId: 'pagespeed-insights' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Re-run failed.');
+      // Rerun route is now synchronous — by the time we get here, PSI + narrator
+      // have completed and the Firestore record has facts.narrative. One bootstrap
+      // refresh is all that's needed to show the full dashboard.
+      doBootstrap();
+    } catch {
+      // non-fatal — user can retry
+    } finally {
+      setSeoRerunLoading(false);
+    }
+  }, [user, seoRerunLoading, doBootstrap]);
+
   const terminalLines = useMemo(
     () => buildTerminalLines(currentRun, dashboardState, latestRunStatus, client),
     [currentRun, dashboardState, latestRunStatus, client]
   );
+
+  // While SEO rerun is in progress, override terminal with live stage messages
+  const activeTerminalLines = (seoRerunLoading && seoRerunStage)
+    ? buildSeoRerunTerminalLines(seoRerunStage, seoAudit?.websiteUrl)
+    : terminalLines;
 
   const terminalLog = useMemo(
     () => buildTerminalLog(currentRun, dashboardState, latestRunStatus, client, completionCountdown),
@@ -959,21 +1156,226 @@ const DashboardPage = () => {
   const hasDraftPostData = Boolean(resolvedDraftPost);
   const hasContentAngleData = Boolean(resolvedContentAngle);
   const hasOpportunitiesData = resolvedOpportunities.length > 0;
+  const hasSeoAuditData = Boolean((seoAudit?.status === 'ok' || seoAudit?.status === 'partial') && seoAudit?.scores);
+  const hasWebsiteUrl = Boolean(client?.websiteUrl);
+  // Five-state resolution — exactly one is true at a time
+  const seoCardState = hasSeoAuditData
+    ? (seoAudit.status === 'partial' ? 'partial' : 'ok')
+    : seoAudit?.status === 'error'
+      ? 'error'
+      : hasWebsiteUrl || isRunActive
+        ? 'queued'
+        : 'no-url';
+  const isSeoQueued   = seoCardState === 'queued';
+  const isSeoError    = seoCardState === 'error';
+  const isSeoPartial  = seoCardState === 'partial';
+
+  // Derive rows for seo-performance card
+  const seoAuditRows = (() => {
+    if (seoCardState === 'queued') {
+      return [
+        { key: 'status', label: 'Status', value: 'Audit queued — results pending' },
+        { key: 'strategy', label: 'Strategy', value: 'Mobile · PageSpeed Insights' },
+      ];
+    }
+    if (seoCardState === 'error') {
+      const errMsg = seoAudit?.error || 'PageSpeed audit failed.';
+      return [
+        { key: 'status', label: 'Status', value: 'Audit failed — retry available' },
+        { key: 'target', label: 'Target', value: seoAudit?.websiteUrl || client?.websiteUrl || '—' },
+        { key: 'error', label: 'Error', value: errMsg.length > 140 ? `${errMsg.slice(0, 137)}…` : errMsg },
+        { key: 'strategy', label: 'Strategy', value: 'Mobile · PageSpeed Insights' },
+      ];
+    }
+    if (seoCardState === 'no-url') {
+      return buildWorkNeededRows('No website URL on file. Submit a URL to trigger the PageSpeed audit.');
+    }
+    const {
+      scores, coreWebVitals, labCoreWebVitals, opportunities,
+      seoRedFlags, a11yFailures, bpFailures, insights, diagnostics, thirdParties, meta,
+    } = seoAudit;
+    const rows = [];
+    const catMap = { FAST: 'FAST', AVERAGE: 'AVG', SLOW: 'SLOW' };
+
+    // ── ANALYSIS (intelligence source summary) ──
+    if (isFromIntelligence && intelligenceSummary) {
+      rows.push({ key: 'hdr-analysis', label: '── ANALYSIS ──', isHeader: true, id: 'seo-audit-analysis' });
+      rows.push({ key: 'analysis-summary', label: 'Assessment', value: intelligenceSummary });
+    }
+
+    // ── PARTIAL NOTICE ──
+    if (seoCardState === 'partial') {
+      const rtCode = seoAudit.runtimeError?.code || 'UNKNOWN';
+      const rtMsg  = seoAudit.runtimeError?.message || 'Lighthouse could not fully load the page.';
+      rows.push({ key: 'hdr-partial', label: '── PARTIAL AUDIT ──', isHeader: true, id: 'seo-audit-partial' });
+      rows.push({ key: 'partial-notice', label: 'Notice', value: 'Diagnostic data unavailable — scores and CWV may be incomplete', isFailing: true });
+      rows.push({ key: 'partial-code', label: 'Error code', value: rtCode });
+      rows.push({ key: 'partial-msg',  label: 'Detail', value: rtMsg.length > 140 ? `${rtMsg.slice(0, 137)}…` : rtMsg });
+    }
+
+    // ── SCORES ──
+    rows.push({ key: 'hdr-scores', label: '── SCORES ──', isHeader: true, id: 'seo-audit-scores' });
+    if (scores?.performance  != null) rows.push({ key: 'perf',  label: 'PERF',  value: `${scores.performance}/100` });
+    if (scores?.seo          != null) rows.push({ key: 'seo',   label: 'SEO',   value: `${scores.seo}/100` });
+    if (scores?.accessibility != null) rows.push({ key: 'a11y', label: 'A11Y',  value: `${scores.accessibility}/100` });
+    if (scores?.bestPractices != null) rows.push({ key: 'bp',   label: 'BP',    value: `${scores.bestPractices}/100` });
+
+    // ── CORE WEB VITALS ──
+    rows.push({ key: 'hdr-cwv', label: '── CORE WEB VITALS ──', isHeader: true, id: 'seo-audit-cwv' });
+    const lcp = coreWebVitals?.lcp?.p75 != null ? coreWebVitals.lcp : labCoreWebVitals?.lcp;
+    rows.push({ key: 'lcp', label: 'LCP', value: lcp?.p75 != null
+      ? `${(lcp.p75 / 1000).toFixed(1)}s${catMap[lcp.category] ? ' ' + catMap[lcp.category] : ''}${lcp.source === 'lab' ? ' (lab)' : ''}`
+      : '—' });
+    const inp = coreWebVitals?.inp;
+    rows.push({ key: 'inp', label: 'INP', value: inp?.p75 != null
+      ? `${inp.p75}ms${catMap[inp.category] ? ' ' + catMap[inp.category] : ''}`
+      : '—' });
+    const cls = coreWebVitals?.cls?.p75 != null ? coreWebVitals.cls : labCoreWebVitals?.cls;
+    rows.push({ key: 'cls', label: 'CLS', value: cls?.p75 != null
+      ? `${Number(cls.p75).toFixed(2)}${cls.source === 'lab' ? ' (lab)' : ''}`
+      : '—' });
+    const ttfb = coreWebVitals?.ttfb?.p75 != null ? coreWebVitals.ttfb : labCoreWebVitals?.ttfb;
+    rows.push({ key: 'ttfb', label: 'TTFB', value: ttfb?.p75 != null
+      ? `${(ttfb.p75 / 1000).toFixed(1)}s${ttfb.source === 'lab' ? ' (lab)' : ''}`
+      : '—' });
+
+    // ── TOP FIXES ──
+    rows.push({ key: 'hdr-fixes', label: '── TOP FIXES ──', isHeader: true, id: 'seo-audit-fixes' });
+    if (opportunities?.length) {
+      opportunities.forEach((op, i) => {
+        rows.push({ key: `fix-${i}`, label: `FIX ${i + 1}`, value: `${op.title} — ${op.savingsMs}ms` });
+      });
+    } else {
+      rows.push({ key: 'fix-none', label: 'Status', value: 'No savings opportunities found' });
+    }
+
+    // ── SEO FLAGS ──
+    rows.push({ key: 'hdr-seo', label: '── SEO FLAGS ──', isHeader: true, id: 'seo-audit-seo-flags' });
+    if (seoRedFlags?.length) {
+      seoRedFlags.forEach((flag) => {
+        const flagId   = typeof flag === 'string' ? flag : flag.id;
+        const flagDesc = typeof flag === 'string' ? null : flag.description;
+        rows.push({ key: `seo-${flagId}`, label: (flagId || '').replace(/-/g, ' '), value: `Failing${flagDesc ? ' — ' + flagDesc : ''}`, isFailing: true });
+      });
+    } else {
+      rows.push({ key: 'seo-ok', label: 'Status', value: 'No issues found' });
+    }
+
+    // ── ACCESSIBILITY FLAGS ──
+    rows.push({ key: 'hdr-a11y', label: '── ACCESSIBILITY FLAGS ──', isHeader: true, id: 'seo-audit-a11y-flags' });
+    if (a11yFailures?.length) {
+      a11yFailures.forEach((flag) => {
+        rows.push({ key: `a11y-${flag.id}`, label: flag.title, value: `Failing${flag.description ? ' — ' + flag.description : ''}`, isFailing: true });
+      });
+    } else {
+      rows.push({ key: 'a11y-ok', label: 'Status', value: 'No issues found' });
+    }
+
+    // ── BEST PRACTICES FLAGS ──
+    rows.push({ key: 'hdr-bp', label: '── BEST PRACTICES FLAGS ──', isHeader: true, id: 'seo-audit-bp-flags' });
+    if (bpFailures?.length) {
+      bpFailures.forEach((flag) => {
+        rows.push({ key: `bp-${flag.id}`, label: flag.title, value: `Failing${flag.description ? ' — ' + flag.description : ''}`, isFailing: true });
+      });
+    } else {
+      rows.push({ key: 'bp-ok', label: 'Status', value: 'No issues found' });
+    }
+
+    // ── INSIGHTS ──
+    if (insights?.length) {
+      rows.push({ key: 'hdr-insights', label: '── INSIGHTS ──', isHeader: true, id: 'seo-audit-insights' });
+      insights.forEach((ins) => {
+        rows.push({ key: `ins-${ins.id}`, label: ins.label, value: ins.value });
+      });
+    }
+
+    // ── DIAGNOSTICS ──
+    if (diagnostics?.length) {
+      rows.push({ key: 'hdr-diag', label: '── DIAGNOSTICS ──', isHeader: true, id: 'seo-audit-diagnostics' });
+      diagnostics.forEach((d) => {
+        rows.push({ key: `diag-${d.id}`, label: d.label, value: d.value });
+      });
+    }
+
+    // ── THIRD PARTIES ──
+    if (thirdParties?.length) {
+      rows.push({ key: 'hdr-tp', label: '── THIRD PARTIES ──', isHeader: true, id: 'seo-audit-third-parties' });
+      thirdParties.forEach((tp, i) => {
+        const tpParts = [];
+        if (tp.blockingMs != null) tpParts.push(`${tp.blockingMs}ms blocking`);
+        if (tp.sizeFormatted)      tpParts.push(tp.sizeFormatted);
+        rows.push({ key: `tp-${i}`, label: tp.entity, value: tpParts.join(' · ') || '—' });
+      });
+    }
+
+    // ── META ──
+    rows.push({ key: 'hdr-meta', label: '── META ──', isHeader: true, id: 'seo-audit-meta' });
+    if (seoAudit.fetchedAt) {
+      const ago = (() => {
+        try {
+          const ms   = Date.now() - new Date(seoAudit.fetchedAt).getTime();
+          const mins = Math.round(ms / 60_000);
+          if (mins < 1)  return 'just now';
+          if (mins < 60) return `${mins}m ago`;
+          const hrs = Math.round(mins / 60);
+          return hrs < 24 ? `${hrs}h ago` : `${Math.round(hrs / 24)}d ago`;
+        } catch { return null; }
+      })();
+      if (ago) rows.push({ key: 'meta-audited', label: 'Audited', value: ago });
+    }
+    if (meta?.lighthouseVersion)       rows.push({ key: 'meta-lh',  label: 'Lighthouse',     value: meta.lighthouseVersion });
+    if (meta?.totalDurationMs != null) rows.push({ key: 'meta-dur', label: 'Audit duration', value: `${(meta.totalDurationMs / 1000).toFixed(1)}s` });
+    rows.push({ key: 'meta-warn', label: 'Warnings', value: meta?.warnings?.length ? meta.warnings.join(' · ') : '—' });
+
+    return rows;
+  })();
+
+  const seoAuditDescription = (() => {
+    if (seoCardState === 'queued')  return 'PageSpeed Insights audit is queued — mobile scores and Core Web Vitals will appear here.';
+    if (seoCardState === 'error')   return 'PageSpeed audit could not complete. Press Re-run to retry — details below.';
+    if (seoCardState === 'no-url')  return buildUnavailableDescription('PageSpeed performance data');
+    if (seoCardState === 'partial') return 'Partial audit — Lighthouse could not fully load the page. Scores may be incomplete. Re-run to retry.';
+    const { scores, opportunities, meta } = seoAudit;
+    const parts = [];
+    if (scores?.performance  != null) parts.push(`PERF ${scores.performance}`);
+    if (scores?.seo          != null) parts.push(`SEO ${scores.seo}`);
+    if (scores?.accessibility != null) parts.push(`A11Y ${scores.accessibility}`);
+    if (scores?.bestPractices != null) parts.push(`BP ${scores.bestPractices}`);
+    const fixCount = opportunities?.length ?? 0;
+    if (fixCount) parts.push(`${fixCount} fix${fixCount === 1 ? '' : 'es'}`);
+    if (meta?.totalDurationMs != null) parts.push(`${(meta.totalDurationMs / 1000).toFixed(0)}s`);
+    return parts.join(' · ');
+  })();
   const intakeCapabilityCards = [
     {
       id: 'intake-terminal',
       number: '08',
       label: 'INTAKE TERMINAL',
       title: 'Intake Terminal',
-      description: terminalLines[0]?.text || 'No recent intake runs.',
-      placeholderLabel: intakeTerminalStatus.toUpperCase(),
-      rows: terminalLines.slice(0, 6).map((line, index) => ({
+      description: activeTerminalLines[0]?.text || 'No recent intake runs.',
+      placeholderLabel: seoRerunLoading ? 'SEO AUDIT' : intakeTerminalStatus.toUpperCase(),
+      rows: activeTerminalLines.slice(0, 6).map((line, index) => ({
         key: `terminal-${index}`,
         label: line.tag || `STEP ${index + 1}`,
         value: line.text,
       })),
       footerLeft: intakeTerminalStatus.toUpperCase(),
       footerRight: latestRunStatus === 'succeeded' ? 'Latest Run' : 'Run Status',
+    },
+    {
+      id: 'seo-performance',
+      number: 'SP',
+      label: 'SEO + PERF',
+      title: 'SEO + Performance',
+      description: psiNarrative || seoAuditDescription,
+      placeholderLabel: 'SITE AUDIT',
+      rows: seoAuditRows,
+      footerLeft: isSeoPartial ? 'Partial' : hasSeoAuditData ? 'Live' : isSeoQueued ? 'Queued' : isSeoError ? 'Error' : WORK_NEEDED_LABEL,
+      domId: 'intake-card-seo-performance',
+      footerRight: 'PSI · Mobile',
+      footerAction: (hasSeoAuditData || isSeoError) && hasWebsiteUrl
+        ? { label: isSeoError ? 'Retry' : 'Re-run', onClick: handleSeoRerun, loading: seoRerunLoading }
+        : null,
     },
     {
       id: 'brand-tone',
@@ -1273,8 +1675,8 @@ const DashboardPage = () => {
           <div id="capability-grid">
             {intakeCapabilityCards.map((card) => (
               <article
-                className={`tile tile-intake-card${hasIntakeData ? ' tile-ready' : ''}`}
-                id={`tile-${card.id}`}
+                className={`tile tile-intake-card${hasIntakeData ? ' tile-ready' : ''}${card.wide ? ' tile-intake-card--wide' : ''}`}
+                id={card.domId || `tile-${card.id}`}
                 key={card.id}
               >
                 <div className="tile-number">
@@ -1282,7 +1684,16 @@ const DashboardPage = () => {
                   <span className="power-dot lamp" />
                 </div>
                 <div className={`tile-intake-placeholder tile-intake-placeholder-${card.id}`}>
-                  <span>{card.placeholderLabel}</span>
+                  {card.id === 'intake-terminal' && intakeMockupSrc ? (
+                    <img
+                      className="tile-intake-mockup-image"
+                      src={intakeMockupSrc}
+                      alt="Generated multi-device website mockup"
+                      onError={() => setIntakeMockupSrc(null)}
+                    />
+                  ) : (
+                    <span>{card.placeholderLabel}</span>
+                  )}
                 </div>
                 <div className="tile-intake-body">
                   <h3 className="tile-heading tile-intake-heading">{card.title}</h3>
@@ -1297,10 +1708,16 @@ const DashboardPage = () => {
                       </thead>
                       <tbody>
                         {card.rows.map((row) => (
-                          <tr key={`${card.id}-${row.key}`}>
-                            <td>{row.label}</td>
-                            <td>{row.value}</td>
-                          </tr>
+                          row.isHeader ? (
+                            <tr key={`${card.id}-${row.key}`} className="tr--section-header" id={row.id || undefined}>
+                              <td colSpan={2}>{row.label}</td>
+                            </tr>
+                          ) : (
+                            <tr key={`${card.id}-${row.key}`} className={row.isFailing ? 'tr--flag' : undefined}>
+                              <td>{row.label}</td>
+                              <td>{row.value}</td>
+                            </tr>
+                          )
                         ))}
                       </tbody>
                     </table>
@@ -1308,7 +1725,20 @@ const DashboardPage = () => {
                 </div>
                 <div className="tile-foot">
                   <span className="status-live">{card.footerLeft}</span>
-                  <span>{card.footerRight}</span>
+                  <span className="tile-foot-right-group">
+                    {card.footerAction ? (
+                      <button
+                        type="button"
+                        id={`tile-${card.id}-rerun-btn`}
+                        className="tile-foot-action-btn"
+                        onClick={card.footerAction.onClick}
+                        disabled={card.footerAction.loading}
+                      >
+                        {card.footerAction.loading ? '…' : card.footerAction.label}
+                      </button>
+                    ) : null}
+                    <span>{card.footerRight}</span>
+                  </span>
                 </div>
               </article>
             ))}
@@ -2096,9 +2526,33 @@ const dashboardCss = `
     gap: 12px;
     padding: 16px;
   }
+  .tile-intake-card--wide {
+    grid-column: 1 / -1;
+  }
+  .tr--section-header td {
+    padding-top: 14px;
+    padding-bottom: 3px;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    color: var(--text-secondary);
+    border-top: 1px solid var(--border);
+    text-transform: uppercase;
+  }
+  .tr--section-header:first-child td {
+    border-top: none;
+    padding-top: 0;
+  }
+  .tr--flag td:first-child {
+    border-left: 2px solid #d05;
+    padding-left: 6px;
+  }
+  [data-dashboard-theme="light"] .tr--flag td:first-child {
+    border-left-color: #c03;
+  }
   .tile-intake-placeholder {
     width: 100%;
-    height: 96px;
+    height: auto;
+    aspect-ratio: 1536 / 1024;
     border-radius: 12px;
     border: 1px solid rgba(42, 36, 32, 0.1);
     background:
@@ -2152,11 +2606,21 @@ const dashboardCss = `
     text-transform: uppercase;
     color: rgba(42,36,32,0.52);
   }
+  .tile-intake-mockup-image {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+  }
   .tile-intake-body {
     display: flex;
     flex-direction: column;
     gap: 8px;
     min-width: 0;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
   }
   .tile-intake-heading {
     grid-area: auto;
@@ -2267,6 +2731,31 @@ const dashboardCss = `
     font-family: var(--font-mono);
     letter-spacing: 0.08em;
     text-transform: uppercase;
+  }
+  .tile-foot-right-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .tile-foot-action-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    padding: 0;
+    opacity: 0.6;
+  }
+  .tile-foot-action-btn:hover:not(:disabled) {
+    opacity: 1;
+    color: var(--text-primary);
+  }
+  .tile-foot-action-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.3;
   }
   .status-live {
     display: inline-flex;

@@ -88,18 +88,29 @@ export const AuthProvider = ({ children }) => {
     }
 
     const userRef = doc(db, 'users', user.uid);
-    const unsubscribe = onSnapshot(userRef, async (snapshot) => {
-      if (!snapshot.exists()) {
-        await upsertUserProfile(user, {
-          createdAt: serverTimestamp(),
-          dashboardTitle: 'Custom Dashboard',
-          dashboardDescription: 'Your client workspace is connected to Firebase Auth and Firestore.',
-        });
-        return;
+    const unsubscribe = onSnapshot(
+      userRef,
+      async (snapshot) => {
+        if (!snapshot.exists()) {
+          await upsertUserProfile(user, {
+            createdAt: serverTimestamp(),
+            dashboardTitle: 'Custom Dashboard',
+            dashboardDescription: 'Your client workspace is connected to Firebase Auth and Firestore.',
+          });
+          return;
+        }
+        setUserProfile(snapshot.data());
+      },
+      (err) => {
+        // permission-denied fires transiently at sign-out before the listener
+        // is unsubscribed — clear profile and let auth state change drive cleanup.
+        if (err.code === 'permission-denied') {
+          setUserProfile(null);
+          return;
+        }
+        console.error('[AuthContext] user snapshot error:', err.code, err.message);
       }
-
-      setUserProfile(snapshot.data());
-    });
+    );
 
     return unsubscribe;
   }, [user]);

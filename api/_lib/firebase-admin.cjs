@@ -1,6 +1,7 @@
 const { cert, getApps, initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { FieldValue, getFirestore } = require('firebase-admin/firestore');
+const { getStorage } = require('firebase-admin/storage');
 
 function parsePrivateKey(raw) {
   return String(raw || '')
@@ -21,6 +22,7 @@ function readRequiredEnv(name) {
 let _adminApp = null;
 let _adminAuth = null;
 let _adminDb = null;
+let _adminStorage = null;
 
 function initAdminApp() {
   if (getApps().length > 0) {
@@ -30,10 +32,13 @@ function initAdminApp() {
   const projectId = readRequiredEnv('FIREBASE_ADMIN_PROJECT_ID');
   const clientEmail = readRequiredEnv('FIREBASE_ADMIN_CLIENT_EMAIL');
   const privateKey = parsePrivateKey(readRequiredEnv('FIREBASE_ADMIN_PRIVATE_KEY'));
+  const storageBucket =
+    process.env.FIREBASE_ADMIN_STORAGE_BUCKET ||
+    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
 
   return initializeApp({
     credential: cert({ projectId, clientEmail, privateKey }),
-    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+    storageBucket,
   });
 }
 
@@ -50,5 +55,9 @@ module.exports = {
   get adminDb() {
     if (!_adminDb) _adminDb = getFirestore(module.exports.adminApp);
     return _adminDb;
+  },
+  get adminStorage() {
+    if (!_adminStorage) _adminStorage = getStorage(module.exports.adminApp);
+    return _adminStorage;
   },
 };

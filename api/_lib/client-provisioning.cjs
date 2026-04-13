@@ -1,4 +1,6 @@
 const fb = require('./firebase-admin.cjs');
+const { getMaster, listSources }        = require('../../features/intelligence/_store');
+const { buildIntelligencePayload }      = require('./intelligence-bootstrap-utils.cjs');
 
 function normalizeOptionalUrl(input) {
   const raw = String(input || '').trim();
@@ -305,11 +307,32 @@ async function getDashboardBootstrap(uid) {
     fb.adminDb.collection('dashboard_state').doc(clientId).get(),
   ]);
 
+  const clientData = clientSnapshot.exists ? clientSnapshot.data() : null;
+
+  // Read intelligence namespace — non-fatal if absent or fails
+  let intelligence = null;
+  try {
+    const [masterDoc, sourceDocs] = await Promise.all([
+      getMaster(clientId),
+      listSources(clientId),
+    ]);
+    if (masterDoc || sourceDocs.length > 0) {
+      intelligence = buildIntelligencePayload(
+        masterDoc,
+        sourceDocs,
+        clientData?.websiteUrl || ''
+      );
+    }
+  } catch (err) {
+    console.warn('[getDashboardBootstrap] intelligence read failed:', err.message);
+  }
+
   return {
     userProfile,
-    client: clientSnapshot.exists ? clientSnapshot.data() : null,
+    client:         clientData,
     dashboardState: dashboardStateSnapshot.exists ? dashboardStateSnapshot.data() : null,
-    recentRuns: runsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+    recentRuns:     runsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+    intelligence,
   };
 }
 

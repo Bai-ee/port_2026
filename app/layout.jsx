@@ -18,6 +18,7 @@ export default function RootLayout({ children }) {
         />
       </head>
       <body
+        suppressHydrationWarning
         style={{
           margin: 0,
           fontFamily: '"Space Grotesk", system-ui, sans-serif',

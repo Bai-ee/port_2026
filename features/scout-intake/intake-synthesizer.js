@@ -238,7 +238,11 @@ const SYNTHESIS_TOOL = {
 
 // ── Prompt builder ────────────────────────────────────────────────────────────
 
-function buildSynthesisPrompt(evidenceText) {
+function buildSynthesisPrompt(evidenceText, intelligenceBriefing = null) {
+  const briefingSection = intelligenceBriefing
+    ? `ADDITIONAL INTELLIGENCE\n=======================\nAdditional intelligence gathered outside the crawl:\n\n${intelligenceBriefing}\n\n`
+    : '';
+
   return `You are a brand strategist performing a first-pass intake for a new client.
 
 Your job: analyze the website evidence below and call write_brand_intake with a complete, accurate, brand-specific intake.
@@ -250,7 +254,7 @@ Rules:
 - The sample post must sound like their actual voice, not a generic brand post
 - Signals should reflect real observations from the site, not guesses
 
-WEBSITE EVIDENCE
+${briefingSection}WEBSITE EVIDENCE
 ================
 ${evidenceText}`;
 }
@@ -293,7 +297,7 @@ function extractUsage(response) {
  *   the LLM request begins. May be async; awaited before the API call.
  * @returns {Promise<SynthesisResult>}
  */
-async function synthesizeSiteEvidence(evidence, { onProgress } = {}) {
+async function synthesizeSiteEvidence(evidence, { onProgress, intelligenceBriefing = null } = {}) {
   const evidenceText = formatEvidenceForPrompt(evidence);
 
   // Emit progress right before the blocking API call — gives the frontend
@@ -310,7 +314,7 @@ async function synthesizeSiteEvidence(evidence, { onProgress } = {}) {
       messages: [
         {
           role: 'user',
-          content: buildSynthesisPrompt(evidenceText),
+          content: buildSynthesisPrompt(evidenceText, intelligenceBriefing),
         },
       ],
     });
@@ -333,4 +337,4 @@ async function synthesizeSiteEvidence(evidence, { onProgress } = {}) {
   return { ok: true, intake, runCostData, error: null };
 }
 
-module.exports = { synthesizeSiteEvidence };
+module.exports = { synthesizeSiteEvidence, buildSynthesisPrompt };

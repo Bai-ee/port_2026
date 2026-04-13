@@ -72,7 +72,10 @@ function deriveContentOpportunities(intake) {
  * @param {object} meta   - { clientId, websiteUrl, runCostData, pipelineRunId }
  * @returns {IntakePipelineResult}
  */
-function normalizeIntakeResult(intake, { clientId, websiteUrl, runCostData, pipelineRunId }) {
+function normalizeIntakeResult(
+  intake,
+  { clientId, websiteUrl, runCostData, pipelineRunId, artifactRefs = [], warnings = [] }
+) {
   if (!intake || typeof intake !== 'object') {
     throw new Error('normalizeIntakeResult: intake must be a non-null object');
   }
@@ -164,6 +167,8 @@ function normalizeIntakeResult(intake, { clientId, websiteUrl, runCostData, pipe
     // ── Cost + provider metadata ────────────────────────────────────────────
     providerName: 'anthropic',
     runCostData: runCostData || null,
+    artifactRefs: Array.isArray(artifactRefs) ? artifactRefs : [],
+    warnings: Array.isArray(warnings) ? warnings : [],
   };
 }
 

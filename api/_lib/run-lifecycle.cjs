@@ -84,6 +84,14 @@ async function claimRun(runId) {
  */
 function buildDashboardProjection(clientId, pipelineResult, runId) {
   const { scoutPriorityAction, content, contentOpportunities } = pipelineResult;
+  const artifactRefs = Array.isArray(pipelineResult.artifactRefs) ? pipelineResult.artifactRefs : [];
+  const homepageScreenshots = artifactRefs.filter((artifact) => artifact?.type === 'website_homepage_screenshot');
+  const homepageScreenshot =
+    homepageScreenshots.find((artifact) => artifact?.variant === 'desktop') ||
+    homepageScreenshots[0] ||
+    null;
+  const homepageDeviceMockup =
+    artifactRefs.find((artifact) => artifact?.type === 'website_homepage_device_mockup') || null;
 
   // Build summaryCards from available content fields
   const summaryCards = [];
@@ -124,6 +132,23 @@ function buildDashboardProjection(clientId, pipelineResult, runId) {
     provisioningState: null,
     errorState: null,
   };
+
+  if (homepageScreenshot) {
+    base.artifacts = {
+      homepageScreenshot,
+      homepageScreenshots: Object.fromEntries(
+        homepageScreenshots
+          .filter((artifact) => artifact?.variant)
+          .map((artifact) => [artifact.variant, artifact])
+      ),
+    };
+  }
+  if (homepageDeviceMockup) {
+    base.artifacts = {
+      ...(base.artifacts || {}),
+      homepageDeviceMockup,
+    };
+  }
 
   // Merge free-tier intake modules when present (pipelineType: 'free-tier-intake')
   if (pipelineResult.pipelineType === 'free-tier-intake') {
@@ -181,6 +206,8 @@ async function completeRun(runId, clientId, pipelineResult) {
         : 0,
     },
     providerUsage: pipelineResult.runCostData || null,
+    artifactRefs: Array.isArray(pipelineResult.artifactRefs) ? pipelineResult.artifactRefs : [],
+    warnings: Array.isArray(pipelineResult.warnings) ? pipelineResult.warnings : [],
     moduleSnapshot: {
       content: pipelineResult.content || null,
       guardianFlags: pipelineResult.guardianFlags || null,
@@ -224,7 +251,7 @@ async function completeRun(runId, clientId, pipelineResult) {
  * @param {Error|object} error
  * @param {number} attempts - current attempt count (post-increment from claimRun)
  */
-async function failRun(runId, clientId, error, attempts) {
+async function failRun(runId, clientId, error, attempts, details = {}) {
   const runRef = fb.adminDb.collection('brief_runs').doc(runId);
   const clientRunRef = fb.adminDb.collection('clients').doc(clientId).collection('brief_runs').doc(runId);
   const dashboardStateRef = fb.adminDb.collection('dashboard_state').doc(clientId);
@@ -233,6 +260,14 @@ async function failRun(runId, clientId, error, attempts) {
   const failedAt = new Date().toISOString();
 
   const isExhausted = attempts >= MAX_ATTEMPTS;
+  const artifactRefs = Array.isArray(details.artifactRefs) ? details.artifactRefs : [];
+  const homepageScreenshots = artifactRefs.filter((artifact) => artifact?.type === 'website_homepage_screenshot');
+  const homepageScreenshot =
+    homepageScreenshots.find((artifact) => artifact?.variant === 'desktop') ||
+    homepageScreenshots[0] ||
+    null;
+  const homepageDeviceMockup =
+    artifactRefs.find((artifact) => artifact?.type === 'website_homepage_device_mockup') || null;
 
   // Full error detail — stored in brief_runs, accessible only via Admin SDK.
   // Firestore rules block client reads of brief_runs.
@@ -248,6 +283,8 @@ async function failRun(runId, clientId, error, attempts) {
       attempts,
       exhausted: isExhausted,
     },
+    artifactRefs,
+    warnings: Array.isArray(details.warnings) ? details.warnings : [],
   };
 
   // Sanitized error for dashboard — no internal detail exposed to end users.
@@ -262,6 +299,23 @@ async function failRun(runId, clientId, error, attempts) {
       retryPending: !isExhausted,
     },
   };
+
+  if (homepageScreenshot) {
+    dashboardUpdate.artifacts = {
+      homepageScreenshot,
+      homepageScreenshots: Object.fromEntries(
+        homepageScreenshots
+          .filter((artifact) => artifact?.variant)
+          .map((artifact) => [artifact.variant, artifact])
+      ),
+    };
+  }
+  if (homepageDeviceMockup) {
+    dashboardUpdate.artifacts = {
+      ...(dashboardUpdate.artifacts || {}),
+      homepageDeviceMockup,
+    };
+  }
 
   const clientUpdate = {
     latestRunId: runId,

@@ -1,0 +1,8 @@
+{
+  "name": "intelligence",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Client Intelligence Layer — contract, storage model, digest, ledger",
+  "main": "index.js",
+  "type": "commonjs"
+}

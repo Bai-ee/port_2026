@@ -3,710 +3,145 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Ops Dashboard</title>
+  <title>Ops Dashboard Redirect</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root {
-      --page:       #f5f1df;
-      --card:       rgba(255,255,255,0.5);
-      --card-border: rgba(212,196,171,0.82);
-      --card-shadow: 0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4);
-      --card-raised: rgba(255,255,255,0.72);
-      --nav-bg:     rgba(245,241,223,0.18);
-      --text:       #2a2420;
-      --text2:      rgba(42,36,32,0.6);
-      --text3:      rgba(42,36,32,0.38);
-      --text4:      rgba(42,36,32,0.22);
-      --divider:    rgba(42,36,32,0.1);
-      --divider2:   rgba(42,36,32,0.06);
-      --green:      #22763a;
-      --green-bg:   rgba(34,118,58,0.08);
-      --green-bdr:  rgba(34,118,58,0.2);
-      --red:        #b91c1c;
-      --red-bg:     rgba(185,28,28,0.08);
-      --red-bdr:    rgba(185,28,28,0.2);
-      --amber:      #92400e;
-      --amber-bg:   rgba(146,64,14,0.08);
-      --amber-bdr:  rgba(146,64,14,0.18);
-      --blue:       #1d4ed8;
-      --blue-bg:    rgba(29,78,216,0.07);
-      --blue-bdr:   rgba(29,78,216,0.18);
-      --purple:     #6d28d9;
-      --purple-bg:  rgba(109,40,217,0.07);
-      --purple-bdr: rgba(109,40,217,0.18);
-      --font-ui:    'Space Grotesk', system-ui, sans-serif;
-      --font-mono:  'Space Mono', monospace;
+      --page: #f5f1df;
+      --card: rgba(255, 255, 255, 0.6);
+      --card-border: rgba(212, 196, 171, 0.82);
+      --card-shadow: 0 1px 0 rgba(255, 255, 255, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+      --text: #2a2420;
+      --text2: rgba(42, 36, 32, 0.68);
+      --text3: rgba(42, 36, 32, 0.42);
+      --font-ui: 'Space Grotesk', system-ui, sans-serif;
+      --font-mono: 'Space Mono', monospace;
     }
-
-    html, body {
-      height: 100%;
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
       background: var(--page);
       color: var(--text);
       font-family: var(--font-ui);
-      font-size: 13px;
-      line-height: 1.5;
     }
-
-    /* dot grid */
     body::before {
-      content: '';
+      content: "";
       position: fixed;
       inset: 0;
-      background: radial-gradient(circle, rgba(42,36,32,0.08) 0.8px, transparent 0.8px);
+      background: radial-gradient(circle, rgba(42, 36, 32, 0.08) 0.8px, transparent 0.8px);
       background-size: 16px 16px;
       pointer-events: none;
       z-index: 0;
     }
-
-    /* ── Top strip ── */
-    #founders-top-strip {
-      position: fixed;
-      top: 0; left: 0;
-      width: 100%;
-      z-index: 200;
-      min-height: 64px;
-      background: var(--nav-bg);
-      backdrop-filter: blur(24px);
-      -webkit-backdrop-filter: blur(24px);
-      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.45), inset 0 -1px 0 rgba(42,36,32,0.08);
-    }
-    #founders-top-strip-inner {
-      display: flex;
-      align-items: center;
-      gap: 20px;
-      min-height: 64px;
-      max-width: 1440px;
-      margin: 0 auto;
-      padding: 0 clamp(1.5rem, 5vw, 3rem);
-    }
-    #founders-brand img {
-      height: clamp(2rem, 4vw, 2.8rem);
-      width: auto;
-      display: block;
-    }
-    #nav-page-label {
-      font-family: var(--font-mono);
-      font-size: 10px;
-      font-weight: 400;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--text3);
-    }
-    #nav-sep { color: var(--text4); font-size: 18px; }
-    #nav-api-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-family: var(--font-mono);
-      font-size: 10px;
-      color: var(--text3);
-    }
-    #base-url-input {
-      background: rgba(255,255,255,0.4);
-      border: 1px solid var(--card-border);
-      border-radius: 6px;
-      padding: 0.3rem 0.6rem;
-      font-family: var(--font-mono);
-      font-size: 10px;
-      color: var(--text2);
-      outline: none;
-      width: 180px;
-    }
-    #base-url-input:focus { border-color: rgba(42,36,32,0.3); }
-
-    /* right side of nav */
-    #nav-right {
-      margin-left: auto;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    #nav-refresh-status {
-      font-family: var(--font-mono);
-      font-size: 10px;
-      color: var(--text3);
-      white-space: nowrap;
-    }
-
-    /* auth — compact inline */
-    #nav-auth-gate {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    #nav-auth-gate input {
-      background: rgba(255,255,255,0.4);
-      border: 1px solid var(--card-border);
-      border-radius: 6px;
-      padding: 0.35rem 0.65rem;
-      font-family: var(--font-ui);
-      font-size: 12px;
-      color: var(--text);
-      outline: none;
-      width: 160px;
-    }
-    #nav-auth-gate input::placeholder { color: var(--text3); }
-    #nav-auth-gate input:focus { border-color: rgba(42,36,32,0.3); }
-    #nav-sign-in-btn {
-      display: inline-flex;
-      align-items: center;
-      padding: 0.45rem 1rem;
-      border-radius: 999px;
-      background: #2a2420;
-      border: none;
-      color: #f5f1df;
-      font-family: var(--font-ui);
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.01em;
-      cursor: pointer;
-      white-space: nowrap;
-    }
-    #nav-sign-in-btn:hover { opacity: 0.85; }
-    #nav-auth-error { font-size: 11px; color: var(--red); font-family: var(--font-mono); }
-
-    #nav-auth-user { display: none; align-items: center; gap: 10px; }
-    #nav-user-email {
-      font-family: var(--font-mono);
-      font-size: 10px;
-      color: var(--text3);
-    }
-
-    /* nav action buttons */
-    .nav-btn {
-      display: inline-flex;
-      align-items: center;
-      padding: 0.45rem 0.9rem;
-      border-radius: 999px;
-      background: rgba(255,255,255,0.34);
-      border: 1px solid rgba(42,36,32,0.1);
-      color: var(--text);
-      font-family: var(--font-ui);
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.01em;
-      cursor: pointer;
-      white-space: nowrap;
-      text-decoration: none;
-    }
-    .nav-btn:hover { background: rgba(255,255,255,0.55); }
-
-    /* ── Main layout ── */
-    #ops-main {
+    .card {
       position: relative;
       z-index: 1;
-      max-width: 1440px;
-      margin: 0 auto;
-      padding: calc(64px + 2rem) clamp(1.5rem, 5vw, 3rem) 4rem;
-      display: flex;
-      flex-direction: column;
-      gap: 2rem;
-    }
-
-    /* ── Stat grid ── */
-    #stat-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
-      gap: 0.65rem;
-    }
-    .stat-card {
+      width: min(720px, 100%);
+      padding: 28px;
+      border-radius: 20px;
       background: var(--card);
       border: 1px solid var(--card-border);
       box-shadow: var(--card-shadow);
-      backdrop-filter: blur(28px);
-      -webkit-backdrop-filter: blur(28px);
-      border-radius: 0.85rem;
-      padding: 0.85rem 1rem;
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
       display: flex;
       flex-direction: column;
-      gap: 0.35rem;
+      gap: 14px;
     }
-    .stat-label {
+    .eyebrow {
       font-family: var(--font-mono);
-      font-size: 9.5px;
-      font-weight: 400;
-      letter-spacing: 0.1em;
+      font-size: 10px;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
       color: var(--text3);
     }
-    .stat-value {
-      font-family: var(--font-mono);
-      font-size: 28px;
-      font-weight: 700;
-      color: var(--text);
-      line-height: 1;
+    h1 {
+      margin: 0;
+      font-size: clamp(2rem, 4vw, 3rem);
+      line-height: 0.94;
+      letter-spacing: -0.04em;
     }
-    .stat-sub {
-      font-family: var(--font-mono);
-      font-size: 9.5px;
-      color: var(--text3);
-      margin-top: 2px;
-    }
-    .stat-card.green .stat-value { color: var(--green); }
-    .stat-card.red   .stat-value { color: var(--red); }
-    .stat-card.amber .stat-value { color: var(--amber); }
-    .stat-card.blue  .stat-value { color: var(--blue); }
-    .stat-card.purple .stat-value { color: var(--purple); }
-
-    /* ── Section head ── */
-    .section { display: flex; flex-direction: column; gap: 0.75rem; }
-    .section-head {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      font-family: var(--font-mono);
-      font-size: 9.5px;
-      font-weight: 400;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--text3);
-    }
-    .section-head-line { flex: 1; height: 1px; background: var(--divider); }
-
-    /* ── Card shell (tables / cost bar) ── */
-    .card-shell {
-      background: var(--card);
-      border: 1px solid var(--card-border);
-      box-shadow: var(--card-shadow);
-      backdrop-filter: blur(28px);
-      -webkit-backdrop-filter: blur(28px);
-      border-radius: 0.85rem;
-      overflow: hidden;
-    }
-
-    /* ── Operational table ── */
-    table { width: 100%; border-collapse: collapse; }
-    thead th {
-      font-family: var(--font-mono);
-      font-size: 9.5px;
-      font-weight: 400;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--text3);
-      text-align: left;
-      padding: 0.7rem 0.9rem 0.6rem;
-      border-bottom: 1px solid var(--divider);
-      background: rgba(255,255,255,0.28);
-    }
-    tbody tr { border-bottom: 1px solid var(--divider2); }
-    tbody tr:last-child { border-bottom: none; }
-    tbody tr:hover { background: rgba(255,255,255,0.25); }
-    tbody td {
-      padding: 0.6rem 0.9rem;
-      font-family: var(--font-mono);
-      font-size: 11.5px;
+    p {
+      margin: 0;
       color: var(--text2);
-      vertical-align: middle;
+      line-height: 1.6;
     }
-    tbody td.cell-primary { font-family: var(--font-ui); font-weight: 500; font-size: 12.5px; color: var(--text); }
-    tbody td.cell-dim { color: var(--text3); font-size: 11px; }
-
-    /* ── Status badge ── */
-    .badge {
-      display: inline-block;
+    .mono {
       font-family: var(--font-mono);
-      font-size: 9.5px;
-      font-weight: 400;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      padding: 3px 8px;
-      border: 1px solid;
-      border-radius: 3px;
+      font-size: 12px;
+      color: var(--text2);
+      word-break: break-all;
     }
-    .badge-succeeded, .badge-active { background: var(--green-bg); color: var(--green); border-color: var(--green-bdr); }
-    .badge-failed,    .badge-error  { background: var(--red-bg);   color: var(--red);   border-color: var(--red-bdr); }
-    .badge-queued, .badge-provisioning { background: var(--amber-bg); color: var(--amber); border-color: var(--amber-bdr); }
-    .badge-running { background: var(--blue-bg); color: var(--blue); border-color: var(--blue-bdr); }
-    .badge-cancelled { background: transparent; color: var(--text3); border-color: var(--divider); }
-    .badge-unknown { background: transparent; color: var(--text4); border-color: var(--divider2); }
-
-    /* ── Cost bar ── */
-    #cost-bar-inner { padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: 0.55rem; }
-    .cost-row { display: flex; align-items: center; gap: 0.75rem; }
-    .cost-name { font-family: var(--font-mono); font-size: 11px; color: var(--text2); width: 160px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
-    .cost-track { flex: 1; height: 5px; background: rgba(42,36,32,0.06); border-radius: 3px; overflow: hidden; }
-    .cost-fill { height: 100%; background: var(--purple); border-radius: 3px; }
-    .cost-val { font-family: var(--font-mono); font-size: 11px; color: var(--purple); width: 60px; text-align: right; }
-
-    /* ── Empty / loading ── */
-    .empty-row td { text-align: center; padding: 2rem !important; color: var(--text3) !important; font-size: 11px !important; }
-    #ops-main.is-hidden { display: none; }
-
-    /* spinner blink */
-    .blink { animation: blink 1s infinite; }
-    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
-
-    @media (max-width: 680px) {
-      #nav-api-row, #nav-sep, #nav-page-label { display: none; }
-      #nav-auth-gate input { width: 120px; }
-      #stat-grid { grid-template-columns: repeat(2, 1fr); }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 4px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      padding: 0.7rem 1rem;
+      border-radius: 999px;
+      border: 1px solid rgba(42, 36, 32, 0.1);
+      background: rgba(255, 255, 255, 0.42);
+      color: var(--text);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .btn-primary {
+      background: #fff;
     }
   </style>
 </head>
 <body>
-
-<!-- ── Top strip ── -->
-<div id="founders-top-strip">
-  <div id="founders-top-strip-inner">
-
-    <a id="founders-brand" href="../index.html">
-      <img src="../public/img/sig.png" alt="" />
-    </a>
-
-    <span id="nav-sep">·</span>
-    <span id="nav-page-label">Ops Dashboard</span>
-
-    <div id="nav-api-row">
-      <span>API</span>
-      <input id="base-url-input" type="text" value="http://localhost:3000" />
-    </div>
-
-    <div id="nav-right">
-      <span id="nav-refresh-status"></span>
-
-      <!-- Signed-out state -->
-      <div id="nav-auth-gate">
-        <input id="email-input" type="email" placeholder="Admin email" autocomplete="username" />
-        <input id="pass-input" type="password" placeholder="Password" autocomplete="current-password" />
-        <button id="nav-sign-in-btn" onclick="handleSignIn()">Sign In</button>
-        <span id="nav-auth-error"></span>
-      </div>
-
-      <!-- Signed-in state -->
-      <div id="nav-auth-user">
-        <span id="nav-user-email"></span>
-        <button class="nav-btn" onclick="forceRefresh()">Refresh</button>
-        <button class="nav-btn" onclick="handleSignOut()">Sign Out</button>
-      </div>
-    </div>
-
-  </div>
-</div>
-
-<!-- ── Main ── -->
-<div id="ops-main" class="is-hidden">
-
-  <!-- Stat cards -->
-  <div id="stat-grid">
-    <div class="stat-card"><div class="stat-label">Clients</div><div class="stat-value" id="s-clients">—</div></div>
-    <div class="stat-card green"><div class="stat-label">Active</div><div class="stat-value" id="s-active">—</div></div>
-    <div class="stat-card amber"><div class="stat-label">Provisioning</div><div class="stat-value" id="s-prov">—</div></div>
-    <div class="stat-card red"><div class="stat-label">Client Errors</div><div class="stat-value" id="s-cerr">—</div></div>
-    <div class="stat-card"><div class="stat-label">Total Runs</div><div class="stat-value" id="s-runs">—</div></div>
-    <div class="stat-card green"><div class="stat-label">Succeeded</div><div class="stat-value" id="s-ok">—</div></div>
-    <div class="stat-card red"><div class="stat-label">Failed</div><div class="stat-value" id="s-fail">—</div></div>
-    <div class="stat-card amber"><div class="stat-label">Queued</div><div class="stat-value" id="s-queued">—</div></div>
-    <div class="stat-card blue"><div class="stat-label">Running</div><div class="stat-value" id="s-running">—</div></div>
-    <div class="stat-card purple"><div class="stat-label">Total Cost</div><div class="stat-value" id="s-cost">—</div><div class="stat-sub" id="s-cost-sub"></div></div>
-    <div class="stat-card purple"><div class="stat-label">Avg / Run</div><div class="stat-value" id="s-avg">—</div></div>
-    <div class="stat-card"><div class="stat-label">Sign-Ups</div><div class="stat-value" id="s-signups">—</div></div>
-  </div>
-
-  <!-- Cost by client -->
-  <div class="section">
-    <div class="section-head">Cost by Client <div class="section-head-line"></div></div>
-    <div class="card-shell" id="cost-shell">
-      <div id="cost-bar-inner"><span style="color:var(--text3);font-family:var(--font-mono);font-size:11px">Loading<span class="blink">…</span></span></div>
+  <div class="card">
+    <span class="eyebrow">Ops Dashboard</span>
+    <h1>This file is now a redirect shim.</h1>
+    <p>
+      The real ops dashboard lives inside the Next app at <span class="mono" id="target-route"></span> so it can
+      populate from the same live data layer as the homepage and client dashboard.
+    </p>
+    <p>
+      If the app is running, this page will forward you automatically. If it is not, start the site and then open
+      the route below directly.
+    </p>
+    <div class="actions">
+      <a class="btn btn-primary" id="open-admin-link" href="#">Open /admin</a>
+      <a class="btn" href="/">Homepage</a>
     </div>
   </div>
 
-  <!-- Recent runs -->
-  <div class="section">
-    <div class="section-head">Recent Runs <div class="section-head-line"></div></div>
-    <div class="card-shell">
-      <table>
-        <thead><tr>
-          <th>Client</th><th>Status</th><th>Pipeline</th><th>Cost</th><th>Attempts</th><th>Started</th><th>Completed</th><th>Run ID</th>
-        </tr></thead>
-        <tbody id="runs-tbody">
-          <tr class="empty-row"><td colspan="8">Loading<span class="blink">…</span></td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- Clients -->
-  <div class="section">
-    <div class="section-head">Clients <div class="section-head-line"></div></div>
-    <div class="card-shell">
-      <table>
-        <thead><tr>
-          <th>Company</th><th>Host</th><th>Status</th><th>Tier</th><th>Owner</th><th>Latest Run</th><th>Created</th>
-        </tr></thead>
-        <tbody id="clients-tbody">
-          <tr class="empty-row"><td colspan="7">Loading<span class="blink">…</span></td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-</div><!-- /ops-main -->
-
-<script>
-// ── Firebase ───────────────────────────────────────────────────────────────────
-firebase.initializeApp({
-  apiKey:            "AIzaSyA_7DtpJvM5l1v3kwdCPIYR4QS5BK0PykY",
-  authDomain:        "human-in-the-loop-a1a19.firebaseapp.com",
-  projectId:         "human-in-the-loop-a1a19",
-  storageBucket:     "human-in-the-loop-a1a19.firebasestorage.app",
-  messagingSenderId: "639335240998",
-  appId:             "1:639335240998:web:b16957a94f7bfcef09dde7",
-});
-const auth = firebase.auth();
-
-// ── State ──────────────────────────────────────────────────────────────────────
-let currentUser = null;
-let refreshTimer = null;
-let countdown = 30;
-const INTERVAL = 30;
-
-// ── Auth ───────────────────────────────────────────────────────────────────────
-async function handleSignIn() {
-  const email = document.getElementById('email-input').value.trim();
-  const pass  = document.getElementById('pass-input').value;
-  const btn   = document.getElementById('nav-sign-in-btn');
-  const err   = document.getElementById('nav-auth-error');
-  btn.textContent = '…';
-  btn.disabled = true;
-  err.textContent = '';
-  try {
-    await auth.signInWithEmailAndPassword(email, pass);
-  } catch (e) {
-    err.textContent = e.code === 'auth/wrong-password' || e.code === 'auth/user-not-found'
-      ? 'Invalid credentials' : e.message;
-    btn.textContent = 'Sign In';
-    btn.disabled = false;
-  }
-}
-
-document.getElementById('pass-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter') handleSignIn();
-});
-
-async function handleSignOut() {
-  clearInterval(refreshTimer);
-  await auth.signOut();
-}
-
-auth.onAuthStateChanged(user => {
-  currentUser = user;
-  if (user) {
-    document.getElementById('nav-auth-gate').style.display = 'none';
-    document.getElementById('nav-auth-user').style.display = 'flex';
-    document.getElementById('nav-user-email').textContent = user.email;
-    document.getElementById('ops-main').classList.remove('is-hidden');
-    startAutoRefresh();
-    loadAll();
-  } else {
-    document.getElementById('nav-auth-gate').style.display = 'flex';
-    document.getElementById('nav-auth-user').style.display = 'none';
-    document.getElementById('ops-main').classList.add('is-hidden');
-    setStatus('');
-    clearInterval(refreshTimer);
-  }
-});
-
-// ── API ────────────────────────────────────────────────────────────────────────
-function baseUrl() {
-  return document.getElementById('base-url-input').value.replace(/\/$/, '');
-}
-
-async function apiFetch(path) {
-  const token = await currentUser.getIdToken();
-  const res = await fetch(`${baseUrl()}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-  return data;
-}
-
-// ── Helpers ────────────────────────────────────────────────────────────────────
-function fmtDate(iso) {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
-}
-
-function extractCost(run) {
-  const pu = run.providerUsage;
-  if (!pu) return null;
-  if (typeof pu.estimatedCostUsd === 'number') return pu.estimatedCostUsd;
-  if (Array.isArray(pu.stageCosts)) return pu.stageCosts.reduce((s, x) => s + (x.estimatedCostUsd || 0), 0);
-  return null;
-}
-
-function badge(status) {
-  const s = (status || 'unknown').toLowerCase();
-  return `<span class="badge badge-${s}">${s}</span>`;
-}
-
-function shortId(id) {
-  return id ? `<span title="${id}">${id.slice(0, 8)}</span>` : '—';
-}
-
-function set(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
-function setStatus(msg) { document.getElementById('nav-refresh-status').textContent = msg; }
-
-// ── Load ───────────────────────────────────────────────────────────────────────
-async function loadAll() {
-  setStatus('Refreshing…');
-  try {
-    const [r0, r1, r2, r3] = await Promise.allSettled([
-      apiFetch('/api/admin/clients'),
-      apiFetch('/api/admin/brief-runs?status=succeeded'),
-      apiFetch('/api/admin/brief-runs?status=failed'),
-      apiFetch('/api/admin/brief-runs?status=queue'),
-    ]);
-
-    const clients  = r0.status === 'fulfilled' ? (r0.value.clients || []) : [];
-    const ok       = r1.status === 'fulfilled' ? (r1.value.runs    || []) : [];
-    const failed   = r2.status === 'fulfilled' ? (r2.value.runs    || []) : [];
-    const queue    = r3.status === 'fulfilled' ? (r3.value.runs    || []) : [];
-    const allRuns  = [...queue, ...failed, ...ok];
-
-    renderStats(clients, ok, failed, queue);
-    renderCostByClient(allRuns, clients);
-    renderRunsTable(allRuns, clients);
-    renderClientsTable(clients);
-
-    const t = new Date().toLocaleTimeString('en-US', { hour12: false });
-    setStatus(`Updated ${t}`);
-    countdown = INTERVAL;
-  } catch (err) {
-    setStatus(`Error: ${err.message}`);
-  }
-}
-
-// ── Stats ──────────────────────────────────────────────────────────────────────
-function renderStats(clients, ok, failed, queue) {
-  const running = queue.filter(r => r.status === 'running');
-  const queued  = queue.filter(r => r.status === 'queued');
-  const all     = [...ok, ...failed, ...queue];
-  const costs   = all.map(extractCost).filter(c => c !== null);
-  const total   = costs.reduce((a, b) => a + b, 0);
-  const avg     = costs.length ? total / costs.length : 0;
-
-  set('s-clients',  clients.length);
-  set('s-active',   clients.filter(c => c.status === 'active').length);
-  set('s-prov',     clients.filter(c => c.status === 'provisioning').length);
-  set('s-cerr',     clients.filter(c => c.status === 'error').length);
-  set('s-runs',     all.length);
-  set('s-ok',       ok.length);
-  set('s-fail',     failed.length);
-  set('s-queued',   queued.length);
-  set('s-running',  running.length);
-  set('s-cost',     `$${total.toFixed(3)}`);
-  set('s-cost-sub', `${costs.length} priced`);
-  set('s-avg',      `$${avg.toFixed(4)}`);
-  set('s-signups',  clients.filter(c => c.ownerEmail).length);
-}
-
-// ── Cost bars ──────────────────────────────────────────────────────────────────
-function renderCostByClient(runs, clients) {
-  const map = {};
-  clients.forEach(c => { map[c.clientId] = c.companyName || c.normalizedHost || c.clientId; });
-
-  const by = {};
-  runs.forEach(r => {
-    const c = extractCost(r);
-    if (c === null) return;
-    const name = map[r.clientId] || r.clientId || 'Unknown';
-    by[name] = (by[name] || 0) + c;
-  });
-
-  const entries = Object.entries(by).sort((a, b) => b[1] - a[1]);
-  const inner = document.getElementById('cost-bar-inner');
-
-  if (!entries.length) {
-    inner.innerHTML = '<span style="color:var(--text3);font-family:var(--font-mono);font-size:11px">No cost data yet</span>';
-    return;
-  }
-
-  const max = entries[0][1];
-  inner.innerHTML = entries.map(([name, cost]) => `
-    <div class="cost-row">
-      <div class="cost-name" title="${name}">${name}</div>
-      <div class="cost-track"><div class="cost-fill" style="width:${(cost/max*100).toFixed(1)}%"></div></div>
-      <div class="cost-val">$${cost.toFixed(4)}</div>
-    </div>
-  `).join('');
-}
-
-// ── Runs table ─────────────────────────────────────────────────────────────────
-function renderRunsTable(runs, clients) {
-  const map = {};
-  clients.forEach(c => { map[c.clientId] = c.companyName || c.normalizedHost || c.clientId; });
-
-  const sorted = [...runs].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)).slice(0, 60);
-  const tbody  = document.getElementById('runs-tbody');
-
-  if (!sorted.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="8">No runs found</td></tr>';
-    return;
-  }
-
-  tbody.innerHTML = sorted.map(r => {
-    const cost = extractCost(r);
-    const costStr = cost !== null ? `$${cost.toFixed(4)}` : '—';
-    const pipeline = r.pipelineType || 'intake';
-    return `<tr>
-      <td class="cell-primary">${map[r.clientId] || r.clientId || '—'}</td>
-      <td>${badge(r.status)}</td>
-      <td class="cell-dim">${pipeline}</td>
-      <td style="color:var(--purple)">${costStr}</td>
-      <td style="text-align:center">${r.attempts ?? '—'}</td>
-      <td class="cell-dim">${fmtDate(r.startedAt || r.createdAt)}</td>
-      <td class="cell-dim">${fmtDate(r.completedAt)}</td>
-      <td class="cell-dim">${shortId(r.id)}</td>
-    </tr>`;
-  }).join('');
-}
-
-// ── Clients table ──────────────────────────────────────────────────────────────
-function renderClientsTable(clients) {
-  const tbody = document.getElementById('clients-tbody');
-
-  if (!clients.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No clients</td></tr>';
-    return;
-  }
-
-  const sorted = [...clients].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-  tbody.innerHTML = sorted.map(c => `<tr>
-    <td class="cell-primary">${c.companyName || '—'}</td>
-    <td class="cell-dim">${c.normalizedHost || c.websiteUrl || '—'}</td>
-    <td>${badge(c.status)}</td>
-    <td class="cell-dim">${c.pricingTier || '—'}</td>
-    <td class="cell-dim">${c.ownerEmail || '—'}</td>
-    <td>${badge(c.latestRunStatus)}</td>
-    <td class="cell-dim">${fmtDate(c.createdAt)}</td>
-  </tr>`).join('');
-}
-
-// ── Auto refresh ───────────────────────────────────────────────────────────────
-function startAutoRefresh() {
-  clearInterval(refreshTimer);
-  countdown = INTERVAL;
-  refreshTimer = setInterval(() => {
-    countdown--;
-    if (countdown <= 0) {
-      countdown = INTERVAL;
-      loadAll();
+  <script>
+    function resolveNextOrigin() {
+      const { protocol, hostname, port } = window.location;
+      if ((protocol === 'http:' || protocol === 'https:') && port && port !== '3000') {
+        return `${protocol}//${hostname}:3000`;
+      }
+      if (protocol === 'http:' || protocol === 'https:') {
+        return `${protocol}//${hostname}${port ? `:${port}` : ''}`;
+      }
+      return 'http://127.0.0.1:3000';
     }
-  }, 1000);
-}
 
-function forceRefresh() {
-  countdown = INTERVAL;
-  loadAll();
-}
-</script>
+    const target = `${resolveNextOrigin()}/admin`;
+    const link = document.getElementById('open-admin-link');
+    const label = document.getElementById('target-route');
+    link.href = target;
+    label.textContent = target;
+
+    window.setTimeout(() => {
+      window.location.href = target;
+    }, 250);
+  </script>
 </body>
 </html>
