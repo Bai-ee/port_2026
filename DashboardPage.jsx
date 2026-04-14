@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 gsap.registerPlugin(ScrollTrigger);
@@ -1015,6 +1016,38 @@ const DashboardPage = () => {
   const [showTierModal, setShowTierModal] = useState(false);
   const [activeTileModal, setActiveTileModal] = useState(null);
   const [activeCapabilityFilter, setActiveCapabilityFilter] = useState(null);
+  const [chatDraft, setChatDraft] = useState('');
+  const capabilityGridRef = useRef(null);
+
+  // Page-load intro — background → nav → hero → cards top-left to bottom-right
+  useLayoutEffect(() => {
+    const bg       = document.querySelector('#internal-page-bg');
+    const strip    = document.querySelector('#founders-top-strip');
+    const heroNum  = document.querySelector('#founders-hero-numeric-shell');
+    const heroMeta = document.querySelector('#founders-hero-meta');
+    const capNav   = document.querySelector('#capability-nav-col');
+    const capGrid  = capabilityGridRef.current;
+    const cards    = capGrid ? gsap.utils.toArray('[data-capability-card]', capGrid) : [];
+
+    // Read computed border color before hiding it (resolves var(--border) to rgb value)
+    const gridBorderColor = capGrid ? getComputedStyle(capGrid).borderTopColor : null;
+
+    gsap.set([strip, heroNum, heroMeta, capNav].filter(Boolean), { autoAlpha: 0 });
+    if (capGrid && gridBorderColor) gsap.set(capGrid, { borderColor: 'transparent' });
+    if (cards.length) gsap.set(cards, { autoAlpha: 0 });
+
+    const tl = gsap.timeline({ delay: 0.5 });
+
+
+         tl.to(strip,    { autoAlpha: 1, duration: 0.5, ease: 'power2.out' }, '<0.1')
+      .to(heroNum,  { autoAlpha: 1, duration: 0.65, ease: 'power2.out' }, '0.28')
+      .to(heroMeta, { autoAlpha: 1, duration: 0.55, ease: 'power2.out' }, '<0.12')
+      .to(capNav,   { autoAlpha: 1, duration: 0.5, ease: 'power2.out' }, '0.55')
+      .to(capGrid,  { borderColor: gridBorderColor, duration: 0.55, ease: 'power2.out' }, '<')
+      .to(cards,    { autoAlpha: 1, duration: 0.32, ease: 'power2.out', stagger: 0.055 }, '<0.05');
+
+    return () => tl.kill();
+  }, []);
   const [bootstrap, setBootstrap] = useState({ userProfile: null, client: null, dashboardState: null, recentRuns: [], intelligence: null });
   const [bootstrapLoading, setBootstrapLoading] = useState(true);
   const [bootstrapError, setBootstrapError] = useState('');
@@ -1375,6 +1408,14 @@ const DashboardPage = () => {
       if (frameId !== null) cancelAnimationFrame(frameId);
     };
   }, [capabilityHeadline]);
+
+  const handleChatSend = (msg) => {
+    const trimmed = msg.trim();
+    if (!trimmed) return;
+    const context = activeTileModal?.label ? `[Re: ${activeTileModal.label}] ` : '';
+    window.open(`sms:+13122865129&body=${encodeURIComponent(context + trimmed)}`, '_self');
+    setChatDraft('');
+  };
 
   const handleReseed = useCallback(async () => {
     if (!user || !reseedUrl.trim() || reseedLoading) return;
@@ -2188,9 +2229,11 @@ const DashboardPage = () => {
 
           {/* Left — grid */}
           <div id="capability-grid-col">
-          <div id="capability-grid">
+          <div id="capability-grid" ref={capabilityGridRef}>
             {intakeCapabilityCards.filter((card) => !activeCapabilityFilter || activeCapabilityFilter === card.category).map((card) => (
               <article
+                data-capability-card
+                data-flip-id={`cap-${card.id}`}
                 className={`tile tile-intake-card${hasIntakeData ? ' tile-ready' : ''}${card.wide ? ' tile-intake-card--wide' : ''}`}
                 id={card.domId || `tile-${card.id}`}
                 key={card.id}
@@ -2520,7 +2563,7 @@ const DashboardPage = () => {
                         onClick={(e) => { e.stopPropagation(); }}
                         aria-label="Download brief"
                       >
-                        Download ↓
+                        DL ↓
                       </button>
                     )}
                     <button
@@ -2528,7 +2571,7 @@ const DashboardPage = () => {
                       className="tile-view-details-btn"
                       onClick={(e) => { e.stopPropagation(); setActiveTileModal({ title: card.title, description: card.description, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null }); }}
                     >
-                      View Details ↗
+                        Details ↗
                     </button>
                   </span>
                 </div>
@@ -2551,6 +2594,8 @@ const DashboardPage = () => {
               ];
               return (
                 <article
+                  data-capability-card
+                  data-flip-id={`tile-${tile.id}`}
                   className={`tile tile-intake-card${!isFreeTier ? ' tile-preview' : ''}${isReady ? ' tile-ready' : ''}${isBlocked ? ' tile-blocked' : ''}`}
                   id={`tile-${tile.number}-${tile.id}`}
                   key={tile.id}
@@ -2604,17 +2649,42 @@ const DashboardPage = () => {
           {/* Right — filter nav */}
           <div id="capability-nav-col">
             {[
+              { key: null,       label: 'All',      sub: 'Everything' },
               { key: 'design',   label: 'Design',   sub: 'Visual & brand' },
               { key: 'content',  label: 'Content',  sub: 'Copy & strategy' },
               { key: 'systems',  label: 'Systems',  sub: 'Data & signals' },
               { key: 'contact',  label: 'Contact',  sub: 'Chat with Bryan' },
             ].map(({ key, label, sub }) => (
               <button
-                key={key}
+                key={key ?? 'all'}
                 type="button"
-                id={`capability-nav-btn-${key}`}
+                id={`capability-nav-btn-${key ?? 'all'}`}
                 className={`capability-nav-btn${activeCapabilityFilter === key ? ' capability-nav-btn--active' : ''}`}
-                onClick={() => setActiveCapabilityFilter(activeCapabilityFilter === key ? null : key)}
+                onClick={() => {
+                  if (key === activeCapabilityFilter) return;
+                  const grid = capabilityGridRef.current;
+                  if (!grid) { setActiveCapabilityFilter(key); return; }
+                  const cards = grid.querySelectorAll('[data-capability-card]');
+                  gsap.killTweensOf(cards);
+                  gsap.to(cards, {
+                    opacity: 0,
+                    duration: 0.18,
+                    ease: 'power2.in',
+                    onComplete: () => {
+                      // flushSync forces React to commit new cards to DOM synchronously
+                      // so we can immediately query and animate them before first paint
+                      flushSync(() => setActiveCapabilityFilter(key));
+                      const newCards = grid.querySelectorAll('[data-capability-card]');
+                      if (newCards.length) {
+                        gsap.fromTo(
+                          newCards,
+                          { opacity: 0 },
+                          { opacity: 1, duration: 0.4, ease: 'power2.out', stagger: 0.08 },
+                        );
+                      }
+                    },
+                  });
+                }}
               >
                 <span className="capability-nav-btn-label">{label}</span>
                 <span className="capability-nav-btn-sub">{sub}</span>
@@ -2797,10 +2867,10 @@ const DashboardPage = () => {
             {/* ── Bento grid ── */}
             <div id="tile-detail-bento-grid">
 
-              {/* Left — card visual */}
+              {/* Left — visual + chat */}
               <div id="tile-detail-bento-image-cell" className="tile-detail-bento-cell">
                 <div className={`tile-intake-placeholder tile-intake-placeholder-${activeTileModal.cardId || 'draft-post'} tile-detail-bento-placeholder`}>
-                  {activeTileModal.cardId === 'style-guide' ? (
+                {activeTileModal.cardId === 'style-guide' ? (
                     <div className="sg-preview">
                       {sgDisplayData?.confidence === 'low' ? (
                         <div className="sg-empty">
@@ -2898,6 +2968,49 @@ const DashboardPage = () => {
                     renderViz(activeTileModal.vizType, countdownHours)
                   )}
                 </div>
+
+                {/* Chat with Bryan */}
+                <div id="tile-detail-chat-header">
+                  <div id="tile-detail-chat-avatar-wrap">
+                    <img src="/img/profile2_400x400.png?v=1774582808" id="tile-detail-chat-avatar" alt="Bryan Balli" />
+                    <span id="tile-detail-chat-status-dot" />
+                  </div>
+                  <div id="tile-detail-chat-identity">
+                    <span id="tile-detail-chat-name">Bryan Balli</span>
+                    <span id="tile-detail-chat-sub">Human + AI · Usually replies fast</span>
+                  </div>
+                  <span id="tile-detail-chat-badge">AI + Human</span>
+                </div>
+
+
+                <div id="tile-detail-chat-bot-msg">
+                  <span id="tile-detail-chat-bot-dot" />
+                  <span id="tile-detail-chat-bot-text">Ask me anything about this module…</span>
+                </div>
+
+                <div id="tile-detail-chat-input-row">
+                  <input
+                    id="tile-detail-chat-input"
+                    type="text"
+                    placeholder={`Ask about ${activeTileModal?.label || 'this module'}…`}
+                    value={chatDraft}
+                    onChange={(e) => setChatDraft(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleChatSend(chatDraft); }}
+                  />
+                  <button
+                    id="tile-detail-chat-send-btn"
+                    type="button"
+                    className="cta-pill-btn"
+                    onClick={() => handleChatSend(chatDraft)}
+                  >↗</button>
+                </div>
+
+                <div id="tile-detail-chat-footer">
+                  <a href="https://calendly.com/bballi/30min" target="_blank" rel="noopener noreferrer" className="tile-detail-chat-footer-link">Book a call ↗</a>
+                  <span id="tile-detail-chat-footer-dot">·</span>
+                  <a href="sms:+13122865129&body=Hey Bryan, I have a question about your services." className="tile-detail-chat-footer-link">Text directly ↗</a>
+                </div>
+
               </div>
 
               {/* Right — content modules */}
@@ -2929,6 +3042,8 @@ const DashboardPage = () => {
                 </div>
 
               </div>
+
+
             </div>
           </div>
         </div>
@@ -3509,6 +3624,10 @@ const dashboardCss = `
     display: flex;
     flex-direction: column;
     gap: 10px;
+    border: none;
+  }
+  .meta-row-source {
+    border-bottom: none;
   }
   .meta-row:last-child { border-bottom: none; }
   .meta-row .label { font-size: 0.72rem; color: var(--text-secondary); font-family: var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; }
@@ -3543,8 +3662,8 @@ const dashboardCss = `
     display: flex;
     flex-direction: column;
     gap: 4px;
-    background: #fff;
-    border: 1px solid rgba(212, 196, 171, 0.6);
+    background: rgba(255, 255, 255, 0.35);
+    border: 1px solid rgba(42, 36, 32, 0.18);
     border-radius: 1rem;
     padding: 20px 22px;
     cursor: pointer;
@@ -3552,17 +3671,19 @@ const dashboardCss = `
     transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
     width: 100%;
   }
-  .capability-nav-btn:hover {
-    background: #f5f1e3;
-    border-color: rgba(212, 196, 171, 1);
-  }
   .capability-nav-btn--active {
-    background: #000 !important;
-    border-color: #000 !important;
+    background: linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+    background-clip: padding-box;
+    border: 2px solid transparent;
   }
   .capability-nav-btn--active .capability-nav-btn-label,
-  .capability-nav-btn--active .capability-nav-btn-sub {
-    color: #fff !important;
+  .capability-nav-btn--active .capability-nav-btn-sub,
+  .capability-nav-btn--active::after {
+    color: #fff;
+  }
+  .capability-nav-btn:not(.capability-nav-btn--active):hover {
+    background: rgba(255, 255, 255, 1);
+    border-color: rgba(42, 36, 32, 0.35);
   }
   .capability-nav-btn-label {
     font-family: var(--font-mono);
@@ -3594,7 +3715,6 @@ const dashboardCss = `
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-auto-rows: minmax(460px, auto);
     gap: 1px;
-    background: var(--border);
     border: 1px solid var(--border);
     border-radius: 28px;
     overflow: hidden;
@@ -4268,21 +4388,22 @@ const dashboardCss = `
     flex: 1;
     min-height: 0;
   }
-  /* Image cell — fills full left column height */
+  /* Image cell — chat with Bryan */
   #tile-detail-bento-image-cell {
-    aspect-ratio: 1536 / 1024;
-    align-self: start;
+    align-self: stretch;
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    gap: 16px;
+    padding: 20px 22px;
   }
   .tile-detail-bento-placeholder {
-    aspect-ratio: unset !important;
+    aspect-ratio: 3 / 2 !important;
     border-radius: calc(1rem - 1px) !important;
     border: none !important;
-    flex: 1;
+    flex-shrink: 0;
     width: 100%;
-    height: 100%;
+    height: auto;
   }
   /* Right column — about + data stacked, 12px gap, each independently scrollable */
   #tile-detail-bento-content {
@@ -4305,6 +4426,160 @@ const dashboardCss = `
     flex: 1;
     overflow-y: auto;
     min-height: 0;
+  }
+  #tile-detail-chat-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  #tile-detail-chat-avatar-wrap {
+    position: relative;
+    flex-shrink: 0;
+  }
+  #tile-detail-chat-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+    border: 2px solid rgba(255,255,255,0.6);
+  }
+  #tile-detail-chat-status-dot {
+    position: absolute;
+    bottom: 1px;
+    right: 1px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #22c55e;
+    border: 2px solid #fff;
+  }
+  #tile-detail-chat-identity {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+  }
+  #tile-detail-chat-name {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-display);
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+  #tile-detail-chat-sub {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    letter-spacing: 0.01em;
+    line-height: 1.2;
+  }
+  #tile-detail-chat-badge {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    border: 1px solid rgba(42,36,32,0.15);
+    border-radius: 999px;
+    padding: 4px 10px;
+    flex-shrink: 0;
+  }
+  #tile-detail-chat-bot-msg {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    align-self: flex-start;
+    background: rgba(42, 36, 32, 0.06);
+    border-radius: 1rem;
+    padding: 10px 14px;
+    max-width: 85%;
+    margin-top: 16px;
+  }
+  #tile-detail-chat-bot-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #22c55e;
+    flex-shrink: 0;
+  }
+  #tile-detail-chat-bot-text {
+    font-size: 0.82rem;
+    color: var(--text-display);
+    line-height: 1.4;
+  }
+  #tile-detail-chat-input-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  #tile-detail-chat-input {
+    flex: 1;
+    min-width: 0;
+    padding: 11px 16px;
+    border-radius: 999px;
+    border: 1px solid rgba(42,36,32,0.14);
+    background: rgba(255,255,255,0.55);
+    font-size: 0.88rem;
+    color: var(--text-display);
+    outline: none;
+    box-sizing: border-box;
+    transition: border-color 0.15s ease;
+  }
+  #tile-detail-chat-input:focus {
+    border-color: rgba(42,36,32,0.35);
+    background: #fff;
+  }
+  #tile-detail-chat-input::placeholder {
+    color: var(--text-disabled);
+  }
+  #tile-detail-chat-send-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    width: 2.4rem;
+    height: 2.4rem;
+    padding: 0;
+    border-radius: 999px;
+    border: none;
+    background: linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+    color: #fff;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  #tile-detail-chat-send-avatar {
+    width: 1.6rem;
+    height: 1.6rem;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+    border: 2px solid rgba(255,255,255,0.35);
+    flex-shrink: 0;
+  }
+  #tile-detail-chat-footer {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .tile-detail-chat-footer-link {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-decoration: none;
+    letter-spacing: 0.01em;
+    transition: color 0.15s ease;
+  }
+  .tile-detail-chat-footer-link:hover {
+    color: var(--text-display);
+  }
+  #tile-detail-chat-footer-dot {
+    color: var(--text-disabled);
+    font-size: 0.78rem;
   }
   /* ── Mobile: vertical single column ── */
   @media (max-width: 680px) {
@@ -4343,7 +4618,21 @@ const dashboardCss = `
     #tile-detail-bento-data {
       flex: none;
       overflow-y: visible;
-      max-height: none;
+    }
+    #tile-detail-bento-chat-cell {
+      padding: 16px 18px;
+      gap: 12px;
+    }
+    .tile-detail-chat-prompt-chip {
+      font-size: 0.72rem;
+      padding: 6px 11px;
+    }
+    #tile-detail-chat-input-row {
+      flex-wrap: wrap;
+    }
+    #tile-detail-chat-input {
+      min-width: 0;
+      flex: 1 1 160px;
     }
   }
   .tile-detail-bento-label {
@@ -4816,9 +5105,12 @@ const dashboardCss = `
     #founders-shell { padding: 104px 24px 64px; }
     #founders-top-strip-inner { padding: 0 24px; }
     #dashboard-source-cta-row { width: 100%; }
+    #founders-hero-shell { border-bottom: none; }
+    #capability-section { padding-top: 0; }
     #capability-section-shell { grid-template-columns: 1fr; }
-    #capability-nav-col { order: -1; position: static; flex-direction: row; flex-wrap: wrap; gap: 6px; }
-    .capability-nav-btn { flex: 1 1 auto; min-width: 0; padding: 10px 16px; border-radius: 999px; flex-direction: row; align-items: center; gap: 0; width: auto; }
+    #capability-nav-col { order: -1; position: static; flex-direction: row; flex-wrap: wrap; gap: 6px; z-index: 10; }
+    .capability-nav-btn { flex: 1 1 auto; min-width: 0; padding: 10px 16px; border-radius: 999px; flex-direction: row; align-items: center; justify-content: center; gap: 0; width: auto; }
+    .capability-nav-btn::after { content: none; }
     .capability-nav-btn-sub { display: none; }
     #capability-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .tile { aspect-ratio: auto; min-height: 220px; grid-template-areas: "num" "head" "desc" "viz" "foot"; grid-template-columns: 1fr; row-gap: 14px; }

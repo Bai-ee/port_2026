@@ -59,7 +59,7 @@ const washStyle = {
 
 export default function InternalPageBackground() {
   return (
-    <div aria-hidden="true" style={wrapperStyle}>
+    <div id="internal-page-bg" aria-hidden="true" style={wrapperStyle}>
       <div style={sceneFrameStyle}>
         <BackgroundScene params={BACKGROUND_PARAMS} backgroundColor={null} />
       </div>

@@ -1,9 +1,7 @@
 import React, { useLayoutEffect, useEffect, useRef, useState } from 'react';
-import { flushSync } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { Flip } from 'gsap/Flip';
 import { createSharedParticleGalleryRenderer } from './sharedParticleGalleryRenderer';
 import { BrainIcon } from './components/ui/brain';
 import {
@@ -21,7 +19,7 @@ import {
   ArrowRightLeft,
 } from 'lucide-react';
 
-gsap.registerPlugin(ScrollTrigger, Flip);
+gsap.registerPlugin(ScrollTrigger);
 
 const MOBILE_SCROLL_MEDIA_QUERY = '(max-width: 767px), (pointer: coarse)';
 const NARROW_SCROLL_MEDIA_QUERY = '(max-width: 680px) and (pointer: coarse)';
@@ -1321,7 +1319,6 @@ const StackedSlidesSection = () => {
                         {AUTOMATION_CAPABILITIES.map((item, index) => {
                           const Icon = AUTOMATION_ICON_COMPONENTS[item.icon];
                           const isMobileCapabilityOpen = isTouchScrollDevice() && activeMobileCapability === item.title;
-
                           return (
                             <React.Fragment key={item.title}>
                             <article
