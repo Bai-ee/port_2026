@@ -1,5 +1,9 @@
+import Script from 'next/script';
 import '../colors.css';
 import { AuthProvider } from '../AuthContext';
+import AnalyticsPageView from '../components/AnalyticsPageView';
+
+const GA_ID = process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID;
 
 export const metadata = {
   title: 'Bballi Portfolio',
@@ -26,7 +30,29 @@ export default function RootLayout({ children }) {
           MozOsxFontSmoothing: 'grayscale',
         }}
       >
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <AnalyticsPageView />
+          {children}
+        </AuthProvider>
+        {GA_ID && (
+          <>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
+              strategy="afterInteractive"
+            />
+            <Script id="ga4-init" strategy="afterInteractive">
+              {`
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '${GA_ID}', {
+                  page_path: window.location.pathname,
+                  send_page_view: true
+                });
+              `}
+            </Script>
+          </>
+        )}
       </body>
     </html>
   );

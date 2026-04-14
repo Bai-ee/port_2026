@@ -272,7 +272,7 @@ const HomePage = () => {
           width: '100%',
           zIndex: 10,
           background: 'transparent',
-          marginTop: 'clamp(-24rem, calc(-13rem - 3vw - 8vh), -18rem)',
+          marginTop: 'clamp(-20rem, calc(-11rem - 2vw - 6vh), -15rem)',
           borderRadius: '1.5rem 1.5rem 0 0',
         }}
       >

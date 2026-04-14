@@ -13,10 +13,8 @@ const detailPageIds = ['value', 'experience', 'clients', 'engage', 'contact'];
 const detailPages = portfolioPages.filter((page) => detailPageIds.includes(page.id));
 
 const glassPanelStyle = {
-  background: 'rgba(245, 241, 223, 0.18)',
-  backdropFilter: 'blur(24px)',
-  WebkitBackdropFilter: 'blur(24px)',
-  boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.45), inset 0 1px 0 rgba(255,255,255,0.6), 0 32px 90px rgba(42,36,32,0.16)',
+  background: '#ffffff',
+  boxShadow: '0 32px 90px rgba(42,36,32,0.18)',
   borderRadius: '1.5rem',
 };
 
@@ -252,7 +250,6 @@ const overlayStyle = {
   position: 'fixed',
   inset: 0,
   zIndex: 320,
-  background: 'rgba(32, 28, 24, 0.36)',
   backdropFilter: 'blur(18px)',
   WebkitBackdropFilter: 'blur(18px)',
   display: 'flex',

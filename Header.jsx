@@ -95,10 +95,10 @@ const Header = ({ logoRef, onOpenPage }) => {
   };
 
   const actionGroupStyle = {
-    marginLeft: 'auto',
     display: 'flex',
     alignItems: 'center',
     gap: '1rem',
+    maxWidth: '268.336px',
   };
 
   const loginLinkStyle = {
@@ -188,7 +188,7 @@ const Header = ({ logoRef, onOpenPage }) => {
       <header id="site-nav" style={headerStyle}>
         <div ref={logoRef} aria-hidden="true" style={anchorStyle} />
 
-        <div id="site-nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <div id="site-nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
           <img src="/img/sig.png" alt="" aria-hidden="true" style={{ height: 'clamp(2rem, 4vw, 2.8rem)', width: 'auto', display: 'block' }} />
         </div>
 

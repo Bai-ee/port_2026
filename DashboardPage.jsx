@@ -2,11 +2,23 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+gsap.registerPlugin(ScrollTrigger);
 import Link from 'next/link';
 import { Globe } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import InternalPageBackground from './InternalPageBackground';
 import { internalPageGlassCardStyle } from './pageSurfaceSystem';
+import {
+  trackDashboardCreated,
+  trackPipelineRerun,
+  trackPipelineCancelled,
+  trackSeoRerun,
+  trackTileOpened,
+  trackThemeChanged,
+  trackTierModalOpened,
+  trackSignOut,
+} from '@/lib/analytics';
 
 // ── Free-tier module IDs ──────────────────────────────────────────────────────
 // These tiles reflect what the free-tier intake actually produces.
@@ -161,7 +173,7 @@ const tiles = [
     number: '01',
     label: 'CREATIVE PIPELINES',
     title: 'Content that sounds like you.',
-    description: 'Posts drafted in real time, aligned to brand voice.',
+    description: 'Posts drafted in real time, aligned to your brand voice and audience.',
     status: 'LIVE',
     metric: 'BRAND READY',
     viz: 'segbars',
@@ -171,9 +183,9 @@ const tiles = [
     number: '02',
     label: 'COMPANY BRAIN',
     title: 'Searchable, structured, stateful.',
-    description: 'Your stack indexed and queryable.',
+    description: 'Your entire knowledge stack indexed, organized, and instantly queryable.',
     status: 'PREVIEW',
-    metric: 'PRO TIER',
+    metric: 'CUSTOMIZATION',
     viz: 'memory',
   },
   {
@@ -181,9 +193,9 @@ const tiles = [
     number: '03',
     label: 'KNOWLEDGE ASSISTANT',
     title: 'Answers from your data.',
-    description: 'Team asks, system pulls from your docs.',
+    description: 'Team asks a question; system pulls the answer directly from your own docs.',
     status: 'PREVIEW',
-    metric: 'PRO TIER',
+    metric: 'CUSTOMIZATION',
     viz: 'qa',
   },
   {
@@ -191,9 +203,9 @@ const tiles = [
     number: '04',
     label: 'EXECUTIVE SUPPORT',
     title: 'Walk in already briefed.',
-    description: 'Every meeting prepared before you sit down.',
+    description: 'Every meeting pre-briefed with full context loaded before you sit down.',
     status: 'PREVIEW',
-    metric: 'PRO TIER',
+    metric: 'CUSTOMIZATION',
     viz: 'meetings',
   },
   {
@@ -201,9 +213,9 @@ const tiles = [
     number: '05',
     label: 'DAILY OPERATIONS',
     title: 'Core tasks run themselves.',
-    description: 'Triage, tracking, reports — no oversight.',
+    description: 'Triage, task tracking, and reports — runs every day without oversight.',
     status: 'PREVIEW',
-    metric: 'PRO TIER',
+    metric: 'CUSTOMIZATION',
     viz: 'rings',
   },
   {
@@ -211,9 +223,9 @@ const tiles = [
     number: '06',
     label: 'EMAIL MARKETING',
     title: 'Campaigns that learn.',
-    description: 'Builds, schedules, optimizes across regions.',
+    description: 'Campaigns built, scheduled, and optimized across regions from one system.',
     status: 'PREVIEW',
-    metric: 'PRO TIER',
+    metric: 'CUSTOMIZATION',
     viz: 'spark',
   },
   {
@@ -221,29 +233,19 @@ const tiles = [
     number: '07',
     label: 'AI RESEARCH',
     title: 'Weeks of insight in hours.',
-    description: 'Deep consumer and market analysis on demand.',
+    description: 'Consumer insights, competitive analysis, and market validation — in hours.',
     status: 'LIVE',
     metric: 'BRAND READY',
     viz: 'countdown',
-  },
-  {
-    id: 'financial-tax',
-    number: '08',
-    label: 'FINANCIAL & TAX',
-    title: 'Books reconciled nightly.',
-    description: 'Transactions sorted, flagged, report-ready.',
-    status: 'PREVIEW',
-    metric: 'PRO TIER',
-    viz: 'stats',
   },
   {
     id: 'compliance',
     number: '09',
     label: 'COMPLIANCE MONITORING',
     title: 'Nothing critical gets missed.',
-    description: 'Deadlines, filings, rules — watched continuously.',
+    description: 'Deadlines, filings, and rules — monitored daily so nothing slips through.',
     status: 'PREVIEW',
-    metric: 'PRO TIER',
+    metric: 'CUSTOMIZATION',
     viz: 'deadlines',
   },
   {
@@ -251,7 +253,7 @@ const tiles = [
     number: '10',
     label: 'DISTRIBUTION & INSIGHT',
     title: 'One loop for everything.',
-    description: 'Publishing, SEO, rankings — unified.',
+    description: 'Publishing, SEO fixes, and rankings — unified into one continuous system.',
     status: 'LIVE',
     metric: 'BRAND READY',
     viz: 'table',
@@ -261,9 +263,9 @@ const tiles = [
     number: '11',
     label: 'RAPID PRODUCT DEV',
     title: 'Concept to launch, fast.',
-    description: 'Tools and integrations shipped on demand.',
+    description: 'Tools and integrations scoped, built, and shipped from a single request.',
     status: 'PREVIEW',
-    metric: 'PRO TIER',
+    metric: 'CUSTOMIZATION',
     viz: 'pipeline',
   },
   {
@@ -271,9 +273,9 @@ const tiles = [
     number: '12',
     label: 'SELF-IMPROVING',
     title: 'Every run smarter.',
-    description: 'Workflows refine themselves from feedback.',
+    description: 'Tracks outcomes and refines execution rules automatically from feedback.',
     status: 'PREVIEW',
-    metric: 'PRO TIER',
+    metric: 'CUSTOMIZATION',
     viz: 'delta',
   },
   {
@@ -281,7 +283,7 @@ const tiles = [
     number: '13',
     label: 'REDDIT & COMMUNITY',
     title: 'Conversations to be in.',
-    description: 'Finds threads, drafts replies for review.',
+    description: 'Finds relevant threads and drafts contextual replies — queued for review.',
     status: 'LIVE',
     metric: 'BRAND READY',
     viz: 'threads',
@@ -291,9 +293,9 @@ const tiles = [
     number: '14',
     label: 'SEO CONTENT',
     title: 'Keywords to capture.',
-    description: 'Opportunities surfaced, drafts ready.',
+    description: 'Surfaces content gaps and delivers drafts aligned to your keyword targets.',
     status: 'PREVIEW',
-    metric: 'PRO TIER',
+    metric: 'CUSTOMIZATION',
     viz: 'keywords',
   },
   // ── Reserved add-on cards (mirror commented add-ons in StackedSlidesSection.jsx) ──
@@ -302,9 +304,9 @@ const tiles = [
     number: '15',
     label: 'MULTI-AGENT PIPELINE',
     title: 'Scout, Scribe, Guardian, Reporter.',
-    description: 'Four-stage agent architecture running daily on raw market signals.',
+    description: 'Four-agent pipeline running daily — Scout, Scribe, Guardian, and Reporter.',
     status: 'PREVIEW',
-    metric: 'PRO TIER',
+    metric: 'CUSTOMIZATION',
     viz: 'segbars',
   },
   {
@@ -314,7 +316,7 @@ const tiles = [
     title: 'Live multi-source intelligence.',
     description: 'X, Instagram, Reddit, reviews, and weather — normalized and synthesized.',
     status: 'PREVIEW',
-    metric: 'PRO TIER',
+    metric: 'CUSTOMIZATION',
     viz: 'spark',
   },
   {
@@ -322,9 +324,9 @@ const tiles = [
     number: '17',
     label: 'PLATFORM CONTENT GEN',
     title: 'Platform-native drafts.',
-    description: 'Instagram, X, Facebook, Discord — formatted and voiced per channel.',
+    description: 'Instagram, X, Facebook, Discord — formatted and voiced for each channel.',
     status: 'PREVIEW',
-    metric: 'PRO TIER',
+    metric: 'CUSTOMIZATION',
     viz: 'threads',
   },
   {
@@ -334,7 +336,7 @@ const tiles = [
     title: 'Four-check quality gate.',
     description: 'Restricted terms, competitor mentions, factual accuracy, voice scoring.',
     status: 'PREVIEW',
-    metric: 'PRO TIER',
+    metric: 'CUSTOMIZATION',
     viz: 'deadlines',
   },
   {
@@ -342,9 +344,9 @@ const tiles = [
     number: '19',
     label: 'FOUNDER DAILY BRIEF',
     title: 'One brief, every morning.',
-    description: 'Priority action, signals, drafts, QA — delivered on schedule.',
+    description: 'Priority action, signals, and QA-approved drafts — delivered on schedule.',
     status: 'PREVIEW',
-    metric: 'PRO TIER',
+    metric: 'CUSTOMIZATION',
     viz: 'meetings',
   },
   {
@@ -352,9 +354,9 @@ const tiles = [
     number: '20',
     label: 'ADMIN & BRIEF HISTORY',
     title: 'Every run, on the record.',
-    description: 'Real-time dashboard with full archive of past briefs and metrics.',
+    description: 'Real-time dashboard and complete archive of every brief and run on record.',
     status: 'PREVIEW',
-    metric: 'PRO TIER',
+    metric: 'CUSTOMIZATION',
     viz: 'table',
   },
   {
@@ -362,9 +364,9 @@ const tiles = [
     number: '21',
     label: 'IMAGE GENERATION',
     title: 'Post images on autopilot.',
-    description: 'Canvas-based generator with logo controls and live preview.',
+    description: 'Canvas generator with logo placement, text controls, and a live preview.',
     status: 'PREVIEW',
-    metric: 'PRO TIER',
+    metric: 'CUSTOMIZATION',
     viz: 'rings',
   },
   {
@@ -374,7 +376,7 @@ const tiles = [
     title: 'Four files, new vertical.',
     description: 'Swap JSON knowledge files to onboard a brand — no code changes.',
     status: 'PREVIEW',
-    metric: 'PRO TIER',
+    metric: 'CUSTOMIZATION',
     viz: 'memory',
   },
 ];
@@ -1011,6 +1013,8 @@ const DashboardPage = () => {
   const [theme, setTheme] = useState('light');
   const [countdownHours, setCountdownHours] = useState(14);
   const [showTierModal, setShowTierModal] = useState(false);
+  const [activeTileModal, setActiveTileModal] = useState(null);
+  const [activeCapabilityFilter, setActiveCapabilityFilter] = useState(null);
   const [bootstrap, setBootstrap] = useState({ userProfile: null, client: null, dashboardState: null, recentRuns: [], intelligence: null });
   const [bootstrapLoading, setBootstrapLoading] = useState(true);
   const [bootstrapError, setBootstrapError] = useState('');
@@ -1067,6 +1071,23 @@ const DashboardPage = () => {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [showTierModal]);
+
+  useEffect(() => {
+    if (!activeTileModal) return;
+    trackTileOpened(activeTileModal.cardId || activeTileModal.number, activeTileModal.label || activeTileModal.title);
+  }, [activeTileModal]);
+
+  useEffect(() => {
+    if (!activeTileModal) return undefined;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleKeyDown = (e) => { if (e.key === 'Escape') setActiveTileModal(null); };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = prev;
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activeTileModal]);
 
   // Bootstrap fetch (stable reference)
   const doBootstrap = useCallback(() => {
@@ -1170,6 +1191,22 @@ const DashboardPage = () => {
   }, [sgDisplayData]);
 
   // GSAP: style-guide layout quadrant — desktop → mobile viewport animation
+  // Pin the capability nav col while the capability section scrolls
+  useEffect(() => {
+    const nav = document.getElementById('capability-nav-col');
+    const section = document.getElementById('capability-section-shell');
+    if (!nav || !section) return undefined;
+    const st = ScrollTrigger.create({
+      trigger: nav,
+      start: 'top top+=72',
+      endTrigger: section,
+      end: 'bottom bottom',
+      pin: true,
+      pinSpacing: false,
+    });
+    return () => st.kill();
+  }, []);
+
   // Animates the frame width so flex-wrap causes columns to actually reflow:
   // at desktop width (100%) all columns fit in one row side-by-side;
   // at mobile width (~36%) they wrap to stacked, overflow:hidden clips to show 1 col.
@@ -1359,6 +1396,8 @@ const DashboardPage = () => {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Request failed.');
+      if (isFirstRun) trackDashboardCreated(reseedUrl.trim());
+      else trackPipelineRerun(reseedUrl.trim());
       setReseedSuccess(true);
       doBootstrap();
     } catch (err) {
@@ -1380,6 +1419,7 @@ const DashboardPage = () => {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Cancel failed.');
+      trackPipelineCancelled();
       setReseedSuccess(false);
       doBootstrap();
     } catch (err) {
@@ -1401,6 +1441,7 @@ const DashboardPage = () => {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Re-run failed.');
+      trackSeoRerun('pagespeed-insights');
       // Rerun route is now synchronous — by the time we get here, PSI + narrator
       // have completed and the Firestore record has facts.narrative. One bootstrap
       // refresh is all that's needed to show the full dashboard.
@@ -1685,19 +1726,43 @@ const DashboardPage = () => {
   })();
   const intakeCapabilityCards = [
     {
+      id: 'brief',
+      category: 'design',
+      number: 'BR',
+      label: 'BRIEF',
+      title: 'Brief',
+      description: brandOverview?.headline
+        ? brandOverview.headline
+        : 'A synthesized creative brief built from intake signals — brand positioning, audience frame, voice, and the one move most worth making right now.',
+      placeholderLabel: 'BRAND BRIEF',
+      rows: hasIntakeData
+        ? [
+            { key: 'industry',   label: 'Industry',  value: resolvedIndustry || 'Pending' },
+            { key: 'model',      label: 'Model',     value: resolvedBusinessModel || 'Pending' },
+            { key: 'tone',       label: 'Tone',      value: brandTone?.primary || 'Pending' },
+            { key: 'priority',   label: 'Priority',  value: resolvedPrioritySignal || 'Pending' },
+            { key: 'channels',   label: 'Channels',  value: strategy?.postStrategy?.formats?.join(' · ') || 'Pending' },
+          ]
+        : buildWorkNeededRows('Intake has not produced enough signal to generate a reliable brief.'),
+      footerLeft: hasIntakeData ? 'Live' : WORK_NEEDED_LABEL,
+      footerRight: 'REVIEWED',
+    },
+    {
       id: 'intake-terminal',
+      category: 'systems',
       number: '08',
       label: 'INTAKE TERMINAL',
       title: 'Intake Terminal',
-      description: activeTerminalLines[0]?.text || 'No recent intake runs.',
+      description: 'Tracks every scraped page, extracted signal, and normalization decision across the full intake lifecycle — so you can see exactly what the pipeline consumed and produced.',
       placeholderLabel: seoRerunLoading ? 'SEO AUDIT' : intakeTerminalStatus.toUpperCase(),
       rows: activeTerminalLines.slice(0, 6).map((line, index) => ({
         key: `terminal-${index}`,
         label: line.tag || `STEP ${index + 1}`,
         value: line.text,
       })),
+      context: 'Tracks every scraped page, extracted signal, and normalization decision across the full intake lifecycle — so you can see exactly what the pipeline consumed and produced.',
       footerLeft: intakeTerminalStatus.toUpperCase(),
-      footerRight: latestRunStatus === 'succeeded' ? 'Latest Run' : 'Run Status',
+      footerRight: 'REVIEWED',
     },
     (() => {
       const hasSiteMeta = siteMeta && typeof siteMeta === 'object' && Object.values(siteMeta).some((v) => v);
@@ -1719,14 +1784,13 @@ const DashboardPage = () => {
 
       return {
         id: 'brand-tone',
+      category: 'design',
         number: 'BT',
         label: hasSiteMeta ? 'SITE META' : 'BRAND TONE',
         title: hasSiteMeta ? 'Site Meta' : 'Brand Tone',
         description: hasSiteMeta
-          ? (siteMeta.description || siteMeta.title || 'Open Graph, Twitter Card, and favicon metadata pulled from the homepage.')
-          : (hasBrandToneData
-              ? brandTone?.writingStyle || 'Voice system, tone markers, and writing rules pulled from intake.'
-              : buildUnavailableDescription('brand tone')),
+          ? 'Open Graph metadata, Twitter Card tags, favicon, and canonical URL parsed directly from your live homepage — the first layer of your public brand surface.'
+          : 'Voice system and tone markers extracted from intake copy — defines how your brand writes, what it avoids, and the personality it projects across every channel.',
         placeholderLabel: hasSiteMeta ? 'NO OG IMAGE PROVIDED' : 'VOICE PREVIEW',
         rows: hasSiteMeta
           ? siteMetaRows
@@ -1737,18 +1801,20 @@ const DashboardPage = () => {
                 { key: 'tags', label: 'Tags', value: brandTone?.tags?.slice(0, 3).join(' · ') || 'Pending' },
               ]
             : buildWorkNeededRows('Not enough long-form copy or repeated messaging was fetched to infer voice confidently.'),
+        context: hasSiteMeta
+          ? 'Open Graph metadata, Twitter Card tags, favicon, and canonical URL parsed directly from your live homepage — the first layer of your public brand surface.'
+          : 'Voice system and tone markers extracted from intake copy — defines how your brand writes, what it avoids, and the personality it projects across every channel.',
         footerLeft: hasSiteMeta ? 'Live' : (hasBrandToneData ? 'Live' : WORK_NEEDED_LABEL),
-        footerRight: hasSiteMeta ? 'OG Meta' : (hasBrandToneData ? 'Intake Data' : 'Contact Human'),
+        footerRight: 'REVIEWED',
       };
     })(),
     {
       id: 'style-guide',
+      category: 'design',
       number: 'SG',
       label: 'STYLE GUIDE',
       title: 'Style Guide',
-      description: sgDisplayData.summary || (hasStyleGuideData
-        ? 'Visual direction, palette cues, and style notes pulled from intake.'
-        : buildUnavailableDescription('visual style guide')),
+      description: 'Typography, color palette, layout system, and motion signals extracted from your live site\'s CSS — normalized into a portable design reference used to keep all generated output on-brand.',
       placeholderLabel: 'STYLE SNAPSHOT',
       rows: [
         {
@@ -1804,67 +1870,70 @@ const DashboardPage = () => {
           ].filter(Boolean).join(' · ') || 'Pending',
         },
       ],
+      context: 'Typography, color palette, layout system, and motion signals extracted from your live site\'s CSS — normalized into a portable design reference used to keep all generated output on-brand.',
       footerLeft: hasStyleGuideData ? 'Live' : WORK_NEEDED_LABEL,
-      footerRight: hasStyleGuideData ? 'Guide Ready' : 'Contact Human',
+      footerRight: 'REVIEWED',
     },
     {
       id: 'seo-performance',
+      category: 'systems',
       number: 'SP',
       label: 'SEO + PERF',
       title: 'SEO + Performance',
-      description: psiNarrative || seoAuditDescription,
+      description: 'Core Web Vitals, Lighthouse scores, and meta-tag coverage pulled directly from PageSpeed Insights — shows where your site loses rankings, load performance, and mobile experience points.',
       placeholderLabel: 'SITE AUDIT',
       rows: seoAuditRows,
       footerLeft: isSeoPartial ? 'Partial' : hasSeoAuditData ? 'Live' : isSeoQueued ? 'Queued' : isSeoError ? 'Error' : WORK_NEEDED_LABEL,
       domId: 'intake-card-seo-performance',
-      footerRight: 'PSI · Mobile',
+      footerRight: 'REVIEWED',
+      context: 'Core Web Vitals, Lighthouse scores, and meta-tag coverage pulled directly from PageSpeed Insights — shows where your site loses rankings, load performance, and mobile experience points.',
       footerAction: (hasSeoAuditData || isSeoError) && hasWebsiteUrl
         ? { label: isSeoError ? 'Retry' : 'Re-run', onClick: handleSeoRerun, loading: seoRerunLoading }
         : null,
     },
     {
       id: 'industry',
+      category: 'content',
       number: 'IN',
       label: 'INDUSTRY',
       title: 'Industry',
-      description: hasIndustryData
-        ? resolvedIndustry
-        : buildUnavailableDescription('industry'),
+      description: 'Market vertical and service category normalized from intake signals — used to calibrate tone, benchmark competitors, and align content to the right audience frame.',
       placeholderLabel: 'MARKET CATEGORY',
+      context: 'Market vertical and service category normalized from intake signals — used to calibrate tone, benchmark competitors, and align content to the right audience frame.',
       rows: hasIndustryData
         ? [
             { key: 'sector', label: 'Sector', value: resolvedIndustry },
           ]
         : buildWorkNeededRows('Fetched pages did not clearly identify the market category or service vertical.'),
       footerLeft: hasIndustryData ? 'Live' : WORK_NEEDED_LABEL,
-      footerRight: hasIndustryData ? 'Positioning Context' : 'Contact Human',
+      footerRight: 'REVIEWED',
     },
     {
       id: 'business-model',
+      category: 'content',
       number: 'BM',
       label: 'MODEL',
       title: 'Business Model',
-      description: hasBusinessModelData
-        ? resolvedBusinessModel
-        : buildUnavailableDescription('business model'),
+      description: 'Revenue structure and commercial setup extracted from pricing pages, service tiers, and product copy — defines how the business captures value and what offers exist to promote.',
       placeholderLabel: 'REVENUE MODEL',
+      context: 'Revenue structure and commercial setup extracted from pricing pages, service tiers, and product copy — defines how the business captures value and what offers exist to promote.',
       rows: hasBusinessModelData
         ? [
             { key: 'model', label: 'Structure', value: resolvedBusinessModel },
           ]
         : buildWorkNeededRows('No pricing, packaging, or service structure was clear in fetched pages.'),
       footerLeft: hasBusinessModelData ? 'Live' : WORK_NEEDED_LABEL,
-      footerRight: hasBusinessModelData ? 'Commercial Setup' : 'Contact Human',
+      footerRight: 'REVIEWED',
     },
     {
       id: 'priority-signal',
+      category: 'content',
       number: 'PS',
       label: 'PRIORITY SIGNAL',
       title: 'Priority Signal',
-      description: hasPrioritySignalData
-        ? resolvedPrioritySignal
-        : buildUnavailableDescription('priority signal'),
+      description: 'The highest-confidence marketing move available right now — derived by crossing brand readiness, content gaps, and channel fit to surface the one thing most worth shipping first.',
       placeholderLabel: 'SIGNAL BRIEF',
+      context: 'The highest-confidence marketing move available right now — derived by crossing brand readiness, content gaps, and channel fit to surface the one thing most worth shipping first.',
       rows: hasPrioritySignalData
         ? [
             { key: 'focus', label: 'Focus', value: resolvedPrioritySignal },
@@ -1872,34 +1941,34 @@ const DashboardPage = () => {
           ]
         : buildWorkNeededRows('The crawl did not surface enough validated positioning or urgency signals.'),
       footerLeft: hasPrioritySignalData ? 'Live' : WORK_NEEDED_LABEL,
-      footerRight: hasPrioritySignalData ? 'Campaign Direction' : 'Contact Human',
+      footerRight: 'REVIEWED',
     },
     {
       id: 'draft-post',
+      category: 'content',
       number: 'DP',
       label: 'DRAFT POST',
       title: 'Draft Post',
-      description: hasDraftPostData
-        ? resolvedDraftPost
-        : buildUnavailableDescription('draft post'),
+      description: 'A publish-ready social draft built from your brand voice, audience frame, and priority signal — structured to the approved format and ready for a final edit before it goes live.',
       placeholderLabel: 'POST DRAFT',
+      context: 'A publish-ready social draft built from your brand voice, audience frame, and priority signal — structured to the approved format and ready for a final edit before it goes live.',
       rows: hasDraftPostData
         ? [
             { key: 'post', label: 'Draft', value: resolvedDraftPost },
           ]
         : buildWorkNeededRows('There is not enough trustworthy brand voice and offer clarity to draft credibly.'),
       footerLeft: hasDraftPostData ? 'Live' : WORK_NEEDED_LABEL,
-      footerRight: hasDraftPostData ? 'Ready To Edit' : 'Contact Human',
+      footerRight: 'REVIEWED',
     },
     {
       id: 'content-angle',
+      category: 'content',
       number: 'CA',
       label: 'CONTENT ANGLE',
       title: 'Content Angle',
-      description: hasContentAngleData
-        ? resolvedContentAngle
-        : buildUnavailableDescription('content angle'),
+      description: 'The specific editorial lens, audience pain point, and positioning frame selected for the next content push — locks the POV so every asset in this cycle is pulling in the same direction.',
       placeholderLabel: 'ANGLE LOCKED',
+      context: 'The specific editorial lens, audience pain point, and positioning frame selected for the next content push — locks the POV so every asset in this cycle is pulling in the same direction.',
       rows: hasContentAngleData
         ? [
             { key: 'angle', label: 'Angle', value: resolvedContentAngle },
@@ -1907,16 +1976,16 @@ const DashboardPage = () => {
           ]
         : buildWorkNeededRows('Audience/problem framing is too thin to establish a reliable angle.'),
       footerLeft: hasContentAngleData ? 'Live' : WORK_NEEDED_LABEL,
-      footerRight: hasContentAngleData ? 'Publishing Cue' : 'Contact Human',
+      footerRight: 'REVIEWED',
     },
     {
       id: 'content-opportunities',
+      category: 'content',
       number: 'CO',
       label: 'CONTENT OPPORTUNITIES',
       title: 'Content Opportunities',
-      description: hasOpportunitiesData
-        ? 'High-priority growth opportunities surfaced from intake and strategy normalization.'
-        : buildUnavailableDescription('content opportunities'),
+      description: 'Ranked list of content and channel moves with the highest signal-to-noise ratio — each opportunity is scored by priority, matched to a format, and tied to a concrete why-now rationale.',
+      context: 'Ranked list of content and channel moves with the highest signal-to-noise ratio — each opportunity is scored by priority, matched to a format, and tied to a concrete why-now rationale.',
       placeholderLabel: 'OPPORTUNITY MAP',
       rows: hasOpportunitiesData
         ? resolvedOpportunities.map((op, index) => ({
@@ -1926,7 +1995,43 @@ const DashboardPage = () => {
           }))
         : buildWorkNeededRows('The current intake did not surface enough concrete evidence to suggest high-confidence opportunities.'),
       footerLeft: hasOpportunitiesData ? 'Live' : WORK_NEEDED_LABEL,
-      footerRight: hasOpportunitiesData ? `${resolvedOpportunities.length} Active` : 'Contact Human',
+      footerRight: 'REVIEWED',
+    },
+    {
+      id: 'competitor-info',
+      category: 'systems',
+      number: 'CI',
+      label: 'COMPETITOR INFO',
+      title: 'Competitor Info',
+      description: 'Competitive landscape pulled from live sources — shows how your positioning, messaging, and offer stack up against direct and indirect competitors in your space.',
+      placeholderLabel: 'COMPETITOR MAP',
+      rows: buildWorkNeededRows('Competitor mapping requires a completed intake run with validated industry and positioning signals.'),
+      footerLeft: WORK_NEEDED_LABEL,
+      footerRight: 'REVIEWED',
+    },
+    {
+      id: 'signals',
+      category: 'systems',
+      number: 'SG',
+      label: 'SIGNALS',
+      title: 'Signals',
+      description: 'Live signal feed from geographic events, trending topics, and social conversations relevant to your brand — surfaces what is happening in your market right now.',
+      placeholderLabel: 'SIGNAL FEED',
+      rows: buildWorkNeededRows('Signal collection requires an active intake run with geo, category, and audience parameters set.'),
+      footerLeft: WORK_NEEDED_LABEL,
+      footerRight: 'REVIEWED',
+    },
+    {
+      id: 'marketing',
+      category: 'content',
+      number: 'MK',
+      label: 'MARKETING',
+      title: 'Marketing',
+      description: 'Strategy recommendations generated from live signals — cross-referenced with your brand positioning and audience frame to produce prioritized marketing moves.',
+      placeholderLabel: 'STRATEGY OUTPUT',
+      rows: buildWorkNeededRows('Marketing strategy requires signals, brand tone, and priority signal data from a completed intake run.'),
+      footerLeft: WORK_NEEDED_LABEL,
+      footerRight: 'REVIEWED',
     },
   ];
 
@@ -1944,7 +2049,7 @@ const DashboardPage = () => {
             <Link href="/" id="founders-linkedin">
               Homepage
             </Link>
-            <button type="button" id="founders-login-link" onClick={signOutUser}>
+            <button type="button" id="founders-login-link" onClick={() => { trackSignOut(); signOutUser(); }}>
               Logout
             </button>
             <a
@@ -1959,8 +2064,8 @@ const DashboardPage = () => {
           </div>
           <div id="founders-hidden-controls" aria-hidden="true">
             <div id="theme-toggle" role="group" aria-label="Theme">
-              <button type="button" data-theme="dark" className={theme === 'dark' ? 'is-active' : ''} onClick={() => setTheme('dark')}>DARK</button>
-              <button type="button" data-theme="light" className={theme === 'light' ? 'is-active' : ''} onClick={() => setTheme('light')}>LIGHT</button>
+              <button type="button" data-theme="dark" className={theme === 'dark' ? 'is-active' : ''} onClick={() => { setTheme('dark'); trackThemeChanged('dark'); }}>DARK</button>
+              <button type="button" data-theme="light" className={theme === 'light' ? 'is-active' : ''} onClick={() => { setTheme('light'); trackThemeChanged('light'); }}>LIGHT</button>
             </div>
             <button type="button" id="founders-signout" onClick={signOutUser}>Sign Out</button>
           </div>
@@ -2003,7 +2108,7 @@ const DashboardPage = () => {
               <button
                 id="tier-trigger-btn"
                 type="button"
-                onClick={() => setShowTierModal(true)}
+                onClick={() => { setShowTierModal(true); trackTierModalOpened(); }}
               >
                 Onboarded
               </button>
@@ -2078,17 +2183,27 @@ const DashboardPage = () => {
             </div>
           ) : null}
 
-          {/* ── Capability grid ── */}
+          {/* ── Capability section shell ── */}
+          <div id="capability-section-shell">
+
+          {/* Left — grid */}
+          <div id="capability-grid-col">
           <div id="capability-grid">
-            {intakeCapabilityCards.map((card) => (
+            {intakeCapabilityCards.filter((card) => !activeCapabilityFilter || activeCapabilityFilter === card.category).map((card) => (
               <article
                 className={`tile tile-intake-card${hasIntakeData ? ' tile-ready' : ''}${card.wide ? ' tile-intake-card--wide' : ''}`}
                 id={card.domId || `tile-${card.id}`}
                 key={card.id}
+                onClick={() => setActiveTileModal({ title: card.title, description: card.description, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null })}
               >
                 <div className="tile-number">
-                  <span>{card.number} / {card.label}</span>
-                  <span className="power-dot lamp" />
+                  <span>{card.label}</span>
+                  <button
+                    type="button"
+                    className="tile-open-modal-btn"
+                    onClick={(e) => { e.stopPropagation(); setActiveTileModal({ title: card.title, description: card.description, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null }); }}
+                    aria-label="Open details"
+                  >[ ↑ ]</button>
                 </div>
                 <div className={`tile-intake-placeholder tile-intake-placeholder-${card.id}`}>
                   {card.id === 'style-guide' ? (
@@ -2380,33 +2495,12 @@ const DashboardPage = () => {
                 <div className="tile-intake-body">
                   <h3 className="tile-heading tile-intake-heading">{card.title}</h3>
                   <p className="tile-description tile-intake-description">{card.description}</p>
-                  <div className="tile-intake-table-wrap">
-                    <table className="tile-intake-table">
-                      <thead>
-                        <tr>
-                          <th>Field</th>
-                          <th>Value</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {card.rows.map((row) => (
-                          row.isHeader ? (
-                            <tr key={`${card.id}-${row.key}`} className="tr--section-header" id={row.id || undefined}>
-                              <td colSpan={2}>{row.label}</td>
-                            </tr>
-                          ) : (
-                            <tr key={`${card.id}-${row.key}`} className={row.isFailing ? 'tr--flag' : undefined}>
-                              <td>{row.label}</td>
-                              <td>{row.value}</td>
-                            </tr>
-                          )
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
                 </div>
                 <div className="tile-foot">
-                  <span className="status-live">{card.footerLeft}</span>
+                  <span className="tile-foot-status">
+                    <span className={`power-dot lamp${card.footerLeft !== 'Live' ? ' power-dot-needs-work' : ''}`} />
+                    {card.footerRight}
+                  </span>
                   <span className="tile-foot-right-group">
                     {card.footerAction ? (
                       <button
@@ -2419,21 +2513,37 @@ const DashboardPage = () => {
                         {card.footerAction.loading ? '…' : card.footerAction.label}
                       </button>
                     ) : null}
-                    <span>{card.footerRight}</span>
+                    {card.id === 'brief' && (
+                      <button
+                        type="button"
+                        className="tile-download-btn"
+                        onClick={(e) => { e.stopPropagation(); }}
+                        aria-label="Download brief"
+                      >
+                        Download ↓
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="tile-view-details-btn"
+                      onClick={(e) => { e.stopPropagation(); setActiveTileModal({ title: card.title, description: card.description, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null }); }}
+                    >
+                      View Details ↗
+                    </button>
                   </span>
                 </div>
               </article>
             ))}
-            {tiles.map((tile) => {
+            {(!activeCapabilityFilter || activeCapabilityFilter === 'contact') && tiles.map((tile) => {
               const isFreeTier = FREE_TIER_TILE_IDS.has(tile.id);
               const isReady = isFreeTier && hasIntakeData;
               const tileStatus = isReady ? tile.status : isFreeTier ? 'INITIALIZING' : 'PREVIEW';
-              const tileMetric = isReady ? tile.metric : isFreeTier ? '—' : 'PRO TIER';
+              const tileMetric = isReady ? tile.metric : isFreeTier ? '—' : 'CUSTOMIZATION';
               const isBlocked = true;
               const upgradeTitle = UPGRADE_TILE_TITLES[tile.id] || tile.label;
               const resolvedDescription = UPGRADE_TILE_DESCRIPTIONS[tile.id] || tile.description;
               const tileRows = [
-                { key: 'tier',    label: 'Tier',    value: isFreeTier ? 'Free Tier' : 'Pro Tier' },
+                { key: 'tier',    label: 'Tier',    value: isFreeTier ? 'Free Tier' : 'Customization' },
                 { key: 'status',  label: 'Status',  value: tileStatus },
                 { key: 'metric',  label: 'Metric',  value: tileMetric },
                 { key: 'module',  label: 'Module',  value: tile.label || 'Not provided' },
@@ -2444,26 +2554,24 @@ const DashboardPage = () => {
                   className={`tile tile-intake-card${!isFreeTier ? ' tile-preview' : ''}${isReady ? ' tile-ready' : ''}${isBlocked ? ' tile-blocked' : ''}`}
                   id={`tile-${tile.number}-${tile.id}`}
                   key={tile.id}
+                  onClick={() => setActiveTileModal({ title: tile.title || upgradeTitle, description: resolvedDescription, rows: tileRows, cardId: null, placeholderLabel: null, number: tile.number, label: tile.label, isCapabilityCard: false, vizType: tile.viz })}
                 >
                   {isBlocked ? (
                     <div className="tile-blocked-overlay" aria-hidden="false">
                       <div className="tile-blocked-inner">
                         <h3 className="tile-heading tile-intake-heading tile-blocked-title">{upgradeTitle}</h3>
                         <p className="tile-description tile-intake-description tile-blocked-description">{resolvedDescription}</p>
-                        <button
-                          type="button"
-                          className="cta-pill-btn tile-blocked-upgrade-btn"
-                          id={`tile-${tile.id}-upgrade-btn`}
-                          onClick={() => setShowTierModal(true)}
-                        >
-                          Upgrade Tier
-                        </button>
                       </div>
                     </div>
                   ) : null}
                   <div className="tile-number">
-                    <span>{tile.number} / {tile.label}</span>
-                    <span className={`power-dot lamp${!isFreeTier ? ' power-dot-dim' : ''}`} />
+                    <span>{tile.label}</span>
+                    <button
+                      type="button"
+                      className="tile-open-modal-btn"
+                      onClick={(e) => { e.stopPropagation(); setActiveTileModal({ title: tile.title || upgradeTitle, description: resolvedDescription, rows: tileRows, cardId: null, placeholderLabel: null, number: tile.number, label: tile.label, isCapabilityCard: false, vizType: tile.viz }); }}
+                      aria-label="Open details"
+                    >[ ↑ ]</button>
                   </div>
                   <div className="tile-intake-placeholder tile-intake-placeholder-draft-post">
                     {renderViz(tile.viz, countdownHours)}
@@ -2471,33 +2579,50 @@ const DashboardPage = () => {
                   <div className="tile-intake-body">
                     <h3 className="tile-heading tile-intake-heading">{tile.title}</h3>
                     <p className="tile-description tile-intake-description">{resolvedDescription}</p>
-                    <div className="tile-intake-table-wrap">
-                      <table className="tile-intake-table">
-                        <thead>
-                          <tr>
-                            <th>Field</th>
-                            <th>Value</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {tileRows.map((row) => (
-                            <tr key={`${tile.id}-${row.key}`}>
-                              <td>{row.label}</td>
-                              <td>{row.value}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
                   </div>
                   <div className="tile-foot">
-                    <span className={`status-live${!isFreeTier ? ' status-preview' : ''}`}>{tileStatus}</span>
-                    <span>{tileMetric}</span>
+                    <span className="tile-foot-status">
+                      <span className={`power-dot lamp${!isFreeTier ? ' power-dot-dim' : ''}`} />
+                      {tileMetric}
+                    </span>
+                    <span className="tile-foot-right-group">
+                      <button
+                        type="button"
+                        className="tile-view-details-btn"
+                        onClick={(e) => { e.stopPropagation(); setActiveTileModal({ title: tile.title || upgradeTitle, description: resolvedDescription, rows: tileRows, cardId: null, placeholderLabel: null, number: tile.number, label: tile.label, isCapabilityCard: false, vizType: tile.viz }); }}
+                      >
+                        Chat with Bryan ↗
+                      </button>
+                    </span>
                   </div>
                 </article>
               );
             })}
           </div>
+          </div>{/* end capability-grid-col */}
+
+          {/* Right — filter nav */}
+          <div id="capability-nav-col">
+            {[
+              { key: 'design',   label: 'Design',   sub: 'Visual & brand' },
+              { key: 'content',  label: 'Content',  sub: 'Copy & strategy' },
+              { key: 'systems',  label: 'Systems',  sub: 'Data & signals' },
+              { key: 'contact',  label: 'Contact',  sub: 'Chat with Bryan' },
+            ].map(({ key, label, sub }) => (
+              <button
+                key={key}
+                type="button"
+                id={`capability-nav-btn-${key}`}
+                className={`capability-nav-btn${activeCapabilityFilter === key ? ' capability-nav-btn--active' : ''}`}
+                onClick={() => setActiveCapabilityFilter(activeCapabilityFilter === key ? null : key)}
+              >
+                <span className="capability-nav-btn-label">{label}</span>
+                <span className="capability-nav-btn-sub">{sub}</span>
+              </button>
+            ))}
+          </div>
+
+          </div>{/* end capability-section-shell */}
         </section>
 
       </main>
@@ -2641,6 +2766,170 @@ const DashboardPage = () => {
             </div>
 
             <div id="tier-modal-footer">Placeholder pricing modal — content to be updated.</div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ── Tile detail modal ── */}
+      {activeTileModal ? (
+        <div
+          id="tile-detail-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Tile detail"
+          onClick={() => setActiveTileModal(null)}
+        >
+          <div
+            id="tile-detail-modal-card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* ── Header strip ── */}
+            <div id="tile-detail-modal-header" className="tile-detail-bento-cell">
+              <h2 id="tile-detail-modal-title">{activeTileModal.title}</h2>
+              <button
+                id="tile-detail-modal-close"
+                type="button"
+                onClick={() => setActiveTileModal(null)}
+                aria-label="Close"
+              >[ ✕ ]</button>
+            </div>
+
+            {/* ── Bento grid ── */}
+            <div id="tile-detail-bento-grid">
+
+              {/* Left — card visual */}
+              <div id="tile-detail-bento-image-cell" className="tile-detail-bento-cell">
+                <div className={`tile-intake-placeholder tile-intake-placeholder-${activeTileModal.cardId || 'draft-post'} tile-detail-bento-placeholder`}>
+                  {activeTileModal.cardId === 'style-guide' ? (
+                    <div className="sg-preview">
+                      {sgDisplayData?.confidence === 'low' ? (
+                        <div className="sg-empty">
+                          <span className="sg-empty-label">NO CSS EXTRACTED</span>
+                          <span className="sg-empty-msg">Site may be JS-rendered or stylesheet-free</span>
+                        </div>
+                      ) : (() => {
+                        const sgHead = sgDisplayData.typography?.headingSystem;
+                        const sgBody = sgDisplayData.typography?.bodySystem;
+                        const headName = sgHead?.fontFamily?.split(',')[0].replace(/["']/g, '').trim() || 'Heading';
+                        const LEVELS = ['none', 'minimal', 'moderate', 'heavy'];
+                        const levelIdx = LEVELS.indexOf(sgDisplayData.motion?.level || 'minimal');
+                        const primaryEasing = sgDisplayData.motion?.easings?.[0] || 'ease-in-out';
+                        const animDur = sgDisplayData.motion?.durations?.[0] || '400ms';
+                        const p = sgDisplayData.motion?.scrollPatterns || [];
+                        const motionTech = p.some(s => /gsap/i.test(s)) ? 'GSAP' : p.some(s => /lenis/i.test(s)) ? 'Lenis' : p.length ? p[0].split(' ')[0] : 'CSS';
+                        const curvePath = _sgEasingPath(primaryEasing, 80, 80);
+                        const rtPath = _sgEasingPath(primaryEasing, 80, 80, true);
+                        const easingSpline = _sgEasingSpline(primaryEasing);
+                        const easingLabel = _sgGsapName(primaryEasing, motionTech === 'GSAP');
+                        const gridType = sgDisplayData.layout?.grid || '12-column';
+                        const cWidth = sgDisplayData.layout?.contentWidth || 'contained';
+                        const framing = sgDisplayData.layout?.framing || 'open';
+                        const bradius = sgDisplayData.layout?.borderRadius || '2px';
+                        const maxWidth = sgDisplayData.layout?.maxWidth;
+                        const COL_MAP = { '12-column': 3, 'auto-fit': 4, 'masonry': 3, 'minimal': 2, 'none': 1, 'custom': 2 };
+                        const colCount = COL_MAP[gridType] ?? 3;
+                        const isFullBleed = cWidth === 'full-bleed';
+                        const isCard = framing === 'card-based' || framing === 'boxed';
+                        const isMasonry = gridType === 'masonry';
+                        const MASONRY_H = ['30px', '20px', '36px', '24px'];
+                        const gridLabel = [gridType.replace('-column', ''), maxWidth && maxWidth !== 'none' ? maxWidth : null].filter(Boolean).join(' · ');
+                        return (
+                          <>
+                            {isStyleGuideMock && <span className="sg-demo-watermark">DEMO</span>}
+                            <div className="sg-quad sg-q-type">
+                              <p className="sg-h1" style={{ fontFamily: sgHead?.fontFamily || 'serif' }}>{headName}</p>
+                              <p className="sg-p" style={{ fontFamily: sgBody?.fontFamily || 'sans-serif' }}>The quick brown fox jumps over the lazy dog and the paragraph text continues here.</p>
+                            </div>
+                            <div className="sg-quad sg-q-color">
+                              {[sgDisplayData.colors?.primary, sgDisplayData.colors?.secondary, sgDisplayData.colors?.tertiary, sgDisplayData.colors?.neutral].filter(Boolean).map((color, ci) => (
+                                <div key={ci} className="sg-swatch" style={{ background: color.hex }} title={color.role} />
+                              ))}
+                            </div>
+                            <div className="sg-quad sg-q-layout">
+                              <>
+                                <div id="sg-rg-demo-modal" className={`sg-rg${isFullBleed ? ' sg-rg--fullbleed' : ''}`}>
+                                  <div className="sg-rg-nav" />
+                                  <div className="sg-rg-cols" style={{ '--sg-col-min-w': colCount <= 1 ? '0px' : '30px' }}>
+                                    {Array.from({ length: colCount }, (_, i) => (
+                                      <div key={i} className={`sg-rg-col${isCard ? ' sg-rg-col--card' : ''}`} style={{ borderRadius: bradius, ...(isMasonry ? { height: MASONRY_H[i] ?? '28px', flex: 'none', width: `${Math.round(100 / colCount)}%` } : {}) }} />
+                                    ))}
+                                  </div>
+                                </div>
+                                <span className="sg-grid-label">{gridLabel}</span>
+                              </>
+                            </div>
+                            <div className="sg-quad sg-q-motion">
+                              <>
+                                <svg className="sg-ease-svg" viewBox="-3 -3 86 86" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <line x1="0" y1="0" x2="0" y2="80" stroke="rgba(42,36,32,0.14)" strokeWidth="0.75"/>
+                                  <line x1="0" y1="80" x2="80" y2="80" stroke="rgba(42,36,32,0.14)" strokeWidth="0.75"/>
+                                  <line x1="0" y1="80" x2="80" y2="0" stroke="rgba(42,36,32,0.1)" strokeWidth="0.75" strokeDasharray="3 3"/>
+                                  <path d={curvePath} stroke="rgba(42,36,32,0.82)" strokeWidth="2" strokeLinecap="round"/>
+                                  <path id="sg-ease-rt-path-modal" d={rtPath} stroke="none" fill="none"/>
+                                  <circle r="3.5" fill="rgba(42,36,32,0.8)">
+                                    <animateMotion dur="3s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.5;1" keySplines={`${easingSpline};${easingSpline}`}>
+                                      <mpath xlinkHref="#sg-ease-rt-path-modal"/>
+                                    </animateMotion>
+                                  </circle>
+                                  <circle cx="0" cy="80" r="2.5" fill="rgba(42,36,32,0.3)"/>
+                                  <circle cx="80" cy="0" r="2.5" fill="rgba(42,36,32,0.3)"/>
+                                </svg>
+                                <div className="sg-motion-meta">
+                                  <span className="sg-motion-easing">{easingLabel}</span>
+                                  <span className="sg-motion-sep">·</span>
+                                  <span className="sg-motion-dur">{animDur}</span>
+                                </div>
+                              </>
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  ) : activeTileModal.cardId === 'intake-terminal' && intakeMockupSrc ? (
+                    <img className="tile-intake-mockup-image" src={intakeMockupSrc} alt="Generated multi-device website mockup" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : activeTileModal.cardId === 'brand-tone' && siteMeta?.ogImage ? (
+                    <div id="bt-preview-shell">
+                      <img id="bt-og-image" src={siteMeta.ogImage} alt={siteMeta.ogImageAlt || ''} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                      {siteMeta.favicon && <img id="bt-favicon" src={siteMeta.favicon} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
+                    </div>
+                  ) : activeTileModal.isCapabilityCard ? (
+                    <span>{activeTileModal.placeholderLabel}</span>
+                  ) : (
+                    renderViz(activeTileModal.vizType, countdownHours)
+                  )}
+                </div>
+              </div>
+
+              {/* Right — content modules */}
+              <div id="tile-detail-bento-content">
+
+                {/* About module */}
+                <div id="tile-detail-bento-about" className="tile-detail-bento-cell">
+                  <span className="tile-detail-bento-label">ABOUT</span>
+                  <p id="tile-detail-bento-description">{activeTileModal.description}</p>
+                </div>
+
+                {/* Data module */}
+                <div id="tile-detail-bento-data" className="tile-detail-bento-cell">
+                  <span className="tile-detail-bento-label">DATA</span>
+                  <div id="tile-detail-bento-rows">
+                    {activeTileModal.rows.map((row) => (
+                      row.isHeader ? (
+                        <div key={row.key} className="tile-detail-row-section-head">
+                          {row.label}
+                        </div>
+                      ) : (
+                        <div key={row.key} className={`tile-detail-stat-row${row.isFailing ? ' tile-detail-stat-row--flag' : ''}`}>
+                          <span className="tile-detail-stat-label">{row.label}</span>
+                          <span className="tile-detail-stat-value">{row.value}</span>
+                        </div>
+                      )
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+            </div>
           </div>
         </div>
       ) : null}
@@ -3082,6 +3371,33 @@ const dashboardCss = `
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
+  .tile-number {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .tile-number-right-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .tile-open-modal-btn {
+    background: none;
+    border: 1px solid rgba(212, 196, 171, 0.5);
+    cursor: pointer;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    padding: 5px 10px;
+    border-radius: 4px;
+    line-height: 1;
+    transition: color 0.15s ease, border-color 0.15s ease;
+  }
+  .tile-open-modal-btn:hover {
+    color: var(--text-display);
+    border-color: var(--text-secondary);
+  }
   .hero-label {
     font-family: var(--font-display);
     font-size: 11px;
@@ -3158,6 +3474,7 @@ const dashboardCss = `
   }
   #founders-hero-caption .status-dot,
   .tile-number .power-dot,
+  .tile-foot .power-dot,
   .status-live::before {
     border-radius: 999px;
     background: var(--success);
@@ -3209,6 +3526,59 @@ const dashboardCss = `
   }
   .meta-value-wrap { font-size: 11px; max-width: 28ch; text-align: right; line-height: 1.4; white-space: normal; }
   #capability-section { padding: 80px 0 0; }
+  #capability-section-shell {
+    display: grid;
+    grid-template-columns: 1fr 268.336px;
+    gap: 12px;
+  }
+  #capability-grid-col {
+    min-width: 0;
+  }
+  #capability-nav-col {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .capability-nav-btn {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: #fff;
+    border: 1px solid rgba(212, 196, 171, 0.6);
+    border-radius: 1rem;
+    padding: 20px 22px;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    width: 100%;
+  }
+  .capability-nav-btn:hover {
+    background: #f5f1e3;
+    border-color: rgba(212, 196, 171, 1);
+  }
+  .capability-nav-btn--active {
+    background: #000 !important;
+    border-color: #000 !important;
+  }
+  .capability-nav-btn--active .capability-nav-btn-label,
+  .capability-nav-btn--active .capability-nav-btn-sub {
+    color: #fff !important;
+  }
+  .capability-nav-btn-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-display);
+    line-height: 1.2;
+  }
+  .capability-nav-btn-sub {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    line-height: 1.2;
+  }
   .db-alert {
     margin: 0 0 20px;
     padding: 14px 16px;
@@ -3221,7 +3591,8 @@ const dashboardCss = `
   .db-alert-muted { color: var(--text-secondary); }
   #capability-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: minmax(460px, auto);
     gap: 1px;
     background: var(--border);
     border: 1px solid var(--border);
@@ -3250,11 +3621,13 @@ const dashboardCss = `
   }
   .tile-intake-card {
     aspect-ratio: auto;
-    min-height: 0;
+    height: 100%;
     display: flex;
     flex-direction: column;
     gap: 12px;
     padding: 16px;
+    box-sizing: border-box;
+    overflow: hidden;
   }
   .tile-intake-card > .tile-number,
   .tile-intake-card > .tile-foot {
@@ -3395,9 +3768,9 @@ const dashboardCss = `
   }
   .tile-blocked-upgrade-btn {
     appearance: none;
-    border: 1px solid transparent;
-    background: rgba(255, 252, 248, 0.92);
-    color: #2a2420;
+    border: none;
+    background: linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+    color: #ffffff;
     font-family: "Space Mono", monospace;
     font-size: 10px;
     letter-spacing: 0.14em;
@@ -3405,14 +3778,13 @@ const dashboardCss = `
     padding: 10px 18px;
     border-radius: 999px;
     cursor: pointer;
-    box-shadow: 0 6px 18px rgba(42, 36, 32, 0.12);
-    transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1);
+    transition: transform 0.18s ease, opacity 0.18s ease, box-shadow 0.18s ease;
   }
   .tile-blocked-upgrade-btn:hover {
-    background: #faf7f2;
-    color: #2a2420;
+    opacity: 0.9;
     transform: translateY(-1px);
-    box-shadow: 0 10px 22px rgba(42, 36, 32, 0.16);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.25);
   }
   [data-dashboard-theme="dark"] .tile-blocked-overlay {
     background: rgba(22, 20, 18, 0.42);
@@ -3703,8 +4075,7 @@ const dashboardCss = `
     gap: 8px;
     min-width: 0;
     flex: 1;
-    min-height: 0;
-    overflow-y: auto;
+    position: relative;
   }
   .tile-intake-heading {
     grid-area: auto;
@@ -3719,8 +4090,7 @@ const dashboardCss = `
     margin-top: 2px;
     padding-top: 10px;
     border-top: 1px solid var(--border);
-    height: 180px;
-    overflow-y: auto;
+    overflow: hidden;
   }
   .tile-intake-table {
     width: 100%;
@@ -3762,21 +4132,308 @@ const dashboardCss = `
   .tile-intake-table tr:last-child td {
     border-bottom: none;
   }
+  /* ── Card compact tease ── */
+  .tile-intake-card {
+    cursor: pointer;
+  }
+  .tile-download-btn {
+    background: none;
+    border: 1px solid #000;
+    cursor: pointer;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #000;
+    padding: 5px 10px;
+    border-radius: 4px;
+    line-height: 1;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .tile-download-btn:hover {
+    background: #000;
+    color: #fff;
+  }
+  .tile-view-details-btn {
+    background: #000;
+    border: 1px solid #000;
+    cursor: pointer;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #fff;
+    padding: 5px 10px;
+    border-radius: 4px;
+    line-height: 1;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+  .tile-view-details-btn:hover {
+    background: #1a1a1a;
+    border-color: #1a1a1a;
+    color: #fff;
+  }
+  .tile-blocked-upgrade-btn::before {
+    display: none;
+  }
+  /* ── Tile detail modal — bento layout ── */
+  #tile-detail-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    z-index: 900;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  /* Layout shell — transparent, no surface, just sizes + spaces cells */
+  #tile-detail-modal-card {
+    width: 100%;
+    height: 100%;
+    max-width: 1280px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow: hidden;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+  }
+  /* Shared bento cell surface */
+  .tile-detail-bento-cell {
+    background: #fff;
+    border: 1px solid rgba(212, 196, 171, 0.6);
+    border-radius: 1rem;
+    box-sizing: border-box;
+  }
+  /* Header cell */
+  #tile-detail-modal-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 20px;
+    flex-shrink: 0;
+  }
+  #tile-detail-modal-eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  #tile-detail-modal-number {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--text-disabled);
+    text-transform: uppercase;
+  }
+  #tile-detail-modal-title {
+    font-family: var(--font-ui);
+    font-size: clamp(1rem, 1.6vw, 1.2rem);
+    font-weight: 700;
+    margin: 0;
+    color: var(--text-display);
+    line-height: 1.2;
+    flex: 1;
+    letter-spacing: -0.03em;
+  }
+  #tile-detail-modal-close {
+    background: none;
+    border: 1px solid rgba(212, 196, 171, 0.5);
+    cursor: pointer;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    padding: 5px 10px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    line-height: 1;
+    transition: color 0.15s ease, border-color 0.15s ease;
+  }
+  #tile-detail-modal-close:hover {
+    color: var(--text-display);
+    border-color: var(--text-secondary);
+  }
+  /* Bento grid — image left, right column, 12px gap */
+  #tile-detail-bento-grid {
+    display: grid;
+    grid-template-columns: 40% 1fr;
+    gap: 12px;
+    flex: 1;
+    min-height: 0;
+  }
+  /* Image cell — fills full left column height */
+  #tile-detail-bento-image-cell {
+    aspect-ratio: 1536 / 1024;
+    align-self: start;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .tile-detail-bento-placeholder {
+    aspect-ratio: unset !important;
+    border-radius: calc(1rem - 1px) !important;
+    border: none !important;
+    flex: 1;
+    width: 100%;
+    height: 100%;
+  }
+  /* Right column — about + data stacked, 12px gap, each independently scrollable */
+  #tile-detail-bento-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+    overflow: hidden;
+  }
+  /* About cell — scrollable if description is very long */
+  #tile-detail-bento-about {
+    padding: 18px 20px 20px;
+    overflow-y: auto;
+    max-height: 40%;
+    flex-shrink: 0;
+  }
+  /* Data cell — fills remaining height, independently scrollable */
+  #tile-detail-bento-data {
+    padding: 18px 20px 22px;
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+  }
+  /* ── Mobile: vertical single column ── */
+  @media (max-width: 680px) {
+    #tile-detail-modal-overlay {
+      padding: 12px;
+      align-items: flex-start;
+    }
+    #tile-detail-modal-card {
+      height: auto;
+      max-height: calc(100dvh - 24px);
+      gap: 10px;
+      overflow-y: auto;
+    }
+    #tile-detail-bento-grid {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto;
+      gap: 10px;
+      flex: none;
+      overflow: visible;
+    }
+    #tile-detail-bento-image-cell {
+      aspect-ratio: 1536 / 1024;
+      align-self: auto;
+      width: 100%;
+      flex-shrink: 0;
+    }
+    #tile-detail-bento-content {
+      flex: none;
+      overflow: visible;
+      gap: 10px;
+    }
+    #tile-detail-bento-about {
+      max-height: none;
+      overflow-y: visible;
+    }
+    #tile-detail-bento-data {
+      flex: none;
+      overflow-y: visible;
+      max-height: none;
+    }
+  }
+  .tile-detail-bento-label {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--text-disabled);
+    margin-bottom: 10px;
+  }
+  #tile-detail-bento-description {
+    font-family: var(--font-ui);
+    font-size: clamp(0.82rem, 1.1vw, 0.95rem);
+    color: var(--text-secondary);
+    line-height: 1.55;
+    margin: 0;
+  }
+  /* Stat rows */
+  #tile-detail-bento-rows {
+    display: flex;
+    flex-direction: column;
+  }
+  .tile-detail-stat-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .tile-detail-stat-row:last-child {
+    border-bottom: none;
+  }
+  .tile-detail-stat-row--flag .tile-detail-stat-label {
+    border-left: 2px solid #d05;
+    padding-left: 6px;
+  }
+  .tile-detail-stat-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+    width: 88px;
+    line-height: 1.45;
+    padding-top: 1px;
+  }
+  .tile-detail-stat-value {
+    font-family: var(--font-ui);
+    font-size: clamp(0.82rem, 1.1vw, 0.95rem);
+    color: var(--text-display);
+    line-height: 1.5;
+    text-align: right;
+    word-break: break-word;
+    flex: 1;
+  }
+  .tile-detail-row-section-head {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    padding: 12px 0 4px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2px;
+  }
   .tile-number {
     grid-area: num;
     font-size: 10px;
     color: var(--text-disabled);
-    margin-bottom: 10px;
     display: flex;
     align-items: center;
     justify-content: space-between;
   }
-  .tile-number .power-dot {
+  .tile-number .power-dot,
+  .tile-foot .power-dot {
     width: 6px;
     height: 6px;
     display: inline-block;
+    flex-shrink: 0;
+  }
+  .tile-foot-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
   }
   .power-dot-dim { background: var(--text-disabled) !important; box-shadow: none !important; }
+  .power-dot-needs-work { background: var(--accent) !important; box-shadow: 0 0 5px 2px rgba(215, 25, 33, 0.55) !important; }
   .tile-heading {
     grid-area: head;
     font-weight: 700;
@@ -3812,6 +4469,7 @@ const dashboardCss = `
     color: var(--text-secondary);
     display: flex;
     justify-content: space-between;
+    align-items: center;
     gap: 12px;
     align-self: end;
     font-family: var(--font-mono);
@@ -4148,6 +4806,9 @@ const dashboardCss = `
   .kw-head .vol { color: var(--text-secondary); }
 
   /* ── Responsive ── */
+  @media (min-width: 1400px) {
+    #capability-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
   @media (max-width: 1200px) {
     #founders-hero-shell { grid-template-columns: 1fr; gap: 32px; }
   }
@@ -4155,6 +4816,10 @@ const dashboardCss = `
     #founders-shell { padding: 104px 24px 64px; }
     #founders-top-strip-inner { padding: 0 24px; }
     #dashboard-source-cta-row { width: 100%; }
+    #capability-section-shell { grid-template-columns: 1fr; }
+    #capability-nav-col { order: -1; position: static; flex-direction: row; flex-wrap: wrap; gap: 6px; }
+    .capability-nav-btn { flex: 1 1 auto; min-width: 0; padding: 10px 16px; border-radius: 999px; flex-direction: row; align-items: center; gap: 0; width: auto; }
+    .capability-nav-btn-sub { display: none; }
     #capability-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .tile { aspect-ratio: auto; min-height: 220px; grid-template-areas: "num" "head" "desc" "viz" "foot"; grid-template-columns: 1fr; row-gap: 14px; }
     .tile-description { }

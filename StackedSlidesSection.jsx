@@ -1,7 +1,9 @@
 import React, { useLayoutEffect, useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { Flip } from 'gsap/Flip';
 import { createSharedParticleGalleryRenderer } from './sharedParticleGalleryRenderer';
 import { BrainIcon } from './components/ui/brain';
 import {
@@ -19,7 +21,7 @@ import {
   ArrowRightLeft,
 } from 'lucide-react';
 
-gsap.registerPlugin(ScrollTrigger);
+gsap.registerPlugin(ScrollTrigger, Flip);
 
 const MOBILE_SCROLL_MEDIA_QUERY = '(max-width: 767px), (pointer: coarse)';
 const NARROW_SCROLL_MEDIA_QUERY = '(max-width: 680px) and (pointer: coarse)';
@@ -187,14 +189,14 @@ const PORTFOLIO_IMAGES = [
 ];
 
 const CMO_TABLE_ROWS = [
-  { task: 'Bryan Balli',             value: 'Immediate oversight' },
+  { task: 'Bryan Balli',             value: 'Custom requests' },
   { task: 'Style guide',             value: 'Cross-device visual audit' },
   { task: 'Brand tone',              value: "How you're being perceived" },
   { task: 'SEO score',               value: 'Performance & AI readiness' },
   { task: 'Competitor info',         value: 'How you compare' },
   { task: 'Signals',                 value: 'Geo, events & social' },
   { task: 'Marketing',               value: 'Signal based strategies' },
-  { task: 'Agentic automation',      value: 'Advanced opportunities' },
+  { task: 'Agentic automation',      value: 'Advanced systems' },
   { task: 'Brand brief',             value: 'Downloadable summary' },
 ];
 
@@ -224,7 +226,7 @@ const AUTOMATION_CAPABILITIES = [
     previewImage: '/img/port/cq_figma.png',
     previewVideo: '/vid/knowledge_assistant.mov',
     title: 'Websites & Landing Pages',
-    body: 'I design, build, and optimize sites that convert, not just look good.',
+    body: 'Designed, built, and optimized to convert. Sites that perform on every screen, at every stage.',
   },
   {
     badge: 'SC',
@@ -233,7 +235,7 @@ const AUTOMATION_CAPABILITIES = [
     previewImage: '/img/port/frame_5.png',
     previewVideo: '/vid/creative_pipeline.mov',
     title: 'Social Media & Content',
-    body: 'Posts, captions, and ongoing content direction aligned to how your brand actually sounds.',
+    body: 'Posts, captions, and content strategy aligned to how your brand sounds and what your audience wants.',
   },
   {
     badge: 'VM',
@@ -242,16 +244,7 @@ const AUTOMATION_CAPABILITIES = [
     previewImage: '/img/port/frame_6.png',
     previewVideo: '/vid/Daily_operations.mov',
     title: 'Video & Motion',
-    body: 'Short-form content, reels, and visual storytelling that gets watched and shared.',
-  },
-  {
-    badge: 'EM',
-    badgeColor: '#ec4899',
-    icon: 'arrow',
-    previewImage: '/img/port/edittrax.png',
-    previewVideo: '/vid/email_marketing.mov',
-    title: 'Email & Newsletter Systems',
-    body: 'Campaigns, flows, and ongoing communication that keep your audience close and your revenue moving.',
+    body: 'Short-form content, reels, and visual storytelling crafted to get watched, saved, and shared.',
   },
   {
     badge: 'SEO',
@@ -260,7 +253,16 @@ const AUTOMATION_CAPABILITIES = [
     previewImage: '/img/port/claire.png',
     previewVideo: '/vid/ai_research.mov',
     title: 'SEO & Content Strategy',
-    body: 'Search visibility and structured content growth. The long game, run right.',
+    body: 'Search visibility and structured content growth — the long game, built to compound over time.',
+  },
+  {
+    badge: 'EM',
+    badgeColor: '#ec4899',
+    icon: 'arrow',
+    previewImage: '/img/port/edittrax.png',
+    previewVideo: '/vid/email_marketing.mov',
+    title: 'Email & Newsletter Systems',
+    body: 'Campaigns, automated flows, and newsletters built to keep your audience close and revenue moving.',
   },
   {
     badge: 'AI',
@@ -811,14 +813,14 @@ const StackedSlidesSection = () => {
                 <th style="text-align:right;padding:0.3rem 0.4rem;font-weight:600;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;">What this means</th>
               </tr></thead>
               <tbody>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Bryan Balli</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Immediate oversight</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Bryan Balli</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Custom requests</td></tr>
                 <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Style guide</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Cross-device visual audit</td></tr>
                 <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Brand tone</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">How you&apos;re being perceived</td></tr>
                 <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">SEO score</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Performance &amp; AI readiness</td></tr>
                 <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Competitor info</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">How you compare</td></tr>
                 <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Signals</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Geo, events &amp; social</td></tr>
                 <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Marketing</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Signal based strategies</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Agentic automation</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Advanced opportunities</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Agentic automation</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Advanced systems</td></tr>
                 <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Brand brief</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Downloadable summary</td></tr>
               </tbody>
             </table>
@@ -1329,7 +1331,7 @@ const StackedSlidesSection = () => {
                               {...(!item.tablePreview && { 'data-hover-video-src': item.previewVideo || undefined })}
                               {...(item.tablePreview ? { id: 'cmo-dashboard-card' } : {})}
                               style={{
-                                ...capabilityCardStyle,
+                                ...(item.tablePreview ? capabilityCardTablePreviewStyle : capabilityCardStyle),
                                 ...(item.tablePreview ? { gridColumn: '1 / -1' } : {}),
                                 zIndex: isMobileCapabilityOpen ? 6 : 1,
                               }}
@@ -1377,7 +1379,7 @@ const StackedSlidesSection = () => {
                                   )}
                                 </div>
                               ) : null}
-                              {item.tablePreview ? (
+                              {item.tablePreview && (
                                 <div
                                   data-hover-item
                                   data-hover-video-src={item.previewVideo}
@@ -1394,10 +1396,6 @@ const StackedSlidesSection = () => {
                                     playsInline
                                     style={{ width: 'clamp(3.5rem, 7vw, 5rem)', aspectRatio: 'auto', borderRadius: '0.5rem', objectFit: 'cover', display: 'block', flexShrink: 0, pointerEvents: 'none' }}
                                   />
-                                </div>
-                              ) : (
-                                <div style={{ ...capabilityBadgeStyle, color: item.badgeColor }}>
-                                  {Icon ? <Icon size={20} strokeWidth={2.1} /> : item.badge}
                                 </div>
                               )}
                               <div style={capabilityContentStyle}>
@@ -1428,10 +1426,17 @@ const StackedSlidesSection = () => {
                                       <thead><tr><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>What you Get</th><th style={{ width: '1.5rem' }} /><th style={{ textAlign: 'right', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>What this means</th></tr></thead>
                                       <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500 }}>{row.task}</td><td style={{ padding: '0.32rem 0.2rem', color: 'rgba(42,36,32,0.3)', fontSize: '0.7rem', textAlign: 'center' }}>→</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
                                     </table>
-                                    <a id="cmo-no-website-hint-desktop" href="/login?flow=homepage-create" style={cmoNoWebsiteLinkStyle}>No website yet?</a>
+                                    <a id="cmo-no-website-hint-desktop" href="/login?flow=homepage-create" style={cmoNoWebsiteLinkStyle}>Don't Have a Website?</a>
                                   </div>
                                 )}
                               </div>
+                              {!item.tablePreview && (
+                                <div style={capabilityCardFooterStyle}>
+                                  <div style={{ ...capabilityBadgeStyle, color: item.badgeColor }}>
+                                    {Icon ? <Icon size={20} strokeWidth={2.1} /> : item.badge}
+                                  </div>
+                                </div>
+                              )}
                               {item.tablePreview && (
                                 <div id="cmo-dashboard-table" className="cmo-table-outer" style={{ gridColumn: '1 / -1', marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
                                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
@@ -1453,12 +1458,12 @@ const StackedSlidesSection = () => {
                                       style={urlIsValid ? { ...ctaStyle, flexShrink: 0 } : { ...ctaStyle, border: 'none', flexShrink: 0, background: 'rgba(255,255,255,0.72)', color: '#2a2420', boxShadow: '0 1px 4px rgba(42,36,32,0.1), inset 0 1px 0 rgba(255,255,255,0.6)', opacity: 0.65, cursor: 'default' }}
                                     >Get Dashboard<span style={ctaIconStyle}>↗</span></button>
                                   </div>
-                                  <a id="cmo-no-website-hint" href="/login?flow=homepage-create" style={cmoNoWebsiteLinkStyle}>No website yet?</a>
+                                  <a id="cmo-no-website-hint" href="/login?flow=homepage-create" style={cmoNoWebsiteLinkStyle}>Don't Have a Website?</a>
                                 </div>
                               )}
                             </article>
                             {item.tablePreview && (
-                              <div id="panel-additional-content-header" style={{ ...capabilitySectionHeaderStyle, gridColumn: '1 / -1', borderTop: '1px solid rgba(42, 36, 32, 0.12)', paddingTop: 'clamp(1.25rem, 2.5vw, 1.85rem)', marginTop: 'clamp(0.5rem, 1vw, 0.75rem)' }}>
+                              <div id="panel-additional-content-header" style={{ ...capabilitySectionHeaderStyle, gridColumn: '1 / -1', borderTop: '1px solid rgba(42, 36, 32, 0.12)', paddingTop: 'clamp(1.25rem, 2.5vw, 1.85rem)', marginTop: 'clamp(1.25rem, 2.5vw, 1.85rem)' }}>
                                 <span style={capabilityEyebrowStyle}>What I can take over next</span>
                                 <p style={{ margin: '0.35rem 0 0', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', lineHeight: 1.55, color: 'rgba(42, 36, 32, 0.6)', fontWeight: 400 }}>Direct outcomes I can step into and run, so you can stop juggling and start shipping.</p>
                               </div>
@@ -1488,6 +1493,7 @@ const StackedSlidesSection = () => {
                         <div id="testimonials-section" style={testimonialsShellStyle}>
                           <div style={capabilitySectionHeaderStyle}>
                             <span style={capabilityEyebrowStyle}>Testimonials</span>
+                            <p style={{ margin: '0.35rem 0 0', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', lineHeight: 1.55, color: 'rgba(42, 36, 32, 0.6)', fontWeight: 400 }}>Feedback from people I've worked with across agency, brand, and product teams.</p>
                           </div>
                           <div id="testimonials-grid" style={{ marginTop: 'clamp(1.25rem, 2.5vw, 2rem)', display: 'flex', flexDirection: 'column', gap: 'clamp(0.75rem, 1.5vw, 1rem)', width: '100%', minWidth: 0 }}>
                             {[testimonials[0], testimonials[1], testimonials[2], testimonials[3]].map((t) => (
@@ -1787,11 +1793,14 @@ const gridLayoutStyle = {
 };
 
 const textCenteringStyle = {
-  height: 'clamp(14rem, calc(9rem + 3vw + 8vh), 20rem)',
+  height: 'auto',
   flexShrink: 0,
   display: 'flex',
   flexDirection: 'column',
   justifyContent: 'center',
+  alignItems: 'center',
+  paddingTop: 'clamp(1.5rem, 3vh, 2.5rem)',
+  paddingBottom: 'clamp(1.5rem, 3vh, 2.5rem)',
   gap: 'clamp(0.75rem, 2vh, 1.25rem)',
 };
 
@@ -1923,7 +1932,7 @@ const capabilityGridStyle = {
   width: '100%',
 };
 
-const capabilityCardStyle = {
+const capabilityCardTablePreviewStyle = {
   position: 'relative',
   display: 'grid',
   gridTemplateColumns: 'auto 1fr',
@@ -1937,6 +1946,25 @@ const capabilityCardStyle = {
   boxShadow: '0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4)',
   boxSizing: 'border-box',
   overflow: 'visible',
+};
+
+const capabilityCardStyle = {
+  position: 'relative',
+  display: 'flex',
+  flexDirection: 'column',
+  padding: 'clamp(1rem, 2vw, 1.35rem)',
+  borderRadius: '1.1rem',
+  border: '1px solid rgba(212, 196, 171, 0.82)',
+  background: 'rgba(255,255,255,0.5)',
+  boxShadow: '0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4)',
+  boxSizing: 'border-box',
+  overflow: 'visible',
+};
+
+const capabilityCardFooterStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  marginTop: '0.85rem',
 };
 
 const capabilityBadgeStyle = {
@@ -1974,7 +2002,6 @@ const capabilityCardBodyStyle = {
   fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)',
   lineHeight: 1.55,
   color: 'rgba(42, 36, 32, 0.6)',
-  maxWidth: '34ch',
 };
 
 const mobileCapabilityPreviewStyle = {
@@ -2310,8 +2337,8 @@ const hoverTitleStyle = {
 
 const testimonialsShellStyle = {
   width: '100%',
-  marginTop: 'clamp(2rem, 4vw, 3rem)',
-  paddingTop: 'clamp(2.5rem, 5vw, 4rem)',
+  marginTop: 'clamp(1.25rem, 2.5vw, 1.85rem)',
+  paddingTop: 'clamp(1.25rem, 2.5vw, 1.85rem)',
   borderTop: '1px solid rgba(42, 36, 32, 0.12)',
   boxSizing: 'border-box',
 };
@@ -3077,12 +3104,13 @@ const cmoNoWebsiteLinkStyle = {
   margin: '0.85rem 0 0',
   textAlign: 'center',
   fontSize: '0.7rem',
-  fontWeight: 600,
-  letterSpacing: '0.1em',
-  textTransform: 'uppercase',
+  fontWeight: 400,
+  letterSpacing: '0.02em',
+  textTransform: 'none',
   color: 'rgba(42, 36, 32, 0.6)',
   fontFamily: "'Space Mono', monospace",
   textDecoration: 'underline',
+  textDecorationThickness: '0.5px',
   textUnderlineOffset: '3px',
   cursor: 'pointer',
 };

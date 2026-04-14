@@ -7,6 +7,7 @@ import { Globe, Lock } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import InternalPageBackground from './InternalPageBackground';
 import { internalPageGlassCardStyle } from './pageSurfaceSystem';
+import { trackSignIn, trackSignUp } from '@/lib/analytics';
 
 const AuthPageInner = () => {
   const router = useRouter();
@@ -105,6 +106,7 @@ const AuthPageInner = () => {
     try {
       if (mode === 'signin') {
         await signIn({ email: form.email, password: form.password });
+        trackSignIn('email');
       } else {
         validateCreateDashboard();
         await signUp({
@@ -113,6 +115,7 @@ const AuthPageInner = () => {
           email: form.email,
           password: form.password,
         });
+        trackSignUp('email');
       }
 
       router.replace(redirectPath);
@@ -135,8 +138,10 @@ const AuthPageInner = () => {
             ideaDescription: form.ideaDescription.trim(),
           },
         });
+        trackSignUp('google');
       } else {
         await signInWithGoogle();
+        trackSignIn('google');
       }
 
       router.replace(redirectPath);
