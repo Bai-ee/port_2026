@@ -94,15 +94,20 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {} 
 
   const staticParams = useMemo(() => ({ ...defaultParams, ...params }), [params]);
   const count = staticParams.particleCount;
-  const dummy = useMemo(() => new THREE.Object3D(), []);
-  const target = useMemo(() => new THREE.Vector3(), []);
   const pColor = useMemo(() => new THREE.Color(), []);
   const color = pColor; // Alias for user code compatibility
+  const lastScaleRef = useRef(-1);
+  const targetKeysRef = useRef({ src: null, keys: null });
 
   const positions = useMemo(() => {
-     const pos = [];
-     for(let i=0; i<count; i++) pos.push(new THREE.Vector3((Math.random()-0.5)*100, (Math.random()-0.5)*100, (Math.random()-0.5)*100));
-     return pos;
+    const arr = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      const i3 = i * 3;
+      arr[i3] = (Math.random() - 0.5) * 100;
+      arr[i3 + 1] = (Math.random() - 0.5) * 100;
+      arr[i3 + 2] = (Math.random() - 0.5) * 100;
+    }
+    return arr;
   }, [count]);
 
   // Material & Geom
@@ -135,15 +140,19 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {} 
   const geometry = useMemo(() => {
     return new THREE.SphereGeometry(1, staticParams.sphereSegments, staticParams.sphereSegments);
   }, [staticParams.sphereSegments]);
-  const addControl = (id, l, min, max, val) => {
-      return staticParams[id] !== undefined ? staticParams[id] : val;
-  };
-  const setInfo = () => {};
-  const annotate = () => {};
-
   useEffect(() => {
     smoothedParamsRef.current = { ...staticParams };
   }, [staticParams]);
+
+  useEffect(() => {
+    const mesh = meshRef.current;
+    if (!mesh) return;
+    mesh.frustumCulled = false;
+    if (!mesh.instanceColor) {
+      mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
+    }
+    lastScaleRef.current = -1;
+  }, [count]);
 
   useEffect(() => {
     if (typeof document === 'undefined') {
@@ -159,124 +168,153 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {} 
   }, []);
 
   useFrame((state, delta) => {
-    if (!meshRef.current || !groupRef.current) return;
+    const mesh = meshRef.current;
+    if (!mesh || !groupRef.current) return;
     if (hiddenRef.current) return;
     const clampedDelta = Math.min(delta, runtimeProfile.maxDelta ?? 1 / 30);
-    const targetParams = liveParamsRef?.current ?? staticParams;
-    const nextParams = smoothedParamsRef.current ?? { ...targetParams };
-    const smoothing = 1 - Math.exp(-clampedDelta * (runtimeProfile.paramSmoothing ?? 10));
 
-    Object.keys(targetParams).forEach((key) => {
-      const targetValue = targetParams[key];
-      const currentValue = nextParams[key];
+    // Param smoothing: only when live params are provided; otherwise use static directly.
+    let PARAMS;
+    if (liveParamsRef?.current) {
+      const targetParams = liveParamsRef.current;
+      const nextParams = smoothedParamsRef.current ?? { ...targetParams };
+      const smoothing = 1 - Math.exp(-clampedDelta * (runtimeProfile.paramSmoothing ?? 10));
 
-      if (typeof targetValue === 'number' && Number.isFinite(targetValue)) {
-        const baseValue = typeof currentValue === 'number' && Number.isFinite(currentValue)
-          ? currentValue
-          : targetValue;
-        nextParams[key] = baseValue + (targetValue - baseValue) * smoothing;
-        return;
+      let keys;
+      if (targetKeysRef.current.src === targetParams) {
+        keys = targetKeysRef.current.keys;
+      } else {
+        keys = Object.keys(targetParams);
+        targetKeysRef.current.src = targetParams;
+        targetKeysRef.current.keys = keys;
       }
 
-      nextParams[key] = targetValue;
-    });
+      for (let k = 0; k < keys.length; k++) {
+        const key = keys[k];
+        const targetValue = targetParams[key];
+        const currentValue = nextParams[key];
+        if (typeof targetValue === 'number' && Number.isFinite(targetValue)) {
+          const baseValue = typeof currentValue === 'number' && Number.isFinite(currentValue)
+            ? currentValue
+            : targetValue;
+          nextParams[key] = baseValue + (targetValue - baseValue) * smoothing;
+        } else {
+          nextParams[key] = targetValue;
+        }
+      }
+      smoothedParamsRef.current = nextParams;
+      PARAMS = nextParams;
+    } else {
+      PARAMS = smoothedParamsRef.current ?? staticParams;
+    }
 
-    smoothedParamsRef.current = nextParams;
-    const PARAMS = nextParams;
     const speedMult = PARAMS.speedMult * PARAMS.animationSpeed;
     simTimeRef.current += clampedDelta;
     const time = simTimeRef.current * speedMult;
-    const THREE_LIB = THREE;
 
-    // Calculate animated tire spin (independent from master animation speed)
+    // Group rotation (static tilt + animated spin)
     const spinAngle = simTimeRef.current * PARAMS.tireSpinSpeed;
-
-    // Apply static tilt + animated spin
     let rotX = PARAMS.rotationX;
     let rotY = PARAMS.rotationY;
     let rotZ = PARAMS.rotationZ;
-
-    // Add spin animation to the appropriate axis
-    if (PARAMS.tireSpinAxis === 'x') {
-      rotX += spinAngle;
-    } else if (PARAMS.tireSpinAxis === 'y') {
-      rotY += spinAngle;
-    } else if (PARAMS.tireSpinAxis === 'z') {
-      rotZ += spinAngle;
-    }
-
-    // Apply combined rotations to the group
+    if (PARAMS.tireSpinAxis === 'x') rotX += spinAngle;
+    else if (PARAMS.tireSpinAxis === 'y') rotY += spinAngle;
+    else if (PARAMS.tireSpinAxis === 'z') rotZ += spinAngle;
     groupRef.current.rotation.x = rotX;
     groupRef.current.rotation.y = rotY;
     groupRef.current.rotation.z = rotZ;
 
     material.uniforms.uOpacity.value = PARAMS.opacity ?? 1;
 
-    for (let i = 0; i < count; i++) {
-        // USER CODE START
-        const scale = PARAMS.scale;
-        const chaos = PARAMS.chaos;
-        const flow = PARAMS.flow;
+    // Hoist hot-path params & pre-compute time-dependent values (loop-invariant)
+    const scale = PARAMS.scale;
+    const chaos = PARAMS.chaos;
+    const flow = PARAMS.flow;
+    const waveAmp = PARAMS.waveAmplitude;
+    const R = PARAMS.torusMajorRadius;
+    const r = PARAMS.torusTubeRadius;
+    const hueOffset = PARAMS.hueOffset ?? 0;
+    const hueSpeed = PARAMS.hueSpeed;
+    const saturation = PARAMS.saturation;
+    const lightness = PARAMS.lightness;
+    const scale08 = scale * 0.8;
+    const timeFlow05 = time * flow * 0.5;
+    const time04 = time * 0.4;
+    const time07 = time * 0.7;
+    const timeHue = time * hueSpeed;
+    const r1 = R + r * 0.2 * Math.sin(time * 0.5);
+    const waveAmpY = waveAmp * Math.sin(time * 0.3);
+    const waveZ = Math.cos(time04);
+    const golden = 2.39996322972865332;
+    const invCount = 1 / count;
+    const lerp = runtimeProfile.positionLerp ?? 0.1;
 
-        if (i === 0) {
-            setInfo("4D Hyper-Torus", "Clifford torus breathing in projected space");
-            annotate("core", new THREE.Vector3(0,0,0), "Singularity");
-        }
+    const s = PARAMS.particleSize;
+    const scaleChanged = s !== lastScaleRef.current;
+    lastScaleRef.current = s;
 
-        const t = i / count;
-        const golden = 2.39996322972865332;
-        const tau = 6.283185307179586;
-
-        // Parametric torus generation
-        const theta = i * golden + time * flow * 0.5;
-        const phi = Math.acos(1 - 2 * t);
-        const u = theta;
-        const v = phi * 2 + time * 0.4;
-
-        // Major and minor radii for torus shape
-        const R = PARAMS.torusMajorRadius; // major radius
-        const r = PARAMS.torusTubeRadius; // tube radius (thickness)
-
-        // Clifford torus with adjustable geometry
-        const cu = Math.cos(u);
-        const su = Math.sin(u);
-        const cv = Math.cos(v);
-        const sv = Math.sin(v);
-
-        // 4D torus coordinates
-        const r1 = R + r * 0.2 * Math.sin(time * 0.5);
-        const x4 = r1 * cu;
-        const y4 = r1 * su;
-        const z4 = r * cv;
-        const w4 = r * sv;
-
-        // Stereographic projection from 4D to 3D
-        const d = 2 - w4;
-        const x = x4 / d;
-        const y = y4 / d;
-        const z = z4 / d;
-
-        const wave = Math.sin(x * 5 + time) * Math.cos(y * 5 - time * 0.7) * chaos;
-
-        target.set(
-            x * scale + wave * PARAMS.waveAmplitude,
-            y * scale + wave * PARAMS.waveAmplitude * Math.sin(time * 0.3),
-            z * scale * 0.8 + wave * Math.cos(time * 0.4)
-        );
-
-        const hue = (PARAMS.hueOffset + t * 0.8 + time * PARAMS.hueSpeed + wave * 0.05) % 1;
-        color.setHSL(hue, PARAMS.saturation, PARAMS.lightness + wave * 0.15);
-        // USER CODE END
-
-        positions[i].lerp(target, runtimeProfile.positionLerp ?? 0.1);
-        dummy.position.copy(positions[i]);
-        dummy.scale.setScalar(PARAMS.particleSize);
-        dummy.updateMatrix();
-        meshRef.current.setMatrixAt(i, dummy.matrix);
-        meshRef.current.setColorAt(i, pColor);
+    if (!mesh.instanceColor) {
+      mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
     }
-    meshRef.current.instanceMatrix.needsUpdate = true;
-    if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true;
+    if (mesh.frustumCulled) mesh.frustumCulled = false;
+    const mArr = mesh.instanceMatrix.array;
+    const cArr = mesh.instanceColor.array;
+
+    for (let i = 0; i < count; i++) {
+      const t = i * invCount;
+      const u = i * golden + timeFlow05;
+      const phi = Math.acos(1 - 2 * t);
+      const v = phi * 2 + time04;
+
+      const cu = Math.cos(u);
+      const su = Math.sin(u);
+      const cv = Math.cos(v);
+      const sv = Math.sin(v);
+
+      const x4 = r1 * cu;
+      const y4 = r1 * su;
+      const z4 = r * cv;
+      const w4 = r * sv;
+
+      const d = 2 - w4;
+      const x = x4 / d;
+      const y = y4 / d;
+      const z = z4 / d;
+
+      const wave = Math.sin(x * 5 + time) * Math.cos(y * 5 - time07) * chaos;
+
+      const tx = x * scale + wave * waveAmp;
+      const ty = y * scale + wave * waveAmpY;
+      const tz = z * scale08 + wave * waveZ;
+
+      const hue = (hueOffset + t * 0.8 + timeHue + wave * 0.05) % 1;
+      pColor.setHSL(hue, saturation, lightness + wave * 0.15);
+
+      const i3 = i * 3;
+      const px = positions[i3]     + (tx - positions[i3])     * lerp;
+      const py = positions[i3 + 1] + (ty - positions[i3 + 1]) * lerp;
+      const pz = positions[i3 + 2] + (tz - positions[i3 + 2]) * lerp;
+      positions[i3]     = px;
+      positions[i3 + 1] = py;
+      positions[i3 + 2] = pz;
+
+      const mi = i * 16;
+      if (scaleChanged) {
+        mArr[mi]      = s; mArr[mi + 1]  = 0; mArr[mi + 2]  = 0; mArr[mi + 3]  = 0;
+        mArr[mi + 4]  = 0; mArr[mi + 5]  = s; mArr[mi + 6]  = 0; mArr[mi + 7]  = 0;
+        mArr[mi + 8]  = 0; mArr[mi + 9]  = 0; mArr[mi + 10] = s; mArr[mi + 11] = 0;
+        mArr[mi + 15] = 1;
+      }
+      mArr[mi + 12] = px;
+      mArr[mi + 13] = py;
+      mArr[mi + 14] = pz;
+
+      cArr[i3]     = pColor.r;
+      cArr[i3 + 1] = pColor.g;
+      cArr[i3 + 2] = pColor.b;
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.instanceColor.needsUpdate = true;
   });
 
   return (
@@ -286,7 +324,7 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {} 
   );
 };
 
-export default function App({ params = {}, liveParamsRef = null, backgroundColor = '#1a1a1a' }) {
+export default function App({ params = {}, liveParamsRef = null, backgroundColor = '#1a1a1a', onReady = null }) {
   const useSimpleScrollViewport = useMediaMatch(SIMPLE_SCROLL_MEDIA_QUERY);
   const isMobile = useMediaMatch(MOBILE_MEDIA_QUERY);
   const prefersReducedMotion = useMediaMatch(REDUCED_MOTION_QUERY);
@@ -373,6 +411,11 @@ export default function App({ params = {}, liveParamsRef = null, backgroundColor
         gl={{ alpha: true, antialias: qualityProfile.antialias, powerPreference: qualityProfile.powerPreference }}
         onCreated={({ gl }) => {
           gl.setClearColor(0x000000, 0);
+          // Notify parent after the first frame is painted so callers can
+          // gate UI transitions (e.g. a loading overlay) on canvas readiness.
+          if (typeof onReady === 'function') {
+            requestAnimationFrame(() => onReady());
+          }
         }}
       >
         <SceneBackground color={backgroundColor} />

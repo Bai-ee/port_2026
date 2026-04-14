@@ -8,7 +8,6 @@ gsap.registerPlugin(ScrollTrigger);
 import Link from 'next/link';
 import { Globe } from 'lucide-react';
 import { useAuth } from './AuthContext';
-import InternalPageBackground from './InternalPageBackground';
 import { internalPageGlassCardStyle } from './pageSurfaceSystem';
 import {
   trackDashboardCreated,
@@ -1018,36 +1017,7 @@ const DashboardPage = () => {
   const [activeCapabilityFilter, setActiveCapabilityFilter] = useState(null);
   const [chatDraft, setChatDraft] = useState('');
   const capabilityGridRef = useRef(null);
-
-  // Page-load intro — background → nav → hero → cards top-left to bottom-right
-  useLayoutEffect(() => {
-    const bg       = document.querySelector('#internal-page-bg');
-    const strip    = document.querySelector('#founders-top-strip');
-    const heroNum  = document.querySelector('#founders-hero-numeric-shell');
-    const heroMeta = document.querySelector('#founders-hero-meta');
-    const capNav   = document.querySelector('#capability-nav-col');
-    const capGrid  = capabilityGridRef.current;
-    const cards    = capGrid ? gsap.utils.toArray('[data-capability-card]', capGrid) : [];
-
-    // Read computed border color before hiding it (resolves var(--border) to rgb value)
-    const gridBorderColor = capGrid ? getComputedStyle(capGrid).borderTopColor : null;
-
-    gsap.set([strip, heroNum, heroMeta, capNav].filter(Boolean), { autoAlpha: 0 });
-    if (capGrid && gridBorderColor) gsap.set(capGrid, { borderColor: 'transparent' });
-    if (cards.length) gsap.set(cards, { autoAlpha: 0 });
-
-    const tl = gsap.timeline({ delay: 0.5 });
-
-
-         tl.to(strip,    { autoAlpha: 1, duration: 0.5, ease: 'power2.out' }, '<0.1')
-      .to(heroNum,  { autoAlpha: 1, duration: 0.65, ease: 'power2.out' }, '0.28')
-      .to(heroMeta, { autoAlpha: 1, duration: 0.55, ease: 'power2.out' }, '<0.12')
-      .to(capNav,   { autoAlpha: 1, duration: 0.5, ease: 'power2.out' }, '0.55')
-      .to(capGrid,  { borderColor: gridBorderColor, duration: 0.55, ease: 'power2.out' }, '<')
-      .to(cards,    { autoAlpha: 1, duration: 0.32, ease: 'power2.out', stagger: 0.055 }, '<0.05');
-
-    return () => tl.kill();
-  }, []);
+  const dashboardVisibleRef = useRef(false);
   const [bootstrap, setBootstrap] = useState({ userProfile: null, client: null, dashboardState: null, recentRuns: [], intelligence: null });
   const [bootstrapLoading, setBootstrapLoading] = useState(true);
   const [bootstrapError, setBootstrapError] = useState('');
@@ -1193,6 +1163,59 @@ const DashboardPage = () => {
 
   // Show terminal modal during active builds, failures, and the post-completion countdown.
   const showIntakeModal = !bootstrapLoading && (isRunActive || latestRunStatus === 'failed' || completionCountdown !== null);
+
+  // Page-load / processing-handoff intro.
+  // Three states this effect handles:
+  //   1. Initial mount with the intake modal showing → instantly hide dashboard
+  //      (background-only with the modal on top).
+  //   2. Initial mount or transition into "ready" (modal closed) → animate the
+  //      dashboard in nav → hero → cards top-left to bottom-right.
+  //   3. Transition from a visible dashboard into processing (e.g. user clicks
+  //      "Update & Rerun") → quick fade out so the modal can take over.
+  // The three.js background is owned by the parent route and stays mounted, so
+  // we never touch it here.
+  useLayoutEffect(() => {
+    const strip    = document.querySelector('#founders-top-strip');
+    const heroNum  = document.querySelector('#founders-hero-numeric-shell');
+    const heroMeta = document.querySelector('#founders-hero-meta');
+    const capNav   = document.querySelector('#capability-nav-col');
+    const capGrid  = capabilityGridRef.current;
+    const cards    = capGrid ? gsap.utils.toArray('[data-capability-card]', capGrid) : [];
+    const gridBorderColor = capGrid ? getComputedStyle(capGrid).borderTopColor : null;
+    const sections = [strip, heroNum, heroMeta, capNav].filter(Boolean);
+
+    if (showIntakeModal) {
+      if (dashboardVisibleRef.current) {
+        // Was visible — fade out so the modal can take over
+        dashboardVisibleRef.current = false;
+        const outTl = gsap.timeline();
+        outTl.to([...sections, ...cards], { autoAlpha: 0, duration: 0.3, ease: 'power2.in' });
+        if (capGrid) outTl.to(capGrid, { borderColor: 'transparent', duration: 0.3, ease: 'power2.in' }, '<');
+        return () => outTl.kill();
+      }
+      // Initial mount with modal already showing — hide instantly
+      gsap.set(sections, { autoAlpha: 0 });
+      if (capGrid && gridBorderColor) gsap.set(capGrid, { borderColor: 'transparent' });
+      if (cards.length) gsap.set(cards, { autoAlpha: 0 });
+      return undefined;
+    }
+
+    // Modal is closed — animate dashboard in (initial load OR after processing)
+    dashboardVisibleRef.current = true;
+    gsap.set(sections, { autoAlpha: 0 });
+    if (capGrid && gridBorderColor) gsap.set(capGrid, { borderColor: 'transparent' });
+    if (cards.length) gsap.set(cards, { autoAlpha: 0 });
+
+    const tl = gsap.timeline({ delay: 0.5 });
+    tl.to(strip,    { autoAlpha: 1, duration: 0.5, ease: 'power2.out' }, '<0.1')
+      .to(heroNum,  { autoAlpha: 1, duration: 0.65, ease: 'power2.out' }, '0.28')
+      .to(heroMeta, { autoAlpha: 1, duration: 0.55, ease: 'power2.out' }, '<0.12')
+      .to(capNav,   { autoAlpha: 1, duration: 0.5, ease: 'power2.out' }, '0.55')
+      .to(capGrid,  { borderColor: gridBorderColor, duration: 0.25, ease: 'power2.out' }, '<')
+      .to(cards,    { autoAlpha: 1, duration: 0.42, ease: 'power1.out', stagger: 0.15 }, '<0.05');
+
+    return () => tl.kill();
+  }, [showIntakeModal]);
 
   // Polling while a run is in-flight
   useEffect(() => {
@@ -2079,7 +2102,6 @@ const DashboardPage = () => {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div data-dashboard-theme={theme} style={shellStyle}>
-      <InternalPageBackground />
       <style>{dashboardCss}</style>
       <header id="founders-top-strip">
         <div id="founders-top-strip-inner">
@@ -2715,6 +2737,7 @@ const DashboardPage = () => {
               ...internalPageGlassCardStyle,
               background: 'rgba(255, 252, 248, 0.97)',
               boxShadow: `${internalPageGlassCardStyle.boxShadow}, 0 30px 90px rgba(42,36,32,0.12)`,
+              border: '1px solid var(--border)',
             }}
           >
 
@@ -3475,7 +3498,6 @@ const dashboardCss = `
     display: grid;
     grid-template-columns: 1.5fr 1fr;
     gap: 64px;
-    border-bottom: 1px solid var(--border);
     align-items: center;
   }
   .hero-label,
@@ -3686,10 +3708,9 @@ const dashboardCss = `
     border-color: rgba(42, 36, 32, 0.35);
   }
   .capability-nav-btn-label {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    font-size: 0.84rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
     color: var(--text-display);
     line-height: 1.2;
   }
@@ -4327,7 +4348,7 @@ const dashboardCss = `
   /* Shared bento cell surface */
   .tile-detail-bento-cell {
     background: #fff;
-    border: 1px solid rgba(212, 196, 171, 0.6);
+    border: 1px solid rgba(42, 36, 32, 0.1);
     border-radius: 1rem;
     box-sizing: border-box;
   }
@@ -4364,7 +4385,7 @@ const dashboardCss = `
   }
   #tile-detail-modal-close {
     background: none;
-    border: 1px solid rgba(212, 196, 171, 0.5);
+    border: 1px solid rgba(42, 36, 32, 0.1);
     cursor: pointer;
     font-size: 10px;
     font-family: var(--font-mono);
@@ -5105,13 +5126,13 @@ const dashboardCss = `
     #founders-shell { padding: 104px 24px 64px; }
     #founders-top-strip-inner { padding: 0 24px; }
     #dashboard-source-cta-row { width: 100%; }
-    #founders-hero-shell { border-bottom: none; }
     #capability-section { padding-top: 0; }
     #capability-section-shell { grid-template-columns: 1fr; }
     #capability-nav-col { order: -1; position: static; flex-direction: row; flex-wrap: wrap; gap: 6px; z-index: 10; }
     .capability-nav-btn { flex: 1 1 auto; min-width: 0; padding: 10px 16px; border-radius: 999px; flex-direction: row; align-items: center; justify-content: center; gap: 0; width: auto; }
     .capability-nav-btn::after { content: none; }
     .capability-nav-btn-sub { display: none; }
+    .capability-nav-btn-label { font-family: var(--font-mono); font-size: 11px; font-weight: 400; letter-spacing: 0.08em; text-transform: uppercase; }
     #capability-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .tile { aspect-ratio: auto; min-height: 220px; grid-template-areas: "num" "head" "desc" "viz" "foot"; grid-template-columns: 1fr; row-gap: 14px; }
     .tile-description { }

@@ -57,11 +57,11 @@ const washStyle = {
   boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.45), inset 0 1px 0 rgba(255,255,255,0.6)',
 };
 
-export default function InternalPageBackground() {
+export default function InternalPageBackground({ onReady = null }) {
   return (
     <div id="internal-page-bg" aria-hidden="true" style={wrapperStyle}>
       <div style={sceneFrameStyle}>
-        <BackgroundScene params={BACKGROUND_PARAMS} backgroundColor={null} />
+        <BackgroundScene params={BACKGROUND_PARAMS} backgroundColor={null} onReady={onReady} />
       </div>
       <div style={washStyle} />
     </div>

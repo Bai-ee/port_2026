@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import gsap from 'gsap';
 import { useAuth } from '../../AuthContext';
 import DashboardPage from '../../DashboardPage';
 import InternalPageBackground from '../../InternalPageBackground';
@@ -10,6 +11,9 @@ import { internalPageGlassCardStyle } from '../../pageSurfaceSystem';
 export default function DashboardRoute() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const [showLoadingCard, setShowLoadingCard] = useState(true);
+  const [bgReady, setBgReady] = useState(false);
+  const loadingOverlayRef = useRef(null);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -17,36 +21,60 @@ export default function DashboardRoute() {
     }
   }, [user, loading, router]);
 
-  if (loading) {
-    return (
-      <div style={{ minHeight: '100dvh', position: 'relative', overflow: 'hidden' }}>
-        <style>{`
-          @keyframes loading-marquee {
-            0%   { transform: translateX(0); }
-            100% { transform: translateX(-50%); }
-          }
-          .loading-marquee-track {
-            display: flex;
-            align-items: center;
-            width: max-content;
-            animation: loading-marquee 12s linear infinite;
-            will-change: transform;
-          }
-        `}</style>
-        <InternalPageBackground />
+  // Fade out the loading card only once three conditions are met:
+  //   1. auth has resolved         (loading === false)
+  //   2. the user is present       (!!user)
+  //   3. the three.js canvas has rendered its first frame (bgReady)
+  // The three.js background stays mounted in the parent tree, so no canvas swap.
+  useEffect(() => {
+    if (loading || !user || !bgReady) return;
+    if (!loadingOverlayRef.current) return;
+    const tween = gsap.to(loadingOverlayRef.current, {
+      autoAlpha: 0,
+      duration: 0.45,
+      ease: 'power2.inOut',
+      onComplete: () => setShowLoadingCard(false),
+    });
+    return () => tween.kill();
+  }, [loading, user, bgReady]);
+
+  const dashboardReady = !loading && !!user;
+
+  return (
+    <div style={{ minHeight: '100dvh', position: 'relative', overflow: 'hidden' }}>
+      <InternalPageBackground onReady={() => setBgReady(true)} />
+
+      {dashboardReady ? <DashboardPage /> : null}
+
+      {showLoadingCard ? (
         <div
+          ref={loadingOverlayRef}
+          id="dashboard-loading-overlay"
           style={{
-            minHeight: '100dvh',
-            position: 'relative',
-            zIndex: 1,
+            position: 'fixed',
+            inset: 0,
+            zIndex: 20,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             padding: 'clamp(1rem, 5vw, 2rem)',
             boxSizing: 'border-box',
-            width: '100%',
+            pointerEvents: dashboardReady ? 'none' : 'auto',
           }}
         >
+          <style>{`
+            @keyframes loading-marquee {
+              0%   { transform: translateX(0); }
+              100% { transform: translateX(-50%); }
+            }
+            .loading-marquee-track {
+              display: flex;
+              align-items: center;
+              width: max-content;
+              animation: loading-marquee 12s linear infinite;
+              will-change: transform;
+            }
+          `}</style>
           <div
             style={{
               width: '100%',
@@ -58,6 +86,7 @@ export default function DashboardRoute() {
               ...internalPageGlassCardStyle,
               background: 'rgba(255, 252, 248, 0.94)',
               boxShadow: `${internalPageGlassCardStyle.boxShadow}, 0 30px 90px rgba(42,36,32,0.12)`,
+              border: '1px solid #E4E4E4',
             }}
           >
             {/* Brand row */}
@@ -104,11 +133,7 @@ export default function DashboardRoute() {
             </p>
           </div>
         </div>
-      </div>
-    );
-  }
-
-  if (!user) return null;
-
-  return <DashboardPage />;
+      ) : null}
+    </div>
+  );
 }
