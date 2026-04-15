@@ -44,7 +44,15 @@ export default function DashboardRoute() {
     <div style={{ minHeight: '100dvh', position: 'relative', overflow: 'hidden' }}>
       <InternalPageBackground onReady={() => setBgReady(true)} />
 
-      {dashboardReady ? <DashboardPage /> : null}
+      {dashboardReady ? (
+        <div style={{
+          opacity: showLoadingCard ? 0 : 1,
+          transition: 'opacity 0.35s ease',
+          pointerEvents: showLoadingCard ? 'none' : 'auto',
+        }}>
+          <DashboardPage />
+        </div>
+      ) : null}
 
       {showLoadingCard ? (
         <div
@@ -85,7 +93,7 @@ export default function DashboardRoute() {
               overflow: 'hidden',
               ...internalPageGlassCardStyle,
               background: 'rgba(255, 252, 248, 0.94)',
-              boxShadow: `${internalPageGlassCardStyle.boxShadow}, 0 30px 90px rgba(42,36,32,0.12)`,
+              boxShadow: '0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4), 0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.1), 0px 20px 40px rgba(0, 0, 0, 0.15)',
               border: '1px solid #E4E4E4',
             }}
           >

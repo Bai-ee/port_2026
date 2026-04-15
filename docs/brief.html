@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Intake Brief · Vol. 01 · Viva Acid</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700;900&family=Space+Grotesk:wght@300..700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f6f3ea;
+    --bg2:#efe9d6;
+    --ink:#0a0a0a;
+    --ink-soft:#5a5346;
+    --line:rgba(212,196,171,0.82);
+    --card:rgba(255,255,255,0.5);
+    --hl:rgba(255,255,255,0.65);
+    --brand:#116dff;
+    --grad:linear-gradient(92deg,#7a5cff 0%,#b14bff 38%,#ff4fa1 72%,#ff7a3a 100%);
+    --gutter:max(8vw, calc((100% - 1100px) / 2));
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:"Space Grotesk",system-ui,sans-serif;
+    color:var(--ink);
+    background:
+      radial-gradient(700px 420px at 0% 4%,    rgba(255,120,90,0.38) 0%, transparent 65%),
+      radial-gradient(620px 380px at 100% 16%, rgba(176,90,255,0.32) 0%, transparent 65%),
+      radial-gradient(700px 420px at 0% 30%,   rgba(255,90,160,0.32) 0%, transparent 65%),
+      radial-gradient(600px 380px at 100% 44%, rgba(90,140,255,0.30) 0%, transparent 65%),
+      radial-gradient(720px 440px at 0% 58%,   rgba(255,180,90,0.32) 0%, transparent 65%),
+      radial-gradient(620px 400px at 100% 72%, rgba(200,90,255,0.30) 0%, transparent 65%),
+      radial-gradient(660px 400px at 0% 86%,   rgba(120,200,255,0.28) 0%, transparent 65%),
+      radial-gradient(560px 360px at 100% 98%, rgba(255,120,160,0.28) 0%, transparent 65%),
+      linear-gradient(180deg, #fefdf9 0%, #fbf8f0 50%, #fdfaf2 100%);
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:"Space Mono",ui-monospace,monospace}
+  .doto{font-family:"Doto",monospace;letter-spacing:.02em}
+
+  /* ======== HEADER (EXACT) ======== */
+  .nav{
+    position:sticky; top:0; z-index:50;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:18px clamp(20px,4vw,40px);
+    background:rgba(246,243,234,0.72);
+    backdrop-filter:blur(14px);
+    -webkit-backdrop-filter:blur(14px);
+    border-bottom:1px solid rgba(0,0,0,0.04);
+  }
+  .sig{
+    font-family:"Caveat",cursive,serif;
+    font-size:26px; font-style:italic; font-weight:500;
+    letter-spacing:-.02em; color:#111;
+  }
+  .sig svg{width:44px;height:30px;display:block}
+  .nav-actions{display:flex;align-items:center;gap:14px}
+  .nav-link{
+    font-family:"Space Grotesk",sans-serif; font-size:14px;
+    color:#1a1a1a; text-decoration:none; padding:8px 14px;
+  }
+  .nav-logout{
+    font-family:"Space Grotesk",sans-serif; font-size:14px;
+    color:#1a1a1a; text-decoration:none;
+    padding:9px 18px; border-radius:999px;
+    background:#fff; border:1px solid rgba(0,0,0,0.08);
+    box-shadow:0 1px 0 rgba(255,255,255,0.7) inset, 0 1px 2px rgba(0,0,0,0.04);
+  }
+  .nav-cta{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:10px 18px; border-radius:999px; color:#fff;
+    font-family:"Space Grotesk",sans-serif; font-size:14px; font-weight:500;
+    text-decoration:none; background:var(--grad);
+    box-shadow:0 1px 0 rgba(255,255,255,0.35) inset, 0 8px 24px rgba(122,92,255,0.25);
+  }
+  .nav-cta .arr{display:inline-block;transform:translateY(-1px)}
+
+  /* ======== PAGE SHELL ======== */
+  section.page{
+    min-height:100vh;
+    padding:clamp(48px,9vh,120px) var(--gutter) clamp(64px,10vh,140px);
+    display:flex; flex-direction:column; justify-content:center;
+    border-bottom:1px solid rgba(0,0,0,0.05);
+    position:relative; overflow:hidden;
+  }
+  .eyebrow{
+    font-family:"Space Mono",monospace; font-size:11px;
+    letter-spacing:.22em; text-transform:uppercase; color:var(--ink-soft);
+    display:flex; gap:18px; align-items:center; margin-bottom:24px;
+  }
+  .eyebrow .dot{width:6px;height:6px;background:var(--ink);border-radius:50%}
+  .headline{
+    font-family:"Doto",monospace;
+    font-weight:900; letter-spacing:-.01em; line-height:.92;
+    font-size:clamp(64px, 13vw, 200px);
+    margin:0 0 24px;
+    text-transform:uppercase;
+  }
+  .sub{
+    font-family:"Space Grotesk",sans-serif;
+    font-weight:300; font-size:clamp(20px,2.4vw,34px);
+    line-height:1.25; color:#1a1a1a; max-width:58ch; margin:0 0 40px;
+  }
+  .rule{height:1px;background:rgba(0,0,0,.1);margin:28px 0}
+
+  /* ======== COVER ======== */
+  .cover .title-stack{display:flex;align-items:baseline;gap:20px;flex-wrap:wrap}
+  .cover .vol{font-family:"Space Mono",monospace;font-size:12px;letter-spacing:.3em}
+  .cover .meta{
+    display:grid; grid-template-columns:repeat(4,minmax(0,1fr));
+    gap:24px 40px; margin-top:40px;
+    border-top:1px solid rgba(0,0,0,.15); padding-top:24px;
+  }
+  .cover .meta .k{font-family:"Space Mono",monospace;font-size:10px;letter-spacing:.25em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:6px}
+  .cover .meta .v{font-family:"Space Grotesk";font-size:18px}
+  .marquee{
+    overflow:hidden; white-space:nowrap;
+    font-family:"Doto",monospace; font-weight:900;
+    font-size:clamp(44px,10vw,160px); text-transform:uppercase;
+    line-height:1; letter-spacing:.02em;
+    border-top:1px solid rgba(0,0,0,.2);
+    border-bottom:1px solid rgba(0,0,0,.2);
+    padding:12px 0; margin-top:40px;
+  }
+  .marquee span{display:inline-block}
+
+  /* ======== SHARED CARD ======== */
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:18px;
+    box-shadow:0 1px 0 var(--hl), inset 0 1px 0 rgba(255,255,255,0.4);
+    padding:clamp(18px,2vw,28px);
+  }
+
+  /* BRIEF grid */
+  .brief-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:clamp(24px,3vw,48px);align-items:start}
+  @media(max-width:900px){.brief-grid{grid-template-columns:1fr}}
+  .stat-row{display:grid;grid-template-columns:120px 1fr;gap:16px;padding:14px 0;border-bottom:1px dashed rgba(0,0,0,.15)}
+  .stat-row:last-child{border-bottom:0}
+  .stat-row .k{font-family:"Space Mono",monospace;font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-soft);padding-top:4px}
+  .stat-row .v{font-family:"Space Grotesk";font-size:16px;line-height:1.45}
+
+  /* BRAND TONE */
+  .pull{
+    font-family:"Space Grotesk"; font-weight:300;
+    font-size:clamp(26px,3.2vw,44px); line-height:1.2;
+    border-left:4px solid var(--ink); padding:8px 0 8px 24px;
+    max-width:28ch;
+  }
+  .meta-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:30px}
+  @media(max-width:800px){.meta-grid{grid-template-columns:1fr 1fr}}
+  .meta-tile{background:rgba(255,255,255,.55);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .meta-tile .k{font-family:"Space Mono";font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:6px}
+  .meta-tile .v{font-family:"Space Grotesk";font-size:15px;word-break:break-word}
+
+  /* STYLE GUIDE */
+  .sg-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:20px}
+  .sg-grid > *{grid-column:span 6}
+  .sg-grid .w4{grid-column:span 4}
+  .sg-grid .w12{grid-column:span 12}
+  @media(max-width:900px){.sg-grid > *{grid-column:span 12!important}}
+  .swatch{height:160px;border-radius:16px;border:1px solid var(--line);position:relative;overflow:hidden;display:flex;align-items:flex-end;padding:16px;color:#fff}
+  .swatch .hex{font-family:"Space Mono";font-size:13px}
+  .swatch.light{color:#111}
+  .type-sample{font-family:"Space Grotesk";font-size:48px;line-height:1;margin:0 0 6px}
+  .dur-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .dur{font-family:"Space Mono";font-size:11px;padding:6px 10px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.5)}
+
+  /* PERF */
+  .scores{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:32px}
+  @media(max-width:800px){.scores{grid-template-columns:repeat(2,1fr)}}
+  .score{aspect-ratio:1/1;border-radius:20px;border:1px solid var(--line);background:rgba(255,255,255,.5);display:flex;flex-direction:column;justify-content:space-between;padding:18px}
+  .score .lbl{font-family:"Space Mono";font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-soft)}
+  .score .num{font-family:"Doto";font-weight:900;font-size:clamp(48px,7vw,96px);line-height:.9}
+  .score.bad .num{color:#c2410c}
+  .score.ok .num{color:#166534}
+  .bar-row{display:flex;align-items:center;gap:14px;margin:10px 0;font-family:"Space Mono";font-size:12px}
+  .bar-row .name{width:140px;text-transform:uppercase;letter-spacing:.18em;font-size:10px;color:var(--ink-soft)}
+  .bar{flex:1;height:10px;background:rgba(0,0,0,.06);border-radius:999px;overflow:hidden}
+  .bar > i{display:block;height:100%;background:var(--grad)}
+
+  /* PRIORITY / Work Needed banners */
+  .status-tag{display:inline-flex;align-items:center;gap:8px;font-family:"Space Mono";font-size:10px;letter-spacing:.2em;text-transform:uppercase;padding:6px 12px;border-radius:999px;background:#fff;border:1px solid var(--line);color:var(--ink)}
+  .status-tag.warn{background:rgba(220,38,38,0.06);border-color:rgba(220,38,38,0.40);color:#dc2626}
+  .status-tag.warn::before{content:"";width:6px;height:6px;border-radius:50%;background:#dc2626;box-shadow:0 0 0 3px rgba(220,38,38,0.15)}
+  .wn-eyebrow{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-soft)}
+
+  /* FOOTER */
+  footer{padding:40px var(--gutter);font-family:"Space Mono";font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
+
+  /* Big section numbers */
+  .sec-num{
+    position:absolute; top:24px; right:var(--gutter);
+    font-family:"Doto"; font-weight:900;
+    font-size:clamp(80px,14vw,220px);
+    color:transparent; -webkit-text-stroke:1.5px rgba(0,0,0,.12);
+    line-height:.8; pointer-events:none; user-select:none;
+  }
+
+  /* Industry radial */
+  .ring{
+    width:min(420px,70vw);aspect-ratio:1/1;border-radius:50%;
+    border:1px dashed rgba(0,0,0,.25);
+    display:flex;align-items:center;justify-content:center;
+    position:relative;
+  }
+  .ring::before,.ring::after{content:"";position:absolute;inset:12%;border-radius:50%;border:1px dashed rgba(0,0,0,.2)}
+  .ring::after{inset:26%}
+  .ring .core{font-family:"Doto";font-weight:900;font-size:clamp(22px,3vw,42px);text-align:center;max-width:60%;line-height:.95;text-transform:uppercase}
+
+  /* Model flow */
+  .flow{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  @media(max-width:800px){.flow{grid-template-columns:1fr}}
+  .flow .node{padding:22px;border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.55)}
+  .flow .node .n{font-family:"Space Mono";font-size:10px;letter-spacing:.22em;color:var(--ink-soft);margin-bottom:8px}
+  .flow .node .t{font-family:"Doto";font-weight:900;font-size:26px;text-transform:uppercase;line-height:1}
+  .flow .node p{font-family:"Space Grotesk";font-size:14px;margin:10px 0 0;color:#2a2a2a}
+
+</style>
+</head>
+<body>
+
+
+<!-- ====== COVER ====== -->
+<section class="page cover">
+  <div class="sec-num">00</div>
+  <div class="eyebrow"><span class="dot"></span>Intake Brief · Vol. 01<span>Client · Critters</span><span>Tier · Onboarded</span></div>
+  <div class="title-stack">
+    <h1 class="headline">Viva<br/>Acid.</h1>
+  </div>
+  <p class="sub">A Chicago-based platform preserving and advancing acid house and underground electronic music — through curated events, exclusive vinyl, and artist collaborations.</p>
+  <div class="cover meta">
+    <div><div class="k">Date</div><div class="v">2026 · 04 · 15</div></div>
+    <div><div class="k">Site</div><div class="v">vivaacid.com</div></div>
+    <div><div class="k">Tier</div><div class="v">One-time · Free</div></div>
+    <div><div class="k">Account</div><div class="v mono" style="font-size:13px">edittraxnft@gmail.com</div></div>
+  </div>
+  <div class="marquee"><span>BRIEF • BRIEF • BRIEF • BRIEF • BRIEF</span></div>
+</section>
+
+<!-- ====== BRIEF ====== -->
+<section class="page">
+  <div class="sec-num">01</div>
+  <div class="eyebrow"><span class="dot"></span>BR · Brief<span>Live · Reviewed</span></div>
+  <h2 class="headline">The<br/>Brief.</h2>
+  <p class="sub">Not a generic event promoter. A curator-led platform rooted in authentic Chicago electronic music heritage.</p>
+
+  <div class="brief-grid">
+    <div class="card">
+      <div class="stat-row"><div class="k">Industry</div><div class="v">B2C Events & Music Culture — Underground Electronic Music</div></div>
+      <div class="stat-row"><div class="k">Model</div><div class="v">Event ticketing + exclusive vinyl merchandise + partnerships / sponsorships</div></div>
+      <div class="stat-row"><div class="k">Tone</div><div class="v">Reverent + Bold</div></div>
+      <div class="stat-row"><div class="k">Target</div><div class="v">Chicago-based acid house and underground electronic music enthusiasts, collectors, DJs, and cultural preservationists aged 25–50 — people invested in electronic music history and live sound experiences.</div></div>
+      <div class="stat-row"><div class="k">Position</div><div class="v">Blends educational content (film, conversations, artist features) with exclusive vinyl drops and partnerships with respected institutions like Gramaphone Records — positioning Viva Acid as stewards of a specific sonic and cultural lineage.</div></div>
+    </div>
+    <div>
+      <div class="pull">"Stewards of a specific sonic and cultural lineage."</div>
+      <div class="rule"></div>
+      <p style="font-family:'Space Grotesk';font-size:16px;line-height:1.55;color:#1a1a1a;max-width:40ch">
+        Viva Acid is a B2C event and merchandise platform centered on underground electronic music. It combines event ticketing, exclusive vinyl releases, and sponsorship partnerships to serve a community of music insiders.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ====== INTAKE TERMINAL ====== -->
+<section class="page" style="background:linear-gradient(180deg,transparent, rgba(10,10,10,.02))">
+  <div class="sec-num">02</div>
+  <div class="eyebrow"><span class="dot"></span>IT · Intake Terminal<span>Warnings · 0</span></div>
+  <h2 class="headline">Intake<br/>Terminal.</h2>
+  <p class="sub">Scraped pages, extracted signals, and normalization steps captured from the run lifecycle.</p>
+
+  <div class="flow">
+    <div class="node"><div class="n">Step 01</div><div class="t">Scrape</div><p>Crawl vivaacid.com — pages, metadata, links, OG tags.</p></div>
+    <div class="node"><div class="n">Step 02</div><div class="t">Extract</div><p>Signals: tone cues, offers, partners, audience frames.</p></div>
+    <div class="node"><div class="n">Step 03</div><div class="t">Normalize</div><p>Map to brand / industry / model / opportunity schema.</p></div>
+  </div>
+</section>
+
+<!-- ====== BRAND TONE ====== -->
+<section class="page">
+  <div class="sec-num">03</div>
+  <div class="eyebrow"><span class="dot"></span>BT · Brand Tone<span>Live · Reviewed</span></div>
+  <h2 class="headline">Speaks<br/>like an<br/>insider.</h2>
+  <p class="sub">Direct, conversational, specific. Leaning into artist names, venue names, 303 references — not generic event language.</p>
+
+  <div class="brief-grid">
+    <div>
+      <div class="pull">Celebratory. Community-focused. Archival.</div>
+      <div class="rule"></div>
+      <p style="font-family:'Space Grotesk';font-size:16px;line-height:1.55;max-width:42ch">
+        Medium-length, energetic sentences. The voice feels like a knowledgeable friend sharing what matters — authenticity, passion, and archival sensibility run through every message.
+      </p>
+    </div>
+    <div class="meta-grid">
+      <div class="meta-tile"><div class="k">Title</div><div class="v">VIVA ACID — Events & Education</div></div>
+      <div class="meta-tile"><div class="k">Site Name</div><div class="v">Viva Acid House</div></div>
+      <div class="meta-tile"><div class="k">OG Type</div><div class="v">website</div></div>
+      <div class="meta-tile"><div class="k">Locale</div><div class="v">en</div></div>
+      <div class="meta-tile"><div class="k">Theme Color</div><div class="v">Not provided</div></div>
+      <div class="meta-tile"><div class="k">Canonical</div><div class="v mono" style="font-size:12px">vivaacid.com</div></div>
+      <div class="meta-tile" style="grid-column:span 3"><div class="k">OG Description</div><div class="v">Viva Acid channels the raw energy of the 303-driven sound while spotlighting both pioneers and emerging voices in the scene.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ====== STYLE GUIDE ====== -->
+<section class="page">
+  <div class="sec-num">04</div>
+  <div class="eyebrow"><span class="dot"></span>SG · Style Guide<span>Live · Reviewed</span></div>
+  <h2 class="headline">Clarity.<br/>Structure.<br/>Signal.</h2>
+  <p class="sub">System sans-serifs on white. Sectioned framing. Precise, deliberate, without flourish — the minimalism lets the music culture speak.</p>
+
+  <div class="sg-grid">
+    <div class="card">
+      <div class="wn-eyebrow"><span>Heading + Body</span></div>
+      <div class="type-sample">Arial / Helvetica</div>
+      <div class="mono" style="font-size:12px;color:var(--ink-soft)">10px · 400 · system sans-serif</div>
+      <div class="rule"></div>
+      <div class="mono" style="font-size:12px">Scale · custom</div>
+      <div class="mono" style="font-size:12px">Layout · grid · contained</div>
+      <div class="mono" style="font-size:12px">Framing · sectioned · customGrid</div>
+      <div class="mono" style="font-size:12px">Radius · 24px · Motion · moderate</div>
+    </div>
+    <div class="card">
+      <div class="wn-eyebrow"><span>Motion Durations</span></div>
+      <div class="dur-row">
+        <span class="dur">0.01s</span><span class="dur">0.12s</span><span class="dur">0.2s</span>
+        <span class="dur">0.25s</span><span class="dur">0.3s</span><span class="dur">0.33s</span>
+        <span class="dur">0.35s</span><span class="dur">0.4s</span><span class="dur">0.5s</span>
+        <span class="dur">0.6s</span><span class="dur">0.8s</span>
+      </div>
+      <div class="rule"></div>
+      <p class="mono" style="font-size:12px;color:var(--ink-soft);margin:0">Eleven discrete easings — deliberate pacing across interactions.</p>
+    </div>
+
+    <div class="w4 swatch" style="background:#116dff"><div><div class="mono" style="font-size:10px;letter-spacing:.22em;opacity:.8">PRIMARY · CTA / FOCUS</div><div class="hex">#116DFF</div></div></div>
+    <div class="w4 swatch" style="background:#080808"><div><div class="mono" style="font-size:10px;letter-spacing:.22em;opacity:.8">SECONDARY · TEXT</div><div class="hex">#080808</div></div></div>
+    <div class="w4 swatch light" style="background:#ffffff"><div><div class="mono" style="font-size:10px;letter-spacing:.22em;color:#666">NEUTRAL · BACKGROUND</div><div class="hex">#FFFFFF</div></div></div>
+  </div>
+</section>
+
+<!-- ====== SEO + PERF ====== -->
+<section class="page">
+  <div class="sec-num">05</div>
+  <div class="eyebrow"><span class="dot"></span>SP · SEO + Performance<span>Lighthouse · Lab</span></div>
+  <h2 class="headline">Strong<br/>on SEO.<br/>Slow on LCP.</h2>
+  <p class="sub">Mobile performance is moderate. SEO fundamentals are strong. LCP is the number that hurts.</p>
+
+  <div class="scores">
+    <div class="score bad"><div class="lbl">Perf</div><div class="num">61</div></div>
+    <div class="score ok"><div class="lbl">SEO</div><div class="num">92</div></div>
+    <div class="score ok"><div class="lbl">A11y</div><div class="num">92</div></div>
+    <div class="score ok"><div class="lbl">BP</div><div class="num">100</div></div>
+  </div>
+
+  <div class="brief-grid">
+    <div class="card">
+      <div class="eyebrow" style="margin-bottom:12px"><span>Core Web Vitals</span></div>
+      <div class="bar-row"><span class="name">LCP · 14.0s</span><span class="bar"><i style="width:100%;background:#c2410c"></i></span><span>SLOW</span></div>
+      <div class="bar-row"><span class="name">CLS · 0.00</span><span class="bar"><i style="width:4%;background:#166534"></i></span><span>OK</span></div>
+      <div class="bar-row"><span class="name">TTFB · 0.0s</span><span class="bar"><i style="width:2%;background:#166534"></i></span><span>OK</span></div>
+      <div class="bar-row"><span class="name">INP · —</span><span class="bar"><i style="width:0"></i></span><span>N/A</span></div>
+    </div>
+    <div class="card">
+      <div class="eyebrow" style="margin-bottom:12px"><span>Top Fixes</span></div>
+      <div class="stat-row"><div class="k">Fix 01</div><div class="v">Avoid multiple page redirects <span class="mono" style="color:var(--ink-soft)">— 780ms</span></div></div>
+      <div class="stat-row"><div class="k">Fix 02</div><div class="v">Reduce unused JavaScript <span class="mono" style="color:var(--ink-soft)">— 450ms</span></div></div>
+      <div class="stat-row"><div class="k">SEO Flag</div><div class="v">Link text failing — descriptive link text helps search engines understand your content.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ====== INDUSTRY ====== -->
+<section class="page">
+  <div class="sec-num">06</div>
+  <div class="eyebrow"><span class="dot"></span>IN · Industry<span>Live · Reviewed</span></div>
+  <h2 class="headline">Under<br/>ground.</h2>
+  <p class="sub">B2C Events & Music Culture — Underground Electronic Music. A hub directly connecting audiences to experiences, merchandise, and community.</p>
+
+  <div class="brief-grid" style="align-items:center">
+    <div style="display:flex;justify-content:center">
+      <div class="ring"><div class="core">Acid<br/>House<br/>303</div></div>
+    </div>
+    <div class="card">
+      <div class="stat-row"><div class="k">Sector</div><div class="v">B2C Events & Music Culture</div></div>
+      <div class="stat-row"><div class="k">Scene</div><div class="v">Underground Electronic Music — Chicago lineage</div></div>
+      <div class="stat-row"><div class="k">Serves</div><div class="v">Event attendees, collectors, DJs, preservationists aged 25–50</div></div>
+      <div class="stat-row"><div class="k">Role</div><div class="v">Curator-led platform, not a generic event promoter</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ====== BUSINESS MODEL ====== -->
+<section class="page">
+  <div class="sec-num">07</div>
+  <div class="eyebrow"><span class="dot"></span>BM · Business Model<span>Live · Reviewed</span></div>
+  <h2 class="headline">Three<br/>streams.</h2>
+  <p class="sub">Revenue ties directly to audience loyalty and cultural relevance within the underground electronic music community.</p>
+
+  <div class="flow">
+    <div class="node"><div class="n">Stream 01</div><div class="t">Event<br/>Ticketing</div><p>Curated live events and programming — the core live-sound experience.</p></div>
+    <div class="node"><div class="n">Stream 02</div><div class="t">Exclusive<br/>Vinyl</div><p>Merchandise drops tied to releases and partners like Gramaphone Records.</p></div>
+    <div class="node"><div class="n">Stream 03</div><div class="t">Partners<br/>+ Sponsors</div><p>Brand partnerships and sponsorship — extending reach while keeping the lineage intact.</p></div>
+  </div>
+</section>
+
+<!-- ====== WORK NEEDED BLOCK ====== -->
+<section class="page">
+  <div class="sec-num">08</div>
+  <div class="eyebrow"><span class="dot"></span>PS · DP · CA · CO<span>Status · Work Needed</span></div>
+  <h2 class="headline">Work<br/>Needed.</h2>
+  <p class="sub">The crawl did not surface enough validated positioning, offer clarity, or audience framing to draft credibly. The next pass tightens the signal.</p>
+
+  <div class="sg-grid">
+    <div class="card">
+      <div class="wn-eyebrow"><span>PS · Priority Signal</span><span class="status-tag warn">Work Needed</span></div>
+      <p style="margin:0;font-family:'Space Grotesk';font-size:15px;line-height:1.5">The crawl did not surface enough validated positioning or urgency signals. The highest-confidence marketing move is not yet clear.</p>
+    </div>
+    <div class="card">
+      <div class="wn-eyebrow"><span>DP · Draft Post</span><span class="status-tag warn">Work Needed</span></div>
+      <p style="margin:0;font-family:'Space Grotesk';font-size:15px;line-height:1.5">Not enough trustworthy brand voice and offer clarity to draft a publish-ready social post credibly.</p>
+    </div>
+    <div class="card">
+      <div class="wn-eyebrow"><span>CA · Content Angle</span><span class="status-tag warn">Work Needed</span></div>
+      <p style="margin:0;font-family:'Space Grotesk';font-size:15px;line-height:1.5">Audience / problem framing is too thin to establish a reliable editorial lens for the next push.</p>
+    </div>
+    <div class="card">
+      <div class="wn-eyebrow"><span>CO · Content Opportunities</span><span class="status-tag warn">Work Needed</span></div>
+      <p style="margin:0;font-family:'Space Grotesk';font-size:15px;line-height:1.5">The current intake did not surface enough concrete evidence to suggest high-confidence content and channel moves.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <span>Generated · 2026-04-15 05:34:08</span>
+  <span>Client · critters-pnrvao9x</span>
+  <span>Intake Brief · Vol. 01 · Viva Acid</span>
+</footer>
+
+</body>
+</html>

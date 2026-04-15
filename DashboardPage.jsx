@@ -9,6 +9,12 @@ import Link from 'next/link';
 import { Globe } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { internalPageGlassCardStyle } from './pageSurfaceSystem';
+import OnboardingChatModal from './onboarding/OnboardingChatModal';
+import onboardingConfig from './onboarding/questions.config.cjs';
+
+// Entry-flow survey surfaces every question step (excludes the summary, which
+// is added in Phase 4). Ordered by the `order` field in questions.config.cjs.
+const ONBOARDING_ENTRY_STEPS = onboardingConfig.QUESTION_STEPS;
 import {
   trackDashboardCreated,
   trackPipelineRerun,
@@ -1023,12 +1029,17 @@ const DashboardPage = () => {
   const [bootstrapError, setBootstrapError] = useState('');
   const cancelledRef = useRef(false);
   const prevRunStatusRef = useRef(null);
+  const postSurveyRevealFiredRef = useRef(false);
+  const runWasActiveRef = useRef(false);
+  const prevRunIdRef = useRef(null);
   const terminalOutputRef = useRef(null);
   const terminalLengthRef = useRef(0);
   const prevLogLengthRef = useRef(0);
   const prevStatusForRevealRef = useRef(null);
   const [completionCountdown, setCompletionCountdown] = useState(null);
   const [revealedLineCount, setRevealedLineCount] = useState(null);
+  const [surveyResolved, setSurveyResolved] = useState(false);
+  const [onboardingAnswersSeed, setOnboardingAnswersSeed] = useState(null);
   const modalMarqueeTrackRef = useRef(null);
   const modalMarqueeOffsetRef = useRef(0);
   const modalMarqueeAnimRef = useRef(null);
@@ -1046,6 +1057,40 @@ const DashboardPage = () => {
   const [seoRerunLoading, setSeoRerunLoading] = useState(false);
   const [seoRerunStage,   setSeoRerunStage]   = useState(null);
   const [intakeMockupSrc, setIntakeMockupSrc] = useState(null);
+  // HTML preview for the brief tile — fetched from /api/dashboard/brief-preview
+  // and injected via iframe srcDoc. Keeps the brief's <style> isolated from
+  // the dashboard's own styles.
+  const [briefPreviewHtml, setBriefPreviewHtml] = useState('');
+
+  // Fetch the brief HTML for the Brief tile's miniature preview. Re-fetches
+  // whenever latestRunId changes so the tile always shows the newest render.
+  // Cache-busted with the runId + `cache: 'no-store'` to defeat both browser
+  // and Next.js response caches.
+  useEffect(() => {
+    if (!user) return;
+    const dash = bootstrap?.dashboardState;
+    const runId = dash?.latestRunId || null;
+    if (!dash?.scribe?.brief) { setBriefPreviewHtml(''); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const url = runId
+          ? `/api/dashboard/brief-preview?runId=${encodeURIComponent(runId)}`
+          : '/api/dashboard/brief-preview';
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        });
+        if (!res.ok) return;
+        const html = await res.text();
+        if (!cancelled) setBriefPreviewHtml(html);
+      } catch {
+        // non-fatal — tile falls back to placeholder label
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user, bootstrap?.dashboardState?.latestRunId, bootstrap?.dashboardState?.scribe?.brief?.headline]);
 
   // Advance scripted terminal stages during SEO rerun
   useEffect(() => {
@@ -1145,6 +1190,11 @@ const DashboardPage = () => {
   const sgDisplayData   = styleGuideData ?? SG_MOCK;
   const isStyleGuideMock = styleGuideData === null;
   const outputsPreview  = dashboardState?.outputsPreview || null;
+  // Phase-4 Scribe: per-card short + expanded copy. When present for a card,
+  // the modal description is overridden with scribe.expanded. Absent → static
+  // fallback copy already defined on each intakeCapabilityCards entry.
+  const scribeCards = dashboardState?.scribe?.cards || null;
+  const briefPdfUrl = dashboardState?.artifacts?.briefPdf?.downloadUrl || null;
   // Intelligence-first SEO data: prefer intelligence source, fall back to dashboardState.seoAudit
   const intelligencePayload = bootstrap.intelligence || null;
   const seoAudit = intelligencePayload?.dashboardSeoAudit ?? dashboardState?.seoAudit ?? null;
@@ -1158,11 +1208,42 @@ const DashboardPage = () => {
   const summaryCards = dashboardState?.summaryCards || [];
   const latestInsights = dashboardState?.latestInsights || [];
 
-  const hasIntakeData = Boolean(brandOverview?.headline);
+  // Broader check than just the brand headline — a run can succeed with
+  // rich scribe/snapshot output even when synth's top-line headline string
+  // is empty. Any of these signals means the dashboard has enough to show.
+  const hasIntakeData = Boolean(
+    brandOverview?.headline
+    || brandOverview?.summary
+    || brandOverview?.industry
+    || brandOverview?.businessModel
+    || dashboardState?.scribe?.brief?.headline
+    || dashboardState?.scribe?.cards
+    || headline
+  );
   const isRunActive = latestRunStatus === 'queued' || latestRunStatus === 'running';
 
+  // Mark the run as active for this session so we know whether to hold the
+  // intake modal for survey resolution (only relevant when the build happened
+  // during this session — returning users with a long-succeeded run skip this).
+  if (latestRunStatus === 'queued' || latestRunStatus === 'running') {
+    runWasActiveRef.current = true;
+  }
+
   // Show terminal modal during active builds, failures, and the post-completion countdown.
-  const showIntakeModal = !bootstrapLoading && (isRunActive || latestRunStatus === 'failed' || completionCountdown !== null);
+  // Hold it while the run has succeeded but the onboarding survey is still unresolved,
+  // but ONLY if the build happened this session — never flash it for returning users
+  // whose dashboard was already built.
+  // Also show it for new users who have never completed a build: there's no dashboard
+  // to reveal yet, so the onboarding terminal + survey should be the entry experience
+  // (even if no brief_run is queued — e.g., idea-only signup without a URL).
+  const hasReadyDashboard = latestRunStatus === 'succeeded' && hasIntakeData;
+  const showIntakeModal = !bootstrapLoading && (
+    isRunActive
+    || latestRunStatus === 'failed'
+    || completionCountdown !== null
+    || (latestRunStatus === 'succeeded' && !surveyResolved && runWasActiveRef.current)
+    || !hasReadyDashboard
+  );
 
   // Page-load / processing-handoff intro.
   // Three states this effect handles:
@@ -1323,14 +1404,80 @@ const DashboardPage = () => {
     }
   }, [client?.websiteUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Detect run completion → start 3-second countdown before revealing dashboard
+  // Detect run completion → start 3-second countdown before revealing dashboard.
+  // Gated: hold the countdown until the onboarding survey is resolved so answers
+  // can influence answer-dependent pipeline stages before reveal.
   useEffect(() => {
     if (latestRunStatus === prevRunStatusRef.current) return;
     if (latestRunStatus === 'succeeded' && (prevRunStatusRef.current === 'running' || prevRunStatusRef.current === 'queued')) {
-      setCompletionCountdown(3);
+      if (surveyResolved) setCompletionCountdown(3);
     }
     prevRunStatusRef.current = latestRunStatus;
-  }, [latestRunStatus]);
+  }, [latestRunStatus, surveyResolved]);
+
+  // If the run finished during this session before the survey resolved, start
+  // the countdown once the survey becomes resolved. Guarded by:
+  //   - runWasActiveRef so returning users (whose run long succeeded) never
+  //     trigger a countdown on page load,
+  //   - postSurveyRevealFiredRef so this can only fire once per session and
+  //     can't loop after the countdown ticks back to null.
+  useEffect(() => {
+    if (postSurveyRevealFiredRef.current) return;
+    if (!runWasActiveRef.current) return;
+    if (surveyResolved && latestRunStatus === 'succeeded' && completionCountdown === null) {
+      postSurveyRevealFiredRef.current = true;
+      setCompletionCountdown(3);
+    }
+  }, [surveyResolved, latestRunStatus, completionCountdown]);
+
+  // When a new brief_run starts (run ID changes from a prior non-null value),
+  // reset survey resolution so the bento survey reappears alongside the fresh
+  // terminal. Previous answers remain in Firestore and seed the survey again.
+  useEffect(() => {
+    const currentRunId = client?.latestRunId || null;
+    if (prevRunIdRef.current !== null && currentRunId && currentRunId !== prevRunIdRef.current) {
+      setSurveyResolved(false);
+      postSurveyRevealFiredRef.current = false;
+    }
+    if (currentRunId) prevRunIdRef.current = currentRunId;
+  }, [client?.latestRunId]);
+
+  // Load current onboarding state on mount so a returning/mid-build user
+  // picks up where they left off (or passes through if already resolved).
+  useEffect(() => {
+    if (!user) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch('/api/dashboard/onboarding', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        const answers = data.onboardingAnswers || null;
+        setOnboardingAnswersSeed(answers?.answers || null);
+        if (answers?.completedAt || answers?.skippedAt) {
+          setSurveyResolved(true);
+        }
+      } catch {
+        /* non-fatal — survey will still render */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user]);
+
+  const postOnboarding = useCallback(async (body) => {
+    if (!user) throw new Error('No user.');
+    const token = await user.getIdToken();
+    const res = await fetch('/api/dashboard/onboarding', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error('Onboarding save failed.');
+    return res.json();
+  }, [user]);
 
   // Tick countdown down to 0, then clear it (modal unmounts)
   useEffect(() => {
@@ -2097,7 +2244,15 @@ const DashboardPage = () => {
       footerLeft: WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
     },
-  ];
+  ].map((card) => {
+    const scribe = scribeCards?.[card.id];
+    if (!scribe) return card;
+    return {
+      ...card,
+      description: scribe.expanded || card.description,
+      scribeShort: scribe.short || null,
+    };
+  });
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -2271,7 +2426,15 @@ const DashboardPage = () => {
                   >[ ↑ ]</button>
                 </div>
                 <div className={`tile-intake-placeholder tile-intake-placeholder-${card.id}`}>
-                  {card.id === 'style-guide' ? (
+                  {card.id === 'brief' && briefPreviewHtml ? (
+                    <iframe
+                      key={dashboardState?.latestRunId || 'brief-preview'}
+                      className="tile-brief-preview"
+                      title="Brief preview"
+                      srcDoc={briefPreviewHtml}
+                      sandbox="allow-same-origin"
+                    />
+                  ) : card.id === 'style-guide' ? (
                     <div id="sg-preview-shell" className="sg-preview">
                       {sgDisplayData?.confidence === 'low' ? (
                         <div className="sg-empty">
@@ -2578,15 +2741,18 @@ const DashboardPage = () => {
                         {card.footerAction.loading ? '…' : card.footerAction.label}
                       </button>
                     ) : null}
-                    {card.id === 'brief' && (
-                      <button
-                        type="button"
+                    {card.id === 'brief' && briefPdfUrl && (
+                      <a
+                        href={briefPdfUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        download="brief.pdf"
                         className="tile-download-btn"
                         onClick={(e) => { e.stopPropagation(); }}
-                        aria-label="Download brief"
+                        aria-label="Download brief PDF"
                       >
                         DL ↓
-                      </button>
+                      </a>
                     )}
                     <button
                       type="button"
@@ -2708,8 +2874,10 @@ const DashboardPage = () => {
                   });
                 }}
               >
-                <span className="capability-nav-btn-label">{label}</span>
-                <span className="capability-nav-btn-sub">{sub}</span>
+                <span className="capability-nav-btn-content">
+                  <span className="capability-nav-btn-label">{label}</span>
+                  <span className="capability-nav-btn-sub">{sub}</span>
+                </span>
               </button>
             ))}
           </div>
@@ -2719,25 +2887,28 @@ const DashboardPage = () => {
 
       </main>
 
-      {/* ── Intake build modal — auth card shell + embedded terminal ── */}
+      {/* ── Intake build modal — unified card: shared top rows + 2-col body (terminal / survey) ── */}
       {showIntakeModal ? (
         <div id="intake-modal-overlay" role="dialog" aria-modal="true" aria-label="Dashboard build in progress">
 
-          {/* Card: exact auth cardStyle */}
+          {/* Card: exact auth cardStyle, widened when survey is active */}
           <div
             id="intake-modal-card"
+            data-with-survey={!surveyResolved ? 'true' : 'false'}
             style={{
               position: 'relative',
               zIndex: 2,
               width: '100%',
-              maxWidth: '30rem',
+              maxWidth: !surveyResolved ? '52rem' : '30rem',
               padding: 'clamp(1.25rem, 5vw, 2rem)',
-              borderRadius: '1.1rem',
+              borderRadius: '10px',
               boxSizing: 'border-box',
               ...internalPageGlassCardStyle,
-              background: 'rgba(255, 252, 248, 0.97)',
-              boxShadow: `${internalPageGlassCardStyle.boxShadow}, 0 30px 90px rgba(42,36,32,0.12)`,
-              border: '1px solid var(--border)',
+              background: 'rgba(255, 255, 255, 0.6)',
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)',
+              boxShadow: '0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.1), 0px 20px 40px rgba(0, 0, 0, 0.15)',
+              border: '1px solid rgba(255, 255, 255, 0.5)',
             }}
           >
 
@@ -2788,16 +2959,69 @@ const DashboardPage = () => {
             </p>
 
 
-            {/* ── Embedded terminal panel ── */}
-            <div id="intake-modal-terminal-embed" ref={terminalOutputRef}>
-              {displayedTerminalLines.map((line, i) => (
-                <div key={`tl-${i}`} className={`term-line term-${line.type}`}>
-                  <span className="term-pfx">{line.prefix}</span>
-                  <span className="term-msg">{line.text}</span>
-                  {line.cursor ? <span className="term-caret" /> : null}
+            {/* ── Bottom row: terminal (left) + survey (right) ── */}
+            <div id="intake-modal-body">
+              <div id="intake-modal-terminal-col">
+                <div id="intake-modal-terminal-titlebar">
+                  <span className="term-win-dot term-win-dot-close" />
+                  <span className="term-win-dot term-win-dot-min" />
+                  <span className="term-win-dot term-win-dot-max" />
+                  <span id="intake-modal-terminal-title">build.process</span>
                 </div>
-              ))}
+                <div id="intake-modal-terminal-embed" ref={terminalOutputRef}>
+                  {displayedTerminalLines.map((line, i) => (
+                    <div key={`tl-${i}`} className={`term-line term-${line.type}`}>
+                      <span className="term-pfx">{line.prefix}</span>
+                      <span className="term-msg">{line.text}</span>
+                      {line.cursor ? <span className="term-caret" /> : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {!surveyResolved ? (
+                <div id="intake-modal-survey-col">
+                  <OnboardingChatModal
+                    steps={ONBOARDING_ENTRY_STEPS}
+                    initialAnswers={onboardingAnswersSeed || {}}
+                    onAnswer={(stepId, value) => postOnboarding({ action: 'answer', stepId, value })}
+                    onSkipStep={(stepId) => postOnboarding({ action: 'skipStep', stepId })}
+                    onSkipAll={() => postOnboarding({ action: 'skipAll' })}
+                    onComplete={() => postOnboarding({ action: 'complete' })}
+                    onResolved={() => setSurveyResolved(true)}
+                  />
+                </div>
+              ) : null}
             </div>
+
+            {/* Retry control — only on failed state. Reuses the dashboard's
+                reseed flow (same state + handler as #reseed-url-input below). */}
+            {latestRunStatus === 'failed' ? (
+              <div id="intake-modal-retry-row">
+                <div id="intake-modal-retry-inner">
+                  <Globe size={14} strokeWidth={1.5} aria-hidden="true" id="intake-modal-retry-icon" />
+                  <input
+                    id="intake-modal-retry-input"
+                    type="url"
+                    value={reseedUrl}
+                    onChange={(e) => { setReseedUrl(e.target.value); setReseedError(''); setReseedSuccess(false); }}
+                    placeholder="yourbusiness.com"
+                    disabled={reseedLoading}
+                    spellCheck={false}
+                    autoFocus
+                  />
+                  <button
+                    id="intake-modal-retry-btn"
+                    type="button"
+                    onClick={handleReseed}
+                    disabled={reseedLoading || !reseedUrl.trim()}
+                  >
+                    {reseedLoading ? 'Queueing…' : 'Retry'}
+                  </button>
+                </div>
+                {reseedError ? <div id="intake-modal-retry-error">{reseedError}</div> : null}
+              </div>
+            ) : null}
 
             {/* Footer */}
             <div id="intake-modal-footer">
@@ -2831,7 +3055,7 @@ const DashboardPage = () => {
               boxSizing: 'border-box',
               ...internalPageGlassCardStyle,
               background: 'rgba(255, 252, 248, 0.97)',
-              boxShadow: `${internalPageGlassCardStyle.boxShadow}, 0 30px 90px rgba(42,36,32,0.12)`,
+              boxShadow: '0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4), 0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.1), 0px 20px 40px rgba(0, 0, 0, 0.15)',
             }}
           >
             <div id="tier-modal-top">
@@ -2995,7 +3219,7 @@ const DashboardPage = () => {
                 {/* Chat with Bryan */}
                 <div id="tile-detail-chat-header">
                   <div id="tile-detail-chat-avatar-wrap">
-                    <img src="/img/profile2_400x400.png?v=1774582808" id="tile-detail-chat-avatar" alt="Bryan Balli" />
+                    <img src="/img/profile_400x400.jpg" id="tile-detail-chat-avatar" alt="Bryan Balli" />
                     <span id="tile-detail-chat-status-dot" />
                   </div>
                   <div id="tile-detail-chat-identity">
@@ -3031,7 +3255,7 @@ const DashboardPage = () => {
                 <div id="tile-detail-chat-footer">
                   <a href="https://calendly.com/bballi/30min" target="_blank" rel="noopener noreferrer" className="tile-detail-chat-footer-link">Book a call ↗</a>
                   <span id="tile-detail-chat-footer-dot">·</span>
-                  <a href="sms:+13122865129&body=Hey Bryan, I have a question about your services." className="tile-detail-chat-footer-link">Text directly ↗</a>
+                  <button type="button" className="tile-detail-chat-footer-link" onClick={() => setShowTierModal(true)}>Text directly ↗</button>
                 </div>
 
               </div>
@@ -3423,6 +3647,14 @@ const dashboardCss = `
     font-weight: 700;
     letter-spacing: 0.01em;
     line-height: 1;
+    transform: scale(1);
+    transition: background 0.45s ease, box-shadow 0.45s ease, transform 0.45s ease;
+  }
+  #founders-login-link:hover {
+    background: rgba(255,255,255,1);
+    box-shadow: 0px 5px 10px rgba(0,0,0,0.067), 0px 15px 30px rgba(0,0,0,0.067), 0px 20px 40px rgba(0,0,0,0.1);
+    transform: scale(1.012);
+    transition: background 0.28s ease, box-shadow 0.28s ease, transform 0.28s ease;
   }
   #founders-chat-cta {
     display: inline-flex;
@@ -3442,6 +3674,13 @@ const dashboardCss = `
     letter-spacing: 0.01em;
     line-height: 1;
     white-space: nowrap;
+    transform: scale(1);
+    transition: box-shadow 0.45s ease, transform 0.45s ease;
+  }
+  #founders-chat-cta:hover {
+    box-shadow: 0px 5px 10px rgba(0,0,0,0.067), 0px 15px 30px rgba(0,0,0,0.067), 0px 20px 40px rgba(0,0,0,0.1);
+    transform: scale(1.012);
+    transition: box-shadow 0.28s ease, transform 0.28s ease;
   }
   #founders-chat-cta-icon {
     font-size: 0.72rem;
@@ -3520,7 +3759,7 @@ const dashboardCss = `
   }
   .tile-open-modal-btn {
     background: none;
-    border: 1px solid rgba(212, 196, 171, 0.5);
+    border: 1px solid rgba(180, 180, 180, 0.7);
     cursor: pointer;
     font-size: 10px;
     font-family: var(--font-mono);
@@ -3529,11 +3768,12 @@ const dashboardCss = `
     padding: 5px 10px;
     border-radius: 4px;
     line-height: 1;
-    transition: color 0.15s ease, border-color 0.15s ease;
+    transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
   }
   .tile-open-modal-btn:hover {
-    color: var(--text-display);
-    border-color: var(--text-secondary);
+    background: var(--text-display);
+    border-color: var(--text-display);
+    color: var(--page);
   }
   .hero-label {
     font-family: var(--font-display);
@@ -3666,7 +3906,7 @@ const dashboardCss = `
     cursor: pointer;
   }
   .meta-value-wrap { font-size: 11px; max-width: 28ch; text-align: right; line-height: 1.4; white-space: normal; }
-  #capability-section { padding: 80px 0 0; }
+  #capability-section { padding: 0; }
   #capability-section-shell {
     display: grid;
     grid-template-columns: 1fr 268.336px;
@@ -3674,50 +3914,106 @@ const dashboardCss = `
   }
   #capability-grid-col {
     min-width: 0;
+    border-radius: 28px;
   }
   #capability-nav-col {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    border-radius: 1rem;
   }
   .capability-nav-btn {
     display: flex;
     flex-direction: column;
     gap: 4px;
     background: rgba(255, 255, 255, 0.35);
-    border: 1px solid rgba(42, 36, 32, 0.18);
+    border: none;
     border-radius: 1rem;
     padding: 20px 22px;
     cursor: pointer;
     text-align: left;
-    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    box-shadow: 0px 0px 0px rgba(0, 0, 0, 0), inset 0 1px 0 rgba(255,255,255,0.22);
+    transform: scale(1);
+    transition: background 0.45s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.45s cubic-bezier(0.16, 1, 0.3, 1), transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
     width: 100%;
+    position: relative;
+  }
+  .capability-nav-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 1rem;
+    padding: 1px;
+    background: linear-gradient(to bottom, rgba(228,228,228,0.9), transparent 65%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+  .capability-nav-btn::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%) scaleY(0);
+    width: 3px;
+    height: 28px;
+    background: var(--accent);
+    border-radius: 0 2px 2px 0;
+    opacity: 0;
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+    pointer-events: none;
+  }
+  .capability-nav-btn:hover {
+    background: rgba(255, 255, 255, 1);
+    box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.067), 0px 15px 30px rgba(0, 0, 0, 0.067), 0px 20px 40px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255,255,255,0.45);
+    transform: scale(1.012);
+    transition: background 0.28s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1), transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .capability-nav-btn:active {
+    transform: scale(0.985);
+    transition: transform 0.12s ease;
   }
   .capability-nav-btn--active {
-    background: linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
-    background-clip: padding-box;
-    border: 2px solid transparent;
-  }
-  .capability-nav-btn--active .capability-nav-btn-label,
-  .capability-nav-btn--active .capability-nav-btn-sub,
-  .capability-nav-btn--active::after {
-    color: #fff;
-  }
-  .capability-nav-btn:not(.capability-nav-btn--active):hover {
     background: rgba(255, 255, 255, 1);
-    border-color: rgba(42, 36, 32, 0.35);
+    box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.067), 0px 15px 30px rgba(0, 0, 0, 0.067), 0px 20px 40px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255,255,255,0.45);
+    transition: background 0.28s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1), transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .capability-nav-btn--active::after {
+    transform: translateY(-50%) scaleY(1);
+    opacity: 1;
+  }
+  /* Dim active item only when a non-active sibling button is directly hovered */
+  #capability-nav-col:has(.capability-nav-btn:not(.capability-nav-btn--active):hover) .capability-nav-btn--active {
+    background: rgba(255, 255, 255, 0.35);
+    box-shadow: 0px 0px 0px rgba(0, 0, 0, 0), inset 0 1px 0 rgba(255,255,255,0.22);
+    transform: scale(1);
+    transition: background 0.45s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.45s cubic-bezier(0.16, 1, 0.3, 1), transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  #capability-nav-col:has(.capability-nav-btn:not(.capability-nav-btn--active):hover) .capability-nav-btn--active::after {
+    transform: translateY(-50%) scaleY(0);
+    opacity: 0;
+  }
+
+  .capability-nav-btn-content {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+    position: relative;
+    z-index: 1;
   }
   .capability-nav-btn-label {
-    font-size: 0.84rem;
+    font-size: 0.88rem;
     font-weight: 700;
-    letter-spacing: 0.01em;
+    letter-spacing: -0.01em;
     color: var(--text-display);
-    line-height: 1.2;
+    line-height: 1.15;
   }
   .capability-nav-btn-sub {
     font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.05em;
+    font-size: 11px;
+    letter-spacing: 0.06em;
     color: var(--text-secondary);
     line-height: 1.2;
   }
@@ -3736,7 +4032,7 @@ const dashboardCss = `
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-auto-rows: minmax(460px, auto);
     gap: 1px;
-    border: 1px solid var(--border);
+    border: 1px solid rgba(42, 36, 32, 0.1);
     border-radius: 28px;
     overflow: hidden;
     isolation: isolate;
@@ -3820,6 +4116,28 @@ const dashboardCss = `
     align-items: stretch;
     justify-content: stretch;
     padding: 0;
+  }
+  /* Brief tile — miniaturized iframe preview of the full brief document.
+     Render iframe at 4x the tile size, scale to 25% via transform to fit. */
+  .tile-intake-placeholder-brief {
+    align-items: stretch;
+    justify-content: stretch;
+    padding: 0;
+    position: relative;
+  }
+  .tile-brief-preview {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 400%;
+    height: 400%;
+    border: none;
+    background: transparent;
+    transform: scale(0.25);
+    transform-origin: top left;
+    pointer-events: none;
+    /* Browsers throttle off-screen iframes, but this keeps it crisp when visible. */
+    image-rendering: -webkit-optimize-contrast;
   }
   .tile-intake-placeholder-industry {
     background:
@@ -4296,22 +4614,22 @@ const dashboardCss = `
     color: #fff;
   }
   .tile-view-details-btn {
-    background: #000;
+    background: #fff;
     border: 1px solid #000;
     cursor: pointer;
     font-size: 10px;
     font-family: var(--font-mono);
     letter-spacing: 0.05em;
     text-transform: uppercase;
-    color: #fff;
+    color: #000;
     padding: 5px 10px;
     border-radius: 4px;
     line-height: 1;
     transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   }
   .tile-view-details-btn:hover {
-    background: #1a1a1a;
-    border-color: #1a1a1a;
+    background: #000;
+    border-color: #000;
     color: #fff;
   }
   .tile-blocked-upgrade-btn::before {
@@ -4351,6 +4669,7 @@ const dashboardCss = `
     border: 1px solid rgba(42, 36, 32, 0.1);
     border-radius: 1rem;
     box-sizing: border-box;
+    box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.1), 0px 20px 40px rgba(0, 0, 0, 0.15);
   }
   /* Header cell */
   #tile-detail-modal-header {
@@ -4359,6 +4678,7 @@ const dashboardCss = `
     gap: 10px;
     padding: 14px 20px;
     flex-shrink: 0;
+    box-shadow: none;
   }
   #tile-detail-modal-eyebrow {
     display: flex;
@@ -4408,6 +4728,10 @@ const dashboardCss = `
     gap: 12px;
     flex: 1;
     min-height: 0;
+  }
+  #tile-detail-bento-grid,
+  #tile-detail-bento-grid * {
+    box-shadow: none !important;
   }
   /* Image cell — chat with Bryan */
   #tile-detail-bento-image-cell {
@@ -5130,9 +5454,11 @@ const dashboardCss = `
     #capability-section-shell { grid-template-columns: 1fr; }
     #capability-nav-col { order: -1; position: static; flex-direction: row; flex-wrap: wrap; gap: 6px; z-index: 10; }
     .capability-nav-btn { flex: 1 1 auto; min-width: 0; padding: 10px 16px; border-radius: 999px; flex-direction: row; align-items: center; justify-content: center; gap: 0; width: auto; }
+    .capability-nav-btn::before { border-radius: 999px; }
     .capability-nav-btn::after { content: none; }
     .capability-nav-btn-sub { display: none; }
     .capability-nav-btn-label { font-family: var(--font-mono); font-size: 11px; font-weight: 400; letter-spacing: 0.08em; text-transform: uppercase; }
+    .capability-nav-btn-content { flex-direction: row; align-items: center; gap: 0; }
     #capability-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .tile { aspect-ratio: auto; min-height: 220px; grid-template-areas: "num" "head" "desc" "viz" "foot"; grid-template-columns: 1fr; row-gap: 14px; }
     .tile-description { }
@@ -5169,7 +5495,7 @@ const dashboardCss = `
     background: rgba(255,255,255,0.45);
     border: 1px solid rgba(42,36,32,0.12);
     border-radius: 999px;
-    box-shadow: 0 1px 4px rgba(42,36,32,0.07);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4), 0 30px 90px rgba(42,36,32,0.12);
     box-sizing: border-box;
     position: relative;
     z-index: 10;
@@ -5212,7 +5538,14 @@ const dashboardCss = `
     box-shadow: none;
     cursor: pointer;
     white-space: nowrap;
-    transition: opacity 150ms;
+    transform: scale(1);
+    transition: background 0.45s ease, box-shadow 0.45s ease, transform 0.45s ease;
+  }
+  #reseed-run-btn:not(:disabled):hover {
+    background: rgba(255,255,255,1);
+    box-shadow: 0px 5px 10px rgba(0,0,0,0.067), 0px 15px 30px rgba(0,0,0,0.067), 0px 20px 40px rgba(0,0,0,0.1);
+    transform: scale(1.012);
+    transition: background 0.28s ease, box-shadow 0.28s ease, transform 0.28s ease;
   }
   #reseed-run-btn:disabled {
     background: rgba(255,255,255,0.72);
@@ -5320,15 +5653,13 @@ const dashboardCss = `
   #intake-modal-host-label { color: rgba(42, 36, 32, 0.44); }
   /* Embedded terminal panel */
   #intake-modal-terminal-embed {
-    background: #1a1a1a;
-    border-radius: 0.55rem;
+    border-radius: 0;
     padding: 0.7rem 0.85rem 0.8rem;
-    margin-top: 0.85rem;
     height: 9rem;
     display: flex;
     flex-direction: column;
     gap: 0.1rem;
-    max-height: 11rem;
+    max-height: 240px;
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: rgba(255,255,255,0.08) transparent;
@@ -5392,10 +5723,735 @@ const dashboardCss = `
     border-top: 1px solid rgba(212, 196, 171, 0.4);
     padding-top: 0.75rem;
   }
-  @media (max-width: 480px) {
-    #intake-modal-overlay { padding: 1rem; align-items: center; }
-    #intake-modal-card { width: 100%; box-sizing: border-box; }
+
+  /* Retry row — failed-state only */
+  #intake-modal-retry-row {
+    margin-top: 0.9rem;
+    padding-top: 0.85rem;
+    border-top: 1px solid rgba(215, 25, 33, 0.25);
   }
+  #intake-modal-retry-inner {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    background: rgba(255, 252, 248, 0.7);
+    border: 1px solid rgba(215, 25, 33, 0.35);
+    border-radius: 8px;
+    padding: 0.45rem 0.6rem;
+  }
+  #intake-modal-retry-icon {
+    flex-shrink: 0;
+    color: rgba(42, 36, 32, 0.55);
+  }
+  #intake-modal-retry-input {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    font-size: 0.95rem;
+    color: #2a2420;
+    padding: 0.25rem 0;
+  }
+  #intake-modal-retry-input::placeholder {
+    color: rgba(42, 36, 32, 0.38);
+  }
+  #intake-modal-retry-btn {
+    flex-shrink: 0;
+    font-family: "Space Mono", monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #fff;
+    background: #D71921;
+    border: none;
+    border-radius: 6px;
+    padding: 0.45rem 0.85rem;
+    cursor: pointer;
+    transition: background 120ms ease, opacity 120ms ease;
+  }
+  #intake-modal-retry-btn:hover:not(:disabled) {
+    background: #b61319;
+  }
+  #intake-modal-retry-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  #intake-modal-retry-error {
+    margin-top: 0.5rem;
+    font-family: "Space Mono", monospace;
+    font-size: 0.7rem;
+    color: #D71921;
+  }
+  @media (max-width: 480px) {
+    #intake-modal-overlay { padding: 1rem 0.5rem; align-items: flex-start; overflow-y: auto; }
+    #intake-modal-card { width: 95vw; box-sizing: border-box; }
+  }
+
+  /* ── Intake body — 2-col layout when survey is active ── */
+  #intake-modal-body {
+    display: block;
+    margin-top: 0.85rem;
+  }
+  #intake-modal-card[data-with-survey="true"] #intake-modal-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    gap: 1rem;
+    align-items: stretch;
+    height: 360px;
+  }
+  #intake-modal-terminal-col {
+    min-width: 0;
+    min-height: 0;
+    background: #1a1a1a;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-top: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.1), 0px 20px 40px rgba(0, 0, 0, 0.15);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-top: 0.85rem;
+  }
+  #intake-modal-terminal-titlebar {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    background: rgba(255, 255, 255, 0.02);
+    flex-shrink: 0;
+  }
+  .term-win-dot {
+    width: 0.52rem;
+    height: 0.52rem;
+    border-radius: 999px;
+    flex-shrink: 0;
+  }
+  .term-win-dot-close { background: rgba(255, 95, 86, 0.65); }
+  .term-win-dot-min   { background: rgba(255, 189, 46, 0.65); }
+  .term-win-dot-max   { background: rgba(39, 201, 63, 0.65); }
+  #intake-modal-terminal-title {
+    flex: 1;
+    text-align: center;
+    font-family: "Space Mono", monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.08em;
+    color: rgba(255, 255, 255, 0.3);
+  }
+  #intake-modal-card[data-with-survey="true"] #intake-modal-terminal-col {
+    display: flex;
+    flex-direction: column;
+    margin-top: 0;
+  }
+  #intake-modal-card[data-with-survey="true"] #intake-modal-terminal-embed {
+    margin-top: 0;
+    flex: 1 1 auto;
+    height: 0;
+    min-height: 0;
+    max-height: none;
+  }
+  #intake-modal-survey-col {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+  }
+  @media (max-width: 900px) {
+    #intake-modal-overlay {
+      align-items: flex-start;
+      overflow-y: auto;
+      padding: 1rem 0.75rem;
+    }
+    #intake-modal-card {
+      width: 95vw;
+      box-sizing: border-box;
+    }
+    #intake-modal-card[data-with-survey="true"] #intake-modal-body {
+      grid-template-columns: 1fr;
+      height: auto;
+    }
+    #intake-modal-card[data-with-survey="true"] #intake-modal-terminal-col {
+      height: 180px;
+      flex-shrink: 0;
+    }
+    #intake-modal-card[data-with-survey="true"] #intake-modal-terminal-embed {
+      height: 0;
+      max-height: none;
+    }
+  }
+
+  /* ── Onboarding survey — embedded column inside the intake card ── */
+  #onboarding-survey-card {
+    position: relative;
+    width: 100%;
+    box-sizing: border-box;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-height: 0;
+    flex: 1 1 auto;
+  }
+  #onboarding-step-header {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+  }
+  #onboarding-step-sig {
+    width: 2rem;
+    height: auto;
+    display: block;
+    flex-shrink: 0;
+  }
+  #onboarding-step-eyebrow {
+    font-family: "Space Mono", monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(42, 36, 32, 0.58);
+    font-weight: 700;
+    flex: 1;
+  }
+  #onboarding-step-progress {
+    font-family: "Space Mono", monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    color: rgba(42, 36, 32, 0.44);
+    flex-shrink: 0;
+  }
+  #onboarding-step-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.55);
+    border: 1px solid rgba(42, 36, 32, 0.12);
+    cursor: pointer;
+    font-size: 0.78rem;
+    color: rgba(42, 36, 32, 0.62);
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+    flex-shrink: 0;
+  }
+  #onboarding-step-close:hover:not(:disabled) {
+    color: rgba(42, 36, 32, 0.92);
+    border-color: rgba(42, 36, 32, 0.28);
+    background: rgba(255, 255, 255, 0.78);
+  }
+  #onboarding-step-close:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  #onboarding-progress-rail {
+    position: relative;
+    height: 2px;
+    background: rgba(42, 36, 32, 0.12);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  #onboarding-progress-fill {
+    display: block;
+    height: 100%;
+    background: rgba(42, 36, 32, 0.72);
+    border-radius: 999px;
+    transition: width 0.32s ease;
+  }
+  #onboarding-step-title {
+    margin: 0;
+    color: #2a2420;
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    font-weight: 700;
+    font-size: clamp(1.35rem, 3.2vw, 1.85rem);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+  }
+  #onboarding-step-helper {
+    margin: -0.3rem 0 0;
+    color: rgba(42, 36, 32, 0.6);
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    font-size: 0.92rem;
+    line-height: 1.5;
+  }
+  #onboarding-step-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+    margin-top: 0.2rem;
+    overflow-y: auto;
+    min-height: 0;
+    flex: 1 1 auto;
+    padding-right: 0.25rem;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(42,36,32,0.22) transparent;
+  }
+  #onboarding-step-options::-webkit-scrollbar { width: 4px; }
+  #onboarding-step-options::-webkit-scrollbar-thumb { background: rgba(42,36,32,0.22); border-radius: 2px; }
+  #onboarding-step-options::-webkit-scrollbar-track { background: transparent; }
+  #onboarding-step-options[data-select-type="text"] {
+    grid-template-columns: 1fr;
+  }
+  .onboarding-option-tile {
+    appearance: none;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    text-align: left;
+    padding: 0.85rem 1rem;
+    border-radius: 0.85rem;
+    border: 1px solid rgba(42, 36, 32, 0.14);
+    background: rgba(255, 255, 255, 0.72);
+    color: #2a2420;
+    cursor: pointer;
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    font-size: 0.95rem;
+    line-height: 1.3;
+    transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.5);
+  }
+  .onboarding-option-tile:hover {
+    border-color: rgba(42, 36, 32, 0.36);
+    background: rgba(255, 255, 255, 0.92);
+  }
+  .onboarding-option-tile.is-selected {
+    border-color: #2a2420;
+    background: #2a2420;
+    color: #faf7f2;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.2), inset 0 1px 0 rgba(255,255,255,0.08);
+  }
+  .onboarding-option-label {
+    display: block;
+    font-weight: 500;
+  }
+  #onboarding-step-textarea {
+    width: 100%;
+    min-height: 8rem;
+    resize: vertical;
+    padding: 0.85rem 1rem;
+    border-radius: 0.85rem;
+    border: 1px solid rgba(42, 36, 32, 0.14);
+    background: rgba(255, 255, 255, 0.82);
+    color: #2a2420;
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    font-size: 0.95rem;
+    line-height: 1.45;
+    box-sizing: border-box;
+    outline: none;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  #onboarding-step-textarea:focus {
+    border-color: rgba(42, 36, 32, 0.42);
+    background: #fff;
+  }
+  #onboarding-step-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-top: 0.4rem;
+  }
+  #onboarding-step-footer-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  #onboarding-skip-all,
+  #onboarding-back,
+  #onboarding-next {
+    appearance: none;
+    cursor: pointer;
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    font-size: 0.88rem;
+    border-radius: 999px;
+    padding: 0.55rem 1.05rem;
+    line-height: 1;
+    transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+  }
+  #onboarding-skip-all {
+    background: transparent;
+    border: 1px solid transparent;
+    color: rgba(42, 36, 32, 0.56);
+  }
+  #onboarding-skip-all:hover:not(:disabled) {
+    color: #2a2420;
+  }
+  #onboarding-back {
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(42, 36, 32, 0.14);
+    color: rgba(42, 36, 32, 0.72);
+  }
+  #onboarding-back:hover:not(:disabled) {
+    color: #2a2420;
+    border-color: rgba(42, 36, 32, 0.32);
+  }
+  #onboarding-next {
+    background: #2a2420;
+    border: 1px solid #2a2420;
+    color: #faf7f2;
+    font-weight: 600;
+  }
+  #onboarding-next:hover:not(:disabled) {
+    background: #1a1412;
+    border-color: #1a1412;
+  }
+  #onboarding-skip-all:disabled,
+  #onboarding-back:disabled,
+  #onboarding-next:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  @media (max-width: 480px) {
+    #onboarding-step-options { grid-template-columns: 1fr; }
+  }
+
+  /* ── Onboarding chat modal ── */
+  #onboarding-chat-shell {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    max-height: 100%;
+    flex: 1 1 auto;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.5) 100%);
+    box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.1), 0px 20px 40px rgba(0, 0, 0, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 10px;
+    border: 1px solid rgba(42, 36, 32, 0.1);
+    overflow: hidden;
+  }
+  #onboarding-chat-header {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid rgba(42, 36, 32, 0.08);
+    background: rgba(255, 255, 255, 0.7);
+    flex-shrink: 0;
+  }
+  #onboarding-chat-avatar-wrap {
+    position: relative;
+    flex-shrink: 0;
+  }
+  #onboarding-chat-avatar-img {
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 999px;
+    object-fit: cover;
+    display: block;
+  }
+  #onboarding-chat-online-dot {
+    position: absolute;
+    bottom: 1px;
+    right: 1px;
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 999px;
+    background: #4A9E5C;
+    border: 2px solid rgba(255, 252, 248, 0.92);
+  }
+  #onboarding-chat-identity {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    flex: 1;
+    min-width: 0;
+  }
+  #onboarding-chat-name {
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 0.88rem;
+    color: #2a2420;
+    line-height: 1.2;
+  }
+  #onboarding-chat-subtitle {
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    font-size: 0.72rem;
+    color: rgba(42, 36, 32, 0.5);
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #onboarding-chat-badge {
+    font-family: "Space Mono", monospace;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(42, 36, 32, 0.62);
+    border: 1px solid rgba(42, 36, 32, 0.18);
+    border-radius: 999px;
+    padding: 0.25rem 0.6rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  #onboarding-chat-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.8rem;
+    height: 1.8rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.55);
+    border: 1px solid rgba(42, 36, 32, 0.12);
+    cursor: pointer;
+    font-size: 0.76rem;
+    color: rgba(42, 36, 32, 0.55);
+    flex-shrink: 0;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  #onboarding-chat-close:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.85);
+    color: rgba(42, 36, 32, 0.9);
+  }
+  #onboarding-chat-close:disabled { opacity: 0.4; cursor: default; }
+  #onboarding-chat-step-count {
+    font-family: "Space Mono", monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    color: rgba(42, 36, 32, 0.44);
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  #onboarding-chat-progress-rail {
+    height: 2px;
+    background: rgba(42, 36, 32, 0.08);
+    flex-shrink: 0;
+    position: relative;
+    overflow: hidden;
+  }
+  #onboarding-chat-progress-fill {
+    display: block;
+    height: 100%;
+    background: linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+    transition: width 0.35s ease;
+  }
+  /* Messages scroll area */
+  #onboarding-chat-messages {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(42,36,32,0.14) transparent;
+  }
+  #onboarding-chat-messages::-webkit-scrollbar { width: 3px; }
+  #onboarding-chat-messages::-webkit-scrollbar-thumb { background: rgba(42,36,32,0.14); border-radius: 2px; }
+  #onboarding-chat-messages::-webkit-scrollbar-track { background: transparent; }
+  @keyframes chat-msg-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .chat-turn { display: flex; flex-direction: column; gap: 0.5rem; animation: chat-msg-in 0.22s ease; }
+  .chat-row-user { animation: chat-msg-in 0.18s ease; }
+  .chat-row { display: flex; align-items: flex-end; gap: 0.5rem; }
+  .chat-row-bot { justify-content: flex-start; }
+  .chat-row-user { justify-content: flex-end; }
+  .chat-avatar-sm {
+    width: 1.6rem;
+    height: 1.6rem;
+    border-radius: 999px;
+    object-fit: cover;
+    flex-shrink: 0;
+    display: block;
+  }
+  .chat-bubble {
+    max-width: 82%;
+    padding: 0.6rem 0.85rem;
+    border-radius: 1rem;
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    font-size: 0.9rem;
+    line-height: 1.45;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .chat-bubble-bot {
+    background: #ffffff;
+    border: 1px solid rgba(42, 36, 32, 0.09);
+    border-bottom-left-radius: 0.2rem;
+    color: #2a2420;
+    box-shadow: 0 1px 3px rgba(42,36,32,0.06);
+  }
+  .chat-bubble-user {
+    background: #2a2420;
+    color: #faf7f2;
+    border-bottom-right-radius: 0.2rem;
+    font-size: 0.88rem;
+  }
+  .chat-eyebrow {
+    font-family: "Space Mono", monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(42, 36, 32, 0.44);
+    font-weight: 700;
+  }
+  .chat-question {
+    font-weight: 300;
+    font-size: clamp(1.15rem, 2vw, 1.6rem);
+    color: rgba(42, 36, 32, 0.75);
+    line-height: 1.4;
+  }
+  .chat-helper {
+    font-size: 0.8rem;
+    color: rgba(42, 36, 32, 0.55);
+  }
+  /* Typing indicator */
+  .chat-typing-bubble {
+    flex-direction: row;
+    gap: 0.3rem;
+    align-items: center;
+    padding: 0.65rem 1rem;
+  }
+  .typing-dot {
+    width: 0.4rem;
+    height: 0.4rem;
+    border-radius: 999px;
+    background: rgba(42, 36, 32, 0.35);
+    animation: typing-bounce 1.2s ease-in-out infinite;
+  }
+  .typing-dot:nth-child(2) { animation-delay: 0.18s; }
+  .typing-dot:nth-child(3) { animation-delay: 0.36s; }
+  @keyframes typing-bounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+    30% { transform: translateY(-0.3rem); opacity: 1; }
+  }
+  /* Options zone */
+  .chat-options-zone {
+    padding-left: 2.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .chat-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .chat-chip {
+    appearance: none;
+    cursor: pointer;
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    font-size: 0.82rem;
+    font-weight: 500;
+    padding: 0.4rem 0.85rem;
+    border-radius: 999px;
+    border: 1px solid #2a2420;
+    background: #fff;
+    color: #2a2420;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    line-height: 1.3;
+  }
+  .chat-chip:hover:not(:disabled) {
+    background: #2a2420;
+    border-color: #2a2420;
+    color: #faf7f2;
+  }
+  .chat-chip.is-selected {
+    background: #2a2420;
+    border-color: #2a2420;
+    color: #faf7f2;
+  }
+  .chat-chip:disabled { opacity: 0.5; cursor: default; }
+  .chat-chip-primary {
+    background: #2a2420;
+    border-color: #2a2420;
+    color: #faf7f2;
+    font-weight: 600;
+  }
+  .chat-chip-primary:hover:not(:disabled) {
+    background: #1a1412;
+    border-color: #1a1412;
+    color: #faf7f2;
+  }
+  /* Text input + action row */
+  .chat-text-wrap { display: flex; flex-direction: column; gap: 0.4rem; width: 100%; }
+  .chat-text-input {
+    width: 100%;
+    resize: vertical;
+    padding: 0.65rem 0.85rem;
+    border-radius: 0.65rem;
+    border: 1px solid rgba(42, 36, 32, 0.14);
+    background: rgba(255, 255, 255, 0.9);
+    color: #2a2420;
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    font-size: 0.88rem;
+    line-height: 1.45;
+    outline: none;
+    transition: border-color 0.15s ease;
+    box-sizing: border-box;
+  }
+  .chat-text-input:focus { border-color: rgba(42, 36, 32, 0.42); }
+  .chat-text-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .chat-skip-btn {
+    appearance: none;
+    cursor: pointer;
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    font-size: 0.8rem;
+    padding: 0.38rem 0.8rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: rgba(42, 36, 32, 0.5);
+    transition: color 0.13s ease;
+  }
+  .chat-skip-btn:hover:not(:disabled) { color: #2a2420; }
+  .chat-skip-btn:disabled { opacity: 0.4; cursor: default; }
+  .chat-confirm-btn {
+    appearance: none;
+    cursor: pointer;
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 0.4rem 1rem;
+    border-radius: 999px;
+    border: 1px solid #2a2420;
+    background: #2a2420;
+    color: #faf7f2;
+    transition: background 0.13s ease, border-color 0.13s ease;
+  }
+  .chat-confirm-btn:hover:not(:disabled) { background: #1a1412; border-color: #1a1412; }
+  .chat-confirm-btn:disabled { opacity: 0.45; cursor: default; }
+  /* Footer */
+  #onboarding-chat-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 0.6rem 1rem;
+    border-top: 1px solid rgba(42, 36, 32, 0.07);
+    background: rgba(255, 255, 255, 0.5);
+    flex-shrink: 0;
+  }
+  #onboarding-chat-skip-all {
+    appearance: none;
+    cursor: pointer;
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    font-size: 0.78rem;
+    padding: 0.35rem 0.8rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: rgba(42, 36, 32, 0.45);
+    transition: color 0.13s ease;
+  }
+  #onboarding-chat-skip-all:hover:not(:disabled) { color: #2a2420; }
+  #onboarding-chat-skip-all:disabled { opacity: 0.4; cursor: default; }
 
   /* ── Tier modal ── */
   #tier-modal-overlay {

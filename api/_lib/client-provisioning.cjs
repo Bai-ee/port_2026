@@ -184,6 +184,7 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
       ideaDescription: trimmedIdeaDescription,
       uploadedImageRefs: [],
     },
+    onboardingAnswers: null,
     ingestionConfig: null,
     briefConfig: null,
     dashboardConfig: null,
@@ -393,10 +394,17 @@ async function reseedIntakeForClient({ clientId, uid, websiteUrl }) {
       { merge: true }
     ),
 
-    // Update client_configs sourceInputs
+    // Update client_configs sourceInputs. Also clear the onboarding survey's
+    // resolution flags so the bento survey reappears with the new run and the
+    // user can refine answers for this build. Prior answers stay as seed.
     fb.adminDb.collection('client_configs').doc(clientId).set(
       {
         sourceInputs: { websiteUrl: normalized.websiteUrl },
+        onboardingAnswers: {
+          completedAt: null,
+          skippedAt: null,
+          updatedAt: now,
+        },
         updatedAt: now,
       },
       { merge: true }

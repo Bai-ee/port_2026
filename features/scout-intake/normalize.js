@@ -74,7 +74,23 @@ function deriveContentOpportunities(intake) {
  */
 function normalizeIntakeResult(
   intake,
-  { clientId, websiteUrl, runCostData, pipelineRunId, artifactRefs = [], warnings = [], siteMeta = null }
+  {
+    clientId,
+    websiteUrl,
+    runCostData,
+    pipelineRunId,
+    artifactRefs = [],
+    warnings = [],
+    siteMeta = null,
+    styleGuide = null,
+    styleGuideCost = null,
+    userContext = null,
+    analyzerResults = null,
+    scribeResult = null,
+    briefHtml = null,
+    scoutConfig = null,
+    tier = 'free',
+  }
 ) {
   if (!intake || typeof intake !== 'object') {
     throw new Error('normalizeIntakeResult: intake must be a non-null object');
@@ -113,6 +129,7 @@ function normalizeIntakeResult(
         summary: str(snapshot.visualIdentity?.summary),
         colorPalette: str(snapshot.visualIdentity?.colorPalette),
         styleNotes: str(snapshot.visualIdentity?.styleNotes),
+        styleGuide: styleGuide || null,
       },
     },
 
@@ -171,6 +188,17 @@ function normalizeIntakeResult(
     // ── Cost + provider metadata ────────────────────────────────────────────
     providerName: 'anthropic',
     runCostData: runCostData || null,
+    styleGuideCost: styleGuideCost || null,
+    userContext: userContext || null,
+    analyzerResults: analyzerResults || null,
+    scribe: scribeResult && scribeResult.ok ? {
+      cards: scribeResult.cards,
+      brief: scribeResult.brief,
+      cost:  scribeResult.runCostData || null,
+      html:  briefHtml || null,
+    } : null,
+    scoutConfig: scoutConfig || null,
+    tier,
     artifactRefs: Array.isArray(artifactRefs) ? artifactRefs : [],
     warnings: Array.isArray(warnings) ? warnings : [],
   };

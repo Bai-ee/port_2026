@@ -107,6 +107,8 @@ function buildDashboardProjection(clientId, pipelineResult, runId) {
     null;
   const homepageDeviceMockup =
     artifactRefs.find((artifact) => artifact?.type === 'website_homepage_device_mockup') || null;
+  const briefPdf =
+    artifactRefs.find((artifact) => artifact?.type === 'brief_pdf') || null;
 
   // Build summaryCards from available content fields
   const summaryCards = [];
@@ -164,6 +166,12 @@ function buildDashboardProjection(clientId, pipelineResult, runId) {
       homepageDeviceMockup,
     };
   }
+  if (briefPdf) {
+    base.artifacts = {
+      ...(base.artifacts || {}),
+      briefPdf,
+    };
+  }
 
   // Merge free-tier intake modules when present (pipelineType: 'free-tier-intake')
   if (pipelineResult.pipelineType === 'free-tier-intake') {
@@ -173,6 +181,14 @@ function buildDashboardProjection(clientId, pipelineResult, runId) {
     if (pipelineResult.outputsPreview) base.outputsPreview = pipelineResult.outputsPreview;
     if (pipelineResult.systemPreview) base.systemPreview = pipelineResult.systemPreview;
     if (pipelineResult.siteMeta) base.siteMeta = pipelineResult.siteMeta;
+    // Phase-4 Scribe output: per-card short/expanded copy + brief sections.
+    // Dashboard consumes scribe.cards[cardId] to override static copy.
+    if (pipelineResult.scribe && pipelineResult.scribe.cards) {
+      base.scribe = {
+        cards: pipelineResult.scribe.cards,
+        brief: pipelineResult.scribe.brief || null,
+      };
+    }
   }
 
   return base;

@@ -19,8 +19,14 @@
 
 const { fetchSiteEvidence } = require('./site-fetcher');
 const { synthesizeSiteEvidence } = require('./intake-synthesizer');
-const { normalizeIntakeResult } = require('./normalize');
-const { persistWebsiteScreenshotArtifact } = require('../../api/_lib/browserless.cjs');
+const { normalizeIntakeResult, synthesizeStyleGuide } = require('./normalize');
+const { extractDesignSystem } = require('./design-system-extractor');
+const { buildUserContext } = require('./user-context');
+const { runAnalyzers } = require('./analyzers');
+const { runScribe } = require('./scribe');
+const { ensureScoutConfig } = require('./scout-config-generator');
+const { persistWebsiteScreenshotArtifact, persistBriefPdfArtifact } = require('../../api/_lib/browserless.cjs');
+const { renderBriefHtml } = require('./brief-renderer');
 const { generateWebsiteMockupArtifact } = require('../../api/_lib/device-mockup.cjs');
 const { getMaster } = require('../intelligence/_store');
 
@@ -110,6 +116,15 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
     '';
 
   const websiteUrl = normalizeWebsiteUrl(rawUrl);
+
+  // Build compact userContext from onboarding survey answers. Null when the
+  // user has no meaningful answers stored — consumers branch on presence.
+  const userContext = buildUserContext(clientConfig);
+  if (userContext) {
+    console.log(
+      `[${new Date().toISOString()}] INTAKE: userContext — ${userContext._meta.answeredCount} answer${userContext._meta.answeredCount !== 1 ? 's' : ''} merged`
+    );
+  }
 
   if (!websiteUrl) {
     return {
@@ -249,10 +264,16 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
     console.warn(`[INTAKE] intelligence read failed (non-fatal): ${err.message}`);
   }
 
-  // ── Stage 2: LLM synthesis ────────────────────────────────────────────────
-  // 'synthesize' stage is emitted inside synthesizeSiteEvidence right before
-  // the Anthropic API call fires — giving a real-time stage boundary.
-  console.log(`[${new Date().toISOString()}] INTAKE: synthesizing...`);
+  // ── Stage 2: LLM synthesis + design system extraction (parallel) ─────────
+  // Both hit Anthropic and are independent — run concurrently to cut wall time.
+  // Design system extraction is non-fatal: any failure becomes a warning and
+  // the styleGuide field is left null for dashboard fallback.
+  console.log(`[${new Date().toISOString()}] INTAKE: synthesizing + extracting design system...`);
+
+  const styleGuideTask = extractDesignSystem(evidence, {
+    onProgress: () => emitProgress('styleguide', 'Extracting design system…'),
+  }).catch((err) => ({ ok: false, designSystem: null, runCostData: null, error: err.message }));
+
   let synthesisResult;
   try {
     synthesisResult = await synthesizeSiteEvidence(evidence, {
@@ -323,11 +344,204 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
     }
   }
 
+  // ── Resolve design system (started in parallel with synth) ──────────────
+  // Haiku summary fires only if extraction returned a design system object.
+  let styleGuide = null;
+  let styleGuideCost = null;
+  try {
+    const dsResult = await styleGuideTask;
+    styleGuideCost = dsResult?.runCostData || null;
+    if (dsResult?.ok && dsResult.designSystem) {
+      styleGuide = await synthesizeStyleGuide(dsResult.designSystem);
+      console.log(
+        `[${new Date().toISOString()}] INTAKE: style guide extracted — cost ~$${dsResult.runCostData?.estimatedCostUsd}`
+      );
+    } else if (dsResult?.error) {
+      warnings.push({
+        type: 'warning',
+        code: 'style_guide_extraction_failed',
+        message: `Style guide extraction failed: ${dsResult.error}`,
+        stage: 'styleguide',
+      });
+    }
+  } catch (err) {
+    warnings.push({
+      type: 'warning',
+      code: 'style_guide_extraction_threw',
+      message: `Style guide extraction threw: ${err.message}`,
+      stage: 'styleguide',
+    });
+  }
+
   // ── Stage 4: Normalize ────────────────────────────────────────────────────
   await emitProgress('normalize', 'Writing dashboard modules...');
 
   // Pull siteMeta from homepage evidence — extracted by site-fetcher, never in LLM output.
   const siteMeta = evidence.pages.find((p) => p.type === 'homepage')?.siteMeta || null;
+
+  // ── Fan out per-card analyzers ──────────────────────────────────────────
+  // Heavy work (synth + design-system) already ran above. Analyzers read from
+  // sharedResults and produce per-card status / confidence / signals for Scribe.
+  const tier = (clientConfig?.tier === 'paid') ? 'paid' : 'free';
+  const sharedResults = {
+    intake: synthesisResult.intake,
+    styleGuide,
+    styleGuideCost,
+    siteMeta,
+    pagespeed: null, // wired in a later phase
+  };
+
+  let analyzerResults = null;
+  try {
+    analyzerResults = await runAnalyzers({ sharedResults, userContext, evidence, tier });
+  } catch (err) {
+    warnings.push({
+      type: 'warning',
+      code: 'analyzers_threw',
+      message: `Analyzer fan-out threw: ${err.message}`,
+      stage: 'analyze',
+    });
+  }
+
+  // ── Scout enrichment config — generate once per client ─────────────────
+  // Produces a clients.js-shape config (brand keywords, competitors,
+  // category terms, reddit subreddits, weather/reviews/instagram when
+  // applicable, plus the 5-query search plan). Cached at
+  // client_configs/{id}.scoutConfig after first write. Non-fatal.
+  //
+  // Scouts DO NOT run here yet — this phase just persists the config so
+  // admin can review. Phase E wires the actual external scout calls.
+  let scoutConfig = null;
+  try {
+    await emitProgress('scout-config', 'Generating scout enrichment config…');
+    const res = await ensureScoutConfig({
+      clientId,
+      clientName: clientConfig?.displayName
+        || clientConfig?.companyName
+        || synthesisResult.intake?.snapshot?.brandOverview?.headline
+        || null,
+      intakeResult: synthesisResult.intake,
+      userContext,
+      evidence,
+      websiteUrl,   // synth's intake object doesn't carry this; pass explicitly
+    });
+    if (res?.scoutConfig) {
+      scoutConfig = res.scoutConfig;
+      console.log(
+        `[${new Date().toISOString()}] INTAKE: scoutConfig ${res.created ? 'generated' : 'loaded from cache'} — ${scoutConfig._meta?.capabilitiesActive?.length ?? 0} capabilities active${res.cost ? `, cost ~$${res.cost.estimatedCostUsd}` : ''}`
+      );
+    }
+    if (res?.error) {
+      warnings.push({
+        type: 'warning',
+        code: 'scout_config_failed',
+        message: `Scout config: ${res.error}`,
+        stage: 'scout-config',
+      });
+    }
+  } catch (err) {
+    warnings.push({
+      type: 'warning',
+      code: 'scout_config_threw',
+      message: `Scout config threw: ${err.message}`,
+      stage: 'scout-config',
+    });
+  }
+
+  // ── Scribe pass — per-card copy + brief doc ─────────────────────────────
+  // Haiku call; reads analyzer signals only (no raw HTML). Non-fatal: on
+  // failure we continue with scribe=null; dashboard falls back to the raw
+  // intake fields still present in the result.
+  let scribeResult = null;
+  try {
+    scribeResult = await runScribe({
+      analyzerResults,
+      userContext,
+      websiteUrl,
+      onProgress: () => emitProgress('scribe', 'Writing card copy + brief…'),
+    });
+    if (scribeResult?.ok) {
+      console.log(
+        `[${new Date().toISOString()}] INTAKE: scribe complete — ${Object.keys(scribeResult.cards || {}).length} cards, cost ~$${scribeResult.runCostData?.estimatedCostUsd}`
+      );
+    } else if (scribeResult?.error) {
+      warnings.push({
+        type: 'warning',
+        code: 'scribe_failed',
+        message: `Scribe: ${scribeResult.error}`,
+        stage: 'scribe',
+      });
+    }
+  } catch (err) {
+    warnings.push({
+      type: 'warning',
+      code: 'scribe_threw',
+      message: `Scribe threw: ${err.message}`,
+      stage: 'scribe',
+    });
+  }
+
+  // ── Brief render + PDF artifact ─────────────────────────────────────────
+  // Only runs when scribe succeeded. Renders a self-contained HTML document
+  // (also usable as email body) and posts it to browserless /pdf. Non-fatal:
+  // failure leaves briefHtml present but no PDF artifact.
+  let briefHtml = null;
+  if (scribeResult?.ok && scribeResult.brief) {
+    try {
+      const mockupArtifact = artifactRefs.find((a) => a?.type === 'website_homepage_device_mockup') || null;
+      const intake = synthesisResult.intake || {};
+      const runMeta = {
+        pagesFetched: Array.isArray(evidence?.pages) ? evidence.pages.length : 0,
+        pageTypes:    Array.isArray(evidence?.pages) ? evidence.pages.map((p) => p.type).filter(Boolean) : [],
+        thin:         Boolean(evidence?.thin),
+        warningCount: Array.isArray(warnings) ? warnings.length : 0,
+        costs: {
+          synth:      synthesisResult?.runCostData?.estimatedCostUsd ?? null,
+          styleGuide: styleGuideCost?.estimatedCostUsd ?? null,
+          scribe:     scribeResult?.runCostData?.estimatedCostUsd ?? null,
+        },
+      };
+      briefHtml = renderBriefHtml({
+        brief: scribeResult.brief,
+        scribeCards: scribeResult.cards || {},
+        snapshot: intake.snapshot || null,
+        signals: intake.signals || null,
+        strategy: intake.strategy || null,
+        outputsPreview: intake.outputsPreview || null,
+        siteMeta,
+        styleGuide,
+        mockupUrl: mockupArtifact?.downloadUrl || null,
+        userContext,
+        runMeta,
+        websiteUrl,
+        clientId,
+        generatedAt: new Date().toISOString(),
+        tier,
+      });
+    } catch (err) {
+      warnings.push({
+        type: 'warning',
+        code: 'brief_render_failed',
+        message: `Brief HTML render failed: ${err.message}`,
+        stage: 'brief',
+      });
+    }
+
+    if (briefHtml) {
+      await emitProgress('brief', 'Rendering brief PDF…');
+      const pdfResult = await persistBriefPdfArtifact({
+        clientId,
+        runId: executionRunId,
+        html: briefHtml,
+      });
+
+      if (pdfResult?.ok && pdfResult.artifactRef) {
+        artifactRefs.push(pdfResult.artifactRef);
+      } else if (pdfResult?.warning) {
+        warnings.push(pdfResult.warning);
+      }
+    }
+  }
 
   let normalized;
   try {
@@ -339,6 +553,14 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
       artifactRefs,
       warnings,
       siteMeta,
+      styleGuide,
+      styleGuideCost,
+      userContext,
+      analyzerResults,
+      scribeResult,
+      briefHtml,
+      scoutConfig,
+      tier,
     });
   } catch (err) {
     return {

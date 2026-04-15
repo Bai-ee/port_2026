@@ -368,8 +368,190 @@ async function persistWebsiteScreenshotArtifact({ clientId, runId, websiteUrl })
   }
 }
 
+// ── Brief PDF rendering ──────────────────────────────────────────────────────
+//
+// Posts an HTML document to Browserless /pdf and persists the returned PDF
+// buffer as a Firebase Storage artifact. Mirrors the screenshot flow.
+
+async function renderPdfBuffer({ clientId, runId, html }) {
+  const config = getBrowserlessConfig();
+  if (!config.enabled) {
+    return {
+      ok: false,
+      warning: buildWarning(
+        'browserless_not_configured',
+        'Brief PDF render skipped because Browserless is not configured.'
+      ),
+    };
+  }
+
+  const endpoint = buildEndpointUrl(config.baseUrl, '/pdf', config.token, config.requestTimeoutMs);
+  const startedAt = Date.now();
+  let requestLog = null;
+
+  try {
+    requestLog = await createBrowserlessRequestLog({
+      clientId,
+      runId,
+      websiteUrl: null,
+      endpoint: 'pdf',
+      requestTimeoutMs: config.requestTimeoutMs,
+      variant: null,
+    });
+  } catch {
+    requestLog = null;
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Cache-Control': 'no-cache',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        html,
+        options: {
+          format: 'A4',
+          printBackground: true,
+          margin: { top: '16mm', right: '14mm', bottom: '16mm', left: '14mm' },
+        },
+        gotoOptions: { waitUntil: 'networkidle2', timeout: config.gotoTimeoutMs },
+        waitForTimeout: config.postLoadWaitMs,
+      }),
+    });
+
+    if (!response.ok) {
+      const snippet = (await response.text().catch(() => '')).slice(0, 300);
+      await finalizeBrowserlessRequestLog(requestLog?.requestRef, {
+        status: 'failed',
+        completedAt: fb.FieldValue.serverTimestamp(),
+        durationMs: Date.now() - startedAt,
+        httpStatus: response.status,
+        ok: false,
+        errorMessage: `HTTP ${response.status}`,
+        errorDetail: snippet || null,
+      });
+      return {
+        ok: false,
+        warning: buildWarning(
+          'browserless_http_error',
+          `Brief PDF render failed with Browserless HTTP ${response.status}.`,
+          snippet ? { detail: snippet, requestId: requestLog?.requestId || null } : { requestId: requestLog?.requestId || null }
+        ),
+      };
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+
+    if (!buffer.length) {
+      await finalizeBrowserlessRequestLog(requestLog?.requestRef, {
+        status: 'failed',
+        completedAt: fb.FieldValue.serverTimestamp(),
+        durationMs: Date.now() - startedAt,
+        httpStatus: response.status,
+        ok: false,
+        errorMessage: 'Empty PDF response',
+      });
+      return {
+        ok: false,
+        warning: buildWarning(
+          'browserless_empty_response',
+          'Brief PDF render failed because Browserless returned an empty document.',
+          { requestId: requestLog?.requestId || null }
+        ),
+      };
+    }
+
+    await finalizeBrowserlessRequestLog(requestLog?.requestRef, {
+      status: 'succeeded',
+      completedAt: fb.FieldValue.serverTimestamp(),
+      durationMs: Date.now() - startedAt,
+      httpStatus: response.status,
+      ok: true,
+      contentType: 'application/pdf',
+      bytesReturned: buffer.length,
+    });
+
+    return {
+      ok: true,
+      buffer,
+      contentType: 'application/pdf',
+      sizeBytes: buffer.length,
+      requestId: requestLog?.requestId || null,
+    };
+  } catch (error) {
+    await finalizeBrowserlessRequestLog(requestLog?.requestRef, {
+      status: 'failed',
+      completedAt: fb.FieldValue.serverTimestamp(),
+      durationMs: Date.now() - startedAt,
+      ok: false,
+      errorMessage: error.message,
+    });
+    throw error;
+  }
+}
+
+async function persistBriefPdfArtifact({ clientId, runId, html }) {
+  const renderedAt = new Date().toISOString();
+
+  try {
+    const rendered = await renderPdfBuffer({ clientId, runId, html });
+
+    if (!rendered.ok) {
+      return { ok: false, warning: rendered.warning };
+    }
+
+    const storagePath = path.posix.join(
+      'clients',
+      clientId,
+      'brief-runs',
+      runId,
+      'artifacts',
+      'brief.pdf'
+    );
+
+    const stored = await saveBufferArtifact({
+      storagePath,
+      buffer: rendered.buffer,
+      contentType: rendered.contentType,
+      metadata: {
+        artifactType: 'brief_pdf',
+        clientId,
+        runId,
+        renderedAt,
+      },
+    });
+
+    return {
+      ok: true,
+      artifactRef: {
+        type: 'brief_pdf',
+        storageProvider: 'firebase-storage',
+        bucket: stored.bucket,
+        storagePath: stored.storagePath,
+        contentType: stored.contentType,
+        sizeBytes: stored.sizeBytes,
+        renderedAt,
+        browserlessRequestId: rendered.requestId || null,
+        downloadUrl: stored.downloadUrl,
+      },
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      warning: buildWarning(
+        'brief_pdf_failed',
+        `Brief PDF render failed: ${error.message}`,
+        { stage: 'brief' }
+      ),
+    };
+  }
+}
+
 module.exports = {
   getBrowserlessConfig,
   SCREENSHOT_VARIANTS,
   persistWebsiteScreenshotArtifact,
+  persistBriefPdfArtifact,
 };
