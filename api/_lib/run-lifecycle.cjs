@@ -181,6 +181,7 @@ function buildDashboardProjection(clientId, pipelineResult, runId) {
     if (pipelineResult.outputsPreview) base.outputsPreview = pipelineResult.outputsPreview;
     if (pipelineResult.systemPreview) base.systemPreview = pipelineResult.systemPreview;
     if (pipelineResult.siteMeta) base.siteMeta = pipelineResult.siteMeta;
+    if (pipelineResult.analyzerOutputs) base.analyzerOutputs = pipelineResult.analyzerOutputs;
     // Phase-4 Scribe output: per-card short/expanded copy + brief sections.
     // Dashboard consumes scribe.cards[cardId] to override static copy.
     if (pipelineResult.scribe && pipelineResult.scribe.cards) {
@@ -264,6 +265,10 @@ async function completeRun(runId, clientId, pipelineResult) {
       },
       { merge: true }
     ),
+    appendRunEvent(runId, clientId, {
+      stage: 'progress',
+      progressLabel: 'Pipeline succeeded — dashboard data ready.',
+    }).catch(() => {}),
   ]);
 }
 
@@ -362,6 +367,10 @@ async function failRun(runId, clientId, error, attempts, details = {}) {
     clientRunRef.set(runUpdate, { merge: true }),
     dashboardStateRef.set(dashboardUpdate, { merge: true }),
     clientRef.set(clientUpdate, { merge: true }),
+    appendRunEvent(runId, clientId, {
+      stage: 'error',
+      progressLabel: `Pipeline failed: ${error?.message || String(error)}`.slice(0, 500),
+    }).catch(() => {}),
   ]);
 }
 
@@ -610,7 +619,32 @@ async function updateRunProgress(runId, clientId, progress) {
       .collection('clients').doc(clientId)
       .collection('brief_runs').doc(runId)
       .set(update, { merge: true }),
+    // Append to per-run events subcollection so the dashboard terminal can
+    // stream real progress as it happens. Non-fatal — any error is swallowed
+    // to keep pipeline progress writes non-blocking.
+    appendRunEvent(runId, clientId, progress).catch(() => {}),
   ]);
+}
+
+/**
+ * Append a single progress event to clients/{clientId}/brief_runs/{runId}/events.
+ * Ordered by createdAt server timestamp. Used by the dashboard to stream
+ * real-time terminal lines during a pipeline run.
+ */
+async function appendRunEvent(runId, clientId, progress = {}) {
+  const now = fb.FieldValue.serverTimestamp();
+  const { stage, progressLabel, ...extra } = progress;
+  const event = {
+    stage:     stage         || 'progress',
+    label:     progressLabel || '',
+    extra:     extra && Object.keys(extra).length > 0 ? extra : null,
+    createdAt: now,
+  };
+  await fb.adminDb
+    .collection('clients').doc(clientId)
+    .collection('brief_runs').doc(runId)
+    .collection('events')
+    .add(event);
 }
 
 module.exports = {
@@ -624,4 +658,5 @@ module.exports = {
   requeueRun,
   findNextQueuedRun,
   updateRunProgress,
+  appendRunEvent,
 };

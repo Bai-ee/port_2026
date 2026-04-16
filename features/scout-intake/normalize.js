@@ -86,14 +86,17 @@ function normalizeIntakeResult(
     styleGuideCost = null,
     userContext = null,
     analyzerResults = null,
+    analyzerOutputs = null,
     scribeResult = null,
     briefHtml = null,
     scoutConfig = null,
     tier = 'free',
   }
 ) {
+  // Degrade gracefully when synthesis failed — build a minimal result from
+  // whatever other data the pipeline captured (screenshots, siteMeta, etc.).
   if (!intake || typeof intake !== 'object') {
-    throw new Error('normalizeIntakeResult: intake must be a non-null object');
+    intake = {};
   }
 
   const snapshot = intake.snapshot || {};
@@ -191,6 +194,9 @@ function normalizeIntakeResult(
     styleGuideCost: styleGuideCost || null,
     userContext: userContext || null,
     analyzerResults: analyzerResults || null,
+    // analyzerOutputs: { [cardId]: SkillOutput } — populated by the skill step in runner.js
+    // when SCOUT_ANALYZER_SKILLS_ENABLED is set. Null when flag is off (pre-P1 path).
+    analyzerOutputs: analyzerOutputs && Object.keys(analyzerOutputs).length > 0 ? analyzerOutputs : null,
     scribe: scribeResult && scribeResult.ok ? {
       cards: scribeResult.cards,
       brief: scribeResult.brief,

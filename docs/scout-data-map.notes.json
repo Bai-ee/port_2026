@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "updatedAt": "2026-04-15T21:30:00.000Z",
+  "notes": [
+    {
+      "id": "note-mo0jrvm5-uad8s0",
+      "anchor": "card:intake-terminal",
+      "status": "addressed",
+      "text": "This card needs to referrence all data the pipeline aggregated successfully or not. It should be a summary of all data scrapes, and survey information with a clear success or failed or upgrade flag across all avaiable data points. example, a free tier might scrape reddit or X, but an upgraded account will scrape both + instagram and whatever other platform we establish in the pipeline. so this card need to support that communicating what free tier data points it pulled from, and then as a user upgrades and reruns new data points are tracked and opened up accordigly.",
+      "author": "edittraxnft@gmail.com",
+      "createdAt": "2026-04-15T21:13:19.565Z",
+      "updatedAt": "2026-04-15T21:30:00.000Z",
+      "addressedBy": "SCOUT_ANALYZER_SKILLS_MASTERPLAN.md §13 A1",
+      "history": [
+        {
+          "at": "2026-04-15T21:13:19.565Z",
+          "status": "open",
+          "by": "edittraxnft@gmail.com"
+        },
+        {
+          "at": "2026-04-15T21:30:00.000Z",
+          "status": "addressed",
+          "by": "assistant · masterplan amendment A1"
+        }
+      ]
+    },
+    {
+      "id": "note-mo0jug9i-b3ktka",
+      "anchor": "card:intake-terminal",
+      "status": "addressed",
+      "text": "Additionally, this cards copy needss to provide analyzation of the data it has access to and upsell the client in a way that describes what  data we pulled from to creatte a basic brief / analasys and how it can improve with additional data on enhanced tiers.",
+      "author": "edittraxnft@gmail.com",
+      "createdAt": "2026-04-15T21:15:19.638Z",
+      "updatedAt": "2026-04-15T21:30:00.000Z",
+      "addressedBy": "SCOUT_ANALYZER_SKILLS_MASTERPLAN.md §13 A1",
+      "history": [
+        {
+          "at": "2026-04-15T21:15:19.638Z",
+          "status": "open",
+          "by": "edittraxnft@gmail.com"
+        },
+        {
+          "at": "2026-04-15T21:30:00.000Z",
+          "status": "addressed",
+          "by": "assistant · masterplan amendment A1"
+        }
+      ]
+    },
+    {
+      "id": "note-mo0jy8pw-hokggd",
+      "anchor": "card:brief",
+      "status": "addressed",
+      "text": "The brief will be more of aggregation of all cards weve drawn data from insterted into a client brief. We wont need to reanalyze the content after each card has provided its own content, we will integrate that existing content into the brief, while writing a short paragraph summary for the home page that evaluates the quality of the brief / brand per its available data",
+      "author": "edittraxnft@gmail.com",
+      "createdAt": "2026-04-15T21:18:16.484Z",
+      "updatedAt": "2026-04-15T21:30:00.000Z",
+      "addressedBy": "SCOUT_ANALYZER_SKILLS_MASTERPLAN.md §13 A2 + P7",
+      "history": [
+        {
+          "at": "2026-04-15T21:18:16.484Z",
+          "status": "open",
+          "by": "edittraxnft@gmail.com"
+        },
+        {
+          "at": "2026-04-15T21:30:00.000Z",
+          "status": "addressed",
+          "by": "assistant · masterplan amendment A2 + new phase P7"
+        }
+      ]
+    }
+  ]
+}

@@ -6,8 +6,21 @@ import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 gsap.registerPlugin(ScrollTrigger);
 import Link from 'next/link';
-import { Globe } from 'lucide-react';
+import {
+  ArrowRightLeft,
+  BriefcaseBusiness,
+  ChartColumnIncreasing,
+  LaptopMinimalCheck,
+  MessageSquareMore,
+  Search,
+  Settings2,
+  Workflow,
+  Globe,
+} from 'lucide-react';
+import { BrainIcon } from './components/ui/brain';
 import { useAuth } from './AuthContext';
+import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { db } from './firebase';
 import { internalPageGlassCardStyle } from './pageSurfaceSystem';
 import OnboardingChatModal from './onboarding/OnboardingChatModal';
 import onboardingConfig from './onboarding/questions.config.cjs';
@@ -183,6 +196,7 @@ const tiles = [
     status: 'LIVE',
     metric: 'BRAND READY',
     viz: 'segbars',
+    category: 'video',
   },
   {
     id: 'company-brain',
@@ -193,6 +207,7 @@ const tiles = [
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'memory',
+    category: 'systems',
   },
   {
     id: 'knowledge-assistant',
@@ -203,6 +218,7 @@ const tiles = [
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'qa',
+    category: 'systems',
   },
   {
     id: 'executive-support',
@@ -213,6 +229,7 @@ const tiles = [
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'meetings',
+    category: 'content',
   },
   {
     id: 'daily-operations',
@@ -223,6 +240,7 @@ const tiles = [
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'rings',
+    category: 'systems',
   },
   {
     id: 'email-marketing',
@@ -233,6 +251,7 @@ const tiles = [
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'spark',
+    category: 'email',
   },
   {
     id: 'ai-research',
@@ -243,6 +262,7 @@ const tiles = [
     status: 'LIVE',
     metric: 'BRAND READY',
     viz: 'countdown',
+    category: 'seo',
   },
   {
     id: 'compliance',
@@ -253,6 +273,7 @@ const tiles = [
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'deadlines',
+    category: 'systems',
   },
   {
     id: 'distribution-insight',
@@ -263,6 +284,7 @@ const tiles = [
     status: 'LIVE',
     metric: 'BRAND READY',
     viz: 'table',
+    category: 'websites',
   },
   {
     id: 'rapid-product',
@@ -273,6 +295,7 @@ const tiles = [
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'pipeline',
+    category: 'websites',
   },
   {
     id: 'self-improving',
@@ -283,6 +306,7 @@ const tiles = [
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'delta',
+    category: 'systems',
   },
   {
     id: 'reddit-community',
@@ -293,6 +317,7 @@ const tiles = [
     status: 'LIVE',
     metric: 'BRAND READY',
     viz: 'threads',
+    category: 'content',
   },
   {
     id: 'seo-content',
@@ -303,6 +328,7 @@ const tiles = [
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'keywords',
+    category: 'seo',
   },
   // ── Reserved add-on cards (mirror commented add-ons in StackedSlidesSection.jsx) ──
   {
@@ -314,6 +340,7 @@ const tiles = [
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'segbars',
+    category: 'systems',
   },
   {
     id: 'hyperlocal-signals',
@@ -324,6 +351,7 @@ const tiles = [
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'spark',
+    category: 'content',
   },
   {
     id: 'platform-content-gen',
@@ -334,6 +362,7 @@ const tiles = [
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'threads',
+    category: 'content',
   },
   {
     id: 'brand-safety-gate',
@@ -344,6 +373,7 @@ const tiles = [
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'deadlines',
+    category: 'systems',
   },
   {
     id: 'founder-daily-brief',
@@ -354,6 +384,7 @@ const tiles = [
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'meetings',
+    category: 'email',
   },
   {
     id: 'admin-dashboard-history',
@@ -364,6 +395,7 @@ const tiles = [
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'table',
+    category: 'websites',
   },
   {
     id: 'image-generation',
@@ -374,6 +406,7 @@ const tiles = [
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'rings',
+    category: 'design',
   },
   {
     id: 'knowledge-file-config',
@@ -384,6 +417,7 @@ const tiles = [
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'memory',
+    category: 'systems',
   },
 ];
 
@@ -1669,6 +1703,81 @@ const DashboardPage = () => {
     [currentRun, dashboardState, latestRunStatus, client]
   );
 
+  // ── Real-time pipeline events ────────────────────────────────────────────
+  // Subscribe to clients/{clientId}/brief_runs/{runId}/events (ordered by
+  // createdAt). Each event is written by the worker via updateRunProgress →
+  // appendRunEvent. When events are present, the terminal uses them instead
+  // of the cosmetic hardcoded lines so progress shows the ACTUAL pipeline
+  // stage as it happens.
+  const [realEvents, setRealEvents] = useState([]);
+  const eventsRunKeyRef = useRef(null);
+  useEffect(() => {
+    const cid = client?.clientId || client?.id || null;
+    const rid = currentRun?.runId || currentRun?.id || null;
+    if (!cid || !rid || !db) {
+      setRealEvents([]);
+      eventsRunKeyRef.current = null;
+      return undefined;
+    }
+    const key = `${cid}:${rid}`;
+    if (eventsRunKeyRef.current !== key) {
+      // New run — reset before attaching the snapshot listener.
+      setRealEvents([]);
+      eventsRunKeyRef.current = key;
+    }
+    const q = query(
+      collection(db, 'clients', cid, 'brief_runs', rid, 'events'),
+      orderBy('createdAt', 'asc')
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      const list = snap.docs.map((d) => {
+        const data = d.data() || {};
+        const t = data.createdAt;
+        const at = t?.toDate ? t.toDate().toISOString() : (typeof t === 'string' ? t : null);
+        return {
+          id: d.id,
+          stage: data.stage || 'progress',
+          label: data.label || '',
+          extra: data.extra || null,
+          at,
+        };
+      });
+      setRealEvents(list);
+    }, () => { /* non-fatal snapshot error */ });
+    return () => unsub();
+  }, [client?.clientId, client?.id, currentRun?.runId, currentRun?.id]);
+
+  // Map a pipeline event to a terminal line. Stages from runner.js:
+  //   capture, fetch, analyze, styleguide, synthesize, compose,
+  //   scout-config, skills, scribe, brief, normalize
+  const realEventLines = useMemo(() => {
+    const stagePrefix = {
+      capture:       ['screen', '[SCREEN]'],
+      fetch:         ['fetch',  '[FETCH]'],
+      analyze:       ['ok',     '[ANALYZE]'],
+      styleguide:    ['ai',     '[STYLE]'],
+      synthesize:    ['ai',     '[AI]'],
+      compose:       ['mock',   '[MOCK]'],
+      'scout-config':['ai',     '[SCOUT]'],
+      skills:        ['ai',     '[SKILL]'],
+      scribe:        ['ai',     '[SCRIBE]'],
+      brief:         ['ai',     '[BRIEF]'],
+      normalize:     ['build',  '[BUILD]'],
+      progress:      ['ok',     '✓'],
+      error:         ['error',  '✗'],
+    };
+    return realEvents.map((ev) => {
+      const [type, prefix] = stagePrefix[ev.stage] || ['info', `[${(ev.stage || '').toUpperCase()}]`];
+      return {
+        type,
+        prefix,
+        text: ev.label || ev.stage || '',
+        cursor: false,
+        _realId: ev.id,
+      };
+    });
+  }, [realEvents]);
+
   // While SEO rerun is in progress, override terminal with live stage messages
   const activeTerminalLines = (seoRerunLoading && seoRerunStage)
     ? buildSeoRerunTerminalLines(seoRerunStage, seoAudit?.websiteUrl)
@@ -1718,9 +1827,74 @@ const DashboardPage = () => {
   }, [latestRunStatus, terminalLog]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // During the succeeded reveal, slice to how many lines have been unlocked so far
-  const displayedTerminalLines = revealedLineCount !== null
+  const slicedLog = revealedLineCount !== null
     ? terminalLog.slice(0, revealedLineCount)
     : terminalLog;
+
+  // ── Real-event reveal animation ──────────────────────────────────────────
+  // Real events arrive in bursts (2–5 at once) then long pauses. We animate
+  // them out one-at-a-time at 180ms intervals so they read like a live
+  // terminal, but the reveal counter never exceeds the number of events
+  // actually received.
+  const [revealedRealCount, setRevealedRealCount] = useState(0);
+  useEffect(() => {
+    // If events arrive faster than animation, keep stepping up.
+    if (revealedRealCount >= realEventLines.length) return undefined;
+    const t = setTimeout(() => {
+      setRevealedRealCount((c) => Math.min(c + 1, realEventLines.length));
+    }, 180);
+    return () => clearTimeout(t);
+  }, [revealedRealCount, realEventLines.length]);
+
+  // Reset reveal counter when a new run's events replace the previous set.
+  const prevFirstEventIdRef = useRef(null);
+  useEffect(() => {
+    const firstId = realEventLines[0]?._realId || null;
+    if (firstId !== prevFirstEventIdRef.current) {
+      prevFirstEventIdRef.current = firstId;
+      setRevealedRealCount(0);
+    }
+  }, [realEventLines]);
+
+  // Append synthetic post-run lines when the pipeline has succeeded:
+  //   - Survey resolved  → "launching dashboard in 3,2,1…" countdown
+  //   - Survey unresolved → "complete the survey to continue →"
+  const realEventLinesWithTail = useMemo(() => {
+    if (realEventLines.length === 0) return realEventLines;
+    if (latestRunStatus !== 'succeeded') return realEventLines;
+    const tail = [...realEventLines];
+    tail.push({ type: 'dim', prefix: '', text: '─'.repeat(46), cursor: false });
+    if (surveyResolved) {
+      if (completionCountdown !== null && completionCountdown > 0) {
+        tail.push({ type: 'countdown', prefix: '▶', text: `launching dashboard in ${completionCountdown}…`, cursor: false });
+      } else {
+        tail.push({ type: 'countdown', prefix: '▶', text: 'launching…', cursor: false });
+      }
+    } else {
+      tail.push({ type: 'active', prefix: '▶', text: 'complete the survey above to reveal your dashboard →', cursor: true });
+    }
+    return tail;
+  }, [realEventLines, latestRunStatus, surveyResolved, completionCountdown]);
+
+  // How many lines to show: events revealed so far + all synthetic tail
+  // lines (no animation delay on the tail — it's just status/gating).
+  const realDisplayLimit = realEventLines.length === 0
+    ? 0
+    : revealedRealCount + (realEventLinesWithTail.length - realEventLines.length);
+  const slicedRealLines = realEventLinesWithTail.slice(0, realDisplayLimit);
+
+  // Prefer real-time pipeline events when a run has emitted any. Falls back
+  // to the hardcoded cosmetic log only when the events subcollection is empty
+  // (legacy runs pre-dating the event stream, or still loading).
+  const displayedTerminalLines = realEventLines.length > 0 ? slicedRealLines : slicedLog;
+
+  // Auto-scroll the terminal so the latest line is always in view.
+  // Runs after every change to displayedTerminalLines.
+  useEffect(() => {
+    const el = terminalOutputRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [displayedTerminalLines]);
 
   const intakeTerminalStatus = isRunActive
     ? 'Processing'
@@ -2087,7 +2261,7 @@ const DashboardPage = () => {
     },
     {
       id: 'seo-performance',
-      category: 'systems',
+      category: 'seo',
       number: 'SP',
       label: 'SEO + PERF',
       title: 'SEO + Performance',
@@ -2580,12 +2754,14 @@ const DashboardPage = () => {
                       })()}
                     </div>
                   ) : card.id === 'intake-terminal' && intakeMockupSrc ? (
-                    <img
-                      className="tile-intake-mockup-image"
-                      src={intakeMockupSrc}
-                      alt="Generated multi-device website mockup"
-                      onError={() => setIntakeMockupSrc(null)}
-                    />
+                    <span className="tile-intake-mockup-wrap">
+                      <img
+                        className="tile-intake-mockup-image"
+                        src={intakeMockupSrc}
+                        alt="Generated multi-device website mockup"
+                        onError={() => setIntakeMockupSrc(null)}
+                      />
+                    </span>
                   ) : card.id === 'seo-performance' && hasSeoAuditData ? (() => {
                     const sc  = seoAudit?.scores ?? {};
                     const cwv = seoAudit?.coreWebVitals ?? {};
@@ -2765,7 +2941,7 @@ const DashboardPage = () => {
                 </div>
               </article>
             ))}
-            {(!activeCapabilityFilter || activeCapabilityFilter === 'contact') && tiles.map((tile) => {
+            {tiles.filter((tile) => !activeCapabilityFilter || activeCapabilityFilter === tile.category).map((tile) => {
               const isFreeTier = FREE_TIER_TILE_IDS.has(tile.id);
               const isReady = isFreeTier && hasIntakeData;
               const tileStatus = isReady ? tile.status : isFreeTier ? 'INITIALIZING' : 'PREVIEW';
@@ -2831,18 +3007,65 @@ const DashboardPage = () => {
                 </article>
               );
             })}
+            {(!activeCapabilityFilter || activeCapabilityFilter === 'contact') && (
+              <article
+                data-capability-card
+                className="tile tile-intake-card tile-contact"
+                id="tile-contact"
+                key="contact"
+                onClick={() => setActiveTileModal({ title: 'Contact Your Human', description: 'Ask anything about your dashboard, strategy, or next steps.', rows: [], cardId: null, placeholderLabel: null, number: 'CH', label: 'CONTACT', isCapabilityCard: true, vizType: null })}
+              >
+                <div className="tile-number">
+                  <span>CONTACT</span>
+                  <button
+                    type="button"
+                    className="tile-open-modal-btn"
+                    onClick={(e) => { e.stopPropagation(); setActiveTileModal({ title: 'Contact Your Human', description: 'Ask anything about your dashboard, strategy, or next steps.', rows: [], cardId: null, placeholderLabel: null, number: 'CH', label: 'CONTACT', isCapabilityCard: true, vizType: null }); }}
+                    aria-label="Open details"
+                  >[ ↑ ]</button>
+                </div>
+                <div className="tile-intake-placeholder tile-intake-placeholder-contact">
+                  <div style={{ width: '64px', height: '64px', borderRadius: '999px', overflow: 'hidden', border: '2px solid var(--border-visible)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                    <img src="/img/profile_400x400.jpg" alt="Bryan Balli" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </div>
+                </div>
+                <div className="tile-intake-body">
+                  <h3 className="tile-heading tile-intake-heading">Contact Your Human</h3>
+                  <p className="tile-description tile-intake-description">Ask anything about your dashboard, strategy, or next steps.</p>
+                </div>
+                <div className="tile-foot">
+                  <span className="tile-foot-status">
+                    <span className="power-dot" />
+                    AVAILABLE
+                  </span>
+                  <span className="tile-foot-right-group">
+                    <button
+                      type="button"
+                      className="tile-view-details-btn"
+                      onClick={(e) => { e.stopPropagation(); setActiveTileModal({ title: 'Contact Your Human', description: 'Ask anything about your dashboard, strategy, or next steps.', rows: [], cardId: null, placeholderLabel: null, number: 'CH', label: 'CONTACT', isCapabilityCard: true, vizType: null }); }}
+                    >
+                      Start chat ↗
+                    </button>
+                  </span>
+                </div>
+              </article>
+            )}
           </div>
           </div>{/* end capability-grid-col */}
 
           {/* Right — filter nav */}
           <div id="capability-nav-col">
             {[
-              { key: null,       label: 'All',      sub: 'Everything' },
-              { key: 'design',   label: 'Design',   sub: 'Visual & brand' },
-              { key: 'content',  label: 'Content',  sub: 'Copy & strategy' },
-              { key: 'systems',  label: 'Systems',  sub: 'Data & signals' },
-              { key: 'contact',  label: 'Contact',  sub: 'Chat with Bryan' },
-            ].map(({ key, label, sub }) => (
+              { key: null,        label: 'View All Services',          sub: 'Dashboard overview',     icon: ChartColumnIncreasing, color: '#0ea5e9' },
+              { key: 'design',    label: 'Brand Identity & Design',    sub: 'Visual systems & kits',  icon: BriefcaseBusiness,     color: '#8b5cf6' },
+              { key: 'websites',  label: 'Websites & Landing Pages',   sub: 'Built to convert',       icon: LaptopMinimalCheck,    color: '#0ea5e9' },
+              { key: 'content',   label: 'Social Media & Content',     sub: 'Posts & strategy',       icon: Workflow,              color: '#14b8a6' },
+              { key: 'video',     label: 'Video & Motion',             sub: 'Reels & storytelling',   icon: Settings2,             color: '#10b981' },
+              { key: 'seo',       label: 'SEO & Content Strategy',     sub: 'Search & growth',        icon: Search,                color: '#f97316' },
+              { key: 'email',     label: 'Email & Newsletter Systems', sub: 'Campaigns & flows',      icon: ArrowRightLeft,        color: '#ec4899' },
+              { key: 'systems',   label: 'AI Automation & Workflows',  sub: 'Custom systems',         icon: BrainIcon,             color: '#6366f1' },
+              { key: 'contact',   label: 'Contact Your Human',         sub: 'Make Custom Requests',   icon: MessageSquareMore,     color: '#ec4899' },
+            ].map(({ key, label, sub, icon: NavIcon, color }) => (
               <button
                 key={key ?? 'all'}
                 type="button"
@@ -2874,10 +3097,19 @@ const DashboardPage = () => {
                   });
                 }}
               >
+                <span className="capability-nav-btn-line" aria-hidden="true" />
                 <span className="capability-nav-btn-content">
-                  <span className="capability-nav-btn-label">{label}</span>
+                  <span className="capability-nav-btn-label">
+                    <span className="capability-nav-btn-label-full">{label}</span>
+                    <span className="capability-nav-btn-label-short">{label.split(' ')[0]}</span>
+                  </span>
                   <span className="capability-nav-btn-sub">{sub}</span>
                 </span>
+                {NavIcon ? (
+                  <span className="capability-nav-btn-icon-wrap" style={{ color }}>
+                    <NavIcon size={18} strokeWidth={2} />
+                  </span>
+                ) : null}
               </button>
             ))}
           </div>
@@ -2891,15 +3123,16 @@ const DashboardPage = () => {
       {showIntakeModal ? (
         <div id="intake-modal-overlay" role="dialog" aria-modal="true" aria-label="Dashboard build in progress">
 
-          {/* Card: exact auth cardStyle, widened when survey is active */}
+          {/* Card: auth cardStyle. Survey is always rendered — 2-col layout
+              always active so the terminal never sits alone. */}
           <div
             id="intake-modal-card"
-            data-with-survey={!surveyResolved ? 'true' : 'false'}
+            data-with-survey="true"
             style={{
               position: 'relative',
               zIndex: 2,
               width: '100%',
-              maxWidth: !surveyResolved ? '52rem' : '30rem',
+              maxWidth: '52rem',
               padding: 'clamp(1.25rem, 5vw, 2rem)',
               borderRadius: '10px',
               boxSizing: 'border-box',
@@ -2937,11 +3170,7 @@ const DashboardPage = () => {
               <div ref={modalMarqueeTrackRef} style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform' }}>
                 {(['a', 'b']).map((k) => (
                   <span key={k} aria-hidden={k === 'b' ? 'true' : undefined} style={{ margin: 0, flexShrink: 0, color: '#2a2420', fontSize: 'clamp(2rem, 8.5vw, 7rem)', lineHeight: 1, letterSpacing: '-0.04em', fontFamily: '"Doto", "Space Mono", monospace', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                    {completionCountdown !== null
-                      ? 'DASHBOARD READY\u00A0\u00A0\u00B7\u00A0\u00A0'
-                      : latestRunStatus === 'failed'
-                        ? 'BUILD FAILED\u00A0\u00A0\u00B7\u00A0\u00A0SETUP REQUIRED\u00A0\u00A0\u00B7\u00A0\u00A0'
-                        : 'BUILDING YOUR DASHBOARD\u00A0\u00A0\u00B7\u00A0\u00A0PROCESSING WEBSITE\u00A0\u00A0\u00B7\u00A0\u00A0'}
+                    {'BUILDING YOUR DASHBOARD\u00A0\u00A0\u00B7\u00A0\u00A0PROCESSING WEBSITE\u00A0\u00A0\u00B7\u00A0\u00A0'}
                   </span>
                 ))}
               </div>
@@ -2949,13 +3178,7 @@ const DashboardPage = () => {
 
             {/* Copy — exact auth copyStyle */}
             <p id="intake-modal-copy" style={{ margin: 0, color: 'rgba(42,36,32,0.66)', lineHeight: 1.6, fontFamily: '"Space Grotesk", system-ui, sans-serif', textAlign: 'center' }}>
-              {completionCountdown !== null
-                ? `Dashboard launching in ${completionCountdown}…`
-                : latestRunStatus === 'queued'
-                  ? 'Creating Your Dashboard'
-                  : latestRunStatus === 'running'
-                    ? 'Creating Your Dashboard. You can close this window and come back.'
-                    : 'Setup encountered an issue. Update the website URL below to retry.'}
+              {'Creating Your Dashboard'}
             </p>
 
 
@@ -2979,49 +3202,62 @@ const DashboardPage = () => {
                 </div>
               </div>
 
-              {!surveyResolved ? (
-                <div id="intake-modal-survey-col">
-                  <OnboardingChatModal
-                    steps={ONBOARDING_ENTRY_STEPS}
-                    initialAnswers={onboardingAnswersSeed || {}}
-                    onAnswer={(stepId, value) => postOnboarding({ action: 'answer', stepId, value })}
-                    onSkipStep={(stepId) => postOnboarding({ action: 'skipStep', stepId })}
-                    onSkipAll={() => postOnboarding({ action: 'skipAll' })}
-                    onComplete={() => postOnboarding({ action: 'complete' })}
-                    onResolved={() => setSurveyResolved(true)}
-                  />
-                </div>
-              ) : null}
-            </div>
-
-            {/* Retry control — only on failed state. Reuses the dashboard's
-                reseed flow (same state + handler as #reseed-url-input below). */}
-            {latestRunStatus === 'failed' ? (
-              <div id="intake-modal-retry-row">
-                <div id="intake-modal-retry-inner">
-                  <Globe size={14} strokeWidth={1.5} aria-hidden="true" id="intake-modal-retry-icon" />
-                  <input
-                    id="intake-modal-retry-input"
-                    type="url"
-                    value={reseedUrl}
-                    onChange={(e) => { setReseedUrl(e.target.value); setReseedError(''); setReseedSuccess(false); }}
-                    placeholder="yourbusiness.com"
-                    disabled={reseedLoading}
-                    spellCheck={false}
-                    autoFocus
-                  />
-                  <button
-                    id="intake-modal-retry-btn"
-                    type="button"
-                    onClick={handleReseed}
-                    disabled={reseedLoading || !reseedUrl.trim()}
-                  >
-                    {reseedLoading ? 'Queueing…' : 'Retry'}
-                  </button>
-                </div>
-                {reseedError ? <div id="intake-modal-retry-error">{reseedError}</div> : null}
+              <div id="intake-modal-survey-col" data-resolved={surveyResolved ? 'true' : 'false'}>
+                <OnboardingChatModal
+                  steps={ONBOARDING_ENTRY_STEPS}
+                  initialAnswers={onboardingAnswersSeed || {}}
+                  onAnswer={(stepId, value) => postOnboarding({ action: 'answer', stepId, value })}
+                  onSkipStep={(stepId) => postOnboarding({ action: 'skipStep', stepId })}
+                  onSkipAll={() => postOnboarding({ action: 'skipAll' })}
+                  onComplete={() => postOnboarding({ action: 'complete' })}
+                  onResolved={() => {
+                    // Flip both flags in the same commit so showIntakeModal
+                    // never drops to false between renders.
+                    // Mark postSurveyRevealFiredRef BEFORE setting state so
+                    // the fallback useEffect (line ~1458) that also watches
+                    // surveyResolved + completionCountdown===null can't
+                    // double-fire when the countdown ticks back to null.
+                    postSurveyRevealFiredRef.current = true;
+                    flushSync(() => {
+                      setSurveyResolved(true);
+                      if (latestRunStatus === 'succeeded' && completionCountdown === null) {
+                        setCompletionCountdown(3);
+                      }
+                    });
+                  }}
+                />
+                {/* Retry prompt — shows inside the survey chat when pipeline
+                    fails. No layout shift; scrolls into view naturally. */}
+                {latestRunStatus === 'failed' && (
+                  <div id="intake-retry-chat-block">
+                    <div className="chat-row chat-row-bot">
+                      <img className="chat-avatar-sm" src="/img/profile_400x400.jpg" alt="" aria-hidden="true" />
+                      <div className="chat-bubble chat-bubble-bot">
+                        <span className="chat-question">There was an issue processing this site. You can update the URL and try again.</span>
+                      </div>
+                    </div>
+                    <div id="intake-retry-chat-input">
+                      <input
+                        type="url"
+                        value={reseedUrl}
+                        onChange={(e) => { setReseedUrl(e.target.value); setReseedError(''); setReseedSuccess(false); }}
+                        placeholder="yourbusiness.com"
+                        disabled={reseedLoading}
+                        spellCheck={false}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleReseed}
+                        disabled={reseedLoading || !reseedUrl.trim()}
+                      >
+                        {reseedLoading ? 'Retrying…' : 'Retry'}
+                      </button>
+                    </div>
+                    {reseedError ? <div id="intake-retry-chat-error">{reseedError}</div> : null}
+                  </div>
+                )}
               </div>
-            ) : null}
+            </div>
 
             {/* Footer */}
             <div id="intake-modal-footer">
@@ -3768,12 +4004,16 @@ const dashboardCss = `
     padding: 5px 10px;
     border-radius: 4px;
     line-height: 1;
-    transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+    transition: background 0.55s cubic-bezier(0.16, 1, 0.3, 1), color 0.55s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.55s cubic-bezier(0.16, 1, 0.3, 1);
   }
-  .tile-open-modal-btn:hover {
-    background: var(--text-display);
-    border-color: var(--text-display);
-    color: var(--page);
+  .tile-open-modal-btn:hover,
+  .tile:hover .tile-open-modal-btn {
+    background:
+      linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%),
+      linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+    border-color: transparent;
+    color: #fff;
+    transition: background 0.32s cubic-bezier(0.16, 1, 0.3, 1), color 0.32s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.32s cubic-bezier(0.16, 1, 0.3, 1);
   }
   .hero-label {
     font-family: var(--font-display);
@@ -3924,19 +4164,25 @@ const dashboardCss = `
   }
   .capability-nav-btn {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
     background: rgba(255, 255, 255, 0.35);
     border: none;
     border-radius: 1rem;
-    padding: 20px 22px;
+    padding: 14px 18px;
     cursor: pointer;
     text-align: left;
-    box-shadow: 0px 0px 0px rgba(0, 0, 0, 0), inset 0 1px 0 rgba(255,255,255,0.22);
-    transform: scale(1);
-    transition: background 0.45s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.45s cubic-bezier(0.16, 1, 0.3, 1), transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0px 0px 0px rgba(0,0,0,0), inset 0 1px 0 rgba(255,255,255,0.22);
+    transform: scale(1) translateY(0);
+    transition:
+      background 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
     width: 100%;
     position: relative;
+    will-change: transform;
   }
   .capability-nav-btn::before {
     content: '';
@@ -3944,72 +4190,126 @@ const dashboardCss = `
     inset: 0;
     border-radius: 1rem;
     padding: 1px;
-    background: linear-gradient(to bottom, rgba(228,228,228,0.9), transparent 65%);
+    background: linear-gradient(180deg, rgba(228,228,228,0.9), transparent 62%);
     -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;
     mask-composite: exclude;
     pointer-events: none;
-  }
-  .capability-nav-btn::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 50%;
-    transform: translateY(-50%) scaleY(0);
-    width: 3px;
-    height: 28px;
-    background: var(--accent);
-    border-radius: 0 2px 2px 0;
-    opacity: 0;
-    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
-    pointer-events: none;
+    opacity: 0.85;
+    transition: opacity 0.45s ease;
   }
   .capability-nav-btn:hover {
     background: rgba(255, 255, 255, 1);
-    box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.067), 0px 15px 30px rgba(0, 0, 0, 0.067), 0px 20px 40px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255,255,255,0.45);
-    transform: scale(1.012);
-    transition: background 0.28s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1), transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow:
+      0px 6px 14px rgba(0,0,0,0.06),
+      0px 18px 36px rgba(0,0,0,0.06),
+      0px 28px 56px rgba(0,0,0,0.09),
+      inset 0 1px 0 rgba(255,255,255,0.55);
+    transform: scale(1.02) translateY(-2px);
+    transition:
+      background 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.38s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .capability-nav-btn:hover::before {
+    background: linear-gradient(180deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+    opacity: 1;
+  }
+  .capability-nav-btn:hover .capability-nav-btn-content {
+    transform: translateX(5px);
+    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .capability-nav-btn:hover .capability-nav-btn-icon-wrap {
+    transform: scale(1.12);
+    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
   .capability-nav-btn:active {
-    transform: scale(0.985);
+    transform: scale(0.98) translateY(0);
+    box-shadow:
+      0px 2px 6px rgba(0,0,0,0.05),
+      0px 6px 12px rgba(0,0,0,0.05),
+      inset 0 1px 0 rgba(255,255,255,0.35);
+    transition:
+      transform 0.12s cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 0.12s ease;
+  }
+  .capability-nav-btn:active .capability-nav-btn-content {
+    transform: translateX(2px);
     transition: transform 0.12s ease;
   }
   .capability-nav-btn--active {
     background: rgba(255, 255, 255, 1);
-    box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.067), 0px 15px 30px rgba(0, 0, 0, 0.067), 0px 20px 40px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255,255,255,0.45);
-    transition: background 0.28s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1), transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow:
+      0px 6px 14px rgba(0,0,0,0.06),
+      0px 18px 36px rgba(0,0,0,0.06),
+      0px 28px 56px rgba(0,0,0,0.09),
+      inset 0 1px 0 rgba(255,255,255,0.55);
+    transition:
+      background 0.32s cubic-bezier(0.16, 1, 0.3, 1) 0.15s,
+      box-shadow 0.32s cubic-bezier(0.16, 1, 0.3, 1) 0.15s,
+      transform 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) 0.15s;
   }
-  .capability-nav-btn--active::after {
-    transform: translateY(-50%) scaleY(1);
+  .capability-nav-btn--active::before {
+    background: linear-gradient(180deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
     opacity: 1;
   }
-  /* Dim active item only when a non-active sibling button is directly hovered */
-  #capability-nav-col:has(.capability-nav-btn:not(.capability-nav-btn--active):hover) .capability-nav-btn--active {
+  .capability-nav-btn--active .capability-nav-btn-content {
+    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) 0.15s;
+  }
+  /* Dim active item whenever the nav container is hovered (prevents flash between buttons) */
+  #capability-nav-col:hover .capability-nav-btn--active {
     background: rgba(255, 255, 255, 0.35);
-    box-shadow: 0px 0px 0px rgba(0, 0, 0, 0), inset 0 1px 0 rgba(255,255,255,0.22);
-    transform: scale(1);
-    transition: background 0.45s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.45s cubic-bezier(0.16, 1, 0.3, 1), transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0px 0px 0px rgba(0,0,0,0), inset 0 1px 0 rgba(255,255,255,0.22);
+    transform: scale(1) translateY(0);
+    transition:
+      background 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0s,
+      box-shadow 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0s,
+      transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) 0s;
   }
-  #capability-nav-col:has(.capability-nav-btn:not(.capability-nav-btn--active):hover) .capability-nav-btn--active::after {
-    transform: translateY(-50%) scaleY(0);
-    opacity: 0;
+  #capability-nav-col:hover .capability-nav-btn--active::before {
+    background: linear-gradient(180deg, rgba(228,228,228,0.9), transparent 62%);
+    opacity: 0.85;
   }
-
+  .capability-nav-btn--active:hover::before {
+    background: linear-gradient(180deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+    opacity: 1;
+  }
+  #capability-nav-col:hover .capability-nav-btn--active .capability-nav-btn-content {
+    transform: translateX(0);
+    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) 0s;
+  }
+  .capability-nav-btn-icon-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    margin-left: auto;
+    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .capability-nav-btn-icon-wrap svg {
+    width: 18px;
+    height: 18px;
+  }
   .capability-nav-btn-content {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 5px;
+    gap: 3px;
     position: relative;
     z-index: 1;
+    transform: translateX(0);
+    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
   .capability-nav-btn-label {
-    font-size: 0.88rem;
-    font-weight: 700;
+    font-size: clamp(0.8rem, 1.1vw, 0.875rem);
+    font-weight: 400;
     letter-spacing: -0.01em;
     color: var(--text-display);
     line-height: 1.15;
   }
+  .capability-nav-btn-label-short { display: none; }
   .capability-nav-btn-sub {
     font-family: var(--font-mono);
     font-size: 11px;
@@ -4030,7 +4330,7 @@ const dashboardCss = `
   #capability-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-auto-rows: minmax(460px, auto);
+    grid-auto-rows: minmax(470px, auto);
     gap: 1px;
     border: 1px solid rgba(42, 36, 32, 0.1);
     border-radius: 28px;
@@ -4325,6 +4625,44 @@ const dashboardCss = `
     object-fit: cover;
     object-position: center;
   }
+  .tile-intake-mockup-wrap,
+  .tile-brief-preview-wrap {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 12px;
+    padding: 2px;
+    position: relative;
+    overflow: hidden;
+    background: transparent;
+  }
+  .tile-intake-mockup-wrap::before,
+  .tile-brief-preview-wrap::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+    opacity: 0;
+    transition: opacity 1.1s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 0;
+  }
+  .tile:hover .tile-intake-mockup-wrap::before,
+  .tile:hover .tile-brief-preview-wrap::before {
+    opacity: 1;
+    transition: opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .tile:hover .tile-intake-placeholder-intake-terminal .tile-intake-mockup-wrap::before {
+    opacity: 0;
+  }
+  .tile-intake-mockup-wrap img,
+  .tile-brief-preview-wrap iframe {
+    position: relative;
+    z-index: 1;
+    border-radius: 10px;
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
 
   /* ── Style Guide Preview ── */
   #sg-preview-shell {
@@ -4613,6 +4951,16 @@ const dashboardCss = `
     background: #000;
     color: #fff;
   }
+  .tile:has(.tile-download-btn:hover) .tile-open-modal-btn {
+    background: none;
+    border-color: rgba(180, 180, 180, 0.7);
+    color: var(--text-secondary);
+  }
+  .tile:has(.tile-download-btn:hover) .tile-view-details-btn {
+    background: #fff;
+    border-color: #000;
+    color: #000;
+  }
   .tile-view-details-btn {
     background: #fff;
     border: 1px solid #000;
@@ -4625,12 +4973,16 @@ const dashboardCss = `
     padding: 5px 10px;
     border-radius: 4px;
     line-height: 1;
-    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    transition: background 0.55s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.55s cubic-bezier(0.16, 1, 0.3, 1), color 0.55s cubic-bezier(0.16, 1, 0.3, 1);
   }
-  .tile-view-details-btn:hover {
-    background: #000;
-    border-color: #000;
+  .tile-view-details-btn:hover,
+  .tile:hover .tile-view-details-btn {
+    background:
+      linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%),
+      linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+    border-color: transparent;
     color: #fff;
+    transition: background 0.32s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.32s cubic-bezier(0.16, 1, 0.3, 1), color 0.32s cubic-bezier(0.16, 1, 0.3, 1);
   }
   .tile-blocked-upgrade-btn::before {
     display: none;
@@ -5453,14 +5805,25 @@ const dashboardCss = `
     #capability-section { padding-top: 0; }
     #capability-section-shell { grid-template-columns: 1fr; }
     #capability-nav-col { order: -1; position: static; flex-direction: row; flex-wrap: wrap; gap: 6px; z-index: 10; }
-    .capability-nav-btn { flex: 1 1 auto; min-width: 0; padding: 10px 16px; border-radius: 999px; flex-direction: row; align-items: center; justify-content: center; gap: 0; width: auto; }
+    .capability-nav-btn { flex: 1 1 auto; min-width: 0; padding: 10px 16px; border-radius: 999px; flex-direction: row; align-items: center; justify-content: center; gap: 0; width: auto; background: rgba(255, 255, 255, 1); }
+    .capability-nav-btn:hover { background: rgba(255, 255, 255, 1); box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.067), 0px 15px 30px rgba(0, 0, 0, 0.067), 0px 20px 40px rgba(0, 0, 0, 0.1); }
     .capability-nav-btn::before { border-radius: 999px; }
-    .capability-nav-btn::after { content: none; }
+    .capability-nav-btn--active::before {
+      background: linear-gradient(180deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+      opacity: 1;
+    }
+    #capability-nav-col:hover .capability-nav-btn--active::before {
+      background: linear-gradient(180deg, rgba(228,228,228,0.9), transparent 62%);
+      opacity: 0.85;
+    }
     .capability-nav-btn-sub { display: none; }
     .capability-nav-btn-label { font-family: var(--font-mono); font-size: 11px; font-weight: 400; letter-spacing: 0.08em; text-transform: uppercase; }
+    .capability-nav-btn-label-full { display: none; }
+    .capability-nav-btn-label-short { display: inline; }
     .capability-nav-btn-content { flex-direction: row; align-items: center; gap: 0; }
+    .capability-nav-btn-icon-wrap { display: none; }
     #capability-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .tile { aspect-ratio: auto; min-height: 220px; grid-template-areas: "num" "head" "desc" "viz" "foot"; grid-template-columns: 1fr; row-gap: 14px; }
+    .tile { aspect-ratio: auto; min-height: 230px; grid-template-areas: "num" "head" "desc" "viz" "foot"; grid-template-columns: 1fr; row-gap: 14px; }
     .tile-description { }
     #intake-identity-row { grid-template-columns: 1fr; gap: 16px; }
   }
@@ -5679,25 +6042,29 @@ const dashboardCss = `
   }
   .term-pfx { text-align: right; white-space: nowrap; font-size: 0.64rem; letter-spacing: 0.02em; }
   .term-msg { word-break: break-word; }
-  /* One Dark palette */
-  .term-system .term-pfx, .term-system .term-msg { color: #3a3a3a; }
-  .term-dim .term-pfx, .term-dim .term-msg { color: #333; }
-  .term-info .term-pfx { color: #4b5263; }
-  .term-info .term-msg { color: #6a6f7a; }
-  .term-fetch .term-pfx { color: #56b6c2; }
-  .term-fetch .term-msg { color: #7ab8bd; }
-  .term-ok .term-pfx { color: #98c379; }
-  .term-ok .term-msg { color: #5d8a44; }
-  .term-ai .term-pfx { color: #c678dd; }
-  .term-ai .term-msg { color: #8c52b8; }
-  .term-build .term-pfx { color: #e5c07b; }
-  .term-build .term-msg { color: #a8843c; }
-  .term-error .term-pfx { color: #e06c75; }
-  .term-error .term-msg { color: #a84f57; }
+  /* One Dark palette — tuned for legibility on #1a1a1a background */
+  .term-system .term-pfx, .term-system .term-msg { color: #6b7280; }
+  .term-dim    .term-pfx, .term-dim    .term-msg { color: #6b7280; }
+  .term-info   .term-pfx { color: #7b8798; }
+  .term-info   .term-msg { color: #aab2bd; }
+  .term-fetch  .term-pfx { color: #56b6c2; }
+  .term-fetch  .term-msg { color: #aee0e3; }
+  .term-ok     .term-pfx { color: #98c379; }
+  .term-ok     .term-msg { color: #c8e1b4; }
+  .term-ai     .term-pfx { color: #c678dd; }
+  .term-ai     .term-msg { color: #e3b6f0; }
+  .term-build  .term-pfx { color: #e5c07b; }
+  .term-build  .term-msg { color: #f0d9a6; }
+  .term-error  .term-pfx { color: #e06c75; }
+  .term-error  .term-msg { color: #f1a6ac; }
   .term-active .term-pfx { color: #61afef; }
-  .term-active .term-msg { color: #dde1e8; font-weight: 700; }
-  .term-countdown .term-pfx { color: #e5c07b; }
-  .term-countdown .term-msg { color: #e5c07b; font-weight: 700; font-size: 0.72rem; letter-spacing: 0.03em; }
+  .term-active .term-msg { color: #eaf0fa; font-weight: 700; }
+  .term-screen .term-pfx { color: #7b9eff; }
+  .term-screen .term-msg { color: #c5d3f7; }
+  .term-mock   .term-pfx { color: #ffb36b; }
+  .term-mock   .term-msg { color: #ffd4aa; }
+  .term-countdown .term-pfx { color: #ffd78a; }
+  .term-countdown .term-msg { color: #ffe3a6; font-weight: 700; font-size: 0.72rem; letter-spacing: 0.03em; }
   /* Blinking block caret */
   .term-caret {
     display: inline-block;
@@ -5725,10 +6092,50 @@ const dashboardCss = `
   }
 
   /* Retry row — failed-state only */
-  #intake-modal-retry-row {
-    margin-top: 0.9rem;
-    padding-top: 0.85rem;
-    border-top: 1px solid rgba(215, 25, 33, 0.25);
+  /* Old retry bar — removed from DOM, kept as reference */
+  #intake-modal-retry-row { display: none; }
+
+  /* Retry prompt inside the survey chat thread */
+  #intake-retry-chat-block { padding: 0.5rem 0.75rem 0.75rem; }
+  #intake-retry-chat-input {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.6rem;
+    padding: 0.4rem 0.5rem;
+    background: rgba(255, 252, 248, 0.9);
+    border: 1px solid rgba(215, 25, 33, 0.3);
+    border-radius: 8px;
+  }
+  #intake-retry-chat-input input {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    font-size: 0.82rem;
+    color: #2a2420;
+  }
+  #intake-retry-chat-input button {
+    flex-shrink: 0;
+    font-family: "Space Mono", monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 0.4rem 0.8rem;
+    background: #D71921;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  #intake-retry-chat-input button:disabled { opacity: 0.5; cursor: default; }
+  #intake-retry-chat-error {
+    margin-top: 0.4rem;
+    font-family: "Space Mono", monospace;
+    font-size: 0.65rem;
+    color: #D71921;
   }
   #intake-modal-retry-inner {
     display: flex;

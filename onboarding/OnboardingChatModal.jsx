@@ -365,12 +365,14 @@ export default function OnboardingChatModal({
 
       </div>
 
-      {/* ── Footer ── */}
-      <div id="onboarding-chat-footer">
-        <button id="onboarding-chat-skip-all" type="button" onClick={() => handleSkipAll('Skip for now')} disabled={busy}>
-          {/* Skip for now */}
-        </button>
-      </div>
+      {/* ── Footer — persistent Skip All for mid-survey exit ── */}
+      {!introMode && (
+        <div id="onboarding-chat-footer">
+          <button id="onboarding-chat-skip-all" type="button" onClick={() => handleSkipAll('Skip remaining')} disabled={busy}>
+            Skip remaining questions
+          </button>
+        </div>
+      )}
 
     </div>
   );

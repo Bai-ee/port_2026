@@ -36,5 +36,18 @@ service cloud.firestore {
     match /brief_runs/{runId} {
       allow read, write: if false;
     }
+
+    // Per-client brief_runs mirror. The run doc itself stays server-owned
+    // (allow read: false), but the events subcollection is readable by the
+    // signed-in user bound to that client so the dashboard terminal can
+    // stream real-time pipeline progress via onSnapshot.
+    match /clients/{clientId}/brief_runs/{runId} {
+      allow read, write: if false;
+
+      match /events/{eventId} {
+        allow read:  if request.auth != null && callerClientId() == clientId;
+        allow write: if false;
+      }
+    }
   }
 }

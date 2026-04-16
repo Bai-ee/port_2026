@@ -24,6 +24,7 @@ const { extractDesignSystem } = require('./design-system-extractor');
 const { buildUserContext } = require('./user-context');
 const { runAnalyzers } = require('./analyzers');
 const { runScribe } = require('./scribe');
+const { runCardSkills, buildSourcePayloads } = require('./skills/_runner');
 const { ensureScoutConfig } = require('./scout-config-generator');
 const { persistWebsiteScreenshotArtifact, persistBriefPdfArtifact } = require('../../api/_lib/browserless.cjs');
 const { renderBriefHtml } = require('./brief-renderer');
@@ -205,12 +206,12 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
   };
 
   let evidence;
+  let fetchWarning = null;
   try {
     evidence = await fetchSiteEvidence(websiteUrl, { onPageFetched });
     console.log(
       `[${new Date().toISOString()}] INTAKE: fetch complete — ${evidence.pages.length} pages, thin=${evidence.thin}`
     );
-    // Final analyze emit — full compact page evidence for the terminal display
     const pageEvidence = evidence.pages.slice(0, 4).map((p) => ({
       type: p.type,
       url: p.url,
@@ -227,25 +228,20 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
       pages: pageEvidence,
     });
   } catch (err) {
-    const { artifactRefs, warnings } = await resolveScreenshotOutcome();
-    return {
-      status: 'failed',
-      pipelineType: 'free-tier-intake',
-      pipelineRunId,
-      error: `Site fetch threw: ${err.message}`,
-      failedStage: 'fetch',
-      scoutPriorityAction: null,
-      content: null,
-      contentOpportunities: null,
-      guardianFlags: null,
-      providerName: 'anthropic',
-      runCostData: null,
-      artifactRefs,
-      warnings,
+    // Fetch failed — degrade to empty evidence so downstream stages can
+    // still produce a (thin) dashboard rather than a dead run.
+    evidence = { url: websiteUrl, fetchedAt: new Date().toISOString(), pages: [], warnings: [`Fetch failed: ${err.message}`], thin: true };
+    fetchWarning = {
+      type: 'warning',
+      code: 'fetch_failed',
+      message: `Site fetch failed (non-fatal): ${err.message}. Dashboard will be thin.`,
+      stage: 'fetch',
     };
+    await emitProgress('fetch', `Fetch failed — continuing with limited data`, { currentUrl: websiteUrl }).catch(() => {});
   }
 
   const { artifactRefs, warnings } = await resolveScreenshotOutcome();
+  if (fetchWarning) warnings.push(fetchWarning);
 
   // ── Opt-in intelligence injection ────────────────────────────────────────
   // Read stored intelligence master for this client. If pipelineInjection is
@@ -281,39 +277,26 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
       intelligenceBriefing,
     });
   } catch (err) {
-    return {
-      status: 'failed',
-      pipelineType: 'free-tier-intake',
-      pipelineRunId,
-      error: `Synthesis threw: ${err.message}`,
-      failedStage: 'synthesize',
-      scoutPriorityAction: null,
-      content: null,
-      contentOpportunities: null,
-      guardianFlags: null,
-      providerName: 'anthropic',
-      runCostData: null,
-      artifactRefs,
-      warnings,
-    };
+    synthesisResult = { ok: false, intake: null, runCostData: null, error: err.message };
+    warnings.push({
+      type: 'warning',
+      code: 'synthesize_failed',
+      message: `Synthesis threw (non-fatal): ${err.message}. Dashboard cards that depend on AI analysis will show "work needed."`,
+      stage: 'synthesize',
+    });
+    await emitProgress('synthesize', `AI analysis failed — continuing with available data`).catch(() => {});
   }
 
   if (!synthesisResult.ok) {
-    return {
-      status: 'failed',
-      pipelineType: 'free-tier-intake',
-      pipelineRunId,
-      error: synthesisResult.error || 'Synthesis returned no intake data.',
-      failedStage: 'synthesize',
-      scoutPriorityAction: null,
-      content: null,
-      contentOpportunities: null,
-      guardianFlags: null,
-      providerName: 'anthropic',
-      runCostData: synthesisResult.runCostData,
-      artifactRefs,
-      warnings,
-    };
+    if (!synthesisResult.intake) {
+      synthesisResult.intake = null;
+      warnings.push({
+        type: 'warning',
+        code: 'synthesize_empty',
+        message: `Synthesis returned no intake data (non-fatal): ${synthesisResult.error || 'unknown'}. Dashboard will be thin.`,
+        stage: 'synthesize',
+      });
+    }
   }
 
   console.log(
@@ -448,6 +431,53 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
     });
   }
 
+  // ── Analyzer skill step ─────────────────────────────────────────────────
+  // Gated behind SCOUT_ANALYZER_SKILLS_ENABLED. When unset, this block is a
+  // no-op and the pipeline runs the pre-P1 path byte-for-byte identically.
+  // Skill failures are non-fatal: each failure pushes a warning and the card
+  // falls back to existing analyzer.impl signals at Scribe time.
+  let analyzerOutputs = {};
+  if (process.env.SCOUT_ANALYZER_SKILLS_ENABLED) {
+    await emitProgress('skills', 'Running analyzer skills…');
+    try {
+      // Strip _rawHtml from evidence pages before handing to skills.
+      // _rawHtml is ephemeral (stripped by normalize.js before Firestore write)
+      // but it's still on the evidence at this stage and can push prompts
+      // well over the 200K token limit. Skills only need the extracted
+      // structured fields, not the raw HTML source.
+      const evidenceForSkills = evidence && Array.isArray(evidence.pages)
+        ? {
+            ...evidence,
+            pages: evidence.pages.map((p) => {
+              const { _rawHtml, ...rest } = p || {};
+              return rest;
+            }),
+          }
+        : evidence;
+
+      const sourcePayloads = buildSourcePayloads({
+        intake:      synthesisResult.intake,
+        styleGuide,
+        siteMeta,
+        evidence:    evidenceForSkills,
+        pagespeed:   sharedResults.pagespeed,
+        scoutConfig,
+        userContext,
+      });
+      analyzerOutputs = await runCardSkills({ tier, sourcePayloads, warnings });
+      console.log(
+        `[${new Date().toISOString()}] INTAKE: analyzer skills complete — ${Object.keys(analyzerOutputs).length} card(s) produced output`
+      );
+    } catch (err) {
+      warnings.push({
+        type: 'warning',
+        code: 'skills_threw',
+        message: `Analyzer skills threw: ${err.message}`,
+        stage: 'skills',
+      });
+    }
+  }
+
   // ── Scribe pass — per-card copy + brief doc ─────────────────────────────
   // Haiku call; reads analyzer signals only (no raw HTML). Non-fatal: on
   // failure we continue with scribe=null; dashboard falls back to the raw
@@ -557,30 +587,44 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
       styleGuideCost,
       userContext,
       analyzerResults,
+      analyzerOutputs,
       scribeResult,
       briefHtml,
       scoutConfig,
       tier,
     });
   } catch (err) {
-    return {
-      status: 'failed',
+    // Normalize failed — build a minimal result so the dashboard still
+    // renders with whatever data we have. Cards will show "work needed."
+    warnings.push({
+      type: 'warning',
+      code: 'normalize_failed',
+      message: `Normalization failed (non-fatal): ${err.message}. Dashboard may be incomplete.`,
+      stage: 'normalize',
+    });
+    normalized = {
+      status: 'succeeded',
       pipelineType: 'free-tier-intake',
       pipelineRunId,
-      error: `Normalization threw: ${err.message}`,
-      failedStage: 'normalize',
       scoutPriorityAction: null,
       content: null,
       contentOpportunities: null,
       guardianFlags: null,
       providerName: 'anthropic',
-      runCostData: synthesisResult.runCostData,
+      runCostData: synthesisResult?.runCostData || null,
       artifactRefs,
       warnings,
+      snapshot: synthesisResult?.intake?.snapshot || null,
+      signals: synthesisResult?.intake?.signals || null,
+      strategy: synthesisResult?.intake?.strategy || null,
+      outputsPreview: synthesisResult?.intake?.outputsPreview || null,
+      systemPreview: synthesisResult?.intake?.systemPreview || null,
+      siteMeta,
+      analyzerOutputs: analyzerOutputs && Object.keys(analyzerOutputs).length > 0 ? analyzerOutputs : null,
     };
   }
 
-  console.log(`[${new Date().toISOString()}] INTAKE: pipeline ${pipelineRunId} succeeded.`);
+  console.log(`[${new Date().toISOString()}] INTAKE: pipeline ${pipelineRunId} ${normalized.status === 'succeeded' ? 'succeeded' : 'completed with warnings'}.`);
   return normalized;
 }
 
