@@ -156,7 +156,24 @@ export async function GET(request) {
   const cards = {};
   for (const card of CARD_CONTRACT) {
     const scribe = scribeCards[card.id] || null;
-    const analyzerOutput = analyzerOutputs?.[card.id] || null;
+    // Shape tolerance: new runs produce { skills, aggregate }; old runs are flat SkillOutput.
+    // For display, prefer aggregate. Carry metadata + runAt from the first skill so the
+    // Data Map cost/token row keeps working.
+    const rawAnalyzerOutput = analyzerOutputs?.[card.id] || null;
+    let analyzerOutput = null;
+    if (rawAnalyzerOutput) {
+      if (rawAnalyzerOutput.aggregate) {
+        const firstSkill = Object.values(rawAnalyzerOutput.skills || {})[0] || null;
+        analyzerOutput = {
+          ...rawAnalyzerOutput.aggregate,
+          metadata: firstSkill?.metadata || null,
+          runAt:    firstSkill?.runAt    || null,
+          skillId:  firstSkill?.skillId  || null,
+        };
+      } else {
+        analyzerOutput = rawAnalyzerOutput;
+      }
+    }
 
     const rawValue       = card.sourceField   ? resolvePath(root, card.sourceField)   : null;
     const fallbackValue  = card.fallbackField ? resolvePath(root, card.fallbackField) : null;

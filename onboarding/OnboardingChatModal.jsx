@@ -17,6 +17,12 @@ export default function OnboardingChatModal({
   onSkipAll,
   onComplete,
   onResolved,
+  pipelineError = null,
+  retryUrl = '',
+  onRetryUrlChange,
+  onRetry,
+  retryLoading = false,
+  retryError = '',
 }) {
   const [messages, setMessages] = useState([]);
   const [introMode, setIntroMode] = useState(true);
@@ -39,11 +45,11 @@ export default function OnboardingChatModal({
     return () => clearTimeout(t);
   }, []);
 
-  // Auto-scroll on new messages or typing indicator
+  // Auto-scroll on new messages, typing indicator, or pipeline error retry
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, typing]);
+  }, [messages, typing, pipelineError]);
 
   const markAnswered = useCallback((idx) => {
     setMessages((prev) =>
@@ -350,6 +356,42 @@ export default function OnboardingChatModal({
             </div>
           );
         })}
+
+        {/* Pipeline error retry — injected into the chat thread so it
+            feels like a natural conversation turn, not a separate UI. Overrides
+            the survey's active-step when the pipeline has failed. */}
+        {pipelineError && (
+          <div className="chat-turn chat-msg-in">
+            <div className="chat-row chat-row-bot">
+              <img className="chat-avatar-sm" src="/img/profile_400x400.jpg" alt="" aria-hidden="true" />
+              <div className="chat-bubble chat-bubble-bot">
+                <span className="chat-question">There was an issue processing this site. You can update the URL below and try again.</span>
+              </div>
+            </div>
+            <div className="chat-options-zone">
+              <div id="intake-retry-chat-input" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.35rem 0.4rem', background: 'rgba(255,252,248,0.9)', border: '1px solid rgba(215,25,33,0.3)', borderRadius: 8 }}>
+                <input
+                  type="url"
+                  value={retryUrl}
+                  onChange={(e) => onRetryUrlChange?.(e.target.value)}
+                  placeholder="yourbusiness.com"
+                  disabled={retryLoading}
+                  spellCheck={false}
+                  style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', fontFamily: '"Space Grotesk", system-ui, sans-serif', fontSize: '0.82rem', color: '#2a2420' }}
+                />
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  disabled={retryLoading || !retryUrl?.trim()}
+                  style={{ flexShrink: 0, fontFamily: '"Space Mono", monospace', fontSize: '0.62rem', letterSpacing: '0.12em', textTransform: 'uppercase', padding: '0.4rem 0.8rem', background: '#D71921', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', opacity: (retryLoading || !retryUrl?.trim()) ? 0.5 : 1 }}
+                >
+                  {retryLoading ? 'Retrying…' : 'Retry'}
+                </button>
+              </div>
+              {retryError ? <div style={{ marginTop: '0.3rem', fontFamily: '"Space Mono", monospace', fontSize: '0.65rem', color: '#D71921' }}>{retryError}</div> : null}
+            </div>
+          </div>
+        )}
 
         {/* Typing indicator */}
         {typing && (

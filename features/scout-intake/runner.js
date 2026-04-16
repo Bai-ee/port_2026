@@ -30,6 +30,7 @@ const { persistWebsiteScreenshotArtifact, persistBriefPdfArtifact } = require('.
 const { renderBriefHtml } = require('./brief-renderer');
 const { generateWebsiteMockupArtifact } = require('../../api/_lib/device-mockup.cjs');
 const { getMaster } = require('../intelligence/_store');
+const pagespeedModule = require('../intelligence/pagespeed');
 
 // ── Intelligence briefing ─────────────────────────────────────────────────────
 
@@ -109,6 +110,37 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
     if (!onProgress) return;
     try { await onProgress(stage, label, extra); } catch { /* ignore */ }
   };
+
+  // Stage timeout with heartbeat — races a promise against a deadline AND
+  // emits periodic "still working" events so the terminal stays alive during
+  // legitimately long Anthropic calls. 180s is generous: if an API call hasn't
+  // returned by then, it's genuinely hung (not just slow).
+  const STAGE_TIMEOUT_MS = 180_000; // 3 min per stage
+  const HEARTBEAT_MS     = 20_000;  // "still working" ping every 20s
+  // stage param overrides the emitProgress stage id. Without it the id is
+  // derived from the label, which may not match a known terminal stage.
+  function withTimeout(promise, label, ms = STAGE_TIMEOUT_MS, stage = null) {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const heartbeatStage = stage || label.toLowerCase().replace(/\s+/g, '-');
+      const heartbeat = setInterval(() => {
+        if (!settled) {
+          emitProgress(heartbeatStage, `Still working on ${label}… You can leave this window and come back at anytime.`).catch(() => {});
+        }
+      }, HEARTBEAT_MS);
+      const timer = setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          clearInterval(heartbeat);
+          reject(new Error(`${label} timed out after ${ms / 1000}s`));
+        }
+      }, ms);
+      promise.then(
+        (val) => { if (!settled) { settled = true; clearTimeout(timer); clearInterval(heartbeat); resolve(val); } },
+        (err) => { if (!settled) { settled = true; clearTimeout(timer); clearInterval(heartbeat); reject(err); } },
+      );
+    });
+  }
 
   // ── Resolve websiteUrl ────────────────────────────────────────────────────
   const rawUrl =
@@ -266,16 +298,22 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
   // the styleGuide field is left null for dashboard fallback.
   console.log(`[${new Date().toISOString()}] INTAKE: synthesizing + extracting design system...`);
 
-  const styleGuideTask = extractDesignSystem(evidence, {
-    onProgress: () => emitProgress('styleguide', 'Extracting design system…'),
-  }).catch((err) => ({ ok: false, designSystem: null, runCostData: null, error: err.message }));
+  const styleGuideTask = withTimeout(
+    extractDesignSystem(evidence, {
+      onProgress: () => emitProgress('styleguide', 'Extracting design system…'),
+    }),
+    'Style guide extraction',
+  ).catch((err) => ({ ok: false, designSystem: null, runCostData: null, error: err.message }));
 
   let synthesisResult;
   try {
-    synthesisResult = await synthesizeSiteEvidence(evidence, {
-      onProgress: () => emitProgress('synthesize', 'Running AI brand analysis…'),
-      intelligenceBriefing,
-    });
+    synthesisResult = await withTimeout(
+      synthesizeSiteEvidence(evidence, {
+        onProgress: () => emitProgress('synthesize', 'Running AI brand analysis…'),
+        intelligenceBriefing,
+      }),
+      'AI synthesis',
+    );
   } catch (err) {
     synthesisResult = { ok: false, intake: null, runCostData: null, error: err.message };
     warnings.push({
@@ -356,6 +394,56 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
     });
   }
 
+  // ── [PSI] PageSpeed Insights fetch ────────────────────────────────────────
+  // Runs after style guide resolves, before analyzers + skills, so both can
+  // consume live scores. Non-fatal: any failure pushes a warning and leaves
+  // pagespeed = null (same as pre-P1 behavior).
+  // Gated: PAGESPEED_API_KEY must be set AND PAGESPEED_ENABLED != '0'.
+  let pagespeed = null;
+  {
+    const psiApiKey  = process.env.PAGESPEED_API_KEY || '';
+    const psiEnabled = process.env.PAGESPEED_ENABLED !== '0';
+    if (!psiApiKey) {
+      console.warn('[PSI] PAGESPEED_API_KEY not set — skipping PageSpeed audit.');
+      warnings.push({
+        type: 'warning',
+        code: 'pagespeed_skipped',
+        message: 'PageSpeed audit skipped: PAGESPEED_API_KEY not configured.',
+        stage: 'psi',
+      });
+    } else if (!psiEnabled) {
+      console.warn('[PSI] PAGESPEED_ENABLED=0 — skipping PageSpeed audit.');
+      warnings.push({
+        type: 'warning',
+        code: 'pagespeed_skipped',
+        message: 'PageSpeed audit skipped: PAGESPEED_ENABLED=0.',
+        stage: 'psi',
+      });
+    } else {
+      try {
+        await emitProgress('psi', '[PSI] Running PageSpeed audit…');
+        pagespeed = await withTimeout(
+          pagespeedModule.fetch({ websiteUrl }),
+          'PageSpeed audit',
+          45_000,   // hard ceiling; AbortSignal inside pagespeed.js fires at 30s
+          'psi',    // heartbeat to 'psi' so terminal shows it + stuck-detection works
+        );
+        console.log(
+          `[${new Date().toISOString()}] INTAKE: PSI complete — perf=${pagespeed?.facts?.scores?.performance}, seo=${pagespeed?.facts?.scores?.seo}`
+        );
+      } catch (err) {
+        console.warn(`[PSI] PageSpeed audit failed (non-fatal): ${err.message}`);
+        warnings.push({
+          type: 'warning',
+          code: 'pagespeed_failed',
+          message: `PageSpeed audit failed: ${err.message}`,
+          stage: 'psi',
+        });
+        pagespeed = null;
+      }
+    }
+  }
+
   // ── Stage 4: Normalize ────────────────────────────────────────────────────
   await emitProgress('normalize', 'Writing dashboard modules...');
 
@@ -371,7 +459,7 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
     styleGuide,
     styleGuideCost,
     siteMeta,
-    pagespeed: null, // wired in a later phase
+    pagespeed,   // live SourceRecord from PSI, or null if skipped/failed
   };
 
   let analyzerResults = null;
@@ -464,7 +552,7 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
         scoutConfig,
         userContext,
       });
-      analyzerOutputs = await runCardSkills({ tier, sourcePayloads, warnings });
+      analyzerOutputs = await withTimeout(runCardSkills({ tier, sourcePayloads, warnings }), 'Analyzer skills');
       console.log(
         `[${new Date().toISOString()}] INTAKE: analyzer skills complete — ${Object.keys(analyzerOutputs).length} card(s) produced output`
       );
@@ -484,12 +572,13 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
   // intake fields still present in the result.
   let scribeResult = null;
   try {
-    scribeResult = await runScribe({
+    scribeResult = await withTimeout(runScribe({
       analyzerResults,
+      analyzerOutputs,   // P4: feeds aggregate signals + recommendation generation
       userContext,
       websiteUrl,
       onProgress: () => emitProgress('scribe', 'Writing card copy + brief…'),
-    });
+    }), 'Scribe');
     if (scribeResult?.ok) {
       console.log(
         `[${new Date().toISOString()}] INTAKE: scribe complete — ${Object.keys(scribeResult.cards || {}).length} cards, cost ~$${scribeResult.runCostData?.estimatedCostUsd}`

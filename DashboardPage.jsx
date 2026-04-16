@@ -24,6 +24,7 @@ import { db } from './firebase';
 import { internalPageGlassCardStyle } from './pageSurfaceSystem';
 import OnboardingChatModal from './onboarding/OnboardingChatModal';
 import onboardingConfig from './onboarding/questions.config.cjs';
+import { buildSolutionsList, resolveSolution } from './features/scout-intake/solutions-catalog.mjs';
 
 // Entry-flow survey surfaces every question step (excludes the summary, which
 // is added in Phase 4). Ordered by the `order` field in questions.config.cjs.
@@ -1054,6 +1055,7 @@ const DashboardPage = () => {
   const [countdownHours, setCountdownHours] = useState(14);
   const [showTierModal, setShowTierModal] = useState(false);
   const [activeTileModal, setActiveTileModal] = useState(null);
+  const [modalTab, setModalTab] = useState('solutions');
   const [activeCapabilityFilter, setActiveCapabilityFilter] = useState(null);
   const [chatDraft, setChatDraft] = useState('');
   const capabilityGridRef = useRef(null);
@@ -1145,6 +1147,15 @@ const DashboardPage = () => {
     return () => window.clearInterval(timer);
   }, []);
 
+  // Reset modal tab to SOLUTIONS each time a card modal opens so users land on
+  // the action view first. If the card has no analyzer data, the tab bar isn't
+  // rendered and this value is unused.
+  useEffect(() => {
+    if (activeTileModal?.cardId) {
+      setModalTab('solutions');
+    }
+  }, [activeTileModal?.cardId]);
+
   useEffect(() => {
     if (!showTierModal) return undefined;
     const handleKeyDown = (event) => {
@@ -1228,6 +1239,10 @@ const DashboardPage = () => {
   // the modal description is overridden with scribe.expanded. Absent → static
   // fallback copy already defined on each intakeCapabilityCards entry.
   const scribeCards = dashboardState?.scribe?.cards || null;
+  // Per-card analyzer skill outputs (P3 shape: { skills, aggregate }). Null when
+  // no skill is wired for the card. Consumed by the modal analyzer-findings
+  // section (P7).
+  const analyzerOutputs = dashboardState?.analyzerOutputs || null;
   const briefPdfUrl = dashboardState?.artifacts?.briefPdf?.downloadUrl || null;
   // Intelligence-first SEO data: prefer intelligence source, fall back to dashboardState.seoAudit
   const intelligencePayload = bootstrap.intelligence || null;
@@ -2420,11 +2435,14 @@ const DashboardPage = () => {
     },
   ].map((card) => {
     const scribe = scribeCards?.[card.id];
-    if (!scribe) return card;
+    const analyzer = analyzerOutputs?.[card.id]?.aggregate || null;   // P7: additive
+    if (!scribe && !analyzer) return card;
     return {
       ...card,
-      description: scribe.expanded || card.description,
-      scribeShort: scribe.short || null,
+      description:    scribe?.expanded      || card.description,
+      scribeShort:    scribe?.short         || null,
+      recommendation: scribe?.recommendation || null,   // P4: additive
+      analyzer,                                          // P7: additive
     };
   });
 
@@ -2564,11 +2582,8 @@ const DashboardPage = () => {
         {/* ── Capability section ── */}
         <section id="capability-section">
           {bootstrapError ? <div className="db-alert">{bootstrapError}</div> : null}
-          {!bootstrapError && errorState ? (
-            <div className="db-alert" id="dashboard-error-banner">
-              {errorState.message}{errorState.retryPending ? ' Retry is pending.' : ''}
-            </div>
-          ) : null}
+          {/* Error banner removed — errors surface in the terminal + survey
+              chat thread. Never show a top-level alert that shifts layout. */}
           {!bootstrapError && !errorState && !bootstrapLoading && clientStatus === 'provisioning' ? (
             <div className="db-alert db-alert-muted" id="dashboard-provisioning-banner">
               {provisioningState?.message || 'Your intelligence stack is being initialized. This typically takes a few minutes.'}
@@ -2588,14 +2603,19 @@ const DashboardPage = () => {
                 className={`tile tile-intake-card${hasIntakeData ? ' tile-ready' : ''}${card.wide ? ' tile-intake-card--wide' : ''}`}
                 id={card.domId || `tile-${card.id}`}
                 key={card.id}
-                onClick={() => setActiveTileModal({ title: card.title, description: card.description, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null })}
+                onClick={() => setActiveTileModal({ title: card.title, description: card.description, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null, recommendation: card.recommendation || null, analyzer: card.analyzer || null })}
               >
                 <div className="tile-number">
                   <span>{card.label}</span>
+                  {card.analyzer?.readiness && (
+                    <span className={`tile-card-readiness readiness-${card.analyzer.readiness}`}>
+                      {card.analyzer.readiness}
+                    </span>
+                  )}
                   <button
                     type="button"
                     className="tile-open-modal-btn"
-                    onClick={(e) => { e.stopPropagation(); setActiveTileModal({ title: card.title, description: card.description, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null }); }}
+                    onClick={(e) => { e.stopPropagation(); setActiveTileModal({ title: card.title, description: card.description, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null, recommendation: card.recommendation || null, analyzer: card.analyzer || null }); }}
                     aria-label="Open details"
                   >[ ↑ ]</button>
                 </div>
@@ -2933,7 +2953,7 @@ const DashboardPage = () => {
                     <button
                       type="button"
                       className="tile-view-details-btn"
-                      onClick={(e) => { e.stopPropagation(); setActiveTileModal({ title: card.title, description: card.description, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null }); }}
+                      onClick={(e) => { e.stopPropagation(); setActiveTileModal({ title: card.title, description: card.description, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null, recommendation: card.recommendation || null, analyzer: card.analyzer || null }); }}
                     >
                         Details ↗
                     </button>
@@ -3211,12 +3231,6 @@ const DashboardPage = () => {
                   onSkipAll={() => postOnboarding({ action: 'skipAll' })}
                   onComplete={() => postOnboarding({ action: 'complete' })}
                   onResolved={() => {
-                    // Flip both flags in the same commit so showIntakeModal
-                    // never drops to false between renders.
-                    // Mark postSurveyRevealFiredRef BEFORE setting state so
-                    // the fallback useEffect (line ~1458) that also watches
-                    // surveyResolved + completionCountdown===null can't
-                    // double-fire when the countdown ticks back to null.
                     postSurveyRevealFiredRef.current = true;
                     flushSync(() => {
                       setSurveyResolved(true);
@@ -3225,37 +3239,18 @@ const DashboardPage = () => {
                       }
                     });
                   }}
+                  pipelineError={latestRunStatus === 'failed' ? (dashboardState?.errorState?.message || currentRun?.error?.message || 'Setup encountered an issue.') : null}
+                  retryUrl={reseedUrl}
+                  onRetryUrlChange={(v) => { setReseedUrl(v); setReseedError(''); setReseedSuccess(false); }}
+                  onRetry={handleReseed}
+                  retryLoading={reseedLoading}
+                  retryError={reseedError}
                 />
                 {/* Retry prompt — shows inside the survey chat when pipeline
                     fails. No layout shift; scrolls into view naturally. */}
-                {latestRunStatus === 'failed' && (
-                  <div id="intake-retry-chat-block">
-                    <div className="chat-row chat-row-bot">
-                      <img className="chat-avatar-sm" src="/img/profile_400x400.jpg" alt="" aria-hidden="true" />
-                      <div className="chat-bubble chat-bubble-bot">
-                        <span className="chat-question">There was an issue processing this site. You can update the URL and try again.</span>
-                      </div>
-                    </div>
-                    <div id="intake-retry-chat-input">
-                      <input
-                        type="url"
-                        value={reseedUrl}
-                        onChange={(e) => { setReseedUrl(e.target.value); setReseedError(''); setReseedSuccess(false); }}
-                        placeholder="yourbusiness.com"
-                        disabled={reseedLoading}
-                        spellCheck={false}
-                      />
-                      <button
-                        type="button"
-                        onClick={handleReseed}
-                        disabled={reseedLoading || !reseedUrl.trim()}
-                      >
-                        {reseedLoading ? 'Retrying…' : 'Retry'}
-                      </button>
-                    </div>
-                    {reseedError ? <div id="intake-retry-chat-error">{reseedError}</div> : null}
-                  </div>
-                )}
+                {/* Retry prompt removed from here — passed into
+                    OnboardingChatModal as a prop so it renders inside the
+                    chat message thread, not as a separate block. */}
               </div>
             </div>
 
@@ -3338,7 +3333,17 @@ const DashboardPage = () => {
           >
             {/* ── Header strip ── */}
             <div id="tile-detail-modal-header" className="tile-detail-bento-cell">
-              <h2 id="tile-detail-modal-title">{activeTileModal.title}</h2>
+              <div id="tile-detail-modal-header-main">
+                <h2 id="tile-detail-modal-title">{activeTileModal.title}</h2>
+                {activeTileModal.analyzer?.readiness && (
+                  <span className={`tile-analyzer-readiness readiness-${activeTileModal.analyzer.readiness}`}>
+                    <span className="tile-analyzer-readiness-label">{activeTileModal.analyzer.readiness}</span>
+                    {activeTileModal.analyzer.readinessReason && (
+                      <span className="tile-analyzer-readiness-reason"> — {activeTileModal.analyzer.readinessReason}</span>
+                    )}
+                  </span>
+                )}
+              </div>
               <button
                 id="tile-detail-modal-close"
                 type="button"
@@ -3505,24 +3510,272 @@ const DashboardPage = () => {
                   <p id="tile-detail-bento-description">{activeTileModal.description}</p>
                 </div>
 
-                {/* Data module */}
-                <div id="tile-detail-bento-data" className="tile-detail-bento-cell">
-                  <span className="tile-detail-bento-label">DATA</span>
-                  <div id="tile-detail-bento-rows">
-                    {activeTileModal.rows.map((row) => (
-                      row.isHeader ? (
-                        <div key={row.key} className="tile-detail-row-section-head">
-                          {row.label}
+                {/* Tabbed Data / Problems / Solutions module */}
+                {activeTileModal.analyzer ? (
+                  <div
+                    id={`${activeTileModal.cardId}-analyzer-findings`}
+                    className="tile-detail-bento-cell tile-detail-tabbed-container"
+                    aria-label="Analyzer findings"
+                  >
+                    <div className="tile-detail-tabs">
+                      {[
+                        { key: 'solutions', label: 'SOLUTIONS' },
+                        { key: 'problems', label: 'DETAILS' },
+                        { key: 'data', label: 'DATA' },
+                      ].map(({ key, label }) => (
+                        <button
+                          key={key}
+                          type="button"
+                          className={`tile-detail-tab${modalTab === key ? ' tile-detail-tab--active' : ''}`}
+                          onClick={() => setModalTab(key)}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="tile-detail-tab-content">
+                      {modalTab === 'data' && (
+                        <div id="tile-detail-bento-rows">
+                          {activeTileModal.rows.map((row) => (
+                            row.isHeader ? (
+                              <div key={row.key} className="tile-detail-row-section-head">
+                                {row.label}
+                              </div>
+                            ) : (
+                              <div key={row.key} className={`tile-detail-stat-row${row.isFailing ? ' tile-detail-stat-row--flag' : ''}`}>
+                                <span className="tile-detail-stat-label">{row.label}</span>
+                                <span className="tile-detail-stat-value">{row.value}</span>
+                              </div>
+                            )
+                          ))}
                         </div>
-                      ) : (
-                        <div key={row.key} className={`tile-detail-stat-row${row.isFailing ? ' tile-detail-stat-row--flag' : ''}`}>
-                          <span className="tile-detail-stat-label">{row.label}</span>
-                          <span className="tile-detail-stat-value">{row.value}</span>
+                      )}
+
+                      {modalTab === 'problems' && (
+                        <div className="tile-detail-tab-pane">
+                          {Array.isArray(activeTileModal.analyzer.findings) && activeTileModal.analyzer.findings.length > 0 && (
+                            <ul
+                              id={`${activeTileModal.cardId}-analyzer-findings-list`}
+                              className="tile-analyzer-findings-list"
+                            >
+                              {activeTileModal.analyzer.findings.map((f) => {
+                                const catalogEntry = resolveSolution(f);
+                                const headline = catalogEntry?.problem || f.label;
+                                return (
+                                  <li
+                                    key={f.id}
+                                    className={`tile-analyzer-finding severity-${f.severity || 'info'}`}
+                                  >
+                                    <div className="tile-analyzer-finding-header">
+                                      <div className="tile-analyzer-finding-header-top">
+                                        <span className="tile-analyzer-severity-chip">{f.severity}</span>
+                                      </div>
+                                      <span className="tile-analyzer-finding-label">{headline}</span>
+                                    </div>
+                                    {catalogEntry?.whyItMatters && (
+                                      <p className="tile-solution-why">{catalogEntry.whyItMatters}</p>
+                                    )}
+                                    {f.detail && (
+                                      <p className="tile-analyzer-finding-detail">
+                                        <span className="tile-analyzer-field-label">Detail:</span>
+                                        <span className="tile-analyzer-finding-detail-text">{f.detail}</span>
+                                      </p>
+                                    )}
+                                    {/* Hide f.impact when catalogEntry.whyItMatters is already shown above — both
+                                        are "why this matters" content and rendering both reads as duplicate info. */}
+                                    {!catalogEntry?.whyItMatters && f.impact && (
+                                      <p className="tile-analyzer-finding-impact">
+                                        <span className="tile-analyzer-field-label">Why it matters:</span> {f.impact}
+                                      </p>
+                                    )}
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          )}
+
+                          {Array.isArray(activeTileModal.analyzer.gaps) && activeTileModal.analyzer.gaps.some((g) => g.triggered) && (
+                            <ul
+                              id={`${activeTileModal.cardId}-analyzer-gaps-list`}
+                              className="tile-analyzer-gaps-list"
+                            >
+                              {activeTileModal.analyzer.gaps
+                                .filter((g) => g.triggered)
+                                .map((g) => {
+                                  const catalogEntry = resolveSolution(g);
+                                  const headline = catalogEntry?.problem || g.ruleId;
+                                  return (
+                                    <li key={g.ruleId} className="tile-analyzer-gap">
+                                      <div className="tile-analyzer-gap-header">
+                                        <div className="tile-analyzer-gap-header-top">
+                                          <span className="tile-analyzer-gap-chip">gap</span>
+                                        </div>
+                                        <span className="tile-analyzer-gap-rule">{headline}</span>
+                                      </div>
+                                      {catalogEntry?.whyItMatters && (
+                                        <p className="tile-solution-why">{catalogEntry.whyItMatters}</p>
+                                      )}
+                                      {g.evidence && <p className="tile-analyzer-gap-evidence">{g.evidence}</p>}
+                                    </li>
+                                  );
+                                })}
+                            </ul>
+                          )}
                         </div>
-                      )
-                    ))}
+                      )}
+
+                      {modalTab === 'solutions' && (() => {
+                        const solutionsList = buildSolutionsList(activeTileModal.analyzer);
+                        if (!solutionsList.length) {
+                          return (
+                            <div className="tile-detail-tab-pane">
+                              <p
+                                id={`${activeTileModal.cardId}-solutions-empty`}
+                                className="tile-analyzer-solutions-empty"
+                              >
+                                No matched solutions yet. As the Solutions Catalog expands, problems on this card will map to specific fixes here.
+                              </p>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div className="tile-detail-tab-pane">
+                            <ol
+                              id={`${activeTileModal.cardId}-solutions-list`}
+                              className="tile-solutions-list"
+                            >
+                              {solutionsList.map(({ key, source, severity, finding, solution, isGeneric }) => {
+                                // Combine the problem statement with the expert-offer title into
+                                // one long sentence for catalog-matched solutions:
+                                //   "Your pages are missing meta descriptions — I'll write all your meta descriptions in 24 hours."
+                                // For generic fallbacks (no catalog match), the problem is a raw LLM-written
+                                // finding label that may already contain em-dashes — combining it would read
+                                // badly. Lead with the expert-offer pitch alone and show the raw label as a
+                                // subtitle so users can cross-reference with the PROBLEMS tab.
+                                const problemClean = String(solution.problem || '').replace(/\.+$/, '').trim();
+                                const expertTitle  = String(solution.expertOffer?.title || '').trim();
+                                const combinedHeadline = isGeneric
+                                  ? (expertTitle || problemClean)
+                                  : (problemClean && expertTitle
+                                      ? `${problemClean} — ${expertTitle}`
+                                      : (problemClean || expertTitle));
+                                // Source label — the same text the PROBLEMS tab uses as the headline for this
+                                // item. Shown on generic cards (and on gap cards regardless) so the user can
+                                // always map a SOLUTIONS card back to the problem it addresses.
+                                const sourceLabel = (() => {
+                                  if (source === 'gap') return `Gap: ${finding?.ruleId || ''}`;
+                                  return finding?.label || '';
+                                })();
+                                const showSourceLabel = Boolean(sourceLabel && (isGeneric || source === 'gap'));
+                                return (
+                                <li
+                                  key={key}
+                                  id={`${activeTileModal.cardId}-solution-${solution.id}`}
+                                  className={`tile-solution-card severity-${severity || solution.severity || 'info'}`}
+                                >
+                                  {/* Combined headline: problem + how I solve it, one long sentence */}
+                                  <header className="tile-solution-header">
+                                    <div className="tile-solution-header-top">
+                                      <span className="tile-analyzer-severity-chip">{severity || solution.severity}</span>
+                                      {showSourceLabel && (
+                                        <span className="tile-solution-source-label">{sourceLabel}</span>
+                                      )}
+                                    </div>
+                                    <h4 className="tile-solution-problem">{combinedHeadline}</h4>
+                                  </header>
+
+                                  {/* Have Me Do It panel — service pitch + CTA, with DIY as collapsible sub-section */}
+                                  {solution.expertOffer && (
+                                    <section
+                                      id={`${activeTileModal.cardId}-solution-${solution.id}-expert`}
+                                      className="tile-solution-expert"
+                                      aria-label="Have me do it"
+                                    >
+                                      {solution.expertOffer.summary && (
+                                        <p className="tile-solution-expert-summary">{solution.expertOffer.summary}</p>
+                                      )}
+                                      {solution.expertOffer.deliverable && (
+                                        <p className="tile-solution-expert-deliverable">
+                                          <span className="tile-analyzer-field-label">Deliverable:</span> {solution.expertOffer.deliverable}
+                                        </p>
+                                      )}
+                                      <div className="tile-solution-actions">
+                                        {solution.expertOffer.cta?.href && (
+                                          <a
+                                            href={solution.expertOffer.cta.href}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="tile-solution-expert-cta"
+                                          >
+                                            {solution.expertOffer.cta.label || 'Book a call'} →
+                                          </a>
+                                        )}
+                                      </div>
+                                    </section>
+                                  )}
+
+                                  {/* DIY — expands from the bottom of the card to avoid collisions */}
+                                  {solution.diy && (
+                                    <details
+                                      id={`${activeTileModal.cardId}-solution-${solution.id}-diy`}
+                                      className="tile-solution-diy-details"
+                                    >
+                                      <summary className="tile-solution-diy-summary-toggle">
+                                        <span className="tile-solution-diy-toggle-label">Prefer to do it yourself?</span>
+                                      </summary>
+                                      <div className="tile-solution-diy">
+                                      {solution.diy.summary && (
+                                        <p className="tile-solution-diy-summary">{solution.diy.summary}</p>
+                                      )}
+                                      {Array.isArray(solution.diy.steps) && solution.diy.steps.length > 0 && (
+                                        <ol className="tile-solution-steps">
+                                          {solution.diy.steps.map((step, idx) => (
+                                            <li key={idx} className="tile-solution-step">{step}</li>
+                                          ))}
+                                        </ol>
+                                      )}
+                                      {Array.isArray(solution.diy.helpfulLinks) && solution.diy.helpfulLinks.length > 0 && (
+                                        <ul className="tile-solution-links">
+                                          {solution.diy.helpfulLinks.map((link, idx) => (
+                                            <li key={idx}>
+                                              <a href={link.url} target="_blank" rel="noopener noreferrer">
+                                                {link.label} ↗
+                                              </a>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      )}
+                                    </div>
+                                  </details>
+                                )}
+                                </li>
+                                );
+                              })}
+                            </ol>
+                          </div>
+                        );
+                      })()}
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div id="tile-detail-bento-data" className="tile-detail-bento-cell">
+                    <span className="tile-detail-bento-label">DATA</span>
+                    <div id="tile-detail-bento-rows">
+                      {activeTileModal.rows.map((row) => (
+                        row.isHeader ? (
+                          <div key={row.key} className="tile-detail-row-section-head">
+                            {row.label}
+                          </div>
+                        ) : (
+                          <div key={row.key} className={`tile-detail-stat-row${row.isFailing ? ' tile-detail-stat-row--flag' : ''}`}>
+                            <span className="tile-detail-stat-label">{row.label}</span>
+                            <span className="tile-detail-stat-value">{row.value}</span>
+                          </div>
+                        )
+                      ))}
+                    </div>
+                  </div>
+                )}
 
               </div>
 
@@ -5032,6 +5285,14 @@ const dashboardCss = `
     flex-shrink: 0;
     box-shadow: none;
   }
+  #tile-detail-modal-header-main {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+    flex-wrap: wrap;
+  }
   #tile-detail-modal-eyebrow {
     display: flex;
     align-items: center;
@@ -5348,45 +5609,448 @@ const dashboardCss = `
     line-height: 1.55;
     margin: 0;
   }
+  /* Analyzer module (P7) — legibility-only styles, refine in a separate pass */
+  .tile-detail-tabbed-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    max-height: none;
+    flex: 1;
+    overflow: hidden;
+  }
+  .tile-detail-tabs {
+    display: flex;
+    flex-direction: row;
+    border-bottom: 1px solid var(--border);
+  }
+  .tile-detail-tab {
+    flex: 1;
+    padding: 10px 8px;
+    background: transparent;
+    border: none;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: color 0.28s ease, background 0.28s ease;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+  .tile-detail-tab:hover {
+    color: var(--text-display);
+    background: rgba(255,255,255,0.35);
+  }
+  .tile-detail-tab--active {
+    color: var(--text-display);
+    border-bottom: 2px solid transparent;
+    border-image: linear-gradient(90deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) 0 0 1 0;
+  }
+  .tile-detail-tab-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px 22px;
+  }
+  .tile-detail-tab-pane {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .tile-analyzer-readiness {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    font-family: var(--font-ui);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 6px 10px;
+    border-radius: 4px;
+    align-self: flex-start;
+    background: var(--border);
+    color: var(--text-primary);
+  }
+  .tile-analyzer-readiness.readiness-critical { background: rgba(139, 92, 246, 0.14); color: hsl(262,80%,35%); }
+  .tile-analyzer-readiness.readiness-partial  { background: rgba(14, 165, 233, 0.14); color: hsl(185,90%,28%); }
+  .tile-analyzer-readiness.readiness-healthy  { background: rgba(236, 72, 153, 0.14); color: hsl(314,85%,35%); }
+  .tile-analyzer-readiness-label { font-weight: 600; }
+  .tile-analyzer-readiness-reason {
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 400;
+    color: var(--text-secondary);
+  }
+  .tile-analyzer-findings-list,
+  .tile-analyzer-gaps-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .tile-analyzer-finding,
+  .tile-analyzer-gap {
+    padding: 14px 18px;
+    border-left: 3px solid var(--border);
+    background: rgba(255,255,255,0.04);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border-radius: 0 6px 6px 0;
+  }
+  .tile-analyzer-finding.severity-critical { border-left-color: hsl(262,100%,55%); }
+  .tile-analyzer-finding.severity-warning  { border-left-color: hsl(185,100%,45%); }
+  .tile-analyzer-finding.severity-info     { border-left-color: hsl(314,100%,50%); }
+  .tile-analyzer-gap                        { border-left-color: hsl(262,100%,55%); }
+  .tile-analyzer-finding-header,
+  .tile-analyzer-gap-header {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .tile-analyzer-finding-header-top,
+  .tile-analyzer-gap-header-top {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .tile-analyzer-severity-chip,
+  .tile-analyzer-gap-chip {
+    font-family: var(--font-ui);
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 2px 6px;
+    border-radius: 2px;
+    background: var(--border);
+    color: var(--text-primary);
+    flex-shrink: 0;
+  }
+  .severity-critical .tile-analyzer-severity-chip { background: rgba(139, 92, 246, 0.22); color: hsl(262,80%,32%); }
+  .severity-warning .tile-analyzer-severity-chip  { background: rgba(14, 165, 233, 0.22); color: hsl(185,90%,25%); }
+  .severity-info .tile-analyzer-severity-chip     { background: rgba(236, 72, 153, 0.22); color: hsl(314,85%,32%); }
+  .tile-analyzer-gap-chip                          { background: rgba(139, 92, 246, 0.22); color: hsl(262,80%,32%); }
+  .tile-analyzer-finding-label,
+  .tile-analyzer-gap-rule {
+    font-family: var(--font-ui);
+    font-size: 0.86rem;
+    color: var(--text-primary);
+    font-weight: 600;
+    line-height: 1.35;
+  }
+  .tile-analyzer-finding-detail,
+  .tile-analyzer-finding-impact,
+  .tile-analyzer-finding-remediation,
+  .tile-analyzer-gap-evidence {
+    font-family: var(--font-ui);
+    font-size: 0.84rem;
+    color: var(--text-secondary);
+    line-height: 1.55;
+    margin: 0;
+  }
+  .tile-analyzer-finding-detail .tile-analyzer-field-label {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-right: 4px;
+  }
+  .tile-analyzer-finding-detail-text {
+    font-family: var(--font-ui);
+    font-size: 0.84rem;
+    color: var(--text-secondary);
+    line-height: 1.55;
+  }
+  .tile-detail-stat-row {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .tile-detail-stat-row:last-child { border-bottom: none; }
+  .tile-detail-stat-label {
+    font-weight: 600;
+    color: var(--text-primary);
+    flex-shrink: 0;
+    font-family: var(--font-ui);
+    font-size: 0.84rem;
+    line-height: 1.55;
+  }
+  .tile-detail-stat-value {
+    font-family: var(--font-ui);
+    font-size: 0.84rem;
+    color: var(--text-secondary);
+    line-height: 1.55;
+    text-align: right;
+    word-break: break-word;
+    flex: 1;
+  }
+  .tile-analyzer-finding-citation {
+    font-family: var(--font-mono, monospace);
+    font-size: 0.72rem;
+    color: var(--text-disabled);
+    line-height: 1.4;
+    margin: 0;
+    word-break: break-all;
+  }
+  .tile-analyzer-field-label {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-right: 4px;
+  }
+  /* Solutions tab — catalog-driven solution cards */
+  .tile-analyzer-solutions-empty {
+    font-family: var(--font-ui);
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin: 0;
+    padding: 12px;
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+  }
+  .tile-solutions-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    counter-reset: solution;
+  }
+  .tile-solution-card {
+    padding: 14px 18px;
+    border-left: 3px solid var(--border);
+    background: rgba(255,255,255,0.04);
+    border-radius: 0 6px 6px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    counter-increment: solution;
+  }
+  .tile-solution-card.severity-critical { border-left-color: hsl(262,100%,55%); }
+  .tile-solution-card.severity-warning  { border-left-color: hsl(185,100%,45%); }
+  .tile-solution-card.severity-info     { border-left-color: hsl(314,100%,50%); }
+  .tile-solution-header {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .tile-solution-header-top {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .tile-solution-source-label {
+    font-family: var(--font-ui);
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-disabled);
+    line-height: 1.3;
+  }
+  .tile-solution-problem {
+    font-family: var(--font-ui);
+    font-size: 0.86rem;
+    color: var(--text-primary);
+    font-weight: 600;
+    line-height: 1.35;
+    margin: 0;
+  }
+  .tile-solution-why {
+    font-family: var(--font-ui);
+    font-size: 0.84rem;
+    color: var(--text-secondary);
+    line-height: 1.55;
+    margin: 0;
+  }
+  .tile-solution-expert {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 0;
+  }
+  .tile-solution-actions {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 4px;
+  }
+  /* Collapsible DIY — sits at the bottom of the solution card */
+  .tile-solution-diy-details {
+    margin: 0;
+    border: none;
+    padding: 0;
+    flex-shrink: 0;
+  }
+  .tile-solution-diy-details[open] {
+    position: static;
+    width: auto;
+    margin-top: 10px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(14, 165, 233, 0.25);
+    border-radius: 6px;
+    padding: 12px 14px;
+    box-shadow: none;
+  }
+  .tile-solution-diy-summary-toggle {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    cursor: pointer;
+    list-style: none;
+    padding: 4px 0;
+    user-select: none;
+  }
+  .tile-solution-diy-summary-toggle::-webkit-details-marker { display: none; }
+  .tile-solution-diy-summary-toggle::before {
+    content: '+';
+    display: inline-block;
+    width: 14px;
+    color: hsl(185,100%,45%);
+    font-weight: 700;
+    transition: transform 0.15s ease;
+  }
+  .tile-solution-diy-details[open] .tile-solution-diy-summary-toggle::before {
+    content: '−';
+  }
+  .tile-solution-diy-toggle-label {
+    flex: 1;
+    font-family: var(--font-ui);
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: hsl(185,100%,45%);
+    letter-spacing: 0.02em;
+  }
+  .tile-solution-diy-summary-toggle:hover .tile-solution-diy-toggle-label {
+    color: hsl(185,100%,55%);
+  }
+  .tile-solution-diy {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 0 2px 18px;
+    margin-top: 4px;
+    border-left: 2px solid rgba(14, 165, 233, 0.25);
+  }
+  .tile-solution-section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 2px;
+  }
+  .tile-solution-section-label {
+    font-family: var(--font-ui);
+    font-size: 0.64rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: hsl(185,100%,45%);
+  }
+  .tile-solution-section-label--expert {
+    color: hsl(314,100%,50%);
+  }
+  .tile-solution-meta {
+    font-family: var(--font-ui);
+    font-size: 0.7rem;
+    color: var(--text-disabled);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .tile-solution-diy-summary,
+  .tile-solution-expert-summary,
+  .tile-solution-expert-deliverable {
+    font-family: var(--font-ui);
+    font-size: 0.84rem;
+    color: var(--text-secondary);
+    line-height: 1.55;
+    margin: 0;
+  }
+  .tile-solution-steps {
+    margin: 4px 0 0 0;
+    padding-left: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .tile-solution-step {
+    font-family: var(--font-ui);
+    font-size: 0.84rem;
+    color: var(--text-secondary);
+    line-height: 1.55;
+    white-space: pre-wrap;
+  }
+  .tile-solution-links {
+    list-style: none;
+    margin: 6px 0 0 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .tile-solution-links a {
+    font-family: var(--font-ui);
+    font-size: 0.76rem;
+    color: hsl(185,100%,45%);
+    text-decoration: none;
+    border-bottom: 1px solid currentColor;
+    padding-bottom: 1px;
+  }
+  .tile-solution-links a:hover {
+    opacity: 0.8;
+  }
+  .tile-solution-expert-title {
+    font-family: var(--font-ui);
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.35;
+    margin: 2px 0 0 0;
+  }
+  .tile-solution-expert-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background:
+      linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%),
+      linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1);
+    color: #ffffff;
+    font-family: var(--font-ui);
+    font-size: 0.82rem;
+    font-weight: 600;
+    text-decoration: none;
+    align-self: flex-start;
+    letter-spacing: 0.02em;
+    transform: scale(1);
+    transition: box-shadow 0.45s cubic-bezier(0.16, 1, 0.3, 1), transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .tile-solution-expert-cta:hover {
+    box-shadow: 0px 5px 10px rgba(0,0,0,0.067), 0px 15px 30px rgba(0,0,0,0.067), 0px 20px 40px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.35);
+    transform: scale(1.02);
+    transition: box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1), transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
   /* Stat rows */
   #tile-detail-bento-rows {
     display: flex;
     flex-direction: column;
   }
-  .tile-detail-stat-row {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 9px 0;
-    border-bottom: 1px solid var(--border);
-  }
-  .tile-detail-stat-row:last-child {
-    border-bottom: none;
-  }
   .tile-detail-stat-row--flag .tile-detail-stat-label {
     border-left: 2px solid #d05;
     padding-left: 6px;
-  }
-  .tile-detail-stat-label {
-    font-family: var(--font-mono);
-    font-size: 9px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-secondary);
-    flex-shrink: 0;
-    width: 88px;
-    line-height: 1.45;
-    padding-top: 1px;
-  }
-  .tile-detail-stat-value {
-    font-family: var(--font-ui);
-    font-size: clamp(0.82rem, 1.1vw, 0.95rem);
-    color: var(--text-display);
-    line-height: 1.5;
-    text-align: right;
-    word-break: break-word;
-    flex: 1;
   }
   .tile-detail-row-section-head {
     font-family: var(--font-mono);
@@ -5406,6 +6070,22 @@ const dashboardCss = `
     align-items: center;
     justify-content: space-between;
   }
+  .tile-card-readiness {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 2px;
+    margin-left: auto;
+    margin-right: 4px;
+    background: var(--border);
+    color: var(--text-primary);
+  }
+  .tile-card-readiness.readiness-critical { background: rgba(139, 92, 246, 0.22); color: hsl(262,80%,32%); }
+  .tile-card-readiness.readiness-partial  { background: rgba(14, 165, 233, 0.22); color: hsl(185,90%,25%); }
+  .tile-card-readiness.readiness-healthy  { background: rgba(236, 72, 153, 0.22); color: hsl(314,85%,32%); }
   .tile-number .power-dot,
   .tile-foot .power-dot {
     width: 6px;
@@ -5823,6 +6503,7 @@ const dashboardCss = `
     .capability-nav-btn-content { flex-direction: row; align-items: center; gap: 0; }
     .capability-nav-btn-icon-wrap { display: none; }
     #capability-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .tile-solution-actions { flex-direction: column; align-items: stretch; gap: 10px; }
     .tile { aspect-ratio: auto; min-height: 230px; grid-template-areas: "num" "head" "desc" "viz" "foot"; grid-template-columns: 1fr; row-gap: 14px; }
     .tile-description { }
     #intake-identity-row { grid-template-columns: 1fr; gap: 16px; }

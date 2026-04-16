@@ -22,35 +22,11 @@ const path = require('path');
 const { getSkillPath }      = require('./_registry');
 const { validateSkillOutput } = require('./_output-contract');
 const { SOURCES_BY_ID }     = require('../source-inventory');
-const { CARD_CONTRACT }     = require('../card-contract');
+const { CARD_CONTRACT, getSkillIdsForCard } = require('../card-contract');
+const { aggregateCardSkills } = require('./_aggregator');
 
-// ── Anthropic client (same pattern as intake-synthesizer / scribe) ─────────────
-
-function getApiKey() {
-  const key =
-    process.env.ANTHROPIC_API_KEY ||
-    (() => {
-      try { require('dotenv/config'); } catch { /* ignore */ }
-      return process.env.ANTHROPIC_API_KEY;
-    })();
-  if (!key) throw new Error('ANTHROPIC_API_KEY is not set.');
-  return key;
-}
-
-async function callAnthropic(params) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': getApiKey(),
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify(params),
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`Anthropic API ${res.status}: ${text.slice(0, 400)}`);
-  return JSON.parse(text);
-}
+// ── LLM client — Anthropic-first, KIMI fallback on credit errors ─────────────
+const { callLLM, extractUsage: extractUsageLLM } = require('./_llm-client');
 
 // ── Front matter parser ───────────────────────────────────────────────────────
 //
@@ -202,17 +178,7 @@ function extractToolInput(response, toolName) {
 }
 
 function extractUsage(response, model) {
-  const usage = response.usage || {};
-  const inputTokens  = usage.input_tokens  || 0;
-  const outputTokens = usage.output_tokens || 0;
-  // Haiku 4.5: $1.00/MTok input, $5.00/MTok output
-  const estimatedCostUsd = (inputTokens * 0.000001) + (outputTokens * 0.000005);
-  return {
-    model,
-    inputTokens,
-    outputTokens,
-    estimatedCostUsd: Math.round(estimatedCostUsd * 10000) / 10000,
-  };
+  return extractUsageLLM(response, model);
 }
 
 // ── Input resolver ────────────────────────────────────────────────────────────
@@ -230,12 +196,18 @@ function buildSourcePayloads({
   scoutConfig  = null,
   userContext  = null,
 } = {}) {
+  // Unwrap pagespeed SourceRecord — skill prompts cite `intel.pagespeed.scores.*`,
+  // which lives under `.facts` in the SourceRecord envelope. When `pagespeed` is
+  // a flat seoAudit object (unit-test path) it has no `.facts`, so fall back to
+  // the value itself. When null, pass null through.
+  const pagespeedPayload = pagespeed?.facts ?? pagespeed ?? null;
+
   return {
     'site.html':                      evidence    || null,
     'site.meta':                      siteMeta    || null,
     'synth.intake':                   intake      || null,
     'synth.styleGuide':               styleGuide  || null,
-    'intel.pagespeed':                pagespeed   || null,
+    'intel.pagespeed':                pagespeedPayload,
     'scout.reddit':                   null,  // Phase E — not wired
     'scout.weather':                  null,
     'scout.reviews':                  null,
@@ -322,11 +294,11 @@ async function runSkill(skillId, { card = null, sourcePayloads = {} } = {}) {
     .replace('{{inputs}}', inputsText)
     .replace('{{missingStateRules}}', rulesText);
 
-  // 8. Call Anthropic
+  // 8. Call LLM (Anthropic-first, KIMI fallback on credit errors)
   const tool = buildSkillTool(fm.output.tool);
   let response;
   try {
-    response = await callAnthropic({
+    response = await callLLM({
       model:       fm.model,
       max_tokens:  fm.maxTokens,
       tools:       [tool],
@@ -334,7 +306,7 @@ async function runSkill(skillId, { card = null, sourcePayloads = {} } = {}) {
       messages:    [{ role: 'user', content: prompt }],
     });
   } catch (err) {
-    return { ok: false, output: null, runCostData: null, error: `Anthropic API error: ${err.message}` };
+    return { ok: false, output: null, runCostData: null, error: `skill_failed: ${err.message}` };
   }
 
   const runCostData = extractUsage(response, fm.model);
@@ -382,7 +354,7 @@ async function runSkill(skillId, { card = null, sourcePayloads = {} } = {}) {
  * @param {string}   options.tier           - 'free' | 'paid'
  * @param {object}   options.sourcePayloads - Map of sourceId → payload
  * @param {Array}    [options.warnings]     - Mutable warnings array (pushed to in-place)
- * @returns {Promise<{ [cardId]: SkillOutput }>}
+ * @returns {Promise<{ [cardId]: { skills: object, aggregate: object } }>}
  */
 async function runCardSkills({ tier = 'free', sourcePayloads = {}, warnings = [] } = {}) {
   const cards = tier === 'paid'
@@ -393,32 +365,52 @@ async function runCardSkills({ tier = 'free', sourcePayloads = {}, warnings = []
 
   await Promise.allSettled(
     cards.map(async (card) => {
-      const skillId = card.analyzerSkill || null;
-      if (!skillId) return;
+      const skillIds = getSkillIdsForCard(card);
+      if (!skillIds.length) return;
 
-      let result;
-      try {
-        result = await runSkill(skillId, { card, sourcePayloads });
-      } catch (err) {
-        warnings.push({
-          type: 'warning',
-          code: 'skill_threw',
-          message: `Skill '${skillId}' for card '${card.id}' threw: ${err.message}`,
-          stage: 'skills',
-        });
-        return;
+      // Run all skills for this card in parallel
+      const settled = await Promise.allSettled(
+        skillIds.map(async (skillId) => {
+          try {
+            const result = await runSkill(skillId, { card, sourcePayloads });
+            return { skillId, result };
+          } catch (err) {
+            warnings.push({
+              type: 'warning',
+              code: 'skill_threw',
+              message: `Skill '${skillId}' for card '${card.id}' threw: ${err.message}`,
+              stage: 'skills',
+            });
+            return { skillId, result: { ok: false, output: null, runCostData: null, error: err.message } };
+          }
+        })
+      );
+
+      // Collect successful per-skill outputs
+      const skillsById = {};
+      for (const s of settled) {
+        if (s.status !== 'fulfilled') continue;
+        const { skillId, result } = s.value;
+        if (result.ok) {
+          skillsById[skillId] = result.output;
+        } else {
+          warnings.push({
+            type: 'warning',
+            code: 'skill_failed',
+            message: `Skill '${skillId}' for card '${card.id}' failed: ${result.error}`,
+            stage: 'skills',
+          });
+        }
       }
 
-      if (result.ok) {
-        analyzerOutputs[card.id] = result.output;
-      } else {
-        warnings.push({
-          type: 'warning',
-          code: 'skill_failed',
-          message: `Skill '${skillId}' for card '${card.id}' failed: ${result.error}`,
-          stage: 'skills',
-        });
-      }
+      if (Object.keys(skillsById).length === 0) return; // all skills failed
+
+      // New shape: { skills, aggregate }
+      // aggregate collapses single- and multi-skill outputs into one consistent blob.
+      analyzerOutputs[card.id] = {
+        skills:    skillsById,
+        aggregate: aggregateCardSkills(skillsById),
+      };
     })
   );
 

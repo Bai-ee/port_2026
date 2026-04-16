@@ -26,10 +26,11 @@
 //
 // ─── NEW FIELDS (F1a) ───────────────────────────────────────────────────────
 //
-// analyzerSkill  Optional skill id to run before Scribe. Matches a .md file in
-//                features/scout-intake/skills/. Null = no skill (fall through to
-//                existing analyzer.impl signals). Used by P1+ of the Scout
-//                Analyzer Skills workstream.
+// analyzerSkills Array of skill ids to run before Scribe (P3+). When present,
+//                supersedes analyzerSkill. Use getSkillIdsForCard() to resolve.
+//
+// analyzerSkill  Legacy single skill id. Kept for back-compat. When analyzerSkills
+//                is set, this field is ignored by the runner. Null = no skill.
 //
 // actionClass    Scribe framing for this card. One of:
 //                  'runtime'       chrome only, no copy
@@ -190,7 +191,8 @@ const CARD_CONTRACT = [
     role: 'technical-health',
     sourceField: 'intelligence.pagespeed',
     analyzer: { impl: 'pagespeed', required: false },
-    analyzerSkill: 'seo-depth-audit',
+    analyzerSkills: ['seo-depth-audit'],
+    analyzerSkill: 'seo-depth-audit',   // legacy — kept for UI back-compat
     copy: {
       short:    { min: 60,  max: 140 },
       expanded: { min: 250, max: 700 },
@@ -624,6 +626,24 @@ function cardsBySource(sourceId) {
   return CARD_CONTRACT.filter((c) => Array.isArray(c.sources) && c.sources.includes(sourceId));
 }
 
+/**
+ * Resolve the effective list of analyzer skill ids for a card.
+ * Prefers analyzerSkills[] (P3+). Falls back to [analyzerSkill] for legacy cards.
+ * Returns [] when no skill is declared.
+ *
+ * @param {object} card
+ * @returns {string[]}
+ */
+function getSkillIdsForCard(card) {
+  if (Array.isArray(card?.analyzerSkills) && card.analyzerSkills.length > 0) {
+    return card.analyzerSkills;
+  }
+  if (card?.analyzerSkill) {
+    return [card.analyzerSkill];
+  }
+  return [];
+}
+
 module.exports = {
   CARD_CONTRACT,
   CARDS_BY_ID,
@@ -633,4 +653,5 @@ module.exports = {
   cardsByCategory,
   cardsByActionClass,
   cardsBySource,
+  getSkillIdsForCard,
 };

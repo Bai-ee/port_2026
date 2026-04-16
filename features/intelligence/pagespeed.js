@@ -208,7 +208,7 @@ async function fetchPsiAudit(websiteUrl) {
 
   let raw;
   try {
-    const res = await fetch(requestUrl, { signal: AbortSignal.timeout(60_000) });
+    const res = await fetch(requestUrl, { signal: AbortSignal.timeout(30_000) });
     const text = await res.text();
     if (!res.ok) throw new Error(`PSI HTTP ${res.status}: ${text.slice(0, 200)}`);
     raw = JSON.parse(text);

@@ -54,7 +54,7 @@ async function callAnthropic(params) {
 // Picks cards with status:'ok' and `copy` budgets. Strips every field Scribe
 // doesn't need so the input prompt stays small.
 
-function buildCardDigest(analyzerResults) {
+function buildCardDigest(analyzerResults, analyzerOutputs = {}) {
   const byCard = analyzerResults?.byCard || {};
   const entries = [];
 
@@ -63,15 +63,53 @@ function buildCardDigest(analyzerResults) {
     const card = getCard(cardId);
     if (!card || !card.copy) continue;
 
+    // P4: prefer analyzerOutputs.aggregate as signal source when available.
+    // Legacy path: fall back to analyzerResults.byCard[cardId] signals.
+    const aggregate = analyzerOutputs?.[cardId]?.aggregate || null;
+
+    let confidence = result.confidence || 'medium';
+    let analyzerSignal = null;
+
+    if (aggregate) {
+      // Readiness → confidence mapping:
+      //   critical = rich findings to write about → high
+      //   healthy  = clean bill, still write authoritatively → high
+      //   partial  = incomplete data → medium
+      confidence = aggregate.readiness === 'partial' ? 'medium' : 'high';
+
+      const topFindings = (aggregate.findings || [])
+        .slice(0, 3)
+        .map((f) => ({ severity: f.severity, label: f.label, detail: f.detail }));
+
+      const triggeredGaps = (aggregate.gaps || [])
+        .filter((g) => g.triggered)
+        .map((g) => ({ ruleId: g.ruleId, evidence: g.evidence }));
+
+      const findingCounts = {
+        critical: (aggregate.findings || []).filter((f) => f.severity === 'critical').length,
+        warning:  (aggregate.findings || []).filter((f) => f.severity === 'warning').length,
+        info:     (aggregate.findings || []).filter((f) => f.severity === 'info').length,
+      };
+
+      analyzerSignal = {
+        readiness:    aggregate.readiness,
+        highlights:   aggregate.highlights || [],
+        topFindings,
+        triggeredGaps,
+        findingCounts,
+      };
+    }
+
     entries.push({
       cardId,
-      role: card.role,
-      confidence: result.confidence || 'medium',
+      role:           card.role,
+      confidence,
       qualityScaling: card.qualityScaling !== false,
       shortBudget:    card.copy.short,
       expandedBudget: card.copy.expanded,
-      signals: result.signals || null,
-      notes: result.notes || null,
+      signals:        aggregate ? null : (result.signals || null),  // don't double-send
+      analyzerSignal: analyzerSignal || null,
+      notes:          result.notes || null,
     });
   }
 
@@ -111,9 +149,24 @@ function formatCardDigest(digest) {
     lines.push(`  short:    ${c.shortBudget.min}-${c.shortBudget.max} chars`);
     lines.push(`  expanded: ${c.expandedBudget.min}-${c.expandedBudget.max} chars`);
     if (c.notes) lines.push(`  notes: ${c.notes}`);
-    if (c.signals) {
-      const signalText = JSON.stringify(c.signals).slice(0, 600);
-      lines.push(`  signals: ${signalText}`);
+    if (c.analyzerSignal) {
+      const a = c.analyzerSignal;
+      lines.push(`  analyzer_readiness: ${a.readiness}`);
+      if (a.findingCounts) {
+        const fc = a.findingCounts;
+        lines.push(`  analyzer_finding_counts: critical=${fc.critical} warning=${fc.warning} info=${fc.info}`);
+      }
+      if (a.highlights.length) {
+        lines.push(`  analyzer_highlights: ${a.highlights.join(' · ')}`);
+      }
+      if (a.topFindings.length) {
+        lines.push(`  analyzer_findings: ${JSON.stringify(a.topFindings).slice(0, 600)}`);
+      }
+      if (a.triggeredGaps.length) {
+        lines.push(`  analyzer_gaps: ${JSON.stringify(a.triggeredGaps).slice(0, 400)}`);
+      }
+    } else if (c.signals) {
+      lines.push(`  signals: ${JSON.stringify(c.signals).slice(0, 600)}`);
     }
   }
   return lines.join('\n');
@@ -142,6 +195,7 @@ FACT DISCIPLINE
 - Use only the signals provided per card. Do not invent company names, numbers, features, or claims.
 - If a card's signals are thin, write briefly and specifically from what is there. Do not fall back to generic marketing filler.
 - The user context (if present) tells you the reader's stage and priority — let it shape TONE and EMPHASIS, never invent facts.
+- When making numeric claims about findings (e.g. "X critical issues"), use \`analyzer_finding_counts\` as ground truth. Do not count findings from the findings list yourself — the counts may differ due to aggregation.
 
 VOICE
 - Crisp, specific, confident. No hedging ("might", "could", "perhaps").
@@ -157,6 +211,13 @@ BRIEF DOC
 - topOpportunities: 1-3 short phrases pulled from content-opportunities signals if present.
 - visualIdentityHighlight: one sentence on the design personality if styleGuide signals are present.
 - recommendedNextStep: one sentence, actionable, tuned to userContext.priority and outputExpectation if set.
+
+RECOMMENDATION RULES
+- For each card that shows analyzer_findings or analyzer_gaps in its signal block, write a recommendation field: one actionable sentence, ≤120 chars, naming exactly what to fix first.
+- The sentence must cite a specific finding label or gap ruleId from the signal block. No generic advice.
+- Tune emphasis to userContext.priority and outputExpectation when present.
+- If analyzer_readiness is 'healthy' or no analyzer signals are present for a card, leave recommendation as an empty string.
+- Do NOT write a recommendation for cards that have no analyzer_findings and no analyzer_gaps.
 
 Now call write_dashboard_cards with one entry per cardId in CARDS TO WRITE, plus the brief fields.`;
 }
@@ -179,6 +240,10 @@ function buildScribeTool(digest) {
         expanded: {
           type: 'string',
           description: `Expanded modal copy. Target ${c.expandedBudget.min}-${c.expandedBudget.max} chars. Finish the sentence — never mid-word.`,
+        },
+        recommendation: {
+          type: 'string',
+          description: 'One actionable sentence ≤120 chars citing a specific finding or gap. Empty string when no analyzer findings or readiness is healthy.',
         },
       },
     };
@@ -242,8 +307,8 @@ function extractUsage(response) {
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
-async function runScribe({ analyzerResults, userContext = null, websiteUrl = '', onProgress = null } = {}) {
-  const digest = buildCardDigest(analyzerResults);
+async function runScribe({ analyzerResults, analyzerOutputs = {}, userContext = null, websiteUrl = '', onProgress = null } = {}) {
+  const digest = buildCardDigest(analyzerResults, analyzerOutputs);
 
   if (digest.length === 0) {
     return {

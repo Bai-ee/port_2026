@@ -1,6 +1,6 @@
 # Pipeline Content Inputs — Granular Reference
 
-**Scope:** the free-tier intake pipeline (`features/scout-intake/`). Documents every field we extract, derive, inject, or synthesize, and where each field ends up on the dashboard.
+**Scope:** the free-tier intake pipeline (`features/scout-intake/`). Documents every field we extract, derive, inject, synthesize, or analyze, and where each field ends up on the dashboard.
 
 **Entry point:** `features/scout-intake/runner.js::runIntakePipeline({ clientId, clientConfig })`
 
@@ -10,9 +10,46 @@
 2. Homepage screenshot capture (parallel, non-blocking)
 3. Site evidence fetch — HTML scraping + per-page extraction
 4. Intelligence briefing read (opt-in)
-5. LLM synthesis — Anthropic Sonnet via tool_use
+5. LLM synthesis — Anthropic Sonnet via tool_use (**180s timeout + 20s heartbeat**)
 6. Device mockup composition (if screenshot succeeded)
-7. Normalize → `IntakePipelineResult`
+7. Scout config generation (cached per client)
+8. **[PSI] PageSpeed Insights fetch** — gated on `PAGESPEED_API_KEY` set + `PAGESPEED_ENABLED != '0'`
+9. **Analyzer skills** (gated on `SCOUT_ANALYZER_SKILLS_ENABLED=1`)
+9. Scribe pass — per-card copy + brief doc (**180s timeout + heartbeat**)
+10. Brief render + PDF artifact
+11. Normalize → `IntakePipelineResult`
+
+---
+
+## Pipeline resilience — never-fail guarantee
+
+**As of P1 resilience patch:** every stage is non-fatal. The pipeline ALWAYS returns `status: 'succeeded'` with whatever data it could capture plus a warnings list.
+
+- **Fetch failure** → evidence becomes `{ pages: [], thin: true }` + warning `fetch_failed`. Pipeline continues with empty evidence.
+- **Synth failure or timeout** → `synthesisResult.intake = null` + warning `synthesize_failed`. Downstream stages accept null gracefully.
+- **Style-guide failure or timeout** → styleGuide = null + warning `style_guide_extraction_failed`.
+- **Scout-config failure** → scoutConfig = null + warning `scout_config_failed`.
+- **PSI failure or timeout** → pagespeed = null + warning `pagespeed_failed`. Skills receive `intel.pagespeed: null` and must handle it.
+- **PSI skipped (no key / flag off)** → pagespeed = null + warning `pagespeed_skipped`.
+- **Skill failure or timeout** → empty analyzerOutputs + warning `skill_failed` with the skill id.
+- **Scribe failure or timeout** → scribeResult = null + warning `scribe_failed`. Cards fall back to static copy from `card-static-copy.js`.
+- **Normalize failure** → builds a minimal succeeded result from whatever was captured + warning `normalize_failed`.
+
+### Stage timeouts
+
+Every Anthropic-dependent stage is wrapped with `withTimeout()`:
+- **Timeout: 180s per stage** (generous — legitimate calls rarely exceed 60s)
+- **Heartbeat: every 20s** — emits `Still working on {stage}… You can leave this window and come back at anytime.` to the terminal events subcollection so the UI stays alive.
+
+Stages wrapped:
+- `synthesizeSiteEvidence` → AI synthesis
+- `extractDesignSystem` → Style guide extraction
+- `runCardSkills` → Analyzer skills
+- `runScribe` → Scribe
+
+### Worker-level error capture
+
+The worker (`app/api/worker/run-brief/route.js`) also catches any unhandled throw from `runIntakePipeline` and routes it through `failRun`. With resilience in place, this path is rarely hit — reserved for framework-level failures.
 
 ---
 
@@ -23,9 +60,9 @@
 
 - Trim whitespace
 - Prepend `https://` if no protocol
-- Parse with `new URL()` — invalid URL fails the run with `failedStage: 'fetch'`
+- Parse with `new URL()` — invalid URL pushes warning, pipeline continues with null websiteUrl
 
-**Output field:** `websiteUrl` (absolute URL string)
+**Output field:** `websiteUrl` (absolute URL string or null)
 
 ---
 
@@ -74,173 +111,76 @@ Each page (`PageEvidence`) carries:
 | `h1` | `<h1>` inner text | each 150 chars, unbounded count |
 | `h2` | `<h2>` inner text | each 150 chars, 10 max |
 | `navLabels` | `<nav>` → fallback to `.nav`/`.menu`/`.header-nav`/`.main-nav` containers, extract `<a>` text | each 2–50 chars, 14 unique max |
-| `ctaTexts` | `<button>` or `<a>` text matching `/get|start|try|sign up|join|book|schedule|learn more|contact|free|demo|buy|shop|order|request|apply|register|subscribe|download|explore|see how/i` | each 2–80 chars, 6 unique max |
+| `ctaTexts` | `<button>` or `<a>` text matching CTA intent regex | each 2–80 chars, 6 unique max |
 | `bodyParagraphs` | `<p>` inner text | each 40–600 chars, sliced to 300, 8 max |
-| `socialLinks` | `href` matching twitter/x/instagram/facebook/linkedin/tiktok/youtube/pinterest (skipping bare domain roots) | 8 unique max |
-| `contactClues` | email regex (skipping `example.|yourdomain|placeholder|test@`) + US/CA phone regex | 4 unique max, prefixed `email:`/`phone:` |
-| `_rawHtml` | full HTML source | ephemeral — stripped by `normalize.js` before Firestore write |
+| `socialLinks` | `href` matching twitter/x/instagram/facebook/linkedin/tiktok/youtube/pinterest | 8 unique max |
+| `contactClues` | email + US/CA phone regex | 4 unique max |
+| `_rawHtml` | full HTML source | **ephemeral** — stripped by `normalize.js` before Firestore write, AND stripped by runner.js before being passed to analyzer skills (to avoid 200K token overflow) |
 
-All strings pass through `decodeEntities()` (handles `&amp;`, `&lt;`, `&#39;`, `&#NNN;`, etc.) and `stripTags()`.
+All strings pass through `decodeEntities()` and `stripTags()`.
 
 ### 3.3 Homepage-only — `siteMeta` extraction
 
-**Function:** `site-fetcher.js::extractSiteMeta(html, baseUrl)`
-
-Attached only to the homepage PageEvidence as `page.siteMeta`. All URLs resolved against `baseUrl` via `new URL()`.
-
-| Field | Priority order |
-|---|---|
-| `title` | `og:title` → `twitter:title` → `<title>` |
-| `description` | `og:description` → `twitter:description` → `meta[name=description]` |
-| `siteName` | `og:site_name` → URL hostname fallback |
-| `ogImage` | `og:image` → `og:image:secure_url` → `twitter:image` (resolved absolute) |
-| `ogImageAlt` | `og:image:alt` → `twitter:image:alt` |
-| `favicon` | `link[rel=icon]` → `link[rel=shortcut icon]` (resolved absolute) |
-| `appleTouchIcon` | `link[rel=apple-touch-icon]` (resolved absolute) |
-| `themeColor` | `meta[name=theme-color]` |
-| `canonical` | `link[rel=canonical]` (resolved absolute) |
-| `locale` | `og:locale` → `html[lang]` |
-| `type` | `og:type` |
+Attached only to the homepage PageEvidence as `page.siteMeta`. Fields: `title`, `description`, `siteName`, `ogImage`, `ogImageAlt`, `favicon`, `appleTouchIcon`, `themeColor`, `canonical`, `locale`, `type`.
 
 ### 3.4 Thin-content detection
 
-`SiteEvidence.thin = true` when the concatenation of all h1 + h2 + bodyParagraphs across every fetched page is under **200 chars**. Added as a warning and passed to the synth prompt so the model knows to reason from URL/domain.
+`SiteEvidence.thin = true` when total body text across all pages < 200 chars. Threaded to synth as a hint.
 
-### 3.5 SiteEvidence object (final Stage-3 output)
+### 3.5 Failure mode (resilience)
 
-```
-{
-  url: string,              // normalized websiteUrl
-  fetchedAt: ISO string,
-  pages: PageEvidence[],    // homepage + 0–3 additional
-  warnings: string[],       // fetch failures, thin content note
-  thin: boolean,
-}
-```
-
-Plus `pages[0].siteMeta` (homepage only) and `pages[n]._rawHtml` (ephemeral).
+If `fetchSiteEvidence` throws (site unreachable, all pages timeout):
+- `evidence = { pages: [], thin: true, warnings: [...] }`
+- Warning `fetch_failed` pushed
+- Terminal emits `[FETCH] Fetch failed — continuing with limited data`
+- Pipeline continues — no early return
 
 ---
 
 ## Stage 4 — Intelligence briefing (opt-in)
 
-**File:** `runner.js::buildIntelligenceBriefing`
 **Store:** `features/intelligence/_store.js::getMaster(clientId)`
 
 Only runs when `master.meta.pipelineInjection === true`. Non-fatal — any read failure just skips injection.
 
 **Input:** `master.digest.briefingBullets: string[]`
-
-**Output** (injected into synth prompt as a dedicated section):
-
-```
-=== SITE INTELLIGENCE BRIEFING ===
-- bullet 1
-- bullet 2
-...
-```
+**Output:** briefing string injected into synth prompt.
 
 ---
 
 ## Stage 5 — LLM synthesis
 
 **File:** `features/scout-intake/intake-synthesizer.js::synthesizeSiteEvidence`
-**Model:** `claude-sonnet-4-5-20250929` (see `SYNTHESIS_MODEL`)
+**Model:** `claude-sonnet-4-5-20250929`
 **Max tokens:** 4096
 **Tool:** `write_brand_intake` (forced via `tool_choice: { type: 'any' }`)
+**Timeout:** 180s (wrapped by `withTimeout` in runner)
 
 ### 5.1 Evidence formatting
 
-`formatEvidenceForPrompt(evidence)` builds a compact text block per page:
+`formatEvidenceForPrompt(evidence)` builds a compact text block per page. Typical input: 600–1500 tokens.
 
-- `WEBSITE: {url}`
-- For each page: section header `--- {TYPE} PAGE ---`, then lines for Title, Meta, H1 (first 2), H2 (first 6), Nav (first 8), CTAs, Body (first 5 paragraphs, 200-char slices), Social, Contact
-- If `evidence.thin`: appends `NOTE: This site has very thin static content. Infer from available signals and URL.`
-- If warnings present: appends `Fetch notes: ...`
+### 5.2 `write_brand_intake` output schema
 
-Typical token cost of evidence block: **600–1500 input tokens**.
+Returns the `intake` object with:
+- `snapshot.brandOverview` (headline, summary, industry, businessModel, targetAudience, positioning)
+- `snapshot.brandTone` (primary, secondary, tags[], writingStyle)
+- `snapshot.visualIdentity` (summary, colorPalette, styleNotes)
+- `signals.core[]` (2–5 items: label, summary, source, relevance)
+- `strategy.postStrategy`, `strategy.contentAngles[]`, `strategy.opportunityMap[]`
+- `outputsPreview.samplePost`, `outputsPreview.sampleCaption`
+- `systemPreview.modulesUnlocked[]`, `systemPreview.nextStep`
 
-### 5.2 Prompt additions
+### 5.3 Failure mode
 
-- Role framing + 5 synthesis rules (specificity, inference, brand voice, signal realness)
-- Optional intelligence briefing from Stage 4, injected above the evidence block
-- Raw evidence text
+- **Throws** (network, invalid response, timeout) → `synthesisResult = { ok: false, intake: null, error }` + warning `synthesize_failed`.
+- **Returns `!ok`** → warning `synthesize_empty` pushed.
 
-### 5.3 `write_brand_intake` output schema
-
-Returned verbatim as `synthesisResult.intake`. Required top-level keys: `snapshot`, `signals`, `strategy`, `outputsPreview`, `systemPreview`.
-
-```
-snapshot: {
-  brandOverview: {
-    headline        string,  // one-sentence what-and-for-whom
-    summary         string,  // 2–3 sentences
-    industry        string,  // specific, e.g. "B2B SaaS – HR Tech"
-    businessModel   string,  // e.g. "subscription SaaS"
-    targetAudience  string,
-    positioning     string,  // 1–2 sentences vs alternatives
-  },
-  brandTone: {
-    primary         string,
-    secondary       string,
-    tags            string[],     // 3–5 descriptor tags
-    writingStyle    string,
-  },
-  visualIdentity: {
-    summary         string,
-    colorPalette    string,       // inferred direction; may be blank
-    styleNotes      string,
-  },
-},
-signals: {
-  core: [ {                       // 2–5 items
-    label       string,
-    summary     string,           // 1–2 sentences
-    source      string,           // e.g. "homepage", "pricing page", "CTAs"
-    relevance   'high' | 'medium' | 'low',
-  } ]
-},
-strategy: {
-  postStrategy: {
-    approach    string,
-    frequency   string,
-    formats     string[],         // 2–4
-  },
-  contentAngles: [ {              // 3–5 items
-    angle       string,
-    rationale   string,
-    format      string,
-  } ],
-  opportunityMap: [ {             // 2–4 items
-    opportunity string,
-    why         string,
-    priority    'high' | 'medium' | 'low',
-  } ],
-},
-outputsPreview: {
-  samplePost      string,         // 140–280 chars, brand voice
-  sampleCaption   string,         // 40–100 chars
-},
-systemPreview: {
-  modulesUnlocked string[],       // always includes the 5 free-tier modules
-  nextStep        string,
-}
-```
+Pipeline continues. Downstream consumers handle `synthesisResult.intake === null`.
 
 ### 5.4 Cost metadata
 
-`runCostData` attached to the result:
-
-```
-{
-  model: string,
-  inputTokens: number,
-  outputTokens: number,
-  estimatedCostUsd: number,   // Haiku pricing table: $0.80 / $4.00 per MTok
-}
-```
-
-**Note:** the pricing constants in `extractUsage` use Haiku rates; the model is Sonnet. Cost numbers are therefore indicative, not invoice-accurate.
+`runCostData` attached — cost typically $0.004–$0.012. Pricing constants in `extractUsage` still use Haiku rates; model is Sonnet — cost numbers are indicative, not invoice-accurate.
 
 ---
 
@@ -248,123 +188,355 @@ systemPreview: {
 
 **File:** `api/_lib/device-mockup.cjs::generateWebsiteMockupArtifact`
 
-Runs only if Stage 2 produced at least one `website_homepage_screenshot`. Inputs the screenshot artifact refs; outputs a single composite artifact added to `artifactRefs`. Failures become warnings.
+Runs only if Stage 2 produced at least one `website_homepage_screenshot`. Non-fatal.
 
 ---
 
-## Stage 7 — Normalize → `IntakePipelineResult`
+## Stage 7 — Scout config generation
 
-**File:** `features/scout-intake/normalize.js::normalizeIntakeResult`
+**File:** `features/scout-intake/scout-config-generator.js`
+**Persisted:** `client_configs/{clientId}.scoutConfig`
 
-Maps the raw LLM `intake` into the canonical `IntakePipelineResult` shape Firestore and `run-lifecycle.cjs` expect. Also:
+Generated once per client from intake + evidence. On subsequent runs, loaded from cache unless stale (URL mismatch).
 
-- Strips `_rawHtml` from every page before Firestore write
-- Threads through `siteMeta` (extracted in Stage 3) as a top-level field
-- Derives `scoutPriorityAction`, `content`, `contentOpportunities` compat shims for older dashboard projection code
-- Wraps in:
+**Output fields:** `brandKeywords`, `competitors`, `categoryTerms`, `kols`, `reddit` (subreddits, mentionQueries, opportunityQueries), `weather` (neighborhoods), `reviews` (sources), `instagram`, `scout.searchPlan` (5 queries), `_meta.capabilitiesActive[]`, `_meta.capabilitiesInactive[]`.
+
+Non-fatal — failure pushes warning `scout_config_failed` and pipeline continues.
+
+---
+
+## Stage 8 — Analyzer skills (P1)
+
+**File:** `features/scout-intake/runner.js` invocation of `runCardSkills`
+**Gate:** `process.env.SCOUT_ANALYZER_SKILLS_ENABLED === '1'`
+**Timeout:** 180s (wrapped)
+
+### 8.1 Skill execution
+
+For each card in `card-contract.js` that declares `analyzerSkill: '<skill-id>'`, the runner:
+
+1. Loads the `.md` skill file from `features/scout-intake/skills/` via `_registry.js`.
+2. Parses YAML front matter (`_runner.js::parseFrontMatter`).
+3. Resolves declared `inputs: [source-ids]` against `buildSourcePayloads({ intake, styleGuide, siteMeta, evidence, pagespeed, scoutConfig, userContext })`. **`_rawHtml` is stripped from `evidence.pages` before this step** to avoid 200K-token overflow on sites with large HTML.
+4. Substitutes `{{inputs}}` and `{{missingStateRules}}` into the prompt body.
+5. Calls Anthropic with `tool_use` forced on the skill's declared output tool.
+6. Validates output against the standard contract (`_output-contract.js`).
+7. Returns structured findings.
+
+### 8.2 Standard skill output contract
+
+Every skill output validated against this shape:
 
 ```
 {
-  status: 'succeeded' | 'failed',
-  pipelineType: 'free-tier-intake',
-  pipelineRunId: uuid,
+  skillId: string,
+  skillVersion: number,
+  runAt: ISO string,
+  findings: [{ id, severity: 'critical'|'warning'|'info', label, detail, citation }],
+  gaps: [{ ruleId, triggered, evidence }],
+  readiness: 'healthy'|'partial'|'critical',
+  highlights: string[],
+  metadata: { model, inputTokens, outputTokens, estimatedCostUsd }
+}
+```
 
-  snapshot:            { brandOverview, brandTone, visualIdentity },
-  signals:             { core },
-  strategy:            { postStrategy, contentAngles, opportunityMap },
-  outputsPreview:      { samplePost, sampleCaption },
-  systemPreview:       { modulesUnlocked, nextStep },
+Invalid outputs → warning + card falls back to analyzer-impl signals.
+
+### 8.3 Current skill library
+
+| Skill | Card | Status |
+|---|---|---|
+| `seo-depth-audit` | `seo-performance` | ✅ P1 wired |
+| `intake-inventory` | `intake-terminal` | 📋 Planned (P6 priority 1 — see [SCOUT_ANALYZER_SKILLS/SCOUT_ANALYZER_SKILLS_MASTERPLAN.md §13 A1](/Users/bballi/Documents/Repos/Bballi_Portfolio/docs/SCOUT_ANALYZER_SKILLS/SCOUT_ANALYZER_SKILLS_MASTERPLAN.md:1)) |
+| `brand-asset-gap` | `brand-identity-design` | 📋 Planned (P6) |
+| `visual-consistency` | `style-guide` | 📋 Planned (P6) |
+| `conversion-audit` | `website-landing` | 📋 Planned (P6) |
+| `competitor-framing` | `competitor-info` | 📋 Planned (P6) |
+| `content-opportunity-rank` | `content-opportunities` | 📋 Planned (P6) |
+| `priority-synthesis` | `priority-signal` | 📋 Planned (P6) |
+
+### 8.4 Failure mode
+
+- Skill throws / times out / returns invalid → warning `skill_failed` with skill id, card id, and error.
+- Empty output → card falls back to passthrough analyzer-impl signals.
+- Flag unset → entire step skipped; pipeline byte-for-byte identical to pre-P1.
+
+### 8.5 Persistence
+
+Output at `dashboard_state.analyzerOutputs[cardId]`. Threaded through `normalize.js` and `buildDashboardProjection` in `run-lifecycle.cjs`.
+
+---
+
+## Stage 9 — Scribe pass
+
+**File:** `features/scout-intake/scribe.js`
+**Model:** `claude-haiku-4-5-20251001`
+**Timeout:** 180s + heartbeat
+**Cost:** ~$0.005–$0.015
+
+Consumes `analyzerResults` + `userContext` + (when P5 lands) `analyzerOutputs` to produce:
+- `cards: { [cardId]: { short, expanded } }`
+- `brief: { headline, summary, prioritySignals[], topOpportunities[], visualIdentityHighlight, recommendedNextStep }`
+
+Non-fatal. Cards fall back to `card-static-copy.js` descriptions on failure.
+
+---
+
+## Stage 10 — Brief render + PDF
+
+**File:** `features/scout-intake/brief-renderer.js`
+
+Renders HTML brief doc, posts to browserless `/pdf`. Only runs when scribe produced output. Non-fatal.
+
+---
+
+## Stage 11 — Normalize
+
+**File:** `features/scout-intake/normalize.js::normalizeIntakeResult`
+
+**Resilient against null intake** — if synth produced no intake, `normalize` defaults to `{}` and uses safe accessors (`str()`, `arr()`) to build a minimal valid result.
+
+Maps the raw LLM `intake` (or empty shell) into the canonical `IntakePipelineResult`:
+
+```
+{
+  status: 'succeeded',           // ← always 'succeeded' with resilience in place
+  pipelineType: 'free-tier-intake',
+  pipelineRunId,
+
+  snapshot:            { brandOverview, brandTone, visualIdentity } | null,
+  signals:             { core } | null,
+  strategy:            { postStrategy, contentAngles, opportunityMap } | null,
+  outputsPreview:      { samplePost, sampleCaption } | null,
+  systemPreview:       { modulesUnlocked, nextStep } | null,
   siteMeta:            { ...10 OG/meta fields } | null,
 
-  scoutPriorityAction: string | null,   // compat shim
+  scoutPriorityAction: string | null,
   content:             { x_post, content_angle, caption? } | null,
   contentOpportunities: [ { topic, whyNow, priority, format } ],
   guardianFlags:       null,
 
+  scribe:              { cards: { ... }, brief: { ... } } | null,
+  briefHtml:           string | null,
+  scoutConfig:         ScoutConfig | null,
+  analyzerOutputs:     { [cardId]: SkillOutput } | null,   // ← P1 addition
+
   providerName: 'anthropic',
   runCostData,
-  artifactRefs,                         // screenshot + mockup refs
-  warnings,                             // merge of fetch + stage warnings
+  artifactRefs,                  // screenshot + mockup + brief-pdf refs
+  warnings,                      // merge of all stage warnings
 
-  // failure-only: error, failedStage
+  tier: 'free' | 'paid',
 }
 ```
+
+If normalize itself throws, runner.js builds an equivalent minimal result so the pipeline still returns `succeeded`.
+
+---
+
+## Real-time terminal events
+
+**Store:** `clients/{clientId}/brief_runs/{runId}/events/{eventId}`
+**Shape:** `{ stage, label, extra, createdAt }`
+
+Every `emitProgress()` call in the pipeline writes an event doc via `api/_lib/run-lifecycle.cjs::appendRunEvent`. The dashboard terminal subscribes via `onSnapshot` and renders events in real time.
+
+### Event stages (mapped to terminal prefixes)
+
+| Stage | Prefix | CSS class |
+|---|---|---|
+| `capture` | `[SCREEN]` | `term-screen` |
+| `fetch` | `[FETCH]` | `term-fetch` |
+| `analyze` | `[ANALYZE]` | `term-ok` |
+| `styleguide` | `[STYLE]` | `term-ai` |
+| `synthesize` | `[AI]` | `term-ai` |
+| `compose` | `[MOCK]` | `term-mock` |
+| `scout-config` | `[SCOUT]` | `term-ai` |
+| `skills` | `[SKILL]` | `term-ai` |
+| `scribe` | `[SCRIBE]` | `term-ai` |
+| `brief` | `[BRIEF]` | `term-ai` |
+| `normalize` | `[BUILD]` | `term-build` |
+| `progress` | `✓` | `term-ok` |
+| `error` | `✗` | `term-error` |
+
+### Run-level events
+
+- `failRun` appends `stage: 'error'` with the failure message.
+- `completeRun` appends `stage: 'progress'` with `"Pipeline succeeded — dashboard data ready."`.
+- Long stages emit heartbeats every 20s: `"Still working on {label}… You can leave this window and come back at anytime."`
+
+### Firestore rules
+
+Client-side reads of the events subcollection are authorized to the signed-in owner of that client:
+
+```
+match /clients/{clientId}/brief_runs/{runId}/events/{eventId} {
+  allow read:  if request.auth != null && callerClientId() == clientId;
+  allow write: if false;  // server-only writes via admin SDK
+}
+```
+
+The parent `brief_runs/{runId}` doc stays server-only.
+
+---
+
+## Card contract, source inventory, static copy
+
+Three declarative source-of-truth files under `features/scout-intake/`:
+
+### `card-contract.js`
+
+38 cards (16 free-tier, 22 paid). Each entry declares:
+
+| Field | Purpose |
+|---|---|
+| `id` | Stable card id |
+| `navLabel`, `navTitle` | Dashboard UI labels (exact match) |
+| `category` | `design` \| `seo` \| `content` \| `systems` \| `runtime` \| `upgrade` |
+| `role` | Semantic role for Scribe prompt |
+| `sourceField`, `fallbackField` | Dotted pointer into the intake result |
+| `analyzer.impl` | `passthrough` \| `pagespeed` \| `design-system-extractor` \| `runtime` |
+| `analyzerSkill` | Skill id from `skills/` (null = skip skill step) |
+| `copy.short`, `copy.expanded` | Char-count budgets for Scribe |
+| `qualityScaling` | Scribe scales copy length by confidence |
+| `tier` | `all` (free+paid) \| `paid` (locked on free) |
+| `actionClass` | `runtime` \| `describe` \| `diagnose` \| `recommend` \| `service-offer` |
+| `sources[]` | Source IDs that feed this card (for Data Map UI) |
+| `missingStateRules[]` | `{ id, when, reason, offer }` declarative gap rules |
+
+Helpers exported: `getCard`, `cardsForTier`, `cardsByAnalyzer`, `cardsByCategory`, `cardsByActionClass`, `cardsBySource`.
+
+### `source-inventory.js`
+
+14 sources. Each entry:
+
+```
+{
+  id, label, category,                      // e.g. 'site.meta', 'Site Meta (OG + favicon)', 'site'
+  collection: { method, detail, auth, costPerRun, file },
+  payloadFields: string[],
+  freshness: string,
+}
+```
+
+Categories: `site`, `llm`, `intelligence`, `external-scout`, `scout-config`, `user`.
+
+### `card-static-copy.js`
+
+Maps every card id to its dashboard baseline description (verbatim from `DashboardPage.jsx`). Used by the Data Map admin UI to show what the dashboard renders when Scribe has no output for a card. Also supports `alternateDescription` (dual-mode cards like `brand-tone`) and `dynamicOverride` notes.
+
+---
+
+## Admin surfaces — Data Map & Notes
+
+Lives at `/preview/scout-config` with four tabs:
+
+### Config tab
+
+Shows the persisted `scoutConfig` for the signed-in user's client plus buttons to regenerate the config or run external scouts manually.
+
+### Data Map tab
+
+Reads `/api/admin/scout-data-map` and `/api/admin/scout-card-copy`. Shows:
+
+- **P1 status banner** — FLAG ON/OFF + output count + skill warnings inline (from latest `brief_run`).
+- **All-cards chip row** — 38 jump links to each card.
+- **Source Inventory** — every source with method, auth, cost, payload fields, freshness.
+- **Every card** (both tiers) rendered fully with:
+  - Nav title + id + tier + action-class chips
+  - Sources chip row
+  - **Data received** — resolved payload fields per source
+  - Missing-state rules
+  - Scribe budgets + intake field pointer
+  - **Static description baseline** (from `card-static-copy.js`)
+  - **Live scribe copy** (short + expanded from the last run)
+  - **Analyzer skill panel** (when attached) — findings with severity chips, readiness, cost, model, tokens
+  - 📝 note buttons on every row
+
+### Runs tab
+
+Reads `/api/admin/scout-recent-runs`. Shows the last 10 brief_runs with:
+- Status chip, trigger, attempts badge (if retried), warning count
+- `runId`, `sourceUrl`, all timestamps
+- Error block (if failed)
+- **Warnings grouped by stage** — skill / scout / styleguide / etc.
+
+### Notes tab
+
+Reads/writes `/api/admin/scout-map-notes`. Persists annotations to `docs/scout-data-map.notes.json` (git-tracked). Filter by `open | addressed | dismissed`. Anchor-based addressing so notes attach to specific cards, rules, sources, or skills.
+
+### Admin endpoints
+
+| Route | Purpose |
+|---|---|
+| `/api/admin/scout-data-map` | Returns `{ sources, cards }` |
+| `/api/admin/scout-card-copy` | Live scribe + static copy + analyzerOutput per card, plus flag status and warnings |
+| `/api/admin/scout-recent-runs` | Last N brief_runs trimmed for triage |
+| `/api/admin/scout-map-notes` | GET/POST/PATCH/DELETE annotations |
+| `/api/admin/whoami` | Diagnostic — decoded token email + admin doc existence |
+
+All endpoints require admin (`admins/{email}` doc exists). Writes are dev-only (`NODE_ENV !== 'production'`).
 
 ---
 
 ## Dashboard field mapping
 
-Each intake field maps to a dashboard card in `DashboardPage.jsx`. The following are the active intake-fed cards (rendered by `intakeCapabilityCards.map`):
+Each intake field maps to a dashboard card. Active intake-fed cards (rendered by `intakeCapabilityCards.map`):
 
 | Card | Source |
 |---|---|
-| Intake Terminal | live progress events during the run (not stored) |
-| Brand Tone → swap to **Site Meta** when present | `siteMeta.*` + `snapshot.brandTone.*` fallback |
-| Style Guide | `snapshot.visualIdentity.styleGuide` (currently mocked; feeder is `design-system-extractor.js` — **not yet wired into runner.js**) |
-| SEO + Performance | PageSpeed Insights intelligence source (`features/intelligence/pagespeed.js`) — separate pipeline, merged at dashboard level |
+| Brief | `snapshot.brandOverview` + dynamic headline override |
+| Intake Terminal | live progress events (real-time stream, no storage) |
+| Brand Tone → swaps to **Site Meta** when present | `siteMeta.*` + `snapshot.brandTone.*` fallback |
+| Style Guide | `snapshot.visualIdentity.styleGuide` (feeder is `design-system-extractor.js`) |
+| SEO + Performance | PageSpeed Insights intelligence (`features/intelligence/pagespeed.js`) + `analyzerOutputs['seo-performance']` when skills enabled |
 | Industry | `snapshot.brandOverview.industry` |
 | Business Model | `snapshot.brandOverview.businessModel` |
 | Priority Signal | top-relevance item from `signals.core[]` |
 | Draft Post | `outputsPreview.samplePost` |
 | Content Angle | `strategy.contentAngles[0]` |
 | Content Opportunities | `strategy.opportunityMap[]` |
+| Competitor Info | `scoutConfig.competitors` (once wired) |
+| Signals | `externalSignals.*` (once Phase E wired) |
+| Marketing | `strategy.postStrategy` + external signals |
+| Website & Landing Page | `evidence.pages` + `siteMeta` + `intelligence.pagespeed` — service-offer card |
+| Brand Identity & Design | `siteMeta` + `synth.styleGuide` — service-offer card |
 
-All cards rendered after Content Opportunities (the `tiles.map` block) are static upgrade-tier previews — they do **not** consume pipeline data today. See `UPGRADE_TILE_TITLES` / `UPGRADE_TILE_DESCRIPTIONS` in `DashboardPage.jsx`.
+Paid/upgrade tiles (22) render with blocked-overlay + `Upgrade Tier` CTA. Source of truth: `UPGRADE_TILE_TITLES` / `UPGRADE_TILE_DESCRIPTIONS` in `DashboardPage.jsx`, mirrored in `card-static-copy.js`.
 
 ---
 
-## Upgrade-tier cards (blocked / preview)
+## Terminal UI behavior
 
-Every tile rendered after `Content Opportunities` uses the blocked-overlay variant with a `Upgrade Tier` CTA. Titles and descriptions are mirrored verbatim from `AUTOMATION_CAPABILITIES` in `StackedSlidesSection.jsx` (both active and reserved/commented entries) so dashboard and homepage stay aligned.
+### Always visible
+- Survey column never unmounts. `OnboardingChatModal` renders unconditionally (gated only on run activity via parent), even after skip or completion.
+- Marquee text static — "BUILDING YOUR DASHBOARD · PROCESSING WEBSITE" at all times. No conditional swap, no layout shift.
+- Subtitle static — "Creating Your Dashboard" at all times.
 
-**Source of truth:** `UPGRADE_TILE_TITLES` + `UPGRADE_TILE_DESCRIPTIONS` in `DashboardPage.jsx`.
+### Retry prompt
+When `latestRunStatus === 'failed'` (should be rare with resilience), a retry chat turn appears inside the `OnboardingChatModal` thread — NOT as a separate UI element. Styled as a bot message + URL input + red Retry button. Auto-scrolls into view.
 
-### Active (currently shown on homepage)
+### Post-run
+When `status: 'succeeded'`:
+- Survey resolved → countdown "launching dashboard in 3…" in terminal. One-shot (guarded by `postSurveyRevealFiredRef`).
+- Survey unresolved → "complete the survey above to reveal your dashboard →" with blinking caret.
 
-| Tile ID | Title | Description |
-|---|---|---|
-| `creative-pipelines` | Creative Pipelines | Automates content creation in real time, aligning every post with your brand's voice while driving consistent engagement. |
-| `company-brain` | Company Brain | Centralizes your entire operating stack into a structured, searchable system that powers faster decisions and smarter execution. |
-| `knowledge-assistant` | Internal Knowledge Assistant | Instantly answers team questions by pulling from your documents, conversations, and data—eliminating bottlenecks and repetitive work. |
-| `executive-support` | Executive Support Automation | Prepares meetings, surfaces insights, and drafts communications so you walk into every decision fully informed. |
-| `daily-operations` | Daily Operations Engine | Runs core business tasks automatically—email triage, task tracking, reporting, and team updates—without manual oversight. |
-| `email-marketing` | Email Marketing Automation | Builds, schedules, and optimizes campaigns across regions while learning and improving from feedback over time. |
-| `ai-research` | AI-Powered Research | Generates deep consumer insights, competitive analysis, and market validation in hours instead of weeks. |
-| `financial-tax` | Financial & Tax Processing | Organizes transactions, corrects discrepancies, and produces reporting-ready outputs aligned with accounting workflows. |
-| `compliance` | Compliance Monitoring | Continuously checks deadlines, filings, and regulatory requirements to ensure nothing critical is missed. |
-| `distribution-insight` | Distribution & Insight Automation | Unifies social publishing, SEO fixes, search visibility, and performance reporting into one continuous system that surfaces what to ship, where to publish, and what to improve next. |
-| `rapid-product` | Rapid Product Development | Builds and deploys functional tools, integrations, and experiences from concept to launch in a fraction of the time. |
-| `self-improving` | Self-Improving Systems | Continuously refines workflows, tools, and outputs based on feedback, increasing performance over time. |
-| `reddit-community` | Reddit & Community | Finds relevant threads and drafts reply ideas and post concepts for review before publishing. |
-| `seo-content` | SEO Content | Surfaces keyword opportunities and drafts landing pages, blog outlines, and content directions for approval. |
+### Skip All mid-survey
+Footer link "Skip remaining questions" visible whenever `!introMode`. Calls same `handleSkipAll` handler as intro-screen skip buttons.
 
-### Reserved (commented out on homepage — dashboard-only preview)
-
-| Tile ID | Title | Description |
-|---|---|---|
-| `multi-agent-pipeline` | Multi-Agent Intelligence Pipeline | A four-stage agent architecture — Scout, Scribe, Guardian, Reporter — runs automatically each day, taking raw market data from five sources and producing a founder-ready content brief with zero manual input. |
-| `hyperlocal-signals` | Hyperlocal Signal Aggregation | Scout pulls live data from X/Twitter, Instagram, Reddit, customer reviews, and weather APIs, normalizes them into a unified intelligence format, and trims context to ~5K tokens before synthesis — optimized to under $0.10 per full run. |
-| `platform-content-gen` | Platform-Specific Content Generation | Scribe reads the day's brief and produces ready-to-publish drafts for Instagram, X/Twitter, Facebook, and Discord — each formatted to platform conventions and constrained by brand voice rules defined in client knowledge files. |
-| `brand-safety-gate` | Brand Safety & Quality Gate | Guardian runs four sequential validation checks on every piece of generated content: restricted term scanning, competitor mention detection, factual accuracy, and brand voice scoring — outputting a readiness verdict and 0–100 quality score before anything moves forward. |
-| `founder-daily-brief` | Founder-Facing Daily Brief | Reporter transforms the day's intelligence, content drafts, and QA results into a formatted HTML briefing — with operational context, review insights, Reddit signals, competitor activity, and content opportunities — delivered to the admin dashboard on schedule. |
-| `admin-dashboard-history` | Admin Dashboard & Brief History | A real-time web dashboard surfaces the latest pipeline run: priority action, weather impact, content angle, Guardian verdict, and cost per run. A full archive of past runs lets the team compare briefs, track signal trends, and trigger fresh runs on demand. |
-| `image-generation` | Image Generation & Asset Management | A canvas-based generator handles post image production — with configurable presets, logo placement controls, and live preview. Completed renders upload to Firebase Storage and attach automatically to the current brief run. |
-| `knowledge-file-config` | Knowledge-File Client Configuration | The entire system adapts to a new client by swapping four JSON files: brand voice rules, intelligence config, business facts, and a restricted-terms glossary. No code changes required to onboard a new brand or vertical. |
-
-### Overlay behavior
-
-- Overlay CSS + handler in `DashboardPage.jsx` (`.tile-blocked-overlay`, `.tile-blocked-inner`, `.tile-blocked-upgrade-btn`).
-- `Upgrade Tier` button calls `setShowTierModal(true)` — same modal as the `ONBOARDED` hero tier trigger.
-- Button uses the shared `.cta-pill-btn` animated comet-border from `colors.css`.
-- Every blocked tile also renders a local rows table (`Tier / Status / Metric / Module / Summary`) beneath the overlay — the `Summary` row uses the same `UPGRADE_TILE_DESCRIPTIONS` value.
+### Error banner
+**Removed.** Dashboard never shows a top-level error banner. Errors surface in the terminal event stream and (as last resort) in the chat retry prompt.
 
 ---
 
 ## What is NOT yet wired
 
-- **`design-system-extractor.js`** exists with a full Sonnet-backed extraction schema (typography / colors / layout / motion), but is currently **not** called from `runner.js`. The Style Guide card reads from `STYLE_GUIDE_MOCK` in `normalize.js` until the extractor is plugged in.
-- **`synthesizeStyleGuide`** (Haiku summary wrapper in `normalize.js`) is exported but unused for the same reason.
-- **`favicon` / `appleTouchIcon` / `og:image`** are extracted and passed through to the dashboard, but no thumbnail proxy/cache layer exists — we store URLs only.
+- **External scouts in main runner** (Reddit / weather / reviews) — exist at `features/scout-intake/external-scouts.js` and callable via `/api/dashboard/scout-run`, but not invoked from `runner.js`. Phase E — separate workstream.
+- **P2 per-client skill overrides** — planned at `clients/{clientId}/scoutSkills/{cardId}`. Not implemented.
+- **P3 skill picker UI** — Data Map Analyzer block with skill dropdown + .md viewer. Not implemented.
+- **P4 test-fire skill endpoint** — run one skill against live data without full pipeline rerun. Not implemented.
+- **P5 Scribe consumption of `analyzerOutputs`** — Scribe still reads legacy analyzerResults. P5 adds recommendation field to card output.
+- **P7 brief aggregator** — post-Scribe synthesis into `brief.homeSummary`. Not implemented.
 
 ---
 
@@ -372,9 +544,11 @@ Every tile rendered after `Content Opportunities` uses the blocked-overlay varia
 
 | Source | Typical input | Notes |
 |---|---|---|
-| `formatEvidenceForPrompt()` | 600–1500 tokens | The main synth evidence |
+| `formatEvidenceForPrompt()` | 600–1500 tokens | Main synth evidence |
 | Intelligence briefing | up to a few hundred tokens | Opt-in, per-client |
-| `buildCssText()` (design-system-extractor) | up to ~60KB of CSS → hard-capped | Second independent LLM call — not yet wired |
+| Skill inputs block (after `_rawHtml` strip) | 10–30K tokens | `_rawHtml` on evidence.pages[] stripped before skill invocation to avoid 200K overflow |
+| `buildCssText()` (design-system-extractor) | up to ~60KB of CSS → hard-capped | Independent LLM call |
+| Scribe prompt | ~500–1200 tokens | Compact analyzer signals only |
 
 ---
 
@@ -382,13 +556,36 @@ Every tile rendered after `Content Opportunities` uses the blocked-overlay varia
 
 | Concern | File |
 |---|---|
-| Orchestration | `features/scout-intake/runner.js` |
+| Pipeline orchestration | `features/scout-intake/runner.js` |
 | HTML fetch + extraction | `features/scout-intake/site-fetcher.js` |
 | LLM synthesis | `features/scout-intake/intake-synthesizer.js` |
 | Result shaping | `features/scout-intake/normalize.js` |
-| CSS → design tokens | `features/scout-intake/design-system-extractor.js` (unwired) |
+| CSS → design tokens | `features/scout-intake/design-system-extractor.js` |
+| Scribe (per-card copy) | `features/scout-intake/scribe.js` |
+| Brief HTML render | `features/scout-intake/brief-renderer.js` |
+| Card contract | `features/scout-intake/card-contract.js` |
+| Source inventory | `features/scout-intake/source-inventory.js` |
+| Static dashboard copy | `features/scout-intake/card-static-copy.js` |
+| Skill runner | `features/scout-intake/skills/_runner.js` |
+| Skill output contract | `features/scout-intake/skills/_output-contract.js` |
+| Skill registry | `features/scout-intake/skills/_registry.js` |
+| First skill (SEO) | `features/scout-intake/skills/seo-depth-audit.md` |
+| Scout config gen | `features/scout-intake/scout-config-generator.js` |
+| External scouts bridge | `features/scout-intake/external-scouts.js` |
+| Reddit scout | `features/scout-intake/external-scouts/reddit-web-search.js` |
 | Homepage screenshot | `api/_lib/browserless.cjs` |
 | Multi-device mockup | `api/_lib/device-mockup.cjs` |
 | PageSpeed source | `features/intelligence/pagespeed.js` |
 | Intelligence master store | `features/intelligence/_store.js` |
+| Run lifecycle + events | `api/_lib/run-lifecycle.cjs` |
 | Dashboard render | `DashboardPage.jsx` |
+| Admin Data Map UI | `app/preview/scout-config/page.jsx` |
+
+---
+
+## Related docs
+
+- **Scout Analyzer Skills master plan** — [`docs/SCOUT_ANALYZER_SKILLS/SCOUT_ANALYZER_SKILLS_MASTERPLAN.md`](/Users/bballi/Documents/Repos/Bballi_Portfolio/docs/SCOUT_ANALYZER_SKILLS/SCOUT_ANALYZER_SKILLS_MASTERPLAN.md:1) — full phase plan P1–P7 + amendments A1/A2.
+- **Scout Analyzer Skills master prompt** — `docs/SCOUT_ANALYZER_SKILLS/SCOUT_ANALYZER_SKILLS_MASTERPROMPT.md` — drop-in prompt for fresh Sonnet sessions executing the plan.
+- **Data Map annotations** — `docs/scout-data-map.notes.json` — git-tracked review notes, readable by the assistant in one file read.
+- **Client Intelligence Layer V2** — `docs/CLIENT_INTELLIGENCE_LAYER_V2_POST_MIGRATION.md` — canonical paths for the intelligence layer (PSI + adjacent sources).
