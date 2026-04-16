@@ -20,8 +20,13 @@ The intelligence layer is now the canonical write path for external client intel
 
 Primary storage:
 - `clients/{clientId}/intelligence/master`
-- `clients/{clientId}/intelligence/sources/{sourceId}`
-- `clients/{clientId}/intelligence/events/{eventId}`
+- `clients/{clientId}/intelligence/master/sources/{sourceId}`
+- `clients/{clientId}/intelligence/master/events/{eventId}`
+
+Notes:
+- `master` is a document, not a collection prefix.
+- source docs and event docs are nested subcollections under the `master` doc.
+- this nesting is the current implementation in [features/intelligence/_store.js](/Users/bballi/Documents/Repos/Bballi_Portfolio/features/intelligence/_store.js:23).
 
 Current PSI/PageSpeed source:
 - [features/intelligence/pagespeed.js](/Users/bballi/Documents/Repos/Bballi_Portfolio/features/intelligence/pagespeed.js:1)
@@ -56,6 +61,10 @@ The dashboard now prefers intelligence-backed data.
 
 Primary dashboard read path:
 - bootstrap intelligence payload returned from client provisioning/bootstrap helpers
+
+Firestore reads behind that bootstrap payload:
+- `clients/{clientId}/intelligence/master`
+- `clients/{clientId}/intelligence/master/sources/*`
 
 Key files:
 - [api/_lib/client-provisioning.cjs](/Users/bballi/Documents/Repos/Bballi_Portfolio/api/_lib/client-provisioning.cjs:1)

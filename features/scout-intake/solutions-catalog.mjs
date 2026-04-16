@@ -562,9 +562,11 @@ function buildGenericSolution(item, source) {
 
 /**
  * Build the ordered list of { source, finding, solution } tuples for a card's
- * analyzer aggregate. Every finding (critical/warning/info) AND every
- * triggered gap gets a solution — either a catalog match or a generic
- * fallback built from the item's own data. Parity with the PROBLEMS tab.
+ * analyzer aggregate. NO dedup — every finding (critical/warning/info) AND
+ * every triggered gap produces its own card, in the same order as the
+ * PROBLEMS tab. Each card carries the finding/gap's unique severity; the
+ * catalog's severity is not used to override. Parity with PROBLEMS is a
+ * stronger requirement than content dedup.
  *
  * @param {{ findings?: any[], gaps?: any[] } | null} aggregate
  * @returns {Array<{ source: 'finding'|'gap', key: string, severity: string, finding: object, solution: object, isGeneric: boolean }>}
@@ -573,45 +575,36 @@ export function buildSolutionsList(aggregate) {
   if (!aggregate || typeof aggregate !== 'object') return [];
 
   const out = [];
-  // Dedup is scoped per source — a finding and a gap that resolve to the same
-  // catalog entry both produce their own card. This matches the PROBLEMS tab,
-  // which lists findings and gaps separately.
-  const seenFindingSolutionIds = new Set();
-  const seenGapSolutionIds     = new Set();
 
   const findings = Array.isArray(aggregate.findings) ? aggregate.findings : [];
-  for (const f of findings) {
-    if (!f) continue;
+  findings.forEach((f, idx) => {
+    if (!f) return;
     const matched  = resolveSolution(f);
     const solution = matched || buildGenericSolution(f, 'finding');
-    if (seenFindingSolutionIds.has(solution.id)) continue;
-    seenFindingSolutionIds.add(solution.id);
     out.push({
       source:    'finding',
-      key:       f.id || `finding-${out.length}`,
+      key:       `finding-${idx}-${f.id || 'item'}`,
       severity:  f.severity || 'info',
       finding:   f,
       solution,
       isGeneric: !matched,
     });
-  }
+  });
 
   const gaps = Array.isArray(aggregate.gaps) ? aggregate.gaps : [];
-  for (const g of gaps) {
-    if (!g || !g.triggered) continue;
+  gaps.forEach((g, idx) => {
+    if (!g || !g.triggered) return;
     const matched  = resolveSolution(g);
     const solution = matched || buildGenericSolution(g, 'gap');
-    if (seenGapSolutionIds.has(solution.id)) continue;
-    seenGapSolutionIds.add(solution.id);
     out.push({
       source:    'gap',
-      key:       g.ruleId || `gap-${out.length}`,
-      severity:  matched ? (solution.severity || 'warning') : 'warning',
+      key:       `gap-${idx}-${g.ruleId || 'item'}`,
+      severity:  g.severity || 'warning',
       finding:   g,
       solution,
       isGeneric: !matched,
     });
-  }
+  });
 
   return out;
 }

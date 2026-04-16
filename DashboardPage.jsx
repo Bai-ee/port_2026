@@ -1058,6 +1058,7 @@ const DashboardPage = () => {
   const [modalTab, setModalTab] = useState('solutions');
   const [activeCapabilityFilter, setActiveCapabilityFilter] = useState(null);
   const [chatDraft, setChatDraft] = useState('');
+  const [modalChatMode, setModalChatMode] = useState('ai');
   const capabilityGridRef = useRef(null);
   const dashboardVisibleRef = useRef(false);
   const [bootstrap, setBootstrap] = useState({ userProfile: null, client: null, dashboardState: null, recentRuns: [], intelligence: null });
@@ -2782,120 +2783,9 @@ const DashboardPage = () => {
                         onError={() => setIntakeMockupSrc(null)}
                       />
                     </span>
-                  ) : card.id === 'seo-performance' && hasSeoAuditData ? (() => {
-                    const sc  = seoAudit?.scores ?? {};
-                    const cwv = seoAudit?.coreWebVitals ?? {};
-                    const lab = seoAudit?.labCoreWebVitals ?? {};
-                    const scoreRings = [
-                      ['Performance',    sc.performance],
-                      ['SEO',            sc.seo],
-                      ['Accessibility',  sc.accessibility],
-                      ['Best Practices', sc.bestPractices],
-                    ].filter(([, v]) => v != null);
-                    const lcpMs   = cwv.lcp?.p75  ?? lab.lcp?.p75;
-                    const inpMs   = cwv.inp?.p75;
-                    const clsVal  = cwv.cls?.p75  ?? lab.cls?.p75;
-                    const ttfbMs  = cwv.ttfb?.p75 ?? lab.ttfb?.p75;
-                    // Goodness percentage: 100 = best, 0 = worst. Bar fill shows quality level.
-                    const goodnessPct = (key, raw) => {
-                      if (raw == null) return 0;
-                      switch (key) {
-                        case 'lcp':  return Math.max(2, Math.min(100, (1 - raw / 8000) * 100));
-                        case 'inp':  return Math.max(2, Math.min(100, (1 - raw / 1000) * 100));
-                        case 'cls':  return Math.max(2, Math.min(100, (1 - raw / 0.5)  * 100));
-                        case 'ttfb': return Math.max(2, Math.min(100, (1 - raw / 3000) * 100));
-                        default:     return 0;
-                      }
-                    };
-                    const cwvItems = [
-                      lcpMs  != null && { key: 'lcp', label: 'Largest Contentful Paint', display: `${(lcpMs / 1000).toFixed(1)}s`, cat: cwv.lcp?.category ?? lab.lcp?.category, pct: goodnessPct('lcp', lcpMs)  },
-                      inpMs  != null && { key: 'inp', label: 'Interaction to Next Paint', display: `${inpMs}ms`,                    cat: cwv.inp?.category,                       pct: goodnessPct('inp', inpMs)  },
-                      clsVal != null && { key: 'cls', label: 'Cumulative Layout Shift',   display: Number(clsVal).toFixed(2),       cat: cwv.cls?.category ?? lab.cls?.category,  pct: goodnessPct('cls', clsVal) },
-                    ].filter(Boolean);
-                    const diagItems = (seoAudit?.diagnostics ?? []).slice(0, 2);
-                    const scoreColor = (v) => v >= 90 ? 'success' : v >= 50 ? 'warning' : 'danger';
-                    const cwvColor   = (c) => c === 'FAST' ? 'success' : c === 'AVERAGE' ? 'warning' : c === 'SLOW' ? 'danger' : null;
-                    const catLabel   = (c) => c === 'FAST' ? 'Fast' : c === 'AVERAGE' ? 'Average' : c === 'SLOW' ? 'Slow' : null;
-                    const circ = 150.8;
-                    return (
-                      <div id="seo-perf-viz-shell">
-                        <div id="seo-perf-rings-row">
-                          {scoreRings.map(([label, score]) => (
-                            <div className="seo-ring-cell" key={label}>
-                              <svg className="seo-ring-svg" viewBox="0 0 58 58">
-                                <circle className="ring-bg" cx="29" cy="29" r="24" fill="none" strokeWidth="4" />
-                                <circle
-                                  className={`ring-fill ring-fill-${scoreColor(score)} stroke-lit`}
-                                  cx="29" cy="29" r="24" fill="none" strokeWidth="4"
-                                  strokeDasharray={circ}
-                                  strokeDashoffset={circ - (circ * score / 100)}
-                                  transform="rotate(-90 29 29)"
-                                />
-                              </svg>
-                              <div className="ring-val">{score}</div>
-                              <div className="ring-label">{label}</div>
-                            </div>
-                          ))}
-                        </div>
-                        {cwvItems.length > 0 && (
-                          <div id="seo-perf-cwv-row">
-                            {cwvItems.map(({ key, label, display, cat, pct }) => {
-                              const tone = cwvColor(cat);
-                              const cLabel = catLabel(cat);
-                              return (
-                                <div className="seo-cwv-item" key={key}>
-                                  <div className="seo-cwv-head">
-                                    <span className="seo-cwv-label">{label}</span>
-                                    <span className={`seo-cwv-val${tone ? ` seo-cwv-val--${tone}` : ''}`}>
-                                      {display}{cLabel ? ` · ${cLabel}` : ''}
-                                    </span>
-                                  </div>
-                                  <div className="seo-cwv-bar-track">
-                                    <div
-                                      className={`seo-cwv-bar-fill${tone ? ` seo-cwv-bar-fill--${tone}` : ''}`}
-                                      style={{ width: `${pct}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                        {diagItems.length > 0 && (() => {
-                          // Parse a numeric value from strings like "0.2 S", "1,234 KiB", "3.1 s"
-                          const parseNum = (str) => {
-                            if (str == null) return null;
-                            const n = parseFloat(String(str).replace(/,/g, ''));
-                            return isNaN(n) ? null : n;
-                          };
-                          const diagNums = diagItems.map((d) => parseNum(d.value));
-                          const maxNum   = Math.max(...diagNums.filter((n) => n != null), 0.001);
-                          return (
-                            <div id="seo-perf-diag-row">
-                              <span id="seo-perf-diag-heading">Diagnostics</span>
-                              <div id="seo-perf-diag-cards">
-                                {diagItems.map((d, i) => {
-                                  const num = diagNums[i];
-                                  const barPct = num != null ? Math.max(4, (num / maxNum) * 100) : null;
-                                  return (
-                                    <div className="seo-diag-card" key={d.id}>
-                                      <div className="seo-diag-card-val">{d.value}</div>
-                                      <div className="seo-diag-card-label">{d.label}</div>
-                                      {barPct != null && (
-                                        <div className="seo-diag-bar-track">
-                                          <div className="seo-diag-bar-fill" style={{ width: `${barPct}%` }} />
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    );
-                  })() : card.id === 'brand-tone' && siteMeta?.ogImage ? (
+                  ) : card.id === 'seo-performance' && hasSeoAuditData ? (
+                    renderSeoViz(seoAudit)
+                  ) : card.id === 'brand-tone' && siteMeta?.ogImage ? (
                     <div id="bt-preview-shell">
                       <img
                         id="bt-og-image"
@@ -3355,7 +3245,7 @@ const DashboardPage = () => {
             {/* ── Bento grid ── */}
             <div id="tile-detail-bento-grid">
 
-              {/* Left — visual + chat */}
+              {/* Left — visual + about */}
               <div id="tile-detail-bento-image-cell" className="tile-detail-bento-cell">
                 <div className={`tile-intake-placeholder tile-intake-placeholder-${activeTileModal.cardId || 'draft-post'} tile-detail-bento-placeholder`}>
                 {activeTileModal.cardId === 'style-guide' ? (
@@ -3450,6 +3340,8 @@ const DashboardPage = () => {
                       <img id="bt-og-image" src={siteMeta.ogImage} alt={siteMeta.ogImageAlt || ''} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                       {siteMeta.favicon && <img id="bt-favicon" src={siteMeta.favicon} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
                     </div>
+                  ) : activeTileModal.cardId === 'seo-performance' && hasSeoAuditData ? (
+                    renderSeoViz(seoAudit)
                   ) : activeTileModal.isCapabilityCard ? (
                     <span>{activeTileModal.placeholderLabel}</span>
                   ) : (
@@ -3457,58 +3349,69 @@ const DashboardPage = () => {
                   )}
                 </div>
 
-                {/* Chat with Bryan */}
-                <div id="tile-detail-chat-header">
-                  <div id="tile-detail-chat-avatar-wrap">
-                    <img src="/img/profile_400x400.jpg" id="tile-detail-chat-avatar" alt="Bryan Balli" />
-                    <span id="tile-detail-chat-status-dot" />
-                  </div>
-                  <div id="tile-detail-chat-identity">
-                    <span id="tile-detail-chat-name">Bryan Balli</span>
-                    <span id="tile-detail-chat-sub">Human + AI · Usually replies fast</span>
-                  </div>
-                  <span id="tile-detail-chat-badge">AI + Human</span>
-                </div>
-
-
-                <div id="tile-detail-chat-bot-msg">
-                  <span id="tile-detail-chat-bot-dot" />
-                  <span id="tile-detail-chat-bot-text">Ask me anything about this module…</span>
-                </div>
-
-                <div id="tile-detail-chat-input-row">
-                  <input
-                    id="tile-detail-chat-input"
-                    type="text"
-                    placeholder={`Ask about ${activeTileModal?.label || 'this module'}…`}
-                    value={chatDraft}
-                    onChange={(e) => setChatDraft(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleChatSend(chatDraft); }}
-                  />
-                  <button
-                    id="tile-detail-chat-send-btn"
-                    type="button"
-                    className="cta-pill-btn"
-                    onClick={() => handleChatSend(chatDraft)}
-                  >↗</button>
-                </div>
-
-                <div id="tile-detail-chat-footer">
-                  <a href="https://calendly.com/bballi/30min" target="_blank" rel="noopener noreferrer" className="tile-detail-chat-footer-link">Book a call ↗</a>
-                  <span id="tile-detail-chat-footer-dot">·</span>
-                  <button type="button" className="tile-detail-chat-footer-link" onClick={() => setShowTierModal(true)}>Text directly ↗</button>
-                </div>
-
-              </div>
-
-              {/* Right — content modules */}
-              <div id="tile-detail-bento-content">
-
                 {/* About module */}
                 <div id="tile-detail-bento-about" className="tile-detail-bento-cell">
                   <span className="tile-detail-bento-label">ABOUT</span>
                   <p id="tile-detail-bento-description">{activeTileModal.description}</p>
                 </div>
+
+                {/* Chat with Bryan — mode toggle between AI and Text */}
+                <div id="tile-detail-chat-wrap" className={modalChatMode === 'ai' ? 'tile-detail-chat--inactive' : ''}>
+                  <div id="tile-detail-chat-header">
+                    <div id="tile-detail-chat-avatar-wrap">
+                      <img
+                        src={modalChatMode === 'text' ? '/img/profile2_400x400.png?v=1774582808' : '/img/profile_400x400.jpg'}
+                        id="tile-detail-chat-avatar"
+                        alt="Bryan Balli"
+                      />
+                      <span id="tile-detail-chat-status-dot" className={modalChatMode === 'ai' ? 'tile-detail-chat-status-dot--inactive' : ''} />
+                    </div>
+                    <div id="tile-detail-chat-identity">
+                      <span id="tile-detail-chat-name">Bryan Balli</span>
+                    </div>
+                    <div className="tile-detail-chat-toggle">
+                      <button
+                        type="button"
+                        className={`tile-detail-chat-toggle-btn${modalChatMode === 'ai' ? ' tile-detail-chat-toggle-btn--active' : ''}`}
+                        onClick={() => setModalChatMode('ai')}
+                      >AI + Human</button>
+                      <button
+                        type="button"
+                        className={`tile-detail-chat-toggle-btn${modalChatMode === 'text' ? ' tile-detail-chat-toggle-btn--active' : ''}`}
+                        onClick={() => setModalChatMode('text')}
+                      >Text</button>
+                    </div>
+                  </div>
+
+                  <div id="tile-detail-chat-bot-msg">
+                    <span id="tile-detail-chat-bot-dot" className={modalChatMode === 'ai' ? 'tile-detail-chat-bot-dot--inactive' : ''} />
+                    <span id="tile-detail-chat-bot-text">
+                      {modalChatMode === 'ai' ? 'Ask me anything about this module…' : 'Text Bryan directly…'}
+                    </span>
+                  </div>
+
+                  <div id="tile-detail-chat-input-row">
+                    <input
+                      id="tile-detail-chat-input"
+                      type="text"
+                      placeholder={modalChatMode === 'ai' ? `Ask about ${activeTileModal?.label || 'this module'}…` : 'Type your message…'}
+                      value={chatDraft}
+                      onChange={(e) => setChatDraft(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleChatSend(chatDraft); }}
+                      disabled={modalChatMode === 'ai'}
+                    />
+                    <button
+                      id="tile-detail-chat-send-btn"
+                      type="button"
+                      onClick={() => handleChatSend(chatDraft)}
+                      disabled={modalChatMode === 'ai'}
+                    >↗</button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right — content modules */}
+              <div id="tile-detail-bento-content">
 
                 {/* Tabbed Data / Problems / Solutions module */}
                 {activeTileModal.analyzer ? (
@@ -3659,24 +3562,29 @@ const DashboardPage = () => {
                                   : (problemClean && expertTitle
                                       ? `${problemClean} — ${expertTitle}`
                                       : (problemClean || expertTitle));
-                                // Source label — the same text the PROBLEMS tab uses as the headline for this
-                                // item. Shown on generic cards (and on gap cards regardless) so the user can
-                                // always map a SOLUTIONS card back to the problem it addresses.
+                                // Source label — same text the PROBLEMS tab uses as the headline for this
+                                // item. Shown on EVERY card so every SOLUTIONS entry is 1:1 attributable to
+                                // its corresponding PROBLEMS entry, even when two findings resolve to the
+                                // same catalog entry.
                                 const sourceLabel = (() => {
                                   if (source === 'gap') return `Gap: ${finding?.ruleId || ''}`;
                                   return finding?.label || '';
                                 })();
-                                const showSourceLabel = Boolean(sourceLabel && (isGeneric || source === 'gap'));
+                                const showSourceLabel = Boolean(sourceLabel);
                                 return (
                                 <li
                                   key={key}
                                   id={`${activeTileModal.cardId}-solution-${solution.id}`}
-                                  className={`tile-solution-card severity-${severity || solution.severity || 'info'}`}
+                                  className={`tile-solution-card severity-${severity || solution.severity || 'info'}${source === 'gap' ? ' source-gap' : ''}`}
                                 >
                                   {/* Combined headline: problem + how I solve it, one long sentence */}
                                   <header className="tile-solution-header">
                                     <div className="tile-solution-header-top">
-                                      <span className="tile-analyzer-severity-chip">{severity || solution.severity}</span>
+                                      {source === 'gap' ? (
+                                        <span className="tile-analyzer-gap-chip">gap</span>
+                                      ) : (
+                                        <span className="tile-analyzer-severity-chip">{severity || solution.severity}</span>
+                                      )}
                                       {showSourceLabel && (
                                         <span className="tile-solution-source-label">{sourceLabel}</span>
                                       )}
@@ -3710,6 +3618,21 @@ const DashboardPage = () => {
                                             {solution.expertOffer.cta.label || 'Book a call'} →
                                           </a>
                                         )}
+
+                                        {solution.diy && (
+                                          <button
+                                            type="button"
+                                            className="tile-solution-diy-toggle-btn"
+                                            onClick={() => {
+                                              const id = `${activeTileModal.cardId}-solution-${solution.id}-diy`;
+                                              const el = document.getElementById(id);
+                                              if (el) el.open = !el.open;
+                                            }}
+                                            aria-controls={`${activeTileModal.cardId}-solution-${solution.id}-diy`}
+                                          >
+                                            <span className="tile-solution-diy-toggle-label">Prefer to do it yourself?</span>
+                                          </button>
+                                        )}
                                       </div>
                                     </section>
                                   )}
@@ -3720,7 +3643,7 @@ const DashboardPage = () => {
                                       id={`${activeTileModal.cardId}-solution-${solution.id}-diy`}
                                       className="tile-solution-diy-details"
                                     >
-                                      <summary className="tile-solution-diy-summary-toggle">
+                                      <summary className="tile-solution-diy-summary-toggle tile-solution-diy-summary-toggle--hidden">
                                         <span className="tile-solution-diy-toggle-label">Prefer to do it yourself?</span>
                                       </summary>
                                       <div className="tile-solution-diy">
@@ -3790,6 +3713,139 @@ const DashboardPage = () => {
 };
 
 // ── Tile viz renderers ────────────────────────────────────────────────────────
+
+const renderSeoViz = (seoAudit) => {
+  const sc  = seoAudit?.scores ?? {};
+  const cwv = seoAudit?.coreWebVitals ?? {};
+  const lab = seoAudit?.labCoreWebVitals ?? {};
+  const scoreRings = [
+    ['Performance',    sc.performance],
+    ['SEO',            sc.seo],
+    ['Accessibility',  sc.accessibility],
+    ['Best Practices', sc.bestPractices],
+  ].filter(([, v]) => v != null);
+  const lcpMs   = cwv.lcp?.p75  ?? lab.lcp?.p75;
+  const inpMs   = cwv.inp?.p75;
+  const clsVal  = cwv.cls?.p75  ?? lab.cls?.p75;
+  const goodnessPct = (key, raw) => {
+    if (raw == null) return 0;
+    switch (key) {
+      case 'lcp':  return Math.max(2, Math.min(100, (1 - raw / 8000) * 100));
+      case 'inp':  return Math.max(2, Math.min(100, (1 - raw / 1000) * 100));
+      case 'cls':  return Math.max(2, Math.min(100, (1 - raw / 0.5)  * 100));
+      default:     return 0;
+    }
+  };
+  const cwvItems = [
+    lcpMs  != null && { key: 'lcp', label: 'LCP', display: `${(lcpMs / 1000).toFixed(1)}s`, cat: cwv.lcp?.category ?? lab.lcp?.category, pct: goodnessPct('lcp', lcpMs)  },
+    inpMs  != null && { key: 'inp', label: 'INP', display: `${inpMs}ms`,                    cat: cwv.inp?.category,                       pct: goodnessPct('inp', inpMs)  },
+    clsVal != null && { key: 'cls', label: 'CLS', display: Number(clsVal).toFixed(2),       cat: cwv.cls?.category ?? lab.cls?.category,  pct: goodnessPct('cls', clsVal) },
+  ].filter(Boolean);
+  const diagItems = (seoAudit?.diagnostics ?? []).slice(0, 2);
+  const catLabel   = (c) => c === 'FAST' ? 'Fast' : c === 'AVERAGE' ? 'Average' : c === 'SLOW' ? 'Slow' : null;
+  const circ = 2 * Math.PI * 27; // ≈ 169.646
+  return (
+    <div id="seo-perf-viz-shell">
+      <svg className="seo-grad-defs" aria-hidden="true">
+        <defs>
+          <linearGradient id="rg" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%"   stopColor="#00cfff"/>
+            <stop offset="48%"  stopColor="#7b5fff"/>
+            <stop offset="100%" stopColor="#ff3de8"/>
+          </linearGradient>
+          <linearGradient id="rg-v" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%"   stopColor="#00cfff"/>
+            <stop offset="100%" stopColor="#ff3de8"/>
+          </linearGradient>
+        </defs>
+      </svg>
+
+      {scoreRings.length > 0 && (
+        <div className="seo-scores">
+          {scoreRings.map(([label, score]) => {
+            const offset = circ - (circ * score / 100);
+            const isPerfect = score === 100;
+            return (
+              <div className="seo-score-tile" key={label}>
+                <div className="seo-ring-wrap">
+                  <svg viewBox="0 0 64 64">
+                    <circle className="seo-ring-track" cx="32" cy="32" r="27" />
+                    <circle
+                      cx="32" cy="32" r="27" fill="none"
+                      stroke={isPerfect ? 'url(#rg)' : 'url(#rg-v)'}
+                      strokeWidth="5" strokeLinecap="round"
+                      strokeDasharray={circ}
+                      strokeDashoffset={offset}
+                    />
+                  </svg>
+                  <div className={`seo-ring-num ${isPerfect ? 'seo-ring-num--grad' : 'seo-ring-num--partial'}`}>{score}</div>
+                </div>
+                <div className="seo-score-lbl">{label}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {scoreRings.length > 0 && cwvItems.length > 0 && <div className="seo-div" />}
+
+      {cwvItems.length > 0 && (
+        <div className="seo-vitals">
+          {cwvItems.map(({ key, label, display, cat, pct }) => {
+            const cLabel = catLabel(cat);
+            const isGood = cat === 'FAST';
+            const tone = isGood ? 'cyan' : 'pink';
+            return (
+              <div className="seo-vital-row" key={key}>
+                <div className="seo-vital-meta">
+                  <span className="seo-vital-key">{label}</span>
+                  <div className="seo-vital-val">
+                    <span className={`seo-vital-n seo-vital-n--${tone}`}>{display}</span>
+                    {cLabel && <span className={`seo-vital-badge seo-vital-badge--${isGood ? 'fast' : 'avg'}`}>{cLabel}</span>}
+                  </div>
+                </div>
+                <div className="seo-vital-bar">
+                  <i className={tone} style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {cwvItems.length > 0 && diagItems.length > 0 && <div className="seo-div" />}
+
+      {diagItems.length > 0 && (() => {
+        const parseNum = (str) => {
+          if (str == null) return null;
+          const n = parseFloat(String(str).replace(/,/g, ''));
+          return isNaN(n) ? null : n;
+        };
+        const diagNums = diagItems.map((d) => parseNum(d.value));
+        const maxNum   = Math.max(...diagNums.filter((n) => n != null), 0.001);
+        return (
+          <div className="seo-diag-row">
+            {diagItems.map((d, i) => {
+              const num = diagNums[i];
+              const barPct = num != null ? Math.max(4, (num / maxNum) * 100) : null;
+              return (
+                <div className="seo-diag-tile" key={d.id}>
+                  <div className="seo-diag-num">{d.value}</div>
+                  <div className="seo-diag-lbl">{d.label}</div>
+                  {barPct != null && (
+                    <div className="seo-diag-bar">
+                      <i style={{ width: `${barPct}%` }} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+    </div>
+  );
+};
 
 const renderViz = (type, countdownHours) => {
   switch (type) {
@@ -5426,23 +5482,34 @@ const dashboardCss = `
     letter-spacing: -0.02em;
     line-height: 1.2;
   }
-  #tile-detail-chat-sub {
-    font-size: 0.72rem;
-    color: var(--text-secondary);
-    letter-spacing: 0.01em;
-    line-height: 1.2;
+  .tile-detail-chat-toggle {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid rgba(42,36,32,0.15);
+    border-radius: 999px;
+    overflow: hidden;
+    flex-shrink: 0;
   }
-  #tile-detail-chat-badge {
+  .tile-detail-chat-toggle-btn {
     font-family: var(--font-mono);
     font-size: 9px;
     font-weight: 700;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-secondary);
-    border: 1px solid rgba(42,36,32,0.15);
-    border-radius: 999px;
+    background: transparent;
+    border: none;
     padding: 4px 10px;
-    flex-shrink: 0;
+    cursor: pointer;
+    transition: color 0.15s ease, background 0.15s ease;
+  }
+  .tile-detail-chat-toggle-btn--active {
+    background: rgba(42,36,32,0.08);
+    color: var(--text-primary);
+  }
+  .tile-detail-chat-toggle-btn:hover:not(.tile-detail-chat-toggle-btn--active) {
+    color: var(--text-primary);
+    background: rgba(42,36,32,0.04);
   }
   #tile-detail-chat-bot-msg {
     display: flex;
@@ -5502,13 +5569,18 @@ const dashboardCss = `
     padding: 0;
     border-radius: 999px;
     border: none;
-    background: linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+    background: var(--text-primary);
     color: #fff;
     font-size: 0.82rem;
     font-weight: 700;
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+  }
+  #tile-detail-chat-send-btn:hover:not(:disabled) {
+    opacity: 0.85;
+    transform: scale(1.02);
   }
   #tile-detail-chat-send-avatar {
     width: 1.6rem;
@@ -5519,25 +5591,28 @@ const dashboardCss = `
     border: 2px solid rgba(255,255,255,0.35);
     flex-shrink: 0;
   }
-  #tile-detail-chat-footer {
+  .tile-detail-chat--inactive {
     display: flex;
-    align-items: center;
-    gap: 10px;
+    flex-direction: column;
+    gap: 12px;
+    opacity: 0.55;
+    filter: grayscale(0.35);
+    user-select: none;
   }
-  .tile-detail-chat-footer-link {
-    font-size: 0.78rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-    text-decoration: none;
-    letter-spacing: 0.01em;
-    transition: color 0.15s ease;
+  .tile-detail-chat-status-dot--inactive {
+    background: #9ca3af !important;
+    border-color: rgba(255,255,255,0.8) !important;
   }
-  .tile-detail-chat-footer-link:hover {
-    color: var(--text-display);
+  .tile-detail-chat-bot-dot--inactive {
+    background: #9ca3af !important;
   }
-  #tile-detail-chat-footer-dot {
+  .tile-detail-chat--inactive #tile-detail-chat-input {
+    background: rgba(255,255,255,0.55);
+    border-color: rgba(42,36,32,0.12);
     color: var(--text-disabled);
-    font-size: 0.78rem;
+  }
+  .tile-detail-chat--inactive #tile-detail-chat-send-btn {
+    opacity: 0.5;
   }
   /* ── Mobile: vertical single column ── */
   @media (max-width: 680px) {
@@ -5836,6 +5911,8 @@ const dashboardCss = `
   .tile-solution-card.severity-critical { border-left-color: hsl(262,100%,55%); }
   .tile-solution-card.severity-warning  { border-left-color: hsl(185,100%,45%); }
   .tile-solution-card.severity-info     { border-left-color: hsl(314,100%,50%); }
+  /* Gap-sourced cards override the severity border to match the PROBLEMS-tab gap treatment. */
+  .tile-solution-card.source-gap        { border-left-color: #ff5c8a; }
   .tile-solution-header {
     display: flex;
     flex-direction: column;
@@ -5884,6 +5961,8 @@ const dashboardCss = `
     gap: 12px;
     margin-top: 4px;
   }
+  .tile-solution-actions .tile-solution-diy-toggle-btn { order: 1; }
+  .tile-solution-actions .tile-solution-expert-cta { order: 2; }
   /* Collapsible DIY — sits at the bottom of the solution card */
   .tile-solution-diy-details {
     margin: 0;
@@ -5911,7 +5990,24 @@ const dashboardCss = `
     padding: 4px 0;
     user-select: none;
   }
+  .tile-solution-diy-summary-toggle--hidden {
+    display: none;
+  }
   .tile-solution-diy-summary-toggle::-webkit-details-marker { display: none; }
+  .tile-solution-diy-toggle-btn {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    user-select: none;
+  }
+  .tile-solution-diy-toggle-btn:hover .tile-solution-diy-toggle-label {
+    color: hsl(185,100%,55%);
+  }
   .tile-solution-diy-summary-toggle::before {
     content: '+';
     display: inline-block;
@@ -6267,153 +6363,218 @@ const dashboardCss = `
     height: 100%;
     display: flex;
     flex-direction: column;
+    justify-content: flex-start;
+    gap: 0.4em;
+    padding: 6px;
+    box-sizing: border-box;
+    min-height: 0;
+    overflow: hidden;
+    container-type: size;
+    font-size: clamp(4px, min(3cqi, 3.5cqh), 12px);
+  }
+  .seo-grad-defs {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+  }
+  .seo-scores {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+    gap: 0.5em;
+    flex: 1 1 0%;
+    min-height: 0;
+    width: 100%;
+  }
+  .seo-score-tile {
+    display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    padding: 10px 12px;
-    box-sizing: border-box;
-  }
-  #seo-perf-rings-row {
-    display: flex;
-    gap: 6px;
-    justify-content: space-around;
-    align-items: center;
-    width: 100%;
-  }
-  .seo-ring-cell {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0;
-  }
-  .seo-ring-svg {
-    display: block;
-    width: clamp(34px, 6vw, 52px);
-    height: clamp(34px, 6vw, 52px);
-  }
-  #seo-perf-cwv-row {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    width: 100%;
-  }
-  .seo-cwv-item {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-  }
-  .seo-cwv-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-  }
-  .seo-cwv-label {
-    font-family: var(--font-mono);
-    font-size: 8px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--text-secondary);
-  }
-  .seo-cwv-val {
-    font-family: var(--font-mono);
-    font-size: 9px;
-    color: var(--text-primary);
-    letter-spacing: 0.04em;
-  }
-  .seo-cwv-val--success { color: var(--success); }
-  .seo-cwv-val--warning { color: var(--warning); }
-  .seo-cwv-val--danger  { color: var(--accent); }
-  .seo-cwv-bar-track {
-    width: 100%;
-    height: 3px;
-    background: var(--border);
-    border-radius: 999px;
-    overflow: hidden;
-  }
-  .seo-cwv-bar-fill {
-    height: 100%;
-    border-radius: 999px;
-    background: var(--text-secondary);
-    transition: width 600ms var(--ease);
-  }
-  .seo-cwv-bar-fill--success { background: var(--success); }
-  .seo-cwv-bar-fill--warning { background: var(--warning); }
-  .seo-cwv-bar-fill--danger  { background: var(--accent); }
-  #seo-perf-diag-row {
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    padding-top: 7px;
-    border-top: 1px solid var(--border);
-  }
-  #seo-perf-diag-heading {
-    font-family: var(--font-mono);
-    font-size: 7px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--text-secondary);
-    margin-bottom: 2px;
-  }
-  #seo-perf-diag-cards {
-    display: flex;
-    gap: 6px;
-    width: 100%;
-  }
-  .seo-diag-card {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding: 5px 7px 6px;
-    border-radius: 6px;
-    background: transparent;
-    border: 1px solid var(--border);
+    gap: 0.35em;
+    padding: 0.5em 0.3em;
+    background: rgba(255,255,255,0.55);
+    border: 1px solid rgba(212,196,171,0.82);
+    border-radius: 1.1em;
     min-width: 0;
-    overflow: hidden;
+    height: 100%;
   }
-  .seo-diag-card-val {
-    font-family: var(--font-mono);
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--warning);
-    letter-spacing: 0.01em;
-    line-height: 1;
-    white-space: nowrap;
+  .seo-ring-wrap {
+    position: relative;
+    width: clamp(3em, 8cqi, 5.5em);
+    height: clamp(3em, 8cqi, 5.5em);
+    flex-shrink: 0;
   }
-  .seo-diag-card-label {
-    font-family: var(--font-mono);
-    font-size: 7px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-secondary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    line-height: 1.3;
-  }
-  .seo-diag-bar-track {
+  .seo-ring-wrap svg {
     width: 100%;
-    height: 3px;
-    background: var(--border);
-    border-radius: 999px;
-    overflow: hidden;
-    margin-top: 3px;
+    height: 100%;
+    transform: rotate(-90deg);
+    display: block;
   }
-  .seo-diag-bar-fill {
+  .seo-ring-track {
+    fill: none;
+    stroke: rgba(0,0,0,0.07);
+    stroke-width: 5;
+    stroke-linecap: round;
+  }
+  .seo-ring-num {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Doto', var(--font-display), sans-serif;
+    font-weight: 900;
+    font-size: 1.4em;
+    line-height: 1;
+  }
+  .seo-ring-num--grad {
+    background: linear-gradient(92deg, #00cfff, #7b5fff, #ff3de8);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .seo-ring-num--partial {
+    color: #ff3de8;
+  }
+  .seo-score-lbl {
+    font-family: 'Space Mono', var(--font-mono), monospace;
+    font-size: 0.62em;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #5a5346;
+    text-align: center;
+    line-height: 1.2;
+  }
+  .seo-div {
+    display: none;
+  }
+  .seo-vitals {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35em;
+    flex: 1 1 0%;
+    min-height: 0;
+    justify-content: center;
+    width: 100%;
+  }
+  .seo-vital-row {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.2em;
+    flex: 1 1 0%;
+    min-height: 0;
+  }
+  .seo-vital-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5em;
+  }
+  .seo-vital-key {
+    font-family: 'Space Mono', var(--font-mono), monospace;
+    font-size: 0.72em;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: #0a0a0a;
+    font-weight: 700;
+  }
+  .seo-vital-val {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+  }
+  .seo-vital-n {
+    font-family: 'Doto', var(--font-display), sans-serif;
+    font-weight: 900;
+    font-size: 1.3em;
+    line-height: 1;
+    letter-spacing: 0;
+  }
+  .seo-vital-n--pink { color: #ff3de8; }
+  .seo-vital-n--cyan { color: #00cfff; }
+  .seo-vital-badge {
+    font-family: 'Space Mono', var(--font-mono), monospace;
+    font-size: 0.6em;
+    letter-spacing: 0.2em;
+    padding: 0.28em 0.7em;
+    border-radius: 999px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .seo-vital-badge--avg {
+    background: rgba(255,61,232,0.08);
+    color: #ff3de8;
+    border: 1px solid rgba(255,61,232,0.30);
+  }
+  .seo-vital-badge--fast {
+    background: rgba(0,207,255,0.08);
+    color: #00cfff;
+    border: 1px solid rgba(0,207,255,0.32);
+  }
+  .seo-vital-bar {
+    height: 0.5em;
+    border-radius: 999px;
+    background: rgba(0,0,0,0.07);
+    overflow: hidden;
+  }
+  .seo-vital-bar > i {
+    display: block;
     height: 100%;
     border-radius: 999px;
-    background: var(--warning);
-    transition: width 600ms var(--ease);
   }
-  @media (max-width: 480px) {
-    .seo-ring-svg { width: 30px; height: 30px; }
-    #seo-perf-rings-row { gap: 3px; }
-    .ring-val { font-size: 9px; margin-top: 3px; }
-    .ring-label { font-size: 6px; }
-    .seo-cwv-label { font-size: 6.5px; }
-    .seo-cwv-val { font-size: 7.5px; }
-    #seo-perf-viz-shell { gap: 7px; padding: 8px 8px; }
+  .seo-vital-bar > i.pink { background: linear-gradient(90deg, #ff3de8, #7b5fff); }
+  .seo-vital-bar > i.cyan { background: linear-gradient(90deg, #00cfff, #7b5fff); }
+  .seo-diag-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5em;
+    flex: 1 1 0%;
+    min-height: 0;
+    width: 100%;
+  }
+  .seo-diag-tile {
+    background: rgba(255,255,255,0.55);
+    border: 1px solid rgba(212,196,171,0.82);
+    border-radius: 1em;
+    padding: 0.5em 0.7em;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.25em;
+    min-width: 0;
+    height: 100%;
+  }
+  .seo-diag-num {
+    font-family: 'Doto', var(--font-display), sans-serif;
+    font-weight: 900;
+    font-size: clamp(1.6em, 5cqh, 3em);
+    line-height: 0.9;
+    background: linear-gradient(92deg, #00cfff, #7b5fff, #ff3de8);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .seo-diag-lbl {
+    font-family: 'Space Mono', var(--font-mono), monospace;
+    font-size: clamp(0.55em, 1.8cqh, 0.85em);
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: #5a5346;
+  }
+  .seo-diag-bar {
+    height: 0.4em;
+    border-radius: 999px;
+    background: rgba(0,0,0,0.07);
+    overflow: hidden;
+    margin-top: auto;
+  }
+  .seo-diag-bar > i {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #00cfff, #7b5fff, #ff3de8);
   }
   .spark-val { font-family: var(--font-mono); font-size: 24px; color: var(--text-display); line-height: 1; margin-bottom: 4px; }
   .spark-val .unit, .countdown .unit, .countdown-meta, .chip { font-family: var(--font-mono); text-transform: uppercase; }

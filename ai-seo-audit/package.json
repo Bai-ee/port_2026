@@ -1,0 +1,19 @@
+{
+  "name": "ai-seo-audit",
+  "version": "1.0.0",
+  "description": "AI/GEO visibility audit engine for the scout-intake pipeline and standalone consulting use",
+  "type": "module",
+  "main": "src/audit.js",
+  "scripts": {
+    "start": "node src/audit.js",
+    "test": "node --test src/__tests__/",
+    "serve": "node src/server.js"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "node-fetch": "^3.3.2"
+  },
+  "optionalDependencies": {
+    "playwright": "^1.40.0"
+  }
+}

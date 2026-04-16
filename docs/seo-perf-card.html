@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>SEO + Performance · Card</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700;900&family=Space+Grotesk:wght@300..700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{
+    min-height:100vh;
+    font-family:"Space Grotesk",sans-serif;
+    display:flex;align-items:center;justify-content:center;
+    padding:clamp(12px,3vw,32px);
+    background:
+      radial-gradient(60vw 40vw at 0% 10%,   rgba(0,207,255,.18) 0%, transparent 65%),
+      radial-gradient(50vw 36vw at 100% 40%,  rgba(123,95,255,.20) 0%, transparent 65%),
+      radial-gradient(50vw 36vw at 0% 90%,    rgba(255,61,232,.16) 0%, transparent 65%),
+      linear-gradient(180deg,#fefdf9 0%,#fbf8f0 100%);
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ── SCALE SYSTEM ──────────────────────────────────────────────
+     1em = card-width / 64.
+     At max card width 880px  → font-size ≈ 13.75px
+     At min viewport 320px   → font-size ≈ 5px (clamped)
+     Everything inside uses em so the whole card scales as one unit.
+  ─────────────────────────────────────────────────────────────── */
+  .card{
+    width:min(880px,95vw);
+    aspect-ratio:16/9;
+    /* drive all em units from this one clamp */
+    font-size:clamp(5px, 1.5625vw, 13.75px);
+    overflow:hidden;
+
+    background:rgba(255,255,255,.62);
+    border:1px solid rgba(212,196,171,.82);
+    border-radius:1.6em;
+    box-shadow:0 .15em 0 rgba(255,255,255,.65) inset,
+               0 1.5em 4em rgba(123,95,255,.12);
+
+    padding:1.6em 2em 1.4em;
+    display:flex;flex-direction:column;gap:0;
+  }
+
+  /* ── SVG RING GRADIENT ── */
+  .grad-defs{position:absolute;width:0;height:0;overflow:hidden}
+
+  /* ── SCORES ── */
+  .scores{
+    display:grid;grid-template-columns:repeat(4,1fr);
+    gap:.8em;
+    flex:0 0 auto;
+    margin-bottom:.9em;
+  }
+  .score-tile{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:.55em;
+    padding:.8em .5em;
+    background:rgba(255,255,255,.55);
+    border:1px solid rgba(212,196,171,.82);
+    border-radius:1.1em;
+  }
+  .ring-wrap{
+    position:relative;
+    width:4em;height:4em;
+    flex-shrink:0;
+  }
+  .ring-wrap svg{width:100%;height:100%;transform:rotate(-90deg);display:block}
+  .ring-track{fill:none;stroke:rgba(0,0,0,.07);stroke-width:5;stroke-linecap:round}
+  .ring-num{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-family:"Doto";font-weight:900;font-size:1.4em;line-height:1;
+  }
+  .ring-num.grad{
+    background:linear-gradient(92deg,#00cfff,#7b5fff,#ff3de8);
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  }
+  .ring-num.partial{color:#ff3de8}
+  .score-lbl{
+    font-family:"Space Mono";font-size:.62em;letter-spacing:.2em;
+    text-transform:uppercase;color:#5a5346;text-align:center;line-height:1.2;
+  }
+
+  /* ── DIVIDER ── */
+  .div{height:1px;background:rgba(0,0,0,.07);flex-shrink:0;margin:.5em 0}
+
+  /* ── VITALS ── */
+  .vitals{
+    display:flex;flex-direction:column;gap:.55em;
+    flex:0 0 auto;margin-bottom:.5em;
+  }
+  .vital-row{display:flex;flex-direction:column;gap:.3em}
+  .vital-meta{display:flex;align-items:center;justify-content:space-between;gap:.5em}
+  .vital-meta .key{
+    font-family:"Space Mono";font-size:.72em;letter-spacing:.22em;
+    text-transform:uppercase;color:#0a0a0a;font-weight:700;
+  }
+  .vital-meta .val{display:flex;align-items:center;gap:.5em}
+  .vital-meta .val .n{
+    font-family:"Doto";font-weight:900;font-size:1.3em;line-height:1;letter-spacing:0;
+  }
+  .vital-meta .val .n.pink{color:#ff3de8}
+  .vital-meta .val .n.cyan{color:#00cfff}
+  .vital-meta .val .badge{
+    font-family:"Space Mono";font-size:.6em;letter-spacing:.2em;
+    padding:.28em .7em;border-radius:999px;text-transform:uppercase;white-space:nowrap;
+  }
+  .vital-meta .val .badge.avg{
+    background:rgba(255,61,232,.08);color:#ff3de8;border:1px solid rgba(255,61,232,.30);
+  }
+  .vital-meta .val .badge.fast{
+    background:rgba(0,207,255,.08);color:#00cfff;border:1px solid rgba(0,207,255,.32);
+  }
+  .vital-bar{
+    height:.5em;border-radius:999px;
+    background:rgba(0,0,0,.07);overflow:hidden;
+  }
+  .vital-bar > i{display:block;height:100%;border-radius:999px}
+  .vital-bar > i.pink{background:linear-gradient(90deg,#ff3de8,#7b5fff)}
+  .vital-bar > i.cyan{background:linear-gradient(90deg,#00cfff,#7b5fff)}
+
+  /* ── DIAGNOSTICS ── */
+  .diag-row{
+    display:grid;grid-template-columns:1fr 1fr;
+    gap:.8em;flex:0 0 auto;
+  }
+  .diag-tile{
+    background:rgba(255,255,255,.55);
+    border:1px solid rgba(212,196,171,.82);
+    border-radius:1em;
+    padding:.75em 1em;
+    display:flex;flex-direction:column;gap:.4em;
+  }
+  .diag-tile .d-num{
+    font-family:"Doto";font-weight:900;font-size:2.2em;line-height:.9;
+    background:linear-gradient(92deg,#00cfff,#7b5fff,#ff3de8);
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  }
+  .diag-tile .d-lbl{
+    font-family:"Space Mono";font-size:.62em;letter-spacing:.22em;
+    text-transform:uppercase;color:#5a5346;
+  }
+  .diag-tile .d-bar{
+    height:.4em;border-radius:999px;
+    background:rgba(0,0,0,.07);overflow:hidden;
+    margin-top:auto;
+  }
+  .diag-tile .d-bar > i{
+    display:block;height:100%;border-radius:999px;
+    background:linear-gradient(90deg,#00cfff,#7b5fff,#ff3de8);
+  }
+</style>
+</head>
+<body>
+
+<!-- shared SVG gradient defs -->
+<svg class="grad-defs" aria-hidden="true">
+  <defs>
+    <linearGradient id="rg" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#00cfff"/>
+      <stop offset="48%"  stop-color="#7b5fff"/>
+      <stop offset="100%" stop-color="#ff3de8"/>
+    </linearGradient>
+    <linearGradient id="rg-v" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#00cfff"/>
+      <stop offset="100%" stop-color="#ff3de8"/>
+    </linearGradient>
+  </defs>
+</svg>
+
+<div class="card">
+
+  <!-- SCORES -->
+  <div class="scores">
+
+    <!-- Performance 88 -->
+    <div class="score-tile">
+      <div class="ring-wrap">
+        <svg viewBox="0 0 64 64">
+          <circle class="ring-track" cx="32" cy="32" r="27"/>
+          <!-- circ≈169.6 · 88%=149.2 · offset=20.4 -->
+          <circle cx="32" cy="32" r="27" fill="none" stroke="url(#rg-v)"
+            stroke-width="5" stroke-linecap="round"
+            stroke-dasharray="169.6" stroke-dashoffset="20.4"/>
+        </svg>
+        <div class="ring-num partial">88</div>
+      </div>
+      <div class="score-lbl">Performance</div>
+    </div>
+
+    <!-- SEO 100 -->
+    <div class="score-tile">
+      <div class="ring-wrap">
+        <svg viewBox="0 0 64 64">
+          <circle class="ring-track" cx="32" cy="32" r="27"/>
+          <circle cx="32" cy="32" r="27" fill="none" stroke="url(#rg)"
+            stroke-width="5" stroke-linecap="round"
+            stroke-dasharray="169.6" stroke-dashoffset="0"/>
+        </svg>
+        <div class="ring-num grad">100</div>
+      </div>
+      <div class="score-lbl">SEO</div>
+    </div>
+
+    <!-- Accessibility 100 -->
+    <div class="score-tile">
+      <div class="ring-wrap">
+        <svg viewBox="0 0 64 64">
+          <circle class="ring-track" cx="32" cy="32" r="27"/>
+          <circle cx="32" cy="32" r="27" fill="none" stroke="url(#rg)"
+            stroke-width="5" stroke-linecap="round"
+            stroke-dasharray="169.6" stroke-dashoffset="0"/>
+        </svg>
+        <div class="ring-num grad">100</div>
+      </div>
+      <div class="score-lbl">Accessibility</div>
+    </div>
+
+    <!-- Best Practices 100 -->
+    <div class="score-tile">
+      <div class="ring-wrap">
+        <svg viewBox="0 0 64 64">
+          <circle class="ring-track" cx="32" cy="32" r="27"/>
+          <circle cx="32" cy="32" r="27" fill="none" stroke="url(#rg)"
+            stroke-width="5" stroke-linecap="round"
+            stroke-dasharray="169.6" stroke-dashoffset="0"/>
+        </svg>
+        <div class="ring-num grad">100</div>
+      </div>
+      <div class="score-lbl">Best Practices</div>
+    </div>
+
+  </div>
+
+  <div class="div"></div>
+
+  <!-- VITALS -->
+  <div class="vitals">
+
+    <div class="vital-row">
+      <div class="vital-meta">
+        <span class="key">LCP</span>
+        <div class="val">
+          <span class="n pink">3.6s</span>
+          <span class="badge avg">Average</span>
+        </div>
+      </div>
+      <div class="vital-bar"><i class="pink" style="width:62%"></i></div>
+    </div>
+
+    <div class="vital-row">
+      <div class="vital-meta">
+        <span class="key">CLS</span>
+        <div class="val">
+          <span class="n cyan">0.00</span>
+          <span class="badge fast">Fast</span>
+        </div>
+      </div>
+      <div class="vital-bar"><i class="cyan" style="width:100%"></i></div>
+    </div>
+
+  </div>
+
+  <div class="div"></div>
+
+  <!-- DIAGNOSTICS -->
+  <div class="diag-row">
+    <div class="diag-tile">
+      <div class="d-num">0.8s</div>
+      <div class="d-lbl">JS Bootup</div>
+      <div class="d-bar"><i style="width:40%"></i></div>
+    </div>
+    <div class="diag-tile">
+      <div class="d-num">1.4s</div>
+      <div class="d-lbl">Main Thread</div>
+      <div class="d-bar"><i style="width:70%"></i></div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
