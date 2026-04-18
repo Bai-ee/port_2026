@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<!-- saved from url=(0227)file:///Users/bballi/Library/Application%20Support/Claude/local-agent-mode-sessions/b6552719-3cf8-4bf3-896d-0b0fa9217bb6/568ee8cb-acf1-48ef-b021-5a82f4e6a9c4/local_2c3299f3-f2c9-44a7-9e6c-24f92a1d792e/outputs/pricing-modal.html -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pricing · Vol. 01</title>
+<link rel="preconnect" href="https://fonts.googleapis.com/">
+<link rel="preconnect" href="https://fonts.gstatic.com/" crossorigin="">
+<link href="./Pricing · Vol. 01_files/css2" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0a0a0a;
+    --ink-soft:#5a5346;
+    --line:rgba(212,196,171,0.82);
+    --card:rgba(255,255,255,0.6);
+    --hl:rgba(255,255,255,0.65);
+    --grad:linear-gradient(92deg,#7a5cff 0%,#b14bff 38%,#ff4fa1 72%,#ff7a3a 100%);
+    --gutter:max(6vw, calc((100% - 1240px) / 2));
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:"Space Grotesk",system-ui,sans-serif; color:var(--ink);
+    min-height:100vh;
+    background:
+      radial-gradient(700px 420px at 0% 4%,    rgba(255,120,90,0.38) 0%, transparent 65%),
+      radial-gradient(620px 380px at 100% 16%, rgba(176,90,255,0.32) 0%, transparent 65%),
+      radial-gradient(700px 420px at 0% 30%,   rgba(255,90,160,0.32) 0%, transparent 65%),
+      radial-gradient(600px 380px at 100% 44%, rgba(90,140,255,0.30) 0%, transparent 65%),
+      radial-gradient(720px 440px at 0% 58%,   rgba(255,180,90,0.32) 0%, transparent 65%),
+      radial-gradient(620px 400px at 100% 72%, rgba(200,90,255,0.30) 0%, transparent 65%),
+      radial-gradient(660px 400px at 0% 86%,   rgba(120,200,255,0.28) 0%, transparent 65%),
+      radial-gradient(560px 360px at 100% 98%, rgba(255,120,160,0.28) 0%, transparent 65%),
+      linear-gradient(180deg, #fefdf9 0%, #fbf8f0 50%, #fdfaf2 100%);
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:"Space Mono",ui-monospace,monospace}
+
+  /* Trigger */
+  .stage{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:40px 20px;flex-direction:column;gap:24px;text-align:center}
+  .stage h1{font-family:"Doto",monospace;font-weight:900;font-size:clamp(60px,12vw,160px);line-height:.9;margin:0;text-transform:uppercase}
+  .stage p{font-family:"Space Grotesk";font-weight:300;font-size:clamp(18px,2vw,24px);max-width:48ch;margin:0;color:#1a1a1a}
+  .open-btn{
+    display:inline-flex;align-items:center;gap:10px;
+    padding:14px 26px; border-radius:999px; color:#fff; border:0; cursor:pointer;
+    font-family:"Space Grotesk"; font-size:15px; font-weight:500;
+    background:var(--grad);
+    box-shadow:0 1px 0 rgba(255,255,255,0.35) inset, 0 10px 30px rgba(122,92,255,0.3);
+  }
+
+  /* ======== MODAL SHELL ======== */
+  .scrim{
+    position:fixed; inset:0; z-index:100;
+    background:rgba(20,16,8,.45);
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    display:none; align-items:flex-start; justify-content:center;
+    padding:clamp(16px,4vw,48px); overflow:auto;
+  }
+  .scrim.open{display:flex}
+  .modal{
+    width:min(1320px,100%);
+    background:
+      radial-gradient(600px 360px at 0% 2%,    rgba(255,120,90,0.22) 0%, transparent 65%),
+      radial-gradient(520px 320px at 100% 12%, rgba(176,90,255,0.20) 0%, transparent 65%),
+      radial-gradient(600px 360px at 0% 52%,   rgba(255,90,160,0.18) 0%, transparent 65%),
+      radial-gradient(520px 320px at 100% 72%, rgba(90,140,255,0.18) 0%, transparent 65%),
+      radial-gradient(560px 340px at 0% 96%,   rgba(255,180,90,0.20) 0%, transparent 65%),
+      linear-gradient(180deg, #fefdf9 0%, #fbf8f0 50%, #fdfaf2 100%);
+    border:1px solid var(--line);
+    border-radius:28px;
+    box-shadow:0 40px 120px rgba(20,16,8,.35), 0 1px 0 var(--hl) inset;
+    overflow:hidden; position:relative;
+  }
+
+  /* Modal top bar */
+  .m-top{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:18px 28px; border-bottom:1px solid rgba(0,0,0,.06);
+    font-family:"Space Mono"; font-size:11px; letter-spacing:.22em; text-transform:uppercase; color:var(--ink-soft);
+    background:rgba(255,255,255,.35); backdrop-filter:blur(6px);
+  }
+  .m-top .left{display:flex;gap:18px;align-items:center}
+  .m-top .dot{width:7px;height:7px;background:var(--ink);border-radius:50%}
+  .m-close{
+    width:36px;height:36px;border-radius:50%;
+    border:1px solid rgba(0,0,0,.1); background:#fff; cursor:pointer;
+    display:inline-flex;align-items:center;justify-content:center;
+    font-family:"Space Mono"; font-size:14px;
+  }
+
+  /* Marquee band */
+  .m-marquee{
+    overflow:hidden; white-space:nowrap;
+    font-family:"Doto",monospace; font-weight:900;
+    font-size:clamp(22px,4vw,56px); text-transform:uppercase;
+    line-height:1; letter-spacing:.02em;
+    border-bottom:1px solid rgba(0,0,0,.12);
+    padding:8px 0; text-align:center;
+  }
+
+  /* Hero row */
+  .m-hero{
+    display:grid;grid-template-columns:1fr 1.4fr;gap:clamp(16px,2.4vw,36px);
+    padding:20px clamp(20px,3vw,40px) 16px;
+    align-items:center;
+  }
+  @media(max-width:900px){.m-hero{grid-template-columns:1fr}}
+  .m-hero h2{
+    font-family:"Doto",monospace;font-weight:900;letter-spacing:-.01em;line-height:.88;
+    font-size:clamp(30px,4vw,54px);margin:0;text-transform:uppercase;
+  }
+  .m-hero .lede{
+    font-family:"Space Grotesk";font-weight:300;font-size:clamp(13px,1.2vw,16px);line-height:1.4;
+    max-width:56ch;color:#1a1a1a;margin:0;
+  }
+
+  /* Section eyebrow */
+  .m-eyebrow{
+    font-family:"Space Mono"; font-size:10px; letter-spacing:.22em; text-transform:uppercase; color:var(--ink-soft);
+    display:flex; gap:12px; align-items:center;
+    padding:14px clamp(20px,3vw,40px) 10px;
+  }
+  .m-eyebrow .rule{flex:1;height:1px;background:rgba(0,0,0,.12)}
+
+  /* Tier grid */
+  .tiers{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:clamp(8px,1vw,12px);
+    padding:0 clamp(20px,3vw,40px) 16px;
+    align-items:stretch;
+  }
+  @media(max-width:1040px){.tiers{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:620px){.tiers{grid-template-columns:1fr}}
+  .tier{
+    position:relative;
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    box-shadow:0 1px 0 var(--hl) inset, inset 0 1px 0 rgba(255,255,255,0.4);
+    padding:16px 16px 14px; display:flex; flex-direction:column;
+  }
+  .tier .tag{
+    font-family:"Space Mono";font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft);
+    display:flex;align-items:center;gap:8px;margin-bottom:8px;
+  }
+  .tier .tag .d{width:5px;height:5px;border-radius:50%;background:var(--ink)}
+  .tier .name{
+    font-family:"Doto",monospace;font-weight:900;font-size:32px;line-height:.9;
+    text-transform:uppercase;margin:0 0 8px;
+  }
+  .tier .price{
+    display:flex;align-items:baseline;gap:5px; border-top:1px dashed rgba(0,0,0,.15);
+    padding-top:8px; margin-bottom:8px;
+  }
+  .tier .price .amt{font-family:"Doto";font-weight:900;font-size:38px;line-height:1}
+  .tier .price .per{font-family:"Space Mono";font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft)}
+  .tier .pitch{font-family:"Space Grotesk";font-size:12px;line-height:1.4;color:#2a2a2a;margin:0 0 10px}
+  .tier ul{list-style:none;padding:0;margin:0 0 10px;display:flex;flex-direction:column;gap:5px}
+  .tier li{
+    font-family:"Space Grotesk";font-size:12px;line-height:1.35;color:#1a1a1a;
+    padding-left:16px;position:relative;
+  }
+  .tier li::before{
+    content:"→"; position:absolute; left:0; top:0;
+    font-family:"Space Mono"; font-size:11px; color:var(--ink-soft);
+  }
+  .tier .cadence{
+    font-family:"Space Mono";font-size:9px;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--ink-soft); margin-top:auto; padding-top:10px;
+    border-top:1px dashed rgba(0,0,0,.10); margin-bottom:5px;
+  }
+  .tier .replaces{
+    font-family:"Space Mono";font-size:9px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--ink-soft); margin-bottom:10px; line-height:1.4;
+  }
+  .tier .replaces b{color:#0a0a0a;font-family:"Doto";font-weight:900;font-size:13px;letter-spacing:0;display:block;margin-top:3px}
+  .tier .runs{
+    display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:baseline;
+    border:1px solid var(--line);border-radius:10px;
+    background:rgba(255,255,255,.55);
+    padding:6px 10px; margin-bottom:8px;
+  }
+  .tier .runs .r-d{font-family:"Doto";font-weight:900;font-size:22px;line-height:.9;color:#0a0a0a}
+  .tier .runs .r-l{font-family:"Space Mono";font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft)}
+  .tier .runs .r-s{font-family:"Space Mono";font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft);text-align:right;white-space:nowrap}
+  .tier.dominant .runs{background:rgba(255,255,255,.7);border-color:rgba(122,92,255,.3)}
+  .tier.dominant .runs .r-d{font-size:26px;background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .tier .cta{
+    display:inline-flex;align-items:center;justify-content:center;gap:6px;
+    padding:9px 14px;border-radius:999px;
+    font-family:"Space Grotesk";font-size:12px;font-weight:500;text-decoration:none;
+    background:#fff;color:#0a0a0a;border:1px solid rgba(0,0,0,.1);
+    box-shadow:0 1px 0 rgba(255,255,255,.7) inset, 0 1px 2px rgba(0,0,0,.04);
+    cursor:pointer;
+  }
+  .tier.feat{
+    background:rgba(255,255,255,.75);
+    border-color:rgba(122,92,255,.4);
+    box-shadow:0 16px 40px rgba(122,92,255,.18), 0 1px 0 var(--hl) inset;
+  }
+  .tier.feat .cta{
+    background:var(--grad); color:#fff; border:0;
+    box-shadow:0 1px 0 rgba(255,255,255,.35) inset, 0 6px 16px rgba(122,92,255,.3);
+  }
+  .tier .flag{
+    position:absolute; top:0; right:14px;
+    transform:translateY(-50%);
+    background:var(--grad); color:#fff;
+    font-family:"Space Mono";font-size:9px;letter-spacing:.16em;text-transform:uppercase;
+    padding:4px 10px;border-radius:999px;
+    box-shadow:0 4px 12px rgba(122,92,255,.3);
+  }
+
+  /* Replaces block inside tier */
+  .rep-block{
+    border-top:1px dashed rgba(0,0,0,.12); padding-top:8px; margin-bottom:8px;
+  }
+  .rep-h{font-family:"Space Mono";font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:#dc2626;margin-bottom:6px}
+  .rep-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:4px}
+  .rep-list li{
+    font-family:"Space Grotesk";font-size:12px;line-height:1.3;color:#1a1a1a;
+    padding-left:15px;position:relative;
+  }
+  .rep-list li::before{
+    content:"✕"; position:absolute; left:0; top:0;
+    font-family:"Space Mono"; font-size:10px; color:#dc2626;
+  }
+
+  /* Dominant tier — gradient border only, no vertical lift (preserves row height) */
+  .tier.dominant{
+    background:rgba(255,255,255,.85);
+    border:2px solid rgba(122,92,255,.35);
+    box-shadow:0 20px 50px rgba(122,92,255,.12), 0 1px 0 var(--hl) inset;
+    position:relative; z-index:2;
+  }
+  .tier.dominant::before{
+    content:none;
+  }
+  .tier.dominant .name{font-size:36px}
+  .tier.dominant .price .amt{font-size:44px}
+
+  /* Bridge */
+  .bridge{
+    display:flex; align-items:center; gap:14px;
+    padding:0 clamp(20px,3vw,40px) 12px;
+  }
+  .bridge p{
+    font-family:"Space Grotesk";font-weight:300;font-style:italic;
+    font-size:clamp(13px,1.2vw,15px);line-height:1.3;
+    margin:0; color:#1a1a1a; white-space:nowrap;
+  }
+  .bridge-rule{flex:1;height:1px;background:rgba(0,0,0,.15)}
+  @media(max-width:700px){.bridge{flex-direction:column}.bridge-rule{width:60%;height:1px}.bridge p{white-space:normal}}
+
+  /* Kill-shot above matrix */
+  .killshot{
+    padding:6px clamp(20px,3vw,40px) 0;
+    display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:center;
+  }
+  .killshot h3{
+    font-family:"Doto",monospace;font-weight:900;
+    font-size:clamp(28px,4vw,52px);line-height:.92;text-transform:uppercase;
+    margin:0; white-space:nowrap;
+  }
+  .killshot p{
+    font-family:"Space Grotesk";font-weight:300;font-size:13px;
+    line-height:1.4; margin:0; color:#1a1a1a;
+  }
+  @media(max-width:800px){.killshot{grid-template-columns:1fr}}
+
+  /* HITL row */
+  .hitl{
+    display:grid;grid-template-columns:1fr 1fr;gap:clamp(8px,1vw,12px);
+    padding:0 clamp(20px,3vw,40px) 14px;
+    align-items:stretch;
+  }
+  @media(max-width:900px){.hitl{grid-template-columns:1fr}}
+  .hitl .tier .name{font-size:36px}
+  .hitl .tier .price .amt{font-size:38px}
+  .hitl .tier.custom{
+    background:rgba(255,255,255,.65);
+    border-color:rgba(0,0,0,.12);
+  }
+  .hitl .tier.custom .cta{background:#0a0a0a;color:#fff;border:0}
+
+  /* Comparison strip */
+  .compare{
+    padding:0 clamp(20px,3vw,40px) 16px;
+  }
+  .compare-card{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:14px 16px;
+    box-shadow:0 1px 0 var(--hl) inset;
+    overflow-x:auto;
+  }
+  .compare table{width:100%;border-collapse:collapse;min-width:680px}
+  .compare th,.compare td{
+    font-family:"Space Grotesk";font-size:12px;text-align:left;
+    padding:8px 8px; border-bottom:1px solid rgba(0,0,0,.05);
+    vertical-align:middle;
+  }
+  .compare thead th{
+    font-family:"Space Mono";font-size:9px;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--ink-soft); border-bottom:1px solid rgba(0,0,0,.12); padding-bottom:8px;
+  }
+  .compare td.feat-col{text-align:center;font-family:"Space Mono";font-size:12px;color:var(--ink-soft)}
+  .compare td.feat-col .y{color:#166534;font-weight:700}
+  .compare td.feat-col .n{color:rgba(0,0,0,.22)}
+  .compare td.feat-col .p{color:#7a5cff;font-weight:700}
+
+  /* ===== ROLES REPLACED EDITORIAL SPREAD ===== */
+  .roles{padding:0 clamp(28px,4vw,56px) clamp(32px,4vw,56px)}
+  .roles .head{
+    display:grid;grid-template-columns:1.1fr 1fr;gap:clamp(20px,3vw,48px);align-items:end;margin-bottom:24px;
+  }
+  @media(max-width:900px){.roles .head{grid-template-columns:1fr}}
+  .roles .head h3{
+    font-family:"Doto",monospace;font-weight:900;font-size:clamp(40px,6vw,80px);line-height:.92;text-transform:uppercase;margin:0;
+  }
+  .roles .head p{font-family:"Space Grotesk";font-weight:300;font-size:18px;line-height:1.4;max-width:46ch;margin:0;color:#1a1a1a}
+
+  .roles-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:14px}
+  @media(max-width:1100px){.roles-grid{grid-template-columns:repeat(3,1fr)}}
+  @media(max-width:620px){.roles-grid{grid-template-columns:repeat(2,1fr)}}
+  .role-col{
+    background:rgba(255,255,255,.55);border:1px solid var(--line);border-radius:16px;
+    padding:16px;display:flex;flex-direction:column;gap:10px;
+    box-shadow:0 1px 0 var(--hl) inset;
+  }
+  .role-col .head-row{
+    display:flex;align-items:baseline;justify-content:space-between;gap:8px;
+    border-bottom:1px dashed rgba(0,0,0,.15);padding-bottom:10px;
+  }
+  .role-col .nm{font-family:"Doto";font-weight:900;font-size:22px;line-height:.95;text-transform:uppercase}
+  .role-col .pr{font-family:"Space Mono";font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft)}
+  .role-row{display:flex;justify-content:space-between;align-items:baseline;gap:6px;font-family:"Space Grotesk";font-size:12px;line-height:1.3}
+  .role-row .r{color:#1a1a1a}
+  .role-row .s{font-family:"Space Mono";font-size:11px;color:var(--ink-soft);white-space:nowrap}
+  .role-col .total{
+    margin-top:auto;padding-top:10px;border-top:1px solid rgba(0,0,0,.12);
+    display:flex;justify-content:space-between;align-items:baseline;
+  }
+  .role-col .total .lbl{font-family:"Space Mono";font-size:9px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-soft)}
+  .role-col .total .v{font-family:"Doto";font-weight:900;font-size:18px}
+  .role-col.atelier{background:rgba(255,255,255,.65);border-color:rgba(122,92,255,.35)}
+  .role-col.atelier .total .v{color:#7a5cff}
+
+  /* ===== À LA CARTE ===== */
+  .ala{padding:0 clamp(20px,3vw,40px) 16px}
+  .ala-head{
+    display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:center;margin-bottom:12px;
+  }
+  @media(max-width:900px){.ala-head{grid-template-columns:1fr}}
+  .ala-head h3{font-family:"Doto",monospace;font-weight:900;font-size:clamp(28px,4vw,52px);line-height:.92;text-transform:uppercase;margin:0;white-space:nowrap}
+  .ala-head p{font-family:"Space Grotesk";font-weight:300;font-size:13px;line-height:1.4;max-width:52ch;margin:0;color:#1a1a1a}
+
+  .ala-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:clamp(8px,1vw,12px);align-items:stretch}
+  @media(max-width:1100px){.ala-grid{grid-template-columns:repeat(3,1fr)}}
+  @media(max-width:700px){.ala-grid{grid-template-columns:repeat(2,1fr)}}
+  .ala-card{
+    background:rgba(255,255,255,.6);border:1px solid var(--line);border-radius:14px;
+    padding:12px;display:flex;flex-direction:column;gap:6px;
+    box-shadow:0 1px 0 var(--hl) inset;
+  }
+  .ala-card .ec{font-family:"Space Mono";font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft);display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px}
+  .ala-card .nm{font-family:"Doto";font-weight:900;font-size:18px;line-height:.95;text-transform:uppercase;margin:2px 0 0}
+  .ala-card .ds{font-family:"Space Grotesk";font-size:11px;line-height:1.35;color:#2a2a2a;margin:0}
+  .ala-card .pr-row{
+    margin-top:auto;display:flex;justify-content:space-between;align-items:center;
+    border-top:1px dashed rgba(0,0,0,.12);padding-top:8px;
+  }
+  .ala-card .pr-row .pr{font-family:"Doto";font-weight:900;font-size:20px}
+  .ala-card .pr-row .add{
+    font-family:"Space Mono";font-size:9px;letter-spacing:.18em;text-transform:uppercase;
+    padding:5px 10px;border:1px solid rgba(0,0,0,.12);border-radius:999px;background:#fff;color:#0a0a0a;cursor:pointer;text-decoration:none;
+  }
+  .ala-card.bundle{background:rgba(255,255,255,.65);border-color:rgba(255,150,90,.4)}
+  .ala-card.bundle .pr-row .add{background:#0a0a0a;color:#fff;border:0}
+
+  /* Footer */
+  .m-foot{
+    display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
+    padding:12px clamp(20px,3vw,40px);
+    border-top:1px solid rgba(0,0,0,.06);
+    background:rgba(255,255,255,.4);
+    font-family:"Space Mono";font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft);
+  }
+  .m-foot a{color:var(--ink);text-decoration:none;border-bottom:1px dashed var(--ink-soft)}
+
+</style>
+</head>
+<body>
+
+<!-- Demo stage with trigger -->
+<div class="stage">
+  <p class="mono" style="font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--ink-soft);margin:0">Founder Briefs · Vol. 01</p>
+  <h1>See what's<br>working.<br>Fix what's<br>not.</h1>
+  <p>Pick how often you want to know what's happening — and what to do next. One-Time → Weekly → Daily → Continuous.</p>
+  <button class="open-btn" onclick="document.getElementById(&#39;pm&#39;).classList.add(&#39;open&#39;)">View Pricing <span>↗</span></button>
+</div>
+
+<!-- ================= MODAL ================= -->
+<div id="pm" class="scrim open" onclick="if(event.target===this)this.classList.remove(&#39;open&#39;)">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Pricing">
+
+    <div class="m-top">
+      <div class="left">
+        <span class="dot"></span>
+        <span>Founder Briefs · Vol. 01</span>
+        <span>38 Automations · Human-in-the-Loop</span>
+      </div>
+      <button class="m-close" onclick="document.getElementById(&#39;pm&#39;).classList.remove(&#39;open&#39;)" aria-label="Close">✕</button>
+    </div>
+
+    <div class="m-marquee">FOUNDER BRIEFS • FOUNDER BRIEFS • FOUNDER BRIEFS • FOUNDER BRIEFS</div>
+
+    <div class="m-hero">
+      <h2>See what's<br>working.<br>Fix what's<br>not.</h2>
+      <p class="lede">A Founder Brief shows what's working, what's missing, and what to do next. Pick how often you want one — from a one-time snapshot to continuous operation.</p>
+    </div>
+
+    <div class="m-eyebrow"><span>A · Founder Briefs</span><span class="rule"></span><span>One-Time → Weekly → Daily → Continuous (snapshot → tracking → direction → always-on)</span></div>
+
+    <div class="tiers">
+      <!-- TIER 01 — ONE-TIME BRIEF -->
+      <div class="tier">
+        <div class="tag"><span class="d"></span>Tier 01 · Free · One-Time</div>
+        <h3 class="name">One-Time<br>Brief.</h3>
+        <div class="price"><span class="amt">$0</span><span class="per">one-time</span></div>
+        <p class="pitch">Your first look. A full snapshot of your business, site, and visibility. Runs once. Establishes your baseline.</p>
+        <div class="rep-block">
+          <div class="rep-h">Replaces</div>
+          <ul class="rep-list">
+            <li>Brand + site breakdown</li>
+            <li>SEO + performance signals</li>
+            <li>Social preview + visibility</li>
+            <li>Market category + positioning</li>
+          </ul>
+        </div>
+        <div class="cadence">Frequency · Once</div>
+        <div class="runs"><span class="r-d">1</span><span class="r-l">brief · ever</span><span class="r-s">on demand</span></div>
+        <div class="replaces">Equivalent to · ~ $1.2K project<b>$0 forever</b></div>
+        <a class="cta" href="file:///Users/bballi/Library/Application%20Support/Claude/local-agent-mode-sessions/b6552719-3cf8-4bf3-896d-0b0fa9217bb6/568ee8cb-acf1-48ef-b021-5a82f4e6a9c4/local_2c3299f3-f2c9-44a7-9e6c-24f92a1d792e/outputs/pricing-modal.html#">Create dashboard <span>↗</span></a>
+      </div>
+
+      <!-- TIER 02 — WEEKLY BRIEF -->
+      <div class="tier">
+        <div class="tag"><span class="d"></span>Tier 02 · Weekly</div>
+        <h3 class="name">Weekly<br>Brief.</h3>
+        <div class="price"><span class="amt">$5</span><span class="per">/ month</span></div>
+        <p class="pitch">A weekly update on how your business shows up and what's changing. Tracks competitors, visibility, and trends.</p>
+        <div class="rep-block">
+          <div class="rep-h">Replaces</div>
+          <ul class="rep-list">
+            <li>Competitor activity</li>
+            <li>Search visibility shifts</li>
+            <li>Local + social signals</li>
+            <li>Emerging trends</li>
+          </ul>
+        </div>
+        <div class="cadence">Frequency · 1× / week</div>
+        <div class="runs"><span class="r-d">1</span><span class="r-l">brief / week</span><span class="r-s">~ 4 / mo</span></div>
+        <div class="replaces">Equivalent to · social listening intern<b>~ $4K / mo</b></div>
+        <a class="cta" href="file:///Users/bballi/Library/Application%20Support/Claude/local-agent-mode-sessions/b6552719-3cf8-4bf3-896d-0b0fa9217bb6/568ee8cb-acf1-48ef-b021-5a82f4e6a9c4/local_2c3299f3-f2c9-44a7-9e6c-24f92a1d792e/outputs/pricing-modal.html#">Start weekly <span>↗</span></a>
+      </div>
+
+      <!-- TIER 03 — DAILY BRIEF -->
+      <div class="tier">
+        <div class="tag"><span class="d"></span>Tier 03 · Daily</div>
+        <h3 class="name">Daily<br>Brief.</h3>
+        <div class="price"><span class="amt">$29</span><span class="per">/ month</span></div>
+        <p class="pitch">Daily direction on what to fix, post, and prioritize. Turns signals into clear actions.</p>
+        <div class="rep-block">
+          <div class="rep-h">Replaces</div>
+          <ul class="rep-list">
+            <li>Daily priority action</li>
+            <li>Content direction</li>
+            <li>Post-ready drafts</li>
+            <li>Strategy tied to signals</li>
+          </ul>
+        </div>
+        <div class="cadence">Frequency · 1× / day</div>
+        <div class="runs"><span class="r-d">1</span><span class="r-l">brief / day</span><span class="r-s">~ 7 / wk · 30 / mo</span></div>
+        <div class="replaces">Equivalent to · strategist + planner<b>~ $11K / mo</b></div>
+        <a class="cta" href="file:///Users/bballi/Library/Application%20Support/Claude/local-agent-mode-sessions/b6552719-3cf8-4bf3-896d-0b0fa9217bb6/568ee8cb-acf1-48ef-b021-5a82f4e6a9c4/local_2c3299f3-f2c9-44a7-9e6c-24f92a1d792e/outputs/pricing-modal.html#">Get daily <span>↗</span></a>
+      </div>
+
+      <!-- TIER 04 — CONTINUOUS BRIEF -->
+      <div class="tier feat dominant">
+        <div class="flag">Most chosen · Always-on</div>
+        <div class="tag"><span class="d"></span>Tier 04 · Continuous · Most chosen</div>
+        <h3 class="name">Continuous<br>Brief.</h3>
+        <div class="price"><span class="amt">$99</span><span class="per">/ month</span></div>
+        <p class="pitch">Your system runs continuously — content, SEO, and optimization handled throughout the day. Multiple updates per day. Maximum signal, full automation.</p>
+        <ul>
+          <li>Writes content across platforms</li>
+          <li>Decides what to publish and when</li>
+          <li>Tracks performance and adjusts</li>
+          <li>Keeps everything on-brand</li>
+        </ul>
+        <div class="rep-block">
+          <div class="rep-h">Replaces</div>
+          <ul class="rep-list">
+            <li>Social media manager</li>
+            <li>SEO specialist</li>
+            <li>Content writer</li>
+            <li>Marketing ops</li>
+          </ul>
+        </div>
+        <div class="cadence">Frequency · 2–3× / day · 38 cards live</div>
+        <div class="runs"><span class="r-d">6</span><span class="r-l">briefs / day</span><span class="r-s">~ 42 / wk · 180 / mo</span></div>
+        <div class="replaces">Equivalent to · full marketing team<b>~ $15K+ / mo</b></div>
+        <a class="cta" href="file:///Users/bballi/Library/Application%20Support/Claude/local-agent-mode-sessions/b6552719-3cf8-4bf3-896d-0b0fa9217bb6/568ee8cb-acf1-48ef-b021-5a82f4e6a9c4/local_2c3299f3-f2c9-44a7-9e6c-24f92a1d792e/outputs/pricing-modal.html#">Run continuously <span>↗</span></a>
+      </div>
+    </div>
+
+    <!-- BRIDGE -->
+    <div class="bridge">
+      <div class="bridge-rule"></div>
+      <p>When a brief shows the gap — this is how you fix it.</p>
+      <div class="bridge-rule"></div>
+    </div>
+
+    <div class="m-eyebrow"><span>B · Human-in-the-Loop</span><span class="rule"></span><span>Automation gets you the insight. Briefs show you the gap. This is where you fix it.</span></div>
+
+    <div class="hitl">
+      <!-- TIER 05 — STUDIO -->
+      <div class="tier custom">
+        <div class="tag"><span class="d"></span>Tier 05 · Studio</div>
+        <h3 class="name">Studio.</h3>
+        <div class="price"><span class="amt">$2.5K+</span><span class="per">project · one-off</span></div>
+        <p class="pitch">Fix what your brief surfaces. Design, pages, and creative — built and delivered fast.</p>
+        <div class="rep-block">
+          <div class="rep-h">Replaces</div>
+          <ul class="rep-list">
+            <li>Boutique design agency</li>
+            <li>Senior product designer</li>
+            <li>Front-end engineer</li>
+            <li>Brand + campaign lead</li>
+          </ul>
+        </div>
+        <div class="cadence">Engagement · Project-scoped</div>
+        <div class="runs"><span class="r-d">6+</span><span class="r-l">runs / day</span><span class="r-s">automation · plus a human</span></div>
+        <div class="replaces">Equivalent to · 3-person creative team<b>~ $36K / yr / project</b></div>
+        <a class="cta" href="file:///Users/bballi/Library/Application%20Support/Claude/local-agent-mode-sessions/b6552719-3cf8-4bf3-896d-0b0fa9217bb6/568ee8cb-acf1-48ef-b021-5a82f4e6a9c4/local_2c3299f3-f2c9-44a7-9e6c-24f92a1d792e/outputs/pricing-modal.html#">Start a project <span>↗</span></a>
+      </div>
+
+      <!-- TIER 06 — ATELIER -->
+      <div class="tier feat">
+        <div class="flag">Everything possible</div>
+        <div class="tag"><span class="d"></span>Tier 06 · Atelier</div>
+        <h3 class="name">Atelier.</h3>
+        <div class="price"><span class="amt">Custom</span><span class="per">retainer · monthly</span></div>
+        <p class="pitch">Ongoing execution with direction. Automation running, human decisions layered in.</p>
+        <div class="rep-block">
+          <div class="rep-h">Replaces</div>
+          <ul class="rep-list">
+            <li>CMO</li>
+            <li>Creative director</li>
+            <li>Product + growth partner</li>
+            <li>The whole marketing pod</li>
+          </ul>
+        </div>
+        <div class="cadence">Engagement · Monthly retainer</div>
+        <div class="runs"><span class="r-d">∞</span><span class="r-l">runs / day</span><span class="r-s">on-demand · plus the team</span></div>
+        <div class="replaces">Equivalent to · CMO + creative leadership<b>~ $70K+ / mo</b></div>
+        <a class="cta" href="file:///Users/bballi/Library/Application%20Support/Claude/local-agent-mode-sessions/b6552719-3cf8-4bf3-896d-0b0fa9217bb6/568ee8cb-acf1-48ef-b021-5a82f4e6a9c4/local_2c3299f3-f2c9-44a7-9e6c-24f92a1d792e/outputs/pricing-modal.html#">Request Atelier <span>↗</span></a>
+      </div>
+    </div>
+
+    <div class="killshot">
+      <h3>What you're<br>missing —<br>and what<br>replaces it</h3>
+      <p>What this replaces vs. what it costs. Read across — every capability maps to the role you'd otherwise pay for.</p>
+    </div>
+
+    <div class="m-eyebrow"><span>C · Outcome Matrix</span><span class="rule"></span><span>What you get → What it replaces</span></div>
+
+    <div class="compare">
+      <div class="compare-card">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:24%">Capability</th>
+              <th style="width:22%">Replaces (role)</th>
+              <th class="feat-col">One-Time</th>
+              <th class="feat-col">Weekly</th>
+              <th class="feat-col">Daily</th>
+              <th class="feat-col">Continuous</th>
+              <th class="feat-col">Studio</th>
+              <th class="feat-col">Atelier</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Brand + site audit</td><td class="mono" style="color:var(--ink-soft);font-size:12px">Freelance brand consultant</td>
+              <td class="feat-col"><span class="y">●</span></td><td class="feat-col"><span class="y">●</span></td><td class="feat-col"><span class="y">●</span></td><td class="feat-col"><span class="y">●</span></td><td class="feat-col"><span class="y">●</span></td><td class="feat-col"><span class="y">●</span></td></tr>
+            <tr><td>Competitor + community signals</td><td class="mono" style="color:var(--ink-soft);font-size:12px">Market research analyst</td>
+              <td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="y">●</span></td><td class="feat-col"><span class="y">●</span></td><td class="feat-col"><span class="y">●</span></td><td class="feat-col"><span class="y">●</span></td><td class="feat-col" <span="">●</td></tr>
+            <tr><td>Reviews + local signal feed</td><td class="mono" style="color:var(--ink-soft);font-size:12px">Community manager</td>
+              <td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="y">●</span></td><td class="feat-col"><span class="y">●</span></td><td class="feat-col"><span class="y">●</span></td><td class="feat-col"><span class="y">●</span></td></tr>
+            <tr><td>Daily Founder Brief</td><td class="mono" style="color:var(--ink-soft);font-size:12px">Executive assistant</td>
+              <td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="y">●</span></td><td class="feat-col"><span class="y">●</span></td><td class="feat-col"><span class="y">●</span></td><td class="feat-col"><span class="y">●</span></td></tr>
+            <tr><td>Strategy card · what to do next</td><td class="mono" style="color:var(--ink-soft);font-size:12px">Content strategist</td>
+              <td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="y">●</span></td><td class="feat-col"><span class="y">●</span></td><td class="feat-col"><span class="y">●</span></td><td class="feat-col"><span class="y">●</span></td></tr>
+            <tr><td>Platform content generation</td><td class="mono" style="color:var(--ink-soft);font-size:12px">Copywriter + social mgr</td>
+              <td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="y">●</span></td><td class="feat-col"><span class="y">●</span></td><td class="feat-col"><span class="y">●</span></td></tr>
+            <tr><td>SEO signals + on-page fixes</td><td class="mono" style="color:var(--ink-soft);font-size:12px">SEO agency</td>
+              <td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="y">●</span></td><td class="feat-col"><span class="y">●</span></td><td class="feat-col"><span class="y">●</span></td></tr>
+            <tr><td>Brand safety + image generation</td><td class="mono" style="color:var(--ink-soft);font-size:12px">Junior designer + QA</td>
+              <td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="y">●</span></td><td class="feat-col"><span class="y">●</span></td><td class="feat-col"><span class="y">●</span></td></tr>
+            <tr><td>Custom creative · vibe-code → prod</td><td class="mono" style="color:var(--ink-soft);font-size:12px">Senior designer + FE eng</td>
+              <td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="p">◆</span></td><td class="feat-col"><span class="p">◆</span></td></tr>
+            <tr><td>Weekly direction + roadmap</td><td class="mono" style="color:var(--ink-soft);font-size:12px">CMO thinking</td>
+              <td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="p">◆</span></td></tr>
+            <tr><td>Custom automation builds</td><td class="mono" style="color:var(--ink-soft);font-size:12px">Product + growth partner</td>
+              <td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="n">○</span></td><td class="feat-col"><span class="p">◆</span></td></tr>
+          </tbody>
+        </table>
+        <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:14px;font-family:&#39;Space Mono&#39;;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft)">
+          <span><span style="color:#166534;font-weight:700">●</span> Included</span>
+          <span><span style="color:rgba(0,0,0,.35)">○</span> Not in tier</span>
+          <span><span style="color:#7a5cff;font-weight:700">◆</span> Human-in-the-loop</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== À LA CARTE ===== -->
+    <div class="m-eyebrow"><span>D · À La Carte</span><span class="rule"></span><span>One-offs · hybrid roles · no Studio commitment</span></div>
+
+    <div class="ala">
+      <div class="ala-head">
+        <h3>Hire a job,<br>not a team.</h3>
+        <p>Act on what your brief reveals. Add a service on top of any tier — handled by a human, not a roadmap.</p>
+      </div>
+
+      <div class="ala-grid">
+        <div class="ala-card">
+          <div class="ec"><span>Video</span><span>Turnaround · 48h</span></div>
+          <h4 class="nm">Short-form edit.</h4>
+          <p class="ds">Short-form video ready to post. Built for engagement and reach.</p>
+          <div class="pr-row"><span class="pr">$250</span><a class="add" href="file:///Users/bballi/Library/Application%20Support/Claude/local-agent-mode-sessions/b6552719-3cf8-4bf3-896d-0b0fa9217bb6/568ee8cb-acf1-48ef-b021-5a82f4e6a9c4/local_2c3299f3-f2c9-44a7-9e6c-24f92a1d792e/outputs/pricing-modal.html#">Add ↗</a></div>
+        </div>
+        <div class="ala-card">
+          <div class="ec"><span>Video</span><span>Turnaround · 5 days</span></div>
+          <h4 class="nm">Long-form edit.</h4>
+          <p class="ds">Longer-form video for product, story, or campaign content.</p>
+          <div class="pr-row"><span class="pr">$750</span><a class="add" href="file:///Users/bballi/Library/Application%20Support/Claude/local-agent-mode-sessions/b6552719-3cf8-4bf3-896d-0b0fa9217bb6/568ee8cb-acf1-48ef-b021-5a82f4e6a9c4/local_2c3299f3-f2c9-44a7-9e6c-24f92a1d792e/outputs/pricing-modal.html#">Add ↗</a></div>
+        </div>
+        <div class="ala-card">
+          <div class="ec"><span>Design</span><span>Turnaround · 24h</span></div>
+          <h4 class="nm">Single graphic.</h4>
+          <p class="ds">One on-brand asset to fill a gap in your content or site.</p>
+          <div class="pr-row"><span class="pr">$150</span><a class="add" href="file:///Users/bballi/Library/Application%20Support/Claude/local-agent-mode-sessions/b6552719-3cf8-4bf3-896d-0b0fa9217bb6/568ee8cb-acf1-48ef-b021-5a82f4e6a9c4/local_2c3299f3-f2c9-44a7-9e6c-24f92a1d792e/outputs/pricing-modal.html#">Add ↗</a></div>
+        </div>
+        <div class="ala-card">
+          <div class="ec"><span>Design</span><span>Turnaround · 3 days</span></div>
+          <h4 class="nm">Carousel kit.</h4>
+          <p class="ds">Multi-slide post designed to explain, educate, or convert.</p>
+          <div class="pr-row"><span class="pr">$400</span><a class="add" href="file:///Users/bballi/Library/Application%20Support/Claude/local-agent-mode-sessions/b6552719-3cf8-4bf3-896d-0b0fa9217bb6/568ee8cb-acf1-48ef-b021-5a82f4e6a9c4/local_2c3299f3-f2c9-44a7-9e6c-24f92a1d792e/outputs/pricing-modal.html#">Add ↗</a></div>
+        </div>
+        <div class="ala-card bundle">
+          <div class="ec"><span>Hybrid · Monthly</span><span>Recurring</span></div>
+          <h4 class="nm">Social management.</h4>
+          <p class="ds">Keeps your content active, consistent, and responsive.</p>
+          <div class="pr-row"><span class="pr">$1.2K<span style="font-family:&#39;Space Mono&#39;;font-size:11px;letter-spacing:.18em;color:var(--ink-soft);margin-left:4px">/mo</span></span><a class="add" href="file:///Users/bballi/Library/Application%20Support/Claude/local-agent-mode-sessions/b6552719-3cf8-4bf3-896d-0b0fa9217bb6/568ee8cb-acf1-48ef-b021-5a82f4e6a9c4/local_2c3299f3-f2c9-44a7-9e6c-24f92a1d792e/outputs/pricing-modal.html#">Add ↗</a></div>
+        </div>
+        <div class="ala-card">
+          <div class="ec"><span>Brand</span><span>Turnaround · 1 wk</span></div>
+          <h4 class="nm">Logo + mark refresh.</h4>
+          <p class="ds">Wordmark, lockup, favicon, social avatar. Source files included.</p>
+          <div class="pr-row"><span class="pr">$1.5K</span><a class="add" href="file:///Users/bballi/Library/Application%20Support/Claude/local-agent-mode-sessions/b6552719-3cf8-4bf3-896d-0b0fa9217bb6/568ee8cb-acf1-48ef-b021-5a82f4e6a9c4/local_2c3299f3-f2c9-44a7-9e6c-24f92a1d792e/outputs/pricing-modal.html#">Add ↗</a></div>
+        </div>
+        <div class="ala-card">
+          <div class="ec"><span>Web</span><span>Turnaround · 2 wks</span></div>
+          <h4 class="nm">Landing micro-build.</h4>
+          <p class="ds">A focused page built to convert traffic into action.</p>
+          <div class="pr-row"><span class="pr">$1.8K</span><a class="add" href="file:///Users/bballi/Library/Application%20Support/Claude/local-agent-mode-sessions/b6552719-3cf8-4bf3-896d-0b0fa9217bb6/568ee8cb-acf1-48ef-b021-5a82f4e6a9c4/local_2c3299f3-f2c9-44a7-9e6c-24f92a1d792e/outputs/pricing-modal.html#">Add ↗</a></div>
+        </div>
+        <div class="ala-card">
+          <div class="ec"><span>Email</span><span>Turnaround · 5 days</span></div>
+          <h4 class="nm">Email campaign.</h4>
+          <p class="ds">Campaign built and ready to send — no setup required.</p>
+          <div class="pr-row"><span class="pr">$500</span><a class="add" href="file:///Users/bballi/Library/Application%20Support/Claude/local-agent-mode-sessions/b6552719-3cf8-4bf3-896d-0b0fa9217bb6/568ee8cb-acf1-48ef-b021-5a82f4e6a9c4/local_2c3299f3-f2c9-44a7-9e6c-24f92a1d792e/outputs/pricing-modal.html#">Add ↗</a></div>
+        </div>
+        <div class="ala-card">
+          <div class="ec"><span>Design · Figma</span><span>Turnaround · 4 days</span></div>
+          <h4 class="nm">UI design · 1 screen.</h4>
+          <p class="ds">Production-ready design your product can ship.</p>
+          <div class="pr-row"><span class="pr">$650</span><a class="add" href="file:///Users/bballi/Library/Application%20Support/Claude/local-agent-mode-sessions/b6552719-3cf8-4bf3-896d-0b0fa9217bb6/568ee8cb-acf1-48ef-b021-5a82f4e6a9c4/local_2c3299f3-f2c9-44a7-9e6c-24f92a1d792e/outputs/pricing-modal.html#">Add ↗</a></div>
+        </div>
+        <div class="ala-card bundle">
+          <div class="ec"><span>Design · Figma</span><span>Turnaround · 2 wks</span></div>
+          <h4 class="nm">UI flow · 5 screens.</h4>
+          <p class="ds">Connected flow built for real use — not just visuals.</p>
+          <div class="pr-row"><span class="pr">$2.4K</span><a class="add" href="file:///Users/bballi/Library/Application%20Support/Claude/local-agent-mode-sessions/b6552719-3cf8-4bf3-896d-0b0fa9217bb6/568ee8cb-acf1-48ef-b021-5a82f4e6a9c4/local_2c3299f3-f2c9-44a7-9e6c-24f92a1d792e/outputs/pricing-modal.html#">Add ↗</a></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="m-foot">
+      <span>All briefs inherit everything below them</span>
+      <span>Questions · <a href="file:///Users/bballi/Library/Application%20Support/Claude/local-agent-mode-sessions/b6552719-3cf8-4bf3-896d-0b0fa9217bb6/568ee8cb-acf1-48ef-b021-5a82f4e6a9c4/local_2c3299f3-f2c9-44a7-9e6c-24f92a1d792e/outputs/pricing-modal.html#">Chat with Bryan ↗</a></span>
+    </div>
+
+  </div>
+</div>
+
+
+
+</body></html>

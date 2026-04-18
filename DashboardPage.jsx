@@ -25,10 +25,23 @@ import { internalPageGlassCardStyle } from './pageSurfaceSystem';
 import OnboardingChatModal from './onboarding/OnboardingChatModal';
 import onboardingConfig from './onboarding/questions.config.cjs';
 import { buildSolutionsList, resolveSolution } from './features/scout-intake/solutions-catalog.mjs';
+import { resolveAnalyzerSource, buildCardDescription } from './features/scout-intake/card-description-builder.mjs';
 
 // Entry-flow survey surfaces every question step (excludes the summary, which
 // is added in Phase 4). Ordered by the `order` field in questions.config.cjs.
 const ONBOARDING_ENTRY_STEPS = onboardingConfig.QUESTION_STEPS;
+
+const ONBOARDING_CARD_IDS = new Set([
+  'audit-summary',
+  'multi-device-view',
+  'social-preview',
+  'business-model',
+  'seo-performance',
+  'industry',
+  'visibility-snapshot',
+  'style-guide',
+  'priority-signal',
+]);
 import {
   trackDashboardCreated,
   trackPipelineRerun,
@@ -197,7 +210,7 @@ const tiles = [
     status: 'LIVE',
     metric: 'BRAND READY',
     viz: 'segbars',
-    category: 'video',
+    category: 'systems',
   },
   {
     id: 'company-brain',
@@ -230,7 +243,7 @@ const tiles = [
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'meetings',
-    category: 'content',
+    category: 'systems',
   },
   {
     id: 'daily-operations',
@@ -252,7 +265,7 @@ const tiles = [
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'spark',
-    category: 'email',
+    category: 'systems',
   },
   {
     id: 'ai-research',
@@ -263,7 +276,7 @@ const tiles = [
     status: 'LIVE',
     metric: 'BRAND READY',
     viz: 'countdown',
-    category: 'seo',
+    category: 'systems',
   },
   {
     id: 'compliance',
@@ -285,7 +298,7 @@ const tiles = [
     status: 'LIVE',
     metric: 'BRAND READY',
     viz: 'table',
-    category: 'websites',
+    category: 'systems',
   },
   {
     id: 'rapid-product',
@@ -296,7 +309,7 @@ const tiles = [
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'pipeline',
-    category: 'websites',
+    category: 'systems',
   },
   {
     id: 'self-improving',
@@ -318,7 +331,7 @@ const tiles = [
     status: 'LIVE',
     metric: 'BRAND READY',
     viz: 'threads',
-    category: 'content',
+    category: 'systems',
   },
   {
     id: 'seo-content',
@@ -329,7 +342,7 @@ const tiles = [
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'keywords',
-    category: 'seo',
+    category: 'systems',
   },
   // ── Reserved add-on cards (mirror commented add-ons in StackedSlidesSection.jsx) ──
   {
@@ -352,7 +365,7 @@ const tiles = [
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'spark',
-    category: 'content',
+    category: 'systems',
   },
   {
     id: 'platform-content-gen',
@@ -363,7 +376,7 @@ const tiles = [
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'threads',
-    category: 'content',
+    category: 'systems',
   },
   {
     id: 'brand-safety-gate',
@@ -385,7 +398,7 @@ const tiles = [
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'meetings',
-    category: 'email',
+    category: 'systems',
   },
   {
     id: 'admin-dashboard-history',
@@ -396,7 +409,7 @@ const tiles = [
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'table',
-    category: 'websites',
+    category: 'systems',
   },
   {
     id: 'image-generation',
@@ -407,7 +420,7 @@ const tiles = [
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'rings',
-    category: 'design',
+    category: 'systems',
   },
   {
     id: 'knowledge-file-config',
@@ -1055,8 +1068,9 @@ const DashboardPage = () => {
   const [countdownHours, setCountdownHours] = useState(14);
   const [showTierModal, setShowTierModal] = useState(false);
   const [activeTileModal, setActiveTileModal] = useState(null);
+  const [briefFullScreen, setBriefFullScreen] = useState(false);
   const [modalTab, setModalTab] = useState('solutions');
-  const [activeCapabilityFilter, setActiveCapabilityFilter] = useState(null);
+  const [activeCapabilityFilter, setActiveCapabilityFilter] = useState('brief');
   const [chatDraft, setChatDraft] = useState('');
   const [modalChatMode, setModalChatMode] = useState('ai');
   const capabilityGridRef = useRef(null);
@@ -1153,7 +1167,7 @@ const DashboardPage = () => {
   // rendered and this value is unused.
   useEffect(() => {
     if (activeTileModal?.cardId) {
-      setModalTab('solutions');
+      setModalTab(activeTileModal.cardId === 'multi-device-view' ? 'desktop' : 'solutions');
     }
   }, [activeTileModal?.cardId]);
 
@@ -1215,6 +1229,15 @@ const DashboardPage = () => {
   const currentRun = recentRuns[0] || null;
   const dashboardState = bootstrap.dashboardState;
   const homepageDeviceMockup = dashboardState?.artifacts?.homepageDeviceMockup || null;
+  const homepageScreenshotUrl = dashboardState?.artifacts?.homepageScreenshot?.downloadUrl || null;
+  const homepageScreenshots = dashboardState?.artifacts?.homepageScreenshots || {};
+  const fullPageScreenshots = dashboardState?.artifacts?.fullPageScreenshots || {};
+  // Full-page screenshots preferred for the tabs; fall back to viewport screenshots
+  const deviceScreenshots = {
+    desktop: fullPageScreenshots['desktop-full']?.downloadUrl || homepageScreenshots.desktop?.downloadUrl || null,
+    tablet:  fullPageScreenshots['tablet-full']?.downloadUrl  || homepageScreenshots.tablet?.downloadUrl  || null,
+    mobile:  fullPageScreenshots['mobile-full']?.downloadUrl  || homepageScreenshots.mobile?.downloadUrl  || null,
+  };
   const clientStatus = dashboardState?.status || client?.status || 'provisioning';
   // Prefer the live run status from brief_runs (polled every 4s) over the cached
   // dashboardState.latestRunStatus — the cached value is written as 'queued' at
@@ -1233,8 +1256,8 @@ const DashboardPage = () => {
   const siteMeta = dashboardState?.siteMeta || null;
   const visualIdentity  = snapshot?.visualIdentity || null;
   const styleGuideData  = visualIdentity?.styleGuide ?? null;
-  const sgDisplayData   = styleGuideData ?? SG_MOCK;
-  const isStyleGuideMock = styleGuideData === null;
+  const sgDisplayData   = styleGuideData || null;
+  const isStyleGuideMock = !styleGuideData;
   const outputsPreview  = dashboardState?.outputsPreview || null;
   // Phase-4 Scribe: per-card short + expanded copy. When present for a card,
   // the modal description is overridden with scribe.expanded. Absent → static
@@ -1248,10 +1271,17 @@ const DashboardPage = () => {
   // Intelligence-first SEO data: prefer intelligence source, fall back to dashboardState.seoAudit
   const intelligencePayload = bootstrap.intelligence || null;
   const seoAudit = intelligencePayload?.dashboardSeoAudit ?? dashboardState?.seoAudit ?? null;
+  const aiVisibility = analyzerOutputs?.['seo-performance']?.skills?.['ai-seo-audit']?.aiVisibility ?? null;
   const isFromIntelligence  = Boolean(intelligencePayload?.dashboardSeoAudit != null);
   const intelligenceSummary = intelligencePayload?.psiSummary || null;
   const psiNarrative        = intelligencePayload?.psiNarrative || null;
-  const capabilityHeadline = client?.dashboardTitle || displayProfile?.dashboardTitle || 'An operating stack that runs itself.';
+  const capabilityHeadline = (() => {
+    const url = client?.websiteUrl || reseedUrl || null;
+    if (url) {
+      try { return new URL(url.startsWith('http') ? url : `https://${url}`).hostname.replace(/^www\./, ''); } catch { return url; }
+    }
+    return client?.dashboardTitle || displayProfile?.dashboardTitle || 'An operating stack that runs itself.';
+  })();
 
   // Legacy compat fields (pre-intake runs)
   const headline = dashboardState?.headline || null;
@@ -1361,20 +1391,27 @@ const DashboardPage = () => {
 
   // Inject Google Fonts for the style-guide type specimen
   useEffect(() => {
+    // Try loading ALL extracted font families via Google Fonts — not just
+    // ones classified as google-fonts. The classifier can miss; Google Fonts
+    // will silently 404 for non-Google fonts with no side effects.
     const families = (sgDisplayData?.typography?.fontFamilies || [])
-      .filter((f) => f.source === 'google-fonts')
+      .filter((f) => f.family && f.source !== 'system')
       .map((f) => f.family);
     if (!families.length) return;
     const id = 'sg-google-fonts-link';
-    if (document.getElementById(id)) return;
+    const existing = document.getElementById(id);
     const query = families
-      .map((fam) => `family=${encodeURIComponent(fam)}:wght@400;600;700`)
+      .map((fam) => `family=${encodeURIComponent(fam)}:wght@300;400;600;700;900`)
       .join('&');
+    const href = `https://fonts.googleapis.com/css2?${query}&display=swap`;
+    if (existing?.href === href) return;
+    if (existing) existing.remove();
     const link = document.createElement('link');
     link.id = id;
     link.rel = 'stylesheet';
-    link.href = `https://fonts.googleapis.com/css2?${query}&display=swap`;
+    link.href = href;
     document.head.appendChild(link);
+    return () => { document.getElementById(id)?.remove(); };
   }, [sgDisplayData]);
 
   // GSAP: style-guide layout quadrant — desktop → mobile viewport animation
@@ -1929,6 +1966,10 @@ const DashboardPage = () => {
   const resolvedOpportunities = (strategy?.opportunityMap?.length ? strategy.opportunityMap : latestInsights.length ? latestInsights : []).slice(0, 4);
   const hasBrandToneData = Boolean(brandTone?.primary || brandTone?.secondary || brandTone?.writingStyle || brandTone?.tags?.length);
   const hasStyleGuideData = Boolean(visualIdentity?.summary || visualIdentity?.colorPalette || visualIdentity?.styleNotes || visualIdentity?.styleGuide);
+  const sgLogoSrc = siteMeta?.appleTouchIcon || siteMeta?.favicon || null;
+  const hasSgColors = Boolean(sgDisplayData?.colors && (sgDisplayData.colors.primary || sgDisplayData.colors.secondary || sgDisplayData.colors.neutral));
+  const hasSgType = Boolean(sgDisplayData?.typography?.headingSystem?.fontFamily);
+  const hasSgQuadrant = true; // brand-mark quadrant always renders (logo or "NO LOGO" fallback)
   const hasIndustryData = Boolean(resolvedIndustry);
   const hasBusinessModelData = Boolean(resolvedBusinessModel);
   const hasPrioritySignalData = Boolean(resolvedPrioritySignal);
@@ -2106,6 +2147,28 @@ const DashboardPage = () => {
     if (meta?.totalDurationMs != null) rows.push({ key: 'meta-dur', label: 'Audit duration', value: `${(meta.totalDurationMs / 1000).toFixed(1)}s` });
     rows.push({ key: 'meta-warn', label: 'Warnings', value: meta?.warnings?.length ? meta.warnings.join(' · ') : '—' });
 
+    // ── AI VISIBILITY section ───────────────────────────────────────────────
+    if (aiVisibility) {
+      rows.push({ key: 'seo-performance-ai-visibility-section', label: 'AI VISIBILITY', isHeader: true });
+      rows.push({ key: 'seo-performance-ai-score-row', label: 'AI Visibility Score', value: `${aiVisibility.score} / 100` });
+      rows.push({ key: 'seo-performance-ai-grade-row', label: 'Grade', value: aiVisibility.letterGrade });
+      const aiSecs = aiVisibility.sections || {};
+      const aiSecLabels = [
+        ['llmsTxt',  'llms.txt'],
+        ['robotsAi', 'Robots (AI bots)'],
+        ['schema',   'Schema'],
+        ['content',  'Content'],
+        ['entity',   'Entity authority'],
+        ['technical','Technical'],
+      ];
+      for (const [secKey, secLabel] of aiSecLabels) {
+        const sec = aiSecs[secKey];
+        if (sec != null) {
+          rows.push({ key: `seo-performance-ai-${secKey}-row`, label: secLabel, value: sec.score != null ? `${sec.score} / 100` : '—' });
+        }
+      }
+    }
+
     return rows;
   })();
 
@@ -2125,17 +2188,24 @@ const DashboardPage = () => {
     if (meta?.totalDurationMs != null) parts.push(`${(meta.totalDurationMs / 1000).toFixed(0)}s`);
     return parts.join(' · ');
   })();
+  const DETERMINISTIC_CARD_IDS = new Set([
+    'brief', 'multi-device-view', 'social-preview',
+    'business-model', 'seo-performance', 'industry', 'visibility-snapshot',
+  ]);
+
   const intakeCapabilityCards = [
+    // ── ONBOARDING ──────────────────────────────────────────────────────────
     {
       id: 'brief',
-      category: 'design',
+      category: 'onboarding',
       number: 'BR',
       label: 'BRIEF',
-      title: 'Brief',
+      wide: true,
+      title: 'Onboarding Brief',
       description: brandOverview?.headline
         ? brandOverview.headline
-        : 'A synthesized creative brief built from intake signals — brand positioning, audience frame, voice, and the one move most worth making right now.',
-      placeholderLabel: 'BRAND BRIEF',
+        : 'A structured breakdown of your business, positioning, and site. This becomes the baseline for all strategy and recommendations.',
+      placeholderLabel: hasIntakeData ? 'BRIEF' : 'NO\nBRIEF',
       rows: hasIntakeData
         ? [
             { key: 'industry',   label: 'Industry',  value: resolvedIndustry || 'Pending' },
@@ -2149,301 +2219,748 @@ const DashboardPage = () => {
       footerRight: 'REVIEWED',
     },
     {
-      id: 'intake-terminal',
-      category: 'systems',
-      number: '08',
-      label: 'INTAKE TERMINAL',
-      title: 'Intake Terminal',
-      description: 'Tracks every scraped page, extracted signal, and normalization decision across the full intake lifecycle — so you can see exactly what the pipeline consumed and produced.',
-      placeholderLabel: seoRerunLoading ? 'SEO AUDIT' : intakeTerminalStatus.toUpperCase(),
-      rows: activeTerminalLines.slice(0, 6).map((line, index) => ({
-        key: `terminal-${index}`,
-        label: line.tag || `STEP ${index + 1}`,
-        value: line.text,
-      })),
-      context: 'Tracks every scraped page, extracted signal, and normalization decision across the full intake lifecycle — so you can see exactly what the pipeline consumed and produced.',
-      footerLeft: intakeTerminalStatus.toUpperCase(),
+      id: 'audit-summary',
+      category: 'onboarding',
+      number: 'AS',
+      label: 'AUDIT',
+      title: 'Audit Summary',
+      description: 'Your baseline across performance, SEO, and brand. Shows strengths and critical gaps.',
+      placeholderLabel: hasIntakeData ? 'AUDIT' : 'NO\nAUDIT',
+      rows: (() => {
+        const ok = (v) => v != null && v !== '' && v !== false;
+        const st = (v) => ok(v) ? '✓ Captured' : '✗ Missing';
+        const row = (key, label, v) => ({ key, label, status: st(v), tier: 'Onboarding', isAuditRow: true });
+        const evidence = dashboardState?.snapshot ? true : false;
+        const pages = dashboardState?.evidence?.pages || [];
+        const homePage = pages[0] || null;
+
+        return [
+          // ── COLUMN HEADER ──
+          { key: 'col-header', isAuditRow: true, isColumnHeader: true, label: 'DATA FIELD', status: 'STATUS', tier: 'TIER' },
+
+          // ── SITE EVIDENCE ──
+          { key: 'sec-site', isHeader: true, label: 'SITE EVIDENCE' },
+          row('site-url',          'Website URL',       client?.websiteUrl),
+          row('site-pages',        'Pages crawled',     pages.length || (evidence ? true : null)),
+          row('site-title',        'Page title',        siteMeta?.title),
+          row('site-meta-desc',    'Meta description',  siteMeta?.description),
+          row('site-h1',           'H1 heading',        homePage?.h1?.[0] || brandOverview?.headline),
+          row('site-h2',           'H2 headings',       homePage?.h2?.length),
+          row('site-body',         'Body paragraphs',   homePage?.bodyParagraphs?.length),
+          row('site-cta',          'CTA texts',         homePage?.ctaTexts?.length),
+          row('site-nav',          'Nav labels',        homePage?.navLabels?.length),
+          row('site-social',       'Social links',      homePage?.socialLinks?.length),
+          row('site-contact',      'Contact clues',     homePage?.contactClues?.length),
+
+          // ── SITE META (OG + BROWSER) ──
+          { key: 'sec-meta', isHeader: true, label: 'SITE META · OG + BROWSER' },
+          row('meta-og-title',     'og:title',          siteMeta?.title),
+          row('meta-og-desc',      'og:description',    siteMeta?.description),
+          row('meta-og-image',     'og:image',          siteMeta?.ogImage),
+          row('meta-og-image-alt', 'og:image:alt',      siteMeta?.ogImageAlt),
+          row('meta-site-name',    'og:site_name',      siteMeta?.siteName),
+          row('meta-og-type',      'og:type',           siteMeta?.type),
+          row('meta-locale',       'og:locale',         siteMeta?.locale),
+          row('meta-canonical',    'Canonical URL',     siteMeta?.canonical),
+          row('meta-favicon',      'Favicon',           siteMeta?.favicon),
+          row('meta-apple-icon',   'Apple touch icon',  siteMeta?.appleTouchIcon),
+          row('meta-theme',        'Theme color',       siteMeta?.themeColor),
+
+          // ── DESIGN SYSTEM ──
+          { key: 'sec-design', isHeader: true, label: 'DESIGN SYSTEM' },
+          row('ds-heading-font',   'Heading font',      sgDisplayData?.typography?.headingSystem?.fontFamily),
+          row('ds-body-font',      'Body font',         sgDisplayData?.typography?.bodySystem?.fontFamily),
+          row('ds-primary-color',  'Primary color',     sgDisplayData?.colors?.primary?.hex),
+          row('ds-secondary',      'Secondary color',   sgDisplayData?.colors?.secondary?.hex),
+          row('ds-neutral',        'Neutral color',     sgDisplayData?.colors?.neutral?.hex),
+          row('ds-layout',         'Layout grid',       sgDisplayData?.layout?.grid),
+          row('ds-border-radius',  'Border radius',     sgDisplayData?.layout?.borderRadius),
+          row('ds-motion',         'Motion level',      sgDisplayData?.motion?.level),
+
+          // ── PAGESPEED INSIGHTS ──
+          { key: 'sec-psi', isHeader: true, label: 'PAGESPEED INSIGHTS' },
+          row('psi-perf',          'Performance score', seoAudit?.scores?.performance),
+          row('psi-seo',           'SEO score',         seoAudit?.scores?.seo),
+          row('psi-a11y',          'Accessibility',     seoAudit?.scores?.accessibility),
+          row('psi-bp',            'Best practices',    seoAudit?.scores?.bestPractices),
+          row('psi-lcp',           'LCP',               seoAudit?.coreWebVitals?.lcp || seoAudit?.labCoreWebVitals?.lcp),
+          row('psi-inp',           'INP',               seoAudit?.coreWebVitals?.inp),
+          row('psi-cls',           'CLS',               seoAudit?.coreWebVitals?.cls || seoAudit?.labCoreWebVitals?.cls),
+          row('psi-opps',          'Opportunities',     seoAudit?.opportunities?.length),
+          row('psi-red-flags',     'SEO red flags',     seoAudit?.seoRedFlags?.length),
+
+          // ── AI VISIBILITY ──
+          { key: 'sec-aiv', isHeader: true, label: 'AI VISIBILITY' },
+          row('aiv-score',         'AI visibility score', aiVisibility?.score),
+          row('aiv-grade',         'Letter grade',      aiVisibility?.letterGrade),
+          row('aiv-llms',          'llms.txt',          aiVisibility?.sections?.llmsTxt),
+          row('aiv-robots',        'Robots (AI bots)',  aiVisibility?.sections?.robotsAi),
+          row('aiv-schema',        'Schema for AI',     aiVisibility?.sections?.schema),
+          row('aiv-content',       'AI extractability', aiVisibility?.sections?.content),
+          row('aiv-entity',        'Entity authority',  aiVisibility?.sections?.entity),
+
+          // ── ARTIFACTS ──
+          { key: 'sec-artifacts', isHeader: true, label: 'ARTIFACTS' },
+          row('art-screenshot',    'Homepage screenshot',  homepageScreenshotUrl),
+          row('art-mockup',        'Device mockup',        intakeMockupSrc),
+          row('art-brief-html',    'Brief HTML',           briefPreviewHtml),
+          row('art-brief-pdf',     'Brief PDF',            briefPdfUrl),
+        ];
+      })(),
+      footerLeft: hasIntakeData ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
     },
-    (() => {
-      const hasSiteMeta = siteMeta && typeof siteMeta === 'object' && Object.values(siteMeta).some((v) => v);
-      const NOT_PROVIDED = 'Not provided';
-      const siteMetaRows = hasSiteMeta
-        ? [
-            { key: 'og-title',       label: 'Title',        value: siteMeta.title        || NOT_PROVIDED },
-            { key: 'og-description', label: 'OG Text',      value: siteMeta.description  || NOT_PROVIDED },
-            { key: 'og-site-name',   label: 'Site Name',    value: siteMeta.siteName     || NOT_PROVIDED },
-            { key: 'og-image-alt',   label: 'Image Alt',    value: siteMeta.ogImageAlt   || NOT_PROVIDED },
-            { key: 'og-type',        label: 'OG Type',      value: siteMeta.type         || NOT_PROVIDED },
-            { key: 'og-locale',      label: 'Locale',       value: siteMeta.locale       || NOT_PROVIDED },
-            { key: 'og-theme',       label: 'Theme Color',  value: siteMeta.themeColor   || NOT_PROVIDED },
-            { key: 'og-favicon',     label: 'Favicon',      value: siteMeta.favicon         ? 'Present' : NOT_PROVIDED },
-            { key: 'og-apple-icon',  label: 'Apple Icon',   value: siteMeta.appleTouchIcon  ? 'Present' : NOT_PROVIDED },
-            { key: 'og-canonical',   label: 'Canonical',    value: siteMeta.canonical    || NOT_PROVIDED },
-          ]
-        : null;
-
-      return {
-        id: 'brand-tone',
-      category: 'design',
-        number: 'BT',
-        label: hasSiteMeta ? 'SITE META' : 'BRAND TONE',
-        title: hasSiteMeta ? 'Site Meta' : 'Brand Tone',
-        description: hasSiteMeta
-          ? 'Open Graph metadata, Twitter Card tags, favicon, and canonical URL parsed directly from your live homepage — the first layer of your public brand surface.'
-          : 'Voice system and tone markers extracted from intake copy — defines how your brand writes, what it avoids, and the personality it projects across every channel.',
-        placeholderLabel: hasSiteMeta ? 'NO OG IMAGE PROVIDED' : 'VOICE PREVIEW',
-        rows: hasSiteMeta
-          ? siteMetaRows
-          : hasBrandToneData
-            ? [
-                { key: 'primary', label: 'Primary', value: brandTone?.primary || 'Pending' },
-                { key: 'secondary', label: 'Secondary', value: brandTone?.secondary || 'Pending' },
-                { key: 'tags', label: 'Tags', value: brandTone?.tags?.slice(0, 3).join(' · ') || 'Pending' },
-              ]
-            : buildWorkNeededRows('Not enough long-form copy or repeated messaging was fetched to infer voice confidently.'),
-        context: hasSiteMeta
-          ? 'Open Graph metadata, Twitter Card tags, favicon, and canonical URL parsed directly from your live homepage — the first layer of your public brand surface.'
-          : 'Voice system and tone markers extracted from intake copy — defines how your brand writes, what it avoids, and the personality it projects across every channel.',
-        footerLeft: hasSiteMeta ? 'Live' : (hasBrandToneData ? 'Live' : WORK_NEEDED_LABEL),
-        footerRight: 'REVIEWED',
-      };
-    })(),
+    {
+      id: 'multi-device-view',
+      category: 'onboarding',
+      number: 'MD',
+      label: 'LAYOUT',
+      title: 'Multi-Device View',
+      description: 'Your site across desktop, tablet, and mobile. Identifies layout and usability issues.',
+      placeholderLabel: intakeMockupSrc ? 'LAYOUT' : 'NO\nLAYOUT',
+      rows: buildWorkNeededRows('Device view requires a completed homepage screenshot capture.'),
+      footerLeft: intakeMockupSrc ? 'Live' : WORK_NEEDED_LABEL,
+      footerRight: 'REVIEWED',
+    },
+    {
+      id: 'social-preview',
+      category: 'onboarding',
+      number: 'SP',
+      label: 'SOCIAL PREVIEW',
+      title: 'Social Preview Check',
+      description: 'How your site appears when shared—title, description, and image. Missing previews reduce clicks and trust.',
+      placeholderLabel: siteMeta?.ogImage ? 'PREVIEW' : 'FIX\nSOCIAL\nPREVIEW',
+      rows: (() => {
+        const NP = 'Not provided';
+        return siteMeta ? [
+          { key: 'og-title',       label: 'Title',       value: siteMeta.title       || NP },
+          { key: 'og-description', label: 'OG Text',     value: siteMeta.description || NP },
+          { key: 'og-site-name',   label: 'Site Name',   value: siteMeta.siteName    || NP },
+          { key: 'og-image-alt',   label: 'Image Alt',   value: siteMeta.ogImageAlt  || NP },
+          { key: 'og-type',        label: 'OG Type',     value: siteMeta.type        || NP },
+          { key: 'og-locale',      label: 'Locale',      value: siteMeta.locale      || NP },
+          { key: 'og-theme',       label: 'Theme Color', value: siteMeta.themeColor  || NP },
+          { key: 'og-favicon',     label: 'Favicon',     value: siteMeta.favicon        ? 'Present' : NP },
+          { key: 'og-apple-icon',  label: 'Apple Icon',  value: siteMeta.appleTouchIcon ? 'Present' : NP },
+          { key: 'og-canonical',   label: 'Canonical',   value: siteMeta.canonical   || NP },
+        ] : buildWorkNeededRows('No site meta captured from the homepage.');
+      })(),
+      footerLeft: siteMeta ? 'Live' : WORK_NEEDED_LABEL,
+      footerRight: 'REVIEWED',
+    },
+    {
+      id: 'business-model',
+      category: 'onboarding',
+      number: 'BM',
+      label: 'MODEL',
+      title: 'Business Model',
+      description: 'Based on your site, we identified your business model and positioning. This helps shape how content, SEO, and messaging should be structured.',
+      placeholderLabel: hasBusinessModelData ? 'MODEL' : 'NO\nMODEL',
+      rows: hasBusinessModelData
+        ? [{ key: 'model', label: 'Structure', value: resolvedBusinessModel }]
+        : buildWorkNeededRows('No pricing, packaging, or service structure was clear in fetched pages.'),
+      footerLeft: hasBusinessModelData ? 'Live' : WORK_NEEDED_LABEL,
+      footerRight: 'REVIEWED',
+    },
     {
       id: 'style-guide',
-      category: 'design',
-      number: 'SG',
-      label: 'STYLE GUIDE',
-      title: 'Style Guide',
-      description: 'Typography, color palette, layout system, and motion signals extracted from your live site\'s CSS — normalized into a portable design reference used to keep all generated output on-brand.',
-      placeholderLabel: 'STYLE SNAPSHOT',
+      category: 'onboarding',
+      number: 'BS',
+      label: 'BRAND SNAPSHOT',
+      title: 'Brand Snapshot',
+      description: 'Your visual system—colors, typography, layout. Highlights inconsistency and missing structure.',
+      placeholderLabel: hasStyleGuideData ? 'STYLE' : 'NO\nSTYLE',
       rows: [
-        {
-          key: 'sg-heading',
-          label: 'Heading',
-          value: [
-            sgDisplayData.typography?.headingSystem?.fontFamily,
-            sgDisplayData.typography?.headingSystem?.fontWeight,
-            sgDisplayData.typography?.headingSystem?.fontSize,
-          ].filter(Boolean).join(' · ') || 'Pending',
-        },
-        {
-          key: 'sg-body',
-          label: 'Body',
-          value: [
-            sgDisplayData.typography?.bodySystem?.fontFamily,
-            sgDisplayData.typography?.bodySystem?.fontSize,
-          ].filter(Boolean).join(' · ') || 'Pending',
-        },
-        {
-          key: 'sg-primary',
-          label: 'Primary',
-          value: sgDisplayData.colors?.primary
-            ? `${sgDisplayData.colors.primary.hex} · ${sgDisplayData.colors.primary.role}`
-            : 'Pending',
-        },
-        {
-          key: 'sg-secondary',
-          label: 'Secondary',
-          value: sgDisplayData.colors?.secondary?.hex || 'Pending',
-        },
-        {
-          key: 'sg-neutral',
-          label: 'Neutral',
-          value: sgDisplayData.colors?.neutral?.hex || 'Pending',
-        },
-        {
-          key: 'sg-layout',
-          label: 'Layout',
-          value: [
-            sgDisplayData.layout?.grid,
-            sgDisplayData.layout?.maxWidth,
-            sgDisplayData.layout?.borderRadius && `r${sgDisplayData.layout.borderRadius}`,
-          ].filter(Boolean).join(' · ') || 'Pending',
-        },
-        {
-          key: 'sg-motion',
-          label: 'Motion',
-          value: [
-            sgDisplayData.motion?.level,
-            sgDisplayData.motion?.scrollPatterns?.[0],
-            sgDisplayData.motion?.durations?.join('–'),
-          ].filter(Boolean).join(' · ') || 'Pending',
-        },
+        { key: 'sg-heading', label: 'Heading', value: [sgDisplayData?.typography?.headingSystem?.fontFamily, sgDisplayData?.typography?.headingSystem?.fontWeight, sgDisplayData?.typography?.headingSystem?.fontSize].filter(Boolean).join(' · ') || 'Pending' },
+        { key: 'sg-body', label: 'Body', value: [sgDisplayData?.typography?.bodySystem?.fontFamily, sgDisplayData?.typography?.bodySystem?.fontSize].filter(Boolean).join(' · ') || 'Pending' },
+        { key: 'sg-primary', label: 'Primary', value: sgDisplayData?.colors?.primary ? `${sgDisplayData.colors.primary.hex} · ${sgDisplayData.colors.primary.role}` : 'Pending' },
+        { key: 'sg-secondary', label: 'Secondary', value: sgDisplayData?.colors?.secondary?.hex || 'Pending' },
+        { key: 'sg-neutral', label: 'Neutral', value: sgDisplayData?.colors?.neutral?.hex || 'Pending' },
       ],
-      context: 'Typography, color palette, layout system, and motion signals extracted from your live site\'s CSS — normalized into a portable design reference used to keep all generated output on-brand.',
       footerLeft: hasStyleGuideData ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
     },
     {
       id: 'seo-performance',
-      category: 'seo',
-      number: 'SP',
-      label: 'SEO + PERF',
-      title: 'SEO + Performance',
-      description: 'Core Web Vitals, Lighthouse scores, and meta-tag coverage pulled directly from PageSpeed Insights — shows where your site loses rankings, load performance, and mobile experience points.',
-      placeholderLabel: 'SITE AUDIT',
+      category: 'onboarding',
+      number: 'SE',
+      label: 'SEO HEALTH',
+      title: 'SEO + Performance Snapshot',
+      description: 'We ran a performance and SEO scan on your site. Load speed, metadata, and structure all impact visibility and conversion — this card shows where you stand.',
+      placeholderLabel: isSeoError ? 'SEO\nAUDIT\nFAILED' : isSeoQueued ? 'AUDIT\nQUEUED' : hasSeoAuditData ? 'SEO' : 'NO\nAUDIT',
       rows: seoAuditRows,
       footerLeft: isSeoPartial ? 'Partial' : hasSeoAuditData ? 'Live' : isSeoQueued ? 'Queued' : isSeoError ? 'Error' : WORK_NEEDED_LABEL,
       domId: 'intake-card-seo-performance',
       footerRight: 'REVIEWED',
-      context: 'Core Web Vitals, Lighthouse scores, and meta-tag coverage pulled directly from PageSpeed Insights — shows where your site loses rankings, load performance, and mobile experience points.',
       footerAction: (hasSeoAuditData || isSeoError) && hasWebsiteUrl
         ? { label: isSeoError ? 'Retry' : 'Re-run', onClick: handleSeoRerun, loading: seoRerunLoading }
         : null,
     },
     {
       id: 'industry',
-      category: 'content',
-      number: 'IN',
-      label: 'INDUSTRY',
-      title: 'Industry',
-      description: 'Market vertical and service category normalized from intake signals — used to calibrate tone, benchmark competitors, and align content to the right audience frame.',
-      placeholderLabel: 'MARKET CATEGORY',
-      context: 'Market vertical and service category normalized from intake signals — used to calibrate tone, benchmark competitors, and align content to the right audience frame.',
+      category: 'onboarding',
+      number: 'MC',
+      label: 'CATEGORY',
+      title: 'Market Category',
+      description: 'We mapped your business into a clear category. This helps benchmark competitors and identify where you should be showing up.',
+      placeholderLabel: hasIndustryData ? 'CATEGORY' : 'UNKNOWN',
       rows: hasIndustryData
-        ? [
-            { key: 'sector', label: 'Sector', value: resolvedIndustry },
-          ]
+        ? [{ key: 'sector', label: 'Sector', value: resolvedIndustry }]
         : buildWorkNeededRows('Fetched pages did not clearly identify the market category or service vertical.'),
       footerLeft: hasIndustryData ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
     },
     {
-      id: 'business-model',
-      category: 'content',
-      number: 'BM',
-      label: 'MODEL',
-      title: 'Business Model',
-      description: 'Revenue structure and commercial setup extracted from pricing pages, service tiers, and product copy — defines how the business captures value and what offers exist to promote.',
-      placeholderLabel: 'REVENUE MODEL',
-      context: 'Revenue structure and commercial setup extracted from pricing pages, service tiers, and product copy — defines how the business captures value and what offers exist to promote.',
-      rows: hasBusinessModelData
-        ? [
-            { key: 'model', label: 'Structure', value: resolvedBusinessModel },
-          ]
-        : buildWorkNeededRows('No pricing, packaging, or service structure was clear in fetched pages.'),
-      footerLeft: hasBusinessModelData ? 'Live' : WORK_NEEDED_LABEL,
+      id: 'visibility-snapshot',
+      category: 'onboarding',
+      number: 'VS',
+      label: 'VISIBILITY',
+      title: 'Visibility Snapshot',
+      description: 'We checked where your business shows up across search and platforms. This shows what\'s indexed, what\'s visible, and where there\'s room to expand reach.',
+      placeholderLabel: aiVisibility ? 'VISIBILITY' : 'NO\nDATA',
+      rows: aiVisibility ? [
+        { key: 'ai-score',   label: 'AI Visibility', value: `${aiVisibility.score}/100 (${aiVisibility.letterGrade})` },
+        ...(aiVisibility.sections ? Object.entries(aiVisibility.sections).map(([k, v]) => ({
+          key: `vis-${k}`, label: k, value: v?.score != null ? `${v.score}/100` : '—',
+        })) : []),
+      ] : buildWorkNeededRows('Visibility data requires a completed audit with AI SEO analysis.'),
+      footerLeft: aiVisibility ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
     },
+
     {
       id: 'priority-signal',
-      category: 'content',
-      number: 'PS',
-      label: 'PRIORITY SIGNAL',
-      title: 'Priority Signal',
-      description: 'The highest-confidence marketing move available right now — derived by crossing brand readiness, content gaps, and channel fit to surface the one thing most worth shipping first.',
-      placeholderLabel: 'SIGNAL BRIEF',
-      context: 'The highest-confidence marketing move available right now — derived by crossing brand readiness, content gaps, and channel fit to surface the one thing most worth shipping first.',
+      category: 'onboarding',
+      number: 'PA',
+      label: 'PRIORITY',
+      title: 'Priority Action',
+      description: 'The highest-impact fix based on current gaps.',
+      placeholderLabel: hasPrioritySignalData ? 'NEXT\nSTEP' : 'NO\nSIGNAL',
       rows: hasPrioritySignalData
         ? [
             { key: 'focus', label: 'Focus', value: resolvedPrioritySignal },
-            { key: 'channel', label: 'Channel', value: strategy?.postStrategy?.formats?.join(' · ') || 'Derived from intake strategy' },
+            { key: 'channel', label: 'Channel', value: strategy?.postStrategy?.formats?.join(' · ') || 'Pending' },
           ]
-        : buildWorkNeededRows('The crawl did not surface enough validated positioning or urgency signals.'),
+        : buildWorkNeededRows('Not enough validated signals to surface a priority action.'),
       footerLeft: hasPrioritySignalData ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
     },
+
+    // ── BRAND & PRESENCE ──────────────────────────────────────────────────────
     {
-      id: 'draft-post',
-      category: 'content',
-      number: 'DP',
-      label: 'DRAFT POST',
-      title: 'Draft Post',
-      description: 'A publish-ready social draft built from your brand voice, audience frame, and priority signal — structured to the approved format and ready for a final edit before it goes live.',
-      placeholderLabel: 'POST DRAFT',
-      context: 'A publish-ready social draft built from your brand voice, audience frame, and priority signal — structured to the approved format and ready for a final edit before it goes live.',
-      rows: hasDraftPostData
+      id: 'brand-voice',
+      category: 'brand',
+      number: 'BV',
+      label: 'VOICE',
+      title: 'Brand Voice',
+      description: 'Your tone and messaging. Identifies unclear or inconsistent positioning.',
+      placeholderLabel: hasBrandToneData ? 'VOICE' : 'NO\nVOICE',
+      rows: hasBrandToneData
         ? [
-            { key: 'post', label: 'Draft', value: resolvedDraftPost },
+            { key: 'primary', label: 'Primary', value: brandTone?.primary || 'Pending' },
+            { key: 'secondary', label: 'Secondary', value: brandTone?.secondary || 'Pending' },
+            { key: 'tags', label: 'Tags', value: brandTone?.tags?.slice(0, 3).join(' · ') || 'Pending' },
           ]
-        : buildWorkNeededRows('There is not enough trustworthy brand voice and offer clarity to draft credibly.'),
-      footerLeft: hasDraftPostData ? 'Live' : WORK_NEEDED_LABEL,
+        : buildWorkNeededRows('Not enough long-form copy or repeated messaging was fetched to infer voice.'),
+      footerLeft: hasBrandToneData ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
     },
     {
-      id: 'content-angle',
-      category: 'content',
-      number: 'CA',
-      label: 'CONTENT ANGLE',
-      title: 'Content Angle',
-      description: 'The specific editorial lens, audience pain point, and positioning frame selected for the next content push — locks the POV so every asset in this cycle is pulling in the same direction.',
-      placeholderLabel: 'ANGLE LOCKED',
-      context: 'The specific editorial lens, audience pain point, and positioning frame selected for the next content push — locks the POV so every asset in this cycle is pulling in the same direction.',
-      rows: hasContentAngleData
-        ? [
-            { key: 'angle', label: 'Angle', value: resolvedContentAngle },
-            { key: 'format', label: 'Format', value: strategy?.contentAngles?.[0]?.format || 'Pending' },
-          ]
-        : buildWorkNeededRows('Audience/problem framing is too thin to establish a reliable angle.'),
-      footerLeft: hasContentAngleData ? 'Live' : WORK_NEEDED_LABEL,
+      id: 'trust-credibility',
+      category: 'brand',
+      number: 'TC',
+      label: 'TRUST',
+      title: 'Trust & Credibility',
+      description: 'Proof signals like reviews, consistency, and authority. Missing trust reduces conversions.',
+      placeholderLabel: 'TRUST',
+      rows: buildWorkNeededRows('Trust signal analysis requires contact clues, about page, and schema markup data.'),
+      footerLeft: WORK_NEEDED_LABEL,
+      footerRight: 'REVIEWED',
+    },
+
+    // ── WEBSITE & CONVERSION ──────────────────────────────────────────────────
+    {
+      id: 'site-performance',
+      category: 'website',
+      number: 'SP',
+      label: 'PERFORMANCE',
+      title: 'Site Performance',
+      description: 'Load speed and technical issues impacting experience and rankings.',
+      placeholderLabel: hasSeoAuditData ? 'PERFORMANCE' : 'NO\nDATA',
+      rows: seoAuditRows.slice(0, 6),
+      footerLeft: hasSeoAuditData ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
     },
     {
-      id: 'content-opportunities',
-      category: 'content',
-      number: 'CO',
-      label: 'CONTENT OPPORTUNITIES',
-      title: 'Content Opportunities',
-      description: 'Ranked list of content and channel moves with the highest signal-to-noise ratio — each opportunity is scored by priority, matched to a format, and tied to a concrete why-now rationale.',
-      context: 'Ranked list of content and channel moves with the highest signal-to-noise ratio — each opportunity is scored by priority, matched to a format, and tied to a concrete why-now rationale.',
-      placeholderLabel: 'OPPORTUNITY MAP',
+      id: 'website-landing',
+      category: 'website',
+      number: 'CR',
+      label: 'CONVERT',
+      title: 'Conversion Readiness',
+      description: 'How effectively your site turns visitors into customers—CTA, layout, flow.',
+      placeholderLabel: 'CONVERT',
+      rows: buildWorkNeededRows('Conversion analysis requires page evidence with CTA and value proposition data.'),
+      footerLeft: WORK_NEEDED_LABEL,
+      footerRight: 'REVIEWED',
+    },
+
+    // ── SEARCH & DISCOVERY ────────────────────────────────────────────────────
+    {
+      id: 'content-gaps',
+      category: 'search',
+      number: 'CG',
+      label: 'GAPS',
+      title: 'Content Gaps',
+      description: 'Topics and pages missing from your site that competitors are capturing.',
+      placeholderLabel: 'GAPS',
+      rows: buildWorkNeededRows('Content gap analysis requires competitor and keyword data.'),
+      footerLeft: WORK_NEEDED_LABEL,
+      footerRight: 'REVIEWED',
+    },
+    {
+      id: 'search-opportunities',
+      category: 'search',
+      number: 'SO',
+      label: 'SEARCH',
+      title: 'Search Opportunities',
+      description: 'Keywords and topics with clear ranking potential.',
+      placeholderLabel: hasOpportunitiesData ? 'SEARCH' : 'NO\nDATA',
       rows: hasOpportunitiesData
         ? resolvedOpportunities.map((op, index) => ({
             key: `op-${index}`,
             label: `[${String(op.priority || 'medium').slice(0, 4).toUpperCase()}]`,
             value: `${op.topic || op.opportunity}${op.whyNow || op.why ? ` — ${op.whyNow || op.why}` : ''}`,
           }))
-        : buildWorkNeededRows('The current intake did not surface enough concrete evidence to suggest high-confidence opportunities.'),
+        : buildWorkNeededRows('No search opportunities surfaced from the current intake.'),
       footerLeft: hasOpportunitiesData ? 'Live' : WORK_NEEDED_LABEL,
+      footerRight: 'REVIEWED',
+    },
+
+    // ── CONTENT & SOCIAL ──────────────────────────────────────────────────────
+    {
+      id: 'marketing',
+      category: 'content',
+      number: 'PS',
+      label: 'STRATEGY',
+      title: 'Post Strategy',
+      description: 'What to post, where, and why—based on gaps and audience signals.',
+      placeholderLabel: 'NO\nSTRATEGY',
+      rows: buildWorkNeededRows('Post strategy requires brand tone, audience signals, and content gap data.'),
+      footerLeft: WORK_NEEDED_LABEL,
+      footerRight: 'REVIEWED',
+    },
+    {
+      id: 'draft-post',
+      category: 'content',
+      number: 'DC',
+      label: 'DRAFT',
+      title: 'Draft Content',
+      description: 'Ready-to-use posts tailored to your brand.',
+      placeholderLabel: hasDraftPostData ? 'DRAFT' : 'NO\nDRAFT',
+      rows: hasDraftPostData
+        ? [{ key: 'post', label: 'Draft', value: resolvedDraftPost }]
+        : buildWorkNeededRows('Not enough brand voice clarity to draft content credibly.'),
+      footerLeft: hasDraftPostData ? 'Live' : WORK_NEEDED_LABEL,
+      footerRight: 'REVIEWED',
+    },
+    {
+      id: 'platform-coverage',
+      category: 'content',
+      number: 'PC',
+      label: 'PLATFORMS',
+      title: 'Platform Coverage',
+      description: 'Where your brand is active and where visibility is missing.',
+      placeholderLabel: 'PLATFORMS',
+      rows: buildWorkNeededRows('Platform analysis requires social link data from crawled pages.'),
+      footerLeft: WORK_NEEDED_LABEL,
+      footerRight: 'REVIEWED',
+    },
+
+    // ── GROWTH SIGNALS ────────────────────────────────────────────────────────
+    {
+      id: 'signals',
+      category: 'growth',
+      number: 'MS',
+      label: 'SIGNALS',
+      title: 'Market Signals',
+      description: 'Trends, conversations, and demand signals relevant to your business.',
+      placeholderLabel: 'NO\nSIGNALS',
+      rows: buildWorkNeededRows('Signal collection requires active scout feeds.'),
+      footerLeft: WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
     },
     {
       id: 'competitor-info',
-      category: 'systems',
-      number: 'CI',
-      label: 'COMPETITOR INFO',
-      title: 'Competitor Info',
-      description: 'Competitive landscape pulled from live sources — shows how your positioning, messaging, and offer stack up against direct and indirect competitors in your space.',
-      placeholderLabel: 'COMPETITOR MAP',
-      rows: buildWorkNeededRows('Competitor mapping requires a completed intake run with validated industry and positioning signals.'),
+      category: 'growth',
+      number: 'CS',
+      label: 'COMPETITION',
+      title: 'Competitor Snapshot',
+      description: 'How competitors position and communicate.',
+      placeholderLabel: 'NOT\nMAPPED',
+      rows: buildWorkNeededRows('Competitor mapping requires validated industry and positioning signals.'),
       footerLeft: WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
     },
     {
-      id: 'signals',
-      category: 'systems',
-      number: 'SG',
-      label: 'SIGNALS',
-      title: 'Signals',
-      description: 'Live signal feed from geographic events, trending topics, and social conversations relevant to your brand — surfaces what is happening in your market right now.',
-      placeholderLabel: 'SIGNAL FEED',
-      rows: buildWorkNeededRows('Signal collection requires an active intake run with geo, category, and audience parameters set.'),
+      id: 'local-signals',
+      category: 'growth',
+      number: 'LS',
+      label: 'LOCAL',
+      title: 'Local Signals',
+      description: 'Events, location-based demand, and local activity.',
+      placeholderLabel: 'LOCAL',
+      rows: buildWorkNeededRows('Local signal data requires geo and location parameters.'),
       footerLeft: WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
     },
+
+    // ── AUTOMATION & SYSTEMS ──────────────────────────────────────────────────
     {
-      id: 'marketing',
-      category: 'content',
-      number: 'MK',
-      label: 'MARKETING',
-      title: 'Marketing',
-      description: 'Strategy recommendations generated from live signals — cross-referenced with your brand positioning and audience frame to produce prioritized marketing moves.',
-      placeholderLabel: 'STRATEGY OUTPUT',
-      rows: buildWorkNeededRows('Marketing strategy requires signals, brand tone, and priority signal data from a completed intake run.'),
-      footerLeft: WORK_NEEDED_LABEL,
+      id: 'automation-opportunities',
+      category: 'automation',
+      number: 'AO',
+      label: 'AUTOMATE',
+      title: 'Automation Opportunities',
+      description: 'Tasks that can be automated across marketing and operations.',
+      placeholderLabel: 'COMING\nSOON',
+      rows: buildWorkNeededRows('Automation analysis is coming soon.'),
+      footerLeft: 'Coming Soon',
+      footerRight: 'PLANNED',
+    },
+    {
+      id: 'content-engine',
+      category: 'automation',
+      number: 'CE',
+      label: 'ENGINE',
+      title: 'Content Engine',
+      description: 'Automated system for generating and distributing content.',
+      placeholderLabel: hasContentAngleData || hasOpportunitiesData ? 'ENGINE' : 'COMING\nSOON',
+      rows: (() => {
+        const engineRows = [];
+        if (hasContentAngleData) engineRows.push({ key: 'angle', label: 'Angle', value: resolvedContentAngle });
+        if (hasOpportunitiesData) resolvedOpportunities.slice(0, 3).forEach((op, i) => {
+          engineRows.push({ key: `eng-op-${i}`, label: `[${String(op.priority || 'med').slice(0, 4).toUpperCase()}]`, value: op.topic || op.opportunity });
+        });
+        return engineRows.length ? engineRows : buildWorkNeededRows('Content engine requires angles and opportunity data.');
+      })(),
+      footerLeft: (hasContentAngleData || hasOpportunitiesData) ? 'Live' : 'Coming Soon',
       footerRight: 'REVIEWED',
+    },
+    {
+      id: 'reporting-insights',
+      category: 'automation',
+      number: 'RI',
+      label: 'INSIGHTS',
+      title: 'Reporting & Insights',
+      description: 'Ongoing tracking of performance and growth.',
+      placeholderLabel: 'COMING\nSOON',
+      rows: buildWorkNeededRows('Reporting and insights tracking is coming soon.'),
+      footerLeft: 'Coming Soon',
+      footerRight: 'PLANNED',
+    },
+
+    // ── WORK WITH ME ──────────────────────────────────────────────────────────
+    {
+      id: 'fix-this',
+      category: 'services',
+      number: 'FX',
+      label: 'FIX',
+      title: 'Fix This',
+      description: 'Request a fix for any issue surfaced in the dashboard.',
+      placeholderLabel: 'FIX',
+      rows: [{ key: 'cta', label: 'Action', value: 'Book a call to fix an issue →' }],
+      footerLeft: 'Available',
+      footerRight: 'SERVICE',
+    },
+    {
+      id: 'creative-work',
+      category: 'services',
+      number: 'CW',
+      label: 'CREATE',
+      title: 'Creative Work',
+      description: 'Design, video, and brand asset creation.',
+      placeholderLabel: 'CREATE',
+      rows: [{ key: 'cta', label: 'Action', value: 'Book a creative session →' }],
+      footerLeft: 'Available',
+      footerRight: 'SERVICE',
+    },
+    {
+      id: 'build-a-page',
+      category: 'services',
+      number: 'BP',
+      label: 'BUILD',
+      title: 'Build a Page',
+      description: 'Landing pages and website builds focused on conversion.',
+      placeholderLabel: 'BUILD',
+      rows: [{ key: 'cta', label: 'Action', value: 'Book a build session →' }],
+      footerLeft: 'Available',
+      footerRight: 'SERVICE',
+    },
+    {
+      id: 'run-my-marketing',
+      category: 'services',
+      number: 'RM',
+      label: 'RUN',
+      title: 'Run My Marketing',
+      description: 'Full execution across content, SEO, and distribution.',
+      placeholderLabel: 'RUN',
+      rows: [{ key: 'cta', label: 'Action', value: 'Book a strategy call →' }],
+      footerLeft: 'Available',
+      footerRight: 'SERVICE',
+    },
+    {
+      id: 'contact',
+      category: 'services',
+      number: 'CH',
+      label: 'CONTACT',
+      title: 'Contact Your Human',
+      description: 'Direct communication to execute work.',
+      placeholderLabel: 'CONTACT',
+      rows: [{ key: 'cta', label: 'Action', value: 'Ask anything about your dashboard →' }],
+      footerLeft: 'Available',
+      footerRight: 'SERVICE',
+    },
+
+    // ── VIDEO SERVICES ──────────────────────────────────────────────────────
+    {
+      id: 'short-form-video',
+      category: 'services',
+      number: 'SV',
+      label: 'VIDEO',
+      title: 'Short-Form Video',
+      description: 'Vertical video edit up to 60 seconds. Includes cuts, captions, music, and brand framing—built for social performance and fast turnaround.',
+      placeholderLabel: 'VIDEO',
+      rows: [
+        { key: 'scope', label: 'Scope', value: 'Up to 60s vertical edit' },
+        { key: 'includes', label: 'Includes', value: 'Cuts · captions · music · brand framing' },
+        { key: 'cta', label: 'Action', value: 'Request a video →' },
+      ],
+      footerLeft: 'Available',
+      footerRight: 'SERVICE',
+    },
+    {
+      id: 'long-form-video',
+      category: 'services',
+      number: 'LV',
+      label: 'VIDEO',
+      title: 'Long-Form Video',
+      description: 'Edited video up to 5 minutes with multi-cam support, color grading, and sound mix. Designed for product, storytelling, or campaign content.',
+      placeholderLabel: 'VIDEO',
+      rows: [
+        { key: 'scope', label: 'Scope', value: 'Up to 5 min · multi-cam' },
+        { key: 'includes', label: 'Includes', value: 'Color grading · sound mix · titles' },
+        { key: 'cta', label: 'Action', value: 'Request a video →' },
+      ],
+      footerLeft: 'Available',
+      footerRight: 'SERVICE',
+    },
+
+    // ── DESIGN SERVICES ─────────────────────────────────────────────────────
+    {
+      id: 'single-graphic',
+      category: 'services',
+      number: 'DG',
+      label: 'DESIGN',
+      title: 'Single Graphic',
+      description: 'One static asset for social, ads, or web. Designed on-brand and ready to publish immediately.',
+      placeholderLabel: 'DESIGN',
+      rows: [
+        { key: 'scope', label: 'Scope', value: '1 static asset · any platform' },
+        { key: 'cta', label: 'Action', value: 'Request a graphic →' },
+      ],
+      footerLeft: 'Available',
+      footerRight: 'SERVICE',
+    },
+    {
+      id: 'carousel-kit',
+      category: 'services',
+      number: 'CK',
+      label: 'DESIGN',
+      title: 'Carousel Kit',
+      description: 'Multi-slide post with structured layout, copy, and flow. Built for engagement and clarity across platforms.',
+      placeholderLabel: 'DESIGN',
+      rows: [
+        { key: 'scope', label: 'Scope', value: 'Multi-slide · copy + layout' },
+        { key: 'cta', label: 'Action', value: 'Request a carousel →' },
+      ],
+      footerLeft: 'Available',
+      footerRight: 'SERVICE',
+    },
+
+    // ── SOCIAL SERVICES ─────────────────────────────────────────────────────
+    {
+      id: 'social-management',
+      category: 'services',
+      number: 'SM',
+      label: 'SOCIAL',
+      title: 'Social Management',
+      description: 'Ongoing posting, scheduling, and light community interaction layered on top of automation. Keeps your presence active and consistent.',
+      placeholderLabel: 'SOCIAL',
+      rows: [
+        { key: 'scope', label: 'Scope', value: 'Ongoing · posting + scheduling' },
+        { key: 'cta', label: 'Action', value: 'Request social management →' },
+      ],
+      footerLeft: 'Available',
+      footerRight: 'SERVICE',
+    },
+
+    // ── BRAND SERVICES ──────────────────────────────────────────────────────
+    {
+      id: 'logo-brand-refresh',
+      category: 'services',
+      number: 'LB',
+      label: 'BRAND',
+      title: 'Logo & Brand Refresh',
+      description: 'Refined logo system including wordmark, icon, and platform-ready assets. Improves consistency and brand recognition.',
+      placeholderLabel: 'BRAND',
+      rows: [
+        { key: 'scope', label: 'Scope', value: 'Wordmark · icon · platform assets' },
+        { key: 'cta', label: 'Action', value: 'Request a brand refresh →' },
+      ],
+      footerLeft: 'Available',
+      footerRight: 'SERVICE',
+    },
+
+    // ── WEB SERVICES ────────────────────────────────────────────────────────
+    {
+      id: 'landing-page-build',
+      category: 'services',
+      number: 'LP',
+      label: 'BUILD',
+      title: 'Landing Page Build',
+      description: 'Single-page site designed and built to convert. Includes copy, layout, and deployment.',
+      placeholderLabel: 'BUILD',
+      rows: [
+        { key: 'scope', label: 'Scope', value: 'Single page · copy + design + deploy' },
+        { key: 'cta', label: 'Action', value: 'Request a landing page →' },
+      ],
+      footerLeft: 'Available',
+      footerRight: 'SERVICE',
+    },
+
+    // ── EMAIL SERVICES ──────────────────────────────────────────────────────
+    {
+      id: 'email-campaign',
+      category: 'services',
+      number: 'EC',
+      label: 'EMAIL',
+      title: 'Email Campaign',
+      description: 'One complete campaign with template, copy, and send setup. Ready to deploy and track performance.',
+      placeholderLabel: 'EMAIL',
+      rows: [
+        { key: 'scope', label: 'Scope', value: '1 campaign · template + copy + send' },
+        { key: 'cta', label: 'Action', value: 'Request an email campaign →' },
+      ],
+      footerLeft: 'Available',
+      footerRight: 'SERVICE',
+    },
+
+    // ── PRODUCT / UI SERVICES ───────────────────────────────────────────────
+    {
+      id: 'ui-screen-design',
+      category: 'services',
+      number: 'UI',
+      label: 'UI',
+      title: 'UI Screen Design',
+      description: 'One production-ready Figma screen with components, variants, and dev-ready structure.',
+      placeholderLabel: 'UI',
+      rows: [
+        { key: 'scope', label: 'Scope', value: '1 Figma screen · components + variants' },
+        { key: 'cta', label: 'Action', value: 'Request a UI screen →' },
+      ],
+      footerLeft: 'Available',
+      footerRight: 'SERVICE',
+    },
+    {
+      id: 'ui-flow-design',
+      category: 'services',
+      number: 'UF',
+      label: 'UI',
+      title: 'UI Flow Design',
+      description: 'Multi-screen flow with shared components and prototype. Built as a scalable system with consistent design logic.',
+      placeholderLabel: 'UI',
+      rows: [
+        { key: 'scope', label: 'Scope', value: 'Multi-screen · prototype + system' },
+        { key: 'cta', label: 'Action', value: 'Request a UI flow →' },
+      ],
+      footerLeft: 'Available',
+      footerRight: 'SERVICE',
     },
   ].map((card) => {
     const scribe = scribeCards?.[card.id];
-    const analyzer = analyzerOutputs?.[card.id]?.aggregate || null;   // P7: additive
+    let analyzer = resolveAnalyzerSource(card.id, analyzerOutputs);
+
+    // Derive readiness for cards without a real analyzer (skip services)
+    if (!analyzer && card.category !== 'services') {
+      const derivedReadiness = (() => {
+        if (card.footerLeft === 'Live') return 'healthy';
+        if (card.footerLeft === 'Partial' || card.footerLeft === 'Queued' || card.footerLeft === 'Coming Soon') return 'partial';
+        if (card.footerLeft === 'Error') return 'critical';
+        return 'critical'; // WORK_NEEDED_LABEL or no data = needs attention
+      })();
+      analyzer = { readiness: derivedReadiness, findings: [], gaps: [], highlights: [] };
+    }
+
     if (!scribe && !analyzer) return card;
+
+    const readinessContext = (() => {
+      if (!analyzer?.readiness) return '';
+      switch (analyzer.readiness) {
+        case 'critical':
+          return ' Status: Holding you back — at least one major issue found that directly impacts visibility, trust, or conversion.';
+        case 'partial':
+          return ' Status: Needs attention — some warnings or incomplete data detected. Room to improve.';
+        case 'healthy':
+          return ' Status: In a good spot — all checks passed. No issues found.';
+        default:
+          return '';
+      }
+    })();
+
+    const baseDescription = scribe?.expanded || card.description;
+
+    // Deterministic tile description — onboarding cards only, no LLM call.
+    // Falls through to scribeShort → static description when builder returns null.
+    let dynamicShortDescription = null;
+    if (DETERMINISTIC_CARD_IDS.has(card.id)) {
+      const rawData = (() => {
+        switch (card.id) {
+          case 'social-preview':
+            return {
+              ogImage:       siteMeta ? Boolean(siteMeta.ogImage) : null,
+              ogTitle:       siteMeta?.title       || null,
+              ogDescription: siteMeta?.description || null,
+              canonical:     siteMeta?.canonical   || null,
+              favicon:       siteMeta?.favicon     || null,
+            };
+          case 'visibility-snapshot':
+            return {
+              score:       aiVisibility?.score       ?? null,
+              letterGrade: aiVisibility?.letterGrade ?? null,
+            };
+          case 'multi-device-view':
+            return { captureDone: Boolean(intakeMockupSrc) };
+          case 'brief':
+            return { hasBrief: hasIntakeData };
+          case 'business-model':
+            return { hasModel: hasBusinessModelData, modelLabel: resolvedBusinessModel };
+          case 'industry':
+            return { hasCategory: hasIndustryData, categoryLabel: resolvedIndustry };
+          default:
+            return {};
+        }
+      })();
+      const built = buildCardDescription(card.id, analyzer, rawData);
+      dynamicShortDescription = built.description || null;
+    }
+
     return {
       ...card,
-      description:    scribe?.expanded      || card.description,
-      scribeShort:    scribe?.short         || null,
-      recommendation: scribe?.recommendation || null,   // P4: additive
-      analyzer,                                          // P7: additive
+      description:             baseDescription + readinessContext,
+      scribeShort:             scribe?.short || null,
+      dynamicShortDescription,
+      recommendation:          scribe?.recommendation || null,
+      analyzer,
     };
   });
 
@@ -2597,30 +3114,65 @@ const DashboardPage = () => {
           {/* Left — grid */}
           <div id="capability-grid-col">
           <div id="capability-grid" ref={capabilityGridRef}>
-            {intakeCapabilityCards.filter((card) => !activeCapabilityFilter || activeCapabilityFilter === card.category).map((card) => (
+            {activeCapabilityFilter === 'brief' ? (
+              <div id="brief-embed-container">
+                {briefPdfUrl && (
+                  <div id="brief-embed-header">
+                    <button
+                      type="button"
+                      className="brief-embed-btn"
+                      onClick={() => setBriefFullScreen(true)}
+                    >Open ↗</button>
+                    <a
+                      className="brief-embed-btn"
+                      href={briefPdfUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      download="brief.pdf"
+                    >↓ Download PDF</a>
+                  </div>
+                )}
+                {briefPreviewHtml ? (
+                  <iframe
+                    id="brief-embed-iframe"
+                    title="Daily Brief"
+                    srcDoc={briefPreviewHtml}
+                    sandbox="allow-same-origin"
+                  />
+                ) : (
+                  <div id="brief-embed-empty">
+                    <div className="brief-loader">
+                      <div className="brief-loader-spinner" />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : null}
+            {activeCapabilityFilter !== 'brief' && intakeCapabilityCards.filter((card) => {
+              if (!activeCapabilityFilter) return true;
+              if (activeCapabilityFilter === 'onboarding') return ONBOARDING_CARD_IDS.has(card.id);
+              return activeCapabilityFilter === card.category;
+            }).map((card) => (
               <article
                 data-capability-card
                 data-flip-id={`cap-${card.id}`}
                 className={`tile tile-intake-card${hasIntakeData ? ' tile-ready' : ''}${card.wide ? ' tile-intake-card--wide' : ''}`}
                 id={card.domId || `tile-${card.id}`}
                 key={card.id}
-                onClick={() => setActiveTileModal({ title: card.title, description: card.description, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null, recommendation: card.recommendation || null, analyzer: card.analyzer || null })}
+                onClick={() => {
+                  if (card.id === 'brief' && briefPreviewHtml) { setBriefFullScreen(true); return; }
+                  setActiveTileModal({ title: card.title, description: card.description, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null, recommendation: card.recommendation || null, analyzer: card.analyzer || null });
+                }}
               >
                 <div className="tile-number">
-                  <span>{card.label}</span>
-                  {card.analyzer?.readiness && (
-                    <span className={`tile-card-readiness readiness-${card.analyzer.readiness}`}>
-                      {card.analyzer.readiness}
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    className="tile-open-modal-btn"
-                    onClick={(e) => { e.stopPropagation(); setActiveTileModal({ title: card.title, description: card.description, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null, recommendation: card.recommendation || null, analyzer: card.analyzer || null }); }}
-                    aria-label="Open details"
-                  >[ ↑ ]</button>
+                  <span className="tile-header-label">{card.label}</span>
                 </div>
-                <div className={`tile-intake-placeholder tile-intake-placeholder-${card.id}`}>
+                <div
+                  className={`tile-intake-placeholder tile-intake-placeholder-${card.id}`}
+                  style={card.id === 'multi-device-view' && sgDisplayData?.colors?.primary?.hex
+                    ? { background: `linear-gradient(135deg, ${sgDisplayData.colors.primary.hex}, ${sgDisplayData.colors.secondary?.hex || sgDisplayData.colors.neutral?.hex || '#ddd'})` }
+                    : undefined}
+                >
                   {card.id === 'brief' && briefPreviewHtml ? (
                     <iframe
                       key={dashboardState?.latestRunId || 'brief-preview'}
@@ -2629,152 +3181,78 @@ const DashboardPage = () => {
                       srcDoc={briefPreviewHtml}
                       sandbox="allow-same-origin"
                     />
-                  ) : card.id === 'style-guide' ? (
+                  ) : card.id === 'style-guide' && hasSgQuadrant ? (
                     <div id="sg-preview-shell" className="sg-preview">
-                      {sgDisplayData?.confidence === 'low' ? (
-                        <div className="sg-empty">
-                          <span className="sg-empty-label">NO CSS EXTRACTED</span>
-                          <span className="sg-empty-msg">Site may be JS-rendered or stylesheet-free</span>
-                        </div>
-                      ) : (() => {
-                        const sgHead = sgDisplayData.typography?.headingSystem;
-                        const sgBody = sgDisplayData.typography?.bodySystem;
-                        const headName = sgHead?.fontFamily?.split(',')[0].replace(/["']/g, '').trim() || 'Heading';
-                        const LEVELS = ['none', 'minimal', 'moderate', 'heavy'];
-                        const levelIdx = LEVELS.indexOf(sgDisplayData.motion?.level || 'minimal');
+                      {(() => {
+                        const sgHead = sgDisplayData?.typography?.headingSystem;
+                        const sgBody = sgDisplayData?.typography?.bodySystem;
+                        const headName = sgHead?.fontFamily?.split(',')[0].replace(/["']/g, '').trim() || null;
                         return (
                           <>
-                            {isStyleGuideMock && <span className="sg-demo-watermark">DEMO</span>}
-
-                            {/* TYPE — H1 sample + P sample */}
-                            <div className="sg-quad sg-q-type">
-                              <p className="sg-h1" style={{ fontFamily: sgHead?.fontFamily || 'serif' }}>
-                                {headName}
-                              </p>
-                              <p className="sg-p" style={{ fontFamily: sgBody?.fontFamily || 'sans-serif' }}>
-                                The quick brown fox jumps over the lazy dog and the paragraph text continues here.
-                              </p>
-                            </div>
-
-                            {/* COLOR — full-bleed equal bands */}
-                            <div className="sg-quad sg-q-color">
-                              {[
-                                sgDisplayData.colors?.primary,
-                                sgDisplayData.colors?.secondary,
-                                sgDisplayData.colors?.tertiary,
-                                sgDisplayData.colors?.neutral,
-                              ].filter(Boolean).map((color, ci) => (
-                                <div
-                                  key={ci}
-                                  className="sg-swatch"
-                                  style={{ background: color.hex }}
-                                  title={color.role}
+                            {/* BRAND MARK (top-left) */}
+                            <div
+                              className="sg-quad sg-q-brand-mark"
+                              style={{ background: sgLogoSrc ? (sgDisplayData?.colors?.neutral?.hex || sgDisplayData?.colors?.primary?.hex || '#f0efed') : 'rgba(255, 255, 255, 0.65)' }}
+                            >
+                              {sgLogoSrc ? (
+                                <img
+                                  id="sg-brand-mark-img"
+                                  src={sgLogoSrc}
+                                  alt="Site brand mark"
+                                  onError={(e) => { e.currentTarget.style.display = 'none'; const p = e.currentTarget.parentElement; if (p) { const s = document.createElement('span'); s.className = 'sg-no-logo'; s.textContent = 'NO\nLOGO'; p.appendChild(s); } }}
                                 />
-                              ))}
+                              ) : (
+                                <span className="sg-no-logo">{"NO\nLOGO"}</span>
+                              )}
                             </div>
 
-                            {/* LAYOUT — data-driven responsive grid: desktop → mobile */}
-                            <div className="sg-quad sg-q-layout">
-                              {(() => {
-                                const gridType  = sgDisplayData.layout?.grid         || '12-column';
-                                const cWidth    = sgDisplayData.layout?.contentWidth || 'contained';
-                                const framing   = sgDisplayData.layout?.framing      || 'open';
-                                const bradius   = sgDisplayData.layout?.borderRadius || '2px';
-                                const maxWidth  = sgDisplayData.layout?.maxWidth;
-
-                                const COL_MAP  = { '12-column': 3, 'auto-fit': 4, 'masonry': 3, 'minimal': 2, 'none': 1, 'custom': 2 };
-                                const colCount = COL_MAP[gridType] ?? 3;
-
-                                const isFullBleed = cWidth === 'full-bleed';
-                                const isCard      = framing === 'card-based' || framing === 'boxed';
-                                const isMasonry   = gridType === 'masonry';
-                                const MASONRY_H   = ['30px', '20px', '36px', '24px'];
-
-                                const label = [
-                                  gridType.replace('-column', ''),
-                                  maxWidth && maxWidth !== 'none' ? maxWidth : null,
-                                ].filter(Boolean).join(' · ');
-
-                                return (
-                                  <>
-                                    <div id="sg-rg-demo" className={`sg-rg${isFullBleed ? ' sg-rg--fullbleed' : ''}`}>
-                                      <div className="sg-rg-nav" />
-                                      <div
-                                        className="sg-rg-cols"
-                                        style={{ '--sg-col-min-w': colCount <= 1 ? '0px' : '30px' }}
-                                      >
-                                        {Array.from({ length: colCount }, (_, i) => (
-                                          <div
-                                            key={i}
-                                            className={`sg-rg-col${isCard ? ' sg-rg-col--card' : ''}`}
-                                            style={{
-                                              borderRadius: bradius,
-                                              ...(isMasonry ? { height: MASONRY_H[i] ?? '28px', flex: 'none', width: `${Math.round(100 / colCount)}%` } : {}),
-                                            }}
-                                          />
-                                        ))}
-                                      </div>
-                                    </div>
-                                    <span className="sg-grid-label">{label}</span>
-                                  </>
-                                );
-                              })()}
+                            {/* COLOR (top-right) */}
+                            <div className="sg-quad sg-q-color" style={!hasSgColors ? { background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' } : undefined}>
+                              {hasSgColors ? [
+                                sgDisplayData.colors.primary,
+                                sgDisplayData.colors.secondary,
+                                sgDisplayData.colors.tertiary,
+                                sgDisplayData.colors.neutral,
+                              ].filter(Boolean).map((color, ci) => (
+                                <div key={ci} className="sg-swatch" style={{ background: color.hex }} title={color.role} />
+                              )) : (
+                                <span className="sg-no-data">{"NO\nCOLOR"}</span>
+                              )}
                             </div>
 
-                            {/* MOTION — easing curve SVG + tech label */}
-                            <div className="sg-quad sg-q-motion">
-                              {(() => {
-                                const primaryEasing = sgDisplayData.motion?.easings?.[0] || 'ease-in-out';
-                                const animDur = sgDisplayData.motion?.durations?.[0] || '400ms';
-                                const p = sgDisplayData.motion?.scrollPatterns || [];
-                                const motionTech = p.some(s => /gsap/i.test(s)) ? 'GSAP'
-                                  : p.some(s => /lenis/i.test(s)) ? 'Lenis'
-                                  : p.some(s => /aos/i.test(s)) ? 'AOS'
-                                  : p.some(s => /framer/i.test(s)) ? 'Framer'
-                                  : p.length ? p[0].split(' ')[0] : 'CSS';
-                                // Forward-only path: drawn as the visible curve
-                                const curvePath    = _sgEasingPath(primaryEasing, 80, 80);
-                                // Round-trip path: forward + reversed bezier, no jump at end
-                                const rtPath       = _sgEasingPath(primaryEasing, 80, 80, true);
-                                const easingSpline = _sgEasingSpline(primaryEasing);
-                                // Show GSAP power name when tech is GSAP, otherwise CSS name
-                                const easingLabel  = _sgGsapName(primaryEasing, motionTech === 'GSAP');
-                                return (
-                                  <>
-                                    <svg className="sg-ease-svg" viewBox="-3 -3 86 86" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                      {/* Axes */}
-                                      <line x1="0" y1="0" x2="0" y2="80" stroke="rgba(42,36,32,0.14)" strokeWidth="0.75"/>
-                                      <line x1="0" y1="80" x2="80" y2="80" stroke="rgba(42,36,32,0.14)" strokeWidth="0.75"/>
-                                      {/* Linear reference diagonal */}
-                                      <line x1="0" y1="80" x2="80" y2="0" stroke="rgba(42,36,32,0.1)" strokeWidth="0.75" strokeDasharray="3 3"/>
-                                      {/* Visible easing curve (forward only) */}
-                                      <path d={curvePath} stroke="rgba(42,36,32,0.82)" strokeWidth="2" strokeLinecap="round"/>
-                                      {/* Hidden round-trip path — dot travels forward then retraces back, no restart jump */}
-                                      <path id="sg-ease-rt-path" d={rtPath} stroke="none" fill="none"/>
-                                      {/* Animated dot: 3s total (1.5s forward + 1.5s reverse), easing both ways */}
-                                      <circle r="3.5" fill="rgba(42,36,32,0.8)">
-                                        <animateMotion dur="3s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.5;1" keySplines={`${easingSpline};${easingSpline}`}>
-                                          <mpath xlinkHref="#sg-ease-rt-path"/>
-                                        </animateMotion>
-                                      </circle>
-                                      {/* Endpoint dots */}
-                                      <circle cx="0" cy="80" r="2.5" fill="rgba(42,36,32,0.3)"/>
-                                      <circle cx="80" cy="0" r="2.5" fill="rgba(42,36,32,0.3)"/>
-                                    </svg>
-                                    <div className="sg-motion-meta">
-                                      <span className="sg-motion-easing">{easingLabel}</span>
-                                      <span className="sg-motion-sep">·</span>
-                                      <span className="sg-motion-dur">{animDur}</span>
-                                    </div>
-                                  </>
-                                );
-                              })()}
+                            {/* TYPE (bottom-left) */}
+                            <div
+                              className="sg-quad sg-q-type"
+                              style={{ background: hasSgType ? (sgDisplayData?.colors?.neutral?.shades?.[0] || sgDisplayData?.colors?.primary?.shades?.[0] || sgDisplayData?.colors?.neutral?.hex || '#faf8f4') : 'transparent' }}
+                            >
+                              {hasSgType && headName ? (
+                                <>
+                                  <p className="sg-h1" style={{ fontFamily: sgHead?.fontFamily || 'serif' }}>
+                                    {headName}
+                                  </p>
+                                  <p className="sg-p" style={{ fontFamily: sgBody?.fontFamily || 'sans-serif' }}>
+                                    The quick brown fox jumps over the lazy dog.
+                                  </p>
+                                </>
+                              ) : (
+                                <span className="sg-no-data">{"NO\nTYPE"}</span>
+                              )}
+                            </div>
+
+                            {/* GRADIENT (bottom-right) */}
+                            <div
+                              className="sg-quad sg-q-gradient"
+                              style={hasSgColors ? {
+                                background: `linear-gradient(135deg, ${sgDisplayData.colors.primary?.hex || '#888'}, ${sgDisplayData.colors.secondary?.hex || sgDisplayData.colors.neutral?.hex || '#ddd'})`,
+                              } : { background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                            >
+                              {!hasSgColors && <span className="sg-no-data">{"NO\nGRADIENT"}</span>}
                             </div>
                           </>
                         );
                       })()}
                     </div>
-                  ) : card.id === 'intake-terminal' && intakeMockupSrc ? (
+                  ) : card.id === 'multi-device-view' && intakeMockupSrc ? (
                     <span className="tile-intake-mockup-wrap">
                       <img
                         className="tile-intake-mockup-image"
@@ -2784,8 +3262,8 @@ const DashboardPage = () => {
                       />
                     </span>
                   ) : card.id === 'seo-performance' && hasSeoAuditData ? (
-                    renderSeoViz(seoAudit)
-                  ) : card.id === 'brand-tone' && siteMeta?.ogImage ? (
+                    renderSeoViz(seoAudit, aiVisibility)
+                  ) : card.id === 'social-preview' && siteMeta?.ogImage ? (
                     <div id="bt-preview-shell">
                       <img
                         id="bt-og-image"
@@ -2802,13 +3280,42 @@ const DashboardPage = () => {
                         />
                       )}
                     </div>
+                  ) : card.id === 'business-model' && homepageScreenshotUrl ? (
+                    <div id="bi-preview-shell">
+                      <img
+                        id="bi-hero-image"
+                        src={homepageScreenshotUrl}
+                        alt="Homepage screenshot"
+                        onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }}
+                      />
+                    </div>
                   ) : (
-                    <span>{card.placeholderLabel}</span>
+                    <span className="tile-empty-label">{card.placeholderLabel}</span>
                   )}
                 </div>
                 <div className="tile-intake-body">
                   <h3 className="tile-heading tile-intake-heading">{card.title}</h3>
-                  <p className="tile-description tile-intake-description">{card.description}</p>
+                  {card.category !== 'services' && (
+                    <span className="tile-intake-source-line">
+                      Generated {(() => {
+                        try {
+                          const raw = dashboardState?.updatedAt || dashboardState?.createdAt || dashboardState?.latestRunTimestamp;
+                          const ts = raw?.toDate?.() || (raw?.seconds ? new Date(raw.seconds * 1000) : raw);
+                          const d = ts ? new Date(ts) : null;
+                          if (!d || isNaN(d.getTime())) return '';
+                          return d.toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) + ' EST';
+                        } catch { return ''; }
+                      })()}
+                    </span>
+                  )}
+                  <p className="tile-description tile-intake-description">
+                    {card.analyzer?.readiness && (
+                      <span className={`tile-readiness-tag readiness-${card.analyzer.readiness}`}>
+                        STATUS: {card.analyzer.readiness === 'critical' ? 'Holding you back' : card.analyzer.readiness === 'partial' ? 'Needs attention' : 'In a good spot'}
+                      </span>
+                    )}
+                    {card.dynamicShortDescription || card.scribeShort || card.description}
+                  </p>
                 </div>
                 <div className="tile-foot">
                   <span className="tile-foot-status">
@@ -2851,130 +3358,21 @@ const DashboardPage = () => {
                 </div>
               </article>
             ))}
-            {tiles.filter((tile) => !activeCapabilityFilter || activeCapabilityFilter === tile.category).map((tile) => {
-              const isFreeTier = FREE_TIER_TILE_IDS.has(tile.id);
-              const isReady = isFreeTier && hasIntakeData;
-              const tileStatus = isReady ? tile.status : isFreeTier ? 'INITIALIZING' : 'PREVIEW';
-              const tileMetric = isReady ? tile.metric : isFreeTier ? '—' : 'CUSTOMIZATION';
-              const isBlocked = true;
-              const upgradeTitle = UPGRADE_TILE_TITLES[tile.id] || tile.label;
-              const resolvedDescription = UPGRADE_TILE_DESCRIPTIONS[tile.id] || tile.description;
-              const tileRows = [
-                { key: 'tier',    label: 'Tier',    value: isFreeTier ? 'Free Tier' : 'Customization' },
-                { key: 'status',  label: 'Status',  value: tileStatus },
-                { key: 'metric',  label: 'Metric',  value: tileMetric },
-                { key: 'module',  label: 'Module',  value: tile.label || 'Not provided' },
-                { key: 'summary', label: 'Summary', value: resolvedDescription || 'Not provided' },
-              ];
-              return (
-                <article
-                  data-capability-card
-                  data-flip-id={`tile-${tile.id}`}
-                  className={`tile tile-intake-card${!isFreeTier ? ' tile-preview' : ''}${isReady ? ' tile-ready' : ''}${isBlocked ? ' tile-blocked' : ''}`}
-                  id={`tile-${tile.number}-${tile.id}`}
-                  key={tile.id}
-                  onClick={() => setActiveTileModal({ title: tile.title || upgradeTitle, description: resolvedDescription, rows: tileRows, cardId: null, placeholderLabel: null, number: tile.number, label: tile.label, isCapabilityCard: false, vizType: tile.viz })}
-                >
-                  {isBlocked ? (
-                    <div className="tile-blocked-overlay" aria-hidden="false">
-                      <div className="tile-blocked-inner">
-                        <h3 className="tile-heading tile-intake-heading tile-blocked-title">{upgradeTitle}</h3>
-                        <p className="tile-description tile-intake-description tile-blocked-description">{resolvedDescription}</p>
-                      </div>
-                    </div>
-                  ) : null}
-                  <div className="tile-number">
-                    <span>{tile.label}</span>
-                    <button
-                      type="button"
-                      className="tile-open-modal-btn"
-                      onClick={(e) => { e.stopPropagation(); setActiveTileModal({ title: tile.title || upgradeTitle, description: resolvedDescription, rows: tileRows, cardId: null, placeholderLabel: null, number: tile.number, label: tile.label, isCapabilityCard: false, vizType: tile.viz }); }}
-                      aria-label="Open details"
-                    >[ ↑ ]</button>
-                  </div>
-                  <div className="tile-intake-placeholder tile-intake-placeholder-draft-post">
-                    {renderViz(tile.viz, countdownHours)}
-                  </div>
-                  <div className="tile-intake-body">
-                    <h3 className="tile-heading tile-intake-heading">{tile.title}</h3>
-                    <p className="tile-description tile-intake-description">{resolvedDescription}</p>
-                  </div>
-                  <div className="tile-foot">
-                    <span className="tile-foot-status">
-                      <span className={`power-dot lamp${!isFreeTier ? ' power-dot-dim' : ''}`} />
-                      {tileMetric}
-                    </span>
-                    <span className="tile-foot-right-group">
-                      <button
-                        type="button"
-                        className="tile-view-details-btn"
-                        onClick={(e) => { e.stopPropagation(); setActiveTileModal({ title: tile.title || upgradeTitle, description: resolvedDescription, rows: tileRows, cardId: null, placeholderLabel: null, number: tile.number, label: tile.label, isCapabilityCard: false, vizType: tile.viz }); }}
-                      >
-                        Chat with Bryan ↗
-                      </button>
-                    </span>
-                  </div>
-                </article>
-              );
-            })}
-            {(!activeCapabilityFilter || activeCapabilityFilter === 'contact') && (
-              <article
-                data-capability-card
-                className="tile tile-intake-card tile-contact"
-                id="tile-contact"
-                key="contact"
-                onClick={() => setActiveTileModal({ title: 'Contact Your Human', description: 'Ask anything about your dashboard, strategy, or next steps.', rows: [], cardId: null, placeholderLabel: null, number: 'CH', label: 'CONTACT', isCapabilityCard: true, vizType: null })}
-              >
-                <div className="tile-number">
-                  <span>CONTACT</span>
-                  <button
-                    type="button"
-                    className="tile-open-modal-btn"
-                    onClick={(e) => { e.stopPropagation(); setActiveTileModal({ title: 'Contact Your Human', description: 'Ask anything about your dashboard, strategy, or next steps.', rows: [], cardId: null, placeholderLabel: null, number: 'CH', label: 'CONTACT', isCapabilityCard: true, vizType: null }); }}
-                    aria-label="Open details"
-                  >[ ↑ ]</button>
-                </div>
-                <div className="tile-intake-placeholder tile-intake-placeholder-contact">
-                  <div style={{ width: '64px', height: '64px', borderRadius: '999px', overflow: 'hidden', border: '2px solid var(--border-visible)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-                    <img src="/img/profile_400x400.jpg" alt="Bryan Balli" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  </div>
-                </div>
-                <div className="tile-intake-body">
-                  <h3 className="tile-heading tile-intake-heading">Contact Your Human</h3>
-                  <p className="tile-description tile-intake-description">Ask anything about your dashboard, strategy, or next steps.</p>
-                </div>
-                <div className="tile-foot">
-                  <span className="tile-foot-status">
-                    <span className="power-dot" />
-                    AVAILABLE
-                  </span>
-                  <span className="tile-foot-right-group">
-                    <button
-                      type="button"
-                      className="tile-view-details-btn"
-                      onClick={(e) => { e.stopPropagation(); setActiveTileModal({ title: 'Contact Your Human', description: 'Ask anything about your dashboard, strategy, or next steps.', rows: [], cardId: null, placeholderLabel: null, number: 'CH', label: 'CONTACT', isCapabilityCard: true, vizType: null }); }}
-                    >
-                      Start chat ↗
-                    </button>
-                  </span>
-                </div>
-              </article>
-            )}
           </div>
           </div>{/* end capability-grid-col */}
 
           {/* Right — filter nav */}
           <div id="capability-nav-col">
             {[
-              { key: null,        label: 'View All Services',          sub: 'Dashboard overview',     icon: ChartColumnIncreasing, color: '#0ea5e9' },
-              { key: 'design',    label: 'Brand Identity & Design',    sub: 'Visual systems & kits',  icon: BriefcaseBusiness,     color: '#8b5cf6' },
-              { key: 'websites',  label: 'Websites & Landing Pages',   sub: 'Built to convert',       icon: LaptopMinimalCheck,    color: '#0ea5e9' },
-              { key: 'content',   label: 'Social Media & Content',     sub: 'Posts & strategy',       icon: Workflow,              color: '#14b8a6' },
-              { key: 'video',     label: 'Video & Motion',             sub: 'Reels & storytelling',   icon: Settings2,             color: '#10b981' },
-              { key: 'seo',       label: 'SEO & Content Strategy',     sub: 'Search & growth',        icon: Search,                color: '#f97316' },
-              { key: 'email',     label: 'Email & Newsletter Systems', sub: 'Campaigns & flows',      icon: ArrowRightLeft,        color: '#ec4899' },
-              { key: 'systems',   label: 'AI Automation & Workflows',  sub: 'Custom systems',         icon: BrainIcon,             color: '#6366f1' },
-              { key: 'contact',   label: 'Contact Your Human',         sub: 'Make Custom Requests',   icon: MessageSquareMore,     color: '#ec4899' },
+              { key: 'brief',      label: 'Daily Brief',             sub: 'Your full report',         icon: ChartColumnIncreasing, color: '#2a2420' },
+              { key: 'onboarding', label: 'Data Visualization',      sub: 'From your onboarding',     icon: Globe,                 color: '#f59e0b' },
+              { key: 'brand',      label: 'Brand & Presence',        sub: 'Identity & trust',         icon: BriefcaseBusiness,     color: '#8b5cf6' },
+              { key: 'website',    label: 'Website & Conversion',    sub: 'Speed & conversion',       icon: LaptopMinimalCheck,    color: '#0ea5e9' },
+              { key: 'search',     label: 'Search & Discovery',      sub: 'SEO & content gaps',       icon: Search,                color: '#f97316' },
+              { key: 'content',    label: 'Content & Social',        sub: 'Posts & platforms',        icon: Workflow,               color: '#14b8a6' },
+              { key: 'growth',     label: 'Growth Signals',          sub: 'Trends & competitors',     icon: Settings2,             color: '#10b981' },
+              { key: 'automation', label: 'Automation & Systems',    sub: 'Scale & automate',         icon: BrainIcon,             color: '#6366f1' },
+              { key: 'services',   label: 'Work With Me',            sub: 'Get it done',              icon: MessageSquareMore,     color: '#ec4899' },
             ].map(({ key, label, sub, icon: NavIcon, color }) => (
               <button
                 key={key ?? 'all'}
@@ -3155,60 +3553,57 @@ const DashboardPage = () => {
         </div>
       ) : null}
 
-      {showTierModal ? (
-        <div
-          id="tier-modal-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Pricing options"
-          onClick={() => setShowTierModal(false)}
-        >
-          <div
-            id="tier-modal-card"
-            onClick={(event) => event.stopPropagation()}
-            style={{
-              position: 'relative',
-              zIndex: 2,
-              width: '100%',
-              maxWidth: '44rem',
-              padding: 'clamp(1.25rem, 5vw, 2rem)',
-              borderRadius: '1.1rem',
-              boxSizing: 'border-box',
-              ...internalPageGlassCardStyle,
-              background: 'rgba(255, 252, 248, 0.97)',
-              boxShadow: '0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4), 0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.1), 0px 20px 40px rgba(0, 0, 0, 0.15)',
-            }}
-          >
-            <div id="tier-modal-top">
-              <div id="tier-modal-brand-row">
-                <img src="/img/sig.png" alt="" aria-hidden="true" style={{ width: '2.75rem', height: 'auto', display: 'block' }} />
-                <span id="tier-modal-eyebrow">Client Access</span>
-                <button id="tier-modal-close" type="button" onClick={() => setShowTierModal(false)} aria-label="Close pricing modal">✕</button>
-              </div>
-              <div id="tier-modal-title-wrap">
-                <h2 id="tier-modal-title">Pricing Options</h2>
-                <p id="tier-modal-summary">Current tier and upgrade paths. This content is placeholder copy and will be updated later.</p>
-              </div>
-            </div>
-
-            <div id="tier-modal-grid">
-              {PRICING_MODAL_OPTIONS.map((option) => (
-                <article className="tier-option-card" key={option.id} id={`tier-option-${option.id}`}>
-                  <div className="tier-option-head">
-                    <span className="tier-option-label">{option.label}</span>
-                    <span className="tier-option-price">{option.price}</span>
-                  </div>
-                  <p className="tier-option-summary">{option.summary}</p>
-                </article>
-              ))}
-            </div>
-
-            <div id="tier-modal-footer">Placeholder pricing modal — content to be updated.</div>
-          </div>
-        </div>
-      ) : null}
 
       {/* ── Tile detail modal ── */}
+      {/* Pricing modal */}
+      {showTierModal && (
+        <div id="tier-modal-overlay" onClick={() => setShowTierModal(false)}>
+          <div id="tier-modal-fullscreen" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              id="tier-modal-close"
+              onClick={() => setShowTierModal(false)}
+              aria-label="Close"
+            >[ ✕ ]</button>
+            <iframe
+              id="tier-modal-iframe"
+              title="Pricing"
+              src="/docs/pricing-modal.html"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Full-page brief overlay */}
+      {briefFullScreen && briefPreviewHtml && (
+        <div id="brief-fullscreen-overlay" onClick={() => setBriefFullScreen(false)}>
+          <div id="brief-fullscreen-container" onClick={(e) => e.stopPropagation()}>
+            <div id="brief-fullscreen-actions">
+              {briefPdfUrl && (
+                <a
+                  id="brief-fullscreen-download"
+                  href={briefPdfUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download="brief.pdf"
+                >↓ Download PDF</a>
+              )}
+              <button
+                type="button"
+                id="brief-fullscreen-close"
+                onClick={() => setBriefFullScreen(false)}
+              >[ ✕ ]</button>
+            </div>
+            <iframe
+              id="brief-fullscreen-iframe"
+              title="Daily Brief"
+              srcDoc={briefPreviewHtml}
+              sandbox="allow-same-origin"
+            />
+          </div>
+        </div>
+      )}
+
       {activeTileModal ? (
         <div
           id="tile-detail-modal-overlay"
@@ -3225,14 +3620,6 @@ const DashboardPage = () => {
             <div id="tile-detail-modal-header" className="tile-detail-bento-cell">
               <div id="tile-detail-modal-header-main">
                 <h2 id="tile-detail-modal-title">{activeTileModal.title}</h2>
-                {activeTileModal.analyzer?.readiness && (
-                  <span className={`tile-analyzer-readiness readiness-${activeTileModal.analyzer.readiness}`}>
-                    <span className="tile-analyzer-readiness-label">{activeTileModal.analyzer.readiness}</span>
-                    {activeTileModal.analyzer.readinessReason && (
-                      <span className="tile-analyzer-readiness-reason"> — {activeTileModal.analyzer.readinessReason}</span>
-                    )}
-                  </span>
-                )}
               </div>
               <button
                 id="tile-detail-modal-close"
@@ -3284,7 +3671,10 @@ const DashboardPage = () => {
                         return (
                           <>
                             {isStyleGuideMock && <span className="sg-demo-watermark">DEMO</span>}
-                            <div className="sg-quad sg-q-type">
+                            <div
+                              className="sg-quad sg-q-type"
+                              style={{ background: sgDisplayData?.colors?.neutral?.shades?.[0] || sgDisplayData?.colors?.primary?.shades?.[0] || sgDisplayData?.colors?.neutral?.hex || '#faf8f4' }}
+                            >
                               <p className="sg-h1" style={{ fontFamily: sgHead?.fontFamily || 'serif' }}>{headName}</p>
                               <p className="sg-p" style={{ fontFamily: sgBody?.fontFamily || 'sans-serif' }}>The quick brown fox jumps over the lazy dog and the paragraph text continues here.</p>
                             </div>
@@ -3333,17 +3723,34 @@ const DashboardPage = () => {
                         );
                       })()}
                     </div>
-                  ) : activeTileModal.cardId === 'intake-terminal' && intakeMockupSrc ? (
+                  ) : activeTileModal.cardId === 'multi-device-view' && intakeMockupSrc ? (
                     <img className="tile-intake-mockup-image" src={intakeMockupSrc} alt="Generated multi-device website mockup" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  ) : activeTileModal.cardId === 'brand-tone' && siteMeta?.ogImage ? (
+                  ) : activeTileModal.cardId === 'social-preview' && siteMeta?.ogImage ? (
                     <div id="bt-preview-shell">
                       <img id="bt-og-image" src={siteMeta.ogImage} alt={siteMeta.ogImageAlt || ''} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                       {siteMeta.favicon && <img id="bt-favicon" src={siteMeta.favicon} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
                     </div>
                   ) : activeTileModal.cardId === 'seo-performance' && hasSeoAuditData ? (
-                    renderSeoViz(seoAudit)
+                    renderSeoViz(seoAudit, aiVisibility)
+                  ) : activeTileModal.cardId === 'business-model' && homepageScreenshotUrl ? (
+                    <div id="bi-preview-shell">
+                      <img
+                        id="bi-hero-image"
+                        src={homepageScreenshotUrl}
+                        alt="Homepage screenshot"
+                        onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }}
+                      />
+                    </div>
+                  ) : activeTileModal.cardId === 'brief' && briefPreviewHtml ? (
+                    <iframe
+                      key={dashboardState?.latestRunId || 'brief-preview-modal'}
+                      className="tile-brief-preview"
+                      title="Brief preview"
+                      srcDoc={briefPreviewHtml}
+                      sandbox="allow-same-origin"
+                    />
                   ) : activeTileModal.isCapabilityCard ? (
-                    <span>{activeTileModal.placeholderLabel}</span>
+                    <span className="tile-empty-label">{activeTileModal.placeholderLabel}</span>
                   ) : (
                     renderViz(activeTileModal.vizType, countdownHours)
                   )}
@@ -3351,98 +3758,89 @@ const DashboardPage = () => {
 
                 {/* About module */}
                 <div id="tile-detail-bento-about" className="tile-detail-bento-cell">
-                  <span className="tile-detail-bento-label">ABOUT</span>
-                  <p id="tile-detail-bento-description">{activeTileModal.description}</p>
+                  <h3 className="tile-heading tile-intake-heading">{activeTileModal.title}</h3>
+                  <p id="tile-detail-bento-description">
+                    {activeTileModal.analyzer?.readiness && (
+                      <span className={`tile-readiness-tag readiness-${activeTileModal.analyzer.readiness}`}>
+                        STATUS: {activeTileModal.analyzer.readiness === 'critical' ? 'Holding you back' : activeTileModal.analyzer.readiness === 'partial' ? 'Needs attention' : 'In a good spot'}
+                      </span>
+                    )}
+                    {activeTileModal.description}
+                  </p>
                 </div>
 
-                {/* Chat with Bryan — mode toggle between AI and Text */}
-                <div id="tile-detail-chat-wrap" className={modalChatMode === 'ai' ? 'tile-detail-chat--inactive' : ''}>
-                  <div id="tile-detail-chat-header">
-                    <div id="tile-detail-chat-avatar-wrap">
-                      <img
-                        src={modalChatMode === 'text' ? '/img/profile2_400x400.png?v=1774582808' : '/img/profile_400x400.jpg'}
-                        id="tile-detail-chat-avatar"
-                        alt="Bryan Balli"
-                      />
-                      <span id="tile-detail-chat-status-dot" className={modalChatMode === 'ai' ? 'tile-detail-chat-status-dot--inactive' : ''} />
-                    </div>
-                    <div id="tile-detail-chat-identity">
-                      <span id="tile-detail-chat-name">Bryan Balli</span>
-                    </div>
-                    <div className="tile-detail-chat-toggle">
-                      <button
-                        type="button"
-                        className={`tile-detail-chat-toggle-btn${modalChatMode === 'ai' ? ' tile-detail-chat-toggle-btn--active' : ''}`}
-                        onClick={() => setModalChatMode('ai')}
-                      >AI + Human</button>
-                      <button
-                        type="button"
-                        className={`tile-detail-chat-toggle-btn${modalChatMode === 'text' ? ' tile-detail-chat-toggle-btn--active' : ''}`}
-                        onClick={() => setModalChatMode('text')}
-                      >Text</button>
-                    </div>
-                  </div>
-
-                  <div id="tile-detail-chat-bot-msg">
-                    <span id="tile-detail-chat-bot-dot" className={modalChatMode === 'ai' ? 'tile-detail-chat-bot-dot--inactive' : ''} />
-                    <span id="tile-detail-chat-bot-text">
-                      {modalChatMode === 'ai' ? 'Ask me anything about this module…' : 'Text Bryan directly…'}
-                    </span>
-                  </div>
-
-                  <div id="tile-detail-chat-input-row">
-                    <input
-                      id="tile-detail-chat-input"
-                      type="text"
-                      placeholder={modalChatMode === 'ai' ? `Ask about ${activeTileModal?.label || 'this module'}…` : 'Type your message…'}
-                      value={chatDraft}
-                      onChange={(e) => setChatDraft(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') handleChatSend(chatDraft); }}
-                      disabled={modalChatMode === 'ai'}
-                    />
-                    <button
-                      id="tile-detail-chat-send-btn"
-                      type="button"
-                      onClick={() => handleChatSend(chatDraft)}
-                      disabled={modalChatMode === 'ai'}
-                    >↗</button>
-                  </div>
-                </div>
               </div>
 
               {/* Right — content modules */}
               <div id="tile-detail-bento-content">
 
-                {/* Tabbed Data / Problems / Solutions module */}
-                {activeTileModal.analyzer ? (
-                  <div
-                    id={`${activeTileModal.cardId}-analyzer-findings`}
-                    className="tile-detail-bento-cell tile-detail-tabbed-container"
-                    aria-label="Analyzer findings"
-                  >
+                {/* Multi-device-view: custom DESKTOP/TABLET/MOBILE tabs */}
+                {activeTileModal.cardId === 'multi-device-view' ? (
+                  <div className="tile-detail-bento-cell tile-detail-tabbed-container">
                     <div className="tile-detail-tabs">
                       {[
-                        { key: 'solutions', label: 'SOLUTIONS' },
-                        { key: 'problems', label: 'DETAILS' },
-                        { key: 'data', label: 'DATA' },
+                        { key: 'desktop', label: 'DESKTOP' },
+                        { key: 'tablet',  label: 'TABLET' },
+                        { key: 'mobile',  label: 'MOBILE' },
                       ].map(({ key, label }) => (
                         <button
                           key={key}
                           type="button"
                           className={`tile-detail-tab${modalTab === key ? ' tile-detail-tab--active' : ''}`}
                           onClick={() => setModalTab(key)}
-                        >
-                          {label}
-                        </button>
+                        >{label}</button>
                       ))}
                     </div>
                     <div className="tile-detail-tab-content">
-                      {modalTab === 'data' && (
-                        <div id="tile-detail-bento-rows">
+                      {['desktop', 'tablet', 'mobile'].map((variant) => (
+                        modalTab === variant && (
+                          <div key={variant} className="tile-detail-tab-pane" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 0 }}>
+                            {deviceScreenshots[variant] ? (
+                              <>
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '8px 0' }}>
+                                  <a
+                                    href={deviceScreenshots[variant]}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    download={`screenshot-${variant}.png`}
+                                    style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-secondary)', textDecoration: 'none', border: '1px solid var(--border)', borderRadius: '4px', padding: '4px 10px' }}
+                                  >&darr; Download</a>
+                                </div>
+                                <img
+                                  src={deviceScreenshots[variant]}
+                                  alt={`${variant} full page screenshot`}
+                                  style={{ width: '100%', height: 'auto', borderRadius: 0 }}
+                                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                />
+                              </>
+                            ) : (
+                              <span className="tile-empty-label" style={{ padding: '40px 0' }}>{"NO\n" + variant.toUpperCase()}</span>
+                            )}
+                          </div>
+                        )
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* Data column — no tabs, just the data rows directly */}
+                {activeTileModal.cardId !== 'multi-device-view' ? (
+                  <div
+                    id={`${activeTileModal.cardId}-detail-data`}
+                    className="tile-detail-bento-cell"
+                    style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+                  >
+                    <div id="tile-detail-bento-rows">
                           {activeTileModal.rows.map((row) => (
                             row.isHeader ? (
                               <div key={row.key} className="tile-detail-row-section-head">
                                 {row.label}
+                              </div>
+                            ) : row.isAuditRow ? (
+                              <div key={row.key} className={`tile-detail-audit-row${row.isColumnHeader ? ' tile-detail-audit-row--header' : ''}`}>
+                                <span className="tile-detail-audit-label">{row.label}</span>
+                                <span className={`tile-detail-audit-status${!row.isColumnHeader ? (row.status.startsWith('✓') ? ' audit-ok' : ' audit-miss') : ''}`}>{row.status}</span>
+                                <span className="tile-detail-audit-tier">{row.tier}</span>
                               </div>
                             ) : (
                               <div key={row.key} className={`tile-detail-stat-row${row.isFailing ? ' tile-detail-stat-row--flag' : ''}`}>
@@ -3452,242 +3850,21 @@ const DashboardPage = () => {
                             )
                           ))}
                         </div>
-                      )}
-
-                      {modalTab === 'problems' && (
-                        <div className="tile-detail-tab-pane">
-                          {Array.isArray(activeTileModal.analyzer.findings) && activeTileModal.analyzer.findings.length > 0 && (
-                            <ul
-                              id={`${activeTileModal.cardId}-analyzer-findings-list`}
-                              className="tile-analyzer-findings-list"
-                            >
-                              {activeTileModal.analyzer.findings.map((f) => {
-                                const catalogEntry = resolveSolution(f);
-                                const headline = catalogEntry?.problem || f.label;
-                                return (
-                                  <li
-                                    key={f.id}
-                                    className={`tile-analyzer-finding severity-${f.severity || 'info'}`}
-                                  >
-                                    <div className="tile-analyzer-finding-header">
-                                      <div className="tile-analyzer-finding-header-top">
-                                        <span className="tile-analyzer-severity-chip">{f.severity}</span>
-                                      </div>
-                                      <span className="tile-analyzer-finding-label">{headline}</span>
-                                    </div>
-                                    {catalogEntry?.whyItMatters && (
-                                      <p className="tile-solution-why">{catalogEntry.whyItMatters}</p>
-                                    )}
-                                    {f.detail && (
-                                      <p className="tile-analyzer-finding-detail">
-                                        <span className="tile-analyzer-field-label">Detail:</span>
-                                        <span className="tile-analyzer-finding-detail-text">{f.detail}</span>
-                                      </p>
-                                    )}
-                                    {/* Hide f.impact when catalogEntry.whyItMatters is already shown above — both
-                                        are "why this matters" content and rendering both reads as duplicate info. */}
-                                    {!catalogEntry?.whyItMatters && f.impact && (
-                                      <p className="tile-analyzer-finding-impact">
-                                        <span className="tile-analyzer-field-label">Why it matters:</span> {f.impact}
-                                      </p>
-                                    )}
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          )}
-
-                          {Array.isArray(activeTileModal.analyzer.gaps) && activeTileModal.analyzer.gaps.some((g) => g.triggered) && (
-                            <ul
-                              id={`${activeTileModal.cardId}-analyzer-gaps-list`}
-                              className="tile-analyzer-gaps-list"
-                            >
-                              {activeTileModal.analyzer.gaps
-                                .filter((g) => g.triggered)
-                                .map((g) => {
-                                  const catalogEntry = resolveSolution(g);
-                                  const headline = catalogEntry?.problem || g.ruleId;
-                                  return (
-                                    <li key={g.ruleId} className="tile-analyzer-gap">
-                                      <div className="tile-analyzer-gap-header">
-                                        <div className="tile-analyzer-gap-header-top">
-                                          <span className="tile-analyzer-gap-chip">gap</span>
-                                        </div>
-                                        <span className="tile-analyzer-gap-rule">{headline}</span>
-                                      </div>
-                                      {catalogEntry?.whyItMatters && (
-                                        <p className="tile-solution-why">{catalogEntry.whyItMatters}</p>
-                                      )}
-                                      {g.evidence && <p className="tile-analyzer-gap-evidence">{g.evidence}</p>}
-                                    </li>
-                                  );
-                                })}
-                            </ul>
-                          )}
-                        </div>
-                      )}
-
-                      {modalTab === 'solutions' && (() => {
-                        const solutionsList = buildSolutionsList(activeTileModal.analyzer);
-                        if (!solutionsList.length) {
-                          return (
-                            <div className="tile-detail-tab-pane">
-                              <p
-                                id={`${activeTileModal.cardId}-solutions-empty`}
-                                className="tile-analyzer-solutions-empty"
-                              >
-                                No matched solutions yet. As the Solutions Catalog expands, problems on this card will map to specific fixes here.
-                              </p>
-                            </div>
-                          );
-                        }
-                        return (
-                          <div className="tile-detail-tab-pane">
-                            <ol
-                              id={`${activeTileModal.cardId}-solutions-list`}
-                              className="tile-solutions-list"
-                            >
-                              {solutionsList.map(({ key, source, severity, finding, solution, isGeneric }) => {
-                                // Combine the problem statement with the expert-offer title into
-                                // one long sentence for catalog-matched solutions:
-                                //   "Your pages are missing meta descriptions — I'll write all your meta descriptions in 24 hours."
-                                // For generic fallbacks (no catalog match), the problem is a raw LLM-written
-                                // finding label that may already contain em-dashes — combining it would read
-                                // badly. Lead with the expert-offer pitch alone and show the raw label as a
-                                // subtitle so users can cross-reference with the PROBLEMS tab.
-                                const problemClean = String(solution.problem || '').replace(/\.+$/, '').trim();
-                                const expertTitle  = String(solution.expertOffer?.title || '').trim();
-                                const combinedHeadline = isGeneric
-                                  ? (expertTitle || problemClean)
-                                  : (problemClean && expertTitle
-                                      ? `${problemClean} — ${expertTitle}`
-                                      : (problemClean || expertTitle));
-                                // Source label — same text the PROBLEMS tab uses as the headline for this
-                                // item. Shown on EVERY card so every SOLUTIONS entry is 1:1 attributable to
-                                // its corresponding PROBLEMS entry, even when two findings resolve to the
-                                // same catalog entry.
-                                const sourceLabel = (() => {
-                                  if (source === 'gap') return `Gap: ${finding?.ruleId || ''}`;
-                                  return finding?.label || '';
-                                })();
-                                const showSourceLabel = Boolean(sourceLabel);
-                                return (
-                                <li
-                                  key={key}
-                                  id={`${activeTileModal.cardId}-solution-${solution.id}`}
-                                  className={`tile-solution-card severity-${severity || solution.severity || 'info'}${source === 'gap' ? ' source-gap' : ''}`}
-                                >
-                                  {/* Combined headline: problem + how I solve it, one long sentence */}
-                                  <header className="tile-solution-header">
-                                    <div className="tile-solution-header-top">
-                                      {source === 'gap' ? (
-                                        <span className="tile-analyzer-gap-chip">gap</span>
-                                      ) : (
-                                        <span className="tile-analyzer-severity-chip">{severity || solution.severity}</span>
-                                      )}
-                                      {showSourceLabel && (
-                                        <span className="tile-solution-source-label">{sourceLabel}</span>
-                                      )}
-                                    </div>
-                                    <h4 className="tile-solution-problem">{combinedHeadline}</h4>
-                                  </header>
-
-                                  {/* Have Me Do It panel — service pitch + CTA, with DIY as collapsible sub-section */}
-                                  {solution.expertOffer && (
-                                    <section
-                                      id={`${activeTileModal.cardId}-solution-${solution.id}-expert`}
-                                      className="tile-solution-expert"
-                                      aria-label="Have me do it"
-                                    >
-                                      {solution.expertOffer.summary && (
-                                        <p className="tile-solution-expert-summary">{solution.expertOffer.summary}</p>
-                                      )}
-                                      {solution.expertOffer.deliverable && (
-                                        <p className="tile-solution-expert-deliverable">
-                                          <span className="tile-analyzer-field-label">Deliverable:</span> {solution.expertOffer.deliverable}
-                                        </p>
-                                      )}
-                                      <div className="tile-solution-actions">
-                                        {solution.expertOffer.cta?.href && (
-                                          <a
-                                            href={solution.expertOffer.cta.href}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="tile-solution-expert-cta"
-                                          >
-                                            {solution.expertOffer.cta.label || 'Book a call'} →
-                                          </a>
-                                        )}
-
-                                        {solution.diy && (
-                                          <button
-                                            type="button"
-                                            className="tile-solution-diy-toggle-btn"
-                                            onClick={() => {
-                                              const id = `${activeTileModal.cardId}-solution-${solution.id}-diy`;
-                                              const el = document.getElementById(id);
-                                              if (el) el.open = !el.open;
-                                            }}
-                                            aria-controls={`${activeTileModal.cardId}-solution-${solution.id}-diy`}
-                                          >
-                                            <span className="tile-solution-diy-toggle-label">Prefer to do it yourself?</span>
-                                          </button>
-                                        )}
-                                      </div>
-                                    </section>
-                                  )}
-
-                                  {/* DIY — expands from the bottom of the card to avoid collisions */}
-                                  {solution.diy && (
-                                    <details
-                                      id={`${activeTileModal.cardId}-solution-${solution.id}-diy`}
-                                      className="tile-solution-diy-details"
-                                    >
-                                      <summary className="tile-solution-diy-summary-toggle tile-solution-diy-summary-toggle--hidden">
-                                        <span className="tile-solution-diy-toggle-label">Prefer to do it yourself?</span>
-                                      </summary>
-                                      <div className="tile-solution-diy">
-                                      {solution.diy.summary && (
-                                        <p className="tile-solution-diy-summary">{solution.diy.summary}</p>
-                                      )}
-                                      {Array.isArray(solution.diy.steps) && solution.diy.steps.length > 0 && (
-                                        <ol className="tile-solution-steps">
-                                          {solution.diy.steps.map((step, idx) => (
-                                            <li key={idx} className="tile-solution-step">{step}</li>
-                                          ))}
-                                        </ol>
-                                      )}
-                                      {Array.isArray(solution.diy.helpfulLinks) && solution.diy.helpfulLinks.length > 0 && (
-                                        <ul className="tile-solution-links">
-                                          {solution.diy.helpfulLinks.map((link, idx) => (
-                                            <li key={idx}>
-                                              <a href={link.url} target="_blank" rel="noopener noreferrer">
-                                                {link.label} ↗
-                                              </a>
-                                            </li>
-                                          ))}
-                                        </ul>
-                                      )}
-                                    </div>
-                                  </details>
-                                )}
-                                </li>
-                                );
-                              })}
-                            </ol>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                ) : (
+                      </div>
+                    ) : null}
+                {activeTileModal.cardId === 'multi-device-view' ? null : (
                   <div id="tile-detail-bento-data" className="tile-detail-bento-cell">
-                    <span className="tile-detail-bento-label">DATA</span>
                     <div id="tile-detail-bento-rows">
                       {activeTileModal.rows.map((row) => (
                         row.isHeader ? (
                           <div key={row.key} className="tile-detail-row-section-head">
                             {row.label}
+                          </div>
+                        ) : row.isAuditRow ? (
+                          <div key={row.key} className="tile-detail-audit-row">
+                            <span className="tile-detail-audit-label">{row.label}</span>
+                            <span className={`tile-detail-audit-status ${row.status.startsWith('✓') ? 'audit-ok' : 'audit-miss'}`}>{row.status}</span>
+                            <span className="tile-detail-audit-tier">{row.tier}</span>
                           </div>
                         ) : (
                           <div key={row.key} className={`tile-detail-stat-row${row.isFailing ? ' tile-detail-stat-row--flag' : ''}`}>
@@ -3714,16 +3891,17 @@ const DashboardPage = () => {
 
 // ── Tile viz renderers ────────────────────────────────────────────────────────
 
-const renderSeoViz = (seoAudit) => {
+const renderSeoViz = (seoAudit, aiVisibility) => {
   const sc  = seoAudit?.scores ?? {};
   const cwv = seoAudit?.coreWebVitals ?? {};
   const lab = seoAudit?.labCoreWebVitals ?? {};
   const scoreRings = [
-    ['Performance',    sc.performance],
-    ['SEO',            sc.seo],
-    ['Accessibility',  sc.accessibility],
-    ['Best Practices', sc.bestPractices],
-  ].filter(([, v]) => v != null);
+    ['Perform', sc.performance],
+    ['SEO',     sc.seo],
+    ['Access',  sc.accessibility],
+    ['BP',      sc.bestPractices],
+    aiVisibility?.score != null ? ['AI Vis', aiVisibility.score] : null,
+  ].filter((entry) => entry != null && entry[1] != null);
   const lcpMs   = cwv.lcp?.p75  ?? lab.lcp?.p75;
   const inpMs   = cwv.inp?.p75;
   const clsVal  = cwv.cls?.p75  ?? lab.cls?.p75;
@@ -4579,6 +4757,27 @@ const dashboardCss = `
     background: linear-gradient(180deg, rgba(228,228,228,0.9), transparent 62%);
     opacity: 0.85;
   }
+  #capability-nav-col:hover .capability-nav-btn--active:hover {
+    background: rgba(255, 255, 255, 1);
+    box-shadow:
+      0px 6px 14px rgba(0,0,0,0.06),
+      0px 18px 36px rgba(0,0,0,0.06),
+      0px 28px 56px rgba(0,0,0,0.09),
+      inset 0 1px 0 rgba(255,255,255,0.55);
+    transform: scale(1.02) translateY(-2px);
+    transition:
+      background 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.38s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  #capability-nav-col:hover .capability-nav-btn--active:hover .capability-nav-btn-content {
+    transform: translateX(5px);
+    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  #capability-nav-col:hover .capability-nav-btn--active:hover .capability-nav-btn-icon-wrap {
+    transform: scale(1.12);
+    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
   .capability-nav-btn--active:hover::before {
     background: linear-gradient(180deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
     opacity: 1;
@@ -4686,6 +4885,10 @@ const dashboardCss = `
   .tile-intake-card--wide {
     grid-column: 1 / -1;
   }
+  .tile-intake-card--wide .tile-intake-placeholder {
+    aspect-ratio: auto;
+    height: 220px;
+  }
   .tr--section-header td {
     padding-top: 14px;
     padding-bottom: 3px;
@@ -4733,6 +4936,144 @@ const dashboardCss = `
     justify-content: stretch;
     padding: 0;
     position: relative;
+  }
+  /* Embedded pricing in grid */
+  #pricing-embed-container {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border-radius: 16px;
+    overflow: hidden;
+    min-height: 80vh;
+  }
+  #pricing-embed-iframe {
+    flex: 1;
+    width: 100%;
+    min-height: 80vh;
+    border: none;
+    background: #fff;
+  }
+  /* Embedded brief in grid */
+  #brief-embed-container {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    background: transparent;
+    border-radius: 16px;
+    overflow: hidden;
+    min-height: 70vh;
+  }
+  #brief-embed-header {
+    display: flex;
+    justify-content: flex-start;
+    gap: 8px;
+    padding: 10px 16px;
+    border-bottom: 1px solid rgba(42, 36, 32, 0.08);
+    background: rgba(250, 248, 243, 0.6);
+  }
+  .brief-embed-btn {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: 5px 10px;
+    border: 1px solid rgba(42, 36, 32, 0.1);
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+    line-height: 1;
+    transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  }
+  .brief-embed-btn:hover {
+    background: #2a2420;
+    color: #fff;
+    border-color: #2a2420;
+  }
+  #brief-embed-iframe {
+    flex: 1;
+    width: 100%;
+    min-height: 65vh;
+    border: none;
+    background: #fff;
+  }
+  @keyframes briefSpin {
+    to { transform: rotate(360deg); }
+  }
+  .brief-loader {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+  .brief-loader-spinner {
+    width: 36px;
+    height: 36px;
+    border: 3px solid rgba(42, 36, 32, 0.1);
+    border-top-color: rgba(42, 36, 32, 0.5);
+    border-radius: 50%;
+    animation: briefSpin 0.8s linear infinite;
+  }
+  #brief-embed-empty {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+  }
+  /* Full-page brief overlay */
+  #brief-fullscreen-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(8px);
+  }
+  #brief-fullscreen-container {
+    width: 90vw;
+    height: 90vh;
+    background: #fff;
+    border-radius: 16px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.3);
+  }
+  #brief-fullscreen-actions {
+    position: absolute;
+    top: 12px;
+    right: 16px;
+    z-index: 10;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  #brief-fullscreen-download,
+  #brief-fullscreen-close {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(42, 36, 32, 0.15);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    cursor: pointer;
+    color: #2a2420;
+    text-decoration: none;
+  }
+  #brief-fullscreen-download:hover,
+  #brief-fullscreen-close:hover {
+    background: #2a2420;
+    color: #fff;
+  }
+  #brief-fullscreen-iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: #fff;
   }
   .tile-brief-preview {
     position: absolute;
@@ -4889,7 +5230,15 @@ const dashboardCss = `
     justify-content: stretch;
     padding: 0;
   }
-  #bt-preview-shell {
+  /* Any placeholder variant that stretches for rich previews must re-center
+     when the fallback empty label renders instead. Single rule covers all
+     stretch variants (style-guide, brief, seo-performance, brand-tone). */
+  .tile-intake-placeholder:has(.tile-empty-label) {
+    align-items: center !important;
+    justify-content: center !important;
+  }
+  #bt-preview-shell,
+  #bi-preview-shell {
     position: relative;
     width: 100%;
     height: 100%;
@@ -4898,6 +5247,12 @@ const dashboardCss = `
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+  #bi-hero-image {
+    width: 100%;
+    height: auto;
+    object-fit: contain;
+    object-position: center top;
   }
   #bt-og-image {
     display: block;
@@ -4926,6 +5281,44 @@ const dashboardCss = `
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: rgba(42,36,32,0.52);
+  }
+  /* Big empty-state label — renders like the brief's dot-font headline
+     when no preview data exists for a card. Two-line labels use \n in the
+     string + white-space: pre-line to break naturally. */
+  .tile-intake-placeholder .tile-empty-label {
+    font-family: 'Doto', var(--font-mono);
+    font-size: 80px;
+    font-size: clamp(40px, 16cqi, 80px);
+    font-weight: 900;
+    letter-spacing: 0.06em;
+    line-height: 1.05;
+    text-transform: uppercase;
+    color: #2a2420;
+    text-align: center;
+    white-space: pre-line;
+    padding: clamp(12px, 4%, 32px);
+    max-width: 90%;
+    word-break: break-word;
+    container-type: normal;
+  }
+  .tile-intake-placeholder {
+    container-type: inline-size;
+  }
+  /* All images + iframes inside card shells and modals fade in on load */
+  @keyframes tileFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  .tile-intake-placeholder img,
+  .tile-intake-placeholder iframe,
+  .tile-detail-bento-placeholder img,
+  .tile-detail-bento-placeholder iframe,
+  .tile-detail-tab-pane img,
+  #brief-embed-iframe,
+  #bi-hero-image,
+  #bt-og-image,
+  #sg-brand-mark-img {
+    animation: tileFadeIn 0.8s ease-out both;
   }
   .tile-intake-mockup-image {
     display: block;
@@ -4960,7 +5353,8 @@ const dashboardCss = `
     opacity: 1;
     transition: opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1);
   }
-  .tile:hover .tile-intake-placeholder-intake-terminal .tile-intake-mockup-wrap::before {
+  .tile:hover .tile-intake-placeholder-intake-terminal .tile-intake-mockup-wrap::before,
+  .tile:hover .tile-intake-placeholder-multi-device-view .tile-intake-mockup-wrap::before {
     opacity: 0;
   }
   .tile-intake-mockup-wrap img,
@@ -4984,6 +5378,35 @@ const dashboardCss = `
     position: relative;
     box-sizing: border-box;
   }
+  /* Brand mark quadrant — replaces the layout quadrant (bottom-left) when
+     a logo/favicon is available. Background is a palette color. */
+  .sg-q-brand-mark {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    container-type: inline-size;
+  }
+  .sg-no-logo,
+  .sg-no-data {
+    font-family: 'Doto', var(--font-mono);
+    font-size: 72px;
+    font-size: clamp(28px, 24cqi, 72px);
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: rgba(42, 36, 32, 0.18);
+    text-align: center;
+    line-height: 1.05;
+    white-space: pre-line;
+  }
+  #sg-brand-mark-img {
+    width: 50%;
+    max-width: 80px;
+    height: auto;
+    object-fit: contain;
+    border-radius: 8px;
+  }
   .sg-demo-watermark {
     position: absolute;
     top: 8px;
@@ -5003,6 +5426,7 @@ const dashboardCss = `
   .sg-quad {
     overflow: hidden;
     box-sizing: border-box;
+    container-type: inline-size;
   }
 
   /* TYPE — top-left */
@@ -5012,7 +5436,9 @@ const dashboardCss = `
     padding: 14px 16px;
     display: flex;
     flex-direction: column;
-    justify-content: flex-end;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
     gap: 5px;
   }
   .sg-h1 {
@@ -5048,6 +5474,8 @@ const dashboardCss = `
     flex: 1;
     width: 100%;
     min-height: 0;
+    /* Prevent near-white swatches from disappearing against the card bg */
+    box-shadow: inset 0 0 0 1px rgba(42, 36, 32, 0.08);
   }
 
   /* LAYOUT — bottom-left: viewport-resize grid demo */
@@ -5187,10 +5615,45 @@ const dashboardCss = `
     grid-area: auto;
     margin: 0;
   }
+  .tile-intake-source-line {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-disabled);
+    margin-top: 2px;
+    margin-bottom: 4px;
+  }
   .tile-intake-description {
     grid-area: auto;
     margin-top: 0;
     max-width: none;
+  }
+  .tile-readiness-tag {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 3px;
+    margin-right: 6px;
+    margin-bottom: 2px;
+    vertical-align: middle;
+  }
+  .tile-readiness-tag.readiness-critical {
+    background: rgba(236, 72, 153, 0.22);
+    color: hsl(314, 85%, 32%);
+  }
+  .tile-readiness-tag.readiness-partial {
+    background: rgba(14, 165, 233, 0.22);
+    color: hsl(185, 90%, 25%);
+  }
+  .tile-readiness-tag.readiness-healthy {
+    background: rgba(139, 92, 246, 0.22);
+    color: hsl(262, 80%, 32%);
   }
   .tile-intake-table-wrap {
     margin-top: 2px;
@@ -5286,12 +5749,10 @@ const dashboardCss = `
   }
   .tile-view-details-btn:hover,
   .tile:hover .tile-view-details-btn {
-    background:
-      linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%),
-      linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
-    border-color: transparent;
+    background: #2a2420;
+    border-color: #2a2420;
     color: #fff;
-    transition: background 0.32s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.32s cubic-bezier(0.16, 1, 0.3, 1), color 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   }
   .tile-blocked-upgrade-btn::before {
     display: none;
@@ -5428,6 +5889,9 @@ const dashboardCss = `
     overflow: hidden;
   }
   /* About cell — scrollable if description is very long */
+  #tile-detail-bento-about .tile-intake-heading {
+    margin: 0 0 8px 0;
+  }
   #tile-detail-bento-about {
     padding: 18px 20px 20px;
     overflow-y: auto;
@@ -5747,9 +6211,9 @@ const dashboardCss = `
     background: var(--border);
     color: var(--text-primary);
   }
-  .tile-analyzer-readiness.readiness-critical { background: rgba(139, 92, 246, 0.14); color: hsl(262,80%,35%); }
-  .tile-analyzer-readiness.readiness-partial  { background: rgba(14, 165, 233, 0.14); color: hsl(185,90%,28%); }
-  .tile-analyzer-readiness.readiness-healthy  { background: rgba(236, 72, 153, 0.14); color: hsl(314,85%,35%); }
+  .tile-analyzer-readiness.readiness-critical { background: rgba(236, 72, 153, 0.22); color: hsl(314, 85%, 32%); }
+  .tile-analyzer-readiness.readiness-partial  { background: rgba(14, 165, 233, 0.22); color: hsl(185, 90%, 25%); }
+  .tile-analyzer-readiness.readiness-healthy  { background: rgba(139, 92, 246, 0.22); color: hsl(262, 80%, 32%); }
   .tile-analyzer-readiness-label { font-weight: 600; }
   .tile-analyzer-readiness-reason {
     text-transform: none;
@@ -5837,6 +6301,59 @@ const dashboardCss = `
     font-size: 0.84rem;
     color: var(--text-secondary);
     line-height: 1.55;
+  }
+  /* Audit data inventory — scrollable table with fixed column widths */
+  #tile-detail-bento-rows:has(.tile-detail-audit-row) {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tile-detail-audit-row {
+    display: grid;
+    grid-template-columns: 1fr 120px 120px;
+    align-items: baseline;
+    gap: 0;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-ui);
+    font-size: 0.8rem;
+    min-width: 480px;
+  }
+  .tile-detail-audit-row:last-child { border-bottom: none; }
+  .tile-detail-audit-row--header .tile-detail-audit-label,
+  .tile-detail-audit-row--header .tile-detail-audit-status,
+  .tile-detail-audit-row--header .tile-detail-audit-tier {
+    font-family: var(--font-mono, monospace);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #9a9080;
+  }
+  .tile-detail-audit-label {
+    color: #2a2420;
+    font-weight: 500;
+  }
+  .tile-detail-audit-status {
+    font-family: var(--font-mono, monospace);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    font-weight: 600;
+    text-align: left;
+    padding-left: 12px;
+  }
+  .tile-detail-audit-status.audit-ok { color: #2d8a5e; }
+  .tile-detail-audit-status.audit-miss { color: #c53030; }
+  .tile-detail-audit-tier {
+    font-family: var(--font-mono, monospace);
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #9a9080;
+    white-space: nowrap;
+    font-weight: 600;
+    text-align: left;
+    padding-left: 12px;
   }
   .tile-detail-stat-row {
     display: flex;
@@ -6143,6 +6660,10 @@ const dashboardCss = `
   #tile-detail-bento-rows {
     display: flex;
     flex-direction: column;
+    padding: 18px 20px 22px;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
   }
   .tile-detail-stat-row--flag .tile-detail-stat-label {
     border-left: 2px solid #d05;
@@ -6157,6 +6678,7 @@ const dashboardCss = `
     padding: 12px 0 4px;
     border-bottom: 1px solid var(--border);
     margin-bottom: 2px;
+    min-width: 480px;
   }
   .tile-number {
     grid-area: num;
@@ -6165,6 +6687,24 @@ const dashboardCss = `
     display: flex;
     align-items: center;
     justify-content: space-between;
+  }
+  .tile-header-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-disabled);
+  }
+  .tile-header-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-disabled);
   }
   .tile-card-readiness {
     font-family: var(--font-mono);
@@ -6226,7 +6766,7 @@ const dashboardCss = `
     grid-area: foot;
     margin-top: 12px;
     padding-top: 10px;
-    border-top: 1px solid var(--border);
+    border-top: none;
     font-size: 10px;
     color: var(--text-secondary);
     display: flex;
@@ -6425,7 +6965,7 @@ const dashboardCss = `
     justify-content: center;
     font-family: 'Doto', var(--font-display), sans-serif;
     font-weight: 900;
-    font-size: 1.4em;
+    font-size: clamp(1.2em, 3.5cqi, 2em);
     line-height: 1;
   }
   .seo-ring-num--grad {
@@ -6439,7 +6979,7 @@ const dashboardCss = `
   }
   .seo-score-lbl {
     font-family: 'Space Mono', var(--font-mono), monospace;
-    font-size: 0.62em;
+    font-size: clamp(0.62em, 2cqi, 0.9em);
     letter-spacing: 0.2em;
     text-transform: uppercase;
     color: #5a5346;
@@ -6549,7 +7089,7 @@ const dashboardCss = `
   .seo-diag-num {
     font-family: 'Doto', var(--font-display), sans-serif;
     font-weight: 900;
-    font-size: clamp(1.6em, 5cqh, 3em);
+    font-size: clamp(2em, 8cqh, 4.5em);
     line-height: 0.9;
     background: linear-gradient(92deg, #00cfff, #7b5fff, #ff3de8);
     -webkit-background-clip: text;
@@ -6558,7 +7098,7 @@ const dashboardCss = `
   }
   .seo-diag-lbl {
     font-family: 'Space Mono', var(--font-mono), monospace;
-    font-size: clamp(0.55em, 1.8cqh, 0.85em);
+    font-size: clamp(0.6em, 2.5cqh, 1em);
     letter-spacing: 0.22em;
     text-transform: uppercase;
     color: #5a5346;
@@ -6656,6 +7196,10 @@ const dashboardCss = `
     #capability-nav-col:hover .capability-nav-btn--active::before {
       background: linear-gradient(180deg, rgba(228,228,228,0.9), transparent 62%);
       opacity: 0.85;
+    }
+    #capability-nav-col:hover .capability-nav-btn--active:hover::before {
+      background: linear-gradient(180deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+      opacity: 1;
     }
     .capability-nav-btn-sub { display: none; }
     .capability-nav-btn-label { font-family: var(--font-mono); font-size: 11px; font-weight: 400; letter-spacing: 0.08em; text-transform: uppercase; }
@@ -7710,10 +8254,45 @@ const dashboardCss = `
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 1.5rem;
-    background: rgba(32, 28, 24, 0.18);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  #tier-modal-fullscreen {
+    width: 90vw;
+    height: 90vh;
+    background: #fff;
+    border-radius: 16px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.3);
+  }
+  #tier-modal-close {
+    position: absolute;
+    top: 12px;
+    right: 16px;
+    z-index: 10;
+    background: none;
+    border: 1px solid rgba(42, 36, 32, 0.1);
+    border-radius: 4px;
+    padding: 5px 10px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    color: var(--text-secondary);
+    line-height: 1;
+    transition: color 0.15s ease, border-color 0.15s ease;
+  }
+  #tier-modal-close:hover {
+    color: var(--text-display);
+    border-color: var(--text-secondary);
+  }
+  #tier-modal-iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: #fff;
   }
   #tier-modal-top {
     display: flex;
@@ -7733,19 +8312,6 @@ const dashboardCss = `
     color: rgba(42,36,32,0.44);
     font-weight: 700;
     font-family: "Space Mono", monospace;
-  }
-  #tier-modal-close {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 2.4rem;
-    height: 2.4rem;
-    border-radius: 999px;
-    background: rgba(255,255,255,0.34);
-    border: 1px solid rgba(42,36,32,0.12);
-    color: rgba(42,36,32,0.58);
-    font-size: 0.95rem;
-    cursor: pointer;
   }
   #tier-modal-title-wrap {
     display: flex;

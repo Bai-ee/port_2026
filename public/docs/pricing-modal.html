@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pricing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700;900&family=Space+Grotesk:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0a0a0a;
+    --ink-soft:#5a5346;
+    --line:rgba(212,196,171,0.82);
+    --card:rgba(255,255,255,0.6);
+    --hl:rgba(255,255,255,0.65);
+    --grad:linear-gradient(92deg,#7a5cff 0%,#b14bff 38%,#ff4fa1 72%,#ff7a3a 100%);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:"Space Grotesk",system-ui,sans-serif; color:var(--ink);
+    background:
+      radial-gradient(700px 420px at 0% 4%,    rgba(255,120,90,0.38) 0%, transparent 65%),
+      radial-gradient(620px 380px at 100% 16%, rgba(176,90,255,0.32) 0%, transparent 65%),
+      radial-gradient(700px 420px at 0% 30%,   rgba(255,90,160,0.32) 0%, transparent 65%),
+      radial-gradient(600px 380px at 100% 44%, rgba(90,140,255,0.30) 0%, transparent 65%),
+      radial-gradient(720px 440px at 0% 58%,   rgba(255,180,90,0.32) 0%, transparent 65%),
+      radial-gradient(620px 400px at 100% 72%, rgba(200,90,255,0.30) 0%, transparent 65%),
+      linear-gradient(180deg, #fefdf9 0%, #fbf8f0 50%, #fdfaf2 100%);
+    -webkit-font-smoothing:antialiased;
+    padding:clamp(16px,3vw,32px);
+  }
+  .mono{font-family:"Space Mono",ui-monospace,monospace}
+  .m-top{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 0 16px;
+    font-family:"Space Mono"; font-size:11px; letter-spacing:.22em; text-transform:uppercase; color:var(--ink-soft);
+  }
+  .m-top .left{display:flex;gap:18px;align-items:center}
+  .m-top .dot{width:7px;height:7px;background:var(--ink);border-radius:50%}
+  .tiers{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:clamp(8px,1vw,12px);
+    padding:0 0 16px;
+    align-items:stretch;
+  }
+  @media(max-width:1040px){.tiers{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:620px){.tiers{grid-template-columns:1fr}}
+  .tier{
+    position:relative;
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    box-shadow:0 1px 0 var(--hl) inset, inset 0 1px 0 rgba(255,255,255,0.4);
+    padding:16px 16px 14px; display:flex; flex-direction:column;
+  }
+  .tier .tag{font-family:"Space Mono";font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft);display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .tier .tag .d{width:5px;height:5px;border-radius:50%;background:var(--ink)}
+  .tier .name{font-family:"Doto",monospace;font-weight:900;font-size:28px;line-height:.9;text-transform:uppercase;margin:0 0 6px}
+  .tier .price{display:flex;align-items:baseline;gap:5px; border-top:1px dashed rgba(0,0,0,.15);padding-top:6px; margin-bottom:6px}
+  .tier .price .amt{font-family:"Doto";font-weight:900;font-size:34px;line-height:1}
+  .tier .price .per{font-family:"Space Mono";font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft)}
+  .tier .pitch{font-family:"Space Grotesk";font-size:12px;line-height:1.4;color:#2a2a2a;margin:0 0 8px}
+  .tier .cadence{font-family:"Space Mono";font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft); margin-top:auto; padding-top:8px;border-top:1px dashed rgba(0,0,0,.10); margin-bottom:4px}
+  .tier .replaces{font-family:"Space Mono";font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft); margin-bottom:8px; line-height:1.4}
+  .tier .replaces b{color:#0a0a0a;font-family:"Doto";font-weight:900;font-size:13px;letter-spacing:0;display:block;margin-top:3px}
+  .tier .runs{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:baseline;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.55);padding:6px 10px; margin-bottom:8px}
+  .tier .runs .r-d{font-family:"Doto";font-weight:900;font-size:22px;line-height:.9;color:#0a0a0a}
+  .tier .runs .r-l{font-family:"Space Mono";font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft)}
+  .tier .runs .r-s{font-family:"Space Mono";font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft);text-align:right;white-space:nowrap}
+  .tier.dominant .runs{background:rgba(255,255,255,.7);border-color:rgba(122,92,255,.3)}
+  .tier.dominant .runs .r-d{font-size:26px;background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .tier .cta{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 14px;border-radius:999px;font-family:"Space Grotesk";font-size:12px;font-weight:500;text-decoration:none;background:#fff;color:#0a0a0a;border:1px solid rgba(0,0,0,.1);box-shadow:0 1px 0 rgba(255,255,255,.7) inset, 0 1px 2px rgba(0,0,0,.04);cursor:pointer}
+  .tier.feat{background:rgba(255,255,255,.75);border-color:rgba(122,92,255,.4);box-shadow:0 16px 40px rgba(122,92,255,.18), 0 1px 0 var(--hl) inset}
+  .tier.feat .cta{background:var(--grad); color:#fff; border:0;box-shadow:0 1px 0 rgba(255,255,255,.35) inset, 0 6px 16px rgba(122,92,255,.3)}
+  .tier .flag{position:absolute; top:0; right:14px;transform:translateY(-50%);background:var(--grad); color:#fff;font-family:"Space Mono";font-size:9px;letter-spacing:.16em;text-transform:uppercase;padding:4px 10px;border-radius:999px;box-shadow:0 4px 12px rgba(122,92,255,.3)}
+  .tier.dominant{background:rgba(255,255,255,.85);border:2px solid rgba(122,92,255,.35);box-shadow:0 20px 50px rgba(122,92,255,.12), 0 1px 0 var(--hl) inset;position:relative; z-index:2}
+  .tier.dominant .name{font-size:32px}
+  .tier.dominant .price .amt{font-size:38px}
+  .bridge{display:flex; align-items:center; gap:14px;padding:0 0 12px}
+  .bridge p{font-family:"Space Grotesk";font-weight:300;font-style:italic;font-size:clamp(13px,1.2vw,15px);line-height:1.3;margin:0; color:#1a1a1a; white-space:nowrap}
+  @media(max-width:700px){.bridge{flex-direction:column}.bridge p{white-space:normal}}
+  .hitl{display:grid;grid-template-columns:1fr 1fr;gap:clamp(8px,1vw,12px);padding:0 0 14px;align-items:stretch}
+  @media(max-width:900px){.hitl{grid-template-columns:1fr}}
+  .hitl .tier .name{font-size:32px}
+  .hitl .tier .price .amt{font-size:34px}
+  .hitl .tier.custom{background:rgba(255,255,255,.65);border-color:rgba(0,0,0,.12)}
+  .hitl .tier.custom .cta{background:#0a0a0a;color:#fff;border:0}
+  .section-label{font-family:"Space Mono"; font-size:10px; letter-spacing:.22em; text-transform:uppercase; color:var(--ink-soft);padding:10px 0 8px}
+  .ala{padding:0 0 16px}
+  .ala-head{display:flex;align-items:baseline;gap:16px;margin-bottom:10px}
+  .ala-head h3{font-family:"Doto",monospace;font-weight:900;font-size:clamp(24px,3vw,40px);line-height:.92;text-transform:uppercase;margin:0;white-space:nowrap}
+  .ala-head p{font-family:"Space Grotesk";font-weight:300;font-size:13px;line-height:1.4;margin:0;color:#1a1a1a}
+  .ala-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:clamp(8px,1vw,12px);align-items:stretch}
+  @media(max-width:1100px){.ala-grid{grid-template-columns:repeat(3,1fr)}}
+  @media(max-width:700px){.ala-grid{grid-template-columns:repeat(2,1fr)}}
+  .ala-card{background:rgba(255,255,255,.6);border:1px solid var(--line);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:4px;box-shadow:0 1px 0 var(--hl) inset}
+  .ala-card .ec{font-family:"Space Mono";font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft);display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px}
+  .ala-card .nm{font-family:"Doto";font-weight:900;font-size:18px;line-height:.95;text-transform:uppercase;margin:2px 0 0}
+  .ala-card .ds{font-family:"Space Grotesk";font-size:11px;line-height:1.35;color:#2a2a2a;margin:0}
+  .ala-card .pr-row{margin-top:auto;display:flex;justify-content:space-between;align-items:center;border-top:1px dashed rgba(0,0,0,.12);padding-top:6px}
+  .ala-card .pr-row .pr{font-family:"Doto";font-weight:900;font-size:20px}
+  .ala-card .pr-row .add{font-family:"Space Mono";font-size:9px;letter-spacing:.18em;text-transform:uppercase;padding:5px 10px;border:1px solid rgba(0,0,0,.12);border-radius:999px;background:#fff;color:#0a0a0a;cursor:pointer;text-decoration:none}
+  .ala-card.bundle{background:rgba(255,255,255,.65);border-color:rgba(255,150,90,.4)}
+  .ala-card.bundle .pr-row .add{background:#0a0a0a;color:#fff;border:0}
+  .m-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 0;border-top:1px solid rgba(0,0,0,.06);font-family:"Space Mono";font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft)}
+  .m-foot a{color:var(--ink);text-decoration:none;border-bottom:1px dashed var(--ink-soft)}
+</style>
+</head>
+<body>
+
+
+    <div class="tiers">
+      <div class="tier">
+        <div class="tag" style="display:none"><span class="d"></span>Tier 01 &middot; Free</div>
+        <h3 class="name">Onboarding<br>Brief.</h3>
+        <div class="price"><span class="amt">$0</span><span class="per">one-time</span></div>
+        <p class="pitch">A full snapshot of your business, site, and visibility. Runs once. Establishes your baseline.</p>
+        <div class="cadence">Frequency &middot; Once</div>
+        <div class="runs"><span class="r-d">1</span><span class="r-l">brief &middot; ever</span><span class="r-s">on demand</span></div>
+        <div class="replaces" style="display:none">Equivalent to &middot; ~ $1.2K project<b>$0 forever</b></div>
+        <a class="cta" href="#">Create dashboard <span>&nearr;</span></a>
+      </div>
+      <div class="tier">
+        <div class="tag" style="display:none"><span class="d"></span>Tier 02 &middot; Weekly</div>
+        <h3 class="name">Weekly<br>Brief.</h3>
+        <div class="price"><span class="amt">$5</span><span class="per">/ month</span></div>
+        <p class="pitch">Weekly update on how your business shows up and what's changing.</p>
+        <div class="cadence">Frequency &middot; 1&times; / week</div>
+        <div class="runs"><span class="r-d">1</span><span class="r-l">brief / week</span><span class="r-s">~ 4 / mo</span></div>
+        <div class="replaces" style="display:none">Equivalent to &middot; social listening intern<b>~ $4K / mo</b></div>
+        <a class="cta" href="#">Start weekly <span>&nearr;</span></a>
+      </div>
+      <div class="tier">
+        <div class="tag" style="display:none"><span class="d"></span>Tier 03 &middot; Daily</div>
+        <h3 class="name">Daily<br>Brief.</h3>
+        <div class="price"><span class="amt">$29</span><span class="per">/ month</span></div>
+        <p class="pitch">Daily direction on what to fix, post, and prioritize.</p>
+        <div class="cadence">Frequency &middot; 1&times; / day</div>
+        <div class="runs"><span class="r-d">1</span><span class="r-l">brief / day</span><span class="r-s">~ 30 / mo</span></div>
+        <div class="replaces" style="display:none">Equivalent to &middot; strategist + planner<b>~ $11K / mo</b></div>
+        <a class="cta" href="#">Get daily <span>&nearr;</span></a>
+      </div>
+      <div class="tier feat dominant">
+        <div class="flag">Most chosen</div>
+        <div class="tag" style="display:none"><span class="d"></span>Tier 04 &middot; Continuous</div>
+        <h3 class="name">Continuous<br>Brief.</h3>
+        <div class="price"><span class="amt">$99</span><span class="per">/ month</span></div>
+        <p class="pitch">Content, SEO, and optimization handled continuously throughout the day.</p>
+        <div class="cadence">Frequency &middot; 2&ndash;3&times; / day</div>
+        <div class="runs"><span class="r-d">6</span><span class="r-l">briefs / day</span><span class="r-s">~ 180 / mo</span></div>
+        <div class="replaces" style="display:none">Equivalent to &middot; full marketing team<b>~ $15K+ / mo</b></div>
+        <a class="cta" href="#">Run continuously <span>&nearr;</span></a>
+      </div>
+    </div>
+
+    <div style="padding:0 0 16px">
+      <div class="tier custom" style="max-width:100%;border-radius:16px">
+        <h3 class="name">Studio.</h3>
+        <div class="price"><span class="amt">$2.5K+</span><span class="per">project</span></div>
+        <p class="pitch">Hire a job, not a team. Fix what your brief surfaces &mdash; design, pages, creative, and systems built and delivered fast.</p>
+        <div class="ala-grid">
+          <div class="ala-card"><div class="ec"><span>Video</span></div><h4 class="nm">Short-form edit.</h4><p class="ds">Short-form video ready to post.</p></div>
+          <div class="ala-card"><div class="ec"><span>Video</span></div><h4 class="nm">Long-form edit.</h4><p class="ds">Product or campaign video.</p></div>
+          <div class="ala-card"><div class="ec"><span>Design</span></div><h4 class="nm">Single graphic.</h4><p class="ds">One on-brand asset.</p></div>
+          <div class="ala-card"><div class="ec"><span>Design</span></div><h4 class="nm">Carousel kit.</h4><p class="ds">Multi-slide post to convert.</p></div>
+          <div class="ala-card"><div class="ec"><span>Social</span></div><h4 class="nm">Social management.</h4><p class="ds">Active + consistent.</p></div>
+          <div class="ala-card"><div class="ec"><span>Brand</span></div><h4 class="nm">Logo refresh.</h4><p class="ds">Wordmark + lockup + assets.</p></div>
+          <div class="ala-card"><div class="ec"><span>Web</span></div><h4 class="nm">Landing page.</h4><p class="ds">Built to convert.</p></div>
+          <div class="ala-card"><div class="ec"><span>Email</span></div><h4 class="nm">Email campaign.</h4><p class="ds">Ready to send.</p></div>
+          <div class="ala-card"><div class="ec"><span>Figma</span></div><h4 class="nm">UI &middot; 1 screen.</h4><p class="ds">Production-ready.</p></div>
+          <div class="ala-card"><div class="ec"><span>Figma</span></div><h4 class="nm">UI flow &middot; 5 screens.</h4><p class="ds">Connected flow.</p></div>
+        </div>
+      </div>
+    </div>
+
+
+</body></html>

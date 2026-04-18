@@ -51,6 +51,7 @@ Determine which PSI state you are in:
 - Set readiness to `'partial'` at minimum.
 - Skip all steps that cite `intel.pagespeed` fields (Steps 2, 3, 4, 9). Continue with Steps 5, 6, 7, 8.
 - **Never** write a citation like `"intel.pagespeed.scores.performance = X"` when State A or B.
+- **Do NOT emit a finding** (at any severity) about PSI unavailability, Lighthouse errors, or audit tool limitations. The gap entry above IS the canonical disclosure. A finding would double-count it and read downstream as if the site has a problem when the reality is the tool could not measure. This rule is absolute — audit-tool failures are NEVER findings.
 
 **If State C:** proceed through all steps.
 

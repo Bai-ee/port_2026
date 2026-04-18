@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
+import { resolveAnalyzerSource, buildCardDescription } from '../../../../features/scout-intake/card-description-builder.mjs';
 
 const require = createRequire(import.meta.url);
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
@@ -125,6 +126,59 @@ function buildResolveRoot({ dash, bootstrap }) {
   };
 }
 
+// Raw data extraction that mirrors DashboardPage.jsx's per-card rawData slices
+// as closely as possible using only persisted dashboard/bootstrap state.
+function buildRawDataForCard(cardId, { dash, analyzerOutputs }) {
+  const snapshot = dash?.snapshot || null;
+  const brandOverview = snapshot?.brandOverview || null;
+  const siteMeta = dash?.siteMeta || null;
+  const scribe = dash?.scribe || null;
+  const headline = dash?.headline || null;
+
+  const hasIntakeData = Boolean(
+    brandOverview?.headline ||
+    brandOverview?.summary ||
+    brandOverview?.industry ||
+    brandOverview?.businessModel ||
+    scribe?.brief?.headline ||
+    scribe?.cards ||
+    headline
+  );
+
+  switch (cardId) {
+    case 'social-preview': {
+      return {
+        ogImage:       siteMeta ? Boolean(siteMeta.ogImage) : null,
+        ogTitle:       siteMeta?.title       || null,
+        ogDescription: siteMeta?.description || null,
+        canonical:     siteMeta?.canonical   || null,
+        favicon:       siteMeta?.favicon     || null,
+      };
+    }
+    case 'visibility-snapshot': {
+      const aiVis = analyzerOutputs?.['seo-performance']?.skills?.['ai-seo-audit']?.aiVisibility ?? null;
+      return { score: aiVis?.score ?? null, letterGrade: aiVis?.letterGrade ?? null };
+    }
+    case 'multi-device-view': {
+      const hasMockup = Boolean(dash?.artifacts?.homepageDeviceMockup?.downloadUrl);
+      return { captureDone: hasMockup };
+    }
+    case 'brief': {
+      return { hasBrief: hasIntakeData };
+    }
+    case 'business-model': {
+      const model = brandOverview?.businessModel || '';
+      return { hasModel: Boolean(model), modelLabel: model };
+    }
+    case 'industry': {
+      const industry = brandOverview?.industry || '';
+      return { hasCategory: Boolean(industry), categoryLabel: industry };
+    }
+    default:
+      return {};
+  }
+}
+
 export async function GET(request) {
   let decoded;
   try {
@@ -178,6 +232,17 @@ export async function GET(request) {
     const rawValue       = card.sourceField   ? resolvePath(root, card.sourceField)   : null;
     const fallbackValue  = card.fallbackField ? resolvePath(root, card.fallbackField) : null;
 
+    // Deterministic description debug trace — resolves through the same alias
+    // map and builder logic used by the tile renderer.
+    let dynamicDescription = null;
+    try {
+      const aggregate = resolveAnalyzerSource(card.id, analyzerOutputs);
+      if (aggregate) {
+        const rawData = buildRawDataForCard(card.id, { dash, analyzerOutputs });
+        dynamicDescription = buildCardDescription(card.id, aggregate, rawData);
+      }
+    } catch { /* non-fatal — debug field only */ }
+
     cards[card.id] = {
       scribe: scribe && (scribe.short || scribe.expanded)
         ? { short: scribe.short || null, expanded: scribe.expanded || null }
@@ -185,6 +250,7 @@ export async function GET(request) {
       staticCopy:    CARD_STATIC_COPY[card.id] || null,
       analyzerOutput,
       analyzerSkill: card.analyzerSkill || null,
+      dynamicDescription,
       rawValue:      rawValue      === undefined ? null : rawValue,
       fallbackValue: fallbackValue === undefined ? null : fallbackValue,
       present:       hasData(rawValue) || hasData(fallbackValue),

@@ -10,10 +10,12 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 45000;
 const DEFAULT_GOTO_TIMEOUT_MS = 15000;
 const DEFAULT_POST_LOAD_WAIT_MS = 1200;
 const SCREENSHOT_VARIANTS = [
+  // Viewport screenshots — used for the multi-device mockup composite
   {
     id: 'desktop',
     label: 'Desktop',
     storageSuffix: 'desktop',
+    fullPage: false,
     viewport: {
       width: 1440,
       height: 900,
@@ -28,6 +30,7 @@ const SCREENSHOT_VARIANTS = [
     id: 'mobile',
     label: 'Mobile',
     storageSuffix: 'mobile',
+    fullPage: false,
     viewport: {
       width: 390,
       height: 844,
@@ -42,6 +45,53 @@ const SCREENSHOT_VARIANTS = [
     id: 'tablet',
     label: 'Tablet',
     storageSuffix: 'tablet',
+    fullPage: false,
+    viewport: {
+      width: 768,
+      height: 1024,
+      deviceScaleFactor: 2,
+      isMobile: true,
+      hasTouch: true,
+      isLandscape: false,
+    },
+    primary: false,
+  },
+  // Full-page screenshots — used in the Multi-Device View tabs
+  {
+    id: 'desktop-full',
+    label: 'Desktop Full Page',
+    storageSuffix: 'desktop-full',
+    fullPage: true,
+    viewport: {
+      width: 1440,
+      height: 900,
+      deviceScaleFactor: 1,
+      isMobile: false,
+      hasTouch: false,
+      isLandscape: true,
+    },
+    primary: false,
+  },
+  {
+    id: 'mobile-full',
+    label: 'Mobile Full Page',
+    storageSuffix: 'mobile-full',
+    fullPage: true,
+    viewport: {
+      width: 390,
+      height: 844,
+      deviceScaleFactor: 2,
+      isMobile: true,
+      hasTouch: true,
+      isLandscape: false,
+    },
+    primary: false,
+  },
+  {
+    id: 'tablet-full',
+    label: 'Tablet Full Page',
+    storageSuffix: 'tablet-full',
+    fullPage: true,
     viewport: {
       width: 768,
       height: 1024,
@@ -195,7 +245,7 @@ async function captureScreenshotBuffer({ clientId, runId, targetUrl, variant }) 
         },
         waitForTimeout: config.postLoadWaitMs,
         options: {
-          fullPage: false,
+          fullPage: Boolean(variant?.fullPage),
           type: 'jpeg',
           quality: 70,
         },

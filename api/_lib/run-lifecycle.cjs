@@ -151,10 +151,20 @@ function buildDashboardProjection(clientId, pipelineResult, runId) {
   };
 
   if (homepageScreenshot) {
+    // Viewport screenshots (desktop/mobile/tablet) — used for mockup composite
+    const viewportScreenshots = homepageScreenshots.filter((a) => a?.variant && !a.variant.endsWith('-full'));
+    // Full-page screenshots (desktop-full/mobile-full/tablet-full) — used in Multi-Device View tabs
+    const fullPageScreenshots = homepageScreenshots.filter((a) => a?.variant && a.variant.endsWith('-full'));
+
     base.artifacts = {
       homepageScreenshot,
       homepageScreenshots: Object.fromEntries(
-        homepageScreenshots
+        viewportScreenshots
+          .filter((artifact) => artifact?.variant)
+          .map((artifact) => [artifact.variant, artifact])
+      ),
+      fullPageScreenshots: Object.fromEntries(
+        fullPageScreenshots
           .filter((artifact) => artifact?.variant)
           .map((artifact) => [artifact.variant, artifact])
       ),

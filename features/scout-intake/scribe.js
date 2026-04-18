@@ -17,6 +17,21 @@
 // Typical cost per run: ~$0.005–$0.015.
 
 const { getCard } = require('./card-contract');
+const { GLOBAL_BRAND_TONE, DESCRIPTION_STRUCTURE, getVoiceForActionClass } = require('./card-voice');
+
+// Naming-convention match for gap ruleIds that represent AUDIT FAILURES
+// (tool/network/data-availability problems) rather than SITE CONDITIONS.
+// Scribe treats these as disclosures ("audit ran with limited data"), not as
+// site problems to enumerate. Examples: psi-data-unavailable, fetch-failed,
+// synthesize-failed, ai-seo-audit-failed, audit-incomplete.
+function isAuditFailureGap(ruleId) {
+  if (!ruleId) return false;
+  const id = String(ruleId).toLowerCase();
+  return id.includes('unavailable') ||
+         id.includes('-failed') ||
+         id.includes('_failed') ||
+         id.startsWith('audit-');
+}
 
 const SCRIBE_MODEL = 'claude-haiku-4-5-20251001';
 const MAX_TOKENS = 4096;
@@ -81,9 +96,15 @@ function buildCardDigest(analyzerResults, analyzerOutputs = {}) {
         .slice(0, 3)
         .map((f) => ({ severity: f.severity, label: f.label, detail: f.detail }));
 
-      const triggeredGaps = (aggregate.gaps || [])
+      const allTriggeredGaps = (aggregate.gaps || [])
         .filter((g) => g.triggered)
         .map((g) => ({ ruleId: g.ruleId, evidence: g.evidence }));
+
+      // Audit-failure gaps (PSI unavailable, fetch failed, etc.) are TOOL
+      // limitations, not site problems. Scribe must disclose them as audit
+      // state, NOT list them alongside real site issues. See isAuditFailureGap.
+      const auditFailureGaps = allTriggeredGaps.filter((g) => isAuditFailureGap(g.ruleId));
+      const siteProblemGaps  = allTriggeredGaps.filter((g) => !isAuditFailureGap(g.ruleId));
 
       const findingCounts = {
         critical: (aggregate.findings || []).filter((f) => f.severity === 'critical').length,
@@ -92,10 +113,11 @@ function buildCardDigest(analyzerResults, analyzerOutputs = {}) {
       };
 
       analyzerSignal = {
-        readiness:    aggregate.readiness,
-        highlights:   aggregate.highlights || [],
+        readiness:        aggregate.readiness,
+        highlights:       aggregate.highlights || [],
         topFindings,
-        triggeredGaps,
+        triggeredGaps:    siteProblemGaps,   // real site issues only
+        auditFailureGaps,                     // tool failures — framed separately
         findingCounts,
       };
     }
@@ -103,6 +125,7 @@ function buildCardDigest(analyzerResults, analyzerOutputs = {}) {
     entries.push({
       cardId,
       role:           card.role,
+      actionClass:    card.actionClass,
       confidence,
       qualityScaling: card.qualityScaling !== false,
       shortBudget:    card.copy.short,
@@ -148,6 +171,10 @@ function formatCardDigest(digest) {
     lines.push(`[${c.cardId}] role=${c.role} confidence=${c.confidence}`);
     lines.push(`  short:    ${c.shortBudget.min}-${c.shortBudget.max} chars`);
     lines.push(`  expanded: ${c.expandedBudget.min}-${c.expandedBudget.max} chars`);
+    // Role-specific priority/voice rule — tells Scribe WHAT to lead with on
+    // this card. Global brand tone + description structure live in the prompt
+    // once; per-card voice lives here.
+    lines.push(`  voice: ${getVoiceForActionClass(c.actionClass)}`);
     if (c.notes) lines.push(`  notes: ${c.notes}`);
     if (c.analyzerSignal) {
       const a = c.analyzerSignal;
@@ -164,6 +191,11 @@ function formatCardDigest(digest) {
       }
       if (a.triggeredGaps.length) {
         lines.push(`  analyzer_gaps: ${JSON.stringify(a.triggeredGaps).slice(0, 400)}`);
+      }
+      // Audit failures are disclosed separately so Scribe can frame them as
+      // tool limitations, not site problems. See AUDIT STATE block in the prompt.
+      if (a.auditFailureGaps && a.auditFailureGaps.length) {
+        lines.push(`  audit_failures: ${JSON.stringify(a.auditFailureGaps).slice(0, 400)}`);
       }
     } else if (c.signals) {
       lines.push(`  signals: ${JSON.stringify(c.signals).slice(0, 600)}`);
@@ -197,7 +229,19 @@ FACT DISCIPLINE
 - The user context (if present) tells you the reader's stage and priority — let it shape TONE and EMPHASIS, never invent facts.
 - When making numeric claims about findings (e.g. "X critical issues"), use \`analyzer_finding_counts\` as ground truth. Do not count findings from the findings list yourself — the counts may differ due to aggregation.
 
-VOICE
+AUDIT STATE — distinguish tool failures from site problems
+- \`audit_failures\` lists TOOL limitations (PSI returned an error, fetch timed out, etc.). These are NOT site problems. They are disclosures about what we could and could not measure.
+- When \`audit_failures\` is present, OPEN the description with a single-phrase acknowledgment: "Audit ran with limited data — [one-line reason]." Then describe the real \`analyzer_findings\` / \`analyzer_gaps\` as usual.
+- DO NOT include audit failures in the "critical issues" count.
+- DO NOT phrase audit failures as if the site is broken. A PSI tool error does not mean "your site is broken" — it means "we couldn't measure it this run."
+- If the ONLY signals are audit failures (no real findings, no real gaps), the description should be short and honest: we tried, here's what blocked the audit, suggest a re-run. Do NOT enumerate fake problems.
+- Real site findings (missing H1, no schema markup, no contact info) ARE site problems — describe them normally even when audit failures are also present.
+
+${GLOBAL_BRAND_TONE}
+
+${DESCRIPTION_STRUCTURE}
+
+VOICE (mechanical rules)
 - Crisp, specific, confident. No hedging ("might", "could", "perhaps").
 - No pleasantries, no meta-commentary, no preamble.
 - Short sentences over long ones. Active voice.

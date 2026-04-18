@@ -25,6 +25,7 @@ const { buildUserContext } = require('./user-context');
 const { runAnalyzers } = require('./analyzers');
 const { runScribe } = require('./scribe');
 const { runCardSkills, buildSourcePayloads } = require('./skills/_runner');
+const { aggregateCardSkills } = require('./skills/_aggregator');
 const { ensureScoutConfig } = require('./scout-config-generator');
 const { persistWebsiteScreenshotArtifact, persistBriefPdfArtifact } = require('../../api/_lib/browserless.cjs');
 const { renderBriefHtml } = require('./brief-renderer');
@@ -444,6 +445,39 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
     }
   }
 
+  // ── [AI-SEO] AI Visibility audit ─────────────────────────────────────────
+  // Runs after PSI, before analyzers + skills. Non-fatal: any failure pushes a
+  // warning and leaves aiSeoAuditResult = null. The result is injected into
+  // analyzerOutputs['seo-performance'].skills['ai-seo-audit'] after runCardSkills.
+  // Gated: AI_SEO_AUDIT_ENABLED !== '0' (default on).
+  let aiSeoAuditResult = null;
+  if (process.env.AI_SEO_AUDIT_ENABLED !== '0') {
+    try {
+      await emitProgress('ai-seo', '[AI-SEO] Running AI visibility audit…');
+      const aiSeoMod = await import('../../ai-seo-audit/src/audit.js').catch(() => null);
+      if (aiSeoMod) {
+        aiSeoAuditResult = await withTimeout(
+          aiSeoMod.runAiSeoAudit({ websiteUrl }),
+          'AI SEO audit',
+          30_000,
+        );
+        console.log(
+          `[${new Date().toISOString()}] INTAKE: AI SEO audit complete — score=${aiSeoAuditResult?.aiVisibility?.score}`
+        );
+      } else {
+        console.warn('[AI-SEO] ai-seo-audit module not found — skipping.');
+      }
+    } catch (err) {
+      console.warn(`[AI-SEO] AI visibility audit failed (non-fatal): ${err.message}`);
+      warnings.push({
+        type: 'warning',
+        code: 'ai_seo_audit_failed',
+        message: `AI visibility audit failed: ${err.message}`,
+        stage: 'ai-seo',
+      });
+    }
+  }
+
   // ── Stage 4: Normalize ────────────────────────────────────────────────────
   await emitProgress('normalize', 'Writing dashboard modules...');
 
@@ -543,6 +577,36 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
           }
         : evidence;
 
+      // Build the runtime-health payload — derived from the pipeline's current
+      // state at this moment (warnings accumulated so far, evidence shape,
+      // per-stage cost data). Consumed by the run-health-audit skill on the
+      // intake-terminal card so Scribe can describe "how the audit itself went."
+      const stagesFailed = Array.from(new Set(
+        (warnings || []).map((w) => w?.stage).filter(Boolean)
+      ));
+      const runtimeHealth = {
+        warnings: (warnings || []).map((w) => ({
+          code:    w?.code    || 'unknown',
+          message: w?.message || '',
+          stage:   w?.stage   || 'unknown',
+        })),
+        pagesFetched:      Array.isArray(evidence?.pages) ? evidence.pages.length : 0,
+        thin:              Boolean(evidence?.thin),
+        costs: {
+          synth:      synthesisResult?.runCostData?.estimatedCostUsd ?? null,
+          styleGuide: styleGuideCost?.estimatedCostUsd ?? null,
+          aiSeo:      0,   // native engine, no LLM cost
+          // scribe cost is not yet known at this stage — remains null
+          scribe:     null,
+          total: [
+            synthesisResult?.runCostData?.estimatedCostUsd,
+            styleGuideCost?.estimatedCostUsd,
+          ].filter((n) => typeof n === 'number').reduce((a, b) => a + b, 0),
+        },
+        stagesFailed,
+        pipelineDurationMs: Date.now() - Date.parse(startedAt),
+      };
+
       const sourcePayloads = buildSourcePayloads({
         intake:      synthesisResult.intake,
         styleGuide,
@@ -551,6 +615,7 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
         pagespeed:   sharedResults.pagespeed,
         scoutConfig,
         userContext,
+        runtimeHealth,
       });
       analyzerOutputs = await withTimeout(runCardSkills({ tier, sourcePayloads, warnings }), 'Analyzer skills');
       console.log(
@@ -564,6 +629,15 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
         stage: 'skills',
       });
     }
+  }
+
+  // ── Inject AI SEO audit into analyzerOutputs ─────────────────────────────
+  // Merges aiSeoAuditResult into the seo-performance card so Scribe and Firestore
+  // downstream can consume aiVisibility without touching normalize.js.
+  if (aiSeoAuditResult) {
+    const card = (analyzerOutputs['seo-performance'] ||= { skills: {}, aggregate: null });
+    card.skills['ai-seo-audit'] = aiSeoAuditResult;
+    card.aggregate = aggregateCardSkills(card.skills);
   }
 
   // ── Scribe pass — per-card copy + brief doc ─────────────────────────────

@@ -429,11 +429,12 @@ TYPOGRAPHY
 
 COLORS
 - Extract actual hex/rgb/hsl values — do not describe colors with words.
-- Primary = the most prominent brand color (used in CTAs, accents, key UI elements).
+- Primary = the most prominent BRAND color (used in CTAs, accents, links, key UI elements). This is NEVER white, near-white, black, near-black, or any gray. It must be a saturated, intentional color that distinguishes the brand. If the site has no saturated brand color at all, report the most prominent non-neutral color you can find.
 - Secondary = the second most used intentional color (not neutral/gray).
 - Tertiary = third brand color if one exists. Omit if not present.
-- Neutral = the dominant background/text color axis.
+- Neutral = the dominant background/text color axis. White, cream, off-white, black, dark gray belong HERE — never in primary.
 - Check CSS custom properties (--color-*, --brand-*, --bg-*, --text-*) first — these are the most reliable source.
+- ANTI-RULE: if you are about to set primary.hex to #FFFFFF, #000000, #333333, #F5F5F5, or any color with saturation < 10%, STOP — that belongs in neutral, not primary. Find a real brand color.
 - If a shade scale exists (50-950 or light-to-dark variants), capture the full scale as hex values.
 - Convert rgb()/hsl() to hex in the output.
 - Detect light/dark mode from @media (prefers-color-scheme) or .dark/.light class patterns.

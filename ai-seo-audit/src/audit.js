@@ -398,24 +398,63 @@ const isMain = process.argv[1] &&
    process.argv[1].endsWith('/audit.js'));
 
 if (isMain) {
-  const url        = process.argv[2];
-  const formatFlag = (process.argv.find((a) => a.startsWith('--format=')) || '--format=json').split('=')[1];
+  const args       = process.argv.slice(2);
+  const urlA       = args.find((a) => !a.startsWith('--'));
+  const formatFlag = (args.find((a) => a.startsWith('--format=')) || '--format=json').split('=')[1];
+  const compareIdx = args.indexOf('--compare');
+  const urlB       = compareIdx !== -1 ? args[compareIdx + 1] : null;
+  const genLlms    = args.includes('--generate-llms-txt');
 
-  if (!url) {
-    console.error('Usage: node src/audit.js <url> [--format=json|json-min|summary]');
+  if (!urlA) {
+    console.error('Usage: node src/audit.js <url> [--format=json|json-min|summary] [--compare <url-b>] [--generate-llms-txt]');
     process.exit(1);
   }
 
-  runAiSeoAudit({ websiteUrl: url })
-    .then((result) => {
-      if (formatFlag === 'json-min') {
-        process.stdout.write(JSON.stringify(result));
-      } else {
-        process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+  (async () => {
+    try {
+      // ── Compare mode ───────────────────────────────────────────────────────
+      if (urlB) {
+        const { formatJson, formatSummary } = await import('./formatters/compare.js');
+        const [resA, resB] = await Promise.allSettled([
+          runAiSeoAudit({ websiteUrl: urlA }),
+          runAiSeoAudit({ websiteUrl: urlB }),
+        ]);
+        const resultA = resA.status === 'fulfilled' ? resA.value : new Error(resA.reason?.message || 'Audit failed');
+        const resultB = resB.status === 'fulfilled' ? resB.value : new Error(resB.reason?.message || 'Audit failed');
+
+        if (formatFlag === 'json') {
+          process.stdout.write(formatJson(resultA, resultB) + '\n');
+        } else {
+          process.stdout.write(formatSummary(resultA, resultB, urlA, urlB) + '\n');
+        }
+        return;
       }
-    })
-    .catch((err) => {
+
+      // ── Single audit ───────────────────────────────────────────────────────
+      const result = await runAiSeoAudit({ websiteUrl: urlA });
+
+      // ── Generate llms.txt ──────────────────────────────────────────────────
+      if (genLlms) {
+        const { generateLlmsTxt } = await import('./generateLlmsTxt.js');
+        process.stdout.write(generateLlmsTxt(result, { websiteUrl: urlA }) + '\n');
+        return;
+      }
+
+      // ── Format output ──────────────────────────────────────────────────────
+      if (formatFlag === 'summary') {
+        const { format } = await import('./formatters/terminal.js');
+        process.stdout.write(format(result));
+      } else if (formatFlag === 'json-min') {
+        const { format } = await import('./formatters/jsonMin.js');
+        process.stdout.write(format(result) + '\n');
+      } else {
+        // Default: pretty JSON
+        const { format } = await import('./formatters/json.js');
+        process.stdout.write(format(result) + '\n');
+      }
+    } catch (err) {
       console.error('Audit failed:', err.message);
       process.exit(1);
-    });
+    }
+  })();
 }

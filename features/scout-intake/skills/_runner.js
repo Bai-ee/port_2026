@@ -188,13 +188,14 @@ function extractUsage(response, model) {
  * Null entries are present for sources that are not yet wired into the pipeline.
  */
 function buildSourcePayloads({
-  intake       = null,
-  styleGuide   = null,
-  siteMeta     = null,
-  evidence     = null,
-  pagespeed    = null,
-  scoutConfig  = null,
-  userContext  = null,
+  intake        = null,
+  styleGuide    = null,
+  siteMeta      = null,
+  evidence      = null,
+  pagespeed     = null,
+  scoutConfig   = null,
+  userContext   = null,
+  runtimeHealth = null,
 } = {}) {
   // Unwrap pagespeed SourceRecord — skill prompts cite `intel.pagespeed.scores.*`,
   // which lives under `.facts` in the SourceRecord envelope. When `pagespeed` is
@@ -208,6 +209,7 @@ function buildSourcePayloads({
     'synth.intake':                   intake      || null,
     'synth.styleGuide':               styleGuide  || null,
     'intel.pagespeed':                pagespeedPayload,
+    'runtime.health':                 runtimeHealth || null,
     'scout.reddit':                   null,  // Phase E — not wired
     'scout.weather':                  null,
     'scout.reviews':                  null,

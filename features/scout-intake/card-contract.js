@@ -94,12 +94,24 @@ const CARD_CONTRACT = [
     category: 'runtime',
     role: 'runtime',
     analyzer: { impl: 'runtime', required: false },
-    analyzerSkill: null,
-    copy: null,
-    qualityScaling: false,
+    analyzerSkill: 'run-health-audit',              // legacy single-skill field
+    analyzerSkills: ['run-health-audit'],           // P3+ multi-skill
+    // Copy budgets added — the card now has a post-run modal state that
+    // surfaces the audit's own health (warnings, thin data, stage failures)
+    // via Scribe. During the live run, the card still renders the event stream;
+    // post-run, the modal shows tabs with run-health findings + solutions.
+    copy: {
+      short:    { min: 60,  max: 160 },
+      expanded: { min: 200, max: 600 },
+    },
+    qualityScaling: true,
     tier: 'all',
-    actionClass: 'runtime',
-    sources: [],
+    // actionClass upgraded from 'runtime' to 'diagnose' — the run-health-audit
+    // skill produces findings about the run itself (PSI failed, data thin,
+    // synth failed). Scribe opens with the most significant run issue and
+    // points to the Solutions tab for diagnostic next steps.
+    actionClass: 'diagnose',
+    sources: ['runtime.health'],
     missingStateRules: [],
   },
 
@@ -139,14 +151,19 @@ const CARD_CONTRACT = [
     sourceField: 'snapshot.brandTone',
     fallbackField: 'siteMeta',
     analyzer: { impl: 'passthrough', required: false },
-    analyzerSkill: null,
+    analyzerSkill: 'site-meta-audit',             // legacy single-skill field
+    analyzerSkills: ['site-meta-audit'],          // P3+ multi-skill (scalable)
     copy: {
       short:    { min: 80,  max: 180 },
       expanded: { min: 250, max: 600 },
     },
     qualityScaling: true,
     tier: 'all',
-    actionClass: 'describe',
+    // actionClass upgraded from 'describe' to 'diagnose' — the site-meta-audit
+    // skill produces actionable findings (missing OG image, missing favicon,
+    // missing canonical). Scribe opens with the top problem and points to the
+    // Solutions tab via the diagnose-role voice rules in card-voice.js.
+    actionClass: 'diagnose',
     sources: ['synth.intake', 'site.meta'],
     missingStateRules: [
       {
@@ -165,14 +182,19 @@ const CARD_CONTRACT = [
     role: 'visual-identity',
     sourceField: 'snapshot.visualIdentity.styleGuide',
     analyzer: { impl: 'design-system-extractor', required: false },
-    analyzerSkill: null,
+    analyzerSkill: 'style-guide-audit',            // legacy single-skill field
+    analyzerSkills: ['style-guide-audit'],         // P3+ multi-skill
     copy: {
       short:    { min: 80,  max: 180 },
       expanded: { min: 300, max: 800 },
     },
     qualityScaling: true,
     tier: 'all',
-    actionClass: 'describe',
+    // actionClass upgraded from 'describe' to 'diagnose' — the style-guide-audit
+    // skill produces actionable findings (body text too small, no brand
+    // typography, thin palette). Scribe leads with the top problem and points
+    // to the Solutions tab via diagnose-role voice rules in card-voice.js.
+    actionClass: 'diagnose',
     sources: ['synth.styleGuide', 'site.html'],
     missingStateRules: [
       {
@@ -465,13 +487,17 @@ const CARD_CONTRACT = [
     role: 'site-health',
     sourceField: 'evidence.pages',
     analyzer: { impl: 'passthrough', required: false },
-    analyzerSkill: null,
+    analyzerSkill: 'conversion-audit',             // legacy single-skill field
+    analyzerSkills: ['conversion-audit'],          // P3+ multi-skill
     copy: {
       short:    { min: 80,  max: 200 },
       expanded: { min: 400, max: 900 },
     },
     qualityScaling: true,
     tier: 'all',
+    // actionClass stays 'service-offer' — Scribe's service-offer voice rules
+    // already frame gaps as opportunities with a subtle close. The skill
+    // produces actionable conversion findings that slot into that framing.
     actionClass: 'service-offer',
     sources: ['site.html', 'site.meta', 'intel.pagespeed'],
     missingStateRules: [
@@ -509,15 +535,20 @@ const CARD_CONTRACT = [
     role: 'brand-assets',
     sourceField: 'siteMeta',
     analyzer: { impl: 'passthrough', required: false },
-    analyzerSkill: null,
+    analyzerSkill: 'brand-asset-gap',              // legacy single-skill field
+    analyzerSkills: ['brand-asset-gap'],           // P3+ multi-skill
     copy: {
       short:    { min: 80,  max: 200 },
       expanded: { min: 400, max: 900 },
     },
     qualityScaling: true,
     tier: 'all',
+    // actionClass stays 'service-offer' — the brand-asset-gap skill produces
+    // findings framed as identity-coherence opportunities (inconsistent brand
+    // name, template defaults, thin positioning). Service-offer voice frames
+    // each gap as a chance to rebuild, not a failure to diagnose.
     actionClass: 'service-offer',
-    sources: ['site.meta', 'synth.styleGuide', 'site.html'],
+    sources: ['site.meta', 'synth.intake', 'synth.styleGuide', 'site.html'],
     missingStateRules: [
       {
         id: 'no-favicon',

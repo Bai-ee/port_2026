@@ -281,6 +281,27 @@ const SOURCE_INVENTORY = [
     ],
     freshness: 'Static until user re-onboards.',
   },
+  {
+    id: 'runtime.health',
+    label: 'Runtime Health',
+    category: 'runtime',
+    collection: {
+      method: 'derived from pipeline runtime state',
+      detail: 'Aggregated at runtime from warnings[], stage cost data, evidence thinness, and pipeline stats. Passed only to skills that audit the run itself (run-health-audit).',
+      auth: 'none (internal pipeline state)',
+      costPerRun: 'free (no external call)',
+      file: 'features/scout-intake/runner.js::buildRuntimeHealthPayload',
+    },
+    payloadFields: [
+      'warnings[] ({ code, message, stage })',
+      'pagesFetched (count of pages successfully fetched)',
+      'thin (boolean — true if evidence.thin was set)',
+      'costs ({ synth, styleGuide, scribe, aiSeo, total } in USD)',
+      'stagesFailed[] (codes extracted from warnings — psi, fetch, synth, styleguide, scribe, ai-seo, etc.)',
+      'pipelineDurationMs (wall time from start to normalize, when available)',
+    ],
+    freshness: 'Per run — computed fresh on every pipeline invocation.',
+  },
 ];
 
 const SOURCES_BY_ID = Object.fromEntries(SOURCE_INVENTORY.map((s) => [s.id, s]));
