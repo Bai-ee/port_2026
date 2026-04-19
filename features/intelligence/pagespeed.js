@@ -8,6 +8,23 @@
 // ── PSI API fetch ─────────────────────────────────────────────────────────────
 
 const PSI_API = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed';
+const PROBE_REDIRECT_LIMIT = 5;
+const PROBE_TIMEOUT_MS = 10_000;
+const HTML_CONTENT_TYPE_RE = /text\/html|application\/xhtml\+xml/i;
+
+const ARWEAVE_HOST_RE = /(^|\.)((arweave|ar-io)\.(net|dev)|arweave\.dev)$/i;
+const IPFS_HOST_RE = /(^|\.)ipfs(\.|$)|(^|\.)ipns(\.|$)|(^|\.)dweb\.link$|(^|\.)nftstorage\.link$|(^|\.)pinata\.cloud$/i;
+const ICP_HOST_RE = /(^|\.)icp0\.io$|(^|\.)ic0\.app$/i;
+const REDIRECTOR_HOST_RE = /(^|\.)linktr\.ee$|(^|\.)lnk\.bio$|(^|\.)beacons\.ai$|(^|\.)bit\.ly$|(^|\.)tinyurl\.com$/i;
+const VERCEL_HOST_RE = /(^|\.)vercel\.app$/i;
+const NETLIFY_HOST_RE = /(^|\.)netlify\.app$/i;
+const CLOUDFLARE_PAGES_HOST_RE = /(^|\.)pages\.dev$/i;
+const GITHUB_PAGES_HOST_RE = /(^|\.)github\.io$/i;
+const WIX_HOST_RE = /(^|\.)wixsite\.com$|(^|\.)wixstudio\.com$|(^|\.)editorx\.io$/i;
+const SHOPIFY_HOST_RE = /(^|\.)myshopify\.com$/i;
+const SQUARESPACE_HOST_RE = /(^|\.)squarespace\.com$/i;
+const WEBFLOW_HOST_RE = /(^|\.)webflow\.io$/i;
+const GODADDY_HOST_RE = /(^|\.)godaddysites\.com$|(^|\.)secureserver\.net$|(^|\.)myftpupload\.com$/i;
 
 const SEO_RED_FLAG_AUDIT_IDS = new Set([
   'meta-description', 'document-title', 'canonical', 'is-crawlable',
@@ -38,6 +55,537 @@ const SKIP_SCORE_MODES = new Set(['notApplicable', 'manual', 'informative']);
 function toScore(val) {
   if (val == null) return null;
   return Math.round(val * 100);
+}
+
+function normalizeWebsiteUrl(input) {
+  const raw = String(input || '').trim();
+  if (!raw) return null;
+  const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  try {
+    return new URL(candidate).toString();
+  } catch {
+    return null;
+  }
+}
+
+function classifyHostType(hostname) {
+  const host = String(hostname || '').toLowerCase();
+  if (!host) return 'unknown';
+  if (ARWEAVE_HOST_RE.test(host)) return 'arweave-gateway';
+  if (IPFS_HOST_RE.test(host)) return 'ipfs-gateway';
+  if (ICP_HOST_RE.test(host)) return 'icp-gateway';
+  if (REDIRECTOR_HOST_RE.test(host)) return 'redirector-service';
+  return 'standard';
+}
+
+function classifyHostService(hostname) {
+  const host = String(hostname || '').toLowerCase();
+  if (!host) return null;
+  if (ARWEAVE_HOST_RE.test(host)) return 'Arweave';
+  if (IPFS_HOST_RE.test(host)) return 'IPFS';
+  if (ICP_HOST_RE.test(host)) return 'Internet Computer (ICP)';
+  if (REDIRECTOR_HOST_RE.test(host)) return 'Redirector service';
+  return null;
+}
+
+function headerValue(headers, name) {
+  if (!headers?.get) return '';
+  return String(headers.get(name) || '').trim();
+}
+
+function uniqueStrings(values) {
+  return [...new Set((values || []).filter(Boolean))];
+}
+
+function classifyHostingProvider({ hostname, headers } = {}) {
+  const host = String(hostname || '').toLowerCase();
+  const server = headerValue(headers, 'server').toLowerCase();
+  const poweredBy = headerValue(headers, 'x-powered-by').toLowerCase();
+  const servedBy = `${headerValue(headers, 'x-servedby')} ${headerValue(headers, 'x-served-by')}`.toLowerCase();
+
+  if (!host && !server && !poweredBy && !servedBy) {
+    return { provider: null, providerKind: null, providerConfidence: null, providerEvidence: [] };
+  }
+
+  const hostnameRules = [
+    { re: VERCEL_HOST_RE,            provider: 'Vercel',              kind: 'deployment-platform', confidence: 'high', evidence: `final hostname matches ${host}` },
+    { re: NETLIFY_HOST_RE,           provider: 'Netlify',             kind: 'deployment-platform', confidence: 'high', evidence: `final hostname matches ${host}` },
+    { re: CLOUDFLARE_PAGES_HOST_RE,  provider: 'Cloudflare Pages',    kind: 'deployment-platform', confidence: 'high', evidence: `final hostname matches ${host}` },
+    { re: GITHUB_PAGES_HOST_RE,      provider: 'GitHub Pages',        kind: 'deployment-platform', confidence: 'high', evidence: `final hostname matches ${host}` },
+    { re: WIX_HOST_RE,               provider: 'Wix',                 kind: 'site-builder',        confidence: 'high', evidence: `final hostname matches ${host}` },
+    { re: SHOPIFY_HOST_RE,           provider: 'Shopify',             kind: 'commerce-platform',   confidence: 'high', evidence: `final hostname matches ${host}` },
+    { re: SQUARESPACE_HOST_RE,       provider: 'Squarespace',         kind: 'site-builder',        confidence: 'high', evidence: `final hostname matches ${host}` },
+    { re: WEBFLOW_HOST_RE,           provider: 'Webflow',             kind: 'site-builder',        confidence: 'high', evidence: `final hostname matches ${host}` },
+    { re: GODADDY_HOST_RE,           provider: 'GoDaddy',             kind: 'hosting-provider',    confidence: 'high', evidence: `final hostname matches ${host}` },
+  ];
+  for (const rule of hostnameRules) {
+    if (rule.re.test(host)) {
+      return {
+        provider: rule.provider,
+        providerKind: rule.kind,
+        providerConfidence: rule.confidence,
+        providerEvidence: [rule.evidence],
+      };
+    }
+  }
+
+  const headerRules = [
+    {
+      test: () => Boolean(headerValue(headers, 'x-vercel-id')),
+      provider: 'Vercel',
+      kind: 'deployment-platform',
+      confidence: 'high',
+      evidence: ['response header x-vercel-id present'],
+    },
+    {
+      test: () => Boolean(headerValue(headers, 'x-nf-request-id')),
+      provider: 'Netlify',
+      kind: 'deployment-platform',
+      confidence: 'high',
+      evidence: ['response header x-nf-request-id present'],
+    },
+    {
+      test: () => Boolean(headerValue(headers, 'x-shopid') || headerValue(headers, 'x-sorting-hat-podid')),
+      provider: 'Shopify',
+      kind: 'commerce-platform',
+      confidence: 'high',
+      evidence: uniqueStrings([
+        headerValue(headers, 'x-shopid') ? 'response header x-shopid present' : null,
+        headerValue(headers, 'x-sorting-hat-podid') ? 'response header x-sorting-hat-podid present' : null,
+      ]),
+    },
+    {
+      test: () => Boolean(headerValue(headers, 'x-wix-request-id')) || server.includes('pepyaka'),
+      provider: 'Wix',
+      kind: 'site-builder',
+      confidence: headerValue(headers, 'x-wix-request-id') ? 'high' : 'medium',
+      evidence: uniqueStrings([
+        headerValue(headers, 'x-wix-request-id') ? 'response header x-wix-request-id present' : null,
+        server.includes('pepyaka') ? `server header reports ${server}` : null,
+      ]),
+    },
+    {
+      test: () => servedBy.includes('squarespace') || server.includes('squarespace'),
+      provider: 'Squarespace',
+      kind: 'site-builder',
+      confidence: 'medium',
+      evidence: uniqueStrings([
+        servedBy.includes('squarespace') ? `x-servedby indicates Squarespace (${servedBy.trim()})` : null,
+        server.includes('squarespace') ? `server header reports ${server}` : null,
+      ]),
+    },
+    {
+      test: () => Boolean(headerValue(headers, 'x-webflow-request-id')) || poweredBy.includes('webflow') || server.includes('webflow'),
+      provider: 'Webflow',
+      kind: 'site-builder',
+      confidence: headerValue(headers, 'x-webflow-request-id') ? 'high' : 'medium',
+      evidence: uniqueStrings([
+        headerValue(headers, 'x-webflow-request-id') ? 'response header x-webflow-request-id present' : null,
+        poweredBy.includes('webflow') ? `x-powered-by reports ${poweredBy}` : null,
+        server.includes('webflow') ? `server header reports ${server}` : null,
+      ]),
+    },
+    {
+      test: () => server.includes('secureserver'),
+      provider: 'GoDaddy',
+      kind: 'hosting-provider',
+      confidence: 'medium',
+      evidence: [`server header reports ${server}`],
+    },
+    {
+      test: () => Boolean(headerValue(headers, 'x-github-request-id')),
+      provider: 'GitHub Pages',
+      kind: 'deployment-platform',
+      confidence: 'medium',
+      evidence: ['response header x-github-request-id present'],
+    },
+  ];
+  for (const rule of headerRules) {
+    if (rule.test()) {
+      return {
+        provider: rule.provider,
+        providerKind: rule.kind,
+        providerConfidence: rule.confidence,
+        providerEvidence: rule.evidence,
+      };
+    }
+  }
+
+  return { provider: null, providerKind: null, providerConfidence: null, providerEvidence: [] };
+}
+
+function isHtmlLike(contentType) {
+  return HTML_CONTENT_TYPE_RE.test(String(contentType || ''));
+}
+
+function detectBlockedBy(status, headers) {
+  if (!headers) return null;
+  const server = String(headers.get('server') || '').toLowerCase();
+  const via = String(headers.get('via') || '').toLowerCase();
+  const cfMitigated = String(headers.get('cf-mitigated') || '').toLowerCase();
+  if ((status === 403 || status === 429) && (server.includes('cloudflare') || cfMitigated)) return 'cloudflare';
+  if ((status === 403 || status === 429) && server.includes('cloudfront')) return 'cloudfront';
+  if ((status === 403 || status === 429) && via.includes('akamai')) return 'akamai';
+  if (status === 401) return 'auth-wall';
+  return null;
+}
+
+function classifyProbeError(err) {
+  const msg = String(err?.message || err || '').toLowerCase();
+  const causeCode = String(err?.cause?.code || '').toLowerCase();
+  const blob = `${causeCode} ${msg}`;
+
+  if (blob.includes('enotfound') || blob.includes('eai_again') || blob.includes('dns')) return 'dns_unreachable';
+  if (blob.includes('self signed') || blob.includes('certificate') || blob.includes('tls') || blob.includes('ssl')) return 'tls_or_cert_error';
+  if (blob.includes('timeout') || blob.includes('aborted') || blob.includes('timed out')) return 'timeout';
+  if (blob.includes('connreset') || blob.includes('socket hang up') || blob.includes('networkerror')) return 'network_error';
+  return 'request_failed';
+}
+
+async function runPreflightProbe(websiteUrl) {
+  const normalized = normalizeWebsiteUrl(websiteUrl);
+  const inputUrl = normalized || String(websiteUrl || '').trim();
+  let currentUrl = inputUrl;
+  const redirects = [];
+  const seen = new Set();
+
+  for (let hop = 0; hop <= PROBE_REDIRECT_LIMIT; hop += 1) {
+    const currentHost = (() => {
+      try { return new URL(currentUrl).hostname; } catch { return ''; }
+    })();
+    const hostType = classifyHostType(currentHost);
+    const hostService = classifyHostService(currentHost);
+
+    let res;
+    try {
+      res = await fetch(currentUrl, {
+        method: 'GET',
+        redirect: 'manual',
+        signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+        headers: {
+          accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+          'user-agent': 'Mozilla/5.0 (compatible; ScoutAudit/1.0; +https://example.com/bot)',
+        },
+      });
+    } catch (err) {
+      return {
+        inputUrl,
+        resolvedUrl: currentUrl,
+        redirectCount: redirects.length,
+        redirectChain: redirects,
+        hostType,
+        hostService,
+        probeStatus: 'error',
+        probeErrorCode: classifyProbeError(err),
+        probeError: err?.message || String(err),
+      };
+    }
+
+    const status = res.status;
+    const location = res.headers.get('location');
+    const contentType = res.headers.get('content-type') || null;
+    const server = res.headers.get('server') || null;
+    const blockedBy = detectBlockedBy(status, res.headers);
+    const provider = classifyHostingProvider({ hostname: currentHost, headers: res.headers });
+
+    if (status >= 300 && status < 400) {
+      if (!location) {
+        try { res.body?.cancel?.(); } catch { /* ignore */ }
+        return {
+          inputUrl,
+          resolvedUrl: currentUrl,
+          redirectCount: redirects.length,
+          redirectChain: redirects,
+          hostType,
+          hostService,
+          hostingProvider: provider.provider,
+          providerKind: provider.providerKind,
+          providerConfidence: provider.providerConfidence,
+          providerEvidence: provider.providerEvidence,
+          finalStatus: status,
+          contentType,
+          server,
+          blockedBy,
+          htmlLike: isHtmlLike(contentType),
+          probeStatus: 'error',
+          probeErrorCode: 'redirect_missing_location',
+          probeError: `Redirect response ${status} missing Location header`,
+        };
+      }
+
+      let nextUrl = null;
+      try {
+        nextUrl = new URL(location, currentUrl).toString();
+      } catch {
+        try { res.body?.cancel?.(); } catch { /* ignore */ }
+        return {
+          inputUrl,
+          resolvedUrl: currentUrl,
+          redirectCount: redirects.length,
+          redirectChain: redirects,
+          hostType,
+          hostService,
+          hostingProvider: provider.provider,
+          providerKind: provider.providerKind,
+          providerConfidence: provider.providerConfidence,
+          providerEvidence: provider.providerEvidence,
+          finalStatus: status,
+          contentType,
+          server,
+          blockedBy,
+          htmlLike: isHtmlLike(contentType),
+          probeStatus: 'error',
+          probeErrorCode: 'redirect_invalid_location',
+          probeError: `Redirect location could not be resolved: ${location}`,
+        };
+      }
+
+      redirects.push({
+        status,
+        from: currentUrl,
+        to: nextUrl,
+      });
+      try { res.body?.cancel?.(); } catch { /* ignore */ }
+
+      if (seen.has(nextUrl)) {
+        return {
+          inputUrl,
+          resolvedUrl: currentUrl,
+          redirectCount: redirects.length,
+          redirectChain: redirects,
+          hostType,
+          hostService,
+          hostingProvider: provider.provider,
+          providerKind: provider.providerKind,
+          providerConfidence: provider.providerConfidence,
+          providerEvidence: provider.providerEvidence,
+          finalStatus: status,
+          contentType,
+          server,
+          blockedBy,
+          htmlLike: isHtmlLike(contentType),
+          probeStatus: 'error',
+          probeErrorCode: 'forwarding_loop',
+          probeError: 'Redirect loop detected during preflight probe.',
+        };
+      }
+
+      seen.add(currentUrl);
+      currentUrl = nextUrl;
+      continue;
+    }
+
+    try { res.body?.cancel?.(); } catch { /* ignore */ }
+    return {
+      inputUrl,
+      resolvedUrl: currentUrl,
+      redirectCount: redirects.length,
+      redirectChain: redirects,
+      hostType,
+      hostService,
+      hostingProvider: provider.provider,
+      providerKind: provider.providerKind,
+      providerConfidence: provider.providerConfidence,
+      providerEvidence: provider.providerEvidence,
+      finalStatus: status,
+      contentType,
+      server,
+      blockedBy,
+      htmlLike: isHtmlLike(contentType),
+      probeStatus: 'ok',
+    };
+  }
+
+  return {
+    inputUrl,
+    resolvedUrl: currentUrl,
+    redirectCount: redirects.length,
+    redirectChain: redirects,
+    hostType: (() => {
+      try { return classifyHostType(new URL(currentUrl).hostname); } catch { return 'unknown'; }
+    })(),
+    hostService: (() => {
+      try { return classifyHostService(new URL(currentUrl).hostname); } catch { return null; }
+    })(),
+    ...(() => {
+      try {
+        const provider = classifyHostingProvider({ hostname: new URL(currentUrl).hostname, headers: null });
+        return {
+          hostingProvider: provider.provider,
+          providerKind: provider.providerKind,
+          providerConfidence: provider.providerConfidence,
+          providerEvidence: provider.providerEvidence,
+        };
+      } catch {
+        return { hostingProvider: null, providerKind: null, providerConfidence: null, providerEvidence: [] };
+      }
+    })(),
+    probeStatus: 'error',
+    probeErrorCode: 'redirect_chain_excessive',
+    probeError: `Redirect chain exceeded ${PROBE_REDIRECT_LIMIT} hops.`,
+  };
+}
+
+function classifyPsiFailure({ websiteUrl, errorMessage, apiStatus = null, probe = null } = {}) {
+  const msg = String(errorMessage || '').toLowerCase();
+  const ctx = probe || {};
+  const hostType = ctx.hostType || (() => {
+    try { return classifyHostType(new URL(websiteUrl || '').hostname); } catch { return 'unknown'; }
+  })();
+
+  if (ctx.probeErrorCode === 'forwarding_loop') {
+    return {
+      failureCode: 'forwarding_loop',
+      failureClass: 'site',
+      failureReason: 'The domain appears to redirect in a loop before reaching a crawlable page.',
+    };
+  }
+  if (ctx.probeErrorCode === 'redirect_chain_excessive') {
+    return {
+      failureCode: 'redirect_chain_excessive',
+      failureClass: 'site',
+      failureReason: 'The domain forwards through too many redirects before the audit can settle on a page.',
+    };
+  }
+  if (ctx.probeErrorCode === 'dns_unreachable') {
+    return {
+      failureCode: 'dns_unreachable',
+      failureClass: 'site',
+      failureReason: 'The domain did not resolve during the audit preflight check.',
+    };
+  }
+  if (ctx.probeErrorCode === 'tls_or_cert_error') {
+    return {
+      failureCode: 'tls_or_cert_error',
+      failureClass: 'site',
+      failureReason: 'The site has a TLS or certificate issue that blocked the audit preflight.',
+    };
+  }
+  if (hostType === 'arweave-gateway') {
+    return {
+      failureCode: 'arweave_or_gateway_host',
+      failureClass: 'measurement',
+      failureReason: 'The site resolves through an Arweave gateway, which can limit consistent Lighthouse measurements.',
+    };
+  }
+  if (hostType === 'ipfs-gateway') {
+    return {
+      failureCode: 'ipfs_or_gateway_host',
+      failureClass: 'measurement',
+      failureReason: 'The site resolves through an IPFS-style gateway, which can limit consistent Lighthouse measurements.',
+    };
+  }
+  if (hostType === 'icp-gateway') {
+    return {
+      failureCode: 'icp_or_gateway_host',
+      failureClass: 'measurement',
+      failureReason: 'The site resolves through Internet Computer (ICP) hosting, which can limit consistent Lighthouse measurements.',
+    };
+  }
+  if (ctx.blockedBy || ctx.finalStatus === 401 || ctx.finalStatus === 403) {
+    return {
+      failureCode: ctx.finalStatus === 401 ? 'login_wall' : 'bot_blocked',
+      failureClass: 'measurement',
+      failureReason: ctx.finalStatus === 401
+        ? 'The site appears to require authentication before the audit can load it.'
+        : `The site appears to block automated audit traffic${ctx.blockedBy ? ` (${ctx.blockedBy})` : ''}.`,
+    };
+  }
+  if (ctx.finalStatus === 429 || apiStatus === 429 || msg.includes('429')) {
+    return {
+      failureCode: 'rate_limited',
+      failureClass: 'measurement',
+      failureReason: 'The PageSpeed request was rate-limited before the audit could complete.',
+    };
+  }
+  if (ctx.finalStatus >= 500 && ctx.finalStatus < 600) {
+    return {
+      failureCode: 'origin_5xx',
+      failureClass: 'site',
+      failureReason: `The site returned HTTP ${ctx.finalStatus} during the preflight check.`,
+    };
+  }
+  if (ctx.finalStatus && ctx.finalStatus >= 400 && ctx.finalStatus < 500) {
+    return {
+      failureCode: 'origin_http_error',
+      failureClass: 'site',
+      failureReason: `The site returned HTTP ${ctx.finalStatus} before Lighthouse could audit it.`,
+    };
+  }
+  if (ctx.contentType && !ctx.htmlLike) {
+    return {
+      failureCode: 'non_html_response',
+      failureClass: 'measurement',
+      failureReason: 'The resolved URL did not return HTML, so Lighthouse could not run a normal page audit.',
+    };
+  }
+  if (ctx.redirectCount >= 2) {
+    return {
+      failureCode: 'redirect_chain_excessive',
+      failureClass: 'site',
+      failureReason: 'The domain forwards through multiple redirects, which reduced audit reliability.',
+    };
+  }
+  if (msg.includes('timeout') || msg.includes('timed out') || ctx.probeErrorCode === 'timeout') {
+    return {
+      failureCode: 'timeout_origin_slow',
+      failureClass: 'measurement',
+      failureReason: 'The page was reachable, but the audit timed out before Lighthouse could finish rendering it.',
+    };
+  }
+  if ((apiStatus && apiStatus >= 500) || msg.includes('psi api error') || msg.includes('psi http 5')) {
+    return {
+      failureCode: 'pagespeed_api_error',
+      failureClass: 'measurement',
+      failureReason: 'The PageSpeed API returned an upstream error before audit data was available.',
+    };
+  }
+  return {
+    failureCode: 'unknown',
+    failureClass: 'measurement',
+    failureReason: 'The audit could not complete and did not return enough detail to classify the failure precisely.',
+  };
+}
+
+function buildDiagnosticsContext({ websiteUrl, probe, failure = null, runtimeError = null, meta = null } = {}) {
+  const resolvedUrl = meta?.finalUrl || meta?.finalDisplayedUrl || probe?.resolvedUrl || websiteUrl || '';
+  const fallbackProvider = (() => {
+    try {
+      return classifyHostingProvider({ hostname: new URL(resolvedUrl || websiteUrl || '').hostname, headers: null });
+    } catch {
+      return { provider: null, providerKind: null, providerConfidence: null, providerEvidence: [] };
+    }
+  })();
+  return {
+    inputUrl: websiteUrl || '',
+    resolvedUrl,
+    redirectCount: probe?.redirectCount ?? 0,
+    redirectChain: Array.isArray(probe?.redirectChain) ? probe.redirectChain : [],
+    hostType: probe?.hostType || (() => {
+      try { return classifyHostType(new URL(resolvedUrl || websiteUrl || '').hostname); } catch { return 'unknown'; }
+    })(),
+    hostService: probe?.hostService || (() => {
+      try { return classifyHostService(new URL(resolvedUrl || websiteUrl || '').hostname); } catch { return null; }
+    })(),
+    hostingProvider: probe?.hostingProvider || fallbackProvider.provider || null,
+    providerKind: probe?.providerKind || fallbackProvider.providerKind || null,
+    providerConfidence: probe?.providerConfidence || fallbackProvider.providerConfidence || null,
+    providerEvidence: Array.isArray(probe?.providerEvidence) && probe.providerEvidence.length
+      ? probe.providerEvidence
+      : fallbackProvider.providerEvidence,
+    httpStatus: probe?.finalStatus ?? null,
+    contentType: probe?.contentType || null,
+    server: probe?.server || null,
+    blockedBy: probe?.blockedBy || null,
+    probeStatus: probe?.probeStatus || null,
+    probeErrorCode: probe?.probeErrorCode || null,
+    probeError: probe?.probeError || null,
+    failureCode: failure?.failureCode || null,
+    failureClass: failure?.failureClass || null,
+    failureReason: failure?.failureReason || null,
+    runtimeErrorCode: runtimeError?.code || null,
+    runtimeErrorMessage: runtimeError?.message || null,
+  };
 }
 
 function stripMdLinks(str) {
@@ -185,6 +733,9 @@ function extractMeta(raw) {
     lighthouseVersion: lr.lighthouseVersion || null,
     fetchTime:         lr.fetchTime || null,
     totalDurationMs:   lr.timing?.total != null ? Math.round(lr.timing.total) : null,
+    requestedUrl:      lr.requestedUrl || null,
+    finalUrl:          lr.finalUrl || null,
+    finalDisplayedUrl: lr.finalDisplayedUrl || null,
     warnings,
   };
 }
@@ -199,6 +750,8 @@ async function fetchPsiAudit(websiteUrl) {
     console.warn('[PSI] PAGESPEED_API_KEY is not set — using anonymous pool (heavily rate-limited, expect 429s).');
   }
 
+  const probe = await runPreflightProbe(websiteUrl);
+
   const params = new URLSearchParams({ url: websiteUrl, strategy: 'mobile' });
   ['performance', 'accessibility', 'best-practices', 'seo'].forEach((c) => params.append('category', c));
   if (apiKey) params.set('key', apiKey);
@@ -208,17 +761,40 @@ async function fetchPsiAudit(websiteUrl) {
 
   let raw;
   try {
-    const res = await fetch(requestUrl, { signal: AbortSignal.timeout(30_000) });
+    const res = await fetch(requestUrl, { signal: AbortSignal.timeout(60_000) });
     const text = await res.text();
-    if (!res.ok) throw new Error(`PSI HTTP ${res.status}: ${text.slice(0, 200)}`);
+    if (!res.ok) {
+      const failure = classifyPsiFailure({ websiteUrl, errorMessage: `PSI HTTP ${res.status}: ${text.slice(0, 200)}`, apiStatus: res.status, probe });
+      return {
+        ok: false,
+        seoAudit: null,
+        error: `PSI HTTP ${res.status}: ${text.slice(0, 200)}`,
+        failure,
+        diagnosticsContext: buildDiagnosticsContext({ websiteUrl, probe, failure }),
+      };
+    }
     raw = JSON.parse(text);
   } catch (err) {
-    return { ok: false, seoAudit: null, error: err.message };
+    const failure = classifyPsiFailure({ websiteUrl, errorMessage: err.message, probe });
+    return {
+      ok: false,
+      seoAudit: null,
+      error: err.message,
+      failure,
+      diagnosticsContext: buildDiagnosticsContext({ websiteUrl, probe, failure }),
+    };
   }
 
   if (raw.error) {
     const msg = raw.error.message || JSON.stringify(raw.error).slice(0, 200);
-    return { ok: false, seoAudit: null, error: `PSI API error: ${msg}` };
+    const failure = classifyPsiFailure({ websiteUrl, errorMessage: `PSI API error: ${msg}`, apiStatus: raw.error.code || null, probe });
+    return {
+      ok: false,
+      seoAudit: null,
+      error: `PSI API error: ${msg}`,
+      failure,
+      diagnosticsContext: buildDiagnosticsContext({ websiteUrl, probe, failure }),
+    };
   }
 
   const runtimeErr = raw.lighthouseResult?.runtimeError;
@@ -230,6 +806,12 @@ async function fetchPsiAudit(websiteUrl) {
   const categories = raw.lighthouseResult?.categories || {};
   const audits     = raw.lighthouseResult?.audits     || {};
   const loadingExp = raw.loadingExperience?.metrics ? raw.loadingExperience : raw.originLoadingExperience || null;
+
+  const meta = extractMeta(raw);
+  const failure = isPartial
+    ? classifyPsiFailure({ websiteUrl, errorMessage: runtimeErr?.message || runtimeErr?.code, probe })
+    : null;
+  const diagnosticsContext = buildDiagnosticsContext({ websiteUrl, probe, failure, runtimeError: runtimeErr, meta });
 
   const seoAudit = {
     fetchedAt:  new Date().toISOString(),
@@ -249,13 +831,14 @@ async function fetchPsiAudit(websiteUrl) {
     insights:         extractInsights(audits),
     diagnostics:      extractDiagnostics(audits),
     thirdParties:     extractThirdParties(audits, 5),
-    meta:             extractMeta(raw),
+    meta,
     status: isPartial ? 'partial' : 'ok',
     runtimeError: isPartial ? { code: runtimeErr.code, message: runtimeErr.message || null } : null,
+    diagnosticsContext,
     error:  null,
   };
 
-  return { ok: true, seoAudit, error: null };
+  return { ok: true, seoAudit, error: null, failure: null, diagnosticsContext };
 }
 
 // ── Translation helpers ────────────────────────────────────────────────────────
@@ -359,6 +942,15 @@ function buildSignals(seoAudit) {
  */
 function seoAuditToSourceRecord(psiResult, websiteUrl, durationMs) {
   if (!psiResult.ok) {
+    const diagnosticsContext = psiResult.diagnosticsContext || buildDiagnosticsContext({
+      websiteUrl,
+      failure: psiResult.failure || classifyPsiFailure({ websiteUrl, errorMessage: psiResult.error }),
+    });
+    const failure = psiResult.failure || {
+      failureCode: diagnosticsContext.failureCode || 'unknown',
+      failureClass: diagnosticsContext.failureClass || 'measurement',
+      failureReason: diagnosticsContext.failureReason || psiResult.error || 'PSI audit failed.',
+    };
     return {
       id:              'pagespeed-insights',
       provider:        'google-pagespeed-v5',
@@ -368,9 +960,19 @@ function seoAuditToSourceRecord(psiResult, websiteUrl, durationMs) {
       fetchedAt:       new Date().toISOString(),
       durationMs:      typeof durationMs === 'number' ? durationMs : null,
       cost:            { usd: 0, quotaUnits: 1, model: null, inputTokens: null, outputTokens: null },
-      summary:         `PSI audit failed: ${psiResult.error || 'unknown error'}`,
+      summary:         failure.failureReason
+        ? `PSI audit failed: ${failure.failureReason}`
+        : `PSI audit failed: ${psiResult.error || 'unknown error'}`,
       signals:         [],
-      facts:           { strategy: 'mobile', websiteUrl, auditStatus: 'error' },
+      facts: {
+        strategy: 'mobile',
+        websiteUrl,
+        auditStatus: 'error',
+        diagnosticsContext,
+        failureCode: failure.failureCode,
+        failureClass: failure.failureClass,
+        failureReason: failure.failureReason,
+      },
       nextRefreshHint: 'manual',
       error:           psiResult.error || 'PSI audit failed.',
     };
@@ -404,6 +1006,7 @@ function seoAuditToSourceRecord(psiResult, websiteUrl, durationMs) {
       thirdParties:     a.thirdParties     || [],
       lighthouseMeta:   a.meta             || null,
       runtimeError:     a.runtimeError     || null,
+      diagnosticsContext: a.diagnosticsContext || null,
       auditStatus:      a.status,
     },
     nextRefreshHint: 'manual',
@@ -433,4 +1036,9 @@ module.exports = {
   },
 
   seoAuditToSourceRecord,
+  classifyHostType,
+  classifyHostService,
+  classifyHostingProvider,
+  classifyPsiFailure,
+  buildDiagnosticsContext,
 };

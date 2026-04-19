@@ -2,7 +2,14 @@
 
 const { test } = require('node:test');
 const assert   = require('node:assert/strict');
-const { seoAuditToSourceRecord } = require('../pagespeed');
+const {
+  seoAuditToSourceRecord,
+  classifyHostType,
+  classifyHostService,
+  classifyHostingProvider,
+  classifyPsiFailure,
+  buildDiagnosticsContext,
+} = require('../pagespeed');
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -142,3 +149,112 @@ test('error SourceRecord has facts with websiteUrl', () => {
   assert.strictEqual(rec.facts.websiteUrl, 'https://example.com');
 });
 
+test('classifyHostType detects decentralized gateway hosts', () => {
+  assert.strictEqual(classifyHostType('arweave.net'), 'arweave-gateway');
+  assert.strictEqual(classifyHostType('bafybeigdyrzt.ipfs.dweb.link'), 'ipfs-gateway');
+  assert.strictEqual(classifyHostType('abcde.icp0.io'), 'icp-gateway');
+  assert.strictEqual(classifyHostType('example.com'), 'standard');
+});
+
+test('classifyHostService returns precise decentralized platform labels', () => {
+  assert.strictEqual(classifyHostService('arweave.net'), 'Arweave');
+  assert.strictEqual(classifyHostService('bafybeigdyrzt.ipfs.dweb.link'), 'IPFS');
+  assert.strictEqual(classifyHostService('abcde.icp0.io'), 'Internet Computer (ICP)');
+  assert.strictEqual(classifyHostService('example.com'), null);
+});
+
+test('classifyHostingProvider detects mainstream platforms from hostname patterns', () => {
+  const wix = classifyHostingProvider({ hostname: 'example.wixsite.com', headers: null });
+  assert.strictEqual(wix.provider, 'Wix');
+  assert.strictEqual(wix.providerKind, 'site-builder');
+  assert.strictEqual(wix.providerConfidence, 'high');
+
+  const vercel = classifyHostingProvider({ hostname: 'my-app.vercel.app', headers: null });
+  assert.strictEqual(vercel.provider, 'Vercel');
+  assert.strictEqual(vercel.providerKind, 'deployment-platform');
+});
+
+test('classifyHostingProvider detects mainstream platforms from response headers', () => {
+  const headers = new Headers({
+    'x-shopid': '12345',
+    'server': 'cloudflare',
+  });
+  const provider = classifyHostingProvider({ hostname: 'www.example.com', headers });
+  assert.strictEqual(provider.provider, 'Shopify');
+  assert.strictEqual(provider.providerKind, 'commerce-platform');
+  assert.strictEqual(provider.providerConfidence, 'high');
+  assert.match(provider.providerEvidence.join(' '), /x-shopid/);
+});
+
+test('classifyPsiFailure prefers gateway classification when host is decentralized', () => {
+  const failure = classifyPsiFailure({
+    websiteUrl: 'https://arweave.net/abc',
+    errorMessage: 'PSI HTTP 500',
+    apiStatus: 500,
+    probe: {
+      hostType: 'arweave-gateway',
+      redirectCount: 0,
+      probeStatus: 'ok',
+    },
+  });
+  assert.strictEqual(failure.failureCode, 'arweave_or_gateway_host');
+  assert.strictEqual(failure.failureClass, 'measurement');
+});
+
+test('classifyPsiFailure names ICP hosting explicitly', () => {
+  const failure = classifyPsiFailure({
+    websiteUrl: 'https://abcde.icp0.io',
+    errorMessage: 'PSI HTTP 500',
+    apiStatus: 500,
+    probe: {
+      hostType: 'icp-gateway',
+      hostService: 'Internet Computer (ICP)',
+      redirectCount: 0,
+      probeStatus: 'ok',
+    },
+  });
+  assert.strictEqual(failure.failureCode, 'icp_or_gateway_host');
+  assert.match(failure.failureReason, /Internet Computer \(ICP\)/);
+});
+
+test('error result stores structured diagnostics context', () => {
+  const failure = {
+    failureCode: 'forwarding_loop',
+    failureClass: 'site',
+    failureReason: 'The domain appears to redirect in a loop before reaching a crawlable page.',
+  };
+  const diagnosticsContext = buildDiagnosticsContext({
+    websiteUrl: 'https://example.com',
+    probe: {
+      resolvedUrl: 'https://redirector.example.com',
+      redirectCount: 2,
+      redirectChain: [
+        { status: 301, from: 'https://example.com', to: 'https://www.example.com' },
+        { status: 302, from: 'https://www.example.com', to: 'https://redirector.example.com' },
+      ],
+      hostType: 'redirector-service',
+      hostService: 'Redirector service',
+      finalStatus: 302,
+      probeStatus: 'error',
+      probeErrorCode: 'forwarding_loop',
+      probeError: 'Redirect loop detected during preflight probe.',
+    },
+    failure,
+  });
+  const rec = seoAuditToSourceRecord({
+    ok: false,
+    seoAudit: null,
+    error: 'PSI audit failed',
+    failure,
+    diagnosticsContext,
+  }, 'https://example.com', null);
+
+  assert.strictEqual(rec.status, 'error');
+  assert.strictEqual(rec.facts.failureCode, 'forwarding_loop');
+  assert.strictEqual(rec.facts.failureClass, 'site');
+  assert.match(rec.summary, /redirect in a loop/i);
+  assert.strictEqual(rec.facts.diagnosticsContext.redirectCount, 2);
+  assert.strictEqual(rec.facts.diagnosticsContext.hostType, 'redirector-service');
+  assert.strictEqual(rec.facts.diagnosticsContext.hostService, 'Redirector service');
+  assert.strictEqual(rec.facts.diagnosticsContext.hostingProvider, null);
+});

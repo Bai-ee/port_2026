@@ -23,13 +23,16 @@
 // Format: cardId → string (primary) | string[] (primary, ...fallbacks)
 
 const CARD_ANALYZER_SOURCE_MAP = {
+  'audit-summary':       'audit-summary',
   'brief':               'brief',
   'multi-device-view':   ['multi-device-view', 'intake-terminal'],
   'social-preview':      ['social-preview', 'brand-tone'],
   'business-model':      'business-model',
   'seo-performance':     ['seo-performance', 'site-performance'],
+  'style-guide':         'style-guide',
   'industry':            'industry',
   'visibility-snapshot': 'visibility-snapshot',
+  'priority-signal':     'priority-signal',
   'brand-voice':         ['brand-voice', 'brand-tone'],
 };
 
@@ -121,26 +124,449 @@ function projectFromAggregate(aggregate) {
 //   - null → caller falls through to scribeShort → static description
 
 const CARD_SIGNAL_SELECTORS = {
+  'audit-summary':       selectAuditSummarySignal,
   'seo-performance':     selectSeoPerformanceSignal,
   'social-preview':      selectSocialPreviewSignal,
   'multi-device-view':   selectMultiDeviceSignal,
   'brief':               selectBriefSignal,
   'business-model':      selectBusinessModelSignal,
+  'style-guide':         selectStyleGuideSignal,
   'industry':            selectIndustrySignal,
   'visibility-snapshot': selectVisibilitySignal,
+  'priority-signal':     selectPrioritySignal,
 };
 
+function pluralize(count, singular, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function sanitizeStyleText(value) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  return text
+    .replace(/[_-]?[A-Za-z]+_[0-9a-f]{4,}\b/gi, (match) => {
+      const cleaned = match.replace(/^[_-]+/, '').split('_')[0];
+      return cleaned || '';
+    })
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function isPresentValue(value) {
+  if (value === null || value === undefined || value === false) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'number') return Number.isFinite(value) && value > 0;
+  return Boolean(value);
+}
+
+// audit-summary
+// Priority: no usable baseline → thin baseline / limited run quality → strong working baseline
+function selectAuditSummarySignal({ metrics }) {
+  const capturedCount = Number(metrics.capturedCount || 0);
+  const totalCount = Number(metrics.totalCount || 0);
+  const missingCount = Math.max(0, Number(metrics.missingCount ?? (totalCount - capturedCount)) || 0);
+  const captureRatio = totalCount > 0 ? capturedCount / totalCount : 0;
+  const pagesCrawled = Number(metrics.pagesCrawled || 0);
+  const warningsCount = Number(metrics.warningCount || 0);
+  const psiStatus = String(metrics.psiStatus || '').toLowerCase();
+  const hasArtifacts = Boolean(metrics.hasScreenshot || metrics.hasMockup);
+  const hasStrategy = Boolean(metrics.hasBrief || metrics.hasIndustry || metrics.hasBusinessModel);
+  const weakestArea = cleanAuditWeakestArea(metrics.weakestArea);
+
+  if (!totalCount || capturedCount === 0) {
+    return {
+      id: 'audit-baseline-missing',
+      type: 'audit-state',
+      readiness: 'critical',
+      finding: 'This run did not capture a usable onboarding baseline.',
+      impact: 'Without site evidence, strategy context, and audit outputs, the recommendations are low-confidence.',
+      action: 'Confirm the site is reachable, then re-run onboarding to collect the baseline data.',
+    };
+  }
+
+  if (captureRatio < 0.55 || pagesCrawled === 0 || psiStatus === 'error') {
+    const qualityReason = psiStatus === 'error'
+      ? 'the performance audit did not complete'
+      : pagesCrawled === 0
+        ? 'the crawler did not capture usable page evidence'
+        : `${pluralize(missingCount, 'signal')} are still missing`;
+    return {
+      id: 'audit-baseline-thin',
+      type: 'issue',
+      readiness: 'critical',
+      finding: `We captured ${capturedCount} of ${totalCount} onboarding signals in this run.`,
+      impact: `That baseline is still thin because ${qualityReason}, so parts of the brief and recommendations are directional instead of complete.`,
+      action: weakestArea
+        ? `Improve the missing ${weakestArea} inputs, then re-run the audit.`
+        : 'Fill the missing inputs and re-run the audit to strengthen the baseline.',
+    };
+  }
+
+  if (captureRatio < 0.8 || warningsCount > 0 || psiStatus === 'partial' || !hasArtifacts || !hasStrategy) {
+    const limiters = [];
+    if (psiStatus === 'partial') limiters.push('the performance audit came back with limited data');
+    if (warningsCount > 0) limiters.push(`${pluralize(warningsCount, 'pipeline warning')} still need review`);
+    if (!hasArtifacts) limiters.push('visual artifacts are still missing');
+    if (!hasStrategy) limiters.push('business context is still thin');
+    if (!limiters.length && missingCount > 0) limiters.push(`${pluralize(missingCount, 'signal')} are still missing`);
+    return {
+      id: 'audit-baseline-partial',
+      type: 'issue',
+      readiness: 'partial',
+      finding: `We captured ${capturedCount} of ${totalCount} onboarding signals, so the baseline is usable.`,
+      impact: `${capitalizeAuditClause(limiters.join(', '))}, which means some recommendations are solid while others still need more evidence.`,
+      action: weakestArea
+        ? `Tighten the ${weakestArea} coverage next, then re-run the audit.`
+        : 'Use this as a working baseline, then re-run after the missing inputs are filled in.',
+    };
+  }
+
+  return {
+    id: 'audit-baseline-strong',
+    type: 'strength',
+    readiness: 'healthy',
+    finding: `We captured ${capturedCount} of ${totalCount} onboarding signals in this run.`,
+    impact: 'That gives you a strong baseline for the brief, SEO review, and follow-on recommendations.',
+    action: 'Use this run as the working baseline and refresh it after major site or messaging changes.',
+  };
+}
+
+function cleanAuditWeakestArea(value) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  return text.toLowerCase();
+}
+
+function capitalizeAuditClause(value) {
+  const text = String(value || '').trim();
+  if (!text) return 'Some inputs are still missing';
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 // seo-performance
-// Priority: critical finding → warning finding or triggered gap → strongest highlight
-function selectSeoPerformanceSignal({ issues, strengths }) {
+// Priority: audit-state limitation → delivery/hosting caveat → critical finding → warning finding or triggered gap → strongest highlight
+function extractHostname(value) {
+  if (!value || typeof value !== 'string') return null;
+  try {
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function normalizeComparableHost(hostname) {
+  return hostname ? hostname.replace(/^www\./, '') : null;
+}
+
+function describeGatewayHost(metrics) {
+  const hostService = String(metrics.hostService || '').trim();
+  const value = String(metrics.hostType || '').toLowerCase();
+  if (hostService === 'Internet Computer (ICP)' || value.includes('icp')) return 'Internet Computer (ICP) hosting';
+  if (hostService === 'Arweave' || value.includes('arweave')) return 'an Arweave gateway';
+  if (hostService === 'IPFS' || value.includes('ipfs')) return 'an IPFS gateway';
+  if (hostService) return `${hostService} hosting`;
+  if (value.includes('gateway')) return 'a gateway host';
+  return 'an external host';
+}
+
+function isGatewayHostType(metrics) {
+  const value = String(metrics.hostType || '').toLowerCase();
+  return value.includes('arweave') || value.includes('ipfs') || value.includes('icp') || value.includes('gateway');
+}
+
+function hasRedirectedDestination(metrics) {
+  const requestedUrl = metrics.requestedUrl || metrics.inputUrl || null;
+  const finalUrl = metrics.finalUrl || metrics.resolvedUrl || metrics.displayedUrl || null;
+  const redirectCount = Number(metrics.redirectCount || 0);
+  const requestedHost = normalizeComparableHost(extractHostname(requestedUrl));
+  const finalHost = normalizeComparableHost(extractHostname(finalUrl));
+
+  return redirectCount > 1 ||
+    Boolean(requestedHost && finalHost && requestedHost !== finalHost);
+}
+
+function pickConfirmedSeoGap(metrics, issues) {
+  const confirmed = [];
+  if (metrics.metaDescriptionPresent === false) confirmed.push('a missing meta description');
+  if (metrics.schemaTypesCount === 0) confirmed.push('no structured data');
+  if (metrics.llmsTxtFound === false) confirmed.push('no llms.txt');
+  if (metrics.canonicalPresent === false) confirmed.push('no canonical URL');
+  if (confirmed.length > 0) return confirmed.slice(0, 2).join(' and ');
+
+  const issue = issues.find((candidate) => {
+    const label = String(candidate?.label || candidate?.ruleId || '').toLowerCase();
+    return label.includes('meta') ||
+      label.includes('schema') ||
+      label.includes('canonical') ||
+      label.includes('llms') ||
+      label.includes('entity') ||
+      label.includes('robots');
+  });
+  return issue?.label || null;
+}
+
+function normalizeSeoIssueFinding(issue) {
+  const label = String(issue?.label || issue?.ruleId || '').trim();
+  const lower = label.toLowerCase();
+
+  if (!label) return 'An SEO issue was detected.';
+  if (lower.includes('largest contentful paint') || lower.includes('lcp')) {
+    return 'Largest Contentful Paint is too slow.';
+  }
+  if (lower.includes('performance score')) {
+    return 'Mobile performance needs work.';
+  }
+  if (lower.includes('meta description') && (lower.includes('missing') || lower.includes('absent') || lower.includes('blank'))) {
+    return 'Your homepage is missing a meta description.';
+  }
+  if (lower.includes('structured data') || lower.includes('schema')) {
+    return 'Structured data needs attention.';
+  }
+  if (lower.includes('canonical')) {
+    return 'Canonical setup needs attention.';
+  }
+
+  return label.replace(/\s+—\s+critical performance metric failure/i, '').trim().replace(/[.!?]*$/, '.');
+}
+
+function normalizeSeoIssueImpact(issue) {
+  const label = String(issue?.label || issue?.ruleId || '').toLowerCase();
+  const detail = String(issue?.detail || issue?.evidence || '').trim();
+  if (label.includes('largest contentful paint') || label.includes('lcp')) {
+    return 'The main content is loading much later than Google recommends, which can hurt both rankings and user experience.';
+  }
+  if (label.includes('performance score')) {
+    return 'Slow rendering and script-heavy load are likely making the site feel sluggish for visitors.';
+  }
+  if (label.includes('meta description')) {
+    return 'That makes the page less compelling in search results and can reduce click-through rate.';
+  }
+  if (label.includes('structured data') || label.includes('schema')) {
+    return 'That limits how clearly search engines and AI systems can interpret the page.';
+  }
+  if (label.includes('canonical')) {
+    return 'That can make it harder for search engines to understand which URL should rank.';
+  }
+  if (!detail) return 'This is directly limiting your search visibility.';
+  return detail.replace(/\s+—\s+/g, ' — ');
+}
+
+function normalizeSeoIssueAction(issue) {
+  const label = String(issue?.label || issue?.ruleId || '').toLowerCase();
+  if (label.includes('largest contentful paint') || label.includes('lcp') || label.includes('performance score')) {
+    return 'Start with the highest-impact performance fix, then re-run the audit.';
+  }
+  if (label.includes('meta description') || label.includes('schema') || label.includes('canonical')) {
+    return 'Fix this markup issue, then re-run the audit.';
+  }
+  return 'Check the Solutions tab for the next fix.';
+}
+
+function buildAiVisibilitySignal(metrics) {
+  const aiVisibilityScore = typeof metrics.aiVisibilityScore === 'number' ? metrics.aiVisibilityScore : null;
+  const schemaTypesCount = typeof metrics.schemaTypesCount === 'number' ? metrics.schemaTypesCount : null;
+  const llmsTxtFound = typeof metrics.llmsTxtFound === 'boolean' ? metrics.llmsTxtFound : null;
+  const blockedBots = Array.isArray(metrics.aiBotsBlocked) ? metrics.aiBotsBlocked.filter(Boolean) : [];
+  const entityPresent = Boolean(metrics.wikidataEntity);
+  const schemaScore = typeof metrics.aiSectionSchemaScore === 'number' ? metrics.aiSectionSchemaScore : null;
+  const entityScore = typeof metrics.aiSectionEntityScore === 'number' ? metrics.aiSectionEntityScore : null;
+
+  if (blockedBots.length > 0) {
+    const bots = blockedBots.slice(0, 2).join(' and ');
+    return {
+      id: 'ai-bots-blocked',
+      type: 'issue',
+      readiness: 'critical',
+      finding: 'Some AI crawlers are blocked from reading the site.',
+      impact: `${bots} ${blockedBots.length === 1 ? 'is' : 'are'} currently blocked, which can limit how often your pages are discovered or cited by AI tools.`,
+      action: 'Open access for the blocked AI crawlers, then re-run the audit.',
+    };
+  }
+
+  if (llmsTxtFound === false && aiVisibilityScore != null && aiVisibilityScore < 80) {
+    return {
+      id: 'ai-llmstxt-missing',
+      type: 'issue',
+      readiness: aiVisibilityScore < 60 ? 'critical' : 'partial',
+      finding: 'AI discovery signals are incomplete.',
+      impact: 'No llms.txt file was found, so AI assistants have no canonical machine-readable summary of the site to reference.',
+      action: 'Publish an llms.txt file, then re-run the audit.',
+    };
+  }
+
+  if (schemaTypesCount === 0) {
+    return {
+      id: 'ai-schema-missing',
+      type: 'issue',
+      readiness: 'partial',
+      finding: 'No structured data was detected.',
+      impact: 'AI systems have very little machine-readable context about the business, which makes the site harder to interpret and cite accurately.',
+      action: 'Add organization and page-level schema, then re-run the audit.',
+    };
+  }
+
+  if (schemaScore != null && schemaScore < 50) {
+    return {
+      id: 'ai-schema-thin',
+      type: 'issue',
+      readiness: 'partial',
+      finding: 'Structured data is present, but key business context is still thin.',
+      impact: 'Some schema is already in place, but it is not yet giving AI systems enough machine-readable detail about the business and page types.',
+      action: 'Expand the schema coverage, then re-run the audit.',
+    };
+  }
+
+  if (!entityPresent && entityScore != null && entityScore < 50) {
+    return {
+      id: 'ai-entity-missing',
+      type: 'issue',
+      readiness: 'partial',
+      finding: 'Entity authority is still weak.',
+      impact: 'No strong external entity reference was found, which makes the brand harder for AI systems to disambiguate and trust.',
+      action: 'Strengthen the business identity signals, then re-run the audit.',
+    };
+  }
+
+  if (entityScore != null && entityScore < 50) {
+    return {
+      id: 'ai-entity-thin',
+      type: 'issue',
+      readiness: 'partial',
+      finding: 'Entity authority is still weak.',
+      impact: 'The brand has some entity signals, but they are still too thin for AI systems to recognize and trust it confidently.',
+      action: 'Strengthen the business identity signals, then re-run the audit.',
+    };
+  }
+
+  if (aiVisibilityScore != null && aiVisibilityScore >= 75 && llmsTxtFound === true && schemaTypesCount > 0) {
+    return {
+      id: 'ai-visibility-strong',
+      type: 'strength',
+      readiness: 'healthy',
+      finding: 'AI discovery signals are in a good place.',
+      impact: `The site already has llms.txt and structured data in place, with an AI visibility score of ${aiVisibilityScore}/100.`,
+      action: 'Keep the AI foundation in place while you work on the next performance or content improvement.',
+    };
+  }
+
+  return null;
+}
+
+function buildPerformanceMetricSignal(metrics) {
+  const lcpSeconds = typeof metrics.lcpSeconds === 'number' ? metrics.lcpSeconds : null;
+  const performanceScore = typeof metrics.performanceScore === 'number' ? metrics.performanceScore : null;
+
+  if (lcpSeconds != null && lcpSeconds >= 4) {
+    return {
+      id: 'raw-lcp-critical',
+      type: 'issue',
+      readiness: 'critical',
+      finding: 'Largest Contentful Paint is too slow.',
+      impact: `This audit measured LCP at ${lcpSeconds.toFixed(1)} seconds, well above the 2.5-second target Google recommends.`,
+      action: 'Start with the highest-impact performance fix, then re-run the audit.',
+    };
+  }
+
+  if (lcpSeconds != null && lcpSeconds >= 2.5) {
+    return {
+      id: 'raw-lcp-warning',
+      type: 'issue',
+      readiness: 'partial',
+      finding: 'Largest Contentful Paint is slower than recommended.',
+      impact: `This audit measured LCP at ${lcpSeconds.toFixed(1)} seconds, so the main content is appearing later than it should.`,
+      action: 'Start with the highest-impact performance fix, then re-run the audit.',
+    };
+  }
+
+  if (performanceScore != null && performanceScore < 30) {
+    return {
+      id: 'raw-performance-critical',
+      type: 'issue',
+      readiness: 'critical',
+      finding: 'Mobile performance is in a critical range.',
+      impact: `This audit scored mobile performance at ${performanceScore}/100, which points to major rendering or script bottlenecks.`,
+      action: 'Start with the highest-impact performance fix, then re-run the audit.',
+    };
+  }
+
+  if (performanceScore != null && performanceScore < 60) {
+    return {
+      id: 'raw-performance-warning',
+      type: 'issue',
+      readiness: 'partial',
+      finding: 'Mobile performance needs work.',
+      impact: `This audit scored mobile performance at ${performanceScore}/100, so visitors are likely feeling the page load cost.`,
+      action: 'Start with the highest-impact performance fix, then re-run the audit.',
+    };
+  }
+
+  return null;
+}
+
+function selectSeoPerformanceSignal({ issues, strengths, metrics }) {
+  if (metrics.auditStatus === 'error') {
+    return {
+      id:      metrics.failureCode || 'seo-audit-error',
+      type:    'audit-state',
+      finding: metrics.failureReason || 'PageSpeed audit could not complete.',
+      impact:  'This run could not capture reliable performance measurements.',
+      action:  'Fix the access issue and re-run the audit.',
+    };
+  }
+
+  if (metrics.auditStatus === 'partial') {
+    return {
+      id:      metrics.failureCode || 'seo-audit-partial',
+      type:    'audit-state',
+      finding: metrics.failureReason || 'PageSpeed returned only partial audit data.',
+      impact:  'Scores and Core Web Vitals may be incomplete on this run.',
+      action:  'Re-run the audit after the site is fully reachable.',
+    };
+  }
+
+  const confirmedGap = pickConfirmedSeoGap(metrics, issues);
+
+  if (isGatewayHostType(metrics)) {
+    return {
+      id:      'gateway-hosted-context',
+      type:    'hosting-context',
+      finding: `Your domain forwards to ${describeGatewayHost(metrics)} before the page loads.`,
+      impact:  confirmedGap
+        ? `We can still confirm ${confirmedGap}, but Lighthouse is grading the gateway path, so performance numbers are directional rather than a pure read of your branded domain.`
+        : 'We can still audit the page, but Lighthouse is grading the gateway path, so performance numbers are directional rather than a pure read of your branded domain.',
+      action:  'Point a stable canonical domain at the final served page, test the final URL directly, and then fix the confirmed discovery gaps.',
+    };
+  }
+
+  if (hasRedirectedDestination(metrics)) {
+    return {
+      id:      'forwarded-domain-context',
+      type:    'hosting-context',
+      readiness: 'partial',
+      finding: 'Your homepage forwards to a different final URL before the audit begins.',
+      impact:  confirmedGap
+        ? `We can still confirm ${confirmedGap}, but search and performance tools are judging the destination URL instead of the branded address visitors type.`
+        : 'Search and performance tools are judging the destination URL instead of the branded address visitors type.',
+      action:  'Audit the resolved URL directly, reduce avoidable redirects, and make the final destination explicit with a canonical URL.',
+    };
+  }
+
+  const aiSignal = buildAiVisibilitySignal(metrics);
+  if (aiSignal) return aiSignal;
+
+  const performanceSignal = buildPerformanceMetricSignal(metrics);
+  if (performanceSignal) return performanceSignal;
+
   const critical = issues.find((i) => i.severity === 'critical');
   if (critical) {
     return {
       id:      critical.id || 'seo-critical',
       type:    'issue',
-      finding: critical.label,
-      impact:  critical.detail || 'This is directly limiting your search visibility.',
-      action:  'Check the Solutions tab for the fix.',
+      readiness: 'critical',
+      finding: normalizeSeoIssueFinding(critical),
+      impact:  normalizeSeoIssueImpact(critical),
+      action:  normalizeSeoIssueAction(critical),
     };
   }
 
@@ -151,9 +577,10 @@ function selectSeoPerformanceSignal({ issues, strengths }) {
     return {
       id:      warning.id || warning.ruleId || 'seo-warning',
       type,
-      finding: label,
-      impact:  warning.detail || warning.evidence || 'Fixing this will improve crawlability and ranking signals.',
-      action:  null,
+      readiness: type === 'gap' ? 'partial' : 'partial',
+      finding: normalizeSeoIssueFinding(warning),
+      impact:  normalizeSeoIssueImpact(warning) || 'Fixing this will improve crawlability and ranking signals.',
+      action:  type === 'gap' ? null : normalizeSeoIssueAction(warning),
     };
   }
 
@@ -162,6 +589,7 @@ function selectSeoPerformanceSignal({ issues, strengths }) {
     return {
       id:      'seo-strength',
       type:    'strength',
+      readiness: 'healthy',
       finding: typeof top === 'string' ? top : (top.label || 'SEO baseline looks solid'),
       impact:  'No critical issues found.',
       action:  null,
@@ -175,13 +603,30 @@ function selectSeoPerformanceSignal({ issues, strengths }) {
 function selectSocialPreviewSignal({ issues, strengths, metrics }) {
   // rawData supplies: ogImage (bool|null), ogTitle (string|null),
   // ogDescription (string|null), canonical (string|null), favicon (bool|null)
+  const requiredSignals = [
+    isPresentValue(metrics.ogImage),
+    isPresentValue(metrics.ogTitle),
+    isPresentValue(metrics.ogDescription),
+    isPresentValue(metrics.canonical),
+    isPresentValue(metrics.favicon),
+  ];
+  const presentCount = requiredSignals.filter(Boolean).length;
+  const totalSignals = requiredSignals.length;
+  const secondarySignals = [
+    isPresentValue(metrics.siteName),
+    isPresentValue(metrics.ogImageAlt),
+    isPresentValue(metrics.themeColor),
+  ];
+  const secondaryPresentCount = secondarySignals.filter(Boolean).length;
+  const secondaryTotal = secondarySignals.length;
 
   if (metrics.ogImage === false) {
     return {
       id:      'og-image-missing',
       type:    'issue',
       finding: 'No preview image is set.',
-      impact:  'Links shared to social platforms will appear without a thumbnail, reducing clicks.',
+      readiness: 'critical',
+      impact:  `Links shared to social platforms will appear without a thumbnail, and only ${presentCount}/${totalSignals} key share signals are in place for a controlled preview.`,
       action:  'Add an og:image tag pointing to a 1200×630 image.',
     };
   }
@@ -194,8 +639,9 @@ function selectSocialPreviewSignal({ issues, strengths, metrics }) {
     return {
       id:      'og-meta-missing',
       type:    'issue',
+      readiness: 'partial',
       finding: `Social preview ${what} is missing.`,
-      impact:  'Platforms will substitute generic or scraped text instead of your branded copy.',
+      impact:  `Platforms will substitute generic or scraped text instead of your branded copy, and only ${presentCount}/${totalSignals} key share signals are in place for a reliable share preview.`,
       action:  'Add the missing Open Graph meta tags.',
     };
   }
@@ -208,6 +654,7 @@ function selectSocialPreviewSignal({ issues, strengths, metrics }) {
     return {
       id:      surfaceIssue.id || 'og-surface',
       type:    'issue',
+      readiness: 'partial',
       finding: surfaceIssue.label || 'Social meta surface incomplete',
       impact:  surfaceIssue.detail || surfaceIssue.evidence || null,
       action:  null,
@@ -223,9 +670,26 @@ function selectSocialPreviewSignal({ issues, strengths, metrics }) {
     return {
       id:      'og-surface-missing',
       type:    'issue',
+      readiness: 'partial',
       finding: `${what} is not set.`,
-      impact:  'Incomplete meta surfaces can affect SEO signals and brand display.',
+      impact:  `The share surface is mostly there, but missing ${what} weakens how reliably the brand is rendered across previews and browsers.`,
       action:  null,
+    };
+  }
+
+  if (secondaryPresentCount < secondaryTotal) {
+    const missing = [
+      !isPresentValue(metrics.siteName) && 'site name',
+      !isPresentValue(metrics.ogImageAlt) && 'image alt text',
+      !isPresentValue(metrics.themeColor) && 'theme color',
+    ].filter(Boolean).join(', ');
+    return {
+      id: 'social-branding-thin',
+      type: 'issue',
+      readiness: 'partial',
+      finding: 'Core social preview tags are in place, but the branded preview surface is still thin.',
+      impact: `The main share card should render, but missing ${missing} leaves less control over how the brand is presented across platforms and devices.`,
+      action: 'Fill the remaining social metadata so the preview is fully branded.',
     };
   }
 
@@ -234,8 +698,9 @@ function selectSocialPreviewSignal({ issues, strengths, metrics }) {
   return {
     id:      'social-complete',
     type:    'strength',
-    finding: (typeof top === 'string' ? top : null) || 'Social preview is fully configured.',
-    impact:  'Shared links will display your image, title, and description.',
+    readiness: 'healthy',
+    finding: (typeof top === 'string' ? top : null) || 'Social preview coverage is complete.',
+    impact:  `All ${totalSignals} key share signals are present, and ${secondaryPresentCount}/${secondaryTotal} secondary brand signals were captured, so shared links should render with branded copy and imagery instead of scraped fallbacks.`,
     action:  null,
   };
 }
@@ -244,13 +709,24 @@ function selectSocialPreviewSignal({ issues, strengths, metrics }) {
 // Priority: capture failed → artifact missing → healthy capture
 // This card describes audit/artifact state — no layout diagnosis without a layout analyzer.
 function selectMultiDeviceSignal({ status, issues, strengths, metrics }) {
-  // rawData supplies: captureDone (bool)
-  if (metrics.captureDone === false) {
+  // rawData supplies: captureDone (bool), variantCount (number), screenshotCount (number),
+  // hasMockup (bool), hasDesktop/hasTablet/hasMobile (bool)
+  const variantCount = Number(metrics.variantCount || 3);
+  const screenshotCount = Number(metrics.screenshotCount || 0);
+  const hasMockup = Boolean(metrics.hasMockup);
+  const missingVariants = [
+    !metrics.hasDesktop && 'desktop',
+    !metrics.hasTablet && 'tablet',
+    !metrics.hasMobile && 'mobile',
+  ].filter(Boolean);
+
+  if (metrics.captureDone === false && screenshotCount === 0 && !hasMockup) {
     return {
       id:      'capture-failed',
       type:    'audit-state',
+      readiness: 'critical',
       finding: 'Device screenshot capture did not complete.',
-      impact:  'Layout review is unavailable until a screenshot is taken.',
+      impact:  'There is no usable visual evidence for desktop, tablet, or mobile, so layout review is blocked on this run.',
       action:  'Re-run the intake to retry the capture.',
     };
   }
@@ -264,6 +740,7 @@ function selectMultiDeviceSignal({ status, issues, strengths, metrics }) {
     return {
       id:      'capture-failed',
       type:    'audit-state',
+      readiness: 'critical',
       finding: 'Device screenshot capture did not complete.',
       impact:  captureFail.evidence || captureFail.detail || 'Layout review is unavailable until a screenshot is taken.',
       action:  'Re-run the intake to retry the capture.',
@@ -277,19 +754,43 @@ function selectMultiDeviceSignal({ status, issues, strengths, metrics }) {
     return {
       id:      'artifact-missing',
       type:    'issue',
+      readiness: 'partial',
       finding: artifactGap.label || 'One or more device views is missing.',
       impact:  artifactGap.detail || 'Full cross-device coverage requires all three breakpoints.',
       action:  null,
     };
   }
 
-  if (metrics.captureDone === true || status === 'healthy') {
+  if (screenshotCount > 0 && screenshotCount < variantCount) {
+    return {
+      id: 'device-coverage-partial',
+      type: 'issue',
+      readiness: 'partial',
+      finding: `We captured ${screenshotCount} of ${variantCount} device views in this run.`,
+      impact: `That gives you a partial layout baseline, but ${missingVariants.join(' and ')} coverage is still missing so responsive issues can be missed.`,
+      action: 'Re-run the capture until all device views are available.',
+    };
+  }
+
+  if (hasMockup && screenshotCount === 0) {
+    return {
+      id: 'mockup-only',
+      type: 'issue',
+      readiness: 'partial',
+      finding: 'The device mockup rendered, but the detailed screen captures are still missing.',
+      impact: 'You have a high-level visual proof point, but not enough raw layout evidence to compare desktop, tablet, and mobile behavior directly.',
+      action: 'Capture the full device screenshots, then review the layout again.',
+    };
+  }
+
+  if (metrics.captureDone === true || status === 'healthy' || screenshotCount === variantCount) {
     const top = strengths[0];
     return {
       id:      'device-healthy',
       type:    'strength',
-      finding: (typeof top === 'string' ? top : null) || 'Multi-device screenshots captured successfully.',
-      impact:  'Desktop, tablet, and mobile views are available for review.',
+      readiness: 'healthy',
+      finding: (typeof top === 'string' ? top : null) || `All ${variantCount} device views were captured successfully.`,
+      impact:  'Desktop, tablet, and mobile layouts are all available, so responsive review can be based on real visual evidence instead of assumptions.',
       action:  null,
     };
   }
@@ -363,10 +864,59 @@ function selectBusinessModelSignal({ status, issues, strengths, metrics }) {
   return null;
 }
 
+// style-guide
+// Priority: no usable design system → partial token coverage → strong token baseline
+function selectStyleGuideSignal({ status, issues, strengths, metrics }) {
+  const coreTokens = [
+    isPresentValue(metrics.headingFont),
+    isPresentValue(metrics.bodyFont),
+    isPresentValue(metrics.primaryColor),
+    isPresentValue(metrics.neutralColor),
+  ];
+  const capturedCount = coreTokens.filter(Boolean).length;
+  const totalCount = coreTokens.length;
+
+  if (capturedCount === 0 || status === 'critical') {
+    const topIssue = issues[0];
+    const safeFinding = sanitizeStyleText(topIssue?.label);
+    const safeImpact = sanitizeStyleText(topIssue?.detail);
+    return {
+      id: 'style-guide-thin',
+      type: 'issue',
+      readiness: 'critical',
+      finding: safeFinding || 'A usable brand system did not come through in this run.',
+      impact: safeImpact || 'Typography and color foundations are still too thin, so future designs will drift instead of feeling consistent.',
+      action: 'Define the core brand fonts and colors, then refresh the snapshot.',
+    };
+  }
+
+  if (capturedCount < totalCount || status === 'partial' || issues.length > 0) {
+    const topIssue = issues[0];
+    const safeImpact = sanitizeStyleText(topIssue?.detail);
+    return {
+      id: 'style-guide-partial',
+      type: 'issue',
+      readiness: 'partial',
+      finding: `We captured ${capturedCount} of ${totalCount} core brand tokens in this run.`,
+      impact: safeImpact || 'That is enough to see the visual direction, but missing brand tokens still limit consistency across future designs.',
+      action: 'Fill the missing brand tokens and refresh the snapshot.',
+    };
+  }
+
+  return {
+    id: 'style-guide-ready',
+    type: 'strength',
+    readiness: 'healthy',
+    finding: `Core brand tokens are defined across ${totalCount} of ${totalCount} key areas.`,
+    impact: 'Typography and color foundations are in place, so future designs can stay visually consistent instead of guessing the system.',
+    action: 'Use this visual baseline as the reference for future landing pages and campaigns.',
+  };
+}
+
 // industry
 // Priority: unknown category → strongest resolved market category
 function selectIndustrySignal({ status, issues, strengths, metrics }) {
-  // rawData supplies: hasCategory (bool), categoryLabel (string|null)
+  // rawData supplies: hasCategory (bool), categoryLabel (string|null), targetAudience (string|null), positioning (string|null)
   if (metrics.hasCategory === false || status === 'critical' || issues.length > 0) {
     const topIssue = issues[0];
     return {
@@ -379,11 +929,23 @@ function selectIndustrySignal({ status, issues, strengths, metrics }) {
   }
 
   if (metrics.hasCategory === true && metrics.categoryLabel) {
+    const hasContext = isPresentValue(metrics.targetAudience) || isPresentValue(metrics.positioning);
+    if (!hasContext) {
+      return {
+        id: 'industry-thin',
+        type: 'issue',
+        readiness: 'partial',
+        finding: `Market category resolved: ${metrics.categoryLabel}.`,
+        impact: 'The vertical is clear, but the buyer or positioning context is still thin, so competitor benchmarking is only partly grounded.',
+        action: 'Make the audience and positioning more explicit so the category map becomes more useful.',
+      };
+    }
     return {
       id:      'industry-resolved',
       type:    'strength',
+      readiness: 'healthy',
       finding: `Market category: ${metrics.categoryLabel}.`,
-      impact:  'Competitor benchmarking and category-specific SEO recommendations are now available.',
+      impact:  'That gives the audit a grounded benchmark for competitors, keywords, and category-specific recommendations.',
       action:  null,
     };
   }
@@ -399,6 +961,36 @@ function selectIndustrySignal({ status, issues, strengths, metrics }) {
     };
   }
   return null;
+}
+
+// priority-signal
+// Priority: no ranked next step → concrete next step with channel context
+function selectPrioritySignal({ status, issues, strengths, metrics }) {
+  if (!metrics.hasPriority || !isPresentValue(metrics.focusLabel)) {
+    const topIssue = issues[0];
+    return {
+      id: 'priority-missing',
+      type: 'issue',
+      readiness: 'critical',
+      finding: topIssue?.label || 'No validated next step could be ranked from this run.',
+      impact: topIssue?.detail || 'Without a clear priority, the roadmap stays broad instead of focusing effort on the highest-leverage fix.',
+      action: 'Strengthen the audit baseline, then re-run to surface a sharper next step.',
+    };
+  }
+
+  const hasChannel = isPresentValue(metrics.channelLabel);
+  return {
+    id: 'priority-ready',
+    type: 'strength',
+    readiness: hasChannel ? 'healthy' : 'partial',
+    finding: `Top next step: ${metrics.focusLabel}.`,
+    impact: hasChannel
+      ? `This is the highest-leverage move right now and already points toward ${metrics.channelLabel}.`
+      : 'This is the highest-leverage move right now, but the execution channel is still broad.',
+    action: hasChannel
+      ? 'Start here before lower-priority fixes.'
+      : 'Confirm the channel for this step, then start here.',
+  };
 }
 
 // visibility-snapshot

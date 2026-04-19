@@ -198,6 +198,7 @@ function buildDashboardProjection(clientId, pipelineResult, runId) {
       base.scribe = {
         cards: pipelineResult.scribe.cards,
         brief: pipelineResult.scribe.brief || null,
+        seoGuardian: pipelineResult.scribe.seoGuardian || null,
       };
     }
   }

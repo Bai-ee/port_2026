@@ -123,7 +123,7 @@ describe('buildCardDescription — seo-performance', () => {
       readiness: 'critical',
       findings:  [finding('critical', 'LCP too slow', 'Page takes 5s to load.')],
     }));
-    assert.ok(r.description.includes('LCP too slow'));
+    assert.match(r.description, /largest contentful paint is too slow/i);
     assert.equal(r.dominantSignal.type, 'issue');
     assert.ok(r.dominantSignal.id, 'signal id must be set');
   });
@@ -133,7 +133,7 @@ describe('buildCardDescription — seo-performance', () => {
       readiness: 'critical',
       findings:  [finding('critical', 'Missing meta description', '')],
     }));
-    assert.ok(r.description.includes('Solutions tab'));
+    assert.match(r.description, /re-run the audit/i);
   });
 
   test('warning finding selected when no critical', () => {
@@ -142,7 +142,7 @@ describe('buildCardDescription — seo-performance', () => {
       findings:  [finding('warning', 'Meta description absent', '')],
     }));
     assert.equal(r.dominantSignal.type, 'issue');
-    assert.ok(r.description.includes('Meta description absent'));
+    assert.match(r.description, /meta description/i);
   });
 
   test('strength selected when readiness is healthy', () => {
@@ -200,6 +200,9 @@ describe('buildCardDescription — social-preview', () => {
     const r = buildCardDescription('social-preview', agg({ readiness: 'healthy' }), {
       ogImage: true, ogTitle: 'My Site', ogDescription: 'Great site',
       canonical: 'https://example.com', favicon: true,
+      siteName: 'My Site',
+      ogImageAlt: 'Homepage preview',
+      themeColor: '#ffffff',
     });
     assert.equal(r.dominantSignal.id, 'social-complete');
     assert.equal(r.dominantSignal.type, 'strength');
@@ -211,6 +214,21 @@ describe('buildCardDescription — social-preview', () => {
       canonical: null, favicon: true,
     });
     assert.equal(r.dominantSignal.id, 'og-surface-missing');
+  });
+
+  test('secondary social metadata gaps produce a branded-surface warning', () => {
+    const r = buildCardDescription('social-preview', agg({ readiness: 'partial' }), {
+      ogImage: true,
+      ogTitle: 'My Site',
+      ogDescription: 'Great site',
+      canonical: 'https://example.com',
+      favicon: true,
+      siteName: null,
+      ogImageAlt: null,
+      themeColor: '#ffffff',
+    });
+    assert.equal(r.dominantSignal.id, 'social-branding-thin');
+    assert.match(r.description, /branded preview surface is still thin/i);
   });
 });
 
@@ -229,9 +247,44 @@ describe('buildCardDescription — multi-device-view', () => {
   });
 
   test('captureDone true + healthy → device-healthy strength', () => {
-    const r = buildCardDescription('multi-device-view', agg({ readiness: 'healthy' }), { captureDone: true });
+    const r = buildCardDescription('multi-device-view', agg({ readiness: 'healthy' }), {
+      captureDone: true,
+      screenshotCount: 3,
+      variantCount: 3,
+      hasDesktop: true,
+      hasTablet: true,
+      hasMobile: true,
+    });
     assert.equal(r.dominantSignal.id, 'device-healthy');
     assert.equal(r.dominantSignal.type, 'strength');
+  });
+
+  test('partial screenshot coverage explains missing device evidence', () => {
+    const r = buildCardDescription('multi-device-view', agg({ readiness: 'partial' }), {
+      captureDone: true,
+      screenshotCount: 2,
+      variantCount: 3,
+      hasDesktop: true,
+      hasTablet: false,
+      hasMobile: true,
+      hasMockup: true,
+    });
+    assert.equal(r.dominantSignal.id, 'device-coverage-partial');
+    assert.match(r.description, /2 of 3 device views/i);
+  });
+
+  test('mockup without underlying screenshots is treated as partial evidence', () => {
+    const r = buildCardDescription('multi-device-view', agg({ readiness: 'partial' }), {
+      captureDone: true,
+      screenshotCount: 0,
+      variantCount: 3,
+      hasDesktop: false,
+      hasTablet: false,
+      hasMobile: false,
+      hasMockup: true,
+    });
+    assert.equal(r.dominantSignal.id, 'mockup-only');
+    assert.match(r.description, /detailed screen captures are still missing/i);
   });
 });
 
@@ -274,6 +327,55 @@ describe('buildCardDescription — business-model', () => {
   });
 });
 
+describe('buildCardDescription — style-guide', () => {
+  test('missing core brand tokens → style-guide-thin issue signal', () => {
+    const r = buildCardDescription('style-guide', agg({ readiness: 'critical' }), {
+      headingFont: null,
+      bodyFont: null,
+      primaryColor: null,
+      neutralColor: null,
+    });
+    assert.equal(r.dominantSignal.id, 'style-guide-thin');
+    assert.match(r.description, /usable brand system did not come through/i);
+  });
+
+  test('style-guide copy sanitizes raw internal token ids', () => {
+    const r = buildCardDescription('style-guide', agg({
+      readiness: 'critical',
+      findings: [{ id: 'style', severity: 'critical', label: 'Body system mismatch', detail: 'Body system assigns _Montserrat_06ab3 to an inconsistent body typeface.' }],
+    }), {
+      headingFont: null,
+      bodyFont: null,
+      primaryColor: null,
+      neutralColor: null,
+    });
+    assert.doesNotMatch(r.description, /_Montserrat_06ab3/i);
+    assert.match(r.description, /Montserrat/i);
+  });
+
+  test('partial token coverage → style-guide-partial issue signal', () => {
+    const r = buildCardDescription('style-guide', agg({ readiness: 'partial' }), {
+      headingFont: 'Geist',
+      bodyFont: null,
+      primaryColor: '#111111',
+      neutralColor: null,
+    });
+    assert.equal(r.dominantSignal.id, 'style-guide-partial');
+    assert.match(r.description, /2 of 4 core brand tokens/i);
+  });
+
+  test('complete token coverage → style-guide-ready strength signal', () => {
+    const r = buildCardDescription('style-guide', agg({ readiness: 'healthy' }), {
+      headingFont: 'Geist',
+      bodyFont: 'Geist Sans',
+      primaryColor: '#111111',
+      neutralColor: '#f5f5f5',
+    });
+    assert.equal(r.dominantSignal.id, 'style-guide-ready');
+    assert.match(r.description, /4 of 4 key areas/i);
+  });
+});
+
 // ── industry ──────────────────────────────────────────────────────────────────
 
 describe('buildCardDescription — industry', () => {
@@ -283,12 +385,60 @@ describe('buildCardDescription — industry', () => {
     assert.ok(r.description.toLowerCase().includes('category') || r.description.toLowerCase().includes('vertical'));
   });
 
+  test('category without audience or positioning → industry-thin issue signal', () => {
+    const r = buildCardDescription('industry', agg({ readiness: 'partial' }), {
+      hasCategory: true,
+      categoryLabel: 'Legal Services',
+      targetAudience: null,
+      positioning: null,
+    });
+    assert.equal(r.dominantSignal.id, 'industry-thin');
+    assert.match(r.description, /buyer or positioning context is still thin/i);
+  });
+
   test('hasCategory true with label → industry-resolved strength signal', () => {
     const r = buildCardDescription('industry', agg({ readiness: 'healthy' }), {
-      hasCategory: true, categoryLabel: 'Legal Services',
+      hasCategory: true,
+      categoryLabel: 'Legal Services',
+      targetAudience: 'small law firms',
+      positioning: 'compliance-first intake platform',
     });
     assert.equal(r.dominantSignal.id, 'industry-resolved');
     assert.ok(r.description.includes('Legal Services'));
+  });
+});
+
+describe('buildCardDescription — priority-signal', () => {
+  test('missing next step → priority-missing issue signal', () => {
+    const r = buildCardDescription('priority-signal', agg({ readiness: 'critical' }), {
+      hasPriority: false,
+      focusLabel: null,
+      channelLabel: null,
+    });
+    assert.equal(r.dominantSignal.id, 'priority-missing');
+    assert.match(r.description, /No validated next step/i);
+  });
+
+  test('next step without channel → partial priority-ready signal', () => {
+    const r = buildCardDescription('priority-signal', agg({ readiness: 'partial' }), {
+      hasPriority: true,
+      focusLabel: 'Fix conversion CTA clarity',
+      channelLabel: null,
+    });
+    assert.equal(r.dominantSignal.id, 'priority-ready');
+    assert.equal(r.dominantSignal.readiness, 'partial');
+    assert.match(r.description, /execution channel is still broad/i);
+  });
+
+  test('next step with channel → healthy priority-ready signal', () => {
+    const r = buildCardDescription('priority-signal', agg({ readiness: 'healthy' }), {
+      hasPriority: true,
+      focusLabel: 'Fix conversion CTA clarity',
+      channelLabel: 'landing page · email',
+    });
+    assert.equal(r.dominantSignal.id, 'priority-ready');
+    assert.equal(r.dominantSignal.readiness, 'healthy');
+    assert.match(r.description, /landing page · email/i);
   });
 });
 

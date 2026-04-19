@@ -43,7 +43,7 @@ Iterate `runtime.health.warnings[]`. For each warning, decide if it deserves a u
 
 | Warning code | Severity | Finding id | Notes |
 |---|---|---|---|
-| `pagespeed_failed` or `pagespeed_skipped` | **warning** | `run-psi-failed` | PSI couldn't run → downstream SEO data is thin |
+| `pagespeed_failed*`, `pagespeed_skipped*`, or `pagespeed_partial*` | **warning** | `run-psi-failed` | PSI couldn't run cleanly → downstream SEO data is thin or incomplete |
 | `fetch_failed` | **critical** | `run-fetch-failed` | Site couldn't be fetched at all → dashboard will be very thin |
 | `synthesize_failed` or `synthesize_empty` | **warning** | `run-synth-failed` | AI brand analysis produced no data |
 | `style_guide_extraction_failed` or `style_guide_extraction_threw` | info | `run-style-guide-skipped` | Design system reads as mock data |

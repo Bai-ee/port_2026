@@ -1,0 +1,1219 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Scout Config Description Wireframe</title>
+    <style>
+      :root {
+        --bg: #f6f2eb;
+        --panel: rgba(255, 255, 255, 0.82);
+        --panel-strong: #fffdf9;
+        --ink: #2a2320;
+        --muted: #6b625c;
+        --line: rgba(113, 92, 77, 0.16);
+        --accent: #ff5ec6;
+        --accent-2: #4cb8ff;
+        --accent-3: #9273ff;
+        --good: #237b64;
+        --warn: #956200;
+        --bad: #9e295f;
+        --shadow: 0 18px 50px rgba(75, 51, 32, 0.08);
+        --radius: 20px;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        font-family: "Inter", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(76, 184, 255, 0.16), transparent 30%),
+          radial-gradient(circle at top right, rgba(255, 94, 198, 0.14), transparent 26%),
+          linear-gradient(180deg, #faf8f4 0%, var(--bg) 100%);
+      }
+
+      a { color: inherit; }
+
+      .page {
+        width: min(1440px, calc(100vw - 40px));
+        margin: 32px auto 80px;
+      }
+
+      .hero,
+      .section,
+      .note-bank,
+      .matrix {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(10px);
+      }
+
+      .hero {
+        padding: 28px 30px 24px;
+        margin-bottom: 24px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--bad);
+        background: rgba(255, 94, 198, 0.12);
+      }
+
+      h1, h2, h3 {
+        margin: 0;
+        line-height: 1.1;
+      }
+
+      h1 {
+        margin-top: 14px;
+        font-size: clamp(32px, 5vw, 58px);
+        letter-spacing: -0.04em;
+      }
+
+      .lede {
+        max-width: 980px;
+        margin-top: 16px;
+        font-size: 16px;
+        line-height: 1.65;
+        color: var(--muted);
+      }
+
+      .hero-grid {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr;
+        gap: 18px;
+        margin-top: 22px;
+      }
+
+      .hero-card {
+        padding: 18px;
+        border-radius: 16px;
+        background: var(--panel-strong);
+        border: 1px solid var(--line);
+      }
+
+      .hero-card h3 {
+        font-size: 14px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 10px;
+      }
+
+      .hero-card ul {
+        margin: 0;
+        padding-left: 18px;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 24px;
+        align-items: start;
+      }
+
+      .section {
+        padding: 24px;
+      }
+
+      .section + .section {
+        margin-top: 24px;
+      }
+
+      .section-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        margin-bottom: 18px;
+      }
+
+      .section-title p {
+        margin: 8px 0 0;
+        color: var(--muted);
+        max-width: 760px;
+        line-height: 1.55;
+      }
+
+      .step-stack {
+        display: grid;
+        gap: 16px;
+      }
+
+      .step {
+        position: relative;
+        padding: 18px 18px 18px 20px;
+        border-radius: 18px;
+        background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.75));
+        border: 1px solid var(--line);
+      }
+
+      .step:not(:last-child)::after {
+        content: "";
+        position: absolute;
+        left: 34px;
+        bottom: -16px;
+        width: 2px;
+        height: 16px;
+        background: linear-gradient(180deg, var(--accent-2), var(--accent));
+      }
+
+      .step-head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .step-num {
+        flex: 0 0 auto;
+        width: 28px;
+        height: 28px;
+        border-radius: 999px;
+        display: grid;
+        place-items: center;
+        font-size: 12px;
+        font-weight: 700;
+        color: #fff;
+        background: linear-gradient(135deg, var(--accent-2), var(--accent));
+      }
+
+      .step h3 {
+        font-size: 20px;
+        letter-spacing: -0.02em;
+      }
+
+      .step p {
+        margin: 10px 0 0;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .path-list,
+      .influence-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .path,
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: rgba(146, 115, 255, 0.08);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+      }
+
+      .pill {
+        background: rgba(76, 184, 255, 0.09);
+        font-family: inherit;
+      }
+
+      .mini-grid {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        margin-top: 16px;
+      }
+
+      .mini-card {
+        padding: 14px;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        background: rgba(255,255,255,0.72);
+      }
+
+      .mini-card h4 {
+        margin: 0 0 8px;
+        font-size: 13px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .mini-card p,
+      .mini-card li {
+        color: var(--muted);
+        line-height: 1.55;
+        font-size: 14px;
+      }
+
+      .mini-card ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      .matrix {
+        margin-top: 24px;
+        overflow: hidden;
+      }
+
+      .matrix-header {
+        padding: 24px 24px 0;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      th, td {
+        text-align: left;
+        vertical-align: top;
+        padding: 16px 18px;
+        border-top: 1px solid var(--line);
+      }
+
+      th {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        background: rgba(255,255,255,0.35);
+      }
+
+      td {
+        font-size: 14px;
+        line-height: 1.55;
+      }
+
+      .card-name {
+        font-weight: 700;
+        font-size: 15px;
+      }
+
+      .note-bank {
+        padding: 24px;
+      }
+
+      .note-controls {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 16px;
+      }
+
+      button {
+        appearance: none;
+        border: 1px solid var(--line);
+        background: var(--panel-strong);
+        color: var(--ink);
+        border-radius: 999px;
+        padding: 10px 14px;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      button:hover {
+        border-color: rgba(113, 92, 77, 0.35);
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 94px;
+        padding: 12px 14px;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.8);
+        resize: vertical;
+        font: inherit;
+        line-height: 1.55;
+        color: var(--ink);
+      }
+
+      .note-label {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+
+      .callout {
+        padding: 16px 18px;
+        border-radius: 16px;
+        background: linear-gradient(135deg, rgba(76, 184, 255, 0.09), rgba(255, 94, 198, 0.09));
+        border: 1px solid var(--line);
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .callout strong {
+        color: var(--ink);
+      }
+
+      .tabs {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 22px;
+      }
+
+      .tab-button {
+        appearance: none;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.62);
+        color: var(--muted);
+        border-radius: 999px;
+        padding: 10px 14px;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .tab-button.is-active {
+        color: var(--ink);
+        border-color: rgba(113, 92, 77, 0.34);
+        background: linear-gradient(135deg, rgba(76, 184, 255, 0.14), rgba(255, 94, 198, 0.14));
+      }
+
+      .tab-panel {
+        display: none;
+        margin-top: 24px;
+      }
+
+      .tab-panel.is-active {
+        display: block;
+      }
+
+      .wireframe-board {
+        display: grid;
+        gap: 18px;
+      }
+
+      .wireframe-row {
+        display: grid;
+        grid-template-columns: 1fr 40px 1fr 40px;
+        gap: 16px;
+        align-items: stretch;
+      }
+
+      .wireframe-box {
+        padding: 18px;
+        border-radius: 18px;
+        border: 1px dashed rgba(113, 92, 77, 0.4);
+        background: rgba(255, 255, 255, 0.72);
+        min-height: 168px;
+      }
+
+      .wireframe-box h3 {
+        font-size: 18px;
+        letter-spacing: -0.02em;
+      }
+
+      .wireframe-box p {
+        margin: 10px 0 0;
+        color: var(--muted);
+        line-height: 1.58;
+      }
+
+      .wireframe-box ul {
+        margin: 10px 0 0;
+        padding-left: 18px;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .wireframe-label {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 8px;
+        margin-bottom: 10px;
+        border-radius: 999px;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--muted);
+        background: rgba(146, 115, 255, 0.08);
+      }
+
+      .wire-arrow {
+        display: grid;
+        place-items: center;
+        color: var(--muted);
+        font-size: 28px;
+      }
+
+      .wireframe-note {
+        padding: 16px 18px;
+        border-radius: 16px;
+        border: 1px solid var(--line);
+        background: rgba(255,255,255,0.72);
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .wireframe-caption {
+        margin-top: 10px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .tweak-list {
+        display: grid;
+        gap: 12px;
+        margin-top: 16px;
+      }
+
+      .tweak-item {
+        padding: 14px 16px;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        background: rgba(255,255,255,0.74);
+      }
+
+      .tweak-item strong {
+        display: block;
+        margin-bottom: 6px;
+      }
+
+      .status-good { color: var(--good); }
+      .status-warn { color: var(--warn); }
+      .status-bad { color: var(--bad); }
+
+      @media (max-width: 1180px) {
+        .layout,
+        .hero-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .wireframe-row {
+          grid-template-columns: 1fr;
+        }
+
+        .wire-arrow {
+          transform: rotate(90deg);
+        }
+
+        .mini-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <div class="eyebrow">Scout Intake · Description Wireframe</div>
+        <h1>How onboarding data becomes card descriptions</h1>
+        <p class="lede">
+          This document maps the actual intake path from the worker entrypoint, through evidence capture,
+          synthesis, analyzer aggregation, normalization, persistence, and frontend rendering. It also shows
+          which files influence each onboarding card description, where the deterministic description system
+          takes over, and where to adjust logic when communication drifts away from the facts.
+        </p>
+        <div class="hero-grid">
+          <div class="hero-card">
+            <h3>Purpose</h3>
+            <ul>
+              <li>Trace which source files shape card copy.</li>
+              <li>Separate raw evidence problems from description-layer problems.</li>
+              <li>Identify where to tweak accuracy without guessing.</li>
+              <li>Capture review notes directly in the document.</li>
+            </ul>
+          </div>
+          <div class="hero-card">
+            <h3>Key Description Rule</h3>
+            <ul>
+              <li><strong>One dominant signal per card.</strong></li>
+              <li>Express it as: <strong>what we saw → why it matters → what to do next</strong>.</li>
+              <li>Prefer deterministic selectors for tile/modal alignment.</li>
+              <li>Use richer synthesis only when the fact pack is too thin or ambiguous.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="tabs" role="tablist" aria-label="Wireframe views">
+          <button class="tab-button is-active" type="button" data-tab="analysis" role="tab" aria-selected="true">Analysis View</button>
+          <button class="tab-button" type="button" data-tab="wireframe" role="tab" aria-selected="false">Wireframe</button>
+        </div>
+      </section>
+
+      <div class="tab-panel is-active" data-panel="analysis">
+      <div class="layout">
+        <div>
+          <section class="section">
+            <div class="section-title">
+              <div>
+                <h2>Pipeline Wireframe</h2>
+                <p>
+                  This is the live processing chain for onboarding and the exact places where content can become more
+                  or less accurate. Each step lists the main files involved and what they contribute downstream.
+                </p>
+              </div>
+            </div>
+
+            <div class="step-stack">
+              <article class="step">
+                <div class="step-head">
+                  <div class="step-num">1</div>
+                  <h3>Run trigger and worker handoff</h3>
+                </div>
+                <p>
+                  The worker route claims the queued run and hands the client config into the intake orchestrator.
+                  This is where a stale run or the wrong website URL can poison every downstream result.
+                </p>
+                <div class="path-list">
+                  <span class="path">app/api/worker/run-brief/route.js</span>
+                  <span class="path">api/_lib/run-lifecycle.cjs</span>
+                </div>
+                <div class="influence-list">
+                  <span class="pill">Inputs: clientId, clientConfig, sourceInputs.websiteUrl</span>
+                  <span class="pill">Failure mode: wrong target URL or stale run state</span>
+                </div>
+              </article>
+
+              <article class="step">
+                <div class="step-head">
+                  <div class="step-num">2</div>
+                  <h3>Intake orchestration</h3>
+                </div>
+                <p>
+                  The intake runner coordinates every downstream stage: site fetch, synthesis, analyzers, card skills,
+                  PageSpeed, scout-config generation, screenshot artifacts, and the SEO guardian. If a stage is skipped,
+                  timed out, or downgraded to a warning, that fact starts here.
+                </p>
+                <div class="path-list">
+                  <span class="path">features/scout-intake/runner.js</span>
+                </div>
+                <div class="mini-grid">
+                  <div class="mini-card">
+                    <h4>What it does</h4>
+                    <ul>
+                      <li>Normalizes the website URL.</li>
+                      <li>Runs evidence capture and synthesis in sequence.</li>
+                      <li>Collects warnings, artifacts, analyzer outputs, and scribe output.</li>
+                      <li>Calls the SEO guardian before the result is normalized and persisted.</li>
+                    </ul>
+                  </div>
+                  <div class="mini-card">
+                    <h4>What to tweak here</h4>
+                    <ul>
+                      <li>Timeouts and retry behavior.</li>
+                      <li>Whether missing evidence downgrades to partial or critical.</li>
+                      <li>Which artifacts are considered required for a given card.</li>
+                      <li>Which warning codes should appear in the debug surfaces.</li>
+                    </ul>
+                  </div>
+                </div>
+              </article>
+
+              <article class="step">
+                <div class="step-head">
+                  <div class="step-num">3</div>
+                  <h3>Evidence capture and artifact generation</h3>
+                </div>
+                <p>
+                  These modules gather the raw facts. If copy is wrong, the first question is whether the underlying
+                  evidence was wrong, thin, or missing before it ever reached a selector.
+                </p>
+                <div class="path-list">
+                  <span class="path">features/scout-intake/site-fetcher.js</span>
+                  <span class="path">features/intelligence/pagespeed.js</span>
+                  <span class="path">features/scout-intake/design-system-extractor.js</span>
+                  <span class="path">api/_lib/browserless.cjs</span>
+                  <span class="path">api/_lib/device-mockup.cjs</span>
+                  <span class="path">features/scout-intake/scout-config-generator.js</span>
+                </div>
+                <div class="mini-grid">
+                  <div class="mini-card">
+                    <h4>Raw outputs</h4>
+                    <ul>
+                      <li>HTML, metadata, page evidence, and crawl findings.</li>
+                      <li>PageSpeed scores, CWV, warnings, host/service/provider hints.</li>
+                      <li>Screenshot and device mockup artifacts.</li>
+                      <li>Extracted colors, typography, and design system signals.</li>
+                      <li>Scout config used by the data map/admin preview surfaces.</li>
+                    </ul>
+                  </div>
+                  <div class="mini-card">
+                    <h4>Primary accuracy levers</h4>
+                    <ul>
+                      <li>Improve service/provider detection.</li>
+                      <li>Separate measurement limitations from real site issues.</li>
+                      <li>Expose more structured diagnostics instead of raw error strings.</li>
+                      <li>Route all useful evidence into rawData before description building.</li>
+                    </ul>
+                  </div>
+                </div>
+              </article>
+
+              <article class="step">
+                <div class="step-head">
+                  <div class="step-num">4</div>
+                  <h3>Interpretation, analyzers, and synthesis</h3>
+                </div>
+                <p>
+                  The pipeline converts raw evidence into higher-level findings, gaps, strengths, readiness states,
+                  and recommendation context. This is where generalized language can creep in if the outputs are not
+                  tied tightly enough to the fact pack.
+                </p>
+                <div class="path-list">
+                  <span class="path">features/scout-intake/intake-synthesizer.js</span>
+                  <span class="path">features/scout-intake/analyzers/*</span>
+                  <span class="path">features/scout-intake/skills/_runner.js</span>
+                  <span class="path">features/scout-intake/skills/_aggregator.js</span>
+                  <span class="path">features/scout-intake/scribe.js</span>
+                  <span class="path">features/scout-intake/seo-comment-guardian.js</span>
+                </div>
+                <div class="mini-grid">
+                  <div class="mini-card">
+                    <h4>Interpretation layers</h4>
+                    <ul>
+                      <li><strong>Synthesizer:</strong> broad site understanding and early narrative context.</li>
+                      <li><strong>Analyzers:</strong> deterministic/domain-specific findings and readiness.</li>
+                      <li><strong>Skills:</strong> card-specific enrichment and aggregation.</li>
+                      <li><strong>Scribe:</strong> fallback expanded copy and brief content.</li>
+                      <li><strong>SEO guardian:</strong> fact-locked SEO writer/reviewer using the canonical fact pack.</li>
+                    </ul>
+                  </div>
+                  <div class="mini-card">
+                    <h4>Primary accuracy levers</h4>
+                    <ul>
+                      <li>Prevent stale or contradictory findings from surviving into aggregate.</li>
+                      <li>Filter measurement-failure language when PageSpeed actually succeeded.</li>
+                      <li>Keep AI-specific findings precise, not generic.</li>
+                      <li>Constrain synthesis to facts instead of letting it invent status claims.</li>
+                    </ul>
+                  </div>
+                </div>
+              </article>
+
+              <article class="step">
+                <div class="step-head">
+                  <div class="step-num">5</div>
+                  <h3>Normalization and persistence</h3>
+                </div>
+                <p>
+                  The normalized result becomes the stable write shape for Firestore and the dashboard projection.
+                  If a useful fact exists upstream but never appears in the UI, this layer is often the missing bridge.
+                </p>
+                <div class="path-list">
+                  <span class="path">features/scout-intake/normalize.js</span>
+                  <span class="path">api/_lib/run-lifecycle.cjs</span>
+                </div>
+                <div class="influence-list">
+                  <span class="pill">Writes: brief_runs, clients/{clientId}/brief_runs, dashboard_state/{clientId}</span>
+                  <span class="pill">Projection: snapshot, signals, strategy, siteMeta, analyzerOutputs, scribe, artifacts</span>
+                </div>
+              </article>
+
+              <article class="step">
+                <div class="step-head">
+                  <div class="step-num">6</div>
+                  <h3>Frontend card rendering and debug surfaces</h3>
+                </div>
+                <p>
+                  The dashboard assembles rawData per card, resolves analyzer aliases, runs the deterministic selector,
+                  and decides whether built copy, guardian copy, or fallback copy should render. The admin surfaces expose
+                  the live card inputs so you can inspect what actually reached the UI.
+                </p>
+                <div class="path-list">
+                  <span class="path">DashboardPage.jsx</span>
+                  <span class="path">features/scout-intake/card-description-builder.js</span>
+                  <span class="path">app/api/admin/scout-card-copy/route.js</span>
+                  <span class="path">app/preview/scout-config/page.jsx</span>
+                </div>
+                <div class="mini-grid">
+                  <div class="mini-card">
+                    <h4>Critical render facts</h4>
+                    <ul>
+                      <li><code>resolveAnalyzerSource()</code> maps display cards to analyzer source ids.</li>
+                      <li><code>buildCardDescription()</code> selects one dominant signal.</li>
+                      <li>Deterministic cards ignore <code>scribe.short</code> in the tile path.</li>
+                      <li>The admin copy route shows rendered copy alongside raw card inputs.</li>
+                    </ul>
+                  </div>
+                  <div class="mini-card">
+                    <h4>Primary accuracy levers</h4>
+                    <ul>
+                      <li>Improve per-card rawData mapping.</li>
+                      <li>Refine dominant-signal selectors and copy templates.</li>
+                      <li>Sanitize internal tokens before user-facing render.</li>
+                      <li>Expose richer debug data in modal/data tabs when review is blocked.</li>
+                    </ul>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-title">
+              <div>
+                <h2>Description Development Flow</h2>
+                <p>
+                  This is the exact description path to keep in mind when a card feels wrong. The tile should not be treated
+                  as a generic summary layer; it is a deterministic decision system that sits on top of normalized evidence.
+                </p>
+              </div>
+            </div>
+
+            <div class="mini-grid">
+              <div class="mini-card">
+                <h4>Input assembly</h4>
+                <p>
+                  <strong>DashboardPage.jsx</strong> assembles <code>rawData</code> per card from live projection data
+                  such as PageSpeed, AI visibility, mockups, social metadata, industry, style-guide, or priority data.
+                </p>
+              </div>
+              <div class="mini-card">
+                <h4>Analyzer resolution</h4>
+                <p>
+                  <strong>card-description-builder.js</strong> resolves the canonical analyzer aggregate using
+                  <code>resolveAnalyzerSource()</code> so alias logic does not live inline in the dashboard.
+                </p>
+              </div>
+              <div class="mini-card">
+                <h4>Dominant signal selection</h4>
+                <p>
+                  The selector for that card chooses one signal only, then writes:
+                  <strong>finding → impact → action</strong>. This is the core pattern that keeps cards readable.
+                </p>
+              </div>
+              <div class="mini-card">
+                <h4>SEO special handling</h4>
+                <p>
+                  <strong>seo-comment-guardian.js</strong> builds a fact pack, filters contradictory analyzer findings,
+                  then generates aligned short and expanded SEO copy from the same canonical signal path.
+                </p>
+              </div>
+              <div class="mini-card">
+                <h4>Fallback behavior</h4>
+                <p>
+                  If a deterministic selector has no usable signal, the UI may fall back to static copy or older scribe
+                  paths. That is usually the first branch to audit when a card suddenly feels generic.
+                </p>
+              </div>
+              <div class="mini-card">
+                <h4>Admin validation path</h4>
+                <p>
+                  <strong>app/api/admin/scout-card-copy/route.js</strong> exposes card inputs and rendered copy so the
+                  data-map view can show exactly what the selector had access to at render time.
+                </p>
+              </div>
+            </div>
+
+            <div class="callout" style="margin-top: 16px;">
+              <strong>Accuracy rule of thumb:</strong>
+              If the shell values are right but the description is wrong, the problem is usually in
+              <strong>rawData mapping</strong>, <strong>dominant-signal selection</strong>, or <strong>fallback rendering</strong>.
+              If both shell and description are wrong, start upstream in evidence capture or analyzer aggregation.
+            </div>
+          </section>
+        </div>
+
+        <div>
+          <section class="note-bank">
+            <div class="section-title">
+              <div>
+                <h2>Review Notes</h2>
+                <p>
+                  Use these fields to note where communication is drifting and what should change. Notes are stored in
+                  this browser using localStorage.
+                </p>
+              </div>
+            </div>
+
+            <label class="note-label" for="global-review-note">Global review note</label>
+            <textarea id="global-review-note" data-note="global-review-note" placeholder="Example: SEO card should distinguish between real schema absence and schema incompleteness when AI visibility is weak."></textarea>
+
+            <div class="tweak-list">
+              <div class="tweak-item">
+                <strong>Best place to tweak evidence quality</strong>
+                <span>Evidence modules and warning routing in <code>runner.js</code>, <code>site-fetcher.js</code>, and <code>pagespeed.js</code>.</span>
+              </div>
+              <div class="tweak-item">
+                <strong>Best place to tweak what the user sees</strong>
+                <span><code>DashboardPage.jsx</code>, <code>card-description-builder.js</code>, and <code>seo-comment-guardian.js</code>.</span>
+              </div>
+              <div class="tweak-item">
+                <strong>Best place to verify the final inputs</strong>
+                <span><code>app/api/admin/scout-card-copy/route.js</code> and <code>/preview/scout-config</code>.</span>
+              </div>
+            </div>
+
+            <div class="note-controls">
+              <button type="button" id="export-notes">Export Notes</button>
+              <button type="button" id="clear-notes">Clear Notes</button>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-title">
+              <div>
+                <h2>High-Value Tweak Zones</h2>
+                <p>
+                  These are the highest-leverage places to improve accuracy before changing architecture.
+                </p>
+              </div>
+            </div>
+
+            <div class="tweak-list">
+              <div class="tweak-item">
+                <strong>1. Raw evidence completeness</strong>
+                Improve capture for performance diagnostics, provider hints, social metadata, schema types, and
+                device artifacts before changing wording.
+              </div>
+              <div class="tweak-item">
+                <strong>2. rawData mapping in DashboardPage</strong>
+                Make sure each card receives the facts it actually needs. Many communication bugs are simply missing
+                or misrouted raw inputs.
+              </div>
+              <div class="tweak-item">
+                <strong>3. Dominant signal hierarchy</strong>
+                Tune <code>buildCardDescription()</code> so the most distinctive issue or strength wins, not just the first available issue.
+              </div>
+              <div class="tweak-item">
+                <strong>4. Guardrails against contradiction</strong>
+                Keep the SEO guardian fact-locked and extend that pattern to other high-risk cards if needed.
+              </div>
+              <div class="tweak-item">
+                <strong>5. Surface-level sanitization</strong>
+                Strip internal token ids, raw font keys, or implementation artifacts before they reach the UI.
+              </div>
+            </div>
+
+            <label class="note-label" for="tweak-zone-note" style="margin-top: 16px;">Tweak zone note</label>
+            <textarea id="tweak-zone-note" data-note="tweak-zone-note" placeholder="Example: Social Preview should show whether missing OG image is a crawl miss, a true absence, or a late-rendered asset."></textarea>
+          </section>
+        </div>
+      </div>
+
+      <section class="matrix">
+        <div class="matrix-header">
+          <h2>Card Influence Matrix</h2>
+          <p class="lede" style="margin-top: 10px;">
+            Each row shows what is feeding the card, where the description is selected, and where to tweak it. Add notes per card to capture
+            improvements you want to make after review.
+          </p>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Card</th>
+              <th>Primary inputs</th>
+              <th>Selector / writer</th>
+              <th>Best tweak files</th>
+              <th>Review notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><div class="card-name">Data Summary</div><span class="status-bad">Baseline quality</span></td>
+              <td>Captured signal counts, crawler coverage, warnings, artifacts, PSI status, business-context presence.</td>
+              <td><code>buildCardDescription('audit-summary')</code></td>
+              <td><code>runner.js</code>, <code>card-description-builder.js</code>, <code>DashboardPage.jsx</code></td>
+              <td><textarea data-note="card-audit-summary" placeholder="Note how baseline completeness should be judged more accurately."></textarea></td>
+            </tr>
+            <tr>
+              <td><div class="card-name">SEO + Performance Snapshot</div><span class="status-warn">Fact-locked</span></td>
+              <td>PageSpeed, CWV, audit status, provider/service hints, AI visibility sections, schema/entity/llms signals, analyzer findings.</td>
+              <td><code>buildCardDescription('seo-performance')</code> + <code>seo-comment-guardian.js</code></td>
+              <td><code>pagespeed.js</code>, <code>seo-comment-guardian.js</code>, <code>card-description-builder.js</code>, <code>DashboardPage.jsx</code></td>
+              <td><textarea data-note="card-seo-performance" placeholder="Note how SEO should better separate measurement limits, AI visibility gaps, and real technical issues."></textarea></td>
+            </tr>
+            <tr>
+              <td><div class="card-name">Multi-Device View</div><span class="status-good">Artifact-based</span></td>
+              <td>Homepage screenshots, device mockup artifact, coverage flags for desktop/tablet/mobile, capture completion state.</td>
+              <td><code>buildCardDescription('multi-device-view')</code></td>
+              <td><code>browserless.cjs</code>, <code>device-mockup.cjs</code>, <code>DashboardPage.jsx</code>, <code>card-description-builder.js</code></td>
+              <td><textarea data-note="card-multi-device-view" placeholder="Note how coverage, fidelity, or layout evidence should be described more clearly."></textarea></td>
+            </tr>
+            <tr>
+              <td><div class="card-name">Social Preview Check</div><span class="status-warn">Metadata quality</span></td>
+              <td>OG image/title/description, canonical, favicon, theme color, site name, social metadata completeness.</td>
+              <td><code>buildCardDescription('social-preview')</code></td>
+              <td><code>site-fetcher.js</code>, <code>DashboardPage.jsx</code>, <code>card-description-builder.js</code></td>
+              <td><textarea data-note="card-social-preview" placeholder="Note how social preview gaps should be prioritized or framed."></textarea></td>
+            </tr>
+            <tr>
+              <td><div class="card-name">Business Model</div><span class="status-good">Business clarity</span></td>
+              <td>Pricing cues, product/service structure, SaaS/store/service hints, analyzer aggregate for business-model.</td>
+              <td><code>buildCardDescription('business-model')</code></td>
+              <td><code>intake-synthesizer.js</code>, <code>analyzers/*</code>, <code>card-description-builder.js</code></td>
+              <td><textarea data-note="card-business-model" placeholder="Note how business model confidence should be improved or softened."></textarea></td>
+            </tr>
+            <tr>
+              <td><div class="card-name">Brand Snapshot</div><span class="status-good">Design system</span></td>
+              <td>Heading font, body font, primary/secondary/neutral colors, motion level, style-guide aggregate.</td>
+              <td><code>buildCardDescription('style-guide')</code></td>
+              <td><code>design-system-extractor.js</code>, <code>DashboardPage.jsx</code>, <code>card-description-builder.js</code></td>
+              <td><textarea data-note="card-style-guide" placeholder="Note how brand system strength or thinness should be explained."></textarea></td>
+            </tr>
+            <tr>
+              <td><div class="card-name">Market Category</div><span class="status-warn">Category confidence</span></td>
+              <td>Industry/category label, positioning, audience, category confidence and strategic fit signals.</td>
+              <td><code>buildCardDescription('industry')</code></td>
+              <td><code>intake-synthesizer.js</code>, <code>DashboardPage.jsx</code>, <code>card-description-builder.js</code></td>
+              <td><textarea data-note="card-industry" placeholder="Note how category uncertainty should be framed without sounding harsher than necessary."></textarea></td>
+            </tr>
+            <tr>
+              <td><div class="card-name">Visibility Snapshot</div><span class="status-good">AI/search exposure</span></td>
+              <td>Visibility score, search/AI surface presence, discoverability aggregate and opportunity framing.</td>
+              <td><code>buildCardDescription('visibility-snapshot')</code></td>
+              <td><code>skills/_aggregator.js</code>, <code>DashboardPage.jsx</code>, <code>card-description-builder.js</code></td>
+              <td><textarea data-note="card-visibility" placeholder="Note how visibility positives or limitations should be phrased more usefully."></textarea></td>
+            </tr>
+            <tr>
+              <td><div class="card-name">Priority Action</div><span class="status-warn">Next-step focus</span></td>
+              <td>Priority signal, focus label, channel label, recommendation context, system readiness.</td>
+              <td><code>buildCardDescription('priority-signal')</code></td>
+              <td><code>runner.js</code>, <code>DashboardPage.jsx</code>, <code>card-description-builder.js</code></td>
+              <td><textarea data-note="card-priority" placeholder="Note how the next-step card should become more specific or easier to scan."></textarea></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="section" style="margin-top: 24px;">
+        <div class="section-title">
+          <div>
+            <h2>File Flow Quick Reference</h2>
+            <p>
+              Use this when you need to quickly jump to the right file without reading the entire pipeline again.
+            </p>
+          </div>
+        </div>
+
+        <div class="mini-grid">
+          <div class="mini-card">
+            <h4>Run starts here</h4>
+            <p><code>app/api/worker/run-brief/route.js</code> → <code>features/scout-intake/runner.js</code></p>
+          </div>
+          <div class="mini-card">
+            <h4>Evidence capture</h4>
+            <p><code>site-fetcher.js</code> · <code>pagespeed.js</code> · <code>design-system-extractor.js</code></p>
+          </div>
+          <div class="mini-card">
+            <h4>Interpretation</h4>
+            <p><code>intake-synthesizer.js</code> · <code>analyzers/*</code> · <code>skills/_runner.js</code> · <code>skills/_aggregator.js</code></p>
+          </div>
+          <div class="mini-card">
+            <h4>Copy layers</h4>
+            <p><code>scribe.js</code> · <code>seo-comment-guardian.js</code> · <code>card-description-builder.js</code></p>
+          </div>
+          <div class="mini-card">
+            <h4>Persistence</h4>
+            <p><code>normalize.js</code> · <code>run-lifecycle.cjs</code></p>
+          </div>
+          <div class="mini-card">
+            <h4>Validation surfaces</h4>
+            <p><code>DashboardPage.jsx</code> · <code>app/api/admin/scout-card-copy/route.js</code> · <code>app/preview/scout-config/page.jsx</code></p>
+          </div>
+        </div>
+      </section>
+      </div>
+
+      <section class="tab-panel" data-panel="wireframe">
+        <section class="section">
+          <div class="section-title">
+            <div>
+              <h2>Wireframe View</h2>
+              <p>
+                This is the clean visual path from intake to final communication. It focuses only on the route from
+                raw evidence, through the relevant files, into the card face and modal description.
+              </p>
+            </div>
+          </div>
+
+          <div class="wireframe-board">
+            <div class="wireframe-row">
+              <div class="wireframe-box">
+                <div class="wireframe-label">1 · Intake</div>
+                <h3>Worker run starts</h3>
+                <p>The queued onboarding run is claimed, the client config is loaded, and the website URL becomes the target.</p>
+                <ul>
+                  <li><code>app/api/worker/run-brief/route.js</code></li>
+                  <li><code>api/_lib/run-lifecycle.cjs</code></li>
+                </ul>
+              </div>
+              <div class="wire-arrow">→</div>
+              <div class="wireframe-box">
+                <div class="wireframe-label">2 · Orchestrator</div>
+                <h3>Pipeline coordinates capture</h3>
+                <p><code>runner.js</code> decides which fetch, audit, skill, artifact, and copy systems run for this pass.</p>
+                <ul>
+                  <li><code>features/scout-intake/runner.js</code></li>
+                </ul>
+              </div>
+              <div class="wire-arrow">→</div>
+            </div>
+
+            <div class="wireframe-row">
+              <div class="wireframe-box">
+                <div class="wireframe-label">3 · Evidence</div>
+                <h3>Raw site facts are captured</h3>
+                <p>HTML, metadata, PSI results, screenshots, device mockups, and design signals are collected.</p>
+                <ul>
+                  <li><code>site-fetcher.js</code></li>
+                  <li><code>pagespeed.js</code></li>
+                  <li><code>design-system-extractor.js</code></li>
+                  <li><code>browserless.cjs</code></li>
+                  <li><code>device-mockup.cjs</code></li>
+                </ul>
+              </div>
+              <div class="wire-arrow">→</div>
+              <div class="wireframe-box">
+                <div class="wireframe-label">4 · Interpretation</div>
+                <h3>Facts become findings</h3>
+                <p>Analyzers, skills, synthesizers, and guardian logic convert evidence into gaps, strengths, readiness, and card-ready signals.</p>
+                <ul>
+                  <li><code>intake-synthesizer.js</code></li>
+                  <li><code>analyzers/*</code></li>
+                  <li><code>skills/_runner.js</code></li>
+                  <li><code>skills/_aggregator.js</code></li>
+                  <li><code>scribe.js</code></li>
+                  <li><code>seo-comment-guardian.js</code></li>
+                </ul>
+              </div>
+              <div class="wire-arrow">→</div>
+            </div>
+
+            <div class="wireframe-row">
+              <div class="wireframe-box">
+                <div class="wireframe-label">5 · Projection</div>
+                <h3>Normalized dashboard state</h3>
+                <p>The run result is shaped into a stable projection so the frontend reads consistent fields across cards.</p>
+                <ul>
+                  <li><code>normalize.js</code></li>
+                  <li><code>run-lifecycle.cjs</code></li>
+                </ul>
+              </div>
+              <div class="wire-arrow">→</div>
+              <div class="wireframe-box">
+                <div class="wireframe-label">6 · Card inputs</div>
+                <h3>Card rawData is assembled</h3>
+                <p><code>DashboardPage.jsx</code> maps projection data into card-specific raw inputs and resolves analyzer aliases.</p>
+                <ul>
+                  <li><code>DashboardPage.jsx</code></li>
+                  <li><code>resolveAnalyzerSource()</code></li>
+                </ul>
+              </div>
+              <div class="wire-arrow">→</div>
+            </div>
+
+            <div class="wireframe-row">
+              <div class="wireframe-box">
+                <div class="wireframe-label">7 · Card face</div>
+                <h3>Deterministic card description</h3>
+                <p>The builder chooses one dominant signal and writes the tile with the same pattern every time.</p>
+                <ul>
+                  <li>What we saw</li>
+                  <li>Why it matters</li>
+                  <li>What to do next</li>
+                </ul>
+                <p class="wireframe-caption"><code>features/scout-intake/card-description-builder.js</code></p>
+              </div>
+              <div class="wire-arrow">→</div>
+              <div class="wireframe-box">
+                <div class="wireframe-label">8 · Modal</div>
+                <h3>Expanded modal description</h3>
+                <p>The modal follows the same canonical signal path, with extra explanation where needed. SEO remains fact-locked.</p>
+                <ul>
+                  <li><code>seo-comment-guardian.js</code></li>
+                  <li><code>DashboardPage.jsx</code></li>
+                </ul>
+              </div>
+              <div class="wire-arrow">→</div>
+            </div>
+
+            <div class="wireframe-note">
+              <strong>Debug shortcut:</strong> if the card shell is right but the sentence is wrong, inspect
+              <strong>card rawData</strong> and <strong>dominant signal selection</strong>. If the shell and sentence are both wrong,
+              move upstream to <strong>evidence capture</strong> and <strong>interpretation</strong>.
+            </div>
+
+            <label class="note-label" for="wireframe-visual-note">Wireframe-specific note</label>
+            <textarea id="wireframe-visual-note" data-note="wireframe-visual-note" placeholder="Example: Multi-Device View should branch earlier when screenshots exist but coverage is still missing for one breakpoint."></textarea>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script>
+      (function () {
+        const fields = Array.from(document.querySelectorAll('[data-note]'));
+        const prefix = 'scout-wireframe-note:';
+
+        function keyFor(field) {
+          return prefix + field.getAttribute('data-note');
+        }
+
+        fields.forEach((field) => {
+          const saved = localStorage.getItem(keyFor(field));
+          if (saved !== null) field.value = saved;
+          field.addEventListener('input', () => {
+            localStorage.setItem(keyFor(field), field.value);
+          });
+        });
+
+        const exportButton = document.getElementById('export-notes');
+        const clearButton = document.getElementById('clear-notes');
+        const tabButtons = Array.from(document.querySelectorAll('[data-tab]'));
+        const tabPanels = Array.from(document.querySelectorAll('[data-panel]'));
+
+        function activateTab(name) {
+          tabButtons.forEach((button) => {
+            const active = button.getAttribute('data-tab') === name;
+            button.classList.toggle('is-active', active);
+            button.setAttribute('aria-selected', active ? 'true' : 'false');
+          });
+          tabPanels.forEach((panel) => {
+            panel.classList.toggle('is-active', panel.getAttribute('data-panel') === name);
+          });
+        }
+
+        tabButtons.forEach((button) => {
+          button.addEventListener('click', () => activateTab(button.getAttribute('data-tab')));
+        });
+
+        if (exportButton) {
+          exportButton.addEventListener('click', () => {
+            const payload = {};
+            fields.forEach((field) => {
+              payload[field.getAttribute('data-note')] = field.value.trim();
+            });
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'scout-description-wireframe-notes.json';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+          });
+        }
+
+        if (clearButton) {
+          clearButton.addEventListener('click', () => {
+            const ok = window.confirm('Clear all saved wireframe notes for this browser?');
+            if (!ok) return;
+            fields.forEach((field) => {
+              field.value = '';
+              localStorage.removeItem(keyFor(field));
+            });
+          });
+        }
+      })();
+    </script>
+  </body>
+</html>

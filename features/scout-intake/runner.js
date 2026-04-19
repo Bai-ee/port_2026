@@ -27,6 +27,7 @@ const { runScribe } = require('./scribe');
 const { runCardSkills, buildSourcePayloads } = require('./skills/_runner');
 const { aggregateCardSkills } = require('./skills/_aggregator');
 const { ensureScoutConfig } = require('./scout-config-generator');
+const { runSeoCommentGuardian } = require('./seo-comment-guardian');
 const { persistWebsiteScreenshotArtifact, persistBriefPdfArtifact } = require('../../api/_lib/browserless.cjs');
 const { renderBriefHtml } = require('./brief-renderer');
 const { generateWebsiteMockupArtifact } = require('../../api/_lib/device-mockup.cjs');
@@ -60,6 +61,18 @@ function normalizeWebsiteUrl(raw) {
   } catch {
     return null;
   }
+}
+
+function buildPagespeedWarning(source, fallbackCode, fallbackMessage) {
+  const diag = source?.facts?.diagnosticsContext || null;
+  const suffix = diag?.failureCode ? `_${String(diag.failureCode).replace(/[^a-z0-9_-]/gi, '_')}` : '';
+  return {
+    type: 'warning',
+    code: `${fallbackCode}${suffix}`,
+    message: diag?.failureReason || fallbackMessage,
+    stage: 'psi',
+    details: diag || null,
+  };
 }
 
 // ── Pipeline ──────────────────────────────────────────────────────────────────
@@ -408,7 +421,7 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
       console.warn('[PSI] PAGESPEED_API_KEY not set — skipping PageSpeed audit.');
       warnings.push({
         type: 'warning',
-        code: 'pagespeed_skipped',
+        code: 'pagespeed_skipped_missing_api_key',
         message: 'PageSpeed audit skipped: PAGESPEED_API_KEY not configured.',
         stage: 'psi',
       });
@@ -416,7 +429,7 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
       console.warn('[PSI] PAGESPEED_ENABLED=0 — skipping PageSpeed audit.');
       warnings.push({
         type: 'warning',
-        code: 'pagespeed_skipped',
+        code: 'pagespeed_skipped_disabled',
         message: 'PageSpeed audit skipped: PAGESPEED_ENABLED=0.',
         stage: 'psi',
       });
@@ -426,12 +439,30 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
         pagespeed = await withTimeout(
           pagespeedModule.fetch({ websiteUrl }),
           'PageSpeed audit',
-          45_000,   // hard ceiling; AbortSignal inside pagespeed.js fires at 30s
+          75_000,   // hard ceiling; AbortSignal inside pagespeed.js fires at 60s
           'psi',    // heartbeat to 'psi' so terminal shows it + stuck-detection works
         );
         console.log(
           `[${new Date().toISOString()}] INTAKE: PSI complete — perf=${pagespeed?.facts?.scores?.performance}, seo=${pagespeed?.facts?.scores?.seo}`
         );
+        if (pagespeed?.status === 'error') {
+          const warning = buildPagespeedWarning(
+            pagespeed,
+            'pagespeed_failed',
+            `PageSpeed audit failed: ${pagespeed?.error || 'unknown error'}`
+          );
+          console.warn(`[PSI] ${warning.message}`);
+          warnings.push(warning);
+        } else if (pagespeed?.facts?.auditStatus === 'partial') {
+          const diag = pagespeed?.facts?.diagnosticsContext || null;
+          warnings.push({
+            type: 'warning',
+            code: `pagespeed_partial${diag?.failureCode ? `_${String(diag.failureCode).replace(/[^a-z0-9_-]/gi, '_')}` : ''}`,
+            message: diag?.failureReason || 'PageSpeed audit completed with partial Lighthouse data.',
+            stage: 'psi',
+            details: diag,
+          });
+        }
       } catch (err) {
         console.warn(`[PSI] PageSpeed audit failed (non-fatal): ${err.message}`);
         warnings.push({
@@ -671,6 +702,68 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
       code: 'scribe_threw',
       message: `Scribe threw: ${err.message}`,
       stage: 'scribe',
+    });
+  }
+
+  // ── SEO comment guardian — fact-locked replacement for seo-performance ──
+  // Rewrites ONLY the SEO card after generic Scribe so the final modal copy
+  // cannot contradict the live PSI payload.
+  try {
+    const seoGuardianResult = await withTimeout(runSeoCommentGuardian({
+      websiteUrl,
+      pagespeed,
+      aiSeoAudit: aiSeoAuditResult || analyzerOutputs?.['seo-performance']?.skills?.['ai-seo-audit'] || null,
+      seoAggregate: analyzerOutputs?.['seo-performance']?.aggregate || null,
+      warnings,
+      userContext,
+      businessModel: synthesisResult?.intake?.snapshot?.brandOverview?.businessModel || '',
+      existingCard: scribeResult?.cards?.['seo-performance'] || null,
+    }), 'SEO comment guardian');
+
+    if (seoGuardianResult?.ok && seoGuardianResult.card) {
+      if (!scribeResult || !scribeResult.ok) {
+        scribeResult = {
+          ok: true,
+          cards: {},
+          brief: null,
+          runCostData: null,
+          error: null,
+        };
+      }
+
+      const existingSeoCard = scribeResult.cards?.['seo-performance'] || {};
+      scribeResult.cards = {
+        ...(scribeResult.cards || {}),
+        'seo-performance': {
+          ...existingSeoCard,
+          ...seoGuardianResult.card,
+          generatedBy: 'seo-comment-guardian',
+          factLocked: true,
+        },
+      };
+      scribeResult.seoGuardian = {
+        source: seoGuardianResult.source || 'fallback',
+        factPack: seoGuardianResult.factPack || null,
+        runCostData: seoGuardianResult.runCostData || null,
+        validationErrors: seoGuardianResult.validationErrors || [],
+        generatedAt: new Date().toISOString(),
+      };
+
+      if (seoGuardianResult.source === 'fallback' && Array.isArray(seoGuardianResult.validationErrors) && seoGuardianResult.validationErrors.length > 0) {
+        warnings.push({
+          type: 'warning',
+          code: 'seo_guardian_fallback_used',
+          message: `SEO guardian used deterministic fallback: ${seoGuardianResult.validationErrors.join(', ')}`,
+          stage: 'seo-guardian',
+        });
+      }
+    }
+  } catch (err) {
+    warnings.push({
+      type: 'warning',
+      code: 'seo_guardian_threw',
+      message: `SEO guardian threw: ${err.message}`,
+      stage: 'seo-guardian',
     });
   }
 

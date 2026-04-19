@@ -1479,7 +1479,7 @@ export const SOLUTIONS_CATALOG = [
     severity: 'warning',
     triggers: {
       ids: ['run-psi-failed'],
-      citationIncludes: ['pagespeed_failed', 'pagespeed_skipped'],
+      citationIncludes: ['pagespeed_failed', 'pagespeed_skipped', 'pagespeed_partial'],
       labelIncludes: ['psi', 'pagespeed', 'lighthouse unavailable'],
     },
     problem: 'PageSpeed Insights data is missing from this audit.',
@@ -2304,4 +2304,3 @@ export function buildSolutionsList(aggregate) {
 
   return out;
 }
-

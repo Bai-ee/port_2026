@@ -131,7 +131,7 @@ describe('buildCardDescription — seo-performance', () => {
       readiness: 'critical',
       findings:  [finding('critical', 'LCP too slow', 'Page takes 5s to load.')],
     }));
-    assert.ok(r.description.includes('LCP too slow'));
+    assert.match(r.description, /largest contentful paint is too slow/i);
     assert.equal(r.dominantSignal.type, 'issue');
     // id comes from the finding itself; 'seo-critical' is the fallback for findings without an id
     assert.ok(r.dominantSignal.id, 'signal id must be set');
@@ -142,7 +142,7 @@ describe('buildCardDescription — seo-performance', () => {
       readiness: 'critical',
       findings:  [finding('critical', 'Missing meta description', '')],
     }));
-    assert.ok(r.description.includes('Solutions tab'));
+    assert.match(r.description, /re-run the audit/i);
   });
 
   test('warning finding selected when no critical', () => {
@@ -151,7 +151,128 @@ describe('buildCardDescription — seo-performance', () => {
       findings:  [finding('warning', 'Meta description absent', '')],
     }));
     assert.equal(r.dominantSignal.type, 'issue');
-    assert.ok(r.description.includes('Meta description absent'));
+    assert.match(r.description, /meta description/i);
+  });
+
+  test('critical performance labels are normalized into human copy', () => {
+    const r = buildCardDescription('seo-performance', agg({
+      readiness: 'critical',
+      findings: [finding('critical', 'LCP exceeds 4 seconds — critical performance metric failure', 'Largest content paint measured at 8.4 seconds.')],
+    }));
+    assert.match(r.description, /Largest Contentful Paint is too slow/i);
+    assert.doesNotMatch(r.description, /critical performance metric failure/i);
+    assert.match(r.description, /user experience/i);
+  });
+
+  test('raw PSI LCP metric overrides stale analyzer wording', () => {
+    const r = buildCardDescription('seo-performance', agg({
+      readiness: 'partial',
+      findings: [finding('warning', 'Largest Contentful Paint slow', 'LCP lab measurement is 11.9 seconds (p75).')],
+    }), {
+      auditStatus: 'ok',
+      lcpSeconds: 8.4,
+      performanceScore: 57,
+    });
+    assert.match(r.description, /8\.4 seconds/i);
+    assert.doesNotMatch(r.description, /11\.9 seconds/i);
+    assert.equal(r.dominantSignal?.id, 'raw-lcp-critical');
+  });
+
+  test('AI crawler blocks lead before generic performance language', () => {
+    const r = buildCardDescription('seo-performance', agg({
+      readiness: 'critical',
+      findings: [finding('critical', 'Largest Contentful Paint slow', 'LCP lab measurement is 6.8 seconds (p75).')],
+    }), {
+      auditStatus: 'ok',
+      lcpSeconds: 6.8,
+      performanceScore: 60,
+      aiBotsBlocked: ['GPTBot'],
+      aiVisibilityScore: 54,
+    });
+    assert.equal(r.dominantSignal?.id, 'ai-bots-blocked');
+    assert.match(r.description, /AI crawlers are blocked/i);
+    assert.match(r.description, /GPTBot/i);
+  });
+
+  test('missing llms.txt leads before standard performance language when AI visibility is weak', () => {
+    const r = buildCardDescription('seo-performance', agg({
+      readiness: 'partial',
+      findings: [finding('warning', 'Largest Contentful Paint slow', 'LCP lab measurement is 5.4 seconds (p75).')],
+    }), {
+      auditStatus: 'ok',
+      lcpSeconds: 5.4,
+      performanceScore: 75,
+      aiVisibilityScore: 58,
+      llmsTxtFound: false,
+      schemaTypesCount: 2,
+    });
+    assert.equal(r.dominantSignal?.id, 'ai-llmstxt-missing');
+    assert.match(r.description, /AI discovery signals are incomplete/i);
+    assert.match(r.description, /llms\.txt/i);
+  });
+
+  test('missing schema uses exact no-schema wording', () => {
+    const r = buildCardDescription('seo-performance', agg({
+      readiness: 'partial',
+      findings: [finding('warning', 'Largest Contentful Paint slow', 'LCP lab measurement is 5.4 seconds (p75).')],
+    }), {
+      auditStatus: 'ok',
+      aiVisibilityScore: 74,
+      llmsTxtFound: true,
+      schemaTypesCount: 0,
+      aiSectionSchemaScore: 0,
+    });
+    assert.equal(r.dominantSignal?.id, 'ai-schema-missing');
+    assert.match(r.description, /No structured data was detected/i);
+  });
+
+  test('thin schema does not claim schema is fully missing', () => {
+    const r = buildCardDescription('seo-performance', agg({
+      readiness: 'partial',
+      findings: [finding('warning', 'Largest Contentful Paint slow', 'LCP lab measurement is 5.4 seconds (p75).')],
+    }), {
+      auditStatus: 'ok',
+      aiVisibilityScore: 74,
+      llmsTxtFound: true,
+      schemaTypesCount: 1,
+      aiSectionSchemaScore: 25,
+    });
+    assert.equal(r.dominantSignal?.id, 'ai-schema-thin');
+    assert.match(r.description, /Structured data is present, but key business context is still thin/i);
+    assert.doesNotMatch(r.description, /No structured data was detected/i);
+  });
+
+  test('missing entity uses explicit external-entity wording', () => {
+    const r = buildCardDescription('seo-performance', agg({
+      readiness: 'partial',
+      findings: [finding('warning', 'Largest Contentful Paint slow', 'LCP lab measurement is 5.4 seconds (p75).')],
+    }), {
+      auditStatus: 'ok',
+      aiVisibilityScore: 68,
+      llmsTxtFound: true,
+      schemaTypesCount: 2,
+      aiSectionSchemaScore: 80,
+      aiSectionEntityScore: 20,
+      wikidataEntity: null,
+    });
+    assert.equal(r.dominantSignal?.id, 'ai-entity-missing');
+    assert.match(r.description, /No strong external entity reference was found/i);
+  });
+
+  test('strong AI signals can lead with a positive when the foundation is distinctive', () => {
+    const r = buildCardDescription('seo-performance', agg({
+      readiness: 'healthy',
+      highlights: ['Strong title tags across all pages'],
+    }), {
+      auditStatus: 'ok',
+      performanceScore: 85,
+      aiVisibilityScore: 82,
+      llmsTxtFound: true,
+      schemaTypesCount: 2,
+    });
+    assert.equal(r.dominantSignal?.id, 'ai-visibility-strong');
+    assert.match(r.description, /AI discovery signals are in a good place/i);
+    assert.match(r.description, /82\/100/i);
   });
 
   test('strength selected when readiness is healthy', () => {
@@ -172,6 +293,71 @@ describe('buildCardDescription — seo-performance', () => {
     }));
     assert.notEqual(r.dominantSignal?.id, 'psi-data-unavailable');
     assert.equal(r.dominantSignal?.type, 'strength');
+  });
+
+  test('auditStatus=error takes priority over analyzer issue copy', () => {
+    const r = buildCardDescription('seo-performance', agg({
+      readiness: 'critical',
+      findings: [finding('critical', 'LCP too slow', 'Page takes 43.7s to load.')],
+    }), {
+      auditStatus: 'error',
+      failureCode: 'timeout_origin_slow',
+      failureReason: 'The page was reachable, but the audit timed out before Lighthouse could finish rendering it.',
+    });
+    assert.equal(r.dominantSignal?.type, 'audit-state');
+    assert.equal(r.dominantSignal?.id, 'timeout_origin_slow');
+    assert.match(r.description, /timed out/i);
+  });
+
+  test('auditStatus=partial takes priority over analyzer issue copy', () => {
+    const r = buildCardDescription('seo-performance', agg({
+      readiness: 'critical',
+      findings: [finding('critical', 'Missing meta description', 'Meta description is blank.')],
+    }), {
+      auditStatus: 'partial',
+      failureReason: 'The site returned only partial Lighthouse data.',
+    });
+    assert.equal(r.dominantSignal?.type, 'audit-state');
+    assert.match(r.description, /partial/i);
+  });
+
+  test('arweave gateway sites lead with delivery context and remediation', () => {
+    const r = buildCardDescription('seo-performance', agg({
+      readiness: 'critical',
+      findings: [finding('critical', 'LCP too slow', 'Page takes 34.7s to load.')],
+    }), {
+      auditStatus: 'ok',
+      hostType: 'arweave-gateway',
+      redirectCount: 1,
+      requestedUrl: 'https://www.undergroundexistence.info/',
+      finalUrl: 'https://runne4eoaopdqg76c4e4soaeuvvyjgevvpdt5viyib5u4xxjd5pa.arweave.net/site/index.html',
+      metaDescriptionPresent: false,
+      schemaTypesCount: 0,
+      llmsTxtFound: false,
+    });
+    assert.equal(r.dominantSignal?.type, 'hosting-context');
+    assert.equal(r.dominantSignal?.id, 'gateway-hosted-context');
+    assert.match(r.description, /Arweave gateway/i);
+    assert.match(r.description, /missing meta description/i);
+    assert.match(r.description, /test the final URL directly/i);
+  });
+
+  test('forwarded domains explain destination-url caveat before issue copy', () => {
+    const r = buildCardDescription('seo-performance', agg({
+      readiness: 'critical',
+      findings: [finding('critical', 'LCP too slow', 'Page takes 12s to load.')],
+    }), {
+      auditStatus: 'ok',
+      redirectCount: 2,
+      requestedUrl: 'https://brand.example/',
+      finalUrl: 'https://www.brand.example/home',
+      canonicalPresent: false,
+    });
+    assert.equal(r.dominantSignal?.type, 'hosting-context');
+    assert.equal(r.dominantSignal?.id, 'forwarded-domain-context');
+    assert.match(r.description, /forwards to a different final URL/i);
+    assert.match(r.description, /canonical URL/i);
+    assert.match(r.description, /Audit the resolved URL directly/i);
   });
 });
 
@@ -209,6 +395,9 @@ describe('buildCardDescription — social-preview', () => {
     const r = buildCardDescription('social-preview', agg({ readiness: 'healthy' }), {
       ogImage: true, ogTitle: 'My Site', ogDescription: 'Great site',
       canonical: 'https://example.com', favicon: true,
+      siteName: 'My Site',
+      ogImageAlt: 'Homepage preview',
+      themeColor: '#ffffff',
     });
     assert.equal(r.dominantSignal.id, 'social-complete');
     assert.equal(r.dominantSignal.type, 'strength');
@@ -220,6 +409,79 @@ describe('buildCardDescription — social-preview', () => {
       canonical: null, favicon: true,
     });
     assert.equal(r.dominantSignal.id, 'og-surface-missing');
+    assert.match(r.description, /share surface is mostly there/i);
+  });
+
+  test('secondary social metadata gaps produce a branded-surface warning', () => {
+    const r = buildCardDescription('social-preview', agg({ readiness: 'partial' }), {
+      ogImage: true,
+      ogTitle: 'My Site',
+      ogDescription: 'Great site',
+      canonical: 'https://example.com',
+      favicon: true,
+      siteName: null,
+      ogImageAlt: null,
+      themeColor: '#ffffff',
+    });
+    assert.equal(r.dominantSignal.id, 'social-branding-thin');
+    assert.match(r.description, /branded preview surface is still thin/i);
+    assert.match(r.description, /site name/i);
+  });
+});
+
+// ── audit-summary ────────────────────────────────────────────────────────────
+
+describe('buildCardDescription — audit-summary', () => {
+  test('thin baseline explains captured vs total signal count', () => {
+    const r = buildCardDescription('audit-summary', null, {
+      capturedCount: 21,
+      totalCount: 62,
+      missingCount: 41,
+      pagesCrawled: 0,
+      psiStatus: 'error',
+      weakestArea: 'PageSpeed',
+    });
+    assert.equal(r.dominantSignal.id, 'audit-baseline-thin');
+    assert.match(r.description, /21 of 62 onboarding signals/i);
+    assert.match(r.description, /baseline is still thin/i);
+  });
+
+  test('usable baseline calls out limited confidence when warnings remain', () => {
+    const r = buildCardDescription('audit-summary', null, {
+      capturedCount: 48,
+      totalCount: 62,
+      missingCount: 14,
+      pagesCrawled: 6,
+      warningCount: 2,
+      psiStatus: 'partial',
+      hasScreenshot: true,
+      hasMockup: true,
+      hasBrief: true,
+      hasIndustry: true,
+      hasBusinessModel: false,
+      weakestArea: 'AI visibility',
+    });
+    assert.equal(r.dominantSignal.id, 'audit-baseline-partial');
+    assert.match(r.description, /baseline is usable/i);
+    assert.match(r.description, /limited data/i);
+  });
+
+  test('strong baseline positions the run as ready to use', () => {
+    const r = buildCardDescription('audit-summary', null, {
+      capturedCount: 58,
+      totalCount: 62,
+      missingCount: 4,
+      pagesCrawled: 8,
+      warningCount: 0,
+      psiStatus: 'ok',
+      hasScreenshot: true,
+      hasMockup: true,
+      hasBrief: true,
+      hasIndustry: true,
+      hasBusinessModel: true,
+    });
+    assert.equal(r.dominantSignal.id, 'audit-baseline-strong');
+    assert.match(r.description, /strong baseline/i);
   });
 });
 
@@ -238,9 +500,45 @@ describe('buildCardDescription — multi-device-view', () => {
   });
 
   test('captureDone true + healthy → device-healthy strength', () => {
-    const r = buildCardDescription('multi-device-view', agg({ readiness: 'healthy' }), { captureDone: true });
+    const r = buildCardDescription('multi-device-view', agg({ readiness: 'healthy' }), {
+      captureDone: true,
+      screenshotCount: 3,
+      variantCount: 3,
+      hasDesktop: true,
+      hasTablet: true,
+      hasMobile: true,
+    });
     assert.equal(r.dominantSignal.id, 'device-healthy');
     assert.equal(r.dominantSignal.type, 'strength');
+  });
+
+  test('partial screenshot coverage explains missing device evidence', () => {
+    const r = buildCardDescription('multi-device-view', agg({ readiness: 'partial' }), {
+      captureDone: true,
+      screenshotCount: 2,
+      variantCount: 3,
+      hasDesktop: true,
+      hasTablet: false,
+      hasMobile: true,
+      hasMockup: true,
+    });
+    assert.equal(r.dominantSignal.id, 'device-coverage-partial');
+    assert.match(r.description, /2 of 3 device views/i);
+    assert.match(r.description, /tablet coverage is still missing/i);
+  });
+
+  test('mockup without underlying screenshots is treated as partial evidence', () => {
+    const r = buildCardDescription('multi-device-view', agg({ readiness: 'partial' }), {
+      captureDone: true,
+      screenshotCount: 0,
+      variantCount: 3,
+      hasDesktop: false,
+      hasTablet: false,
+      hasMobile: false,
+      hasMockup: true,
+    });
+    assert.equal(r.dominantSignal.id, 'mockup-only');
+    assert.match(r.description, /detailed screen captures are still missing/i);
   });
 });
 
@@ -283,6 +581,57 @@ describe('buildCardDescription — business-model', () => {
   });
 });
 
+// ── style-guide ──────────────────────────────────────────────────────────────
+
+describe('buildCardDescription — style-guide', () => {
+  test('missing core brand tokens → style-guide-thin issue signal', () => {
+    const r = buildCardDescription('style-guide', agg({ readiness: 'critical' }), {
+      headingFont: null,
+      bodyFont: null,
+      primaryColor: null,
+      neutralColor: null,
+    });
+    assert.equal(r.dominantSignal.id, 'style-guide-thin');
+    assert.match(r.description, /usable brand system did not come through/i);
+  });
+
+  test('style-guide copy sanitizes raw internal token ids', () => {
+    const r = buildCardDescription('style-guide', agg({
+      readiness: 'critical',
+      findings: [{ id: 'style', severity: 'critical', label: 'Body system mismatch', detail: 'Body system assigns _Montserrat_06ab3 to an inconsistent body typeface.' }],
+    }), {
+      headingFont: null,
+      bodyFont: null,
+      primaryColor: null,
+      neutralColor: null,
+    });
+    assert.doesNotMatch(r.description, /_Montserrat_06ab3/i);
+    assert.match(r.description, /Montserrat/i);
+  });
+
+  test('partial token coverage → style-guide-partial issue signal', () => {
+    const r = buildCardDescription('style-guide', agg({ readiness: 'partial' }), {
+      headingFont: 'Geist',
+      bodyFont: null,
+      primaryColor: '#111111',
+      neutralColor: null,
+    });
+    assert.equal(r.dominantSignal.id, 'style-guide-partial');
+    assert.match(r.description, /2 of 4 core brand tokens/i);
+  });
+
+  test('complete token coverage → style-guide-ready strength signal', () => {
+    const r = buildCardDescription('style-guide', agg({ readiness: 'healthy' }), {
+      headingFont: 'Geist',
+      bodyFont: 'Geist Sans',
+      primaryColor: '#111111',
+      neutralColor: '#f5f5f5',
+    });
+    assert.equal(r.dominantSignal.id, 'style-guide-ready');
+    assert.match(r.description, /4 of 4 key areas/i);
+  });
+});
+
 // ── industry ──────────────────────────────────────────────────────────────────
 
 describe('buildCardDescription — industry', () => {
@@ -292,12 +641,62 @@ describe('buildCardDescription — industry', () => {
     assert.ok(r.description.toLowerCase().includes('category') || r.description.toLowerCase().includes('vertical'));
   });
 
+  test('category without audience or positioning → industry-thin issue signal', () => {
+    const r = buildCardDescription('industry', agg({ readiness: 'partial' }), {
+      hasCategory: true,
+      categoryLabel: 'Legal Services',
+      targetAudience: null,
+      positioning: null,
+    });
+    assert.equal(r.dominantSignal.id, 'industry-thin');
+    assert.match(r.description, /buyer or positioning context is still thin/i);
+  });
+
   test('hasCategory true with label → industry-resolved strength signal', () => {
     const r = buildCardDescription('industry', agg({ readiness: 'healthy' }), {
-      hasCategory: true, categoryLabel: 'Legal Services',
+      hasCategory: true,
+      categoryLabel: 'Legal Services',
+      targetAudience: 'small law firms',
+      positioning: 'compliance-first intake platform',
     });
     assert.equal(r.dominantSignal.id, 'industry-resolved');
     assert.ok(r.description.includes('Legal Services'));
+  });
+});
+
+// ── priority-signal ──────────────────────────────────────────────────────────
+
+describe('buildCardDescription — priority-signal', () => {
+  test('missing next step → priority-missing issue signal', () => {
+    const r = buildCardDescription('priority-signal', agg({ readiness: 'critical' }), {
+      hasPriority: false,
+      focusLabel: null,
+      channelLabel: null,
+    });
+    assert.equal(r.dominantSignal.id, 'priority-missing');
+    assert.match(r.description, /No validated next step/i);
+  });
+
+  test('next step without channel → partial priority-ready signal', () => {
+    const r = buildCardDescription('priority-signal', agg({ readiness: 'partial' }), {
+      hasPriority: true,
+      focusLabel: 'Fix conversion CTA clarity',
+      channelLabel: null,
+    });
+    assert.equal(r.dominantSignal.id, 'priority-ready');
+    assert.equal(r.dominantSignal.readiness, 'partial');
+    assert.match(r.description, /execution channel is still broad/i);
+  });
+
+  test('next step with channel → healthy priority-ready signal', () => {
+    const r = buildCardDescription('priority-signal', agg({ readiness: 'healthy' }), {
+      hasPriority: true,
+      focusLabel: 'Fix conversion CTA clarity',
+      channelLabel: 'landing page · email',
+    });
+    assert.equal(r.dominantSignal.id, 'priority-ready');
+    assert.equal(r.dominantSignal.readiness, 'healthy');
+    assert.match(r.description, /landing page · email/i);
   });
 });
 

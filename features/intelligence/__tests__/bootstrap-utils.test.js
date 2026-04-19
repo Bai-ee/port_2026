@@ -72,6 +72,25 @@ function makePsiSource(overrides) {
       thirdParties:    [],
       lighthouseMeta:  { lighthouseVersion: '11.0.0', totalDurationMs: 34200, warnings: [] },
       runtimeError:    null,
+      diagnosticsContext: {
+        inputUrl: 'https://example.com',
+        resolvedUrl: 'https://www.example.com',
+        redirectCount: 1,
+        redirectChain: [{ status: 301, from: 'https://example.com', to: 'https://www.example.com' }],
+        hostType: 'standard',
+        httpStatus: 200,
+        contentType: 'text/html; charset=utf-8',
+        server: 'nginx',
+        blockedBy: null,
+        probeStatus: 'ok',
+        probeErrorCode: null,
+        probeError: null,
+        failureCode: null,
+        failureClass: null,
+        failureReason: null,
+        runtimeErrorCode: null,
+        runtimeErrorMessage: null,
+      },
       auditStatus:     'ok',
     },
     nextRefreshHint: 'manual',
@@ -119,6 +138,35 @@ test('meta is mapped from facts.lighthouseMeta', () => {
   const src    = makePsiSource();
   const result = psiSourceToDashboardSeoAudit(src, '');
   assert.ok(result.meta?.lighthouseVersion === '11.0.0');
+});
+
+test('diagnosticsContext is mapped from live source facts', () => {
+  const src = makePsiSource();
+  const result = psiSourceToDashboardSeoAudit(src, '');
+  assert.strictEqual(result.diagnosticsContext?.resolvedUrl, 'https://www.example.com');
+  assert.strictEqual(result.diagnosticsContext?.redirectCount, 1);
+});
+
+test('error source preserves diagnosticsContext for dashboard rendering', () => {
+  const src = makePsiSource({
+    status: 'error',
+    error: 'timeout',
+    facts: {
+      websiteUrl: 'https://example.com',
+      diagnosticsContext: {
+        failureCode: 'timeout_origin_slow',
+        failureClass: 'measurement',
+        failureReason: 'The page was reachable, but the audit timed out before Lighthouse could finish rendering it.',
+        resolvedUrl: 'https://example.com',
+        hostType: 'standard',
+        redirectCount: 0,
+      },
+    },
+  });
+  const result = psiSourceToDashboardSeoAudit(src, 'https://fallback.com');
+  assert.strictEqual(result.status, 'error');
+  assert.strictEqual(result.diagnosticsContext?.failureCode, 'timeout_origin_slow');
+  assert.match(result.diagnosticsContext?.failureReason || '', /timed out/i);
 });
 
 // ── buildIntelligencePayload ──────────────────────────────────────────────────
@@ -175,4 +223,3 @@ test('sources map keyed by source id', () => {
   const p   = buildIntelligencePayload(null, [src], '');
   assert.ok('pagespeed-insights' in p.sources);
 });
-

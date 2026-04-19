@@ -29,8 +29,8 @@
 - **Synth failure or timeout** → `synthesisResult.intake = null` + warning `synthesize_failed`. Downstream stages accept null gracefully.
 - **Style-guide failure or timeout** → styleGuide = null + warning `style_guide_extraction_failed`.
 - **Scout-config failure** → scoutConfig = null + warning `scout_config_failed`.
-- **PSI failure or timeout** → pagespeed = null + warning `pagespeed_failed`. Skills receive `intel.pagespeed: null` and must handle it.
-- **PSI skipped (no key / flag off)** → pagespeed = null + warning `pagespeed_skipped`.
+- **PSI failure or timeout** → `pagespeed` is now an error `SourceRecord` with `facts.diagnosticsContext` and a warning code prefixed `pagespeed_failed_*`. Skills receive `intel.pagespeed.auditStatus = 'error'` plus structured failure context.
+- **PSI skipped (no key / flag off)** → warning code prefixed `pagespeed_skipped_*`.
 - **Skill failure or timeout** → empty analyzerOutputs + warning `skill_failed` with the skill id.
 - **Scribe failure or timeout** → scribeResult = null + warning `scribe_failed`. Cards fall back to static copy from `card-static-copy.js`.
 - **Normalize failure** → builds a minimal succeeded result from whatever was captured + warning `normalize_failed`.

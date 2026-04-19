@@ -26,6 +26,7 @@ import OnboardingChatModal from './onboarding/OnboardingChatModal';
 import onboardingConfig from './onboarding/questions.config.cjs';
 import { buildSolutionsList, resolveSolution } from './features/scout-intake/solutions-catalog.mjs';
 import { resolveAnalyzerSource, buildCardDescription } from './features/scout-intake/card-description-builder.mjs';
+import { deriveFindings } from './features/scout-intake/derived-findings.mjs';
 
 // Entry-flow survey surfaces every question step (excludes the summary, which
 // is added in Phase 4). Ordered by the `order` field in questions.config.cjs.
@@ -93,6 +94,18 @@ const SG_MOCK = {
     scrollPatterns: ['GSAP ScrollTrigger'], prefersReducedMotion: true,
   },
 };
+
+function sanitizeStylePreviewLabel(value) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  return text
+    .replace(/[_-]?[A-Za-z]+_[0-9a-f]{4,}\b/gi, (match) => {
+      const cleaned = match.replace(/^[_-]+/, '').split('_')[0];
+      return cleaned || '';
+    })
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
 
 // Compute SVG cubic-bezier path: (0,h) → (w,0), SVG y-down so (1-y) flips.
 // roundTrip=true appends the reversed bezier C so the dot travels forward then
@@ -1069,6 +1082,7 @@ const DashboardPage = () => {
   const [showTierModal, setShowTierModal] = useState(false);
   const [activeTileModal, setActiveTileModal] = useState(null);
   const [briefFullScreen, setBriefFullScreen] = useState(false);
+  const [auditFullScreen, setAuditFullScreen] = useState(false);
   const [modalTab, setModalTab] = useState('solutions');
   const [activeCapabilityFilter, setActiveCapabilityFilter] = useState('brief');
   const [chatDraft, setChatDraft] = useState('');
@@ -1254,6 +1268,7 @@ const DashboardPage = () => {
   const brandOverview = snapshot?.brandOverview || null;
   const brandTone = snapshot?.brandTone || null;
   const siteMeta = dashboardState?.siteMeta || null;
+  const evidencePages = dashboardState?.evidence?.pages || [];
   const visualIdentity  = snapshot?.visualIdentity || null;
   const styleGuideData  = visualIdentity?.styleGuide ?? null;
   const sgDisplayData   = styleGuideData || null;
@@ -1263,15 +1278,19 @@ const DashboardPage = () => {
   // the modal description is overridden with scribe.expanded. Absent → static
   // fallback copy already defined on each intakeCapabilityCards entry.
   const scribeCards = dashboardState?.scribe?.cards || null;
+  const seoGuardianState = dashboardState?.scribe?.seoGuardian || null;
   // Per-card analyzer skill outputs (P3 shape: { skills, aggregate }). Null when
   // no skill is wired for the card. Consumed by the modal analyzer-findings
   // section (P7).
   const analyzerOutputs = dashboardState?.analyzerOutputs || null;
+  const seoAnalyzerCard = analyzerOutputs?.['seo-performance'] || null;
+  const seoDepthAudit = seoAnalyzerCard?.skills?.['seo-depth-audit'] ?? null;
+  const aiSeoAudit = seoAnalyzerCard?.skills?.['ai-seo-audit'] ?? null;
   const briefPdfUrl = dashboardState?.artifacts?.briefPdf?.downloadUrl || null;
   // Intelligence-first SEO data: prefer intelligence source, fall back to dashboardState.seoAudit
   const intelligencePayload = bootstrap.intelligence || null;
   const seoAudit = intelligencePayload?.dashboardSeoAudit ?? dashboardState?.seoAudit ?? null;
-  const aiVisibility = analyzerOutputs?.['seo-performance']?.skills?.['ai-seo-audit']?.aiVisibility ?? null;
+  const aiVisibility = aiSeoAudit?.aiVisibility ?? null;
   const isFromIntelligence  = Boolean(intelligencePayload?.dashboardSeoAudit != null);
   const intelligenceSummary = intelligencePayload?.psiSummary || null;
   const psiNarrative        = intelligencePayload?.psiNarrative || null;
@@ -1989,6 +2008,74 @@ const DashboardPage = () => {
   const isSeoQueued   = seoCardState === 'queued';
   const isSeoError    = seoCardState === 'error';
   const isSeoPartial  = seoCardState === 'partial';
+  const seoDiag = seoAudit?.diagnosticsContext || null;
+  const seoRunWarnings = Array.isArray(currentRun?.warnings)
+    ? currentRun.warnings.filter((w) => w?.stage === 'psi')
+    : [];
+  const aiSeoRunWarnings = Array.isArray(currentRun?.warnings)
+    ? currentRun.warnings.filter((w) => w?.stage === 'ai-seo')
+    : [];
+  const skillRunWarnings = Array.isArray(currentRun?.warnings)
+    ? currentRun.warnings.filter((w) => w?.stage === 'skills')
+    : [];
+  const scribeRunWarnings = Array.isArray(currentRun?.warnings)
+    ? currentRun.warnings.filter((w) => w?.stage === 'scribe')
+    : [];
+  const seoHostTypeLabel = seoDiag?.hostType
+    ? seoDiag.hostType
+        .replace(/-/g, ' ')
+        .replace(/\b\w/g, (m) => m.toUpperCase())
+    : null;
+  const seoHostServiceLabel = seoDiag?.hostService || null;
+  const seoHostingProviderLabel = seoDiag?.hostingProvider || null;
+  const seoProviderConfidence = seoDiag?.providerConfidence || null;
+  const seoBusinessModelText = String(resolvedBusinessModel || '').toLowerCase();
+  const seoHasCommerceModel = /e-?commerce|retail|store|shop|checkout|cart|product|marketplace|shopify|catalog/.test(seoBusinessModelText);
+  const seoProviderNote = (() => {
+    if (!seoHostingProviderLabel || seoProviderConfidence !== 'high') return null;
+    if (seoHostingProviderLabel === 'Vercel' || seoHostingProviderLabel === 'Netlify' || seoHostingProviderLabel === 'Cloudflare Pages' || seoHostingProviderLabel === 'GitHub Pages') {
+      return null;
+    }
+    if (seoHostingProviderLabel === 'Wix' || seoHostingProviderLabel === 'Squarespace' || seoHostingProviderLabel === 'GoDaddy') {
+      if (!seoHasCommerceModel) {
+        return `This site also appears to be built on ${seoHostingProviderLabel}. If you are not using its store or booking features, a lighter stack may cut recurring cost and give you more control.`;
+      }
+      return `This site also appears to be built on ${seoHostingProviderLabel}, so some structure and template constraints may come from the platform itself.`;
+    }
+    if (seoHostingProviderLabel === 'Shopify') {
+      return 'This site appears to be built on Shopify, which usually makes sense when the business depends on built-in cart and checkout flows.';
+    }
+    return `This site also appears to be served from ${seoHostingProviderLabel}.`;
+  })();
+  const seoProviderTileNote = (() => {
+    if (!seoHostingProviderLabel || seoProviderConfidence !== 'high') return null;
+    if (seoHostingProviderLabel === 'Vercel' || seoHostingProviderLabel === 'Netlify' || seoHostingProviderLabel === 'Cloudflare Pages' || seoHostingProviderLabel === 'GitHub Pages') {
+      return null;
+    }
+    if (seoHostingProviderLabel === 'Shopify') {
+      return 'Built on Shopify, so some structure comes from its commerce platform.';
+    }
+    if (seoHostingProviderLabel === 'Wix' || seoHostingProviderLabel === 'Squarespace' || seoHostingProviderLabel === 'GoDaddy') {
+      return `Built on ${seoHostingProviderLabel}, so some layout and template constraints may come from the platform itself.`;
+    }
+    return `Built on ${seoHostingProviderLabel}.`;
+  })();
+  const formatLogScalar = (value) => {
+    if (value == null || value === '') return '—';
+    if (typeof value === 'boolean') return value ? 'true' : 'false';
+    if (typeof value === 'number') return String(value);
+    if (typeof value === 'string') return value;
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  };
+  const formatLogList = (list, mapper = (item) => item) => {
+    if (!Array.isArray(list) || !list.length) return '—';
+    return list.map((item) => mapper(item)).filter(Boolean).join(' | ') || '—';
+  };
+  const countSeverity = (items, severity) => Array.isArray(items) ? items.filter((item) => item?.severity === severity).length : 0;
 
   // Derive rows for seo-performance card
   const seoAuditRows = (() => {
@@ -2000,12 +2087,34 @@ const DashboardPage = () => {
     }
     if (seoCardState === 'error') {
       const errMsg = seoAudit?.error || 'PageSpeed audit failed.';
-      return [
+      const rows = [
         { key: 'status', label: 'Status', value: 'Audit failed — retry available' },
         { key: 'target', label: 'Target', value: seoAudit?.websiteUrl || client?.websiteUrl || '—' },
-        { key: 'error', label: 'Error', value: errMsg.length > 140 ? `${errMsg.slice(0, 137)}…` : errMsg },
-        { key: 'strategy', label: 'Strategy', value: 'Mobile · PageSpeed Insights' },
       ];
+      if (seoDiag?.failureReason) rows.push({ key: 'cause', label: 'Cause', value: seoDiag.failureReason });
+      if (seoDiag?.resolvedUrl && seoDiag.resolvedUrl !== (seoAudit?.websiteUrl || client?.websiteUrl || '')) {
+        rows.push({ key: 'resolved', label: 'Resolved URL', value: seoDiag.resolvedUrl });
+      }
+      if (seoHostServiceLabel) {
+        rows.push({ key: 'host-service', label: 'Hosting service', value: seoHostServiceLabel });
+      }
+      if (seoHostingProviderLabel) {
+        rows.push({ key: 'hosting-provider', label: 'Hosting provider', value: seoHostingProviderLabel });
+      }
+      if (seoProviderConfidence) {
+        rows.push({ key: 'provider-confidence', label: 'Provider confidence', value: seoProviderConfidence });
+      }
+      if (seoHostTypeLabel && seoHostTypeLabel !== 'Standard') {
+        rows.push({ key: 'host-type', label: 'Host type', value: seoHostTypeLabel });
+      }
+      if (seoDiag?.redirectCount) rows.push({ key: 'redirects', label: 'Redirects', value: String(seoDiag.redirectCount) });
+      if (seoDiag?.httpStatus != null) rows.push({ key: 'http-status', label: 'HTTP status', value: String(seoDiag.httpStatus) });
+      if (seoDiag?.blockedBy) rows.push({ key: 'blocked-by', label: 'Blocked by', value: seoDiag.blockedBy });
+      rows.push({ key: 'error', label: 'Error', value: errMsg.length > 140 ? `${errMsg.slice(0, 137)}…` : errMsg });
+      rows.push(
+        { key: 'strategy', label: 'Strategy', value: 'Mobile · PageSpeed Insights' },
+      );
+      return rows;
     }
     if (seoCardState === 'no-url') {
       return buildWorkNeededRows('No website URL on file. Submit a URL to trigger the PageSpeed audit.');
@@ -2021,6 +2130,16 @@ const DashboardPage = () => {
     if (isFromIntelligence && intelligenceSummary) {
       rows.push({ key: 'hdr-analysis', label: '── ANALYSIS ──', isHeader: true, id: 'seo-audit-analysis' });
       rows.push({ key: 'analysis-summary', label: 'Assessment', value: intelligenceSummary });
+      if (seoHostingProviderLabel) {
+        rows.push({
+          key: 'analysis-provider',
+          label: 'Platform',
+          value: `${seoHostingProviderLabel}${seoProviderConfidence ? ` (${seoProviderConfidence} confidence)` : ''}`,
+        });
+      }
+      if (seoProviderNote) {
+        rows.push({ key: 'analysis-provider-note', label: 'Provider note', value: seoProviderNote });
+      }
     }
 
     // ── PARTIAL NOTICE ──
@@ -2029,6 +2148,16 @@ const DashboardPage = () => {
       const rtMsg  = seoAudit.runtimeError?.message || 'Lighthouse could not fully load the page.';
       rows.push({ key: 'hdr-partial', label: '── PARTIAL AUDIT ──', isHeader: true, id: 'seo-audit-partial' });
       rows.push({ key: 'partial-notice', label: 'Notice', value: 'Diagnostic data unavailable — scores and CWV may be incomplete', isFailing: true });
+      if (seoDiag?.failureReason) rows.push({ key: 'partial-cause', label: 'Cause', value: seoDiag.failureReason });
+      if (seoDiag?.resolvedUrl && seoDiag.resolvedUrl !== (seoAudit?.websiteUrl || client?.websiteUrl || '')) {
+        rows.push({ key: 'partial-resolved', label: 'Resolved URL', value: seoDiag.resolvedUrl });
+      }
+      if (seoHostingProviderLabel) rows.push({ key: 'partial-provider', label: 'Hosting provider', value: seoHostingProviderLabel });
+      if (seoProviderConfidence) rows.push({ key: 'partial-provider-confidence', label: 'Provider confidence', value: seoProviderConfidence });
+      if (seoHostTypeLabel && seoHostTypeLabel !== 'Standard') {
+        rows.push({ key: 'partial-host-type', label: 'Host type', value: seoHostTypeLabel });
+      }
+      if (seoDiag?.redirectCount) rows.push({ key: 'partial-redirects', label: 'Redirects', value: String(seoDiag.redirectCount) });
       rows.push({ key: 'partial-code', label: 'Error code', value: rtCode });
       rows.push({ key: 'partial-msg',  label: 'Detail', value: rtMsg.length > 140 ? `${rtMsg.slice(0, 137)}…` : rtMsg });
     }
@@ -2145,7 +2274,143 @@ const DashboardPage = () => {
     }
     if (meta?.lighthouseVersion)       rows.push({ key: 'meta-lh',  label: 'Lighthouse',     value: meta.lighthouseVersion });
     if (meta?.totalDurationMs != null) rows.push({ key: 'meta-dur', label: 'Audit duration', value: `${(meta.totalDurationMs / 1000).toFixed(1)}s` });
+    if (seoDiag?.resolvedUrl && seoDiag.resolvedUrl !== (seoAudit?.websiteUrl || client?.websiteUrl || '')) {
+      rows.push({ key: 'meta-resolved-url', label: 'Resolved URL', value: seoDiag.resolvedUrl });
+    }
+    rows.push({ key: 'meta-host-service', label: 'Hosting service', value: formatLogScalar(seoDiag?.hostService) });
+    rows.push({ key: 'meta-hosting-provider', label: 'Hosting provider', value: formatLogScalar(seoDiag?.hostingProvider) });
+    rows.push({ key: 'meta-provider-kind', label: 'Provider kind', value: formatLogScalar(seoDiag?.providerKind) });
+    rows.push({ key: 'meta-provider-confidence', label: 'Provider confidence', value: formatLogScalar(seoDiag?.providerConfidence) });
+    if (seoHostTypeLabel && seoHostTypeLabel !== 'Standard') {
+      rows.push({ key: 'meta-host-type', label: 'Host type', value: seoHostTypeLabel });
+    }
+    if (seoDiag?.redirectCount) rows.push({ key: 'meta-redirects', label: 'Redirects', value: String(seoDiag.redirectCount) });
     rows.push({ key: 'meta-warn', label: 'Warnings', value: meta?.warnings?.length ? meta.warnings.join(' · ') : '—' });
+
+    // ── RUN MICRO LOG ──
+    rows.push({ key: 'hdr-run-micro-log', label: '── RUN MICRO LOG ──', isHeader: true, id: 'seo-audit-run-micro-log' });
+    rows.push({ key: 'run-status', label: 'Run status', value: formatLogScalar(currentRun?.status || latestRunStatus) });
+    rows.push({ key: 'run-source-url', label: 'Run source URL', value: formatLogScalar(currentRun?.sourceUrl || client?.websiteUrl) });
+    rows.push({ key: 'run-error-message', label: 'Run error', value: formatLogScalar(currentRun?.error?.message || errorState?.message) });
+    rows.push({ key: 'run-psi-warning-codes', label: 'PSI warning codes', value: formatLogList(seoRunWarnings, (w) => w?.code) });
+    rows.push({ key: 'run-psi-warning-msgs', label: 'PSI warning messages', value: formatLogList(seoRunWarnings, (w) => w?.message) });
+    rows.push({
+      key: 'run-psi-warning-details',
+      label: 'PSI warning details',
+      value: formatLogList(seoRunWarnings, (w) => {
+        const d = w?.details;
+        if (!d) return null;
+        return [
+          d.failureCode,
+          d.failureClass,
+          d.httpStatus != null ? `http=${d.httpStatus}` : null,
+          d.hostType ? `host=${d.hostType}` : null,
+          d.hostingProvider ? `provider=${d.hostingProvider}` : null,
+          d.providerConfidence ? `confidence=${d.providerConfidence}` : null,
+          d.redirectCount != null ? `redirects=${d.redirectCount}` : null,
+        ].filter(Boolean).join(' · ');
+      }),
+    });
+    rows.push({ key: 'run-psi-audit-status', label: 'PSI audit status', value: formatLogScalar(seoAudit?.status) });
+    rows.push({
+      key: 'run-psi-data-presence',
+      label: 'PSI data presence',
+      value: [
+        `scores:${seoAudit?.scores ? 'yes' : 'no'}`,
+        `cwv:${seoAudit?.coreWebVitals || seoAudit?.labCoreWebVitals ? 'yes' : 'no'}`,
+        `opps:${seoAudit?.opportunities?.length ?? 0}`,
+        `flags:${seoAudit?.seoRedFlags?.length ?? 0}`,
+        `diag:${seoAudit?.diagnostics?.length ?? 0}`,
+      ].join(' · '),
+    });
+    rows.push({ key: 'run-psi-failure-code', label: 'Failure code', value: formatLogScalar(seoDiag?.failureCode) });
+    rows.push({ key: 'run-psi-failure-class', label: 'Failure class', value: formatLogScalar(seoDiag?.failureClass) });
+    rows.push({ key: 'run-psi-failure-reason', label: 'Failure reason', value: formatLogScalar(seoDiag?.failureReason || seoAudit?.error) });
+    rows.push({ key: 'run-psi-input-url', label: 'Input URL', value: formatLogScalar(seoDiag?.inputUrl || client?.websiteUrl) });
+    rows.push({ key: 'run-psi-requested-url', label: 'Requested URL', value: formatLogScalar(meta?.requestedUrl) });
+    rows.push({ key: 'run-psi-final-url', label: 'Final URL', value: formatLogScalar(meta?.finalUrl) });
+    rows.push({ key: 'run-psi-displayed-url', label: 'Displayed URL', value: formatLogScalar(meta?.finalDisplayedUrl) });
+    rows.push({ key: 'run-psi-resolved-url', label: 'Probe resolved URL', value: formatLogScalar(seoDiag?.resolvedUrl) });
+    rows.push({ key: 'run-psi-http-status', label: 'Probe HTTP status', value: formatLogScalar(seoDiag?.httpStatus) });
+    rows.push({ key: 'run-psi-content-type', label: 'Content type', value: formatLogScalar(seoDiag?.contentType) });
+    rows.push({ key: 'run-psi-server', label: 'Server', value: formatLogScalar(seoDiag?.server) });
+    rows.push({ key: 'run-psi-host-service', label: 'Hosting service', value: formatLogScalar(seoDiag?.hostService) });
+    rows.push({ key: 'run-psi-hosting-provider', label: 'Hosting provider', value: formatLogScalar(seoDiag?.hostingProvider) });
+    rows.push({ key: 'run-psi-provider-kind', label: 'Provider kind', value: formatLogScalar(seoDiag?.providerKind) });
+    rows.push({ key: 'run-psi-provider-confidence', label: 'Provider confidence', value: formatLogScalar(seoDiag?.providerConfidence) });
+    rows.push({ key: 'run-psi-provider-evidence', label: 'Provider evidence', value: formatLogList(seoDiag?.providerEvidence) });
+    rows.push({ key: 'run-psi-host-type', label: 'Host type', value: formatLogScalar(seoDiag?.hostType) });
+    rows.push({ key: 'run-psi-blocked-by', label: 'Blocked by', value: formatLogScalar(seoDiag?.blockedBy) });
+    rows.push({ key: 'run-psi-probe-status', label: 'Probe status', value: formatLogScalar(seoDiag?.probeStatus) });
+    rows.push({ key: 'run-psi-probe-error-code', label: 'Probe error code', value: formatLogScalar(seoDiag?.probeErrorCode) });
+    rows.push({ key: 'run-psi-probe-error', label: 'Probe error', value: formatLogScalar(seoDiag?.probeError) });
+    rows.push({ key: 'run-psi-redirect-count', label: 'Redirect count', value: formatLogScalar(seoDiag?.redirectCount) });
+    rows.push({
+      key: 'run-psi-redirect-chain',
+      label: 'Redirect chain',
+      value: formatLogList(seoDiag?.redirectChain, (hop) => hop ? `${hop.status || '?'} ${hop.from || '—'} -> ${hop.to || '—'}` : null),
+    });
+    rows.push({ key: 'run-psi-runtime-code', label: 'Runtime error code', value: formatLogScalar(seoAudit?.runtimeError?.code || seoDiag?.runtimeErrorCode) });
+    rows.push({ key: 'run-psi-runtime-msg', label: 'Runtime error message', value: formatLogScalar(seoAudit?.runtimeError?.message || seoDiag?.runtimeErrorMessage) });
+    rows.push({ key: 'run-psi-fetch-time', label: 'Fetch time', value: formatLogScalar(meta?.fetchTime) });
+    rows.push({ key: 'run-psi-duration-ms', label: 'Duration ms', value: formatLogScalar(meta?.totalDurationMs) });
+    rows.push({ key: 'run-psi-lh-version', label: 'Lighthouse version', value: formatLogScalar(meta?.lighthouseVersion) });
+    rows.push({ key: 'run-psi-meta-warnings', label: 'Lighthouse warnings', value: formatLogList(meta?.warnings) });
+    rows.push({
+      key: 'run-psi-opportunities',
+      label: 'Top opportunities',
+      value: formatLogList((seoAudit?.opportunities || []).slice(0, 5), (op) => op?.title ? `${op.title} (${op.savingsMs ?? '—'}ms)` : null),
+    });
+    rows.push({
+      key: 'run-psi-flag-ids',
+      label: 'SEO red flags',
+      value: formatLogList(seoAudit?.seoRedFlags, (flag) => typeof flag === 'string' ? flag : flag?.id),
+    });
+    rows.push({
+      key: 'run-psi-diagnostic-ids',
+      label: 'Diagnostic ids',
+      value: formatLogList(seoAudit?.diagnostics, (d) => d?.id),
+    });
+
+    // ── AI TRACE ──
+    rows.push({ key: 'hdr-ai-trace', label: '── AI TRACE ──', isHeader: true, id: 'seo-audit-ai-trace' });
+    rows.push({ key: 'ai-synth-model', label: 'Synthesis model', value: formatLogScalar(currentRun?.providerUsage?.model) });
+    rows.push({ key: 'ai-synth-input', label: 'Synthesis input tokens', value: formatLogScalar(currentRun?.providerUsage?.inputTokens) });
+    rows.push({ key: 'ai-synth-output', label: 'Synthesis output tokens', value: formatLogScalar(currentRun?.providerUsage?.outputTokens) });
+    rows.push({ key: 'ai-synth-cost', label: 'Synthesis cost USD', value: formatLogScalar(currentRun?.providerUsage?.estimatedCostUsd) });
+    rows.push({ key: 'ai-seo-run-at', label: 'AI SEO audited at', value: formatLogScalar(aiSeoAudit?.runAt) });
+    rows.push({ key: 'ai-seo-model', label: 'AI SEO engine', value: formatLogScalar(aiSeoAudit?.metadata?.model) });
+    rows.push({ key: 'ai-seo-cost', label: 'AI SEO cost USD', value: formatLogScalar(aiSeoAudit?.metadata?.estimatedCostUsd) });
+    rows.push({ key: 'ai-seo-score', label: 'AI SEO score', value: formatLogScalar(aiVisibility?.score) });
+    rows.push({ key: 'ai-seo-grade', label: 'AI SEO grade', value: formatLogScalar(aiVisibility?.letterGrade) });
+    rows.push({ key: 'ai-seo-sections', label: 'AI SEO sections', value: formatLogList(aiVisibility?.sections ? Object.entries(aiVisibility.sections) : [], ([key, section]) => `${key}:${section?.score ?? '—'}(${section?.status ?? '—'})`) });
+    rows.push({ key: 'ai-seo-findings-critical', label: 'AI SEO critical findings', value: formatLogScalar(countSeverity(aiSeoAudit?.findings, 'critical')) });
+    rows.push({ key: 'ai-seo-findings-warning', label: 'AI SEO warning findings', value: formatLogScalar(countSeverity(aiSeoAudit?.findings, 'warning')) });
+    rows.push({ key: 'ai-seo-gaps', label: 'AI SEO triggered gaps', value: formatLogScalar(Array.isArray(aiSeoAudit?.gaps) ? aiSeoAudit.gaps.filter((g) => g?.triggered).length : null) });
+    rows.push({ key: 'ai-seo-highlights', label: 'AI SEO highlights', value: formatLogList(aiSeoAudit?.highlights) });
+    rows.push({ key: 'ai-seo-schema-types', label: 'AI SEO schema types', value: formatLogList(aiSeoAudit?.rawSignals?.schema?.types) });
+    rows.push({ key: 'ai-seo-robots-blocked', label: 'AI bots blocked', value: formatLogList(aiSeoAudit?.rawSignals?.robotsAi?.blockedBots, (bot) => bot?.name || bot?.id) });
+    rows.push({ key: 'ai-seo-llms-found', label: 'llms.txt found', value: formatLogScalar(aiSeoAudit?.rawSignals?.llmsTxt?.found) });
+    rows.push({ key: 'ai-seo-wikidata', label: 'Wikidata entity', value: formatLogScalar(aiSeoAudit?.rawSignals?.entity?.qid || aiSeoAudit?.rawSignals?.entity?.wikidataUrl) });
+    rows.push({ key: 'ai-seo-tech-canonical', label: 'AI technical canonical', value: formatLogScalar(aiSeoAudit?.rawSignals?.technical?.canonical) });
+    rows.push({ key: 'ai-seo-tech-meta-desc', label: 'AI technical meta description', value: formatLogScalar(aiSeoAudit?.rawSignals?.technical?.metaDescription) });
+    rows.push({ key: 'ai-seo-warning-codes', label: 'AI SEO warning codes', value: formatLogList(aiSeoRunWarnings, (w) => w?.code) });
+    rows.push({ key: 'ai-seo-warning-msgs', label: 'AI SEO warning messages', value: formatLogList(aiSeoRunWarnings, (w) => w?.message) });
+    rows.push({ key: 'seo-skill-run-at', label: 'SEO depth skill runAt', value: formatLogScalar(seoDepthAudit?.runAt) });
+    rows.push({ key: 'seo-skill-model', label: 'SEO depth skill model', value: formatLogScalar(seoDepthAudit?.metadata?.model) });
+    rows.push({ key: 'seo-skill-cost', label: 'SEO depth skill cost USD', value: formatLogScalar(seoDepthAudit?.metadata?.estimatedCostUsd) });
+    rows.push({ key: 'seo-skill-readiness', label: 'SEO depth readiness', value: formatLogScalar(seoDepthAudit?.readiness || seoAnalyzerCard?.aggregate?.readiness) });
+    rows.push({ key: 'seo-skill-critical', label: 'SEO critical findings', value: formatLogScalar(countSeverity(seoDepthAudit?.findings, 'critical')) });
+    rows.push({ key: 'seo-skill-warning', label: 'SEO warning findings', value: formatLogScalar(countSeverity(seoDepthAudit?.findings, 'warning')) });
+    rows.push({ key: 'seo-skill-gap-count', label: 'SEO triggered gaps', value: formatLogScalar(Array.isArray(seoDepthAudit?.gaps) ? seoDepthAudit.gaps.filter((g) => g?.triggered).length : null) });
+    rows.push({ key: 'seo-skill-highlights', label: 'SEO skill highlights', value: formatLogList(seoDepthAudit?.highlights) });
+    rows.push({ key: 'seo-skill-warning-codes', label: 'Skill warning codes', value: formatLogList(skillRunWarnings, (w) => w?.code) });
+    rows.push({ key: 'seo-skill-warning-msgs', label: 'Skill warning messages', value: formatLogList(skillRunWarnings, (w) => w?.message) });
+    rows.push({ key: 'seo-scribe-warning-codes', label: 'Scribe warning codes', value: formatLogList(scribeRunWarnings, (w) => w?.code) });
+    rows.push({ key: 'seo-scribe-warning-msgs', label: 'Scribe warning messages', value: formatLogList(scribeRunWarnings, (w) => w?.message) });
+    rows.push({ key: 'seo-guardian-source', label: 'SEO guardian source', value: formatLogScalar(seoGuardianState?.source) });
+    rows.push({ key: 'seo-guardian-cost', label: 'SEO guardian cost USD', value: formatLogScalar(seoGuardianState?.runCostData?.estimatedCostUsd) });
+    rows.push({ key: 'seo-guardian-validation', label: 'SEO guardian validation', value: formatLogList(seoGuardianState?.validationErrors) });
 
     // ── AI VISIBILITY section ───────────────────────────────────────────────
     if (aiVisibility) {
@@ -2172,11 +2437,19 @@ const DashboardPage = () => {
     return rows;
   })();
 
+  const seoPrimaryLcp = seoAudit?.coreWebVitals?.lcp?.p75 != null
+    ? seoAudit.coreWebVitals.lcp
+    : seoAudit?.labCoreWebVitals?.lcp || null;
+
   const seoAuditDescription = (() => {
     if (seoCardState === 'queued')  return 'PageSpeed Insights audit is queued — mobile scores and Core Web Vitals will appear here.';
-    if (seoCardState === 'error')   return 'PageSpeed audit could not complete. Press Re-run to retry — details below.';
+    if (seoCardState === 'error')   return seoDiag?.failureReason
+      ? `${seoDiag.failureReason}${seoProviderNote ? ` ${seoProviderNote}` : ''} Re-run to retry after the access issue is fixed.`
+      : 'PageSpeed audit could not complete. Press Re-run to retry — details below.';
     if (seoCardState === 'no-url')  return buildUnavailableDescription('PageSpeed performance data');
-    if (seoCardState === 'partial') return 'Partial audit — Lighthouse could not fully load the page. Scores may be incomplete. Re-run to retry.';
+    if (seoCardState === 'partial') return seoDiag?.failureReason
+      ? `Partial audit — ${seoDiag.failureReason}${seoProviderNote ? ` ${seoProviderNote}` : ''} Scores may be incomplete.`
+      : 'Partial audit — Lighthouse could not fully load the page. Scores may be incomplete. Re-run to retry.';
     const { scores, opportunities, meta } = seoAudit;
     const parts = [];
     if (scores?.performance  != null) parts.push(`PERF ${scores.performance}`);
@@ -2186,11 +2459,12 @@ const DashboardPage = () => {
     const fixCount = opportunities?.length ?? 0;
     if (fixCount) parts.push(`${fixCount} fix${fixCount === 1 ? '' : 'es'}`);
     if (meta?.totalDurationMs != null) parts.push(`${(meta.totalDurationMs / 1000).toFixed(0)}s`);
+    if (seoHostingProviderLabel && seoProviderConfidence === 'high') parts.push(`built on ${seoHostingProviderLabel}`);
     return parts.join(' · ');
   })();
   const DETERMINISTIC_CARD_IDS = new Set([
-    'brief', 'multi-device-view', 'social-preview',
-    'business-model', 'seo-performance', 'industry', 'visibility-snapshot',
+    'audit-summary', 'brief', 'multi-device-view', 'social-preview',
+    'business-model', 'seo-performance', 'style-guide', 'industry', 'visibility-snapshot', 'priority-signal',
   ]);
 
   const intakeCapabilityCards = [
@@ -2223,20 +2497,34 @@ const DashboardPage = () => {
       category: 'onboarding',
       number: 'AS',
       label: 'AUDIT',
-      title: 'Audit Summary',
+      title: 'Data Summary',
       description: 'Your baseline across performance, SEO, and brand. Shows strengths and critical gaps.',
-      placeholderLabel: hasIntakeData ? 'AUDIT' : 'NO\nAUDIT',
-      rows: (() => {
+      ...(() => {
         const ok = (v) => v != null && v !== '' && v !== false;
-        const st = (v) => ok(v) ? '✓ Captured' : '✗ Missing';
-        const row = (key, label, v) => ({ key, label, status: st(v), tier: 'Onboarding', isAuditRow: true });
+        const st = (v) => ok(v) ? 'Captured' : 'Missing';
+        const row = (key, label, v, tierLevel = 1) => ({
+          key, label,
+          status: tierLevel > 1 ? 'Upgrade ↗' : st(v),
+          tier: tierLevel === 1 ? 'Onboarding' : tierLevel === 2 ? 'Weekly' : tierLevel === 3 ? 'Daily' : 'Pro',
+          isAuditRow: true,
+          _captured: tierLevel === 1 ? ok(v) : false,
+          isUpgrade: tierLevel > 1,
+        });
         const evidence = dashboardState?.snapshot ? true : false;
         const pages = dashboardState?.evidence?.pages || [];
         const homePage = pages[0] || null;
+        const scoutCfg = dashboardState?.scoutConfig || null;
+        const seoMeta = seoAudit?.meta || null;
+        const seoDiagnostics = seoAudit?.diagnosticsContext || null;
+        const runWarnings = Array.isArray(currentRun?.warnings) ? currentRun.warnings : [];
+        const psiWarnings = runWarnings.filter((w) => w?.stage === 'psi');
+        const aiSeoWarnings = runWarnings.filter((w) => w?.stage === 'ai-seo');
+        const skillsWarnings = runWarnings.filter((w) => w?.stage === 'skills');
+        const scribeWarnings = runWarnings.filter((w) => w?.stage === 'scribe');
+        const countSeverity = (items, severity) => Array.isArray(items) ? items.filter((item) => item?.severity === severity).length : 0;
 
-        return [
-          // ── COLUMN HEADER ──
-          { key: 'col-header', isAuditRow: true, isColumnHeader: true, label: 'DATA FIELD', status: 'STATUS', tier: 'TIER' },
+        const allRows = [
+          { key: 'col-header', isAuditRow: true, isColumnHeader: true, label: 'DATA FIELD', tier: 'TIER', status: 'STATUS' },
 
           // ── SITE EVIDENCE ──
           { key: 'sec-site', isHeader: true, label: 'SITE EVIDENCE' },
@@ -2252,7 +2540,7 @@ const DashboardPage = () => {
           row('site-social',       'Social links',      homePage?.socialLinks?.length),
           row('site-contact',      'Contact clues',     homePage?.contactClues?.length),
 
-          // ── SITE META (OG + BROWSER) ──
+          // ── SITE META ──
           { key: 'sec-meta', isHeader: true, label: 'SITE META · OG + BROWSER' },
           row('meta-og-title',     'og:title',          siteMeta?.title),
           row('meta-og-desc',      'og:description',    siteMeta?.description),
@@ -2266,14 +2554,38 @@ const DashboardPage = () => {
           row('meta-apple-icon',   'Apple touch icon',  siteMeta?.appleTouchIcon),
           row('meta-theme',        'Theme color',       siteMeta?.themeColor),
 
+          // ── AI SYNTHESIS ──
+          { key: 'sec-synth', isHeader: true, label: 'AI SYNTHESIS' },
+          row('synth-headline',    'Brand headline',    brandOverview?.headline),
+          row('synth-summary',     'Brand summary',     brandOverview?.summary),
+          row('synth-industry',    'Industry',          resolvedIndustry),
+          row('synth-model',       'Business model',    resolvedBusinessModel),
+          row('synth-audience',    'Target audience',   brandOverview?.targetAudience),
+          row('synth-positioning', 'Positioning',       brandOverview?.positioning),
+          row('synth-tone-pri',    'Tone (primary)',    brandTone?.primary),
+          row('synth-tone-sec',    'Tone (secondary)',  brandTone?.secondary),
+          row('synth-tone-tags',   'Tone tags',         brandTone?.tags?.length),
+
+          // ── STRATEGY ──
+          { key: 'sec-strategy', isHeader: true, label: 'STRATEGY' },
+          row('strat-post',        'Post strategy',     strategy?.postStrategy),
+          row('strat-angles',      'Content angles',    strategy?.contentAngles?.length),
+          row('strat-opps',        'Opportunity map',   strategy?.opportunityMap?.length),
+          row('strat-priority',    'Priority signal',   resolvedPrioritySignal),
+          row('strat-draft',       'Sample post',       dashboardState?.outputsPreview?.samplePost),
+          row('strat-caption',     'Sample caption',    dashboardState?.outputsPreview?.sampleCaption),
+
           // ── DESIGN SYSTEM ──
           { key: 'sec-design', isHeader: true, label: 'DESIGN SYSTEM' },
           row('ds-heading-font',   'Heading font',      sgDisplayData?.typography?.headingSystem?.fontFamily),
           row('ds-body-font',      'Body font',         sgDisplayData?.typography?.bodySystem?.fontFamily),
+          row('ds-font-scale',     'Type scale',        sgDisplayData?.typography?.scale),
           row('ds-primary-color',  'Primary color',     sgDisplayData?.colors?.primary?.hex),
           row('ds-secondary',      'Secondary color',   sgDisplayData?.colors?.secondary?.hex),
+          row('ds-tertiary',       'Tertiary color',    sgDisplayData?.colors?.tertiary?.hex),
           row('ds-neutral',        'Neutral color',     sgDisplayData?.colors?.neutral?.hex),
           row('ds-layout',         'Layout grid',       sgDisplayData?.layout?.grid),
+          row('ds-max-width',      'Max width',         sgDisplayData?.layout?.maxWidth),
           row('ds-border-radius',  'Border radius',     sgDisplayData?.layout?.borderRadius),
           row('ds-motion',         'Motion level',      sgDisplayData?.motion?.level),
 
@@ -2286,8 +2598,95 @@ const DashboardPage = () => {
           row('psi-lcp',           'LCP',               seoAudit?.coreWebVitals?.lcp || seoAudit?.labCoreWebVitals?.lcp),
           row('psi-inp',           'INP',               seoAudit?.coreWebVitals?.inp),
           row('psi-cls',           'CLS',               seoAudit?.coreWebVitals?.cls || seoAudit?.labCoreWebVitals?.cls),
+          row('psi-ttfb',          'TTFB',              seoAudit?.coreWebVitals?.ttfb || seoAudit?.labCoreWebVitals?.ttfb),
           row('psi-opps',          'Opportunities',     seoAudit?.opportunities?.length),
           row('psi-red-flags',     'SEO red flags',     seoAudit?.seoRedFlags?.length),
+          row('psi-a11y-fail',     'A11y failures',     seoAudit?.a11yFailures?.length),
+          row('psi-insights',      'Insights',          seoAudit?.insights?.length),
+          row('psi-diagnostics',   'Diagnostics',       seoAudit?.diagnostics?.length),
+          row('psi-3p',            'Third parties',     seoAudit?.thirdParties?.length),
+
+          // ── RUN HEALTH ──
+          { key: 'sec-run', isHeader: true, label: 'RUN HEALTH' },
+          row('run-status',        'Run status',          currentRun?.status || latestRunStatus),
+          row('run-timestamp',     'Run timestamp',       currentRun?.updatedAt || dashboardState?.updatedAt),
+          row('run-source-url',    'Source URL',          currentRun?.sourceUrl || client?.websiteUrl),
+          row('run-error',         'Run error',           currentRun?.error?.message || errorState?.message),
+          row('run-warnings',      'Warnings raised',     currentRun ? runWarnings.length : null),
+          row('run-psi-warnings',  'PSI warnings',        currentRun ? psiWarnings.length : null),
+
+          // ── PSI TRACE ──
+          { key: 'sec-psi-trace', isHeader: true, label: 'PSI TRACE' },
+          row('psi-audit-status',  'PSI audit status',    seoAudit?.status),
+          row('psi-data',          'PSI data presence',   seoAudit?.scores),
+          row('psi-fail-code',     'Failure code',        seoDiagnostics?.failureCode),
+          row('psi-fail-class',    'Failure class',       seoDiagnostics?.failureClass),
+          row('psi-fail-reason',   'Failure reason',      seoDiagnostics?.failureReason || seoAudit?.error),
+          row('psi-input-url',     'Input URL',           seoDiagnostics?.inputUrl || client?.websiteUrl),
+          row('psi-req-url',       'Requested URL',       seoMeta?.requestedUrl),
+          row('psi-final-url',     'Final URL',           seoMeta?.finalUrl),
+          row('psi-display-url',   'Displayed URL',       seoMeta?.finalDisplayedUrl),
+          row('psi-resolved-url',  'Resolved URL',        seoDiagnostics?.resolvedUrl),
+          row('psi-http-status',   'HTTP status',         seoDiagnostics?.httpStatus),
+          row('psi-content-type',  'Content type',        seoDiagnostics?.contentType),
+          row('psi-server',        'Server',              seoDiagnostics?.server),
+          row('psi-host-service',  'Hosting service',     seoDiagnostics?.hostService),
+          row('psi-host-provider', 'Hosting provider',    seoDiagnostics?.hostingProvider),
+          row('psi-provider-kind', 'Provider kind',       seoDiagnostics?.providerKind),
+          row('psi-provider-confidence', 'Provider confidence', seoDiagnostics?.providerConfidence),
+          row('psi-provider-evidence', 'Provider evidence', seoDiagnostics?.providerEvidence?.length),
+          row('psi-host-type',     'Host type',           seoDiagnostics?.hostType),
+          row('psi-blocked-by',    'Blocked by',          seoDiagnostics?.blockedBy),
+          row('psi-probe-status',  'Probe status',        seoDiagnostics?.probeStatus),
+          row('psi-probe-err-code','Probe error code',    seoDiagnostics?.probeErrorCode),
+          row('psi-probe-err',     'Probe error',         seoDiagnostics?.probeError),
+          row('psi-redirects',     'Redirect count',      seoDiagnostics?.redirectCount),
+          row('psi-redir-chain',   'Redirect chain',      seoDiagnostics?.redirectChain?.length),
+          row('psi-rt-err-code',   'Runtime error code',  seoAudit?.runtimeError?.code || seoDiagnostics?.runtimeErrorCode),
+          row('psi-rt-err-msg',    'Runtime error msg',   seoAudit?.runtimeError?.message || seoDiagnostics?.runtimeErrorMessage),
+          row('psi-fetch-time',    'Fetch time',          seoMeta?.fetchTime),
+          row('psi-duration',      'Duration (ms)',       seoMeta?.totalDurationMs),
+          row('psi-lh-version',    'Lighthouse version',  seoMeta?.lighthouseVersion),
+          row('psi-lh-warnings',   'Lighthouse warnings', seoMeta?.warnings?.length),
+
+          // ── AI PIPELINE ──
+          { key: 'sec-ai-pipeline', isHeader: true, label: 'AI PIPELINE' },
+          row('ai-synth-model',    'Synthesis model',     currentRun?.providerUsage?.model),
+          row('ai-synth-input',    'Synth input tokens',  currentRun?.providerUsage?.inputTokens),
+          row('ai-synth-output',   'Synth output tokens', currentRun?.providerUsage?.outputTokens),
+          row('ai-synth-cost',     'Synth cost USD',      currentRun?.providerUsage?.estimatedCostUsd),
+          row('ai-az-count',       'Analyzer output cards', analyzerOutputs ? Object.keys(analyzerOutputs).length : null),
+          row('ai-seo-run-at',     'AI SEO audited at',   aiSeoAudit?.runAt),
+          row('ai-seo-engine',     'AI SEO engine',       aiSeoAudit?.metadata?.model),
+          row('ai-seo-cost',       'AI SEO cost USD',     aiSeoAudit?.metadata?.estimatedCostUsd),
+          row('ai-seo-score',      'AI SEO score',        aiVisibility?.score),
+          row('ai-seo-grade',      'AI SEO grade',        aiVisibility?.letterGrade),
+          row('ai-seo-critical',   'AI SEO criticals',    aiSeoAudit ? countSeverity(aiSeoAudit.findings, 'critical') : null),
+          row('ai-seo-warning',    'AI SEO warnings',     aiSeoAudit ? countSeverity(aiSeoAudit.findings, 'warning') : null),
+          row('ai-seo-gaps',       'AI SEO triggered gaps', Array.isArray(aiSeoAudit?.gaps) ? aiSeoAudit.gaps.filter((g) => g?.triggered).length : null),
+          row('ai-seo-highlights', 'AI SEO highlights',   aiSeoAudit?.highlights?.length),
+          row('ai-seo-schema',     'Schema types',        aiSeoAudit?.rawSignals?.schema?.types?.length),
+          row('ai-seo-bots',       'AI bots blocked',     aiSeoAudit?.rawSignals?.robotsAi?.blockedBots?.length),
+          row('ai-seo-llms',       'llms.txt found',      aiSeoAudit?.rawSignals?.llmsTxt?.found),
+          row('ai-seo-wikidata',   'Wikidata entity',     aiSeoAudit?.rawSignals?.entity?.qid || aiSeoAudit?.rawSignals?.entity?.wikidataUrl),
+          row('ai-seo-warn-codes', 'AI SEO warn codes',   aiSeoWarnings.length || null),
+          row('ai-skill-run',      'SEO depth skill',     seoDepthAudit?.runAt),
+          row('ai-skill-model',    'SEO depth model',     seoDepthAudit?.metadata?.model),
+          row('ai-skill-cost',     'SEO depth cost USD',  seoDepthAudit?.metadata?.estimatedCostUsd),
+          row('ai-skill-readiness','SEO depth readiness',  seoDepthAudit?.readiness || seoAnalyzerCard?.aggregate?.readiness),
+          row('ai-skill-critical', 'SEO depth criticals', seoDepthAudit ? countSeverity(seoDepthAudit.findings, 'critical') : null),
+          row('ai-skill-warning',  'SEO depth warnings',  seoDepthAudit ? countSeverity(seoDepthAudit.findings, 'warning') : null),
+          row('ai-skill-gaps',     'SEO depth gaps',      Array.isArray(seoDepthAudit?.gaps) ? seoDepthAudit.gaps.filter((g) => g?.triggered).length : null),
+          row('ai-skill-highlights','SEO depth highlights', seoDepthAudit?.highlights?.length),
+          row('ai-skills-warn',    'Skills warn codes',   skillsWarnings.length || null),
+          row('ai-scribe',         'Scribe output',       scribeCards),
+          row('ai-scribe-count',   'Scribe card count',   scribeCards ? Object.keys(scribeCards).length : null),
+          row('ai-scribe-headline','Brief headline',       dashboardState?.scribe?.brief?.headline),
+          row('ai-scribe-cost',    'Scribe cost USD',     dashboardState?.scribe?.cost?.estimatedCostUsd),
+          row('ai-scribe-warn',    'Scribe warn codes',   scribeWarnings.length || null),
+          row('ai-seo-guardian-source', 'SEO guardian source', seoGuardianState?.source),
+          row('ai-seo-guardian-cost',   'SEO guardian cost USD', seoGuardianState?.runCostData?.estimatedCostUsd),
+          row('ai-seo-guardian-errors', 'SEO guardian validation', seoGuardianState?.validationErrors?.length),
 
           // ── AI VISIBILITY ──
           { key: 'sec-aiv', isHeader: true, label: 'AI VISIBILITY' },
@@ -2299,16 +2698,115 @@ const DashboardPage = () => {
           row('aiv-content',       'AI extractability', aiVisibility?.sections?.content),
           row('aiv-entity',        'Entity authority',  aiVisibility?.sections?.entity),
 
+          // ── SCOUT CONFIG ──
+          { key: 'sec-scout', isHeader: true, label: 'SCOUT CONFIG' },
+          row('sc-keywords',       'Brand keywords',    scoutCfg?.brandKeywords?.length),
+          row('sc-competitors',    'Competitors',       scoutCfg?.competitors?.length),
+          row('sc-category',       'Category terms',    scoutCfg?.categoryTerms?.length),
+          row('sc-search-plan',    'Search plan',       scoutCfg?.scout?.searchPlan?.length),
+          row('sc-reddit',         'Reddit subreddits', scoutCfg?.reddit?.subreddits?.length),
+
+          // ── EXTERNAL SCOUTS ──
+          // ── PLATFORM SEARCH ──
+          { key: 'sec-platforms', isHeader: true, label: 'PLATFORM SEARCH' },
+          row('plat-reddit',         'Reddit',              null, 2),
+          row('plat-producthunt',    'ProductHunt',         null, 2),
+          row('plat-betalist',       'Betalist',            null, 2),
+          row('plat-uneed',          'Uneed',               null, 2),
+          row('plat-trustmrr',       'TrustMRR',            null, 2),
+          row('plat-fazier',         'Fazier',              null, 2),
+          row('plat-openalt',        'OpenAlternative',     null, 2),
+          row('plat-microlaunch',    'Microlaunch',         null, 2),
+          row('plat-peerlist',       'Peerlist',            null, 2),
+          row('plat-tinylaunch',     'TinyLaunch',          null, 2),
+          row('plat-saashub',        'SaaSHub',             null, 2),
+          row('plat-indiehackers',   'Indie Hackers',       null, 2),
+          row('plat-hackernews',     'Hacker News',         null, 2),
+          row('plat-toolfolio',      'Toolfolio',           null, 2),
+          row('plat-tinystartup',    'Tiny Startup',        null, 2),
+          row('plat-sideprojectors', 'SideProjectors',      null, 2),
+          row('plat-alternativeto',  'AlternativeTo',       null, 2),
+          row('plat-launchigniter',  'LaunchIgniter',       null, 2),
+          row('plat-peerpush',       'PeerPush',            null, 2),
+          row('plat-saasgenius',     'SaaS Genius',         null, 2),
+          row('plat-theresanai',     "There's an AI for that", null, 2),
+          row('plat-devhunt',        'DevHunt',             null, 2),
+
+          // ── SOCIAL MEDIA ──
+          { key: 'sec-social', isHeader: true, label: 'SOCIAL MEDIA' },
+          row('soc-instagram',       'Instagram',           null, 2),
+          row('soc-twitter',         'X / Twitter',         null, 2),
+          row('soc-linkedin',        'LinkedIn',            null, 2),
+          row('soc-facebook',        'Facebook',            null, 2),
+          row('soc-tiktok',          'TikTok',              null, 2),
+          row('soc-youtube',         'YouTube',             null, 2),
+          row('soc-pinterest',       'Pinterest',           null, 2),
+          row('soc-threads',         'Threads',             null, 2),
+          row('soc-bluesky',         'Bluesky',             null, 2),
+          row('soc-mastodon',        'Mastodon',            null, 2),
+          row('soc-discord',         'Discord',             null, 2),
+          row('soc-twitch',          'Twitch',              null, 2),
+          row('soc-snapchat',        'Snapchat',            null, 2),
+
+          // ── EXTERNAL SIGNALS ──
+          { key: 'sec-ext', isHeader: true, label: 'EXTERNAL SIGNALS' },
+          row('ext-weather',       'Weather / local',   null, 2),
+          row('ext-reviews',       'Reviews',           null, 2),
+          row('ext-google-trends', 'Google Trends',     null, 2),
+
           // ── ARTIFACTS ──
           { key: 'sec-artifacts', isHeader: true, label: 'ARTIFACTS' },
           row('art-screenshot',    'Homepage screenshot',  homepageScreenshotUrl),
+          row('art-full-desktop',  'Full page (desktop)',  fullPageScreenshots['desktop-full']?.downloadUrl),
+          row('art-full-tablet',   'Full page (tablet)',   fullPageScreenshots['tablet-full']?.downloadUrl),
+          row('art-full-mobile',   'Full page (mobile)',   fullPageScreenshots['mobile-full']?.downloadUrl),
           row('art-mockup',        'Device mockup',        intakeMockupSrc),
           row('art-brief-html',    'Brief HTML',           briefPreviewHtml),
           row('art-brief-pdf',     'Brief PDF',            briefPdfUrl),
+
+          // ── SCRIBE ──
+          { key: 'sec-scribe', isHeader: true, label: 'SCRIBE OUTPUT' },
+          row('scr-cards',         'Card copy generated',  scribeCards),
+          row('scr-brief-hl',      'Brief headline',       dashboardState?.scribe?.brief?.headline),
+          row('scr-brief-sum',     'Brief summary',        dashboardState?.scribe?.brief?.summary),
+
+          // ── ANALYZER SKILLS ──
+          { key: 'sec-analyzers', isHeader: true, label: 'ANALYZER SKILLS' },
+          row('az-seo',            'SEO depth audit',      analyzerOutputs?.['seo-performance']),
+          row('az-ai-seo',         'AI SEO audit',         analyzerOutputs?.['seo-performance']?.skills?.['ai-seo-audit']),
+          row('az-site-meta',      'Site meta audit',      analyzerOutputs?.['brand-tone']),
+          row('az-style-guide',    'Style guide audit',    analyzerOutputs?.['style-guide']),
+          row('az-conversion',     'Conversion audit',     analyzerOutputs?.['website-landing']),
+          row('az-brand-gap',      'Brand asset gap',      analyzerOutputs?.['brand-identity-design']),
         ];
+
+        const dataRows = allRows.filter((r) => r.isAuditRow && !r.isColumnHeader);
+        const captured = dataRows.filter((r) => r._captured).length;
+        const total = dataRows.length;
+
+        return {
+          placeholderLabel: `${captured}/${total}`,
+          rows: allRows,
+        };
       })(),
       footerLeft: hasIntakeData ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
+    },
+    {
+      id: 'seo-performance',
+      category: 'onboarding',
+      number: 'SE',
+      label: 'SEO HEALTH',
+      title: 'SEO + Performance Snapshot',
+      description: 'We ran a performance and SEO scan on your site. Load speed, metadata, and structure all impact visibility and conversion — this card shows where you stand.',
+      placeholderLabel: isSeoError ? 'SEO\nAUDIT\nFAILED' : isSeoQueued ? 'AUDIT\nQUEUED' : hasSeoAuditData ? 'SEO' : 'NO\nAUDIT',
+      rows: seoAuditRows,
+      footerLeft: isSeoPartial ? 'Partial' : hasSeoAuditData ? 'Live' : isSeoQueued ? 'Queued' : isSeoError ? 'Error' : WORK_NEEDED_LABEL,
+      domId: 'intake-card-seo-performance',
+      footerRight: 'REVIEWED',
+      footerAction: (hasSeoAuditData || isSeoError) && hasWebsiteUrl
+        ? { label: isSeoError ? 'Retry' : 'Re-run', onClick: handleSeoRerun, loading: seoRerunLoading }
+        : null,
     },
     {
       id: 'multi-device-view',
@@ -2379,22 +2877,6 @@ const DashboardPage = () => {
       ],
       footerLeft: hasStyleGuideData ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
-    },
-    {
-      id: 'seo-performance',
-      category: 'onboarding',
-      number: 'SE',
-      label: 'SEO HEALTH',
-      title: 'SEO + Performance Snapshot',
-      description: 'We ran a performance and SEO scan on your site. Load speed, metadata, and structure all impact visibility and conversion — this card shows where you stand.',
-      placeholderLabel: isSeoError ? 'SEO\nAUDIT\nFAILED' : isSeoQueued ? 'AUDIT\nQUEUED' : hasSeoAuditData ? 'SEO' : 'NO\nAUDIT',
-      rows: seoAuditRows,
-      footerLeft: isSeoPartial ? 'Partial' : hasSeoAuditData ? 'Live' : isSeoQueued ? 'Queued' : isSeoError ? 'Error' : WORK_NEEDED_LABEL,
-      domId: 'intake-card-seo-performance',
-      footerRight: 'REVIEWED',
-      footerAction: (hasSeoAuditData || isSeoError) && hasWebsiteUrl
-        ? { label: isSeoError ? 'Retry' : 'Re-run', onClick: handleSeoRerun, loading: seoRerunLoading }
-        : null,
     },
     {
       id: 'industry',
@@ -2901,9 +3383,202 @@ const DashboardPage = () => {
       analyzer = { readiness: derivedReadiness, findings: [], gaps: [], highlights: [] };
     }
 
-    if (!scribe && !analyzer) return card;
+    // Merge deterministic derived findings into analyzer (all non-service cards).
+    // Derived findings are data-inspection rules that produce catalog-matchable
+    // finding IDs without an LLM call. They augment — never replace — skill findings.
+    if (analyzer && card.category !== 'services') {
+      const derivedData = { siteMeta, brandOverview, sgDisplayData, seoAudit, aiSeoAudit, aiVisibility, homePage: evidencePages[0] || null, pages: evidencePages, client };
+      const derived = deriveFindings(card.id, derivedData);
+      if (derived.length) {
+        // Dedupe: skip derived findings whose ID already exists in skill findings
+        const existingIds = new Set((analyzer.findings || []).map((f) => f.id).filter(Boolean));
+        const novel = derived.filter((d) => !existingIds.has(d.id));
+        if (novel.length) {
+          analyzer = {
+            ...analyzer,
+            findings: [...(analyzer.findings || []), ...novel],
+          };
+          // Upgrade readiness if derived findings are more severe
+          if (novel.some((f) => f.severity === 'critical') && analyzer.readiness !== 'critical') {
+            analyzer = { ...analyzer, readiness: 'critical' };
+          } else if (novel.some((f) => f.severity === 'warning') && analyzer.readiness === 'healthy') {
+            analyzer = { ...analyzer, readiness: 'partial' };
+          }
+        }
+      }
+    }
+
+    if (!scribe && !analyzer && !DETERMINISTIC_CARD_IDS.has(card.id)) return card;
+
+    // Deterministic tile description — onboarding cards only, no LLM call.
+    // Falls through to scribeShort → static description when builder returns null.
+    let dynamicShortDescription = null;
+    let built = null;
+    let rawData = {};
+    const isFactLockedSeo = card.id === 'seo-performance' && scribe?.generatedBy === 'seo-comment-guardian';
+    if (DETERMINISTIC_CARD_IDS.has(card.id)) {
+      rawData = (() => {
+        switch (card.id) {
+          case 'audit-summary': {
+            const dataRows = Array.isArray(card.rows)
+              ? card.rows.filter((row) => row?.isAuditRow && !row?.isColumnHeader && !row?.isUpgrade)
+              : [];
+            const capturedCount = dataRows.filter((row) => row?._captured).length;
+            const totalCount = dataRows.length;
+            const missingCount = Math.max(0, totalCount - capturedCount);
+            const weakSection = (() => {
+              const groups = [
+                ['site evidence', /^site-/],
+                ['site metadata', /^meta-/],
+                ['AI synthesis', /^synth-|^strat-/],
+                ['design system', /^ds-/],
+                ['PageSpeed', /^psi-/],
+                ['AI visibility', /^aiv-|^ai-/],
+                ['artifacts', /^art-/],
+              ].map(([label, pattern]) => {
+                const rows = dataRows.filter((row) => pattern.test(String(row?.key || '')));
+                if (!rows.length) return null;
+                const captured = rows.filter((row) => row?._captured).length;
+                return { label, ratio: captured / rows.length };
+              }).filter(Boolean);
+              groups.sort((a, b) => a.ratio - b.ratio);
+              return groups[0]?.label || null;
+            })();
+            return {
+              capturedCount,
+              totalCount,
+              missingCount,
+              pagesCrawled: dashboardState?.evidence?.pages?.length ?? 0,
+              warningCount: Array.isArray(currentRun?.warnings) ? currentRun.warnings.length : 0,
+              psiStatus: seoAudit?.status || null,
+              hasScreenshot: Boolean(homepageScreenshotUrl),
+              hasMockup: Boolean(intakeMockupSrc),
+              hasBrief: hasIntakeData,
+              hasIndustry: hasIndustryData,
+              hasBusinessModel: hasBusinessModelData,
+              weakestArea: weakSection,
+            };
+          }
+          case 'social-preview':
+            return {
+              ogImage:       siteMeta ? Boolean(siteMeta.ogImage) : null,
+              ogTitle:       siteMeta?.title       || null,
+              ogDescription: siteMeta?.description || null,
+              canonical:     siteMeta?.canonical   || null,
+              favicon:       siteMeta?.favicon     || null,
+              siteName:      siteMeta?.siteName    || null,
+              ogImageAlt:    siteMeta?.ogImageAlt  || null,
+              themeColor:    siteMeta?.themeColor  || null,
+            };
+          case 'visibility-snapshot':
+            return {
+              score:       aiVisibility?.score       ?? null,
+              letterGrade: aiVisibility?.letterGrade ?? null,
+            };
+          case 'multi-device-view':
+            return {
+              captureDone: Boolean(intakeMockupSrc),
+              hasMockup: Boolean(intakeMockupSrc),
+              screenshotCount: ['desktop', 'tablet', 'mobile'].filter((variant) => Boolean(deviceScreenshots[variant])).length,
+              variantCount: 3,
+              hasDesktop: Boolean(deviceScreenshots.desktop),
+              hasTablet: Boolean(deviceScreenshots.tablet),
+              hasMobile: Boolean(deviceScreenshots.mobile),
+            };
+          case 'brief':
+            return { hasBrief: hasIntakeData };
+          case 'business-model':
+            return { hasModel: hasBusinessModelData, modelLabel: resolvedBusinessModel };
+          case 'style-guide':
+            return {
+              headingFont: sgDisplayData?.typography?.headingSystem?.fontFamily || null,
+              bodyFont: sgDisplayData?.typography?.bodySystem?.fontFamily || null,
+              primaryColor: sgDisplayData?.colors?.primary?.hex || null,
+              neutralColor: sgDisplayData?.colors?.neutral?.hex || null,
+              secondaryColor: sgDisplayData?.colors?.secondary?.hex || null,
+              motionLevel: sgDisplayData?.motion?.level || null,
+            };
+          case 'industry':
+            return {
+              hasCategory: hasIndustryData,
+              categoryLabel: resolvedIndustry,
+              targetAudience: brandOverview?.targetAudience || null,
+              positioning: brandOverview?.positioning || null,
+            };
+          case 'priority-signal':
+            return {
+              hasPriority: hasPrioritySignalData,
+              focusLabel: resolvedPrioritySignal || null,
+              channelLabel: strategy?.postStrategy?.formats?.join(' · ') || null,
+            };
+          case 'seo-performance':
+            return {
+              auditStatus:   seoCardState,
+              failureCode:   seoDiag?.failureCode || null,
+              failureReason: seoDiag?.failureReason || null,
+              resolvedUrl:   seoDiag?.resolvedUrl || null,
+              hostType:      seoDiag?.hostType || null,
+              hostService:   seoDiag?.hostService || null,
+              redirectCount: seoDiag?.redirectCount ?? null,
+              inputUrl:      seoDiag?.inputUrl || client?.websiteUrl || null,
+              requestedUrl:  seoAudit?.meta?.requestedUrl || seoDiag?.inputUrl || client?.websiteUrl || null,
+              finalUrl:      seoAudit?.meta?.finalUrl || seoDiag?.resolvedUrl || null,
+              displayedUrl:  seoAudit?.meta?.displayedUrl || null,
+              performanceScore: seoAudit?.scores?.performance ?? null,
+              seoScore:         seoAudit?.scores?.seo ?? null,
+              lcpSeconds: seoPrimaryLcp?.p75 != null ? Math.round((seoPrimaryLcp.p75 / 1000) * 10) / 10 : null,
+              lcpMs: seoPrimaryLcp?.p75 ?? null,
+              lcpSource: seoPrimaryLcp?.source || null,
+              aiVisibilityScore: aiVisibility?.score ?? null,
+              aiVisibilityGrade: aiVisibility?.letterGrade ?? null,
+              aiSectionSchemaScore: aiVisibility?.sections?.schema?.score ?? null,
+              aiSectionEntityScore: aiVisibility?.sections?.entity?.score ?? null,
+              aiBotsBlocked: Array.isArray(aiSeoAudit?.rawSignals?.robotsAi?.blockedBots)
+                ? aiSeoAudit.rawSignals.robotsAi.blockedBots.map((bot) => bot?.name || bot?.id).filter(Boolean)
+                : [],
+              wikidataEntity: aiSeoAudit?.rawSignals?.entity?.qid || aiSeoAudit?.rawSignals?.entity?.wikidataUrl || null,
+              metaDescriptionPresent: typeof aiSeoAudit?.rawSignals?.technical?.metaDescription === 'string'
+                ? aiSeoAudit.rawSignals.technical.metaDescription.trim().length > 0
+                : null,
+              canonicalPresent: typeof aiSeoAudit?.rawSignals?.technical?.canonical === 'string'
+                ? aiSeoAudit.rawSignals.technical.canonical.trim().length > 0
+                : null,
+              schemaTypesCount: Array.isArray(aiSeoAudit?.rawSignals?.schema?.types)
+                ? aiSeoAudit.rawSignals.schema.types.length
+                : null,
+              llmsTxtFound: typeof aiSeoAudit?.rawSignals?.llmsTxt?.found === 'boolean'
+                ? aiSeoAudit.rawSignals.llmsTxt.found
+                : null,
+            };
+          default:
+            return {};
+        }
+      })();
+      built = buildCardDescription(card.id, analyzer, rawData);
+      dynamicShortDescription = card.id === 'seo-performance'
+        ? (
+            (seoCardState === 'error' || seoCardState === 'partial')
+              ? seoAuditDescription
+              : (built.description || null)
+          )
+        : isFactLockedSeo
+          ? (scribe?.short || built.description || null)
+          : (built.description || null);
+      if (
+        card.id === 'seo-performance' &&
+        dynamicShortDescription &&
+        seoProviderTileNote &&
+        !isFactLockedSeo &&
+        built?.dominantSignal?.type !== 'hosting-context'
+      ) {
+        dynamicShortDescription = `${dynamicShortDescription} ${seoProviderTileNote}`;
+      }
+    }
+
+    const isSeoHostingContext = card.id === 'seo-performance' && built?.dominantSignal?.type === 'hosting-context';
 
     const readinessContext = (() => {
+      if (card.id === 'seo-performance') return '';
       if (!analyzer?.readiness) return '';
       switch (analyzer.readiness) {
         case 'critical':
@@ -2917,49 +3592,151 @@ const DashboardPage = () => {
       }
     })();
 
-    const baseDescription = scribe?.expanded || card.description;
+    const baseDescription = (() => {
+      if ((card.id === 'audit-summary' || card.id === 'social-preview' || card.id === 'multi-device-view' || card.id === 'style-guide' || card.id === 'industry' || card.id === 'priority-signal') && built?.description) {
+        return built.description;
+      }
+      if (card.id === 'seo-performance' && built?.description) {
+        const providerTail = seoProviderNote && built?.dominantSignal?.type !== 'hosting-context'
+          ? seoProviderNote
+          : null;
+        const finding = built?.dominantSignal?.finding || null;
+        const impact = built?.dominantSignal?.impact || null;
+        const action = built?.dominantSignal?.action || null;
+        const seoParts = [finding, impact, providerTail, action].filter(Boolean);
+        return seoParts.length ? seoParts.join(' ') : built.description;
+      }
+      if (card.id === 'seo-performance' && (seoCardState === 'error' || seoCardState === 'partial')) {
+        return seoAuditDescription;
+      }
+      if (isSeoHostingContext && built?.description) {
+        return built.description;
+      }
+      if (card.id === 'seo-performance' && seoProviderNote && scribe?.generatedBy !== 'seo-comment-guardian') {
+        return `${scribe?.expanded || card.description} ${seoProviderNote}`;
+      }
+      return scribe?.expanded || card.description;
+    })();
 
-    // Deterministic tile description — onboarding cards only, no LLM call.
-    // Falls through to scribeShort → static description when builder returns null.
-    let dynamicShortDescription = null;
-    if (DETERMINISTIC_CARD_IDS.has(card.id)) {
-      const rawData = (() => {
-        switch (card.id) {
-          case 'social-preview':
-            return {
-              ogImage:       siteMeta ? Boolean(siteMeta.ogImage) : null,
-              ogTitle:       siteMeta?.title       || null,
-              ogDescription: siteMeta?.description || null,
-              canonical:     siteMeta?.canonical   || null,
-              favicon:       siteMeta?.favicon     || null,
-            };
-          case 'visibility-snapshot':
-            return {
-              score:       aiVisibility?.score       ?? null,
-              letterGrade: aiVisibility?.letterGrade ?? null,
-            };
-          case 'multi-device-view':
-            return { captureDone: Boolean(intakeMockupSrc) };
-          case 'brief':
-            return { hasBrief: hasIntakeData };
-          case 'business-model':
-            return { hasModel: hasBusinessModelData, modelLabel: resolvedBusinessModel };
-          case 'industry':
-            return { hasCategory: hasIndustryData, categoryLabel: resolvedIndustry };
-          default:
-            return {};
+    const readinessBadge = (() => {
+      const seoSignalReadiness = card.id === 'seo-performance' ? built?.dominantSignal?.readiness || null : null;
+      const seoSignalId = card.id === 'seo-performance' ? built?.dominantSignal?.id || '' : '';
+      const isAiSpecificSeoSignal = card.id === 'seo-performance' && String(seoSignalId).startsWith('ai-');
+      if (card.id === 'seo-performance' && seoCardState === 'error') {
+        return { tone: 'partial', label: 'Audit limited' };
+      }
+      if (card.id === 'seo-performance' && seoCardState === 'partial') {
+        return { tone: 'partial', label: 'Partial audit' };
+      }
+      if (card.id === 'seo-performance' && isSeoHostingContext) {
+        if (rawData.hostService === 'Internet Computer (ICP)') {
+          return { tone: 'partial', label: 'ICP-hosted' };
         }
-      })();
-      const built = buildCardDescription(card.id, analyzer, rawData);
-      dynamicShortDescription = built.description || null;
-    }
+        if (rawData.hostService === 'Arweave') {
+          return { tone: 'partial', label: 'Arweave-hosted' };
+        }
+        if (rawData.hostService === 'IPFS') {
+          return { tone: 'partial', label: 'IPFS-hosted' };
+        }
+        return {
+          tone: 'partial',
+          label: String(rawData.hostType || '').toLowerCase().includes('gateway') ? 'Gateway-hosted' : 'Forwarded URL',
+        };
+      }
+      if (card.id === 'seo-performance' && seoSignalReadiness) {
+        if (isAiSpecificSeoSignal) {
+          return {
+            tone: seoSignalReadiness === 'critical' ? 'critical' : 'partial',
+            label: seoSignalReadiness === 'critical' ? 'AI access issue' : 'AI gap found',
+          };
+        }
+        return {
+          tone: seoSignalReadiness,
+          label: seoSignalReadiness === 'critical'
+            ? 'Holding you back'
+            : seoSignalReadiness === 'partial'
+              ? 'Needs attention'
+              : 'In a good spot',
+        };
+      }
+      if (card.id === 'audit-summary' && built?.dominantSignal?.readiness) {
+        return {
+          tone: built.dominantSignal.readiness,
+          label: built.dominantSignal.readiness === 'critical'
+            ? 'Data quality issue'
+            : built.dominantSignal.readiness === 'partial'
+              ? 'Baseline needs work'
+              : 'Baseline ready',
+        };
+      }
+      if (card.id === 'social-preview' && built?.dominantSignal?.readiness) {
+        return {
+          tone: built.dominantSignal.readiness,
+          label: built.dominantSignal.readiness === 'critical'
+            ? 'Share preview issue'
+            : built.dominantSignal.readiness === 'partial'
+              ? 'Share gaps found'
+              : 'Share-ready',
+        };
+      }
+      if (card.id === 'multi-device-view' && built?.dominantSignal?.readiness) {
+        return {
+          tone: built.dominantSignal.readiness,
+          label: built.dominantSignal.readiness === 'critical'
+            ? 'Capture failed'
+            : built.dominantSignal.readiness === 'partial'
+              ? 'Coverage partial'
+              : 'Layout ready',
+        };
+      }
+      if (card.id === 'style-guide' && built?.dominantSignal?.readiness) {
+        return {
+          tone: built.dominantSignal.readiness,
+          label: built.dominantSignal.readiness === 'critical'
+            ? 'System thin'
+            : built.dominantSignal.readiness === 'partial'
+              ? 'System partial'
+              : 'System ready',
+        };
+      }
+      if (card.id === 'industry' && built?.dominantSignal?.readiness) {
+        return {
+          tone: built.dominantSignal.readiness,
+          label: built.dominantSignal.readiness === 'critical'
+            ? 'Category needs clarity'
+            : built.dominantSignal.readiness === 'partial'
+              ? 'Category still forming'
+              : 'Category set',
+        };
+      }
+      if (card.id === 'priority-signal' && built?.dominantSignal?.readiness) {
+        return {
+          tone: built.dominantSignal.readiness,
+          label: built.dominantSignal.readiness === 'critical'
+            ? 'Next step missing'
+            : built.dominantSignal.readiness === 'partial'
+              ? 'Next step taking shape'
+              : 'Next step ready',
+        };
+      }
+      if (!analyzer?.readiness) return null;
+      return {
+        tone: analyzer.readiness,
+        label: analyzer.readiness === 'critical'
+          ? 'Holding you back'
+          : analyzer.readiness === 'partial'
+            ? 'Needs attention'
+            : 'In a good spot',
+      };
+    })();
 
     return {
       ...card,
       description:             baseDescription + readinessContext,
-      scribeShort:             scribe?.short || null,
+      scribeShort:             DETERMINISTIC_CARD_IDS.has(card.id) ? null : (scribe?.short || null),
       dynamicShortDescription,
       recommendation:          scribe?.recommendation || null,
+      readinessBadge,
       analyzer,
     };
   });
@@ -3161,7 +3938,8 @@ const DashboardPage = () => {
                 key={card.id}
                 onClick={() => {
                   if (card.id === 'brief' && briefPreviewHtml) { setBriefFullScreen(true); return; }
-                  setActiveTileModal({ title: card.title, description: card.description, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null, recommendation: card.recommendation || null, analyzer: card.analyzer || null });
+                  if (card.id === 'audit-summary') { setAuditFullScreen(true); return; }
+                  setActiveTileModal({ title: card.title, description: card.description, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null, recommendation: card.recommendation || null, analyzer: card.analyzer || null, readinessBadge: card.readinessBadge || null });
                 }}
               >
                 <div className="tile-number">
@@ -3186,7 +3964,9 @@ const DashboardPage = () => {
                       {(() => {
                         const sgHead = sgDisplayData?.typography?.headingSystem;
                         const sgBody = sgDisplayData?.typography?.bodySystem;
-                        const headName = sgHead?.fontFamily?.split(',')[0].replace(/["']/g, '').trim() || null;
+                        const headName = sanitizeStylePreviewLabel(
+                          sgHead?.fontFamily?.split(',')[0].replace(/["']/g, '').trim() || null
+                        );
                         return (
                           <>
                             {/* BRAND MARK (top-left) */}
@@ -3261,6 +4041,8 @@ const DashboardPage = () => {
                         onError={() => setIntakeMockupSrc(null)}
                       />
                     </span>
+                  ) : card.id === 'audit-summary' ? (
+                    renderAuditViz(card.rows)
                   ) : card.id === 'seo-performance' && hasSeoAuditData ? (
                     renderSeoViz(seoAudit, aiVisibility)
                   ) : card.id === 'social-preview' && siteMeta?.ogImage ? (
@@ -3309,11 +4091,12 @@ const DashboardPage = () => {
                     </span>
                   )}
                   <p className="tile-description tile-intake-description">
-                    {card.analyzer?.readiness && (
-                      <span className={`tile-readiness-tag readiness-${card.analyzer.readiness}`}>
-                        STATUS: {card.analyzer.readiness === 'critical' ? 'Holding you back' : card.analyzer.readiness === 'partial' ? 'Needs attention' : 'In a good spot'}
+                    {card.readinessBadge && (
+                      <span className={`tile-readiness-tag readiness-${card.readinessBadge.tone}`}>
+                        STATUS: {card.readinessBadge.label}
                       </span>
                     )}
+                    {card.readinessBadge ? ' ' : ''}
                     {card.dynamicShortDescription || card.scribeShort || card.description}
                   </p>
                 </div>
@@ -3350,7 +4133,7 @@ const DashboardPage = () => {
                     <button
                       type="button"
                       className="tile-view-details-btn"
-                      onClick={(e) => { e.stopPropagation(); setActiveTileModal({ title: card.title, description: card.description, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null, recommendation: card.recommendation || null, analyzer: card.analyzer || null }); }}
+                      onClick={(e) => { e.stopPropagation(); setActiveTileModal({ title: card.title, description: card.description, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null, recommendation: card.recommendation || null, analyzer: card.analyzer || null, readinessBadge: card.readinessBadge || null }); }}
                     >
                         Details ↗
                     </button>
@@ -3575,6 +4358,40 @@ const DashboardPage = () => {
       )}
 
       {/* Full-page brief overlay */}
+      {/* Audit Summary fullscreen modal */}
+      {auditFullScreen && (() => {
+        const auditCard = intakeCapabilityCards.find((c) => c.id === 'audit-summary');
+        const auditRows = auditCard?.rows || [];
+        return (
+          <div id="audit-fullscreen-overlay" onClick={() => setAuditFullScreen(false)}>
+            <div id="audit-fullscreen-container" onClick={(e) => e.stopPropagation()}>
+              <div id="audit-fullscreen-header">
+                <h2 id="audit-fullscreen-title">Audit Summary</h2>
+                <button type="button" id="audit-fullscreen-close" onClick={() => setAuditFullScreen(false)}>[ ✕ ]</button>
+              </div>
+              <div id="audit-fullscreen-rows">
+                {auditRows.map((row) => (
+                  row.isHeader ? (
+                    <div key={row.key} className="tile-detail-row-section-head">{row.label}</div>
+                  ) : row.isAuditRow ? (
+                    <div key={row.key} className={`tile-detail-audit-row${row.isColumnHeader ? ' tile-detail-audit-row--header' : ''}`}>
+                      <span className="tile-detail-audit-label">{row.label}</span>
+                      <span className="tile-detail-audit-tier">{row.tier}</span>
+                      <span className={`tile-detail-audit-status${!row.isColumnHeader ? (row.isUpgrade ? ' audit-upgrade' : row.status === 'Captured' ? ' audit-ok' : ' audit-miss') : ''}`} onClick={row.isUpgrade ? () => setShowTierModal(true) : undefined}>{row.status}</span>
+                    </div>
+                  ) : (
+                    <div key={row.key} className="tile-detail-stat-row">
+                      <span className="tile-detail-stat-label">{row.label}</span>
+                      <span className="tile-detail-stat-value">{row.value}</span>
+                    </div>
+                  )
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {briefFullScreen && briefPreviewHtml && (
         <div id="brief-fullscreen-overlay" onClick={() => setBriefFullScreen(false)}>
           <div id="brief-fullscreen-container" onClick={(e) => e.stopPropagation()}>
@@ -3760,11 +4577,12 @@ const DashboardPage = () => {
                 <div id="tile-detail-bento-about" className="tile-detail-bento-cell">
                   <h3 className="tile-heading tile-intake-heading">{activeTileModal.title}</h3>
                   <p id="tile-detail-bento-description">
-                    {activeTileModal.analyzer?.readiness && (
-                      <span className={`tile-readiness-tag readiness-${activeTileModal.analyzer.readiness}`}>
-                        STATUS: {activeTileModal.analyzer.readiness === 'critical' ? 'Holding you back' : activeTileModal.analyzer.readiness === 'partial' ? 'Needs attention' : 'In a good spot'}
+                    {activeTileModal.readinessBadge && (
+                      <span className={`tile-readiness-tag readiness-${activeTileModal.readinessBadge.tone}`}>
+                        STATUS: {activeTileModal.readinessBadge.label}
                       </span>
                     )}
+                    {activeTileModal.readinessBadge ? ' ' : ''}
                     {activeTileModal.description}
                   </p>
                 </div>
@@ -3823,24 +4641,104 @@ const DashboardPage = () => {
                   </div>
                 ) : null}
 
-                {/* Data column — no tabs, just the data rows directly */}
-                {activeTileModal.cardId !== 'multi-device-view' ? (
+                {/* Tabbed SOLUTIONS / PROBLEMS / DATA for most cards */}
+                {!['multi-device-view', 'brief', 'audit-summary'].includes(activeTileModal.cardId) && activeTileModal.analyzer ? (
                   <div
-                    id={`${activeTileModal.cardId}-detail-data`}
-                    className="tile-detail-bento-cell"
-                    style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+                    id={`${activeTileModal.cardId}-analyzer-findings`}
+                    className="tile-detail-bento-cell tile-detail-tabbed-container"
                   >
-                    <div id="tile-detail-bento-rows">
+                    <div className="tile-detail-tabs">
+                      {[
+                        { key: 'solutions', label: 'SOLUTIONS' },
+                        { key: 'problems', label: 'PROBLEMS' },
+                        { key: 'data', label: 'DATA' },
+                      ].map(({ key, label }) => (
+                        <button
+                          key={key}
+                          type="button"
+                          className={`tile-detail-tab${modalTab === key ? ' tile-detail-tab--active' : ''}`}
+                          onClick={() => setModalTab(key)}
+                        >{label}</button>
+                      ))}
+                    </div>
+                    <div className="tile-detail-tab-content">
+                      {modalTab === 'solutions' && (() => {
+                        const solutionsList = buildSolutionsList(activeTileModal.analyzer);
+                        if (!solutionsList.length) return <div className="tile-detail-tab-pane"><p className="tile-analyzer-solutions-empty">No matched solutions yet.</p></div>;
+                        return (
+                          <div className="tile-detail-tab-pane">
+                            <ol id={`${activeTileModal.cardId}-solutions-list`} className="tile-solutions-list">
+                              {solutionsList.map(({ key, source, severity, finding, solution, isGeneric }) => {
+                                const problemClean = String(solution.problem || '').replace(/\.+$/, '').trim();
+                                const expertTitle = String(solution.expertOffer?.title || '').trim();
+                                const combinedHeadline = isGeneric ? (expertTitle || problemClean) : (problemClean && expertTitle ? `${problemClean} — ${expertTitle}` : (problemClean || expertTitle));
+                                const sourceLabel = source === 'gap' ? `Gap: ${finding?.ruleId || ''}` : (finding?.label || '');
+                                return (
+                                  <li key={key} id={`${activeTileModal.cardId}-solution-${solution.id}`} className={`tile-solution-card severity-${severity || solution.severity || 'info'}${source === 'gap' ? ' source-gap' : ''}`}>
+                                    <header className="tile-solution-header">
+                                      <div className="tile-solution-header-top">
+                                        {source === 'gap' ? <span className="tile-analyzer-gap-chip">gap</span> : <span className="tile-analyzer-severity-chip">{severity || solution.severity}</span>}
+                                        {sourceLabel && <span className="tile-solution-source-label">{sourceLabel}</span>}
+                                      </div>
+                                      <h4 className="tile-solution-problem">{combinedHeadline}</h4>
+                                    </header>
+                                    {solution.expertOffer && (
+                                      <section className="tile-solution-expert">
+                                        {solution.expertOffer.summary && <p className="tile-solution-expert-summary">{solution.expertOffer.summary}</p>}
+                                        {solution.expertOffer.cta?.href && <a href={solution.expertOffer.cta.href} target="_blank" rel="noopener noreferrer" className="tile-solution-expert-cta">{solution.expertOffer.cta.label || 'Book a call'} →</a>}
+                                        {solution.diy && (
+                                          <details className="tile-solution-diy-details">
+                                            <summary className="tile-solution-diy-summary-toggle"><span className="tile-solution-diy-toggle-label">Prefer to do it yourself?</span></summary>
+                                            <div className="tile-solution-diy">
+                                              {solution.diy.summary && <p className="tile-solution-diy-summary">{solution.diy.summary}</p>}
+                                              {Array.isArray(solution.diy.steps) && solution.diy.steps.length > 0 && <ol className="tile-solution-steps">{solution.diy.steps.map((step, idx) => <li key={idx} className="tile-solution-step">{step}</li>)}</ol>}
+                                            </div>
+                                          </details>
+                                        )}
+                                      </section>
+                                    )}
+                                  </li>
+                                );
+                              })}
+                            </ol>
+                          </div>
+                        );
+                      })()}
+
+                      {modalTab === 'problems' && (
+                        <div className="tile-detail-tab-pane">
+                          {activeTileModal.analyzer.readiness && (
+                            <div id={`${activeTileModal.cardId}-analyzer-readiness`} className={`tile-analyzer-readiness readiness-${activeTileModal.analyzer.readiness}`}>
+                              <span className="tile-analyzer-readiness-label">{activeTileModal.analyzer.readiness === 'critical' ? 'Holding you back' : activeTileModal.analyzer.readiness === 'partial' ? 'Needs attention' : 'In a good spot'}</span>
+                            </div>
+                          )}
+                          {Array.isArray(activeTileModal.analyzer.findings) && activeTileModal.analyzer.findings.length > 0 && (
+                            <ul className="tile-analyzer-findings-list">
+                              {activeTileModal.analyzer.findings.map((f) => {
+                                const catalogEntry = resolveSolution(f);
+                                const headline = catalogEntry?.problem || f.label;
+                                return (
+                                  <li key={f.id} className={`tile-analyzer-finding severity-${f.severity || 'info'}`}>
+                                    <div className="tile-analyzer-finding-header"><span className="tile-analyzer-severity-chip">{f.severity}</span><span className="tile-analyzer-finding-label">{headline}</span></div>
+                                    {catalogEntry?.whyItMatters && <p className="tile-solution-why">{catalogEntry.whyItMatters}</p>}
+                                    {f.detail && <p className="tile-analyzer-finding-detail">{f.detail}</p>}
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+
+                      {modalTab === 'data' && (
+                        <div id="tile-detail-bento-rows">
                           {activeTileModal.rows.map((row) => (
-                            row.isHeader ? (
-                              <div key={row.key} className="tile-detail-row-section-head">
-                                {row.label}
-                              </div>
-                            ) : row.isAuditRow ? (
+                            row.isHeader ? <div key={row.key} className="tile-detail-row-section-head">{row.label}</div>
+                            : row.isAuditRow ? (
                               <div key={row.key} className={`tile-detail-audit-row${row.isColumnHeader ? ' tile-detail-audit-row--header' : ''}`}>
                                 <span className="tile-detail-audit-label">{row.label}</span>
-                                <span className={`tile-detail-audit-status${!row.isColumnHeader ? (row.status.startsWith('✓') ? ' audit-ok' : ' audit-miss') : ''}`}>{row.status}</span>
                                 <span className="tile-detail-audit-tier">{row.tier}</span>
+                                <span className={`tile-detail-audit-status${!row.isColumnHeader ? (row.isUpgrade ? ' audit-upgrade' : row.status === 'Captured' ? ' audit-ok' : ' audit-miss') : ''}`} onClick={row.isUpgrade ? () => setShowTierModal(true) : undefined}>{row.status}</span>
                               </div>
                             ) : (
                               <div key={row.key} className={`tile-detail-stat-row${row.isFailing ? ' tile-detail-stat-row--flag' : ''}`}>
@@ -3850,21 +4748,26 @@ const DashboardPage = () => {
                             )
                           ))}
                         </div>
-                      </div>
-                    ) : null}
-                {activeTileModal.cardId === 'multi-device-view' ? null : (
-                  <div id="tile-detail-bento-data" className="tile-detail-bento-cell">
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* Data-only column for brief + audit-summary (no tabs) */}
+                {['brief', 'audit-summary'].includes(activeTileModal.cardId) ? (
+                  <div
+                    id={`${activeTileModal.cardId}-detail-data`}
+                    className="tile-detail-bento-cell"
+                    style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+                  >
                     <div id="tile-detail-bento-rows">
                       {activeTileModal.rows.map((row) => (
-                        row.isHeader ? (
-                          <div key={row.key} className="tile-detail-row-section-head">
-                            {row.label}
-                          </div>
-                        ) : row.isAuditRow ? (
-                          <div key={row.key} className="tile-detail-audit-row">
+                        row.isHeader ? <div key={row.key} className="tile-detail-row-section-head">{row.label}</div>
+                        : row.isAuditRow ? (
+                          <div key={row.key} className={`tile-detail-audit-row${row.isColumnHeader ? ' tile-detail-audit-row--header' : ''}`}>
                             <span className="tile-detail-audit-label">{row.label}</span>
-                            <span className={`tile-detail-audit-status ${row.status.startsWith('✓') ? 'audit-ok' : 'audit-miss'}`}>{row.status}</span>
                             <span className="tile-detail-audit-tier">{row.tier}</span>
+                            <span className={`tile-detail-audit-status${!row.isColumnHeader ? (row.isUpgrade ? ' audit-upgrade' : row.status === 'Captured' ? ' audit-ok' : ' audit-miss') : ''}`} onClick={row.isUpgrade ? () => setShowTierModal(true) : undefined}>{row.status}</span>
                           </div>
                         ) : (
                           <div key={row.key} className={`tile-detail-stat-row${row.isFailing ? ' tile-detail-stat-row--flag' : ''}`}>
@@ -3875,7 +4778,8 @@ const DashboardPage = () => {
                       ))}
                     </div>
                   </div>
-                )}
+                ) : null}
+
 
               </div>
 
@@ -3890,6 +4794,96 @@ const DashboardPage = () => {
 };
 
 // ── Tile viz renderers ────────────────────────────────────────────────────────
+
+const renderAuditViz = (auditRows) => {
+  if (!auditRows || !auditRows.length) return null;
+  const dataRows = auditRows.filter((r) => r.isAuditRow && !r.isColumnHeader);
+  const captured = dataRows.filter((r) => r._captured).length;
+  const missing = dataRows.filter((r) => !r._captured && !r.isUpgrade).length;
+  const upgrade = dataRows.filter((r) => r.isUpgrade).length;
+  const total = dataRows.length;
+  const pct = total > 0 ? Math.round((captured / total) * 100) : 0;
+  const circ = 2 * Math.PI * 27;
+
+  // Per-section breakdown
+  const sections = [];
+  let currentSection = null;
+  for (const r of auditRows) {
+    if (r.isHeader) { currentSection = { label: r.label, captured: 0, total: 0 }; sections.push(currentSection); }
+    else if (r.isAuditRow && !r.isColumnHeader && currentSection) {
+      currentSection.total++;
+      if (r._captured) currentSection.captured++;
+    }
+  }
+  const topSections = sections.filter((s) => s.total > 0).sort((a, b) => b.captured - a.captured).slice(0, 4);
+
+  return (
+    <div id="audit-viz-shell">
+      <svg className="seo-grad-defs" aria-hidden="true">
+        <defs>
+          <linearGradient id="ag" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%"   stopColor="#00cfff"/>
+            <stop offset="48%"  stopColor="#7b5fff"/>
+            <stop offset="100%" stopColor="#ff3de8"/>
+          </linearGradient>
+        </defs>
+      </svg>
+
+      {/* Rings in a row */}
+      <div id="audit-viz-ring-row">
+        {[
+          { label: 'Total',    val: total,    p: 100 },
+          { label: 'Captured', val: captured, p: total > 0 ? (captured / total) * 100 : 0 },
+          { label: 'Upgrade',  val: upgrade,  p: total > 0 ? (upgrade / total) * 100 : 0 },
+        ].map(({ label, val, p }) => (
+          <div className="audit-ring-cell" key={label}>
+            <svg className="seo-ring-svg" viewBox="0 0 58 58">
+              <circle className="ring-bg" cx="29" cy="29" r="24" fill="none" strokeWidth="4" />
+              <circle
+                cx="29" cy="29" r="24" fill="none" strokeWidth="4"
+                stroke="url(#ag)"
+                strokeDasharray={circ}
+                strokeDashoffset={circ - (circ * p / 100)}
+                transform="rotate(-90 29 29)"
+                strokeLinecap="round"
+                className="stroke-lit"
+              />
+            </svg>
+            <div className="audit-ring-val">{val}</div>
+            <div className="audit-ring-label">{label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Section bars — 2 columns */}
+      <div id="audit-viz-bars">
+        {topSections.map((s) => {
+          const sPct = s.total > 0 ? Math.round((s.captured / s.total) * 100) : 0;
+          const short = s.label.split(' ')[0].replace('·','').trim();
+          return (
+            <div className="audit-bar-item" key={s.label}>
+              <span className="audit-bar-label">{short}</span>
+              <div className="audit-bar-track">
+                <div className="audit-bar-fill" style={{ width: `${sPct}%` }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Quality score bar — bottom */}
+      <div id="audit-viz-quality">
+        <div className="audit-quality-head">
+          <span className="audit-quality-label">Data Quality</span>
+          <span className="audit-quality-pct">{pct}%</span>
+        </div>
+        <div className="audit-quality-track">
+          <div className="audit-quality-fill" style={{ width: `${pct}%` }} />
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const renderSeoViz = (seoAudit, aiVisibility) => {
   const sc  = seoAudit?.scores ?? {};
@@ -4937,6 +5931,67 @@ const dashboardCss = `
     padding: 0;
     position: relative;
   }
+  /* Audit fullscreen modal */
+  #audit-fullscreen-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(8px);
+  }
+  #audit-fullscreen-container {
+    width: 90vw;
+    height: 90vh;
+    background: #fff;
+    border-radius: 16px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.3);
+    display: flex;
+    flex-direction: column;
+  }
+  #audit-fullscreen-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    border-bottom: 1px solid rgba(42, 36, 32, 0.08);
+    flex-shrink: 0;
+  }
+  #audit-fullscreen-title {
+    font-family: var(--font-ui);
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0;
+    color: #2a2420;
+  }
+  #audit-fullscreen-close {
+    background: none;
+    border: 1px solid rgba(42, 36, 32, 0.1);
+    border-radius: 4px;
+    padding: 5px 10px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    color: var(--text-secondary);
+    line-height: 1;
+  }
+  #audit-fullscreen-close:hover {
+    background: #2a2420;
+    color: #fff;
+    border-color: #2a2420;
+  }
+  #audit-fullscreen-rows {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+  }
   /* Embedded pricing in grid */
   #pricing-embed-container {
     grid-column: 1 / -1;
@@ -5895,8 +6950,8 @@ const dashboardCss = `
   #tile-detail-bento-about {
     padding: 18px 20px 20px;
     overflow-y: auto;
-    max-height: 40%;
-    flex-shrink: 0;
+    flex: 1;
+    min-height: 0;
   }
   /* Data cell — fills remaining height, independently scrollable */
   #tile-detail-bento-data {
@@ -6344,6 +7399,25 @@ const dashboardCss = `
   }
   .tile-detail-audit-status.audit-ok { color: #2d8a5e; }
   .tile-detail-audit-status.audit-miss { color: #c53030; }
+  .tile-detail-audit-status.audit-upgrade {
+    background: #2a2420;
+    border: 1px solid #2a2420;
+    color: #fff;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    text-transform: uppercase;
+    line-height: 1;
+    min-width: 100px;
+    text-align: center;
+    transition: opacity 0.15s ease;
+  }
+  .tile-detail-audit-status.audit-upgrade:hover {
+    opacity: 0.8;
+  }
   .tile-detail-audit-tier {
     font-family: var(--font-mono, monospace);
     font-size: 0.68rem;
@@ -6898,6 +7972,134 @@ const dashboardCss = `
   .ring-label { font-family: var(--font-mono); font-size: 8.5px; color: var(--text-secondary); margin-top: 1px; letter-spacing: 0.08em; text-transform: uppercase; }
 
   /* ── SEO + Performance viz shell ── */
+  /* ── Audit Summary Viz ── */
+  #audit-viz-shell {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: clamp(8px, 3%, 18px) clamp(10px, 4%, 22px);
+    justify-content: center;
+    gap: 0;
+    container-type: size;
+  }
+  #audit-viz-quality {
+    flex-shrink: 0;
+    margin-top: clamp(6px, 2cqi, 14px);
+    padding: clamp(6px, 2cqi, 10px) clamp(8px, 2.5cqi, 14px);
+    border: 1px solid rgba(42, 36, 32, 0.1);
+    border-radius: clamp(6px, 2cqi, 10px);
+    background: rgba(255, 255, 255, 0.55);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .audit-quality-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .audit-quality-label {
+    font-family: var(--font-mono);
+    font-size: clamp(7px, 2.2cqi, 9px);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(42, 36, 32, 0.55);
+  }
+  .audit-quality-pct {
+    font-family: 'Doto', var(--font-mono);
+    font-weight: 900;
+    font-size: clamp(14px, 4cqi, 22px);
+    color: #2a2420;
+    line-height: 1;
+  }
+  .audit-quality-track {
+    height: clamp(4px, 1.2cqi, 6px);
+    background: rgba(42, 36, 32, 0.08);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .audit-quality-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #00cfff 0%, #7b5fff 50%, #ff3de8 100%);
+    transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  #audit-viz-ring-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-evenly;
+    flex: 1;
+    min-height: 0;
+  }
+  .audit-ring-cell {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 0 1 auto;
+    padding: clamp(6px, 2cqi, 12px);
+    border: 1px solid rgba(42, 36, 32, 0.1);
+    border-radius: clamp(8px, 2.5cqi, 14px);
+    background: rgba(255, 255, 255, 0.55);
+  }
+  .audit-ring-cell .seo-ring-svg {
+    width: clamp(44px, 22cqi, 78px);
+    height: clamp(44px, 22cqi, 78px);
+  }
+  .audit-ring-val {
+    position: absolute;
+    top: 46%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'Doto', var(--font-mono);
+    font-weight: 900;
+    font-size: clamp(12px, 5cqi, 22px);
+    line-height: 1;
+  }
+  .audit-ring-label {
+    font-family: var(--font-mono);
+    font-size: clamp(7px, 2.5cqi, 9px);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(42, 36, 32, 0.6);
+    margin-top: 3px;
+  }
+  #audit-viz-bars {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: clamp(4px, 1.5cqi, 8px) clamp(8px, 3cqi, 16px);
+    padding: clamp(4px, 1.5cqi, 10px) 0;
+    flex-shrink: 0;
+  }
+  .audit-bar-item {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .audit-bar-label {
+    font-family: var(--font-mono);
+    font-size: clamp(6px, 2cqi, 8px);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(42, 36, 32, 0.45);
+    white-space: nowrap;
+  }
+  .audit-bar-track {
+    width: 100%;
+    height: clamp(3px, 1cqi, 5px);
+    background: rgba(42, 36, 32, 0.08);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .audit-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #00cfff 0%, #7b5fff 50%, #ff3de8 100%);
+    transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
   #seo-perf-viz-shell {
     width: 100%;
     height: 100%;

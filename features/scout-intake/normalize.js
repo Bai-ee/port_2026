@@ -201,6 +201,7 @@ function normalizeIntakeResult(
       cards: scribeResult.cards,
       brief: scribeResult.brief,
       cost:  scribeResult.runCostData || null,
+      seoGuardian: scribeResult.seoGuardian || null,
       html:  briefHtml || null,
     } : null,
     scoutConfig: scoutConfig || null,

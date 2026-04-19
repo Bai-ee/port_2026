@@ -109,7 +109,7 @@ Phase boundaries are hard stops. Implementer reports and waits for approval betw
    - Add a new stage after style guide resolves, before analyzers run:
      - Emit progress: `[PSI] Running PageSpeed audit…`
      - Call `pagespeed.fetch({ websiteUrl })` wrapped in `withTimeout(..., 'PageSpeed audit', 90_000)`.
-     - Non-fatal: on error/timeout, push warning `code: 'pagespeed_failed'`, continue with `pagespeed = null`.
+     - Non-fatal: on error/timeout, persist an error `pagespeed` source with structured diagnostics and push warning code `pagespeed_failed_*`.
      - Guard on `PAGESPEED_ENABLED` + `PAGESPEED_API_KEY` — warn and skip if either missing.
    - Replace `pagespeed: null` at [`runner.js:408`](/Users/bballi/Documents/Repos/Bballi_Portfolio/features/scout-intake/runner.js:408) with the live SourceRecord.
 2. `features/scout-intake/skills/_runner.js::buildSourcePayloads`
@@ -119,7 +119,7 @@ Phase boundaries are hard stops. Implementer reports and waits for approval betw
 
 **Acceptance:**
 - With `PAGESPEED_API_KEY` set, a real pipeline run produces `sharedResults.pagespeed` with live scores and `intel.pagespeed.scores` visible in the skill prompt logs.
-- With the key unset, the pipeline logs a warning, pushes `pagespeed_failed` or `pagespeed_skipped`, and still completes.
+- With the key unset, the pipeline logs a warning, pushes `pagespeed_skipped_*`, and still completes.
 - Byte-for-byte identical behavior when `PAGESPEED_ENABLED=0`.
 
 ### Phase 2 — Upgrade the SEO skill prompt

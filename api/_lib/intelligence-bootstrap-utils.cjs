@@ -43,15 +43,25 @@ function psiSourceToDashboardSeoAudit(source, fallbackWebsiteUrl) {
   if (!source) return null;
 
   if (source.status === 'error') {
+    const diagnosticsContext = source.facts?.diagnosticsContext || null;
     return {
-      fetchedAt:     source.fetchedAt || new Date().toISOString(),
-      websiteUrl:    fallbackWebsiteUrl || '',
-      scores:        null,
-      coreWebVitals: null,
-      opportunities: [],
-      seoRedFlags:   [],
-      status:        'error',
-      error:         source.error || 'Intelligence source error.',
+      fetchedAt:          source.fetchedAt || new Date().toISOString(),
+      websiteUrl:         source.facts?.websiteUrl || fallbackWebsiteUrl || '',
+      scores:             null,
+      coreWebVitals:      null,
+      labCoreWebVitals:   null,
+      opportunities:      [],
+      seoRedFlags:        [],
+      a11yFailures:       [],
+      bpFailures:         [],
+      insights:           [],
+      diagnostics:        [],
+      thirdParties:       [],
+      meta:               null,
+      runtimeError:       null,
+      diagnosticsContext,
+      status:             'error',
+      error:              source.error || 'Intelligence source error.',
     };
   }
 
@@ -71,6 +81,7 @@ function psiSourceToDashboardSeoAudit(source, fallbackWebsiteUrl) {
     thirdParties:     f.thirdParties     || [],
     meta:             f.lighthouseMeta   || null,
     runtimeError:     f.runtimeError     || null,
+    diagnosticsContext: f.diagnosticsContext || null,
     status:           f.auditStatus      || 'ok',
     error:            source.error       || null,
   };
