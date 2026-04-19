@@ -178,7 +178,7 @@ describe('buildCardDescription — seo-performance', () => {
     assert.equal(r.dominantSignal?.id, 'raw-lcp-critical');
   });
 
-  test('AI crawler blocks lead before generic performance language', () => {
+  test('high-value AI crawler blocks can lead before generic performance language', () => {
     const r = buildCardDescription('seo-performance', agg({
       readiness: 'critical',
       findings: [finding('critical', 'Largest Contentful Paint slow', 'LCP lab measurement is 6.8 seconds (p75).')],
@@ -190,8 +190,24 @@ describe('buildCardDescription — seo-performance', () => {
       aiVisibilityScore: 54,
     });
     assert.equal(r.dominantSignal?.id, 'ai-bots-blocked');
-    assert.match(r.description, /AI crawlers are blocked/i);
+    assert.equal(r.dominantSignal?.readiness, 'partial');
+    assert.match(r.description, /robots\.txt/i);
     assert.match(r.description, /GPTBot/i);
+  });
+
+  test('single low-value AI bot block does not override stronger performance evidence', () => {
+    const r = buildCardDescription('seo-performance', agg({
+      readiness: 'partial',
+      findings: [finding('warning', 'Largest Contentful Paint slow', 'LCP lab measurement is 5.4 seconds (p75).')],
+    }), {
+      auditStatus: 'ok',
+      lcpSeconds: 5.4,
+      performanceScore: 75,
+      aiBotsBlocked: ['PetalBot'],
+      aiVisibilityScore: 74,
+    });
+    assert.notEqual(r.dominantSignal?.id, 'ai-bots-blocked');
+    assert.match(r.description, /5\.4 seconds/i);
   });
 
   test('missing llms.txt leads before standard performance language when AI visibility is weak', () => {
@@ -609,6 +625,22 @@ describe('buildCardDescription — style-guide', () => {
     assert.match(r.description, /Montserrat/i);
   });
 
+  test('system-font baseline stays partial instead of framing the brand system as missing', () => {
+    const r = buildCardDescription('style-guide', agg({
+      readiness: 'critical',
+      findings: [{ id: 'style', severity: 'critical', label: 'No web fonts loaded', detail: 'Typography fell back to Arial on this run.' }],
+    }), {
+      headingFont: 'Arial',
+      bodyFont: 'Arial',
+      primaryColor: '#111111',
+      neutralColor: '#f5f5f5',
+    });
+    assert.equal(r.dominantSignal.id, 'style-guide-system-baseline');
+    assert.equal(r.dominantSignal.readiness, 'partial');
+    assert.match(r.description, /system fonts/i);
+    assert.match(r.description, /System UI/i);
+  });
+
   test('partial token coverage → style-guide-partial issue signal', () => {
     const r = buildCardDescription('style-guide', agg({ readiness: 'partial' }), {
       headingFont: 'Geist',
@@ -685,18 +717,18 @@ describe('buildCardDescription — priority-signal', () => {
     });
     assert.equal(r.dominantSignal.id, 'priority-ready');
     assert.equal(r.dominantSignal.readiness, 'partial');
-    assert.match(r.description, /execution channel is still broad/i);
+    assert.match(r.description, /channel still needs confirmation/i);
   });
 
   test('next step with channel → healthy priority-ready signal', () => {
     const r = buildCardDescription('priority-signal', agg({ readiness: 'healthy' }), {
       hasPriority: true,
       focusLabel: 'Fix conversion CTA clarity',
-      channelLabel: 'landing page · email',
+      channelLabel: 'landing page · email · lifecycle sms',
     });
     assert.equal(r.dominantSignal.id, 'priority-ready');
     assert.equal(r.dominantSignal.readiness, 'healthy');
-    assert.match(r.description, /landing page · email/i);
+    assert.match(r.description, /landing page · email \+1 more/i);
   });
 });
 

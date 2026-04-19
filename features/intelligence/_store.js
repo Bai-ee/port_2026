@@ -9,8 +9,7 @@
 // (non-transactional). Concurrent admin writes are unlikely in Phase 1; if
 // contention becomes an issue, promote to runTransaction in Phase 2.
 
-const path = require('path');
-const fb   = require(path.resolve(__dirname, '../../api/_lib/firebase-admin.cjs'));
+const fb = require('../../api/_lib/firebase-admin.cjs');
 const { validateSourceRecord } = require('./_contract');
 const { generateDigest }       = require('./_digest');
 const { computeLedger }        = require('./_ledger');

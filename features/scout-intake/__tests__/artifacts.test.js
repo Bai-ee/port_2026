@@ -71,10 +71,10 @@ test('getBrowserlessConfig uses env token and trims base URL slash', () => {
   assert.equal(config.baseUrl, 'https://browserless.example.com');
 });
 
-test('screenshot variants default to desktop, mobile, and tablet', () => {
+test('screenshot variants include viewport and full-page variants', () => {
   assert.deepStrictEqual(
     SCREENSHOT_VARIANTS.map((variant) => variant.id),
-    ['desktop', 'mobile', 'tablet']
+    ['desktop', 'mobile', 'tablet', 'desktop-full', 'mobile-full', 'tablet-full']
   );
   assert.equal(SCREENSHOT_VARIANTS[0].primary, true);
 });

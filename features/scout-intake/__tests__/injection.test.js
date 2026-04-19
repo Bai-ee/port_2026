@@ -128,10 +128,10 @@ test('null briefing produces same output as omitted briefing', () => {
 
 const BRIEFING = '=== SITE INTELLIGENCE BRIEFING ===\n- Performance 44/100\n- SEO 91/100';
 
-test('prompt with briefing contains ADDITIONAL INTELLIGENCE section', () => {
+test('prompt with briefing contains OPTIONAL BACKGROUND section', () => {
   const p = buildSynthesisPrompt(EVIDENCE, BRIEFING);
-  assert.ok(p.includes('ADDITIONAL INTELLIGENCE'));
-  assert.ok(p.includes('Additional intelligence gathered outside the crawl:'));
+  assert.ok(p.includes('OPTIONAL BACKGROUND'));
+  assert.ok(p.includes('may be stale from prior runs'));
 });
 
 test('prompt with briefing contains the briefing content', () => {
@@ -140,20 +140,18 @@ test('prompt with briefing contains the briefing content', () => {
   assert.ok(p.includes('SEO 91/100'));
 });
 
-test('prompt with briefing still contains WEBSITE EVIDENCE after the briefing', () => {
+test('prompt with briefing contains WEBSITE EVIDENCE before the optional background', () => {
   const p = buildSynthesisPrompt(EVIDENCE, BRIEFING);
-  const briefingPos = p.indexOf('ADDITIONAL INTELLIGENCE');
+  const briefingPos = p.indexOf('OPTIONAL BACKGROUND');
   const evidencePos = p.indexOf('WEBSITE EVIDENCE');
-  assert.ok(briefingPos < evidencePos, 'briefing should appear before site evidence');
+  assert.ok(evidencePos < briefingPos, 'evidence should appear before optional background');
 });
 
-test('briefing section appears immediately before WEBSITE EVIDENCE', () => {
+test('briefing section appears after WEBSITE EVIDENCE block', () => {
   const p = buildSynthesisPrompt(EVIDENCE, BRIEFING);
-  // There should be nothing between the briefing block and WEBSITE EVIDENCE
-  // other than the double newline separator
   const evidenceIdx = p.indexOf('WEBSITE EVIDENCE');
-  const textBeforeEvidence = p.slice(0, evidenceIdx);
-  assert.ok(textBeforeEvidence.includes(BRIEFING));
+  const textAfterEvidence = p.slice(evidenceIdx);
+  assert.ok(textAfterEvidence.includes(BRIEFING));
 });
 
 test('prompt with briefing still contains original evidence text', () => {

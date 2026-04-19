@@ -13,9 +13,23 @@ const ROOT = path.resolve(__dirname, '../..');
 const SCRIPT_PATH = path.join(ROOT, 'scripts', 'generate_device_mockup.py');
 const TEMPLATE_PATH = path.join(ROOT, 'public', 'img', 'device_template.png');
 const SCRIPT_TIMEOUT_MS = 90_000;
-const PYTHON_BIN = require('fs').existsSync(path.join(ROOT, '.venv', 'bin', 'python3'))
-  ? path.join(ROOT, '.venv', 'bin', 'python3')
-  : 'python3';
+
+function resolvePythonBin() {
+  if (process.env.PYTHON_BIN) return process.env.PYTHON_BIN;
+  const fsSync = require('fs');
+  // Runtime-only resolution keeps Turbopack from tracing a static interpreter path.
+  const candidates = [];
+  const configuredVenvDir = process.env.PYTHON_VENV_DIR;
+  if (configuredVenvDir) {
+    candidates.push(path.join(ROOT, configuredVenvDir, 'bin', 'python3'));
+  }
+  const defaultVenvDir = String.fromCharCode(46, 118, 101, 110, 118);
+  candidates.push(path.join(ROOT, defaultVenvDir, 'bin', 'python3'));
+  for (const candidate of candidates) {
+    if (fsSync.existsSync(candidate)) return candidate;
+  }
+  return 'python3';
+}
 
 const REQUIRED_VARIANTS = {
   desktop: 'desktop',
@@ -81,7 +95,7 @@ async function generateWebsiteMockupArtifact({
     );
 
     await execFileAsync(
-      PYTHON_BIN,
+      resolvePythonBin(),
       [
         SCRIPT_PATH,
         '--desktop', path.join(inputDir, 'desktop.png'),

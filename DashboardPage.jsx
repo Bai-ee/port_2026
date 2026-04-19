@@ -98,13 +98,21 @@ const SG_MOCK = {
 function sanitizeStylePreviewLabel(value) {
   const text = String(value || '').trim();
   if (!text) return null;
-  return text
+  const cleaned = text
     .replace(/[_-]?[A-Za-z]+_[0-9a-f]{4,}\b/gi, (match) => {
       const cleaned = match.replace(/^[_-]+/, '').split('_')[0];
       return cleaned || '';
     })
     .replace(/\s{2,}/g, ' ')
     .trim();
+  if (!cleaned) return null;
+  if (/^(arial|helvetica(?: neue)?|system-ui|ui-sans-serif|sans-serif|-apple-system|blinkmacsystemfont|segoe ui)$/i.test(cleaned)) {
+    return 'System UI';
+  }
+  if (/^(times new roman|georgia|ui-serif|serif)$/i.test(cleaned)) {
+    return 'System Serif';
+  }
+  return cleaned;
 }
 
 // Compute SVG cubic-bezier path: (0,h) → (w,0), SVG y-down so (1-y) flips.
@@ -1252,7 +1260,7 @@ const DashboardPage = () => {
     tablet:  fullPageScreenshots['tablet-full']?.downloadUrl  || homepageScreenshots.tablet?.downloadUrl  || null,
     mobile:  fullPageScreenshots['mobile-full']?.downloadUrl  || homepageScreenshots.mobile?.downloadUrl  || null,
   };
-  const clientStatus = dashboardState?.status || client?.status || 'provisioning';
+  const clientStatus = dashboardState?.status || client?.status || null;
   // Prefer the live run status from brief_runs (polled every 4s) over the cached
   // dashboardState.latestRunStatus — the cached value is written as 'queued' at
   // provisioning and only flips to 'succeeded' at completion, so it never reports
@@ -1260,6 +1268,7 @@ const DashboardPage = () => {
   const latestRunStatus = currentRun?.status || dashboardState?.latestRunStatus || null;
   const provisioningState = dashboardState?.provisioningState || null;
   const errorState = dashboardState?.errorState || null;
+  const hasClientWorkspace = Boolean(client || dashboardState || recentRuns.length > 0);
 
   // Free-tier intake fields
   const snapshot = dashboardState?.snapshot || null;
@@ -1320,6 +1329,10 @@ const DashboardPage = () => {
     || headline
   );
   const isRunActive = latestRunStatus === 'queued' || latestRunStatus === 'running';
+  const noWorkspaceState = !bootstrapLoading
+    && !bootstrapError
+    && Boolean(user)
+    && !hasClientWorkspace;
 
   // Mark the run as active for this session so we know whether to hold the
   // intake modal for survey resolution (only relevant when the build happened
@@ -1337,11 +1350,13 @@ const DashboardPage = () => {
   // (even if no brief_run is queued — e.g., idea-only signup without a URL).
   const hasReadyDashboard = latestRunStatus === 'succeeded' && hasIntakeData;
   const showIntakeModal = !bootstrapLoading && (
+    !noWorkspaceState && (
     isRunActive
     || latestRunStatus === 'failed'
     || completionCountdown !== null
     || (latestRunStatus === 'succeeded' && !surveyResolved && runWasActiveRef.current)
-    || !hasReadyDashboard
+    || (Boolean(client) && clientStatus === 'provisioning' && !hasReadyDashboard)
+    )
   );
 
   // Page-load / processing-handoff intro.
@@ -1692,6 +1707,11 @@ const DashboardPage = () => {
     window.open(`sms:+13122865129&body=${encodeURIComponent(context + trimmed)}`, '_self');
     setChatDraft('');
   };
+
+  const handleSignOut = useCallback(() => {
+    trackSignOut();
+    signOutUser();
+  }, [signOutUser]);
 
   const handleReseed = useCallback(async () => {
     if (!user || !reseedUrl.trim() || reseedLoading) return;
@@ -3754,7 +3774,7 @@ const DashboardPage = () => {
             <Link href="/" id="founders-linkedin">
               Homepage
             </Link>
-            <button type="button" id="founders-login-link" onClick={() => { trackSignOut(); signOutUser(); }}>
+            <button type="button" id="founders-login-link" onClick={handleSignOut}>
               Logout
             </button>
             <a
@@ -3772,12 +3792,117 @@ const DashboardPage = () => {
               <button type="button" data-theme="dark" className={theme === 'dark' ? 'is-active' : ''} onClick={() => { setTheme('dark'); trackThemeChanged('dark'); }}>DARK</button>
               <button type="button" data-theme="light" className={theme === 'light' ? 'is-active' : ''} onClick={() => { setTheme('light'); trackThemeChanged('light'); }}>LIGHT</button>
             </div>
-            <button type="button" id="founders-signout" onClick={signOutUser}>Sign Out</button>
+            <button type="button" id="founders-signout" onClick={handleSignOut}>Sign Out</button>
           </div>
         </div>
       </header>
       <main id="founders-shell">
 
+        {noWorkspaceState ? (
+          <section
+            id="dashboard-recovery-shell"
+            style={{
+              width: '100%',
+              maxWidth: '56rem',
+              margin: '2rem auto 0',
+              padding: '1.5rem',
+              borderRadius: '20px',
+              ...internalPageGlassCardStyle,
+            }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <p style={{ margin: 0, fontSize: '0.8rem', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.48)', fontFamily: '"Space Mono", monospace' }}>
+                  Client access
+                </p>
+                <h1 style={{ margin: '0.5rem 0 0', fontSize: 'clamp(1.8rem, 4vw, 3rem)', lineHeight: 1.05, letterSpacing: '-0.04em' }}>
+                  This login is not linked to a dashboard yet.
+                </h1>
+              </div>
+              <p style={{ margin: 0, color: 'rgba(42,36,32,0.72)', lineHeight: 1.7, maxWidth: '46rem' }}>
+                You signed in successfully, but this account does not currently have a client workspace attached to it. If you expected an existing dashboard, sign out and use the correct account. If you want to start a new workspace, enter a website below and create it intentionally.
+              </p>
+              <div style={{ display: 'grid', gap: '0.75rem' }}>
+                <label htmlFor="dashboard-recovery-url" style={{ fontSize: '0.82rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.5)', fontFamily: '"Space Mono", monospace' }}>
+                  Website URL
+                </label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
+                  <input
+                    id="dashboard-recovery-url"
+                    type="url"
+                    value={reseedUrl}
+                    onChange={(e) => { setReseedUrl(e.target.value); setReseedError(''); setReseedSuccess(false); }}
+                    placeholder="yourbusiness.com"
+                    spellCheck={false}
+                    style={{
+                      flex: '1 1 22rem',
+                      minWidth: '18rem',
+                      borderRadius: '999px',
+                      border: '1px solid rgba(42,36,32,0.14)',
+                      background: 'rgba(255,255,255,0.72)',
+                      padding: '0.95rem 1.1rem',
+                      fontSize: '1rem',
+                      color: '#2a2420',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleReseed}
+                    disabled={reseedLoading || !reseedUrl.trim()}
+                    style={{
+                      borderRadius: '999px',
+                      border: 'none',
+                      background: '#2a2420',
+                      color: '#fff',
+                      padding: '0.95rem 1.2rem',
+                      fontWeight: 600,
+                      cursor: reseedLoading || !reseedUrl.trim() ? 'not-allowed' : 'pointer',
+                      opacity: reseedLoading || !reseedUrl.trim() ? 0.55 : 1,
+                    }}
+                  >
+                    {reseedLoading ? 'Creating…' : 'Create dashboard'}
+                  </button>
+                </div>
+                {reseedError ? (
+                  <div style={{ color: '#9f2d2d', fontSize: '0.94rem' }}>{reseedError}</div>
+                ) : null}
+                {reseedSuccess ? (
+                  <div style={{ color: '#2d6a4f', fontSize: '0.94rem' }}>Dashboard creation has been queued. This page will refresh when bootstrap data is ready.</div>
+                ) : null}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
+                <Link
+                  href="/"
+                  style={{
+                    borderRadius: '999px',
+                    border: '1px solid rgba(42,36,32,0.14)',
+                    padding: '0.82rem 1.1rem',
+                    textDecoration: 'none',
+                    color: '#2a2420',
+                    background: 'rgba(255,255,255,0.6)',
+                  }}
+                >
+                  Back to homepage
+                </Link>
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  style={{
+                    borderRadius: '999px',
+                    border: '1px solid rgba(42,36,32,0.14)',
+                    padding: '0.82rem 1.1rem',
+                    color: '#2a2420',
+                    background: 'rgba(255,255,255,0.6)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Sign out
+                </button>
+              </div>
+            </div>
+          </section>
+        ) : (
+        <>
         {/* ── Hero ── */}
         <section id="founders-hero-shell">
           <div id="founders-hero-numeric-shell">
@@ -4207,6 +4332,8 @@ const DashboardPage = () => {
 
           </div>{/* end capability-section-shell */}
         </section>
+        </>
+        )}
 
       </main>
 
@@ -4462,7 +4589,9 @@ const DashboardPage = () => {
                       ) : (() => {
                         const sgHead = sgDisplayData.typography?.headingSystem;
                         const sgBody = sgDisplayData.typography?.bodySystem;
-                        const headName = sgHead?.fontFamily?.split(',')[0].replace(/["']/g, '').trim() || 'Heading';
+                        const headName = sanitizeStylePreviewLabel(
+                          sgHead?.fontFamily?.split(',')[0].replace(/["']/g, '').trim() || 'Heading'
+                        ) || 'Heading';
                         const LEVELS = ['none', 'minimal', 'moderate', 'heavy'];
                         const levelIdx = LEVELS.indexOf(sgDisplayData.motion?.level || 'minimal');
                         const primaryEasing = sgDisplayData.motion?.easings?.[0] || 'ease-in-out';

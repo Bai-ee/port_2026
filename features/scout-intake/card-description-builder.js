@@ -152,6 +152,39 @@ function sanitizeStyleText(value) {
     .trim();
 }
 
+function normalizeFontLabel(value) {
+  const text = sanitizeStyleText(String(value || '').split(',')[0].replace(/["']/g, '').trim());
+  if (!text) return null;
+  if (/^(arial|helvetica(?: neue)?|system-ui|ui-sans-serif|sans-serif|-apple-system|blinkmacsystemfont|segoe ui)$/i.test(text)) {
+    return 'System UI';
+  }
+  if (/^(times new roman|georgia|ui-serif|serif)$/i.test(text)) {
+    return 'System Serif';
+  }
+  return text;
+}
+
+function isSystemFontLike(value) {
+  const text = normalizeFontLabel(value);
+  return text === 'System UI' || text === 'System Serif';
+}
+
+function summarizeList(value, maxItems = 2) {
+  const list = String(value || '')
+    .split('·')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (list.length <= maxItems) return list.join(' · ') || null;
+  return `${list.slice(0, maxItems).join(' · ')} +${list.length - maxItems} more`;
+}
+
+function summarizeFocusLabel(value, maxLength = 72) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
 function isPresentValue(value) {
   if (value === null || value === undefined || value === false) return false;
   if (typeof value === 'string') return value.trim().length > 0;
@@ -372,14 +405,16 @@ function buildAiVisibilitySignal(metrics) {
   const schemaScore = typeof metrics.aiSectionSchemaScore === 'number' ? metrics.aiSectionSchemaScore : null;
   const entityScore = typeof metrics.aiSectionEntityScore === 'number' ? metrics.aiSectionEntityScore : null;
 
-  if (blockedBots.length > 0) {
-    const bots = blockedBots.slice(0, 2).join(' and ');
+  const highValueBots = blockedBots.filter((bot) => /gptbot|chatgpt-user|claudebot|perplexitybot|google-extended/i.test(String(bot)));
+
+  if (highValueBots.length >= 2 || (highValueBots.length >= 1 && aiVisibilityScore != null && aiVisibilityScore < 60)) {
+    const bots = highValueBots.slice(0, 2).join(' and ');
     return {
       id: 'ai-bots-blocked',
       type: 'issue',
-      readiness: 'critical',
-      finding: 'Some AI crawlers are blocked from reading the site.',
-      impact: `${bots} ${blockedBots.length === 1 ? 'is' : 'are'} currently blocked, which can limit how often your pages are discovered or cited by AI tools.`,
+      readiness: highValueBots.length >= 2 ? 'critical' : 'partial',
+      finding: 'Some high-value AI crawlers are blocked in robots.txt.',
+      impact: `${bots} ${highValueBots.length === 1 ? 'is' : 'are'} currently blocked, which can limit how often your pages are fetched or cited by AI assistants.`,
       action: 'Open access for the blocked AI crawlers, then re-run the audit.',
     };
   }
@@ -867,14 +902,30 @@ function selectBusinessModelSignal({ status, issues, strengths, metrics }) {
 // style-guide
 // Priority: no usable design system → partial token coverage → strong token baseline
 function selectStyleGuideSignal({ status, issues, strengths, metrics }) {
+  const hasBrandedHeading = isPresentValue(metrics.headingFont) && !isSystemFontLike(metrics.headingFont);
+  const hasBrandedBody = isPresentValue(metrics.bodyFont) && !isSystemFontLike(metrics.bodyFont);
   const coreTokens = [
-    isPresentValue(metrics.headingFont),
-    isPresentValue(metrics.bodyFont),
+    hasBrandedHeading,
+    hasBrandedBody,
     isPresentValue(metrics.primaryColor),
     isPresentValue(metrics.neutralColor),
   ];
   const capturedCount = coreTokens.filter(Boolean).length;
   const totalCount = coreTokens.length;
+  const hasSystemTypeBaseline = isPresentValue(metrics.headingFont) || isPresentValue(metrics.bodyFont);
+  const headingLabel = normalizeFontLabel(metrics.headingFont);
+  const bodyLabel = normalizeFontLabel(metrics.bodyFont);
+
+  if ((capturedCount === 0 || status === 'critical') && hasSystemTypeBaseline) {
+    return {
+      id: 'style-guide-system-baseline',
+      type: 'issue',
+      readiness: 'partial',
+      finding: 'A basic visual baseline came through, but typography is still relying on system fonts.',
+      impact: `The run captured ${headingLabel || 'system'}${bodyLabel && bodyLabel !== headingLabel ? ` and ${bodyLabel}` : ''} instead of a clearly branded type system, so the snapshot still feels generic.`,
+      action: 'Confirm one heading font and one body font, then refresh the snapshot.',
+    };
+  }
 
   if (capturedCount === 0 || status === 'critical') {
     const topIssue = issues[0];
@@ -892,7 +943,9 @@ function selectStyleGuideSignal({ status, issues, strengths, metrics }) {
 
   if (capturedCount < totalCount || status === 'partial' || issues.length > 0) {
     const topIssue = issues[0];
-    const safeImpact = sanitizeStyleText(topIssue?.detail);
+    const safeImpact = hasSystemTypeBaseline && !hasBrandedHeading && !hasBrandedBody
+      ? 'Color and layout direction are visible, but the run did not confirm a dedicated branded type system yet.'
+      : sanitizeStyleText(topIssue?.detail);
     return {
       id: 'style-guide-partial',
       type: 'issue',
@@ -979,17 +1032,19 @@ function selectPrioritySignal({ status, issues, strengths, metrics }) {
   }
 
   const hasChannel = isPresentValue(metrics.channelLabel);
+  const channelSummary = summarizeList(metrics.channelLabel, 2);
+  const focusLabel = summarizeFocusLabel(metrics.focusLabel);
   return {
     id: 'priority-ready',
     type: 'strength',
     readiness: hasChannel ? 'healthy' : 'partial',
-    finding: `Top next step: ${metrics.focusLabel}.`,
+    finding: `Top next step: ${focusLabel || metrics.focusLabel}.`,
     impact: hasChannel
-      ? `This is the highest-leverage move right now and already points toward ${metrics.channelLabel}.`
-      : 'This is the highest-leverage move right now, but the execution channel is still broad.',
+      ? `This is the clearest move right now and already points toward ${channelSummary || metrics.channelLabel}.`
+      : 'This is the clearest move right now, but the execution channel still needs confirmation.',
     action: hasChannel
       ? 'Start here before lower-priority fixes.'
-      : 'Confirm the channel for this step, then start here.',
+      : 'Confirm the channel, then start here.',
   };
 }
 
