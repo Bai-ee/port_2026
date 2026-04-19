@@ -560,19 +560,18 @@ async function fetchDashboardBootstrap(user) {
   const token = await user.getIdToken();
   const response = await fetch('/api/dashboard/bootstrap', {
     headers: { Authorization: `Bearer ${token}` },
+    cache: 'no-store',
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data?.error || 'Could not load dashboard data.');
   return data;
 }
 
-async function checkMockupAvailability() {
-  const response = await fetch('/output/final_mockup.png', {
-    method: 'HEAD',
-    cache: 'no-store',
-  });
-  if (!response.ok) return null;
-  return `/output/final_mockup.png?v=${Date.now()}`;
+function appendCacheBust(url, key) {
+  if (!url) return null;
+  if (!key) return url;
+  const joiner = url.includes('?') ? '&' : '?';
+  return `${url}${joiner}v=${encodeURIComponent(String(key))}`;
 }
 
 // ── Modal step builder ───────────────────────────────────────────────────────
@@ -1250,15 +1249,37 @@ const DashboardPage = () => {
   const displayProfile = bootstrap.userProfile || userProfile;
   const currentRun = recentRuns[0] || null;
   const dashboardState = bootstrap.dashboardState;
+  const artifactVersionKey =
+    dashboardState?.latestRunId
+    || dashboardState?.updatedAt?.seconds
+    || currentRun?.id
+    || currentRun?.runId
+    || null;
   const homepageDeviceMockup = dashboardState?.artifacts?.homepageDeviceMockup || null;
-  const homepageScreenshotUrl = dashboardState?.artifacts?.homepageScreenshot?.downloadUrl || null;
+  const homepageDeviceMockupUrl = appendCacheBust(
+    homepageDeviceMockup?.downloadUrl || null,
+    homepageDeviceMockup?.capturedAt || artifactVersionKey
+  );
+  const homepageScreenshotUrl = appendCacheBust(
+    dashboardState?.artifacts?.homepageScreenshot?.downloadUrl || null,
+    dashboardState?.artifacts?.homepageScreenshot?.capturedAt || artifactVersionKey
+  );
   const homepageScreenshots = dashboardState?.artifacts?.homepageScreenshots || {};
   const fullPageScreenshots = dashboardState?.artifacts?.fullPageScreenshots || {};
   // Full-page screenshots preferred for the tabs; fall back to viewport screenshots
   const deviceScreenshots = {
-    desktop: fullPageScreenshots['desktop-full']?.downloadUrl || homepageScreenshots.desktop?.downloadUrl || null,
-    tablet:  fullPageScreenshots['tablet-full']?.downloadUrl  || homepageScreenshots.tablet?.downloadUrl  || null,
-    mobile:  fullPageScreenshots['mobile-full']?.downloadUrl  || homepageScreenshots.mobile?.downloadUrl  || null,
+    desktop: appendCacheBust(
+      fullPageScreenshots['desktop-full']?.downloadUrl || homepageScreenshots.desktop?.downloadUrl || null,
+      fullPageScreenshots['desktop-full']?.capturedAt || homepageScreenshots.desktop?.capturedAt || artifactVersionKey
+    ),
+    tablet: appendCacheBust(
+      fullPageScreenshots['tablet-full']?.downloadUrl || homepageScreenshots.tablet?.downloadUrl || null,
+      fullPageScreenshots['tablet-full']?.capturedAt || homepageScreenshots.tablet?.capturedAt || artifactVersionKey
+    ),
+    mobile: appendCacheBust(
+      fullPageScreenshots['mobile-full']?.downloadUrl || homepageScreenshots.mobile?.downloadUrl || null,
+      fullPageScreenshots['mobile-full']?.capturedAt || homepageScreenshots.mobile?.capturedAt || artifactVersionKey
+    ),
   };
   const clientStatus = dashboardState?.status || client?.status || null;
   // Prefer the live run status from brief_runs (polled every 4s) over the cached
@@ -1488,35 +1509,8 @@ const DashboardPage = () => {
   }, [sgDisplayData]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    const refreshMockup = async () => {
-      if (homepageDeviceMockup?.downloadUrl) {
-        if (!cancelled) {
-          setIntakeMockupSrc(homepageDeviceMockup.downloadUrl);
-        }
-        return;
-      }
-
-      try {
-        const src = await checkMockupAvailability();
-        if (!cancelled) {
-          setIntakeMockupSrc(src);
-        }
-      } catch {
-        if (!cancelled) {
-          setIntakeMockupSrc(null);
-        }
-      }
-    };
-
-    refreshMockup();
-    const interval = setInterval(refreshMockup, 15000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [homepageDeviceMockup?.downloadUrl]);
+    setIntakeMockupSrc(homepageDeviceMockupUrl || null);
+  }, [homepageDeviceMockupUrl]);
 
   // Seed reseedUrl from client websiteUrl once loaded
   useEffect(() => {

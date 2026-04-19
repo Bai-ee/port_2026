@@ -27,7 +27,11 @@ export async function GET(request) {
 
   try {
     const bootstrap = await getDashboardBootstrap(decoded.uid);
-    return NextResponse.json(bootstrap);
+    return NextResponse.json(bootstrap, {
+      headers: {
+        'Cache-Control': 'no-store, max-age=0',
+      },
+    });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unauthorized.' },
