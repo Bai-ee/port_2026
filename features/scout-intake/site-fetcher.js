@@ -360,18 +360,20 @@ async function fetchPage(url, timeoutMs = FETCH_TIMEOUT_MS) {
         'Accept-Language': 'en-US,en;q=0.9',
       },
     });
-    clearTimeout(timer);
 
     if (!res.ok) {
+      clearTimeout(timer);
       return { ok: false, status: res.status, html: null, reason: `HTTP ${res.status}` };
     }
 
     const contentType = res.headers.get('content-type') || '';
     if (!contentType.includes('text/html') && !contentType.includes('text/plain')) {
+      clearTimeout(timer);
       return { ok: false, status: res.status, html: null, reason: 'non-html response' };
     }
 
     const html = await res.text();
+    clearTimeout(timer);
     return { ok: true, status: res.status, html };
   } catch (err) {
     clearTimeout(timer);

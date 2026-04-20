@@ -122,9 +122,12 @@ async function fetchStylesheet(url, timeoutMs = FETCH_TIMEOUT_MS) {
         Accept: 'text/css,*/*;q=0.1',
       },
     });
-    clearTimeout(timer);
-    if (!res.ok) return null;
+    if (!res.ok) {
+      clearTimeout(timer);
+      return null;
+    }
     const text = await res.text();
+    clearTimeout(timer);
     return text.slice(0, 30000); // cap individual sheet
   } catch {
     clearTimeout(timer);
