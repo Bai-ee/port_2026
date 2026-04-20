@@ -1190,7 +1190,10 @@ const DashboardPage = () => {
   const [briefFullScreen, setBriefFullScreen] = useState(false);
   const [auditFullScreen, setAuditFullScreen] = useState(false);
   const [modalTab, setModalTab] = useState('solutions');
-  const [activeCapabilityFilter, setActiveCapabilityFilter] = useState('brief');
+  // null until bootstrap resolves, then synchronously set to 'onboarding' for
+  // modular clients without brief data, or 'brief' otherwise. Avoids the flash
+  // where the default 'brief' view paints before the effect corrects it.
+  const [activeCapabilityFilter, setActiveCapabilityFilter] = useState(null);
   const [chatDraft, setChatDraft] = useState('');
   const [modalChatMode, setModalChatMode] = useState('ai');
   const capabilityGridRef = useRef(null);
@@ -1720,13 +1723,16 @@ const DashboardPage = () => {
     }
   }, [surveyResolved, latestRunStatus, completionCountdown]);
 
-  // For modular clients without brief data, default the capability filter to
-  // 'onboarding' (Data Visualization) instead of 'brief'. Only fires once,
-  // when moduleConfig first loads, and only if the user hasn't navigated away.
-  useEffect(() => {
-    if (!moduleConfig || hasIntakeData) return;
-    setActiveCapabilityFilter((prev) => (prev === 'brief' ? 'onboarding' : prev));
-  }, [moduleConfig, hasIntakeData]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Resolve the initial capability filter synchronously once bootstrap lands.
+  // useLayoutEffect so the filter is set before the browser paints — eliminates
+  // the flash from default 'brief' → corrected 'onboarding' on modular clients.
+  // Only fires while the filter is still null; user nav overrides afterward.
+  useLayoutEffect(() => {
+    if (bootstrapLoading) return;
+    if (activeCapabilityFilter !== null) return;
+    const next = (Boolean(moduleConfig) && !hasIntakeData) ? 'onboarding' : 'brief';
+    setActiveCapabilityFilter(next);
+  }, [bootstrapLoading, moduleConfig, hasIntakeData, activeCapabilityFilter]);
 
   // When a new brief_run starts (run ID changes from a prior non-null value),
   // reset survey resolution so the bento survey reappears alongside the fresh
@@ -4340,7 +4346,10 @@ const DashboardPage = () => {
           ) : null}
 
           {/* ── Capability section shell ── */}
-          <div id="capability-section-shell">
+          {/* Hold render until the initial capability filter is resolved so the
+              nav pills + grid don't flash 'brief' before correcting to
+              'onboarding' for modular clients. */}
+          <div id="capability-section-shell" style={{ visibility: activeCapabilityFilter ? 'visible' : 'hidden' }}>
 
           {/* Left — grid */}
           <div id="capability-grid-col">
@@ -4379,8 +4388,7 @@ const DashboardPage = () => {
                 )}
               </div>
             ) : null}
-            {activeCapabilityFilter !== 'brief' && intakeCapabilityCards.filter((card) => {
-              if (!activeCapabilityFilter) return true;
+            {activeCapabilityFilter && activeCapabilityFilter !== 'brief' && intakeCapabilityCards.filter((card) => {
               if (activeCapabilityFilter === 'onboarding') {
                 if (!ONBOARDING_CARD_IDS.has(card.id)) return false;
                 // Show every onboarding card regardless of enabled/run state.
