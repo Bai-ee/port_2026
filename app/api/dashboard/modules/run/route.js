@@ -182,11 +182,17 @@ export async function POST(request) {
   // Complete or fail the run so latestRunStatus flips to succeeded/failed
   const anyOk = results.some((r) => r.ok);
   if (anyOk) {
+    const artifactRefs = results.flatMap((r) => Array.isArray(r.artifacts) ? r.artifacts : []);
+    const warnings = results.flatMap((r) =>
+      Array.isArray(r.warningCodes)
+        ? r.warningCodes.map((code) => ({ type: 'warning', code, moduleId: r.cardId || null }))
+        : []
+    );
     const minimalResult = {
       pipelineType: 'module-run',
       pipelineRunId: runId,
-      artifactRefs: [],
-      warnings: [],
+      artifactRefs,
+      warnings,
       scoutPriorityAction: null,
       content: null,
       contentOpportunities: null,

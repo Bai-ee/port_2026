@@ -138,12 +138,18 @@ export async function POST(request) {
       await updateModuleState(clientId, results, runId);
 
       const anyOk = results.some((r) => r.ok);
+      const artifactRefs = results.flatMap((r) => Array.isArray(r.artifacts) ? r.artifacts : []);
+      const warnings = results.flatMap((r) =>
+        Array.isArray(r.warningCodes)
+          ? r.warningCodes.map((code) => ({ type: 'warning', code, moduleId: r.cardId || null }))
+          : []
+      );
       pipelineResult = {
         status: anyOk ? 'succeeded' : 'failed',
         pipelineType: 'free-tier-intake',
         pipelineRunId: runId,
-        artifactRefs: [],
-        warnings: [],
+        artifactRefs,
+        warnings,
         scoutPriorityAction: null,
         content: null,
         contentOpportunities: null,
