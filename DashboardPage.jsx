@@ -3032,20 +3032,6 @@ const DashboardPage = () => {
       footerRight: 'REVIEWED',
     },
     {
-      id: 'seo-performance',
-      category: 'onboarding',
-      number: 'SE',
-      label: 'SEO HEALTH',
-      title: 'SEO + Performance Snapshot',
-      description: 'We ran a performance and SEO scan on your site. Load speed, metadata, and structure all impact visibility and conversion — this card shows where you stand.',
-      placeholderLabel: isSeoError ? 'SEO\nAUDIT\nFAILED' : isSeoQueued ? 'AUDIT\nQUEUED' : hasSeoAuditData ? 'SEO' : 'NO\nAUDIT',
-      rows: seoAuditRows,
-      footerLeft: isSeoPartial ? 'Partial' : hasSeoAuditData ? 'Live' : isSeoQueued ? 'Queued' : isSeoError ? 'Error' : WORK_NEEDED_LABEL,
-      domId: 'intake-card-seo-performance',
-      footerRight: 'REVIEWED',
-      moduleControls: { tech: ['pagespeed-insights', 'anthropic', 'ai-seo-audit'] },
-    },
-    {
       id: 'multi-device-view',
       category: 'onboarding',
       number: 'MD',
@@ -3062,6 +3048,20 @@ const DashboardPage = () => {
       footerLeft: intakeMockupSrc ? 'Live' : multiDevicePreviewSrc ? 'Partial' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
       moduleControls: { tech: ['browserless', 'firebase-storage', 'python-mockup'] },
+    },
+    {
+      id: 'seo-performance',
+      category: 'onboarding',
+      number: 'SE',
+      label: 'SEO HEALTH',
+      title: 'SEO + Performance Snapshot',
+      description: 'We ran a performance and SEO scan on your site. Load speed, metadata, and structure all impact visibility and conversion — this card shows where you stand.',
+      placeholderLabel: isSeoError ? 'SEO\nAUDIT\nFAILED' : isSeoQueued ? 'AUDIT\nQUEUED' : hasSeoAuditData ? 'SEO' : 'NO\nAUDIT',
+      rows: seoAuditRows,
+      footerLeft: isSeoPartial ? 'Partial' : hasSeoAuditData ? 'Live' : isSeoQueued ? 'Queued' : isSeoError ? 'Error' : WORK_NEEDED_LABEL,
+      domId: 'intake-card-seo-performance',
+      footerRight: 'REVIEWED',
+      moduleControls: { tech: ['pagespeed-insights', 'anthropic', 'ai-seo-audit'] },
     },
     {
       id: 'social-preview',
@@ -4286,19 +4286,24 @@ const DashboardPage = () => {
               if (!activeCapabilityFilter) return true;
               if (activeCapabilityFilter === 'onboarding') {
                 if (!ONBOARDING_CARD_IDS.has(card.id)) return false;
-                // Modular clients without brief data: only show enabled module cards
-                if (isModularOnboardingClient) return enabledModuleIds.has(card.id);
+                // Show every onboarding card regardless of enabled/run state.
+                // Inactive cards render as INACTIVE with a RUN action in the footer.
                 return true;
               }
               return activeCapabilityFilter === card.category;
-            }).map((card) => (
+            }).map((card) => {
+              const _mEnabled = moduleConfig ? (moduleConfig[card.id]?.enabled ?? false) : true;
+              const _mStatus = moduleState?.[card.id]?.status ?? 'inactive';
+              const hasBothButtons = Boolean(card.moduleControls) && !(!_mEnabled && _mStatus === 'inactive');
+              const isDimmed = isModularOnboardingClient && card.id !== 'audit-summary' && card.id !== 'multi-device-view';
+              return (
               <article
                 data-capability-card
                 data-flip-id={`cap-${card.id}`}
-                className={`tile tile-intake-card${hasIntakeData ? ' tile-ready' : ''}${card.wide ? ' tile-intake-card--wide' : ''}`}
+                className={`tile tile-intake-card${hasIntakeData ? ' tile-ready' : ''}${card.wide ? ' tile-intake-card--wide' : ''}${hasBothButtons ? ' tile-intake-card--btns-only' : ''}${isDimmed ? ' tile-intake-card--dimmed' : ''}`}
                 id={card.domId || `tile-${card.id}`}
                 key={card.id}
-                onClick={() => {
+                onClick={hasBothButtons ? undefined : () => {
                   if (card.id === 'brief' && briefPreviewHtml) { setBriefFullScreen(true); return; }
                   if (card.id === 'audit-summary') { setAuditFullScreen(true); return; }
                   setActiveTileModal({ title: card.title, description: card.description, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null, recommendation: card.recommendation || null, analyzer: card.analyzer || null, readinessBadge: card.readinessBadge || null });
@@ -4472,25 +4477,41 @@ const DashboardPage = () => {
                     onRun={handleModuleRun}
                     onToggle={handleModuleToggle}
                     tech={card.moduleControls.tech}
+                    hideRunButton
+                    hideStatusLabel
                   />
                 )}
                 <div className="tile-foot">
                   <span className="tile-foot-status">
-                    <span className={`power-dot lamp${card.footerLeft !== 'Live' ? ' power-dot-needs-work' : ''}`} />
-                    {card.footerRight}
+                    {(() => {
+                      const STATUS_DOT = {
+                        succeeded: { dot: '#22c55e', label: 'Active',   glow: '0 0 5px 2px rgba(34,197,94,0.45)' },
+                        failed:    { dot: '#ef4444', label: 'Failed',   glow: '0 0 5px 2px rgba(239,68,68,0.45)' },
+                        running:   { dot: '#f59e0b', label: 'Running…', glow: '0 0 5px 2px rgba(245,158,11,0.45)' },
+                        queued:    { dot: '#f59e0b', label: 'Queued',   glow: '0 0 5px 2px rgba(245,158,11,0.30)' },
+                        idle:      { dot: '#6b7280', label: 'Idle',     glow: 'none' },
+                        disabled:  { dot: '#6b7280', label: 'Inactive', glow: 'none' },
+                        inactive:  { dot: '#6b7280', label: 'Inactive', glow: 'none' },
+                      };
+                      if (card.moduleControls) {
+                        const s = moduleState?.[card.id]?.status ?? 'inactive';
+                        const meta = STATUS_DOT[s] ?? STATUS_DOT.inactive;
+                        return (
+                          <>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', display: 'inline-block', background: meta.dot, boxShadow: meta.glow, flexShrink: 0 }} />
+                            {meta.label}
+                          </>
+                        );
+                      }
+                      return (
+                        <>
+                          <span className={`power-dot lamp${card.footerLeft !== 'Live' ? ' power-dot-needs-work' : ''}`} />
+                          {card.footerRight}
+                        </>
+                      );
+                    })()}
                   </span>
                   <span className="tile-foot-right-group">
-                    {card.footerAction ? (
-                      <button
-                        type="button"
-                        id={`tile-${card.id}-rerun-btn`}
-                        className="tile-foot-action-btn"
-                        onClick={card.footerAction.onClick}
-                        disabled={card.footerAction.loading}
-                      >
-                        {card.footerAction.loading ? '…' : card.footerAction.label}
-                      </button>
-                    ) : null}
                     {card.id === 'brief' && briefPdfUrl && (
                       <a
                         href={briefPdfUrl}
@@ -4504,22 +4525,69 @@ const DashboardPage = () => {
                         DL ↓
                       </a>
                     )}
-                    <button
-                      type="button"
-                      className="tile-view-details-btn"
-                      onClick={(e) => { e.stopPropagation(); setActiveTileModal({ title: card.title, description: card.description, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null, recommendation: card.recommendation || null, analyzer: card.analyzer || null, readinessBadge: card.readinessBadge || null }); }}
-                    >
-                        Details ↗
-                    </button>
+                    {(() => {
+                      if (!card.moduleControls) {
+                        if (!card.footerAction) return null;
+                        return (
+                          <button
+                            type="button"
+                            id={`tile-${card.id}-rerun-btn`}
+                            className="tile-foot-rerun-btn"
+                            onClick={(e) => { e.stopPropagation(); card.footerAction.onClick?.(e); }}
+                            disabled={card.footerAction.loading}
+                          >
+                            {card.footerAction.loading ? '…' : card.footerAction.label}
+                          </button>
+                        );
+                      }
+                      const mStatus = moduleState?.[card.id]?.status ?? 'inactive';
+                      const mEnabled = moduleConfig ? (moduleConfig[card.id]?.enabled ?? false) : true;
+                      const mIsRetry = mStatus === 'failed';
+                      const mIsRerun = mStatus === 'succeeded';
+                      const mLoading = moduleRunLoading[card.id] || moduleToggleLoading[card.id] || false;
+                      const tierAllowsRerun = !!moduleConfig?.[card.id]?.allowMultiRun;
+                      const mBusy = mStatus === 'running' || mStatus === 'queued';
+                      // Inactive = no config-enabled yet AND never succeeded. RUN here enables + kicks off first run.
+                      const mIsInactive = !mEnabled && !mIsRerun && !mBusy;
+                      const interactive =
+                        !mBusy && (mIsInactive || (mEnabled && (mIsRetry || tierAllowsRerun)));
+                      const label = mLoading ? '…' : mIsRetry ? 'Retry' : mIsRerun ? 'Re-run' : 'Run';
+                      return (
+                        <button
+                          type="button"
+                          id={`tile-${card.id}-rerun-btn`}
+                          className="tile-foot-rerun-btn"
+                          disabled={!interactive || mLoading}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!interactive) return;
+                            if (mIsInactive) { handleModuleToggle(card.id, true); return; }
+                            handleModuleRun(card.id, mIsRerun);
+                          }}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })()}
+                    {!(card.moduleControls && !(moduleConfig ? (moduleConfig[card.id]?.enabled ?? false) : true) && (moduleState?.[card.id]?.status ?? 'inactive') === 'inactive') && (
+                      <button
+                        type="button"
+                        className="tile-view-details-btn"
+                        onClick={(e) => { e.stopPropagation(); setActiveTileModal({ title: card.title, description: card.description, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null, recommendation: card.recommendation || null, analyzer: card.analyzer || null, readinessBadge: card.readinessBadge || null }); }}
+                      >
+                          Details ↗
+                      </button>
+                    )}
                   </span>
                 </div>
               </article>
-            ))}
+              );
+            })}
           </div>
           </div>{/* end capability-grid-col */}
 
           {/* Right — filter nav */}
-          <div id="capability-nav-col">
+          <div id="capability-nav-col" className={isModularOnboardingClient ? 'capability-nav-col--single-active' : undefined}>
             {[
               { key: 'brief',      label: 'Daily Brief',             sub: 'Your full report',         icon: ChartColumnIncreasing, color: '#2a2420' },
               { key: 'onboarding', label: 'Data Visualization',      sub: 'From your onboarding',     icon: Globe,                 color: '#f59e0b' },
@@ -4530,16 +4598,15 @@ const DashboardPage = () => {
               { key: 'growth',     label: 'Growth Signals',          sub: 'Trends & competitors',     icon: Settings2,             color: '#10b981' },
               { key: 'automation', label: 'Automation & Systems',    sub: 'Scale & automate',         icon: BrainIcon,             color: '#6366f1' },
               { key: 'services',   label: 'Work With Me',            sub: 'Get it done',              icon: MessageSquareMore,     color: '#ec4899' },
-            ].filter(({ key }) => {
-              // Modular clients without brief data see only Data Visualization
-              if (isModularOnboardingClient) return key === 'onboarding';
-              return true;
-            }).map(({ key, label, sub, icon: NavIcon, color }) => (
+            ].map(({ key, label, sub, icon: NavIcon, color }) => {
+              const isLocked = isModularOnboardingClient && key !== 'onboarding';
+              return (
               <button
                 key={key ?? 'all'}
                 type="button"
                 id={`capability-nav-btn-${key ?? 'all'}`}
-                className={`capability-nav-btn${activeCapabilityFilter === key ? ' capability-nav-btn--active' : ''}`}
+                className={`capability-nav-btn${activeCapabilityFilter === key ? ' capability-nav-btn--active' : ''}${isLocked ? ' capability-nav-btn--locked' : ''}`}
+                disabled={isLocked}
                 onClick={() => {
                   if (key === activeCapabilityFilter) return;
                   const grid = capabilityGridRef.current;
@@ -4580,7 +4647,8 @@ const DashboardPage = () => {
                   </span>
                 ) : null}
               </button>
-            ))}
+              );
+            })}
           </div>
 
           </div>{/* end capability-section-shell */}
@@ -6185,6 +6253,33 @@ const dashboardCss = `
     transform: translateX(5px);
     transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
+  .capability-nav-btn--locked {
+    opacity: 0.32;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+  .capability-nav-btn--locked .capability-nav-btn-icon-wrap {
+    filter: grayscale(1);
+  }
+  /* Single-active state: kill all pointer interaction so zero hover effects fire */
+  #capability-nav-col.capability-nav-col--single-active {
+    pointer-events: none;
+  }
+  /* Keep the one live nav always showing as active */
+  #capability-nav-col.capability-nav-col--single-active:hover .capability-nav-btn--active {
+    background: rgba(255, 255, 255, 1);
+    box-shadow:
+      0px 6px 14px rgba(0,0,0,0.06),
+      0px 18px 36px rgba(0,0,0,0.06),
+      0px 28px 56px rgba(0,0,0,0.09),
+      inset 0 1px 0 rgba(255,255,255,0.55);
+    transform: scale(1.02) translateY(-2px);
+    opacity: 1;
+  }
+  #capability-nav-col.capability-nav-col--single-active:hover .capability-nav-btn--active::before {
+    background: linear-gradient(180deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+    opacity: 1;
+  }
   #capability-nav-col:hover .capability-nav-btn--active:hover .capability-nav-btn-icon-wrap {
     transform: scale(1.12);
     transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -7226,6 +7321,60 @@ const dashboardCss = `
     color: #fff;
     transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   }
+  /* New-user dimmed cards: 60% opacity, full on hover */
+  .tile.tile-intake-card--dimmed {
+    opacity: 0.4;
+    transition: opacity 0.3s ease;
+    pointer-events: auto;
+  }
+  /* Override --btns-only's pointer-events: none so hover fires */
+  .tile.tile-intake-card--btns-only.tile-intake-card--dimmed {
+    pointer-events: auto;
+  }
+  .tile.tile-intake-card--dimmed:hover {
+    opacity: 1;
+  }
+  /* Details button: suppress card-hover activation, only activates on direct hover */
+  .tile.tile-intake-card--dimmed:hover .tile-view-details-btn:not(:hover) {
+    background: #fff;
+    border-color: #000;
+    color: #000;
+  }
+  /* Run button: only activates on direct hover */
+  .tile-foot-rerun-btn:not(:disabled):hover {
+    background: #2a2420;
+    border-color: #2a2420;
+    color: #fff;
+  }
+  /* Cards with both RUN + DETAILS: kill all card-level hover; buttons handle their own hover */
+  .tile.tile-intake-card--btns-only {
+    cursor: default;
+    pointer-events: none;
+  }
+  .tile.tile-intake-card--btns-only .tile-foot-rerun-btn,
+  .tile.tile-intake-card--btns-only .tile-view-details-btn {
+    pointer-events: auto;
+  }
+  .tile-foot-rerun-btn {
+    background: #fff;
+    border: 1px solid #000;
+    cursor: pointer;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #000;
+    padding: 5px 10px;
+    border-radius: 4px;
+    line-height: 1;
+  }
+  .tile-foot-rerun-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.35;
+    background: #fff;
+    border-color: rgba(0,0,0,0.4);
+    color: rgba(0,0,0,0.55);
+  }
   .tile-blocked-upgrade-btn::before {
     display: none;
   }
@@ -8224,6 +8373,9 @@ const dashboardCss = `
     display: inline-flex;
     align-items: center;
     gap: 6px;
+  }
+  #module-controls-multi-device-view {
+    display: none;
   }
   .power-dot-dim { background: var(--text-disabled) !important; box-shadow: none !important; }
   .power-dot-needs-work { background: var(--accent) !important; box-shadow: 0 0 5px 2px rgba(215, 25, 33, 0.55) !important; }

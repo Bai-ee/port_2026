@@ -8,7 +8,8 @@ const STATUS_META = {
   running:   { dot: '#f59e0b', label: 'Running…',  glow: '0 0 5px 2px rgba(245,158,11,0.45)' },
   queued:    { dot: '#f59e0b', label: 'Queued',    glow: '0 0 5px 2px rgba(245,158,11,0.30)' },
   idle:      { dot: '#6b7280', label: 'Idle',      glow: 'none' },
-  disabled:  { dot: '#6b7280', label: 'Disabled',  glow: 'none' },
+  disabled:  { dot: '#6b7280', label: 'Inactive',  glow: 'none' },
+  inactive:  { dot: '#6b7280', label: 'Inactive',  glow: 'none' },
 };
 
 function formatTs(ts) {
@@ -28,6 +29,8 @@ export default function ModuleCardControls({
   loading, toggleLoading,
   onRun, onToggle,
   tech = [],
+  hideRunButton = false,
+  hideStatusLabel = false,
 }) {
   const state = moduleState?.[cardId] ?? null;
   const status = state?.status ?? 'disabled';
@@ -45,10 +48,14 @@ export default function ModuleCardControls({
   return (
     <div id={`module-controls-${cardId}`} style={rootStyle}>
       <div style={rowStyle}>
-        <span style={{ ...dotStyle, background: dot, boxShadow: glow }} />
-        <span style={statusTextStyle}>{label}</span>
-        {successAt && status === 'succeeded' && (
-          <span style={metaTextStyle}>{successAt}</span>
+        {!hideStatusLabel && (
+          <>
+            <span style={{ ...dotStyle, background: dot, boxShadow: glow }} />
+            <span style={statusTextStyle}>{label}</span>
+            {successAt && status === 'succeeded' && (
+              <span style={metaTextStyle}>{successAt}</span>
+            )}
+          </>
         )}
         {tech.length > 0 && (
           <span style={techGroupStyle}>
@@ -57,7 +64,7 @@ export default function ModuleCardControls({
             ))}
           </span>
         )}
-        {!isEnabled && onToggle && (
+        {!hideRunButton && !isEnabled && onToggle && (
           <button
             type="button"
             id={`module-enable-btn-${cardId}`}
@@ -69,7 +76,7 @@ export default function ModuleCardControls({
             {toggleLoading ? '…' : 'Enable & Run'}
           </button>
         )}
-        {isEnabled && canRun && onRun && (
+        {!hideRunButton && isEnabled && canRun && onRun && (
           <button
             type="button"
             id={`module-run-btn-${cardId}`}
