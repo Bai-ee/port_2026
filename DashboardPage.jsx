@@ -6311,9 +6311,9 @@ const dashboardCss = `
   .meta-row .value { font-family: var(--font-mono); font-size: clamp(0.82rem, 1.1vw, 0.95rem); color: var(--text-display); flex: 1; text-align: center; }
   #client-meta-row, #account-meta-row, #tier-meta-row { display: flex; align-items: center; gap: 8px; }
   .meta-row-action-btn {
-    background: #000;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    color: #e7d9c3;
+    background: transparent;
+    border: 1px solid #000;
+    color: #000;
     width: 22px;
     height: 22px;
     border-radius: 3px;
@@ -6326,12 +6326,14 @@ const dashboardCss = `
     transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
   }
   .meta-row-action-btn:hover {
-    background: #1a1712;
-    border-color: rgba(255, 255, 255, 0.2);
+    background: #000;
     color: #fff;
+    border-color: #000;
   }
-  .meta-row-action-btn--danger { border-color: rgba(239, 68, 68, 0.4); color: #ef4444; }
-  .meta-row-action-btn--danger:hover { background: #1a1712; border-color: rgba(239, 68, 68, 0.65); color: #f87171; }
+  .meta-row-action-btn--danger,
+  .meta-row-action-btn--danger:hover {
+    /* Kept black-themed to match other action buttons. No red accent. */
+  }
   #tier-trigger-btn {
     /* Icon-only action button — styled via .meta-row-action-btn. No underline. */
     text-decoration: none;
