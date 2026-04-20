@@ -12,6 +12,8 @@ Move onboarding from one broad intake run into a modular card system where:
 
 This spec is written against the current codebase and names the files that should be changed.
 
+> **Before authoring a new card module, read [`PRODUCTION_HARDENING/CARD_MODULE_VERCEL_GOTCHAS.md`](./PRODUCTION_HARDENING/CARD_MODULE_VERCEL_GOTCHAS.md).** It covers Vercel-specific runtime traps (static assets not in the lambda, deployment-protected URLs, `after()` for post-response work, warning-object shape, screenshot variant key mapping) that have each burned a full debug cycle.
+
 ---
 
 ## Product Rules
