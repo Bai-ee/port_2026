@@ -1,13 +1,13 @@
 'use strict';
 
 const fs = require('fs/promises');
+const os = require('os');
 const path = require('path');
 const sharp = require('sharp');
 const { downloadArtifactToFile, saveBufferArtifact } = require('./storage-artifacts.cjs');
 
 const ROOT = path.resolve(__dirname, '../..');
 const TEMPLATE_PATH = path.join(ROOT, 'public', 'img', 'device_template.png');
-const PUBLIC_OUTPUT_PATH = path.join(ROOT, 'public', 'output', 'final_mockup.png');
 
 const REQUIRED_VARIANTS = {
   desktop: 'desktop',
@@ -86,13 +86,12 @@ async function generateWebsiteMockupArtifact({
     };
   }
 
-  const tempRoot = path.join(ROOT, '.tmp-device-mockup');
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'device-mockup-'));
   const inputDir = path.join(tempRoot, runId);
   const capturedAt = new Date().toISOString();
 
   try {
     await fs.mkdir(inputDir, { recursive: true });
-    await fs.mkdir(path.dirname(PUBLIC_OUTPUT_PATH), { recursive: true });
 
     await Promise.all(
       Object.entries(REQUIRED_VARIANTS).map(([targetName, sourceVariant]) => {
@@ -117,8 +116,6 @@ async function generateWebsiteMockupArtifact({
       .composite(composites)
       .png()
       .toBuffer();
-
-    await fs.writeFile(PUBLIC_OUTPUT_PATH, buffer).catch(() => {});
 
     const storagePath = path.posix.join(
       'clients',
@@ -156,7 +153,6 @@ async function generateWebsiteMockupArtifact({
         capturedAt,
         downloadUrl: stored.downloadUrl,
         sourceVariants: Object.values(REQUIRED_VARIANTS),
-        localPublicPath: '/output/final_mockup.png',
       },
     };
   } catch (error) {
@@ -169,7 +165,7 @@ async function generateWebsiteMockupArtifact({
       ),
     };
   } finally {
-    await fs.rm(inputDir, { recursive: true, force: true }).catch(() => {});
+    await fs.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
   }
 }
 
