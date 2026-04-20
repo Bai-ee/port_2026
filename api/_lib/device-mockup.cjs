@@ -1,40 +1,24 @@
 'use strict';
 
 const fs = require('fs/promises');
-const os = require('os');
 const path = require('path');
-const { promisify } = require('util');
-const { execFile } = require('child_process');
+const sharp = require('sharp');
 const { downloadArtifactToFile, saveBufferArtifact } = require('./storage-artifacts.cjs');
 
-const execFileAsync = promisify(execFile);
-
 const ROOT = path.resolve(__dirname, '../..');
-const SCRIPT_PATH = path.join(ROOT, 'scripts', 'generate_device_mockup.py');
 const TEMPLATE_PATH = path.join(ROOT, 'public', 'img', 'device_template.png');
-const SCRIPT_TIMEOUT_MS = 90_000;
-
-function resolvePythonBin() {
-  if (process.env.PYTHON_BIN) return process.env.PYTHON_BIN;
-  const fsSync = require('fs');
-  // Runtime-only resolution keeps Turbopack from tracing a static interpreter path.
-  const candidates = [];
-  const configuredVenvDir = process.env.PYTHON_VENV_DIR;
-  if (configuredVenvDir) {
-    candidates.push(path.join(ROOT, configuredVenvDir, 'bin', 'python3'));
-  }
-  const defaultVenvDir = String.fromCharCode(46, 118, 101, 110, 118);
-  candidates.push(path.join(ROOT, defaultVenvDir, 'bin', 'python3'));
-  for (const candidate of candidates) {
-    if (fsSync.existsSync(candidate)) return candidate;
-  }
-  return 'python3';
-}
+const PUBLIC_OUTPUT_PATH = path.join(ROOT, 'public', 'output', 'final_mockup.png');
 
 const REQUIRED_VARIANTS = {
   desktop: 'desktop',
   ipad: 'tablet',
   iphone: 'mobile',
+};
+
+const SCREEN_BOXES = {
+  desktop: { left: 159, top: 145, width: 707, height: 418, radius: 0 },
+  ipad: { left: 887, top: 308, width: 298, height: 437, radius: 7 },
+  iphone: { left: 1254, top: 470, width: 138, height: 307, radius: 11 },
 };
 
 function buildWarning(code, message, extra = {}) {
@@ -44,6 +28,35 @@ function buildWarning(code, message, extra = {}) {
     message,
     ...extra,
   };
+}
+
+function roundedRectSvg(width, height, radius) {
+  const safeRadius = Math.max(0, Math.min(radius || 0, Math.floor(Math.min(width, height) / 2)));
+  return Buffer.from(
+    `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">` +
+    `<rect x="0" y="0" width="${width}" height="${height}" rx="${safeRadius}" ry="${safeRadius}" fill="white"/>` +
+    `</svg>`
+  );
+}
+
+async function renderScreenBuffer(inputPath, box) {
+  let pipeline = sharp(inputPath)
+    .resize(box.width, box.height, {
+      fit: 'cover',
+      position: 'north',
+    })
+    .png();
+
+  if (box.radius > 0) {
+    pipeline = pipeline.composite([
+      {
+        input: roundedRectSvg(box.width, box.height, box.radius),
+        blend: 'dest-in',
+      },
+    ]);
+  }
+
+  return pipeline.toBuffer();
 }
 
 async function generateWebsiteMockupArtifact({
@@ -73,15 +86,13 @@ async function generateWebsiteMockupArtifact({
     };
   }
 
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'device-mockup-'));
-  const inputDir = path.join(tempRoot, 'input');
-  const outputDir = path.join(tempRoot, 'output');
-  const localOutputPath = path.join(outputDir, 'final_mockup.png');
+  const tempRoot = path.join(ROOT, '.tmp-device-mockup');
+  const inputDir = path.join(tempRoot, runId);
   const capturedAt = new Date().toISOString();
 
   try {
     await fs.mkdir(inputDir, { recursive: true });
-    await fs.mkdir(outputDir, { recursive: true });
+    await fs.mkdir(path.dirname(PUBLIC_OUTPUT_PATH), { recursive: true });
 
     await Promise.all(
       Object.entries(REQUIRED_VARIANTS).map(([targetName, sourceVariant]) => {
@@ -94,23 +105,21 @@ async function generateWebsiteMockupArtifact({
       })
     );
 
-    await execFileAsync(
-      resolvePythonBin(),
-      [
-        SCRIPT_PATH,
-        '--desktop', path.join(inputDir, 'desktop.png'),
-        '--ipad', path.join(inputDir, 'ipad.png'),
-        '--iphone', path.join(inputDir, 'iphone.png'),
-        '--template', TEMPLATE_PATH,
-        '--output', localOutputPath,
-      ],
-      {
-        cwd: ROOT,
-        timeout: SCRIPT_TIMEOUT_MS,
-      }
+    const composites = await Promise.all(
+      Object.entries(SCREEN_BOXES).map(async ([deviceName, box]) => ({
+        input: await renderScreenBuffer(path.join(inputDir, `${deviceName}.png`), box),
+        left: box.left,
+        top: box.top,
+      }))
     );
 
-    const buffer = await fs.readFile(localOutputPath);
+    const buffer = await sharp(TEMPLATE_PATH)
+      .composite(composites)
+      .png()
+      .toBuffer();
+
+    await fs.writeFile(PUBLIC_OUTPUT_PATH, buffer).catch(() => {});
+
     const storagePath = path.posix.join(
       'clients',
       clientId,
@@ -160,7 +169,7 @@ async function generateWebsiteMockupArtifact({
       ),
     };
   } finally {
-    await fs.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
+    await fs.rm(inputDir, { recursive: true, force: true }).catch(() => {});
   }
 }
 
