@@ -8,14 +8,17 @@ gsap.registerPlugin(ScrollTrigger);
 import Link from 'next/link';
 import {
   ArrowRightLeft,
+  ArrowUpRight,
   BriefcaseBusiness,
   ChartColumnIncreasing,
   LaptopMinimalCheck,
   MessageSquareMore,
+  Pencil,
   Search,
   Settings2,
   Workflow,
   Globe,
+  X as XIcon,
 } from 'lucide-react';
 import { BrainIcon } from './components/ui/brain';
 import { useAuth } from './AuthContext';
@@ -1179,6 +1182,10 @@ const DashboardPage = () => {
   const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
   const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
   const [deleteAccountError, setDeleteAccountError] = useState(null);
+  const [showClientEditModal, setShowClientEditModal] = useState(false);
+  const [clientNameInput, setClientNameInput] = useState('');
+  const [clientEditLoading, setClientEditLoading] = useState(false);
+  const [clientEditError, setClientEditError] = useState(null);
   const [activeTileModal, setActiveTileModal] = useState(null);
   const [briefFullScreen, setBriefFullScreen] = useState(false);
   const [auditFullScreen, setAuditFullScreen] = useState(false);
@@ -1882,6 +1889,33 @@ const DashboardPage = () => {
     trackSignOut();
     signOutUser();
   }, [signOutUser]);
+
+  const handleUpdateClientName = useCallback(async () => {
+    if (!user || clientEditLoading) return;
+    const next = clientNameInput.trim();
+    if (!next) {
+      setClientEditError('Client name cannot be empty.');
+      return;
+    }
+    setClientEditLoading(true);
+    setClientEditError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/account/update-client', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyName: next }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Update failed.');
+      setShowClientEditModal(false);
+      doBootstrap();
+    } catch (err) {
+      setClientEditError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setClientEditLoading(false);
+    }
+  }, [user, clientEditLoading, clientNameInput, doBootstrap]);
 
   const handleDeleteAccount = useCallback(async () => {
     if (!user || deleteAccountLoading) return;
@@ -4184,9 +4218,25 @@ const DashboardPage = () => {
           </div>
 
           <div id="founders-hero-meta">
-            <div className="meta-row">
+            <div className="meta-row" id="client-meta-row">
               <span className="label">CLIENT</span>
               <span className="value">{client?.companyName || 'UNASSIGNED'}</span>
+              {client?.clientId && (
+                <button
+                  type="button"
+                  id="client-edit-trigger-btn"
+                  className="meta-row-action-btn"
+                  aria-label="Edit client name"
+                  title="Edit client name"
+                  onClick={() => {
+                    setClientNameInput(client?.companyName || '');
+                    setClientEditError(null);
+                    setShowClientEditModal(true);
+                  }}
+                >
+                  <Pencil size={12} strokeWidth={1.75} aria-hidden="true" />
+                </button>
+              )}
             </div>
             <div className="meta-row" id="account-meta-row">
               <span className="label">ACCOUNT</span>
@@ -4195,7 +4245,7 @@ const DashboardPage = () => {
                 <button
                   type="button"
                   id="account-delete-trigger-btn"
-                  className="account-delete-x"
+                  className="meta-row-action-btn meta-row-action-btn--danger"
                   aria-label="Delete account"
                   title="Delete account"
                   onClick={() => {
@@ -4204,18 +4254,22 @@ const DashboardPage = () => {
                     setShowDeleteAccountModal(true);
                   }}
                 >
-                  ✕
+                  <XIcon size={12} strokeWidth={2} aria-hidden="true" />
                 </button>
               )}
             </div>
-            <div className="meta-row">
+            <div className="meta-row" id="tier-meta-row">
               <span className="label">TIER</span>
+              <span className="value">Onboarded</span>
               <button
-                id="tier-trigger-btn"
                 type="button"
+                id="tier-trigger-btn"
+                className="meta-row-action-btn"
+                aria-label="View pricing tiers"
+                title="View pricing tiers"
                 onClick={() => { setShowTierModal(true); trackTierModalOpened(); }}
               >
-                Onboarded
+                <ArrowUpRight size={12} strokeWidth={1.75} aria-hidden="true" />
               </button>
             </div>
             <div className="meta-row meta-row-source">
@@ -4847,6 +4901,61 @@ const DashboardPage = () => {
               title="Pricing"
               src="/docs/pricing-modal.html"
             />
+          </div>
+        </div>
+      )}
+
+      {showClientEditModal && (
+        <div
+          id="client-edit-modal-overlay"
+          onClick={() => { if (!clientEditLoading) setShowClientEditModal(false); }}
+        >
+          <div id="client-edit-modal" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              id="client-edit-modal-close"
+              onClick={() => { if (!clientEditLoading) setShowClientEditModal(false); }}
+              aria-label="Close"
+              disabled={clientEditLoading}
+            >[ ✕ ]</button>
+            <h2 id="client-edit-modal-title">Edit client</h2>
+            <p id="client-edit-modal-body">
+              Updates the company name shown across this dashboard and the brief.
+            </p>
+            <label id="client-edit-label" htmlFor="client-edit-input">
+              Client name
+            </label>
+            <input
+              id="client-edit-input"
+              type="text"
+              autoComplete="off"
+              value={clientNameInput}
+              onChange={(e) => setClientNameInput(e.target.value)}
+              disabled={clientEditLoading}
+              placeholder="Acme, Inc."
+              maxLength={120}
+            />
+            {clientEditError && (
+              <p id="client-edit-modal-error">{clientEditError}</p>
+            )}
+            <div id="client-edit-modal-actions">
+              <button
+                type="button"
+                id="client-edit-modal-cancel"
+                onClick={() => setShowClientEditModal(false)}
+                disabled={clientEditLoading}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                id="client-edit-modal-confirm"
+                onClick={handleUpdateClientName}
+                disabled={clientEditLoading || !clientNameInput.trim() || clientNameInput.trim() === (client?.companyName || '')}
+              >
+                {clientEditLoading ? 'Saving…' : 'Save'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -6199,17 +6308,33 @@ const dashboardCss = `
   }
   .meta-row:last-child { border-bottom: none; }
   .meta-row .label { font-size: 0.72rem; color: var(--text-secondary); font-family: var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; }
-  .meta-row .value { font-family: var(--font-mono); font-size: clamp(0.82rem, 1.1vw, 0.95rem); color: var(--text-display); }
-  #tier-trigger-btn {
-    border: none;
-    background: none;
+  .meta-row .value { font-family: var(--font-mono); font-size: clamp(0.82rem, 1.1vw, 0.95rem); color: var(--text-display); flex: 1; text-align: center; }
+  #client-meta-row, #account-meta-row, #tier-meta-row { display: flex; align-items: center; gap: 8px; }
+  .meta-row-action-btn {
+    background: #000;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #e7d9c3;
+    width: 22px;
+    height: 22px;
+    border-radius: 3px;
     padding: 0;
-    font-family: var(--font-mono);
-    font-size: 14px;
-    color: var(--text-display);
-    text-decoration: underline;
-    text-underline-offset: 0.18em;
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  }
+  .meta-row-action-btn:hover {
+    background: #1a1712;
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #fff;
+  }
+  .meta-row-action-btn--danger { border-color: rgba(239, 68, 68, 0.4); color: #ef4444; }
+  .meta-row-action-btn--danger:hover { background: #1a1712; border-color: rgba(239, 68, 68, 0.65); color: #f87171; }
+  #tier-trigger-btn {
+    /* Icon-only action button — styled via .meta-row-action-btn. No underline. */
+    text-decoration: none;
   }
   .meta-value-wrap { font-size: 11px; max-width: 28ch; text-align: right; line-height: 1.4; white-space: normal; }
   #capability-section { padding: 0; }
@@ -10263,31 +10388,9 @@ const dashboardCss = `
     #tier-modal-card { width: 100%; box-sizing: border-box; }
   }
 
-  /* ── Account delete X + modal ── */
-  #account-meta-row { position: relative; }
-  .account-delete-x {
-    background: transparent;
-    border: 1px solid rgba(239, 68, 68, 0.35);
-    color: #ef4444;
-    font-family: var(--font-mono, monospace);
-    font-size: 10px;
-    line-height: 1;
-    width: 18px;
-    height: 18px;
-    border-radius: 3px;
-    margin-left: 8px;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    transition: background 120ms ease, color 120ms ease;
-  }
-  .account-delete-x:hover {
-    background: rgba(239, 68, 68, 0.12);
-    color: #f87171;
-  }
-  #delete-account-modal-overlay {
+  /* ── Account delete + client edit modals ── */
+  #delete-account-modal-overlay,
+  #client-edit-modal-overlay {
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.72);
@@ -10297,6 +10400,107 @@ const dashboardCss = `
     justify-content: center;
     padding: 1.5rem;
   }
+  #client-edit-modal {
+    position: relative;
+    background: #14100c;
+    color: #e7d9c3;
+    border: 1px solid rgba(231, 217, 195, 0.18);
+    border-radius: 6px;
+    padding: 1.5rem 1.5rem 1.25rem;
+    max-width: 460px;
+    width: 100%;
+    font-family: var(--font-mono, monospace);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  }
+  #client-edit-modal-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: transparent;
+    border: none;
+    color: rgba(231, 217, 195, 0.6);
+    font-size: 11px;
+    cursor: pointer;
+    letter-spacing: 0.1em;
+  }
+  #client-edit-modal-close:hover { color: #e7d9c3; }
+  #client-edit-modal-title {
+    margin: 0 0 0.75rem;
+    font-size: 14px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #e7d9c3;
+  }
+  #client-edit-modal-body {
+    margin: 0 0 1rem;
+    font-size: 12px;
+    line-height: 1.5;
+    color: rgba(231, 217, 195, 0.7);
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+  #client-edit-label {
+    display: block;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(231, 217, 195, 0.65);
+    margin-bottom: 0.4rem;
+  }
+  #client-edit-input {
+    width: 100%;
+    box-sizing: border-box;
+    background: #0b0906;
+    border: 1px solid rgba(231, 217, 195, 0.18);
+    color: #e7d9c3;
+    padding: 0.55rem 0.7rem;
+    font-family: var(--font-mono, monospace);
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    border-radius: 3px;
+    outline: none;
+  }
+  #client-edit-input:focus { border-color: rgba(231, 217, 195, 0.5); }
+  #client-edit-modal-error {
+    margin: 0.6rem 0 0;
+    padding: 0.5rem 0.6rem;
+    background: rgba(239, 68, 68, 0.1);
+    border-left: 2px solid #ef4444;
+    color: #f87171;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  #client-edit-modal-actions {
+    display: flex;
+    gap: 0.6rem;
+    justify-content: flex-end;
+    margin-top: 1.1rem;
+  }
+  #client-edit-modal-cancel,
+  #client-edit-modal-confirm {
+    font-family: var(--font-mono, monospace);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.55rem 0.9rem;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  }
+  #client-edit-modal-cancel {
+    background: transparent;
+    border: 1px solid rgba(231, 217, 195, 0.2);
+    color: rgba(231, 217, 195, 0.75);
+  }
+  #client-edit-modal-cancel:hover { color: #e7d9c3; border-color: rgba(231, 217, 195, 0.4); }
+  #client-edit-modal-confirm {
+    background: #e7d9c3;
+    border: 1px solid #e7d9c3;
+    color: #14100c;
+    font-weight: 600;
+  }
+  #client-edit-modal-confirm:hover:not(:disabled) { background: #fff; border-color: #fff; }
+  #client-edit-modal-confirm:disabled,
+  #client-edit-modal-cancel:disabled { opacity: 0.4; cursor: not-allowed; }
   #delete-account-modal {
     position: relative;
     background: #14100c;
