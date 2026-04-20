@@ -1175,6 +1175,10 @@ const DashboardPage = () => {
   const [theme, setTheme] = useState('light');
   const [countdownHours, setCountdownHours] = useState(14);
   const [showTierModal, setShowTierModal] = useState(false);
+  const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
+  const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
+  const [deleteAccountError, setDeleteAccountError] = useState(null);
   const [activeTileModal, setActiveTileModal] = useState(null);
   const [briefFullScreen, setBriefFullScreen] = useState(false);
   const [auditFullScreen, setAuditFullScreen] = useState(false);
@@ -1878,6 +1882,29 @@ const DashboardPage = () => {
     trackSignOut();
     signOutUser();
   }, [signOutUser]);
+
+  const handleDeleteAccount = useCallback(async () => {
+    if (!user || deleteAccountLoading) return;
+    if (deleteConfirmInput.trim().toUpperCase() !== 'DELETE') return;
+    setDeleteAccountLoading(true);
+    setDeleteAccountError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/account/delete', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.errors?.[0]?.message || data?.error || 'Account deletion failed.');
+      }
+      // Auth user is gone at this point — signOutUser clears client state and redirects.
+      signOutUser();
+    } catch (err) {
+      setDeleteAccountError(err instanceof Error ? err.message : String(err));
+      setDeleteAccountLoading(false);
+    }
+  }, [user, deleteAccountLoading, deleteConfirmInput, signOutUser]);
 
   const handleReseed = useCallback(async () => {
     if (!user || !reseedUrl.trim() || reseedLoading) return;
@@ -4161,9 +4188,25 @@ const DashboardPage = () => {
               <span className="label">CLIENT</span>
               <span className="value">{client?.companyName || 'UNASSIGNED'}</span>
             </div>
-            <div className="meta-row">
+            <div className="meta-row" id="account-meta-row">
               <span className="label">ACCOUNT</span>
               <span className="value">{user?.email || 'SIGNED IN'}</span>
+              {user?.email && (
+                <button
+                  type="button"
+                  id="account-delete-trigger-btn"
+                  className="account-delete-x"
+                  aria-label="Delete account"
+                  title="Delete account"
+                  onClick={() => {
+                    setDeleteConfirmInput('');
+                    setDeleteAccountError(null);
+                    setShowDeleteAccountModal(true);
+                  }}
+                >
+                  ✕
+                </button>
+              )}
             </div>
             <div className="meta-row">
               <span className="label">TIER</span>
@@ -4804,6 +4847,63 @@ const DashboardPage = () => {
               title="Pricing"
               src="/docs/pricing-modal.html"
             />
+          </div>
+        </div>
+      )}
+
+      {showDeleteAccountModal && (
+        <div
+          id="delete-account-modal-overlay"
+          onClick={() => { if (!deleteAccountLoading) setShowDeleteAccountModal(false); }}
+        >
+          <div id="delete-account-modal" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              id="delete-account-modal-close"
+              onClick={() => { if (!deleteAccountLoading) setShowDeleteAccountModal(false); }}
+              aria-label="Close"
+              disabled={deleteAccountLoading}
+            >[ ✕ ]</button>
+            <h2 id="delete-account-modal-title">Delete account</h2>
+            <p id="delete-account-modal-body">
+              This permanently removes your Firebase Auth identity, all client data in
+              Firestore, and every generated artifact in Storage (screenshots, mockups,
+              brief PDFs). This cannot be undone.
+            </p>
+            <label id="delete-account-confirm-label" htmlFor="delete-account-confirm-input">
+              Type <strong>DELETE</strong> to confirm
+            </label>
+            <input
+              id="delete-account-confirm-input"
+              type="text"
+              autoComplete="off"
+              autoCapitalize="characters"
+              value={deleteConfirmInput}
+              onChange={(e) => setDeleteConfirmInput(e.target.value)}
+              disabled={deleteAccountLoading}
+              placeholder="DELETE"
+            />
+            {deleteAccountError && (
+              <p id="delete-account-modal-error">{deleteAccountError}</p>
+            )}
+            <div id="delete-account-modal-actions">
+              <button
+                type="button"
+                id="delete-account-modal-cancel"
+                onClick={() => setShowDeleteAccountModal(false)}
+                disabled={deleteAccountLoading}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                id="delete-account-modal-confirm"
+                onClick={handleDeleteAccount}
+                disabled={deleteAccountLoading || deleteConfirmInput.trim().toUpperCase() !== 'DELETE'}
+              >
+                {deleteAccountLoading ? 'Deleting…' : 'Delete account'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -10162,6 +10262,143 @@ const dashboardCss = `
     #tier-modal-overlay { padding: 1rem; align-items: flex-start; padding-top: 1.5rem; }
     #tier-modal-card { width: 100%; box-sizing: border-box; }
   }
+
+  /* ── Account delete X + modal ── */
+  #account-meta-row { position: relative; }
+  .account-delete-x {
+    background: transparent;
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    color: #ef4444;
+    font-family: var(--font-mono, monospace);
+    font-size: 10px;
+    line-height: 1;
+    width: 18px;
+    height: 18px;
+    border-radius: 3px;
+    margin-left: 8px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: background 120ms ease, color 120ms ease;
+  }
+  .account-delete-x:hover {
+    background: rgba(239, 68, 68, 0.12);
+    color: #f87171;
+  }
+  #delete-account-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.72);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+  }
+  #delete-account-modal {
+    position: relative;
+    background: #14100c;
+    color: #e7d9c3;
+    border: 1px solid rgba(239, 68, 68, 0.45);
+    border-radius: 6px;
+    padding: 1.5rem 1.5rem 1.25rem;
+    max-width: 480px;
+    width: 100%;
+    font-family: var(--font-mono, monospace);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  }
+  #delete-account-modal-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: transparent;
+    border: none;
+    color: rgba(231, 217, 195, 0.6);
+    font-size: 11px;
+    cursor: pointer;
+    letter-spacing: 0.1em;
+  }
+  #delete-account-modal-close:hover { color: #e7d9c3; }
+  #delete-account-modal-title {
+    margin: 0 0 0.75rem;
+    font-size: 14px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #ef4444;
+  }
+  #delete-account-modal-body {
+    margin: 0 0 1rem;
+    font-size: 12px;
+    line-height: 1.5;
+    color: rgba(231, 217, 195, 0.8);
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+  #delete-account-confirm-label {
+    display: block;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(231, 217, 195, 0.65);
+    margin-bottom: 0.4rem;
+  }
+  #delete-account-confirm-label strong { color: #ef4444; }
+  #delete-account-confirm-input {
+    width: 100%;
+    box-sizing: border-box;
+    background: #0b0906;
+    border: 1px solid rgba(231, 217, 195, 0.18);
+    color: #e7d9c3;
+    padding: 0.55rem 0.7rem;
+    font-family: var(--font-mono, monospace);
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    border-radius: 3px;
+    outline: none;
+  }
+  #delete-account-confirm-input:focus { border-color: #ef4444; }
+  #delete-account-modal-error {
+    margin: 0.6rem 0 0;
+    padding: 0.5rem 0.6rem;
+    background: rgba(239, 68, 68, 0.1);
+    border-left: 2px solid #ef4444;
+    color: #f87171;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  #delete-account-modal-actions {
+    display: flex;
+    gap: 0.6rem;
+    justify-content: flex-end;
+    margin-top: 1.1rem;
+  }
+  #delete-account-modal-cancel,
+  #delete-account-modal-confirm {
+    font-family: var(--font-mono, monospace);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.55rem 0.9rem;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  }
+  #delete-account-modal-cancel {
+    background: transparent;
+    border: 1px solid rgba(231, 217, 195, 0.2);
+    color: rgba(231, 217, 195, 0.75);
+  }
+  #delete-account-modal-cancel:hover { color: #e7d9c3; border-color: rgba(231, 217, 195, 0.4); }
+  #delete-account-modal-confirm {
+    background: #ef4444;
+    border: 1px solid #ef4444;
+    color: #14100c;
+    font-weight: 600;
+  }
+  #delete-account-modal-confirm:hover:not(:disabled) { background: #f87171; border-color: #f87171; }
+  #delete-account-modal-confirm:disabled,
+  #delete-account-modal-cancel:disabled { opacity: 0.4; cursor: not-allowed; }
 
   /* ── Lamp effects ── */
   .lamp {
