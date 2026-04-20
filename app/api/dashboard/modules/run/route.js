@@ -183,11 +183,21 @@ export async function POST(request) {
   const anyOk = results.some((r) => r.ok);
   if (anyOk) {
     const artifactRefs = results.flatMap((r) => Array.isArray(r.artifacts) ? r.artifacts : []);
-    const warnings = results.flatMap((r) =>
-      Array.isArray(r.warningCodes)
+    const warnings = results.flatMap((r) => {
+      if (Array.isArray(r.warnings) && r.warnings.length > 0) {
+        return r.warnings.map((w) => ({
+          type: w?.type || 'warning',
+          code: w?.code || 'unknown',
+          message: w?.message || '',
+          stage: w?.stage || null,
+          detail: w?.detail || null,
+          moduleId: r.cardId || null,
+        }));
+      }
+      return Array.isArray(r.warningCodes)
         ? r.warningCodes.map((code) => ({ type: 'warning', code, moduleId: r.cardId || null }))
-        : []
-    );
+        : [];
+    });
     const minimalResult = {
       pipelineType: 'module-run',
       pipelineRunId: runId,
