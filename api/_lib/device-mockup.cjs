@@ -88,6 +88,7 @@ async function generateWebsiteMockupArtifact({
   runId,
   websiteUrl,
   screenshotArtifactRefs,
+  screenshotBuffersByVariant = null,
 }) {
   const artifacts = Array.isArray(screenshotArtifactRefs) ? screenshotArtifactRefs : [];
   const byVariant = Object.fromEntries(
@@ -120,6 +121,14 @@ async function generateWebsiteMockupArtifact({
     await Promise.all(
       Object.entries(REQUIRED_VARIANTS).map(([targetName, sourceVariant]) => {
         const artifact = byVariant[sourceVariant];
+        const inMemoryBuffer =
+          screenshotBuffersByVariant &&
+          Buffer.isBuffer(screenshotBuffersByVariant[sourceVariant])
+            ? screenshotBuffersByVariant[sourceVariant]
+            : null;
+        if (inMemoryBuffer) {
+          return fs.writeFile(path.join(inputDir, `${targetName}.png`), inMemoryBuffer);
+        }
         return downloadArtifactToFileWithRetry({
           bucketName: artifact.bucket || null,
           storagePath: artifact.storagePath,

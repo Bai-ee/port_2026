@@ -10,6 +10,7 @@ async function runScreenshots({
   runId,
   websiteUrl,
   includeFullPage = true,
+  includeBuffers = false,
   onVariantProgress = null,
 }) {
   try {
@@ -18,6 +19,7 @@ async function runScreenshots({
       runId,
       websiteUrl,
       variants: includeFullPage ? undefined : VIEWPORT_SCREENSHOT_VARIANTS,
+      includeBuffers,
       onVariantProgress,
     });
     if (!result?.ok) {

@@ -332,6 +332,7 @@ async function persistWebsiteScreenshotArtifact({
   runId,
   websiteUrl,
   variants = SCREENSHOT_VARIANTS,
+  includeBuffers = false,
   onVariantProgress = null,
 }) {
   const capturedAt = new Date().toISOString();
@@ -414,6 +415,7 @@ async function persistWebsiteScreenshotArtifact({
         capturedAt,
         browserlessRequestId: screenshot.requestId || null,
         downloadUrl: stored.downloadUrl,
+        ...(includeBuffers ? { buffer: screenshot.buffer } : {}),
       });
 
       if (typeof onVariantProgress === 'function') {

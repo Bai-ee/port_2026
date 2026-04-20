@@ -2,9 +2,15 @@
 
 const { generateWebsiteMockupArtifact } = require('../../../../api/_lib/device-mockup.cjs');
 
-async function runDeviceMockup({ clientId, runId, websiteUrl, screenshotArtifactRefs }) {
+async function runDeviceMockup({ clientId, runId, websiteUrl, screenshotArtifactRefs, screenshotBuffersByVariant = null }) {
   try {
-    const result = await generateWebsiteMockupArtifact({ clientId, runId, websiteUrl, screenshotArtifactRefs });
+    const result = await generateWebsiteMockupArtifact({
+      clientId,
+      runId,
+      websiteUrl,
+      screenshotArtifactRefs,
+      screenshotBuffersByVariant,
+    });
     if (!result?.ok) {
       return {
         ok: false,

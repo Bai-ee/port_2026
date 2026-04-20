@@ -33,7 +33,7 @@ async function runMultiDeviceView({
     clientId,
     runId,
     websiteUrl,
-    evidence,
+    includeBuffers: true,
     onVariantProgress: async ({ phase, variant }) => {
       if (!variant?.label) return;
       if (phase === 'start') {
@@ -77,7 +77,18 @@ async function runMultiDeviceView({
   const mockupResult = await runDeviceMockup({
     clientId, runId, websiteUrl,
     screenshotArtifactRefs: artifactRefs,
+    screenshotBuffersByVariant: Object.fromEntries(
+      artifactRefs
+        .filter((a) => a?.type === 'website_homepage_screenshot' && Buffer.isBuffer(a.buffer))
+        .map((a) => [a.variant, a.buffer])
+    ),
   });
+
+  for (const artifact of artifactRefs) {
+    if (artifact && Object.prototype.hasOwnProperty.call(artifact, 'buffer')) {
+      delete artifact.buffer;
+    }
+  }
 
   if (mockupResult.ok && mockupResult.artifactRef) {
     artifactRefs.push(mockupResult.artifactRef);
