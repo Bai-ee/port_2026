@@ -8,6 +8,10 @@ const nextConfig = {
   turbopack: {
     root: __dirname,
   },
+  outputFileTracingIncludes: {
+    '/api/worker/run-brief': ['./api/_lib/assets/**/*'],
+    '/api/worker/run-psi': ['./api/_lib/assets/**/*'],
+  },
 };
 
 export default nextConfig;

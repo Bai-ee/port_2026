@@ -6,7 +6,7 @@ const path = require('path');
 const sharp = require('sharp');
 const { downloadArtifactToFile, saveBufferArtifact } = require('./storage-artifacts.cjs');
 
-const TEMPLATE_PATH = path.join(__dirname, 'assets', 'device_template.png');
+const TEMPLATE_PATH = path.join(process.cwd(), 'api', '_lib', 'assets', 'device_template.png');
 
 const REQUIRED_VARIANTS = {
   desktop: 'desktop',
