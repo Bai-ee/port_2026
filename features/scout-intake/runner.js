@@ -901,9 +901,18 @@ const MODULE_RUNNERS = {
  * @param {string}   options.runId
  * @param {string}   options.websiteUrl
  * @param {string[]} options.moduleIds
+ * @param {Function|null} [options.onProgress]
+ * @param {Record<string, object>} [options.moduleOptionsById]
  * @returns {Promise<{ ok: boolean, results: object[] }>}
  */
-async function runModules({ clientId, runId, websiteUrl, moduleIds = [] }) {
+async function runModules({
+  clientId,
+  runId,
+  websiteUrl,
+  moduleIds = [],
+  onProgress = null,
+  moduleOptionsById = {},
+}) {
   const results = await Promise.all(
     moduleIds.map(async (moduleId) => {
       const getRunner = MODULE_RUNNERS[moduleId];
@@ -920,7 +929,13 @@ async function runModules({ clientId, runId, websiteUrl, moduleIds = [] }) {
       }
       try {
         const runner = getRunner();
-        return await runner({ clientId, runId, websiteUrl });
+        return await runner({
+          clientId,
+          runId,
+          websiteUrl,
+          onProgress,
+          ...(moduleOptionsById[moduleId] || {}),
+        });
       } catch (err) {
         return {
           ok: false,

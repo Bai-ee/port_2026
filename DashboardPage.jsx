@@ -44,6 +44,7 @@ const ONBOARDING_CARD_IDS = new Set([
   'style-guide',
   'priority-signal',
 ]);
+const PENDING_DASHBOARD_SIGNUP_KEY = 'pending-dashboard-signup';
 import {
   trackDashboardCreated,
   trackPipelineRerun,
@@ -574,6 +575,24 @@ function appendCacheBust(url, key) {
   return `${url}${joiner}v=${encodeURIComponent(String(key))}`;
 }
 
+function readPendingDashboardSignup() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.sessionStorage.getItem(PENDING_DASHBOARD_SIGNUP_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function clearPendingDashboardSignup() {
+  if (typeof window === 'undefined') return;
+  window.sessionStorage.removeItem(PENDING_DASHBOARD_SIGNUP_KEY);
+}
+
 // ── Modal step builder ───────────────────────────────────────────────────────
 // Converts run state + progress into human-readable build steps for the modal.
 // Step states: 'done' | 'active' | 'pending' | 'waiting' | 'sub' | 'pending-sub' | 'error'
@@ -687,6 +706,106 @@ function buildModalSteps(run, dashboardState, latestRunStatus, client) {
   return steps;
 }
 
+// ── Module terminal stages ────────────────────────────────────────────────────
+const MODULE_TERMINAL_STAGES = {
+  'multi-device-view': [
+    { tag: 'FETCH',   label: 'Connect to website' },
+    { tag: 'SCREEN',  label: 'Capture homepage screenshots' },
+    { tag: 'SCREEN',  label: 'Generate desktop / tablet / mobile views' },
+    { tag: 'MOCK',    label: 'Build device mockup' },
+    { tag: 'WRITE',   label: 'Write layout module' },
+  ],
+  'social-preview': [
+    { tag: 'FETCH',   label: 'Fetch homepage' },
+    { tag: 'META',    label: 'Extract social metadata' },
+    { tag: 'WRITE',   label: 'Write preview module' },
+  ],
+  'seo-performance': [
+    { tag: 'PSI',     label: 'Run PageSpeed Insights' },
+    { tag: 'AI',      label: 'Run AI SEO audit' },
+    { tag: 'WRITE',   label: 'Write SEO module' },
+  ],
+};
+
+function _detectQueuedModule(dashboardState) {
+  const modules = dashboardState?.modules;
+  if (!modules) return null;
+  for (const [cardId, state] of Object.entries(modules)) {
+    if (state?.status === 'queued' || state?.status === 'running') return cardId;
+  }
+  return null;
+}
+
+function _isModularOnlyRun(dashboardState) {
+  // Modular-only runs have no legacy synthesis data
+  return Boolean(dashboardState?.modules) && !dashboardState?.snapshot && !dashboardState?.strategy && !dashboardState?.scribe;
+}
+
+function buildModuleTerminalLog(moduleId, dashboardState, latestRunStatus, run, client, countdown) {
+  const lines = [];
+  const add = (type, prefix, text, cursor = false) => lines.push({ type, prefix, text, cursor });
+  const host = _termHost(run, client);
+  const runId = run?.id ? `${run.id.slice(0, 8)}…` : '—';
+  const stages = MODULE_TERMINAL_STAGES[moduleId] || [];
+
+  add('system', '$', `module/${moduleId || 'init'} — run ${runId}`);
+  add('dim', '', '─'.repeat(46));
+  add('info', 'site', host);
+  add('dim', '', '─'.repeat(46));
+
+  if (latestRunStatus === 'failed') {
+    const msg = dashboardState?.errorState?.message || 'Module run encountered an error.';
+    add('error', '[ERR]', msg);
+    add('error', '✗', 'module run failed');
+    add('dim', '', 'retry below to re-run this module');
+    return lines;
+  }
+
+  if (latestRunStatus === 'queued') {
+    add('ok', '✓', 'module run registered');
+    add('info', 'queue', `target: ${host}`);
+    add('dim', '', '─'.repeat(46));
+    add('info', 'sys', 'locating available worker…');
+    add('active', '▶', `queuing ${moduleId}…`, true);
+    for (const s of stages) {
+      add('dim', '·', `[${s.tag}]  ${s.label}`);
+    }
+    return lines;
+  }
+
+  if (latestRunStatus === 'succeeded') {
+    const modules = dashboardState?.modules || {};
+    add('ok', '✓', 'worker claimed job');
+    for (const [cardId, state] of Object.entries(modules)) {
+      if (state?.status !== 'succeeded') continue;
+      const cardStages = MODULE_TERMINAL_STAGES[cardId] || [];
+      for (const s of cardStages) {
+        add('ok', '✓', s.label);
+      }
+      add('ok', '✓', `${cardId} — complete`);
+      add('dim', '', '─'.repeat(46));
+    }
+    if (countdown > 0) {
+      add('countdown', '▶', `launching dashboard in ${countdown}…`);
+    } else {
+      add('countdown', '▶', 'dashboard ready');
+    }
+    return lines;
+  }
+
+  // Running — show active state
+  add('ok', '✓', 'worker claimed job');
+  if (stages.length > 0) {
+    add('active', `[${stages[0].tag}]`, `${stages[0].label}…`, true);
+    for (const s of stages.slice(1)) {
+      add('dim', '·', `[${s.tag}]  ${s.label}`);
+    }
+  } else {
+    add('active', '[RUN]', `${moduleId} in progress…`, true);
+  }
+  return lines;
+}
+
 // ── Intake build terminal log ─────────────────────────────────────────────────
 // Produces IDE-style terminal log lines for the intake build modal.
 // Each line: { type, prefix, text, cursor? }
@@ -703,6 +822,14 @@ function _termPath(url) {
 }
 
 function buildTerminalLog(run, dashboardState, latestRunStatus, client, countdown) {
+  // Delegate to module-specific terminal for modular-only clients
+  if (_isModularOnlyRun(dashboardState)) {
+    const moduleId = _detectQueuedModule(dashboardState) ||
+      Object.keys(dashboardState?.modules || {}).find((id) => dashboardState.modules[id]?.status === 'succeeded') ||
+      null;
+    return buildModuleTerminalLog(moduleId, dashboardState, latestRunStatus, run, client, countdown);
+  }
+
   const lines = [];
   const add = (type, prefix, text, cursor = false) => lines.push({ type, prefix, text, cursor });
 
@@ -1058,6 +1185,7 @@ const DashboardPage = () => {
   const capabilityGridRef = useRef(null);
   const dashboardVisibleRef = useRef(false);
   const [bootstrap, setBootstrap] = useState({ userProfile: null, client: null, dashboardState: null, recentRuns: [], intelligence: null, moduleConfig: null, moduleState: null });
+  const [pendingSignupProvision, setPendingSignupProvision] = useState(null);
   const [moduleRunLoading, setModuleRunLoading] = useState({});
   const [moduleToggleLoading, setModuleToggleLoading] = useState({});
   const [bootstrapLoading, setBootstrapLoading] = useState(true);
@@ -1083,6 +1211,7 @@ const DashboardPage = () => {
   const heroMarqueeTrackRef = useRef(null);
   const heroMarqueeCopyRef = useRef(null);
   const [heroMarqueeCopies, setHeroMarqueeCopies] = useState(2);
+  const autoProvisionRecoveryAttemptedRef = useRef(false);
   const [reseedUrl, setReseedUrl] = useState('');
   const [reseedLoading, setReseedLoading] = useState(false);
   const [reseedError, setReseedError] = useState('');
@@ -1195,6 +1324,17 @@ const DashboardPage = () => {
     return () => { cancelledRef.current = true; };
   }, [user]);
 
+  useEffect(() => {
+    if (!user) {
+      setPendingSignupProvision(null);
+      autoProvisionRecoveryAttemptedRef.current = false;
+      clearPendingDashboardSignup();
+      return;
+    }
+    setPendingSignupProvision(readPendingDashboardSignup());
+    autoProvisionRecoveryAttemptedRef.current = false;
+  }, [user]);
+
   // ── Derived state ─────────────────────────────────────────────────────────
   const client = bootstrap.client;
   const recentRuns = bootstrap.recentRuns || [];
@@ -1233,6 +1373,13 @@ const DashboardPage = () => {
       fullPageScreenshots['mobile-full']?.capturedAt || homepageScreenshots.mobile?.capturedAt || artifactVersionKey
     ),
   };
+  const multiDevicePreviewSrc =
+    homepageDeviceMockupUrl ||
+    homepageScreenshotUrl ||
+    deviceScreenshots.desktop ||
+    deviceScreenshots.tablet ||
+    deviceScreenshots.mobile ||
+    null;
   const clientStatus = dashboardState?.status || client?.status || null;
   // Prefer the live run status from brief_runs (polled every 4s) over the cached
   // dashboardState.latestRunStatus — the cached value is written as 'queued' at
@@ -1242,6 +1389,12 @@ const DashboardPage = () => {
   const provisioningState = dashboardState?.provisioningState || null;
   const errorState = dashboardState?.errorState || null;
   const hasClientWorkspace = Boolean(client || dashboardState || recentRuns.length > 0);
+  const hasRecentPendingSignup = Boolean(
+    pendingSignupProvision?.websiteUrl &&
+    pendingSignupProvision?.createdAt &&
+    (Date.now() - pendingSignupProvision.createdAt) < 15 * 60 * 1000
+  );
+  const awaitingSignupProvision = Boolean(user) && !hasClientWorkspace && hasRecentPendingSignup;
 
   // Free-tier intake fields
   const snapshot = dashboardState?.snapshot || null;
@@ -1273,6 +1426,11 @@ const DashboardPage = () => {
   const intelligencePayload = bootstrap.intelligence || null;
   const moduleConfig = bootstrap.moduleConfig || null;
   const moduleState  = bootstrap.moduleState  || dashboardState?.modules || null;
+  // Set of currently enabled modular card IDs — drives nav gating and card visibility
+  const enabledModuleIds = useMemo(() => {
+    if (!moduleConfig) return new Set();
+    return new Set(Object.entries(moduleConfig).filter(([, cfg]) => cfg?.enabled === true).map(([id]) => id));
+  }, [moduleConfig]);
   const seoAudit = intelligencePayload?.dashboardSeoAudit ?? dashboardState?.seoAudit ?? null;
   const aiVisibility = aiSeoAudit?.aiVisibility ?? null;
   const isFromIntelligence  = Boolean(intelligencePayload?.dashboardSeoAudit != null);
@@ -1303,11 +1461,16 @@ const DashboardPage = () => {
     || dashboardState?.scribe?.cards
     || headline
   );
+  // True for clients provisioned with moduleConfig who have not yet run the full pipeline.
+  // Drives nav gating and initial filter — these clients see only Data Visualization.
+  const isModularOnboardingClient = Boolean(moduleConfig) && !hasIntakeData;
+
   const isRunActive = latestRunStatus === 'queued' || latestRunStatus === 'running';
   const noWorkspaceState = !bootstrapLoading
     && !bootstrapError
     && Boolean(user)
-    && !hasClientWorkspace;
+    && !hasClientWorkspace
+    && !awaitingSignupProvision;
 
   // Mark the run as active for this session so we know whether to hold the
   // intake modal for survey resolution (only relevant when the build happened
@@ -1325,13 +1488,15 @@ const DashboardPage = () => {
   // (even if no brief_run is queued — e.g., idea-only signup without a URL).
   const hasReadyDashboard = latestRunStatus === 'succeeded' && hasIntakeData;
   const showIntakeModal = !bootstrapLoading && (
-    !noWorkspaceState && (
+    (awaitingSignupProvision || !noWorkspaceState) && (
+    awaitingSignupProvision
+    || (
     isRunActive
     || latestRunStatus === 'failed'
     || completionCountdown !== null
     || (latestRunStatus === 'succeeded' && !surveyResolved && runWasActiveRef.current)
     || (Boolean(client) && clientStatus === 'provisioning' && !hasReadyDashboard)
-    )
+    ))
   );
 
   // Page-load / processing-handoff intro.
@@ -1397,6 +1562,51 @@ const DashboardPage = () => {
     }, 4000);
     return () => clearInterval(interval);
   }, [user, isRunActive]);
+
+  useEffect(() => {
+    if (!awaitingSignupProvision) return;
+    const interval = setInterval(() => {
+      fetchDashboardBootstrap(user)
+        .then((data) => { if (!cancelledRef.current) setBootstrap(data); })
+        .catch(() => {});
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [user, awaitingSignupProvision]);
+
+  useEffect(() => {
+    if (!awaitingSignupProvision || hasClientWorkspace) return;
+    if (autoProvisionRecoveryAttemptedRef.current) return;
+    const timer = setTimeout(async () => {
+      if (!user || !pendingSignupProvision?.websiteUrl) return;
+      autoProvisionRecoveryAttemptedRef.current = true;
+      try {
+        const token = await user.getIdToken();
+        await fetch('/api/clients/provision', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            websiteUrl: pendingSignupProvision.websiteUrl,
+            ideaDescription: pendingSignupProvision.ideaDescription || '',
+            displayName: pendingSignupProvision.displayName || user.displayName || '',
+            companyName: pendingSignupProvision.companyName || '',
+          }),
+        });
+        doBootstrap();
+      } catch {
+        // non-fatal: polling will continue and the recovery panel remains the fallback
+      }
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [user, awaitingSignupProvision, hasClientWorkspace, pendingSignupProvision, doBootstrap]);
+
+  useEffect(() => {
+    if (!hasClientWorkspace) return;
+    clearPendingDashboardSignup();
+    setPendingSignupProvision(null);
+  }, [hasClientWorkspace]);
 
   // Inject Google Fonts for the style-guide type specimen
   useEffect(() => {
@@ -1498,6 +1708,14 @@ const DashboardPage = () => {
       setCompletionCountdown(3);
     }
   }, [surveyResolved, latestRunStatus, completionCountdown]);
+
+  // For modular clients without brief data, default the capability filter to
+  // 'onboarding' (Data Visualization) instead of 'brief'. Only fires once,
+  // when moduleConfig first loads, and only if the user hasn't navigated away.
+  useEffect(() => {
+    if (!moduleConfig || hasIntakeData) return;
+    setActiveCapabilityFilter((prev) => (prev === 'brief' ? 'onboarding' : prev));
+  }, [moduleConfig, hasIntakeData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // When a new brief_run starts (run ID changes from a prior non-null value),
   // reset survey resolution so the bento survey reappears alongside the fresh
@@ -1720,6 +1938,7 @@ const DashboardPage = () => {
     setModuleToggleLoading((prev) => ({ ...prev, [cardId]: true }));
     try {
       const token = await user.getIdToken();
+      // Step 1: persist the config change
       const res = await fetch('/api/dashboard/modules/config', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -1727,6 +1946,14 @@ const DashboardPage = () => {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Toggle failed.');
+      // Step 2: enabling a card immediately triggers its first run
+      if (enabled) {
+        await fetch('/api/dashboard/modules/run', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cardIds: [cardId], force: false }),
+        });
+      }
       doBootstrap();
     } catch {
       // non-fatal
@@ -1935,11 +2162,42 @@ const DashboardPage = () => {
     ? 0
     : revealedRealCount + (realEventLinesWithTail.length - realEventLines.length);
   const slicedRealLines = realEventLinesWithTail.slice(0, realDisplayLimit);
+  const hasMeaningfulRealEvents = useMemo(
+    () => realEvents.some((ev) => ev.stage && ev.stage !== 'progress' && ev.stage !== 'error'),
+    [realEvents]
+  );
+
+  const pendingSignupTerminalLines = useMemo(() => {
+    if (!awaitingSignupProvision) return [];
+    const websiteUrl = pendingSignupProvision?.websiteUrl || '';
+    const host = websiteUrl
+      ? (() => { try { return new URL(/^https?:\/\//i.test(websiteUrl) ? websiteUrl : `https://${websiteUrl}`).hostname.replace(/^www\./, ''); } catch { return websiteUrl; } })()
+      : '—';
+    return [
+      { type: 'system', prefix: '$', text: 'signup/provision — linking workspace' },
+      { type: 'dim', prefix: '', text: '─'.repeat(46) },
+      { type: 'info', prefix: 'site', text: host },
+      { type: 'ok', prefix: '✓', text: 'account created' },
+      { type: 'active', prefix: '▶', text: 'attaching workspace and queueing multi-device-view…', cursor: true },
+      { type: 'dim', prefix: '·', text: '[FETCH]  fetch homepage' },
+      { type: 'dim', prefix: '·', text: '[SCREEN] capture desktop, tablet, and mobile screenshots' },
+      { type: 'dim', prefix: '·', text: '[MOCK]   render device mockup' },
+      { type: 'dim', prefix: '·', text: '[WRITE]  write dashboard module' },
+    ];
+  }, [awaitingSignupProvision, pendingSignupProvision]);
 
   // Prefer real-time pipeline events when a run has emitted any. Falls back
   // to the hardcoded cosmetic log only when the events subcollection is empty
   // (legacy runs pre-dating the event stream, or still loading).
-  const displayedTerminalLines = realEventLines.length > 0 ? slicedRealLines : slicedLog;
+  const displayedTerminalLines = awaitingSignupProvision && !currentRun
+    ? pendingSignupTerminalLines
+    : _isModularOnlyRun(dashboardState) && hasMeaningfulRealEvents
+      ? slicedRealLines
+      : _isModularOnlyRun(dashboardState)
+      ? slicedLog
+      : realEventLines.length > 0
+        ? slicedRealLines
+        : slicedLog;
 
   // Auto-scroll the terminal so the latest line is always in view.
   // Runs after every change to displayedTerminalLines.
@@ -2794,9 +3052,14 @@ const DashboardPage = () => {
       label: 'LAYOUT',
       title: 'Multi-Device View',
       description: 'Your site across desktop, tablet, and mobile. Identifies layout and usability issues.',
-      placeholderLabel: intakeMockupSrc ? 'LAYOUT' : 'NO\nLAYOUT',
-      rows: buildWorkNeededRows('Device view requires a completed homepage screenshot capture.'),
-      footerLeft: intakeMockupSrc ? 'Live' : WORK_NEEDED_LABEL,
+      placeholderLabel: multiDevicePreviewSrc ? 'LAYOUT' : 'NO\nLAYOUT',
+      rows: multiDevicePreviewSrc ? [
+        { key: 'md-desktop', label: 'Desktop capture', value: deviceScreenshots.desktop ? 'Captured' : homepageScreenshotUrl ? 'Captured' : 'Missing' },
+        { key: 'md-tablet', label: 'Tablet capture', value: deviceScreenshots.tablet ? 'Captured' : 'Missing' },
+        { key: 'md-mobile', label: 'Mobile capture', value: deviceScreenshots.mobile ? 'Captured' : 'Missing' },
+        { key: 'md-mockup', label: 'Device mockup', value: intakeMockupSrc ? 'Generated' : 'Missing — using screenshot fallback' },
+      ] : buildWorkNeededRows('Device view requires a completed homepage screenshot capture.'),
+      footerLeft: intakeMockupSrc ? 'Live' : multiDevicePreviewSrc ? 'Partial' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
       moduleControls: { tech: ['browserless', 'firebase-storage', 'python-mockup'] },
     },
@@ -4021,7 +4284,12 @@ const DashboardPage = () => {
             ) : null}
             {activeCapabilityFilter !== 'brief' && intakeCapabilityCards.filter((card) => {
               if (!activeCapabilityFilter) return true;
-              if (activeCapabilityFilter === 'onboarding') return ONBOARDING_CARD_IDS.has(card.id);
+              if (activeCapabilityFilter === 'onboarding') {
+                if (!ONBOARDING_CARD_IDS.has(card.id)) return false;
+                // Modular clients without brief data: only show enabled module cards
+                if (isModularOnboardingClient) return enabledModuleIds.has(card.id);
+                return true;
+              }
               return activeCapabilityFilter === card.category;
             }).map((card) => (
               <article
@@ -4126,12 +4394,12 @@ const DashboardPage = () => {
                         );
                       })()}
                     </div>
-                  ) : card.id === 'multi-device-view' && intakeMockupSrc ? (
+                  ) : card.id === 'multi-device-view' && multiDevicePreviewSrc ? (
                     <span className="tile-intake-mockup-wrap">
                       <img
                         className="tile-intake-mockup-image"
-                        src={intakeMockupSrc}
-                        alt="Generated multi-device website mockup"
+                        src={multiDevicePreviewSrc}
+                        alt={intakeMockupSrc ? 'Generated multi-device website mockup' : 'Captured website screenshot preview'}
                         onError={() => setIntakeMockupSrc(null)}
                       />
                     </span>
@@ -4262,7 +4530,11 @@ const DashboardPage = () => {
               { key: 'growth',     label: 'Growth Signals',          sub: 'Trends & competitors',     icon: Settings2,             color: '#10b981' },
               { key: 'automation', label: 'Automation & Systems',    sub: 'Scale & automate',         icon: BrainIcon,             color: '#6366f1' },
               { key: 'services',   label: 'Work With Me',            sub: 'Get it done',              icon: MessageSquareMore,     color: '#ec4899' },
-            ].map(({ key, label, sub, icon: NavIcon, color }) => (
+            ].filter(({ key }) => {
+              // Modular clients without brief data see only Data Visualization
+              if (isModularOnboardingClient) return key === 'onboarding';
+              return true;
+            }).map(({ key, label, sub, icon: NavIcon, color }) => (
               <button
                 key={key ?? 'all'}
                 type="button"
@@ -4358,8 +4630,8 @@ const DashboardPage = () => {
               >
                 <span style={{
                   width: '0.46rem', height: '0.46rem', borderRadius: '999px',
-                  background: latestRunStatus === 'failed' ? '#D71921' : completionCountdown !== null ? '#4A9E5C' : latestRunStatus === 'queued' ? '#D4A843' : '#4A9E5C',
-                  animation: isRunActive ? 'status-pulse 1.4s ease-in-out infinite' : 'none',
+                  background: latestRunStatus === 'failed' ? '#D71921' : completionCountdown !== null ? '#4A9E5C' : (latestRunStatus === 'queued' || awaitingSignupProvision) ? '#D4A843' : '#4A9E5C',
+                  animation: (isRunActive || awaitingSignupProvision) ? 'status-pulse 1.4s ease-in-out infinite' : 'none',
                 }} />
               </span>
             </div>
@@ -4377,7 +4649,7 @@ const DashboardPage = () => {
 
             {/* Copy — exact auth copyStyle */}
             <p id="intake-modal-copy" style={{ margin: 0, color: 'rgba(42,36,32,0.66)', lineHeight: 1.6, fontFamily: '"Space Grotesk", system-ui, sans-serif', textAlign: 'center' }}>
-              {'Creating Your Dashboard'}
+              {awaitingSignupProvision ? 'Linking Your Workspace' : 'Creating Your Dashboard'}
             </p>
 
 
@@ -4436,6 +4708,9 @@ const DashboardPage = () => {
             {/* Footer */}
             <div id="intake-modal-footer">
               {client?.normalizedHost
+                || (awaitingSignupProvision && pendingSignupProvision?.websiteUrl
+                  ? (() => { try { return new URL(/^https?:\/\//i.test(pendingSignupProvision.websiteUrl) ? pendingSignupProvision.websiteUrl : `https://${pendingSignupProvision.websiteUrl}`).hostname.replace(/^www\./, ''); } catch { return pendingSignupProvision.websiteUrl; } })()
+                  : null)
                 || (currentRun?.sourceUrl ? (() => { try { return new URL(currentRun.sourceUrl).hostname.replace(/^www\./, ''); } catch { return currentRun.sourceUrl; } })() : null)
                 || '\u00A0'}
             </div>
@@ -4650,8 +4925,8 @@ const DashboardPage = () => {
                         );
                       })()}
                     </div>
-                  ) : activeTileModal.cardId === 'multi-device-view' && intakeMockupSrc ? (
-                    <img className="tile-intake-mockup-image" src={intakeMockupSrc} alt="Generated multi-device website mockup" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : activeTileModal.cardId === 'multi-device-view' && multiDevicePreviewSrc ? (
+                    <img className="tile-intake-mockup-image" src={multiDevicePreviewSrc} alt={intakeMockupSrc ? 'Generated multi-device website mockup' : 'Captured website screenshot preview'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : activeTileModal.cardId === 'social-preview' && siteMeta?.ogImage ? (
                     <div id="bt-preview-shell">
                       <img id="bt-og-image" src={siteMeta.ogImage} alt={siteMeta.ogImageAlt || ''} onError={(e) => { e.currentTarget.style.display = 'none'; }} />

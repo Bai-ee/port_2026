@@ -13,6 +13,7 @@ const {
   failRun,
   findNextQueuedRun,
   updateRunProgress,
+  updateModuleState,
 } = require('../../../../api/_lib/run-lifecycle.cjs');
 
 // Lazy-loaded: avoids pulling the full pipeline at module init time
@@ -114,7 +115,44 @@ export async function POST(request) {
 
   let pipelineResult;
   try {
-    if (pipelineType === 'free-tier-intake') {
+    if (pipelineType === 'free-tier-intake' && clientConfig?.moduleConfig) {
+      // Modular client — run only enabled modules instead of the full legacy pipeline.
+      // moduleConfig presence is the signal that this is a post-Phase-A provisioned client.
+      const { runModules } = getIntakePipeline();
+      const websiteUrl =
+        clientConfig?.sourceInputs?.websiteUrl ||
+        clientConfig?.websiteUrl ||
+        null;
+
+      const enabledModuleIds = Object.entries(clientConfig.moduleConfig)
+        .filter(([, cfg]) => cfg?.enabled === true)
+        .map(([id]) => id);
+
+      const { results } = await runModules({
+        clientId,
+        runId,
+        websiteUrl,
+        moduleIds: enabledModuleIds,
+        onProgress,
+      });
+      await updateModuleState(clientId, results, runId);
+
+      const anyOk = results.some((r) => r.ok);
+      pipelineResult = {
+        status: anyOk ? 'succeeded' : 'failed',
+        pipelineType: 'free-tier-intake',
+        pipelineRunId: runId,
+        artifactRefs: [],
+        warnings: [],
+        scoutPriorityAction: null,
+        content: null,
+        contentOpportunities: null,
+        guardianFlags: null,
+        providerName: null,
+        runCostData: null,
+        ...(anyOk ? {} : { error: results.map((r) => r.errorMessage).filter(Boolean).join('; '), failedStage: 'module' }),
+      };
+    } else if (pipelineType === 'free-tier-intake') {
       const { runIntakePipeline } = getIntakePipeline();
       pipelineResult = await runIntakePipeline({ clientId, clientConfig, onProgress, runId });
     } else {

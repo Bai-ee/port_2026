@@ -66,7 +66,7 @@ export default function ModuleCardControls({
             disabled={toggleLoading}
             onClick={(e) => { e.stopPropagation(); onToggle(cardId, true); }}
           >
-            {toggleLoading ? '…' : 'Enable'}
+            {toggleLoading ? '…' : 'Enable & Run'}
           </button>
         )}
         {isEnabled && canRun && onRun && (

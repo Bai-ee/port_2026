@@ -119,6 +119,34 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
     };
   }
 
+  // Signup can land on the dashboard before the user->client link is visible
+  // everywhere. If a client was already created for this owner, repair the
+  // user doc link instead of creating a duplicate workspace.
+  const ownedClientSnapshot = await fb.adminDb
+    .collection('clients')
+    .where('ownerUid', '==', uid)
+    .limit(1)
+    .get();
+
+  if (!ownedClientSnapshot.empty) {
+    const existingClient = ownedClientSnapshot.docs[0];
+    const existingClientData = existingClient.data() || null;
+    await userRef.set(
+      {
+        clientId: existingClient.id,
+        role: 'owner',
+        websiteUrl: existingClientData?.websiteUrl || normalized?.websiteUrl || '',
+        updatedAt: fb.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    return {
+      clientId: existingClient.id,
+      client: existingClientData,
+      alreadyProvisioned: true,
+    };
+  }
+
   const resolvedCompanyName = deriveCompanyName({
     companyName,
     hostname: normalized?.hostname || '',

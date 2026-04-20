@@ -660,6 +660,20 @@ async function appendRunEvent(runId, clientId, progress = {}) {
 
 // ── Module state update ───────────────────────────────────────────────────────
 
+function deepSet(target, path, value) {
+  if (!target || !Array.isArray(path) || path.length === 0) return target;
+  let node = target;
+  for (let i = 0; i < path.length - 1; i += 1) {
+    const key = path[i];
+    if (!node[key] || typeof node[key] !== 'object' || Array.isArray(node[key])) {
+      node[key] = {};
+    }
+    node = node[key];
+  }
+  node[path[path.length - 1]] = value;
+  return target;
+}
+
 function projectScreenshotArtifacts(update, artifactRefs = []) {
   const homepageScreenshots = artifactRefs.filter((artifact) => artifact?.type === 'website_homepage_screenshot');
   const homepageScreenshot =
@@ -672,25 +686,25 @@ function projectScreenshotArtifacts(update, artifactRefs = []) {
   if (homepageScreenshot) {
     const viewportScreenshots = homepageScreenshots.filter((artifact) => artifact?.variant && !artifact.variant.endsWith('-full'));
     const fullPageScreenshots = homepageScreenshots.filter((artifact) => artifact?.variant && artifact.variant.endsWith('-full'));
-    update['artifacts.homepageScreenshot'] = homepageScreenshot;
+    deepSet(update, ['artifacts', 'homepageScreenshot'], homepageScreenshot);
     if (viewportScreenshots.length > 0) {
-      update['artifacts.homepageScreenshots'] = Object.fromEntries(
+      deepSet(update, ['artifacts', 'homepageScreenshots'], Object.fromEntries(
         viewportScreenshots
           .filter((artifact) => artifact?.variant)
           .map((artifact) => [artifact.variant, artifact])
-      );
+      ));
     }
     if (fullPageScreenshots.length > 0) {
-      update['artifacts.fullPageScreenshots'] = Object.fromEntries(
+      deepSet(update, ['artifacts', 'fullPageScreenshots'], Object.fromEntries(
         fullPageScreenshots
           .filter((artifact) => artifact?.variant)
           .map((artifact) => [artifact.variant, artifact])
-      );
+      ));
     }
   }
 
   if (homepageDeviceMockup) {
-    update['artifacts.homepageDeviceMockup'] = homepageDeviceMockup;
+    deepSet(update, ['artifacts', 'homepageDeviceMockup'], homepageDeviceMockup);
   }
 }
 
@@ -703,16 +717,16 @@ function projectModuleResult(update, result) {
   }
 
   if (result.cardId === 'social-preview' && result.result?.siteMeta) {
-    update.siteMeta = result.result.siteMeta;
+    deepSet(update, ['siteMeta'], result.result.siteMeta);
     return;
   }
 
   if (result.cardId === 'seo-performance') {
     if (result.result?.pagespeed) {
-      update.seoAudit = result.result.pagespeed;
+      deepSet(update, ['seoAudit'], result.result.pagespeed);
     }
     if (result.result?.aiSeoAudit) {
-      update['analyzerOutputs.seo-performance.skills.ai-seo-audit'] = result.result.aiSeoAudit;
+      deepSet(update, ['analyzerOutputs', 'seo-performance', 'skills', 'ai-seo-audit'], result.result.aiSeoAudit);
     }
   }
 }
@@ -738,28 +752,29 @@ async function updateModuleState(clientId, moduleResults, runId) {
     const cardId = r.cardId;
     if (!cardId) continue;
 
-    update[`modules.${cardId}.status`] = r.status || (r.ok ? 'succeeded' : 'failed');
-    update[`modules.${cardId}.lastAttemptRunId`] = runId;
-    update[`modules.${cardId}.lastAttemptAt`] = now;
-    update[`modules.${cardId}.warningCodes`] = r.warningCodes || [];
+    deepSet(update, ['modules', cardId, 'status'], r.status || (r.ok ? 'succeeded' : 'failed'));
+    deepSet(update, ['modules', cardId, 'lastAttemptRunId'], runId);
+    deepSet(update, ['modules', cardId, 'lastAttemptAt'], now);
+    deepSet(update, ['modules', cardId, 'warningCodes'], r.warningCodes || []);
 
     if (r.ok) {
-      update[`modules.${cardId}.lastSuccessfulRunId`] = runId;
-      update[`modules.${cardId}.lastSuccessAt`] = now;
-      update[`modules.${cardId}.lastErrorCode`] = null;
-      update[`modules.${cardId}.lastErrorMessage`] = null;
+      deepSet(update, ['modules', cardId, 'lastSuccessfulRunId'], runId);
+      deepSet(update, ['modules', cardId, 'lastSuccessAt'], now);
+      deepSet(update, ['modules', cardId, 'lastErrorCode'], null);
+      deepSet(update, ['modules', cardId, 'lastErrorMessage'], null);
       if (r.result) {
-        update[`modules.${cardId}.result`] = r.result;
+        deepSet(update, ['modules', cardId, 'result'], r.result);
       }
     } else {
-      update[`modules.${cardId}.lastErrorCode`] = r.errorCode || 'unknown';
-      update[`modules.${cardId}.lastErrorMessage`] = r.errorMessage || null;
+      deepSet(update, ['modules', cardId, 'lastErrorCode'], r.errorCode || 'unknown');
+      deepSet(update, ['modules', cardId, 'lastErrorMessage'], r.errorMessage || null);
     }
 
     projectModuleResult(update, r);
   }
 
-  await fb.adminDb.collection('dashboard_state').doc(clientId).set(update, { merge: true });
+  const ref = fb.adminDb.collection('dashboard_state').doc(clientId);
+  await ref.set(update, { merge: true });
 }
 
 module.exports = {

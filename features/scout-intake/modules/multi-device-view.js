@@ -6,11 +6,21 @@ const { runDeviceMockup } = require('./shared/device-mockup');
 
 const CARD_ID = 'multi-device-view';
 
-async function runMultiDeviceView({ clientId, runId, websiteUrl }) {
+async function runMultiDeviceView({
+  clientId,
+  runId,
+  websiteUrl,
+  onProgress = null,
+}) {
   const warningCodes = [];
   const artifactRefs = [];
+  const emit = async (stage, label, extra = {}) => {
+    if (!onProgress) return;
+    try { await onProgress(stage, label, { moduleId: CARD_ID, ...extra }); } catch {}
+  };
 
   // Step 1: site fetch (degraded evidence is acceptable)
+  await emit('fetch', 'Connect to website…');
   const fetchResult = await runSiteFetch({ websiteUrl });
   if (!fetchResult.ok && fetchResult.warning) {
     warningCodes.push(fetchResult.warning.code);
@@ -18,7 +28,21 @@ async function runMultiDeviceView({ clientId, runId, websiteUrl }) {
   const evidence = fetchResult.evidence;
 
   // Step 2: screenshots
-  const screenshotResult = await runScreenshots({ clientId, runId, websiteUrl, evidence });
+  await emit('capture', 'Capture homepage screenshots…');
+  const screenshotResult = await runScreenshots({
+    clientId,
+    runId,
+    websiteUrl,
+    evidence,
+    onVariantProgress: async ({ phase, variant }) => {
+      if (!variant?.label) return;
+      if (phase === 'start') {
+        await emit('capture', `Capture ${variant.label.toLowerCase()} screenshot…`);
+      } else if (phase === 'stored') {
+        await emit('capture', `${variant.label} screenshot captured.`);
+      }
+    },
+  });
   if (screenshotResult.ok) {
     artifactRefs.push(...screenshotResult.artifactRefs);
     for (const w of screenshotResult.warnings || []) warningCodes.push(w.code);
@@ -49,6 +73,7 @@ async function runMultiDeviceView({ clientId, runId, websiteUrl }) {
     };
   }
 
+  await emit('compose', 'Build device mockup…');
   const mockupResult = await runDeviceMockup({
     clientId, runId, websiteUrl,
     screenshotArtifactRefs: artifactRefs,
@@ -65,6 +90,8 @@ async function runMultiDeviceView({ clientId, runId, websiteUrl }) {
     artifactRefs.find((a) => a?.type === 'website_homepage_screenshot' && a?.variant === variant)?.downloadUrl || null;
 
   const mockupArtifact = artifactRefs.find((a) => a?.type === 'website_homepage_device_mockup') || null;
+
+  await emit('normalize', 'Write layout module…');
 
   return {
     ok: true,

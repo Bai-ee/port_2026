@@ -5,10 +5,15 @@ const { runSiteMeta } = require('./shared/site-meta');
 
 const CARD_ID = 'social-preview';
 
-async function runSocialPreview({ websiteUrl }) {
+async function runSocialPreview({ websiteUrl, onProgress = null }) {
   const warningCodes = [];
+  const emit = async (stage, label, extra = {}) => {
+    if (!onProgress) return;
+    try { await onProgress(stage, label, { moduleId: CARD_ID, ...extra }); } catch {}
+  };
 
   // Step 1: site fetch
+  await emit('fetch', 'Connect to website…');
   const fetchResult = await runSiteFetch({ websiteUrl });
   if (!fetchResult.ok && fetchResult.warning) {
     warningCodes.push(fetchResult.warning.code);
@@ -16,6 +21,7 @@ async function runSocialPreview({ websiteUrl }) {
   const evidence = fetchResult.evidence;
 
   // Step 2: extract site meta
+  await emit('analyze', 'Extract social metadata…');
   const metaResult = runSiteMeta({ evidence });
   if (!metaResult.ok || !metaResult.siteMeta) {
     const code = 'site_meta_missing';
@@ -30,6 +36,7 @@ async function runSocialPreview({ websiteUrl }) {
     };
   }
 
+  await emit('normalize', 'Write preview module…');
   return {
     ok: true,
     cardId: CARD_ID,

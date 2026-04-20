@@ -9,6 +9,24 @@ import InternalPageBackground from './InternalPageBackground';
 import { internalPageGlassCardStyle } from './pageSurfaceSystem';
 import { trackSignIn, trackSignUp } from '@/lib/analytics';
 
+const PENDING_DASHBOARD_SIGNUP_KEY = 'pending-dashboard-signup';
+
+function persistPendingDashboardSignup(payload = {}) {
+  if (typeof window === 'undefined') return;
+  window.sessionStorage.setItem(
+    PENDING_DASHBOARD_SIGNUP_KEY,
+    JSON.stringify({
+      ...payload,
+      createdAt: Date.now(),
+    })
+  );
+}
+
+function clearPendingDashboardSignup() {
+  if (typeof window === 'undefined') return;
+  window.sessionStorage.removeItem(PENDING_DASHBOARD_SIGNUP_KEY);
+}
+
 const AuthPageInner = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -105,10 +123,15 @@ const AuthPageInner = () => {
 
     try {
       if (mode === 'signin') {
+        clearPendingDashboardSignup();
         await signIn({ email: form.email, password: form.password });
         trackSignIn('email');
       } else {
         validateCreateDashboard();
+        persistPendingDashboardSignup({
+          websiteUrl: form.websiteUrl.trim(),
+          ideaDescription: form.ideaDescription.trim(),
+        });
         await signUp({
           websiteUrl: form.websiteUrl.trim(),
           ideaDescription: form.ideaDescription.trim(),
@@ -120,6 +143,7 @@ const AuthPageInner = () => {
 
       router.replace(redirectPath);
     } catch (nextError) {
+      if (mode === 'create') clearPendingDashboardSignup();
       setError(nextError?.message || 'Authentication failed.');
     } finally {
       setSubmitting(false);
@@ -132,6 +156,10 @@ const AuthPageInner = () => {
 
     try {
       if (mode === 'create') {
+        persistPendingDashboardSignup({
+          websiteUrl: form.websiteUrl.trim(),
+          ideaDescription: form.ideaDescription.trim(),
+        });
         await signInWithGoogle({
           provisioningPayload: {
             websiteUrl: form.websiteUrl.trim(),
@@ -140,12 +168,14 @@ const AuthPageInner = () => {
         });
         trackSignUp('google');
       } else {
+        clearPendingDashboardSignup();
         await signInWithGoogle();
         trackSignIn('google');
       }
 
       router.replace(redirectPath);
     } catch (nextError) {
+      if (mode === 'create') clearPendingDashboardSignup();
       setError(nextError?.message || 'Authentication failed.');
     } finally {
       setSubmitting(false);

@@ -6,16 +6,22 @@ const { runAiSeo } = require('./shared/ai-seo');
 
 const CARD_ID = 'seo-performance';
 
-async function runSeoPerformance({ websiteUrl }) {
+async function runSeoPerformance({ websiteUrl, onProgress = null }) {
   const warningCodes = [];
+  const emit = async (stage, label, extra = {}) => {
+    if (!onProgress) return;
+    try { await onProgress(stage, label, { moduleId: CARD_ID, ...extra }); } catch {}
+  };
 
   // Step 1: site fetch (evidence used for context; pagespeed/ai-seo run independently)
+  await emit('fetch', 'Connect to website…');
   const fetchResult = await runSiteFetch({ websiteUrl });
   if (!fetchResult.ok && fetchResult.warning) {
     warningCodes.push(fetchResult.warning.code);
   }
 
   // Step 2: pagespeed + ai-seo in parallel — both only need websiteUrl
+  await emit('analyze', 'Run PageSpeed and AI SEO checks…');
   const [pagespeedResult, aiSeoResult] = await Promise.all([
     runPagespeed({ websiteUrl }),
     runAiSeo({ websiteUrl }),
@@ -41,6 +47,7 @@ async function runSeoPerformance({ websiteUrl }) {
     };
   }
 
+  await emit('normalize', 'Write SEO module…');
   return {
     ok: true,
     cardId: CARD_ID,

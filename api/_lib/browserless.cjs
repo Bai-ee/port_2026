@@ -103,6 +103,7 @@ const SCREENSHOT_VARIANTS = [
     primary: false,
   },
 ];
+const VIEWPORT_SCREENSHOT_VARIANTS = SCREENSHOT_VARIANTS.filter((variant) => !variant.fullPage);
 
 function readOptionalEnvInt(name, fallback) {
   const raw = process.env[name];
@@ -326,14 +327,32 @@ async function captureScreenshotBuffer({ clientId, runId, targetUrl, variant }) 
   }
 }
 
-async function persistWebsiteScreenshotArtifact({ clientId, runId, websiteUrl }) {
+async function persistWebsiteScreenshotArtifact({
+  clientId,
+  runId,
+  websiteUrl,
+  variants = SCREENSHOT_VARIANTS,
+  onVariantProgress = null,
+}) {
   const capturedAt = new Date().toISOString();
 
   try {
     const artifactRefs = [];
     const warnings = [];
 
-    for (const variant of SCREENSHOT_VARIANTS) {
+    for (const [index, variant] of variants.entries()) {
+      if (typeof onVariantProgress === 'function') {
+        try {
+          await onVariantProgress({
+            phase: 'start',
+            variant,
+            index,
+            total: variants.length,
+          });
+        } catch {
+          /* non-fatal progress hook */
+        }
+      }
       const screenshot = await captureScreenshotBuffer({
         clientId,
         runId,
@@ -343,6 +362,19 @@ async function persistWebsiteScreenshotArtifact({ clientId, runId, websiteUrl })
 
       if (!screenshot.ok) {
         warnings.push(screenshot.warning);
+        if (typeof onVariantProgress === 'function') {
+          try {
+            await onVariantProgress({
+              phase: 'failed',
+              variant,
+              index,
+              total: variants.length,
+              warning: screenshot.warning || null,
+            });
+          } catch {
+            /* non-fatal progress hook */
+          }
+        }
         continue;
       }
 
@@ -383,6 +415,19 @@ async function persistWebsiteScreenshotArtifact({ clientId, runId, websiteUrl })
         browserlessRequestId: screenshot.requestId || null,
         downloadUrl: stored.downloadUrl,
       });
+
+      if (typeof onVariantProgress === 'function') {
+        try {
+          await onVariantProgress({
+            phase: 'stored',
+            variant,
+            index,
+            total: variants.length,
+          });
+        } catch {
+          /* non-fatal progress hook */
+        }
+      }
     }
 
     if (artifactRefs.length === 0) {
@@ -602,6 +647,7 @@ async function persistBriefPdfArtifact({ clientId, runId, html }) {
 module.exports = {
   getBrowserlessConfig,
   SCREENSHOT_VARIANTS,
+  VIEWPORT_SCREENSHOT_VARIANTS,
   persistWebsiteScreenshotArtifact,
   persistBriefPdfArtifact,
 };

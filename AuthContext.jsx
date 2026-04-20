@@ -15,6 +15,7 @@ import { auth, db, isFirebaseConfigured } from './firebase';
 
 const AuthContext = createContext(null);
 const googleProvider = typeof window !== 'undefined' ? new GoogleAuthProvider() : null;
+const PENDING_DASHBOARD_SIGNUP_KEY = 'pending-dashboard-signup';
 
 if (googleProvider) {
   googleProvider.setCustomParameters({ prompt: 'select_account' });
@@ -26,6 +27,22 @@ const getAuthHeaders = async (user) => {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${token}`,
   };
+};
+
+const persistPendingDashboardSignup = (payload = {}) => {
+  if (typeof window === 'undefined') return;
+  window.sessionStorage.setItem(
+    PENDING_DASHBOARD_SIGNUP_KEY,
+    JSON.stringify({
+      ...payload,
+      createdAt: Date.now(),
+    })
+  );
+};
+
+const clearPendingDashboardSignup = () => {
+  if (typeof window === 'undefined') return;
+  window.sessionStorage.removeItem(PENDING_DASHBOARD_SIGNUP_KEY);
 };
 
 const provisionClientForSignup = async (user, payload) => {
@@ -127,25 +144,38 @@ export const AuthProvider = ({ children }) => {
 
       const credential = await createUserWithEmailAndPassword(auth, email, password);
 
-      if (displayName) {
-        await updateProfile(credential.user, { displayName });
+      try {
+        if (displayName) {
+          await updateProfile(credential.user, { displayName });
+        }
+
+        await upsertUserProfile(credential.user, {
+          displayName: displayName || credential.user.displayName || '',
+          createdAt: serverTimestamp(),
+          dashboardTitle: 'Provisioning Dashboard',
+          dashboardDescription: 'Your client workspace is being provisioned.',
+        });
+
+        await provisionClientForSignup(credential.user, {
+          displayName: displayName || credential.user.displayName || '',
+          companyName: companyName || '',
+          websiteUrl: websiteUrl || '',
+          ideaDescription: ideaDescription || '',
+        });
+
+        persistPendingDashboardSignup({
+          displayName: displayName || credential.user.displayName || '',
+          companyName: companyName || '',
+          websiteUrl: websiteUrl || '',
+          ideaDescription: ideaDescription || '',
+        });
+
+        return credential.user;
+      } catch (error) {
+        clearPendingDashboardSignup();
+        await signOut(auth).catch(() => {});
+        throw error;
       }
-
-      await upsertUserProfile(credential.user, {
-        displayName: displayName || credential.user.displayName || '',
-        createdAt: serverTimestamp(),
-        dashboardTitle: 'Provisioning Dashboard',
-        dashboardDescription: 'Your client workspace is being provisioned.',
-      });
-
-      await provisionClientForSignup(credential.user, {
-        displayName: displayName || credential.user.displayName || '',
-        companyName: companyName || '',
-        websiteUrl: websiteUrl || '',
-        ideaDescription: ideaDescription || '',
-      });
-
-      return credential.user;
     },
     signIn: async ({ email, password }) => {
       if (!auth) {
@@ -154,6 +184,7 @@ export const AuthProvider = ({ children }) => {
 
       const credential = await signInWithEmailAndPassword(auth, email, password);
       await upsertUserProfile(credential.user);
+      clearPendingDashboardSignup();
       return credential.user;
     },
     signInWithGoogle: async ({ provisioningPayload } = {}) => {
@@ -166,30 +197,45 @@ export const AuthProvider = ({ children }) => {
         || credential.user.displayName
         || '';
 
-      await upsertUserProfile(credential.user, {
-        displayName: resolvedDisplayName,
-        photoURL: credential.user.photoURL || '',
-        ...(provisioningPayload
-          ? {
-              dashboardTitle: 'Provisioning Dashboard',
-              dashboardDescription: 'Your client workspace is being provisioned.',
-            }
-          : null),
-      });
-
-      if (provisioningPayload) {
-        await provisionClientForSignup(credential.user, {
+      try {
+        await upsertUserProfile(credential.user, {
           displayName: resolvedDisplayName,
-          companyName: provisioningPayload.companyName || '',
-          websiteUrl: provisioningPayload.websiteUrl || '',
-          ideaDescription: provisioningPayload.ideaDescription || '',
+          photoURL: credential.user.photoURL || '',
+          ...(provisioningPayload
+            ? {
+                dashboardTitle: 'Provisioning Dashboard',
+                dashboardDescription: 'Your client workspace is being provisioned.',
+              }
+            : null),
         });
-      }
 
-      return credential.user;
+        if (provisioningPayload) {
+          await provisionClientForSignup(credential.user, {
+            displayName: resolvedDisplayName,
+            companyName: provisioningPayload.companyName || '',
+            websiteUrl: provisioningPayload.websiteUrl || '',
+            ideaDescription: provisioningPayload.ideaDescription || '',
+          });
+          persistPendingDashboardSignup({
+            displayName: resolvedDisplayName,
+            companyName: provisioningPayload.companyName || '',
+            websiteUrl: provisioningPayload.websiteUrl || '',
+            ideaDescription: provisioningPayload.ideaDescription || '',
+          });
+        } else {
+          clearPendingDashboardSignup();
+        }
+
+        return credential.user;
+      } catch (error) {
+        clearPendingDashboardSignup();
+        await signOut(auth).catch(() => {});
+        throw error;
+      }
     },
     signOutUser: async () => {
       if (!auth) return;
+      clearPendingDashboardSignup();
       await signOut(auth);
     },
   }), [loading, user, userProfile]);

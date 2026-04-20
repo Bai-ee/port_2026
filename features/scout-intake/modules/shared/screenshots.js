@@ -1,10 +1,25 @@
 'use strict';
 
-const { persistWebsiteScreenshotArtifact } = require('../../../../api/_lib/browserless.cjs');
+const {
+  persistWebsiteScreenshotArtifact,
+  VIEWPORT_SCREENSHOT_VARIANTS,
+} = require('../../../../api/_lib/browserless.cjs');
 
-async function runScreenshots({ clientId, runId, websiteUrl }) {
+async function runScreenshots({
+  clientId,
+  runId,
+  websiteUrl,
+  includeFullPage = true,
+  onVariantProgress = null,
+}) {
   try {
-    const result = await persistWebsiteScreenshotArtifact({ clientId, runId, websiteUrl });
+    const result = await persistWebsiteScreenshotArtifact({
+      clientId,
+      runId,
+      websiteUrl,
+      variants: includeFullPage ? undefined : VIEWPORT_SCREENSHOT_VARIANTS,
+      onVariantProgress,
+    });
     if (!result?.ok) {
       return {
         ok: false,
