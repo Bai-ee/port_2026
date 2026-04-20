@@ -756,6 +756,14 @@ async function updateModuleState(clientId, moduleResults, runId) {
     deepSet(update, ['modules', cardId, 'lastAttemptRunId'], runId);
     deepSet(update, ['modules', cardId, 'lastAttemptAt'], now);
     deepSet(update, ['modules', cardId, 'warningCodes'], r.warningCodes || []);
+    deepSet(update, ['modules', cardId, 'warnings'], Array.isArray(r.warnings)
+      ? r.warnings.map((w) => ({
+          code: w?.code || 'unknown',
+          message: w?.message || '',
+          stage: w?.stage || null,
+          detail: w?.detail || null,
+        }))
+      : []);
 
     if (r.ok) {
       deepSet(update, ['modules', cardId, 'lastSuccessfulRunId'], runId);

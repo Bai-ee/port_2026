@@ -13,6 +13,7 @@ async function runMultiDeviceView({
   onProgress = null,
 }) {
   const warningCodes = [];
+  const warnings = [];
   const artifactRefs = [];
   const emit = async (stage, label, extra = {}) => {
     if (!onProgress) return;
@@ -24,6 +25,7 @@ async function runMultiDeviceView({
   const fetchResult = await runSiteFetch({ websiteUrl });
   if (!fetchResult.ok && fetchResult.warning) {
     warningCodes.push(fetchResult.warning.code);
+    warnings.push(fetchResult.warning);
   }
   const evidence = fetchResult.evidence;
 
@@ -46,7 +48,10 @@ async function runMultiDeviceView({
   });
   if (screenshotResult.ok) {
     artifactRefs.push(...screenshotResult.artifactRefs);
-    for (const w of screenshotResult.warnings || []) warningCodes.push(w.code);
+    for (const w of screenshotResult.warnings || []) {
+      warningCodes.push(w.code);
+      warnings.push(w);
+    }
   } else {
     const code = screenshotResult.warning?.code || 'website_screenshot_failed';
     return {
@@ -95,6 +100,7 @@ async function runMultiDeviceView({
     artifactRefs.push(mockupResult.artifactRef);
   } else if (mockupResult.warning) {
     warningCodes.push(mockupResult.warning.code);
+    warnings.push(mockupResult.warning);
   }
 
   // Build result URLs from artifact refs
@@ -110,6 +116,7 @@ async function runMultiDeviceView({
     cardId: CARD_ID,
     status: 'succeeded',
     warningCodes,
+    warnings,
     artifacts: artifactRefs,
     result: {
       mockupUrl:  mockupArtifact?.downloadUrl || null,

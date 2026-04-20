@@ -193,12 +193,18 @@ async function generateWebsiteMockupArtifact({
       },
     };
   } catch (error) {
+    console.error('[device-mockup] compose failed', {
+      clientId,
+      runId,
+      message: error?.message,
+      stack: error?.stack,
+    });
     return {
       ok: false,
       warning: buildWarning(
         'mockup_generation_failed',
         `Mockup generation failed: ${error.message}`,
-        { stage: 'compose' }
+        { stage: 'compose', detail: error?.stack || null }
       ),
     };
   } finally {
