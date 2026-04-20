@@ -34,6 +34,7 @@ async function runMultiDeviceView({
     runId,
     websiteUrl,
     includeBuffers: true,
+    includeBufferVariants: ['desktop', 'tablet', 'mobile'],
     onVariantProgress: async ({ phase, variant }) => {
       if (!variant?.label) return;
       if (phase === 'start') {

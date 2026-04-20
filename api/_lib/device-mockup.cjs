@@ -63,8 +63,8 @@ async function downloadArtifactToFileWithRetry({
   throw lastError || new Error('Artifact download failed.');
 }
 
-async function renderScreenBuffer(inputPath, box) {
-  let pipeline = sharp(inputPath)
+async function renderScreenBuffer(input, box) {
+  let pipeline = sharp(input)
     .resize(box.width, box.height, {
       fit: 'cover',
       position: 'north',
@@ -111,38 +111,42 @@ async function generateWebsiteMockupArtifact({
     };
   }
 
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'device-mockup-'));
-  const inputDir = path.join(tempRoot, runId);
+  const hasInMemoryBuffers = Object.values(REQUIRED_VARIANTS).every((sourceVariant) =>
+    screenshotBuffersByVariant && Buffer.isBuffer(screenshotBuffersByVariant[sourceVariant])
+  );
+  const tempRoot = hasInMemoryBuffers ? null : await fs.mkdtemp(path.join(os.tmpdir(), 'device-mockup-'));
+  const inputDir = tempRoot ? path.join(tempRoot, runId) : null;
   const capturedAt = new Date().toISOString();
 
   try {
-    await fs.mkdir(inputDir, { recursive: true });
-
-    await Promise.all(
-      Object.entries(REQUIRED_VARIANTS).map(([targetName, sourceVariant]) => {
-        const artifact = byVariant[sourceVariant];
+    const composites = await Promise.all(
+      Object.entries(SCREEN_BOXES).map(async ([deviceName, box]) => {
         const inMemoryBuffer =
           screenshotBuffersByVariant &&
-          Buffer.isBuffer(screenshotBuffersByVariant[sourceVariant])
-            ? screenshotBuffersByVariant[sourceVariant]
+          Buffer.isBuffer(screenshotBuffersByVariant[deviceName])
+            ? screenshotBuffersByVariant[deviceName]
             : null;
-        if (inMemoryBuffer) {
-          return fs.writeFile(path.join(inputDir, `${targetName}.png`), inMemoryBuffer);
+        let source = inMemoryBuffer;
+        if (!source) {
+          if (!inputDir) {
+            throw new Error(`Missing in-memory screenshot buffer for ${deviceName}.`);
+          }
+          await fs.mkdir(inputDir, { recursive: true });
+          const artifact = byVariant[REQUIRED_VARIANTS[deviceName]];
+          const destination = path.join(inputDir, `${deviceName}.png`);
+          await downloadArtifactToFileWithRetry({
+            bucketName: artifact.bucket || null,
+            storagePath: artifact.storagePath,
+            destination,
+          });
+          source = destination;
         }
-        return downloadArtifactToFileWithRetry({
-          bucketName: artifact.bucket || null,
-          storagePath: artifact.storagePath,
-          destination: path.join(inputDir, `${targetName}.png`),
-        });
-      })
-    );
-
-    const composites = await Promise.all(
-      Object.entries(SCREEN_BOXES).map(async ([deviceName, box]) => ({
-        input: await renderScreenBuffer(path.join(inputDir, `${deviceName}.png`), box),
+        return {
+        input: await renderScreenBuffer(source, box),
         left: box.left,
         top: box.top,
-      }))
+        };
+      })
     );
 
     const buffer = await sharp(TEMPLATE_PATH)
@@ -198,7 +202,9 @@ async function generateWebsiteMockupArtifact({
       ),
     };
   } finally {
-    await fs.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
+    if (tempRoot) {
+      await fs.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
+    }
   }
 }
 
