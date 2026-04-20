@@ -25,8 +25,9 @@ import { internalPageGlassCardStyle } from './pageSurfaceSystem';
 import OnboardingChatModal from './onboarding/OnboardingChatModal';
 import onboardingConfig from './onboarding/questions.config.cjs';
 import { buildSolutionsList, resolveSolution } from './features/scout-intake/solutions-catalog.mjs';
-import { resolveAnalyzerSource, buildCardDescription } from './features/scout-intake/card-description-builder.mjs';
+import { resolveAnalyzerSource, buildCardDescription, buildModuleStateDescription } from './features/scout-intake/card-description-builder.mjs';
 import { deriveFindings } from './features/scout-intake/derived-findings.mjs';
+import ModuleCardControls from './components/dashboard/ModuleCardControls';
 
 // Entry-flow survey surfaces every question step (excludes the summary, which
 // is added in Phase 4). Ordered by the `order` field in questions.config.cjs.
@@ -47,7 +48,6 @@ import {
   trackDashboardCreated,
   trackPipelineRerun,
   trackPipelineCancelled,
-  trackSeoRerun,
   trackTileOpened,
   trackThemeChanged,
   trackTierModalOpened,
@@ -1040,45 +1040,6 @@ function buildTerminalLines(run, dashboardState, latestRunStatus, client) {
  * @param {'start'|'fetch'|'audit'|'narrator'|'write'} stage
  * @param {string} [websiteUrl]
  */
-function buildSeoRerunTerminalLines(stage, websiteUrl) {
-  const host = websiteUrl
-    ? (() => { try { return new URL(websiteUrl).hostname.replace(/^www\./, ''); } catch { return websiteUrl; } })()
-    : '...';
-
-  const ok   = (tag, text) => ({ tag, text, type: 'ok' });
-  const act  = (tag, text) => ({ tag, text, type: 'active', active: true });
-  const dim  = (tag, text) => ({ tag, text, type: 'dim' });
-
-  const base = [ok('SEO', `PageSpeed Insights audit · ${host}`)];
-
-  if (stage === 'start') {
-    return [act('SEO', `Triggering PageSpeed Insights audit for ${host}...`)];
-  }
-  if (stage === 'fetch') {
-    return [...base, act('FETCH', 'Fetching mobile performance data from Google PSI...')];
-  }
-  if (stage === 'audit') {
-    return [...base, ok('FETCH', 'Mobile data received'), act('AUDIT', 'Running Lighthouse analysis...')];
-  }
-  if (stage === 'narrator') {
-    return [
-      ...base,
-      ok('FETCH', 'Mobile data received'),
-      ok('AUDIT', 'Lighthouse analysis complete'),
-      act('AI', 'Generating SEO performance summary for card...'),
-    ];
-  }
-  if (stage === 'write') {
-    return [
-      ...base,
-      ok('FETCH', 'Mobile data received'),
-      ok('AUDIT', 'Lighthouse analysis complete'),
-      ok('AI',    'SEO performance summary generated'),
-      act('WRITE', 'Writing results to database...'),
-    ];
-  }
-  return [dim('SEO', `Running SEO audit for ${host}...`)];
-}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -1096,7 +1057,9 @@ const DashboardPage = () => {
   const [modalChatMode, setModalChatMode] = useState('ai');
   const capabilityGridRef = useRef(null);
   const dashboardVisibleRef = useRef(false);
-  const [bootstrap, setBootstrap] = useState({ userProfile: null, client: null, dashboardState: null, recentRuns: [], intelligence: null });
+  const [bootstrap, setBootstrap] = useState({ userProfile: null, client: null, dashboardState: null, recentRuns: [], intelligence: null, moduleConfig: null, moduleState: null });
+  const [moduleRunLoading, setModuleRunLoading] = useState({});
+  const [moduleToggleLoading, setModuleToggleLoading] = useState({});
   const [bootstrapLoading, setBootstrapLoading] = useState(true);
   const [bootstrapError, setBootstrapError] = useState('');
   const cancelledRef = useRef(false);
@@ -1126,8 +1089,7 @@ const DashboardPage = () => {
   const [reseedSuccess, setReseedSuccess] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [cancelError, setCancelError] = useState('');
-  const [seoRerunLoading, setSeoRerunLoading] = useState(false);
-  const [seoRerunStage,   setSeoRerunStage]   = useState(null);
+
   const [intakeMockupSrc, setIntakeMockupSrc] = useState(null);
   // HTML preview for the brief tile — fetched from /api/dashboard/brief-preview
   // and injected via iframe srcDoc. Keeps the brief's <style> isolated from
@@ -1164,16 +1126,6 @@ const DashboardPage = () => {
     return () => { cancelled = true; };
   }, [user, bootstrap?.dashboardState?.latestRunId, bootstrap?.dashboardState?.scribe?.brief?.headline]);
 
-  // Advance scripted terminal stages during SEO rerun
-  useEffect(() => {
-    if (!seoRerunLoading) { setSeoRerunStage(null); return; }
-    setSeoRerunStage('start');
-    const t1 = setTimeout(() => setSeoRerunStage('fetch'),    10_000);
-    const t2 = setTimeout(() => setSeoRerunStage('audit'),    25_000);
-    const t3 = setTimeout(() => setSeoRerunStage('narrator'), 38_000);
-    const t4 = setTimeout(() => setSeoRerunStage('write'),    52_000);
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
-  }, [seoRerunLoading]);
 
   // Clock tick
   useEffect(() => {
@@ -1319,6 +1271,8 @@ const DashboardPage = () => {
   const briefPdfUrl = dashboardState?.artifacts?.briefPdf?.downloadUrl || null;
   // Intelligence-first SEO data: prefer intelligence source, fall back to dashboardState.seoAudit
   const intelligencePayload = bootstrap.intelligence || null;
+  const moduleConfig = bootstrap.moduleConfig || null;
+  const moduleState  = bootstrap.moduleState  || dashboardState?.modules || null;
   const seoAudit = intelligencePayload?.dashboardSeoAudit ?? dashboardState?.seoAudit ?? null;
   const aiVisibility = aiSeoAudit?.aiVisibility ?? null;
   const isFromIntelligence  = Boolean(intelligencePayload?.dashboardSeoAudit != null);
@@ -1760,29 +1714,46 @@ const DashboardPage = () => {
     }
   }, [user, cancelLoading, doBootstrap]);
 
-  const handleSeoRerun = useCallback(async () => {
-    if (!user || seoRerunLoading) return;
-    setSeoRerunLoading(true);
+
+  const handleModuleToggle = useCallback(async (cardId, enabled) => {
+    if (!user || moduleToggleLoading[cardId]) return;
+    setModuleToggleLoading((prev) => ({ ...prev, [cardId]: true }));
     try {
       const token = await user.getIdToken();
-      const res = await fetch('/api/intelligence/rerun', {
+      const res = await fetch('/api/dashboard/modules/config', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sourceId: 'pagespeed-insights' }),
+        body: JSON.stringify({ cardId, enabled }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || 'Re-run failed.');
-      trackSeoRerun('pagespeed-insights');
-      // Rerun route is now synchronous — by the time we get here, PSI + narrator
-      // have completed and the Firestore record has facts.narrative. One bootstrap
-      // refresh is all that's needed to show the full dashboard.
+      if (!res.ok) throw new Error(data?.error || 'Toggle failed.');
       doBootstrap();
     } catch {
-      // non-fatal — user can retry
+      // non-fatal
     } finally {
-      setSeoRerunLoading(false);
+      setModuleToggleLoading((prev) => ({ ...prev, [cardId]: false }));
     }
-  }, [user, seoRerunLoading, doBootstrap]);
+  }, [user, moduleToggleLoading, doBootstrap]);
+
+  const handleModuleRun = useCallback(async (cardId, force = false) => {
+    if (!user || moduleRunLoading[cardId]) return;
+    setModuleRunLoading((prev) => ({ ...prev, [cardId]: true }));
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/dashboard/modules/run', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cardIds: [cardId], force }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Module run failed.');
+      doBootstrap();
+    } catch {
+      // non-fatal
+    } finally {
+      setModuleRunLoading((prev) => ({ ...prev, [cardId]: false }));
+    }
+  }, [user, moduleRunLoading, doBootstrap]);
 
   const terminalLines = useMemo(
     () => buildTerminalLines(currentRun, dashboardState, latestRunStatus, client),
@@ -1864,10 +1835,6 @@ const DashboardPage = () => {
     });
   }, [realEvents]);
 
-  // While SEO rerun is in progress, override terminal with live stage messages
-  const activeTerminalLines = (seoRerunLoading && seoRerunStage)
-    ? buildSeoRerunTerminalLines(seoRerunStage, seoAudit?.websiteUrl)
-    : terminalLines;
 
   const terminalLog = useMemo(
     () => buildTerminalLog(currentRun, dashboardState, latestRunStatus, client, completionCountdown),
@@ -2818,9 +2785,7 @@ const DashboardPage = () => {
       footerLeft: isSeoPartial ? 'Partial' : hasSeoAuditData ? 'Live' : isSeoQueued ? 'Queued' : isSeoError ? 'Error' : WORK_NEEDED_LABEL,
       domId: 'intake-card-seo-performance',
       footerRight: 'REVIEWED',
-      footerAction: (hasSeoAuditData || isSeoError) && hasWebsiteUrl
-        ? { label: isSeoError ? 'Retry' : 'Re-run', onClick: handleSeoRerun, loading: seoRerunLoading }
-        : null,
+      moduleControls: { tech: ['pagespeed-insights', 'anthropic', 'ai-seo-audit'] },
     },
     {
       id: 'multi-device-view',
@@ -2833,6 +2798,7 @@ const DashboardPage = () => {
       rows: buildWorkNeededRows('Device view requires a completed homepage screenshot capture.'),
       footerLeft: intakeMockupSrc ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
+      moduleControls: { tech: ['browserless', 'firebase-storage', 'python-mockup'] },
     },
     {
       id: 'social-preview',
@@ -2859,6 +2825,7 @@ const DashboardPage = () => {
       })(),
       footerLeft: siteMeta ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
+      moduleControls: { tech: ['html-fetch', 'meta-parser'] },
     },
     {
       id: 'business-model',
@@ -3589,6 +3556,14 @@ const DashboardPage = () => {
       }
     }
 
+    // Module state override — replaces description for disabled/failed/idle modular cards.
+    // Running/queued states defer to the standard description so progress copy shows.
+    if (card.moduleControls) {
+      const moduleCardState = moduleState?.[card.id] ?? null;
+      const moduleDesc = buildModuleStateDescription(card.id, moduleCardState);
+      if (moduleDesc) dynamicShortDescription = moduleDesc;
+    }
+
     const isSeoHostingContext = card.id === 'seo-performance' && built?.dominantSignal?.type === 'hosting-context';
 
     const readinessContext = (() => {
@@ -4219,6 +4194,18 @@ const DashboardPage = () => {
                     {card.dynamicShortDescription || card.scribeShort || card.description}
                   </p>
                 </div>
+                {card.moduleControls && (
+                  <ModuleCardControls
+                    cardId={card.id}
+                    moduleState={moduleState}
+                    moduleConfig={moduleConfig}
+                    loading={moduleRunLoading[card.id] || false}
+                    toggleLoading={moduleToggleLoading[card.id] || false}
+                    onRun={handleModuleRun}
+                    onToggle={handleModuleToggle}
+                    tech={card.moduleControls.tech}
+                  />
+                )}
                 <div className="tile-foot">
                   <span className="tile-foot-status">
                     <span className={`power-dot lamp${card.footerLeft !== 'Live' ? ' power-dot-needs-work' : ''}`} />
@@ -4870,6 +4857,38 @@ const DashboardPage = () => {
                               </div>
                             )
                           ))}
+                          {(() => {
+                            const cms = moduleState?.[activeTileModal.cardId];
+                            if (!cms) return null;
+                            const fmtTs = (ts) => {
+                              try {
+                                const d = ts?.toDate?.() ?? (ts?.seconds ? new Date(ts.seconds * 1000) : null);
+                                return d ? d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : '—';
+                              } catch { return '—'; }
+                            };
+                            const diagRows = [
+                              { key: 'mod-header',  isHeader: true, label: 'MODULE DIAGNOSTICS' },
+                              { key: 'mod-status',  label: 'Status',          value: cms.status             || '—' },
+                              { key: 'mod-enabled', label: 'Enabled',         value: cms.enabled ? 'Yes' : 'No' },
+                              { key: 'mod-run',     label: 'Last run ID',     value: cms.lastAttemptRunId   || '—' },
+                              { key: 'mod-success', label: 'Last success ID', value: cms.lastSuccessfulRunId || '—' },
+                              { key: 'mod-at',      label: 'Last attempt',    value: fmtTs(cms.lastAttemptAt) },
+                              { key: 'mod-ok-at',   label: 'Last success',    value: fmtTs(cms.lastSuccessAt) },
+                              { key: 'mod-err',     label: 'Error code',      value: cms.lastErrorCode      || '—' },
+                              { key: 'mod-msg',     label: 'Error message',   value: cms.lastErrorMessage   || '—' },
+                              { key: 'mod-warns',   label: 'Warning codes',   value: (cms.warningCodes?.join(', ')) || 'None' },
+                            ];
+                            return diagRows.map((row) =>
+                              row.isHeader
+                                ? <div key={row.key} className="tile-detail-row-section-head">{row.label}</div>
+                                : (
+                                  <div key={row.key} className="tile-detail-stat-row">
+                                    <span className="tile-detail-stat-label">{row.label}</span>
+                                    <span className="tile-detail-stat-value" style={{ wordBreak: 'break-all' }}>{row.value}</span>
+                                  </div>
+                                )
+                            );
+                          })()}
                         </div>
                       )}
                     </div>

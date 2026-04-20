@@ -17,7 +17,23 @@ async function verifyRequestUser(req) {
   return decoded;
 }
 
+function hasValidWorkerSecret(req) {
+  const configured = process.env.WORKER_SECRET;
+  if (!configured) return false;
+  const provided = req?.headers?.['x-worker-secret'] || req?.headers?.['X-Worker-Secret'] || null;
+  return typeof provided === 'string' && provided.length > 0 && provided === configured;
+}
+
 async function verifyAdminRequest(req) {
+  if (hasValidWorkerSecret(req)) {
+    return {
+      uid: 'worker-secret',
+      email: null,
+      isWorkerSecret: true,
+      authType: 'worker-secret',
+    };
+  }
+
   const decoded = await verifyRequestUser(req);
   const email = decoded.email;
 

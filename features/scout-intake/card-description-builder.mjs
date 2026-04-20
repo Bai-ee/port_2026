@@ -1151,3 +1151,47 @@ export function buildCardDescription(cardId, aggregate, rawData = {}) {
     },
   };
 }
+
+// ── Module state descriptions ─────────────────────────────────────────────────
+
+const MODULE_STATE_DESCRIPTIONS = {
+  'multi-device-view': {
+    disabled:  'This card is turned off. Enable it to capture screenshots and generate a multi-device layout review.',
+    idle:      'This card is enabled and ready. Click Run to capture desktop, tablet, and mobile screenshots.',
+    failed:    (err) => `Screenshot capture failed${err ? `: ${err}` : ''}. Retry to generate the device preview.`,
+    succeeded: 'Desktop, tablet, and mobile layouts were captured. This card shows the latest completed run.',
+  },
+  'social-preview': {
+    disabled:  'This card is turned off. Enable it to check how your site appears when shared on social platforms.',
+    idle:      "This card is enabled and ready. Click Run to check your site's social preview tags.",
+    failed:    (err) => `Social meta extraction failed${err ? `: ${err}` : ''}. Retry to check your OG tags and preview image.`,
+    succeeded: 'Social metadata was captured. This card shows your current OG title, description, and image.',
+  },
+  'seo-performance': {
+    disabled:  'This card is turned off. Enable it to run a PageSpeed audit and AI visibility check.',
+    idle:      'This card is enabled and ready. Click Run to start a PageSpeed and AI visibility audit.',
+    failed:    (err) => `The SEO audit could not complete${err ? `: ${err}` : ''}. Retry to run a fresh performance check.`,
+    succeeded: 'SEO and performance data was captured. This card shows your latest audit results.',
+  },
+};
+
+/**
+ * Return a module-state-aware description string for a modular card.
+ * Returns null when the card has no module templates or when the status
+ * is transient (running/queued) — letting the standard description show.
+ *
+ * @param {string} cardId
+ * @param {{ status: string, lastErrorMessage?: string|null }} moduleCardState
+ * @returns {string|null}
+ */
+export function buildModuleStateDescription(cardId, moduleCardState) {
+  const templates = MODULE_STATE_DESCRIPTIONS[cardId];
+  if (!templates) return null;
+  const status = moduleCardState?.status;
+  if (!status || status === 'running' || status === 'queued') return null;
+  const template = templates[status];
+  if (!template) return null;
+  return typeof template === 'function'
+    ? template(moduleCardState?.lastErrorMessage || null)
+    : template;
+}

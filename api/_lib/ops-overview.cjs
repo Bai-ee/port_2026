@@ -32,6 +32,49 @@ function toIsoSortValue(value) {
   return value ? new Date(value).getTime() : 0;
 }
 
+const MODULAR_CARD_IDS = ['multi-device-view', 'social-preview', 'seo-performance'];
+
+/**
+ * Build a per-client module state summary for ops visibility.
+ * Answers "why didn't this render for client A but did for client B?"
+ */
+function summarizeModuleStates(dashboardStates, clientConfigs) {
+  const configById = Object.fromEntries(
+    clientConfigs.map((cfg) => [cfg.id, cfg])
+  );
+  return dashboardStates
+    .filter((ds) => ds?.modules)
+    .map((ds) => {
+      const cfg = configById[ds.id] || null;
+      const cards = {};
+      for (const cardId of MODULAR_CARD_IDS) {
+        const cm = ds.modules[cardId] || null;
+        const cc = cfg?.moduleConfig?.[cardId] || null;
+        if (!cm && !cc) continue;
+        cards[cardId] = {
+          status:              cm?.status              ?? null,
+          enabled:             cm?.enabled             ?? cc?.enabled ?? null,
+          lastErrorCode:       cm?.lastErrorCode       ?? null,
+          lastErrorMessage:    cm?.lastErrorMessage     ?? null,
+          warningCodes:        cm?.warningCodes         ?? [],
+          lastAttemptRunId:    cm?.lastAttemptRunId     ?? null,
+          lastSuccessfulRunId: cm?.lastSuccessfulRunId  ?? null,
+          lastAttemptAt:       cm?.lastAttemptAt        ?? null,
+          lastSuccessAt:       cm?.lastSuccessAt        ?? null,
+          artifactsCaptured:   cm?.result
+            ? Object.values(cm.result).filter(Boolean).length
+            : null,
+        };
+      }
+      return {
+        clientId:   ds.id,
+        websiteUrl: cfg?.sourceInputs?.websiteUrl ?? ds.clientId ?? null,
+        cards,
+      };
+    })
+    .filter((s) => Object.keys(s.cards).length > 0);
+}
+
 function summarizeCollectionPresence(clientConfig, dashboardState, latestRun, latestBrowserlessRequest) {
   return [
     {
@@ -298,6 +341,7 @@ async function buildOpsOverview() {
     dashboardStates,
     runs: sortedRuns,
     browserlessRequests,
+    modulesSummary: summarizeModuleStates(dashboardStates, clientConfigs),
   };
 }
 

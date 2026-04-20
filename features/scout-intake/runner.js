@@ -884,4 +884,58 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
   return normalized;
 }
 
-module.exports = { runIntakePipeline, buildIntelligenceBriefing };
+// ── Module dispatch ───────────────────────────────────────────────────────────
+
+const MODULE_RUNNERS = {
+  'multi-device-view': () => require('./modules/multi-device-view').runMultiDeviceView,
+  'social-preview':    () => require('./modules/social-preview').runSocialPreview,
+  'seo-performance':   () => require('./modules/seo-performance').runSeoPerformance,
+};
+
+/**
+ * Run one or more card modules independently.
+ * Callers are responsible for filtering already-succeeded modules before calling here.
+ *
+ * @param {object}   options
+ * @param {string}   options.clientId
+ * @param {string}   options.runId
+ * @param {string}   options.websiteUrl
+ * @param {string[]} options.moduleIds
+ * @returns {Promise<{ ok: boolean, results: object[] }>}
+ */
+async function runModules({ clientId, runId, websiteUrl, moduleIds = [] }) {
+  const results = await Promise.all(
+    moduleIds.map(async (moduleId) => {
+      const getRunner = MODULE_RUNNERS[moduleId];
+      if (!getRunner) {
+        return {
+          ok: false,
+          cardId: moduleId,
+          status: 'failed',
+          errorCode: 'unknown_module',
+          errorMessage: `No runner registered for module "${moduleId}".`,
+          warningCodes: [],
+          artifacts: [],
+        };
+      }
+      try {
+        const runner = getRunner();
+        return await runner({ clientId, runId, websiteUrl });
+      } catch (err) {
+        return {
+          ok: false,
+          cardId: moduleId,
+          status: 'failed',
+          errorCode: 'module_threw',
+          errorMessage: err.message,
+          warningCodes: [],
+          artifacts: [],
+        };
+      }
+    })
+  );
+
+  return { ok: results.every((r) => r.ok), results };
+}
+
+module.exports = { runIntakePipeline, buildIntelligenceBriefing, runModules };

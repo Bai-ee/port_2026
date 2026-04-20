@@ -1,6 +1,7 @@
 const fb = require('./firebase-admin.cjs');
 const { getMaster, listSources }        = require('../../features/intelligence/_store');
 const { buildIntelligencePayload }      = require('./intelligence-bootstrap-utils.cjs');
+const { getDefaultModuleConfig, getDefaultModuleState } = require('../../features/scout-intake/module-registry');
 
 function normalizeOptionalUrl(input) {
   const raw = String(input || '').trim();
@@ -59,6 +60,7 @@ function deriveCompanyName({ companyName, hostname, displayName, email }) {
 function buildDashboardTitle(companyName) {
   return `${companyName} Dashboard`;
 }
+
 
 async function queueInitialBriefRun({ clientId, uid, websiteUrl }) {
   const runRef = fb.adminDb.collection('brief_runs').doc();
@@ -192,6 +194,7 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
       defaultProvider: 'anthropic',
     },
     moduleFlags: {},
+    moduleConfig: getDefaultModuleConfig(),
     createdAt: now,
     updatedAt: now,
   };
@@ -204,6 +207,7 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
     latestInsights: [],
     latestRunId: null,
     latestRunStatus: null,
+    modules: getDefaultModuleState(Boolean(normalized?.websiteUrl)),
     updatedAt: now,
     provisioningState: {
       startedAt: now,
@@ -279,6 +283,26 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
   };
 }
 
+function inferModuleStateFromDashboard(dashboardState) {
+  const base = getDefaultModuleState(false);
+  if (!dashboardState) return base;
+
+  if (dashboardState.artifacts?.homepageDeviceMockup) {
+    base['multi-device-view'] = { status: 'succeeded', enabled: true };
+  }
+
+  const seoStatus = dashboardState.seoAudit?.status;
+  if (seoStatus === 'ok' || seoStatus === 'partial') {
+    base['seo-performance'] = { status: 'succeeded', enabled: true };
+  }
+
+  if (dashboardState.siteMeta) {
+    base['social-preview'] = { status: 'succeeded', enabled: true };
+  }
+
+  return base;
+}
+
 async function getDashboardBootstrap(uid) {
   const userSnapshot = await fb.adminDb.collection('users').doc(uid).get();
   if (!userSnapshot.exists) {
@@ -302,10 +326,11 @@ async function getDashboardBootstrap(uid) {
     };
   }
 
-  const [clientSnapshot, runsSnapshot, dashboardStateSnapshot] = await Promise.all([
+  const [clientSnapshot, runsSnapshot, dashboardStateSnapshot, clientConfigSnapshot] = await Promise.all([
     fb.adminDb.collection('clients').doc(clientId).get(),
     fb.adminDb.collection('clients').doc(clientId).collection('brief_runs').orderBy('createdAt', 'desc').limit(8).get(),
     fb.adminDb.collection('dashboard_state').doc(clientId).get(),
+    fb.adminDb.collection('client_configs').doc(clientId).get(),
   ]);
 
   const clientData = clientSnapshot.exists ? clientSnapshot.data() : null;
@@ -328,12 +353,43 @@ async function getDashboardBootstrap(uid) {
     console.warn('[getDashboardBootstrap] intelligence read failed:', err.message);
   }
 
+  const dashboardState = dashboardStateSnapshot.exists ? dashboardStateSnapshot.data() : null;
+  const clientConfig  = clientConfigSnapshot.exists ? clientConfigSnapshot.data() : null;
+
+  // Always return registry-derived defaults — stored values win; inferred values fill gaps.
+  const storedModuleConfig = clientConfig?.moduleConfig;
+  const storedModuleState  = dashboardState?.modules;
+
+  // Always construct a response-local config object so bootstrap can reconcile
+  // legacy contradictions without mutating Firestore state.
+  const moduleConfig = {
+    ...getDefaultModuleConfig(),
+    ...(storedModuleConfig || {}),
+  };
+  const moduleState  = storedModuleState || inferModuleStateFromDashboard(dashboardState);
+
+  // Reconcile response payload: for legacy clients with no stored config, infer
+  // enabled=true from succeeded status. When storedModuleConfig has an explicit
+  // entry for a card, trust it — the user may have deliberately disabled a
+  // card that previously succeeded via the config endpoint.
+  for (const [cardId, cardState] of Object.entries(moduleState)) {
+    if (cardState?.status === 'succeeded') {
+      const hasExplicitConfig = storedModuleConfig != null &&
+        Object.prototype.hasOwnProperty.call(storedModuleConfig, cardId);
+      if (!hasExplicitConfig) {
+        moduleConfig[cardId] = { ...(moduleConfig[cardId] || {}), enabled: true };
+      }
+    }
+  }
+
   return {
     userProfile,
     client:         clientData,
-    dashboardState: dashboardStateSnapshot.exists ? dashboardStateSnapshot.data() : null,
+    dashboardState,
     recentRuns:     runsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
     intelligence,
+    moduleConfig,
+    moduleState,
   };
 }
 
