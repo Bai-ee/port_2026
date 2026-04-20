@@ -6,7 +6,25 @@ const path = require('path');
 const sharp = require('sharp');
 const { downloadArtifactToFile, saveBufferArtifact } = require('./storage-artifacts.cjs');
 
-const TEMPLATE_PATH = path.join(process.cwd(), 'api', '_lib', 'assets', 'device_template.png');
+const TEMPLATE_PUBLIC_PATH = '/img/device_template.png';
+let templateBufferCache = null;
+
+async function loadTemplateBuffer() {
+  if (templateBufferCache) return templateBufferCache;
+  const host = process.env.VERCEL_URL || process.env.NEXT_PUBLIC_SITE_URL || null;
+  if (!host) {
+    throw new Error('Cannot resolve template host: VERCEL_URL / NEXT_PUBLIC_SITE_URL both unset.');
+  }
+  const baseUrl = host.startsWith('http') ? host : `https://${host}`;
+  const url = `${baseUrl}${TEMPLATE_PUBLIC_PATH}`;
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) {
+    throw new Error(`Template fetch failed: ${res.status} ${res.statusText} (${url})`);
+  }
+  const arrayBuffer = await res.arrayBuffer();
+  templateBufferCache = Buffer.from(arrayBuffer);
+  return templateBufferCache;
+}
 
 const REQUIRED_VARIANTS = {
   desktop: 'desktop',
@@ -148,7 +166,8 @@ async function generateWebsiteMockupArtifact({
       })
     );
 
-    const buffer = await sharp(TEMPLATE_PATH)
+    const templateBuffer = await loadTemplateBuffer();
+    const buffer = await sharp(templateBuffer)
       .composite(composites)
       .png()
       .toBuffer();
