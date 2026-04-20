@@ -11,6 +11,7 @@ from PIL import Image, ImageDraw
 ROOT = Path(__file__).resolve().parents[1]
 INPUT_DIR = ROOT / "input"
 TEMPLATE_CANDIDATES = [
+    ROOT / "api" / "_lib" / "assets" / "device_template.png",
     ROOT / "public" / "img" / "device_template.png",
     ROOT / "public" / "IMG" / "device_template.png",
     ROOT / "IMG" / "device_template.png",
