@@ -233,6 +233,7 @@ async function captureScreenshotBuffer({ clientId, runId, targetUrl, variant }) 
   try {
     const response = await fetch(endpoint, {
       method: 'POST',
+      signal: AbortSignal.timeout(config.requestTimeoutMs + 5000),
       headers: {
         'Cache-Control': 'no-cache',
         'Content-Type': 'application/json',
@@ -355,12 +356,24 @@ async function persistWebsiteScreenshotArtifact({
           /* non-fatal progress hook */
         }
       }
-      const screenshot = await captureScreenshotBuffer({
-        clientId,
-        runId,
-        targetUrl: websiteUrl,
-        variant,
-      });
+      let screenshot;
+      try {
+        screenshot = await captureScreenshotBuffer({
+          clientId,
+          runId,
+          targetUrl: websiteUrl,
+          variant,
+        });
+      } catch (err) {
+        screenshot = {
+          ok: false,
+          warning: buildWarning(
+            'browserless_timeout',
+            `Screenshot timed out for variant ${variant.id}: ${err.message}`,
+            { variant: variant.id }
+          ),
+        };
+      }
 
       if (!screenshot.ok) {
         warnings.push(screenshot.warning);
@@ -505,6 +518,7 @@ async function renderPdfBuffer({ clientId, runId, html }) {
   try {
     const response = await fetch(endpoint, {
       method: 'POST',
+      signal: AbortSignal.timeout(config.requestTimeoutMs + 5000),
       headers: {
         'Cache-Control': 'no-cache',
         'Content-Type': 'application/json',

@@ -35,6 +35,7 @@ async function runMultiDeviceView({
     clientId,
     runId,
     websiteUrl,
+    includeFullPage: false,
     includeBuffers: true,
     includeBufferVariants: ['desktop', 'tablet', 'mobile'],
     onVariantProgress: async ({ phase, variant }) => {

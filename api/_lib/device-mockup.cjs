@@ -123,8 +123,8 @@ async function generateWebsiteMockupArtifact({
       Object.entries(SCREEN_BOXES).map(async ([deviceName, box]) => {
         const inMemoryBuffer =
           screenshotBuffersByVariant &&
-          Buffer.isBuffer(screenshotBuffersByVariant[deviceName])
-            ? screenshotBuffersByVariant[deviceName]
+          Buffer.isBuffer(screenshotBuffersByVariant[REQUIRED_VARIANTS[deviceName]])
+            ? screenshotBuffersByVariant[REQUIRED_VARIANTS[deviceName]]
             : null;
         let source = inMemoryBuffer;
         if (!source) {
