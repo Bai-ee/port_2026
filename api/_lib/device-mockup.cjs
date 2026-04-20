@@ -20,6 +20,7 @@ const SCREEN_BOXES = {
   ipad: { left: 887, top: 308, width: 298, height: 437, radius: 7 },
   iphone: { left: 1254, top: 470, width: 138, height: 307, radius: 11 },
 };
+const DOWNLOAD_RETRY_DELAYS_MS = [400, 900, 1800, 3200];
 
 function buildWarning(code, message, extra = {}) {
   return {
@@ -37,6 +38,29 @@ function roundedRectSvg(width, height, radius) {
     `<rect x="0" y="0" width="${width}" height="${height}" rx="${safeRadius}" ry="${safeRadius}" fill="white"/>` +
     `</svg>`
   );
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function downloadArtifactToFileWithRetry({
+  bucketName,
+  storagePath,
+  destination,
+}) {
+  let lastError = null;
+  for (let attempt = 0; attempt <= DOWNLOAD_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      await downloadArtifactToFile({ bucketName, storagePath, destination });
+      return destination;
+    } catch (error) {
+      lastError = error;
+      if (attempt === DOWNLOAD_RETRY_DELAYS_MS.length) break;
+      await sleep(DOWNLOAD_RETRY_DELAYS_MS[attempt]);
+    }
+  }
+  throw lastError || new Error('Artifact download failed.');
 }
 
 async function renderScreenBuffer(inputPath, box) {
@@ -96,7 +120,7 @@ async function generateWebsiteMockupArtifact({
     await Promise.all(
       Object.entries(REQUIRED_VARIANTS).map(([targetName, sourceVariant]) => {
         const artifact = byVariant[sourceVariant];
-        return downloadArtifactToFile({
+        return downloadArtifactToFileWithRetry({
           bucketName: artifact.bucket || null,
           storagePath: artifact.storagePath,
           destination: path.join(inputDir, `${targetName}.png`),
