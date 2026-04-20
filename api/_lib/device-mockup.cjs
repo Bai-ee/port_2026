@@ -11,9 +11,13 @@ let templateBufferCache = null;
 
 async function loadTemplateBuffer() {
   if (templateBufferCache) return templateBufferCache;
-  const host = process.env.VERCEL_URL || process.env.NEXT_PUBLIC_SITE_URL || null;
+  const host =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ||
+    process.env.VERCEL_URL ||
+    null;
   if (!host) {
-    throw new Error('Cannot resolve template host: VERCEL_URL / NEXT_PUBLIC_SITE_URL both unset.');
+    throw new Error('Cannot resolve template host: NEXT_PUBLIC_SITE_URL / VERCEL_PROJECT_PRODUCTION_URL / VERCEL_URL all unset.');
   }
   const baseUrl = host.startsWith('http') ? host : `https://${host}`;
   const url = `${baseUrl}${TEMPLATE_PUBLIC_PATH}`;
