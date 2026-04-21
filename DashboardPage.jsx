@@ -4476,7 +4476,7 @@ const DashboardPage = () => {
               // always unlocked; every card after it requires the previous
               // card in the chain to have passed. Cards not in the chain stay
               // locked until they're added here.
-              const CARD_UNLOCK_CHAIN = ['multi-device-view', 'social-preview', 'seo-performance', 'style-guide'];
+              const CARD_UNLOCK_CHAIN = ['multi-device-view', 'social-preview', 'style-guide', 'seo-performance'];
               const INACTIVE_CARD_DESCRIPTIONS = {
                 'multi-device-view':   'Run this to capture your site on desktop, tablet, and mobile, composite a single device-frame mockup, and collect full-page screenshots per device.',
                 'social-preview':      'Run this to pull your site metadata, favicon, and share description, and generate a preview of exactly how your site appears when shared — plus a flag list for anything that is missing.',
@@ -4520,9 +4520,11 @@ const DashboardPage = () => {
                   return s === 'succeeded' || s === 'failed' || s === 'partial';
                 }
                 if (cardId === 'style-guide') {
-                  // Strict: a future chain card needs the actual styleGuide
-                  // payload before it unlocks.
-                  return Boolean(dashboardState?.snapshot?.visualIdentity?.styleGuide);
+                  // Same progression rule as the other chain cards — running
+                  // Brand Snapshot at all (succeeded/failed/partial) unlocks
+                  // the next slot (SEO Performance).
+                  const s = moduleState?.[cardId]?.status;
+                  return s === 'succeeded' || s === 'failed' || s === 'partial';
                 }
                 return false;
               };
