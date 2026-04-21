@@ -4750,7 +4750,7 @@ const DashboardPage = () => {
                       </span>
                     ) : card.readinessBadge && (
                       <span className={`tile-readiness-tag readiness-${card.readinessBadge.tone}`}>
-                        STATUS: {card.readinessBadge.label}
+                        STATUS: {card.readinessBadge.tone === 'ok' ? card.readinessBadge.label : 'NEEDS ATTENTION'}
                       </span>
                     )}
                     {' '}
@@ -5515,7 +5515,7 @@ const DashboardPage = () => {
                   <p id="tile-detail-bento-description">
                     {activeTileModal.readinessBadge && (
                       <span className={`tile-readiness-tag readiness-${activeTileModal.readinessBadge.tone}`}>
-                        STATUS: {activeTileModal.readinessBadge.label}
+                        STATUS: {activeTileModal.readinessBadge.tone === 'ok' ? activeTileModal.readinessBadge.label : 'NEEDS ATTENTION'}
                       </span>
                     )}
                     {activeTileModal.readinessBadge ? ' ' : ''}
