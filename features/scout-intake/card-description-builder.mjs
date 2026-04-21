@@ -1188,8 +1188,38 @@ const MODULE_STATE_DESCRIPTIONS = {
   'social-preview': {
     disabled:  'This card is turned off. Enable it to check how your site appears when shared on social platforms.',
     idle:      "This card is enabled and ready. Click Run to check your site's social preview tags.",
-    failed:    (err) => `Social meta extraction failed${err ? `: ${err}` : ''}. Retry to check your OG tags and preview image.`,
-    succeeded: 'Social metadata was captured. This card shows your current OG title, description, and image.',
+    failed:    (err) => `Social meta extraction failed${err ? `: ${err}` : ''}. Retry to check your site metadata and preview image.`,
+    succeeded: (_err, ctx = {}) => {
+      const missing = Array.isArray(ctx.missing) ? ctx.missing : [];
+      const present = Array.isArray(ctx.present) ? ctx.present : [];
+      const list = (arr) => {
+        if (arr.length === 0) return '';
+        if (arr.length === 1) return arr[0];
+        if (arr.length === 2) return `${arr[0]} and ${arr[1]}`;
+        return `${arr.slice(0, -1).join(', ')}, and ${arr[arr.length - 1]}`;
+      };
+      if (missing.length === 0) {
+        const sample = present.slice(0, 4);
+        return `Your share preview is fully set up — ${list(sample)} are all detected. Open Details for the full tag list.`;
+      }
+      if (missing.length === 1) {
+        const reassure = present.slice(0, 2);
+        const reassureText = reassure.length > 0
+          ? ` Everything else is looking good — ${list(reassure)} are in place.`
+          : '';
+        return `Your ${missing[0]} is missing and should be updated so the share preview renders cleanly.${reassureText}`;
+      }
+      const leadMissing = missing.slice(0, 2);
+      const remainingCount = missing.length - leadMissing.length;
+      const missingText = remainingCount > 0
+        ? `${list(leadMissing)} (plus ${remainingCount} more)`
+        : list(leadMissing);
+      const reassure = present.slice(0, 2);
+      const reassureText = reassure.length > 0
+        ? ` On the plus side, ${list(reassure)} are already set.`
+        : '';
+      return `Your ${missingText} need updating so the share preview renders cleanly.${reassureText}`;
+    },
   },
   'seo-performance': {
     disabled:  'This card is turned off. Enable it to run a PageSpeed audit and AI visibility check.',

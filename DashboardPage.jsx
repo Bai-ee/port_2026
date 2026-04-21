@@ -3915,16 +3915,33 @@ const DashboardPage = () => {
     // Running/queued states defer to the standard description so progress copy shows.
     if (card.moduleControls) {
       const moduleCardState = moduleState?.[card.id] ?? null;
-      const moduleContext = card.id === 'multi-device-view'
-        ? {
-            hasMockup: Boolean(dashboardState?.artifacts?.homepageDeviceMockup?.downloadUrl),
-            hasFullPages: Boolean(
-              dashboardState?.artifacts?.fullPageScreenshots?.['desktop-full']?.downloadUrl
-              || dashboardState?.artifacts?.fullPageScreenshots?.['tablet-full']?.downloadUrl
-              || dashboardState?.artifacts?.fullPageScreenshots?.['mobile-full']?.downloadUrl
-            ),
-          }
-        : {};
+      let moduleContext = {};
+      if (card.id === 'multi-device-view') {
+        moduleContext = {
+          hasMockup: Boolean(dashboardState?.artifacts?.homepageDeviceMockup?.downloadUrl),
+          hasFullPages: Boolean(
+            dashboardState?.artifacts?.fullPageScreenshots?.['desktop-full']?.downloadUrl
+            || dashboardState?.artifacts?.fullPageScreenshots?.['tablet-full']?.downloadUrl
+            || dashboardState?.artifacts?.fullPageScreenshots?.['mobile-full']?.downloadUrl
+          ),
+        };
+      } else if (card.id === 'social-preview') {
+        const SOCIAL_FIELDS = [
+          { key: 'title',          label: 'page title' },
+          { key: 'description',    label: 'share description' },
+          { key: 'ogImage',        label: 'share image' },
+          { key: 'ogImageAlt',     label: 'share image alt text' },
+          { key: 'favicon',        label: 'favicon' },
+          { key: 'appleTouchIcon', label: 'Apple touch icon' },
+          { key: 'themeColor',     label: 'mobile theme color' },
+          { key: 'siteName',       label: 'site name' },
+          { key: 'canonical',      label: 'canonical URL' },
+        ];
+        const meta = siteMeta || {};
+        const missing = SOCIAL_FIELDS.filter((f) => !meta[f.key]).map((f) => f.label);
+        const present = SOCIAL_FIELDS.filter((f) => Boolean(meta[f.key])).map((f) => f.label);
+        moduleContext = { missing, present };
+      }
       const moduleDesc = buildModuleStateDescription(card.id, moduleCardState, moduleContext);
       if (moduleDesc) dynamicShortDescription = moduleDesc;
     }
@@ -4431,7 +4448,7 @@ const DashboardPage = () => {
               // always unlocked; every card after it requires the previous
               // card in the chain to have passed. Cards not in the chain stay
               // locked until they're added here.
-              const CARD_UNLOCK_CHAIN = ['multi-device-view', 'social-preview'];
+              const CARD_UNLOCK_CHAIN = ['multi-device-view', 'social-preview', 'seo-performance'];
               const INACTIVE_CARD_DESCRIPTIONS = {
                 'multi-device-view':   'Run this to capture your site on desktop, tablet, and mobile, composite a single device-frame mockup, and collect full-page screenshots per device.',
                 'social-preview':      'Run this to pull your site metadata, favicon, and share description, and generate a preview of exactly how your site appears when shared — plus a flag list for anything that is missing.',
@@ -4462,7 +4479,11 @@ const DashboardPage = () => {
                   return mockup && full;
                 }
                 if (cardId === 'social-preview') {
-                  return moduleState?.[cardId]?.status === 'succeeded';
+                  // Unlocks the next card whether social-preview passed, was
+                  // partial, or failed — running it at all is enough to
+                  // progress the chain.
+                  const s = moduleState?.[cardId]?.status;
+                  return s === 'succeeded' || s === 'failed' || s === 'partial';
                 }
                 return false;
               };
@@ -4699,20 +4720,7 @@ const DashboardPage = () => {
                         : (card.dynamicShortDescription || card.scribeShort || card.description)}
                   </p>
                 </div>
-                {card.moduleControls && !isLocked && !isInactiveUnlocked && (
-                  <ModuleCardControls
-                    cardId={card.id}
-                    moduleState={moduleState}
-                    moduleConfig={moduleConfig}
-                    loading={moduleRunLoading[card.id] || false}
-                    toggleLoading={moduleToggleLoading[card.id] || false}
-                    onRun={handleModuleRun}
-                    onToggle={handleModuleToggle}
-                    tech={card.moduleControls.tech}
-                    hideRunButton
-                    hideStatusLabel
-                  />
-                )}
+                {/* ModuleCardControls removed — footer handles Run/Details */}
                 <div className="tile-foot">
                   <span className="tile-foot-status">
                     {(() => {
