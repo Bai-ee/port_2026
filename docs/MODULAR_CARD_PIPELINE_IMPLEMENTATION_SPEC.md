@@ -601,7 +601,7 @@ Examples:
 
 ### Succeeded
 
-`Desktop, tablet, and mobile layouts were captured successfully. This card is showing the latest completed run.`
+`The multi-device mockup was generated successfully — desktop, tablet, and mobile views all captured. Open the next module to continue building your profile.`
 
 ---
 
