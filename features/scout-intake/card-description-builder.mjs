@@ -1225,7 +1225,57 @@ const MODULE_STATE_DESCRIPTIONS = {
     disabled:  'This card is turned off. Enable it to run a PageSpeed audit and AI visibility check.',
     idle:      'This card is enabled and ready. Click Run to start a PageSpeed and AI visibility audit.',
     failed:    (err) => `The SEO audit could not complete${err ? `: ${err}` : ''}. Retry to run a fresh performance check.`,
-    succeeded: 'SEO and performance data was captured. This card shows your latest audit results.',
+    succeeded: (_err, ctx = {}) => {
+      const {
+        hasPsi, psiStatus,
+        perf, seo, a11y, bp,
+        aiGap, aiCritical, aiGapDetail,
+        psiErrorReason,
+        dominantType,
+        dominantFinding, dominantAction,
+      } = ctx;
+      const fmt = (n) => (typeof n === 'number' ? `${Math.round(n)}%` : null);
+      const scoreLine = (() => {
+        const parts = [];
+        const p = fmt(perf); if (p) parts.push(`performance ${p}`);
+        const s = fmt(seo);  if (s) parts.push(`SEO ${s}`);
+        const a = fmt(a11y); if (a) parts.push(`accessibility ${a}`);
+        const b = fmt(bp);   if (b) parts.push(`best-practices ${b}`);
+        return parts.length ? parts.join(', ') : null;
+      })();
+
+      // AI visibility issue dominates the status — lead with it.
+      if (aiGap || aiCritical || dominantType === 'ai-seo') {
+        const verb = aiCritical ? 'blocking AI crawlers' : 'limiting AI visibility';
+        const detail = aiGapDetail || dominantFinding || 'AI assistants can\u2019t reliably read or cite this page.';
+        const action = dominantAction ? ` Next step: ${dominantAction}` : '';
+        const reassure = scoreLine
+          ? ` Performance side is in reasonable shape — ${scoreLine}.`
+          : '';
+        return `${detail} This is ${verb}, which means Google AI Overviews and LLM answers are likely skipping your page even when your traditional SEO is fine.${reassure}${action}`;
+      }
+
+      // PSI failed but AI portion ran (or vice versa) — explicit partial state.
+      if (!hasPsi || psiStatus === 'error') {
+        const reason = psiErrorReason ? ` (${psiErrorReason})` : '';
+        return `PageSpeed Insights did not return data${reason}, so the performance side is incomplete. The AI visibility audit did complete — open Details for that breakdown, or Retry to re-run PageSpeed.`;
+      }
+
+      // Full PSI data with a specific signal to highlight.
+      if (dominantFinding) {
+        const action = dominantAction ? ` Next step: ${dominantAction}` : '';
+        const reassure = scoreLine ? ` Other scores: ${scoreLine}.` : '';
+        return `${dominantFinding}${reassure}${action}`;
+      }
+
+      // Full PSI data, no critical signal.
+      if (scoreLine) {
+        return `PageSpeed audit complete — ${scoreLine}. No critical issues surfaced. Open Details for the full Core Web Vitals, opportunities, and AI visibility breakdown.`;
+      }
+
+      // Fallback.
+      return 'SEO and performance data was captured. Open Details for the full audit breakdown.';
+    },
   },
 };
 

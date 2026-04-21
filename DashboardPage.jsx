@@ -3925,6 +3925,26 @@ const DashboardPage = () => {
             || dashboardState?.artifacts?.fullPageScreenshots?.['mobile-full']?.downloadUrl
           ),
         };
+      } else if (card.id === 'seo-performance') {
+        const signal = built?.dominantSignal || null;
+        const signalId = String(signal?.id || '');
+        const isAiSignal = signalId.startsWith('ai-');
+        const isAiCritical = isAiSignal && signal?.readiness === 'critical';
+        moduleContext = {
+          hasPsi: Boolean(seoAudit?.scores),
+          psiStatus: seoAudit?.status || null,
+          perf: seoAudit?.scores?.performance ?? null,
+          seo:  seoAudit?.scores?.seo ?? null,
+          a11y: seoAudit?.scores?.accessibility ?? null,
+          bp:   seoAudit?.scores?.bestPractices ?? null,
+          psiErrorReason: seoAudit?.diagnosticsContext?.failureReason || seoAudit?.error || null,
+          aiGap: isAiSignal,
+          aiCritical: isAiCritical,
+          aiGapDetail: isAiSignal ? (signal?.finding || signal?.description || null) : null,
+          dominantType: signal?.type || null,
+          dominantFinding: signal?.finding || signal?.description || null,
+          dominantAction: signal?.action || null,
+        };
       } else if (card.id === 'social-preview') {
         const SOCIAL_FIELDS = [
           { key: 'title',          label: 'page title' },
