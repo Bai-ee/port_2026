@@ -4482,20 +4482,17 @@ const DashboardPage = () => {
                 <div className="tile-number">
                   <span className="tile-header-label">{card.label}</span>
                 </div>
-                {isLocked ? (
-                  <div
-                    className={`tile-intake-placeholder tile-intake-placeholder-${card.id} tile-intake-placeholder--locked`}
-                    aria-label="Locked card"
-                  >
-                    <Lock size={72} strokeWidth={1.25} className="tile-intake-lock-icon" aria-hidden="true" />
-                  </div>
-                ) : (
                 <div
                   className={`tile-intake-placeholder tile-intake-placeholder-${card.id}`}
                   style={card.id === 'multi-device-view' && sgDisplayData?.colors?.primary?.hex
                     ? { background: `linear-gradient(135deg, ${sgDisplayData.colors.primary.hex}, ${sgDisplayData.colors.secondary?.hex || sgDisplayData.colors.neutral?.hex || '#ddd'})` }
                     : undefined}
                 >
+                  {isLocked && (
+                    <span className="tile-intake-lock-overlay" aria-label="Locked card">
+                      <Lock size={56} strokeWidth={1.25} className="tile-intake-lock-icon" aria-hidden="true" />
+                    </span>
+                  )}
                   {card.id === 'brief' && briefPreviewHtml ? (
                     <iframe
                       key={dashboardState?.latestRunId || 'brief-preview'}
@@ -4620,7 +4617,6 @@ const DashboardPage = () => {
                     <span className="tile-empty-label">{card.placeholderLabel}</span>
                   )}
                 </div>
-                )}
                 <div className="tile-intake-body">
                   <h3 className="tile-heading tile-intake-heading">{card.title}</h3>
                   {card.category !== 'services' && (
@@ -7685,28 +7681,26 @@ const dashboardCss = `
     color: #fff;
     transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   }
-  /* Locked cards — dark shell + large centered lock icon, no interactions */
+  /* Locked cards — keep original visual styling, just mark inactive and
+     overlay a centered lock icon on top of the content shell. */
   .tile.tile-intake-card--locked {
-    background: #0b0906;
     cursor: not-allowed;
     pointer-events: none;
   }
-  .tile.tile-intake-card--locked .tile-intake-body,
-  .tile.tile-intake-card--locked .tile-foot,
-  .tile.tile-intake-card--locked .tile-number { opacity: 0.55; }
-  .tile-intake-placeholder--locked {
-    background: #000 !important;
+  .tile-intake-lock-overlay {
+    position: absolute;
+    inset: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 100%;
-    height: 100%;
-    min-height: 180px;
-    color: rgba(231, 217, 195, 0.55);
+    pointer-events: none;
+    z-index: 2;
   }
   .tile-intake-lock-icon {
-    color: rgba(231, 217, 195, 0.55);
+    color: rgba(0, 0, 0, 0.7);
+    filter: drop-shadow(0 1px 2px rgba(255, 255, 255, 0.6));
   }
+  .tile.tile-intake-card--locked .tile-intake-placeholder { position: relative; }
   /* New-user dimmed cards: 60% opacity, full on hover */
   .tile.tile-intake-card--dimmed {
     opacity: 0.4;
