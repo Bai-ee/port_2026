@@ -7446,7 +7446,8 @@ const dashboardCss = `
   }
 
   /* ── Style Guide Preview ── */
-  #sg-preview-shell {
+  #sg-preview-shell,
+  .sg-preview {
     width: 100%;
     height: 100%;
     display: grid;
