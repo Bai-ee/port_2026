@@ -601,7 +601,7 @@ Examples:
 
 ### Succeeded
 
-`The multi-device mockup was generated successfully — desktop, tablet, and mobile views all captured. Open the next module to continue building your profile.`
+`The multi-device mockup was generated successfully — desktop, tablet, and mobile views all captured. Open Details on this card to browse full-page captures across every device, not just the homepage. Open the next module to continue building your profile.`
 
 ---
 

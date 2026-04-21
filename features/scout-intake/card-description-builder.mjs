@@ -1159,7 +1159,7 @@ const MODULE_STATE_DESCRIPTIONS = {
     disabled:  'This card is turned off. Enable it to capture screenshots and generate a multi-device layout review. Open the next module to continue building your profile.',
     idle:      'This card is enabled and ready. Click Run to capture desktop, tablet, and mobile screenshots. Open the next module to continue building your profile.',
     failed:    (err) => `The multi-device mockup did not generate${err ? `: ${err}` : '.'} Retry to rebuild it, or open the next module to continue building your profile.`,
-    succeeded: 'The multi-device mockup was generated successfully — desktop, tablet, and mobile views all captured. Open the next module to continue building your profile.',
+    succeeded: 'The multi-device mockup was generated successfully — desktop, tablet, and mobile views all captured. Open Details on this card to browse full-page captures across every device, not just the homepage. Open the next module to continue building your profile.',
   },
   'social-preview': {
     disabled:  'This card is turned off. Enable it to check how your site appears when shared on social platforms.',
