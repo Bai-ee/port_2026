@@ -3207,9 +3207,36 @@ const DashboardPage = () => {
       rows: [
         { key: 'sg-heading', label: 'Heading', value: [sgDisplayData?.typography?.headingSystem?.fontFamily, sgDisplayData?.typography?.headingSystem?.fontWeight, sgDisplayData?.typography?.headingSystem?.fontSize].filter(Boolean).join(' · ') || 'Pending' },
         { key: 'sg-body', label: 'Body', value: [sgDisplayData?.typography?.bodySystem?.fontFamily, sgDisplayData?.typography?.bodySystem?.fontSize].filter(Boolean).join(' · ') || 'Pending' },
-        { key: 'sg-primary', label: 'Primary', value: sgDisplayData?.colors?.primary ? `${sgDisplayData.colors.primary.hex} · ${sgDisplayData.colors.primary.role}` : 'Pending' },
-        { key: 'sg-secondary', label: 'Secondary', value: sgDisplayData?.colors?.secondary?.hex || 'Pending' },
-        { key: 'sg-neutral', label: 'Neutral', value: sgDisplayData?.colors?.neutral?.hex || 'Pending' },
+        ...(() => {
+          const sgColorRow = (key, label, entry) => ({
+            key,
+            label,
+            value: entry?.hex ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                <span
+                  aria-hidden="true"
+                  style={{
+                    display: 'inline-block',
+                    width: 14,
+                    height: 14,
+                    borderRadius: 3,
+                    background: entry.hex,
+                    border: '1px solid rgba(0, 0, 0, 0.18)',
+                    flexShrink: 0,
+                  }}
+                />
+                <span style={{ whiteSpace: 'normal' }}>
+                  {entry.hex}{entry.role ? ` · ${entry.role}` : ''}
+                </span>
+              </span>
+            ) : 'Pending',
+          });
+          return [
+            sgColorRow('sg-primary',   'Primary',   sgDisplayData?.colors?.primary),
+            sgColorRow('sg-secondary', 'Secondary', sgDisplayData?.colors?.secondary),
+            sgColorRow('sg-neutral',   'Neutral',   sgDisplayData?.colors?.neutral),
+          ];
+        })(),
       ],
       footerLeft: hasStyleGuideData ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
