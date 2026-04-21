@@ -200,6 +200,62 @@ function buildCssText(cssEvidence, externalCss) {
   return combined;
 }
 
+// ── Deterministic heading-font detector ──────────────────────────────────────
+
+/**
+ * Scan raw CSS text and find the first font-family declaration that targets a
+ * heading selector. Priority order:
+ *   1. `h1` (alone or in a selector list that includes h1)
+ *   2. `h1, h2, …` headings group
+ *   3. `.h1` / `[role="heading"][aria-level="1"]`
+ *   4. `h2`
+ * Returns the first font name (stripped of quotes and fallback list) or null.
+ *
+ * Ignores @keyframes, @font-face, @media rules for the selector match but still
+ * reads `font-family:` declarations inside @media blocks.
+ */
+function extractHeadingFontFamily(cssText) {
+  if (!cssText || typeof cssText !== 'string') return null;
+
+  const firstFamilyOf = (declList) => {
+    const match = /font-family\s*:\s*([^;{}]+)/i.exec(declList);
+    if (!match) return null;
+    const raw = match[1].trim();
+    // Split on commas, take the first entry, strip quotes.
+    const first = raw.split(',')[0].trim().replace(/^["']|["']$/g, '').trim();
+    // Reject obvious system stacks or vars.
+    if (!first || /^var\(/i.test(first)) return null;
+    if (/^(inherit|initial|unset|revert|sans-serif|serif|monospace|system-ui)$/i.test(first)) return null;
+    return first;
+  };
+
+  // Match rules of the form: selector { declarations }
+  // Non-greedy body match; skip @-rule blocks heuristically.
+  const ruleRe = /([^{}@]+)\{([^{}]*)\}/g;
+  const candidates = { h1Only: null, h1Group: null, h1Class: null, h2: null };
+  let m;
+  while ((m = ruleRe.exec(cssText)) !== null) {
+    const selector = m[1].trim().replace(/\s+/g, ' ');
+    const body = m[2];
+    if (!selector || !body || !/font-family\s*:/i.test(body)) continue;
+
+    const selectors = selector.split(',').map((s) => s.trim()).filter(Boolean);
+    const touchesH1   = selectors.some((s) => /(^|[^a-z0-9_-])h1([^a-z0-9_-]|$)/i.test(s));
+    const isH1Only    = selectors.length === 1 && /^h1$/i.test(selectors[0]);
+    const isH1Class   = selectors.some((s) => /^\.h1$/i.test(s) || /\[aria-level="1"\]/i.test(s));
+    const touchesH2   = selectors.some((s) => /(^|[^a-z0-9_-])h2([^a-z0-9_-]|$)/i.test(s));
+
+    if (isH1Only && !candidates.h1Only)   candidates.h1Only  = firstFamilyOf(body);
+    if (touchesH1 && !candidates.h1Group) candidates.h1Group = firstFamilyOf(body);
+    if (isH1Class && !candidates.h1Class) candidates.h1Class = firstFamilyOf(body);
+    if (touchesH2 && !candidates.h2)      candidates.h2      = firstFamilyOf(body);
+
+    if (candidates.h1Only) break;
+  }
+
+  return candidates.h1Only || candidates.h1Group || candidates.h1Class || candidates.h2 || null;
+}
+
 // ── Tool schema for design system extraction ─────────────────────────────────
 
 const DESIGN_SYSTEM_TOOL = {
@@ -416,14 +472,18 @@ const DESIGN_SYSTEM_TOOL = {
 
 // ── Master prompt ────────────────────────────────────────────────────────────
 
-function buildDesignSystemPrompt(cssText, siteUrl) {
-  return `You are a senior design systems engineer performing a CSS audit.
+function buildDesignSystemPrompt(cssText, siteUrl, { headingFontHint = null } = {}) {
+  const headingHintBlock = headingFontHint
+    ? `\nAUTHORITATIVE HEADING-FONT HINT — extracted deterministically from the raw CSS's h1 rules:\n  headingSystem.fontFamily MUST be "${headingFontHint}" unless you can point to a more specific h1 selector in the CSS below that proves otherwise. Do not use a .menu-button, .nav-link, or utility-class font as the heading font.\n`
+    : '';
+  return `You are a senior design systems engineer performing a CSS audit.${headingHintBlock}
 
 Your job: analyze the raw CSS below and call write_design_system with a complete, structured design system extraction.
 
 RULES — READ CAREFULLY:
 
 TYPOGRAPHY
+- The HEADING font is whatever is declared on the h1 selector (or h1, h2 group, or [role="heading"][aria-level="1"]). If the AUTHORITATIVE HEADING-FONT HINT above is provided, that font wins — do not substitute a button/menu/nav font.
 - Identify every font-family declaration. Determine role (heading vs body vs ui vs accent vs mono) from context: selectors, weights, sizes.
 - For heading and body systems, extract the EXACT values from CSS — do not infer or round. Include font-family, font-size, font-weight, line-height, letter-spacing.
 - If values use clamp(), calc(), or CSS vars, preserve the full expression.
@@ -556,6 +616,11 @@ async function extractDesignSystem(evidence, { onProgress } = {}) {
     };
   }
 
+  // Deterministic heading-font extraction — feeds the LLM as an authoritative
+  // hint AND acts as a fallback/override if the model picks a non-heading
+  // font (e.g. a .menu-button or .nav-link family) for the heading system.
+  const headingFontHint = extractHeadingFontFamily(cssText);
+
   // Emit progress before blocking LLM call
   if (onProgress) { try { await onProgress(); } catch { /* never block extraction */ } }
 
@@ -569,7 +634,7 @@ async function extractDesignSystem(evidence, { onProgress } = {}) {
       messages: [
         {
           role: 'user',
-          content: buildDesignSystemPrompt(cssText, evidence.url),
+          content: buildDesignSystemPrompt(cssText, evidence.url, { headingFontHint }),
         },
       ],
     });
@@ -589,12 +654,23 @@ async function extractDesignSystem(evidence, { onProgress } = {}) {
     };
   }
 
+  // Override: if we deterministically detected an h1 font and the model picked
+  // something different, trust the CSS source of truth.
+  if (headingFontHint && designSystem?.typography?.headingSystem) {
+    const llmFont = String(designSystem.typography.headingSystem.fontFamily || '')
+      .split(',')[0].trim().replace(/^["']|["']$/g, '').trim();
+    if (!llmFont || llmFont.toLowerCase() !== headingFontHint.toLowerCase()) {
+      designSystem.typography.headingSystem.fontFamily = headingFontHint;
+    }
+  }
+
   return { ok: true, designSystem, runCostData, error: null };
 }
 
 module.exports = {
   extractDesignSystem,
   extractCssEvidence,
+  extractHeadingFontFamily,
   fetchExternalStylesheets,
   buildCssText,
   buildDesignSystemPrompt,
