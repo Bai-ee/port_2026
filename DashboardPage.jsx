@@ -4851,8 +4851,13 @@ const DashboardPage = () => {
                       const mIsRerun = mStatus === 'succeeded' && !mdArtifactsMissing && !cardNotPassed;
                       // Inactive = no config-enabled yet AND never succeeded. RUN here enables + kicks off first run.
                       const mIsInactive = !mEnabled && !mIsRerun && !mBusy && !mdArtifactsMissing && !cardNotPassed;
+                      // Retry must work even if moduleConfig.enabled never flipped true
+                      // on the server (autoEnable race, legacy client, etc). If the card
+                      // has been run but hasn't reached STATUS: Passed, allow retry
+                      // regardless of the enabled flag — the onClick forwards autoEnable=true
+                      // so the server flips the flag before dispatching.
                       const interactive =
-                        !mBusy && (mIsInactive || (mEnabled && (mIsRetry || tierAllowsRerun)));
+                        !mBusy && (mIsInactive || (mEnabled && (mIsRetry || tierAllowsRerun)) || cardNotPassed);
                       const label = mLoading ? '…' : mIsRetry ? 'Retry' : mIsRerun ? 'Re-run' : mIsInactive ? 'RUN' : 'Run';
                       return (
                         <button
@@ -4876,8 +4881,10 @@ const DashboardPage = () => {
                               : null;
                             // Force=true whenever the card hasn't reached STATUS: Passed
                             // so the server doesn't skip an already-succeeded module.
+                            // autoEnable=true when the module isn't yet config-enabled
+                            // so the server flips the flag and runs in a single shot.
                             const shouldForce = mIsRerun || mdArtifactsMissing || cardNotPassed;
-                            handleModuleRun(card.id, shouldForce, retryOptions);
+                            handleModuleRun(card.id, shouldForce, retryOptions, !mEnabled);
                           }}
                         >
                           {label}
