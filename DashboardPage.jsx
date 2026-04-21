@@ -3152,7 +3152,7 @@ const DashboardPage = () => {
       label: 'SOCIAL PREVIEW',
       title: 'Social Preview Check',
       description: 'How your site appears when shared—title, description, and image. Missing previews reduce clicks and trust.',
-      placeholderLabel: siteMeta?.ogImage ? 'PREVIEW' : 'FIX\nSOCIAL\nPREVIEW',
+      placeholderLabel: siteMeta?.ogImage ? 'PREVIEW' : 'RUN\nSOCIAL\nPREVIEW',
       rows: (() => {
         const NP = 'Not provided';
         return siteMeta ? [
@@ -4424,7 +4424,7 @@ const DashboardPage = () => {
               const CARD_UNLOCK_CHAIN = ['multi-device-view', 'social-preview'];
               const INACTIVE_CARD_DESCRIPTIONS = {
                 'multi-device-view':   'Run this to capture your site on desktop, tablet, and mobile, composite a single device-frame mockup, and collect full-page screenshots per device.',
-                'social-preview':      'Run this to pull your og:*, twitter:*, and favicon metadata and generate a preview of exactly how your site appears when shared — plus a flag list for any missing tags.',
+                'social-preview':      'Run this to pull your site metadata, favicon, and share description, and generate a preview of exactly how your site appears when shared — plus a flag list for anything that is missing.',
                 'style-guide':         'Run this to extract colors, typography, and logo usage from the live site and render a compact style guide for the brand layer of your dashboard.',
                 'seo-performance':     'Run this to score your site in PageSpeed Insights and run a structured SEO scan — speed, metadata, and structural issues summarized in one view.',
                 'business-model':      'Run this to synthesize what your business does, who it serves, and how it makes money — drawn from site evidence, not guesswork.',
@@ -4435,7 +4435,7 @@ const DashboardPage = () => {
               };
               const LOCKED_CARD_DESCRIPTIONS = {
                 'multi-device-view':   'Captures your site on desktop, tablet, and mobile, composites them into a single device-frame mockup, and provides full-page screenshots you can browse per device.',
-                'social-preview':      'Reads your og:*, twitter:*, and favicon metadata and shows exactly how your site appears when shared on social platforms. Flags missing images, titles, and descriptions.',
+                'social-preview':      'Reads your site metadata, favicon, and share description, and shows exactly how your site appears when shared on social platforms. Flags missing images, titles, and descriptions.',
                 'audit-summary':       'Aggregates every baseline check — pages fetched, metadata coverage, analyzer warnings — into a single go / no-go readout for the foundation of your dashboard.',
                 'business-model':      'Synthesizes what your business actually does, who it serves, and how it makes money — written from site evidence, not guesswork.',
                 'seo-performance':     'Runs a PageSpeed Insights audit and a structured SEO scan, then summarizes speed, metadata, and structural issues that affect visibility and conversion.',
@@ -4674,7 +4674,7 @@ const DashboardPage = () => {
                       </span>
                     ) : isInactiveUnlocked ? (
                       <span className="tile-readiness-tag readiness-run-modal">
-                        STATUS: RUN MODAL
+                        STATUS: RUN
                       </span>
                     ) : card.readinessBadge && (
                       <span className={`tile-readiness-tag readiness-${card.readinessBadge.tone}`}>
@@ -4727,7 +4727,7 @@ const DashboardPage = () => {
                         return (
                           <>
                             <span style={{ width: 6, height: 6, borderRadius: '50%', display: 'inline-block', background: '#6b7280', flexShrink: 0 }} />
-                            RUN MODAL
+                            RUN
                           </>
                         );
                       }
@@ -4829,7 +4829,7 @@ const DashboardPage = () => {
                       const mIsInactive = !mEnabled && !mIsRerun && !mBusy && !mdArtifactsMissing;
                       const interactive =
                         !mBusy && (mIsInactive || (mEnabled && (mIsRetry || tierAllowsRerun)));
-                      const label = mLoading ? '…' : mIsRetry ? 'Retry' : mIsRerun ? 'Re-run' : mIsInactive ? 'RUN MODAL' : 'Run';
+                      const label = mLoading ? '…' : mIsRetry ? 'Retry' : mIsRerun ? 'Re-run' : mIsInactive ? 'RUN' : 'Run';
                       return (
                         <button
                           type="button"
