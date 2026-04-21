@@ -2005,6 +2005,14 @@ const DashboardPage = () => {
   const handleModuleToggle = useCallback(async (cardId, enabled) => {
     if (!user || moduleToggleLoading[cardId]) return;
     setModuleToggleLoading((prev) => ({ ...prev, [cardId]: true }));
+    // When enabling (which triggers the first run), poll bootstrap so the
+    // terminal UI surfaces mid-run instead of only after the run POST resolves.
+    let pollHandle = null;
+    const kickBootstrap = () => { try { doBootstrap(); } catch {} };
+    if (enabled) {
+      setTimeout(kickBootstrap, 400);
+      pollHandle = setInterval(kickBootstrap, 2000);
+    }
     try {
       const token = await user.getIdToken();
       // Step 1: persist the config change
@@ -2027,6 +2035,7 @@ const DashboardPage = () => {
     } catch {
       // non-fatal
     } finally {
+      if (pollHandle) clearInterval(pollHandle);
       setModuleToggleLoading((prev) => ({ ...prev, [cardId]: false }));
     }
   }, [user, moduleToggleLoading, doBootstrap]);
