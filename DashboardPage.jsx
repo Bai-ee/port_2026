@@ -4511,7 +4511,7 @@ const DashboardPage = () => {
                 className={`tile tile-intake-card${hasIntakeData ? ' tile-ready' : ''}${card.wide ? ' tile-intake-card--wide' : ''}${hasBothButtons && !isLocked ? ' tile-intake-card--btns-only' : ''}${isDimmed && !isLocked ? ' tile-intake-card--dimmed' : ''}${isLocked ? ' tile-intake-card--locked' : ''}${isInactiveUnlocked ? ' tile-intake-card--inactive' : ''}`}
                 id={card.domId || `tile-${card.id}`}
                 key={card.id}
-                onClick={isLocked ? undefined : (hasBothButtons ? undefined : () => {
+                onClick={isLocked || isInactiveUnlocked ? undefined : (hasBothButtons ? undefined : () => {
                   if (card.id === 'brief' && briefPreviewHtml) { setBriefFullScreen(true); return; }
                   if (card.id === 'audit-summary') { setAuditFullScreen(true); return; }
                   setActiveTileModal({ title: card.title, description: card.description, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null, recommendation: card.recommendation || null, analyzer: card.analyzer || null, readinessBadge: card.readinessBadge || null });
@@ -7792,18 +7792,14 @@ const dashboardCss = `
   }
 
   /* Inactive-but-unlocked cards (Run visible, not yet executed) — kill the
-     card-level hover effects; only the Run button reacts to its own hover. */
-  .tile.tile-intake-card--inactive {
-    pointer-events: none;
-  }
-  .tile.tile-intake-card--inactive .tile-foot-rerun-btn,
-  .tile.tile-intake-card--inactive .tile-view-details-btn {
-    pointer-events: auto;
-  }
-  .tile.tile-intake-card--inactive:hover .tile-view-details-btn {
+     card-level hover effects only. Buttons stay fully interactive so RUN
+     actually fires and Details can still reject clicks via its disabled prop. */
+  .tile.tile-intake-card--inactive { cursor: default; }
+  .tile.tile-intake-card--inactive:hover { transform: none; box-shadow: none; }
+  .tile.tile-intake-card--inactive:hover .tile-view-details-btn:not(:hover) {
     background: #fff;
-    border-color: #000;
-    color: #000;
+    border-color: rgba(0, 0, 0, 0.4);
+    color: rgba(0, 0, 0, 0.55);
   }
   /* New-user dimmed cards: 60% opacity, full on hover */
   .tile.tile-intake-card--dimmed {
