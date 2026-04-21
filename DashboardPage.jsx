@@ -4422,6 +4422,17 @@ const DashboardPage = () => {
               // card in the chain to have passed. Cards not in the chain stay
               // locked until they're added here.
               const CARD_UNLOCK_CHAIN = ['multi-device-view', 'social-preview'];
+              const LOCKED_CARD_DESCRIPTIONS = {
+                'multi-device-view':   'Captures your site on desktop, tablet, and mobile, composites them into a single device-frame mockup, and provides full-page screenshots you can browse per device.',
+                'social-preview':      'Reads your og:*, twitter:*, and favicon metadata and shows exactly how your site appears when shared on social platforms. Flags missing images, titles, and descriptions.',
+                'audit-summary':       'Aggregates every baseline check — pages fetched, metadata coverage, analyzer warnings — into a single go / no-go readout for the foundation of your dashboard.',
+                'business-model':      'Synthesizes what your business actually does, who it serves, and how it makes money — written from site evidence, not guesswork.',
+                'seo-performance':     'Runs a PageSpeed Insights audit and a structured SEO scan, then summarizes speed, metadata, and structural issues that affect visibility and conversion.',
+                'industry':            'Classifies your industry and positioning so the dashboard can benchmark you against the right peers and apply the right content playbook.',
+                'visibility-snapshot': 'Probes how your site surfaces in AI search (LLM responses, citations, answers) and reports where you show up versus where competitors dominate.',
+                'style-guide':         'Extracts your visual identity from the live site — colors, typography, logo usage — and renders a compact style guide for the brand layer of your dashboard.',
+                'priority-signal':     'Picks the single highest-leverage action for your site right now, with the evidence behind it, so you know exactly what to work on next.',
+              };
               const hasCardPassed = (cardId) => {
                 if (cardId === 'multi-device-view') {
                   const mockup = Boolean(dashboardState?.artifacts?.homepageDeviceMockup?.downloadUrl);
@@ -4464,7 +4475,10 @@ const DashboardPage = () => {
               const _mEnabled = moduleConfig ? (moduleConfig[card.id]?.enabled ?? false) : true;
               const _mStatus = moduleState?.[card.id]?.status ?? 'inactive';
               const hasBothButtons = Boolean(card.moduleControls) && !(!_mEnabled && _mStatus === 'inactive');
-              const isDimmed = isModularOnboardingClient && card.id !== 'audit-summary' && card.id !== 'multi-device-view';
+              const isInChain = CARD_UNLOCK_CHAIN.includes(card.id);
+              // Chain cards have their own lock/unlock treatment, so they skip
+              // the legacy modular-onboarding dimming entirely.
+              const isDimmed = isModularOnboardingClient && card.id !== 'audit-summary' && card.id !== 'multi-device-view' && !isInChain;
               const isLocked = activeCapabilityFilter === 'onboarding' && isCardLocked(card.id);
               // Unlocked but not yet run (enabled/disabled without a succeeded status) —
               // we want no card-level hover effect, only direct button hover.
@@ -4643,13 +4657,19 @@ const DashboardPage = () => {
                     </span>
                   )}
                   <p className="tile-description tile-intake-description">
-                    {card.readinessBadge && (
+                    {isLocked ? (
+                      <span className="tile-readiness-tag readiness-locked">
+                        STATUS: LOCKED
+                      </span>
+                    ) : card.readinessBadge && (
                       <span className={`tile-readiness-tag readiness-${card.readinessBadge.tone}`}>
                         STATUS: {card.readinessBadge.label}
                       </span>
                     )}
-                    {card.readinessBadge ? ' ' : ''}
-                    {card.dynamicShortDescription || card.scribeShort || card.description}
+                    {' '}
+                    {isLocked
+                      ? (LOCKED_CARD_DESCRIPTIONS[card.id] || 'This card will unlock after the previous steps are complete.')
+                      : (card.dynamicShortDescription || card.scribeShort || card.description)}
                   </p>
                 </div>
                 {card.moduleControls && !isLocked && (
@@ -7588,6 +7608,11 @@ const dashboardCss = `
   .tile-readiness-tag.readiness-ok {
     background: rgba(34, 197, 94, 0.18);
     color: hsl(142, 72%, 29%);
+  }
+  .tile-readiness-tag.readiness-locked {
+    background: rgba(107, 114, 128, 0.18);
+    color: rgba(55, 65, 81, 0.95);
+    letter-spacing: 0.1em;
   }
   .tile-intake-table-wrap {
     margin-top: 2px;
