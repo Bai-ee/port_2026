@@ -53,11 +53,12 @@ export async function POST(request) {
   const clientId = userSnap.data()?.clientId || null;
   if (!clientId) return json({ error: 'No clientId on user record.' }, 404);
 
-  let cardIds, force;
+  let cardIds, force, moduleOptions;
   try {
     const body = await request.json();
     cardIds = Array.isArray(body.cardIds) ? body.cardIds : [];
     force = Boolean(body.force);
+    moduleOptions = body.moduleOptions && typeof body.moduleOptions === 'object' ? body.moduleOptions : {};
   } catch {
     return json({ error: 'Invalid JSON body.' }, 400);
   }
@@ -157,9 +158,29 @@ export async function POST(request) {
     }).catch(() => {});
   }
 
+  // Resolve per-module options. For multi-device-view, a mockup-only retry
+  // (skipScreenshots=true) needs the existing viewport screenshot refs so the
+  // module can hand them straight to the mockup composer.
+  const moduleOptionsById = {};
+  for (const mid of moduleIds) {
+    const opts = moduleOptions?.[mid] ? { ...moduleOptions[mid] } : {};
+    if (mid === 'multi-device-view' && opts.skipScreenshots) {
+      const artifactsMap = dashSnap.exists ? (dashSnap.data()?.artifacts || {}) : {};
+      const hs = artifactsMap.homepageScreenshots || {};
+      const refs = Object.values(hs).filter(Boolean);
+      if (refs.length > 0) {
+        opts.existingScreenshotRefs = refs;
+      } else {
+        // No viewport screenshots available — fall back to a full run.
+        opts.skipScreenshots = false;
+      }
+    }
+    moduleOptionsById[mid] = opts;
+  }
+
   let results;
   try {
-    ({ results } = await runModules({ clientId, runId, websiteUrl, moduleIds }));
+    ({ results } = await runModules({ clientId, runId, websiteUrl, moduleIds, moduleOptionsById }));
   } catch (err) {
     const runErr = new Error(err.message || 'Module execution threw.');
     runErr.stage = 'module';

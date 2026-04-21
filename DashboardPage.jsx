@@ -2030,15 +2030,19 @@ const DashboardPage = () => {
     }
   }, [user, moduleToggleLoading, doBootstrap]);
 
-  const handleModuleRun = useCallback(async (cardId, force = false) => {
+  const handleModuleRun = useCallback(async (cardId, force = false, options = null) => {
     if (!user || moduleRunLoading[cardId]) return;
     setModuleRunLoading((prev) => ({ ...prev, [cardId]: true }));
     try {
       const token = await user.getIdToken();
+      const body = { cardIds: [cardId], force };
+      if (options && typeof options === 'object') {
+        body.moduleOptions = { [cardId]: options };
+      }
       const res = await fetch('/api/dashboard/modules/run', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cardIds: [cardId], force }),
+        body: JSON.stringify(body),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Module run failed.');
@@ -4677,13 +4681,21 @@ const DashboardPage = () => {
                       // is missing (mockup OR full-page captures), even when the run
                       // reports 'succeeded' at the module level.
                       let mdArtifactsMissing = false;
+                      let mdMockupOnlyRetry = false;
                       if (card.id === 'multi-device-view' && mStatus === 'succeeded') {
                         const hasMockup = Boolean(dashboardState?.artifacts?.homepageDeviceMockup?.downloadUrl);
                         const fp = dashboardState?.artifacts?.fullPageScreenshots || {};
                         const hasFullPages = Boolean(
                           fp['desktop-full']?.downloadUrl || fp['tablet-full']?.downloadUrl || fp['mobile-full']?.downloadUrl
                         );
+                        const hs = dashboardState?.artifacts?.homepageScreenshots || {};
+                        const hasViewportScreenshots = Boolean(
+                          hs.desktop?.downloadUrl || hs.tablet?.downloadUrl || hs.mobile?.downloadUrl
+                        );
                         mdArtifactsMissing = !hasMockup || !hasFullPages;
+                        // Mockup missing but viewport screenshots are already stored →
+                        // retry should skip browserless and only rebuild the mockup.
+                        mdMockupOnlyRetry = !hasMockup && hasViewportScreenshots;
                       }
                       const mIsRetry = mStatus === 'failed' || mdArtifactsMissing;
                       const mIsRerun = mStatus === 'succeeded' && !mdArtifactsMissing;
@@ -4702,7 +4714,8 @@ const DashboardPage = () => {
                             e.stopPropagation();
                             if (!interactive) return;
                             if (mIsInactive) { handleModuleToggle(card.id, true); return; }
-                            handleModuleRun(card.id, mIsRerun);
+                            const retryOptions = mdMockupOnlyRetry ? { skipScreenshots: true } : null;
+                            handleModuleRun(card.id, mIsRerun || mdArtifactsMissing, retryOptions);
                           }}
                         >
                           {label}

@@ -11,6 +11,8 @@ async function runMultiDeviceView({
   runId,
   websiteUrl,
   onProgress = null,
+  skipScreenshots = false,
+  existingScreenshotRefs = null,
 }) {
   const warningCodes = [];
   const warnings = [];
@@ -19,6 +21,48 @@ async function runMultiDeviceView({
     if (!onProgress) return;
     try { await onProgress(stage, label, { moduleId: CARD_ID, ...extra }); } catch {}
   };
+
+  // Mockup-only retry path: skip site-fetch + browserless capture entirely and
+  // feed the existing viewport screenshot refs straight to the mockup composer.
+  if (skipScreenshots && Array.isArray(existingScreenshotRefs) && existingScreenshotRefs.length > 0) {
+    await emit('compose', 'Reusing existing screenshots — rebuilding mockup only…');
+    const reuseRefs = existingScreenshotRefs.filter(
+      (a) => a?.type === 'website_homepage_screenshot' && a?.variant && !String(a.variant).endsWith('-full')
+    );
+    artifactRefs.push(...reuseRefs);
+
+    await emit('compose', 'Build device mockup…');
+    const mockupResult = await runDeviceMockup({
+      clientId, runId, websiteUrl,
+      screenshotArtifactRefs: reuseRefs,
+    });
+    if (mockupResult.ok && mockupResult.artifactRef) {
+      artifactRefs.push(mockupResult.artifactRef);
+    } else if (mockupResult.warning) {
+      warningCodes.push(mockupResult.warning.code);
+      warnings.push(mockupResult.warning);
+    }
+
+    const mockupArtifact = artifactRefs.find((a) => a?.type === 'website_homepage_device_mockup') || null;
+    const findUrl = (variant) =>
+      artifactRefs.find((a) => a?.type === 'website_homepage_screenshot' && a?.variant === variant)?.downloadUrl || null;
+
+    await emit('normalize', 'Write layout module…');
+    return {
+      ok: true,
+      cardId: CARD_ID,
+      status: 'succeeded',
+      warningCodes,
+      warnings,
+      artifacts: artifactRefs,
+      result: {
+        mockupUrl:  mockupArtifact?.downloadUrl || null,
+        desktopUrl: findUrl('desktop'),
+        tabletUrl:  findUrl('tablet'),
+        mobileUrl:  findUrl('mobile'),
+      },
+    };
+  }
 
   // Step 1: site fetch (degraded evidence is acceptable)
   await emit('fetch', 'Connect to website…');
