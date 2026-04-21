@@ -113,6 +113,34 @@ const HomePage = () => {
   const paramsRef = useRef(HERO_PARAMS_START);
   const isScrollMorphActiveRef = useRef(false);
 
+  // Keep #content-section.marginTop = -peekHeight so the capabilitySectionStyle
+  // borderTop always lands exactly at the 100dvh fold on page load.
+  useLayoutEffect(() => {
+    const contentSection = contentSectionRef.current;
+    if (!contentSection) return;
+
+    const applyPeek = () => {
+      const introBlock = document.querySelector('#panel-hero-intro-centering');
+      if (!introBlock) return;
+      const peekHeight = introBlock.getBoundingClientRect().height;
+      contentSection.style.marginTop = `-${peekHeight}px`;
+    };
+
+    applyPeek();
+
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(applyPeek) : null;
+    const introBlock = document.querySelector('#panel-hero-intro-centering');
+    if (introBlock) ro?.observe(introBlock);
+    window.addEventListener('resize', applyPeek);
+    window.addEventListener('orientationchange', applyPeek);
+
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener('resize', applyPeek);
+      window.removeEventListener('orientationchange', applyPeek);
+    };
+  }, []);
+
   useEffect(() => {
     if (isScrollMorphActiveRef.current) {
       return;
@@ -137,7 +165,7 @@ const HomePage = () => {
     const headline     = document.querySelector('#hero-panel-top-left');
     const gradient     = document.querySelector('#hero-gradient-overlay');
     const canvasWrapper = canvasWrapperRef.current;
-    const nav          = document.querySelector('#site-nav');
+    const nav          = document.querySelector('#founders-top-strip');
     const panelHeadline = document.querySelector('#panel-hero-headline');
     const panelCta      = document.querySelector('#panel-hero-cta');
     const panelGrid     = document.querySelector('#stacked-grid-row');
@@ -217,6 +245,20 @@ const HomePage = () => {
     window.addEventListener('pageshow', handlePageShow);
     window.addEventListener('focus', handleFocus);
 
+    // Refresh all ScrollTriggers once the full page (images, fonts, etc.) has loaded.
+    // Deferred by two rAFs so it doesn't fight the intro timeline.
+    const handleLoad = () => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => ScrollTrigger.refresh());
+      });
+    };
+
+    if (document.readyState === 'complete') {
+      handleLoad();
+    } else {
+      window.addEventListener('load', handleLoad);
+    }
+
     return () => {
       tl.kill();
       heroST.kill();
@@ -224,11 +266,12 @@ const HomePage = () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('pageshow', handlePageShow);
       window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('load', handleLoad);
     };
   }, []);
 
   return (
-    <div style={{ position: 'relative', width: '100vw', minHeight: '100dvh', background: 'transparent', overflowX: 'hidden' }}>
+    <div style={{ position: 'relative', width: '100vw', minHeight: '100dvh', background: 'transparent', overflowX: 'clip' }}>
       <style>{`
         @keyframes heroGradientDrift {
           0% {
@@ -237,6 +280,16 @@ const HomePage = () => {
           100% {
             transform: translate3d(1.5%, -1.2%, 0) scale(1.04);
           }
+        }
+        /* Hide intro-animated elements before GSAP initializes to prevent FOUC */
+        #hero-canvas-wrapper,
+        #founders-top-strip,
+        #hero-panel-top-left,
+        #panel-hero-headline,
+        #panel-hero-cta,
+        #hero-panel-filter-pills .filter-chip {
+          opacity: 0;
+          visibility: hidden;
         }
       `}</style>
       {/* <FontSelector /> */}
@@ -254,7 +307,7 @@ const HomePage = () => {
         }}
       >
         <div id="hero-gradient-overlay" style={heroGradientStyle} />
-        <div id="hero-canvas-wrapper" ref={canvasWrapperRef} style={{ position: 'absolute', inset: 0 }}>
+        <div id="hero-canvas-wrapper" ref={canvasWrapperRef} style={{ position: 'absolute', inset: 0, opacity: 0 }}>
           <AppCanvas params={params} liveParamsRef={paramsRef} backgroundColor={canvasBackground} />
         </div>
         <HeroHeadline headerLogoRef={headerLogoRef} textColor={textColor} />
@@ -270,9 +323,9 @@ const HomePage = () => {
         style={{
           position: 'relative',
           width: '100%',
-          zIndex: 10,
+          zIndex: 110,
           background: 'transparent',
-          marginTop: 'clamp(-20rem, calc(-11rem - 2vw - 6vh), -15rem)',
+          marginTop: 0,
           borderRadius: '1.5rem 1.5rem 0 0',
         }}
       >

@@ -87,6 +87,7 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {} 
     // Tire spin animation params
     tireSpinAxis: 'y', // which axis to spin around: 'x', 'y', or 'z'
     tireSpinSpeed: 0.5, // speed of tire rotation (0 = static, up to 5 = very fast)
+    torusPulse: 1, // 0 = locked shape (no r1 oscillation), 1 = full pulse
     // Animation params
     animationSpeed: 1.0,
     sphereSegments: 16,
@@ -242,8 +243,9 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {} 
     const time04 = time * 0.4;
     const time07 = time * 0.7;
     const timeHue = time * hueSpeed;
-    const r1 = R + r * 0.2 * Math.sin(time * 0.5);
-    const waveAmpY = waveAmp * Math.sin(time * 0.3);
+    const pulse = PARAMS.torusPulse ?? 1;
+    const r1 = R + r * 0.2 * Math.sin(time * 0.5) * pulse;
+    const waveAmpY = waveAmp * (pulse > 0 ? Math.sin(time * 0.3) : 1);
     const waveZ = Math.cos(time04);
     const golden = 2.39996322972865332;
     const invCount = 1 / count;

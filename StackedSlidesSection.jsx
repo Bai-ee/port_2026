@@ -410,7 +410,6 @@ function isValidHomepageUrl(raw) {
 
 const StackedSlidesSection = () => {
   const wrapperRef = useRef(null);
-  const filterDropdownRef = useRef(null);
   const servicesViewportRef = useRef(null);
   const servicesCanvasRef = useRef(null);
   const stickyCTARef = useRef(null);
@@ -421,7 +420,6 @@ const StackedSlidesSection = () => {
   const agentMarqueeTrackRef = useRef(null);
   const agentMarqueeSetRef = useRef(null);
   const [pokerHovered, setPokerHovered] = useState(false);
-  const [filterOpen, setFilterOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState(null);
   const [filterCopy, setFilterCopy] = useState(FILTER_COPY.default);
   const [particleParams, setParticleParams] = useState(PARTICLE_DEFAULTS);
@@ -443,35 +441,6 @@ const StackedSlidesSection = () => {
     const params = new URLSearchParams({ flow: 'homepage-create', url: normalized });
     router.push(`/login?${params.toString()}`);
   };
-
-  // Set initial hidden state
-  useEffect(() => {
-    const el = filterDropdownRef.current;
-    if (!el) return;
-    gsap.set(el, { height: 0, overflow: 'hidden' });
-    gsap.set(el.querySelectorAll('.filter-chip'), { opacity: 0, y: 6 });
-  }, []);
-
-  // Animate open / close
-  useEffect(() => {
-    const el = filterDropdownRef.current;
-    if (!el) return;
-    const pills = el.querySelectorAll('.filter-chip');
-
-    if (filterOpen) {
-      gsap.set(el, { overflow: 'hidden' });
-      gsap.set(el, { height: 'auto' });
-      gsap.from(el, { height: 0, duration: 0.35, ease: 'power2.out' });
-      gsap.fromTo(
-        pills,
-        { opacity: 0, y: 6 },
-        { opacity: 1, y: 0, duration: 0.22, ease: 'power2.out', stagger: 0.055, delay: 0.12 }
-      );
-    } else {
-      gsap.to(pills, { opacity: 0, y: 4, duration: 0.1, stagger: { each: 0.03, from: 'end' } });
-      gsap.to(el, { height: 0, duration: 0.28, ease: 'power2.in', delay: 0.08 });
-    }
-  }, [filterOpen]);
 
   // Three.js particle renderer for service thumbnails
   useEffect(() => {
@@ -1130,6 +1099,18 @@ const StackedSlidesSection = () => {
         .font-doto {
           font-family: 'Doto', monospace;
         }
+        /* Hide scroll-animated elements before GSAP ScrollTrigger initializes to prevent FOUC */
+        [data-capability-header],
+        [data-capability-card],
+        [data-grid-window],
+        #stacked-inline-footer,
+        #inline-footer-value-block,
+        #agency-marquee-shell,
+        #inline-footer-bottom,
+        #panel-additional-content-header {
+          opacity: 0;
+          visibility: hidden;
+        }
         @media (max-width: 767px) {
           #stacked-grid-row {
             grid-template-columns: 1fr !important;
@@ -1244,7 +1225,7 @@ const StackedSlidesSection = () => {
           }
         }
       `}</style>
-      <div ref={wrapperRef} style={wrapperStyle}>
+      <div id="stacked-slides-wrapper" ref={wrapperRef} style={wrapperStyle}>
         {slides.map((slide, index) => (
           <section
             key={slide.title}
@@ -1262,10 +1243,10 @@ const StackedSlidesSection = () => {
               <div data-stack-inner style={innerStyle}>
                 {slide.layout === 'grid' ? (
                   <div style={gridLayoutStyle}>
-                    <div style={textCenteringStyle}>
+                    <div id="panel-hero-intro-centering" style={textCenteringStyle}>
                       <div id="panel-hero-text-row" style={textRowStyle}>
                         <div id="panel-hero-headline-col" style={textColumnStyle}>
-                          <h2 id="panel-hero-headline" style={{ ...headingStyle, fontSize: 'clamp(1.4rem, 3.5vw, 2.45rem)', fontWeight: 300, textAlign: 'left', margin: 0, whiteSpace: 'nowrap' }}>{slide.headlineText}</h2>
+                          <h2 id="panel-hero-headline" style={{ ...headingStyle, fontSize: 'clamp(1.4rem, 3.5vw, 2.45rem)', fontWeight: 300, textAlign: 'left', margin: 0, whiteSpace: 'nowrap', visibility: 'hidden' }}>{slide.headlineText}</h2>
                         </div>
                         <div style={textColumnRightStyle}>
                           <a
@@ -1274,7 +1255,7 @@ const StackedSlidesSection = () => {
                             target="_blank"
                             rel="noopener noreferrer"
                             className="cta-pill-btn"
-                            style={heroCtaStyle}
+                            style={{ ...heroCtaStyle, visibility: 'hidden' }}
                           >
                             <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
                             {slide.supportText}
@@ -1288,7 +1269,7 @@ const StackedSlidesSection = () => {
                             key={f}
                             type="button"
                             className="filter-chip"
-                            style={{ ...filterChipStyle, ...(activeFilter === f ? filterChipActiveStyle : {}) }}
+                            style={{ ...filterChipStyle, ...(activeFilter === f ? filterChipActiveStyle : {}), visibility: 'hidden' }}
                             onClick={() => {
                               setActiveFilter(f);
                               setFilterCopy(FILTER_COPY[f] ?? FILTER_COPY.default);
@@ -1325,7 +1306,6 @@ const StackedSlidesSection = () => {
                               data-capability-card
                               {...(!item.tablePreview && { 'data-hover-item': true })}
                               {...(!item.tablePreview && { 'data-hover-side': index % 2 === 0 ? 'left' : 'right' })}
-                              {...(!item.tablePreview && { 'data-hover-video-src': item.previewVideo || undefined })}
                               {...(item.tablePreview ? { id: 'cmo-dashboard-card' } : {})}
                               style={{
                                 ...(item.tablePreview ? capabilityCardTablePreviewStyle : capabilityCardStyle),
@@ -1378,8 +1358,6 @@ const StackedSlidesSection = () => {
                               ) : null}
                               {item.tablePreview && (
                                 <div
-                                  data-hover-item
-                                  data-hover-video-src={item.previewVideo}
                                   data-hover-native-ratio
                                   data-hover-side="right"
                                   style={{ display: 'inline-block', flexShrink: 0, cursor: 'pointer' }}
@@ -1567,9 +1545,6 @@ const StackedSlidesSection = () => {
                               <a href="https://www.linkedin.com/in/bryanballi" style={inlineFooterLegalLinkStyle}>LinkedIn</a>
                               <a href="https://x.com/bai_ee" style={inlineFooterLegalLinkStyle}>𝕏</a>
                             </div>
-                            <p id="footer-powered-by" style={inlineFooterPoweredByStyle}>
-                              Powered by AI. Run by a human who actually executes.
-                            </p>
                           </div>
                         </div>
 
@@ -1714,7 +1689,7 @@ const quoteTextStyle = {
 };
 
 const wrapperStyle = {
-  paddingTop: '64px',
+  paddingTop: 0,
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
@@ -1783,7 +1758,7 @@ const gridLayoutStyle = {
   display: 'flex',
   flexDirection: 'column',
   paddingTop: 0,
-  paddingBottom: 'clamp(1.4rem, 3.5vw, 2.8rem)',
+  paddingBottom: 'clamp(0.75rem, 1.5vw, 1.4rem)',
   paddingLeft: 'max(10vw, calc((100% - 810px) / 2))',
   paddingRight: 'max(10vw, calc((100% - 810px) / 2))',
   boxSizing: 'border-box',
@@ -1796,9 +1771,9 @@ const textCenteringStyle = {
   flexDirection: 'column',
   justifyContent: 'center',
   alignItems: 'center',
-  paddingTop: 'clamp(1.5rem, 3vh, 2.5rem)',
-  paddingBottom: 'clamp(1.5rem, 3vh, 2.5rem)',
-  gap: 'clamp(0.75rem, 2vh, 1.25rem)',
+  paddingTop: 'clamp(0.5rem, 1.5vh, 1.25rem)',
+  paddingBottom: 'clamp(0.5rem, 1.5vh, 1.25rem)',
+  gap: 'clamp(0.35rem, 1vh, 0.75rem)',
 };
 
 const textRowStyle = {
@@ -1890,7 +1865,7 @@ const gridRowStyle = {
 const capabilitySectionStyle = {
   width: '100%',
   marginTop: 0,
-  paddingTop: 'clamp(1.25rem, 2.5vw, 1.85rem)',
+  paddingTop: 'clamp(0.6rem, 1.2vw, 1rem)',
   borderTop: '1px solid rgba(42, 36, 32, 0.12)',
   boxSizing: 'border-box',
 };
@@ -2184,8 +2159,8 @@ const filterDropdownStyle = {
   flexWrap: 'wrap',
   justifyContent: 'center',
   gap: '0.5rem',
-  paddingTop: 'clamp(0.9rem, 1.8vw, 1.15rem)',
-  paddingBottom: 'clamp(1.15rem, 2.4vw, 1.7rem)',
+  paddingTop: 'clamp(0.35rem, 0.8vw, 0.6rem)',
+  paddingBottom: 'clamp(0.35rem, 0.8vw, 0.6rem)',
 };
 
 const filterChipStyle = {

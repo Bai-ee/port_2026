@@ -42,7 +42,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
     };
 
     const updateMetrics = () => {
-      const nav = document.querySelector('#site-nav');
+      const nav = document.querySelector('#founders-top-strip');
       const contentAnchor =
         document.querySelector('#panel-hero-text-row') ??
         document.querySelector('#content-section');
@@ -79,6 +79,10 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       el.style.maxWidth = `${metrics.maxWidth}px`;
       el.style.setProperty('--hero-gap-height', `${metrics.gapHeight}px`);
 
+      // Hide subheadline when vertical space is too tight to avoid overlap with section 2
+      const sub = el.querySelector('#hero-subheadline');
+      if (sub) sub.style.display = metrics.gapHeight < 320 ? 'none' : '';
+
       if (useSimpleScrollViewport) {
         contentEl.style.transform = `translate3d(0, ${travelY * progress}px, 0)`;
         contentEl.style.opacity = `${1 - progress}`;
@@ -99,7 +103,6 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       });
     };
 
-    gsap.set(el, { autoAlpha: 1 });
     gsap.set(contentEl, { autoAlpha: 1, y: 0, filter: 'blur(0px)' });
 
     trigger = ScrollTrigger.create({
@@ -123,7 +126,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       ? new ResizeObserver(scheduleRefresh)
       : null;
 
-    const nav = document.querySelector('#site-nav');
+    const nav = document.querySelector('#founders-top-strip');
     const contentAnchor =
       document.querySelector('#panel-hero-text-row') ??
       document.querySelector('#content-section');
@@ -187,7 +190,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
             lineHeight: 1.05,
             color: textColor,
             margin: 0,
-            fontSize: 'clamp(3.37rem, min(16.53vw, calc(var(--hero-gap-height) / 2.33)), 7.83rem)',
+            fontSize: 'clamp(1.5rem, min(16.53vw, calc(var(--hero-gap-height) / 4.5)), 7.83rem)',
             textTransform: 'none',
           }}>
             YOUR<br />HUMAN<br />IN THE<br />LOOP

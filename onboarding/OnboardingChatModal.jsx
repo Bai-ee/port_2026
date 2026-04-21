@@ -164,7 +164,7 @@ export default function OnboardingChatModal({
       {/* ── Header ── */}
       <div id="onboarding-chat-header">
         <div id="onboarding-chat-avatar-wrap">
-          <img id="onboarding-chat-avatar-img" src="/img/profile_400x400.jpg" alt="Bryan Balli" />
+          <img id="onboarding-chat-avatar-img" src="/img/circle_avatar.gif" alt="Bryan Balli" />
           <span id="onboarding-chat-online-dot" aria-hidden="true" />
         </div>
         <div id="onboarding-chat-identity">
@@ -210,7 +210,7 @@ export default function OnboardingChatModal({
             return (
               <div key={msg.id} className="chat-turn chat-msg-in">
                 <div className="chat-row chat-row-bot">
-                  <img className="chat-avatar-sm" src="/img/profile_400x400.jpg" alt="" aria-hidden="true" />
+                  <img className="chat-avatar-sm" src="/img/circle_avatar.gif" alt="" aria-hidden="true" />
                   <div className="chat-bubble chat-bubble-bot">
                     <span className="chat-question">No problem, you can return to answer questions later on if you like.</span>
                   </div>
@@ -224,7 +224,7 @@ export default function OnboardingChatModal({
             return (
               <div key={msg.id} className="chat-turn">
                 <div className="chat-row chat-row-bot">
-                  <img className="chat-avatar-sm" src="/img/profile_400x400.jpg" alt="" aria-hidden="true" />
+                  <img className="chat-avatar-sm" src="/img/circle_avatar.gif" alt="" aria-hidden="true" />
                   <div className="chat-bubble chat-bubble-bot">
                     <span className="chat-question">Answer a few simple questions to add context and improve your onboarding experience.</span>
                   </div>
@@ -256,7 +256,7 @@ export default function OnboardingChatModal({
             <div key={msg.id} className="chat-turn">
               {/* Bot message bubble */}
               <div className="chat-row chat-row-bot">
-                <img className="chat-avatar-sm" src="/img/profile_400x400.jpg" alt="" aria-hidden="true" />
+                <img className="chat-avatar-sm" src="/img/circle_avatar.gif" alt="" aria-hidden="true" />
                 <div className="chat-bubble chat-bubble-bot">
                   {s.eyebrow && <span className="chat-eyebrow">{s.eyebrow}</span>}
                   <span className="chat-question">{s.title}</span>
@@ -363,7 +363,7 @@ export default function OnboardingChatModal({
         {pipelineError && (
           <div className="chat-turn chat-msg-in">
             <div className="chat-row chat-row-bot">
-              <img className="chat-avatar-sm" src="/img/profile_400x400.jpg" alt="" aria-hidden="true" />
+              <img className="chat-avatar-sm" src="/img/circle_avatar.gif" alt="" aria-hidden="true" />
               <div className="chat-bubble chat-bubble-bot">
                 <span className="chat-question">There was an issue processing this site. You can update the URL below and try again.</span>
               </div>
@@ -396,7 +396,7 @@ export default function OnboardingChatModal({
         {/* Typing indicator */}
         {typing && (
           <div className="chat-row chat-row-bot">
-            <img className="chat-avatar-sm" src="/img/profile_400x400.jpg" alt="" aria-hidden="true" />
+            <img className="chat-avatar-sm" src="/img/circle_avatar.gif" alt="" aria-hidden="true" />
             <div className="chat-bubble chat-bubble-bot chat-typing-bubble">
               <span className="typing-dot" />
               <span className="typing-dot" />

@@ -229,6 +229,32 @@ const AuthPageInner = () => {
           }
         }
 
+        #auth-create-columns {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 0.9rem;
+        }
+        #auth-create-col-left,
+        #auth-create-col-right {
+          display: flex;
+          flex-direction: column;
+          gap: 0.9rem;
+        }
+
+        @media (max-width: 560px) {
+          #auth-create-columns {
+            grid-template-columns: 1fr;
+          }
+          #auth-form input,
+          #auth-form textarea {
+            font-size: 0.92rem;
+            padding: 0.75rem 0.85rem;
+          }
+          #auth-form label span {
+            font-size: 0.65rem;
+          }
+        }
+
         @media (max-width: 360px) {
           #auth-shell {
             padding: 0.75rem;
@@ -247,7 +273,7 @@ const AuthPageInner = () => {
       `}</style>
       <div id="auth-gradient-overlay" style={gradientStyle} />
 
-      <div id="auth-card" style={cardStyle}>
+      <div id="auth-card" style={{ ...cardStyle, maxWidth: mode === 'create' ? 'min(75vw, 56rem)' : '30rem' }}>
         <div id="auth-brand-row" style={brandStyle}>
           <img src="/img/sig.png" alt="" aria-hidden="true" style={sigStyle} />
           <span style={eyebrowStyle}>Client Access</span>
@@ -388,61 +414,94 @@ const AuthPageInner = () => {
 
             <form id="auth-form" style={formStyle} onSubmit={handleSubmit}>
               {mode === 'create' ? (
+                <div id="auth-create-columns">
+                  <div id="auth-create-col-left">
+                    <label style={labelStyle}>
+                      <span style={labelTextStyle}>Website URL</span>
+                      <input
+                        id="auth-form-url"
+                        name="websiteUrl"
+                        type="url"
+                        value={form.websiteUrl}
+                        onChange={handleChange}
+                        style={inputStyle}
+                        placeholder="Enter your website (optional)"
+                      />
+                    </label>
+                    <label style={labelStyle}>
+                      <span style={labelTextStyle}>Idea / Request</span>
+                      <textarea
+                        id="auth-form-idea"
+                        name="ideaDescription"
+                        value={form.ideaDescription}
+                        onChange={handleChange}
+                        style={textareaStyle}
+                        placeholder="Describe your project (required if no website)"
+                        rows={1}
+                      />
+                    </label>
+                  </div>
+                  <div id="auth-create-col-right">
+                    <label style={labelStyle}>
+                      <span style={labelTextStyle}>Email</span>
+                      <input
+                        id="auth-form-email"
+                        name="email"
+                        type="email"
+                        value={form.email}
+                        onChange={handleChange}
+                        style={inputStyle}
+                        placeholder="Your email address"
+                        required
+                      />
+                    </label>
+                    <label style={labelStyle}>
+                      <span style={labelTextStyle}>Password</span>
+                      <input
+                        id="auth-form-password"
+                        name="password"
+                        type="password"
+                        value={form.password}
+                        onChange={handleChange}
+                        style={inputStyle}
+                        placeholder="Create a password"
+                        required
+                        minLength={6}
+                      />
+                    </label>
+                  </div>
+                </div>
+              ) : (
                 <>
                   <label style={labelStyle}>
-                    <span style={labelTextStyle}>Website URL</span>
+                    <span style={labelTextStyle}>Email</span>
                     <input
-                      id="auth-form-url"
-                      name="websiteUrl"
-                      type="url"
-                      value={form.websiteUrl}
+                      id="auth-form-email"
+                      name="email"
+                      type="email"
+                      value={form.email}
                       onChange={handleChange}
                       style={inputStyle}
-                      placeholder="Enter your website (optional)"
+                      placeholder="Your email address"
+                      required
                     />
                   </label>
                   <label style={labelStyle}>
-                    <span style={labelTextStyle}>Idea / Request</span>
-                    <textarea
-                      id="auth-form-idea"
-                      name="ideaDescription"
-                      value={form.ideaDescription}
+                    <span style={labelTextStyle}>Password</span>
+                    <input
+                      id="auth-form-password"
+                      name="password"
+                      type="password"
+                      value={form.password}
                       onChange={handleChange}
-                      style={textareaStyle}
-                      placeholder="Describe your project (required if no website)"
-                      rows={1}
+                      style={inputStyle}
+                      placeholder={mode === 'signin' ? 'Enter your password' : 'Create a password'}
+                      required
+                      minLength={6}
                     />
                   </label>
                 </>
-              ) : null}
-
-              <label style={labelStyle}>
-                <span style={labelTextStyle}>Email</span>
-                <input
-                  id="auth-form-email"
-                  name="email"
-                  type="email"
-                  value={form.email}
-                  onChange={handleChange}
-                  style={inputStyle}
-                  placeholder="Your email address"
-                  required
-                />
-              </label>
-              <label style={labelStyle}>
-                <span style={labelTextStyle}>Password</span>
-                <input
-                  id="auth-form-password"
-                  name="password"
-                  type="password"
-                  value={form.password}
-                  onChange={handleChange}
-                  style={inputStyle}
-                  placeholder={mode === 'signin' ? 'Enter your password' : 'Create a password'}
-                  required
-                  minLength={6}
-                />
-              </label>
+              )}
 
               {error ? (
                 <div id="auth-error" style={errorStyle}>[ERROR: {error}]</div>

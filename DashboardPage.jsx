@@ -10761,7 +10761,6 @@ const dashboardCss = `
   }
 
   /* ── Account delete + client edit modals ── */
-  #delete-account-modal-overlay,
   #client-edit-modal-overlay {
     position: fixed;
     inset: 0;
@@ -10771,6 +10770,18 @@ const dashboardCss = `
     align-items: center;
     justify-content: center;
     padding: 1.5rem;
+  }
+  #delete-account-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: clamp(1rem, 5vw, 2rem);
   }
   #client-edit-modal {
     position: relative;
@@ -10873,108 +10884,141 @@ const dashboardCss = `
   #client-edit-modal-confirm:hover:not(:disabled) { background: #fff; border-color: #fff; }
   #client-edit-modal-confirm:disabled,
   #client-edit-modal-cancel:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Delete modal — redesigned to match login screen design system */
   #delete-account-modal {
     position: relative;
-    background: #14100c;
-    color: #e7d9c3;
-    border: 1px solid rgba(239, 68, 68, 0.45);
-    border-radius: 6px;
-    padding: 1.5rem 1.5rem 1.25rem;
-    max-width: 480px;
     width: 100%;
-    font-family: var(--font-mono, monospace);
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+    max-width: 30rem;
+    padding: clamp(1.25rem, 5vw, 2rem);
+    border-radius: 1.1rem;
+    box-sizing: border-box;
+    background: rgba(255, 252, 248, 0.94);
+    backdrop-filter: blur(28px);
+    -webkit-backdrop-filter: blur(28px);
+    border: 1px solid rgba(212, 196, 171, 0.82);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4), 0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.1), 0px 20px 40px rgba(0, 0, 0, 0.15);
+    font-family: var(--font-ui, "Space Grotesk", system-ui, sans-serif);
+    color: #2a2420;
   }
   #delete-account-modal-close {
     position: absolute;
-    top: 10px;
-    right: 10px;
-    background: transparent;
-    border: none;
-    color: rgba(231, 217, 195, 0.6);
-    font-size: 11px;
+    top: 1rem;
+    right: 1rem;
+    width: 2.4rem;
+    height: 2.4rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.34);
+    border: 1px solid rgba(42, 36, 32, 0.12);
+    color: rgba(42, 36, 32, 0.58);
+    font-size: 1.05rem;
+    font-family: var(--font-mono, monospace);
+    line-height: 1;
     cursor: pointer;
-    letter-spacing: 0.1em;
+    transition: background 0.2s ease, color 0.2s ease;
   }
-  #delete-account-modal-close:hover { color: #e7d9c3; }
+  #delete-account-modal-close:hover {
+    background: rgba(255,255,255,1);
+    color: #2a2420;
+  }
   #delete-account-modal-title {
     margin: 0 0 0.75rem;
-    font-size: 14px;
+    font-size: 0.82rem;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: #ef4444;
+    color: #8b1e1e;
+    font-family: var(--font-mono, monospace);
+    font-weight: 700;
   }
   #delete-account-modal-body {
     margin: 0 0 1rem;
-    font-size: 12px;
-    line-height: 1.5;
-    color: rgba(231, 217, 195, 0.8);
-    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 0.92rem;
+    line-height: 1.6;
+    color: rgba(42, 36, 32, 0.66);
+    font-family: var(--font-ui, "Space Grotesk", system-ui, sans-serif);
   }
   #delete-account-confirm-label {
     display: block;
-    font-size: 10px;
-    letter-spacing: 0.1em;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: rgba(231, 217, 195, 0.65);
+    color: rgba(42, 36, 32, 0.55);
+    font-family: var(--font-mono, monospace);
     margin-bottom: 0.4rem;
   }
-  #delete-account-confirm-label strong { color: #ef4444; }
+  #delete-account-confirm-label strong { color: #8b1e1e; }
   #delete-account-confirm-input {
     width: 100%;
     box-sizing: border-box;
-    background: #0b0906;
-    border: 1px solid rgba(231, 217, 195, 0.18);
-    color: #e7d9c3;
-    padding: 0.55rem 0.7rem;
-    font-family: var(--font-mono, monospace);
-    font-size: 13px;
-    letter-spacing: 0.08em;
-    border-radius: 3px;
+    padding: 0.9rem 1rem;
+    border-radius: 0.95rem;
+    border: 1px solid rgba(42, 36, 32, 0.12);
+    background: rgba(255,255,255,0.72);
+    color: #2a2420;
+    font-family: var(--font-ui, "Space Grotesk", system-ui, sans-serif);
+    font-size: 1rem;
     outline: none;
+    transition: border-color 0.2s ease;
   }
-  #delete-account-confirm-input:focus { border-color: #ef4444; }
+  #delete-account-confirm-input:focus { border-color: rgba(42, 36, 32, 0.35); }
   #delete-account-modal-error {
     margin: 0.6rem 0 0;
-    padding: 0.5rem 0.6rem;
-    background: rgba(239, 68, 68, 0.1);
-    border-left: 2px solid #ef4444;
-    color: #f87171;
-    font-size: 11px;
+    color: #8b1e1e;
+    font-size: 0.82rem;
+    font-family: var(--font-mono, monospace);
+    letter-spacing: 0.04em;
     line-height: 1.4;
   }
   #delete-account-modal-actions {
     display: flex;
-    gap: 0.6rem;
+    gap: 0.75rem;
     justify-content: flex-end;
-    margin-top: 1.1rem;
+    margin-top: 1.4rem;
   }
   #delete-account-modal-cancel,
   #delete-account-modal-confirm {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 3rem;
+    padding: 0.65rem 1.25rem;
+    border-radius: 999px;
     font-family: var(--font-mono, monospace);
-    font-size: 11px;
-    letter-spacing: 0.1em;
+    font-size: 0.84rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
     text-transform: uppercase;
-    padding: 0.55rem 0.9rem;
-    border-radius: 3px;
+    line-height: 1;
     cursor: pointer;
-    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+    transition: background 0.28s ease, box-shadow 0.28s ease, transform 0.28s ease, border-color 0.28s ease;
+    border: none;
   }
   #delete-account-modal-cancel {
-    background: transparent;
-    border: 1px solid rgba(231, 217, 195, 0.2);
-    color: rgba(231, 217, 195, 0.75);
+    background: rgba(255,255,255,0.92);
+    border: 1px solid rgba(42, 36, 32, 0.18);
+    color: #2a2420;
+    box-shadow: 0 1px 3px rgba(42,36,32,0.08);
   }
-  #delete-account-modal-cancel:hover { color: #e7d9c3; border-color: rgba(231, 217, 195, 0.4); }
+  #delete-account-modal-cancel:hover {
+    background: rgba(255,255,255,1);
+    box-shadow: 0px 5px 10px rgba(0,0,0,0.05), 0px 15px 30px rgba(0,0,0,0.05), 0px 20px 40px rgba(0,0,0,0.08);
+    transform: scale(1.012);
+  }
   #delete-account-modal-confirm {
-    background: #ef4444;
-    border: 1px solid #ef4444;
-    color: #14100c;
-    font-weight: 600;
+    background: #c45c5c;
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
   }
-  #delete-account-modal-confirm:hover:not(:disabled) { background: #f87171; border-color: #f87171; }
+  #delete-account-modal-confirm:hover:not(:disabled) {
+    background: #d46a6a;
+    box-shadow: 0px 5px 10px rgba(0,0,0,0.067), 0px 15px 30px rgba(0,0,0,0.067), 0px 20px 40px rgba(0,0,0,0.1);
+    transform: scale(1.012);
+  }
   #delete-account-modal-confirm:disabled,
-  #delete-account-modal-cancel:disabled { opacity: 0.4; cursor: not-allowed; }
+  #delete-account-modal-cancel:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 
   /* ── Lamp effects ── */
   .lamp {
