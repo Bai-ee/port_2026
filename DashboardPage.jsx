@@ -4022,17 +4022,22 @@ const DashboardPage = () => {
               : 'Share-ready',
         };
       }
-      if (card.id === 'multi-device-view' && built?.dominantSignal?.readiness) {
-        return {
-          tone: built.dominantSignal.readiness === 'critical' ? 'critical'
-            : built.dominantSignal.readiness === 'partial' ? 'partial'
-            : 'ok',
-          label: built.dominantSignal.readiness === 'critical'
-            ? 'Capture failed'
-            : built.dominantSignal.readiness === 'partial'
-              ? 'Coverage partial'
-              : 'Passed',
-        };
+      if (card.id === 'multi-device-view') {
+        // Derive readiness from actual artifact presence so the badge matches
+        // the footer dot: both artifacts → Passed, one missing → Partial,
+        // both missing → Capture failed.
+        const mdHasMockup = Boolean(dashboardState?.artifacts?.homepageDeviceMockup?.downloadUrl);
+        const mdFp = dashboardState?.artifacts?.fullPageScreenshots || {};
+        const mdHasFullPages = Boolean(
+          mdFp['desktop-full']?.downloadUrl || mdFp['tablet-full']?.downloadUrl || mdFp['mobile-full']?.downloadUrl
+        );
+        if (mdHasMockup && mdHasFullPages) {
+          return { tone: 'ok', label: 'Passed' };
+        }
+        if (!mdHasMockup && !mdHasFullPages) {
+          return { tone: 'critical', label: 'Capture failed' };
+        }
+        return { tone: 'partial', label: 'Partial' };
       }
       if (card.id === 'style-guide' && built?.dominantSignal?.readiness) {
         return {
@@ -7508,8 +7513,10 @@ const dashboardCss = `
     color: hsl(314, 85%, 32%);
   }
   .tile-readiness-tag.readiness-partial {
-    background: rgba(14, 165, 233, 0.22);
-    color: hsl(185, 90%, 25%);
+    /* Matches the footer Partial dot (#f59e0b) so the card-level status and
+       the footer status read as the same state. */
+    background: rgba(245, 158, 11, 0.22);
+    color: hsl(32, 92%, 28%);
   }
   .tile-readiness-tag.readiness-healthy {
     background: rgba(139, 92, 246, 0.22);
