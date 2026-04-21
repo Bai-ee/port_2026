@@ -4673,8 +4673,9 @@ const DashboardPage = () => {
                       const mLoading = moduleRunLoading[card.id] || moduleToggleLoading[card.id] || false;
                       const tierAllowsRerun = !!moduleConfig?.[card.id]?.allowMultiRun;
                       const mBusy = mStatus === 'running' || mStatus === 'queued';
-                      // multi-device-view: detect partial/missing artifacts so Retry activates
-                      // when the run reports succeeded but neither artifact kind landed.
+                      // multi-device-view: Retry activates whenever either artifact
+                      // is missing (mockup OR full-page captures), even when the run
+                      // reports 'succeeded' at the module level.
                       let mdArtifactsMissing = false;
                       if (card.id === 'multi-device-view' && mStatus === 'succeeded') {
                         const hasMockup = Boolean(dashboardState?.artifacts?.homepageDeviceMockup?.downloadUrl);
@@ -4682,7 +4683,7 @@ const DashboardPage = () => {
                         const hasFullPages = Boolean(
                           fp['desktop-full']?.downloadUrl || fp['tablet-full']?.downloadUrl || fp['mobile-full']?.downloadUrl
                         );
-                        mdArtifactsMissing = !hasMockup && !hasFullPages;
+                        mdArtifactsMissing = !hasMockup || !hasFullPages;
                       }
                       const mIsRetry = mStatus === 'failed' || mdArtifactsMissing;
                       const mIsRerun = mStatus === 'succeeded' && !mdArtifactsMissing;
