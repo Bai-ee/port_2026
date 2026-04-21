@@ -4477,7 +4477,7 @@ const DashboardPage = () => {
                   if (card.id === 'brief' && briefPreviewHtml) { setBriefFullScreen(true); return; }
                   if (card.id === 'audit-summary') { setAuditFullScreen(true); return; }
                   setActiveTileModal({ title: card.title, description: card.description, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null, recommendation: card.recommendation || null, analyzer: card.analyzer || null, readinessBadge: card.readinessBadge || null });
-                }}
+                })}
               >
                 <div className="tile-number">
                   <span className="tile-header-label">{card.label}</span>
