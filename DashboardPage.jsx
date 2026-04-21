@@ -4466,11 +4466,15 @@ const DashboardPage = () => {
               const hasBothButtons = Boolean(card.moduleControls) && !(!_mEnabled && _mStatus === 'inactive');
               const isDimmed = isModularOnboardingClient && card.id !== 'audit-summary' && card.id !== 'multi-device-view';
               const isLocked = activeCapabilityFilter === 'onboarding' && isCardLocked(card.id);
+              // Unlocked but not yet run (enabled/disabled without a succeeded status) —
+              // we want no card-level hover effect, only direct button hover.
+              const isInactiveUnlocked = !isLocked && Boolean(card.moduleControls)
+                && !(_mStatus === 'succeeded' || _mStatus === 'running' || _mStatus === 'queued');
               return (
               <article
                 data-capability-card
                 data-flip-id={`cap-${card.id}`}
-                className={`tile tile-intake-card${hasIntakeData ? ' tile-ready' : ''}${card.wide ? ' tile-intake-card--wide' : ''}${hasBothButtons && !isLocked ? ' tile-intake-card--btns-only' : ''}${isDimmed && !isLocked ? ' tile-intake-card--dimmed' : ''}${isLocked ? ' tile-intake-card--locked' : ''}`}
+                className={`tile tile-intake-card${hasIntakeData ? ' tile-ready' : ''}${card.wide ? ' tile-intake-card--wide' : ''}${hasBothButtons && !isLocked ? ' tile-intake-card--btns-only' : ''}${isDimmed && !isLocked ? ' tile-intake-card--dimmed' : ''}${isLocked ? ' tile-intake-card--locked' : ''}${isInactiveUnlocked ? ' tile-intake-card--inactive' : ''}`}
                 id={card.domId || `tile-${card.id}`}
                 key={card.id}
                 onClick={isLocked ? undefined : (hasBothButtons ? undefined : () => {
@@ -4482,17 +4486,22 @@ const DashboardPage = () => {
                 <div className="tile-number">
                   <span className="tile-header-label">{card.label}</span>
                 </div>
+                {isLocked ? (
+                  <div
+                    className={`tile-intake-placeholder tile-intake-placeholder-${card.id} tile-intake-placeholder--locked`}
+                    aria-label="Locked card"
+                  >
+                    <span className="tile-intake-lock-overlay">
+                      <Lock size={56} strokeWidth={1.25} className="tile-intake-lock-icon" aria-hidden="true" />
+                    </span>
+                  </div>
+                ) : (
                 <div
                   className={`tile-intake-placeholder tile-intake-placeholder-${card.id}`}
                   style={card.id === 'multi-device-view' && sgDisplayData?.colors?.primary?.hex
                     ? { background: `linear-gradient(135deg, ${sgDisplayData.colors.primary.hex}, ${sgDisplayData.colors.secondary?.hex || sgDisplayData.colors.neutral?.hex || '#ddd'})` }
                     : undefined}
                 >
-                  {isLocked && (
-                    <span className="tile-intake-lock-overlay" aria-label="Locked card">
-                      <Lock size={56} strokeWidth={1.25} className="tile-intake-lock-icon" aria-hidden="true" />
-                    </span>
-                  )}
                   {card.id === 'brief' && briefPreviewHtml ? (
                     <iframe
                       key={dashboardState?.latestRunId || 'brief-preview'}
@@ -4617,6 +4626,7 @@ const DashboardPage = () => {
                     <span className="tile-empty-label">{card.placeholderLabel}</span>
                   )}
                 </div>
+                )}
                 <div className="tile-intake-body">
                   <h3 className="tile-heading tile-intake-heading">{card.title}</h3>
                   {card.category !== 'services' && (
@@ -7681,26 +7691,44 @@ const dashboardCss = `
     color: #fff;
     transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   }
-  /* Locked cards — keep original visual styling, just mark inactive and
-     overlay a centered lock icon on top of the content shell. */
+  /* Locked cards — standard placeholder bg, no shell content, lock icon
+     centered, card dimmed, no hover effects. */
   .tile.tile-intake-card--locked {
     cursor: not-allowed;
     pointer-events: none;
+    opacity: 0.5;
+  }
+  .tile.tile-intake-card--locked:hover { opacity: 0.5; }
+  .tile-intake-placeholder--locked {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   .tile-intake-lock-overlay {
-    position: absolute;
-    inset: 0;
     display: flex;
     align-items: center;
     justify-content: center;
     pointer-events: none;
-    z-index: 2;
   }
   .tile-intake-lock-icon {
-    color: rgba(0, 0, 0, 0.7);
-    filter: drop-shadow(0 1px 2px rgba(255, 255, 255, 0.6));
+    color: rgba(0, 0, 0, 0.55);
   }
-  .tile.tile-intake-card--locked .tile-intake-placeholder { position: relative; }
+
+  /* Inactive-but-unlocked cards (Run visible, not yet executed) — kill the
+     card-level hover effects; only the Run button reacts to its own hover. */
+  .tile.tile-intake-card--inactive {
+    pointer-events: none;
+  }
+  .tile.tile-intake-card--inactive .tile-foot-rerun-btn,
+  .tile.tile-intake-card--inactive .tile-view-details-btn {
+    pointer-events: auto;
+  }
+  .tile.tile-intake-card--inactive:hover .tile-view-details-btn {
+    background: #fff;
+    border-color: #000;
+    color: #000;
+  }
   /* New-user dimmed cards: 60% opacity, full on hover */
   .tile.tile-intake-card--dimmed {
     opacity: 0.4;
