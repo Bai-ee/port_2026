@@ -55,8 +55,12 @@ async function runSeoPerformance({ websiteUrl, onProgress = null }) {
     warningCodes,
     artifacts: [],
     result: {
-      pagespeed:    pagespeedOk  ? pagespeedResult.pagespeed   : null,
-      aiSeoAudit:   aiSeoOk     ? aiSeoResult.aiSeoAudit      : null,
+      // Always pass the SourceRecord through when present, even if the PSI
+      // fetch reported an error. The dashboard projection translator will
+      // convert an error SourceRecord into a { status: 'error', … } shape so
+      // the card can render the failure state instead of a blank shell.
+      pagespeed:    pagespeedResult.pagespeed || null,
+      aiSeoAudit:   aiSeoOk ? aiSeoResult.aiSeoAudit : null,
     },
   };
 }

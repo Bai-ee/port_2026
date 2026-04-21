@@ -4841,10 +4841,15 @@ const DashboardPage = () => {
                         // preserve the existing mockup + viewport artifacts.
                         mdFullPagesOnlyRetry = hasMockup && !hasFullPages;
                       }
-                      const mIsRetry = mStatus === 'failed' || mdArtifactsMissing;
-                      const mIsRerun = mStatus === 'succeeded' && !mdArtifactsMissing;
+                      // Any card that hasn't reached STATUS: Passed (readiness tone !== 'ok')
+                      // stays re-runnable so the user can retry without waiting for a tier
+                      // unlock. multi-device-view's artifact check already covered its case;
+                      // this generalizes the same rule to every other card.
+                      const cardNotPassed = Boolean(card.readinessBadge) && card.readinessBadge.tone !== 'ok';
+                      const mIsRetry = mStatus === 'failed' || mdArtifactsMissing || (mStatus === 'succeeded' && cardNotPassed);
+                      const mIsRerun = mStatus === 'succeeded' && !mdArtifactsMissing && !cardNotPassed;
                       // Inactive = no config-enabled yet AND never succeeded. RUN here enables + kicks off first run.
-                      const mIsInactive = !mEnabled && !mIsRerun && !mBusy && !mdArtifactsMissing;
+                      const mIsInactive = !mEnabled && !mIsRerun && !mBusy && !mdArtifactsMissing && !cardNotPassed;
                       const interactive =
                         !mBusy && (mIsInactive || (mEnabled && (mIsRetry || tierAllowsRerun)));
                       const label = mLoading ? '…' : mIsRetry ? 'Retry' : mIsRerun ? 'Re-run' : mIsInactive ? 'RUN' : 'Run';
@@ -4868,7 +4873,10 @@ const DashboardPage = () => {
                               : mdFullPagesOnlyRetry
                               ? { fullPagesOnly: true }
                               : null;
-                            handleModuleRun(card.id, mIsRerun || mdArtifactsMissing, retryOptions);
+                            // Force=true whenever the card hasn't reached STATUS: Passed
+                            // so the server doesn't skip an already-succeeded module.
+                            const shouldForce = mIsRerun || mdArtifactsMissing || cardNotPassed;
+                            handleModuleRun(card.id, shouldForce, retryOptions);
                           }}
                         >
                           {label}
