@@ -10,6 +10,7 @@ import {
   ArrowRightLeft,
   ArrowUpRight,
   BriefcaseBusiness,
+  House,
   ChartColumnIncreasing,
   LaptopMinimalCheck,
   MessageSquareMore,
@@ -3103,7 +3104,7 @@ const DashboardPage = () => {
       category: 'onboarding',
       number: 'MD',
       label: 'LAYOUT',
-      title: 'Multi-Device View',
+      title: 'Cross-Device Layouts',
       description: 'Your site across desktop, tablet, and mobile. Identifies layout and usability issues.',
       placeholderLabel: multiDevicePreviewSrc ? 'LAYOUT' : 'NO\nLAYOUT',
       rows: multiDevicePreviewSrc ? [
@@ -3890,7 +3891,17 @@ const DashboardPage = () => {
     // Running/queued states defer to the standard description so progress copy shows.
     if (card.moduleControls) {
       const moduleCardState = moduleState?.[card.id] ?? null;
-      const moduleDesc = buildModuleStateDescription(card.id, moduleCardState);
+      const moduleContext = card.id === 'multi-device-view'
+        ? {
+            hasMockup: Boolean(dashboardState?.artifacts?.homepageDeviceMockup?.downloadUrl),
+            hasFullPages: Boolean(
+              dashboardState?.artifacts?.fullPageScreenshots?.['desktop-full']?.downloadUrl
+              || dashboardState?.artifacts?.fullPageScreenshots?.['tablet-full']?.downloadUrl
+              || dashboardState?.artifacts?.fullPageScreenshots?.['mobile-full']?.downloadUrl
+            ),
+          }
+        : {};
+      const moduleDesc = buildModuleStateDescription(card.id, moduleCardState, moduleContext);
       if (moduleDesc) dynamicShortDescription = moduleDesc;
     }
 
@@ -4000,12 +4011,14 @@ const DashboardPage = () => {
       }
       if (card.id === 'multi-device-view' && built?.dominantSignal?.readiness) {
         return {
-          tone: built.dominantSignal.readiness,
+          tone: built.dominantSignal.readiness === 'critical' ? 'critical'
+            : built.dominantSignal.readiness === 'partial' ? 'partial'
+            : 'ok',
           label: built.dominantSignal.readiness === 'critical'
             ? 'Capture failed'
             : built.dominantSignal.readiness === 'partial'
               ? 'Coverage partial'
-              : 'Layout ready',
+              : 'Passed',
         };
       }
       if (card.id === 'style-guide' && built?.dominantSignal?.readiness) {
@@ -4070,8 +4083,8 @@ const DashboardPage = () => {
             <img src="/img/sig.png" alt="" aria-hidden="true" />
           </Link>
           <div id="founders-top-actions">
-            <Link href="/" id="founders-linkedin">
-              Homepage
+            <Link href="/" id="founders-linkedin" aria-label="Homepage">
+              <House size={18} strokeWidth={1.75} />
             </Link>
             <button type="button" id="founders-login-link" onClick={handleSignOut}>
               Logout
@@ -4082,7 +4095,8 @@ const DashboardPage = () => {
               target="_blank"
               rel="noopener noreferrer"
             >
-              Chat with Bryan
+              <span className="founders-chat-label-full">Contact</span>
+              <span className="founders-chat-label-short">Contact</span>
               <span id="founders-chat-cta-icon">↗</span>
             </a>
           </div>
@@ -4265,7 +4279,7 @@ const DashboardPage = () => {
               )}
             </div>
             <div className="meta-row" id="tier-meta-row">
-              <span className="label">TIER</span>
+              <span className="label">STATUS</span>
               <span className="value">Onboarded</span>
               <button
                 type="button"
@@ -4339,11 +4353,6 @@ const DashboardPage = () => {
           {bootstrapError ? <div className="db-alert">{bootstrapError}</div> : null}
           {/* Error banner removed — errors surface in the terminal + survey
               chat thread. Never show a top-level alert that shifts layout. */}
-          {!bootstrapError && !errorState && !bootstrapLoading && clientStatus === 'provisioning' ? (
-            <div className="db-alert db-alert-muted" id="dashboard-provisioning-banner">
-              {provisioningState?.message || 'Your intelligence stack is being initialized. This typically takes a few minutes.'}
-            </div>
-          ) : null}
 
           {/* ── Capability section shell ── */}
           {/* Hold render until the initial capability filter is resolved so the
@@ -4599,8 +4608,22 @@ const DashboardPage = () => {
                         inactive:  { dot: '#6b7280', label: 'Inactive', glow: 'none' },
                       };
                       if (card.moduleControls) {
-                        const s = moduleState?.[card.id]?.status ?? 'inactive';
-                        const meta = STATUS_DOT[s] ?? STATUS_DOT.inactive;
+                        let s = moduleState?.[card.id]?.status ?? 'inactive';
+                        // multi-device-view: treat succeeded-but-partial (or missing both)
+                        // as partial/failed so the status dot reflects actual artifact state.
+                        if (card.id === 'multi-device-view') {
+                          const hasMockup = Boolean(dashboardState?.artifacts?.homepageDeviceMockup?.downloadUrl);
+                          const fp = dashboardState?.artifacts?.fullPageScreenshots || {};
+                          const hasFullPages = Boolean(
+                            fp['desktop-full']?.downloadUrl || fp['tablet-full']?.downloadUrl || fp['mobile-full']?.downloadUrl
+                          );
+                          if (s === 'succeeded') {
+                            if (!hasMockup && !hasFullPages) s = 'failed';
+                            else if (!hasMockup || !hasFullPages) s = 'partial';
+                          }
+                        }
+                        const PARTIAL_META = { dot: '#f59e0b', label: 'Partial', glow: '0 0 5px 2px rgba(245,158,11,0.35)' };
+                        const meta = s === 'partial' ? PARTIAL_META : (STATUS_DOT[s] ?? STATUS_DOT.inactive);
                         return (
                           <>
                             <span style={{ width: 6, height: 6, borderRadius: '50%', display: 'inline-block', background: meta.dot, boxShadow: meta.glow, flexShrink: 0 }} />
@@ -4647,13 +4670,24 @@ const DashboardPage = () => {
                       }
                       const mStatus = moduleState?.[card.id]?.status ?? 'inactive';
                       const mEnabled = moduleConfig ? (moduleConfig[card.id]?.enabled ?? false) : true;
-                      const mIsRetry = mStatus === 'failed';
-                      const mIsRerun = mStatus === 'succeeded';
                       const mLoading = moduleRunLoading[card.id] || moduleToggleLoading[card.id] || false;
                       const tierAllowsRerun = !!moduleConfig?.[card.id]?.allowMultiRun;
                       const mBusy = mStatus === 'running' || mStatus === 'queued';
+                      // multi-device-view: detect partial/missing artifacts so Retry activates
+                      // when the run reports succeeded but neither artifact kind landed.
+                      let mdArtifactsMissing = false;
+                      if (card.id === 'multi-device-view' && mStatus === 'succeeded') {
+                        const hasMockup = Boolean(dashboardState?.artifacts?.homepageDeviceMockup?.downloadUrl);
+                        const fp = dashboardState?.artifacts?.fullPageScreenshots || {};
+                        const hasFullPages = Boolean(
+                          fp['desktop-full']?.downloadUrl || fp['tablet-full']?.downloadUrl || fp['mobile-full']?.downloadUrl
+                        );
+                        mdArtifactsMissing = !hasMockup && !hasFullPages;
+                      }
+                      const mIsRetry = mStatus === 'failed' || mdArtifactsMissing;
+                      const mIsRerun = mStatus === 'succeeded' && !mdArtifactsMissing;
                       // Inactive = no config-enabled yet AND never succeeded. RUN here enables + kicks off first run.
-                      const mIsInactive = !mEnabled && !mIsRerun && !mBusy;
+                      const mIsInactive = !mEnabled && !mIsRerun && !mBusy && !mdArtifactsMissing;
                       const interactive =
                         !mBusy && (mIsInactive || (mEnabled && (mIsRetry || tierAllowsRerun)));
                       const label = mLoading ? '…' : mIsRetry ? 'Retry' : mIsRerun ? 'Re-run' : 'Run';
@@ -6101,6 +6135,8 @@ const dashboardCss = `
     transform: scale(1.012);
     transition: box-shadow 0.28s ease, transform 0.28s ease;
   }
+  .founders-chat-label-short { display: none; }
+  .founders-chat-label-full  { display: inline; }
   #founders-chat-cta-icon {
     font-size: 0.72rem;
     opacity: 0.82;
@@ -6566,16 +6602,6 @@ const dashboardCss = `
     color: var(--text-secondary);
     line-height: 1.2;
   }
-  .db-alert {
-    margin: 0 0 20px;
-    padding: 14px 16px;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text-display);
-    font-size: 12px;
-    line-height: 1.5;
-  }
-  .db-alert-muted { color: var(--text-secondary); }
   #capability-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -7456,6 +7482,10 @@ const dashboardCss = `
   .tile-readiness-tag.readiness-healthy {
     background: rgba(139, 92, 246, 0.22);
     color: hsl(262, 80%, 32%);
+  }
+  .tile-readiness-tag.readiness-ok {
+    background: rgba(34, 197, 94, 0.18);
+    color: hsl(142, 72%, 29%);
   }
   .tile-intake-table-wrap {
     margin-top: 2px;
@@ -9218,9 +9248,15 @@ const dashboardCss = `
     .tile { aspect-ratio: auto; min-height: 230px; grid-template-areas: "num" "head" "desc" "viz" "foot"; grid-template-columns: 1fr; row-gap: 14px; }
     .tile-description { }
     #intake-identity-row { grid-template-columns: 1fr; gap: 16px; }
+    #audit-viz-bars .audit-bar-item:nth-child(n+3) { display: none; }
   }
   @media (max-width: 520px) {
-    #capability-grid { grid-template-columns: 1fr; }
+    #capability-grid { grid-template-columns: 1fr; grid-auto-rows: auto; }
+    .tile-intake-card { height: auto; min-height: unset; padding: 8px 10px; gap: 6px; }
+    .tile-intake-placeholder { aspect-ratio: auto !important; flex: 1; min-height: 0; max-height: 160px; overflow: hidden; }
+    .tile-intake-placeholder-audit-summary { max-height: none; flex: none; min-height: 180px; }
+    .tile-intake-source-line { display: none; }
+    .tile-intake-description { font-size: 10px; line-height: 1.3; -webkit-line-clamp: 2; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
   }
   @media (max-width: 620px) {
     #founders-shell { padding-top: 96px; }
@@ -9232,6 +9268,8 @@ const dashboardCss = `
     #founders-linkedin { font-size: 0.92rem; }
     #founders-login-link { padding: 0.62rem 0.9rem; font-size: 0.8rem; }
     #founders-chat-cta { padding: 0.62rem 0.9rem; font-size: 0.8rem; gap: 0.35rem; }
+    .founders-chat-label-full  { display: none; }
+    .founders-chat-label-short { display: inline; }
     #capability-section { padding-top: 0; }
     .reseed-run-btn-label-desktop { display: none; }
     .reseed-run-btn-label-mobile { display: inline; }

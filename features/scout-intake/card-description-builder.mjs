@@ -1158,8 +1158,32 @@ const MODULE_STATE_DESCRIPTIONS = {
   'multi-device-view': {
     disabled:  'This card is turned off. Enable it to capture screenshots and generate a multi-device layout review. Open the next module to continue building your profile.',
     idle:      'This card is enabled and ready. Click Run to capture desktop, tablet, and mobile screenshots. Open the next module to continue building your profile.',
-    failed:    (err) => `The multi-device mockup did not generate${err ? `: ${err}` : '.'} Retry to rebuild it, or open the next module to continue building your profile.`,
-    succeeded: 'The multi-device mockup was generated successfully — desktop, tablet, and mobile views all captured. Open Details on this card to browse full-page captures across every device, not just the homepage. Open the next module to continue building your profile.',
+    failed:    (err, ctx = {}) => {
+      const { hasMockup, hasFullPages } = ctx;
+      if (hasMockup && hasFullPages) {
+        return `The last run reported an error${err ? `: ${err}` : '.'} The mockup and full-page captures from a prior run are still available — open Details to browse them, or Retry to refresh.`;
+      }
+      if (hasMockup) {
+        return `Mockup generated, but full-page screenshots were not captured${err ? `: ${err}` : '.'} Retry to attempt the full-page captures again.`;
+      }
+      if (hasFullPages) {
+        return `Full-page screenshots were captured, but the composite mockup was not generated${err ? `: ${err}` : '.'} Retry to rebuild the mockup from existing captures.`;
+      }
+      return `Neither the multi-device mockup nor full-page screenshots were captured${err ? `: ${err}` : '.'} Retry to rebuild from existing viewport images, or open the next module to continue building your profile.`;
+    },
+    succeeded: (_err, ctx = {}) => {
+      const { hasMockup, hasFullPages } = ctx;
+      if (hasMockup && hasFullPages) {
+        return 'The multi-device mockup was generated successfully and full-page captures are available for desktop, tablet, and mobile. Open Details on this card to browse every device end to end, not just the homepage. Open the next module to continue building your profile.';
+      }
+      if (hasMockup && !hasFullPages) {
+        return 'The multi-device mockup was generated, but full-page screenshots are missing. The homepage view is accurate — Retry to capture the full pages for each device, or open the next module to continue building your profile.';
+      }
+      if (!hasMockup && hasFullPages) {
+        return 'Full-page screenshots were captured for desktop, tablet, and mobile, but the composite mockup image was not generated — the card is showing the homepage screenshot as a fallback. Retry to rebuild the mockup, or open Details to browse the full-page captures.';
+      }
+      return 'The run completed but neither the multi-device mockup nor full-page screenshots were captured. Retry to rebuild from existing viewport images, or open the next module to continue building your profile.';
+    },
   },
   'social-preview': {
     disabled:  'This card is turned off. Enable it to check how your site appears when shared on social platforms.',
@@ -1184,7 +1208,7 @@ const MODULE_STATE_DESCRIPTIONS = {
  * @param {{ status: string, lastErrorMessage?: string|null }} moduleCardState
  * @returns {string|null}
  */
-export function buildModuleStateDescription(cardId, moduleCardState) {
+export function buildModuleStateDescription(cardId, moduleCardState, context = {}) {
   const templates = MODULE_STATE_DESCRIPTIONS[cardId];
   if (!templates) return null;
   const status = moduleCardState?.status;
@@ -1192,6 +1216,6 @@ export function buildModuleStateDescription(cardId, moduleCardState) {
   const template = templates[status];
   if (!template) return null;
   return typeof template === 'function'
-    ? template(moduleCardState?.lastErrorMessage || null)
+    ? template(moduleCardState?.lastErrorMessage || null, context)
     : template;
 }
