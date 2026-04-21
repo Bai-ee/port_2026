@@ -2033,6 +2033,14 @@ const DashboardPage = () => {
   const handleModuleRun = useCallback(async (cardId, force = false, options = null) => {
     if (!user || moduleRunLoading[cardId]) return;
     setModuleRunLoading((prev) => ({ ...prev, [cardId]: true }));
+    // Kick an immediate bootstrap + short interval so the dashboard picks up the
+    // server's early writes (latestRunStatus='running', new runId). This flips
+    // showIntakeModal so the terminal UI surfaces mid-run instead of only after
+    // the fetch below resolves.
+    let pollHandle = null;
+    const kickBootstrap = () => { try { doBootstrap(); } catch {} };
+    setTimeout(kickBootstrap, 400);
+    pollHandle = setInterval(kickBootstrap, 2000);
     try {
       const token = await user.getIdToken();
       const body = { cardIds: [cardId], force };
@@ -2050,6 +2058,7 @@ const DashboardPage = () => {
     } catch {
       // non-fatal
     } finally {
+      if (pollHandle) clearInterval(pollHandle);
       setModuleRunLoading((prev) => ({ ...prev, [cardId]: false }));
     }
   }, [user, moduleRunLoading, doBootstrap]);
@@ -7594,7 +7603,10 @@ const dashboardCss = `
     transition: background 0.55s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.55s cubic-bezier(0.16, 1, 0.3, 1), color 0.55s cubic-bezier(0.16, 1, 0.3, 1);
   }
   .tile-view-details-btn:hover,
-  .tile:hover .tile-view-details-btn {
+  /* Card-level hover styles Details, but exclude the case where the cursor
+     is specifically on the Retry button so the retry hover doesn't bleed
+     into the Details button. */
+  .tile:hover:not(:has(.tile-foot-rerun-btn:hover)) .tile-view-details-btn {
     background: #2a2420;
     border-color: #2a2420;
     color: #fff;
