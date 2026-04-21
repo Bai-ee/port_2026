@@ -87,18 +87,16 @@ export async function POST(request) {
     if (!autoEnable) {
       return json({ error: `Module(s) not enabled: ${disabledCards.join(', ')}. Enable the module first.` }, 403);
     }
-    const patch = {};
+    // Use .update() so dot-path keys are interpreted as nested field paths.
+    // set({...}, { merge: true }) treats "a.b.c" as a literal top-level key.
+    const clientConfigPatch = { updatedAt: fb.FieldValue.serverTimestamp() };
+    const dashboardStatePatch = { updatedAt: fb.FieldValue.serverTimestamp() };
     for (const cardId of disabledCards) {
-      patch[`moduleConfig.${cardId}.enabled`] = true;
+      clientConfigPatch[`moduleConfig.${cardId}.enabled`] = true;
+      dashboardStatePatch[`modules.${cardId}.enabled`] = true;
     }
-    patch.updatedAt = fb.FieldValue.serverTimestamp();
-    await fb.adminDb.collection('client_configs').doc(clientId).set(patch, { merge: true });
-    await fb.adminDb.collection('dashboard_state').doc(clientId).set(
-      Object.fromEntries(
-        disabledCards.map((cardId) => [`modules.${cardId}.enabled`, true])
-      ),
-      { merge: true }
-    );
+    await fb.adminDb.collection('client_configs').doc(clientId).update(clientConfigPatch);
+    await fb.adminDb.collection('dashboard_state').doc(clientId).update(dashboardStatePatch);
   }
 
   // Filter out already-succeeded modules unless force=true

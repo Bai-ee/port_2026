@@ -725,7 +725,19 @@ function projectModuleResult(update, result) {
 
   if (result.cardId === 'seo-performance') {
     if (result.result?.pagespeed) {
-      deepSet(update, ['seoAudit'], result.result.pagespeed);
+      // result.result.pagespeed is a pagespeed-insights SourceRecord
+      // (status: 'live', facts: { scores, auditStatus: 'ok' }). The dashboard
+      // reads a flattened shape (status: 'ok', scores, coreWebVitals, …) so
+      // we must translate before writing — otherwise hasSeoAuditData stays
+      // false and the card renders 'Audit queued — results pending'.
+      const { psiSourceToDashboardSeoAudit } = require('./intelligence-bootstrap-utils.cjs');
+      const dashboardShape = psiSourceToDashboardSeoAudit(
+        result.result.pagespeed,
+        result.result.pagespeed?.facts?.websiteUrl || ''
+      );
+      if (dashboardShape) {
+        deepSet(update, ['seoAudit'], dashboardShape);
+      }
     }
     if (result.result?.aiSeoAudit) {
       deepSet(update, ['analyzerOutputs', 'seo-performance', 'skills', 'ai-seo-audit'], result.result.aiSeoAudit);
