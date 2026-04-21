@@ -5373,10 +5373,10 @@ const DashboardPage = () => {
                 <div className={`tile-intake-placeholder tile-intake-placeholder-${activeTileModal.cardId || 'draft-post'} tile-detail-bento-placeholder`}>
                 {activeTileModal.cardId === 'style-guide' ? (
                     <div className="sg-preview">
-                      {sgDisplayData?.confidence === 'low' ? (
+                      {!sgDisplayData || sgDisplayData?.confidence === 'low' ? (
                         <div className="sg-empty">
                           <span className="sg-empty-label">NO CSS EXTRACTED</span>
-                          <span className="sg-empty-msg">Site may be JS-rendered or stylesheet-free</span>
+                          <span className="sg-empty-msg">{!sgDisplayData ? 'Brand Snapshot has no data yet — run the intake pipeline or trigger a re-extraction.' : 'Site may be JS-rendered or stylesheet-free'}</span>
                         </div>
                       ) : (() => {
                         const sgHead = sgDisplayData.typography?.headingSystem;
