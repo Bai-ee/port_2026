@@ -723,6 +723,14 @@ function projectModuleResult(update, result) {
     return;
   }
 
+  if (result.cardId === 'style-guide') {
+    if (result.result?.styleGuide) {
+      // Brand Snapshot card reads snapshot.visualIdentity.styleGuide.
+      deepSet(update, ['snapshot', 'visualIdentity', 'styleGuide'], result.result.styleGuide);
+    }
+    return;
+  }
+
   if (result.cardId === 'seo-performance') {
     if (result.result?.pagespeed) {
       // result.result.pagespeed is a pagespeed-insights SourceRecord

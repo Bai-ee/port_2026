@@ -29,6 +29,15 @@ const REGISTRY = {
     cacheOnSuccess: true,
     retryOnFailure: true,
   },
+  'style-guide': {
+    cardId: 'style-guide',
+    label: 'Brand Snapshot',
+    category: 'onboarding',
+    dependencies: ['site-fetch', 'design-system-extractor', 'style-guide-synthesizer'],
+    tech: ['html-fetch', 'css-parser', 'anthropic'],
+    cacheOnSuccess: true,
+    retryOnFailure: true,
+  },
 };
 
 function getModuleDefinition(cardId) {

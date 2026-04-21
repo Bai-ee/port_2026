@@ -3213,6 +3213,7 @@ const DashboardPage = () => {
       ],
       footerLeft: hasStyleGuideData ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
+      moduleControls: { tech: ['html-fetch', 'css-parser', 'anthropic'] },
     },
     {
       id: 'industry',
@@ -4087,15 +4088,22 @@ const DashboardPage = () => {
         }
         return { tone: 'partial', label: 'Partial' };
       }
-      if (card.id === 'style-guide' && built?.dominantSignal?.readiness) {
-        return {
-          tone: built.dominantSignal.readiness,
-          label: built.dominantSignal.readiness === 'critical'
-            ? 'System thin'
-            : built.dominantSignal.readiness === 'partial'
-              ? 'System partial'
-              : 'System ready',
-        };
+      if (card.id === 'style-guide') {
+        // After a modular run, derive pass state from the actual style-guide
+        // data presence. Fall back to analyzer signal when no data yet.
+        if (hasStyleGuideData) {
+          return { tone: 'ok', label: 'Passed' };
+        }
+        if (built?.dominantSignal?.readiness) {
+          return {
+            tone: built.dominantSignal.readiness,
+            label: built.dominantSignal.readiness === 'critical'
+              ? 'System thin'
+              : built.dominantSignal.readiness === 'partial'
+                ? 'System partial'
+                : 'System ready',
+          };
+        }
       }
       if (card.id === 'industry' && built?.dominantSignal?.readiness) {
         return {
@@ -4510,6 +4518,11 @@ const DashboardPage = () => {
                   // Brand Snapshot appears even if PSI was flaky.
                   const s = moduleState?.[cardId]?.status;
                   return s === 'succeeded' || s === 'failed' || s === 'partial';
+                }
+                if (cardId === 'style-guide') {
+                  // Strict: a future chain card needs the actual styleGuide
+                  // payload before it unlocks.
+                  return Boolean(dashboardState?.snapshot?.visualIdentity?.styleGuide);
                 }
                 return false;
               };
