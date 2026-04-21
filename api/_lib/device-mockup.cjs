@@ -7,10 +7,25 @@ const sharp = require('sharp');
 const { downloadArtifactToFile, saveBufferArtifact } = require('./storage-artifacts.cjs');
 
 const TEMPLATE_PUBLIC_PATH = '/img/device_template.png';
+const LOCAL_TEMPLATE_PATH = path.join(process.cwd(), 'public', 'img', 'device_template.png');
 let templateBufferCache = null;
 
 async function loadTemplateBuffer() {
   if (templateBufferCache) return templateBufferCache;
+
+  // Local dev: read straight from disk. process.cwd() points at the project
+  // root where public/ lives, so the file resolves without needing a host URL.
+  if (!process.env.VERCEL) {
+    try {
+      const buf = await fs.readFile(LOCAL_TEMPLATE_PATH);
+      templateBufferCache = buf;
+      return templateBufferCache;
+    } catch (err) {
+      // Fall through to HTTP fetch if the file is missing locally (unlikely
+      // but keeps behavior identical to prod as a last resort).
+    }
+  }
+
   const host =
     process.env.NEXT_PUBLIC_SITE_URL ||
     process.env.VERCEL_PROJECT_PRODUCTION_URL ||
