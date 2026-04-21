@@ -2040,7 +2040,7 @@ const DashboardPage = () => {
     }
   }, [user, moduleToggleLoading, doBootstrap]);
 
-  const handleModuleRun = useCallback(async (cardId, force = false, options = null) => {
+  const handleModuleRun = useCallback(async (cardId, force = false, options = null, autoEnable = false) => {
     if (!user || moduleRunLoading[cardId]) return;
     setModuleRunLoading((prev) => ({ ...prev, [cardId]: true }));
     // Kick an immediate bootstrap + short interval so the dashboard picks up the
@@ -2057,6 +2057,7 @@ const DashboardPage = () => {
       if (options && typeof options === 'object') {
         body.moduleOptions = { [cardId]: options };
       }
+      if (autoEnable) body.autoEnable = true;
       const res = await fetch('/api/dashboard/modules/run', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -4848,7 +4849,12 @@ const DashboardPage = () => {
                           onClick={(e) => {
                             e.stopPropagation();
                             if (!interactive) return;
-                            if (mIsInactive) { handleModuleToggle(card.id, true); return; }
+                            if (mIsInactive) {
+                              // First-run: single call with autoEnable so the
+                              // server flips enabled=true and runs in one shot.
+                              handleModuleRun(card.id, false, null, true);
+                              return;
+                            }
                             const retryOptions = mdMockupOnlyRetry
                               ? { skipScreenshots: true }
                               : mdFullPagesOnlyRetry

@@ -53,12 +53,13 @@ export async function POST(request) {
   const clientId = userSnap.data()?.clientId || null;
   if (!clientId) return json({ error: 'No clientId on user record.' }, 404);
 
-  let cardIds, force, moduleOptions;
+  let cardIds, force, moduleOptions, autoEnable;
   try {
     const body = await request.json();
     cardIds = Array.isArray(body.cardIds) ? body.cardIds : [];
     force = Boolean(body.force);
     moduleOptions = body.moduleOptions && typeof body.moduleOptions === 'object' ? body.moduleOptions : {};
+    autoEnable = Boolean(body.autoEnable);
   } catch {
     return json({ error: 'Invalid JSON body.' }, 400);
   }
@@ -74,13 +75,30 @@ export async function POST(request) {
   if (!websiteUrl) return json({ error: 'No websiteUrl in client config.' }, 400);
 
   // P2: enforce moduleConfig.enabled server-side — reject disabled cards
+  // unless autoEnable=true, in which case we flip them on in-place before
+  // running. This lets first-run cards (Social Preview RUN click, etc.) use
+  // the same single-call path as reruns.
   const moduleConfig = configData?.moduleConfig || null;
   const disabledCards = cardIds.filter((cardId) => {
-    if (!moduleConfig) return false; // legacy client with no config — allow
+    if (!moduleConfig) return false;
     return moduleConfig[cardId]?.enabled !== true;
   });
   if (disabledCards.length > 0) {
-    return json({ error: `Module(s) not enabled: ${disabledCards.join(', ')}. Enable the module first.` }, 403);
+    if (!autoEnable) {
+      return json({ error: `Module(s) not enabled: ${disabledCards.join(', ')}. Enable the module first.` }, 403);
+    }
+    const patch = {};
+    for (const cardId of disabledCards) {
+      patch[`moduleConfig.${cardId}.enabled`] = true;
+    }
+    patch.updatedAt = fb.FieldValue.serverTimestamp();
+    await fb.adminDb.collection('client_configs').doc(clientId).set(patch, { merge: true });
+    await fb.adminDb.collection('dashboard_state').doc(clientId).set(
+      Object.fromEntries(
+        disabledCards.map((cardId) => [`modules.${cardId}.enabled`, true])
+      ),
+      { merge: true }
+    );
   }
 
   // Filter out already-succeeded modules unless force=true
