@@ -9538,11 +9538,30 @@ const dashboardCss = `
   }
   @media (max-width: 520px) {
     #capability-grid { grid-template-columns: 1fr; grid-auto-rows: auto; }
-    .tile-intake-card { height: auto; min-height: unset; padding: 8px 10px; gap: 6px; }
-    .tile-intake-placeholder { aspect-ratio: auto !important; flex: 1; min-height: 0; max-height: 160px; overflow: hidden; }
-    .tile-intake-placeholder-audit-summary { max-height: none; flex: none; min-height: 180px; }
-    .tile-intake-source-line { display: none; }
-    .tile-intake-description { font-size: 10px; line-height: 1.3; -webkit-line-clamp: 2; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
+    .tile-intake-card { height: auto; min-height: unset; padding: 12px 14px; gap: 10px; }
+    /* Preserve the desktop shell aspect ratio on mobile — never shrink the
+       shell's height relative to its width. Remove the prior max-height cap
+       and the aspect-ratio: auto override that squashed the card on phones. */
+    .tile-intake-placeholder {
+      aspect-ratio: inherit;
+      flex: none;
+      min-height: 0;
+      max-height: none;
+      overflow: hidden;
+    }
+    .tile-intake-placeholder-audit-summary { flex: none; min-height: 220px; }
+    /* Keep the full copy at a readable size — no line-clamp, no hidden
+       source/timestamp line. */
+    .tile-intake-source-line { display: inline-block; font-size: 11px; }
+    .tile-intake-description {
+      font-size: 13px;
+      line-height: 1.45;
+      -webkit-line-clamp: unset;
+      display: block;
+      -webkit-box-orient: unset;
+      overflow: visible;
+    }
+    .tile-intake-heading { font-size: 16px; line-height: 1.25; }
   }
   @media (max-width: 620px) {
     #founders-shell { padding-top: 96px; }
