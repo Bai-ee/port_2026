@@ -4422,6 +4422,17 @@ const DashboardPage = () => {
               // card in the chain to have passed. Cards not in the chain stay
               // locked until they're added here.
               const CARD_UNLOCK_CHAIN = ['multi-device-view', 'social-preview'];
+              const INACTIVE_CARD_DESCRIPTIONS = {
+                'multi-device-view':   'Run this to capture your site on desktop, tablet, and mobile, composite a single device-frame mockup, and collect full-page screenshots per device.',
+                'social-preview':      'Run this to pull your og:*, twitter:*, and favicon metadata and generate a preview of exactly how your site appears when shared — plus a flag list for any missing tags.',
+                'style-guide':         'Run this to extract colors, typography, and logo usage from the live site and render a compact style guide for the brand layer of your dashboard.',
+                'seo-performance':     'Run this to score your site in PageSpeed Insights and run a structured SEO scan — speed, metadata, and structural issues summarized in one view.',
+                'business-model':      'Run this to synthesize what your business does, who it serves, and how it makes money — drawn from site evidence, not guesswork.',
+                'industry':            'Run this to classify your industry and positioning so the dashboard can benchmark you against the right peers.',
+                'visibility-snapshot': 'Run this to probe how your site surfaces in AI search — citations, answers, and competitor coverage — in a single readout.',
+                'audit-summary':       'Run this to aggregate every baseline check into a single go / no-go foundation score for your dashboard.',
+                'priority-signal':     'Run this to pick the single highest-leverage action for your site right now, with the evidence behind it.',
+              };
               const LOCKED_CARD_DESCRIPTIONS = {
                 'multi-device-view':   'Captures your site on desktop, tablet, and mobile, composites them into a single device-frame mockup, and provides full-page screenshots you can browse per device.',
                 'social-preview':      'Reads your og:*, twitter:*, and favicon metadata and shows exactly how your site appears when shared on social platforms. Flags missing images, titles, and descriptions.',
@@ -4661,6 +4672,10 @@ const DashboardPage = () => {
                       <span className="tile-readiness-tag readiness-locked">
                         STATUS: LOCKED
                       </span>
+                    ) : isInactiveUnlocked ? (
+                      <span className="tile-readiness-tag readiness-run-modal">
+                        STATUS: RUN MODAL
+                      </span>
                     ) : card.readinessBadge && (
                       <span className={`tile-readiness-tag readiness-${card.readinessBadge.tone}`}>
                         STATUS: {card.readinessBadge.label}
@@ -4669,10 +4684,12 @@ const DashboardPage = () => {
                     {' '}
                     {isLocked
                       ? (LOCKED_CARD_DESCRIPTIONS[card.id] || 'This card will unlock after the previous steps are complete.')
-                      : (card.dynamicShortDescription || card.scribeShort || card.description)}
+                      : isInactiveUnlocked
+                        ? (INACTIVE_CARD_DESCRIPTIONS[card.id] || 'Run this module to populate this card.')
+                        : (card.dynamicShortDescription || card.scribeShort || card.description)}
                   </p>
                 </div>
-                {card.moduleControls && !isLocked && (
+                {card.moduleControls && !isLocked && !isInactiveUnlocked && (
                   <ModuleCardControls
                     cardId={card.id}
                     moduleState={moduleState}
@@ -4703,6 +4720,14 @@ const DashboardPage = () => {
                           <>
                             <span style={{ width: 6, height: 6, borderRadius: '50%', display: 'inline-block', background: '#6b7280', flexShrink: 0 }} />
                             Locked
+                          </>
+                        );
+                      }
+                      if (isInactiveUnlocked) {
+                        return (
+                          <>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', display: 'inline-block', background: '#6b7280', flexShrink: 0 }} />
+                            RUN MODAL
                           </>
                         );
                       }
@@ -4804,7 +4829,7 @@ const DashboardPage = () => {
                       const mIsInactive = !mEnabled && !mIsRerun && !mBusy && !mdArtifactsMissing;
                       const interactive =
                         !mBusy && (mIsInactive || (mEnabled && (mIsRetry || tierAllowsRerun)));
-                      const label = mLoading ? '…' : mIsRetry ? 'Retry' : mIsRerun ? 'Re-run' : 'Run';
+                      const label = mLoading ? '…' : mIsRetry ? 'Retry' : mIsRerun ? 'Re-run' : mIsInactive ? 'RUN MODAL' : 'Run';
                       return (
                         <button
                           type="button"
@@ -4827,11 +4852,18 @@ const DashboardPage = () => {
                         </button>
                       );
                     })()}
-                    {!isLocked && !(card.moduleControls && !(moduleConfig ? (moduleConfig[card.id]?.enabled ?? false) : true) && (moduleState?.[card.id]?.status ?? 'inactive') === 'inactive') && (
+                    {!isLocked && (
                       <button
                         type="button"
-                        className="tile-view-details-btn"
-                        onClick={(e) => { e.stopPropagation(); setActiveTileModal({ title: card.title, description: card.description, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null, recommendation: card.recommendation || null, analyzer: card.analyzer || null, readinessBadge: card.readinessBadge || null }); }}
+                        className={`tile-view-details-btn${isInactiveUnlocked ? ' tile-view-details-btn--disabled' : ''}`}
+                        disabled={isInactiveUnlocked}
+                        aria-disabled={isInactiveUnlocked}
+                        title={isInactiveUnlocked ? 'Run this module first to enable Details.' : undefined}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isInactiveUnlocked) return;
+                          setActiveTileModal({ title: card.title, description: card.description, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null, recommendation: card.recommendation || null, analyzer: card.analyzer || null, readinessBadge: card.readinessBadge || null });
+                        }}
                       >
                           Details ↗
                       </button>
@@ -7609,10 +7641,20 @@ const dashboardCss = `
     background: rgba(34, 197, 94, 0.18);
     color: hsl(142, 72%, 29%);
   }
-  .tile-readiness-tag.readiness-locked {
+  .tile-readiness-tag.readiness-locked,
+  .tile-readiness-tag.readiness-run-modal {
     background: rgba(107, 114, 128, 0.18);
     color: rgba(55, 65, 81, 0.95);
     letter-spacing: 0.1em;
+  }
+  .tile-view-details-btn.tile-view-details-btn--disabled,
+  .tile-view-details-btn[disabled] {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+    background: #fff;
+    border-color: rgba(0, 0, 0, 0.4);
+    color: rgba(0, 0, 0, 0.55);
   }
   .tile-intake-table-wrap {
     margin-top: 2px;
