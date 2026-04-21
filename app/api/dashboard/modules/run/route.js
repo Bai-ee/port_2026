@@ -178,9 +178,22 @@ export async function POST(request) {
     moduleOptionsById[mid] = opts;
   }
 
+  // Stream in-module progress events into brief_runs/{runId}/events so the
+  // dashboard terminal shows each stage (fetch, capture, compose, normalize)
+  // instead of only the start + completion markers appended from this route.
+  const onProgress = async (stage, label, extra = {}) => {
+    try {
+      await appendRunEvent(runId, clientId, {
+        stage: stage || 'progress',
+        progressLabel: label || '',
+        ...(extra || {}),
+      });
+    } catch { /* non-fatal */ }
+  };
+
   let results;
   try {
-    ({ results } = await runModules({ clientId, runId, websiteUrl, moduleIds, moduleOptionsById }));
+    ({ results } = await runModules({ clientId, runId, websiteUrl, moduleIds, moduleOptionsById, onProgress }));
   } catch (err) {
     const runErr = new Error(err.message || 'Module execution threw.');
     runErr.stage = 'module';

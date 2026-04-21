@@ -38,9 +38,23 @@ async function runMultiDeviceView({
     });
     if (mockupResult.ok && mockupResult.artifactRef) {
       artifactRefs.push(mockupResult.artifactRef);
+      await emit('compose', 'Device mockup generated.');
     } else if (mockupResult.warning) {
       warningCodes.push(mockupResult.warning.code);
       warnings.push(mockupResult.warning);
+      // Mockup rebuild is the sole purpose of this path — report failure so the
+      // terminal and module status reflect that nothing new was produced.
+      await emit('error', `Mockup rebuild failed: ${mockupResult.warning.message || mockupResult.warning.code}`);
+      return {
+        ok: false,
+        cardId: CARD_ID,
+        status: 'failed',
+        errorCode: mockupResult.warning.code || 'mockup_generation_failed',
+        errorMessage: mockupResult.warning.message || 'Mockup rebuild failed.',
+        warningCodes,
+        warnings,
+        artifacts: reuseRefs,
+      };
     }
 
     const mockupArtifact = artifactRefs.find((a) => a?.type === 'website_homepage_device_mockup') || null;
