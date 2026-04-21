@@ -13,6 +13,7 @@ import {
   House,
   ChartColumnIncreasing,
   LaptopMinimalCheck,
+  Lock,
   MessageSquareMore,
   Pencil,
   Search,
@@ -4415,27 +4416,64 @@ const DashboardPage = () => {
                 )}
               </div>
             ) : null}
-            {activeCapabilityFilter && activeCapabilityFilter !== 'brief' && intakeCapabilityCards.filter((card) => {
-              if (activeCapabilityFilter === 'onboarding') {
-                if (!ONBOARDING_CARD_IDS.has(card.id)) return false;
-                // Show every onboarding card regardless of enabled/run state.
-                // Inactive cards render as INACTIVE with a RUN action in the footer.
-                return true;
-              }
-              return activeCapabilityFilter === card.category;
-            }).map((card) => {
+            {(() => {
+              // Ordered unlock chain for the onboarding section. Index 0 is
+              // always unlocked; every card after it requires the previous
+              // card in the chain to have passed. Cards not in the chain stay
+              // locked until they're added here.
+              const CARD_UNLOCK_CHAIN = ['multi-device-view', 'social-preview'];
+              const hasCardPassed = (cardId) => {
+                if (cardId === 'multi-device-view') {
+                  const mockup = Boolean(dashboardState?.artifacts?.homepageDeviceMockup?.downloadUrl);
+                  const fp = dashboardState?.artifacts?.fullPageScreenshots || {};
+                  const full = Boolean(fp['desktop-full']?.downloadUrl || fp['tablet-full']?.downloadUrl || fp['mobile-full']?.downloadUrl);
+                  return mockup && full;
+                }
+                if (cardId === 'social-preview') {
+                  return moduleState?.[cardId]?.status === 'succeeded';
+                }
+                return false;
+              };
+              const isCardLocked = (cardId) => {
+                const idx = CARD_UNLOCK_CHAIN.indexOf(cardId);
+                if (idx === -1) return true; // Not yet in the chain → locked.
+                if (idx === 0) return false;
+                // Unlocked iff every prior card in the chain has passed.
+                for (let i = 0; i < idx; i += 1) {
+                  if (!hasCardPassed(CARD_UNLOCK_CHAIN[i])) return true;
+                }
+                return false;
+              };
+              const chainSortKey = (cardId) => {
+                const idx = CARD_UNLOCK_CHAIN.indexOf(cardId);
+                return idx === -1 ? 999 + cardId.charCodeAt(0) : idx;
+              };
+              return activeCapabilityFilter && activeCapabilityFilter !== 'brief' && intakeCapabilityCards
+                .filter((card) => {
+                  if (activeCapabilityFilter === 'onboarding') {
+                    if (!ONBOARDING_CARD_IDS.has(card.id)) return false;
+                    return true;
+                  }
+                  return activeCapabilityFilter === card.category;
+                })
+                .sort((a, b) => {
+                  if (activeCapabilityFilter !== 'onboarding') return 0;
+                  return chainSortKey(a.id) - chainSortKey(b.id);
+                })
+                .map((card) => {
               const _mEnabled = moduleConfig ? (moduleConfig[card.id]?.enabled ?? false) : true;
               const _mStatus = moduleState?.[card.id]?.status ?? 'inactive';
               const hasBothButtons = Boolean(card.moduleControls) && !(!_mEnabled && _mStatus === 'inactive');
               const isDimmed = isModularOnboardingClient && card.id !== 'audit-summary' && card.id !== 'multi-device-view';
+              const isLocked = activeCapabilityFilter === 'onboarding' && isCardLocked(card.id);
               return (
               <article
                 data-capability-card
                 data-flip-id={`cap-${card.id}`}
-                className={`tile tile-intake-card${hasIntakeData ? ' tile-ready' : ''}${card.wide ? ' tile-intake-card--wide' : ''}${hasBothButtons ? ' tile-intake-card--btns-only' : ''}${isDimmed ? ' tile-intake-card--dimmed' : ''}`}
+                className={`tile tile-intake-card${hasIntakeData ? ' tile-ready' : ''}${card.wide ? ' tile-intake-card--wide' : ''}${hasBothButtons && !isLocked ? ' tile-intake-card--btns-only' : ''}${isDimmed && !isLocked ? ' tile-intake-card--dimmed' : ''}${isLocked ? ' tile-intake-card--locked' : ''}`}
                 id={card.domId || `tile-${card.id}`}
                 key={card.id}
-                onClick={hasBothButtons ? undefined : () => {
+                onClick={isLocked ? undefined : (hasBothButtons ? undefined : () => {
                   if (card.id === 'brief' && briefPreviewHtml) { setBriefFullScreen(true); return; }
                   if (card.id === 'audit-summary') { setAuditFullScreen(true); return; }
                   setActiveTileModal({ title: card.title, description: card.description, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null, recommendation: card.recommendation || null, analyzer: card.analyzer || null, readinessBadge: card.readinessBadge || null });
@@ -4444,6 +4482,14 @@ const DashboardPage = () => {
                 <div className="tile-number">
                   <span className="tile-header-label">{card.label}</span>
                 </div>
+                {isLocked ? (
+                  <div
+                    className={`tile-intake-placeholder tile-intake-placeholder-${card.id} tile-intake-placeholder--locked`}
+                    aria-label="Locked card"
+                  >
+                    <Lock size={72} strokeWidth={1.25} className="tile-intake-lock-icon" aria-hidden="true" />
+                  </div>
+                ) : (
                 <div
                   className={`tile-intake-placeholder tile-intake-placeholder-${card.id}`}
                   style={card.id === 'multi-device-view' && sgDisplayData?.colors?.primary?.hex
@@ -4574,6 +4620,7 @@ const DashboardPage = () => {
                     <span className="tile-empty-label">{card.placeholderLabel}</span>
                   )}
                 </div>
+                )}
                 <div className="tile-intake-body">
                   <h3 className="tile-heading tile-intake-heading">{card.title}</h3>
                   {card.category !== 'services' && (
@@ -4599,7 +4646,7 @@ const DashboardPage = () => {
                     {card.dynamicShortDescription || card.scribeShort || card.description}
                   </p>
                 </div>
-                {card.moduleControls && (
+                {card.moduleControls && !isLocked && (
                   <ModuleCardControls
                     cardId={card.id}
                     moduleState={moduleState}
@@ -4625,6 +4672,14 @@ const DashboardPage = () => {
                         disabled:  { dot: '#6b7280', label: 'Inactive', glow: 'none' },
                         inactive:  { dot: '#6b7280', label: 'Inactive', glow: 'none' },
                       };
+                      if (isLocked) {
+                        return (
+                          <>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', display: 'inline-block', background: '#6b7280', flexShrink: 0 }} />
+                            Locked
+                          </>
+                        );
+                      }
                       if (card.moduleControls) {
                         let s = moduleState?.[card.id]?.status ?? 'inactive';
                         // multi-device-view: treat succeeded-but-partial (or missing both)
@@ -4672,6 +4727,7 @@ const DashboardPage = () => {
                       </a>
                     )}
                     {(() => {
+                      if (isLocked) return null;
                       if (!card.moduleControls) {
                         if (!card.footerAction) return null;
                         return (
@@ -4745,7 +4801,7 @@ const DashboardPage = () => {
                         </button>
                       );
                     })()}
-                    {!(card.moduleControls && !(moduleConfig ? (moduleConfig[card.id]?.enabled ?? false) : true) && (moduleState?.[card.id]?.status ?? 'inactive') === 'inactive') && (
+                    {!isLocked && !(card.moduleControls && !(moduleConfig ? (moduleConfig[card.id]?.enabled ?? false) : true) && (moduleState?.[card.id]?.status ?? 'inactive') === 'inactive') && (
                       <button
                         type="button"
                         className="tile-view-details-btn"
@@ -4758,7 +4814,8 @@ const DashboardPage = () => {
                 </div>
               </article>
               );
-            })}
+            });
+            })()}
           </div>
           </div>{/* end capability-grid-col */}
 
@@ -7627,6 +7684,28 @@ const dashboardCss = `
     border-color: #2a2420;
     color: #fff;
     transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+  /* Locked cards — dark shell + large centered lock icon, no interactions */
+  .tile.tile-intake-card--locked {
+    background: #0b0906;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+  .tile.tile-intake-card--locked .tile-intake-body,
+  .tile.tile-intake-card--locked .tile-foot,
+  .tile.tile-intake-card--locked .tile-number { opacity: 0.55; }
+  .tile-intake-placeholder--locked {
+    background: #000 !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    min-height: 180px;
+    color: rgba(231, 217, 195, 0.55);
+  }
+  .tile-intake-lock-icon {
+    color: rgba(231, 217, 195, 0.55);
   }
   /* New-user dimmed cards: 60% opacity, full on hover */
   .tile.tile-intake-card--dimmed {
