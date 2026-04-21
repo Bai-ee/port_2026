@@ -1725,20 +1725,16 @@ const DashboardPage = () => {
     }
   }, [surveyResolved, latestRunStatus, completionCountdown]);
 
-  // Resolve the initial capability filter synchronously once bootstrap lands.
-  // useLayoutEffect so the filter is set before the browser paints — eliminates
-  // the flash from default 'brief' → corrected 'onboarding' on modular clients.
-  // Only fires while the filter is still null; user nav overrides afterward.
-  // Modular clients always land on 'onboarding' (Data Visualization) regardless
-  // of hasIntakeData — the brief view hangs mid-load until every onboarding
-  // card has been run, so default routing to the brief tab on a fresh dashboard
-  // traps the user in a loading state.
+  // Always land on Data Visualization on first paint. The brief tab hangs
+  // until every onboarding card has been run, so defaulting there traps the
+  // user in a loading state. User nav clicks still switch to 'brief' on
+  // demand. useLayoutEffect so the value is set before the browser paints —
+  // no flash from the null initial state.
   useLayoutEffect(() => {
     if (bootstrapLoading) return;
     if (activeCapabilityFilter !== null) return;
-    const next = Boolean(moduleConfig) ? 'onboarding' : 'brief';
-    setActiveCapabilityFilter(next);
-  }, [bootstrapLoading, moduleConfig, activeCapabilityFilter]);
+    setActiveCapabilityFilter('onboarding');
+  }, [bootstrapLoading, activeCapabilityFilter]);
 
   // When a new brief_run starts (run ID changes from a prior non-null value),
   // reset survey resolution so the bento survey reappears alongside the fresh
