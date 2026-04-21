@@ -150,25 +150,27 @@ function buildDashboardProjection(clientId, pipelineResult, runId) {
     errorState: null,
   };
 
+  // Only emit artifact sub-keys when the current run actually produced content
+  // for them. Setting an empty map would overwrite existing values on merge
+  // (e.g. a mockup-only retry would wipe previously-stored full-page refs).
   if (homepageScreenshot) {
-    // Viewport screenshots (desktop/mobile/tablet) — used for mockup composite
-    const viewportScreenshots = homepageScreenshots.filter((a) => a?.variant && !a.variant.endsWith('-full'));
-    // Full-page screenshots (desktop-full/mobile-full/tablet-full) — used in Multi-Device View tabs
-    const fullPageScreenshots = homepageScreenshots.filter((a) => a?.variant && a.variant.endsWith('-full'));
-
-    base.artifacts = {
-      homepageScreenshot,
-      homepageScreenshots: Object.fromEntries(
-        viewportScreenshots
-          .filter((artifact) => artifact?.variant)
-          .map((artifact) => [artifact.variant, artifact])
-      ),
-      fullPageScreenshots: Object.fromEntries(
-        fullPageScreenshots
-          .filter((artifact) => artifact?.variant)
-          .map((artifact) => [artifact.variant, artifact])
-      ),
-    };
+    base.artifacts = { ...(base.artifacts || {}), homepageScreenshot };
+  }
+  if (homepageScreenshots.length > 0) {
+    const viewport = homepageScreenshots.filter((a) => a?.variant && !a.variant.endsWith('-full'));
+    const fullPage = homepageScreenshots.filter((a) => a?.variant && a.variant.endsWith('-full'));
+    if (viewport.length > 0) {
+      base.artifacts = {
+        ...(base.artifacts || {}),
+        homepageScreenshots: Object.fromEntries(viewport.map((a) => [a.variant, a])),
+      };
+    }
+    if (fullPage.length > 0) {
+      base.artifacts = {
+        ...(base.artifacts || {}),
+        fullPageScreenshots: Object.fromEntries(fullPage.map((a) => [a.variant, a])),
+      };
+    }
   }
   if (homepageDeviceMockup) {
     base.artifacts = {

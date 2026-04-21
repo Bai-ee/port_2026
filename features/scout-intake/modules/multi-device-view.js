@@ -13,6 +13,7 @@ async function runMultiDeviceView({
   onProgress = null,
   skipScreenshots = false,
   existingScreenshotRefs = null,
+  fullPagesOnly = false,
 }) {
   const warningCodes = [];
   const warnings = [];
@@ -21,6 +22,67 @@ async function runMultiDeviceView({
     if (!onProgress) return;
     try { await onProgress(stage, label, { moduleId: CARD_ID, ...extra }); } catch {}
   };
+
+  // Full-pages-only retry path: skip site-fetch + viewport capture + mockup
+  // composition. Only captures the three full-page screenshots. Preserves the
+  // existing mockup and viewport screenshots in dashboard_state.
+  if (fullPagesOnly) {
+    await emit('capture', 'Capture full-page screenshots only — preserving existing mockup…');
+    const fpResult = await runScreenshots({
+      clientId,
+      runId,
+      websiteUrl,
+      fullPageOnly: true,
+      onVariantProgress: async ({ phase, variant }) => {
+        if (!variant?.label) return;
+        if (phase === 'start') {
+          await emit('capture', `Capture ${variant.label.toLowerCase()}…`);
+        } else if (phase === 'stored') {
+          await emit('capture', `${variant.label} captured.`);
+        }
+      },
+    });
+    if (fpResult.ok) {
+      artifactRefs.push(...fpResult.artifactRefs);
+      for (const w of fpResult.warnings || []) {
+        warningCodes.push(w.code);
+        warnings.push(w);
+      }
+    } else {
+      const warning = fpResult.warning || { type: 'warning', code: 'full_page_capture_failed', message: 'Full-page capture failed.', stage: 'capture' };
+      warningCodes.push(warning.code);
+      warnings.push(warning);
+      await emit('error', `Full-page capture failed: ${warning.message || warning.code}`);
+      return {
+        ok: false,
+        cardId: CARD_ID,
+        status: 'failed',
+        errorCode: warning.code,
+        errorMessage: warning.message || 'Full-page capture failed.',
+        warningCodes,
+        warnings,
+        artifacts: [],
+      };
+    }
+
+    await emit('normalize', 'Write full-page captures…');
+    return {
+      ok: true,
+      cardId: CARD_ID,
+      status: 'succeeded',
+      warningCodes,
+      warnings,
+      artifacts: artifactRefs,
+      result: {
+        // Intentionally null — this path doesn't produce new viewport or mockup
+        // artifacts; run-lifecycle preserves existing ones.
+        mockupUrl:  null,
+        desktopUrl: null,
+        tabletUrl:  null,
+        mobileUrl:  null,
+      },
+    };
+  }
 
   // Mockup-only retry path: skip site-fetch + browserless capture entirely and
   // feed the existing viewport screenshot refs straight to the mockup composer.

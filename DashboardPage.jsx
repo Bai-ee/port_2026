@@ -4691,6 +4691,7 @@ const DashboardPage = () => {
                       // reports 'succeeded' at the module level.
                       let mdArtifactsMissing = false;
                       let mdMockupOnlyRetry = false;
+                      let mdFullPagesOnlyRetry = false;
                       if (card.id === 'multi-device-view' && mStatus === 'succeeded') {
                         const hasMockup = Boolean(dashboardState?.artifacts?.homepageDeviceMockup?.downloadUrl);
                         const fp = dashboardState?.artifacts?.fullPageScreenshots || {};
@@ -4703,8 +4704,12 @@ const DashboardPage = () => {
                         );
                         mdArtifactsMissing = !hasMockup || !hasFullPages;
                         // Mockup missing but viewport screenshots are already stored →
-                        // retry should skip browserless and only rebuild the mockup.
+                        // retry should skip browserless capture and only rebuild the mockup.
                         mdMockupOnlyRetry = !hasMockup && hasViewportScreenshots;
+                        // Mockup present but full-page screenshots are missing →
+                        // retry should only re-capture full-page screenshots and
+                        // preserve the existing mockup + viewport artifacts.
+                        mdFullPagesOnlyRetry = hasMockup && !hasFullPages;
                       }
                       const mIsRetry = mStatus === 'failed' || mdArtifactsMissing;
                       const mIsRerun = mStatus === 'succeeded' && !mdArtifactsMissing;
@@ -4723,7 +4728,11 @@ const DashboardPage = () => {
                             e.stopPropagation();
                             if (!interactive) return;
                             if (mIsInactive) { handleModuleToggle(card.id, true); return; }
-                            const retryOptions = mdMockupOnlyRetry ? { skipScreenshots: true } : null;
+                            const retryOptions = mdMockupOnlyRetry
+                              ? { skipScreenshots: true }
+                              : mdFullPagesOnlyRetry
+                              ? { fullPagesOnly: true }
+                              : null;
                             handleModuleRun(card.id, mIsRerun || mdArtifactsMissing, retryOptions);
                           }}
                         >

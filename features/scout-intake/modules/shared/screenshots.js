@@ -3,6 +3,7 @@
 const {
   persistWebsiteScreenshotArtifact,
   VIEWPORT_SCREENSHOT_VARIANTS,
+  FULL_PAGE_SCREENSHOT_VARIANTS,
 } = require('../../../../api/_lib/browserless.cjs');
 
 async function runScreenshots({
@@ -10,16 +11,20 @@ async function runScreenshots({
   runId,
   websiteUrl,
   includeFullPage = true,
+  fullPageOnly = false,
   includeBuffers = false,
   includeBufferVariants = null,
   onVariantProgress = null,
 }) {
+  const variants = fullPageOnly
+    ? FULL_PAGE_SCREENSHOT_VARIANTS
+    : includeFullPage ? undefined : VIEWPORT_SCREENSHOT_VARIANTS;
   try {
     const result = await persistWebsiteScreenshotArtifact({
       clientId,
       runId,
       websiteUrl,
-      variants: includeFullPage ? undefined : VIEWPORT_SCREENSHOT_VARIANTS,
+      variants,
       includeBuffers,
       includeBufferVariants,
       onVariantProgress,

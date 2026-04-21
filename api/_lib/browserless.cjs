@@ -104,6 +104,7 @@ const SCREENSHOT_VARIANTS = [
   },
 ];
 const VIEWPORT_SCREENSHOT_VARIANTS = SCREENSHOT_VARIANTS.filter((variant) => !variant.fullPage);
+const FULL_PAGE_SCREENSHOT_VARIANTS = SCREENSHOT_VARIANTS.filter((variant) => variant.fullPage);
 
 function readOptionalEnvInt(name, fallback) {
   const raw = process.env[name];
@@ -667,6 +668,7 @@ module.exports = {
   getBrowserlessConfig,
   SCREENSHOT_VARIANTS,
   VIEWPORT_SCREENSHOT_VARIANTS,
+  FULL_PAGE_SCREENSHOT_VARIANTS,
   persistWebsiteScreenshotArtifact,
   persistBriefPdfArtifact,
 };
