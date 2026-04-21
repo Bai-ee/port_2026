@@ -5421,83 +5421,74 @@ const DashboardPage = () => {
                           <span className="sg-empty-msg">{!sgDisplayData ? 'Brand Snapshot has no data yet — run the intake pipeline or trigger a re-extraction.' : 'Site may be JS-rendered or stylesheet-free'}</span>
                         </div>
                       ) : (() => {
+                        // Mirror the dashboard card shell exactly — same four
+                        // quadrants (BRAND MARK / COLOR / TYPE / GRADIENT) so
+                        // the modal reads as a zoomed-in version of the card.
                         const sgHead = sgDisplayData.typography?.headingSystem;
                         const sgBody = sgDisplayData.typography?.bodySystem;
                         const headName = sanitizeStylePreviewLabel(
-                          sgHead?.fontFamily?.split(',')[0].replace(/["']/g, '').trim() || 'Heading'
-                        ) || 'Heading';
-                        const LEVELS = ['none', 'minimal', 'moderate', 'heavy'];
-                        const levelIdx = LEVELS.indexOf(sgDisplayData.motion?.level || 'minimal');
-                        const primaryEasing = sgDisplayData.motion?.easings?.[0] || 'ease-in-out';
-                        const animDur = sgDisplayData.motion?.durations?.[0] || '400ms';
-                        const p = sgDisplayData.motion?.scrollPatterns || [];
-                        const motionTech = p.some(s => /gsap/i.test(s)) ? 'GSAP' : p.some(s => /lenis/i.test(s)) ? 'Lenis' : p.length ? p[0].split(' ')[0] : 'CSS';
-                        const curvePath = _sgEasingPath(primaryEasing, 80, 80);
-                        const rtPath = _sgEasingPath(primaryEasing, 80, 80, true);
-                        const easingSpline = _sgEasingSpline(primaryEasing);
-                        const easingLabel = _sgGsapName(primaryEasing, motionTech === 'GSAP');
-                        const gridType = sgDisplayData.layout?.grid || '12-column';
-                        const cWidth = sgDisplayData.layout?.contentWidth || 'contained';
-                        const framing = sgDisplayData.layout?.framing || 'open';
-                        const bradius = sgDisplayData.layout?.borderRadius || '2px';
-                        const maxWidth = sgDisplayData.layout?.maxWidth;
-                        const COL_MAP = { '12-column': 3, 'auto-fit': 4, 'masonry': 3, 'minimal': 2, 'none': 1, 'custom': 2 };
-                        const colCount = COL_MAP[gridType] ?? 3;
-                        const isFullBleed = cWidth === 'full-bleed';
-                        const isCard = framing === 'card-based' || framing === 'boxed';
-                        const isMasonry = gridType === 'masonry';
-                        const MASONRY_H = ['30px', '20px', '36px', '24px'];
-                        const gridLabel = [gridType.replace('-column', ''), maxWidth && maxWidth !== 'none' ? maxWidth : null].filter(Boolean).join(' · ');
+                          sgHead?.fontFamily?.split(',')[0].replace(/["']/g, '').trim() || null
+                        );
                         return (
                           <>
                             {isStyleGuideMock && <span className="sg-demo-watermark">DEMO</span>}
+                            {/* BRAND MARK (top-left) */}
+                            <div
+                              className="sg-quad sg-q-brand-mark"
+                              style={{ background: sgLogoSrc ? (sgDisplayData?.colors?.neutral?.hex || sgDisplayData?.colors?.primary?.hex || '#f0efed') : 'rgba(255, 255, 255, 0.65)' }}
+                            >
+                              {sgLogoSrc ? (
+                                <img
+                                  src={sgLogoSrc}
+                                  alt="Site brand mark"
+                                  onError={(e) => { e.currentTarget.style.display = 'none'; const p = e.currentTarget.parentElement; if (p) { const s = document.createElement('span'); s.className = 'sg-no-logo'; s.textContent = 'NO\nLOGO'; p.appendChild(s); } }}
+                                />
+                              ) : (
+                                <span className="sg-no-logo">{"NO\nLOGO"}</span>
+                              )}
+                            </div>
+
+                            {/* COLOR (top-right) */}
+                            <div className="sg-quad sg-q-color" style={!hasSgColors ? { background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' } : undefined}>
+                              {hasSgColors ? [
+                                sgDisplayData.colors.primary,
+                                sgDisplayData.colors.secondary,
+                                sgDisplayData.colors.tertiary,
+                                sgDisplayData.colors.neutral,
+                              ].filter(Boolean).map((color, ci) => (
+                                <div key={ci} className="sg-swatch" style={{ background: color.hex }} title={color.role} />
+                              )) : (
+                                <span className="sg-no-data">{"NO\nCOLOR"}</span>
+                              )}
+                            </div>
+
+                            {/* TYPE (bottom-left) */}
                             <div
                               className="sg-quad sg-q-type"
-                              style={{ background: sgDisplayData?.colors?.neutral?.shades?.[0] || sgDisplayData?.colors?.primary?.shades?.[0] || sgDisplayData?.colors?.neutral?.hex || '#faf8f4' }}
+                              style={{ background: hasSgType ? (sgDisplayData?.colors?.neutral?.shades?.[0] || sgDisplayData?.colors?.primary?.shades?.[0] || sgDisplayData?.colors?.neutral?.hex || '#faf8f4') : 'transparent' }}
                             >
-                              <p className="sg-h1" style={{ fontFamily: sgHead?.fontFamily || 'serif' }}>{headName}</p>
-                              <p className="sg-p" style={{ fontFamily: sgBody?.fontFamily || 'sans-serif' }}>The quick brown fox jumps over the lazy dog and the paragraph text continues here.</p>
+                              {hasSgType && headName ? (
+                                <>
+                                  <p className="sg-h1" style={{ fontFamily: sgHead?.fontFamily || 'serif' }}>
+                                    {headName}
+                                  </p>
+                                  <p className="sg-p" style={{ fontFamily: sgBody?.fontFamily || 'sans-serif' }}>
+                                    The quick brown fox jumps over the lazy dog.
+                                  </p>
+                                </>
+                              ) : (
+                                <span className="sg-no-data">{"NO\nTYPE"}</span>
+                              )}
                             </div>
-                            <div className="sg-quad sg-q-color">
-                              {[sgDisplayData.colors?.primary, sgDisplayData.colors?.secondary, sgDisplayData.colors?.tertiary, sgDisplayData.colors?.neutral].filter(Boolean).map((color, ci) => (
-                                <div key={ci} className="sg-swatch" style={{ background: color.hex }} title={color.role} />
-                              ))}
-                            </div>
-                            <div className="sg-quad sg-q-layout">
-                              <>
-                                <div id="sg-rg-demo-modal" className={`sg-rg${isFullBleed ? ' sg-rg--fullbleed' : ''}`}>
-                                  <div className="sg-rg-nav" />
-                                  <div className="sg-rg-cols" style={{ '--sg-col-min-w': colCount <= 1 ? '0px' : '30px' }}>
-                                    {Array.from({ length: colCount }, (_, i) => (
-                                      <div key={i} className={`sg-rg-col${isCard ? ' sg-rg-col--card' : ''}`} style={{ borderRadius: bradius, ...(isMasonry ? { height: MASONRY_H[i] ?? '28px', flex: 'none', width: `${Math.round(100 / colCount)}%` } : {}) }} />
-                                    ))}
-                                  </div>
-                                </div>
-                                <span className="sg-grid-label">{gridLabel}</span>
-                              </>
-                            </div>
-                            <div className="sg-quad sg-q-motion">
-                              <>
-                                <svg className="sg-ease-svg" viewBox="-3 -3 86 86" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                  <line x1="0" y1="0" x2="0" y2="80" stroke="rgba(42,36,32,0.14)" strokeWidth="0.75"/>
-                                  <line x1="0" y1="80" x2="80" y2="80" stroke="rgba(42,36,32,0.14)" strokeWidth="0.75"/>
-                                  <line x1="0" y1="80" x2="80" y2="0" stroke="rgba(42,36,32,0.1)" strokeWidth="0.75" strokeDasharray="3 3"/>
-                                  <path d={curvePath} stroke="rgba(42,36,32,0.82)" strokeWidth="2" strokeLinecap="round"/>
-                                  <path id="sg-ease-rt-path-modal" d={rtPath} stroke="none" fill="none"/>
-                                  <circle r="3.5" fill="rgba(42,36,32,0.8)">
-                                    <animateMotion dur="3s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.5;1" keySplines={`${easingSpline};${easingSpline}`}>
-                                      <mpath xlinkHref="#sg-ease-rt-path-modal"/>
-                                    </animateMotion>
-                                  </circle>
-                                  <circle cx="0" cy="80" r="2.5" fill="rgba(42,36,32,0.3)"/>
-                                  <circle cx="80" cy="0" r="2.5" fill="rgba(42,36,32,0.3)"/>
-                                </svg>
-                                <div className="sg-motion-meta">
-                                  <span className="sg-motion-easing">{easingLabel}</span>
-                                  <span className="sg-motion-sep">·</span>
-                                  <span className="sg-motion-dur">{animDur}</span>
-                                </div>
-                              </>
+
+                            {/* GRADIENT (bottom-right) */}
+                            <div
+                              className="sg-quad sg-q-gradient"
+                              style={hasSgColors ? {
+                                background: `linear-gradient(135deg, ${sgDisplayData.colors.primary?.hex || '#888'}, ${sgDisplayData.colors.secondary?.hex || sgDisplayData.colors.neutral?.hex || '#ddd'})`,
+                              } : { background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                            >
+                              {!hasSgColors && <span className="sg-no-data">{"NO\nGRADIENT"}</span>}
                             </div>
                           </>
                         );
