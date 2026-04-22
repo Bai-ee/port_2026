@@ -195,6 +195,7 @@ const SiteFooter = () => {
 const footerStyle = {
   width: '100%',
   background: '#1e1a17',
+  marginTop: '50px',
   paddingTop: 'clamp(4rem, 8vw, 7rem)',
   paddingBottom: 'clamp(2rem, 4vw, 3rem)',
   boxSizing: 'border-box',

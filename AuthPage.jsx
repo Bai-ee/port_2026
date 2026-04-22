@@ -217,6 +217,7 @@ const AuthPageInner = () => {
           #auth-card {
             padding: 1.25rem;
             width: 100%;
+            max-width: none !important;
             box-sizing: border-box;
           }
           #auth-mode-tab-bar {

@@ -1323,7 +1323,38 @@ const StackedSlidesSection = () => {
                     </div>
                     <section data-capability-grid style={capabilitySectionStyle}>
                       <div data-capability-header style={{ ...capabilitySectionHeaderStyle, maxWidth: 'none' }}>
-                        <div id="agent-marquee-shell" ref={agentMarqueeShellRef} style={{ width: '100%', overflow: 'hidden', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
+                        <div id="testimonials-section" style={{ ...testimonialsShellStyle, marginTop: 0, paddingTop: 0, borderTop: 'none' }}>
+                          <div id="testimonials-grid" style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(0.75rem, 1.5vw, 1rem)', width: '100%', minWidth: 0 }}>
+                            {[
+                              { type: 'image', src: PORTFOLIO_IMAGES[0] },
+                              { type: 'testimonial', data: testimonials[0] },
+                              { type: 'image', src: PORTFOLIO_IMAGES[5] },
+                              { type: 'testimonial', data: testimonials[1] },
+                              { type: 'image', src: PORTFOLIO_IMAGES[1] },
+                              { type: 'testimonial', data: testimonials[2] },
+                              { type: 'image', src: PORTFOLIO_IMAGES[3] },
+                              { type: 'testimonial', data: testimonials[3] },
+                              { type: 'image', src: PORTFOLIO_IMAGES[8] },
+                            ].map((item) => item.type === 'image' ? (
+                              <div key={item.src} style={{ width: '100%', borderRadius: '0.75rem', overflow: 'hidden', border: '1px solid rgba(42,36,32,0.1)', aspectRatio: '16 / 5', boxSizing: 'border-box' }}>
+                                <img src={item.src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                              </div>
+                            ) : (
+                              <article key={item.data.name + item.data.company} style={{ ...secondaryQuoteItemStyle, width: '100%', boxSizing: 'border-box', overflow: 'hidden', aspectRatio: '19 / 6', flexDirection: 'row', alignItems: 'center', gap: 'clamp(1.5rem, 3vw, 2.5rem)', padding: 'clamp(1.5rem, 3vw, 2.5rem)' }}>
+                                <img src={item.data.img} alt={item.data.name} style={{ ...testimonialCardAvatarStyle, flexShrink: 0, width: 'clamp(2.5rem, 4vw, 3.5rem)', height: 'clamp(2.5rem, 4vw, 3.5rem)' }} />
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <p style={{ ...featuredQuoteTextStyle, fontSize: 'clamp(0.9rem, 1.4vw, 1.15rem)', margin: '0 0 0.65rem' }}>{item.data.quote}</p>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                                    <span style={quoteAttributionNameStyle}>{item.data.name}</span>
+                                    <span style={{ color: 'rgba(42,36,32,0.3)', fontSize: '0.75rem' }}>·</span>
+                                    <span style={quoteAttributionRoleStyle}>{item.data.title}, {item.data.company}</span>
+                                  </div>
+                                </div>
+                              </article>
+                            ))}
+                          </div>
+                        </div>
+                        <div id="agent-marquee-shell" ref={agentMarqueeShellRef} style={{ width: '100%', overflow: 'hidden', marginTop: '50px', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
                           <div ref={agentMarqueeTrackRef} style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', backfaceVisibility: 'hidden', transform: 'translate3d(0, 0, 0)' }}>
                             <div ref={agentMarqueeSetRef} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
                               <span style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(2rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>CREATE YOUR DASHBOARD</span>
@@ -1422,12 +1453,12 @@ const StackedSlidesSection = () => {
                               )}
                               {!item.tablePreview ? (
                                 <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 'clamp(0.8rem, 1.5vw, 1rem)' }}>
-                                  <div style={{ ...capabilityBadgeStyle, color: item.badgeColor, flexShrink: 0 }}>
-                                    {Icon ? <Icon size={20} strokeWidth={2.1} /> : item.badge}
-                                  </div>
                                   <div style={capabilityContentStyle}>
                                     <h4 style={capabilityCardTitleStyle}>{item.title}</h4>
                                     {item.body && <p style={capabilityCardBodyStyle}>{item.body}</p>}
+                                  </div>
+                                  <div style={{ ...capabilityBadgeStyle, color: item.badgeColor, flexShrink: 0 }}>
+                                    {Icon ? <Icon size={20} strokeWidth={2.1} /> : item.badge}
                                   </div>
                                 </div>
                               ) : (
@@ -1512,28 +1543,6 @@ const StackedSlidesSection = () => {
                             </div>
                           ))}
                         </div> */}
-                        {/* Testimonials */}
-                        <div id="testimonials-section" style={testimonialsShellStyle}>
-                          <div style={capabilitySectionHeaderStyle}>
-                            <span style={capabilityEyebrowStyle}>Testimonials</span>
-                            <p style={{ margin: '0.35rem 0 0', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', lineHeight: 1.55, color: 'rgba(42, 36, 32, 0.6)', fontWeight: 400 }}>Feedback from people I've worked with across agency, brand, and product teams.</p>
-                          </div>
-                          <div id="testimonials-grid" style={{ marginTop: 'clamp(1.25rem, 2.5vw, 2rem)', display: 'flex', flexDirection: 'column', gap: 'clamp(0.75rem, 1.5vw, 1rem)', width: '100%', minWidth: 0 }}>
-                            {[testimonials[0], testimonials[1], testimonials[2], testimonials[3]].map((t) => (
-                              <article key={t.name + t.company} style={{ ...secondaryQuoteItemStyle, width: '100%', boxSizing: 'border-box', overflow: 'hidden', aspectRatio: '19 / 6', flexDirection: 'row', alignItems: 'center', gap: 'clamp(1.5rem, 3vw, 2.5rem)', padding: 'clamp(1.5rem, 3vw, 2.5rem)' }}>
-                                <img src={t.img} alt={t.name} style={{ ...testimonialCardAvatarStyle, flexShrink: 0, width: 'clamp(2.5rem, 4vw, 3.5rem)', height: 'clamp(2.5rem, 4vw, 3.5rem)' }} />
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <p style={{ ...featuredQuoteTextStyle, fontSize: 'clamp(0.9rem, 1.4vw, 1.15rem)', margin: '0 0 0.65rem' }}>{t.quote}</p>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-                                    <span style={quoteAttributionNameStyle}>{t.name}</span>
-                                    <span style={{ color: 'rgba(42,36,32,0.3)', fontSize: '0.75rem' }}>·</span>
-                                    <span style={quoteAttributionRoleStyle}>{t.title}, {t.company}</span>
-                                  </div>
-                                </div>
-                              </article>
-                            ))}
-                          </div>
-                        </div>
                         {/* Inline footer */}
                         <div id="stacked-inline-footer" style={inlineFooterStyle}>
                           <div id="inline-footer-value-block" style={inlineFooterNewsletterStyle}>
@@ -3151,6 +3160,7 @@ const inlineFooterSeoNavStyle = {
   gap: 'clamp(2rem, 5vw, 4rem)',
   padding: 'clamp(2rem, 4vw, 3rem) 0',
   borderTop: '1px solid rgba(42, 36, 32, 0.1)',
+  marginTop: '50px',
 };
 
 const inlineFooterNavColStyle = {
