@@ -1418,12 +1418,22 @@ const StackedSlidesSection = () => {
                                   />
                                 </div>
                               )}
-                              <div style={capabilityContentStyle}>
-                                <h4 style={capabilityCardTitleStyle}>{item.title}</h4>
-                                {item.body && (
-                                  <p style={{ ...capabilityCardBodyStyle, ...(item.tablePreview ? { maxWidth: 'none' } : {}) }}>{item.body}</p>
-                                )}
-                                {item.tablePreview && (
+                              {!item.tablePreview ? (
+                                <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 'clamp(0.8rem, 1.5vw, 1rem)' }}>
+                                  <div style={{ ...capabilityBadgeStyle, color: item.badgeColor, flexShrink: 0 }}>
+                                    {Icon ? <Icon size={20} strokeWidth={2.1} /> : item.badge}
+                                  </div>
+                                  <div style={capabilityContentStyle}>
+                                    <h4 style={capabilityCardTitleStyle}>{item.title}</h4>
+                                    {item.body && <p style={capabilityCardBodyStyle}>{item.body}</p>}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div style={capabilityContentStyle}>
+                                  <h4 style={capabilityCardTitleStyle}>{item.title}</h4>
+                                  {item.body && (
+                                    <p style={{ ...capabilityCardBodyStyle, maxWidth: 'none' }}>{item.body}</p>
+                                  )}
                                   <div id="cmo-url-input-row" className="cmo-url-input-desktop" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.85rem', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                                     <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
                                     <input
@@ -1439,21 +1449,12 @@ const StackedSlidesSection = () => {
                                       style={urlIsValid ? { ...ctaStyle, flexShrink: 0 } : { ...ctaStyle, border: 'none', flexShrink: 0, background: 'rgba(255,255,255,0.72)', color: '#2a2420', boxShadow: '0 1px 4px rgba(42,36,32,0.1), inset 0 1px 0 rgba(255,255,255,0.6)', opacity: 0.65, cursor: 'default' }}
                                     >Get Dashboard<span style={ctaIconStyle}>↗</span></button>
                                   </div>
-                                )}
-                                {item.tablePreview && (
                                   <div className="cmo-table-inner" style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
                                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
                                       <thead><tr><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>What you Get</th><th style={{ width: '1.5rem' }} /><th style={{ textAlign: 'right', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>What this means</th></tr></thead>
                                       <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500 }}>{row.task}</td><td style={{ padding: '0.32rem 0.2rem', textAlign: 'center' }}>{row.task === 'Bryan Balli' || row.task === 'Cross-Device Mockups' || row.task === 'Social Preview Check' || row.task === 'Brand Snapshot' || row.task === 'SEO + AI Visibility' || row.task === 'Founders Brief' ? <span style={{ color: 'rgba(42,36,32,0.3)', fontSize: '0.7rem' }}>→</span> : <span className="cmo-arrow"><Lock size={12} /></span>}</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
                                     </table>
                                     <a id="cmo-no-website-hint-desktop" href="/login?flow=homepage-create" style={cmoNoWebsiteLinkStyle}>Don't Have a Website?</a>
-                                  </div>
-                                )}
-                              </div>
-                              {!item.tablePreview && (
-                                <div style={capabilityCardFooterStyle}>
-                                  <div style={{ ...capabilityBadgeStyle, color: item.badgeColor }}>
-                                    {Icon ? <Icon size={20} strokeWidth={2.1} /> : item.badge}
                                   </div>
                                 </div>
                               )}
