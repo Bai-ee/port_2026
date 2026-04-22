@@ -7,6 +7,9 @@ Allow: /
 Disallow: /api/
 Disallow: /dashboard/
 Disallow: /auth/
+Disallow: /login
+Disallow: /admin
+Disallow: /preview/
 Disallow: /capture/
 Disallow: /*?preview=
 Disallow: /*?debug=
@@ -17,18 +20,27 @@ Allow: /
 Disallow: /api/
 Disallow: /dashboard/
 Disallow: /auth/
+Disallow: /login
+Disallow: /admin
+Disallow: /preview/
 
 User-agent: Bingbot
 Allow: /
 Disallow: /api/
 Disallow: /dashboard/
 Disallow: /auth/
+Disallow: /login
+Disallow: /admin
+Disallow: /preview/
 
 User-agent: DuckDuckBot
 Allow: /
 Disallow: /api/
 Disallow: /dashboard/
 Disallow: /auth/
+Disallow: /login
+Disallow: /admin
+Disallow: /preview/
 
 # ── AI crawlers / LLM search — allow indexing for AI Overviews, Perplexity,
 # ChatGPT search, Claude, etc. Block from the gated product surfaces only. ──
@@ -37,96 +49,144 @@ Allow: /
 Disallow: /api/
 Disallow: /dashboard/
 Disallow: /auth/
+Disallow: /login
+Disallow: /admin
+Disallow: /preview/
 
 User-agent: OAI-SearchBot
 Allow: /
 Disallow: /api/
 Disallow: /dashboard/
 Disallow: /auth/
+Disallow: /login
+Disallow: /admin
+Disallow: /preview/
 
 User-agent: ChatGPT-User
 Allow: /
 Disallow: /api/
 Disallow: /dashboard/
 Disallow: /auth/
+Disallow: /login
+Disallow: /admin
+Disallow: /preview/
 
 User-agent: ClaudeBot
 Allow: /
 Disallow: /api/
 Disallow: /dashboard/
 Disallow: /auth/
+Disallow: /login
+Disallow: /admin
+Disallow: /preview/
 
 User-agent: Claude-Web
 Allow: /
 Disallow: /api/
 Disallow: /dashboard/
 Disallow: /auth/
+Disallow: /login
+Disallow: /admin
+Disallow: /preview/
 
 User-agent: anthropic-ai
 Allow: /
 Disallow: /api/
 Disallow: /dashboard/
 Disallow: /auth/
+Disallow: /login
+Disallow: /admin
+Disallow: /preview/
 
 User-agent: PerplexityBot
 Allow: /
 Disallow: /api/
 Disallow: /dashboard/
 Disallow: /auth/
+Disallow: /login
+Disallow: /admin
+Disallow: /preview/
 
 User-agent: Perplexity-User
 Allow: /
 Disallow: /api/
 Disallow: /dashboard/
 Disallow: /auth/
+Disallow: /login
+Disallow: /admin
+Disallow: /preview/
 
 User-agent: Google-Extended
 Allow: /
 Disallow: /api/
 Disallow: /dashboard/
 Disallow: /auth/
+Disallow: /login
+Disallow: /admin
+Disallow: /preview/
 
 User-agent: Applebot
 Allow: /
 Disallow: /api/
 Disallow: /dashboard/
 Disallow: /auth/
+Disallow: /login
+Disallow: /admin
+Disallow: /preview/
 
 User-agent: Applebot-Extended
 Allow: /
 Disallow: /api/
 Disallow: /dashboard/
 Disallow: /auth/
+Disallow: /login
+Disallow: /admin
+Disallow: /preview/
 
 User-agent: CCBot
 Allow: /
 Disallow: /api/
 Disallow: /dashboard/
 Disallow: /auth/
+Disallow: /login
+Disallow: /admin
+Disallow: /preview/
 
 User-agent: Meta-ExternalAgent
 Allow: /
 Disallow: /api/
 Disallow: /dashboard/
 Disallow: /auth/
+Disallow: /login
+Disallow: /admin
+Disallow: /preview/
 
 User-agent: Bytespider
 Allow: /
 Disallow: /api/
 Disallow: /dashboard/
 Disallow: /auth/
+Disallow: /login
+Disallow: /admin
+Disallow: /preview/
 
 User-agent: cohere-ai
 Allow: /
 Disallow: /api/
 Disallow: /dashboard/
 Disallow: /auth/
+Disallow: /login
+Disallow: /admin
+Disallow: /preview/
 
 User-agent: Diffbot
 Allow: /
 Disallow: /api/
 Disallow: /dashboard/
 Disallow: /auth/
+Disallow: /login
+Disallow: /admin
+Disallow: /preview/
 
 # Sitemap + LLM index
 Sitemap: /sitemap.xml

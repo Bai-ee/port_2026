@@ -311,6 +311,25 @@ const HomePage = () => {
           <AppCanvas params={params} liveParamsRef={paramsRef} backgroundColor={canvasBackground} />
         </div>
         <HeroHeadline headerLogoRef={headerLogoRef} textColor={textColor} />
+        {/* Keyword-rich subheading for crawlers — visually hidden but read by
+            search engines and assistive tech as the first H2 under the brand H1. */}
+        <h2
+          style={{
+            position: 'absolute',
+            left: '-10000px',
+            width: '1px',
+            height: '1px',
+            overflow: 'hidden',
+            clip: 'rect(0 0 0 0)',
+            clipPath: 'inset(50%)',
+            whiteSpace: 'nowrap',
+            border: 0,
+            padding: 0,
+            margin: 0,
+          }}
+        >
+          AI design engineer and creative technologist — portfolio, case studies, and AI-assisted client intelligence dashboards.
+        </h2>
       </section>
 
       {/* Header/Nav */}

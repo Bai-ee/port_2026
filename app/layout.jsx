@@ -5,9 +5,83 @@ import AnalyticsPageView from '../components/AnalyticsPageView';
 
 const GA_ID = process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID;
 
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL
+  || (process.env.VERCEL_PROJECT_PRODUCTION_URL
+        ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+        : 'https://bballi.com');
+
 export const metadata = {
-  title: 'Bballi Portfolio',
-  description: 'Client dashboard and portfolio',
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: 'Bryan Balli — AI Design Engineer & Creative Technologist Portfolio',
+    template: '%s · Bryan Balli',
+  },
+  description:
+    'Bryan Balli is an AI design engineer and creative technologist building AI-assisted client dashboards, modular intake pipelines, and high-performance web experiences. Portfolio, case studies, and the Bballi client intelligence platform.',
+  keywords: [
+    'Bryan Balli',
+    'AI design engineer',
+    'creative technologist',
+    'AI consultant',
+    'client dashboard',
+    'design system extraction',
+    'AI-assisted SEO',
+    'generative engine optimization',
+    'Next.js portfolio',
+    'GSAP animation',
+  ],
+  authors: [{ name: 'Bryan Balli', url: SITE_URL }],
+  creator: 'Bryan Balli',
+  publisher: 'Bryan Balli',
+  alternates: {
+    canonical: '/',
+  },
+  openGraph: {
+    type: 'website',
+    locale: 'en_US',
+    url: SITE_URL,
+    siteName: 'Bryan Balli — Portfolio',
+    title: 'Bryan Balli — AI Design Engineer & Creative Technologist',
+    description:
+      'Portfolio, case studies, and a modular AI-assisted client intelligence platform by Bryan Balli.',
+    images: [
+      {
+        url: '/img/profile2_400x400.png',
+        width: 400,
+        height: 400,
+        alt: 'Bryan Balli — AI design engineer and creative technologist',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Bryan Balli — AI Design Engineer & Creative Technologist',
+    description:
+      'Portfolio, case studies, and a modular AI-assisted client intelligence platform.',
+    images: ['/img/profile2_400x400.png'],
+    creator: '@bai_ee',
+  },
+  robots: {
+    index: true,
+    follow: true,
+    nocache: false,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-snippet': -1,
+      'max-image-preview': 'large',
+      'max-video-preview': -1,
+    },
+  },
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/img/profile2_400x400.png', type: 'image/png' },
+    ],
+    apple: '/img/profile2_400x400.png',
+  },
+  category: 'technology',
 };
 
 export default function RootLayout({ children }) {

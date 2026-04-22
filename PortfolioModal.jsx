@@ -118,7 +118,7 @@ const renderPageBody = (pageId) => {
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                <img src="/img/profile2_400x400.png?v=1774582808" style={avatarStyle} alt="" />
+                <img src="/img/profile2_400x400.png?v=1774582808" style={avatarStyle} alt="Bryan Balli, AI design engineer and creative technologist" />
                 {plan.cta}
                 <span style={btnIconStyle}>↗</span>
               </a>
@@ -143,7 +143,7 @@ const renderPageBody = (pageId) => {
           data-cal-namespace="30min"
           data-cal-config='{"layout":"month_view","useSlotsViewOnSmallScreen":"true"}'
         >
-          <img src="/img/profile2_400x400.png?v=1774582808" style={avatarStyle} alt="" />
+          <img src="/img/profile2_400x400.png?v=1774582808" style={avatarStyle} alt="Bryan Balli, AI design engineer and creative technologist" />
           Book a Call
           <span style={btnIconStyle}>↗</span>
         </a>
@@ -162,7 +162,7 @@ const renderPageBody = (pageId) => {
         <div style={newsletterFormStyle}>
           <input type="email" placeholder="Your email address" style={inputStyle} />
           <button type="button" className="cta-pill-btn" style={primaryButtonStyle}>
-            <img src="/img/profile2_400x400.png?v=1774582808" style={avatarStyle} alt="" />
+            <img src="/img/profile2_400x400.png?v=1774582808" style={avatarStyle} alt="Bryan Balli, AI design engineer and creative technologist" />
             Subscribe
           </button>
         </div>
