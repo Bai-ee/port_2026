@@ -44,23 +44,30 @@ export const metadata = {
     siteName: 'Bryan Balli — Portfolio',
     title: 'Bryan Balli — AI Design Engineer & Creative Technologist',
     description:
-      'Portfolio, case studies, and a modular AI-assisted client intelligence platform by Bryan Balli.',
+      'Portfolio, case studies, and a modular AI-assisted client intelligence platform by Bryan Balli — multi-device layout capture, social preview check, brand snapshot extraction, and SEO + performance audit in one dashboard.',
     images: [
       {
-        url: '/img/profile2_400x400.png',
-        width: 400,
-        height: 400,
-        alt: 'Bryan Balli — AI design engineer and creative technologist',
+        url: '/img/og_meta.png',
+        width: 2390,
+        height: 1254,
+        alt: 'Bryan Balli — AI design engineer and creative technologist portfolio share card',
+        type: 'image/png',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
+    site: '@bai_ee',
+    creator: '@bai_ee',
     title: 'Bryan Balli — AI Design Engineer & Creative Technologist',
     description:
-      'Portfolio, case studies, and a modular AI-assisted client intelligence platform.',
-    images: ['/img/profile2_400x400.png'],
-    creator: '@bai_ee',
+      'Portfolio, case studies, and a modular AI-assisted client intelligence platform — multi-device capture, social preview, brand snapshot, SEO + performance in one dashboard.',
+    images: [
+      {
+        url: '/img/og_meta.png',
+        alt: 'Bryan Balli — AI design engineer and creative technologist portfolio share card',
+      },
+    ],
   },
   robots: {
     index: true,
@@ -75,11 +82,12 @@ export const metadata = {
     },
   },
   icons: {
+    // Brand signature mark as favicon — same art used in the header logo.
     icon: [
-      { url: '/favicon.ico', sizes: 'any' },
-      { url: '/img/profile2_400x400.png', type: 'image/png' },
+      { url: '/img/sig.png', type: 'image/png', sizes: '276x208' },
     ],
-    apple: '/img/profile2_400x400.png',
+    shortcut: [{ url: '/img/sig.png', type: 'image/png' }],
+    apple: [{ url: '/img/sig.png', type: 'image/png' }],
   },
   category: 'technology',
 };
