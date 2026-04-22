@@ -1114,6 +1114,24 @@ const StackedSlidesSection = () => {
           opacity: 0;
           visibility: hidden;
         }
+        /* Narrow / touch viewports skip the GSAP ScrollTrigger reveal entirely
+           (see isNarrowTouchViewport early-return), so force these elements
+           visible on mobile or they stay hidden forever. Also unhide when the
+           user prefers reduced motion. */
+        @media (max-width: 767px), (prefers-reduced-motion: reduce) {
+          [data-capability-header],
+          [data-capability-card],
+          [data-grid-window],
+          #stacked-inline-footer,
+          #inline-footer-value-block,
+          #agency-marquee-shell,
+          #inline-footer-bottom,
+          #panel-additional-content-header {
+            opacity: 1 !important;
+            visibility: visible !important;
+            transform: none !important;
+          }
+        }
         @media (max-width: 767px) {
           #stacked-grid-row {
             grid-template-columns: 1fr !important;
