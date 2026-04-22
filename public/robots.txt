@@ -1,0 +1,132 @@
+# Bballi Portfolio — robots.txt
+# Reference: https://www.robotstxt.org/robotstxt.html
+
+# ── Default: allow well-behaved crawlers everywhere except auth/app surfaces ──
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /auth/
+Disallow: /capture/
+Disallow: /*?preview=
+Disallow: /*?debug=
+
+# ── Major search engines — explicit allow for homepage + marketing surfaces ──
+User-agent: Googlebot
+Allow: /
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /auth/
+
+User-agent: Bingbot
+Allow: /
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /auth/
+
+User-agent: DuckDuckBot
+Allow: /
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /auth/
+
+# ── AI crawlers / LLM search — allow indexing for AI Overviews, Perplexity,
+# ChatGPT search, Claude, etc. Block from the gated product surfaces only. ──
+User-agent: GPTBot
+Allow: /
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /auth/
+
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /auth/
+
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /auth/
+
+User-agent: ClaudeBot
+Allow: /
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /auth/
+
+User-agent: Claude-Web
+Allow: /
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /auth/
+
+User-agent: anthropic-ai
+Allow: /
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /auth/
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /auth/
+
+User-agent: Perplexity-User
+Allow: /
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /auth/
+
+User-agent: Google-Extended
+Allow: /
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /auth/
+
+User-agent: Applebot
+Allow: /
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /auth/
+
+User-agent: Applebot-Extended
+Allow: /
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /auth/
+
+User-agent: CCBot
+Allow: /
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /auth/
+
+User-agent: Meta-ExternalAgent
+Allow: /
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /auth/
+
+User-agent: Bytespider
+Allow: /
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /auth/
+
+User-agent: cohere-ai
+Allow: /
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /auth/
+
+User-agent: Diffbot
+Allow: /
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /auth/
+
+# Sitemap + LLM index
+Sitemap: /sitemap.xml

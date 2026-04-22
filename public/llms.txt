@@ -1,0 +1,40 @@
+# Bballi Portfolio
+
+> Bryan Balli's portfolio and modular client intelligence platform. The site pairs a marketing front end (work, studios, testimonials) with a signed-in client dashboard that runs a modular card pipeline — multi-device layout capture, social preview check, SEO + performance snapshot, and brand snapshot — against a client's website to produce a dashboard + brief.
+
+Bryan Balli is a senior design engineer and creative technologist. The platform combines front-end design work with an AI-assisted intake pipeline: modules fetch a client's site, capture device screenshots, extract metadata and a style guide, run PageSpeed Insights + AI visibility checks, and surface the results as an unlockable card sequence inside the dashboard.
+
+## Core experiences
+
+- [Homepage](/): Marketing front end — featured work, studios, testimonials, agency marquee, contact footer.
+- [Dashboard](/dashboard): Signed-in client workspace. Data Visualization tab shows the modular card chain (Multi-Device View → Social Preview → Brand Snapshot → SEO Performance). Each card runs an independent module, streams progress into the terminal UI, and persists artifacts to Firebase.
+- [Auth](/auth): Firebase Auth sign-in and signup. First-time signups trigger the intake pipeline for the supplied website URL.
+
+## Modular card pipeline
+
+- **Multi-Device View** — Captures desktop / tablet / mobile screenshots via Browserless, composites a device-frame mockup with sharp, and stores full-page screenshots in Firebase Storage. Supports split retry paths (mockup-only rebuild from existing viewport captures, or full-page-only recapture).
+- **Social Preview** — Fetches the site's HTML, parses metadata (title, description, image, favicon, theme color, canonical, site name). Flags missing fields with a human-readable lead-with-what's-wrong description.
+- **Brand Snapshot (style-guide)** — Collects HTML + external stylesheets, extracts colors / typography / layout / motion via Anthropic's API, then deterministically re-anchors the heading font to the actual `h1` selector's `font-family` so the extraction can't pick a menu/nav font by mistake.
+- **SEO + Performance Snapshot** — Runs PageSpeed Insights v5 and a separate AI SEO audit in parallel. The data-driven description leads with the dominant finding (AI visibility gap, critical issue, or clean scores) and lists the scores that are in reasonable shape.
+
+## Technical substrate
+
+- Next.js 16 (App Router, Turbopack build)
+- React 19 client components
+- Firebase Admin (Auth, Firestore, Storage) for persistence
+- Anthropic API for design system extraction and card scribe
+- Browserless for headless screenshot capture
+- PageSpeed Insights v5 + custom `ai-seo-audit` engine
+- GSAP (ScrollTrigger, Flip) for marketing-surface scroll animations
+
+## Conventions for AI summarization
+
+- "Cross-Device Layouts" and "Multi-Device View" are the same card.
+- "Brand Snapshot" and "style-guide" refer to the same module.
+- "STATUS: Passed" means every required artifact for a card is present in `dashboard_state`. "STATUS: NEEDS ATTENTION" is the unified non-passing label for any card with partial or critical findings.
+- "Chain" refers to the ordered unlock sequence: `multi-device-view → social-preview → style-guide → seo-performance`. Each card unlocks the next once it has been run (succeeded, partial, or failed are all progress).
+
+## Contact
+
+- Email: bryanballi@gmail.com
+- Repo: https://github.com/Bai-ee/port_2026
