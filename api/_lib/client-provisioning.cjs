@@ -384,6 +384,17 @@ async function getDashboardBootstrap(uid) {
   const dashboardState = dashboardStateSnapshot.exists ? dashboardStateSnapshot.data() : null;
   const clientConfig  = clientConfigSnapshot.exists ? clientConfigSnapshot.data() : null;
 
+  // Onboarding survey summary — lightweight subset of onboardingAnswers for card status.
+  const onboardingAnswers = clientConfig?.onboardingAnswers || null;
+  const _rawAnswers = onboardingAnswers?.answers || {};
+  const answeredCount = Object.values(_rawAnswers).filter((a) => a && !a.skipped && a.value != null).length;
+  const onboardingSummary = {
+    total: 10,
+    answeredCount,
+    completedAt: onboardingAnswers?.completedAt || null,
+    skippedAt: onboardingAnswers?.skippedAt || null,
+  };
+
   // Always return registry-derived defaults — stored values win; inferred values fill gaps.
   const storedModuleConfig = clientConfig?.moduleConfig;
   const storedModuleState  = dashboardState?.modules;
@@ -418,6 +429,7 @@ async function getDashboardBootstrap(uid) {
     intelligence,
     moduleConfig,
     moduleState,
+    onboardingSummary,
   };
 }
 

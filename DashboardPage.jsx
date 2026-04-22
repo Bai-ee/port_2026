@@ -33,6 +33,10 @@ import { buildSolutionsList, resolveSolution } from './features/scout-intake/sol
 import { resolveAnalyzerSource, buildCardDescription, buildModuleStateDescription } from './features/scout-intake/card-description-builder.mjs';
 import { deriveFindings } from './features/scout-intake/derived-findings.mjs';
 import { renderDesignMd } from './features/scout-intake/design-md-renderer.mjs';
+import { renderMiniBriefHtml } from './features/scout-intake/mini-brief-renderer.mjs';
+import { designEvaluationAdapter } from './features/scout-intake/mini-briefs/design-evaluation-adapter.mjs';
+import { seoPerformanceAdapter } from './features/scout-intake/mini-briefs/seo-performance-adapter.mjs';
+import { socialPreviewAdapter } from './features/scout-intake/mini-briefs/social-preview-adapter.mjs';
 import ModuleCardControls from './components/dashboard/ModuleCardControls';
 
 // Entry-flow survey surfaces every question step (excludes the summary, which
@@ -50,6 +54,7 @@ const ONBOARDING_CARD_IDS = new Set([
   'style-guide',
   'design-evaluation',
   'priority-signal',
+  'survey-status',
 ]);
 const PENDING_DASHBOARD_SIGNUP_KEY = 'pending-dashboard-signup';
 import {
@@ -1178,7 +1183,7 @@ function buildTerminalLines(run, dashboardState, latestRunStatus, client) {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 const DashboardPage = () => {
-  const { user, userProfile, signOutUser } = useAuth();
+  const { user, userProfile, signOutUser, isAdmin } = useAuth();
   const [theme, setTheme] = useState('light');
   const [countdownHours, setCountdownHours] = useState(14);
   const [showTierModal, setShowTierModal] = useState(false);
@@ -1296,8 +1301,10 @@ const DashboardPage = () => {
     if (id === 'multi-device-view') { setModalTab('desktop'); return; }
     // Reference via bootstrap here — `dashboardState` is declared later in the
     // component body (TDZ) so the direct name isn't safe at effect-definition time.
-    const seoReportReady = !!bootstrap?.dashboardState?.artifacts?.skillDocs?.['seo-depth-audit']?.html;
-    if (id === 'seo-performance' && seoReportReady) { setModalTab('report'); return; }
+    if (id === 'survey-status') { setModalTab('chat'); return; }
+    if (id === 'seo-performance') { setModalTab('report'); return; }
+    if (id === 'design-evaluation' && bootstrap?.dashboardState?.analyzerOutputs?.['design-evaluation']) { setModalTab('report'); return; }
+    if (id === 'social-preview' && bootstrap?.dashboardState?.siteMeta) { setModalTab('report'); return; }
     setModalTab('solutions');
   }, [activeTileModal?.cardId, bootstrap?.dashboardState?.artifacts?.skillDocs]);
 
@@ -1454,11 +1461,42 @@ const DashboardPage = () => {
   const intelligencePayload = bootstrap.intelligence || null;
   const moduleConfig = bootstrap.moduleConfig || null;
   const moduleState  = bootstrap.moduleState  || dashboardState?.modules || null;
+  const onboardingSummary = bootstrap.onboardingSummary || null;
   // Set of currently enabled modular card IDs — drives nav gating and card visibility
   const enabledModuleIds = useMemo(() => {
     if (!moduleConfig) return new Set();
     return new Set(Object.entries(moduleConfig).filter(([, cfg]) => cfg?.enabled === true).map(([id]) => id));
   }, [moduleConfig]);
+  const designEvalMiniBriefHtml = useMemo(() => {
+    const raw = client?.websiteUrl || client?.name || '';
+    let siteName = '';
+    try { siteName = raw ? new URL(raw.startsWith('http') ? raw : `https://${raw}`).hostname.replace(/^www\./, '') : ''; } catch { siteName = String(raw).split('?')[0]; }
+    return renderMiniBriefHtml(designEvaluationAdapter({
+      ev:         analyzerOutputs?.['design-evaluation'] || null,
+      styleGuide: styleGuideData,
+      siteName,
+    }));
+  }, [analyzerOutputs, styleGuideData, client]);
+
+  const seoMiniBriefHtml = useMemo(() => {
+    const raw = client?.websiteUrl || client?.name || '';
+    let siteName = '';
+    try { siteName = raw ? new URL(raw.startsWith('http') ? raw : `https://${raw}`).hostname.replace(/^www\./, '') : ''; } catch { siteName = String(raw).split('?')[0]; }
+    return renderMiniBriefHtml(seoPerformanceAdapter({
+      seoAudit:       analyzerOutputs ? (intelligencePayload?.dashboardSeoAudit ?? dashboardState?.seoAudit ?? null) : null,
+      aiVisibility:   analyzerOutputs?.['seo-performance']?.skills?.['ai-seo-audit']?.aiVisibility ?? null,
+      analyzerOutputs,
+      siteName,
+    }));
+  }, [analyzerOutputs, intelligencePayload, dashboardState?.seoAudit, client]);
+
+  const socialMiniBriefHtml = useMemo(() => {
+    const raw = client?.websiteUrl || client?.name || '';
+    let siteName = '';
+    try { siteName = raw ? new URL(raw.startsWith('http') ? raw : `https://${raw}`).hostname.replace(/^www\./, '') : ''; } catch { siteName = String(raw).split('?')[0]; }
+    return renderMiniBriefHtml(socialPreviewAdapter({ siteMeta: dashboardState?.siteMeta ?? null, siteName }));
+  }, [dashboardState?.siteMeta, client]);
+
   const seoAudit = intelligencePayload?.dashboardSeoAudit ?? dashboardState?.seoAudit ?? null;
   const aiVisibility = aiSeoAudit?.aiVisibility ?? null;
   const isFromIntelligence  = Boolean(intelligencePayload?.dashboardSeoAudit != null);
@@ -3414,6 +3452,31 @@ const DashboardPage = () => {
       footerRight: 'REVIEWED',
     },
 
+    {
+      id: 'survey-status',
+      category: 'onboarding',
+      number: 'SV',
+      label: 'SURVEY',
+      title: 'Onboarding Survey',
+      description: 'I step into your business, map what\'s working, fix what\'s not, and build what\'s missing, across design, content, and systems. This survey helps me get the context I need upfront — so we skip the back-and-forth and get straight to the work that matters.',
+      placeholderLabel: 'SURVEY',
+      rows: (() => {
+        const total = onboardingSummary?.total ?? 10;
+        const answered = onboardingSummary?.answeredCount ?? 0;
+        return [
+          { key: 'sv-answered', label: 'Answered', value: `${answered} / ${total}` },
+          { key: 'sv-status',   label: 'Status',   value: onboardingSummary?.completedAt ? 'Complete' : answered > 0 ? 'In progress' : 'Not started' },
+        ];
+      })(),
+      footerLeft: onboardingSummary?.completedAt ? 'Live' : WORK_NEEDED_LABEL,
+      footerRight: 'SURVEY',
+      surveyStatus: (() => {
+        if (onboardingSummary?.completedAt) return 'complete';
+        if ((onboardingSummary?.answeredCount ?? 0) > 0) return 'partial';
+        return 'empty';
+      })(),
+    },
+
     // ── BRAND & PRESENCE ──────────────────────────────────────────────────────
     {
       id: 'brand-voice',
@@ -4139,6 +4202,7 @@ const DashboardPage = () => {
 
     const readinessContext = (() => {
       if (card.id === 'seo-performance') return '';
+      if (card.id === 'survey-status') return '';
       if (!analyzer?.readiness) return '';
       switch (analyzer.readiness) {
         case 'critical':
@@ -4711,6 +4775,8 @@ const DashboardPage = () => {
                 return false;
               };
               const isCardLocked = (cardId) => {
+                if (isAdmin) return false;
+                if (cardId === 'survey-status') return false;
                 const idx = CARD_UNLOCK_CHAIN.indexOf(cardId);
                 if (idx === -1) return true; // Not yet in the chain → locked.
                 if (idx === 0) return false;
@@ -4721,6 +4787,7 @@ const DashboardPage = () => {
                 return false;
               };
               const chainSortKey = (cardId) => {
+                if (cardId === 'survey-status') return -1;
                 const idx = CARD_UNLOCK_CHAIN.indexOf(cardId);
                 return idx === -1 ? 999 + cardId.charCodeAt(0) : idx;
               };
@@ -4743,7 +4810,7 @@ const DashboardPage = () => {
               const isInChain = CARD_UNLOCK_CHAIN.includes(card.id);
               // Chain cards have their own lock/unlock treatment, so they skip
               // the legacy modular-onboarding dimming entirely.
-              const isDimmed = isModularOnboardingClient && card.id !== 'audit-summary' && card.id !== 'multi-device-view' && !isInChain;
+              const isDimmed = !isAdmin && isModularOnboardingClient && card.id !== 'audit-summary' && card.id !== 'multi-device-view' && card.id !== 'survey-status' && !isInChain;
               const isLocked = activeCapabilityFilter === 'onboarding' && isCardLocked(card.id);
               // Unlocked but not yet run (enabled/disabled without a succeeded status) —
               // we want no card-level hover effect, only direct button hover.
@@ -4753,10 +4820,10 @@ const DashboardPage = () => {
               <article
                 data-capability-card
                 data-flip-id={`cap-${card.id}`}
-                className={`tile tile-intake-card${hasIntakeData ? ' tile-ready' : ''}${card.wide ? ' tile-intake-card--wide' : ''}${hasBothButtons && !isLocked ? ' tile-intake-card--btns-only' : ''}${isDimmed && !isLocked ? ' tile-intake-card--dimmed' : ''}${isLocked ? ' tile-intake-card--locked' : ''}${isInactiveUnlocked ? ' tile-intake-card--inactive' : ''}`}
+                className={`tile tile-intake-card${hasIntakeData ? ' tile-ready' : ''}${card.wide ? ' tile-intake-card--wide' : ''}${hasBothButtons && !isLocked ? ' tile-intake-card--btns-only' : ''}${isDimmed && !isLocked ? ' tile-intake-card--dimmed' : ''}${isLocked ? ' tile-intake-card--locked' : ''}${isInactiveUnlocked || card.id === 'survey-status' ? ' tile-intake-card--inactive' : ''}`}
                 id={card.domId || `tile-${card.id}`}
                 key={card.id}
-                onClick={isLocked || isInactiveUnlocked ? undefined : (hasBothButtons ? undefined : () => {
+                onClick={isLocked || isInactiveUnlocked || card.id === 'survey-status' ? undefined : (hasBothButtons ? undefined : () => {
                   if (card.id === 'brief' && briefPreviewHtml) { setBriefFullScreen(true); return; }
                   if (card.id === 'audit-summary') { setAuditFullScreen(true); return; }
                   setActiveTileModal({ title: card.title, description: card.description, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null, recommendation: card.recommendation || null, analyzer: card.analyzer || null, readinessBadge: card.readinessBadge || null });
@@ -4910,6 +4977,14 @@ const DashboardPage = () => {
                         onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }}
                       />
                     </div>
+                  ) : card.id === 'survey-status' ? (
+                    <div id="survey-status-avatar-shell">
+                      <img
+                        id="survey-status-avatar-img"
+                        src="/img/profile2_400x400.png"
+                        alt="Bryan Balli"
+                      />
+                    </div>
                   ) : (
                     <span className="tile-empty-label">{card.placeholderLabel}</span>
                   )}
@@ -5005,6 +5080,20 @@ const DashboardPage = () => {
                           </>
                         );
                       }
+                      if (card.id === 'survey-status') {
+                        const SURVEY_STATUS = {
+                          complete: { dot: '#22c55e', label: 'Complete',    glow: '0 0 5px 2px rgba(34,197,94,0.45)' },
+                          partial:  { dot: '#f59e0b', label: 'In Progress', glow: '0 0 5px 2px rgba(245,158,11,0.45)' },
+                          empty:    { dot: '#ef4444', label: 'Not Started', glow: '0 0 5px 2px rgba(239,68,68,0.45)' },
+                        };
+                        const sMeta = SURVEY_STATUS[card.surveyStatus] ?? SURVEY_STATUS.empty;
+                        return (
+                          <>
+                            <span id="survey-status-dot" style={{ width: 6, height: 6, borderRadius: '50%', display: 'inline-block', background: sMeta.dot, boxShadow: sMeta.glow, flexShrink: 0 }} />
+                            {sMeta.label}
+                          </>
+                        );
+                      }
                       return (
                         <>
                           <span className={`power-dot lamp${card.footerLeft !== 'Live' ? ' power-dot-needs-work' : ''}`} />
@@ -5029,6 +5118,7 @@ const DashboardPage = () => {
                     )}
                     {(() => {
                       if (isLocked) return null;
+                      if (card.id === 'survey-status') return null;
                       if (!card.moduleControls) {
                         if (!card.footerAction) return null;
                         return (
@@ -5149,7 +5239,7 @@ const DashboardPage = () => {
           </div>{/* end capability-grid-col */}
 
           {/* Right — filter nav */}
-          <div id="capability-nav-col" className={isModularOnboardingClient ? 'capability-nav-col--single-active' : undefined}>
+          <div id="capability-nav-col" className={!isAdmin && isModularOnboardingClient ? 'capability-nav-col--single-active' : undefined}>
             {[
               { key: 'brief',      label: 'Daily Brief',             sub: 'Your full report',         icon: ChartColumnIncreasing, color: '#2a2420' },
               { key: 'onboarding', label: 'Data Visualization',      sub: 'From your onboarding',     icon: Globe,                 color: '#f59e0b' },
@@ -5161,7 +5251,7 @@ const DashboardPage = () => {
               { key: 'automation', label: 'Automation & Systems',    sub: 'Scale & automate',         icon: BrainIcon,             color: '#6366f1' },
               { key: 'services',   label: 'Work With Me',            sub: 'Get it done',              icon: MessageSquareMore,     color: '#ec4899' },
             ].map(({ key, label, sub, icon: NavIcon, color }) => {
-              const isLocked = isModularOnboardingClient && key !== 'onboarding';
+              const isLocked = !isAdmin && isModularOnboardingClient && key !== 'onboarding';
               return (
               <button
                 key={key ?? 'all'}
@@ -5768,8 +5858,69 @@ const DashboardPage = () => {
                   </div>
                 ) : null}
 
+                {/* Survey card — CHAT + DATA tabs */}
+                {activeTileModal.cardId === 'survey-status' && (
+                  <div
+                    id="survey-status-modal-tabs-container"
+                    className="tile-detail-bento-cell tile-detail-tabbed-container"
+                  >
+                    <div className="tile-detail-tabs">
+                      <button
+                        id="survey-modal-tab-chat"
+                        type="button"
+                        className={`tile-detail-tab${modalTab === 'chat' ? ' tile-detail-tab--active' : ''}`}
+                        onClick={() => setModalTab('chat')}
+                      >CHAT</button>
+                      <button
+                        id="survey-modal-tab-data"
+                        type="button"
+                        className={`tile-detail-tab${modalTab === 'data' ? ' tile-detail-tab--active' : ''}`}
+                        onClick={() => setModalTab('data')}
+                      >DATA</button>
+                    </div>
+                    <div className="tile-detail-tab-content">
+                      {modalTab === 'chat' && (
+                        <div className="tile-detail-tab-pane" style={{ padding: 0, height: '100%', overflow: 'hidden' }}>
+                          <OnboardingChatModal
+                            key={activeTileModal.cardId}
+                            steps={ONBOARDING_ENTRY_STEPS}
+                            initialAnswers={onboardingAnswersSeed || {}}
+                            onAnswer={(stepId, value) => postOnboarding({ action: 'answer', stepId, value })}
+                            onSkipStep={(stepId) => postOnboarding({ action: 'skipStep', stepId })}
+                            onSkipAll={() => postOnboarding({ action: 'skipAll' })}
+                            onComplete={() => postOnboarding({ action: 'complete' })}
+                          />
+                        </div>
+                      )}
+                      {modalTab === 'data' && (
+                        <div id="survey-answers-table" className="tile-detail-tab-pane">
+                          {ONBOARDING_ENTRY_STEPS.length === 0 ? (
+                            <p className="tile-analyzer-solutions-empty">No questions found.</p>
+                          ) : (() => {
+                            const answers = onboardingAnswersSeed || {};
+                            return ONBOARDING_ENTRY_STEPS.map((step) => {
+                              const ans = answers[step.id];
+                              const rawVal = ans?.value;
+                              const displayVal = Array.isArray(rawVal) ? rawVal.join(', ') : (rawVal ?? null);
+                              const skipped = ans?.skipped ?? false;
+                              return (
+                                <div key={step.id} className="tile-detail-stat-row">
+                                  <span className="tile-detail-stat-label">{step.title}</span>
+                                  <span className="tile-detail-stat-value">
+                                    {skipped ? '—' : displayVal != null ? String(displayVal) : <span style={{ opacity: 0.4 }}>Not answered</span>}
+                                  </span>
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Tabbed SOLUTIONS / PROBLEMS / DATA for most cards */}
-                {!['multi-device-view', 'brief', 'audit-summary'].includes(activeTileModal.cardId) && activeTileModal.analyzer ? (
+                {!['multi-device-view', 'brief', 'audit-summary', 'survey-status'].includes(activeTileModal.cardId) && (activeTileModal.analyzer || (activeTileModal.cardId === 'social-preview' && siteMeta)) ? (
                   <div
                     id={`${activeTileModal.cardId}-analyzer-findings`}
                     className="tile-detail-bento-cell tile-detail-tabbed-container"
@@ -5781,7 +5932,8 @@ const DashboardPage = () => {
                         // it by default (see modal-tab reset effect).
                         const SKILL_DOC_BY_CARD = { 'seo-performance': 'seo-depth-audit' };
                         const docSkillId = SKILL_DOC_BY_CARD[activeTileModal.cardId];
-                        const hasReport = !!(docSkillId && dashboardState?.artifacts?.skillDocs?.[docSkillId]?.html);
+                        const hasReport = ['design-evaluation', 'seo-performance', 'social-preview'].includes(activeTileModal.cardId)
+                          || !!(docSkillId && dashboardState?.artifacts?.skillDocs?.[docSkillId]?.html);
                         const tabs = [
                           ...(hasReport ? [{ key: 'report', label: 'REPORT' }] : []),
                           { key: 'solutions', label: 'SOLUTIONS' },
@@ -5800,6 +5952,64 @@ const DashboardPage = () => {
                     </div>
                     <div className="tile-detail-tab-content">
                       {modalTab === 'report' && (() => {
+                        if (activeTileModal.cardId === 'design-evaluation') {
+                          const raw = client?.websiteUrl || client?.name || '';
+                          let sn = '';
+                          try { sn = raw ? new URL(raw.startsWith('http') ? raw : `https://${raw}`).hostname.replace(/^www\./, '') : ''; } catch { sn = String(raw).split('?')[0]; }
+                          const onDownload = () => {
+                            const md = renderDesignMd({ siteName: sn, styleGuide: styleGuideData, skillOutput: analyzerOutputs?.['design-evaluation'] });
+                            const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a'); a.href = url; a.download = 'DESIGN.md';
+                            document.body.appendChild(a); a.click(); a.remove();
+                            setTimeout(() => URL.revokeObjectURL(url), 1000);
+                          };
+                          return (
+                            <div className="tile-detail-tab-pane" id="design-eval-report-pane" style={{ display: 'flex', flexDirection: 'column', padding: 0, height: '100%' }}>
+                              {analyzerOutputs?.['design-evaluation'] && (
+                                <div id="design-eval-report-toolbar" style={{ display: 'flex', justifyContent: 'flex-end', padding: '6px 8px', flexShrink: 0 }}>
+                                  <button id="design-eval-report-download-btn" type="button" className="tile-solution-expert-cta" onClick={onDownload} style={{ cursor: 'pointer', border: 'none' }}>Download DESIGN.md ↓</button>
+                                </div>
+                              )}
+                              <iframe
+                                key={'de-report-' + (dashboardState?.latestRunId || 'static')}
+                                id="design-eval-report-iframe"
+                                title="Design Evaluation brief"
+                                srcDoc={designEvalMiniBriefHtml}
+                                sandbox="allow-same-origin"
+                                style={{ flex: 1, width: '100%', border: 'none', minHeight: 0, display: 'block' }}
+                              />
+                            </div>
+                          );
+                        }
+                        if (activeTileModal.cardId === 'seo-performance') {
+                          return (
+                            <div className="tile-detail-tab-pane" id="seo-perf-report-pane" style={{ padding: 0, height: '100%' }}>
+                              <iframe
+                                key={'seo-report-' + (dashboardState?.latestRunId || 'static')}
+                                id="seo-perf-report-iframe"
+                                title="SEO Performance brief"
+                                srcDoc={seoMiniBriefHtml}
+                                sandbox="allow-same-origin"
+                                style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
+                              />
+                            </div>
+                          );
+                        }
+                        if (activeTileModal.cardId === 'social-preview') {
+                          return (
+                            <div className="tile-detail-tab-pane" id="social-preview-report-pane" style={{ padding: 0, height: '100%' }}>
+                              <iframe
+                                key={'social-report-' + (dashboardState?.latestRunId || 'static')}
+                                id="social-preview-report-iframe"
+                                title="Social Preview brief"
+                                srcDoc={socialMiniBriefHtml}
+                                sandbox="allow-same-origin"
+                                style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
+                              />
+                            </div>
+                          );
+                        }
                         // Renders the skill-generated audit doc inline.
                         // Sandbox via iframe srcDoc so the doc's CSS doesn't bleed
                         // into the dashboard. Provides Download HTML / MD buttons
@@ -5983,12 +6193,12 @@ const DashboardPage = () => {
 
                       {modalTab === 'problems' && (
                         <div className="tile-detail-tab-pane">
-                          {activeTileModal.analyzer.readiness && (
+                          {activeTileModal.analyzer?.readiness && (
                             <div id={`${activeTileModal.cardId}-analyzer-readiness`} className={`tile-analyzer-readiness readiness-${activeTileModal.analyzer.readiness}`}>
                               <span className="tile-analyzer-readiness-label">{activeTileModal.analyzer.readiness === 'critical' ? 'Holding you back' : activeTileModal.analyzer.readiness === 'partial' ? 'Needs attention' : 'In a good spot'}</span>
                             </div>
                           )}
-                          {Array.isArray(activeTileModal.analyzer.findings) && activeTileModal.analyzer.findings.length > 0 && (
+                          {Array.isArray(activeTileModal.analyzer?.findings) && activeTileModal.analyzer.findings.length > 0 && (
                             <ul className="tile-analyzer-findings-list">
                               {activeTileModal.analyzer.findings.map((f) => {
                                 const catalogEntry = resolveSolution(f);
@@ -8243,6 +8453,23 @@ const dashboardCss = `
   }
   .tile-intake-lock-icon {
     color: rgba(0, 0, 0, 0.55);
+  }
+
+  /* Survey card — avatar placeholder */
+  #survey-status-avatar-shell {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #survey-status-avatar-img {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+    flex-shrink: 0;
   }
 
   /* Inactive-but-unlocked cards (Run visible, not yet executed) — kill the

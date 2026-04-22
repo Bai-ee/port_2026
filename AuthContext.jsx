@@ -132,11 +132,14 @@ export const AuthProvider = ({ children }) => {
     return unsubscribe;
   }, [user]);
 
+  const isAdmin = useMemo(() => user?.email === 'edittraxnft@gmail.com', [user?.email]);
+
   const value = useMemo(() => ({
     user,
     userProfile,
     loading,
     isFirebaseConfigured,
+    isAdmin,
     signUp: async ({ email, password, displayName, companyName, websiteUrl, ideaDescription }) => {
       if (!auth) {
         throw new Error('Firebase is not configured.');
