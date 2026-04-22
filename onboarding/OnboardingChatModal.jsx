@@ -52,6 +52,12 @@ export default function OnboardingChatModal({
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, typing, pipelineError]);
 
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   const markAnswered = useCallback((idx) => {
     setMessages((prev) =>
       prev.map((m) => (m.role === 'bot' && m.stepIndex === idx ? { ...m, answered: true } : m))

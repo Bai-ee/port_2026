@@ -797,11 +797,7 @@ function buildModuleTerminalLog(moduleId, dashboardState, latestRunStatus, run, 
       add('ok', '✓', `${cardId} — complete`);
       add('dim', '', '─'.repeat(46));
     }
-    if (countdown > 0) {
-      add('countdown', '▶', `launching dashboard in ${countdown}…`);
-    } else {
-      add('countdown', '▶', 'dashboard ready');
-    }
+    add('ok', '✓', 'module complete');
     return lines;
   }
 
@@ -1575,6 +1571,14 @@ const DashboardPage = () => {
     ))
   );
 
+  useEffect(() => {
+    const anyModalOpen = showIntakeModal || showTierModal || showClientEditModal || showDeleteAccountModal || briefFullScreen || auditFullScreen;
+    if (!anyModalOpen) return undefined;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [showIntakeModal, showTierModal, showClientEditModal, showDeleteAccountModal, briefFullScreen, auditFullScreen]);
+
   // Page-load / processing-handoff intro.
   // Three states this effect handles:
   //   1. Initial mount with the intake modal showing → instantly hide dashboard
@@ -1763,13 +1767,14 @@ const DashboardPage = () => {
   // Detect run completion → start 3-second countdown before revealing dashboard.
   // Gated: hold the countdown until the onboarding survey is resolved so answers
   // can influence answer-dependent pipeline stages before reveal.
+  // Skip entirely for module re-runs — those don't need a reveal countdown.
   useEffect(() => {
     if (latestRunStatus === prevRunStatusRef.current) return;
     if (latestRunStatus === 'succeeded' && (prevRunStatusRef.current === 'running' || prevRunStatusRef.current === 'queued')) {
-      if (surveyResolved) setCompletionCountdown(3);
+      if (surveyResolved && activeRunIsIntake) setCompletionCountdown(3);
     }
     prevRunStatusRef.current = latestRunStatus;
-  }, [latestRunStatus, surveyResolved]);
+  }, [latestRunStatus, surveyResolved, activeRunIsIntake]);
 
   // If the run finished during this session before the survey resolved, start
   // the countdown once the survey becomes resolved. Guarded by:
@@ -1780,11 +1785,12 @@ const DashboardPage = () => {
   useEffect(() => {
     if (postSurveyRevealFiredRef.current) return;
     if (!runWasActiveRef.current) return;
+    if (!activeRunIsIntake) return;
     if (surveyResolved && latestRunStatus === 'succeeded' && completionCountdown === null) {
       postSurveyRevealFiredRef.current = true;
       setCompletionCountdown(3);
     }
-  }, [surveyResolved, latestRunStatus, completionCountdown]);
+  }, [surveyResolved, latestRunStatus, completionCountdown, activeRunIsIntake]);
 
   // Always land on Data Visualization on first paint. The brief tab hangs
   // until every onboarding card has been run, so defaulting there traps the
@@ -2201,13 +2207,14 @@ const DashboardPage = () => {
       styleguide:    ['ai',     '[STYLE]'],
       synthesize:    ['ai',     '[AI]'],
       compose:       ['mock',   '[MOCK]'],
-      'scout-config':['ai',     '[SCOUT]'],
-      skills:        ['ai',     '[SKILL]'],
-      scribe:        ['ai',     '[SCRIBE]'],
-      brief:         ['ai',     '[BRIEF]'],
-      normalize:     ['build',  '[BUILD]'],
-      progress:      ['ok',     '✓'],
-      error:         ['error',  '✗'],
+      'scout-config':    ['ai',     '[SCOUT]'],
+      skills:            ['ai',     '[SKILL]'],
+      scribe:            ['ai',     '[SCRIBE]'],
+      brief:             ['ai',     '[BRIEF]'],
+      normalize:         ['build',  '[BUILD]'],
+      'design-evaluation': ['ai',   '[DSN]'],
+      progress:          ['ok',     '✓'],
+      error:             ['error',  '✗'],
     };
     return realEvents.map((ev) => {
       const [type, prefix] = stagePrefix[ev.stage] || ['info', `[${(ev.stage || '').toUpperCase()}]`];
@@ -2303,7 +2310,9 @@ const DashboardPage = () => {
     if (latestRunStatus !== 'succeeded') return realEventLines;
     const tail = [...realEventLines];
     tail.push({ type: 'dim', prefix: '', text: '─'.repeat(46), cursor: false });
-    if (surveyResolved) {
+    if (!activeRunIsIntake) {
+      tail.push({ type: 'ok', prefix: '✓', text: 'module complete', cursor: false });
+    } else if (surveyResolved) {
       if (completionCountdown !== null && completionCountdown > 0) {
         tail.push({ type: 'countdown', prefix: '▶', text: `launching dashboard in ${completionCountdown}…`, cursor: false });
       } else {
@@ -2313,7 +2322,7 @@ const DashboardPage = () => {
       tail.push({ type: 'active', prefix: '▶', text: 'complete the survey above to reveal your dashboard →', cursor: true });
     }
     return tail;
-  }, [realEventLines, latestRunStatus, surveyResolved, completionCountdown]);
+  }, [realEventLines, latestRunStatus, surveyResolved, completionCountdown, activeRunIsIntake]);
 
   // How many lines to show: events revealed so far + all synthetic tail
   // lines (no animation delay on the tail — it's just status/gating).
@@ -4243,6 +4252,14 @@ const DashboardPage = () => {
     })();
 
     const readinessBadge = (() => {
+      if (card.id === 'survey-status') {
+        const s = card.surveyStatus;
+        return s === 'complete'
+          ? { tone: 'ok',       label: 'Complete'    }
+          : s === 'partial'
+          ? { tone: 'partial',  label: 'In Progress' }
+          : { tone: 'critical', label: 'Not Started' };
+      }
       const seoSignalReadiness = card.id === 'seo-performance' ? built?.dominantSignal?.readiness || null : null;
       const seoSignalId = card.id === 'seo-performance' ? built?.dominantSignal?.id || '' : '';
       const isAiSpecificSeoSignal = card.id === 'seo-performance' && String(seoSignalId).startsWith('ai-');
@@ -4378,6 +4395,12 @@ const DashboardPage = () => {
       analyzer,
     };
   });
+
+  // ── Active module card (for terminal UI customisation) ───────────────────
+  const activeModuleCardId = Object.keys(moduleRunLoading).find((k) => moduleRunLoading[k]) || null;
+  const activeModuleCard = activeModuleCardId
+    ? intakeCapabilityCards.find((c) => c.id === activeModuleCardId) || null
+    : null;
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -4844,7 +4867,7 @@ const DashboardPage = () => {
                 ) : (
                 <div
                   className={`tile-intake-placeholder tile-intake-placeholder-${card.id}`}
-                  style={card.id === 'multi-device-view' && sgDisplayData?.colors?.primary?.hex
+                  style={sgDisplayData?.colors?.primary?.hex
                     ? { background: `linear-gradient(135deg, ${sgDisplayData.colors.primary.hex}, ${sgDisplayData.colors.secondary?.hex || sgDisplayData.colors.neutral?.hex || '#ddd'})` }
                     : undefined}
                 >
@@ -4984,6 +5007,14 @@ const DashboardPage = () => {
                         src="/img/profile2_400x400.png"
                         alt="Bryan Balli"
                       />
+                      {siteMeta?.favicon && (
+                        <img
+                          id="survey-status-brand-favicon"
+                          src={siteMeta.favicon}
+                          alt="Brand"
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                      )}
                     </div>
                   ) : (
                     <span className="tile-empty-label">{card.placeholderLabel}</span>
@@ -5016,7 +5047,7 @@ const DashboardPage = () => {
                       </span>
                     ) : card.readinessBadge && (
                       <span className={`tile-readiness-tag readiness-${card.readinessBadge.tone}`}>
-                        STATUS: {card.readinessBadge.tone === 'ok' ? card.readinessBadge.label : 'NEEDS ATTENTION'}
+                        STATUS: {card.readinessBadge.label || 'NEEDS ATTENTION'}
                       </span>
                     )}
                     {' '}
@@ -5144,7 +5175,7 @@ const DashboardPage = () => {
                       let mdArtifactsMissing = false;
                       let mdMockupOnlyRetry = false;
                       let mdFullPagesOnlyRetry = false;
-                      if (card.id === 'multi-device-view' && mStatus === 'succeeded') {
+                      if (card.id === 'multi-device-view' && (mStatus === 'succeeded' || mStatus === 'failed')) {
                         const hasMockup = Boolean(dashboardState?.artifacts?.homepageDeviceMockup?.downloadUrl);
                         const fp = dashboardState?.artifacts?.fullPageScreenshots || {};
                         const hasFullPages = Boolean(
@@ -5318,7 +5349,7 @@ const DashboardPage = () => {
               always active so the terminal never sits alone. */}
           <div
             id="intake-modal-card"
-            data-with-survey="true"
+            data-with-survey={activeRunIsIntake ? 'true' : 'false'}
             style={{
               position: 'relative',
               zIndex: 2,
@@ -5340,7 +5371,7 @@ const DashboardPage = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', justifyContent: 'space-between' }}>
               <img src="/img/sig.png" alt="" aria-hidden="true" style={{ width: '2.75rem', height: 'auto', display: 'block' }} />
               <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.44)', fontWeight: 700, fontFamily: '"Space Mono", monospace' }}>
-                Client Access
+                {activeModuleCard ? 'Updating Dashboard' : 'Client Access'}
               </span>
               {/* Status orb — same shape as auth back button */}
               <span
@@ -5361,17 +5392,13 @@ const DashboardPage = () => {
               <div ref={modalMarqueeTrackRef} style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform' }}>
                 {(['a', 'b']).map((k) => (
                   <span key={k} aria-hidden={k === 'b' ? 'true' : undefined} style={{ margin: 0, flexShrink: 0, color: '#2a2420', fontSize: 'clamp(2rem, 8.5vw, 7rem)', lineHeight: 1, letterSpacing: '-0.04em', fontFamily: '"Doto", "Space Mono", monospace', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                    {'BUILDING YOUR DASHBOARD\u00A0\u00A0\u00B7\u00A0\u00A0PROCESSING WEBSITE\u00A0\u00A0\u00B7\u00A0\u00A0'}
+                    {activeModuleCard
+                      ? `UPDATING ${activeModuleCard.label}\u00A0\u00A0\u00B7\u00A0\u00A0RUNNING MODULE\u00A0\u00A0\u00B7\u00A0\u00A0`
+                      : 'BUILDING YOUR DASHBOARD\u00A0\u00A0\u00B7\u00A0\u00A0PROCESSING WEBSITE\u00A0\u00A0\u00B7\u00A0\u00A0'}
                   </span>
                 ))}
               </div>
             </div>
-
-            {/* Copy — exact auth copyStyle */}
-            <p id="intake-modal-copy" style={{ margin: 0, color: 'rgba(42,36,32,0.66)', lineHeight: 1.6, fontFamily: '"Space Grotesk", system-ui, sans-serif', textAlign: 'center' }}>
-              {awaitingSignupProvision ? 'Linking Your Workspace' : 'Creating Your Dashboard'}
-            </p>
-
 
             {/* ── Bottom row: terminal (left) + survey (right) ── */}
             <div id="intake-modal-body">
@@ -5393,7 +5420,7 @@ const DashboardPage = () => {
                 </div>
               </div>
 
-              <div id="intake-modal-survey-col" data-resolved={surveyResolved ? 'true' : 'false'}>
+              {activeRunIsIntake && <div id="intake-modal-survey-col" data-resolved={surveyResolved ? 'true' : 'false'}>
                 <OnboardingChatModal
                   steps={ONBOARDING_ENTRY_STEPS}
                   initialAnswers={onboardingAnswersSeed || {}}
@@ -5423,7 +5450,7 @@ const DashboardPage = () => {
                 {/* Retry prompt removed from here — passed into
                     OnboardingChatModal as a prop so it renders inside the
                     chat message thread, not as a separate block. */}
-              </div>
+              </div>}
             </div>
 
             {/* Footer */}
@@ -5530,19 +5557,26 @@ const DashboardPage = () => {
           onClick={() => { if (!deleteAccountLoading) setShowDeleteAccountModal(false); }}
         >
           <div id="delete-account-modal" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              id="delete-account-modal-close"
-              onClick={() => { if (!deleteAccountLoading) setShowDeleteAccountModal(false); }}
-              aria-label="Close"
-              disabled={deleteAccountLoading}
-            >[ ✕ ]</button>
-            <h2 id="delete-account-modal-title">Delete account</h2>
-            <p id="delete-account-modal-body">
+            <div id="delete-account-brand-row">
+              <img src="/img/sig.png" alt="" aria-hidden="true" id="delete-account-sig" />
+              <span id="delete-account-eyebrow">Delete Account</span>
+              <button
+                type="button"
+                id="delete-account-modal-close"
+                onClick={() => { if (!deleteAccountLoading) setShowDeleteAccountModal(false); }}
+                aria-label="Close"
+                disabled={deleteAccountLoading}
+              >✕</button>
+            </div>
+
+            <h2 id="delete-account-modal-headline">DELETE ACCOUNT</h2>
+
+            <p id="delete-account-modal-copy">
               This permanently removes your Firebase Auth identity, all client data in
               Firestore, and every generated artifact in Storage (screenshots, mockups,
               brief PDFs). This cannot be undone.
             </p>
+
             <label id="delete-account-confirm-label" htmlFor="delete-account-confirm-input">
               Type <strong>DELETE</strong> to confirm
             </label>
@@ -5562,19 +5596,20 @@ const DashboardPage = () => {
             <div id="delete-account-modal-actions">
               <button
                 type="button"
+                id="delete-account-modal-confirm"
+                className="cta-pill-btn"
+                onClick={handleDeleteAccount}
+                disabled={deleteAccountLoading || deleteConfirmInput.trim().toUpperCase() !== 'DELETE'}
+              >
+                {deleteAccountLoading ? 'Deleting…' : 'Delete Account'}
+              </button>
+              <button
+                type="button"
                 id="delete-account-modal-cancel"
                 onClick={() => setShowDeleteAccountModal(false)}
                 disabled={deleteAccountLoading}
               >
                 Cancel
-              </button>
-              <button
-                type="button"
-                id="delete-account-modal-confirm"
-                onClick={handleDeleteAccount}
-                disabled={deleteAccountLoading || deleteConfirmInput.trim().toUpperCase() !== 'DELETE'}
-              >
-                {deleteAccountLoading ? 'Deleting…' : 'Delete account'}
               </button>
             </div>
           </div>
@@ -5796,7 +5831,7 @@ const DashboardPage = () => {
                   <p id="tile-detail-bento-description">
                     {activeTileModal.readinessBadge && (
                       <span className={`tile-readiness-tag readiness-${activeTileModal.readinessBadge.tone}`}>
-                        STATUS: {activeTileModal.readinessBadge.tone === 'ok' ? activeTileModal.readinessBadge.label : 'NEEDS ATTENTION'}
+                        STATUS: {activeTileModal.readinessBadge.label || 'NEEDS ATTENTION'}
                       </span>
                     )}
                     {activeTileModal.readinessBadge ? ' ' : ''}
@@ -8460,14 +8495,24 @@ const dashboardCss = `
     width: 100%;
     height: 100%;
     display: flex;
+    flex-direction: row;
     align-items: center;
     justify-content: center;
+    gap: 10px;
   }
   #survey-status-avatar-img {
-    width: 64px;
-    height: 64px;
+    width: 56px;
+    height: 56px;
     border-radius: 50%;
     object-fit: cover;
+    display: block;
+    flex-shrink: 0;
+  }
+  #survey-status-brand-favicon {
+    width: 56px;
+    height: 56px;
+    border-radius: 0;
+    object-fit: contain;
     display: block;
     flex-shrink: 0;
   }
@@ -10177,13 +10222,13 @@ const dashboardCss = `
   @media (max-width: 620px) {
     #founders-shell { padding-top: 96px; }
     #founders-top-strip-inner {
-      gap: 16px;
-      padding: 0 16px;
+      gap: 12px;
+      padding: 0 12px;
     }
-    #founders-top-actions { gap: 0.75rem; }
-    #founders-linkedin { font-size: 0.92rem; }
-    #founders-login-link { padding: 0.62rem 0.9rem; font-size: 0.8rem; }
-    #founders-chat-cta { padding: 0.62rem 0.9rem; font-size: 0.8rem; gap: 0.35rem; }
+    #founders-top-actions { gap: 0.5rem; }
+    #founders-linkedin { font-size: 0.72rem; }
+    #founders-login-link { padding: 0.4rem 0.6rem; font-size: 0.55rem; }
+    #founders-chat-cta { padding: 0.4rem 0.6rem; font-size: 0.55rem; gap: 0.25rem; }
     .founders-chat-label-full  { display: none; }
     .founders-chat-label-short { display: inline; }
     #capability-section { padding-top: 0; }
@@ -10567,8 +10612,8 @@ const dashboardCss = `
     color: #D71921;
   }
   @media (max-width: 480px) {
-    #intake-modal-overlay { padding: 1rem 0.5rem; align-items: flex-start; overflow-y: auto; }
-    #intake-modal-card { width: 95vw; box-sizing: border-box; }
+    #intake-modal-overlay { padding: 1rem 0.5rem; align-items: center; overflow-y: auto; min-height: 100%; }
+    #intake-modal-card { width: 95vw; box-sizing: border-box; margin: auto; }
   }
 
   /* ── Intake body — 2-col layout when survey is active ── */
@@ -11522,10 +11567,27 @@ const dashboardCss = `
     font-family: var(--font-ui, "Space Grotesk", system-ui, sans-serif);
     color: #2a2420;
   }
+  #delete-account-brand-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    justify-content: space-between;
+  }
+  #delete-account-sig {
+    width: 2.75rem;
+    height: auto;
+    display: block;
+  }
+  #delete-account-eyebrow {
+    font-size: 0.82rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(42, 36, 32, 0.44);
+    font-weight: 700;
+    font-family: var(--font-mono, monospace);
+  }
   #delete-account-modal-close {
-    position: absolute;
-    top: 1rem;
-    right: 1rem;
     width: 2.4rem;
     height: 2.4rem;
     display: inline-flex;
@@ -11540,26 +11602,30 @@ const dashboardCss = `
     line-height: 1;
     cursor: pointer;
     transition: background 0.2s ease, color 0.2s ease;
+    flex-shrink: 0;
   }
   #delete-account-modal-close:hover {
     background: rgba(255,255,255,1);
     color: #2a2420;
   }
-  #delete-account-modal-title {
-    margin: 0 0 0.75rem;
-    font-size: 0.82rem;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: #8b1e1e;
-    font-family: var(--font-mono, monospace);
+  #delete-account-modal-headline {
+    margin: 0 0 0.7rem;
+    color: #2a2420;
+    font-size: clamp(2rem, 8.5vw, 7rem);
+    line-height: 1;
+    letter-spacing: -0.04em;
+    font-family: "Doto", "Space Mono", monospace;
     font-weight: 700;
+    text-align: center;
+    word-break: break-word;
   }
-  #delete-account-modal-body {
-    margin: 0 0 1rem;
-    font-size: 0.92rem;
-    line-height: 1.6;
+  #delete-account-modal-copy {
+    margin: 0 0 1.2rem;
     color: rgba(42, 36, 32, 0.66);
+    line-height: 1.6;
     font-family: var(--font-ui, "Space Grotesk", system-ui, sans-serif);
+    text-align: center;
+    font-size: 0.92rem;
   }
   #delete-account-confirm-label {
     display: block;
@@ -11595,50 +11661,59 @@ const dashboardCss = `
   }
   #delete-account-modal-actions {
     display: flex;
+    flex-direction: column;
     gap: 0.75rem;
-    justify-content: flex-end;
     margin-top: 1.4rem;
   }
-  #delete-account-modal-cancel,
   #delete-account-modal-confirm {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     min-height: 3rem;
-    padding: 0.65rem 1.25rem;
+    width: 100%;
+    border: none;
     border-radius: 999px;
-    font-family: var(--font-mono, monospace);
-    font-size: 0.84rem;
+    background: linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+    color: #fff;
     font-weight: 700;
+    font-size: 0.95rem;
+    cursor: pointer;
+    font-family: var(--font-mono, monospace);
     letter-spacing: 0.05em;
     text-transform: uppercase;
     line-height: 1;
-    cursor: pointer;
-    transition: background 0.28s ease, box-shadow 0.28s ease, transform 0.28s ease, border-color 0.28s ease;
-    border: none;
+    transition: box-shadow 0.28s ease, transform 0.28s ease;
   }
+  #delete-account-modal-confirm:hover:not(:disabled) {
+    box-shadow: 0px 5px 10px rgba(0,0,0,0.067), 0px 15px 30px rgba(0,0,0,0.067), 0px 20px 40px rgba(0,0,0,0.1);
+    transform: scale(1.012);
+  }
+  #delete-account-modal-confirm:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
   #delete-account-modal-cancel {
-    background: rgba(255,255,255,0.92);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.65rem;
+    min-height: 3rem;
+    width: 100%;
+    border-radius: 999px;
     border: 1px solid rgba(42, 36, 32, 0.18);
-    color: #2a2420;
+    background: rgba(255,255,255,0.92);
+    color: #3c3c3c;
+    font-weight: 500;
+    font-size: 0.9rem;
+    cursor: pointer;
+    font-family: var(--font-ui, "Space Grotesk", system-ui, sans-serif);
+    letter-spacing: 0.01em;
     box-shadow: 0 1px 3px rgba(42,36,32,0.08);
+    line-height: 1;
+    transition: background 0.28s ease, box-shadow 0.28s ease, transform 0.28s ease;
   }
   #delete-account-modal-cancel:hover {
     background: rgba(255,255,255,1);
     box-shadow: 0px 5px 10px rgba(0,0,0,0.05), 0px 15px 30px rgba(0,0,0,0.05), 0px 20px 40px rgba(0,0,0,0.08);
     transform: scale(1.012);
   }
-  #delete-account-modal-confirm {
-    background: #c45c5c;
-    color: #ffffff;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-  }
-  #delete-account-modal-confirm:hover:not(:disabled) {
-    background: #d46a6a;
-    box-shadow: 0px 5px 10px rgba(0,0,0,0.067), 0px 15px 30px rgba(0,0,0,0.067), 0px 20px 40px rgba(0,0,0,0.1);
-    transform: scale(1.012);
-  }
-  #delete-account-modal-confirm:disabled,
   #delete-account-modal-cancel:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 
   /* ── Lamp effects ── */

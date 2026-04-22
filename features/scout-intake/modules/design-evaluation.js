@@ -16,6 +16,7 @@ const { runSiteFetch }   = require('./shared/site-fetch');
 const { runStyleGuide }  = require('./shared/style-guide');
 const { runSkill, buildSourcePayloads } = require('../skills/_runner');
 const { CARD_CONTRACT }  = require('../card-contract');
+const { sampleVisualPalette } = require('../visual-palette-sampler');
 const fb                 = require('../../../api/_lib/firebase-admin.cjs');
 
 const CARD_ID   = 'design-evaluation';
@@ -68,11 +69,19 @@ async function runDesignEvaluationModule({ clientId, websiteUrl, onProgress = nu
   }
   const evidence = fetchResult.evidence;
 
+  // 2a. Sample ground-truth palette from homepage screenshot (best-effort).
+  const homepageMockupUrl = await loadHomepageMockupUrl(clientId);
+  let visualPalette = null;
+  if (homepageMockupUrl) {
+    const sampled = await sampleVisualPalette({ imageUrl: homepageMockupUrl });
+    if (sampled.ok) visualPalette = sampled.palette;
+  }
+
   // 2. Extract design-system tokens (best-effort — skill handles null).
   await emit('analyze', 'Extract colors, typography, and layout tokens…');
   let styleGuide = null;
   try {
-    const sgResult = await runStyleGuide({ evidence });
+    const sgResult = await runStyleGuide({ evidence, visualPalette });
     styleGuide = sgResult?.styleGuide || null;
     if (!sgResult?.ok && sgResult?.error) {
       const w = { type: 'warning', code: 'style_guide_extraction_degraded', message: sgResult.error, stage: 'analyze' };
@@ -98,10 +107,9 @@ async function runDesignEvaluationModule({ clientId, websiteUrl, onProgress = nu
     };
   }
 
-  // Look up the homepage mockup if multi-device-view has already run.
-  // Passed through as an __image payload so the skill runner turns it into
+  // homepageMockupUrl was resolved above (step 2a). If present, it's also
+  // passed through as an __image payload so the skill runner turns it into
   // an Anthropic vision block.
-  const homepageMockupUrl = await loadHomepageMockupUrl(clientId);
   if (homepageMockupUrl) {
     await emit('analyze', 'Include homepage mockup as visual reference…');
   }

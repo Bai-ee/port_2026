@@ -8,7 +8,7 @@ const { saveBufferArtifact } = require('./storage-artifacts.cjs');
 const DEFAULT_BASE_URL = 'https://production-sfo.browserless.io';
 const DEFAULT_REQUEST_TIMEOUT_MS = 45000;
 const DEFAULT_GOTO_TIMEOUT_MS = 15000;
-const DEFAULT_POST_LOAD_WAIT_MS = 1200;
+const DEFAULT_POST_LOAD_WAIT_MS = 4000;
 const SCREENSHOT_VARIANTS = [
   // Viewport screenshots — used for the multi-device mockup composite
   {

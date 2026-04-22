@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 /**
  * Onboarding survey — overlay modal that layers above the intake-build modal
@@ -54,6 +54,12 @@ export default function OnboardingSurveyModal({
   }, [step.selectType, currentValue]);
 
   const isLastStep = stepIndex === stepCount - 1;
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
 
   const setValue = useCallback((nextValue) => {
     setLocalValues((prev) => ({ ...prev, [step.id]: nextValue }));

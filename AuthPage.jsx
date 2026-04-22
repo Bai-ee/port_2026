@@ -199,8 +199,12 @@ const AuthPageInner = () => {
         }
         #auth-submit-btn:disabled,
         #auth-google-btn:disabled {
-          opacity: 0.4;
+          opacity: 0.25;
           cursor: not-allowed;
+        }
+        #auth-submit-btn:disabled::before {
+          animation: none;
+          background: none;
         }
 
         @media (max-width: 480px) {
@@ -277,22 +281,20 @@ const AuthPageInner = () => {
         <div id="auth-brand-row" style={brandStyle}>
           <img src="/img/sig.png" alt="" aria-hidden="true" style={sigStyle} />
           <span style={eyebrowStyle}>Client Access</span>
-          <Link href="/" id="auth-back-btn" style={backBtnStyle} aria-label="Back to site">↖</Link>
+          <Link href="/" id="auth-back-btn" style={backBtnStyle} aria-label="Back to site">✕</Link>
         </div>
 
         {/* Marquee — rAF driven, fixed content so speed never changes between tabs */}
         <div style={titleViewportStyle}>
           <div ref={marqueeTrackRef} style={titleTrackStyle}>
-            <span style={titleStyle}>SIGN IN TO YOUR DASHBOARD&nbsp;&nbsp;·&nbsp;&nbsp;CREATE DASHBOARD&nbsp;&nbsp;·&nbsp;&nbsp;</span>
-            <span aria-hidden="true" style={titleStyle}>SIGN IN TO YOUR DASHBOARD&nbsp;&nbsp;·&nbsp;&nbsp;CREATE DASHBOARD&nbsp;&nbsp;·&nbsp;&nbsp;</span>
+            <span style={titleStyle}>SIGN IN TO YOUR DASHBOARD&nbsp;&nbsp;·&nbsp;&nbsp;SIGN UP&nbsp;&nbsp;·&nbsp;&nbsp;</span>
+            <span aria-hidden="true" style={titleStyle}>SIGN IN TO YOUR DASHBOARD&nbsp;&nbsp;·&nbsp;&nbsp;SIGN UP&nbsp;&nbsp;·&nbsp;&nbsp;</span>
           </div>
         </div>
 
         {isHomepageCreate ? (
           /* ── Homepage-create streamlined variant ─────────────────────────── */
           <>
-            <p id="auth-copy" style={copyStyle}>Create your account to activate your dashboard.</p>
-
             {!isFirebaseConfigured ? (
               <div id="auth-firebase-warning" style={warningStyle}>
                 Firebase is not configured yet. Add the `NEXT_PUBLIC_FIREBASE_*` variables to `.env.local` before signing in.
@@ -347,9 +349,9 @@ const AuthPageInner = () => {
                 id="auth-submit-btn"
                 className="cta-pill-btn"
                 style={submitStyle}
-                disabled={submitting || !isFirebaseConfigured}
+                disabled={submitting || !isFirebaseConfigured || !form.email.trim() || !form.password}
               >
-                {submitting ? 'Working…' : 'Create Dashboard'}
+                {submitting ? 'Working…' : 'Sign Up'}
               </button>
 
               <div id="auth-divider" style={dividerStyle}>
@@ -366,19 +368,13 @@ const AuthPageInner = () => {
                 disabled={submitting || !isFirebaseConfigured}
               >
                 <GoogleLogo />
-                <span>Create Dashboard with Google</span>
+                <span>Sign Up with Google</span>
               </button>
             </form>
           </>
         ) : (
           /* ── General auth variant — full experience unchanged ─────────────── */
           <>
-            <p id="auth-copy" style={copyStyle}>
-              {mode === 'signin'
-                ? 'Sign in to access your dashboard.'
-                : 'Create your dashboard and make requests.'}
-            </p>
-
             {!isFirebaseConfigured ? (
               <div id="auth-firebase-warning" style={warningStyle}>
                 Firebase is not configured yet. Add the `NEXT_PUBLIC_FIREBASE_*` variables to `.env.local` before signing in.
@@ -408,7 +404,7 @@ const AuthPageInner = () => {
                 style={{ ...tabButtonStyle, color: mode === 'create' ? '#f5f1df' : '#2a2420' }}
                 onClick={() => setMode('create')}
               >
-                Create Dashboard
+                Sign Up
               </button>
             </div>
 
@@ -512,9 +508,9 @@ const AuthPageInner = () => {
                 id="auth-submit-btn"
                 className="cta-pill-btn"
                 style={submitStyle}
-                disabled={submitting || !isFirebaseConfigured}
+                disabled={submitting || !isFirebaseConfigured || !form.email.trim() || !form.password}
               >
-                {submitting ? 'Working…' : mode === 'signin' ? 'Enter Dashboard' : 'Create Dashboard'}
+                {submitting ? 'Working…' : mode === 'signin' ? 'Enter Dashboard' : 'Sign Up'}
               </button>
 
               <div id="auth-divider" style={dividerStyle}>
@@ -531,7 +527,7 @@ const AuthPageInner = () => {
                 disabled={submitting || !isFirebaseConfigured}
               >
                 <GoogleLogo />
-                <span>{mode === 'signin' ? 'Continue with Google' : 'Create Dashboard with Google'}</span>
+                <span>{mode === 'signin' ? 'Continue with Google' : 'Sign Up with Google'}</span>
               </button>
             </form>
           </>

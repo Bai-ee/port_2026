@@ -472,11 +472,36 @@ const DESIGN_SYSTEM_TOOL = {
 
 // ── Master prompt ────────────────────────────────────────────────────────────
 
-function buildDesignSystemPrompt(cssText, siteUrl, { headingFontHint = null } = {}) {
+function buildVisualPaletteBlock(visualPalette) {
+  if (!visualPalette || !Array.isArray(visualPalette.hero) || visualPalette.hero.length === 0) return '';
+  const coverage = Array.isArray(visualPalette.coverage)
+    ? visualPalette.coverage.map((c) => `  - ${c.hex} (${Math.round((c.ratio || 0) * 100)}% of hero)`).join('\n')
+    : visualPalette.hero.map((hex) => `  - ${hex}`).join('\n');
+  const accents = Array.isArray(visualPalette.accents) && visualPalette.accents.length
+    ? visualPalette.accents.join(', ')
+    : '(none detected)';
+  return `
+AUTHORITATIVE HOMEPAGE PALETTE — sampled from the rendered hero region of the live site:
+  Dominant brand color (most saturated color present above the fold): ${visualPalette.dominant}
+  Hero coverage (top colors by pixel share):
+${coverage}
+  Accent candidates: ${accents}
+  Mode: ${visualPalette.mode || 'mixed'}
+
+COLOR RECONCILIATION RULE:
+  - Treat the sampled HOMEPAGE PALETTE above as ground truth for what users actually see.
+  - If a CSS-declared color would go into primary/secondary/tertiary but is NOT present (within ~ΔE 20) in the hero coverage list, move it to styleNotes with a note like "declared in CSS but not prominent on homepage" — do NOT put it in primary/secondary/tertiary.
+  - If the CSS has no saturated brand color but the homepage palette shows one, use the sampled dominant color as primary (set role: "brand accent — sampled from homepage").
+  - Neutral backgrounds should match the hero-coverage background, not an unused CSS variable.
+`;
+}
+
+function buildDesignSystemPrompt(cssText, siteUrl, { headingFontHint = null, visualPalette = null } = {}) {
   const headingHintBlock = headingFontHint
     ? `\nAUTHORITATIVE HEADING-FONT HINT — extracted deterministically from the raw CSS's h1 rules:\n  headingSystem.fontFamily MUST be "${headingFontHint}" unless you can point to a more specific h1 selector in the CSS below that proves otherwise. Do not use a .menu-button, .nav-link, or utility-class font as the heading font.\n`
     : '';
-  return `You are a senior design systems engineer performing a CSS audit.${headingHintBlock}
+  const paletteBlock = buildVisualPaletteBlock(visualPalette);
+  return `You are a senior design systems engineer performing a CSS audit.${headingHintBlock}${paletteBlock}
 
 Your job: analyze the raw CSS below and call write_design_system with a complete, structured design system extraction.
 
@@ -580,7 +605,7 @@ function extractUsage(response) {
  * @param {function} [options.onProgress] - Called before LLM call fires
  * @returns {Promise<DesignSystemResult>}
  */
-async function extractDesignSystem(evidence, { onProgress } = {}) {
+async function extractDesignSystem(evidence, { onProgress, visualPalette = null } = {}) {
   // Collect CSS from all fetched pages
   const allCssEvidence = {
     inlineStyles: [],
@@ -634,7 +659,7 @@ async function extractDesignSystem(evidence, { onProgress } = {}) {
       messages: [
         {
           role: 'user',
-          content: buildDesignSystemPrompt(cssText, evidence.url, { headingFontHint }),
+          content: buildDesignSystemPrompt(cssText, evidence.url, { headingFontHint, visualPalette }),
         },
       ],
     });
