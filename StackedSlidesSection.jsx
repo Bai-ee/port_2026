@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   Workflow,
   ArrowRightLeft,
+  Lock,
 } from 'lucide-react';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -188,14 +189,16 @@ const PORTFOLIO_IMAGES = [
 
 const CMO_TABLE_ROWS = [
   { task: 'Bryan Balli',             value: 'Custom requests' },
-  { task: 'Style guide',             value: 'Cross-device visual audit' },
+  { task: 'Cross-Device Mockups',    value: 'Full Page Screenshots' },
+  { task: 'Social Preview Check',    value: 'OG Meta Data Review' },
+  { task: 'Brand Snapshot',          value: 'Core Design Tokens' },
+  { task: 'SEO + AI Visibility',     value: 'Searchability Score' },
   { task: 'Brand tone',              value: "How you're being perceived" },
-  { task: 'SEO score',               value: 'Performance & AI readiness' },
   { task: 'Competitor info',         value: 'How you compare' },
   { task: 'Signals',                 value: 'Geo, events & social' },
   { task: 'Marketing',               value: 'Signal based strategies' },
   { task: 'Agentic automation',      value: 'Advanced systems' },
-  { task: 'Brand brief',             value: 'Downloadable summary' },
+  { task: 'Founders Brief',          value: 'Downloadable summary' },
 ];
 
 const AUTOMATION_CAPABILITIES = [
@@ -1193,6 +1196,24 @@ const StackedSlidesSection = () => {
         }
         .cmo-table-inner { display: none; }
         .cmo-table-outer { display: block; }
+        .cmo-arrow {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 1.5rem;
+          height: 1.5rem;
+          border-radius: 999px;
+          background: rgba(42, 36, 32, 0.06);
+          color: rgba(42, 36, 32, 0.45);
+          font-size: 0.7rem;
+          cursor: default;
+          transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+        }
+        .cmo-arrow:hover {
+          background: rgba(42, 36, 32, 0.14);
+          color: rgba(42, 36, 32, 0.75);
+          transform: scale(1.12);
+        }
         .cmo-url-input-desktop { display: none !important; }
         .cmo-url-input-mobile { display: flex; }
         @media (min-width: 900px) {
@@ -1335,7 +1356,13 @@ const StackedSlidesSection = () => {
                                           {CMO_TABLE_ROWS.map((row) => (
                                             <tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}>
                                               <td style={{ padding: '0.38rem 0.4rem', color: '#2a2420', fontWeight: 500 }}>{row.task}</td>
-                                              <td style={{ padding: '0.38rem 0.2rem', color: 'rgba(42,36,32,0.3)', fontSize: '0.7rem', textAlign: 'center' }}>→</td>
+                                              <td style={{ padding: '0.38rem 0.2rem', textAlign: 'center' }}>
+                                                {row.task === 'Bryan Balli' || row.task === 'Cross-Device Mockups' || row.task === 'Social Preview Check' || row.task === 'Brand Snapshot' || row.task === 'SEO + AI Visibility' || row.task === 'Founders Brief' ? (
+                                                  <span style={{ color: 'rgba(42,36,32,0.3)', fontSize: '0.7rem' }}>→</span>
+                                                ) : (
+                                                  <span className="cmo-arrow"><Lock size={12} /></span>
+                                                )}
+                                              </td>
                                               <td style={{ padding: '0.38rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td>
                                             </tr>
                                           ))}
@@ -1399,7 +1426,7 @@ const StackedSlidesSection = () => {
                                   <div className="cmo-table-inner" style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
                                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
                                       <thead><tr><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>What you Get</th><th style={{ width: '1.5rem' }} /><th style={{ textAlign: 'right', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>What this means</th></tr></thead>
-                                      <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500 }}>{row.task}</td><td style={{ padding: '0.32rem 0.2rem', color: 'rgba(42,36,32,0.3)', fontSize: '0.7rem', textAlign: 'center' }}>→</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
+                                      <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500 }}>{row.task}</td><td style={{ padding: '0.32rem 0.2rem', textAlign: 'center' }}>{row.task === 'Bryan Balli' || row.task === 'Cross-Device Mockups' || row.task === 'Social Preview Check' || row.task === 'Brand Snapshot' || row.task === 'SEO + AI Visibility' || row.task === 'Founders Brief' ? <span style={{ color: 'rgba(42,36,32,0.3)', fontSize: '0.7rem' }}>→</span> : <span className="cmo-arrow"><Lock size={12} /></span>}</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
                                     </table>
                                     <a id="cmo-no-website-hint-desktop" href="/login?flow=homepage-create" style={cmoNoWebsiteLinkStyle}>Don't Have a Website?</a>
                                   </div>
@@ -1416,7 +1443,7 @@ const StackedSlidesSection = () => {
                                 <div id="cmo-dashboard-table" className="cmo-table-outer" style={{ gridColumn: '1 / -1', marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
                                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
                                     <thead><tr><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>What you Get</th><th style={{ width: '1.5rem' }} /><th style={{ textAlign: 'right', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>What this means</th></tr></thead>
-                                    <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500 }}>{row.task}</td><td style={{ padding: '0.32rem 0.2rem', color: 'rgba(42,36,32,0.3)', fontSize: '0.7rem', textAlign: 'center' }}>→</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
+                                    <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500 }}>{row.task}</td><td style={{ padding: '0.32rem 0.2rem', textAlign: 'center' }}>{row.task === 'Bryan Balli' || row.task === 'Cross-Device Mockups' || row.task === 'Social Preview Check' || row.task === 'Brand Snapshot' || row.task === 'SEO + AI Visibility' || row.task === 'Founders Brief' ? <span style={{ color: 'rgba(42,36,32,0.3)', fontSize: '0.7rem' }}>→</span> : <span className="cmo-arrow"><Lock size={12} /></span>}</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
                                   </table>
                                   <div className="cmo-url-input-mobile" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ alignItems: 'center', justifyContent: 'space-between', marginTop: '0.85rem', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                                     <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />

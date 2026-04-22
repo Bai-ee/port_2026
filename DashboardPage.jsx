@@ -1655,6 +1655,7 @@ const DashboardPage = () => {
     const nav = document.getElementById('capability-nav-col');
     const section = document.getElementById('capability-section-shell');
     if (!nav || !section) return undefined;
+    if (window.innerWidth <= 900 && isModularOnboardingClient) return undefined;
     const st = ScrollTrigger.create({
       trigger: nav,
       start: 'top top+=72',
@@ -1664,7 +1665,7 @@ const DashboardPage = () => {
       pinSpacing: false,
     });
     return () => st.kill();
-  }, []);
+  }, [isModularOnboardingClient]);
 
   // Animates the frame width so flex-wrap causes columns to actually reflow:
   // at desktop width (100%) all columns fit in one row side-by-side;
@@ -9527,6 +9528,7 @@ const dashboardCss = `
     #capability-section { padding-top: 0; }
     #capability-section-shell { grid-template-columns: 1fr; }
     #capability-nav-col { order: -1; position: static; flex-direction: row; flex-wrap: wrap; gap: 6px; z-index: 10; }
+    #capability-nav-col.capability-nav-col--single-active { display: none; }
     .capability-nav-btn { flex: 1 1 auto; min-width: 0; padding: 10px 16px; border-radius: 999px; flex-direction: row; align-items: center; justify-content: center; gap: 0; width: auto; background: rgba(255, 255, 255, 1); }
     .capability-nav-btn:hover { background: rgba(255, 255, 255, 1); box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.067), 0px 15px 30px rgba(0, 0, 0, 0.067), 0px 20px 40px rgba(0, 0, 0, 0.1); }
     .capability-nav-btn::before { border-radius: 999px; }
@@ -9562,7 +9564,7 @@ const dashboardCss = `
        shell's height relative to its width. Remove the prior max-height cap
        and the aspect-ratio: auto override that squashed the card on phones. */
     .tile-intake-placeholder {
-      aspect-ratio: inherit;
+      aspect-ratio: 1536 / 1024;
       flex: none;
       min-height: 0;
       max-height: none;
