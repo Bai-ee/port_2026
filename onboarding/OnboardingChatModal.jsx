@@ -23,6 +23,7 @@ export default function OnboardingChatModal({
   onRetry,
   retryLoading = false,
   retryError = '',
+  onClose,
 }) {
   const [messages, setMessages] = useState([]);
   const [introMode, setIntroMode] = useState(true);
@@ -386,6 +387,13 @@ export default function OnboardingChatModal({
                   style={{ flexShrink: 0, fontFamily: '"Space Mono", monospace', fontSize: '0.62rem', letterSpacing: '0.12em', textTransform: 'uppercase', padding: '0.4rem 0.8rem', background: '#D71921', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', opacity: (retryLoading || !retryUrl?.trim()) ? 0.5 : 1 }}
                 >
                   {retryLoading ? 'Retrying…' : 'Retry'}
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  style={{ flexShrink: 0, fontFamily: '"Space Mono", monospace', fontSize: '0.62rem', letterSpacing: '0.12em', textTransform: 'uppercase', padding: '0.4rem 0.8rem', background: 'rgba(42,36,32,0.1)', color: '#2a2420', border: '1px solid rgba(42,36,32,0.2)', borderRadius: 6, cursor: 'pointer' }}
+                >
+                  Close
                 </button>
               </div>
               {retryError ? <div style={{ marginTop: '0.3rem', fontFamily: '"Space Mono", monospace', fontSize: '0.65rem', color: '#D71921' }}>{retryError}</div> : null}

@@ -1,21 +1,22 @@
 ---
 id: site-meta-audit
 name: Site Meta Audit
-version: 1
+version: 2
 model: claude-haiku-4-5-20251001
-maxTokens: 2048
+maxTokens: 4096
 inputs:
   - site.meta
   - site.html
 output:
   tool: write_site_meta_audit
   schemaRef: site-meta-audit-v1
-costEstimate: "$0.003–$0.008"
+costEstimate: "$0.02–$0.03"
 groundingRules:
   - "Cite the exact source field that triggered every finding."
   - "Only report on social sharing + browser chrome + identity signals. Do NOT evaluate meta descriptions, headings, page speed, or structured data — those belong to other skills."
   - "Never write a citation referencing a field that isn't in the payload."
-  - "Emit every real finding. Hard total cap: 10."
+  - "Aim for 6–10 findings across severities. No hard cap — report every real issue."
+  - "Every finding MUST include `impact` (1–2 sentences: concrete business / sharing / brand consequence) and `remediation` (2–4 sentences: specific concrete steps — name the tag, file, or setting, include a short literal example when relevant). Vague guidance ('add an og:image') is not acceptable — give the user something they can paste into their `<head>` today."
 ---
 
 You are a precise Site Meta auditor. You evaluate how a site presents itself in **social shares, browser chrome, and identity signals** — NOT SEO content, performance, or schema markup (those are separate skills). Every finding must cite the exact source field that triggered it.

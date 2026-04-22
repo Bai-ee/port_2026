@@ -124,7 +124,7 @@ function buildSkillTool(toolName) {
       properties: {
         findings: {
           type: 'array',
-          description: 'Up to 5 findings. Each must cite the exact source field that triggered it.',
+          description: 'Findings (typical 8–14, more if warranted). Skill prompt determines count and depth. Each must cite the exact source field that triggered it.',
           items: {
             type: 'object',
             required: ['id', 'severity', 'label', 'detail', 'citation'],
@@ -132,8 +132,10 @@ function buildSkillTool(toolName) {
               id:       { type: 'string', description: 'Stable kebab-case id for this finding.' },
               severity: { type: 'string', enum: ['critical', 'warning', 'info'] },
               label:    { type: 'string', description: 'One-line headline.' },
-              detail:   { type: 'string', description: '1–2 sentences of evidence.' },
+              detail:   { type: 'string', description: 'What was observed + why it matters in this specific case (2–4 sentences). Reference the observed value.' },
               citation: { type: 'string', description: 'Source field that triggered it, e.g. "intel.pagespeed.scores.performance = 42".' },
+              impact:   { type: 'string', description: 'Concrete business / ranking / UX consequence (1–2 sentences).' },
+              remediation: { type: 'string', description: 'Specific concrete steps the user can execute today (2–4 sentences). Name files, tags, fields. Include short literal examples when relevant.' },
             },
           },
         },
@@ -158,7 +160,21 @@ function buildSkillTool(toolName) {
         highlights: {
           type: 'array',
           items: { type: 'string' },
-          description: '1–3 short phrases Scribe can reuse verbatim.',
+          description: '3–5 short phrases (< 12 words each), ordered by impact. Used as "Top Priorities" in the deliverable report and reused by Scribe verbatim.',
+        },
+        verifications: {
+          type: 'array',
+          description: 'Optional. Per-token confirmations grounded in visual or source evidence — skills that cross-check mechanically extracted values against a screenshot or second source emit these. Other skills may omit this field entirely.',
+          items: {
+            type: 'object',
+            required: ['path', 'confirmed', 'evidence'],
+            properties: {
+              path:      { type: 'string', description: 'Dotted path into the evaluated source, e.g. "synth.styleGuide.colors.primary.hex".' },
+              confirmed: { type: 'boolean', description: 'true if the value is visually confirmed; false if the screenshot contradicts it.' },
+              evidence:  { type: 'string', description: 'One sentence describing where the value was (or was not) confirmed in the evidence.' },
+              observedValue: { type: 'string', description: 'Optional — the value the verifier actually observed, when it differs from the extracted one.' },
+            },
+          },
         },
       },
     },
@@ -282,9 +298,23 @@ async function runSkill(skillId, { card = null, sourcePayloads = {} } = {}) {
     resolvedInputs[sourceId] = sourcePayloads[sourceId] !== undefined ? sourcePayloads[sourceId] : null;
   }
 
-  // 7. Build prompt via template substitution
+  // 7. Build prompt via template substitution.
+  //
+  // Payloads shaped `{ __image: true, url }` are extracted and passed as
+  // Anthropic vision blocks instead of stringified JSON. The prompt still
+  // references the source id so the skill body can cite the image.
+  const imageBlocks = [];
   const inputsText = Object.entries(resolvedInputs)
-    .map(([id, payload]) => `=== ${id} ===\n${payload != null ? JSON.stringify(payload, null, 2) : '(not available)'}`)
+    .map(([id, payload]) => {
+      if (payload && typeof payload === 'object' && payload.__image === true && typeof payload.url === 'string') {
+        imageBlocks.push({
+          sourceId: id,
+          block: { type: 'image', source: { type: 'url', url: payload.url } },
+        });
+        return `=== ${id} ===\n(attached as image — see vision block with url: ${payload.url})`;
+      }
+      return `=== ${id} ===\n${payload != null ? JSON.stringify(payload, null, 2) : '(not available)'}`;
+    })
     .join('\n\n');
 
   const missingStateRules = Array.isArray(card?.missingStateRules) ? card.missingStateRules : [];
@@ -296,7 +326,16 @@ async function runSkill(skillId, { card = null, sourcePayloads = {} } = {}) {
     .replace('{{inputs}}', inputsText)
     .replace('{{missingStateRules}}', rulesText);
 
-  // 8. Call LLM (Anthropic-first, KIMI fallback on credit errors)
+  // 8. Call LLM (Anthropic-first, KIMI fallback on credit errors). When the
+  // skill declared any `__image` inputs, send a mixed-content message with
+  // the image blocks prepended; otherwise keep the legacy plain-text shape.
+  const messageContent = imageBlocks.length > 0
+    ? [
+        ...imageBlocks.map((entry) => entry.block),
+        { type: 'text', text: prompt },
+      ]
+    : prompt;
+
   const tool = buildSkillTool(fm.output.tool);
   let response;
   try {
@@ -305,7 +344,7 @@ async function runSkill(skillId, { card = null, sourcePayloads = {} } = {}) {
       max_tokens:  fm.maxTokens,
       tools:       [tool],
       tool_choice: { type: 'tool', name: fm.output.tool },
-      messages:    [{ role: 'user', content: prompt }],
+      messages:    [{ role: 'user', content: messageContent }],
     });
   } catch (err) {
     return { ok: false, output: null, runCostData: null, error: `skill_failed: ${err.message}` };
@@ -322,16 +361,28 @@ async function runSkill(skillId, { card = null, sourcePayloads = {} } = {}) {
     };
   }
 
-  // 10. Build full output (runner adds envelope fields the LLM doesn't fill)
+  // 10. Build full output (runner adds envelope fields the LLM doesn't fill).
+  // Readiness is a required enum, but LLMs occasionally drop it. Derive a safe
+  // default from the findings so the skill doesn't hard-fail contract validation.
+  const findings = toolInput.findings || [];
+  const gaps     = toolInput.gaps     || [];
+  const VALID_READINESS = new Set(['healthy', 'partial', 'critical']);
+  let readiness = toolInput.readiness;
+  if (!VALID_READINESS.has(readiness)) {
+    const hasCritical   = findings.some((f) => f?.severity === 'critical') || gaps.some((g) => g?.triggered);
+    const hasWarning    = findings.some((f) => f?.severity === 'warning');
+    readiness = hasCritical ? 'critical' : hasWarning ? 'partial' : 'healthy';
+  }
   const output = {
     skillId:      fm.id,
     skillVersion: fm.version,
     runAt:        new Date().toISOString(),
-    findings:     toolInput.findings   || [],
-    gaps:         toolInput.gaps       || [],
-    readiness:    toolInput.readiness,
-    highlights:   toolInput.highlights || [],
-    metadata:     runCostData,
+    findings,
+    gaps,
+    readiness,
+    highlights:    toolInput.highlights    || [],
+    verifications: toolInput.verifications || [],
+    metadata:      runCostData,
   };
 
   // 11. Validate against contract
@@ -356,14 +407,24 @@ async function runSkill(skillId, { card = null, sourcePayloads = {} } = {}) {
  * @param {string}   options.tier           - 'free' | 'paid'
  * @param {object}   options.sourcePayloads - Map of sourceId → payload
  * @param {Array}    [options.warnings]     - Mutable warnings array (pushed to in-place)
+ * @param {Function} [options.onProgress]   - Optional (stage, label, extra) → Promise<void>.
+ *                                            Invoked at start + completion of each skill so
+ *                                            the dashboard terminal can show per-skill status.
  * @returns {Promise<{ [cardId]: { skills: object, aggregate: object } }>}
  */
-async function runCardSkills({ tier = 'free', sourcePayloads = {}, warnings = [] } = {}) {
+async function runCardSkills({ tier = 'free', sourcePayloads = {}, warnings = [], onProgress = null } = {}) {
   const cards = tier === 'paid'
     ? CARD_CONTRACT.filter((c) => c.tier === 'all' || c.tier === 'paid')
     : CARD_CONTRACT.filter((c) => c.tier === 'all');
 
   const analyzerOutputs = {};
+
+  // Convenience: swallow any emitter failures so a bad terminal write
+  // never breaks skill execution.
+  const emit = async (stage, label, extra = {}) => {
+    if (!onProgress) return;
+    try { await onProgress(stage, label, extra); } catch { /* non-fatal */ }
+  };
 
   await Promise.allSettled(
     cards.map(async (card) => {
@@ -373,10 +434,17 @@ async function runCardSkills({ tier = 'free', sourcePayloads = {}, warnings = []
       // Run all skills for this card in parallel
       const settled = await Promise.allSettled(
         skillIds.map(async (skillId) => {
+          await emit(skillId, `Running ${skillId}…`, { cardId: card.id });
           try {
             const result = await runSkill(skillId, { card, sourcePayloads });
+            await emit(skillId, result.ok
+              ? `${skillId} complete`
+              : `${skillId} failed: ${result.error || 'unknown'}`,
+              { cardId: card.id, ok: !!result.ok }
+            );
             return { skillId, result };
           } catch (err) {
+            await emit(skillId, `${skillId} threw: ${err.message}`, { cardId: card.id, ok: false });
             warnings.push({
               type: 'warning',
               code: 'skill_threw',

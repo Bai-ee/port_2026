@@ -206,6 +206,35 @@ const CARD_CONTRACT = [
     ],
   },
   {
+    id: 'design-evaluation',
+    navLabel: 'DESIGN EVAL',
+    navTitle: 'Design Evaluation',
+    category: 'design',
+    role: 'visual-identity',
+    // Reads the same extracted tokens as style-guide but reframes them as a
+    // DESIGN.md-shaped fix roadmap (current → proposed, with citations).
+    sourceField: 'snapshot.visualIdentity.styleGuide',
+    analyzer: { impl: 'passthrough', required: false },
+    analyzerSkill: 'design-evaluation',
+    analyzerSkills: ['design-evaluation'],
+    copy: {
+      short:    { min: 80,  max: 180 },
+      expanded: { min: 300, max: 800 },
+    },
+    qualityScaling: true,
+    tier: 'all',
+    actionClass: 'recommend',
+    sources: ['synth.styleGuide', 'site.html', 'site.meta'],
+    missingStateRules: [
+      {
+        id: 'design-evaluation-unavailable',
+        when: 'synth.styleGuide is null',
+        reason: 'Design system extraction did not run, so no tokens are available to evaluate.',
+        offer: 'Run the design-system-extractor to capture tokens before requesting an evaluation.',
+      },
+    ],
+  },
+  {
     id: 'seo-performance',
     navLabel: 'SEO + PERF',
     navTitle: 'SEO + Performance',

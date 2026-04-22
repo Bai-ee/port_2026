@@ -25,6 +25,7 @@ const { buildUserContext } = require('./user-context');
 const { runAnalyzers } = require('./analyzers');
 const { runScribe } = require('./scribe');
 const { runCardSkills, buildSourcePayloads } = require('./skills/_runner');
+const { renderSkillDoc } = require('./skills/_doc-renderer');
 const { aggregateCardSkills } = require('./skills/_aggregator');
 const { ensureScoutConfig } = require('./scout-config-generator');
 const { runSeoCommentGuardian } = require('./seo-comment-guardian');
@@ -648,7 +649,10 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
         userContext,
         runtimeHealth,
       });
-      analyzerOutputs = await withTimeout(runCardSkills({ tier, sourcePayloads, warnings }), 'Analyzer skills');
+      analyzerOutputs = await withTimeout(
+        runCardSkills({ tier, sourcePayloads, warnings, onProgress: emitProgress }),
+        'Analyzer skills'
+      );
       console.log(
         `[${new Date().toISOString()}] INTAKE: analyzer skills complete — ${Object.keys(analyzerOutputs).length} card(s) produced output`
       );
@@ -669,6 +673,37 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
     const card = (analyzerOutputs['seo-performance'] ||= { skills: {}, aggregate: null });
     card.skills['ai-seo-audit'] = aiSeoAuditResult;
     card.aggregate = aggregateCardSkills(card.skills);
+  }
+
+  // ── Render per-skill downloadable docs for the DATA tab ────────────────
+  // Each skill's structured output → self-contained HTML + markdown.
+  // Consumed by dashboard_state.artifacts.skillDocs via normalize.js.
+  const skillDocs = {};
+  for (const [cardId, entry] of Object.entries(analyzerOutputs || {})) {
+    const skills = entry?.skills || {};
+    for (const [skillId, output] of Object.entries(skills)) {
+      try {
+        const doc = renderSkillDoc(output, { siteUrl: websiteUrl, cardId });
+        skillDocs[skillId] = {
+          type:     'skill-doc',
+          skillId,
+          cardId,
+          title:    doc.title,
+          filename: doc.filename,
+          markdown: doc.markdown,
+          html:     doc.html,
+          runAt:    output?.runAt || new Date().toISOString(),
+          siteUrl:  websiteUrl,
+        };
+      } catch (err) {
+        warnings.push({
+          type: 'warning',
+          code: 'skill_doc_render_failed',
+          message: `Failed to render doc for skill '${skillId}': ${err.message}`,
+          stage: 'skills',
+        });
+      }
+    }
   }
 
   // ── Scribe pass — per-card copy + brief doc ─────────────────────────────
@@ -844,6 +879,7 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
       userContext,
       analyzerResults,
       analyzerOutputs,
+      skillDocs,
       scribeResult,
       briefHtml,
       scoutConfig,
@@ -891,6 +927,7 @@ const MODULE_RUNNERS = {
   'social-preview':    () => require('./modules/social-preview').runSocialPreview,
   'seo-performance':   () => require('./modules/seo-performance').runSeoPerformance,
   'style-guide':       () => require('./modules/style-guide').runStyleGuideModule,
+  'design-evaluation': () => require('./modules/design-evaluation').runDesignEvaluationModule,
 };
 
 /**

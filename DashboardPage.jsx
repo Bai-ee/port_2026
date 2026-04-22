@@ -32,6 +32,7 @@ import onboardingConfig from './onboarding/questions.config.cjs';
 import { buildSolutionsList, resolveSolution } from './features/scout-intake/solutions-catalog.mjs';
 import { resolveAnalyzerSource, buildCardDescription, buildModuleStateDescription } from './features/scout-intake/card-description-builder.mjs';
 import { deriveFindings } from './features/scout-intake/derived-findings.mjs';
+import { renderDesignMd } from './features/scout-intake/design-md-renderer.mjs';
 import ModuleCardControls from './components/dashboard/ModuleCardControls';
 
 // Entry-flow survey surfaces every question step (excludes the summary, which
@@ -47,6 +48,7 @@ const ONBOARDING_CARD_IDS = new Set([
   'industry',
   'visibility-snapshot',
   'style-guide',
+  'design-evaluation',
   'priority-signal',
 ]);
 const PENDING_DASHBOARD_SIGNUP_KEY = 'pending-dashboard-signup';
@@ -1219,6 +1221,7 @@ const DashboardPage = () => {
   const [revealedLineCount, setRevealedLineCount] = useState(null);
   const [surveyResolved, setSurveyResolved] = useState(false);
   const [onboardingAnswersSeed, setOnboardingAnswersSeed] = useState(null);
+  const [intakeModalDismissed, setIntakeModalDismissed] = useState(false);
   const modalMarqueeTrackRef = useRef(null);
   const modalMarqueeOffsetRef = useRef(0);
   const modalMarqueeAnimRef = useRef(null);
@@ -1283,11 +1286,20 @@ const DashboardPage = () => {
   // Reset modal tab to SOLUTIONS each time a card modal opens so users land on
   // the action view first. If the card has no analyzer data, the tab bar isn't
   // rendered and this value is unused.
+  // Exceptions:
+  //   - multi-device-view → defaults to the 'desktop' viewport tab.
+  //   - seo-performance → if a skill report exists, default to 'report' so users
+  //     land on the deliverable instead of the solutions list.
   useEffect(() => {
-    if (activeTileModal?.cardId) {
-      setModalTab(activeTileModal.cardId === 'multi-device-view' ? 'desktop' : 'solutions');
-    }
-  }, [activeTileModal?.cardId]);
+    if (!activeTileModal?.cardId) return;
+    const id = activeTileModal.cardId;
+    if (id === 'multi-device-view') { setModalTab('desktop'); return; }
+    // Reference via bootstrap here — `dashboardState` is declared later in the
+    // component body (TDZ) so the direct name isn't safe at effect-definition time.
+    const seoReportReady = !!bootstrap?.dashboardState?.artifacts?.skillDocs?.['seo-depth-audit']?.html;
+    if (id === 'seo-performance' && seoReportReady) { setModalTab('report'); return; }
+    setModalTab('solutions');
+  }, [activeTileModal?.cardId, bootstrap?.dashboardState?.artifacts?.skillDocs]);
 
   useEffect(() => {
     if (!showTierModal) return undefined;
@@ -1491,7 +1503,11 @@ const DashboardPage = () => {
   // Mark the run as active for this session so we know whether to hold the
   // intake modal for survey resolution (only relevant when the build happened
   // during this session — returning users with a long-succeeded run skip this).
-  if (latestRunStatus === 'queued' || latestRunStatus === 'running') {
+  // IMPORTANT: scope to INTAKE runs only. Module reruns (pipelineType:
+  // 'module-run') are triggered from per-card Run buttons and must NOT hold
+  // the onboarding survey modal open after they complete.
+  const activeRunIsIntake = currentRun?.pipelineType !== 'module-run';
+  if ((latestRunStatus === 'queued' || latestRunStatus === 'running') && activeRunIsIntake) {
     runWasActiveRef.current = true;
   }
 
@@ -1503,9 +1519,15 @@ const DashboardPage = () => {
   // to reveal yet, so the onboarding terminal + survey should be the entry experience
   // (even if no brief_run is queued — e.g., idea-only signup without a URL).
   const hasReadyDashboard = latestRunStatus === 'succeeded' && hasIntakeData;
-  const showIntakeModal = !bootstrapLoading && (
+  // Client-side bridge: when a module Run has been clicked, `moduleRunLoading`
+  // flips true immediately. Use it to surface the terminal before the server
+  // round-trip updates latestRunStatus — otherwise there's a visible 2s gap
+  // between click and the terminal appearing.
+  const moduleRunInFlight = Object.values(moduleRunLoading || {}).some(Boolean);
+  const showIntakeModal = !intakeModalDismissed && !bootstrapLoading && (
     (awaitingSignupProvision || !noWorkspaceState) && (
     awaitingSignupProvision
+    || moduleRunInFlight
     || (
     isRunActive
     || latestRunStatus === 'failed'
@@ -2011,6 +2033,8 @@ const DashboardPage = () => {
     let pollHandle = null;
     const kickBootstrap = () => { try { doBootstrap(); } catch {} };
     if (enabled) {
+      // Re-open the terminal overlay for the run that's about to start.
+      setIntakeModalDismissed(false);
       setTimeout(kickBootstrap, 400);
       pollHandle = setInterval(kickBootstrap, 2000);
     }
@@ -2044,6 +2068,10 @@ const DashboardPage = () => {
   const handleModuleRun = useCallback(async (cardId, force = false, options = null, autoEnable = false) => {
     if (!user || moduleRunLoading[cardId]) return;
     setModuleRunLoading((prev) => ({ ...prev, [cardId]: true }));
+    // Re-open the terminal overlay for this run. Without this, any prior
+    // dismiss of the terminal stays sticky for the session and subsequent
+    // module runs would stream invisibly in the background.
+    setIntakeModalDismissed(false);
     // Kick an immediate bootstrap + short interval so the dashboard picks up the
     // server's early writes (latestRunStatus='running', new runId). This flips
     // showIntakeModal so the terminal UI surfaces mid-run instead of only after
@@ -2796,7 +2824,7 @@ const DashboardPage = () => {
   })();
   const DETERMINISTIC_CARD_IDS = new Set([
     'audit-summary', 'brief', 'multi-device-view', 'social-preview',
-    'business-model', 'seo-performance', 'style-guide', 'industry', 'visibility-snapshot', 'priority-signal',
+    'business-model', 'seo-performance', 'style-guide', 'design-evaluation', 'industry', 'visibility-snapshot', 'priority-signal',
   ]);
 
   const intakeCapabilityCards = [
@@ -3095,6 +3123,14 @@ const DashboardPage = () => {
           row('art-mockup',        'Device mockup',        intakeMockupSrc),
           row('art-brief-html',    'Brief HTML',           briefPreviewHtml),
           row('art-brief-pdf',     'Brief PDF',            briefPdfUrl),
+          // Per-skill downloadable audit docs. Inline HTML/markdown stored under
+          // dashboard_state.artifacts.skillDocs[skillId]. Phase 3 wires download UI.
+          row('art-skill-seo',     'SEO audit report',     dashboardState?.artifacts?.skillDocs?.['seo-depth-audit']),
+          row('art-skill-ai-seo',  'AI visibility report', dashboardState?.artifacts?.skillDocs?.['ai-seo-audit']),
+          row('art-skill-brand',   'Site meta report',     dashboardState?.artifacts?.skillDocs?.['site-meta-audit']),
+          row('art-skill-style',   'Style guide report',   dashboardState?.artifacts?.skillDocs?.['style-guide-audit']),
+          row('art-skill-conv',    'Conversion report',    dashboardState?.artifacts?.skillDocs?.['conversion-audit']),
+          row('art-skill-asset',   'Brand asset report',   dashboardState?.artifacts?.skillDocs?.['brand-asset-gap']),
 
           // ── SCRIBE ──
           { key: 'sec-scribe', isHeader: true, label: 'SCRIBE OUTPUT' },
@@ -3205,43 +3241,128 @@ const DashboardPage = () => {
       title: 'Brand Snapshot',
       description: 'Your visual system—colors, typography, layout. Highlights inconsistency and missing structure.',
       placeholderLabel: hasStyleGuideData ? 'STYLE' : 'NO\nSTYLE',
-      rows: [
-        { key: 'sg-heading', label: 'Heading', value: [sgDisplayData?.typography?.headingSystem?.fontFamily, sgDisplayData?.typography?.headingSystem?.fontWeight, sgDisplayData?.typography?.headingSystem?.fontSize].filter(Boolean).join(' · ') || 'Pending' },
-        { key: 'sg-body', label: 'Body', value: [sgDisplayData?.typography?.bodySystem?.fontFamily, sgDisplayData?.typography?.bodySystem?.fontSize].filter(Boolean).join(' · ') || 'Pending' },
-        ...(() => {
-          const sgColorRow = (key, label, entry) => ({
-            key,
-            label,
-            value: entry?.hex ? (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                <span
-                  aria-hidden="true"
-                  style={{
-                    display: 'inline-block',
-                    width: 14,
-                    height: 14,
-                    borderRadius: 3,
-                    background: entry.hex,
-                    border: '1px solid rgba(0, 0, 0, 0.18)',
-                    flexShrink: 0,
-                  }}
-                />
-                <span style={{ whiteSpace: 'normal' }}>
-                  {entry.hex}{entry.role ? ` · ${entry.role}` : ''}
-                </span>
+      rows: (() => {
+        // Design Evaluation verifications cross-check the mechanically-extracted
+        // tokens against the homepage screenshot. Map them to the Brand Snapshot
+        // rows so each row can show a ✓ (confirmed) or ⚠ (contradicted) chip.
+        const verifications = Array.isArray(analyzerOutputs?.['design-evaluation']?.verifications)
+          ? analyzerOutputs['design-evaluation'].verifications
+          : [];
+        const byPath = Object.fromEntries(verifications.map((v) => [v?.path, v]));
+        const ROW_PATH = {
+          'sg-heading':   'synth.styleGuide.typography.headingSystem.fontFamily',
+          'sg-body':      'synth.styleGuide.typography.bodySystem.fontFamily',
+          'sg-primary':   'synth.styleGuide.colors.primary.hex',
+          'sg-secondary': 'synth.styleGuide.colors.secondary.hex',
+          'sg-neutral':   'synth.styleGuide.colors.neutral.hex',
+        };
+        const verifyChip = (rowKey) => {
+          const v = byPath[ROW_PATH[rowKey]];
+          if (!v) return null;
+          const title = v.evidence || '';
+          const style = {
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginLeft: 6,
+            width: 14,
+            height: 14,
+            borderRadius: 7,
+            fontSize: 10,
+            lineHeight: '14px',
+            textAlign: 'center',
+            color: '#fff',
+            background: v.confirmed ? '#22c55e' : '#f59e0b',
+            flexShrink: 0,
+          };
+          return (
+            <span
+              aria-label={v.confirmed ? 'Confirmed in homepage screenshot' : 'Screenshot contradicts extracted value'}
+              title={title}
+              style={style}
+            >
+              {v.confirmed ? '✓' : '!'}
+            </span>
+          );
+        };
+
+        const headingText = [sgDisplayData?.typography?.headingSystem?.fontFamily, sgDisplayData?.typography?.headingSystem?.fontWeight, sgDisplayData?.typography?.headingSystem?.fontSize].filter(Boolean).join(' · ') || 'Pending';
+        const bodyText    = [sgDisplayData?.typography?.bodySystem?.fontFamily, sgDisplayData?.typography?.bodySystem?.fontSize].filter(Boolean).join(' · ') || 'Pending';
+        const withChip = (rowKey, text) => {
+          const chip = verifyChip(rowKey);
+          if (!chip) return text;
+          return (
+            <span style={{ display: 'inline-flex', alignItems: 'center', minWidth: 0 }}>
+              <span style={{ whiteSpace: 'normal' }}>{text}</span>
+              {chip}
+            </span>
+          );
+        };
+
+        const sgColorRow = (key, label, entry) => ({
+          key,
+          label,
+          value: entry?.hex ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+              <span
+                aria-hidden="true"
+                style={{
+                  display: 'inline-block',
+                  width: 14,
+                  height: 14,
+                  borderRadius: 3,
+                  background: entry.hex,
+                  border: '1px solid rgba(0, 0, 0, 0.18)',
+                  flexShrink: 0,
+                }}
+              />
+              <span style={{ whiteSpace: 'normal' }}>
+                {entry.hex}{entry.role ? ` · ${entry.role}` : ''}
               </span>
-            ) : 'Pending',
-          });
-          return [
-            sgColorRow('sg-primary',   'Primary',   sgDisplayData?.colors?.primary),
-            sgColorRow('sg-secondary', 'Secondary', sgDisplayData?.colors?.secondary),
-            sgColorRow('sg-neutral',   'Neutral',   sgDisplayData?.colors?.neutral),
-          ];
-        })(),
-      ],
+              {verifyChip(key)}
+            </span>
+          ) : 'Pending',
+        });
+
+        return [
+          { key: 'sg-heading', label: 'Heading', value: withChip('sg-heading', headingText) },
+          { key: 'sg-body',    label: 'Body',    value: withChip('sg-body',    bodyText) },
+          sgColorRow('sg-primary',   'Primary',   sgDisplayData?.colors?.primary),
+          sgColorRow('sg-secondary', 'Secondary', sgDisplayData?.colors?.secondary),
+          sgColorRow('sg-neutral',   'Neutral',   sgDisplayData?.colors?.neutral),
+        ];
+      })(),
       footerLeft: hasStyleGuideData ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
       moduleControls: { tech: ['html-fetch', 'css-parser', 'anthropic'] },
+    },
+    {
+      id: 'design-evaluation',
+      category: 'onboarding',
+      number: 'DE',
+      label: 'DESIGN EVAL',
+      title: 'Design Evaluation',
+      description: 'Evaluates your site\'s design using a homepage screenshot and our custom design-critique skills, then rates your visual system from our perspective and returns a DESIGN.md brief.',
+      placeholderLabel: hasStyleGuideData ? 'DESIGN.md' : 'NO\nTOKENS',
+      rows: (() => {
+        const ev = analyzerOutputs?.['design-evaluation'] || null;
+        if (!ev) {
+          return buildWorkNeededRows('Run the Design Evaluation skill to generate a DESIGN.md audit of your site\'s tokens.');
+        }
+        const findings = Array.isArray(ev.findings) ? ev.findings : [];
+        const critical = findings.filter((f) => f.severity === 'critical').length;
+        const warning  = findings.filter((f) => f.severity === 'warning').length;
+        return [
+          { key: 'de-readiness', label: 'Readiness', value: ev.readiness || '—' },
+          { key: 'de-findings',  label: 'Findings',  value: String(findings.length) },
+          { key: 'de-critical',  label: 'Critical',  value: String(critical) },
+          { key: 'de-warning',   label: 'Warnings',  value: String(warning) },
+        ];
+      })(),
+      footerLeft: analyzerOutputs?.['design-evaluation'] ? 'Live' : WORK_NEEDED_LABEL,
+      footerRight: 'REVIEWED',
+      moduleControls: { tech: ['html-fetch', 'anthropic'] },
+      analyzer: analyzerOutputs?.['design-evaluation'] || null,
     },
     {
       id: 'industry',
@@ -3993,6 +4114,25 @@ const DashboardPage = () => {
       }
       const moduleDesc = buildModuleStateDescription(card.id, moduleCardState, moduleContext);
       if (moduleDesc) dynamicShortDescription = moduleDesc;
+
+      // Design Evaluation: once the analyzer has findings, replace the generic
+      // module-state copy with a results-focused summary that points the user
+      // to the Design Brief inside the modal.
+      if (card.id === 'design-evaluation' && analyzer && moduleCardState?.status === 'succeeded') {
+        const findings = Array.isArray(analyzer.findings) ? analyzer.findings : [];
+        const critical = findings.filter((f) => f?.severity === 'critical').length;
+        const warning  = findings.filter((f) => f?.severity === 'warning').length;
+        const readiness = analyzer.readiness || 'partial';
+        const verdict = readiness === 'critical'
+          ? 'Your design has foundational issues holding the visual system back'
+          : readiness === 'healthy'
+            ? 'Your design reads as coherent with only minor refinements suggested'
+            : 'Your design is recoverable but needs attention in a few places';
+        const countPhrase = findings.length === 0
+          ? 'No findings surfaced this run.'
+          : `${findings.length} finding${findings.length === 1 ? '' : 's'}${critical ? ` (${critical} critical)` : warning ? ` (${warning} to address)` : ''}.`;
+        dynamicShortDescription = `${verdict}. ${countPhrase} Open the Design Brief inside to review the DESIGN.md and change recommendations.`;
+      }
     }
 
     const isSeoHostingContext = card.id === 'seo-performance' && built?.dominantSignal?.type === 'hosting-context';
@@ -4428,7 +4568,14 @@ const DashboardPage = () => {
                     </button>
                   </div>
                 </div>
-                {isRunActive ? (
+                {/*
+                  This row is meaningful only for full-intake pipeline runs
+                  (re-seeding the website URL). When the user clicks Run on a
+                  card the brief_run has pipelineType: 'module-run' — the terminal
+                  UI shows the progress, and this intake-field row should stay
+                  hidden. Only surface for intake-type (non module-run) runs.
+                */}
+                {isRunActive && currentRun?.pipelineType !== 'module-run' ? (
                   <div id="reseed-active-row">
                     <span id="reseed-run-status-label">
                       {latestRunStatus === 'queued' ? 'RUN IS QUEUED — WAITING FOR WORKER' : 'RUN IN PROGRESS — PROCESSING'}
@@ -4504,8 +4651,9 @@ const DashboardPage = () => {
               // always unlocked; every card after it requires the previous
               // card in the chain to have passed. Cards not in the chain stay
               // locked until they're added here.
-              const CARD_UNLOCK_CHAIN = ['multi-device-view', 'social-preview', 'style-guide', 'seo-performance'];
+              const CARD_UNLOCK_CHAIN = ['multi-device-view', 'design-evaluation', 'social-preview', 'style-guide', 'seo-performance'];
               const INACTIVE_CARD_DESCRIPTIONS = {
+                'design-evaluation':   'Run this to evaluate your site\'s design — we read a homepage screenshot with a custom design-critique skill, rate your visual system from our perspective, and return a DESIGN.md brief with change recommendations.',
                 'multi-device-view':   'Run this to capture your site on desktop, tablet, and mobile, composite a single device-frame mockup, and collect full-page screenshots per device.',
                 'social-preview':      'Run this to pull your site metadata, favicon, and share description, and generate a preview of exactly how your site appears when shared — plus a flag list for anything that is missing.',
                 'style-guide':         'Run this to extract colors, typography, and logo usage from the live site and render a compact style guide for the brand layer of your dashboard.',
@@ -4517,6 +4665,7 @@ const DashboardPage = () => {
                 'priority-signal':     'Run this to pick the single highest-leverage action for your site right now, with the evidence behind it.',
               };
               const LOCKED_CARD_DESCRIPTIONS = {
+                'design-evaluation':   'Evaluates your site\'s design by reading a homepage screenshot with a custom design-critique skill and rating your visual system from our perspective. Returns a DESIGN.md brief with change recommendations you can review or hand to a design agent.',
                 'multi-device-view':   'Captures your site on desktop, tablet, and mobile, composites them into a single device-frame mockup, and provides full-page screenshots you can browse per device.',
                 'social-preview':      'Reads your site metadata, favicon, and share description, and shows exactly how your site appears when shared on social platforms. Flags missing images, titles, and descriptions.',
                 'audit-summary':       'Aggregates every baseline check — pages fetched, metadata coverage, analyzer warnings — into a single go / no-go readout for the foundation of your dashboard.',
@@ -4528,6 +4677,11 @@ const DashboardPage = () => {
                 'priority-signal':     'Picks the single highest-leverage action for your site right now, with the evidence behind it, so you know exactly what to work on next.',
               };
               const hasCardPassed = (cardId) => {
+                if (cardId === 'design-evaluation') {
+                  // Running design-evaluation at all progresses the chain.
+                  const s = moduleState?.[cardId]?.status;
+                  return s === 'succeeded' || s === 'failed' || s === 'partial';
+                }
                 if (cardId === 'multi-device-view') {
                   const mockup = Boolean(dashboardState?.artifacts?.homepageDeviceMockup?.downloadUrl);
                   const fp = dashboardState?.artifacts?.fullPageScreenshots || {};
@@ -4744,6 +4898,15 @@ const DashboardPage = () => {
                         id="bi-hero-image"
                         src={homepageScreenshotUrl}
                         alt="Homepage screenshot"
+                        onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }}
+                      />
+                    </div>
+                  ) : card.id === 'design-evaluation' && moduleState?.['design-evaluation']?.status === 'succeeded' && homepageScreenshotUrl ? (
+                    <div id="de-preview-shell">
+                      <img
+                        id="de-hero-image"
+                        src={homepageScreenshotUrl}
+                        alt="Homepage screenshot evaluated for design"
                         onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }}
                       />
                     </div>
@@ -5163,6 +5326,7 @@ const DashboardPage = () => {
                   onRetry={handleReseed}
                   retryLoading={reseedLoading}
                   retryError={reseedError}
+                  onClose={() => setIntakeModalDismissed(true)}
                 />
                 {/* Retry prompt — shows inside the survey chat when pipeline
                     fails. No layout shift; scrolls into view naturally. */}
@@ -5174,12 +5338,20 @@ const DashboardPage = () => {
 
             {/* Footer */}
             <div id="intake-modal-footer">
-              {client?.normalizedHost
-                || (awaitingSignupProvision && pendingSignupProvision?.websiteUrl
-                  ? (() => { try { return new URL(/^https?:\/\//i.test(pendingSignupProvision.websiteUrl) ? pendingSignupProvision.websiteUrl : `https://${pendingSignupProvision.websiteUrl}`).hostname.replace(/^www\./, ''); } catch { return pendingSignupProvision.websiteUrl; } })()
-                  : null)
-                || (currentRun?.sourceUrl ? (() => { try { return new URL(currentRun.sourceUrl).hostname.replace(/^www\./, ''); } catch { return currentRun.sourceUrl; } })() : null)
-                || '\u00A0'}
+              <span id="intake-modal-footer-host">
+                {client?.normalizedHost
+                  || (awaitingSignupProvision && pendingSignupProvision?.websiteUrl
+                    ? (() => { try { return new URL(/^https?:\/\//i.test(pendingSignupProvision.websiteUrl) ? pendingSignupProvision.websiteUrl : `https://${pendingSignupProvision.websiteUrl}`).hostname.replace(/^www\./, ''); } catch { return pendingSignupProvision.websiteUrl; } })()
+                    : null)
+                  || (currentRun?.sourceUrl ? (() => { try { return new URL(currentRun.sourceUrl).hostname.replace(/^www\./, ''); } catch { return currentRun.sourceUrl; } })() : null)
+                  || '\u00A0'}
+              </span>
+              <button
+                type="button"
+                id="intake-modal-footer-cancel"
+                onClick={() => setIntakeModalDismissed(true)}
+                aria-label="Close terminal and return to dashboard"
+              >[ cancel ]</button>
             </div>
 
           </div>
@@ -5603,21 +5775,170 @@ const DashboardPage = () => {
                     className="tile-detail-bento-cell tile-detail-tabbed-container"
                   >
                     <div className="tile-detail-tabs">
-                      {[
-                        { key: 'solutions', label: 'SOLUTIONS' },
-                        { key: 'problems', label: 'PROBLEMS' },
-                        { key: 'data', label: 'DATA' },
-                      ].map(({ key, label }) => (
-                        <button
-                          key={key}
-                          type="button"
-                          className={`tile-detail-tab${modalTab === key ? ' tile-detail-tab--active' : ''}`}
-                          onClick={() => setModalTab(key)}
-                        >{label}</button>
-                      ))}
+                      {(() => {
+                        // Per-card tab list. Skill report tab appears only when a
+                        // doc is available for that card. seo-performance opens to
+                        // it by default (see modal-tab reset effect).
+                        const SKILL_DOC_BY_CARD = { 'seo-performance': 'seo-depth-audit' };
+                        const docSkillId = SKILL_DOC_BY_CARD[activeTileModal.cardId];
+                        const hasReport = !!(docSkillId && dashboardState?.artifacts?.skillDocs?.[docSkillId]?.html);
+                        const tabs = [
+                          ...(hasReport ? [{ key: 'report', label: 'REPORT' }] : []),
+                          { key: 'solutions', label: 'SOLUTIONS' },
+                          { key: 'problems', label: 'PROBLEMS' },
+                          { key: 'data', label: 'DATA' },
+                        ];
+                        return tabs.map(({ key, label }) => (
+                          <button
+                            key={key}
+                            type="button"
+                            className={`tile-detail-tab${modalTab === key ? ' tile-detail-tab--active' : ''}`}
+                            onClick={() => setModalTab(key)}
+                          >{label}</button>
+                        ));
+                      })()}
                     </div>
                     <div className="tile-detail-tab-content">
-                      {modalTab === 'solutions' && (() => {
+                      {modalTab === 'report' && (() => {
+                        // Renders the skill-generated audit doc inline.
+                        // Sandbox via iframe srcDoc so the doc's CSS doesn't bleed
+                        // into the dashboard. Provides Download HTML / MD buttons
+                        // that pull from the auth'd skill-doc endpoint.
+                        const SKILL_DOC_BY_CARD = { 'seo-performance': 'seo-depth-audit' };
+                        const skillId = SKILL_DOC_BY_CARD[activeTileModal.cardId];
+                        const doc = dashboardState?.artifacts?.skillDocs?.[skillId] || null;
+                        if (!doc) {
+                          return <div className="tile-detail-tab-pane"><p className="tile-analyzer-solutions-empty">Report not generated yet. Run the card to produce one.</p></div>;
+                        }
+                        const downloadDoc = async (format) => {
+                          try {
+                            const auth = (typeof window !== 'undefined' && window.__auth) || null;
+                            const token = await auth?.currentUser?.getIdToken?.();
+                            if (!token) { window.alert('Sign-in required to download.'); return; }
+                            const r = await fetch(`/api/dashboard/skill-doc?skillId=${encodeURIComponent(skillId)}&format=${format}`, {
+                              headers: { authorization: `Bearer ${token}` },
+                            });
+                            if (!r.ok) { window.alert(`Download failed: ${r.status}`); return; }
+                            const blob = await r.blob();
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = (doc.filename || `${skillId}.html`).replace(/\.html?$/i, format === 'md' ? '.md' : '.html');
+                            document.body.appendChild(a);
+                            a.click();
+                            a.remove();
+                            setTimeout(() => URL.revokeObjectURL(url), 1000);
+                          } catch (err) {
+                            window.alert('Download error: ' + (err?.message || 'unknown'));
+                          }
+                        };
+                        const isRerunning = !!moduleRunLoading?.[activeTileModal.cardId];
+                        return (
+                          <div className="tile-detail-tab-pane">
+                            <div id={`${activeTileModal.cardId}-report-toolbar`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 8 }}>
+                              <div style={{ fontSize: 12, opacity: 0.7 }}>
+                                {doc.title} · {new Date(doc.runAt).toLocaleString()}
+                              </div>
+                              <div style={{ display: 'flex', gap: 8 }}>
+                                <button
+                                  id={`${activeTileModal.cardId}-report-rerun`}
+                                  type="button"
+                                  className="tile-solution-expert-cta"
+                                  onClick={() => handleModuleRun(activeTileModal.cardId, true)}
+                                  disabled={isRerunning}
+                                  style={{ cursor: isRerunning ? 'wait' : 'pointer', border: 'none', opacity: isRerunning ? 0.6 : 1 }}
+                                >{isRerunning ? 'Rerunning…' : 'Rerun audit ↻'}</button>
+                                <button
+                                  id={`${activeTileModal.cardId}-report-download-html`}
+                                  type="button"
+                                  className="tile-solution-expert-cta"
+                                  onClick={() => downloadDoc('html')}
+                                  style={{ cursor: 'pointer', border: 'none' }}
+                                >Download HTML ↓</button>
+                                <button
+                                  id={`${activeTileModal.cardId}-report-download-md`}
+                                  type="button"
+                                  className="tile-solution-expert-cta"
+                                  onClick={() => downloadDoc('md')}
+                                  style={{ cursor: 'pointer', border: 'none' }}
+                                >Download MD ↓</button>
+                              </div>
+                            </div>
+                            <iframe
+                              id={`${activeTileModal.cardId}-report-frame`}
+                              title={doc.title}
+                              srcDoc={doc.html}
+                              sandbox=""
+                              style={{
+                                width: '100%',
+                                height: '60vh',
+                                border: '1px solid rgba(255,255,255,0.08)',
+                                borderRadius: 6,
+                                background: '#fff',
+                              }}
+                            />
+                          </div>
+                        );
+                      })()}
+
+                      {modalTab === 'solutions' && activeTileModal.cardId === 'design-evaluation' && (() => {
+                        const cleanSiteName = (() => {
+                          const raw = client?.websiteUrl || client?.name || '';
+                          if (!raw) return 'Untitled';
+                          try {
+                            const u = new URL(raw.startsWith('http') ? raw : `https://${raw}`);
+                            return u.hostname.replace(/^www\./, '');
+                          } catch { return String(raw).split('?')[0]; }
+                        })();
+                        const designMd = renderDesignMd({
+                          siteName: cleanSiteName,
+                          styleGuide: styleGuideData,
+                          skillOutput: activeTileModal.analyzer,
+                        });
+                        const onDownloadDesignMd = () => {
+                          const blob = new Blob([designMd], { type: 'text/markdown;charset=utf-8' });
+                          const url  = URL.createObjectURL(blob);
+                          const a    = document.createElement('a');
+                          a.href = url;
+                          a.download = 'DESIGN.md';
+                          document.body.appendChild(a);
+                          a.click();
+                          a.remove();
+                          setTimeout(() => URL.revokeObjectURL(url), 1000);
+                        };
+                        return (
+                          <div className="tile-detail-tab-pane">
+                            <div id="design-evaluation-md-toolbar" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                              <button
+                                id="design-evaluation-download-btn"
+                                type="button"
+                                className="tile-solution-expert-cta"
+                                onClick={onDownloadDesignMd}
+                                style={{ cursor: 'pointer', border: 'none' }}
+                              >Download DESIGN.md ↓</button>
+                            </div>
+                            <pre
+                              id="design-evaluation-md-preview"
+                              style={{
+                                margin: 0,
+                                padding: 12,
+                                background: 'rgba(0,0,0,0.35)',
+                                color: '#e8e6e1',
+                                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                                fontSize: 12,
+                                lineHeight: 1.5,
+                                whiteSpace: 'pre-wrap',
+                                wordBreak: 'break-word',
+                                borderRadius: 6,
+                                maxHeight: '60vh',
+                                overflow: 'auto',
+                              }}
+                            >{designMd}</pre>
+                          </div>
+                        );
+                      })()}
+
+                      {modalTab === 'solutions' && activeTileModal.cardId !== 'design-evaluation' && (() => {
                         const solutionsList = buildSolutionsList(activeTileModal.analyzer);
                         if (!solutionsList.length) return <div className="tile-detail-tab-pane"><p className="tile-analyzer-solutions-empty">No matched solutions yet.</p></div>;
                         return (
@@ -5734,6 +6055,46 @@ const DashboardPage = () => {
                                 )
                             );
                           })()}
+                          {activeTileModal.cardId === 'design-evaluation' && (
+                            <div id="design-evaluation-raw-data">
+                              <div className="tile-detail-row-section-head">EXTRACTED TOKENS (synth.styleGuide)</div>
+                              <pre
+                                id="design-evaluation-tokens-json"
+                                style={{
+                                  margin: 0,
+                                  padding: 12,
+                                  background: 'rgba(0,0,0,0.35)',
+                                  color: '#e8e6e1',
+                                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                                  fontSize: 11,
+                                  lineHeight: 1.45,
+                                  whiteSpace: 'pre-wrap',
+                                  wordBreak: 'break-word',
+                                  borderRadius: 6,
+                                  maxHeight: '40vh',
+                                  overflow: 'auto',
+                                }}
+                              >{JSON.stringify(styleGuideData ?? null, null, 2)}</pre>
+                              <div className="tile-detail-row-section-head" style={{ marginTop: 12 }}>SKILL OUTPUT (design-evaluation)</div>
+                              <pre
+                                id="design-evaluation-skill-json"
+                                style={{
+                                  margin: 0,
+                                  padding: 12,
+                                  background: 'rgba(0,0,0,0.35)',
+                                  color: '#e8e6e1',
+                                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                                  fontSize: 11,
+                                  lineHeight: 1.45,
+                                  whiteSpace: 'pre-wrap',
+                                  wordBreak: 'break-word',
+                                  borderRadius: 6,
+                                  maxHeight: '40vh',
+                                  overflow: 'auto',
+                                }}
+                              >{JSON.stringify(activeTileModal.analyzer ?? null, null, 2)}</pre>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -7317,7 +7678,8 @@ const dashboardCss = `
     justify-content: center !important;
   }
   #bt-preview-shell,
-  #bi-preview-shell {
+  #bi-preview-shell,
+  #de-preview-shell {
     position: relative;
     width: 100%;
     height: 100%;
@@ -7327,7 +7689,8 @@ const dashboardCss = `
     align-items: center;
     justify-content: center;
   }
-  #bi-hero-image {
+  #bi-hero-image,
+  #de-hero-image {
     width: 100%;
     height: auto;
     object-fit: contain;
@@ -9845,6 +10208,35 @@ const dashboardCss = `
     margin-top: 0.9rem;
     border-top: 1px solid rgba(212, 196, 171, 0.4);
     padding-top: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+  #intake-modal-footer-host {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #intake-modal-footer-cancel {
+    appearance: none;
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    color: rgba(42, 36, 32, 0.5);
+    cursor: pointer;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    transition: color 0.15s ease;
+    flex-shrink: 0;
+  }
+  #intake-modal-footer-cancel:hover,
+  #intake-modal-footer-cancel:focus-visible {
+    color: rgba(42, 36, 32, 0.95);
+    outline: none;
   }
 
   /* Retry row — failed-state only */

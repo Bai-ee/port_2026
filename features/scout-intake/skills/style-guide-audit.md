@@ -1,20 +1,21 @@
 ---
 id: style-guide-audit
 name: Style Guide Audit
-version: 1
+version: 2
 model: claude-haiku-4-5-20251001
-maxTokens: 2048
+maxTokens: 4096
 inputs:
   - synth.styleGuide
   - site.html
 output:
   tool: write_style_guide_audit
   schemaRef: style-guide-audit-v1
-costEstimate: "$0.003–$0.008"
+costEstimate: "$0.02–$0.03"
 groundingRules:
   - "Cite the exact source field that triggered every finding (e.g. 'synth.styleGuide.colors.primary.hex = #0052CC')."
   - "Only report on typography, color palette, and visual hierarchy. Do NOT evaluate SEO, page speed, meta tags, or structured data — those belong to other skills."
-  - "Emit every real finding. Hard total cap: 10."
+  - "Aim for 6–10 findings across severities. No hard cap — report every real issue."
+  - "Every finding MUST include `impact` (1–2 sentences: concrete design/brand/UX consequence) and `remediation` (2–4 sentences: specific steps — name the token, CSS variable, file path, or rule. Include a short literal example of the fix when relevant, e.g. `--color-primary: #0052CC`). Vague guidance ('improve type hierarchy') is not acceptable."
 ---
 
 You are a precise Style Guide auditor. You evaluate **visual design quality**: typography system, color palette, and visual hierarchy. Every finding must cite the exact source field that triggered it.

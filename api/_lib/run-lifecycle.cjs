@@ -194,6 +194,13 @@ function buildDashboardProjection(clientId, pipelineResult, runId) {
     if (pipelineResult.systemPreview) base.systemPreview = pipelineResult.systemPreview;
     if (pipelineResult.siteMeta) base.siteMeta = pipelineResult.siteMeta;
     if (pipelineResult.analyzerOutputs) base.analyzerOutputs = pipelineResult.analyzerOutputs;
+    // skillDocs — per-skill downloadable doc (html + markdown), surfaced on DATA tab.
+    if (pipelineResult.skillDocs && Object.keys(pipelineResult.skillDocs).length > 0) {
+      base.artifacts = {
+        ...(base.artifacts || {}),
+        skillDocs: pipelineResult.skillDocs,
+      };
+    }
     // Phase-4 Scribe output: per-card short/expanded copy + brief sections.
     // Dashboard consumes scribe.cards[cardId] to override static copy.
     if (pipelineResult.scribe && pipelineResult.scribe.cards) {
@@ -731,6 +738,17 @@ function projectModuleResult(update, result) {
     return;
   }
 
+  if (result.cardId === 'design-evaluation') {
+    if (result.result?.styleGuide) {
+      // Keep the shared brand snapshot in sync so subsequent cards reuse it.
+      deepSet(update, ['snapshot', 'visualIdentity', 'styleGuide'], result.result.styleGuide);
+    }
+    if (result.result?.analyzerOutput) {
+      deepSet(update, ['analyzerOutputs', 'design-evaluation'], result.result.analyzerOutput);
+    }
+    return;
+  }
+
   if (result.cardId === 'seo-performance') {
     if (result.result?.pagespeed) {
       // result.result.pagespeed is a pagespeed-insights SourceRecord
@@ -749,6 +767,27 @@ function projectModuleResult(update, result) {
     }
     if (result.result?.aiSeoAudit) {
       deepSet(update, ['analyzerOutputs', 'seo-performance', 'skills', 'ai-seo-audit'], result.result.aiSeoAudit);
+    }
+    // Skill output + downloadable doc from the chained seo-depth-audit skill.
+    if (result.result?.skillOutput && result.result?.skillId) {
+      deepSet(update, ['analyzerOutputs', 'seo-performance', 'skills', result.result.skillId], result.result.skillOutput);
+    }
+    if (result.result?.skillAggregate) {
+      deepSet(update, ['analyzerOutputs', 'seo-performance', 'aggregate'], result.result.skillAggregate);
+    }
+    if (result.result?.skillDoc && result.result?.skillId) {
+      const doc = result.result.skillDoc;
+      deepSet(update, ['artifacts', 'skillDocs', result.result.skillId], {
+        type:     'skill-doc',
+        skillId:  result.result.skillId,
+        cardId:   'seo-performance',
+        title:    doc.title,
+        filename: doc.filename,
+        markdown: doc.markdown,
+        html:     doc.html,
+        runAt:    result.result.skillOutput?.runAt || new Date().toISOString(),
+        siteUrl:  result.result.pagespeed?.facts?.websiteUrl || null,
+      });
     }
   }
 }

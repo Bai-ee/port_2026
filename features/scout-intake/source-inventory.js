@@ -302,6 +302,22 @@ const SOURCE_INVENTORY = [
     ],
     freshness: 'Per run — computed fresh on every pipeline invocation.',
   },
+  {
+    id: 'image.homepageMockup',
+    label: 'Homepage Full-Page Mockup',
+    category: 'artifact',
+    collection: {
+      method: 'Read from dashboard_state.artifacts.fullPageScreenshots["desktop-full"] (or homepageDeviceMockup)',
+      detail: 'Public URL of the full-page desktop screenshot captured by the multi-device-view module. Passed to vision-capable skills as an image content block.',
+      auth: 'None (public download URL).',
+      costPerRun: 'Vision tokens (~1500–3000 per image depending on resolution).',
+      file: 'features/scout-intake/modules/design-evaluation.js',
+    },
+    payloadFields: [
+      '{ __image: true, url: string }',
+    ],
+    freshness: 'Per run of multi-device-view module.',
+  },
 ];
 
 const SOURCES_BY_ID = Object.fromEntries(SOURCE_INVENTORY.map((s) => [s.id, s]));

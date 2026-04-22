@@ -87,6 +87,7 @@ function normalizeIntakeResult(
     userContext = null,
     analyzerResults = null,
     analyzerOutputs = null,
+    skillDocs = null,
     scribeResult = null,
     briefHtml = null,
     scoutConfig = null,
@@ -197,6 +198,10 @@ function normalizeIntakeResult(
     // analyzerOutputs: { [cardId]: SkillOutput } — populated by the skill step in runner.js
     // when SCOUT_ANALYZER_SKILLS_ENABLED is set. Null when flag is off (pre-P1 path).
     analyzerOutputs: analyzerOutputs && Object.keys(analyzerOutputs).length > 0 ? analyzerOutputs : null,
+    // skillDocs: { [skillId]: { type, skillId, cardId, title, filename, markdown, html, runAt, siteUrl } }
+    // Rendered by _doc-renderer.js from each skill's structured output. Surfaced on
+    // the dashboard DATA tab as a downloadable document.
+    skillDocs: skillDocs && Object.keys(skillDocs).length > 0 ? skillDocs : null,
     scribe: scribeResult && scribeResult.ok ? {
       cards: scribeResult.cards,
       brief: scribeResult.brief,

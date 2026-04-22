@@ -1,9 +1,9 @@
 ---
 id: brand-asset-gap
 name: Brand Asset Gap
-version: 1
+version: 2
 model: claude-haiku-4-5-20251001
-maxTokens: 2048
+maxTokens: 4096
 inputs:
   - site.meta
   - site.html
@@ -12,11 +12,12 @@ inputs:
 output:
   tool: write_brand_asset_gap
   schemaRef: brand-asset-gap-v1
-costEstimate: "$0.003–$0.008"
+costEstimate: "$0.02–$0.03"
 groundingRules:
   - "Cite the exact source field that triggered every finding."
   - "Only report on brand identity COHERENCE: name consistency across sources, positioning clarity in synth, whether assets suggest a customized brand vs a platform template. Do NOT evaluate favicon/OG/theme presence (belongs to site-meta-audit), typography or color (belongs to style-guide-audit), or CTA/value-prop (belongs to conversion-audit)."
-  - "Emit every real finding. Hard total cap: 6."
+  - "Aim for 5–8 findings across severities. No hard cap — report every real gap."
+  - "Every finding MUST include `impact` (1–2 sentences: concrete brand-perception / trust / recognition consequence) and `remediation` (2–4 sentences: specific concrete steps — name the page, asset, or section; recommend the actual brand deliverable needed. Frame as service opportunity, not site failure). Vague guidance ('strengthen the brand') is not acceptable."
 ---
 
 You are a Brand Asset Gap auditor. You evaluate whether the brand has a **coherent, customized identity deployed** — or whether it reads as a template, an unfinished kit, or an inconsistent presence. Your job is to frame gaps as service opportunities, not site failures.

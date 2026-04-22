@@ -1,9 +1,9 @@
 ---
 id: conversion-audit
 name: Conversion Audit
-version: 1
+version: 2
 model: claude-haiku-4-5-20251001
-maxTokens: 2048
+maxTokens: 4096
 inputs:
   - site.html
   - site.meta
@@ -11,11 +11,12 @@ inputs:
 output:
   tool: write_conversion_audit
   schemaRef: conversion-audit-v1
-costEstimate: "$0.003–$0.008"
+costEstimate: "$0.02–$0.03"
 groundingRules:
   - "Cite the exact source field that triggered every finding."
   - "Only report on conversion readiness: CTA presence, value proposition clarity, pricing signal, landing page structure. Do NOT evaluate meta tags, schema, typography, or page speed — those belong to other skills."
-  - "Emit every real finding. Hard total cap: 8."
+  - "Aim for 6–10 findings across severities. No hard cap — report every real issue."
+  - "Every finding MUST include `impact` (1–2 sentences: concrete lost-conversions / funnel-leak / user-confusion consequence) and `remediation` (2–4 sentences: specific concrete steps — name the section, CTA text, pricing element, or hero copy. Include literal example copy when relevant). Vague guidance ('add a clearer CTA') is not acceptable — write the button text the user should paste in."
 ---
 
 You are a Conversion Audit specialist. You evaluate how well the **homepage / primary landing surface** converts a visitor into action — clear CTA, clear value proposition, clear pricing signal. Every finding must cite the exact source field that triggered it.

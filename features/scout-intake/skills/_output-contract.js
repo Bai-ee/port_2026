@@ -81,6 +81,25 @@ function validateSkillOutput(output) {
     errors.push(`readiness must be one of: ${[...VALID_READINESS].join(', ')}`);
   }
 
+  // verifications — optional (only emitted by cross-check skills like
+  // design-evaluation). When present, every entry must match the shape
+  // so downstream consumers can trust it.
+  if (output.verifications !== undefined) {
+    if (!Array.isArray(output.verifications)) {
+      errors.push('verifications must be an array when present');
+    } else {
+      output.verifications.forEach((v, i) => {
+        if (!v || typeof v !== 'object') {
+          errors.push(`verifications[${i}] must be an object`);
+          return;
+        }
+        if (typeof v.path !== 'string' || !v.path)     errors.push(`verifications[${i}].path missing`);
+        if (typeof v.confirmed !== 'boolean')           errors.push(`verifications[${i}].confirmed must be boolean`);
+        if (typeof v.evidence !== 'string')             errors.push(`verifications[${i}].evidence must be a string`);
+      });
+    }
+  }
+
   // highlights
   if (!Array.isArray(output.highlights)) {
     errors.push('highlights must be an array');

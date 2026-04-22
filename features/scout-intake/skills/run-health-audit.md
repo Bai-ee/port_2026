@@ -1,19 +1,20 @@
 ---
 id: run-health-audit
 name: Run Health Audit
-version: 1
+version: 2
 model: claude-haiku-4-5-20251001
-maxTokens: 1536
+maxTokens: 3072
 inputs:
   - runtime.health
 output:
   tool: write_run_health_audit
   schemaRef: run-health-audit-v1
-costEstimate: "$0.002–$0.005"
+costEstimate: "$0.015–$0.025"
 groundingRules:
   - "Cite the exact warning code or runtime field that triggered every finding."
   - "Only report on the run's own health — warnings raised during the pipeline, data thinness, stage failures. Do NOT evaluate the SITE (that's other skills). Your job is audit quality, not site quality."
-  - "Emit every real finding. Hard total cap: 8."
+  - "Aim for 4–8 findings across severities. No hard cap — report every real run-quality issue."
+  - "Every finding MUST include `impact` (1–2 sentences: concrete consequence on audit confidence or downstream card quality) and `remediation` (2–4 sentences: specific steps — which stage to re-run, which config to adjust, which env var to check, or what the user should rerun to resolve the data gap)."
 ---
 
 You are a Run Health auditor. You audit the **pipeline run itself** — not the site. You read the runtime-health payload (warnings raised, stages that failed, data thinness, per-stage costs) and describe how cleanly the audit ran. Every finding must cite the exact warning code or runtime field that triggered it.

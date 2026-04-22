@@ -25,3 +25,9 @@ if (!isFirebaseConfigured && typeof window !== 'undefined') {
 export const firebaseApp = app;
 export const auth = app ? getAuth(app) : null;
 export const db = app ? getFirestore(app) : null;
+
+// Dev-only: expose auth on window so we can grab tokens from the console.
+// Stripped in production builds (process.env.NODE_ENV !== 'development').
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+  window.__auth = auth;
+}
