@@ -35,6 +35,9 @@ const Header = ({ logoRef, onOpenPage }) => {
           <div id="founders-top-actions">
             {user ? (
               <>
+                <button type="button" id="founders-logout-link" onClick={signOutUser}>
+                  Logout
+                </button>
                 <button type="button" id="founders-login-link" onClick={handleDashClick}>
                   Dash
                 </button>

@@ -932,7 +932,7 @@ const StackedSlidesSection = () => {
         .toArray('#stacked-grid-row > *', wrapper)
         .filter((card) => card.getBoundingClientRect().top > window.innerHeight * 0.82);
       const revealBlocks = gsap.utils
-        .toArray('[data-grid-window], #stacked-inline-footer, #inline-footer-value-block, #agency-marquee-shell, #inline-footer-bottom, #panel-additional-content-header', wrapper)
+        .toArray('[data-grid-window], #stacked-inline-footer, #inline-footer-value-block, #agency-marquee-shell, #inline-footer-seo-nav, #inline-footer-bottom, #panel-additional-content-header', wrapper)
         .filter((block, index, all) => all.indexOf(block) === index);
 
       if (gridCards.length) {
@@ -1109,6 +1109,7 @@ const StackedSlidesSection = () => {
         #stacked-inline-footer,
         #inline-footer-value-block,
         #agency-marquee-shell,
+        #inline-footer-seo-nav,
         #inline-footer-bottom,
         #panel-additional-content-header {
           opacity: 0;
@@ -1125,6 +1126,7 @@ const StackedSlidesSection = () => {
           #stacked-inline-footer,
           #inline-footer-value-block,
           #agency-marquee-shell,
+          #inline-footer-seo-nav,
           #inline-footer-bottom,
           #panel-additional-content-header {
             opacity: 1 !important;
@@ -1586,10 +1588,45 @@ const StackedSlidesSection = () => {
                               </div>
                             </div>
                           </div>
+                          <div id="inline-footer-seo-nav" style={inlineFooterSeoNavStyle}>
+                            <div style={inlineFooterNavColStyle}>
+                              <span style={inlineFooterNavHeadingStyle}>Work</span>
+                              <a href="#" style={inlineFooterNavLinkStyle}>Featured Projects</a>
+                              <a href="#" style={inlineFooterNavLinkStyle}>Case Studies</a>
+                              <a href="#" style={inlineFooterNavLinkStyle}>Process</a>
+                            </div>
+                            <div style={inlineFooterNavColStyle}>
+                              <span style={inlineFooterNavHeadingStyle}>Services</span>
+                              <a href="/services/ai-design-consulting" style={inlineFooterNavLinkStyle}>AI Design Consulting</a>
+                              <a href="/services/web-development" style={inlineFooterNavLinkStyle}>Web Development</a>
+                              <a href="/services/brand-identity" style={inlineFooterNavLinkStyle}>Brand Identity</a>
+                              <a href="/services/design-systems" style={inlineFooterNavLinkStyle}>Design Systems</a>
+                              <a href="/services/seo-geo" style={inlineFooterNavLinkStyle}>SEO &amp; GEO</a>
+                            </div>
+                            <div style={inlineFooterNavColStyle}>
+                              <span style={inlineFooterNavHeadingStyle}>FAQ</span>
+                              <a href="/faq#what-is-a-creative-technologist" style={inlineFooterNavLinkStyle}>What Is a Creative Technologist?</a>
+                              <a href="/faq#ai-design-engineer" style={inlineFooterNavLinkStyle}>What Is an AI Design Engineer?</a>
+                              <a href="/faq#how-i-work" style={inlineFooterNavLinkStyle}>How I Work</a>
+                              <a href="/faq#pricing" style={inlineFooterNavLinkStyle}>Pricing &amp; Engagements</a>
+                              <a href="/faq#turnaround" style={inlineFooterNavLinkStyle}>Turnaround &amp; Availability</a>
+                            </div>
+                            <div style={inlineFooterNavColStyle}>
+                              <span style={inlineFooterNavHeadingStyle}>Company</span>
+                              <a href="#" style={inlineFooterNavLinkStyle}>About</a>
+                              <a href="#" style={inlineFooterNavLinkStyle}>How It Works</a>
+                              <a href="#" style={inlineFooterNavLinkStyle}>Contact</a>
+                              <a href="https://calendly.com/bballi/30min" target="_blank" rel="noopener noreferrer" style={inlineFooterNavLinkStyle}>Book a Call</a>
+                            </div>
+                          </div>
+
                           <div id="inline-footer-bottom" style={inlineFooterBottomStyle}>
+                            <span style={inlineFooterCopyrightStyle}>© 2026 Bryan Balli · All rights reserved</span>
                             <div style={inlineFooterLegalStyle}>
                               <a href="https://www.linkedin.com/in/bryanballi" style={inlineFooterLegalLinkStyle}>LinkedIn</a>
                               <a href="https://x.com/bai_ee" style={inlineFooterLegalLinkStyle}>𝕏</a>
+                              <a href="#" style={inlineFooterLegalLinkStyle}>Privacy</a>
+                              <a href="#" style={inlineFooterLegalLinkStyle}>Terms</a>
                             </div>
                           </div>
                         </div>
@@ -3083,11 +3120,12 @@ const inlineFooterInnerDividerStyle = {
 
 const inlineFooterBottomStyle = {
   display: 'flex',
-  justifyContent: 'center',
+  justifyContent: 'space-between',
   alignItems: 'center',
   flexWrap: 'wrap',
   gap: '0.75rem',
-  marginTop: 'clamp(1.5rem, 3vw, 2.5rem)',
+  paddingTop: 'clamp(1rem, 2vw, 1.5rem)',
+  borderTop: '1px solid rgba(42, 36, 32, 0.1)',
 };
 
 const inlineFooterCopyrightStyle = {
@@ -3101,10 +3139,42 @@ const inlineFooterLegalStyle = {
 };
 
 const inlineFooterLegalLinkStyle = {
-  fontSize: '1.4rem',
+  fontSize: '0.82rem',
   color: 'rgba(42, 36, 32, 0.4)',
   textDecoration: 'none',
   cursor: 'pointer',
+};
+
+const inlineFooterSeoNavStyle = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: 'clamp(2rem, 5vw, 4rem)',
+  padding: 'clamp(2rem, 4vw, 3rem) 0',
+  borderTop: '1px solid rgba(42, 36, 32, 0.1)',
+};
+
+const inlineFooterNavColStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.7rem',
+  flex: '1 1 120px',
+};
+
+const inlineFooterNavHeadingStyle = {
+  fontSize: '0.68rem',
+  fontWeight: 700,
+  letterSpacing: '0.1em',
+  textTransform: 'uppercase',
+  color: 'rgba(42, 36, 32, 0.35)',
+  marginBottom: '0.2rem',
+};
+
+const inlineFooterNavLinkStyle = {
+  fontSize: 'clamp(0.82rem, 1.1vw, 0.9rem)',
+  color: 'rgba(42, 36, 32, 0.6)',
+  textDecoration: 'none',
+  cursor: 'pointer',
+  lineHeight: 1.4,
 };
 
 const cmoTableHeadingStyle = {

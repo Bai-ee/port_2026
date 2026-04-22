@@ -50,8 +50,14 @@ const SiteFooter = () => {
             max-width: 100% !important;
           }
           #site-footer .footer-nav-grid {
-            flex-direction: row;
-            gap: 2.5rem;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2.5rem 2rem;
+          }
+        }
+        @media (max-width: 420px) {
+          #site-footer .footer-nav-grid {
+            grid-template-columns: 1fr;
           }
         }
       `}</style>
@@ -114,6 +120,22 @@ const SiteFooter = () => {
               <a href="#" style={footerNavLinkStyle}>Case Studies</a>
               <a href="#" style={footerNavLinkStyle}>Gallery</a>
               <a href="#" style={footerNavLinkStyle}>Process</a>
+            </div>
+            <div style={footerNavColStyle}>
+              <span style={footerNavHeadingStyle}>Services</span>
+              <a href="/services/ai-design-consulting" style={footerNavLinkStyle}>AI Design Consulting</a>
+              <a href="/services/web-development" style={footerNavLinkStyle}>Web Development</a>
+              <a href="/services/brand-identity" style={footerNavLinkStyle}>Brand Identity</a>
+              <a href="/services/design-systems" style={footerNavLinkStyle}>Design Systems</a>
+              <a href="/services/seo-geo" style={footerNavLinkStyle}>SEO &amp; GEO</a>
+            </div>
+            <div style={footerNavColStyle}>
+              <span style={footerNavHeadingStyle}>FAQ</span>
+              <a href="/faq#what-is-a-creative-technologist" style={footerNavLinkStyle}>What Is a Creative Technologist?</a>
+              <a href="/faq#ai-design-engineer" style={footerNavLinkStyle}>What Is an AI Design Engineer?</a>
+              <a href="/faq#how-i-work" style={footerNavLinkStyle}>How I Work</a>
+              <a href="/faq#pricing" style={footerNavLinkStyle}>Pricing &amp; Engagements</a>
+              <a href="/faq#turnaround" style={footerNavLinkStyle}>Turnaround &amp; Availability</a>
             </div>
             <div style={footerNavColStyle}>
               <span style={footerNavHeadingStyle}>Company</span>
