@@ -2884,7 +2884,7 @@ const DashboardPage = () => {
       number: 'BR',
       label: 'BRIEF',
       wide: true,
-      title: 'Onboarding Brief',
+      title: 'Client Brief',
       description: brandOverview?.headline
         ? brandOverview.headline
         : 'A structured breakdown of your business, positioning, and site. This becomes the baseline for all strategy and recommendations.',
@@ -3469,7 +3469,7 @@ const DashboardPage = () => {
       number: 'SV',
       label: 'SURVEY',
       title: 'Onboarding Survey',
-      description: 'I step into your business, map what\'s working, fix what\'s not, and build what\'s missing, across design, content, and systems. This survey helps me get the context I need upfront — so we skip the back-and-forth and get straight to the work that matters.',
+      description: 'Across design, content, and systems. This survey helps me get the context I need upfront — so we skip the back-and-forth and get straight to the work that matters.',
       placeholderLabel: 'SURVEY',
       rows: (() => {
         const total = onboardingSummary?.total ?? 10;

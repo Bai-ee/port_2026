@@ -205,7 +205,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
             fontWeight: 400,
             maxWidth: '42ch',
           }}>
-            I step into your business, map what's working, fix what's not, and build what's missing, across design, content, and systems.
+            Across design, content, and systems.
           </p>
         </div>
       </div>

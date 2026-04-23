@@ -12,6 +12,7 @@
 .cta-pill-btn {
   position: relative;
   isolation: isolate;
+  padding: 1rem;
 }
 
 .cta-pill-btn::before {
@@ -160,7 +161,8 @@ body.cmo-modal-open #founders-top-strip { display: none; }
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
-  padding: 0.65rem 1rem;
+  padding: 0.5rem 0.75rem;
+  line-height: 1;
   border-radius: 999px;
   background:
     linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%),
@@ -205,8 +207,8 @@ body.cmo-modal-open #founders-top-strip { display: none; }
   }
   #founders-top-actions { gap: 0.35rem; }
   #founders-login-link,
-  #founders-logout-link { padding: 0.55rem 0.85rem; font-size: 0.78rem; }
-  #founders-chat-cta { padding: 0.55rem 0.85rem; font-size: 0.78rem; gap: 0.3rem; }
+  #founders-logout-link { padding: 0.5rem 0.75rem; font-size: 0.78rem; }
+  #founders-chat-cta { padding: 0.5rem 0.75rem; font-size: 0.78rem; gap: 0.3rem; }
   .founders-chat-label-full  { display: none; }
   .founders-chat-label-short { display: inline; }
 }
