@@ -188,17 +188,16 @@ const PORTFOLIO_IMAGES = [
 ];
 
 const CMO_TABLE_ROWS = [
-  { task: 'Bryan Balli',             value: 'Custom requests' },
   { task: 'Cross-Device Mockups',    value: 'Full Page Screenshots' },
   { task: 'Social Preview Check',    value: 'OG Meta Data Review' },
   { task: 'Brand Snapshot',          value: 'Core Design Tokens' },
   { task: 'SEO + AI Visibility',     value: 'Searchability Score' },
+  { task: 'Founder Briefs',          value: 'Downloadable summary' },
   { task: 'Brand tone',              value: "How you're being perceived" },
   { task: 'Competitor info',         value: 'How you compare' },
   { task: 'Signals',                 value: 'Geo, events & social' },
   { task: 'Marketing',               value: 'Signal based strategies' },
   { task: 'Agentic automation',      value: 'Advanced systems' },
-  { task: 'Founders Brief',          value: 'Downloadable summary' },
 ];
 
 const AUTOMATION_CAPABILITIES = [
@@ -208,8 +207,8 @@ const AUTOMATION_CAPABILITIES = [
     icon: 'chart',
     tablePreview: true,
     previewVideo: '/vid/dashboard.mov',
-    title: 'Everything Starts With a Shared Dashboard',
-    body: 'Get a clear read on your brand, with instant insight into your SEO, competitors, and what to prioritize.',
+    title: 'Immediate Insights and Free Automations',
+    body: 'Onboard now and we\'ll save time later by automating a Client Brief based on your current website, brand identity and visibility.',
   },
   {
     badge: 'BI',
@@ -428,9 +427,25 @@ const StackedSlidesSection = () => {
   const [particleParams, setParticleParams] = useState(PARTICLE_DEFAULTS);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeMobileCapability, setActiveMobileCapability] = useState(null);
-  const [homepageUrl, setHomepageUrl] = useState('');
-  const [urlIsValid, setUrlIsValid] = useState(false);
+  const CMO_PLACEHOLDER_URL = 'yourwebsite.com';
+  const [homepageUrl, setHomepageUrl] = useState(CMO_PLACEHOLDER_URL);
+  const [urlIsValid, setUrlIsValid] = useState(true);
+  const [showCmoModal, setShowCmoModal] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    if (!showCmoModal) return;
+    const onKey = (e) => { if (e.key === 'Escape') setShowCmoModal(false); };
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.body.classList.add('cmo-modal-open');
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+      document.body.classList.remove('cmo-modal-open');
+    };
+  }, [showCmoModal]);
 
   const handleHomepageUrlChange = (e) => {
     const val = e.target.value;
@@ -439,7 +454,7 @@ const StackedSlidesSection = () => {
   };
 
   const handleCreateDashboard = () => {
-    if (!urlIsValid) return;
+    if (!urlIsValid || homepageUrl === CMO_PLACEHOLDER_URL) return;
     const normalized = normalizeHomepageUrl(homepageUrl);
     const params = new URLSearchParams({ flow: 'homepage-create', url: normalized });
     router.push(`/login?${params.toString()}`);
@@ -778,19 +793,16 @@ const StackedSlidesSection = () => {
             <p style="margin:0 0 0.7rem;font-size:0.6rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:rgba(42,36,32,0.4);font-family:'Space Mono',monospace;">Your Business, Mapped</p>
             <table style="width:100%;border-collapse:collapse;font-size:0.78rem;flex:1;">
               <thead><tr style="border-bottom:1.5px solid rgba(42,36,32,0.15);">
-                <th style="text-align:left;padding:0.3rem 0.4rem;font-weight:600;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;">What you Get</th>
+                <th style="text-align:left;padding:0.3rem 0.4rem;font-weight:600;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;">Modules</th>
                 <th style="width:1.2rem;"></th>
-                <th style="text-align:right;padding:0.3rem 0.4rem;font-weight:600;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;">What this means</th>
+                <th style="text-align:right;padding:0.3rem 0.4rem;font-weight:600;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;">Automations</th>
               </tr></thead>
               <tbody>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Bryan Balli</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Custom requests</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Style guide</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Cross-device visual audit</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Brand tone</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">How you&apos;re being perceived</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">SEO score</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Performance &amp; AI readiness</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Competitor info</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">How you compare</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Signals</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Geo, events &amp; social</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Marketing</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Signal based strategies</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Agentic automation</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Advanced systems</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Cross-Device Mockups</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Full Page Screenshots</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Social Preview Check</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">OG Meta Data Review</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Brand Snapshot</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Core Design Tokens</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">SEO + AI Visibility</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Searchability Score</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Founder Briefs</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Downloadable summary</td></tr>
                 <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Brand brief</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td><td style="padding:0.38rem 0.4rem;text-align:right;color:rgba(42,36,32,0.65);font-weight:400;">Downloadable summary</td></tr>
               </tbody>
             </table>
@@ -1265,6 +1277,165 @@ const StackedSlidesSection = () => {
             flex: 1;
           }
         }
+        /* ── Automations Modal ─────────────────────────────────────────────── */
+        @property --cta-angle { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+        @keyframes cmoMarqueeScroll { from { transform: translate3d(0,0,0); } to { transform: translate3d(-50%,0,0); } }
+        @keyframes agentMarquee { from { transform: translate3d(0,0,0); } to { transform: translate3d(-50%,0,0); } }
+        @keyframes cmoModalFadeIn { from { opacity:0; } to { opacity:1; } }
+        @keyframes cmoModalPopIn { from { opacity:0; transform: scale(0.96) translateY(8px); } to { opacity:1; transform: scale(1) translateY(0); } }
+        #cmo-modal-overlay {
+          position: fixed; inset: 0; z-index: 100000;
+          background: rgba(255,255,255,0.6);
+          backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+          display: flex; align-items: center; justify-content: center;
+          padding: 20px; box-sizing: border-box;
+          animation: cmoModalFadeIn 180ms ease-out;
+          overflow-y: auto;
+        }
+        @media (max-width: 600px) {
+          #cmo-modal-overlay { align-items: flex-start; padding: 16px; }
+        }
+        #cmo-auth-card {
+          position: relative; width: 100%; max-width: 44rem;
+          padding: clamp(1.25rem,5vw,2rem); border-radius: 1.1rem; box-sizing: border-box;
+          background: rgba(255,255,255,0.5); border: 1px solid rgba(212,196,171,0.82);
+          backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px);
+          box-shadow: 0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4),
+            0px 5px 10px rgba(0,0,0,0.1), 0px 15px 30px rgba(0,0,0,0.1), 0px 20px 40px rgba(0,0,0,0.15);
+          display: flex; flex-direction: column;
+          animation: cmoModalPopIn 220ms cubic-bezier(0.2,0.8,0.2,1);
+          font-family: 'Space Grotesk', system-ui, sans-serif;
+        }
+        #cmo-auth-brand-row {
+          display: flex; align-items: center; justify-content: space-between;
+          gap: 0.75rem; margin-bottom: 0.8rem;
+        }
+        #cmo-auth-sig { width: 2.75rem; height: auto; display: block; }
+        #cmo-auth-eyebrow {
+          font-family: 'Space Mono', monospace; font-size: 0.82rem;
+          letter-spacing: 0.14em; text-transform: uppercase;
+          color: rgba(42,36,32,0.44); font-weight: 700;
+        }
+        #cmo-auth-back-btn {
+          display: inline-flex; align-items: center; justify-content: center;
+          width: 2.4rem; height: 2.4rem; border-radius: 999px;
+          background: rgba(255,255,255,0.34); border: 1px solid rgba(42,36,32,0.12);
+          color: rgba(42,36,32,0.58); font-family: 'Space Mono', monospace;
+          font-size: 1.05rem; line-height: 1; cursor: pointer; padding: 0;
+          transition: background 160ms ease, color 160ms ease;
+        }
+        #cmo-auth-back-btn:hover { background: rgba(255,255,255,0.6); color: #2a2420; }
+        #cmo-auth-copy {
+          display: flex; align-items: flex-start; justify-content: center;
+          gap: 0; margin: 0.6rem 0 0; width: 100%;
+          border: 1px solid rgba(42,36,32,0.12); border-radius: 0.85rem;
+          padding: 0.9rem 0.75rem; box-sizing: border-box;
+        }
+        .cmo-step-item {
+          display: flex; flex-direction: column; align-items: center;
+          gap: 0.45rem; flex: 1; position: relative; min-width: 0;
+        }
+        .cmo-step-track { display: flex; flex-direction: row; align-items: center; width: 100%; }
+        .cmo-step-line { flex: 1; height: 1.5px; width: auto; background: rgba(42,36,32,0.15); }
+        .cmo-step-line-hidden { background: transparent; }
+        .cmo-step-dot {
+          flex-shrink: 0; width: 1.5rem; height: 1.5rem; border-radius: 50%;
+          display: flex; align-items: center; justify-content: center;
+          font-family: 'Space Mono', monospace; font-size: 0.6rem; font-weight: 700;
+          transition: all 160ms ease;
+        }
+        .cmo-step-dot-active { background: #2a2420; color: #fff; box-shadow: 0 0 0 3px rgba(42,36,32,0.12); }
+        .cmo-step-dot-inactive { background: transparent; border: 1.5px solid rgba(42,36,32,0.2); color: rgba(42,36,32,0.35); }
+        .cmo-step-labels { display: flex; flex-direction: column; align-items: center; gap: 0.1rem; padding: 0 0.25rem; }
+        .cmo-step-name {
+          font-family: 'Space Grotesk', system-ui, sans-serif;
+          font-size: clamp(0.85rem,1.2vw,1rem); letter-spacing: 0;
+          text-align: center; white-space: normal;
+        }
+        .cmo-step-name-active  { color: #2a2420; font-weight: 700; }
+        .cmo-step-name-inactive { color: rgba(42,36,32,0.38); font-weight: 500; }
+        @media (max-width: 600px) {
+          #cmo-auth-copy { flex-direction: column; align-items: stretch; gap: 0; padding: 0.75rem 1rem; }
+          .cmo-step-item { flex-direction: row; align-items: center; gap: 0.75rem; flex: unset; }
+          .cmo-step-track { flex-direction: column; align-items: center; width: auto; flex-shrink: 0; height: 3.5rem; }
+          .cmo-step-line { flex: 1; width: 1.5px; height: auto; }
+          .cmo-step-labels { align-items: flex-start; padding: 0; }
+          .cmo-step-name { text-align: left; white-space: nowrap; font-size: 0.9rem; }
+          .cmo-step-name br { display: none; }
+        }
+        #cmo-modal-marquee {
+          position: relative; width: 100%; flex-shrink: 0; overflow: hidden;
+          pointer-events: none; margin: 25px 0;
+          mask-image: linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%);
+          -webkit-mask-image: linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%);
+        }
+        #cmo-modal-marquee .cmo-marquee-track {
+          display: flex; align-items: center; width: max-content;
+          will-change: transform; animation: cmoMarqueeScroll 36s linear infinite;
+        }
+        #cmo-modal-marquee .cmo-marquee-item {
+          font-family: 'Doto', 'Space Mono', monospace; font-size: clamp(2rem,8vw,5rem);
+          font-weight: 700; letter-spacing: -0.02em; line-height: 1.05;
+          color: rgba(42,36,32,0.82); white-space: nowrap; padding-right: 2rem;
+        }
+        #cmo-modal-marquee .cmo-marquee-dot { font-family: 'Doto', monospace; color: rgba(42,36,32,0.35); }
+        @media (prefers-reduced-motion: reduce) { #cmo-modal-marquee .cmo-marquee-track { animation: none; } }
+        #cmo-modal-table-wrap { width: 100%; margin-top: 0.65rem; }
+        #cmo-modal-table { width: 100%; border-collapse: collapse; }
+        #cmo-modal-table thead th {
+          font-family: 'Space Mono', monospace; font-size: 0.58rem; font-weight: 600;
+          text-transform: uppercase; letter-spacing: 0.08em; color: rgba(42,36,32,0.4);
+          padding: 0.28rem 0.4rem; border-bottom: 1px solid rgba(42,36,32,0.1);
+        }
+        .cmo-td-task { padding: 0.38rem 0.4rem; color: rgba(42,36,32,0.82); font-weight: 500; font-size: 0.88rem; }
+        .cmo-td-mark { padding: 0.38rem 0.2rem; text-align: center; }
+        .cmo-td-value { padding: 0.38rem 0.4rem; text-align: right; color: rgba(42,36,32,0.6); font-size: 0.82rem; }
+        .cmo-td-arrow { color: rgba(42,36,32,0.3); font-size: 0.7rem; }
+        #cmo-modal-table tbody tr { border-bottom: 1px solid rgba(42,36,32,0.07); }
+        #cmo-url-pill {
+          display: flex; align-items: center; gap: 0.5rem; width: 100%;
+          box-sizing: border-box; margin-top: 0.75rem;
+          padding: 0.35rem 0.35rem 0.35rem 0.9rem;
+          background: rgba(255,255,255,0.55); border: 1px solid rgba(42,36,32,0.14);
+          border-radius: 999px; box-shadow: 0 1px 4px rgba(42,36,32,0.07);
+          transition: border-color 160ms ease, box-shadow 160ms ease;
+        }
+        #cmo-url-pill:focus-within { border-color: rgba(42,36,32,0.28); box-shadow: 0 0 0 3px rgba(42,36,32,0.06); }
+        #cmo-modal-url-input {
+          flex: 1; min-width: 0; border: none; outline: none; background: transparent;
+          padding: 0; margin: 0; font-family: 'Space Grotesk', system-ui, sans-serif;
+          font-size: clamp(0.85rem,1.1vw,0.95rem); color: #2a2420; line-height: 1.2;
+        }
+        #cmo-modal-url-input::placeholder { color: rgba(42,36,32,0.45); }
+        #cmo-url-pill-submit {
+          display: inline-flex; align-items: center; gap: 0.35rem; flex-shrink: 0;
+          border-radius: 999px; padding: 0.55rem 0.95rem;
+          font-family: 'Space Mono', monospace; font-size: 0.78rem; font-weight: 700;
+          letter-spacing: 0.04em; cursor: pointer;
+          transition: transform 160ms ease, filter 160ms ease;
+        }
+        .cmo-url-pill-submit-active {
+          border: none;
+          background: linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+          color: #fff; box-shadow: 0 2px 6px rgba(139,92,246,0.28);
+        }
+        .cmo-url-pill-submit-active:hover { transform: translateY(-1px); filter: brightness(1.05); }
+        .cmo-url-pill-submit-idle {
+          border: 1px solid rgba(42,36,32,0.12); background: rgba(255,255,255,0.72);
+          color: #2a2420; box-shadow: 0 1px 4px rgba(42,36,32,0.1), inset 0 1px 0 rgba(255,255,255,0.6);
+          opacity: 0.65; cursor: default;
+        }
+        #cmo-no-site-link {
+          display: block; text-align: center; margin-top: 0.65rem;
+          font-family: 'Space Mono', monospace; font-size: 0.72rem;
+          color: rgba(42,36,32,0.45); text-decoration: underline;
+          text-underline-offset: 3px; letter-spacing: 0.03em;
+          transition: color 160ms ease;
+        }
+        #cmo-no-site-link:hover { color: rgba(42,36,32,0.75); }
+        @media (max-width: 767px), (prefers-reduced-motion: reduce) {
+          #cmo-modal-overlay, #cmo-auth-card { animation: none; }
+        }
       `}</style>
       <div id="stacked-slides-wrapper" ref={wrapperRef} style={wrapperStyle}>
         {slides.map((slide, index) => (
@@ -1290,18 +1461,17 @@ const StackedSlidesSection = () => {
                           <h2 id="panel-hero-headline" style={{ ...headingStyle, fontSize: 'clamp(1.4rem, 3.5vw, 2.45rem)', fontWeight: 300, textAlign: 'left', margin: 0, whiteSpace: 'nowrap', visibility: 'hidden' }}>{slide.headlineText}</h2>
                         </div>
                         <div style={textColumnRightStyle}>
-                          <a
+                          <button
                             id="panel-hero-cta"
-                            href="https://calendly.com/bballi/30min"
-                            target="_blank"
-                            rel="noopener noreferrer"
+                            type="button"
+                            onClick={() => setShowCmoModal(true)}
                             className="cta-pill-btn"
-                            style={{ ...heroCtaStyle, visibility: 'hidden' }}
+                            style={{ ...heroCtaStyle, visibility: 'hidden', cursor: 'pointer', border: 'none' }}
                           >
                             <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
-                            {slide.supportText}
+                            Get Free Automations
                             <span style={ctaIconStyle}>↗</span>
-                          </a>
+                          </button>
                         </div>
                       </div>
                       <div id="hero-panel-filter-pills" style={filterDropdownStyle}>
@@ -1324,6 +1494,16 @@ const StackedSlidesSection = () => {
                     <section data-capability-grid style={capabilitySectionStyle}>
                       <div data-capability-header style={{ ...capabilitySectionHeaderStyle, maxWidth: 'none' }}>
                         <div id="testimonials-section" style={{ ...testimonialsShellStyle, marginTop: 0, paddingTop: 0, borderTop: 'none' }}>
+                          <div id="testimonials-marquee-shell" style={{ width: '100%', overflow: 'hidden', margin: '75px 0', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', animation: 'agentMarquee 28s linear infinite' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
+                                <span style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(2rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>CREATE YOUR DASHBOARD</span>
+                              </div>
+                              <div aria-hidden="true" style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
+                                <span style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(2rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>CREATE YOUR DASHBOARD</span>
+                              </div>
+                            </div>
+                          </div>
                           <div id="testimonials-grid" style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(0.75rem, 1.5vw, 1rem)', width: '100%', minWidth: 0 }}>
                             {[
                               { type: 'image', src: PORTFOLIO_IMAGES[0] },
@@ -1354,7 +1534,7 @@ const StackedSlidesSection = () => {
                             ))}
                           </div>
                         </div>
-                        <div id="agent-marquee-shell" ref={agentMarqueeShellRef} style={{ width: '100%', overflow: 'hidden', marginTop: '50px', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
+                        <div id="agent-marquee-shell" ref={agentMarqueeShellRef} style={{ width: '100%', overflow: 'hidden', margin: '75px 0', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
                           <div ref={agentMarqueeTrackRef} style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', backfaceVisibility: 'hidden', transform: 'translate3d(0, 0, 0)' }}>
                             <div ref={agentMarqueeSetRef} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
                               <span style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(2rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>CREATE YOUR DASHBOARD</span>
@@ -1364,9 +1544,6 @@ const StackedSlidesSection = () => {
                             </div>
                           </div>
                         </div>
-                        {filterCopy.support && (
-                          <p id="panel-capability-support" style={{ margin: '0.75rem 0 0', fontSize: 'clamp(1.15rem, 2vw, 1.6rem)', lineHeight: 1.4, color: 'rgba(42, 36, 32, 0.75)', fontWeight: 300, maxWidth: '68ch' }}>{filterCopy.support}</p>
-                        )}
                       </div>
                       <div style={capabilityGridStyle}>
                         {AUTOMATION_CAPABILITIES.map((item, index) => {
@@ -1398,9 +1575,9 @@ const StackedSlidesSection = () => {
                                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem', fontFamily: "'Space Grotesk', system-ui, sans-serif", flex: 1 }}>
                                         <thead>
                                           <tr style={{ borderBottom: '1px solid rgba(42,36,32,0.15)' }}>
-                                            <th style={{ textAlign: 'left', padding: '0.28rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.45)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>What you Get</th>
+                                            <th style={{ textAlign: 'left', padding: '0.28rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.45)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Modules</th>
                                             <th style={{ width: '1.2rem' }} />
-                                            <th style={{ textAlign: 'right', padding: '0.28rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.45)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>What this means</th>
+                                            <th style={{ textAlign: 'right', padding: '0.28rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.45)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Automations</th>
                                           </tr>
                                         </thead>
                                         <tbody>
@@ -1408,7 +1585,7 @@ const StackedSlidesSection = () => {
                                             <tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}>
                                               <td style={{ padding: '0.38rem 0.4rem', color: '#2a2420', fontWeight: 500 }}>{row.task}</td>
                                               <td style={{ padding: '0.38rem 0.2rem', textAlign: 'center' }}>
-                                                {row.task === 'Bryan Balli' || row.task === 'Cross-Device Mockups' || row.task === 'Social Preview Check' || row.task === 'Brand Snapshot' || row.task === 'SEO + AI Visibility' || row.task === 'Founders Brief' ? (
+                                                {row.task === 'Cross-Device Mockups' || row.task === 'Social Preview Check' || row.task === 'Brand Snapshot' || row.task === 'SEO + AI Visibility' || row.task === 'Founder Briefs' ? (
                                                   <span style={{ color: 'rgba(42,36,32,0.3)', fontSize: '0.7rem' }}>→</span>
                                                 ) : (
                                                   <span className="cmo-arrow"><Lock size={12} /></span>
@@ -1440,14 +1617,11 @@ const StackedSlidesSection = () => {
                                   data-hover-side="right"
                                   style={{ display: 'inline-block', flexShrink: 0, cursor: 'pointer' }}
                                 >
-                                  <video
+                                  <img
                                     className="cmo-video-thumb"
-                                    src={item.previewVideo}
-                                    autoPlay
-                                    muted
-                                    loop
-                                    playsInline
-                                    style={{ width: 'clamp(3.5rem, 7vw, 5rem)', aspectRatio: 'auto', borderRadius: '0.5rem', objectFit: 'cover', display: 'block', flexShrink: 0, pointerEvents: 'none' }}
+                                    src="/img/port/dash_ss2.png"
+                                    alt=""
+                                    style={{ width: 'clamp(3.5rem, 7vw, 5rem)', aspectRatio: 'auto', borderRadius: '0.5rem', objectFit: 'cover', display: 'block', flexShrink: 0 }}
                                   />
                                 </div>
                               )}
@@ -1484,8 +1658,8 @@ const StackedSlidesSection = () => {
                                   </div>
                                   <div className="cmo-table-inner" style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
                                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
-                                      <thead><tr><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>What you Get</th><th style={{ width: '1.5rem' }} /><th style={{ textAlign: 'right', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>What this means</th></tr></thead>
-                                      <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500 }}>{row.task}</td><td style={{ padding: '0.32rem 0.2rem', textAlign: 'center' }}>{row.task === 'Bryan Balli' || row.task === 'Cross-Device Mockups' || row.task === 'Social Preview Check' || row.task === 'Brand Snapshot' || row.task === 'SEO + AI Visibility' || row.task === 'Founders Brief' ? <span style={{ color: 'rgba(42,36,32,0.3)', fontSize: '0.7rem' }}>→</span> : <span className="cmo-arrow"><Lock size={12} /></span>}</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
+                                      <thead><tr><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Modules</th><th style={{ width: '1.5rem' }} /><th style={{ textAlign: 'right', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Automations</th></tr></thead>
+                                      <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500 }}>{row.task}</td><td style={{ padding: '0.32rem 0.2rem', textAlign: 'center' }}>{row.task === 'Cross-Device Mockups' || row.task === 'Social Preview Check' || row.task === 'Brand Snapshot' || row.task === 'SEO + AI Visibility' || row.task === 'Founder Briefs' ? <span style={{ color: 'rgba(42,36,32,0.3)', fontSize: '0.7rem' }}>→</span> : <span className="cmo-arrow"><Lock size={12} /></span>}</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
                                     </table>
                                     <a id="cmo-no-website-hint-desktop" href="/login?flow=homepage-create" style={cmoNoWebsiteLinkStyle}>Don't Have a Website?</a>
                                   </div>
@@ -1494,8 +1668,8 @@ const StackedSlidesSection = () => {
                               {item.tablePreview && (
                                 <div id="cmo-dashboard-table" className="cmo-table-outer" style={{ gridColumn: '1 / -1', marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
                                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
-                                    <thead><tr><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>What you Get</th><th style={{ width: '1.5rem' }} /><th style={{ textAlign: 'right', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>What this means</th></tr></thead>
-                                    <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500 }}>{row.task}</td><td style={{ padding: '0.32rem 0.2rem', textAlign: 'center' }}>{row.task === 'Bryan Balli' || row.task === 'Cross-Device Mockups' || row.task === 'Social Preview Check' || row.task === 'Brand Snapshot' || row.task === 'SEO + AI Visibility' || row.task === 'Founders Brief' ? <span style={{ color: 'rgba(42,36,32,0.3)', fontSize: '0.7rem' }}>→</span> : <span className="cmo-arrow"><Lock size={12} /></span>}</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
+                                    <thead><tr><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Modules</th><th style={{ width: '1.5rem' }} /><th style={{ textAlign: 'right', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Automations</th></tr></thead>
+                                    <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500 }}>{row.task}</td><td style={{ padding: '0.32rem 0.2rem', textAlign: 'center' }}>{row.task === 'Cross-Device Mockups' || row.task === 'Social Preview Check' || row.task === 'Brand Snapshot' || row.task === 'SEO + AI Visibility' || row.task === 'Founder Briefs' ? <span style={{ color: 'rgba(42,36,32,0.3)', fontSize: '0.7rem' }}>→</span> : <span className="cmo-arrow"><Lock size={12} /></span>}</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
                                   </table>
                                   <div className="cmo-url-input-mobile" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ alignItems: 'center', justifyContent: 'space-between', marginTop: '0.85rem', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                                     <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
@@ -1729,13 +1903,125 @@ const StackedSlidesSection = () => {
         </div>
       )}
 
+      {showCmoModal && (
+        <div
+          id="cmo-modal-overlay"
+          onClick={() => setShowCmoModal(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Get Free Automations"
+        >
+          <div id="cmo-auth-card" onClick={(e) => e.stopPropagation()}>
+            <div id="cmo-auth-brand-row">
+              <img id="cmo-auth-sig" src="/img/sig.png" alt="" aria-hidden="true" />
+              <span id="cmo-auth-eyebrow">AUTOMATIONS</span>
+              <button type="button" id="cmo-auth-back-btn" onClick={() => setShowCmoModal(false)} aria-label="Close">✕</button>
+            </div>
+
+            <div id="cmo-modal-marquee" aria-label="CREATE DASHBOARD">
+              <div className="cmo-marquee-track">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <span key={i} className="cmo-marquee-item" aria-hidden={i > 0 ? 'true' : undefined}>
+                    CREATE DASHBOARD
+                    <span className="cmo-marquee-dot">·</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div id="cmo-auth-copy">
+              <div className="cmo-step-item">
+                <div className="cmo-step-track">
+                  <div className="cmo-step-line cmo-step-line-hidden" />
+                  <div className={`cmo-step-dot ${urlIsValid && homepageUrl !== CMO_PLACEHOLDER_URL ? 'cmo-step-dot-inactive' : 'cmo-step-dot-active'}`}>01</div>
+                  <div className="cmo-step-line" />
+                </div>
+                <div className="cmo-step-labels">
+                  <span className={`cmo-step-name ${urlIsValid && homepageUrl !== CMO_PLACEHOLDER_URL ? 'cmo-step-name-inactive' : 'cmo-step-name-active'}`}>Add your website <br />or big idea</span>
+                </div>
+              </div>
+              <div className="cmo-step-item">
+                <div className="cmo-step-track">
+                  <div className="cmo-step-line" />
+                  <div className={`cmo-step-dot ${urlIsValid && homepageUrl !== CMO_PLACEHOLDER_URL ? 'cmo-step-dot-active' : 'cmo-step-dot-inactive'}`}>02</div>
+                  <div className="cmo-step-line" />
+                </div>
+                <div className="cmo-step-labels">
+                  <span className={`cmo-step-name ${urlIsValid && homepageUrl !== CMO_PLACEHOLDER_URL ? 'cmo-step-name-active' : 'cmo-step-name-inactive'}`}>Click on Get <br />Dashboard</span>
+                </div>
+              </div>
+              <div className="cmo-step-item">
+                <div className="cmo-step-track">
+                  <div className="cmo-step-line" />
+                  <div className="cmo-step-dot cmo-step-dot-inactive">03</div>
+                  <div className="cmo-step-line cmo-step-line-hidden" />
+                </div>
+                <div className="cmo-step-labels">
+                  <span className="cmo-step-name cmo-step-name-inactive">Access Dashboard <br />with Modules</span>
+                </div>
+              </div>
+            </div>
+
+            <div id="cmo-modal-table-wrap">
+              <table id="cmo-modal-table">
+                <thead>
+                  <tr>
+                    <th>Modules</th>
+                    <th style={{ width: '1.75rem' }} />
+                    <th style={{ textAlign: 'right' }}>Automations</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {CMO_TABLE_ROWS
+                    .filter((row) => ['Cross-Device Mockups', 'Social Preview Check', 'Brand Snapshot', 'SEO + AI Visibility', 'Founder Briefs'].includes(row.task))
+                    .map((row) => (
+                      <tr key={row.task}>
+                        <td className="cmo-td-task">{row.task}</td>
+                        <td className="cmo-td-mark"><span className="cmo-td-arrow">→</span></td>
+                        <td className="cmo-td-value">{row.value}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+
+            <form
+              id="cmo-url-pill"
+              onSubmit={(e) => { e.preventDefault(); handleCreateDashboard(); }}
+              onMouseEnter={(e) => e.stopPropagation()}
+              onMouseLeave={(e) => e.stopPropagation()}
+            >
+              <Globe size={16} strokeWidth={1.6} style={{ flexShrink: 0, color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
+              <input
+                id="cmo-modal-url-input"
+                value={homepageUrl}
+                onChange={handleHomepageUrlChange}
+                onFocus={() => { if (homepageUrl === CMO_PLACEHOLDER_URL) { setHomepageUrl(''); setUrlIsValid(false); } }}
+                onBlur={() => { if (!homepageUrl.trim()) { setHomepageUrl(CMO_PLACEHOLDER_URL); setUrlIsValid(true); } }}
+                style={{ color: homepageUrl === CMO_PLACEHOLDER_URL ? 'rgba(42,36,32,0.45)' : undefined }}
+              />
+              <button
+                type="submit"
+                id="cmo-url-pill-submit"
+                disabled={!urlIsValid || homepageUrl === CMO_PLACEHOLDER_URL}
+                className={urlIsValid ? 'cta-pill-btn cmo-url-pill-submit-active' : 'cta-pill-btn cmo-url-pill-submit-idle'}
+              >
+                Get Dashboard
+                <span aria-hidden="true">↗</span>
+              </button>
+            </form>
+
+            <a id="cmo-no-site-link" href="/login?flow=homepage-create">Don't Have a Website?</a>
+          </div>
+        </div>
+      )}
+
       {/* Sticky CTA — mirrors #panel-hero-cta, shown via ScrollTrigger */}
-      <a
+      <button
         id="hero-cta-sticky"
         ref={stickyCTARef}
-        href="https://calendly.com/bballi/30min"
-        target="_blank"
-        rel="noopener noreferrer"
+        type="button"
+        onClick={() => setShowCmoModal(true)}
         className="cta-pill-btn"
         style={{
           ...ctaStyle,
@@ -1746,12 +2032,14 @@ const StackedSlidesSection = () => {
           zIndex: 240,
           visibility: 'hidden',
           opacity: 0,
+          border: 'none',
+          cursor: 'pointer',
         }}
       >
         <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
-        Chat with Bryan
+        Get Free Automations
         <span style={ctaIconStyle}>↗</span>
-      </a>
+      </button>
     </section>
   );
 };
@@ -1957,7 +2245,7 @@ const gridRowStyle = {
 const capabilitySectionStyle = {
   width: '100%',
   marginTop: 0,
-  paddingTop: 'clamp(0.6rem, 1.2vw, 1rem)',
+  paddingTop: 0,
   borderTop: '1px solid rgba(42, 36, 32, 0.12)',
   boxSizing: 'border-box',
 };

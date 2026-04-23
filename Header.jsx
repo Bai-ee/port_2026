@@ -41,23 +41,23 @@ const Header = ({ logoRef, onOpenPage }) => {
                 <button type="button" id="founders-login-link" onClick={handleDashClick}>
                   Dash
                 </button>
-                <a
-                  id="founders-chat-cta"
-                  className="founders-chat-cta--light"
-                  href="https://calendly.com/bballi/30min"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <span className="founders-chat-label-full">Contact</span>
-                  <span className="founders-chat-label-short">Contact</span>
-                  <span id="founders-chat-cta-icon">↗</span>
-                </a>
               </>
             ) : (
               <a href="/login" id="founders-login-link">
                 Login
               </a>
             )}
+            <a
+              id="founders-chat-cta"
+              className="founders-chat-cta--light"
+              href="https://calendly.com/bballi/30min"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span className="founders-chat-label-full">Contact</span>
+              <span className="founders-chat-label-short">Contact</span>
+              <span id="founders-chat-cta-icon">↗</span>
+            </a>
           </div>
         </div>
       </header>

@@ -1573,10 +1573,12 @@ const DashboardPage = () => {
 
   useEffect(() => {
     const anyModalOpen = showIntakeModal || showTierModal || showClientEditModal || showDeleteAccountModal || briefFullScreen || auditFullScreen;
-    if (!anyModalOpen) return undefined;
-    const prev = document.body.style.overflow;
+    if (!anyModalOpen) {
+      document.body.style.overflow = '';
+      return undefined;
+    }
     document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
+    return () => { document.body.style.overflow = ''; };
   }, [showIntakeModal, showTierModal, showClientEditModal, showDeleteAccountModal, briefFullScreen, auditFullScreen]);
 
   // Page-load / processing-handoff intro.

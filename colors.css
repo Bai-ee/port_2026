@@ -87,6 +87,7 @@
 }
 
 /* ── Shared top-nav (normalized across homepage + dashboard) ───────────────── */
+body.cmo-modal-open #founders-top-strip { display: none; }
 #founders-top-strip {
   position: fixed;
   top: 0;
