@@ -47,6 +47,39 @@
   pointer-events: none;
 }
 
+/* Nav avatar gradient ring — matches cta-pill-btn comet border */
+.nav-avatar-ring {
+  position: relative;
+  isolation: isolate;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.nav-avatar-ring::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  padding: 2px;
+  background: linear-gradient(135deg,
+    hsla(185, 100%, 58%, 0.8),
+    hsla(250, 100%, 66%, 0.9),
+    hsla(300, 100%, 68%, 0.95),
+    rgba(255, 255, 255, 0.95)
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
 /* Yellow Color Palette */
 :root, .light, .light-theme {
   --yellow-1: #fefdfa;

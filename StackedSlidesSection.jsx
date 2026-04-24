@@ -1522,7 +1522,7 @@ const StackedSlidesSection = () => {
                             type="button"
                             onClick={() => setShowCmoModal(true)}
                             className="cta-pill-btn"
-                            style={{ ...heroCtaStyle, padding: '0.5rem 0.75rem', cursor: 'pointer', border: 'none' }}
+                            style={{ ...heroCtaStyle, padding: '0.85rem 1.1rem', cursor: 'pointer', border: 'none' }}
                           >
                             Analyze My Site Now
                             <span style={ctaIconStyle}>↗</span>
@@ -1551,12 +1551,13 @@ const StackedSlidesSection = () => {
                         <div id="testimonials-section" style={{ ...testimonialsShellStyle, marginTop: 0, paddingTop: 0, borderTop: 'none' }}>
                           <div id="testimonials-marquee-shell" style={{ width: '100%', overflow: 'hidden', margin: 'clamp(24px, 5vw, 75px) 0', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
                             <div style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', animation: 'agentMarquee 28s linear infinite' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
-                                <span style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>WORK • WORK •</span>
-                              </div>
-                              <div aria-hidden="true" style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
-                                <span style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>WORK • WORK •</span>
-                              </div>
+                              {[0, 1].map((i) => (
+                                <div key={i} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
+                                  {['WORK', '•', 'WORK', '•'].map((w, j) => (
+                                    <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
+                                  ))}
+                                </div>
+                              ))}
                             </div>
                           </div>
                           <div id="testimonials-grid" style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(0.75rem, 1.5vw, 1rem)', width: '100%', minWidth: 0 }}>
@@ -1591,12 +1592,13 @@ const StackedSlidesSection = () => {
                         </div>
                         <div id="agent-marquee-shell" ref={agentMarqueeShellRef} style={{ width: '100%', overflow: 'hidden', margin: 'clamp(24px, 5vw, 75px) 0', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
                           <div ref={agentMarqueeTrackRef} style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', backfaceVisibility: 'hidden', transform: 'translate3d(0, 0, 0)' }}>
-                            <div ref={agentMarqueeSetRef} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
-                              <span style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>TOOLS • TOOLS •</span>
-                            </div>
-                            <div aria-hidden="true" style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
-                              <span style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>TOOLS • TOOLS •</span>
-                            </div>
+                            {[0, 1].map((i) => (
+                              <div key={i} ref={i === 0 ? agentMarqueeSetRef : undefined} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
+                                {['TOOLS', '•', 'TOOLS', '•'].map((w, j) => (
+                                  <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
+                                ))}
+                              </div>
+                            ))}
                           </div>
                         </div>
                       </div>
@@ -1757,12 +1759,13 @@ const StackedSlidesSection = () => {
                           <div id="inline-footer-value-block" style={inlineFooterNewsletterStyle}>
                             <div id="footer-marquee-shell" style={{ width: '100%', overflow: 'hidden', marginBottom: 'clamp(24px, 5vw, 75px)', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
                               <div style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', animation: 'agentMarquee 28s linear infinite' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
-                                  <span style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>CONTACT • CONTACT •</span>
-                                </div>
-                                <div aria-hidden="true" style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
-                                  <span style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>CONTACT • CONTACT •</span>
-                                </div>
+                                {[0, 1].map((i) => (
+                                  <div key={i} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
+                                    {['CONTACT', '•', 'CONTACT', '•'].map((w, j) => (
+                                      <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
+                                    ))}
+                                  </div>
+                                ))}
                               </div>
                             </div>
                             <img src="/img/sig.png" alt="Bryan Balli signature" style={inlineFooterSignatureStyle} />
@@ -2054,7 +2057,7 @@ const StackedSlidesSection = () => {
         className="cta-pill-btn"
         style={{
           ...ctaStyle,
-          padding: '0.5rem 0.75rem',
+          padding: '0.85rem 1.1rem',
           position: 'fixed',
           top: '74px',
           left: 'auto',
