@@ -204,7 +204,7 @@ const AUTOMATION_CAPABILITIES = [
     icon: 'chart',
     tablePreview: true,
     previewVideo: '/vid/dashboard.mov',
-    title: "Onboard now and save time later",
+    title: "Onboard now, save time later.",
     body: 'Access automation tools and download a Client Brief based on your current website, brand identity and visibility.',
   },
   {
@@ -1300,7 +1300,7 @@ const StackedSlidesSection = () => {
           overflow-y: auto;
         }
         @media (max-width: 600px) {
-          #cmo-modal-overlay { align-items: flex-start; padding: 16px; }
+          #cmo-modal-overlay { align-items: center; justify-content: center; padding: 16px; min-height: 100dvh; }
           .testimonials-port-img { aspect-ratio: 16 / 10 !important; }
           #dashboard-stack-shell { padding-top: 44px !important; }
           .dash-peek-card { width: clamp(88px, 22%, 160px) !important; max-height: 120px !important; }
@@ -1423,8 +1423,9 @@ const StackedSlidesSection = () => {
         #cmo-modal-marquee .cmo-marquee-dot { font-family: 'Doto', monospace; color: rgba(42,36,32,0.35); }
         @media (prefers-reduced-motion: reduce) { #cmo-modal-marquee .cmo-marquee-track { animation: none; } }
         @media (max-width: 640px) {
-          #cmo-modal-marquee { margin: 12px 0; }
-          #cmo-modal-marquee .cmo-marquee-item { font-size: max(1.6rem, 8vw); }
+          #cmo-modal-marquee { margin: 0; padding: 0; }
+          #cmo-modal-marquee .cmo-marquee-item { font-size: max(2.2rem, 11vw); }
+          #cmo-modal-table-wrap { display: none; }
         }
         [data-hover-floater] { display: none !important; }
         #cmo-modal-table-wrap { width: 100%; margin-top: 0.65rem; }
@@ -1513,8 +1514,9 @@ const StackedSlidesSection = () => {
                             type="button"
                             onClick={() => setShowCmoModal(true)}
                             className="cta-pill-btn"
-                            style={{ ...heroCtaStyle, padding: '1rem 0.75rem', cursor: 'pointer', border: 'none' }}
+                            style={{ ...heroCtaStyle, padding: '0.5rem 0.75rem', cursor: 'pointer', border: 'none' }}
                           >
+                            <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
                             Onboard in 30 Seconds
                             <span style={ctaIconStyle}>↗</span>
                           </button>
@@ -1664,14 +1666,13 @@ const StackedSlidesSection = () => {
                                     </div>
                                   ) : null}
                                   <div style={capabilityContentStyle}>
-                                    <h2 style={{ ...capabilityCardTitleStyle, fontSize: 'clamp(2rem, 5vw, 12.4rem)', lineHeight: 1.1, marginBottom: '0.5rem', textAlign: 'center' }}>Onboard now and<br />save time later</h2>
+                                    <h2 style={{ ...capabilityCardTitleStyle, fontSize: 'clamp(2rem, 5vw, 12.4rem)', lineHeight: 1.1, marginBottom: '0.5rem', textAlign: 'center' }}>Onboard now,<br />save time later.</h2>
                                     {item.body && <p style={{ ...capabilityCardBodyStyle, maxWidth: 'none' }}>{item.body}</p>}
                                     <div id="cmo-url-input-row" className="cmo-url-input-desktop" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.85rem', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                                       <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
                                       <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
                                       <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none' } : { ...ctaStyle, border: 'none', flexShrink: 0, background: 'rgba(255,255,255,0.72)', color: '#2a2420', boxShadow: 'none', opacity: 0.65, cursor: 'default' }}>Onboard in 30 Seconds<span style={ctaIconStyle}>↗</span></button>
                                     </div>
-                                    <a id="cmo-no-website-hint-desktop" href="/login?flow=homepage-create" style={cmoNoWebsiteLinkStyle}>Don't Have a Website?</a>
                                     <div className="cmo-table-inner" style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
                                       <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
                                         <colgroup><col style={{ width: 'calc(50% - 0.75rem)' }} /><col style={{ width: '1.5rem' }} /><col style={{ width: 'calc(50% - 0.75rem)' }} /></colgroup>
@@ -2047,7 +2048,7 @@ const StackedSlidesSection = () => {
         className="cta-pill-btn"
         style={{
           ...ctaStyle,
-          padding: '1rem 0.75rem',
+          padding: '0.5rem 0.75rem',
           position: 'fixed',
           top: '74px',
           left: 'auto',
@@ -2059,6 +2060,7 @@ const StackedSlidesSection = () => {
           cursor: 'pointer',
         }}
       >
+        <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
         Onboard in 30 Seconds
         <span style={ctaIconStyle}>↗</span>
       </button>
