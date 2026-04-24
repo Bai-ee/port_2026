@@ -47,11 +47,11 @@ export const metadata = {
       'Portfolio, case studies, and a modular AI-assisted client intelligence platform by Bryan Balli — multi-device layout capture, social preview check, brand snapshot extraction, and SEO + performance audit in one dashboard.',
     images: [
       {
-        url: '/img/og_meta.png',
-        width: 2390,
-        height: 1254,
+        url: '/img/og_meta.optimized.jpg',
+        width: 1200,
+        height: 630,
         alt: 'Bryan Balli — AI design engineer and creative technologist portfolio share card',
-        type: 'image/png',
+        type: 'image/jpeg',
       },
     ],
   },
@@ -64,7 +64,7 @@ export const metadata = {
       'Portfolio, case studies, and a modular AI-assisted client intelligence platform — multi-device capture, social preview, brand snapshot, SEO + performance in one dashboard.',
     images: [
       {
-        url: '/img/og_meta.png',
+        url: '/img/og_meta.optimized.jpg',
         alt: 'Bryan Balli — AI design engineer and creative technologist portfolio share card',
       },
     ],
