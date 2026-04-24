@@ -1,12 +1,16 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import gsap from 'gsap';
 import { useAuth } from '../../AuthContext';
-import DashboardPage from '../../DashboardPage';
 import InternalPageBackground from '../../InternalPageBackground';
 import { internalPageGlassCardStyle } from '../../pageSurfaceSystem';
+
+const DashboardPage = dynamic(() => import('../../DashboardPage'), {
+  loading: () => null,
+});
 
 export default function DashboardRoute() {
   const { user, loading } = useAuth();

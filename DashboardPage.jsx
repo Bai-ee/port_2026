@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { flushSync } from 'react-dom';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -27,7 +28,6 @@ import { useAuth } from './AuthContext';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from './firebase';
 import { internalPageGlassCardStyle } from './pageSurfaceSystem';
-import OnboardingChatModal from './onboarding/OnboardingChatModal';
 import onboardingConfig from './onboarding/questions.config.cjs';
 import { buildSolutionsList, resolveSolution } from './features/scout-intake/solutions-catalog.mjs';
 import { resolveAnalyzerSource, buildCardDescription, buildModuleStateDescription } from './features/scout-intake/card-description-builder.mjs';
@@ -38,6 +38,10 @@ import { designEvaluationAdapter } from './features/scout-intake/mini-briefs/des
 import { seoPerformanceAdapter } from './features/scout-intake/mini-briefs/seo-performance-adapter.mjs';
 import { socialPreviewAdapter } from './features/scout-intake/mini-briefs/social-preview-adapter.mjs';
 import ModuleCardControls from './components/dashboard/ModuleCardControls';
+
+const OnboardingChatModal = dynamic(() => import('./onboarding/OnboardingChatModal'), {
+  loading: () => null,
+});
 
 // Entry-flow survey surfaces every question step (excludes the summary, which
 // is added in Phase 4). Ordered by the `order` field in questions.config.cjs.
