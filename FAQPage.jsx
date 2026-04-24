@@ -176,7 +176,14 @@ export default function FAQPage() {
     <div id="faq-page-shell" style={{ minHeight: '100dvh', position: 'relative', background: 'rgba(254,253,249,1)' }}>
       <InternalPageBackground />
 
-      <style>{`@keyframes agentMarquee { from { transform: translate3d(0,0,0); } to { transform: translate3d(-50%,0,0); } } @media (max-width: 767px) { #faq-hero-eyebrow { display: none; } }`}</style>
+      <style>{`
+  @keyframes agentMarquee { from { transform: translate3d(0,0,0); } to { transform: translate3d(-50%,0,0); } }
+  @media (max-width: 767px) {
+    #faq-hero-eyebrow { display: none; }
+    .faq-marquee-contact { animation-duration: 14s !important; }
+    .faq-marquee-agency  { animation-duration: 9s  !important; }
+  }
+`}</style>
 
       {/* All content above the bg */}
       <div id="faq-page-content" style={{ position: 'relative', zIndex: 1 }}>
@@ -305,9 +312,9 @@ export default function FAQPage() {
               maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)',
               WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)',
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', animation: 'agentMarquee 28s linear infinite' }}>
+              <div className="faq-marquee-contact" style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', animation: 'agentMarquee 28s linear infinite' }}>
                 {['a', 'b'].map((k) => (
-                  <div key={k} aria-hidden={k === 'b' ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
+                  <div key={k} aria-hidden={k === 'b' ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', paddingRight: 'clamp(0.75rem, 2vw, 2rem)', flexShrink: 0 }}>
                     <span style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>CONTACT • CONTACT •</span>
                   </div>
                 ))}
@@ -363,9 +370,9 @@ export default function FAQPage() {
               maskImage: 'linear-gradient(to right, transparent 0%, black 15%, black 85%, transparent 100%)',
               WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 15%, black 85%, transparent 100%)',
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', animation: 'agentMarquee 18s linear infinite' }}>
+              <div className="faq-marquee-agency" style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', animation: 'agentMarquee 18s linear infinite' }}>
                 {['a', 'b'].map((k) => (
-                  <div key={k} aria-hidden={k === 'b' ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '2rem', paddingRight: '2rem', flexShrink: 0 }}>
+                  <div key={k} aria-hidden={k === 'b' ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '2rem', paddingRight: 'clamp(0.5rem, 1.5vw, 2rem)', flexShrink: 0 }}>
                     {agencyLogos.map((logo) => (
                       <img
                         key={logo.alt}
