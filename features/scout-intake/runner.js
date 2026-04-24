@@ -34,6 +34,7 @@ const { renderBriefHtml } = require('./brief-renderer');
 const { generateWebsiteMockupArtifact } = require('../../api/_lib/device-mockup.cjs');
 const { getMaster } = require('../intelligence/_store');
 const pagespeedModule = require('../intelligence/pagespeed');
+const { logInfo, logWarn } = require('../../api/_lib/observability.cjs');
 
 // ── Intelligence briefing ─────────────────────────────────────────────────────
 
@@ -118,7 +119,7 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
   const pipelineRunId = randomUUID();
   const executionRunId = runId || pipelineRunId;
   const startedAt = new Date().toISOString();
-  console.log(`[${startedAt}] INTAKE: starting pipeline ${pipelineRunId} for ${clientId}`);
+  logInfo('intake_pipeline_start', { clientId, pipelineRunId, runId: executionRunId, startedAt });
 
   // Convenience wrapper — non-fatal, never throws to pipeline
   const emitProgress = async (stage, label, extra = {}) => {
@@ -233,7 +234,7 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
   // ── Stage 1: Fetch site evidence ─────────────────────────────────────────
   // Emit initial fetch stage so frontend shows "connecting" immediately
   await emitProgress('fetch', `Connecting to ${websiteUrl}…`, { currentUrl: websiteUrl });
-  console.log(`[${new Date().toISOString()}] INTAKE: fetching ${websiteUrl}...`);
+  logInfo('intake_fetch_start', { clientId, pipelineRunId, websiteUrl });
 
   // Track pages as they arrive — emitted incrementally via onPageFetched
   const livePages = [];
@@ -256,9 +257,13 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
   let fetchWarning = null;
   try {
     evidence = await fetchSiteEvidence(websiteUrl, { onPageFetched });
-    console.log(
-      `[${new Date().toISOString()}] INTAKE: fetch complete — ${evidence.pages.length} pages, thin=${evidence.thin}`
-    );
+    logInfo('intake_fetch_complete', {
+      clientId,
+      pipelineRunId,
+      websiteUrl,
+      pages: evidence.pages.length,
+      thin: Boolean(evidence.thin),
+    });
     const pageEvidence = evidence.pages.slice(0, 4).map((p) => ({
       type: p.type,
       url: p.url,
@@ -300,18 +305,18 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
     if (master?.meta?.pipelineInjection === true) {
       intelligenceBriefing = buildIntelligenceBriefing(master);
       if (intelligenceBriefing) {
-        console.log(`[${new Date().toISOString()}] INTAKE: intelligence injection enabled for ${clientId}`);
+        logInfo('intake_intelligence_injection_enabled', { clientId, pipelineRunId });
       }
     }
   } catch (err) {
-    console.warn(`[INTAKE] intelligence read failed (non-fatal): ${err.message}`);
+    logWarn('intake_intelligence_read_failed', { clientId, pipelineRunId, error: err.message });
   }
 
   // ── Stage 2: LLM synthesis + design system extraction (parallel) ─────────
   // Both hit Anthropic and are independent — run concurrently to cut wall time.
   // Design system extraction is non-fatal: any failure becomes a warning and
   // the styleGuide field is left null for dashboard fallback.
-  console.log(`[${new Date().toISOString()}] INTAKE: synthesizing + extracting design system...`);
+  logInfo('intake_synthesis_start', { clientId, pipelineRunId, websiteUrl });
 
   const styleGuideTask = withTimeout(
     extractDesignSystem(evidence, {
@@ -443,9 +448,14 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
           75_000,   // hard ceiling; AbortSignal inside pagespeed.js fires at 60s
           'psi',    // heartbeat to 'psi' so terminal shows it + stuck-detection works
         );
-        console.log(
-          `[${new Date().toISOString()}] INTAKE: PSI complete — perf=${pagespeed?.facts?.scores?.performance}, seo=${pagespeed?.facts?.scores?.seo}`
-        );
+        logInfo('intake_pagespeed_complete', {
+          clientId,
+          pipelineRunId,
+          websiteUrl,
+          performanceScore: pagespeed?.facts?.scores?.performance ?? null,
+          seoScore: pagespeed?.facts?.scores?.seo ?? null,
+          auditStatus: pagespeed?.facts?.auditStatus || null,
+        });
         if (pagespeed?.status === 'error') {
           const warning = buildPagespeedWarning(
             pagespeed,
@@ -465,7 +475,7 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
           });
         }
       } catch (err) {
-        console.warn(`[PSI] PageSpeed audit failed (non-fatal): ${err.message}`);
+      logWarn('intake_pagespeed_failed', { clientId, pipelineRunId, websiteUrl, error: err.message });
         warnings.push({
           type: 'warning',
           code: 'pagespeed_failed',
@@ -493,14 +503,17 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
           'AI SEO audit',
           30_000,
         );
-        console.log(
-          `[${new Date().toISOString()}] INTAKE: AI SEO audit complete — score=${aiSeoAuditResult?.aiVisibility?.score}`
-        );
+        logInfo('intake_ai_seo_complete', {
+          clientId,
+          pipelineRunId,
+          websiteUrl,
+          score: aiSeoAuditResult?.aiVisibility?.score ?? null,
+        });
       } else {
         console.warn('[AI-SEO] ai-seo-audit module not found — skipping.');
       }
     } catch (err) {
-      console.warn(`[AI-SEO] AI visibility audit failed (non-fatal): ${err.message}`);
+      logWarn('intake_ai_seo_failed', { clientId, pipelineRunId, websiteUrl, error: err.message });
       warnings.push({
         type: 'warning',
         code: 'ai_seo_audit_failed',
@@ -916,7 +929,13 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
     };
   }
 
-  console.log(`[${new Date().toISOString()}] INTAKE: pipeline ${pipelineRunId} ${normalized.status === 'succeeded' ? 'succeeded' : 'completed with warnings'}.`);
+  logInfo('intake_pipeline_complete', {
+    clientId,
+    pipelineRunId,
+    runId: executionRunId,
+    status: normalized.status,
+    warningCount: Array.isArray(normalized.warnings) ? normalized.warnings.length : 0,
+  });
   return normalized;
 }
 

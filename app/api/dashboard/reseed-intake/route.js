@@ -9,6 +9,7 @@ const { reseedIntakeForClient }      = require('../../../../api/_lib/client-prov
 const { listRegisteredSourceMeta }   = require('../../../../api/_lib/intelligence-runner.cjs');
 const { getMaster, appendEvent }     = require('../../../../features/intelligence/_store');
 const { normalizeSourceSetting }     = require('../../../../api/_lib/intelligence-bootstrap-utils.cjs');
+const { logError, logInfo, logWarn } = require('../../../../api/_lib/observability.cjs');
 
 function json(body, status = 200) {
   return NextResponse.json(body, {
@@ -64,12 +65,19 @@ export async function POST(request) {
     );
   }
 
+  logInfo('reseed_intake_queued', {
+    clientId,
+    uid: decoded.uid,
+    runId: result.runId || null,
+    websiteUrl,
+  });
+
   const proto        = request.headers.get('x-forwarded-proto') || 'http';
   const host         = request.headers.get('host')              || 'localhost:3000';
   const workerSecret = process.env.WORKER_SECRET                || '';
 
   if (!workerSecret) {
-    console.error('[reseed-intake] WORKER_SECRET is not set — worker triggers will be rejected with 401.');
+    logWarn('reseed_worker_secret_missing', { clientId, runId: result.runId || null });
   }
 
   // Fire-and-forget: trigger the intake brief worker (unchanged)
@@ -79,9 +87,25 @@ export async function POST(request) {
     body:    JSON.stringify({ runId: result.runId }),
   })
     .then((r) => {
-      if (!r.ok) console.error(`[reseed-intake] run-brief trigger returned ${r.status}`);
+      if (!r.ok) {
+        logWarn('reseed_worker_trigger_failed', {
+          clientId,
+          runId: result.runId || null,
+          httpStatus: r.status,
+        });
+      } else {
+        logInfo('reseed_worker_trigger_accepted', {
+          clientId,
+          runId: result.runId || null,
+          httpStatus: r.status,
+        });
+      }
     })
-    .catch((err) => console.error(`[reseed-intake] run-brief trigger failed: ${err?.message || err}`));
+    .catch((err) => logError('reseed_worker_trigger_throw', {
+      clientId,
+      runId: result.runId || null,
+      error: err?.message || String(err),
+    }));
 
   // Fire-and-forget: registry-driven intelligence fanout with observability
   // Reads source settings from master if present; falls back to defaultEnabled per source.
@@ -94,12 +118,11 @@ export async function POST(request) {
         return rawSettings[id] !== undefined ? setting.enabled : defaultEnabled;
       });
 
-      console.log(JSON.stringify({
-        event:     'intelligence_fanout_start',
+      logInfo('intelligence_fanout_start', {
         clientId,
-        runId:     result.runId,
-        sources:   sourcesToRun.map((s) => s.id),
-      }));
+        runId: result.runId,
+        sources: sourcesToRun.map((s) => s.id),
+      });
 
       for (const { id: sourceId } of sourcesToRun) {
         fetch(`${proto}://${host}/api/intelligence/run`, {
@@ -109,13 +132,12 @@ export async function POST(request) {
         })
           .then((r) => {
             if (!r.ok) {
-              console.error(JSON.stringify({
-                event:    'intelligence_fanout_trigger_failed',
+              logWarn('intelligence_fanout_trigger_failed', {
                 clientId,
                 sourceId,
                 httpStatus: r.status,
-                runId:    result.runId,
-              }));
+                runId: result.runId,
+              });
               // Append observable error event — non-fatal if this also fails
               appendEvent(clientId, {
                 at:        new Date().toISOString(),
@@ -127,17 +149,21 @@ export async function POST(request) {
                 durationMs: null,
                 note:      `fanout trigger returned HTTP ${r.status}`,
                 runId:     result.runId,
-              }).catch((e) => console.error(`[reseed-intake] appendEvent failed for ${sourceId}: ${e?.message}`));
+              }).catch((e) => logWarn('intelligence_fanout_append_event_failed', {
+                clientId,
+                sourceId,
+                runId: result.runId,
+                error: e?.message || String(e),
+              }));
             }
           })
           .catch((err) => {
-            console.error(JSON.stringify({
-              event:    'intelligence_fanout_trigger_error',
+            logError('intelligence_fanout_trigger_error', {
               clientId,
               sourceId,
-              error:    err?.message || String(err),
-              runId:    result.runId,
-            }));
+              error: err?.message || String(err),
+              runId: result.runId,
+            });
             appendEvent(clientId, {
               at:        new Date().toISOString(),
               sourceId,
@@ -148,16 +174,20 @@ export async function POST(request) {
               durationMs: null,
               note:      `fanout trigger error: ${err?.message || String(err)}`,
               runId:     result.runId,
-            }).catch((e) => console.error(`[reseed-intake] appendEvent failed for ${sourceId}: ${e?.message}`));
+            }).catch((e) => logWarn('intelligence_fanout_append_event_failed', {
+              clientId,
+              sourceId,
+              runId: result.runId,
+              error: e?.message || String(e),
+            }));
           });
       }
     } catch (err) {
-      console.error(JSON.stringify({
-        event:    'intelligence_fanout_resolution_failed',
+      logError('intelligence_fanout_resolution_failed', {
         clientId,
-        error:    err?.message || String(err),
-        runId:    result.runId,
-      }));
+        error: err?.message || String(err),
+        runId: result.runId,
+      });
     }
   })();
 

@@ -4,6 +4,7 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
 const { getHeaderValue, safeSecretEquals } = require('../../../../api/_lib/auth.cjs');
+const { logError, logInfo, logWarn } = require('../../../../api/_lib/observability.cjs');
 
 // ── Config ──────────────────────────────────────────────────────────────────
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
@@ -279,7 +280,7 @@ async function getGA4Metrics() {
 
     return { overview, topPages, trafficSources, events, error: null };
   } catch (err) {
-    console.error('[daily-digest] GA4 error:', err.message);
+    logError('daily_digest_ga4_error', { error: err.message });
     return { overview: null, topPages: [], trafficSources: [], events: {}, error: err.message };
   }
 }
@@ -555,7 +556,7 @@ function buildEmailHtml(firebase, vercel, ga4, timestamp) {
 
 async function sendEmail(subject, html) {
   if (!RESEND_API_KEY) {
-    console.log('[daily-digest] RESEND_API_KEY not set — skipping email send');
+    logWarn('daily_digest_email_skipped_missing_api_key');
     return { skipped: true, reason: 'RESEND_API_KEY not configured' };
   }
 
@@ -591,6 +592,7 @@ export async function GET(request) {
 
   try {
     const timestamp = Date.now();
+    logInfo('daily_digest_start', { timestamp: new Date(timestamp).toISOString() });
     const [firebase, vercel, ga4] = await Promise.all([
       getFirebaseMetrics(),
       getVercelMetrics(),
@@ -607,6 +609,12 @@ export async function GET(request) {
 
     const html = buildEmailHtml(firebase, vercel, ga4, timestamp);
     const emailResult = await sendEmail(subject, html);
+    logInfo('daily_digest_complete', {
+      timestamp: new Date(timestamp).toISOString(),
+      newUsers: firebase.newUsers,
+      recentRuns: firebase.recentRuns,
+      emailSkipped: Boolean(emailResult?.skipped),
+    });
 
     return json({
       ok: true,
@@ -615,7 +623,7 @@ export async function GET(request) {
       email: emailResult,
     });
   } catch (err) {
-    console.error('[daily-digest] Error:', err);
+    logError('daily_digest_route_error', { error: err });
     return json({ error: err.message || 'Internal error' }, 500);
   }
 }

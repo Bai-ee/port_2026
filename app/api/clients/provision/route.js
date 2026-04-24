@@ -4,6 +4,7 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const { buildAuthRequestShim, verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
 const { provisionClientForUser } = require('../../../../api/_lib/client-provisioning.cjs');
+const { logError, logInfo, logWarn } = require('../../../../api/_lib/observability.cjs');
 
 function json(body, status = 200) {
   return NextResponse.json(body, {
@@ -47,6 +48,13 @@ export async function POST(request) {
     );
   }
 
+  logInfo('client_provision_result', {
+    uid: decoded.uid,
+    clientId: result.clientId || null,
+    alreadyProvisioned: Boolean(result.alreadyProvisioned),
+    runId: result.initialRun?.runId || null,
+  });
+
   // Trigger the worker after the response has been scheduled. A plain fire-and-forget
   // fetch can be dropped when the request lifecycle ends on Vercel, which leaves the
   // run permanently queued. `after()` keeps the invocation alive long enough to hand
@@ -69,10 +77,25 @@ export async function POST(request) {
         });
         if (!response.ok) {
           const detail = await response.text().catch(() => '');
-          console.error(`[provision] worker trigger failed for ${runId}: HTTP ${response.status} ${detail}`.trim());
+          logError('client_provision_worker_trigger_failed', {
+            clientId: result.clientId || null,
+            runId,
+            httpStatus: response.status,
+            detail: detail.trim() || null,
+          });
+        } else {
+          logInfo('client_provision_worker_trigger_accepted', {
+            clientId: result.clientId || null,
+            runId,
+            httpStatus: response.status,
+          });
         }
       } catch (error) {
-        console.error(`[provision] worker trigger threw for ${runId}: ${error instanceof Error ? error.message : String(error)}`);
+        logWarn('client_provision_worker_trigger_throw', {
+          clientId: result.clientId || null,
+          runId,
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     });
   }

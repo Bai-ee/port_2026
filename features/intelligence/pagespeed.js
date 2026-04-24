@@ -5,6 +5,8 @@
 // Self-contained: fetches the PSI API, normalizes the result, and translates
 // it into a validated SourceRecord. Registered by intelligence-runner.cjs.
 
+const { logInfo, logWarn } = require('../../api/_lib/observability.cjs');
+
 // ── PSI API fetch ─────────────────────────────────────────────────────────────
 
 const PSI_API = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed';
@@ -747,7 +749,7 @@ function extractMeta(raw) {
 async function fetchPsiAudit(websiteUrl) {
   const apiKey = process.env.PAGESPEED_API_KEY || '';
   if (!apiKey) {
-    console.warn('[PSI] PAGESPEED_API_KEY is not set — using anonymous pool (heavily rate-limited, expect 429s).');
+    logWarn('pagespeed_api_key_missing', { websiteUrl, mode: 'anonymous' });
   }
 
   const probe = await runPreflightProbe(websiteUrl);
@@ -757,7 +759,10 @@ async function fetchPsiAudit(websiteUrl) {
   if (apiKey) params.set('key', apiKey);
 
   const requestUrl = `${PSI_API}?${params.toString()}`;
-  console.log(`[PSI] Fetching audit for ${websiteUrl}${apiKey ? '' : ' (anonymous)'}`);
+  logInfo('pagespeed_fetch_start', {
+    websiteUrl,
+    mode: apiKey ? 'authenticated' : 'anonymous',
+  });
 
   let raw;
   try {
@@ -800,7 +805,11 @@ async function fetchPsiAudit(websiteUrl) {
   const runtimeErr = raw.lighthouseResult?.runtimeError;
   const isPartial  = Boolean(runtimeErr?.code && runtimeErr.code !== 'NO_ERROR');
   if (isPartial) {
-    console.warn(`[PSI] runtimeError detected for ${websiteUrl}: ${runtimeErr.code} — ${runtimeErr.message}`);
+    logWarn('pagespeed_runtime_error', {
+      websiteUrl,
+      runtimeCode: runtimeErr.code,
+      runtimeMessage: runtimeErr.message || null,
+    });
   }
 
   const categories = raw.lighthouseResult?.categories || {};

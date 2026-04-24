@@ -18,6 +18,7 @@
 //   (needed for findNextQueuedRun)
 
 const fb = require('./firebase-admin.cjs');
+const { logInfo } = require('./observability.cjs');
 
 const MAX_ATTEMPTS = 3;
 const LEASE_TIMEOUT_MS = 10 * 60 * 1000; // 10 min — stale lease window for admin reclaim
@@ -239,7 +240,7 @@ async function completeRun(runId, clientId, pipelineResult) {
   // skip the dashboard projection write entirely. The cancelled state is authoritative.
   const runSnap = await runRef.get();
   if (runSnap.exists && runSnap.data()?.status === 'cancelled') {
-    console.log(`[completeRun] Run ${runId} was cancelled mid-flight — dashboard write skipped.`);
+    logInfo('run_complete_skipped_cancelled', { clientId, runId });
     return;
   }
 

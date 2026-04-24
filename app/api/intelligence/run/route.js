@@ -7,6 +7,7 @@ export const maxDuration = 120;
 const require = createRequire(import.meta.url);
 const { runIntelligenceSource } = require('../../../../api/_lib/intelligence-runner.cjs');
 const { buildAuthRequestShim, hasValidWorkerSecret } = require('../../../../api/_lib/auth.cjs');
+const { logError, logInfo } = require('../../../../api/_lib/observability.cjs');
 
 function json(body, status = 200) {
   return NextResponse.json(body, {
@@ -35,19 +36,22 @@ export async function POST(request) {
   if (!clientId) return json({ error: 'clientId is required.' }, 400);
   if (!sourceId) return json({ error: 'sourceId is required.' }, 400);
 
+  logInfo('intelligence_run_start', { clientId, sourceId, runId });
+
   let result;
   try {
     result = await runIntelligenceSource(clientId, sourceId, { runId });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`[intelligence/run] ${sourceId}/${clientId} threw: ${message}`);
+    logError('intelligence_run_throw', { clientId, sourceId, runId, error: message });
     return json({ ok: false, clientId, sourceId, error: message }, 500);
   }
 
   if (!result.ok) {
-    console.error(`[intelligence/run] ${sourceId}/${clientId} failed: ${result.error}`);
+    logError('intelligence_run_failed', { clientId, sourceId, runId, error: result.error });
     return json({ ok: false, clientId, sourceId, error: result.error }, 500);
   }
 
+  logInfo('intelligence_run_complete', { clientId, sourceId, runId, status: result.status });
   return json({ ok: true, clientId, sourceId, status: result.status });
 }

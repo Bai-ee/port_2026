@@ -2,6 +2,7 @@ const fb = require('./firebase-admin.cjs');
 const { getMaster, listSources }        = require('../../features/intelligence/_store');
 const { buildIntelligencePayload }      = require('./intelligence-bootstrap-utils.cjs');
 const { getDefaultModuleConfig, getDefaultModuleState } = require('../../features/scout-intake/module-registry');
+const { logWarn } = require('./observability.cjs');
 
 function normalizeOptionalUrl(input) {
   const raw = String(input || '').trim();
@@ -378,7 +379,10 @@ async function getDashboardBootstrap(uid) {
       );
     }
   } catch (err) {
-    console.warn('[getDashboardBootstrap] intelligence read failed:', err.message);
+    logWarn('dashboard_bootstrap_intelligence_read_failed', {
+      clientId,
+      error: err.message,
+    });
   }
 
   const dashboardState = dashboardStateSnapshot.exists ? dashboardStateSnapshot.data() : null;
