@@ -4,7 +4,7 @@ const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL
   || (process.env.VERCEL_PROJECT_PRODUCTION_URL
         ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-        : 'https://bballi.com');
+        : 'https://hitloop.agency');
 
 const personSchema = {
   '@context': 'https://schema.org',
@@ -32,6 +32,8 @@ const personSchema = {
   sameAs: [
     'https://github.com/Bai-ee',
     'https://github.com/Bai-ee/port_2026',
+    'https://www.linkedin.com/in/bryanballi/',
+    'https://twitter.com/bai_ee',
   ],
 };
 

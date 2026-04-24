@@ -1797,9 +1797,9 @@ const StackedSlidesSection = () => {
                           <div id="inline-footer-seo-nav" style={inlineFooterSeoNavStyle}>
                             <div style={inlineFooterNavColStyle}>
                               <span style={inlineFooterNavHeadingStyle}>Work</span>
-                              <a href="#" style={inlineFooterNavLinkStyle}>Featured Projects</a>
-                              <a href="#" style={inlineFooterNavLinkStyle}>Case Studies</a>
-                              <a href="#" style={inlineFooterNavLinkStyle}>Process</a>
+                              <a href="/work" style={inlineFooterNavLinkStyle}>Featured Projects</a>
+                              <a href="/case-studies" style={inlineFooterNavLinkStyle}>Case Studies</a>
+                              <a href="/process" style={inlineFooterNavLinkStyle}>Process</a>
                             </div>
                             <div style={inlineFooterNavColStyle}>
                               <span style={inlineFooterNavHeadingStyle}>Services</span>
@@ -1819,9 +1819,9 @@ const StackedSlidesSection = () => {
                             </div>
                             <div style={inlineFooterNavColStyle}>
                               <span style={inlineFooterNavHeadingStyle}>Company</span>
-                              <a href="#" style={inlineFooterNavLinkStyle}>About</a>
-                              <a href="#" style={inlineFooterNavLinkStyle}>How It Works</a>
-                              <a href="#" style={inlineFooterNavLinkStyle}>Contact</a>
+                              <a href="/about" style={inlineFooterNavLinkStyle}>About</a>
+                              <a href="/how-it-works" style={inlineFooterNavLinkStyle}>How It Works</a>
+                              <a href="/contact" style={inlineFooterNavLinkStyle}>Contact</a>
                               <a href="https://calendly.com/bballi/30min" target="_blank" rel="noopener noreferrer" style={inlineFooterNavLinkStyle}>Book a Call</a>
                             </div>
                           </div>

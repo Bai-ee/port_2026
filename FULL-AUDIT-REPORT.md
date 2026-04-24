@@ -1,264 +1,256 @@
 # SEO Audit Report — Bballi Portfolio
-**Date:** 2026-04-21  
-**URL:** https://port-2026-kohl.vercel.app  
-**Framework:** Next.js (App Router, Turbopack)  
-**Business Type:** Personal portfolio / freelance consulting (AI-assisted design + development)
+**Date:** 2026-04-23 (updated from 2026-04-21 baseline)
+**URL:** https://port-2026-kohl.vercel.app (no custom domain live yet)
+**Framework:** Next.js 16 (App Router, Turbopack)
+**Business Type:** Personal portfolio / AI design engineer & creative technologist
 
 ---
 
 ## Executive Summary
 
-**Overall SEO Health Score: 27 / 100**
+**Overall SEO Health Score: 61 / 100** *(up from 27/100 two days ago)*
 
-The site has strong visual craft and real portfolio content, but almost no SEO infrastructure. There is no robots.txt, no sitemap, no structured data, no Open Graph tags, no per-page metadata, no favicon, no custom domain, and no AI crawler file. Private pages (dashboard, admin, login) are fully indexable. Images are unoptimized — several exceed 5 MB as PNGs. The heavy WebGL canvas animation will hurt Core Web Vitals, especially LCP on mobile.
+Major structural work completed since the last audit: robots.txt, sitemap, llms.txt, per-page metadata, OG/Twitter cards, JSON-LD schemas, noindex on private pages, GA4 analytics, and favicon are all now in place. The site has gone from no SEO infrastructure to a solid baseline.
 
-### Top 5 Critical Issues
-1. No robots.txt — search engines crawl with no guidance
-2. No sitemap.xml — pages may not be discovered
-3. Private pages (dashboard, admin, login) have no `noindex` — will appear in search results
-4. No structured data (Person, WebSite, ProfessionalService schemas)
-5. No custom domain — `*.vercel.app` undermines brand authority and ranking potential
+Remaining blockers: the sitemap only lists the homepage while 10+ new public pages exist, domain names are inconsistent across schemas (`bballi.com` vs `bryanballi.com` vs the live Vercel URL), portfolio images are still uncompressed PNGs (5.6 MB), and no custom domain is live.
+
+### What Was Fixed
+1. ✅ `robots.txt` — comprehensive, includes 15+ AI crawlers
+2. ✅ `llms.txt` — detailed, covers platform architecture and use cases
+3. ✅ Root layout metadata — full OG, Twitter Card, keywords, GA4
+4. ✅ JSON-LD — Person, WebSite, and Review schemas on homepage
+5. ✅ Per-page metadata — About, Work, all 5 service pages have layouts with metadata + schema
+6. ✅ `noindex` — dashboard, admin, login, capture, preview all blocked via layout.jsx
+7. ✅ Favicon — `app/icon.png` present
+8. ✅ GA4 analytics — wired via `AnalyticsPageView` + gtag script
+
+### Top 5 Remaining Critical Issues
+1. Sitemap lists only `/` — 10 new public pages are not submitted to search engines
+2. Domain inconsistency — schemas use `bryanballi.com`, root layout falls back to `bballi.com`, live site is `port-2026-kohl.vercel.app`
+3. Portfolio images uncompressed — frame_4.png is 5.6 MB (no WebP, no `<Image>`)
+4. `robots.txt` Sitemap directive is a relative path — must be absolute
+5. No custom domain live — `*.vercel.app` carries no domain authority
 
 ### Top 5 Quick Wins
-1. Add `robots.txt` (30 minutes)
-2. Add `sitemap.xml` via Next.js `app/sitemap.js` (1 hour)
-3. Add `noindex` to dashboard / login / admin pages (30 minutes)
-4. Add Open Graph + Twitter Card meta tags to root layout (1 hour)
-5. Add `Person` + `WebSite` JSON-LD schema to homepage (1–2 hours)
+1. Expand `app/sitemap.js` to include all public routes (30 min)
+2. Fix `robots.txt` Sitemap line to absolute URL (5 min)
+3. Pick one canonical domain and make all schemas consistent (30 min)
+4. Convert heavy portfolio images to WebP using Next.js `<Image>` (2–3 hrs)
+5. Add LinkedIn/Twitter to `sameAs` in homepage Person schema (15 min)
 
 ---
 
 ## Technical SEO
 
-**Score: 22 / 100**
+**Score: 65 / 100** *(was 22/100)*
 
-### robots.txt
-- **CRITICAL** — No `robots.txt` file exists anywhere in `/public/`.
-- Bots crawl with zero guidance. Private routes (`/dashboard`, `/admin`, `/login`, `/capture`, `/preview/*`) are fully open.
-- **Fix:** Create `public/robots.txt`. Disallow private paths. Point to sitemap.
+### robots.txt ✅ — Fixed
+- Comprehensive file with `User-agent: *` defaults plus explicit rules for Googlebot, Bingbot, GPTBot, ClaudeBot, PerplexityBot, and 10+ others.
+- Private routes correctly blocked: `/api/`, `/dashboard/`, `/auth/`, `/login`, `/admin`, `/preview/`, `/capture/`.
+- **ISSUE — HIGH:** `Sitemap: /sitemap.xml` is a relative URL. Per the Sitemaps protocol, the Sitemap directive must be an absolute URL.
+  - Fix: `Sitemap: https://port-2026-kohl.vercel.app/sitemap.xml` (or the custom domain once live).
 
-```
-User-agent: *
-Disallow: /dashboard
-Disallow: /admin
-Disallow: /login
-Disallow: /capture
-Disallow: /preview/
-Sitemap: https://port-2026-kohl.vercel.app/sitemap.xml
-```
+### Sitemap ⚠️ — Partial
+- `app/sitemap.js` exists and uses env-var-driven URL — good pattern.
+- **CRITICAL:** Only `/` is listed. The site now has 10+ public pages:
+  - `/about`, `/work`, `/contact`, `/gallery`, `/how-it-works`, `/process`, `/faq`, `/case-studies`
+  - `/services/ai-design-consulting`, `/services/brand-identity`, `/services/design-systems`, `/services/seo-geo`, `/services/web-development`
+- These pages will not be discovered or prioritized by search engines until added to the sitemap.
 
-### Sitemap
-- **CRITICAL** — No sitemap.xml found. Only the homepage (`/`) and portfolio modal views matter for indexing.
-- **Fix:** Add `app/sitemap.js` returning `[{ url, lastModified, changeFrequency, priority }]` for `/` only (private pages excluded).
+### Canonical Tags ✅ — Fixed
+- `metadataBase` set in root layout.
+- Individual pages declare `alternates: { canonical: '/slug' }` in their layouts.
 
-### Canonical Tags
-- **HIGH** — No canonical URLs configured. Root metadata object in `app/layout.jsx` has only `title` and `description`.
-- Next.js App Router supports `metadataBase` + `alternates.canonical` — neither is set.
-- **Fix:** Add `metadataBase: new URL('https://port-2026-kohl.vercel.app')` and per-page canonicals.
+### noindex on Private Pages ✅ — Fixed
+- `dashboard`, `admin`, `login`, `capture`, `preview` layouts all export `robots: { index: false, follow: false, nocache: true }`. Correctly implemented at layout level so all child routes inherit.
 
-### noindex on Private Pages
-- **CRITICAL** — `/dashboard`, `/admin`, `/admin/control`, `/login`, `/capture`, `/preview/*` pages have no metadata exports at all. They will be indexed.
-- **Fix:** Add `export const metadata = { robots: { index: false, follow: false } }` to each private page.
+### Custom Domain ❌ — Not Yet Live
+- Site still served from `port-2026-kohl.vercel.app`. No `bballi.com` or `bryanballi.com` configured.
+- **Inconsistency risk:** root layout falls back to `https://bballi.com`; inner page schemas hardcode `https://bryanballi.com`. These need to converge on one domain before it goes live, or schemas will have mismatched entity URLs.
 
-### Custom Domain
-- **HIGH** — The site runs on `port-2026-kohl.vercel.app`. There is no custom domain configured.
-- `*.vercel.app` subdomains carry no domain authority. Google will not rank them competitively for personal name / skill searches.
-- **Fix:** Register `bryanballi.com` or `bballi.com` and connect via Vercel.
-
-### Favicon
-- **MEDIUM** — No favicon.ico, apple-touch-icon, or web manifest found. Browser tab shows generic icon.
-- **Fix:** Add `app/favicon.ico` and optionally `public/site.webmanifest`.
+### Favicon ✅ — Fixed
+- `app/icon.png` present. Next.js serves this as `favicon.ico` automatically.
+- `icons` in root layout points to `/img/sig.png` — the brand signature mark. Acceptable.
 
 ### Security Headers
-- Not audited against live server — Vercel defaults include `X-Frame-Options: DENY` and `X-Content-Type-Options`. No custom `Content-Security-Policy` observed in `next.config.mjs`.
+- Vercel default headers apply. No custom `Content-Security-Policy` in `next.config.mjs`.
 
 ---
 
 ## On-Page SEO
 
-**Score: 28 / 100**
+**Score: 75 / 100** *(was 28/100)*
 
-### Title Tag
-- Current: `Bballi Portfolio` (root layout `metadata.title`)
-- **HIGH** — Too short, no keywords, no name, no value proposition.
-- Recommended: `Bryan Balli — AI Consultant & Creative Technologist`
-- Or: `Bryan Balli | Human-in-the-Loop AI Design & Development`
+### Title ✅ — Fixed
+- Root: `Bryan Balli — AI Design Engineer & Creative Technologist Portfolio`
+- Template: `%s · Bryan Balli`
+- Per-page titles set on About, Work, all service pages.
 
-### Meta Description
-- Current: `Client dashboard and portfolio`
-- **HIGH** — Generic, internal-facing language ("Client dashboard"), not search-facing copy.
-- Max 155 chars, use real value proposition from the site content.
-- Recommended: `Bryan Balli is a freelance AI consultant and creative technologist who helps brands navigate AI adoption through design, code, and systems.`
+### Meta Description ✅ — Fixed
+- Root description is substantive and search-facing.
+- Per-page descriptions set and differentiated.
 
-### Per-Page Metadata
-- **HIGH** — No page-level `metadata` exports on any route. Every page inherits the root generic title/description.
-- The homepage, dashboard, login, admin, capture, and preview pages all need their own `export const metadata` blocks.
+### Per-Page Metadata ✅ — Fixed (for existing layouts)
+- About, Work, Contact, Gallery, How It Works, Process, and all 5 service pages have `export const metadata` in their layout files with page-specific titles, descriptions, keywords, OG, and canonical.
+- **GAP — MEDIUM:** `app/case-studies/layout.jsx` and `app/faq/layout.jsx` may not have metadata — not verified. Check and add if missing.
+
+### Open Graph & Twitter ✅ — Fixed
+- Root layout has full OG and Twitter Card config with `og_meta.png` as the share image.
+- `@bai_ee` Twitter handle set on both `site` and `creator`.
+- **MEDIUM:** OG image (`/img/og_meta.png`) is 1.1 MB. Recommended max is 300 KB for fast social unfurling. Compress or convert to WebP/JPG.
 
 ### Heading Structure
-- H1: `"YOUR HUMAN IN THE LOOP"` — visually strong, stylistically on-brand, but zero keyword signal for search.
-  - This is acceptable if the page has other keyword-rich content, but the H1 is fixed as a brand tagline.
-  - Consider a visually hidden or below-fold H2 like "Freelance AI Consultant & Creative Technologist — Bryan Balli" for crawlers.
-- H2: Used in `StackedSlidesSection` (`panel-hero-headline` slide headings) and testimonial-like sections.
-- H3: Used in `HoverRevealList` for item titles.
-- Structure is reasonable for a single-page layout — just needs keyword presence.
+- H1: `YOUR HUMAN IN THE LOOP` — brand tagline, not keyword-rich.
+- New inner pages have proper heading structure through their respective page components.
+- **LOW:** Consider a visually hidden or below-fold `<h2>` on the homepage for crawlers that surfaces keyword-rich copy.
 
 ### Internal Linking
-- The site is a single-page application. Portfolio items open as modals — their content is JS-rendered, not separate crawlable URLs.
-- **MEDIUM** — All portfolio case content is inaccessible to crawlers. Consider adding static `/work/[slug]` pages if search discovery of work matters.
+- Site now has real navigable pages via `InnerPageShell`. Portfolio items appear to remain JS-modal-only on the homepage.
+- **MEDIUM:** If the new `/work` and `/case-studies` pages contain static, crawlable project descriptions, internal links from the homepage to those pages would pass authority and improve indexation.
 
 ---
 
 ## Content Quality
 
-**Score: 44 / 100**
+**Score: 58 / 100** *(was 44/100)*
 
 ### What's Good
-- Real testimonials with named people and companies (Sam / Onward, Rashid A. / Hossy, Claire B. / Carduvy, Marco T. / HEC)
-- Clear value proposition in the subheadline: *"I step into your business, map what's working, fix what's not, and build what's missing"*
-- Genuine work history with real roles and companies
-- Differentiated positioning around "human-in-the-loop AI" — a real keyword cluster
+- Site now has 10+ public pages with distinct content — about, work, services, process, contact, gallery, FAQ, how-it-works, case studies.
+- `llms.txt` is detailed and accurate — covers platform architecture, technical substrate, and modular card pipeline descriptions.
+- Homepage testimonials now include real names, job titles, and companies (TikTok, HBO Max, Epsilon, TST).
+- Service pages segmented by offering (AI design consulting, brand identity, design systems, SEO/GEO, web development).
 
 ### E-E-A-T Signals
-- **Experience:** Work history from 2014 covers front-end, interactive production, creative direction, and AI consulting. Good.
-- **Expertise:** Technical depth visible in project complexity (WebGL, GSAP, Firebase, Next.js). Not surfaced in crawlable text.
-- **Authoritativeness:** No external links or press mentions on the homepage. No published articles, GitHub links, or external profiles referenced.
-- **Trust:** Profile image is present but uses empty `alt=""`. Testimonials are uncited (no LinkedIn links, no company URLs).
+- **Experience:** Work history now surfaced with named employers. Schema `worksFor` array on About page lists Publicis, Epsilon, Conversant, Alliance Data.
+- **Expertise:** Technical stack called out in `knowsAbout` (Three.js, GSAP, Firebase, Claude API) — good.
+- **Authoritativeness:** GitHub sameAs links added. No LinkedIn or Twitter yet in `sameAs`. No external press or published articles.
+- **Trust:** Profile photo alt text issue may persist — confirm `alt="Bryan Balli"` on profile image.
 
 ### Thin Content Risk
-- Slide/section content in `StackedSlidesSection` is loaded from JS — if Google can't execute the animation, key differentiators won't be indexed.
-- The `HoverRevealList` items (service differentiators) render only on hover in the DOM — may not be indexed.
+- Service page content depth not verified — if `AiDesignConsultingPage`, `BrandIdentityPage`, etc. are shallow, they will not rank for service queries.
+- The `HoverRevealList` and GSAP-animated slide content still renders on interaction — AI crawlers that don't execute JS will miss this content.
 
-### Readability
-- Copy is strong and concise. Not padded. Reads well.
-- Lacks FAQ, blog, or any long-form content. No content depth to rank for informational queries.
+### Content Gaps
+- No blog, editorial, or long-form content for informational queries ("how to choose an AI consultant", "what is GEO", etc.).
+- FAQ page exists — verify it has substantive Q&A and consider adding FAQPage JSON-LD schema.
 
 ---
 
 ## Schema / Structured Data
 
-**Score: 3 / 100**
+**Score: 75 / 100** *(was 3/100)*
 
-**CRITICAL** — No JSON-LD or any structured data anywhere in the codebase.
+### Implemented
+- **Homepage (`app/page.jsx`):** Person (with `@id`, `knowsAbout`, `sameAs`, `alternateName`), WebSite, and 4× Review schemas — well-formed.
+- **About layout:** Person schema (redundant with homepage but acceptable for the page context).
+- **Work layout:** ItemList schema with 4 listed projects.
+- **Service layouts:** Service-specific schemas (verified on ai-design-consulting, brand-identity, seo-geo).
+- **Contact/Gallery layouts:** Schema present (type not fully verified).
 
-### Missing Schemas
+### Issues
 
-**1. Person (highest priority)**
-```json
-{
-  "@context": "https://schema.org",
-  "@type": "Person",
-  "name": "Bryan Balli",
-  "url": "https://port-2026-kohl.vercel.app",
-  "jobTitle": "AI Consultant & Creative Technologist",
-  "description": "Freelance consultant specializing in human-in-the-loop AI systems, interactive builds, and digital strategy.",
-  "image": "https://port-2026-kohl.vercel.app/img/profile2_400x400.png",
-  "sameAs": []
-}
-```
+**HIGH — Domain inconsistency across schemas:**
+- `app/page.jsx` (homepage): uses `SITE_URL` env var → falls back to `https://bballi.com`
+- `app/about/layout.jsx`: hardcodes `https://bryanballi.com`
+- All service layouts: hardcode `https://bryanballi.com`
+- These create two distinct entity URLs for the same Person — Google will treat them as different entities or ignore one.
+- Fix: pick one domain (likely `bryanballi.com` if that's the intended custom domain), move it to an env var, and use it consistently everywhere.
 
-**2. WebSite**
-```json
-{
-  "@context": "https://schema.org",
-  "@type": "WebSite",
-  "name": "Bryan Balli Portfolio",
-  "url": "https://port-2026-kohl.vercel.app"
-}
-```
+**MEDIUM — `sameAs` is GitHub-only:**
+- Homepage Person schema: `sameAs: ['https://github.com/Bai-ee', 'https://github.com/Bai-ee/port_2026']`
+- Both point to GitHub. No LinkedIn, no Twitter/X.
+- Fix: add LinkedIn profile URL and `https://twitter.com/bai_ee` to the array.
 
-**3. ProfessionalService / Consulting**
-For the consulting/services angle — add a `ProfessionalService` or `LocalBusiness` schema if a geographic market is relevant.
+**MEDIUM — Missing FAQPage schema:**
+- `app/faq/` exists but no FAQPage JSON-LD verified. FAQPage schema is eligible for Google rich results.
 
-**4. Review / AggregateRating**
-Testimonials from Sam (Onward), Rashid A. (Hossy), Claire B. (Carduvy) could be marked up as `Review` under the `Person` or `ProfessionalService` entity for rich result eligibility.
+**LOW — Review schema limitation:**
+- Reviews are `Review` items on a Person entity. This is valid but Google typically surfaces AggregateRating on product/service entities more prominently. Consider wrapping in a `ProfessionalService` with `aggregateRating` once 3+ reviews are added.
 
 ---
 
 ## Performance (Core Web Vitals)
 
-**Score: 30 / 100** *(lab estimate — no CrUX field data available)*
+**Score: 32 / 100** *(was 30/100 — minimal change)*
 
-### Image Weight — Severe
-| File | Size | Issue |
-|------|------|-------|
-| `/img/port/frame_4.png` | 5.6 MB | No WebP conversion, no lazy load |
-| `/img/port/frame_2.png` | 5.3 MB | Same |
-| `/img/port/critters_game1.png` | 5.1 MB | Same |
-| `/img/port/frame_8.png` | 4.7 MB | Same |
-| `/img/device_template.png` | 2.2 MB | Same |
+### Image Weight — Still Severe ❌
+| File | Size | Status |
+|------|------|--------|
+| `/img/port/frame_4.png` | 5.6 MB | No change |
+| `/img/port/frame_2.png` | 5.3 MB | No change |
+| `/img/port/critters_game1.png` | 5.1 MB | No change |
+| `/img/port/frame_8.png` | 4.7 MB | No change |
+| `/img/og_meta.png` | 1.1 MB | OG image too large |
 
-Total portfolio image payload exceeds 25 MB uncompressed. This will cause severe LCP failures on mobile and slow connections.
-
-**Fix:** Use Next.js `<Image>` component everywhere — it auto-converts to WebP, applies responsive sizing, and lazy-loads. Current code uses raw `<img>` tags throughout.
+Total heavy payload unchanged. Next.js `<Image>` not yet applied to portfolio images.
 
 ### WebGL Canvas
-- A 25,000-particle WebGL canvas (`ox.jsx`) is loaded on the homepage hero.
-- `dynamic(() => import('./ox.jsx'), { ssr: false })` prevents SSR crash, but the canvas is not deferred — it loads on page entry.
-- Heavy GPU load will impact INP and CLS on mid-range mobile devices.
-- **Fix:** Add intersection observer or scroll-triggered canvas init to defer WebGL until the user scrolls to the canvas area. Or lower default `particleCount` to 8,000–12,000 on mobile.
+- Homepage WebGL canvas unchanged. Still loads on entry, not deferred.
 
 ### Font Loading
-- Three Google Font families (Doto, Space Grotesk, Space Mono) loaded via `<link>` in `<head>`.
-- `display=swap` is set — good. `preconnect` to fonts.googleapis.com is present — good.
-- FOUT is mitigated, but three font family requests add latency.
-
-### GSAP / ScrollTrigger
-- GSAP ScrollTrigger is registered and used for reveal animations. Multiple `useLayoutEffect` calls.
-- Animated elements use `opacity: 0` as initial state and are revealed on scroll — confirmed by recent commit fixing mobile visibility bug.
-- On mobile/reduced-motion, GSAP context early-returns and elements must be force-shown via CSS (recently fixed).
+- 3 Google Font families, `display=swap`, `preconnect` — unchanged, acceptable.
 
 ---
 
 ## Images
 
-**Score: 25 / 100**
+**Score: 28 / 100** *(was 25/100)*
 
-### Alt Text
-- `Header.jsx`: `<img src="/img/sig.png" alt="" aria-hidden="true">` — signature as decoration, acceptable.
-- `PortfolioModal.jsx`: Profile image with `alt=""` — profile photo of the site owner **should** have descriptive alt text like `alt="Bryan Balli, AI consultant and creative technologist"`.
-- Portfolio images in the gallery — not inspected but likely have no alt text if they follow the same pattern.
-
-### Format
-- All portfolio images are PNG. None converted to WebP or AVIF.
-- Next.js `<Image>` would handle this automatically.
-
-### Sizing
-- No `width`/`height` attributes on `<img>` tags — causes layout shift (CLS impact).
+- Format: all portfolio images still PNG. No WebP conversion.
+- Size: 5 images over 4 MB. Total portfolio image payload exceeds 25 MB.
+- `<img>` vs `<Image>`: portfolio images still use raw `<img>` tags — no responsive sizing, no lazy-load, no auto-WebP.
+- **OG image:** 1.1 MB is too large for a social meta image. Target < 300 KB at 1200×630 px.
 
 ---
 
 ## AI Search Readiness
 
-**Score: 12 / 100**
+**Score: 65 / 100** *(was 12/100)*
 
-### llms.txt
-- **Missing.** No `/public/llms.txt` file.
-- AI crawlers (ChatGPT, Perplexity, Claude.ai web) have no structured signal about what this site is, who Bryan Balli is, or what content is citable.
+### llms.txt ✅ — Added
+- `/public/llms.txt` is comprehensive. Covers what the platform does, the modular card pipeline, technical stack, conventions for AI summarization, and contact info.
+- AI crawlers (ChatGPT, Perplexity, Claude.ai) can extract entity facts directly.
 
-### Crawler Access
-- The site is heavily JavaScript-dependent. Most content (portfolio modals, slide panels, hover reveals) requires JS execution.
-- Googlebot can execute JS; simpler AI crawlers cannot. Content behind GSAP reveals may not be indexed by AI engines.
+### Crawler Access ✅ — Fixed
+- `robots.txt` explicitly allows GPTBot, OAI-SearchBot, ClaudeBot, anthropic-ai, PerplexityBot, and others. No AI crawlers blocked.
 
 ### Citability
-- The homepage H1 (`YOUR HUMAN IN THE LOOP`) and subheadline copy are good citation candidates — concise, unique claims.
-- The testimonials section contains high-quality quotes — but they're behind scroll animations that some crawlers may not trigger.
-- No FAQ, no long-form editorial, no published articles that AI systems can cite back to this entity.
+- Homepage H1 and subheadline are citable. Testimonials with real names/companies are strong citation candidates.
+- Schema provides entity anchoring — AI systems can now associate the site with "Bryan Balli, AI Design Engineer."
+- `sameAs` GitHub links provide entity disambiguation, but LinkedIn/Twitter would strengthen this further.
 
-### Entity Clarity
-- No schema signals to tell AI engines that this site represents "Bryan Balli, the AI consultant."
-- No `sameAs` links to LinkedIn, GitHub, Twitter — entity disambiguation is zero.
+### Remaining Gaps
+- Most JS-animated content (GSAP reveals, hover items) still requires JS execution — basic AI crawlers miss this.
+- No FAQ or editorial content for informational AI Overview inclusion.
 
 ---
 
 ## Sitemap Analysis
 
-**Score: 0 / 100** — No sitemap exists.
+**Score: 30 / 100** *(was 0/100)*
 
-Public crawlable pages that should be in a sitemap:
-- `/` (homepage)
+`app/sitemap.js` exists but only includes the homepage.
 
-Pages that should be **excluded** from both sitemap and index:
-- `/dashboard`, `/login`, `/admin`, `/admin/control`, `/capture`, `/preview/*`
+### Pages that should be in the sitemap
+```
+/ (homepage)          — priority 1.0
+/about                — priority 0.9
+/work                 — priority 0.9
+/case-studies         — priority 0.8
+/services/ai-design-consulting  — priority 0.8
+/services/brand-identity        — priority 0.8
+/services/design-systems        — priority 0.8
+/services/seo-geo               — priority 0.8
+/services/web-development       — priority 0.8
+/how-it-works         — priority 0.7
+/process              — priority 0.7
+/gallery              — priority 0.7
+/faq                  — priority 0.7
+/contact              — priority 0.6
+```
+
+### Pages to keep excluded
+`/dashboard`, `/login`, `/admin`, `/preview/*`, `/capture`, `/api/*`
 
 ---
 
@@ -268,41 +260,37 @@ Pages that should be **excluded** from both sitemap and index:
 
 | # | Issue | File | Est. Time |
 |---|-------|------|-----------|
-| 1 | Add `robots.txt` | `public/robots.txt` | 30 min |
-| 2 | Add `noindex` to private pages | `app/dashboard/page.jsx`, `app/login/page.jsx`, `app/admin/page.jsx`, `app/admin/control/page.jsx`, `app/capture/page.jsx`, `app/preview/*/page.jsx` | 30 min |
-| 3 | Add `sitemap.js` | `app/sitemap.js` | 45 min |
-| 4 | Register a custom domain | Vercel + registrar | 1–2 hrs |
+| 1 | Expand sitemap to include all 13 public pages | `app/sitemap.js` | 30 min |
+| 2 | Fix robots.txt Sitemap to absolute URL | `public/robots.txt` | 5 min |
+| 3 | Resolve domain inconsistency — pick one and use env var everywhere | all layout.jsx files | 1 hr |
 
 ### High — Fix Within 1 Week
 
 | # | Issue | File | Est. Time |
 |---|-------|------|-----------|
-| 5 | Improve root title + description | `app/layout.jsx` | 15 min |
-| 6 | Add `metadataBase` + canonical config | `app/layout.jsx` | 15 min |
-| 7 | Add Open Graph + Twitter Card tags | `app/layout.jsx` | 1 hr |
-| 8 | Add Person + WebSite JSON-LD schema | `app/page.jsx` or layout | 1–2 hrs |
-| 9 | Fix profile image alt text | `PortfolioModal.jsx`, `Header.jsx` | 15 min |
-| 10 | Convert `<img>` to Next.js `<Image>` | `PortfolioModal.jsx`, `Header.jsx`, gallery components | 2–3 hrs |
+| 4 | Convert portfolio images to WebP / use Next.js `<Image>` | PortfolioModal.jsx, gallery components | 2–3 hrs |
+| 5 | Compress OG image from 1.1 MB to < 300 KB | `/public/img/og_meta.png` | 30 min |
+| 6 | Add LinkedIn + Twitter to `sameAs` in homepage Person schema | `app/page.jsx` | 15 min |
+| 7 | Verify case-studies and FAQ layouts have metadata | `app/case-studies/layout.jsx`, `app/faq/layout.jsx` | 30 min |
 
 ### Medium — Fix Within 1 Month
 
 | # | Issue | File | Est. Time |
 |---|-------|------|-----------|
-| 11 | Compress portfolio images to WebP | `/public/img/port/` | 1 hr |
-| 12 | Add `llms.txt` | `public/llms.txt` | 30 min |
-| 13 | Add `favicon.ico` + web manifest | `app/favicon.ico`, `public/manifest.webmanifest` | 1 hr |
-| 14 | Add keyword-rich H2 below hero fold | `HomePage.jsx` or `StackedSlidesSection.jsx` | 30 min |
-| 15 | Add Review schema for testimonials | `app/layout.jsx` or `app/page.jsx` | 1 hr |
-| 16 | Reduce canvas particle count on mobile | `ox.jsx` or `HomePage.jsx` | 1–2 hrs |
+| 8 | Add FAQPage JSON-LD to FAQ route | `app/faq/layout.jsx` | 30 min |
+| 9 | Add `ProfessionalService` schema with aggregateRating once 3+ reviews live | `app/page.jsx` | 1 hr |
+| 10 | Defer WebGL canvas init until scroll (reduce mobile LCP) | `ox.jsx` | 1–2 hrs |
+| 11 | Audit inner page content depth — ensure service pages have 300+ words each | all service page components | varies |
+| 12 | Custom domain — connect `bryanballi.com` in Vercel | Vercel dashboard | 1 hr |
 
 ### Low — Backlog
 
 | # | Issue | Notes |
 |---|-------|-------|
-| 17 | Static `/work/[slug]` pages for portfolio items | Currently JS-modal-only; crawlers miss case content |
-| 18 | Add blog / editorial content | Long-form AI consulting content would rank for informational queries |
-| 19 | Add external profile `sameAs` links (LinkedIn, GitHub) | Entity disambiguation for Google Knowledge Graph |
-| 20 | `Content-Security-Policy` header | Security hardening, not ranking impact |
+| 13 | Static `/work/[slug]` pages for individual case studies | Currently JS-modal-only on homepage |
+| 14 | Blog / editorial content for informational queries | "What is GEO", "AI consulting for SMBs" |
+| 15 | CSP header in `next.config.mjs` | Security hardening |
+| 16 | Keyword-rich H2 below hero fold on homepage | Crawlable keyword signal alongside brand tagline |
 
 ---
 
@@ -310,132 +298,83 @@ Pages that should be **excluded** from both sitemap and index:
 
 | Category | Weight | Score | Weighted |
 |----------|--------|-------|----------|
-| Technical SEO | 22% | 22/100 | 4.8 |
-| Content Quality | 23% | 44/100 | 10.1 |
-| On-Page SEO | 20% | 28/100 | 5.6 |
-| Schema / Structured Data | 10% | 3/100 | 0.3 |
-| Performance (CWV) | 10% | 30/100 | 3.0 |
-| AI Search Readiness | 10% | 12/100 | 1.2 |
-| Images | 5% | 25/100 | 1.3 |
-| **Overall** | **100%** | | **26.3 / 100** |
+| Technical SEO | 22% | 65/100 | 14.3 |
+| Content Quality | 23% | 58/100 | 13.3 |
+| On-Page SEO | 20% | 75/100 | 15.0 |
+| Schema / Structured Data | 10% | 75/100 | 7.5 |
+| Performance (CWV) | 10% | 32/100 | 3.2 |
+| AI Search Readiness | 10% | 65/100 | 6.5 |
+| Images | 5% | 28/100 | 1.4 |
+| **Overall** | **100%** | | **61.2 / 100** |
 
 ---
 
-## Quick Win Code Snippets
+## Quick Fix Code Snippets
 
-### 1. robots.txt (`public/robots.txt`)
-```
-User-agent: *
-Disallow: /dashboard
-Disallow: /admin
-Disallow: /login
-Disallow: /capture
-Disallow: /preview/
-Allow: /
-
-Sitemap: https://port-2026-kohl.vercel.app/sitemap.xml
-```
-
-### 2. Sitemap (`app/sitemap.js`)
+### 1. Expanded sitemap (`app/sitemap.js`)
 ```js
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL
+  || (process.env.VERCEL_PROJECT_PRODUCTION_URL
+        ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+        : 'https://bryanballi.com');
+
+const PUBLIC_ROUTES = [
+  { path: '/',                                  priority: 1.0, freq: 'weekly' },
+  { path: '/about',                             priority: 0.9, freq: 'monthly' },
+  { path: '/work',                              priority: 0.9, freq: 'weekly' },
+  { path: '/case-studies',                      priority: 0.8, freq: 'weekly' },
+  { path: '/services/ai-design-consulting',     priority: 0.8, freq: 'monthly' },
+  { path: '/services/brand-identity',           priority: 0.8, freq: 'monthly' },
+  { path: '/services/design-systems',           priority: 0.8, freq: 'monthly' },
+  { path: '/services/seo-geo',                  priority: 0.8, freq: 'monthly' },
+  { path: '/services/web-development',          priority: 0.8, freq: 'monthly' },
+  { path: '/how-it-works',                      priority: 0.7, freq: 'monthly' },
+  { path: '/process',                           priority: 0.7, freq: 'monthly' },
+  { path: '/gallery',                           priority: 0.7, freq: 'monthly' },
+  { path: '/faq',                               priority: 0.7, freq: 'monthly' },
+  { path: '/contact',                           priority: 0.6, freq: 'monthly' },
+];
+
 export default function sitemap() {
-  return [
-    {
-      url: 'https://port-2026-kohl.vercel.app',
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 1,
-    },
-  ];
+  const lastModified = new Date();
+  return PUBLIC_ROUTES.map(({ path, priority, freq }) => ({
+    url: `${SITE_URL}${path}`,
+    lastModified,
+    changeFrequency: freq,
+    priority,
+  }));
 }
 ```
 
-### 3. noindex on private pages (add to each)
+### 2. robots.txt Sitemap fix (`public/robots.txt`)
+Replace the last line:
+```
+# Before (relative — non-standard):
+Sitemap: /sitemap.xml
+
+# After (absolute):
+Sitemap: https://bryanballi.com/sitemap.xml
+```
+
+### 3. Consistent SITE_URL in inner page schemas
+Replace hardcoded `https://bryanballi.com` across layout files with:
 ```js
-export const metadata = {
-  robots: { index: false, follow: false },
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL || 'https://bryanballi.com';
+
+const personSchema = {
+  url: SITE_URL,
+  // ...
 };
 ```
 
-### 4. Improved root layout metadata (`app/layout.jsx`)
+### 4. Add LinkedIn/Twitter to sameAs (`app/page.jsx`)
 ```js
-export const metadata = {
-  metadataBase: new URL('https://port-2026-kohl.vercel.app'),
-  title: 'Bryan Balli — AI Consultant & Creative Technologist',
-  description: 'Bryan Balli helps brands navigate AI adoption through design, interactive builds, and human-in-the-loop systems. Freelance consulting, creative technology, and digital strategy.',
-  openGraph: {
-    title: 'Bryan Balli — AI Consultant & Creative Technologist',
-    description: 'Freelance AI consultant and creative technologist. Design, code, and strategy for brands navigating AI.',
-    url: 'https://port-2026-kohl.vercel.app',
-    siteName: 'Bryan Balli Portfolio',
-    images: [{ url: '/img/profile2_400x400.png', width: 400, height: 400, alt: 'Bryan Balli' }],
-    type: 'website',
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'Bryan Balli — AI Consultant & Creative Technologist',
-    description: 'Human-in-the-loop AI systems, interactive builds, and digital strategy.',
-    images: ['/img/profile2_400x400.png'],
-  },
-  alternates: {
-    canonical: '/',
-  },
-};
-```
-
-### 5. Person + WebSite JSON-LD (add to `app/page.jsx`)
-```jsx
-export default function Home() {
-  const schema = {
-    '@context': 'https://schema.org',
-    '@graph': [
-      {
-        '@type': 'Person',
-        name: 'Bryan Balli',
-        url: 'https://port-2026-kohl.vercel.app',
-        jobTitle: 'AI Consultant & Creative Technologist',
-        description: 'Freelance consultant specializing in human-in-the-loop AI systems, interactive builds, and digital strategy for brands.',
-        image: 'https://port-2026-kohl.vercel.app/img/profile2_400x400.png',
-        sameAs: [],
-      },
-      {
-        '@type': 'WebSite',
-        name: 'Bryan Balli Portfolio',
-        url: 'https://port-2026-kohl.vercel.app',
-      },
-    ],
-  };
-
-  return (
-    <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
-      />
-      <HomePage />
-    </>
-  );
-}
-```
-
-### 6. llms.txt (`public/llms.txt`)
-```
-# Bryan Balli — AI Consultant & Creative Technologist
-
-Bryan Balli is a freelance consultant and creative technologist who helps brands navigate AI adoption through design, interactive builds, and human-in-the-loop systems.
-
-## What I do
-- Human-in-the-loop AI systems
-- Interactive web experiences and creative technology
-- Brand identity and digital strategy
-- Front-end development (React, Next.js, WebGL, GSAP)
-
-## Background
-- Founder & Consultant, Independent (2022–present)
-- Creative Technology Director, Studio Meridian (2019–2022)
-- Senior Interactive Producer, Carve Digital (2017–2019)
-- Front-End Developer, Tactile Media (2014–2017)
-
-## Contact
-bryanballi@gmail.com
+sameAs: [
+  'https://github.com/Bai-ee',
+  'https://github.com/Bai-ee/port_2026',
+  'https://www.linkedin.com/in/bryanballi',  // add real LinkedIn slug
+  'https://twitter.com/bai_ee',
+],
 ```

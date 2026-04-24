@@ -9,7 +9,7 @@ const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL
   || (process.env.VERCEL_PROJECT_PRODUCTION_URL
         ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-        : 'https://bballi.com');
+        : 'https://hitloop.agency');
 
 export const metadata = {
   metadataBase: new URL(SITE_URL),

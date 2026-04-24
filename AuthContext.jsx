@@ -17,6 +17,19 @@ const AuthContext = createContext(null);
 const googleProvider = typeof window !== 'undefined' ? new GoogleAuthProvider() : null;
 const PENDING_DASHBOARD_SIGNUP_KEY = 'pending-dashboard-signup';
 
+// Thrown when a sign-in (no provisioning payload) resolves a brand-new Firebase
+// Auth user — i.e. the Google account has never signed in here, or the previous
+// account was deleted. Caller should route them into the Create Dashboard flow.
+export const NEW_USER_SIGNIN_ERROR = 'NEW_USER_SIGNIN';
+
+function isBrandNewAuthUser(fbUser) {
+  const created = fbUser?.metadata?.creationTime;
+  const lastSignIn = fbUser?.metadata?.lastSignInTime;
+  if (!created || !lastSignIn) return false;
+  // Same timestamp → first ever sign-in for this uid.
+  return created === lastSignIn;
+}
+
 if (googleProvider) {
   googleProvider.setCustomParameters({ prompt: 'select_account' });
 }
@@ -196,6 +209,19 @@ export const AuthProvider = ({ children }) => {
       }
 
       const credential = await signInWithPopup(auth, googleProvider);
+
+      // Sign-in path with no provisioning payload but a brand-new Firebase Auth
+      // user = account was never set up here, or was deleted. Sign them back
+      // out and signal the UI to switch into Create Dashboard mode.
+      if (!provisioningPayload && isBrandNewAuthUser(credential.user)) {
+        await signOut(auth).catch(() => {});
+        clearPendingDashboardSignup();
+        const err = new Error(NEW_USER_SIGNIN_ERROR);
+        err.code = NEW_USER_SIGNIN_ERROR;
+        err.email = credential.user.email || '';
+        throw err;
+      }
+
       const resolvedDisplayName = provisioningPayload?.displayName?.trim()
         || credential.user.displayName
         || '';

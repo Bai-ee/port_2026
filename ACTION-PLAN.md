@@ -1,38 +1,59 @@
 # SEO Action Plan — Bballi Portfolio
-**Overall Score: 27 / 100** | Date: 2026-04-21
+**Overall Score: 61 / 100** | Updated: 2026-04-23 | Previous: 27/100 (2026-04-21)
 
 ---
 
-## Critical (Fix Immediately)
+## Critical — Fix Immediately
 
-- [ ] **`public/robots.txt`** — Disallow /dashboard, /admin, /login, /capture, /preview/*. Point to sitemap.
-- [ ] **`noindex` on private pages** — Add `export const metadata = { robots: { index: false, follow: false } }` to dashboard, login, admin, capture, all preview pages.
-- [ ] **`app/sitemap.js`** — Return homepage URL only. Private routes excluded.
-- [ ] **Custom domain** — Register bryanballi.com or bballi.com. Connect via Vercel. Largest single SEO unlock.
+- [ ] **Expand sitemap** — `app/sitemap.js` only lists `/`. Add all 13 public pages (about, work, case-studies, 5 service pages, how-it-works, process, gallery, faq, contact). See snippet in `FULL-AUDIT-REPORT.md`. (30 min)
 
-## High (Within 1 Week)
+- [ ] **Fix robots.txt Sitemap directive** — `Sitemap: /sitemap.xml` is relative. Change to absolute URL: `Sitemap: https://bryanballi.com/sitemap.xml`. (5 min)
 
-- [ ] **Improve title + description** — `app/layout.jsx`. Current: "Bballi Portfolio" / "Client dashboard and portfolio". Both are internal-facing and keyword-free.
-- [ ] **Add `metadataBase` + Open Graph + Twitter Card** — `app/layout.jsx`. OG image: `/img/profile2_400x400.png`.
-- [ ] **Person + WebSite JSON-LD schema** — `app/page.jsx`. Establishes entity identity for Google Knowledge Graph.
-- [ ] **Fix profile image alt text** — `PortfolioModal.jsx`. Change `alt=""` to `alt="Bryan Balli, AI consultant and creative technologist"`.
-- [ ] **Convert `<img>` to Next.js `<Image>`** — `Header.jsx`, `PortfolioModal.jsx`, gallery. Auto WebP + lazy loading.
+- [ ] **Resolve domain inconsistency** — Homepage schema falls back to `https://bballi.com`; all inner page layouts hardcode `https://bryanballi.com`. Pick one (`bryanballi.com`), set it in `NEXT_PUBLIC_SITE_URL`, and replace hardcoded URLs in all layout.jsx files. (1 hr)
 
-## Medium (Within 1 Month)
+---
 
-- [ ] **Compress portfolio images** — Multiple 5MB+ PNGs in `/public/img/port/`. Convert to WebP. Target < 200 KB each.
-- [ ] **`public/llms.txt`** — Brief structured description for AI crawlers (ChatGPT, Perplexity, etc.).
-- [ ] **`app/favicon.ico`** — No favicon exists. Add branded icon.
-- [ ] **Add keyword-rich H2 below hero fold** — Support the brand tagline H1 with a crawlable keyword line.
-- [ ] **Review schema for testimonials** — Mark up quotes from Sam, Rashid A., Claire B., Marco T. as schema.org `Review`.
-- [ ] **Reduce canvas particle count on mobile** — 25,000 particles on narrow/touch. Cap at 8,000–10,000 for mobile.
+## High — Fix Within 1 Week
 
-## Low (Backlog)
+- [ ] **Portfolio images — WebP + `<Image>`** — frame_4.png (5.6 MB), frame_2.png (5.3 MB), critters_game1.png (5.1 MB) are uncompressed PNGs. Replace `<img>` with Next.js `<Image>` in PortfolioModal.jsx and gallery components. (2–3 hrs)
 
-- [ ] Static `/work/[slug]` pages for portfolio case content (currently JS-modal-only, invisible to crawlers)
-- [ ] Blog / editorial content for informational keyword targeting
-- [ ] Add LinkedIn, GitHub `sameAs` links to Person schema
-- [ ] `Content-Security-Policy` header in `next.config.mjs`
+- [ ] **Compress OG image** — `/img/og_meta.png` is 1.1 MB. Target < 300 KB at 1200×630 px. Export as JPG 85% or WebP. (30 min)
+
+- [ ] **Add LinkedIn/Twitter to `sameAs`** — homepage Person schema only has GitHub. Add LinkedIn profile URL and `https://twitter.com/bai_ee`. (15 min)
+
+- [ ] **Verify case-studies + FAQ layouts** — Confirm `app/case-studies/layout.jsx` and `app/faq/layout.jsx` have `export const metadata` with page-specific title, description, canonical, and OG. (30 min)
+
+---
+
+## Medium — Fix Within 1 Month
+
+- [ ] **FAQPage JSON-LD** — `app/faq/` exists but FAQPage schema not confirmed. Adds rich result eligibility. (30 min)
+
+- [ ] **ProfessionalService + AggregateRating** — Once 3+ testimonials are live, wrap in a `ProfessionalService` entity with `aggregateRating`. (1 hr)
+
+- [ ] **Defer WebGL canvas init** — Homepage canvas (`ox.jsx`) loads on entry. Add intersection observer to defer until scroll. Reduces mobile LCP. (1–2 hrs)
+
+- [ ] **Audit service page content depth** — AiDesignConsultingPage, BrandIdentityPage, etc. need 300+ words of substantive crawlable text to rank for service queries. (varies)
+
+- [ ] **Connect custom domain** — Register and connect `bryanballi.com` in Vercel. Update `NEXT_PUBLIC_SITE_URL` env var. (1 hr)
+
+---
+
+## Low — Backlog
+
+- [ ] Static `/work/[slug]` pages — Portfolio case content is JS-modal-only. Crawlers miss all project detail.
+- [ ] Blog / editorial content — Informational queries require long-form content.
+- [ ] CSP header — Add `Content-Security-Policy` to `next.config.mjs`.
+- [ ] Keyword H2 on homepage — Crawlable keyword line below brand tagline H1.
+
+---
+
+## Score History
+
+| Date | Score | Notes |
+|------|-------|-------|
+| 2026-04-21 | 27/100 | Baseline — no robots.txt, sitemap, schema, OG, or noindex |
+| 2026-04-23 | 61/100 | robots.txt, llms.txt, sitemap (partial), full metadata, JSON-LD, noindex, GA4, favicon |
 
 ---
 

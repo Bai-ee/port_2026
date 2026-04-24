@@ -116,10 +116,10 @@ const SiteFooter = () => {
           <div className="footer-nav-grid" style={footerNavGridStyle}>
             <div style={footerNavColStyle}>
               <span style={footerNavHeadingStyle}>Work</span>
-              <a href="#" style={footerNavLinkStyle}>Featured Projects</a>
-              <a href="#" style={footerNavLinkStyle}>Case Studies</a>
-              <a href="#" style={footerNavLinkStyle}>Gallery</a>
-              <a href="#" style={footerNavLinkStyle}>Process</a>
+              <a href="/work" style={footerNavLinkStyle}>Featured Projects</a>
+              <a href="/case-studies" style={footerNavLinkStyle}>Case Studies</a>
+              <a href="/gallery" style={footerNavLinkStyle}>Gallery</a>
+              <a href="/process" style={footerNavLinkStyle}>Process</a>
             </div>
             <div style={footerNavColStyle}>
               <span style={footerNavHeadingStyle}>Services</span>
@@ -139,9 +139,9 @@ const SiteFooter = () => {
             </div>
             <div style={footerNavColStyle}>
               <span style={footerNavHeadingStyle}>Company</span>
-              <a href="#" style={footerNavLinkStyle}>About</a>
-              <a href="#" style={footerNavLinkStyle}>How It Works</a>
-              <a href="#" style={footerNavLinkStyle}>Contact</a>
+              <a href="/about" style={footerNavLinkStyle}>About</a>
+              <a href="/how-it-works" style={footerNavLinkStyle}>How It Works</a>
+              <a href="/contact" style={footerNavLinkStyle}>Contact</a>
               <a
                 href="https://calendly.com/bballi/30min"
                 target="_blank"

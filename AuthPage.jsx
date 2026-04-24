@@ -4,7 +4,7 @@ import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Globe, Lock } from 'lucide-react';
-import { useAuth } from './AuthContext';
+import { useAuth, NEW_USER_SIGNIN_ERROR } from './AuthContext';
 import InternalPageBackground from './InternalPageBackground';
 import { internalPageGlassCardStyle } from './pageSurfaceSystem';
 import { trackSignIn, trackSignUp } from '@/lib/analytics';
@@ -175,6 +175,14 @@ const AuthPageInner = () => {
 
       router.replace(redirectPath);
     } catch (nextError) {
+      if (nextError?.code === NEW_USER_SIGNIN_ERROR || nextError?.message === NEW_USER_SIGNIN_ERROR) {
+        // Brand-new Google account (never signed up here, or was deleted) —
+        // flip to the Create Dashboard flow so they complete proper signup.
+        clearPendingDashboardSignup();
+        setMode('create');
+        setError('Welcome — this Google account does not have a dashboard yet. Enter a website URL below to create one.');
+        return;
+      }
       if (mode === 'create') clearPendingDashboardSignup();
       setError(nextError?.message || 'Authentication failed.');
     } finally {
