@@ -22,6 +22,11 @@ function json(body, status = 200) {
   return NextResponse.json(body, { status, headers: { 'cache-control': 'no-store' } });
 }
 
+function readAggregateCount(snapshot) {
+  const count = snapshot?.data?.()?.count;
+  return typeof count === 'number' ? count : 0;
+}
+
 function hasValidSecret(request) {
   if (!WORKER_SECRET) return false;
   const provided =
@@ -45,9 +50,15 @@ async function getFirebaseMetrics() {
   const now = new Date();
   const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-  // Total users
-  const usersSnap = await db.collection('users').get();
-  const totalUsers = usersSnap.size;
+  const [usersCountSnap, clientsCountSnap, runsCountSnap] = await Promise.all([
+    db.collection('users').count().get(),
+    db.collection('clients').count().get(),
+    db.collection('brief_runs').count().get(),
+  ]);
+
+  const totalUsers = readAggregateCount(usersCountSnap);
+  const totalClients = readAggregateCount(clientsCountSnap);
+  const totalRuns = readAggregateCount(runsCountSnap);
 
   // New users in last 24h
   const newUsersSnap = await db
@@ -63,14 +74,6 @@ async function getFirebaseMetrics() {
       website: data.websiteUrl || data.website || null,
     };
   });
-
-  // Total clients (multi-tenant)
-  const clientsSnap = await db.collection('clients').get();
-  const totalClients = clientsSnap.size;
-
-  // Brief runs (dashboards) — total and last 24h
-  const runsSnap = await db.collection('brief_runs').get();
-  const totalRuns = runsSnap.size;
 
   const recentRunsSnap = await db
     .collection('brief_runs')
@@ -89,7 +92,8 @@ async function getFirebaseMetrics() {
 
   // Runs by status
   const statusCounts = {};
-  runsSnap.docs.forEach((d) => {
+  const runsByStatusSnap = await db.collection('brief_runs').select('status').get();
+  runsByStatusSnap.docs.forEach((d) => {
     const s = d.data().status || 'unknown';
     statusCounts[s] = (statusCounts[s] || 0) + 1;
   });
@@ -118,7 +122,11 @@ async function getVercelMetrics() {
     // Recent deployments
     const dplRes = await fetch(
       `https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT_ID}&teamId=${VERCEL_TEAM_ID}&since=${yesterday}&limit=20`,
-      { headers: { Authorization: `Bearer ${VERCEL_TOKEN}` } }
+      {
+        headers: { Authorization: `Bearer ${VERCEL_TOKEN}` },
+        signal: AbortSignal.timeout(15_000),
+        cache: 'no-store',
+      }
     );
     const dplData = await dplRes.json();
     const deployments = (dplData.deployments || []).map((d) => ({
@@ -132,7 +140,11 @@ async function getVercelMetrics() {
     // Runtime logs — errors only
     const logsRes = await fetch(
       `https://api.vercel.com/v1/projects/${VERCEL_PROJECT_ID}/runtime-logs?teamId=${VERCEL_TEAM_ID}&since=${yesterday}&level=error&limit=20`,
-      { headers: { Authorization: `Bearer ${VERCEL_TOKEN}` } }
+      {
+        headers: { Authorization: `Bearer ${VERCEL_TOKEN}` },
+        signal: AbortSignal.timeout(15_000),
+        cache: 'no-store',
+      }
     );
     let errorLogs = [];
     if (logsRes.ok) {
@@ -182,6 +194,8 @@ async function runGA4Report(accessToken, body) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(20_000),
+      cache: 'no-store',
     }
   );
   if (!res.ok) {
@@ -572,6 +586,8 @@ async function sendEmail(subject, html) {
       subject,
       html,
     }),
+    signal: AbortSignal.timeout(15_000),
+    cache: 'no-store',
   });
 
   if (!res.ok) {
