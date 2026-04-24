@@ -30,11 +30,17 @@ export default function InnerPageShell({ children, secNum }) {
   const logoRef = useRef(null);
 
   return (
-    <div style={{ minHeight: '100dvh', position: 'relative', background: 'rgba(254,253,249,1)' }}>
+    <div className="inner-page-shell" style={{ minHeight: '100dvh', position: 'relative', background: 'rgba(254,253,249,1)' }}>
       <InternalPageBackground />
 
       <style>{`
         @keyframes agentMarquee { from { transform: translate3d(0,0,0); } to { transform: translate3d(-50%,0,0); } }
+        .inner-page-shell #founders-top-strip {
+          background: rgba(254, 253, 249, 0.72);
+          backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
+          box-shadow: inset 0 -1px 0 rgba(0,0,0,0.05);
+        }
         @media (max-width: 767px) {
           .inner-page-eyebrow { display: none; }
           .inner-page-marquee-contact { animation-duration: 14s !important; }

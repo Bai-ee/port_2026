@@ -151,11 +151,22 @@ async function getVercelMetrics() {
 // ── GA4 Analytics ───────────────────────────────────────────────────────────
 
 async function getGoogleAccessToken() {
-  // Use the Firebase Admin credential to mint a Google OAuth2 access token
-  // scoped for the Analytics Data API.
-  const credential = fb.adminApp.options.credential;
-  const token = await credential.getAccessToken();
-  return token.access_token;
+  // The Firebase Admin default credential doesn't include the analytics scope,
+  // so we create a dedicated JWT client with the correct scope using the same
+  // service account key that Firebase Admin uses.
+  const { GoogleAuth } = require('google-auth-library');
+  const auth = new GoogleAuth({
+    credentials: {
+      client_email: process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
+      private_key: String(process.env.FIREBASE_ADMIN_PRIVATE_KEY || '')
+        .replace(/^"|"$/g, '')
+        .replace(/\\n/g, '\n'),
+    },
+    scopes: ['https://www.googleapis.com/auth/analytics.readonly'],
+  });
+  const client = await auth.getClient();
+  const token = await client.getAccessToken();
+  return token.token;
 }
 
 async function runGA4Report(accessToken, body) {
