@@ -2,19 +2,10 @@ import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-const { verifyAdminRequest }     = require('../../../../api/_lib/auth.cjs');
+const { buildAuthRequestShim, verifyAdminRequest } = require('../../../../api/_lib/auth.cjs');
 const fb                         = require('../../../../api/_lib/firebase-admin.cjs');
 const { getMaster, listSources, listRecentEvents, setSourceSetting } = require('../../../../features/intelligence/_store');
 const { normalizeSourceSetting } = require('../../../../api/_lib/intelligence-bootstrap-utils.cjs');
-
-function makeReqShim(request) {
-  return {
-    headers: {
-      authorization: request.headers.get('authorization'),
-      Authorization: request.headers.get('authorization'),
-    },
-  };
-}
 
 function deepSerialize(v) {
   if (v == null) return v;
@@ -29,6 +20,13 @@ function deepSerialize(v) {
     return out;
   }
   return v;
+}
+
+function json(body, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: { 'cache-control': 'no-store, max-age=0' },
+  });
 }
 
 /**
@@ -75,11 +73,11 @@ async function loadClientIntelligence(clientId, websiteUrl, companyName) {
 
 export async function GET(request) {
   try {
-    await verifyAdminRequest(makeReqShim(request));
+    await verifyAdminRequest(buildAuthRequestShim(request));
   } catch (err) {
-    return NextResponse.json(
+    return json(
       { error: err instanceof Error ? err.message : 'Forbidden.' },
-      { status: 403 }
+      403
     );
   }
 
@@ -90,11 +88,11 @@ export async function GET(request) {
     if (clientId) {
       const snap = await fb.adminDb.collection('clients').doc(clientId).get();
       if (!snap.exists) {
-        return NextResponse.json({ error: 'Client not found.' }, { status: 404 });
+        return json({ error: 'Client not found.' }, 404);
       }
       const d      = snap.data();
       const result = await loadClientIntelligence(clientId, d.websiteUrl || '', d.companyName || '');
-      return NextResponse.json({ clients: [result] });
+      return json({ clients: [result] });
     }
 
     // List mode
@@ -111,9 +109,9 @@ export async function GET(request) {
       })
     );
 
-    return NextResponse.json({ clients: results });
+    return json({ clients: results });
   } catch (err) {
     console.error('[admin/intelligence] GET error:', err.message);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return json({ error: err.message }, 500);
   }
 }

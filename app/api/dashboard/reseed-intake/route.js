@@ -3,29 +3,27 @@ import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 const fb                             = require('../../../../api/_lib/firebase-admin.cjs');
-const { verifyRequestUser }          = require('../../../../api/_lib/auth.cjs');
+const { buildAuthRequestShim, verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
 const { reseedIntakeForClient }      = require('../../../../api/_lib/client-provisioning.cjs');
 // Importing the runner registers source modules and exposes listRegisteredSourceMeta
 const { listRegisteredSourceMeta }   = require('../../../../api/_lib/intelligence-runner.cjs');
 const { getMaster, appendEvent }     = require('../../../../features/intelligence/_store');
 const { normalizeSourceSetting }     = require('../../../../api/_lib/intelligence-bootstrap-utils.cjs');
 
-function makeReqShim(request) {
-  return {
-    headers: {
-      authorization: request.headers.get('authorization'),
-      Authorization: request.headers.get('authorization'),
-    },
-  };
+function json(body, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: { 'cache-control': 'no-store, max-age=0' },
+  });
 }
 
 export async function POST(request) {
   // Auth
   let decoded;
   try {
-    decoded = await verifyRequestUser(makeReqShim(request));
+    decoded = await verifyRequestUser(buildAuthRequestShim(request));
   } catch (err) {
-    return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+    return json({ error: 'Unauthorized.' }, 401);
   }
 
   // Parse body
@@ -34,21 +32,21 @@ export async function POST(request) {
     const body = await request.json().catch(() => ({}));
     websiteUrl = String(body.websiteUrl || '').trim();
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 });
+    return json({ error: 'Invalid JSON body.' }, 400);
   }
 
   if (!websiteUrl) {
-    return NextResponse.json({ error: 'websiteUrl is required.' }, { status: 400 });
+    return json({ error: 'websiteUrl is required.' }, 400);
   }
 
   // Resolve clientId from the authenticated user's record
   const userDoc = await fb.adminDb.collection('users').doc(decoded.uid).get();
   if (!userDoc.exists) {
-    return NextResponse.json({ error: 'User record not found.' }, { status: 404 });
+    return json({ error: 'User record not found.' }, 404);
   }
   const clientId = userDoc.data()?.clientId;
   if (!clientId) {
-    return NextResponse.json({ error: 'No client associated with this account.' }, { status: 404 });
+    return json({ error: 'No client associated with this account.' }, 404);
   }
 
   // Queue reseed
@@ -60,9 +58,9 @@ export async function POST(request) {
       websiteUrl,
     });
   } catch (err) {
-    return NextResponse.json(
+    return json(
       { error: err instanceof Error ? err.message : 'Reseed failed.' },
-      { status: 500 }
+      500
     );
   }
 
@@ -163,5 +161,5 @@ export async function POST(request) {
     }
   })();
 
-  return NextResponse.json(result);
+  return json(result);
 }

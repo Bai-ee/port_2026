@@ -2,17 +2,8 @@ import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-const { verifyAdminRequest } = require('../../../../api/_lib/auth.cjs');
+const { buildAuthRequestShim, verifyAdminRequest } = require('../../../../api/_lib/auth.cjs');
 const _fb = require('../../../../api/_lib/firebase-admin.cjs');
-
-function makeReqShim(request) {
-  return {
-    headers: {
-      authorization: request.headers.get('authorization'),
-      Authorization: request.headers.get('authorization'),
-    },
-  };
-}
 
 function serializeTimestamps(data) {
   if (!data) return data;
@@ -29,13 +20,20 @@ function serializeTimestamps(data) {
   return out;
 }
 
+function json(body, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: { 'cache-control': 'no-store, max-age=0' },
+  });
+}
+
 export async function GET(request) {
   try {
-    await verifyAdminRequest(makeReqShim(request));
+    await verifyAdminRequest(buildAuthRequestShim(request));
   } catch (err) {
-    return NextResponse.json(
+    return json(
       { error: err instanceof Error ? err.message : 'Forbidden.' },
-      { status: 403 }
+      403
     );
   }
 
@@ -63,5 +61,5 @@ export async function GET(request) {
     });
   });
 
-  return NextResponse.json({ clients });
+  return json({ clients });
 }

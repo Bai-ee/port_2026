@@ -2,26 +2,24 @@ import { after, NextResponse } from 'next/server';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
+const { buildAuthRequestShim, verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
 const { provisionClientForUser } = require('../../../../api/_lib/client-provisioning.cjs');
 
-function makeReqShim(request) {
-  return {
-    headers: {
-      authorization: request.headers.get('authorization'),
-      Authorization: request.headers.get('authorization'),
-    },
-  };
+function json(body, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: { 'cache-control': 'no-store, max-age=0' },
+  });
 }
 
 export async function POST(request) {
   let decoded;
   try {
-    decoded = await verifyRequestUser(makeReqShim(request));
+    decoded = await verifyRequestUser(buildAuthRequestShim(request));
   } catch (err) {
-    return NextResponse.json(
+    return json(
       { error: err instanceof Error ? err.message : 'Unauthorized.' },
-      { status: 401 }
+      401
     );
   }
 
@@ -29,7 +27,7 @@ export async function POST(request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 });
+    return json({ error: 'Invalid JSON body.' }, 400);
   }
 
   let result;
@@ -43,9 +41,9 @@ export async function POST(request) {
       ideaDescription: body.ideaDescription || '',
     });
   } catch (error) {
-    return NextResponse.json(
+    return json(
       { error: error instanceof Error ? error.message : 'Provisioning failed.' },
-      { status: 400 }
+      400
     );
   }
 
@@ -79,5 +77,5 @@ export async function POST(request) {
     });
   }
 
-  return NextResponse.json(result);
+  return json(result);
 }

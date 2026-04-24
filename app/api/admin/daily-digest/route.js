@@ -3,6 +3,7 @@ import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
+const { getHeaderValue, safeSecretEquals } = require('../../../../api/_lib/auth.cjs');
 
 // ── Config ──────────────────────────────────────────────────────────────────
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
@@ -23,16 +24,17 @@ function json(body, status = 200) {
 function hasValidSecret(request) {
   if (!WORKER_SECRET) return false;
   const provided =
-    request.headers.get('x-worker-secret') ||
-    request.headers.get('authorization')?.replace('Bearer ', '');
-  return provided === WORKER_SECRET;
+    getHeaderValue(request.headers, 'x-worker-secret') ||
+    getHeaderValue(request.headers, 'authorization')?.replace(/^Bearer\s+/i, '');
+  return safeSecretEquals(provided, WORKER_SECRET);
 }
 
 /** Vercel cron sends a special header we can verify */
 function hasValidCronSecret(request) {
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) return true; // if not configured, allow (dev mode)
-  return request.headers.get('authorization') === `Bearer ${cronSecret}`;
+  const provided = getHeaderValue(request.headers, 'authorization');
+  return safeSecretEquals(provided, `Bearer ${cronSecret}`);
 }
 
 // ── Data collectors ─────────────────────────────────────────────────────────

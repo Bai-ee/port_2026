@@ -6,18 +6,19 @@ export const maxDuration = 120;
 
 const require = createRequire(import.meta.url);
 const { runIntelligenceSource } = require('../../../../api/_lib/intelligence-runner.cjs');
+const { buildAuthRequestShim, hasValidWorkerSecret } = require('../../../../api/_lib/auth.cjs');
 
-const WORKER_SECRET = process.env.WORKER_SECRET;
-
-function hasValidWorkerSecret(request) {
-  if (!WORKER_SECRET) return false;
-  return request.headers.get('x-worker-secret') === WORKER_SECRET;
+function json(body, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: { 'cache-control': 'no-store, max-age=0' },
+  });
 }
 
 export async function POST(request) {
   // Auth — worker-secret only
-  if (!hasValidWorkerSecret(request)) {
-    return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+  if (!hasValidWorkerSecret(buildAuthRequestShim(request))) {
+    return json({ error: 'Unauthorized.' }, 401);
   }
 
   // Parse body
@@ -28,18 +29,25 @@ export async function POST(request) {
     sourceId = String(body.sourceId || '').trim();
     runId    = body.runId ? String(body.runId).trim() : null;
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 });
+    return json({ error: 'Invalid JSON body.' }, 400);
   }
 
-  if (!clientId) return NextResponse.json({ error: 'clientId is required.' }, { status: 400 });
-  if (!sourceId) return NextResponse.json({ error: 'sourceId is required.' }, { status: 400 });
+  if (!clientId) return json({ error: 'clientId is required.' }, 400);
+  if (!sourceId) return json({ error: 'sourceId is required.' }, 400);
 
-  const result = await runIntelligenceSource(clientId, sourceId, { runId });
+  let result;
+  try {
+    result = await runIntelligenceSource(clientId, sourceId, { runId });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[intelligence/run] ${sourceId}/${clientId} threw: ${message}`);
+    return json({ ok: false, clientId, sourceId, error: message }, 500);
+  }
 
   if (!result.ok) {
     console.error(`[intelligence/run] ${sourceId}/${clientId} failed: ${result.error}`);
-    return NextResponse.json({ ok: false, clientId, sourceId, error: result.error }, { status: 500 });
+    return json({ ok: false, clientId, sourceId, error: result.error }, 500);
   }
 
-  return NextResponse.json({ ok: true, clientId, sourceId, status: result.status });
+  return json({ ok: true, clientId, sourceId, status: result.status });
 }

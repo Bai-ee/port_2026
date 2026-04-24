@@ -6,7 +6,11 @@ export const maxDuration = 300;
 
 const require = createRequire(import.meta.url);
 const _fb = require('../../../../api/_lib/firebase-admin.cjs');
-const { verifyAdminRequest } = require('../../../../api/_lib/auth.cjs');
+const {
+  buildAuthRequestShim,
+  hasValidWorkerSecret,
+  verifyAdminRequest,
+} = require('../../../../api/_lib/auth.cjs');
 const {
   claimRun,
   completeRun,
@@ -26,25 +30,16 @@ function getIntakePipeline() {
   return require('../../../../features/scout-intake/runner');
 }
 
-const WORKER_SECRET = process.env.WORKER_SECRET;
-
-function makeReqShim(request) {
-  return {
-    headers: {
-      authorization: request.headers.get('authorization'),
-      Authorization: request.headers.get('authorization'),
-    },
-  };
-}
-
-function hasValidWorkerSecret(request) {
-  if (!WORKER_SECRET) return false;
-  return request.headers.get('x-worker-secret') === WORKER_SECRET;
+function json(body, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: { 'cache-control': 'no-store, max-age=0' },
+  });
 }
 
 async function authorizeRequest(request) {
-  if (hasValidWorkerSecret(request)) return;
-  await verifyAdminRequest(makeReqShim(request));
+  if (hasValidWorkerSecret(buildAuthRequestShim(request))) return;
+  await verifyAdminRequest(buildAuthRequestShim(request));
 }
 
 export async function POST(request) {
@@ -52,23 +47,23 @@ export async function POST(request) {
   try {
     await authorizeRequest(request);
   } catch {
-    return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+    return json({ error: 'Unauthorized.' }, 401);
   }
 
   // Step 2 — Parse body
   let runId = null;
   try {
     const body = await request.json().catch(() => ({}));
-    runId = body.runId || null;
+    runId = body.runId ? String(body.runId).trim() : null;
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 });
+    return json({ error: 'Invalid JSON body.' }, 400);
   }
 
   // Step 3 — Resolve runId
   if (!runId) {
     const nextRun = await findNextQueuedRun();
     if (!nextRun) {
-      return NextResponse.json({ ok: true, message: 'No queued runs found.' });
+      return json({ ok: true, message: 'No queued runs found.' });
     }
     runId = nextRun.id;
   }
@@ -78,7 +73,7 @@ export async function POST(request) {
   try {
     claimedRun = await claimRun(runId);
   } catch (err) {
-    return NextResponse.json({ error: err.message, runId }, { status: 409 });
+    return json({ error: err.message, runId }, 409);
   }
 
   const { clientId, attempts } = claimedRun;
@@ -97,7 +92,7 @@ export async function POST(request) {
     const configErr = new Error(`Config load failed: ${err.message}`);
     configErr.stage = 'config';
     await failRun(runId, clientId, configErr, attempts);
-    return NextResponse.json({ error: 'Failed to load client config.', runId }, { status: 500 });
+    return json({ error: 'Failed to load client config.', runId }, 500);
   }
 
   // Step 6 — Execute pipeline (route by pipelineType)
@@ -180,7 +175,7 @@ export async function POST(request) {
     const pipelineErr = new Error(err.message || 'Pipeline threw an unhandled error.');
     pipelineErr.stage = 'pipeline';
     await failRun(runId, clientId, pipelineErr, attempts);
-    return NextResponse.json({ error: 'Pipeline execution failed.', runId }, { status: 500 });
+    return json({ error: 'Pipeline execution failed.', runId }, 500);
   }
 
   // Step 7 — Write result
@@ -192,7 +187,7 @@ export async function POST(request) {
       warnings: pipelineResult.warnings,
     });
     console.log(`[WORKER] Run ${runId} failed at stage: ${stageErr.stage}`);
-    return NextResponse.json({
+    return json({
       ok: false,
       runId,
       clientId,
@@ -203,7 +198,7 @@ export async function POST(request) {
 
   await completeRun(runId, clientId, pipelineResult);
   console.log(`[${new Date().toISOString()}] WORKER: run ${runId} succeeded for ${clientId}`);
-  return NextResponse.json({
+  return json({
     ok: true,
     runId,
     clientId,

@@ -1,13 +1,54 @@
+const { timingSafeEqual } = require('crypto');
 const fb = require('./firebase-admin.cjs');
 
-async function verifyRequestUser(req) {
-  const authHeader = req.headers.authorization || req.headers.Authorization;
+function getHeaderValue(headers, name) {
+  if (!headers || !name) return null;
 
+  if (typeof headers.get === 'function') {
+    const value = headers.get(name);
+    return typeof value === 'string' && value.length > 0 ? value : null;
+  }
+
+  const target = String(name).toLowerCase();
+  for (const [key, value] of Object.entries(headers)) {
+    if (String(key).toLowerCase() !== target) continue;
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+
+  return null;
+}
+
+function safeSecretEquals(provided, configured) {
+  if (typeof provided !== 'string' || provided.length === 0) return false;
+  if (typeof configured !== 'string' || configured.length === 0) return false;
+
+  const providedBuffer = Buffer.from(provided);
+  const configuredBuffer = Buffer.from(configured);
+  if (providedBuffer.length !== configuredBuffer.length) return false;
+
+  return timingSafeEqual(providedBuffer, configuredBuffer);
+}
+
+function buildAuthRequestShim(request) {
+  return { headers: request?.headers || {} };
+}
+
+function getBearerToken(req) {
+  const authHeader = getHeaderValue(req?.headers, 'authorization');
   if (!authHeader || !String(authHeader).startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = String(authHeader).slice(7).trim();
+  return token || null;
+}
+
+async function verifyRequestUser(req) {
+  const token = getBearerToken(req);
+  if (!token) {
     throw new Error('Unauthorized: missing bearer token.');
   }
 
-  const token = String(authHeader).slice(7);
   const decoded = await fb.adminAuth.verifyIdToken(token);
 
   if (!decoded.uid) {
@@ -20,8 +61,8 @@ async function verifyRequestUser(req) {
 function hasValidWorkerSecret(req) {
   const configured = process.env.WORKER_SECRET;
   if (!configured) return false;
-  const provided = req?.headers?.['x-worker-secret'] || req?.headers?.['X-Worker-Secret'] || null;
-  return typeof provided === 'string' && provided.length > 0 && provided === configured;
+  const provided = getHeaderValue(req?.headers, 'x-worker-secret');
+  return safeSecretEquals(provided, configured);
 }
 
 async function verifyAdminRequest(req) {
@@ -50,6 +91,10 @@ async function verifyAdminRequest(req) {
 }
 
 module.exports = {
+  buildAuthRequestShim,
+  getHeaderValue,
+  hasValidWorkerSecret,
+  safeSecretEquals,
   verifyAdminRequest,
   verifyRequestUser,
 };
