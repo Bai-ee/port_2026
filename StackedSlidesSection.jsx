@@ -1068,8 +1068,8 @@ const StackedSlidesSection = () => {
     return () => ctx.revert();
   }, []);
 
-  // Sticky CTA — when #panel-hero-cta top touches the nav, instantly swap to
-  // the fixed clone at the exact same screen position so it looks pinned.
+  // Sticky CTA — fades in when #panel-hero-cta scrolls behind the nav,
+  // fades out when #footer-cta enters the viewport.
   useLayoutEffect(() => {
     const sticky = stickyCTARef.current;
     const inline = document.getElementById('panel-hero-cta');
@@ -1077,25 +1077,30 @@ const StackedSlidesSection = () => {
 
     gsap.set(sticky, { autoAlpha: 0, pointerEvents: 'none' });
 
+    const FADE_IN  = { autoAlpha: 1, duration: 0.22, ease: 'power1.out' };
+    const FADE_OUT = { autoAlpha: 0, duration: 0.18, ease: 'power1.in' };
+
     const pin = () => {
       const rect = inline.getBoundingClientRect();
       gsap.set(sticky, { left: rect.left, right: 'auto', width: rect.width, top: 74 });
       gsap.set(inline, { autoAlpha: 0 });
-      gsap.set(sticky, { autoAlpha: 1, pointerEvents: 'auto' });
+      gsap.to(sticky, { ...FADE_IN, onStart: () => gsap.set(sticky, { pointerEvents: 'auto' }) });
     };
     const unpin = () => {
-      gsap.set(sticky, { autoAlpha: 0, pointerEvents: 'none' });
+      gsap.to(sticky, { ...FADE_OUT, onComplete: () => gsap.set(sticky, { pointerEvents: 'none' }) });
       gsap.set(inline, { autoAlpha: 1 });
     };
 
     const ctaST = ScrollTrigger.create({
       trigger: '#panel-hero-cta',
       start: 'top 74px',
-      endTrigger: '#cmo-dashboard-card',
-      end: 'top 80%',
+      // unpin when the footer CTA actually enters the viewport bottom edge
+      endTrigger: '#footer-cta',
+      end: 'top bottom',
+      invalidateOnRefresh: true,
       onEnter: pin,
       onLeaveBack: unpin,
-      onLeave: () => gsap.set(sticky, { autoAlpha: 0, pointerEvents: 'none' }),
+      onLeave: () => gsap.to(sticky, { ...FADE_OUT, onComplete: () => gsap.set(sticky, { pointerEvents: 'none' }) }),
       onEnterBack: pin,
     });
 
@@ -1519,8 +1524,7 @@ const StackedSlidesSection = () => {
                             className="cta-pill-btn"
                             style={{ ...heroCtaStyle, padding: '0.5rem 0.75rem', cursor: 'pointer', border: 'none' }}
                           >
-                            <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
-                            Get Immediate Insights
+                            Analyze My Site Now
                             <span style={ctaIconStyle}>↗</span>
                           </button>
                         </div>
@@ -1673,7 +1677,7 @@ const StackedSlidesSection = () => {
                                     <div id="cmo-url-input-row" className="cmo-url-input-desktop" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.85rem', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                                       <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
                                       <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
-                                      <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none' } : { ...ctaStyle, border: 'none', flexShrink: 0, background: 'rgba(255,255,255,0.72)', color: '#2a2420', boxShadow: 'none', opacity: 0.65, cursor: 'default' }}>Get Immediate Insights<span style={ctaIconStyle}>↗</span></button>
+                                      <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none' } : { ...ctaStyle, border: 'none', flexShrink: 0, background: 'rgba(255,255,255,0.72)', color: '#2a2420', boxShadow: 'none', opacity: 0.65, cursor: 'default' }}>Analyze My Site Now<span style={ctaIconStyle}>↗</span></button>
                                     </div>
                                     <div className="cmo-table-inner" style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
                                       <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
@@ -1687,7 +1691,7 @@ const StackedSlidesSection = () => {
                                     <div className="cmo-url-input-mobile" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                                       <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
                                       <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
-                                      <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none' } : { ...ctaStyle, border: 'none', flexShrink: 0, background: 'rgba(255,255,255,0.72)', color: '#2a2420', boxShadow: 'none', opacity: 0.65, cursor: 'default' }}><span className="cmo-table-submit-label">Get Immediate Insights</span><span className="cmo-table-submit-arrow" style={ctaIconStyle}>↗</span></button>
+                                      <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none' } : { ...ctaStyle, border: 'none', flexShrink: 0, background: 'rgba(255,255,255,0.72)', color: '#2a2420', boxShadow: 'none', opacity: 0.65, cursor: 'default' }}><span className="cmo-table-submit-label">Analyze My Site Now</span><span className="cmo-table-submit-arrow" style={ctaIconStyle}>↗</span></button>
                                     </div>
                                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
                                       <thead><tr><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Modules</th><th style={{ width: '1.5rem' }} /><th style={{ textAlign: 'right', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Automations</th></tr></thead>
@@ -1934,7 +1938,7 @@ const StackedSlidesSection = () => {
           onClick={() => setShowCmoModal(false)}
           role="dialog"
           aria-modal="true"
-          aria-label="Get Immediate Insights"
+          aria-label="Analyze My Site Now"
         >
           <div id="cmo-auth-card" onClick={(e) => e.stopPropagation()}>
             <div id="cmo-auth-brand-row">
@@ -2060,10 +2064,10 @@ const StackedSlidesSection = () => {
           opacity: 0,
           border: 'none',
           cursor: 'pointer',
+          transition: 'opacity 0.22s ease',
         }}
       >
-        <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
-        Get Immediate Insights
+        Analyze My Site Now
         <span style={ctaIconStyle}>↗</span>
       </button>
     </section>
@@ -2073,6 +2077,8 @@ const StackedSlidesSection = () => {
 const sectionStyle = {
   position: 'relative',
   paddingBottom: 0,
+  width: '100%',
+  boxSizing: 'border-box',
 };
 
 const quoteSectionStyle = {
@@ -2096,9 +2102,10 @@ const quoteTextStyle = {
 
 const wrapperStyle = {
   paddingTop: 0,
+  width: '100%',
   display: 'flex',
   flexDirection: 'column',
-  alignItems: 'center',
+  alignItems: 'stretch',
 };
 
 const panelStyle = {
