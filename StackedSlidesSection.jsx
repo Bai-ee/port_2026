@@ -1303,12 +1303,11 @@ const StackedSlidesSection = () => {
           #cmo-modal-overlay { align-items: center; justify-content: center; padding: 16px; min-height: 100dvh; }
           .testimonials-port-img { aspect-ratio: 16 / 10 !important; }
           #dashboard-stack-shell { padding-top: 44px !important; }
-          .dash-peek-card { width: clamp(88px, 22%, 160px) !important; max-height: 120px !important; }
+          .dash-peek-card { width: clamp(90px, 33%, 160px) !important; max-height: 120px !important; }
           .dash-peek-card img { height: calc(100% - 24px) !important; }
-          #dash-peek-card-1 { left: 3% !important; }
-          #dash-peek-card-2 { left: 26% !important; }
-          #dash-peek-card-3 { left: 49% !important; }
-          #dash-peek-card-4 { left: 72% !important; }
+          #dash-peek-card-1 { left: 0% !important; }
+          #dash-peek-card-2 { left: 33% !important; }
+          #dash-peek-card-3 { left: 66% !important; }
         }
         #cmo-auth-card {
           position: relative; width: 100%; max-width: 44rem;
@@ -1606,10 +1605,9 @@ const StackedSlidesSection = () => {
                               >
                                 {/* ── Peek cards: top: 0 in wrapper, article sits below with z-index 10 ── */}
                                 {[
-                                  { ref: peekCard1Ref, id: 'dash-peek-card-1', left: '1%',  rotate: '-3.2deg', objPos: '0% 12%',  label: 'Brand Overview', img: '/img/port/dash_ss2.png', height: '200px' },
-                                  { ref: peekCard2Ref, id: 'dash-peek-card-2', left: '21%', rotate: '1.2deg',  objPos: '33% 8%',  label: 'SEO Visibility', img: '/img/port/dash_ss2.png', height: '168px' },
-                                  { ref: peekCard3Ref, id: 'dash-peek-card-3', left: '41%', rotate: '-1.4deg', objPos: '66% 12%', label: 'Automations',    img: '/img/port/dash_ss2.png', height: '190px' },
-                                  { ref: peekCard4Ref, id: 'dash-peek-card-4', left: '61%', rotate: '2.4deg',  objPos: '100% 8%', label: 'Signals',         img: '/img/port/dash_ss2.png', height: '158px' },
+                                  { ref: peekCard1Ref, id: 'dash-peek-card-1', left: '0%',  rotate: '-3.2deg', objPos: '0% 12%',  label: 'Brand Overview', img: '/img/port/dash_ss2.png', height: '200px' },
+                                  { ref: peekCard2Ref, id: 'dash-peek-card-2', left: '33%', rotate: '1.2deg',  objPos: '33% 8%',  label: 'SEO Visibility', img: '/img/port/dash_ss2.png', height: '168px' },
+                                  { ref: peekCard3Ref, id: 'dash-peek-card-3', left: '66%', rotate: '-1.4deg', objPos: '66% 12%', label: 'Automations',    img: '/img/port/dash_ss2.png', height: '190px' },
                                 ].map(({ ref: cardRef, id, left, rotate, objPos, label, img, height }, i) => (
                                   <div
                                     key={id}
@@ -1623,7 +1621,7 @@ const StackedSlidesSection = () => {
                                       position: 'absolute',
                                       top: '0',
                                       left,
-                                      width: 'clamp(180px, 38%, 340px)',
+                                      width: 'clamp(180px, 33%, 400px)',
                                       height,
                                       zIndex: i + 1,
                                       borderRadius: '10px',

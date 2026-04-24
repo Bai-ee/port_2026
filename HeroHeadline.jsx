@@ -81,7 +81,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
 
       // Hide subheadline when vertical space is too tight to avoid overlap with section 2
       const sub = el.querySelector('#hero-subheadline');
-      if (sub) sub.style.display = metrics.gapHeight < 320 ? 'none' : '';
+      if (sub) sub.style.display = metrics.gapHeight < 240 ? 'none' : '';
 
       if (useSimpleScrollViewport) {
         contentEl.style.transform = `translate3d(0, ${travelY * progress}px, 0)`;
@@ -190,7 +190,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
             lineHeight: 1.05,
             color: textColor,
             margin: 0,
-            fontSize: 'clamp(1.5rem, min(16.53vw, calc(var(--hero-gap-height) / 4.5)), 7.83rem)',
+            fontSize: 'clamp(1.25rem, min(13vw, calc(var(--hero-gap-height) / 5)), 7.83rem)',
             textTransform: 'none',
           }}>
             YOUR<br />HUMAN<br />IN THE<br />LOOP
@@ -205,7 +205,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
             fontWeight: 400,
             maxWidth: '42ch',
           }}>
-            Across design, content, and systems.
+            Get immediate insight into your site, content, and what to fix next.
           </p>
         </div>
       </div>
