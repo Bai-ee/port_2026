@@ -12,6 +12,7 @@ const WORKER_SECRET = process.env.WORKER_SECRET;
 const VERCEL_TOKEN = process.env.VERCEL_API_TOKEN;
 const VERCEL_PROJECT_ID = 'prj_h2AHIKHmJu7eV1DdmiTra2WFmPv6';
 const VERCEL_TEAM_ID = 'team_xmgNCNc6fHyZZinuszh8B6ZB';
+const GA4_PROPERTY_ID = process.env.GA4_PROPERTY_ID || '532567174';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -147,9 +148,132 @@ async function getVercelMetrics() {
   }
 }
 
+// ── GA4 Analytics ───────────────────────────────────────────────────────────
+
+async function getGoogleAccessToken() {
+  // Use the Firebase Admin credential to mint a Google OAuth2 access token
+  // scoped for the Analytics Data API.
+  const credential = fb.adminApp.options.credential;
+  const token = await credential.getAccessToken();
+  return token.access_token;
+}
+
+async function runGA4Report(accessToken, body) {
+  const res = await fetch(
+    `https://analyticsdata.googleapis.com/v1beta/properties/${GA4_PROPERTY_ID}:runReport`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    }
+  );
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`GA4 API error (${res.status}): ${err}`);
+  }
+  return res.json();
+}
+
+async function getGA4Metrics() {
+  try {
+    const accessToken = await getGoogleAccessToken();
+
+    // 1. Overview metrics — sessions, users, pageviews, new users, engagement
+    const overviewReport = await runGA4Report(accessToken, {
+      dateRanges: [{ startDate: 'yesterday', endDate: 'today' }],
+      metrics: [
+        { name: 'sessions' },
+        { name: 'totalUsers' },
+        { name: 'newUsers' },
+        { name: 'screenPageViews' },
+        { name: 'averageSessionDuration' },
+        { name: 'bounceRate' },
+        { name: 'engagedSessions' },
+      ],
+    });
+
+    const ov = overviewReport.rows?.[0]?.metricValues || [];
+    const overview = {
+      sessions: parseInt(ov[0]?.value || '0', 10),
+      totalUsers: parseInt(ov[1]?.value || '0', 10),
+      newUsers: parseInt(ov[2]?.value || '0', 10),
+      pageViews: parseInt(ov[3]?.value || '0', 10),
+      avgSessionDuration: Math.round(parseFloat(ov[4]?.value || '0')),
+      bounceRate: Math.round(parseFloat(ov[5]?.value || '0') * 100),
+      engagedSessions: parseInt(ov[6]?.value || '0', 10),
+    };
+
+    // 2. Top pages
+    const pagesReport = await runGA4Report(accessToken, {
+      dateRanges: [{ startDate: 'yesterday', endDate: 'today' }],
+      dimensions: [{ name: 'pagePath' }],
+      metrics: [
+        { name: 'screenPageViews' },
+        { name: 'totalUsers' },
+      ],
+      orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
+      limit: 10,
+    });
+
+    const topPages = (pagesReport.rows || []).map((r) => ({
+      path: r.dimensionValues[0].value,
+      views: parseInt(r.metricValues[0].value, 10),
+      users: parseInt(r.metricValues[1].value, 10),
+    }));
+
+    // 3. Traffic sources
+    const sourcesReport = await runGA4Report(accessToken, {
+      dateRanges: [{ startDate: 'yesterday', endDate: 'today' }],
+      dimensions: [{ name: 'sessionSource' }, { name: 'sessionMedium' }],
+      metrics: [
+        { name: 'sessions' },
+        { name: 'totalUsers' },
+      ],
+      orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+      limit: 10,
+    });
+
+    const trafficSources = (sourcesReport.rows || []).map((r) => ({
+      source: r.dimensionValues[0].value,
+      medium: r.dimensionValues[1].value,
+      sessions: parseInt(r.metricValues[0].value, 10),
+      users: parseInt(r.metricValues[1].value, 10),
+    }));
+
+    // 4. GA4 events — sign_up, dashboard_created, etc.
+    const eventsReport = await runGA4Report(accessToken, {
+      dateRanges: [{ startDate: 'yesterday', endDate: 'today' }],
+      dimensions: [{ name: 'eventName' }],
+      metrics: [{ name: 'eventCount' }],
+      dimensionFilter: {
+        filter: {
+          fieldName: 'eventName',
+          inListFilter: {
+            values: ['sign_up', 'sign_in', 'dashboard_created', 'pipeline_rerun', 'seo_rerun', 'tile_opened', 'theme_changed', 'tier_modal_opened'],
+          },
+        },
+      },
+      orderBys: [{ metric: { metricName: 'eventCount' }, desc: true }],
+    });
+
+    const events = {};
+    (eventsReport.rows || []).forEach((r) => {
+      events[r.dimensionValues[0].value] = parseInt(r.metricValues[0].value, 10);
+    });
+
+    return { overview, topPages, trafficSources, events, error: null };
+  } catch (err) {
+    console.error('[daily-digest] GA4 error:', err.message);
+    return { overview: null, topPages: [], trafficSources: [], events: {}, error: err.message };
+  }
+}
+
 // ── Email builder ───────────────────────────────────────────────────────────
 
-function buildEmailHtml(firebase, vercel, timestamp) {
+function buildEmailHtml(firebase, vercel, ga4, timestamp) {
   const dateStr = new Date(timestamp).toLocaleDateString('en-US', {
     weekday: 'long',
     year: 'numeric',
@@ -260,6 +384,93 @@ function buildEmailHtml(firebase, vercel, timestamp) {
       </div>
     </div>
 
+    <!-- GA4 Traffic Overview -->
+    ${ga4.overview ? `
+    <div style="margin-bottom:24px;">
+      <h2 style="font-size:18px;color:#1a1a1a;margin:0 0 12px 0;font-weight:600;">Site Traffic (Google Analytics)</h2>
+      <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:90px;background:#fff;border-radius:10px;padding:16px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+          <div style="font-size:28px;font-weight:700;color:#1a1a1a;">${ga4.overview.sessions}</div>
+          <div style="font-size:12px;color:#888;margin-top:4px;">Sessions</div>
+        </div>
+        <div style="flex:1;min-width:90px;background:#fff;border-radius:10px;padding:16px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+          <div style="font-size:28px;font-weight:700;color:#1a1a1a;">${ga4.overview.pageViews}</div>
+          <div style="font-size:12px;color:#888;margin-top:4px;">Page Views</div>
+        </div>
+        <div style="flex:1;min-width:90px;background:#fff;border-radius:10px;padding:16px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+          <div style="font-size:28px;font-weight:700;color:#1a1a1a;">${ga4.overview.totalUsers}</div>
+          <div style="font-size:12px;color:#888;margin-top:4px;">Visitors</div>
+        </div>
+        <div style="flex:1;min-width:90px;background:#fff;border-radius:10px;padding:16px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+          <div style="font-size:28px;font-weight:700;color:#1a1a1a;">${ga4.overview.newUsers}</div>
+          <div style="font-size:12px;color:#888;margin-top:4px;">New Visitors</div>
+        </div>
+        <div style="flex:1;min-width:90px;background:#fff;border-radius:10px;padding:16px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+          <div style="font-size:28px;font-weight:700;color:#1a1a1a;">${ga4.overview.bounceRate}%</div>
+          <div style="font-size:12px;color:#888;margin-top:4px;">Bounce Rate</div>
+        </div>
+      </div>
+      <div style="background:#fff;border-radius:8px;padding:12px 16px;box-shadow:0 1px 3px rgba(0,0,0,0.08);font-size:13px;color:#888;">
+        Avg. session: <strong style="color:#1a1a1a;">${Math.floor(ga4.overview.avgSessionDuration / 60)}m ${ga4.overview.avgSessionDuration % 60}s</strong>
+        &middot; Engaged sessions: <strong style="color:#1a1a1a;">${ga4.overview.engagedSessions}</strong>
+      </div>
+    </div>
+    ` : (ga4.error ? `<div style="margin-bottom:24px;"><h2 style="font-size:18px;color:#1a1a1a;margin:0 0 8px 0;font-weight:600;">Site Traffic</h2><p style="font-size:13px;color:#cc7700;">GA4 unavailable: ${ga4.error}</p></div>` : '')}
+
+    <!-- Top Pages -->
+    ${ga4.topPages?.length ? `
+    <div style="margin-bottom:24px;">
+      <h2 style="font-size:18px;color:#1a1a1a;margin:0 0 12px 0;font-weight:600;">Top Pages</h2>
+      <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+        <thead><tr style="background:#fafafa;">
+          <th style="padding:10px 12px;text-align:left;font-size:13px;color:#888;">Page</th>
+          <th style="padding:10px 12px;text-align:right;font-size:13px;color:#888;">Views</th>
+          <th style="padding:10px 12px;text-align:right;font-size:13px;color:#888;">Users</th>
+        </tr></thead>
+        <tbody>
+          ${ga4.topPages.map((p) => `
+          <tr>
+            <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.path}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;text-align:right;font-weight:600;">${p.views}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;text-align:right;color:#888;">${p.users}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    ` : ''}
+
+    <!-- Traffic Sources -->
+    ${ga4.trafficSources?.length ? `
+    <div style="margin-bottom:24px;">
+      <h2 style="font-size:18px;color:#1a1a1a;margin:0 0 12px 0;font-weight:600;">Traffic Sources</h2>
+      <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+        <thead><tr style="background:#fafafa;">
+          <th style="padding:10px 12px;text-align:left;font-size:13px;color:#888;">Source / Medium</th>
+          <th style="padding:10px 12px;text-align:right;font-size:13px;color:#888;">Sessions</th>
+          <th style="padding:10px 12px;text-align:right;font-size:13px;color:#888;">Users</th>
+        </tr></thead>
+        <tbody>
+          ${ga4.trafficSources.map((s) => `
+          <tr>
+            <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;">${s.source} / ${s.medium}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;text-align:right;font-weight:600;">${s.sessions}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;text-align:right;color:#888;">${s.users}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    ` : ''}
+
+    <!-- GA4 Custom Events -->
+    ${Object.keys(ga4.events || {}).length ? `
+    <div style="margin-bottom:24px;">
+      <h2 style="font-size:18px;color:#1a1a1a;margin:0 0 12px 0;font-weight:600;">Key Events</h2>
+      <div style="background:#fff;border-radius:8px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+        ${Object.entries(ga4.events).map(([name, count]) => `<span style="display:inline-block;margin:2px 6px 2px 0;padding:4px 10px;background:#f5f5f5;border-radius:4px;font-size:13px;">${name.replace(/_/g, ' ')}: <strong>${count}</strong></span>`).join('')}
+      </div>
+    </div>
+    ` : ''}
+
     <!-- New Sign-ups -->
     <div style="margin-bottom:24px;">
       <h2 style="font-size:18px;color:#1a1a1a;margin:0 0 12px 0;font-weight:600;">New Sign-ups</h2>
@@ -367,9 +578,10 @@ export async function GET(request) {
 
   try {
     const timestamp = Date.now();
-    const [firebase, vercel] = await Promise.all([
+    const [firebase, vercel, ga4] = await Promise.all([
       getFirebaseMetrics(),
       getVercelMetrics(),
+      getGA4Metrics(),
     ]);
 
     const dateStr = new Date(timestamp).toLocaleDateString('en-US', {
@@ -377,15 +589,16 @@ export async function GET(request) {
       day: 'numeric',
     });
 
-    const subject = `HitLoop Daily — ${firebase.newUsers} sign-up${firebase.newUsers !== 1 ? 's' : ''}, ${firebase.recentRuns} dashboard${firebase.recentRuns !== 1 ? 's' : ''} · ${dateStr}`;
+    const sessionStr = ga4.overview ? `, ${ga4.overview.sessions} session${ga4.overview.sessions !== 1 ? 's' : ''}` : '';
+    const subject = `HitLoop Daily — ${firebase.newUsers} sign-up${firebase.newUsers !== 1 ? 's' : ''}, ${firebase.recentRuns} dashboard${firebase.recentRuns !== 1 ? 's' : ''}${sessionStr} · ${dateStr}`;
 
-    const html = buildEmailHtml(firebase, vercel, timestamp);
+    const html = buildEmailHtml(firebase, vercel, ga4, timestamp);
     const emailResult = await sendEmail(subject, html);
 
     return json({
       ok: true,
       timestamp: new Date(timestamp).toISOString(),
-      metrics: { firebase, vercel: { totalDeployments: vercel.totalDeployments, errorCount: vercel.errorLogs?.length || 0 } },
+      metrics: { firebase, vercel: { totalDeployments: vercel.totalDeployments, errorCount: vercel.errorLogs?.length || 0 }, ga4: { overview: ga4.overview, topPagesCount: ga4.topPages?.length, sourcesCount: ga4.trafficSources?.length, events: ga4.events } },
       email: emailResult,
     });
   } catch (err) {
