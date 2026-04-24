@@ -136,13 +136,10 @@ function getBrowserlessConfig() {
   };
 }
 
-function buildEndpointUrl(baseUrl, endpoint, token, requestTimeoutMs, variant = null) {
+function buildEndpointUrl(baseUrl, endpoint, token, requestTimeoutMs) {
   const url = new URL(`${baseUrl}${endpoint}`);
   url.searchParams.set('token', token);
   url.searchParams.set('timeout', String(requestTimeoutMs));
-  if (variant?.viewport) {
-    url.searchParams.set('launch', JSON.stringify({ defaultViewport: variant.viewport }));
-  }
   return url.toString();
 }
 
@@ -196,7 +193,55 @@ async function finalizeBrowserlessRequestLog(requestRef, update) {
   );
 }
 
-async function captureScreenshotBuffer({ clientId, runId, targetUrl, variant }) {
+const RETRYABLE_BROWSERLESS_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
+const BROWSERLESS_MAX_ATTEMPTS = 3;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function captureScreenshotBuffer(args) {
+  const { onAttempt = null } = args || {};
+  let lastResult = null;
+  let lastError = null;
+  for (let attempt = 1; attempt <= BROWSERLESS_MAX_ATTEMPTS; attempt += 1) {
+    if (typeof onAttempt === 'function' && attempt > 1) {
+      try { await onAttempt({ attempt, total: BROWSERLESS_MAX_ATTEMPTS }); } catch {}
+    }
+    let result;
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      result = await captureScreenshotBufferOnce({ ...args, attempt });
+    } catch (err) {
+      // Transport-level failures (AbortSignal timeout, network error) — retry.
+      lastError = err;
+      if (attempt >= BROWSERLESS_MAX_ATTEMPTS) throw err;
+      // eslint-disable-next-line no-await-in-loop
+      await sleep(1000 * attempt);
+      continue;
+    }
+    if (result.ok) return result;
+    lastResult = result;
+
+    const code = result.warning?.code || '';
+    const status = Number(result.warning?.httpStatus);
+    const isRetryable =
+      code === 'browserless_timeout' ||
+      code === 'browserless_empty_response' ||
+      (code === 'browserless_http_error' && RETRYABLE_BROWSERLESS_STATUSES.has(status));
+
+    if (!isRetryable || attempt >= BROWSERLESS_MAX_ATTEMPTS) break;
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(1000 * attempt); // 1s, 2s backoff
+  }
+  if (lastResult) return lastResult;
+  throw lastError || new Error('Browserless capture failed without a result.');
+}
+
+async function captureScreenshotBufferOnce({ clientId, runId, targetUrl, variant, attempt = 1 }) {
+  // Sentinel: if this line does not show up in server logs, the dev server
+  // has not reloaded this module — restart it.
+  console.log(`[browserless:v2] capture attempt=${attempt} variant=${variant?.id} url=${targetUrl}`);
   const config = getBrowserlessConfig();
   if (!config.enabled) {
     return {
@@ -208,12 +253,16 @@ async function captureScreenshotBuffer({ clientId, runId, targetUrl, variant }) 
     };
   }
 
+  // Give slow sites more time on retries — bump goto + request timeouts by 50% per attempt.
+  const attemptMultiplier = 1 + 0.5 * (attempt - 1);
+  const effectiveRequestTimeoutMs = Math.round(config.requestTimeoutMs * attemptMultiplier);
+  const effectiveGotoTimeoutMs = Math.round(config.gotoTimeoutMs * attemptMultiplier);
+
   const endpoint = buildEndpointUrl(
     config.baseUrl,
     '/screenshot',
     config.token,
-    config.requestTimeoutMs,
-    variant
+    effectiveRequestTimeoutMs
   );
   const startedAt = Date.now();
   let requestLog = null;
@@ -224,7 +273,7 @@ async function captureScreenshotBuffer({ clientId, runId, targetUrl, variant }) 
       runId,
       websiteUrl: targetUrl,
       endpoint: 'screenshot',
-      requestTimeoutMs: config.requestTimeoutMs,
+      requestTimeoutMs: effectiveRequestTimeoutMs,
       variant,
     });
   } catch {
@@ -234,7 +283,7 @@ async function captureScreenshotBuffer({ clientId, runId, targetUrl, variant }) 
   try {
     const response = await fetch(endpoint, {
       method: 'POST',
-      signal: AbortSignal.timeout(config.requestTimeoutMs + 5000),
+      signal: AbortSignal.timeout(effectiveRequestTimeoutMs + 5000),
       headers: {
         'Cache-Control': 'no-cache',
         'Content-Type': 'application/json',
@@ -242,9 +291,16 @@ async function captureScreenshotBuffer({ clientId, runId, targetUrl, variant }) 
       body: JSON.stringify({
         url: targetUrl,
         bestAttempt: true,
+        // Pass viewport in the body — Browserless v2 /screenshot expects it here,
+        // not via the `launch` query param. A misplaced launch can queue the
+        // request indefinitely and return 408.
+        ...(variant?.viewport ? { viewport: variant.viewport } : null),
         gotoOptions: {
-          waitUntil: 'networkidle2',
-          timeout: config.gotoTimeoutMs,
+          // 'domcontentloaded' resolves reliably in seconds; 'networkidle2'
+          // never resolves on modern sites with analytics/websockets/heartbeats.
+          // The post-load wait below still lets JS-heavy sites paint before capture.
+          waitUntil: attempt === 1 ? 'domcontentloaded' : 'load',
+          timeout: effectiveGotoTimeoutMs,
         },
         waitForTimeout: config.postLoadWaitMs,
         options: {
@@ -271,7 +327,11 @@ async function captureScreenshotBuffer({ clientId, runId, targetUrl, variant }) 
         warning: buildWarning(
           'browserless_http_error',
           `Website screenshot failed with Browserless HTTP ${response.status}.`,
-          snippet ? { detail: snippet, requestId: requestLog?.requestId || null } : { requestId: requestLog?.requestId || null }
+          {
+            httpStatus: response.status,
+            requestId: requestLog?.requestId || null,
+            ...(snippet ? { detail: snippet } : null),
+          }
         ),
       };
     }
@@ -364,6 +424,19 @@ async function persistWebsiteScreenshotArtifact({
           runId,
           targetUrl: websiteUrl,
           variant,
+          onAttempt: async ({ attempt, total }) => {
+            if (typeof onVariantProgress !== 'function') return;
+            try {
+              await onVariantProgress({
+                phase: 'retry',
+                variant,
+                index,
+                total: variants.length,
+                attempt,
+                totalAttempts: total,
+              });
+            } catch {}
+          },
         });
       } catch (err) {
         screenshot = {

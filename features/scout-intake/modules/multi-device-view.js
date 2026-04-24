@@ -91,13 +91,75 @@ async function runMultiDeviceView({
     const reuseRefs = existingScreenshotRefs.filter(
       (a) => a?.type === 'website_homepage_screenshot' && a?.variant && !String(a.variant).endsWith('-full')
     );
+
+    // Self-heal: if any required viewport is missing from the reused refs,
+    // capture only the missing ones before composing — avoids a hard failure
+    // when the previous run produced a partial set.
+    const REQUIRED = ['desktop', 'tablet', 'mobile'];
+    const presentVariants = new Set(reuseRefs.map((a) => a.variant));
+    const missingVariants = REQUIRED.filter((v) => !presentVariants.has(v));
+    const buffersByVariant = {};
+
+    if (missingVariants.length > 0) {
+      await emit(
+        'capture',
+        `Missing ${missingVariants.join(', ')} — capturing only the missing screenshot${missingVariants.length > 1 ? 's' : ''}…`
+      );
+      const recapture = await runScreenshots({
+        clientId,
+        runId,
+        websiteUrl,
+        includeFullPage: false,
+        includeBuffers: true,
+        includeBufferVariants: missingVariants,
+        variantIds: missingVariants,
+        onVariantProgress: async ({ phase, variant, attempt, totalAttempts }) => {
+          if (!variant?.label) return;
+          if (phase === 'start') {
+            await emit('capture', `Capture ${variant.label.toLowerCase()}…`);
+          } else if (phase === 'retry') {
+            await emit('capture', `Retrying ${variant.label.toLowerCase()} (attempt ${attempt}/${totalAttempts})…`);
+          } else if (phase === 'stored') {
+            await emit('capture', `${variant.label} captured.`);
+          }
+        },
+      });
+      if (!recapture.ok) {
+        const warning = recapture.warning || { type: 'warning', code: 'website_screenshot_failed', message: 'Screenshot capture failed.', stage: 'capture' };
+        warningCodes.push(warning.code);
+        warnings.push(warning);
+        await emit('error', `Missing-screenshot recapture failed: ${warning.message || warning.code}`);
+        return {
+          ok: false,
+          cardId: CARD_ID,
+          status: 'failed',
+          errorCode: warning.code,
+          errorMessage: warning.message || 'Missing-screenshot recapture failed.',
+          warningCodes,
+          warnings,
+          artifacts: reuseRefs,
+        };
+      }
+      for (const ref of recapture.artifactRefs) {
+        if (ref?.type !== 'website_homepage_screenshot' || !ref?.variant) continue;
+        if (String(ref.variant).endsWith('-full')) continue;
+        if (Buffer.isBuffer(ref.buffer)) buffersByVariant[ref.variant] = ref.buffer;
+        reuseRefs.push(ref);
+      }
+    }
+
     artifactRefs.push(...reuseRefs);
 
     await emit('compose', 'Build device mockup…');
     const mockupResult = await runDeviceMockup({
       clientId, runId, websiteUrl,
       screenshotArtifactRefs: reuseRefs,
+      screenshotBuffersByVariant: Object.keys(buffersByVariant).length > 0 ? buffersByVariant : null,
     });
+
+    for (const ref of reuseRefs) {
+      if (ref && Object.prototype.hasOwnProperty.call(ref, 'buffer')) delete ref.buffer;
+    }
     if (mockupResult.ok && mockupResult.artifactRef) {
       artifactRefs.push(mockupResult.artifactRef);
       await emit('compose', 'Device mockup generated.');

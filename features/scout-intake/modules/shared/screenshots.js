@@ -15,10 +15,16 @@ async function runScreenshots({
   includeBuffers = false,
   includeBufferVariants = null,
   onVariantProgress = null,
+  variantIds = null,
 }) {
-  const variants = fullPageOnly
+  let variants = fullPageOnly
     ? FULL_PAGE_SCREENSHOT_VARIANTS
     : includeFullPage ? undefined : VIEWPORT_SCREENSHOT_VARIANTS;
+  if (Array.isArray(variantIds) && variantIds.length > 0) {
+    const base = variants || [...VIEWPORT_SCREENSHOT_VARIANTS, ...FULL_PAGE_SCREENSHOT_VARIANTS];
+    const idSet = new Set(variantIds);
+    variants = base.filter((v) => idSet.has(v.id));
+  }
   try {
     const result = await persistWebsiteScreenshotArtifact({
       clientId,
