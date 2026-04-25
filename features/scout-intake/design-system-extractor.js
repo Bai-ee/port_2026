@@ -22,36 +22,7 @@ const MAX_TOKENS = 4096;
 const FETCH_TIMEOUT_MS = 6000;
 const MAX_CSS_CHARS = 60000; // cap total CSS to avoid token blowout
 const MAX_EXTERNAL_SHEETS = 4;
-
-// ── Anthropic client (shared pattern with intake-synthesizer.js) ─────────────
-
-function getApiKey() {
-  const key =
-    process.env.ANTHROPIC_API_KEY ||
-    (() => {
-      try { require('dotenv/config'); } catch { /* ignore */ }
-      return process.env.ANTHROPIC_API_KEY;
-    })();
-
-  if (!key) throw new Error('ANTHROPIC_API_KEY is not set.');
-  return key;
-}
-
-async function callAnthropic(params) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': getApiKey(),
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify(params),
-  });
-
-  const text = await res.text();
-  if (!res.ok) throw new Error(`Anthropic API ${res.status}: ${text.slice(0, 400)}`);
-  return JSON.parse(text);
-}
+const { callAnthropic, extractAnthropicUsage } = require('./_anthropic-client');
 
 // ── CSS Evidence Extraction (regex-only, no parser dependency) ───────────────
 
@@ -577,17 +548,12 @@ function extractToolInput(response) {
 }
 
 function extractUsage(response) {
-  const usage = response.usage || {};
-  const inputTokens = usage.input_tokens || 0;
-  const outputTokens = usage.output_tokens || 0;
   // Sonnet pricing: $3.00/MTok input, $15.00/MTok output
-  const estimatedCostUsd = (inputTokens * 0.000003) + (outputTokens * 0.000015);
-  return {
+  return extractAnthropicUsage(response, {
     model: DESIGN_SYSTEM_MODEL,
-    inputTokens,
-    outputTokens,
-    estimatedCostUsd: Math.round(estimatedCostUsd * 10000) / 10000,
-  };
+    inputRate: 0.000003,
+    outputRate: 0.000015,
+  });
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────

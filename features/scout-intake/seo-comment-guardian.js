@@ -2,48 +2,17 @@
 
 const { getCard } = require('./card-contract');
 const { buildCardDescription } = require('./card-description-builder');
+const { callAnthropic, extractAnthropicUsage } = require('./_anthropic-client');
 
 const GUARDIAN_MODEL = 'claude-haiku-4-5-20251001';
 const MAX_TOKENS = 1400;
 
-function getApiKey() {
-  const key =
-    process.env.ANTHROPIC_API_KEY ||
-    (() => {
-      try { require('dotenv/config'); } catch { /* ignore */ }
-      return process.env.ANTHROPIC_API_KEY;
-    })();
-  return key || null;
-}
-
-async function callAnthropic(params) {
-  const apiKey = getApiKey();
-  if (!apiKey) throw new Error('ANTHROPIC_API_KEY is not set.');
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify(params),
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`Anthropic API ${res.status}: ${text.slice(0, 400)}`);
-  return JSON.parse(text);
-}
-
 function extractUsage(response) {
-  const usage = response?.usage || {};
-  const inputTokens = usage.input_tokens || 0;
-  const outputTokens = usage.output_tokens || 0;
-  const estimatedCostUsd = (inputTokens * 0.000001) + (outputTokens * 0.000005);
-  return {
+  return extractAnthropicUsage(response, {
     model: GUARDIAN_MODEL,
-    inputTokens,
-    outputTokens,
-    estimatedCostUsd: Math.round(estimatedCostUsd * 10000) / 10000,
-  };
+    inputRate: 0.000001,
+    outputRate: 0.000005,
+  });
 }
 
 function extractToolInput(response) {

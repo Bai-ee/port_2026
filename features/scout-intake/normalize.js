@@ -1,5 +1,7 @@
 'use strict';
 
+const { callAnthropic } = require('./_anthropic-client');
+
 // normalize.js — Maps LLM synthesis output to the IntakePipelineResult contract
 //
 // This is the boundary between what the LLM returns and what the worker writes
@@ -221,15 +223,6 @@ function normalizeIntakeResult(
 const HAIKU_MODEL = 'claude-haiku-4-5-20251001';
 const HAIKU_MAX_TOKENS = 120;
 
-function _getApiKey() {
-  const key = process.env.ANTHROPIC_API_KEY || (() => {
-    try { require('dotenv/config'); } catch { /* ignore */ }
-    return process.env.ANTHROPIC_API_KEY;
-  })();
-  if (!key) throw new Error('ANTHROPIC_API_KEY is not set.');
-  return key;
-}
-
 /**
  * Generate a one-line visual personality summary from extracted design tokens.
  * Uses claude-haiku-4-5-20251001. Falls back to a deterministic template.
@@ -258,20 +251,11 @@ async function generateStyleGuideSummary(ds) {
   ].filter(Boolean).join('\n');
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': _getApiKey(),
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
+    const data = await callAnthropic({
         model: HAIKU_MODEL,
         max_tokens: HAIKU_MAX_TOKENS,
         messages: [{ role: 'user', content: prompt }],
-      }),
     });
-    const data = await res.json();
     const text = data?.content?.[0]?.text?.trim();
     if (text && text.length > 5 && text.length < 120) return text;
   } catch { /* fall through */ }

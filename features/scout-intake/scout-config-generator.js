@@ -25,35 +25,10 @@
 // generation outcome that runner.js logs/warns on.
 
 const { getScoutConfig, saveScoutConfig } = require('./scout-config-store');
+const { callAnthropic, extractAnthropicUsage } = require('./_anthropic-client');
 
 const MODEL = 'claude-haiku-4-5-20251001';
 const MAX_TOKENS = 1400;
-
-// ── Anthropic client ─────────────────────────────────────────────────────────
-
-function getApiKey() {
-  const key = process.env.ANTHROPIC_API_KEY || (() => {
-    try { require('dotenv/config'); } catch { /* ignore */ }
-    return process.env.ANTHROPIC_API_KEY;
-  })();
-  if (!key) throw new Error('ANTHROPIC_API_KEY is not set.');
-  return key;
-}
-
-async function callAnthropic(params) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'content-type':       'application/json',
-      'x-api-key':          getApiKey(),
-      'anthropic-version':  '2023-06-01',
-    },
-    body: JSON.stringify(params),
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`Anthropic API ${res.status}: ${text.slice(0, 400)}`);
-  return JSON.parse(text);
-}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -472,17 +447,12 @@ Call write_scout_config with the filled config.`;
 // ── Cost extraction ─────────────────────────────────────────────────────────
 
 function extractUsage(response) {
-  const u = response.usage || {};
-  const inputTokens = u.input_tokens || 0;
-  const outputTokens = u.output_tokens || 0;
   // Haiku 4.5 pricing
-  const estimatedCostUsd = (inputTokens * 0.000001) + (outputTokens * 0.000005);
-  return {
+  return extractAnthropicUsage(response, {
     model: MODEL,
-    inputTokens,
-    outputTokens,
-    estimatedCostUsd: Math.round(estimatedCostUsd * 10000) / 10000,
-  };
+    inputRate: 0.000001,
+    outputRate: 0.000005,
+  });
 }
 
 function extractToolInput(response) {

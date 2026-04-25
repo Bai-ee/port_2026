@@ -13,36 +13,7 @@
 
 const SYNTHESIS_MODEL = 'claude-haiku-4-5-20251001';
 const MAX_TOKENS = 4096;
-
-// ── Anthropic client ──────────────────────────────────────────────────────────
-
-function getApiKey() {
-  const key =
-    process.env.ANTHROPIC_API_KEY ||
-    (() => {
-      try { require('dotenv/config'); } catch { /* ignore */ }
-      return process.env.ANTHROPIC_API_KEY;
-    })();
-
-  if (!key) throw new Error('ANTHROPIC_API_KEY is not set.');
-  return key;
-}
-
-async function callAnthropic(params) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': getApiKey(),
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify(params),
-  });
-
-  const text = await res.text();
-  if (!res.ok) throw new Error(`Anthropic API ${res.status}: ${text.slice(0, 400)}`);
-  return JSON.parse(text);
-}
+const { callAnthropic, extractAnthropicUsage } = require('./_anthropic-client');
 
 // ── Evidence formatter ────────────────────────────────────────────────────────
 
@@ -293,17 +264,12 @@ function extractToolInput(response) {
 }
 
 function extractUsage(response) {
-  const usage = response.usage || {};
-  const inputTokens = usage.input_tokens || 0;
-  const outputTokens = usage.output_tokens || 0;
   // Haiku pricing (2025): $0.80/MTok input, $4.00/MTok output
-  const estimatedCostUsd = (inputTokens * 0.0000008) + (outputTokens * 0.000004);
-  return {
+  return extractAnthropicUsage(response, {
     model: SYNTHESIS_MODEL,
-    inputTokens,
-    outputTokens,
-    estimatedCostUsd: Math.round(estimatedCostUsd * 10000) / 10000,
-  };
+    inputRate: 0.0000008,
+    outputRate: 0.000004,
+  });
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────

@@ -29,17 +29,15 @@ import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from './firebase';
 import { internalPageGlassCardStyle } from './pageSurfaceSystem';
 import onboardingConfig from './onboarding/questions.config.cjs';
-import { buildSolutionsList, resolveSolution } from './features/scout-intake/solutions-catalog.mjs';
 import { resolveAnalyzerSource, buildCardDescription, buildModuleStateDescription } from './features/scout-intake/card-description-builder.mjs';
 import { deriveFindings } from './features/scout-intake/derived-findings.mjs';
-import { renderDesignMd } from './features/scout-intake/design-md-renderer.mjs';
-import { renderMiniBriefHtml } from './features/scout-intake/mini-brief-renderer.mjs';
-import { designEvaluationAdapter } from './features/scout-intake/mini-briefs/design-evaluation-adapter.mjs';
-import { seoPerformanceAdapter } from './features/scout-intake/mini-briefs/seo-performance-adapter.mjs';
-import { socialPreviewAdapter } from './features/scout-intake/mini-briefs/social-preview-adapter.mjs';
 import ModuleCardControls from './components/dashboard/ModuleCardControls';
 
 const OnboardingChatModal = dynamic(() => import('./onboarding/OnboardingChatModal'), {
+  loading: () => null,
+});
+
+const TileDetailAnalysisContent = dynamic(() => import('./components/dashboard/TileDetailAnalysisContent'), {
   loading: () => null,
 });
 
@@ -1467,36 +1465,6 @@ const DashboardPage = () => {
     if (!moduleConfig) return new Set();
     return new Set(Object.entries(moduleConfig).filter(([, cfg]) => cfg?.enabled === true).map(([id]) => id));
   }, [moduleConfig]);
-  const designEvalMiniBriefHtml = useMemo(() => {
-    const raw = client?.websiteUrl || client?.name || '';
-    let siteName = '';
-    try { siteName = raw ? new URL(raw.startsWith('http') ? raw : `https://${raw}`).hostname.replace(/^www\./, '') : ''; } catch { siteName = String(raw).split('?')[0]; }
-    return renderMiniBriefHtml(designEvaluationAdapter({
-      ev:         analyzerOutputs?.['design-evaluation'] || null,
-      styleGuide: styleGuideData,
-      siteName,
-    }));
-  }, [analyzerOutputs, styleGuideData, client]);
-
-  const seoMiniBriefHtml = useMemo(() => {
-    const raw = client?.websiteUrl || client?.name || '';
-    let siteName = '';
-    try { siteName = raw ? new URL(raw.startsWith('http') ? raw : `https://${raw}`).hostname.replace(/^www\./, '') : ''; } catch { siteName = String(raw).split('?')[0]; }
-    return renderMiniBriefHtml(seoPerformanceAdapter({
-      seoAudit:       analyzerOutputs ? (intelligencePayload?.dashboardSeoAudit ?? dashboardState?.seoAudit ?? null) : null,
-      aiVisibility:   analyzerOutputs?.['seo-performance']?.skills?.['ai-seo-audit']?.aiVisibility ?? null,
-      analyzerOutputs,
-      siteName,
-    }));
-  }, [analyzerOutputs, intelligencePayload, dashboardState?.seoAudit, client]);
-
-  const socialMiniBriefHtml = useMemo(() => {
-    const raw = client?.websiteUrl || client?.name || '';
-    let siteName = '';
-    try { siteName = raw ? new URL(raw.startsWith('http') ? raw : `https://${raw}`).hostname.replace(/^www\./, '') : ''; } catch { siteName = String(raw).split('?')[0]; }
-    return renderMiniBriefHtml(socialPreviewAdapter({ siteMeta: dashboardState?.siteMeta ?? null, siteName }));
-  }, [dashboardState?.siteMeta, client]);
-
   const seoAudit = intelligencePayload?.dashboardSeoAudit ?? dashboardState?.seoAudit ?? null;
   const aiVisibility = aiSeoAudit?.aiVisibility ?? null;
   const isFromIntelligence  = Boolean(intelligencePayload?.dashboardSeoAudit != null);
@@ -5992,269 +5960,19 @@ const DashboardPage = () => {
                       })()}
                     </div>
                     <div className="tile-detail-tab-content">
-                      {modalTab === 'report' && (() => {
-                        if (activeTileModal.cardId === 'design-evaluation') {
-                          const raw = client?.websiteUrl || client?.name || '';
-                          let sn = '';
-                          try { sn = raw ? new URL(raw.startsWith('http') ? raw : `https://${raw}`).hostname.replace(/^www\./, '') : ''; } catch { sn = String(raw).split('?')[0]; }
-                          const onDownload = () => {
-                            const md = renderDesignMd({ siteName: sn, styleGuide: styleGuideData, skillOutput: analyzerOutputs?.['design-evaluation'] });
-                            const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement('a'); a.href = url; a.download = 'DESIGN.md';
-                            document.body.appendChild(a); a.click(); a.remove();
-                            setTimeout(() => URL.revokeObjectURL(url), 1000);
-                          };
-                          return (
-                            <div className="tile-detail-tab-pane" id="design-eval-report-pane" style={{ display: 'flex', flexDirection: 'column', padding: 0, height: '100%' }}>
-                              {analyzerOutputs?.['design-evaluation'] && (
-                                <div id="design-eval-report-toolbar" style={{ display: 'flex', justifyContent: 'flex-end', padding: '6px 8px', flexShrink: 0 }}>
-                                  <button id="design-eval-report-download-btn" type="button" className="tile-solution-expert-cta" onClick={onDownload} style={{ cursor: 'pointer', border: 'none' }}>Download DESIGN.md ↓</button>
-                                </div>
-                              )}
-                              <iframe
-                                key={'de-report-' + (dashboardState?.latestRunId || 'static')}
-                                id="design-eval-report-iframe"
-                                title="Design Evaluation brief"
-                                srcDoc={designEvalMiniBriefHtml}
-                                sandbox="allow-same-origin"
-                                style={{ flex: 1, width: '100%', border: 'none', minHeight: 0, display: 'block' }}
-                              />
-                            </div>
-                          );
-                        }
-                        if (activeTileModal.cardId === 'seo-performance') {
-                          return (
-                            <div className="tile-detail-tab-pane" id="seo-perf-report-pane" style={{ padding: 0, height: '100%' }}>
-                              <iframe
-                                key={'seo-report-' + (dashboardState?.latestRunId || 'static')}
-                                id="seo-perf-report-iframe"
-                                title="SEO Performance brief"
-                                srcDoc={seoMiniBriefHtml}
-                                sandbox="allow-same-origin"
-                                style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
-                              />
-                            </div>
-                          );
-                        }
-                        if (activeTileModal.cardId === 'social-preview') {
-                          return (
-                            <div className="tile-detail-tab-pane" id="social-preview-report-pane" style={{ padding: 0, height: '100%' }}>
-                              <iframe
-                                key={'social-report-' + (dashboardState?.latestRunId || 'static')}
-                                id="social-preview-report-iframe"
-                                title="Social Preview brief"
-                                srcDoc={socialMiniBriefHtml}
-                                sandbox="allow-same-origin"
-                                style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
-                              />
-                            </div>
-                          );
-                        }
-                        // Renders the skill-generated audit doc inline.
-                        // Sandbox via iframe srcDoc so the doc's CSS doesn't bleed
-                        // into the dashboard. Provides Download HTML / MD buttons
-                        // that pull from the auth'd skill-doc endpoint.
-                        const SKILL_DOC_BY_CARD = { 'seo-performance': 'seo-depth-audit' };
-                        const skillId = SKILL_DOC_BY_CARD[activeTileModal.cardId];
-                        const doc = dashboardState?.artifacts?.skillDocs?.[skillId] || null;
-                        if (!doc) {
-                          return <div className="tile-detail-tab-pane"><p className="tile-analyzer-solutions-empty">Report not generated yet. Run the card to produce one.</p></div>;
-                        }
-                        const downloadDoc = async (format) => {
-                          try {
-                            const auth = (typeof window !== 'undefined' && window.__auth) || null;
-                            const token = await auth?.currentUser?.getIdToken?.();
-                            if (!token) { window.alert('Sign-in required to download.'); return; }
-                            const r = await fetch(`/api/dashboard/skill-doc?skillId=${encodeURIComponent(skillId)}&format=${format}`, {
-                              headers: { authorization: `Bearer ${token}` },
-                            });
-                            if (!r.ok) { window.alert(`Download failed: ${r.status}`); return; }
-                            const blob = await r.blob();
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = (doc.filename || `${skillId}.html`).replace(/\.html?$/i, format === 'md' ? '.md' : '.html');
-                            document.body.appendChild(a);
-                            a.click();
-                            a.remove();
-                            setTimeout(() => URL.revokeObjectURL(url), 1000);
-                          } catch (err) {
-                            window.alert('Download error: ' + (err?.message || 'unknown'));
-                          }
-                        };
-                        const isRerunning = !!moduleRunLoading?.[activeTileModal.cardId];
-                        return (
-                          <div className="tile-detail-tab-pane">
-                            <div id={`${activeTileModal.cardId}-report-toolbar`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 8 }}>
-                              <div style={{ fontSize: 12, opacity: 0.7 }}>
-                                {doc.title} · {new Date(doc.runAt).toLocaleString()}
-                              </div>
-                              <div style={{ display: 'flex', gap: 8 }}>
-                                <button
-                                  id={`${activeTileModal.cardId}-report-rerun`}
-                                  type="button"
-                                  className="tile-solution-expert-cta"
-                                  onClick={() => handleModuleRun(activeTileModal.cardId, true)}
-                                  disabled={isRerunning}
-                                  style={{ cursor: isRerunning ? 'wait' : 'pointer', border: 'none', opacity: isRerunning ? 0.6 : 1 }}
-                                >{isRerunning ? 'Rerunning…' : 'Rerun audit ↻'}</button>
-                                <button
-                                  id={`${activeTileModal.cardId}-report-download-html`}
-                                  type="button"
-                                  className="tile-solution-expert-cta"
-                                  onClick={() => downloadDoc('html')}
-                                  style={{ cursor: 'pointer', border: 'none' }}
-                                >Download HTML ↓</button>
-                                <button
-                                  id={`${activeTileModal.cardId}-report-download-md`}
-                                  type="button"
-                                  className="tile-solution-expert-cta"
-                                  onClick={() => downloadDoc('md')}
-                                  style={{ cursor: 'pointer', border: 'none' }}
-                                >Download MD ↓</button>
-                              </div>
-                            </div>
-                            <iframe
-                              id={`${activeTileModal.cardId}-report-frame`}
-                              title={doc.title}
-                              srcDoc={doc.html}
-                              sandbox=""
-                              style={{
-                                width: '100%',
-                                height: '60vh',
-                                border: '1px solid rgba(255,255,255,0.08)',
-                                borderRadius: 6,
-                                background: '#fff',
-                              }}
-                            />
-                          </div>
-                        );
-                      })()}
-
-                      {modalTab === 'solutions' && activeTileModal.cardId === 'design-evaluation' && (() => {
-                        const cleanSiteName = (() => {
-                          const raw = client?.websiteUrl || client?.name || '';
-                          if (!raw) return 'Untitled';
-                          try {
-                            const u = new URL(raw.startsWith('http') ? raw : `https://${raw}`);
-                            return u.hostname.replace(/^www\./, '');
-                          } catch { return String(raw).split('?')[0]; }
-                        })();
-                        const designMd = renderDesignMd({
-                          siteName: cleanSiteName,
-                          styleGuide: styleGuideData,
-                          skillOutput: activeTileModal.analyzer,
-                        });
-                        const onDownloadDesignMd = () => {
-                          const blob = new Blob([designMd], { type: 'text/markdown;charset=utf-8' });
-                          const url  = URL.createObjectURL(blob);
-                          const a    = document.createElement('a');
-                          a.href = url;
-                          a.download = 'DESIGN.md';
-                          document.body.appendChild(a);
-                          a.click();
-                          a.remove();
-                          setTimeout(() => URL.revokeObjectURL(url), 1000);
-                        };
-                        return (
-                          <div className="tile-detail-tab-pane">
-                            <div id="design-evaluation-md-toolbar" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
-                              <button
-                                id="design-evaluation-download-btn"
-                                type="button"
-                                className="tile-solution-expert-cta"
-                                onClick={onDownloadDesignMd}
-                                style={{ cursor: 'pointer', border: 'none' }}
-                              >Download DESIGN.md ↓</button>
-                            </div>
-                            <pre
-                              id="design-evaluation-md-preview"
-                              style={{
-                                margin: 0,
-                                padding: 12,
-                                background: 'rgba(0,0,0,0.35)',
-                                color: '#e8e6e1',
-                                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                                fontSize: 12,
-                                lineHeight: 1.5,
-                                whiteSpace: 'pre-wrap',
-                                wordBreak: 'break-word',
-                                borderRadius: 6,
-                                maxHeight: '60vh',
-                                overflow: 'auto',
-                              }}
-                            >{designMd}</pre>
-                          </div>
-                        );
-                      })()}
-
-                      {modalTab === 'solutions' && activeTileModal.cardId !== 'design-evaluation' && (() => {
-                        const solutionsList = buildSolutionsList(activeTileModal.analyzer);
-                        if (!solutionsList.length) return <div className="tile-detail-tab-pane"><p className="tile-analyzer-solutions-empty">No matched solutions yet.</p></div>;
-                        return (
-                          <div className="tile-detail-tab-pane">
-                            <ol id={`${activeTileModal.cardId}-solutions-list`} className="tile-solutions-list">
-                              {solutionsList.map(({ key, source, severity, finding, solution, isGeneric }) => {
-                                const problemClean = String(solution.problem || '').replace(/\.+$/, '').trim();
-                                const expertTitle = String(solution.expertOffer?.title || '').trim();
-                                const combinedHeadline = isGeneric ? (expertTitle || problemClean) : (problemClean && expertTitle ? `${problemClean} — ${expertTitle}` : (problemClean || expertTitle));
-                                const sourceLabel = source === 'gap' ? `Gap: ${finding?.ruleId || ''}` : (finding?.label || '');
-                                return (
-                                  <li key={key} id={`${activeTileModal.cardId}-solution-${solution.id}`} className={`tile-solution-card severity-${severity || solution.severity || 'info'}${source === 'gap' ? ' source-gap' : ''}`}>
-                                    <header className="tile-solution-header">
-                                      <div className="tile-solution-header-top">
-                                        {source === 'gap' ? <span className="tile-analyzer-gap-chip">gap</span> : <span className="tile-analyzer-severity-chip">{severity || solution.severity}</span>}
-                                        {sourceLabel && <span className="tile-solution-source-label">{sourceLabel}</span>}
-                                      </div>
-                                      <h4 className="tile-solution-problem">{combinedHeadline}</h4>
-                                    </header>
-                                    {solution.expertOffer && (
-                                      <section className="tile-solution-expert">
-                                        {solution.expertOffer.summary && <p className="tile-solution-expert-summary">{solution.expertOffer.summary}</p>}
-                                        {solution.expertOffer.cta?.href && <a href={solution.expertOffer.cta.href} target="_blank" rel="noopener noreferrer" className="tile-solution-expert-cta">{solution.expertOffer.cta.label || 'Book a call'} →</a>}
-                                        {solution.diy && (
-                                          <details className="tile-solution-diy-details">
-                                            <summary className="tile-solution-diy-summary-toggle"><span className="tile-solution-diy-toggle-label">Prefer to do it yourself?</span></summary>
-                                            <div className="tile-solution-diy">
-                                              {solution.diy.summary && <p className="tile-solution-diy-summary">{solution.diy.summary}</p>}
-                                              {Array.isArray(solution.diy.steps) && solution.diy.steps.length > 0 && <ol className="tile-solution-steps">{solution.diy.steps.map((step, idx) => <li key={idx} className="tile-solution-step">{step}</li>)}</ol>}
-                                            </div>
-                                          </details>
-                                        )}
-                                      </section>
-                                    )}
-                                  </li>
-                                );
-                              })}
-                            </ol>
-                          </div>
-                        );
-                      })()}
-
-                      {modalTab === 'problems' && (
-                        <div className="tile-detail-tab-pane">
-                          {activeTileModal.analyzer?.readiness && (
-                            <div id={`${activeTileModal.cardId}-analyzer-readiness`} className={`tile-analyzer-readiness readiness-${activeTileModal.analyzer.readiness}`}>
-                              <span className="tile-analyzer-readiness-label">{activeTileModal.analyzer.readiness === 'critical' ? 'Holding you back' : activeTileModal.analyzer.readiness === 'partial' ? 'Needs attention' : 'In a good spot'}</span>
-                            </div>
-                          )}
-                          {Array.isArray(activeTileModal.analyzer?.findings) && activeTileModal.analyzer.findings.length > 0 && (
-                            <ul className="tile-analyzer-findings-list">
-                              {activeTileModal.analyzer.findings.map((f) => {
-                                const catalogEntry = resolveSolution(f);
-                                const headline = catalogEntry?.problem || f.label;
-                                return (
-                                  <li key={f.id} className={`tile-analyzer-finding severity-${f.severity || 'info'}`}>
-                                    <div className="tile-analyzer-finding-header"><span className="tile-analyzer-severity-chip">{f.severity}</span><span className="tile-analyzer-finding-label">{headline}</span></div>
-                                    {catalogEntry?.whyItMatters && <p className="tile-solution-why">{catalogEntry.whyItMatters}</p>}
-                                    {f.detail && <p className="tile-analyzer-finding-detail">{f.detail}</p>}
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          )}
-                        </div>
+                      {['report', 'solutions', 'problems'].includes(modalTab) && (
+                        <TileDetailAnalysisContent
+                          modalTab={modalTab}
+                          activeTileModal={activeTileModal}
+                          client={client}
+                          styleGuideData={styleGuideData}
+                          analyzerOutputs={analyzerOutputs}
+                          dashboardState={dashboardState}
+                          siteMeta={siteMeta}
+                          seoAudit={seoAudit}
+                          moduleRunLoading={moduleRunLoading}
+                          handleModuleRun={handleModuleRun}
+                        />
                       )}
 
                       {modalTab === 'data' && (

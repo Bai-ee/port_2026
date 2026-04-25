@@ -15,6 +15,7 @@ const VERCEL_TOKEN = process.env.VERCEL_API_TOKEN;
 const VERCEL_PROJECT_ID = 'prj_h2AHIKHmJu7eV1DdmiTra2WFmPv6';
 const VERCEL_TEAM_ID = 'team_xmgNCNc6fHyZZinuszh8B6ZB';
 const GA4_PROPERTY_ID = process.env.GA4_PROPERTY_ID || '532567174';
+const RUN_STATUS_BUCKETS = ['queued', 'running', 'succeeded', 'failed', 'cancelled', 'provisioning'];
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -90,13 +91,26 @@ async function getFirebaseMetrics() {
     };
   });
 
-  // Runs by status
+  // Runs by status. Keep this bounded so digest cost does not grow with the
+  // total brief_runs volume.
+  const statusSnapshots = await Promise.all(
+    RUN_STATUS_BUCKETS.map((status) =>
+      db.collection('brief_runs').where('status', '==', status).count().get()
+    )
+  );
   const statusCounts = {};
-  const runsByStatusSnap = await db.collection('brief_runs').select('status').get();
-  runsByStatusSnap.docs.forEach((d) => {
-    const s = d.data().status || 'unknown';
-    statusCounts[s] = (statusCounts[s] || 0) + 1;
+  let knownStatusTotal = 0;
+  RUN_STATUS_BUCKETS.forEach((status, index) => {
+    const count = readAggregateCount(statusSnapshots[index]);
+    if (count > 0) {
+      statusCounts[status] = count;
+      knownStatusTotal += count;
+    }
   });
+  const unknownStatusCount = Math.max(0, totalRuns - knownStatusTotal);
+  if (unknownStatusCount > 0) {
+    statusCounts.unknown = unknownStatusCount;
+  }
 
   return {
     totalUsers,
