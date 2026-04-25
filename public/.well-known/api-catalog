@@ -1,0 +1,21 @@
+{
+  "linkset": [
+    {
+      "anchor": "https://hitloop.agency",
+      "describedby": [
+        {
+          "href": "https://hitloop.agency/llms.txt",
+          "type": "text/plain",
+          "title": "LLM content index"
+        }
+      ],
+      "item": [
+        {
+          "href": "https://hitloop.agency/sitemap.xml",
+          "type": "application/xml",
+          "title": "XML sitemap"
+        }
+      ]
+    }
+  ]
+}

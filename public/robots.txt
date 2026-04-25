@@ -190,3 +190,6 @@ Disallow: /preview/
 
 # Sitemap + LLM index
 Sitemap: https://hitloop.agency/sitemap.xml
+
+# Content usage preferences (contentsignals.org)
+Content-Signal: ai-train=no, search=yes, ai-input=yes
