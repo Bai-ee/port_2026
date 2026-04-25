@@ -1231,7 +1231,7 @@ const StackedSlidesSection = () => {
           [data-label-heading] {
             color: #000000 !important;
           }
-          [data-capability-grid] > div:last-child {
+          #capability-cards-grid {
             grid-template-columns: 1fr !important;
           }
           [data-filter-dropdown] {
@@ -1249,7 +1249,7 @@ const StackedSlidesSection = () => {
             display: none !important;
           }
           #panel-hero-cta {
-            width: auto !important;
+            width: 100% !important;
             justify-content: center !important;
             box-sizing: border-box !important;
           }
@@ -1603,7 +1603,7 @@ const StackedSlidesSection = () => {
                           </div>
                         </div>
                       </div>
-                      <div style={capabilityGridStyle}>
+                      <div id="capability-cards-grid" style={capabilityGridStyle}>
                         {AUTOMATION_CAPABILITIES.map((item, index) => {
                           const Icon = AUTOMATION_ICON_COMPONENTS[item.icon];
                           const isMobileCapabilityOpen = isTouchScrollDevice() && activeMobileCapability === item.title;
