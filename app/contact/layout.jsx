@@ -21,7 +21,7 @@ const contactSchema = {
 };
 
 export const metadata = {
-  title: 'Contact · Bryan Balli',
+  title: 'Contact',
   description:
     'Book a 30-minute call, send a note, or start with the intake brief — whichever fits where you are right now.',
   keywords: [

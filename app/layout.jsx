@@ -18,7 +18,7 @@ export const metadata = {
     template: '%s · Bryan Balli',
   },
   description:
-    'Bryan Balli is an AI design engineer and creative technologist building AI-assisted client dashboards, modular intake pipelines, and high-performance web experiences. Portfolio, case studies, and the Bballi client intelligence platform.',
+    'Bryan Balli leads a team across design and engineering as a Creative Technologist, with experience spanning agencies in Chicago, San Francisco, and remote teams. Ready to step into your process, see what\'s working, fix what\'s not, and build what\'s missing across design, content, and systems.',
   keywords: [
     'Bryan Balli',
     'AI design engineer',
@@ -44,7 +44,7 @@ export const metadata = {
     siteName: 'Bryan Balli — Portfolio',
     title: 'Bryan Balli — AI Design Engineer & Creative Technologist',
     description:
-      'Portfolio, case studies, and a modular AI-assisted client intelligence platform by Bryan Balli — multi-device layout capture, social preview check, brand snapshot extraction, and SEO + performance audit in one dashboard.',
+      'Bryan Balli leads a team across design and engineering as a Creative Technologist, with experience spanning agencies in Chicago, San Francisco, and remote teams. Ready to step into your process, see what\'s working, fix what\'s not, and build what\'s missing across design, content, and systems.',
     images: [
       {
         url: '/img/og_meta.optimized.jpg',
@@ -61,7 +61,7 @@ export const metadata = {
     creator: '@bai_ee',
     title: 'Bryan Balli — AI Design Engineer & Creative Technologist',
     description:
-      'Portfolio, case studies, and a modular AI-assisted client intelligence platform — multi-device capture, social preview, brand snapshot, SEO + performance in one dashboard.',
+      'Bryan Balli leads a team across design and engineering as a Creative Technologist, with experience spanning agencies in Chicago, San Francisco, and remote teams. Ready to step into your process, see what\'s working, fix what\'s not, and build what\'s missing across design, content, and systems.',
     images: [
       {
         url: '/img/og_meta.optimized.jpg',

@@ -1,14 +1,33 @@
-# Bballi Portfolio
+# hitloop.agency — Bryan Balli
 
-> Bryan Balli's portfolio and modular client intelligence platform. The site pairs a marketing front end (work, studios, testimonials) with a signed-in client dashboard that runs a modular card pipeline — multi-device layout capture, social preview check, SEO + performance snapshot, and brand snapshot — against a client's website to produce a dashboard + brief.
+> Bryan Balli is an AI design engineer and creative technologist building AI-assisted client intelligence platforms, high-performance web experiences, and modular intake pipelines. Based in Chicago. Available for consulting engagements worldwide.
 
-Bryan Balli is a senior design engineer and creative technologist. The platform combines front-end design work with an AI-assisted intake pipeline: modules fetch a client's site, capture device screenshots, extract metadata and a style guide, run PageSpeed Insights + AI visibility checks, and surface the results as an unlockable card sequence inside the dashboard.
+Bryan Balli works at the intersection of front-end engineering (Next.js, Three.js, GSAP) and applied AI (Claude API, OpenAI). He builds AI-assisted systems that compress discovery, briefing, and audit workflows into automated pipelines — replacing manual spreadsheet-and-email loops with structured, actionable intelligence delivered to a client dashboard.
 
-## Core experiences
+## Public pages
 
-- [Homepage](/): Marketing front end — featured work, studios, testimonials, agency marquee, contact footer.
-- [Dashboard](/dashboard): Signed-in client workspace. Data Visualization tab shows the modular card chain (Multi-Device View → Social Preview → Brand Snapshot → SEO Performance). Each card runs an independent module, streams progress into the terminal UI, and persists artifacts to Firebase.
-- [Auth](/auth): Firebase Auth sign-in and signup. First-time signups trigger the intake pipeline for the supplied website URL.
+- [Homepage](https://hitloop.agency/): Portfolio, featured work, testimonials from TikTok, HBO Max, Epsilon, and TST. Agency marquee (Publicis, Epsilon, Conversant, Alliance Data).
+- [About](https://hitloop.agency/about): Background, methodology, and experience spanning Chicago, San Francisco, and remote teams.
+- [Work](https://hitloop.agency/work): Selected projects — AI-assisted platforms, Three.js interactive experiences, design systems, SEO/GEO intelligence.
+- [Case Studies](https://hitloop.agency/case-studies): Process documentation and results — from intake through delivery.
+- [FAQ](https://hitloop.agency/faq): Common questions about AI design engineering, creative technology, engagement structure, pricing ($3,500 starting scope), timelines (2–6 weeks), and the intake pipeline.
+- [How It Works](https://hitloop.agency/how-it-works): The three-phase process — intake brief, scope and prototype, build and handoff.
+- [Process](https://hitloop.agency/process): Phased, approval-gated workflow from discovery through handoff.
+- [Gallery](https://hitloop.agency/gallery): Visual samples across web, motion, brand, and interactive.
+- [Contact](https://hitloop.agency/contact): Book a 30-minute call or start with the async intake brief.
+
+## Services
+
+- [AI Design Consulting](https://hitloop.agency/services/ai-design-consulting): AI-assisted workflows, client intelligence pipelines, and production-quality web systems.
+- [Brand Identity](https://hitloop.agency/services/brand-identity): Design system extraction, brand snapshot analysis, and visual identity work.
+- [Design Systems](https://hitloop.agency/services/design-systems): Component libraries, token architecture, and design-to-code pipelines.
+- [SEO & GEO](https://hitloop.agency/services/seo-geo): AI-assisted SEO audits, Core Web Vitals analysis, and generative engine optimization for AI Overviews, ChatGPT, and Perplexity.
+- [Web Development](https://hitloop.agency/services/web-development): High-performance builds using Next.js, React, GSAP, and Three.js.
+
+## Gated product surfaces (require sign-in — not publicly crawlable)
+
+- [Dashboard](/dashboard): Client workspace running the modular card chain (Multi-Device View → Social Preview → Brand Snapshot → SEO Performance).
+- [Auth](/auth): Firebase Auth sign-in and signup.
 
 ## Modular card pipeline
 

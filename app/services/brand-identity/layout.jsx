@@ -18,10 +18,11 @@ const serviceSchema = {
   url: `${SITE_URL}/services/brand-identity`,
   serviceType: 'Brand Identity Design',
   areaServed: 'Worldwide',
+  datePublished: '2026-04-24',
 };
 
 export const metadata = {
-  title: 'Brand Identity — Bryan Balli · Design System Extraction & Visual Identity',
+  title: 'Brand Identity — Design System Extraction & Visual Identity',
   description:
     'Brand snapshot analysis, design system extraction, and visual identity work. Token-based design systems, color palettes, typography scales, and competitive positioning — delivered fast.',
   keywords: [

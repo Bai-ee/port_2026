@@ -18,6 +18,7 @@ const serviceSchema = {
   url: `${SITE_URL}/services/seo-geo`,
   serviceType: 'SEO & Generative Engine Optimization',
   areaServed: 'Worldwide',
+  datePublished: '2026-04-24',
 };
 
 const faqSchema = {
@@ -60,7 +61,7 @@ const faqSchema = {
 };
 
 export const metadata = {
-  title: 'SEO & GEO — Bryan Balli · AI-Assisted SEO & Generative Engine Optimization',
+  title: 'SEO & GEO — AI-Assisted SEO & Generative Engine Optimization',
   description:
     'AI-assisted SEO audits, Core Web Vitals analysis, and generative engine optimization (GEO) for visibility in ChatGPT, Perplexity, Google AI Overviews, and traditional search.',
   keywords: [

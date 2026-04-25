@@ -328,7 +328,7 @@ const HomePage = () => {
             margin: 0,
           }}
         >
-          AI design engineer and creative technologist — portfolio, case studies, and AI-assisted client intelligence dashboards.
+          Bryan Balli is an AI design engineer and creative technologist based in Chicago. He builds AI-assisted client intelligence platforms, modular intake pipelines, and high-performance web experiences for founders, agencies, and growing teams — combining Next.js, Three.js, and GSAP with the Claude API and OpenAI to ship production-quality work with intelligent automation built in. Agency background spans Publicis, Epsilon, Conversant, and Alliance Data. Clients include TikTok, HBO Max, and TST. Starting engagement scope: $3,500. Typical project timeline: 2–6 weeks.
         </h2>
       </section>
 

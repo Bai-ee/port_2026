@@ -25,7 +25,7 @@ const creativeWorkSchema = {
 };
 
 export const metadata = {
-  title: 'Gallery · Bryan Balli',
+  title: 'Gallery',
   description:
     'Visual samples across web, motion, brand, and interactive — a surface-level view of the work before the case studies are ready.',
   keywords: [

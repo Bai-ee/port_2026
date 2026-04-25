@@ -24,7 +24,7 @@ const howToSchema = {
 };
 
 export const metadata = {
-  title: 'How It Works · Bryan Balli',
+  title: 'How It Works',
   description:
     'From first contact to shipped product — a phased process designed to stay lean, move fast, and keep every decision reviewable.',
   keywords: [

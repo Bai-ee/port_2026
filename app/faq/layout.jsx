@@ -44,6 +44,8 @@ const FAQS = [
 const faqSchema = {
   '@context': 'https://schema.org',
   '@type': 'FAQPage',
+  datePublished: '2026-04-24',
+  dateModified: '2026-04-25',
   mainEntity: FAQS.map(({ q, a }) => ({
     '@type': 'Question',
     name: q,
@@ -52,7 +54,7 @@ const faqSchema = {
 };
 
 export const metadata = {
-  title: 'FAQ — AI Design Engineer & Creative Technologist · Bryan Balli',
+  title: 'FAQ — AI Design Engineer & Creative Technologist',
   description:
     'Answers to common questions about working with Bryan Balli — an AI design engineer and creative technologist. Services, pricing, intake process, tech stack, and how to get started.',
   keywords: [

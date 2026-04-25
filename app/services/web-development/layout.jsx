@@ -18,10 +18,11 @@ const serviceSchema = {
   url: `${SITE_URL}/services/web-development`,
   serviceType: 'Web Development',
   areaServed: 'Worldwide',
+  datePublished: '2026-04-24',
 };
 
 export const metadata = {
-  title: 'Web Development — Bryan Balli · Next.js, GSAP & Three.js',
+  title: 'Web Development — Next.js, GSAP & Three.js',
   description:
     'High-performance web builds using Next.js, React, GSAP, and Three.js. Marketing sites, dashboards, design systems, animated landing pages, and data-driven applications.',
   keywords: [

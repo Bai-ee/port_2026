@@ -30,7 +30,7 @@ const itemListSchema = {
 };
 
 export const metadata = {
-  title: 'Case Studies · Bryan Balli',
+  title: 'Case Studies',
   description:
     'Process documentation, results, and the decisions behind them — from intake through delivery.',
   keywords: [

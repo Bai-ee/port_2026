@@ -32,7 +32,7 @@ const personSchema = {
 };
 
 export const metadata = {
-  title: 'About · Bryan Balli',
+  title: 'About',
   description:
     'Creative technologist with a decade of experience spanning design strategy and front-end engineering — building AI-assisted systems for founders, agencies, and growing teams.',
   keywords: [

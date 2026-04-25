@@ -189,4 +189,4 @@ Disallow: /admin
 Disallow: /preview/
 
 # Sitemap + LLM index
-Sitemap: /sitemap.xml
+Sitemap: https://hitloop.agency/sitemap.xml

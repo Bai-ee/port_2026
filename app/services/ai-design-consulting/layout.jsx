@@ -18,10 +18,11 @@ const serviceSchema = {
   url: `${SITE_URL}/services/ai-design-consulting`,
   serviceType: 'AI Design Consulting',
   areaServed: 'Worldwide',
+  datePublished: '2026-04-24',
 };
 
 export const metadata = {
-  title: 'AI Design Consulting — Bryan Balli · AI Design Engineer',
+  title: 'AI Design Consulting — AI Design Engineer',
   description:
     'AI design consulting combining software engineering, applied AI, and product design. Client intelligence pipelines, brand intake, modular workflows, and deployed dashboards.',
   keywords: [

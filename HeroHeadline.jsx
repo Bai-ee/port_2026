@@ -205,7 +205,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
             fontWeight: 400,
             maxWidth: '42ch',
           }}>
-            Turn your site into a clear, actionable growth plan.
+            I'm ready to step into your process, see what's working, fix what's not, and build what's missing across design, content, and systems.
           </p>
         </div>
       </div>

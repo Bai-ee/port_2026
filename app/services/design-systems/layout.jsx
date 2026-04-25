@@ -18,10 +18,11 @@ const serviceSchema = {
   url: `${SITE_URL}/services/design-systems`,
   serviceType: 'Design Systems',
   areaServed: 'Worldwide',
+  datePublished: '2026-04-24',
 };
 
 export const metadata = {
-  title: 'Design Systems — Bryan Balli · Component Libraries & Token Architecture',
+  title: 'Design Systems — Component Libraries & Token Architecture',
   description:
     'Component libraries, token architecture, and design-to-code pipelines. React + TypeScript component systems, Figma token integration, Storybook documentation, and Radix UI primitives.',
   keywords: [

@@ -37,7 +37,7 @@ const itemListSchema = {
 };
 
 export const metadata = {
-  title: 'Featured Work · Bryan Balli',
+  title: 'Featured Work',
   description:
     'Selected projects spanning AI-assisted platforms, interactive web experiences, design systems, and client intelligence dashboards.',
   keywords: [

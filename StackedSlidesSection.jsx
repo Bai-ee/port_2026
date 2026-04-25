@@ -18,6 +18,9 @@ import {
   Workflow,
   ArrowRightLeft,
   Lock,
+  Check,
+  Blocks,
+  Gamepad2,
 } from 'lucide-react';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -279,6 +282,22 @@ const AUTOMATION_CAPABILITIES = [
     title: 'AI Automation & Workflows',
     body: 'Custom systems that remove manual work and scale output, built around how your business actually runs.',
   },
+  {
+    badge: 'BC',
+    badgeColor: '#f97316',
+    icon: 'blocks',
+    previewImage: '/img/port/frame_3.webp',
+    title: 'Blockchain',
+    body: 'Web3 product design, token UX, and smart contract interfaces — built for clarity in a space where trust is everything.',
+  },
+  {
+    badge: 'GM',
+    badgeColor: '#a855f7',
+    icon: 'gamepad',
+    previewImage: '/img/port/critters_game1.webp',
+    title: 'Gaming',
+    body: 'Game UI, interactive experiences, and player-facing systems designed to keep users engaged and coming back.',
+  },
   // --- Multi-Agent Intelligence Pipeline cards (reserved for future use) ---
   // {
   //   badge: 'MAP',
@@ -367,6 +386,8 @@ const AUTOMATION_ICON_COMPONENTS = {
   settings: Settings2,
   shield: ShieldCheck,
   workflow: Workflow,
+  blocks: Blocks,
+  gamepad: Gamepad2,
 };
 
 const PARTICLE_DEFAULTS = {
@@ -438,10 +459,16 @@ const StackedSlidesSection = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeMobileCapability, setActiveMobileCapability] = useState(null);
   const CMO_PLACEHOLDER_URL = 'yourwebsite.com';
-  const [homepageUrl, setHomepageUrl] = useState(CMO_PLACEHOLDER_URL);
-  const [urlIsValid, setUrlIsValid] = useState(true);
+  const [homepageUrl, setHomepageUrl] = useState('');
+  const [urlIsValid, setUrlIsValid] = useState(false);
   const [showCmoModal, setShowCmoModal] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    const handler = () => setShowCmoModal(true);
+    window.addEventListener('openOnboardModal', handler);
+    return () => window.removeEventListener('openOnboardModal', handler);
+  }, []);
 
   useEffect(() => {
     if (!showCmoModal) return;
@@ -807,12 +834,12 @@ const StackedSlidesSection = () => {
                 <th style="width:1.2rem;"></th>
               </tr></thead>
               <tbody>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Cross-Device Mockups</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Social Preview Check</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Brand Snapshot</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">SEO + AI Visibility</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Client Brief</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Brand brief</td><td style="padding:0.38rem 0.2rem;color:rgba(42,36,32,0.3);font-size:0.7rem;text-align:center;">→</td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Cross-Device Mockups</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;"><polyline points="20 6 9 17 4 12"></polyline></svg></td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Social Preview Check</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;"><polyline points="20 6 9 17 4 12"></polyline></svg></td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Brand Snapshot</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;"><polyline points="20 6 9 17 4 12"></polyline></svg></td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">SEO + AI Visibility</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;"><polyline points="20 6 9 17 4 12"></polyline></svg></td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Client Brief</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;"><polyline points="20 6 9 17 4 12"></polyline></svg></td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Brand brief</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;"><polyline points="20 6 9 17 4 12"></polyline></svg></td></tr>
               </tbody>
             </table>
           </div>`;
@@ -1205,15 +1232,20 @@ const StackedSlidesSection = () => {
           #panel-hero-headline {
             display: none !important;
           }
-          #panel-hero-cta,
+          #panel-hero-cta {
+            width: auto !important;
+            justify-content: center !important;
+            box-sizing: border-box !important;
+          }
           #footer-cta {
             width: 100% !important;
             justify-content: center !important;
             box-sizing: border-box !important;
           }
           #hero-cta-sticky {
-            left: max(10vw, calc((100% - 810px) / 2)) !important;
-            right: max(10vw, calc((100% - 810px) / 2)) !important;
+            width: auto !important;
+            left: auto !important;
+            right: 1rem !important;
             justify-content: center !important;
             box-sizing: border-box !important;
           }
@@ -1517,16 +1549,18 @@ const StackedSlidesSection = () => {
                           <h2 id="panel-hero-headline" style={{ ...headingStyle, fontSize: 'clamp(1.4rem, 3.5vw, 2.45rem)', fontWeight: 300, textAlign: 'left', margin: 0, whiteSpace: 'nowrap', visibility: 'hidden' }}>{slide.headlineText}</h2>
                         </div>
                         <div style={textColumnRightStyle}>
-                          <button
+                          <a
                             id="panel-hero-cta"
-                            type="button"
-                            onClick={() => setShowCmoModal(true)}
+                            href="https://calendly.com/bballi/30min"
+                            target="_blank"
+                            rel="noopener noreferrer"
                             className="cta-pill-btn"
-                            style={{ ...heroCtaStyle, padding: '0.85rem 1.1rem', cursor: 'pointer', border: 'none' }}
+                            style={{ ...heroCtaStyle, padding: '0.55rem 0.75rem', cursor: 'pointer', border: 'none', textDecoration: 'none' }}
                           >
-                            Analyze My Site Now
+                            <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
+                            Meet with Bryan
                             <span style={ctaIconStyle}>↗</span>
-                          </button>
+                          </a>
                         </div>
                       </div>
                       <div id="hero-panel-filter-pills" style={filterDropdownStyle}>
@@ -1548,52 +1582,10 @@ const StackedSlidesSection = () => {
                     </div>
                     <section data-capability-grid style={capabilitySectionStyle}>
                       <div data-capability-header style={{ ...capabilitySectionHeaderStyle, maxWidth: 'none' }}>
-                        <div id="testimonials-section" style={{ ...testimonialsShellStyle, marginTop: 0, paddingTop: 0, borderTop: 'none' }}>
-                          <div id="testimonials-marquee-shell" style={{ width: '100%', overflow: 'hidden', margin: 'clamp(24px, 5vw, 75px) 0', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', animation: 'agentMarquee 28s linear infinite' }}>
-                              {[0, 1].map((i) => (
-                                <div key={i} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
-                                  {['WORK', '•', 'WORK', '•'].map((w, j) => (
-                                    <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
-                                  ))}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                          <div id="testimonials-grid" style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(0.75rem, 1.5vw, 1rem)', width: '100%', minWidth: 0 }}>
-                            {[
-                              { type: 'image', src: PORTFOLIO_IMAGES[0] },
-                              { type: 'testimonial', data: testimonials[0] },
-                              { type: 'image', src: PORTFOLIO_IMAGES[5] },
-                              { type: 'testimonial', data: testimonials[1] },
-                              { type: 'image', src: PORTFOLIO_IMAGES[1] },
-                              { type: 'testimonial', data: testimonials[2] },
-                              { type: 'image', src: PORTFOLIO_IMAGES[3] },
-                              { type: 'testimonial', data: testimonials[3] },
-                              { type: 'image', src: PORTFOLIO_IMAGES[8] },
-                            ].map((item) => item.type === 'image' ? (
-                              <div key={item.src} className="testimonials-port-img" style={{ width: '100%', borderRadius: '0.75rem', overflow: 'hidden', border: '1px solid rgba(42,36,32,0.1)', aspectRatio: '16 / 5', boxSizing: 'border-box' }}>
-                                <img src={item.src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                              </div>
-                            ) : (
-                              <article key={item.data.name + item.data.company} style={{ ...secondaryQuoteItemStyle, width: '100%', boxSizing: 'border-box', overflow: 'hidden', aspectRatio: '19 / 6', flexDirection: 'row', alignItems: 'center', gap: 'clamp(1.5rem, 3vw, 2.5rem)', padding: 'clamp(1.5rem, 3vw, 2.5rem)' }}>
-                                <img src={item.data.img} alt={item.data.name} style={{ ...testimonialCardAvatarStyle, flexShrink: 0, width: 'clamp(2.5rem, 4vw, 3.5rem)', height: 'clamp(2.5rem, 4vw, 3.5rem)' }} />
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <p style={{ ...featuredQuoteTextStyle, fontSize: 'clamp(0.9rem, 1.4vw, 1.15rem)', margin: '0 0 0.65rem' }}>{item.data.quote}</p>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-                                    <span style={quoteAttributionNameStyle}>{item.data.name}</span>
-                                    <span style={{ color: 'rgba(42,36,32,0.3)', fontSize: '0.75rem' }}>·</span>
-                                    <span style={quoteAttributionRoleStyle}>{item.data.title}, {item.data.company}</span>
-                                  </div>
-                                </div>
-                              </article>
-                            ))}
-                          </div>
-                        </div>
-                        <div id="agent-marquee-shell" ref={agentMarqueeShellRef} style={{ width: '100%', overflow: 'hidden', margin: 'clamp(24px, 5vw, 75px) 0', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
-                          <div ref={agentMarqueeTrackRef} style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', backfaceVisibility: 'hidden', transform: 'translate3d(0, 0, 0)' }}>
+                        <div id="testimonials-marquee-shell" style={{ width: '100%', overflow: 'hidden', margin: 'clamp(24px, 5vw, 75px) 0', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', animation: 'agentMarquee 28s linear infinite' }}>
                             {[0, 1].map((i) => (
-                              <div key={i} ref={i === 0 ? agentMarqueeSetRef : undefined} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
+                              <div key={i} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
                                 {['TOOLS', '•', 'TOOLS', '•'].map((w, j) => (
                                   <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
                                 ))}
@@ -1668,7 +1660,7 @@ const StackedSlidesSection = () => {
                                         <p style={{ margin: '0 0 0.6rem', fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.4)', fontFamily: "'Space Mono', monospace" }}>Your Business, Mapped</p>
                                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem', fontFamily: "'Space Grotesk', system-ui, sans-serif", flex: 1 }}>
                                           <thead><tr style={{ borderBottom: '1px solid rgba(42,36,32,0.15)' }}><th style={{ textAlign: 'left', padding: '0.28rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.45)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Modules</th><th style={{ width: '1.2rem' }} /></tr></thead>
-                                          <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.38rem 0.4rem', color: '#2a2420', fontWeight: 500 }}>{row.task}</td><td style={{ padding: '0.38rem 0.2rem', textAlign: 'center' }}>{row.task === 'Cross-Device Mockups' || row.task === 'Social Preview Check' || row.task === 'Brand Snapshot' || row.task === 'SEO + AI Visibility' || row.task === 'Client Brief' ? <span style={{ color: 'rgba(42,36,32,0.3)', fontSize: '0.7rem' }}>→</span> : <span className="cmo-arrow"><Lock size={12} /></span>}</td></tr>))}</tbody>
+                                          <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.38rem 0.4rem', color: '#2a2420', fontWeight: 500 }}>{row.task}</td><td style={{ padding: '0.38rem 0.2rem', textAlign: 'center' }}>{row.task === 'Cross-Device Mockups' || row.task === 'Social Preview Check' || row.task === 'Brand Snapshot' || row.task === 'SEO + AI Visibility' || row.task === 'Client Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : <span className="cmo-arrow"><Lock size={12} /></span>}</td></tr>))}</tbody>
                                         </table>
                                       </div>
                                     </div>
@@ -1679,13 +1671,13 @@ const StackedSlidesSection = () => {
                                     <div id="cmo-url-input-row" className="cmo-url-input-desktop" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.85rem', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                                       <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
                                       <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
-                                      <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none' } : { ...ctaStyle, border: 'none', flexShrink: 0, background: 'rgba(255,255,255,0.72)', color: '#2a2420', boxShadow: 'none', opacity: 0.65, cursor: 'default' }}>Analyze My Site Now<span style={ctaIconStyle}>↗</span></button>
+                                      <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: 'none', flexShrink: 0, background: 'rgba(255,255,255,0.72)', color: '#2a2420', boxShadow: 'none', opacity: 0.65, cursor: 'default', padding: '0.75rem 0.75rem' }}>Onboard in 30 Seconds<span style={ctaIconStyle}>↗</span></button>
                                     </div>
                                     <div className="cmo-table-inner" style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
                                       <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
                                         <colgroup><col style={{ width: 'calc(50% - 0.75rem)' }} /><col style={{ width: '1.5rem' }} /><col style={{ width: 'calc(50% - 0.75rem)' }} /></colgroup>
                                         <thead><tr><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Modules</th><th /><th style={{ textAlign: 'right', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Automations</th></tr></thead>
-                                        <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.task}</td><td style={{ padding: '0.32rem 0.2rem', textAlign: 'center', verticalAlign: 'middle' }}>{row.task === 'Cross-Device Mockups' || row.task === 'Social Preview Check' || row.task === 'Brand Snapshot' || row.task === 'SEO + AI Visibility' || row.task === 'Client Brief' ? <span style={{ color: 'rgba(42,36,32,0.3)', fontSize: '0.7rem' }}>→</span> : <span className="cmo-arrow"><Lock size={12} /></span>}</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.value}</td></tr>))}</tbody>
+                                        <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.task}</td><td style={{ padding: '0.32rem 0.2rem', textAlign: 'center', verticalAlign: 'middle' }}>{row.task === 'Cross-Device Mockups' || row.task === 'Social Preview Check' || row.task === 'Brand Snapshot' || row.task === 'SEO + AI Visibility' || row.task === 'Client Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : <span className="cmo-arrow"><Lock size={12} /></span>}</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.value}</td></tr>))}</tbody>
                                       </table>
                                     </div>
                                   </div>
@@ -1693,11 +1685,11 @@ const StackedSlidesSection = () => {
                                     <div className="cmo-url-input-mobile" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                                       <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
                                       <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
-                                      <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none' } : { ...ctaStyle, border: 'none', flexShrink: 0, background: 'rgba(255,255,255,0.72)', color: '#2a2420', boxShadow: 'none', opacity: 0.65, cursor: 'default' }}><span className="cmo-table-submit-label">Analyze My Site Now</span><span className="cmo-table-submit-arrow" style={ctaIconStyle}>↗</span></button>
+                                      <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: 'none', flexShrink: 0, background: 'rgba(255,255,255,0.72)', color: '#2a2420', boxShadow: 'none', opacity: 0.65, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="cmo-table-submit-label">Onboard in 30 Seconds</span><span className="cmo-table-submit-arrow" style={ctaIconStyle}>↗</span></button>
                                     </div>
                                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
                                       <thead><tr><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Modules</th><th style={{ width: '1.5rem' }} /><th style={{ textAlign: 'right', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Automations</th></tr></thead>
-                                      <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500 }}>{row.task}</td><td style={{ padding: '0.32rem 0.2rem', textAlign: 'center' }}>{row.task === 'Cross-Device Mockups' || row.task === 'Social Preview Check' || row.task === 'Brand Snapshot' || row.task === 'SEO + AI Visibility' || row.task === 'Client Brief' ? <span style={{ color: 'rgba(42,36,32,0.3)', fontSize: '0.7rem' }}>→</span> : <span className="cmo-arrow"><Lock size={12} /></span>}</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
+                                      <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500 }}>{row.task}</td><td style={{ padding: '0.32rem 0.2rem', textAlign: 'center' }}>{row.task === 'Cross-Device Mockups' || row.task === 'Social Preview Check' || row.task === 'Brand Snapshot' || row.task === 'SEO + AI Visibility' || row.task === 'Client Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : <span className="cmo-arrow"><Lock size={12} /></span>}</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
                                     </table>
                                     <a id="cmo-no-website-hint" href="/login?flow=homepage-create" style={cmoNoWebsiteLinkStyle}>Don't Have a Website?</a>
                                   </div>
@@ -1736,6 +1728,48 @@ const StackedSlidesSection = () => {
                             </React.Fragment>
                           );
                         })}
+                      </div>
+                      <div id="agent-marquee-shell" ref={agentMarqueeShellRef} style={{ width: '100%', overflow: 'hidden', margin: 'clamp(24px, 5vw, 75px) 0', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
+                        <div ref={agentMarqueeTrackRef} style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', backfaceVisibility: 'hidden', transform: 'translate3d(0, 0, 0)' }}>
+                          {[0, 1].map((i) => (
+                            <div key={i} ref={i === 0 ? agentMarqueeSetRef : undefined} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
+                              {['WORK', '•', 'WORK', '•'].map((w, j) => (
+                                <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div id="testimonials-section" style={{ ...testimonialsShellStyle, marginTop: 0, paddingTop: 0, borderTop: 'none' }}>
+                        <div id="testimonials-grid" style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(0.75rem, 1.5vw, 1rem)', width: '100%', minWidth: 0 }}>
+                          {[
+                            { type: 'image', src: PORTFOLIO_IMAGES[0] },
+                            { type: 'testimonial', data: testimonials[0] },
+                            { type: 'image', src: PORTFOLIO_IMAGES[5] },
+                            { type: 'testimonial', data: testimonials[1] },
+                            { type: 'image', src: PORTFOLIO_IMAGES[1] },
+                            { type: 'testimonial', data: testimonials[2] },
+                            { type: 'image', src: PORTFOLIO_IMAGES[3] },
+                            { type: 'testimonial', data: testimonials[3] },
+                            { type: 'image', src: PORTFOLIO_IMAGES[8] },
+                          ].map((item) => item.type === 'image' ? (
+                            <div key={item.src} className="testimonials-port-img" style={{ width: '100%', borderRadius: '0.75rem', overflow: 'hidden', border: '1px solid rgba(42,36,32,0.1)', aspectRatio: '16 / 5', boxSizing: 'border-box' }}>
+                              <img src={item.src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                            </div>
+                          ) : (
+                            <article key={item.data.name + item.data.company} style={{ ...secondaryQuoteItemStyle, width: '100%', boxSizing: 'border-box', overflow: 'hidden', aspectRatio: '19 / 6', flexDirection: 'row', alignItems: 'center', gap: 'clamp(1.5rem, 3vw, 2.5rem)', padding: 'clamp(1.5rem, 3vw, 2.5rem)' }}>
+                              <img src={item.data.img} alt={item.data.name} style={{ ...testimonialCardAvatarStyle, flexShrink: 0, width: 'clamp(2.5rem, 4vw, 3.5rem)', height: 'clamp(2.5rem, 4vw, 3.5rem)' }} />
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <p style={{ ...featuredQuoteTextStyle, fontSize: 'clamp(0.9rem, 1.4vw, 1.15rem)', margin: '0 0 0.65rem' }}>{item.data.quote}</p>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                                  <span style={quoteAttributionNameStyle}>{item.data.name}</span>
+                                  <span style={{ color: 'rgba(42,36,32,0.3)', fontSize: '0.75rem' }}>·</span>
+                                  <span style={quoteAttributionRoleStyle}>{item.data.title}, {item.data.company}</span>
+                                </div>
+                              </div>
+                            </article>
+                          ))}
+                        </div>
                       </div>
                     </section>
                     <div data-grid-window style={gridWindowStyle}>
@@ -1941,7 +1975,7 @@ const StackedSlidesSection = () => {
           onClick={() => setShowCmoModal(false)}
           role="dialog"
           aria-modal="true"
-          aria-label="Analyze My Site Now"
+          aria-label="Onboard in 30 Seconds"
         >
           <div id="cmo-auth-card" onClick={(e) => e.stopPropagation()}>
             <div id="cmo-auth-brand-row">
@@ -2009,7 +2043,7 @@ const StackedSlidesSection = () => {
                     .map((row) => (
                       <tr key={row.task}>
                         <td className="cmo-td-task">{row.task}</td>
-                        <td className="cmo-td-mark"><span className="cmo-td-arrow">→</span></td>
+                        <td className="cmo-td-mark"><Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /></td>
                         <td className="cmo-td-value">{row.value}</td>
                       </tr>
                     ))}
@@ -2028,14 +2062,11 @@ const StackedSlidesSection = () => {
                 id="cmo-modal-url-input"
                 value={homepageUrl}
                 onChange={handleHomepageUrlChange}
-                onFocus={() => { if (homepageUrl === CMO_PLACEHOLDER_URL) { setHomepageUrl(''); setUrlIsValid(false); } }}
-                onBlur={() => { if (!homepageUrl.trim()) { setHomepageUrl(CMO_PLACEHOLDER_URL); setUrlIsValid(true); } }}
-                style={{ color: homepageUrl === CMO_PLACEHOLDER_URL ? 'rgba(42,36,32,0.45)' : undefined }}
               />
               <button
                 type="submit"
                 id="cmo-url-pill-submit"
-                disabled={!urlIsValid || homepageUrl === CMO_PLACEHOLDER_URL}
+                disabled={!urlIsValid}
                 className={urlIsValid ? 'cta-pill-btn cmo-url-pill-submit-active' : 'cta-pill-btn cmo-url-pill-submit-idle'}
               >
                 <span className="cmo-submit-label">Get Dashboard</span>
@@ -2049,15 +2080,16 @@ const StackedSlidesSection = () => {
       )}
 
       {/* Sticky CTA — mirrors #panel-hero-cta, shown via ScrollTrigger */}
-      <button
+      <a
         id="hero-cta-sticky"
         ref={stickyCTARef}
-        type="button"
-        onClick={() => setShowCmoModal(true)}
+        href="https://calendly.com/bballi/30min"
+        target="_blank"
+        rel="noopener noreferrer"
         className="cta-pill-btn"
         style={{
           ...ctaStyle,
-          padding: '0.85rem 1.1rem',
+          padding: '0.55rem 0.75rem',
           position: 'fixed',
           top: '74px',
           left: 'auto',
@@ -2066,13 +2098,14 @@ const StackedSlidesSection = () => {
           visibility: 'hidden',
           opacity: 0,
           border: 'none',
-          cursor: 'pointer',
+          textDecoration: 'none',
           transition: 'opacity 0.22s ease',
         }}
       >
-        Analyze My Site Now
+        <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
+        Meet with Bryan
         <span style={ctaIconStyle}>↗</span>
-      </button>
+      </a>
     </section>
   );
 };
@@ -2246,7 +2279,8 @@ const ctaStyle = {
 
 const heroCtaStyle = {
   ...ctaStyle,
-  width: 'min(100%, 14.75rem)',
+  width: 'auto',
+  alignSelf: 'flex-end',
 };
 
 const ctaAvatarStyle = {

@@ -33,7 +33,7 @@ const howToSchema = {
 };
 
 export const metadata = {
-  title: 'Process · Bryan Balli',
+  title: 'Process',
   description:
     'A phased, approval-gated process built for speed, clarity, and zero scope drift. Every step is visible. Every decision is explained.',
   keywords: [

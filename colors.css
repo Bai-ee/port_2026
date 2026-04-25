@@ -141,9 +141,7 @@ body.cmo-modal-open #founders-top-strip { display: none; }
   gap: 24px;
   min-height: 64px;
   width: 100%;
-  max-width: 1440px;
-  margin: 0 auto;
-  padding: 0 48px;
+  padding: 0 max(10vw, calc((100% - 810px) / 2));
   flex-wrap: nowrap;
   box-sizing: border-box;
 }
@@ -196,6 +194,7 @@ body.cmo-modal-open #founders-top-strip { display: none; }
   gap: 0.45rem;
   padding: 0.5rem 0.75rem;
   line-height: 1;
+  border: none;
   border-radius: 999px;
   background:
     linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%),
@@ -236,7 +235,7 @@ body.cmo-modal-open #founders-top-strip { display: none; }
 @media (max-width: 620px) {
   #founders-top-strip-inner {
     gap: 12px;
-    padding: 0 12px;
+    padding: 0 max(4vw, 16px);
   }
   #founders-top-actions { gap: 0.35rem; }
   #founders-login-link,
