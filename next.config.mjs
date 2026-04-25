@@ -30,6 +30,14 @@ const nextConfig = {
           { key: 'Access-Control-Allow-Origin', value: '*' },
         ],
       },
+      {
+        source: '/md/:path*',
+        headers: [
+          { key: 'Content-Type', value: 'text/markdown; charset=utf-8' },
+          { key: 'Vary', value: 'Accept' },
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+        ],
+      },
     ];
   },
 };
