@@ -1,4 +1,5 @@
 import React, { useLayoutEffect, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -441,7 +442,6 @@ const StackedSlidesSection = () => {
   const wrapperRef = useRef(null);
   const servicesViewportRef = useRef(null);
   const servicesCanvasRef = useRef(null);
-  const stickyCTARef = useRef(null);
   const marqueeShellRef = useRef(null);
   const marqueeTrackRef = useRef(null);
   const marqueeSetRef = useRef(null);
@@ -1095,44 +1095,60 @@ const StackedSlidesSection = () => {
     return () => ctx.revert();
   }, []);
 
-  // Sticky CTA — fades in when #panel-hero-cta scrolls behind the nav,
-  // fades out when #footer-cta enters the viewport.
+  // Pinned CTA — only one CTA is ever visible. The inline #panel-hero-cta is
+  // the hero CTA. Once the user scrolls past it, ScrollTrigger flips
+  // `ctaPinned` true and we render a clone of the CTA via a Portal directly
+  // into document.body with position: fixed at top: 74px. Rendering into
+  // <body> escapes any GSAP-transformed ancestors that would otherwise be
+  // the containing block for position: fixed (the same workaround that the
+  // hover-reveal feature in this file already uses). The inline CTA is
+  // scrolled off-screen above at this point, so the user only ever sees one
+  // CTA. The portal stays mounted until the user scrolls back above the
+  // inline CTA's original position.
+  const [ctaPinned, setCtaPinned] = useState(false);
+  const [ctaPinnedRight, setCtaPinnedRight] = useState(0);
+
   useLayoutEffect(() => {
-    const sticky = stickyCTARef.current;
-    const inline = document.getElementById('panel-hero-cta');
-    if (!sticky || !inline) return;
+    const cta = document.getElementById('panel-hero-cta');
+    if (!cta) return;
+    const wrapper = cta.parentElement;
+    if (!wrapper) return;
 
-    gsap.set(sticky, { autoAlpha: 0, pointerEvents: 'none' });
-
-    const FADE_IN  = { autoAlpha: 1, duration: 0.22, ease: 'power1.out' };
-    const FADE_OUT = { autoAlpha: 0, duration: 0.18, ease: 'power1.in' };
-
-    const pin = () => {
-      const rect = inline.getBoundingClientRect();
-      gsap.set(sticky, { left: rect.left, right: 'auto', width: rect.width, top: 74 });
-      gsap.set(inline, { autoAlpha: 0 });
-      gsap.to(sticky, { ...FADE_IN, onStart: () => gsap.set(sticky, { pointerEvents: 'auto' }) });
-    };
-    const unpin = () => {
-      gsap.to(sticky, { ...FADE_OUT, onComplete: () => gsap.set(sticky, { pointerEvents: 'none' }) });
-      gsap.set(inline, { autoAlpha: 1 });
+    const computeRightOffset = () => {
+      const rect = wrapper.getBoundingClientRect();
+      return Math.max(0, window.innerWidth - rect.right);
     };
 
     const ctaST = ScrollTrigger.create({
-      trigger: '#panel-hero-cta',
+      trigger: wrapper,
       start: 'top 74px',
-      // unpin when the footer CTA actually enters the viewport bottom edge
-      endTrigger: '#footer-cta',
-      end: 'top bottom',
+      // No end — stays pinned for the rest of the page.
+      onEnter: () => {
+        setCtaPinnedRight(computeRightOffset());
+        setCtaPinned(true);
+      },
+      onLeaveBack: () => {
+        setCtaPinned(false);
+      },
       invalidateOnRefresh: true,
-      onEnter: pin,
-      onLeaveBack: unpin,
-      onLeave: () => gsap.to(sticky, { ...FADE_OUT, onComplete: () => gsap.set(sticky, { pointerEvents: 'none' }) }),
-      onEnterBack: pin,
     });
 
-    return () => ctaST.kill();
+    return () => {
+      ctaST.kill();
+    };
   }, []);
+
+  useEffect(() => {
+    if (!ctaPinned) return;
+    const handleResize = () => {
+      const wrapper = document.getElementById('panel-hero-cta')?.parentElement;
+      if (!wrapper) return;
+      const rect = wrapper.getBoundingClientRect();
+      setCtaPinnedRight(Math.max(0, window.innerWidth - rect.right));
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [ctaPinned]);
 
   return (
     <section style={sectionStyle}>
@@ -1239,13 +1255,6 @@ const StackedSlidesSection = () => {
           }
           #footer-cta {
             width: 100% !important;
-            justify-content: center !important;
-            box-sizing: border-box !important;
-          }
-          #hero-cta-sticky {
-            width: auto !important;
-            left: auto !important;
-            right: 1rem !important;
             justify-content: center !important;
             box-sizing: border-box !important;
           }
@@ -1667,7 +1676,7 @@ const StackedSlidesSection = () => {
                                   ) : null}
                                   <div style={capabilityContentStyle}>
                                     <h2 style={{ ...capabilityCardTitleStyle, fontSize: 'clamp(2rem, 5vw, 12.4rem)', lineHeight: 1.1, marginBottom: '0.5rem', textAlign: 'center' }}>Onboard now,<br />save time later.</h2>
-                                    {item.body && <p style={{ ...capabilityCardBodyStyle, maxWidth: 'none' }}>{item.body}</p>}
+                                    {item.body && <p style={{ ...capabilityCardBodyStyle, maxWidth: 'none', textAlign: 'center' }}>{item.body}</p>}
                                     <div id="cmo-url-input-row" className="cmo-url-input-desktop" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.85rem', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                                       <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
                                       <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
@@ -2079,33 +2088,32 @@ const StackedSlidesSection = () => {
         </div>
       )}
 
-      {/* Sticky CTA — mirrors #panel-hero-cta, shown via ScrollTrigger */}
-      <a
-        id="hero-cta-sticky"
-        ref={stickyCTARef}
-        href="https://calendly.com/bballi/30min"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="cta-pill-btn"
-        style={{
-          ...ctaStyle,
-          padding: '0.55rem 0.75rem',
-          position: 'fixed',
-          top: '74px',
-          left: 'auto',
-          right: 'auto',
-          zIndex: 240,
-          visibility: 'hidden',
-          opacity: 0,
-          border: 'none',
-          textDecoration: 'none',
-          transition: 'opacity 0.22s ease',
-        }}
-      >
-        <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
-        Meet with Bryan
-        <span style={ctaIconStyle}>↗</span>
-      </a>
+      {ctaPinned && typeof document !== 'undefined' && createPortal(
+        <a
+          id="panel-hero-cta-pinned"
+          href="https://calendly.com/bballi/30min"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="cta-pill-btn"
+          style={{
+            ...heroCtaStyle,
+            padding: '0.55rem 0.75rem',
+            border: 'none',
+            textDecoration: 'none',
+            position: 'fixed',
+            top: '74px',
+            right: ctaPinnedRight + 'px',
+            left: 'auto',
+            zIndex: 240,
+            margin: 0,
+          }}
+        >
+          <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
+          Meet with Bryan
+          <span style={ctaIconStyle}>↗</span>
+        </a>,
+        document.body
+      )}
     </section>
   );
 };
