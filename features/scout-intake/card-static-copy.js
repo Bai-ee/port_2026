@@ -37,6 +37,10 @@ const CARD_STATIC_COPY = {
     description: "Core Web Vitals, Lighthouse scores, and meta-tag coverage pulled directly from PageSpeed Insights — shows where your site loses rankings, load performance, and mobile experience points.",
     placeholderLabel: 'SITE AUDIT',
   },
+  'agent-readiness': {
+    description: "We ran 14 checks across robots access, sitemaps, llms.txt, structured data, and MCP endpoints to see how your site scores for AI agents and LLM crawlers — this card shows what's blocking them and what to fix first.",
+    placeholderLabel: 'AGENT READY',
+  },
   'industry': {
     description: "Market vertical and service category normalized from intake signals — used to calibrate tone, benchmark competitors, and align content to the right audience frame.",
     placeholderLabel: 'MARKET CATEGORY',

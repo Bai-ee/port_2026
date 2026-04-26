@@ -750,6 +750,26 @@ function projectModuleResult(update, result) {
     return;
   }
 
+  if (result.cardId === 'agent-readiness') {
+    const arSkills = {};
+    if (result.result?.agentReadiness) {
+      arSkills['agent-readiness'] = result.result.agentReadiness;
+      deepSet(update, ['analyzerOutputs', 'agent-readiness', 'skills', 'agent-readiness'], result.result.agentReadiness);
+    }
+    if (result.result?.aiSeoAudit) {
+      arSkills['ai-seo-audit'] = result.result.aiSeoAudit;
+      deepSet(update, ['analyzerOutputs', 'agent-readiness', 'skills', 'ai-seo-audit'], result.result.aiSeoAudit);
+    }
+    // Compute aggregate so the dashboard card pill reflects worst-of readiness
+    // across the agent-readiness probe + AI SEO skill.
+    if (Object.keys(arSkills).length > 0) {
+      const { aggregateCardSkills } = require('../../features/scout-intake/skills/_aggregator');
+      const aggregate = aggregateCardSkills(arSkills);
+      deepSet(update, ['analyzerOutputs', 'agent-readiness', 'aggregate'], aggregate);
+    }
+    return;
+  }
+
   if (result.cardId === 'seo-performance') {
     if (result.result?.pagespeed) {
       // result.result.pagespeed is a pagespeed-insights SourceRecord
@@ -765,9 +785,6 @@ function projectModuleResult(update, result) {
       if (dashboardShape) {
         deepSet(update, ['seoAudit'], dashboardShape);
       }
-    }
-    if (result.result?.aiSeoAudit) {
-      deepSet(update, ['analyzerOutputs', 'seo-performance', 'skills', 'ai-seo-audit'], result.result.aiSeoAudit);
     }
     // Skill output + downloadable doc from the chained seo-depth-audit skill.
     if (result.result?.skillOutput && result.result?.skillId) {

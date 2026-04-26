@@ -2,7 +2,6 @@
 
 const { runSiteFetch } = require('./shared/site-fetch');
 const { runPagespeed } = require('./shared/pagespeed');
-const { runAiSeo } = require('./shared/ai-seo');
 const { extractSiteMeta } = require('../site-fetcher');
 const { runSkill, buildSourcePayloads } = require('../skills/_runner');
 const { aggregateCardSkills } = require('../skills/_aggregator');
@@ -39,28 +38,22 @@ async function runSeoPerformance({ clientId = null, websiteUrl, onProgress = nul
   const homepageHtml = homepage?._rawHtml || null;
   const siteMeta = homepageHtml ? extractSiteMeta(homepageHtml, websiteUrl) : (homepage?.siteMeta || null);
 
-  // Step 2: pagespeed + ai-seo in parallel — both only need websiteUrl
-  await emit('analyze', 'Run PageSpeed and AI SEO checks…');
-  const [pagespeedResult, aiSeoResult] = await Promise.all([
-    runPagespeed({ websiteUrl }),
-    runAiSeo({ websiteUrl }),
-  ]);
+  // Step 2: PageSpeed only — AI features moved to agent-readiness card
+  await emit('analyze', 'Run PageSpeed Insights…');
+  const pagespeedResult = await runPagespeed({ websiteUrl });
 
   if (pagespeedResult.warning) warningCodes.push(pagespeedResult.warning.code);
-  if (aiSeoResult.warning) warningCodes.push(aiSeoResult.warning.code);
 
   const pagespeedOk = pagespeedResult.ok && !pagespeedResult.skipped;
-  const aiSeoOk = aiSeoResult.ok && !aiSeoResult.skipped;
 
-  // Both skipped or both failed — hard failure (skip skill, no point)
-  if (!pagespeedOk && !aiSeoOk) {
+  if (!pagespeedOk) {
     const code = warningCodes[0] || 'seo_performance_no_data';
     return {
       ok: false,
       cardId: CARD_ID,
       status: 'failed',
       errorCode: code,
-      errorMessage: 'Neither PageSpeed nor AI visibility audit produced data.',
+      errorMessage: 'PageSpeed audit produced no data.',
       warningCodes,
       artifacts: [],
     };
@@ -138,7 +131,6 @@ async function runSeoPerformance({ clientId = null, websiteUrl, onProgress = nul
       // convert an error SourceRecord into a { status: 'error', … } shape so
       // the card can render the failure state instead of a blank shell.
       pagespeed:    pagespeedResult.pagespeed || null,
-      aiSeoAudit:   aiSeoOk ? aiSeoResult.aiSeoAudit : null,
       // Skill output + rendered downloadable doc — picked up by run-lifecycle.
       skillOutput,
       skillAggregate: aggregate,

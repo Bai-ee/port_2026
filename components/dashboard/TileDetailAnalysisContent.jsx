@@ -7,6 +7,7 @@ import { renderMiniBriefHtml } from '../../features/scout-intake/mini-brief-rend
 import { designEvaluationAdapter } from '../../features/scout-intake/mini-briefs/design-evaluation-adapter.mjs';
 import { seoPerformanceAdapter } from '../../features/scout-intake/mini-briefs/seo-performance-adapter.mjs';
 import { socialPreviewAdapter } from '../../features/scout-intake/mini-briefs/social-preview-adapter.mjs';
+import { agentReadinessAdapter } from '../../features/scout-intake/mini-briefs/agent-readiness-adapter.mjs';
 
 const SKILL_DOC_BY_CARD = { 'seo-performance': 'seo-depth-audit' };
 
@@ -61,7 +62,6 @@ export default function TileDetailAnalysisContent({
   const seoMiniBriefHtml = useMemo(() => (
     renderMiniBriefHtml(seoPerformanceAdapter({
       seoAudit: seoAudit || null,
-      aiVisibility: analyzerOutputs?.['seo-performance']?.skills?.['ai-seo-audit']?.aiVisibility ?? null,
       analyzerOutputs,
       siteName,
     }))
@@ -73,6 +73,13 @@ export default function TileDetailAnalysisContent({
       siteName,
     }))
   ), [siteMeta, siteName]);
+
+  const agentReadinessMiniBriefHtml = useMemo(() => (
+    renderMiniBriefHtml(agentReadinessAdapter({
+      analyzerOutputs,
+      siteName,
+    }))
+  ), [analyzerOutputs, siteName]);
 
   const designReportMd = useMemo(() => (
     renderDesignMd({
@@ -141,6 +148,21 @@ export default function TileDetailAnalysisContent({
             id="social-preview-report-iframe"
             title="Social Preview brief"
             srcDoc={socialMiniBriefHtml}
+            sandbox="allow-same-origin"
+            style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
+          />
+        </div>
+      );
+    }
+
+    if (activeTileModal.cardId === 'agent-readiness') {
+      return (
+        <div className="tile-detail-tab-pane" id="agent-readiness-report-pane" style={{ padding: 0, height: '100%' }}>
+          <iframe
+            key={`agent-readiness-report-${dashboardState?.latestRunId || 'static'}`}
+            id="agent-readiness-report-iframe"
+            title="Agent Readiness brief"
+            srcDoc={agentReadinessMiniBriefHtml}
             sandbox="allow-same-origin"
             style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
           />

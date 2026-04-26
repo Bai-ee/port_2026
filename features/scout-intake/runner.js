@@ -945,6 +945,7 @@ const MODULE_RUNNERS = {
   'multi-device-view': () => require('./modules/multi-device-view').runMultiDeviceView,
   'social-preview':    () => require('./modules/social-preview').runSocialPreview,
   'seo-performance':   () => require('./modules/seo-performance').runSeoPerformance,
+  'agent-readiness':   () => require('./modules/agent-readiness').runAgentReadinessModule,
   'style-guide':       () => require('./modules/style-guide').runStyleGuideModule,
   'design-evaluation': () => require('./modules/design-evaluation').runDesignEvaluationModule,
 };

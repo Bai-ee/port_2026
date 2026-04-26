@@ -192,6 +192,32 @@ export const MINI_BRIEF_CSS = `
   .mb-verdict-title{font-family:"Space Grotesk";font-weight:600;font-size:14px;color:var(--ink);margin:0 0 3px}
   .mb-verdict-desc {font-family:"Space Grotesk";font-size:12px;color:var(--ink-soft);margin:0;line-height:1.4}
 
+  /* ── Code block ── */
+  .mb-code-block{
+    position:relative;
+    background:#1a1714;
+    border:1px solid rgba(212,196,171,0.22);
+    border-radius:12px;
+    padding:14px 18px 14px 18px;
+    overflow-x:auto;
+  }
+  .mb-code-block code{
+    font-family:"Space Mono",ui-monospace,monospace;
+    font-size:11.5px; line-height:1.65; color:#e8dfc8;
+    white-space:pre; display:block;
+  }
+  .mb-code-copy{
+    position:absolute; top:10px; right:12px;
+    background:rgba(255,255,255,0.07);
+    border:1px solid rgba(212,196,171,0.22);
+    border-radius:6px; color:#9e9282;
+    font-family:"Space Mono",monospace;
+    font-size:8px; letter-spacing:.2em; text-transform:uppercase;
+    padding:4px 10px; cursor:pointer; line-height:1;
+    transition:background .15s,color .15s;
+  }
+  .mb-code-copy:hover{background:rgba(255,255,255,0.13);color:#e8dfc8}
+
   /* ── Status banner (empty / partial) ── */
   .mb-status-banner{
     display:flex;align-items:center;gap:10px;
@@ -331,6 +357,20 @@ function renderStatRows({ eyebrow, title, rows = [] }) {
     </div>`;
 }
 
+function renderCodeBlock({ eyebrow, title, body = '', language = '' }) {
+  const id = `mb-cb-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  const copyScript = `var c=document.getElementById('${id}').querySelector('code');navigator.clipboard.writeText(c.textContent).then(function(){var b=this;b.textContent='COPIED';setTimeout(function(){b.textContent='COPY';},1500);}.bind(this))`;
+  return `
+    <div class="mb-section">
+      ${eyebrow ? `<div class="mb-section-eyebrow">${esc(eyebrow)}</div>` : ''}
+      ${title   ? `<div class="mb-section-title">${esc(title)}</div>`   : ''}
+      <div class="mb-code-block" id="${id}">
+        <button class="mb-code-copy" onclick="${copyScript}">COPY</button>
+        <pre><code${language ? ` class="language-${esc(language)}"` : ''}>${esc(body)}</code></pre>
+      </div>
+    </div>`;
+}
+
 function renderReadiness({ label, verdict = 'partial', title, description }) {
   return `
     <div class="mb-section">
@@ -354,6 +394,7 @@ function renderSection(section) {
     case 'prose':              return renderProse(section);
     case 'stat-rows':          return renderStatRows(section);
     case 'readiness':          return renderReadiness(section);
+    case 'code-block':         return renderCodeBlock(section);
     default:                   return '';
   }
 }

@@ -21,7 +21,10 @@ function scoreStatus(v) {
 function verdictFrom(readiness) {
   if (!readiness) return 'partial';
   const r = String(readiness).toLowerCase();
-  if (r.includes('ready') && !r.includes('not') && !r.includes('blocked')) return 'ready';
+  // 'Not agent-ready' must resolve before the generic 'ready' check below
+  if (r.includes('not') && r.includes('ready')) return 'blocked';
+  if (r.includes('partial') || r.includes('partially')) return 'partial';
+  if (r.includes('ready') && !r.includes('blocked')) return 'ready';
   if (r.includes('block') || r.includes('critical')) return 'blocked';
   return 'partial';
 }
@@ -38,9 +41,9 @@ function mapFindings(findings) {
 /**
  * Converts SEO performance data into a sections[] payload for renderMiniBriefHtml.
  *
- * @param {{ seoAudit: object|null, aiVisibility: object|null, analyzerOutputs: object|null, siteName?: string }} opts
+ * @param {{ seoAudit: object|null, analyzerOutputs: object|null, siteName?: string }} opts
  */
-export function seoPerformanceAdapter({ seoAudit, aiVisibility, analyzerOutputs, siteName } = {}) {
+export function seoPerformanceAdapter({ seoAudit, analyzerOutputs, siteName } = {}) {
   const subtitle = `Search & visibility performance${siteName ? ` · ${siteName}` : ''}`;
 
   const scores      = seoAudit?.scores ?? null;
@@ -50,7 +53,6 @@ export function seoPerformanceAdapter({ seoAudit, aiVisibility, analyzerOutputs,
 
   const seoCard       = analyzerOutputs?.['seo-performance'] || null;
   const seoDepthAudit = seoCard?.skills?.['seo-depth-audit'] || null;
-  const aiSeoAudit    = seoCard?.skills?.['ai-seo-audit']    || null;
 
   if (!seoAudit && !seoCard) {
     return {
@@ -128,7 +130,7 @@ export function seoPerformanceAdapter({ seoAudit, aiVisibility, analyzerOutputs,
       label:   verdictWord,
       verdict: verdictFrom(readiness),
       title:   readiness,
-      description: (seoDepthAudit?.highlights?.[0] || aiSeoAudit?.highlights?.[0]) ?? undefined,
+      description: seoDepthAudit?.highlights?.[0] ?? undefined,
     });
   }
 
@@ -143,42 +145,18 @@ export function seoPerformanceAdapter({ seoAudit, aiVisibility, analyzerOutputs,
     });
   }
 
-  // 6. AI SEO audit skill findings
-  const aiFindings = mapFindings(aiSeoAudit?.findings);
-  if (aiFindings.length > 0) {
-    sections.push({
-      type:    'finding-list',
-      eyebrow: 'SEO Skill · AI Analysis',
-      title:   `${aiFindings.length} AI-identified issue${aiFindings.length !== 1 ? 's' : ''}`,
-      items:   aiFindings,
-    });
-  }
-
-  // 7. AI SEO score tile (separate from PSI — this is the skill's visibility score)
-  const aiScore = aiVisibility?.score ?? aiSeoAudit?.aiVisibility?.score ?? null;
-  if (aiScore != null) {
-    sections.push({
-      type:    'score-block',
-      eyebrow: 'SEO Skill · AI Visibility',
-      scores:  [{ label: 'AI Visibility', value: aiScore, status: scoreStatus(aiScore) }],
-    });
-  }
-
-  // 8. AI visibility highlights as a pull-quote (cross-skill synthesis)
-  const aiHighlights = [
-    ...(aiSeoAudit?.highlights  || []),
-    ...(seoDepthAudit?.highlights || []),
-  ].filter(Boolean).slice(0, 3);
-  if (aiHighlights.length > 0) {
+  // 6. SEO depth highlights as prose
+  const depthHighlights = (seoDepthAudit?.highlights || []).filter(Boolean).slice(0, 3);
+  if (depthHighlights.length > 0) {
     sections.push({
       type:    'prose',
-      eyebrow: 'SEO Skill · AI Visibility',
-      title:   'LLM citation readiness',
-      body:    aiHighlights.join(' '),
+      eyebrow: 'SEO Skill · Depth Audit',
+      title:   'Key findings',
+      body:    depthHighlights.join(' '),
     });
   }
 
-  const hasData = scores != null || cwvItems.length > 0 || depthFindings.length > 0 || aiFindings.length > 0 || opps.length > 0;
+  const hasData = scores != null || cwvItems.length > 0 || depthFindings.length > 0 || opps.length > 0;
 
   return {
     eyebrow:  'SEO Performance',

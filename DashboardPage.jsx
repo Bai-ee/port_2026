@@ -51,6 +51,7 @@ const ONBOARDING_CARD_IDS = new Set([
   'social-preview',
   'business-model',
   'seo-performance',
+  'agent-readiness',
   'industry',
   'visibility-snapshot',
   'style-guide',
@@ -1301,6 +1302,7 @@ const DashboardPage = () => {
     // component body (TDZ) so the direct name isn't safe at effect-definition time.
     if (id === 'survey-status') { setModalTab('chat'); return; }
     if (id === 'seo-performance') { setModalTab('report'); return; }
+    if (id === 'agent-readiness') { setModalTab('report'); return; }
     if (id === 'design-evaluation' && bootstrap?.dashboardState?.analyzerOutputs?.['design-evaluation']) { setModalTab('report'); return; }
     if (id === 'social-preview' && bootstrap?.dashboardState?.siteMeta) { setModalTab('report'); return; }
     setModalTab('solutions');
@@ -1453,7 +1455,6 @@ const DashboardPage = () => {
   const analyzerOutputs = dashboardState?.analyzerOutputs || null;
   const seoAnalyzerCard = analyzerOutputs?.['seo-performance'] || null;
   const seoDepthAudit = seoAnalyzerCard?.skills?.['seo-depth-audit'] ?? null;
-  const aiSeoAudit = seoAnalyzerCard?.skills?.['ai-seo-audit'] ?? null;
   const briefPdfUrl = dashboardState?.artifacts?.briefPdf?.downloadUrl || null;
   // Intelligence-first SEO data: prefer intelligence source, fall back to dashboardState.seoAudit
   const intelligencePayload = bootstrap.intelligence || null;
@@ -1466,7 +1467,6 @@ const DashboardPage = () => {
     return new Set(Object.entries(moduleConfig).filter(([, cfg]) => cfg?.enabled === true).map(([id]) => id));
   }, [moduleConfig]);
   const seoAudit = intelligencePayload?.dashboardSeoAudit ?? dashboardState?.seoAudit ?? null;
-  const aiVisibility = aiSeoAudit?.aiVisibility ?? null;
   const isFromIntelligence  = Boolean(intelligencePayload?.dashboardSeoAudit != null);
   const intelligenceSummary = intelligencePayload?.psiSummary || null;
   const psiNarrative        = intelligencePayload?.psiNarrative || null;
@@ -2393,9 +2393,6 @@ const DashboardPage = () => {
   const seoRunWarnings = Array.isArray(currentRun?.warnings)
     ? currentRun.warnings.filter((w) => w?.stage === 'psi')
     : [];
-  const aiSeoRunWarnings = Array.isArray(currentRun?.warnings)
-    ? currentRun.warnings.filter((w) => w?.stage === 'ai-seo')
-    : [];
   const skillRunWarnings = Array.isArray(currentRun?.warnings)
     ? currentRun.warnings.filter((w) => w?.stage === 'skills')
     : [];
@@ -2759,24 +2756,6 @@ const DashboardPage = () => {
     rows.push({ key: 'ai-synth-input', label: 'Synthesis input tokens', value: formatLogScalar(currentRun?.providerUsage?.inputTokens) });
     rows.push({ key: 'ai-synth-output', label: 'Synthesis output tokens', value: formatLogScalar(currentRun?.providerUsage?.outputTokens) });
     rows.push({ key: 'ai-synth-cost', label: 'Synthesis cost USD', value: formatLogScalar(currentRun?.providerUsage?.estimatedCostUsd) });
-    rows.push({ key: 'ai-seo-run-at', label: 'AI SEO audited at', value: formatLogScalar(aiSeoAudit?.runAt) });
-    rows.push({ key: 'ai-seo-model', label: 'AI SEO engine', value: formatLogScalar(aiSeoAudit?.metadata?.model) });
-    rows.push({ key: 'ai-seo-cost', label: 'AI SEO cost USD', value: formatLogScalar(aiSeoAudit?.metadata?.estimatedCostUsd) });
-    rows.push({ key: 'ai-seo-score', label: 'AI SEO score', value: formatLogScalar(aiVisibility?.score) });
-    rows.push({ key: 'ai-seo-grade', label: 'AI SEO grade', value: formatLogScalar(aiVisibility?.letterGrade) });
-    rows.push({ key: 'ai-seo-sections', label: 'AI SEO sections', value: formatLogList(aiVisibility?.sections ? Object.entries(aiVisibility.sections) : [], ([key, section]) => `${key}:${section?.score ?? '—'}(${section?.status ?? '—'})`) });
-    rows.push({ key: 'ai-seo-findings-critical', label: 'AI SEO critical findings', value: formatLogScalar(countSeverity(aiSeoAudit?.findings, 'critical')) });
-    rows.push({ key: 'ai-seo-findings-warning', label: 'AI SEO warning findings', value: formatLogScalar(countSeverity(aiSeoAudit?.findings, 'warning')) });
-    rows.push({ key: 'ai-seo-gaps', label: 'AI SEO triggered gaps', value: formatLogScalar(Array.isArray(aiSeoAudit?.gaps) ? aiSeoAudit.gaps.filter((g) => g?.triggered).length : null) });
-    rows.push({ key: 'ai-seo-highlights', label: 'AI SEO highlights', value: formatLogList(aiSeoAudit?.highlights) });
-    rows.push({ key: 'ai-seo-schema-types', label: 'AI SEO schema types', value: formatLogList(aiSeoAudit?.rawSignals?.schema?.types) });
-    rows.push({ key: 'ai-seo-robots-blocked', label: 'AI bots blocked', value: formatLogList(aiSeoAudit?.rawSignals?.robotsAi?.blockedBots, (bot) => bot?.name || bot?.id) });
-    rows.push({ key: 'ai-seo-llms-found', label: 'llms.txt found', value: formatLogScalar(aiSeoAudit?.rawSignals?.llmsTxt?.found) });
-    rows.push({ key: 'ai-seo-wikidata', label: 'Wikidata entity', value: formatLogScalar(aiSeoAudit?.rawSignals?.entity?.qid || aiSeoAudit?.rawSignals?.entity?.wikidataUrl) });
-    rows.push({ key: 'ai-seo-tech-canonical', label: 'AI technical canonical', value: formatLogScalar(aiSeoAudit?.rawSignals?.technical?.canonical) });
-    rows.push({ key: 'ai-seo-tech-meta-desc', label: 'AI technical meta description', value: formatLogScalar(aiSeoAudit?.rawSignals?.technical?.metaDescription) });
-    rows.push({ key: 'ai-seo-warning-codes', label: 'AI SEO warning codes', value: formatLogList(aiSeoRunWarnings, (w) => w?.code) });
-    rows.push({ key: 'ai-seo-warning-msgs', label: 'AI SEO warning messages', value: formatLogList(aiSeoRunWarnings, (w) => w?.message) });
     rows.push({ key: 'seo-skill-run-at', label: 'SEO depth skill runAt', value: formatLogScalar(seoDepthAudit?.runAt) });
     rows.push({ key: 'seo-skill-model', label: 'SEO depth skill model', value: formatLogScalar(seoDepthAudit?.metadata?.model) });
     rows.push({ key: 'seo-skill-cost', label: 'SEO depth skill cost USD', value: formatLogScalar(seoDepthAudit?.metadata?.estimatedCostUsd) });
@@ -2792,28 +2771,6 @@ const DashboardPage = () => {
     rows.push({ key: 'seo-guardian-source', label: 'SEO guardian source', value: formatLogScalar(seoGuardianState?.source) });
     rows.push({ key: 'seo-guardian-cost', label: 'SEO guardian cost USD', value: formatLogScalar(seoGuardianState?.runCostData?.estimatedCostUsd) });
     rows.push({ key: 'seo-guardian-validation', label: 'SEO guardian validation', value: formatLogList(seoGuardianState?.validationErrors) });
-
-    // ── AI VISIBILITY section ───────────────────────────────────────────────
-    if (aiVisibility) {
-      rows.push({ key: 'seo-performance-ai-visibility-section', label: 'AI VISIBILITY', isHeader: true });
-      rows.push({ key: 'seo-performance-ai-score-row', label: 'AI Visibility Score', value: `${aiVisibility.score} / 100` });
-      rows.push({ key: 'seo-performance-ai-grade-row', label: 'Grade', value: aiVisibility.letterGrade });
-      const aiSecs = aiVisibility.sections || {};
-      const aiSecLabels = [
-        ['llmsTxt',  'llms.txt'],
-        ['robotsAi', 'Robots (AI bots)'],
-        ['schema',   'Schema'],
-        ['content',  'Content'],
-        ['entity',   'Entity authority'],
-        ['technical','Technical'],
-      ];
-      for (const [secKey, secLabel] of aiSecLabels) {
-        const sec = aiSecs[secKey];
-        if (sec != null) {
-          rows.push({ key: `seo-performance-ai-${secKey}-row`, label: secLabel, value: sec.score != null ? `${sec.score} / 100` : '—' });
-        }
-      }
-    }
 
     return rows;
   })();
@@ -2843,9 +2800,52 @@ const DashboardPage = () => {
     if (seoHostingProviderLabel && seoProviderConfidence === 'high') parts.push(`built on ${seoHostingProviderLabel}`);
     return parts.join(' · ');
   })();
+  // Derive rows for agent-readiness card
+  const agentReadinessData  = analyzerOutputs?.['agent-readiness']?.skills?.['agent-readiness'] || null;
+  const agentReadinessAiSeo = analyzerOutputs?.['agent-readiness']?.skills?.['ai-seo-audit']    || null;
+  const agentReadinessState = moduleState?.['agent-readiness']?.status || 'disabled';
+  const hasAgentReadinessData = !!(agentReadinessData?.score != null);
+  const agentReadinessRows = (() => {
+    if (agentReadinessState === 'queued') {
+      return [{ key: 'ar-status', label: 'Status', value: 'Audit queued — results pending' }];
+    }
+    if (!hasAgentReadinessData) {
+      return buildWorkNeededRows('Run the AI Agent Readiness check to see how well your site supports AI crawlers and agents.');
+    }
+    const rows = [];
+    rows.push({ key: 'ar-score',   label: 'Overall Score', value: `${Math.round(agentReadinessData.score)} / 100` });
+    rows.push({ key: 'ar-verdict', label: 'Verdict',       value: agentReadinessData.verdict || '—' });
+    const dims = agentReadinessData.dimensions || {};
+    const DIM_LABELS = { discoverability: 'Discoverability', accessibility: 'Accessibility', botAccess: 'Bot Access', capabilities: 'Capabilities' };
+    for (const [key, val] of Object.entries(dims)) {
+      if (val != null) rows.push({ key: `ar-dim-${key}`, label: DIM_LABELS[key] || key, value: `${Math.round(val)} / 100` });
+    }
+    const aiScore = agentReadinessAiSeo?.aiVisibility?.score;
+    if (aiScore != null) rows.push({ key: 'ar-ai-score', label: 'AI Visibility', value: `${aiScore} / 100` });
+    const failedChecks = (agentReadinessData.checks || []).filter((c) => c.status === 'fail' || c.status === 'warn');
+    if (failedChecks.length > 0) {
+      rows.push({ key: 'ar-checks-hdr', label: '── CHECKS NEEDING ATTENTION ──', isHeader: true });
+      failedChecks.slice(0, 6).forEach((c) => {
+        rows.push({ key: `ar-check-${c.id}`, label: c.id, value: c.status.toUpperCase() });
+      });
+    }
+    const cfSignals = agentReadinessData?.cfSignals;
+    if (cfSignals) {
+      rows.push({ key: 'ar-cf-hdr', label: '── CLOUDFLARE SCAN ──', isHeader: true });
+      rows.push({ key: 'ar-cf-cdn',    label: 'Cloudflare CDN',    value: cfSignals.onCloudflare  ? 'Detected'     : 'Not detected' });
+      if (cfSignals.cacheStatus)   rows.push({ key: 'ar-cf-cache',  label: 'Cache Status',        value: cfSignals.cacheStatus });
+      if (cfSignals.botManagement) rows.push({ key: 'ar-cf-bot',    label: 'Bot Management',      value: 'Active'  });
+      rows.push({ key: 'ar-cf-radar',  label: 'Radar API',         value: cfSignals.radarAvailable ? 'Connected'   : 'No token set' });
+      if (cfSignals.radarRank?.rank)   rows.push({ key: 'ar-cf-rank', label: 'Radar Rank', value: `#${cfSignals.radarRank.rank.toLocaleString()}` });
+      const customFixCount = Object.keys(agentReadinessData?.customFixes || {}).length;
+      if (customFixCount > 0) rows.push({ key: 'ar-custom-fixes', label: 'LLM Fix Prompts', value: `${customFixCount} generated` });
+    }
+    return rows;
+  })();
+
   const DETERMINISTIC_CARD_IDS = new Set([
     'audit-summary', 'brief', 'multi-device-view', 'social-preview',
-    'business-model', 'seo-performance', 'style-guide', 'design-evaluation', 'industry', 'visibility-snapshot', 'priority-signal',
+    'business-model', 'seo-performance', 'agent-readiness', 'style-guide', 'design-evaluation', 'industry', 'visibility-snapshot', 'priority-signal',
   ]);
 
   const intakeCapabilityCards = [
@@ -2878,8 +2878,8 @@ const DashboardPage = () => {
       category: 'onboarding',
       number: 'AS',
       label: 'AUDIT',
-      title: 'Data Summary',
-      description: 'Your baseline across performance, SEO, and brand. Shows strengths and critical gaps.',
+      title: 'Brief Status',
+      description: 'Run every card in Data Visualization to unlock a complete Brief — each module feeds a section, so a missing run = a missing chapter. Underneath, this card aggregates your baseline across performance, SEO, brand, and AI agent readiness, and surfaces strengths plus critical gaps once the inputs are in.',
       ...(() => {
         const ok = (v) => v != null && v !== '' && v !== false;
         const st = (v) => ok(v) ? 'Captured' : 'Missing';
@@ -2899,7 +2899,6 @@ const DashboardPage = () => {
         const seoDiagnostics = seoAudit?.diagnosticsContext || null;
         const runWarnings = Array.isArray(currentRun?.warnings) ? currentRun.warnings : [];
         const psiWarnings = runWarnings.filter((w) => w?.stage === 'psi');
-        const aiSeoWarnings = runWarnings.filter((w) => w?.stage === 'ai-seo');
         const skillsWarnings = runWarnings.filter((w) => w?.stage === 'skills');
         const scribeWarnings = runWarnings.filter((w) => w?.stage === 'scribe');
         const countSeverity = (items, severity) => Array.isArray(items) ? items.filter((item) => item?.severity === severity).length : 0;
@@ -3037,20 +3036,6 @@ const DashboardPage = () => {
           row('ai-synth-output',   'Synth output tokens', currentRun?.providerUsage?.outputTokens),
           row('ai-synth-cost',     'Synth cost USD',      currentRun?.providerUsage?.estimatedCostUsd),
           row('ai-az-count',       'Analyzer output cards', analyzerOutputs ? Object.keys(analyzerOutputs).length : null),
-          row('ai-seo-run-at',     'AI SEO audited at',   aiSeoAudit?.runAt),
-          row('ai-seo-engine',     'AI SEO engine',       aiSeoAudit?.metadata?.model),
-          row('ai-seo-cost',       'AI SEO cost USD',     aiSeoAudit?.metadata?.estimatedCostUsd),
-          row('ai-seo-score',      'AI SEO score',        aiVisibility?.score),
-          row('ai-seo-grade',      'AI SEO grade',        aiVisibility?.letterGrade),
-          row('ai-seo-critical',   'AI SEO criticals',    aiSeoAudit ? countSeverity(aiSeoAudit.findings, 'critical') : null),
-          row('ai-seo-warning',    'AI SEO warnings',     aiSeoAudit ? countSeverity(aiSeoAudit.findings, 'warning') : null),
-          row('ai-seo-gaps',       'AI SEO triggered gaps', Array.isArray(aiSeoAudit?.gaps) ? aiSeoAudit.gaps.filter((g) => g?.triggered).length : null),
-          row('ai-seo-highlights', 'AI SEO highlights',   aiSeoAudit?.highlights?.length),
-          row('ai-seo-schema',     'Schema types',        aiSeoAudit?.rawSignals?.schema?.types?.length),
-          row('ai-seo-bots',       'AI bots blocked',     aiSeoAudit?.rawSignals?.robotsAi?.blockedBots?.length),
-          row('ai-seo-llms',       'llms.txt found',      aiSeoAudit?.rawSignals?.llmsTxt?.found),
-          row('ai-seo-wikidata',   'Wikidata entity',     aiSeoAudit?.rawSignals?.entity?.qid || aiSeoAudit?.rawSignals?.entity?.wikidataUrl),
-          row('ai-seo-warn-codes', 'AI SEO warn codes',   aiSeoWarnings.length || null),
           row('ai-skill-run',      'SEO depth skill',     seoDepthAudit?.runAt),
           row('ai-skill-model',    'SEO depth model',     seoDepthAudit?.metadata?.model),
           row('ai-skill-cost',     'SEO depth cost USD',  seoDepthAudit?.metadata?.estimatedCostUsd),
@@ -3068,16 +3053,6 @@ const DashboardPage = () => {
           row('ai-seo-guardian-source', 'SEO guardian source', seoGuardianState?.source),
           row('ai-seo-guardian-cost',   'SEO guardian cost USD', seoGuardianState?.runCostData?.estimatedCostUsd),
           row('ai-seo-guardian-errors', 'SEO guardian validation', seoGuardianState?.validationErrors?.length),
-
-          // ── AI VISIBILITY ──
-          { key: 'sec-aiv', isHeader: true, label: 'AI VISIBILITY' },
-          row('aiv-score',         'AI visibility score', aiVisibility?.score),
-          row('aiv-grade',         'Letter grade',      aiVisibility?.letterGrade),
-          row('aiv-llms',          'llms.txt',          aiVisibility?.sections?.llmsTxt),
-          row('aiv-robots',        'Robots (AI bots)',  aiVisibility?.sections?.robotsAi),
-          row('aiv-schema',        'Schema for AI',     aiVisibility?.sections?.schema),
-          row('aiv-content',       'AI extractability', aiVisibility?.sections?.content),
-          row('aiv-entity',        'Entity authority',  aiVisibility?.sections?.entity),
 
           // ── SCOUT CONFIG ──
           { key: 'sec-scout', isHeader: true, label: 'SCOUT CONFIG' },
@@ -3147,7 +3122,6 @@ const DashboardPage = () => {
           // Per-skill downloadable audit docs. Inline HTML/markdown stored under
           // dashboard_state.artifacts.skillDocs[skillId]. Phase 3 wires download UI.
           row('art-skill-seo',     'SEO audit report',     dashboardState?.artifacts?.skillDocs?.['seo-depth-audit']),
-          row('art-skill-ai-seo',  'AI visibility report', dashboardState?.artifacts?.skillDocs?.['ai-seo-audit']),
           row('art-skill-brand',   'Site meta report',     dashboardState?.artifacts?.skillDocs?.['site-meta-audit']),
           row('art-skill-style',   'Style guide report',   dashboardState?.artifacts?.skillDocs?.['style-guide-audit']),
           row('art-skill-conv',    'Conversion report',    dashboardState?.artifacts?.skillDocs?.['conversion-audit']),
@@ -3162,7 +3136,7 @@ const DashboardPage = () => {
           // ── ANALYZER SKILLS ──
           { key: 'sec-analyzers', isHeader: true, label: 'ANALYZER SKILLS' },
           row('az-seo',            'SEO depth audit',      analyzerOutputs?.['seo-performance']),
-          row('az-ai-seo',         'AI SEO audit',         analyzerOutputs?.['seo-performance']?.skills?.['ai-seo-audit']),
+          row('az-agent-ready',    'Agent readiness',      analyzerOutputs?.['agent-readiness']?.skills?.['agent-readiness']),
           row('az-site-meta',      'Site meta audit',      analyzerOutputs?.['brand-tone']),
           row('az-style-guide',    'Style guide audit',    analyzerOutputs?.['style-guide']),
           row('az-conversion',     'Conversion audit',     analyzerOutputs?.['website-landing']),
@@ -3178,7 +3152,7 @@ const DashboardPage = () => {
           rows: allRows,
         };
       })(),
-      footerLeft: hasIntakeData ? 'Live' : WORK_NEEDED_LABEL,
+      footerLeft: hasIntakeData ? 'Live' : 'Run all cards to unlock Brief',
       footerRight: 'REVIEWED',
     },
     {
@@ -3211,7 +3185,21 @@ const DashboardPage = () => {
       footerLeft: isSeoPartial ? 'Partial' : hasSeoAuditData ? 'Live' : isSeoQueued ? 'Queued' : isSeoError ? 'Error' : WORK_NEEDED_LABEL,
       domId: 'intake-card-seo-performance',
       footerRight: 'REVIEWED',
-      moduleControls: { tech: ['pagespeed-insights', 'anthropic', 'ai-seo-audit'] },
+      moduleControls: { tech: ['pagespeed-insights', 'anthropic'] },
+    },
+    {
+      id: 'agent-readiness',
+      category: 'onboarding',
+      number: 'AR',
+      label: 'AGENT READY',
+      title: 'AI Agent Readiness',
+      description: 'We ran 14 checks across robots access, sitemaps, llms.txt, structured data, and MCP endpoints to see how your site scores for AI agents and LLM crawlers — this card shows what\'s blocking them and what to fix first.',
+      placeholderLabel: agentReadinessState === 'queued' ? 'AUDIT\nQUEUED' : hasAgentReadinessData ? 'AGENT\nREADY' : 'NO\nAUDIT',
+      rows: agentReadinessRows,
+      footerLeft: hasAgentReadinessData ? 'Live' : agentReadinessState === 'queued' ? 'Queued' : WORK_NEEDED_LABEL,
+      domId: 'intake-card-agent-readiness',
+      footerRight: 'REVIEWED',
+      moduleControls: { tech: ['agent-ready-checks', 'anthropic', 'ai-seo-audit'] },
     },
     {
       id: 'social-preview',
@@ -3364,7 +3352,7 @@ const DashboardPage = () => {
       label: 'DESIGN EVAL',
       title: 'Design Evaluation',
       description: 'Evaluates your site\'s design using a homepage screenshot and our custom design-critique skills, then rates your visual system from our perspective and returns a DESIGN.md brief.',
-      placeholderLabel: hasStyleGuideData ? 'DESIGN.md' : 'NO\nTOKENS',
+      placeholderLabel: hasStyleGuideData ? 'DESIGN.md' : 'DESIGN\nEVALUATION',
       rows: (() => {
         const ev = analyzerOutputs?.['design-evaluation'] || null;
         if (!ev) {
@@ -3406,14 +3394,9 @@ const DashboardPage = () => {
       label: 'VISIBILITY',
       title: 'Visibility Snapshot',
       description: 'We checked where your business shows up across search and platforms. This shows what\'s indexed, what\'s visible, and where there\'s room to expand reach.',
-      placeholderLabel: aiVisibility ? 'VISIBILITY' : 'NO\nDATA',
-      rows: aiVisibility ? [
-        { key: 'ai-score',   label: 'AI Visibility', value: `${aiVisibility.score}/100 (${aiVisibility.letterGrade})` },
-        ...(aiVisibility.sections ? Object.entries(aiVisibility.sections).map(([k, v]) => ({
-          key: `vis-${k}`, label: k, value: v?.score != null ? `${v.score}/100` : '—',
-        })) : []),
-      ] : buildWorkNeededRows('Visibility data requires a completed audit with AI SEO analysis.'),
-      footerLeft: aiVisibility ? 'Live' : WORK_NEEDED_LABEL,
+      placeholderLabel: 'NO\nDATA',
+      rows: buildWorkNeededRows('AI Visibility data has moved to the AI Agent Readiness card.'),
+      footerLeft: WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
     },
 
@@ -3919,7 +3902,7 @@ const DashboardPage = () => {
     // Derived findings are data-inspection rules that produce catalog-matchable
     // finding IDs without an LLM call. They augment — never replace — skill findings.
     if (analyzer && card.category !== 'services') {
-      const derivedData = { siteMeta, brandOverview, sgDisplayData, seoAudit, aiSeoAudit, aiVisibility, homePage: evidencePages[0] || null, pages: evidencePages, client };
+      const derivedData = { siteMeta, brandOverview, sgDisplayData, seoAudit, homePage: evidencePages[0] || null, pages: evidencePages, client };
       const derived = deriveFindings(card.id, derivedData);
       if (derived.length) {
         // Dedupe: skip derived findings whose ID already exists in skill findings
@@ -4004,8 +3987,8 @@ const DashboardPage = () => {
             };
           case 'visibility-snapshot':
             return {
-              score:       aiVisibility?.score       ?? null,
-              letterGrade: aiVisibility?.letterGrade ?? null,
+              score:       null,
+              letterGrade: null,
             };
           case 'multi-device-view':
             return {
@@ -4061,26 +4044,6 @@ const DashboardPage = () => {
               lcpSeconds: seoPrimaryLcp?.p75 != null ? Math.round((seoPrimaryLcp.p75 / 1000) * 10) / 10 : null,
               lcpMs: seoPrimaryLcp?.p75 ?? null,
               lcpSource: seoPrimaryLcp?.source || null,
-              aiVisibilityScore: aiVisibility?.score ?? null,
-              aiVisibilityGrade: aiVisibility?.letterGrade ?? null,
-              aiSectionSchemaScore: aiVisibility?.sections?.schema?.score ?? null,
-              aiSectionEntityScore: aiVisibility?.sections?.entity?.score ?? null,
-              aiBotsBlocked: Array.isArray(aiSeoAudit?.rawSignals?.robotsAi?.blockedBots)
-                ? aiSeoAudit.rawSignals.robotsAi.blockedBots.map((bot) => bot?.name || bot?.id).filter(Boolean)
-                : [],
-              wikidataEntity: aiSeoAudit?.rawSignals?.entity?.qid || aiSeoAudit?.rawSignals?.entity?.wikidataUrl || null,
-              metaDescriptionPresent: typeof aiSeoAudit?.rawSignals?.technical?.metaDescription === 'string'
-                ? aiSeoAudit.rawSignals.technical.metaDescription.trim().length > 0
-                : null,
-              canonicalPresent: typeof aiSeoAudit?.rawSignals?.technical?.canonical === 'string'
-                ? aiSeoAudit.rawSignals.technical.canonical.trim().length > 0
-                : null,
-              schemaTypesCount: Array.isArray(aiSeoAudit?.rawSignals?.schema?.types)
-                ? aiSeoAudit.rawSignals.schema.types.length
-                : null,
-              llmsTxtFound: typeof aiSeoAudit?.rawSignals?.llmsTxt?.found === 'boolean'
-                ? aiSeoAudit.rawSignals.llmsTxt.found
-                : null,
             };
           default:
             return {};
@@ -4722,14 +4685,15 @@ const DashboardPage = () => {
                 'business-model':      'Run this to synthesize what your business does, who it serves, and how it makes money — drawn from site evidence, not guesswork.',
                 'industry':            'Run this to classify your industry and positioning so the dashboard can benchmark you against the right peers.',
                 'visibility-snapshot': 'Run this to probe how your site surfaces in AI search — citations, answers, and competitor coverage — in a single readout.',
-                'audit-summary':       'Run this to aggregate every baseline check into a single go / no-go foundation score for your dashboard.',
+                'audit-summary':       'Run every card in Data Visualization to unlock a Brief with all the information — each module fills a section. Then this card aggregates the baseline checks into a single go / no-go foundation score.',
                 'priority-signal':     'Run this to pick the single highest-leverage action for your site right now, with the evidence behind it.',
+                'agent-readiness':     'Run this to probe robots.txt, sitemaps, llms.txt, structured data, and MCP endpoints — returns a readiness score, a list of what\'s blocking AI agents, and copy-paste fixes for each issue.',
               };
               const LOCKED_CARD_DESCRIPTIONS = {
                 'design-evaluation':   'Evaluates your site\'s design by reading a homepage screenshot with a custom design-critique skill and rating your visual system from our perspective. Returns a DESIGN.md brief with change recommendations you can review or hand to a design agent.',
                 'multi-device-view':   'Captures your site on desktop, tablet, and mobile, composites them into a single device-frame mockup, and provides full-page screenshots you can browse per device.',
                 'social-preview':      'Reads your site metadata, favicon, and share description, and shows exactly how your site appears when shared on social platforms. Flags missing images, titles, and descriptions.',
-                'audit-summary':       'Aggregates every baseline check — pages fetched, metadata coverage, analyzer warnings — into a single go / no-go readout for the foundation of your dashboard.',
+                'audit-summary':       'Run every card in Data Visualization to unlock a complete Brief — each module feeds a section. This card then aggregates pages fetched, metadata coverage, and analyzer warnings into a single go / no-go readout.',
                 'business-model':      'Synthesizes what your business actually does, who it serves, and how it makes money — written from site evidence, not guesswork.',
                 'seo-performance':     'Runs a PageSpeed Insights audit and a structured SEO scan, then summarizes speed, metadata, and structural issues that affect visibility and conversion.',
                 'industry':            'Classifies your industry and positioning so the dashboard can benchmark you against the right peers and apply the right content playbook.',
@@ -4771,20 +4735,16 @@ const DashboardPage = () => {
                 }
                 return false;
               };
-              const isCardLocked = (cardId) => {
-                if (isAdmin) return false;
-                if (cardId === 'survey-status') return false;
-                const idx = CARD_UNLOCK_CHAIN.indexOf(cardId);
-                if (idx === -1) return true; // Not yet in the chain → locked.
-                if (idx === 0) return false;
-                // Unlocked iff every prior card in the chain has passed.
-                for (let i = 0; i < idx; i += 1) {
-                  if (!hasCardPassed(CARD_UNLOCK_CHAIN[i])) return true;
-                }
-                return false;
-              };
+              // Data Visualization bucket is fully unlocked — every card can
+              // be run individually in any order. Server-side autoEnable in
+              // /api/dashboard/modules/run handles flipping moduleConfig.enabled
+              // on first click for cards that were previously gated.
+              const isCardLocked = () => false;
               const chainSortKey = (cardId) => {
-                if (cardId === 'survey-status') return -1;
+                if (cardId === 'audit-summary')  return -1;
+                if (cardId === 'social-preview') return 0.5; // 3rd
+                if (cardId === 'style-guide')    return 0.6; // 4th — Brand Snapshot right after Social
+                if (cardId === 'survey-status')  return Number.MAX_SAFE_INTEGER;
                 const idx = CARD_UNLOCK_CHAIN.indexOf(cardId);
                 return idx === -1 ? 999 + cardId.charCodeAt(0) : idx;
               };
@@ -4827,7 +4787,7 @@ const DashboardPage = () => {
                 })}
               >
                 <div className="tile-number">
-                  <span className="tile-header-label">{card.label}</span>
+                  <span className="tile-header-label">{card.title}</span>
                 </div>
                 {isLocked ? (
                   <div
@@ -4841,7 +4801,7 @@ const DashboardPage = () => {
                 ) : (
                 <div
                   className={`tile-intake-placeholder tile-intake-placeholder-${card.id}`}
-                  style={sgDisplayData?.colors?.primary?.hex
+                  style={card.id === 'style-guide' && sgDisplayData?.colors?.primary?.hex
                     ? { background: `linear-gradient(135deg, ${sgDisplayData.colors.primary.hex}, ${sgDisplayData.colors.secondary?.hex || sgDisplayData.colors.neutral?.hex || '#ddd'})` }
                     : undefined}
                 >
@@ -4873,15 +4833,15 @@ const DashboardPage = () => {
                                   id="sg-brand-mark-img"
                                   src={sgLogoSrc}
                                   alt="Site brand mark"
-                                  onError={(e) => { e.currentTarget.style.display = 'none'; const p = e.currentTarget.parentElement; if (p) { const s = document.createElement('span'); s.className = 'sg-no-logo'; s.textContent = 'NO\nLOGO'; p.appendChild(s); } }}
+                                  onError={(e) => { e.currentTarget.style.display = 'none'; const p = e.currentTarget.parentElement; if (p) { const s = document.createElement('span'); s.className = 'sg-no-logo'; s.textContent = 'LOGO'; p.appendChild(s); } }}
                                 />
                               ) : (
-                                <span className="sg-no-logo">{"NO\nLOGO"}</span>
+                                <span className="sg-no-logo">{"LOGO"}</span>
                               )}
                             </div>
 
                             {/* COLOR (top-right) */}
-                            <div className="sg-quad sg-q-color" style={!hasSgColors ? { background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' } : undefined}>
+                            <div className="sg-quad sg-q-color" style={!hasSgColors ? { background: 'rgba(255,255,255,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center' } : undefined}>
                               {hasSgColors ? [
                                 sgDisplayData.colors.primary,
                                 sgDisplayData.colors.secondary,
@@ -4890,14 +4850,14 @@ const DashboardPage = () => {
                               ].filter(Boolean).map((color, ci) => (
                                 <div key={ci} className="sg-swatch" style={{ background: color.hex }} title={color.role} />
                               )) : (
-                                <span className="sg-no-data">{"NO\nCOLOR"}</span>
+                                <span className="sg-no-data">{"COLOR"}</span>
                               )}
                             </div>
 
                             {/* TYPE (bottom-left) */}
                             <div
                               className="sg-quad sg-q-type"
-                              style={{ background: hasSgType ? (sgDisplayData?.colors?.neutral?.shades?.[0] || sgDisplayData?.colors?.primary?.shades?.[0] || sgDisplayData?.colors?.neutral?.hex || '#faf8f4') : 'transparent' }}
+                              style={{ background: hasSgType ? (sgDisplayData?.colors?.neutral?.shades?.[0] || sgDisplayData?.colors?.primary?.shades?.[0] || sgDisplayData?.colors?.neutral?.hex || '#faf8f4') : 'rgba(255,255,255,0.65)' }}
                             >
                               {hasSgType && headName ? (
                                 <>
@@ -4909,7 +4869,7 @@ const DashboardPage = () => {
                                   </p>
                                 </>
                               ) : (
-                                <span className="sg-no-data">{"NO\nTYPE"}</span>
+                                <span className="sg-no-data">{"FONT"}</span>
                               )}
                             </div>
 
@@ -4918,9 +4878,9 @@ const DashboardPage = () => {
                               className="sg-quad sg-q-gradient"
                               style={hasSgColors ? {
                                 background: `linear-gradient(135deg, ${sgDisplayData.colors.primary?.hex || '#888'}, ${sgDisplayData.colors.secondary?.hex || sgDisplayData.colors.neutral?.hex || '#ddd'})`,
-                              } : { background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                              } : { background: 'rgba(255,255,255,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                             >
-                              {!hasSgColors && <span className="sg-no-data">{"NO\nGRADIENT"}</span>}
+                              {!hasSgColors && <span className="sg-no-data">{"GRADIENT"}</span>}
                             </div>
                           </>
                         );
@@ -4936,9 +4896,11 @@ const DashboardPage = () => {
                       />
                     </span>
                   ) : card.id === 'audit-summary' ? (
-                    renderAuditViz(card.rows)
+                    renderAuditViz(card.rows, moduleState)
                   ) : card.id === 'seo-performance' && hasSeoAuditData ? (
-                    renderSeoViz(seoAudit, aiVisibility)
+                    renderSeoViz(seoAudit)
+                  ) : card.id === 'agent-readiness' && hasAgentReadinessData ? (
+                    renderAgentReadyViz(agentReadinessData, agentReadinessAiSeo)
                   ) : card.id === 'social-preview' && siteMeta?.ogImage ? (
                     <div id="bt-preview-shell">
                       <img
@@ -4991,7 +4953,7 @@ const DashboardPage = () => {
                       )}
                     </div>
                   ) : (
-                    <span className="tile-empty-label">{card.placeholderLabel}</span>
+                    <span className="tile-empty-label">{card.title || card.placeholderLabel}</span>
                   )}
                 </div>
                 )}
@@ -5713,15 +5675,15 @@ const DashboardPage = () => {
                                 <img
                                   src={sgLogoSrc}
                                   alt="Site brand mark"
-                                  onError={(e) => { e.currentTarget.style.display = 'none'; const p = e.currentTarget.parentElement; if (p) { const s = document.createElement('span'); s.className = 'sg-no-logo'; s.textContent = 'NO\nLOGO'; p.appendChild(s); } }}
+                                  onError={(e) => { e.currentTarget.style.display = 'none'; const p = e.currentTarget.parentElement; if (p) { const s = document.createElement('span'); s.className = 'sg-no-logo'; s.textContent = 'LOGO'; p.appendChild(s); } }}
                                 />
                               ) : (
-                                <span className="sg-no-logo">{"NO\nLOGO"}</span>
+                                <span className="sg-no-logo">{"LOGO"}</span>
                               )}
                             </div>
 
                             {/* COLOR (top-right) */}
-                            <div className="sg-quad sg-q-color" style={!hasSgColors ? { background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' } : undefined}>
+                            <div className="sg-quad sg-q-color" style={!hasSgColors ? { background: 'rgba(255,255,255,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center' } : undefined}>
                               {hasSgColors ? [
                                 sgDisplayData.colors.primary,
                                 sgDisplayData.colors.secondary,
@@ -5730,14 +5692,14 @@ const DashboardPage = () => {
                               ].filter(Boolean).map((color, ci) => (
                                 <div key={ci} className="sg-swatch" style={{ background: color.hex }} title={color.role} />
                               )) : (
-                                <span className="sg-no-data">{"NO\nCOLOR"}</span>
+                                <span className="sg-no-data">{"COLOR"}</span>
                               )}
                             </div>
 
                             {/* TYPE (bottom-left) */}
                             <div
                               className="sg-quad sg-q-type"
-                              style={{ background: hasSgType ? (sgDisplayData?.colors?.neutral?.shades?.[0] || sgDisplayData?.colors?.primary?.shades?.[0] || sgDisplayData?.colors?.neutral?.hex || '#faf8f4') : 'transparent' }}
+                              style={{ background: hasSgType ? (sgDisplayData?.colors?.neutral?.shades?.[0] || sgDisplayData?.colors?.primary?.shades?.[0] || sgDisplayData?.colors?.neutral?.hex || '#faf8f4') : 'rgba(255,255,255,0.65)' }}
                             >
                               {hasSgType && headName ? (
                                 <>
@@ -5749,7 +5711,7 @@ const DashboardPage = () => {
                                   </p>
                                 </>
                               ) : (
-                                <span className="sg-no-data">{"NO\nTYPE"}</span>
+                                <span className="sg-no-data">{"FONT"}</span>
                               )}
                             </div>
 
@@ -5758,9 +5720,9 @@ const DashboardPage = () => {
                               className="sg-quad sg-q-gradient"
                               style={hasSgColors ? {
                                 background: `linear-gradient(135deg, ${sgDisplayData.colors.primary?.hex || '#888'}, ${sgDisplayData.colors.secondary?.hex || sgDisplayData.colors.neutral?.hex || '#ddd'})`,
-                              } : { background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                              } : { background: 'rgba(255,255,255,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                             >
-                              {!hasSgColors && <span className="sg-no-data">{"NO\nGRADIENT"}</span>}
+                              {!hasSgColors && <span className="sg-no-data">{"GRADIENT"}</span>}
                             </div>
                           </>
                         );
@@ -5774,7 +5736,9 @@ const DashboardPage = () => {
                       {siteMeta.favicon && <img id="bt-favicon" src={siteMeta.favicon} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
                     </div>
                   ) : activeTileModal.cardId === 'seo-performance' && hasSeoAuditData ? (
-                    renderSeoViz(seoAudit, aiVisibility)
+                    renderSeoViz(seoAudit)
+                  ) : activeTileModal.cardId === 'agent-readiness' && hasAgentReadinessData ? (
+                    renderAgentReadyViz(agentReadinessData, agentReadinessAiSeo)
                   ) : activeTileModal.cardId === 'business-model' && homepageScreenshotUrl ? (
                     <div id="bi-preview-shell">
                       <img
@@ -5941,7 +5905,7 @@ const DashboardPage = () => {
                         // it by default (see modal-tab reset effect).
                         const SKILL_DOC_BY_CARD = { 'seo-performance': 'seo-depth-audit' };
                         const docSkillId = SKILL_DOC_BY_CARD[activeTileModal.cardId];
-                        const hasReport = ['design-evaluation', 'seo-performance', 'social-preview'].includes(activeTileModal.cardId)
+                        const hasReport = ['design-evaluation', 'seo-performance', 'social-preview', 'agent-readiness'].includes(activeTileModal.cardId)
                           || !!(docSkillId && dashboardState?.artifacts?.skillDocs?.[docSkillId]?.html);
                         const tabs = [
                           ...(hasReport ? [{ key: 'report', label: 'REPORT' }] : []),
@@ -6112,110 +6076,161 @@ const DashboardPage = () => {
 
 // ── Tile viz renderers ────────────────────────────────────────────────────────
 
-const renderAuditViz = (auditRows) => {
-  if (!auditRows || !auditRows.length) return null;
-  const dataRows = auditRows.filter((r) => r.isAuditRow && !r.isColumnHeader);
-  const captured = dataRows.filter((r) => r._captured).length;
-  const missing = dataRows.filter((r) => !r._captured && !r.isUpgrade).length;
-  const upgrade = dataRows.filter((r) => r.isUpgrade).length;
-  const total = dataRows.length;
-  const pct = total > 0 ? Math.round((captured / total) * 100) : 0;
-  const circ = 2 * Math.PI * 27;
-
-  // Per-section breakdown
-  const sections = [];
-  let currentSection = null;
-  for (const r of auditRows) {
-    if (r.isHeader) { currentSection = { label: r.label, captured: 0, total: 0 }; sections.push(currentSection); }
-    else if (r.isAuditRow && !r.isColumnHeader && currentSection) {
-      currentSection.total++;
-      if (r._captured) currentSection.captured++;
-    }
-  }
-  const topSections = sections.filter((s) => s.total > 0).sort((a, b) => b.captured - a.captured).slice(0, 4);
+// Shared half-circle gauge + up-to-5 dimension rings layout. Used by
+// AI Agent Readiness, Data Summary, and SEO Performance Snapshot so the
+// three cards share a consistent visual shell.
+//
+// `score` is the central numeric/string label.
+// `gaugePct` (optional) controls how full the half-arc renders, on a 0–100
+// scale. If omitted, falls back to using `score` (treated as a percentage).
+// This lets a card display a count like "6" while the arc fills based on
+// 6/12 = 50 %.
+const renderGaugeViz = ({ score, verdictLabel, rings, gaugePct: gaugePctOverride }) => {
+  const gaugeCirc = Math.PI * 44;
+  const rawPct = gaugePctOverride != null ? gaugePctOverride : (typeof score === 'number' ? score : 0);
+  const gaugePct = Math.min(Math.max(rawPct, 0) / 100, 1);
+  const gaugeOffset = gaugeCirc * (1 - gaugePct);
+  const ringCirc = 2 * Math.PI * 24;
+  const safeRings = (rings || []).slice(0, 5);
 
   return (
-    <div id="audit-viz-shell">
+    <div id="ar-viz-shell">
       <svg className="seo-grad-defs" aria-hidden="true">
         <defs>
-          <linearGradient id="ag" x1="0%" y1="0%" x2="100%" y2="0%">
+          <linearGradient id="ar-g" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%"   stopColor="#00cfff"/>
             <stop offset="48%"  stopColor="#7b5fff"/>
             <stop offset="100%" stopColor="#ff3de8"/>
           </linearGradient>
+          <linearGradient id="ar-gv" x1="0%" y1="100%" x2="0%" y2="0%">
+            <stop offset="0%"   stopColor="#00cfff"/>
+            <stop offset="100%" stopColor="#ff3de8"/>
+          </linearGradient>
         </defs>
       </svg>
-
-      {/* Rings in a row */}
-      <div id="audit-viz-ring-row">
-        {[
-          { label: 'Total',    val: total,    p: 100 },
-          { label: 'Captured', val: captured, p: total > 0 ? (captured / total) * 100 : 0 },
-          { label: 'Upgrade',  val: upgrade,  p: total > 0 ? (upgrade / total) * 100 : 0 },
-        ].map(({ label, val, p }) => (
-          <div className="audit-ring-cell" key={label}>
-            <svg className="seo-ring-svg" viewBox="0 0 58 58">
-              <circle className="ring-bg" cx="29" cy="29" r="24" fill="none" strokeWidth="4" />
-              <circle
-                cx="29" cy="29" r="24" fill="none" strokeWidth="4"
-                stroke="url(#ag)"
-                strokeDasharray={circ}
-                strokeDashoffset={circ - (circ * p / 100)}
-                transform="rotate(-90 29 29)"
-                strokeLinecap="round"
-                className="stroke-lit"
-              />
-            </svg>
-            <div className="audit-ring-val">{val}</div>
+      <div id="ar-gauge-wrap">
+        <svg id="ar-gauge-svg" viewBox="0 0 100 56" aria-hidden="true">
+          <path d="M 6 52 A 44 44 0 0 1 94 52" fill="none" stroke="rgba(42,36,32,0.1)" strokeWidth="7" strokeLinecap="round" />
+          <path
+            d="M 6 52 A 44 44 0 0 1 94 52"
+            fill="none"
+            stroke="url(#ar-gv)"
+            strokeWidth="7"
+            strokeLinecap="round"
+            strokeDasharray={gaugeCirc}
+            strokeDashoffset={gaugeOffset}
+          />
+        </svg>
+        <div id="ar-gauge-score">{score != null ? score : '—'}</div>
+        {verdictLabel && <div id="ar-verdict-pill">{verdictLabel}</div>}
+      </div>
+      <div id="ar-dim-row">
+        {safeRings.map(({ label, val, sub, p }) => (
+          <div className="audit-ring-cell ar-dim-cell" key={label}>
+            <div className="ar-ring-wrap">
+              <svg className="seo-ring-svg" viewBox="0 0 58 58">
+                <circle className="ring-bg" cx="29" cy="29" r="24" fill="none" strokeWidth="4" />
+                <circle
+                  cx="29" cy="29" r="24"
+                  fill="none"
+                  strokeWidth="4"
+                  stroke="url(#ar-g)"
+                  strokeDasharray={ringCirc}
+                  strokeDashoffset={ringCirc - (ringCirc * Math.max(0, Math.min(p ?? 0, 100)) / 100)}
+                  transform="rotate(-90 29 29)"
+                  strokeLinecap="round"
+                  className="stroke-lit"
+                />
+              </svg>
+              <div className="ar-ring-val">{val != null ? val : '—'}</div>
+            </div>
             <div className="audit-ring-label">{label}</div>
+            <div className="ar-dim-sub">{sub}</div>
           </div>
         ))}
-      </div>
-
-      {/* Section bars — 2 columns */}
-      <div id="audit-viz-bars">
-        {topSections.map((s) => {
-          const sPct = s.total > 0 ? Math.round((s.captured / s.total) * 100) : 0;
-          const short = s.label.split(' ')[0].replace('·','').trim();
-          return (
-            <div className="audit-bar-item" key={s.label}>
-              <span className="audit-bar-label">{short}</span>
-              <div className="audit-bar-track">
-                <div className="audit-bar-fill" style={{ width: `${sPct}%` }} />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Quality score bar — bottom */}
-      <div id="audit-viz-quality">
-        <div className="audit-quality-head">
-          <span className="audit-quality-label">Data Quality</span>
-          <span className="audit-quality-pct">{pct}%</span>
-        </div>
-        <div className="audit-quality-track">
-          <div className="audit-quality-fill" style={{ width: `${pct}%` }} />
-        </div>
       </div>
     </div>
   );
 };
 
-const renderSeoViz = (seoAudit, aiVisibility) => {
+// Data Summary — counts how many runnable Data Visualization cards have
+// completed and surfaces the five most important ones as the dimension rings.
+// Half-circle gauge: count-of-run cards in the center, "OUT OF X" pill below,
+// arc fill ratio = run / total of the data-viz bucket.
+const renderAuditViz = (_auditRows, moduleState) => {
+  // The 5 most important runnable cards in the Data Visualization bucket.
+  // Order = display order in the ring row.
+  const FEATURED = [
+    { id: 'multi-device-view', label: 'Layout' },
+    { id: 'agent-readiness',   label: 'AI Ready' },
+    { id: 'seo-performance',   label: 'SEO' },
+    { id: 'style-guide',       label: 'Brand' },
+    { id: 'social-preview',    label: 'Social' },
+  ];
+  // The full set of runnable Data Visualization cards used for the gauge ratio.
+  const RUNNABLE_BUCKET = [
+    'multi-device-view',
+    'agent-readiness',
+    'seo-performance',
+    'style-guide',
+    'social-preview',
+    'design-evaluation',
+  ];
+
+  const isRun = (id) => moduleState?.[id]?.status === 'succeeded';
+  const isPartial = (id) => {
+    const s = moduleState?.[id]?.status;
+    return s === 'running' || s === 'queued' || s === 'partial' || s === 'failed';
+  };
+
+  const runCount = RUNNABLE_BUCKET.filter(isRun).length;
+  const total = RUNNABLE_BUCKET.length;
+  const gaugePct = total > 0 ? Math.round((runCount / total) * 100) : 0;
+
+  const rings = FEATURED.map(({ id, label }) => {
+    const status = moduleState?.[id]?.status || 'idle';
+    let val = 0;
+    let sub = 'Pending';
+    let p = 0;
+    if (status === 'succeeded') { val = 100; sub = 'Run';     p = 100; }
+    else if (status === 'running' || status === 'queued') { val = 50;  sub = status === 'queued' ? 'Queued' : 'Running'; p = 50; }
+    else if (status === 'partial') { val = 60; sub = 'Partial'; p = 60; }
+    else if (status === 'failed')  { val = 25; sub = 'Failed';  p = 25; }
+    return { label, val, sub, p };
+  });
+
+  return renderGaugeViz({
+    score: runCount,
+    gaugePct,
+    verdictLabel: `OUT OF ${total}`,
+    rings,
+  });
+};
+
+const renderSeoViz = (seoAudit) => {
   const sc  = seoAudit?.scores ?? {};
   const cwv = seoAudit?.coreWebVitals ?? {};
   const lab = seoAudit?.labCoreWebVitals ?? {};
-  const scoreRings = [
-    ['Perform', sc.performance],
+
+  const scoreEntries = [
+    ['Mobile', sc.performance],
     ['SEO',     sc.seo],
     ['Access',  sc.accessibility],
     ['BP',      sc.bestPractices],
-    aiVisibility?.score != null ? ['AI Vis', aiVisibility.score] : null,
-  ].filter((entry) => entry != null && entry[1] != null);
-  const lcpMs   = cwv.lcp?.p75  ?? lab.lcp?.p75;
-  const inpMs   = cwv.inp?.p75;
-  const clsVal  = cwv.cls?.p75  ?? lab.cls?.p75;
+  ].filter(([, s]) => s != null);
+
+  const overall = scoreEntries.length > 0
+    ? Math.round(scoreEntries.reduce((sum, [, s]) => sum + s, 0) / scoreEntries.length)
+    : null;
+
+  const rings = scoreEntries.map(([label, s]) => ({
+    label,
+    val: s,
+    sub: 'Score',
+    p: s,
+  }));
+
+  // Optionally append a single Core Web Vital ring as the 5th cell.
   const goodnessPct = (key, raw) => {
     if (raw == null) return 0;
     switch (key) {
@@ -6225,115 +6240,60 @@ const renderSeoViz = (seoAudit, aiVisibility) => {
       default:     return 0;
     }
   };
-  const cwvItems = [
-    lcpMs  != null && { key: 'lcp', label: 'LCP', display: `${(lcpMs / 1000).toFixed(1)}s`, cat: cwv.lcp?.category ?? lab.lcp?.category, pct: goodnessPct('lcp', lcpMs)  },
-    inpMs  != null && { key: 'inp', label: 'INP', display: `${inpMs}ms`,                    cat: cwv.inp?.category,                       pct: goodnessPct('inp', inpMs)  },
-    clsVal != null && { key: 'cls', label: 'CLS', display: Number(clsVal).toFixed(2),       cat: cwv.cls?.category ?? lab.cls?.category,  pct: goodnessPct('cls', clsVal) },
-  ].filter(Boolean);
-  const diagItems = (seoAudit?.diagnostics ?? []).slice(0, 2);
-  const catLabel   = (c) => c === 'FAST' ? 'Fast' : c === 'AVERAGE' ? 'Average' : c === 'SLOW' ? 'Slow' : null;
-  const circ = 2 * Math.PI * 27; // ≈ 169.646
-  return (
-    <div id="seo-perf-viz-shell">
-      <svg className="seo-grad-defs" aria-hidden="true">
-        <defs>
-          <linearGradient id="rg" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%"   stopColor="#00cfff"/>
-            <stop offset="48%"  stopColor="#7b5fff"/>
-            <stop offset="100%" stopColor="#ff3de8"/>
-          </linearGradient>
-          <linearGradient id="rg-v" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%"   stopColor="#00cfff"/>
-            <stop offset="100%" stopColor="#ff3de8"/>
-          </linearGradient>
-        </defs>
-      </svg>
+  const lcpMs = cwv.lcp?.p75 ?? lab.lcp?.p75;
+  if (lcpMs != null && rings.length < 5) {
+    const cat = cwv.lcp?.category ?? lab.lcp?.category;
+    const sub = cat === 'FAST' ? 'Fast' : cat === 'AVERAGE' ? 'Avg' : cat === 'SLOW' ? 'Slow' : 'p75';
+    rings.push({
+      label: 'LCP',
+      val: `${(lcpMs / 1000).toFixed(1)}s`,
+      sub,
+      p: goodnessPct('lcp', lcpMs),
+    });
+  }
 
-      {scoreRings.length > 0 && (
-        <div className="seo-scores">
-          {scoreRings.map(([label, score]) => {
-            const offset = circ - (circ * score / 100);
-            const isPerfect = score === 100;
-            return (
-              <div className="seo-score-tile" key={label}>
-                <div className="seo-ring-wrap">
-                  <svg viewBox="0 0 64 64">
-                    <circle className="seo-ring-track" cx="32" cy="32" r="27" />
-                    <circle
-                      cx="32" cy="32" r="27" fill="none"
-                      stroke={isPerfect ? 'url(#rg)' : 'url(#rg-v)'}
-                      strokeWidth="5" strokeLinecap="round"
-                      strokeDasharray={circ}
-                      strokeDashoffset={offset}
-                    />
-                  </svg>
-                  <div className={`seo-ring-num ${isPerfect ? 'seo-ring-num--grad' : 'seo-ring-num--partial'}`}>{score}</div>
-                </div>
-                <div className="seo-score-lbl">{label}</div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+  const verdictLabel = overall == null ? null : overall >= 90 ? 'FAST' : overall >= 50 ? 'AVERAGE' : 'SLOW';
+  return renderGaugeViz({ score: overall, verdictLabel, rings });
+};
 
-      {scoreRings.length > 0 && cwvItems.length > 0 && <div className="seo-div" />}
+const renderAgentReadyViz = (agentData, aiSeoData) => {
+  const score   = agentData?.score != null ? Math.round(agentData.score) : null;
+  const verdict = agentData?.verdict || null;
+  const dims    = agentData?.dimensions || {};
+  const checks  = Array.isArray(agentData?.checks) ? agentData.checks : [];
+  const aiScore = aiSeoData?.aiVisibility?.score ?? null;
 
-      {cwvItems.length > 0 && (
-        <div className="seo-vitals">
-          {cwvItems.map(({ key, label, display, cat, pct }) => {
-            const cLabel = catLabel(cat);
-            const isGood = cat === 'FAST';
-            const tone = isGood ? 'cyan' : 'pink';
-            return (
-              <div className="seo-vital-row" key={key}>
-                <div className="seo-vital-meta">
-                  <span className="seo-vital-key">{label}</span>
-                  <div className="seo-vital-val">
-                    <span className={`seo-vital-n seo-vital-n--${tone}`}>{display}</span>
-                    {cLabel && <span className={`seo-vital-badge seo-vital-badge--${isGood ? 'fast' : 'avg'}`}>{cLabel}</span>}
-                  </div>
-                </div>
-                <div className="seo-vital-bar">
-                  <i className={tone} style={{ width: `${pct}%` }} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+  const verdictLevel = (v) => {
+    if (!v) return 'LEVEL 2';
+    const r = v.toLowerCase();
+    if (r.includes('not') && r.includes('ready')) return 'LEVEL 1';
+    if (r.includes('partial'))                     return 'LEVEL 2';
+    if (r.includes('ready'))                       return 'LEVEL 3';
+    return 'LEVEL 2';
+  };
 
-      {cwvItems.length > 0 && diagItems.length > 0 && <div className="seo-div" />}
+  const DIM_META = [
+    { key: 'discoverability', label: 'Discover',     dimChecks: ['robots-txt-present','robots-txt-parseable','sitemap-xml-reachable','link-header-sitemap','api-catalog-wellknown'] },
+    { key: 'accessibility',   label: 'Content',      dimChecks: ['llms-txt-present','markdown-content-negotiation','structured-data-present'] },
+    { key: 'botAccess',       label: 'Bot Access',   dimChecks: ['robots-content-signal','web-bot-auth-supported'] },
+    { key: 'capabilities',    label: 'Capabilities', dimChecks: ['mcp-discovery','agent-skills-manifest','x402-payment-supported','oauth-discovery'] },
+  ];
 
-      {diagItems.length > 0 && (() => {
-        const parseNum = (str) => {
-          if (str == null) return null;
-          const n = parseFloat(String(str).replace(/,/g, ''));
-          return isNaN(n) ? null : n;
-        };
-        const diagNums = diagItems.map((d) => parseNum(d.value));
-        const maxNum   = Math.max(...diagNums.filter((n) => n != null), 0.001);
-        return (
-          <div className="seo-diag-row">
-            {diagItems.map((d, i) => {
-              const num = diagNums[i];
-              const barPct = num != null ? Math.max(4, (num / maxNum) * 100) : null;
-              return (
-                <div className="seo-diag-tile" key={d.id}>
-                  <div className="seo-diag-num">{d.value}</div>
-                  <div className="seo-diag-lbl">{d.label}</div>
-                  {barPct != null && (
-                    <div className="seo-diag-bar">
-                      <i style={{ width: `${barPct}%` }} />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        );
-      })()}
-    </div>
-  );
+  const rings = [
+    ...DIM_META.map(({ key, label, dimChecks }) => {
+      const val   = dims[key] != null ? Math.round(dims[key]) : null;
+      const total = dimChecks.length;
+      const passed = checks.filter((c) => dimChecks.includes(c.id) && c.status === 'pass').length;
+      return { label, val, sub: val != null ? `${passed}/${total}` : 'N/A', p: val ?? 0 };
+    }),
+    ...(aiScore != null ? [{ label: 'AI Vis', val: aiScore, sub: 'Score', p: aiScore }] : []),
+  ];
+
+  return renderGaugeViz({
+    score,
+    verdictLabel: verdict ? verdictLevel(verdict) : null,
+    rings,
+  });
 };
 
 const renderViz = (type, countdownHours) => {
@@ -7276,6 +7236,8 @@ const dashboardCss = `
     align-items: stretch;
     justify-content: stretch;
     padding: 0;
+    font-family: 'Doto', var(--font-mono);
+    font-size: clamp(14px, 1.4vw, 20px);
   }
   /* Brief tile — miniaturized iframe preview of the full brief document.
      Render iframe at 4x the tile size, scale to 25% via transform to fit. */
@@ -7698,18 +7660,20 @@ const dashboardCss = `
      string + white-space: pre-line to break naturally. */
   .tile-intake-placeholder .tile-empty-label {
     font-family: 'Doto', var(--font-mono);
-    font-size: 80px;
-    font-size: clamp(40px, 16cqi, 80px);
+    font-size: 44px;
+    font-size: clamp(22px, 9cqi, 44px);
     font-weight: 900;
-    letter-spacing: 0.06em;
-    line-height: 1.05;
+    letter-spacing: 0.04em;
+    line-height: 1.08;
     text-transform: uppercase;
     color: #2a2420;
     text-align: center;
-    white-space: pre-line;
-    padding: clamp(12px, 4%, 32px);
-    max-width: 90%;
-    word-break: break-word;
+    white-space: normal;
+    text-wrap: balance;
+    padding: clamp(10px, 4%, 24px);
+    max-width: 92%;
+    word-break: normal;
+    overflow-wrap: break-word;
     container-type: normal;
   }
   .tile-intake-placeholder {
@@ -7802,15 +7766,22 @@ const dashboardCss = `
   .sg-no-logo,
   .sg-no-data {
     font-family: 'Doto', var(--font-mono);
-    font-size: 72px;
-    font-size: clamp(28px, 24cqi, 72px);
+    /* Target 20px, scale up/down with the quadrant's width. */
+    font-size: 20px;
+    font-size: clamp(12px, 9cqw, 32px);
     font-weight: 900;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: rgba(42, 36, 32, 0.18);
+    letter-spacing: 0.02em;
+    color: rgba(42, 36, 32, 0.22);
     text-align: center;
-    line-height: 1.05;
-    white-space: pre-line;
+    line-height: 1;
+    white-space: nowrap;
+    padding: 4px;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   #sg-brand-mark-img {
     width: 50%;
@@ -8284,6 +8255,37 @@ const dashboardCss = `
   .tile.tile-intake-card--btns-only .tile-foot-rerun-btn,
   .tile.tile-intake-card--btns-only .tile-view-details-btn {
     pointer-events: auto;
+  }
+  /* ── Global card-hover override: every intake/data-viz card renders at full
+        opacity with no card-level hover state. Direct button :hover (Run,
+        Details, download, etc.) still works because those rules don't depend
+        on the parent .tile:hover selector. ──────────────────────────────── */
+  .tile.tile-intake-card,
+  .tile.tile-intake-card--dimmed,
+  .tile.tile-intake-card--locked,
+  .tile.tile-intake-card--inactive,
+  .tile.tile-intake-card--btns-only {
+    opacity: 1 !important;
+  }
+  .tile.tile-intake-card:hover,
+  .tile.tile-intake-card--dimmed:hover,
+  .tile.tile-intake-card--locked:hover,
+  .tile.tile-intake-card--inactive:hover,
+  .tile.tile-intake-card--btns-only:hover {
+    opacity: 1 !important;
+    transform: none !important;
+    box-shadow: none !important;
+  }
+  /* Cancel card-hover-driven children effects (Details btn dark fill, mockup
+     darkening overlays). Direct btn :hover rules elsewhere are unaffected. */
+  .tile.tile-intake-card:hover .tile-view-details-btn:not(:hover) {
+    background: #fff;
+    border-color: rgba(0, 0, 0, 0.4);
+    color: rgba(0, 0, 0, 0.55);
+  }
+  .tile.tile-intake-card:hover .tile-intake-mockup-wrap::before,
+  .tile.tile-intake-card:hover .tile-brief-preview-wrap::before {
+    opacity: 0;
   }
   .tile-foot-rerun-btn {
     background: #fff;
@@ -9817,6 +9819,104 @@ const dashboardCss = `
     border-radius: 999px;
     background: linear-gradient(90deg, #00cfff, #7b5fff, #ff3de8);
   }
+  /* ── Agent Readiness card shell viz ──────────────────────────────────── */
+  #ar-viz-shell {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(4px, 1.5cqi, 10px);
+    padding: clamp(8px, 3%, 18px) clamp(10px, 4%, 22px);
+    box-sizing: border-box;
+    overflow: hidden;
+    container-type: size;
+  }
+  #ar-gauge-wrap {
+    position: relative;
+    width: clamp(70px, 72cqi, 140px);
+    flex-shrink: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(3px, 1cqi, 6px);
+  }
+  #ar-gauge-svg { width: 100%; display: block; }
+  #ar-gauge-score {
+    position: absolute;
+    top: 56%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'Doto', var(--font-mono);
+    font-weight: 900;
+    font-size: clamp(14px, 5cqi, 26px);
+    line-height: 1;
+    color: #2a2420;
+  }
+  #ar-verdict-pill {
+    font-family: var(--font-mono);
+    font-size: clamp(7px, 2.2cqi, 9px);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.3em 0.9em;
+    border-radius: 999px;
+    border: 1px solid rgba(42,36,32,0.1);
+    background: rgba(255,255,255,0.55);
+    color: rgba(42,36,32,0.6);
+    line-height: 1;
+  }
+  #ar-dim-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-evenly;
+    width: 100%;
+    flex-shrink: 0;
+    gap: clamp(3px, 1cqi, 8px);
+  }
+  .ar-dim-cell {
+    flex: 1 1 0%;
+    min-width: 0;
+    padding: clamp(4px, 1.5cqi, 10px) clamp(3px, 1cqi, 8px);
+  }
+  .ar-dim-cell .seo-ring-svg {
+    width: clamp(30px, 16cqi, 56px);
+    height: clamp(30px, 16cqi, 56px);
+  }
+  .ar-dim-cell .audit-ring-val {
+    font-size: clamp(9px, 3.5cqi, 17px);
+  }
+  .ar-dim-cell .audit-ring-label {
+    font-size: clamp(5px, 1.8cqi, 8px);
+  }
+  .ar-ring-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .ar-ring-val {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'Doto', var(--font-mono);
+    font-weight: 900;
+    font-size: clamp(9px, 3.5cqi, 17px);
+    line-height: 1;
+    color: #2a2420;
+    pointer-events: none;
+  }
+  .ar-dim-sub {
+    font-family: var(--font-mono);
+    font-size: clamp(5px, 1.6cqi, 7px);
+    color: rgba(42,36,32,0.45);
+    letter-spacing: 0.06em;
+    text-align: center;
+    margin-top: 1px;
+  }
+  /* ── end Agent Readiness viz ──────────────────────────────────────────── */
   .spark-val { font-family: var(--font-mono); font-size: 24px; color: var(--text-display); line-height: 1; margin-bottom: 4px; }
   .spark-val .unit, .countdown .unit, .countdown-meta, .chip { font-family: var(--font-mono); text-transform: uppercase; }
   .spark-val .unit { font-size: 9px; color: var(--text-secondary); margin-left: 5px; letter-spacing: 0.08em; }
@@ -11335,13 +11435,13 @@ const dashboardCss = `
   #delete-account-modal-headline {
     margin: 0 0 0.7rem;
     color: #2a2420;
-    font-size: clamp(2rem, 8.5vw, 7rem);
-    line-height: 1;
-    letter-spacing: -0.04em;
+    font-size: clamp(1.4rem, 4.5vw, 2.4rem);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
     font-family: "Doto", "Space Mono", monospace;
     font-weight: 700;
     text-align: center;
-    word-break: break-word;
+    white-space: nowrap;
   }
   #delete-account-modal-copy {
     margin: 0 0 1.2rem;

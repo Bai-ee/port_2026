@@ -141,7 +141,7 @@ const slides = [
 
 const getInitials = (name) => name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
 
-const FILTERS = ['Design', 'Websites', 'Content', 'Video', 'AI Workflows'];
+const FILTERS = ['Design', 'Websites', 'Content', 'Video', 'AI Workflows', 'Blockchain'];
 
 const FILTER_WORK_LABEL = {
   default: 'Selected Work',
