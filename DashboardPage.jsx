@@ -1202,8 +1202,14 @@ const DashboardPage = () => {
   // modular clients without brief data, or 'brief' otherwise. Avoids the flash
   // where the default 'brief' view paints before the effect corrects it.
   const [activeCapabilityFilter, setActiveCapabilityFilter] = useState(null);
+  const [expandedMobileCards, setExpandedMobileCards] = useState(new Set());
   const [chatDraft, setChatDraft] = useState('');
   const [modalChatMode, setModalChatMode] = useState('ai');
+  const toggleMobileCard = (id) => setExpandedMobileCards((prev) => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
   const capabilityGridRef = useRef(null);
   const dashboardVisibleRef = useRef(false);
   const [bootstrap, setBootstrap] = useState({ userProfile: null, client: null, dashboardState: null, recentRuns: [], intelligence: null, moduleConfig: null, moduleState: null });
@@ -4777,17 +4783,32 @@ const DashboardPage = () => {
               <article
                 data-capability-card
                 data-flip-id={`cap-${card.id}`}
-                className={`tile tile-intake-card${hasIntakeData ? ' tile-ready' : ''}${card.wide ? ' tile-intake-card--wide' : ''}${hasBothButtons && !isLocked ? ' tile-intake-card--btns-only' : ''}${isDimmed && !isLocked ? ' tile-intake-card--dimmed' : ''}${isLocked ? ' tile-intake-card--locked' : ''}${isInactiveUnlocked || card.id === 'survey-status' ? ' tile-intake-card--inactive' : ''}`}
+                className={`tile tile-intake-card${hasIntakeData ? ' tile-ready' : ''}${card.wide ? ' tile-intake-card--wide' : ''}${hasBothButtons && !isLocked ? ' tile-intake-card--btns-only' : ''}${isDimmed && !isLocked ? ' tile-intake-card--dimmed' : ''}${isLocked ? ' tile-intake-card--locked' : ''}${isInactiveUnlocked || card.id === 'survey-status' ? ' tile-intake-card--inactive' : ''}${expandedMobileCards.has(card.id) ? ' tile-intake-card--mobile-expanded' : ''}`}
                 id={card.domId || `tile-${card.id}`}
                 key={card.id}
-                onClick={isLocked || isInactiveUnlocked || card.id === 'survey-status' ? undefined : (hasBothButtons ? undefined : () => {
+                onClick={(e) => {
+                  if (typeof window !== 'undefined' && window.matchMedia('(max-width: 520px)').matches) {
+                    const isCollapsed = !expandedMobileCards.has(card.id);
+                    if (isCollapsed) {
+                      // Any tap on a collapsed card expands it
+                      toggleMobileCard(card.id);
+                    } else if (e.target.closest('.tile-number')) {
+                      // Only the header strip collapses an expanded card
+                      toggleMobileCard(card.id);
+                    }
+                    return;
+                  }
+                  if (isLocked || isInactiveUnlocked || card.id === 'survey-status' || hasBothButtons) return;
                   if (card.id === 'brief' && briefPreviewHtml) { setBriefFullScreen(true); return; }
                   if (card.id === 'audit-summary') { setAuditFullScreen(true); return; }
                   setActiveTileModal({ title: card.title, description: card.description, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null, recommendation: card.recommendation || null, analyzer: card.analyzer || null, readinessBadge: card.readinessBadge || null });
-                })}
+                }}
               >
                 <div className="tile-number">
                   <span className="tile-header-label">{card.title}</span>
+                  <span className="tile-mobile-chevron" aria-hidden="true">
+                    <svg viewBox="0 0 12 12"><polyline points="2,4 6,8 10,4" /></svg>
+                  </span>
                 </div>
                 {isLocked ? (
                   <div
@@ -10042,6 +10063,75 @@ const dashboardCss = `
       overflow: visible;
     }
     .tile-intake-heading { font-size: 16px; line-height: 1.25; }
+
+    /* ── Mobile collapsible cards ────────────────────────────────────────── */
+    /* Re-enable pointer events so all cards can be tapped to expand */
+    .tile.tile-intake-card--btns-only { pointer-events: auto; }
+    .tile-intake-card .tile-number {
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      min-height: 44px;
+      padding-top: 4px;
+      padding-bottom: 4px;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .tile-intake-card .tile-header-label {
+      color: var(--text-primary);
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .tile-mobile-chevron {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--border);
+      flex-shrink: 0;
+      margin-left: auto;
+      transition: background 0.18s ease, transform 0.22s ease;
+    }
+    .tile-mobile-chevron svg {
+      width: 11px;
+      height: 11px;
+      stroke: var(--text-secondary);
+      fill: none;
+      stroke-width: 2.2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      transition: stroke 0.18s ease;
+      transform: rotate(0deg);
+      transition: transform 0.22s ease;
+    }
+    .tile-intake-card--mobile-expanded .tile-mobile-chevron {
+      background: var(--surface-raised);
+    }
+    .tile-intake-card--mobile-expanded .tile-mobile-chevron svg {
+      transform: rotate(180deg);
+    }
+    /* Collapsed: hide everything below tile-number */
+    .tile-intake-card .tile-intake-placeholder,
+    .tile-intake-card .tile-intake-body,
+    .tile-intake-card .tile-foot {
+      display: none;
+    }
+    /* Expanded: restore all sections */
+    .tile-intake-card--mobile-expanded .tile-intake-placeholder,
+    .tile-intake-card--mobile-expanded .tile-intake-placeholder--locked,
+    .tile-intake-card--mobile-expanded .tile-intake-body,
+    .tile-intake-card--mobile-expanded .tile-foot {
+      display: flex;
+    }
+    .tile-intake-card--mobile-expanded .tile-intake-body {
+      flex-direction: column;
+    }
+  }
+  /* Chevron hidden above mobile breakpoint */
+  @media (min-width: 521px) {
+    .tile-mobile-chevron { display: none; }
   }
   @media (max-width: 620px) {
     #founders-shell { padding-top: 96px; }
