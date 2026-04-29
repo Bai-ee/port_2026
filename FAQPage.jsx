@@ -201,7 +201,7 @@ export default function FAQPage() {
           id="faq-hero-section"
           style={{
             marginTop: '50px',
-          padding: 'clamp(3rem, 8vh, 7rem) max(10vw, calc((100% - 810px) / 2)) clamp(2.5rem, 5vh, 4rem)',
+          padding: 'clamp(3rem, 8vh, 7rem) clamp(1.25rem, max(8vw, calc((100% - 1100px) / 2)), 12rem) clamp(2.5rem, 5vh, 4rem)',
             position: 'relative',
             overflow: 'hidden',
             borderBottom: '1px solid rgba(0,0,0,0.05)',
@@ -274,7 +274,7 @@ export default function FAQPage() {
         <section
           id="faq-accordion-section"
           style={{
-            padding: 'clamp(3rem, 6vh, 5rem) max(10vw, calc((100% - 810px) / 2))',
+            padding: 'clamp(3rem, 6vh, 5rem) clamp(1.25rem, max(8vw, calc((100% - 1100px) / 2)), 12rem)',
           }}
         >
           <div id="faq-accordion-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -294,7 +294,7 @@ export default function FAQPage() {
           id="faq-inline-footer"
           style={{
             width: '100%',
-            padding: 'clamp(2.5rem, 5vw, 4.5rem) max(10vw, calc((100% - 810px) / 2)) clamp(3rem, 6vw, 5rem)',
+            padding: 'clamp(2.5rem, 5vw, 4.5rem) clamp(1.25rem, max(8vw, calc((100% - 1100px) / 2)), 12rem) clamp(3rem, 6vw, 5rem)',
             boxSizing: 'border-box',
             borderTop: '1px solid rgba(42,36,32,0.08)',
           }}

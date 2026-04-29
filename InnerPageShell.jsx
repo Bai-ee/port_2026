@@ -61,7 +61,7 @@ export default function InnerPageShell({ children, secNum }) {
           id="inner-page-footer"
           style={{
             width: '100%',
-            padding: 'clamp(2.5rem, 5vw, 4.5rem) max(10vw, calc((100% - 810px) / 2)) clamp(3rem, 6vw, 5rem)',
+            padding: 'clamp(2.5rem, 5vw, 4.5rem) clamp(1.25rem, max(8vw, calc((100% - 1100px) / 2)), 12rem) clamp(3rem, 6vw, 5rem)',
             boxSizing: 'border-box',
             borderTop: '1px solid rgba(42,36,32,0.08)',
           }}

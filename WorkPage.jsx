@@ -60,7 +60,7 @@ export default function WorkPage() {
       <section
         id="work-hero-section"
         style={{
-          padding: 'clamp(3rem,8vh,7rem) max(10vw,calc((100% - 810px) / 2)) clamp(2.5rem,5vh,4rem)',
+          padding: 'clamp(3rem,8vh,7rem) clamp(1.25rem,max(8vw,calc((100% - 1100px) / 2)),12rem) clamp(2.5rem,5vh,4rem)',
           position: 'relative',
           overflow: 'hidden',
           borderBottom: '1px solid rgba(0,0,0,0.05)',
@@ -127,7 +127,7 @@ export default function WorkPage() {
       <section
         id="work-projects-section"
         style={{
-          padding: 'clamp(3rem,8vh,7rem) max(10vw,calc((100% - 810px) / 2)) clamp(2.5rem,5vh,4rem)',
+          padding: 'clamp(3rem,8vh,7rem) clamp(1.25rem,max(8vw,calc((100% - 1100px) / 2)),12rem) clamp(2.5rem,5vh,4rem)',
         }}
       >
         <div className="inner-page-card-grid">
