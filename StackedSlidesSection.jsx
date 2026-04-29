@@ -1284,6 +1284,30 @@ const StackedSlidesSection = () => {
             border-radius: 999px !important;
             letter-spacing: 0.02em !important;
           }
+          /* ── Onboarding card / table overflow fix ── */
+          #dashboard-stack-shell {
+            overflow: hidden;
+            padding-top: 0 !important;
+          }
+          [data-peek-card] {
+            display: none !important;
+          }
+          #cmo-dashboard-card,
+          [data-capability-card] {
+            overflow: hidden !important;
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+          }
+          #cmo-dashboard-table table {
+            table-layout: fixed;
+            width: 100%;
+          }
+          #cmo-dashboard-table td {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 0;
+          }
           .cmo-url-input-mobile .cmo-table-submit-label { display: none; }
           .cmo-url-input-mobile .cta-pill-btn {
             width: 2.6rem;
