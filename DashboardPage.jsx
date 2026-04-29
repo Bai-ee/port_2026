@@ -28,6 +28,7 @@ import { useAuth } from './AuthContext';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from './firebase';
 import { internalPageGlassCardStyle } from './pageSurfaceSystem';
+import InternalPageBackground from './InternalPageBackground';
 import onboardingConfig from './onboarding/questions.config.cjs';
 import { resolveAnalyzerSource, buildCardDescription, buildModuleStateDescription } from './features/scout-intake/card-description-builder.mjs';
 import { deriveFindings } from './features/scout-intake/derived-findings.mjs';
@@ -1238,6 +1239,10 @@ const DashboardPage = () => {
   const modalMarqueePrevTimeRef = useRef(null);
   const heroMarqueeShellRef = useRef(null);
   const heroMarqueeTrackRef = useRef(null);
+  const noWorkspaceMarqueeTrackRef = useRef(null);
+  const noWorkspaceMarqueeOffsetRef = useRef(0);
+  const noWorkspaceMarqueeAnimRef = useRef(null);
+  const noWorkspaceMarqueePrevTimeRef = useRef(null);
   const heroMarqueeCopyRef = useRef(null);
   const [heroMarqueeCopies, setHeroMarqueeCopies] = useState(2);
   const autoProvisionRecoveryAttemptedRef = useRef(false);
@@ -1253,6 +1258,8 @@ const DashboardPage = () => {
   // and injected via iframe srcDoc. Keeps the brief's <style> isolated from
   // the dashboard's own styles.
   const [briefPreviewHtml, setBriefPreviewHtml] = useState('');
+  // HTML preview for the newsletter tile — fetched from /api/dashboard/newsletter-preview
+  const [newsletterPreviewHtml, setNewsletterPreviewHtml] = useState('');
 
   // Fetch the brief HTML for the Brief tile's miniature preview. Re-fetches
   // whenever latestRunId changes so the tile always shows the newest render.
@@ -1284,6 +1291,32 @@ const DashboardPage = () => {
     return () => { cancelled = true; };
   }, [user, bootstrap?.dashboardState?.latestRunId, bootstrap?.dashboardState?.scribe?.brief?.headline]);
 
+  // Fetch the newsletter HTML for the Newsletter tile's PREVIEW tab.
+  // Loads the real newsletter if available, otherwise the generic template.
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const dash = bootstrap?.dashboardState;
+        const hasReal = Boolean(dash?.newsletter?.content?.hero_story);
+        const url = hasReal
+          ? '/api/dashboard/newsletter-preview'
+          : '/api/dashboard/newsletter-preview?template=generic';
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        });
+        if (!res.ok) return;
+        const html = await res.text();
+        if (!cancelled) setNewsletterPreviewHtml(html);
+      } catch {
+        // non-fatal — tab falls back to placeholder
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user, bootstrap?.dashboardState?.newsletter?.content?.hero_story]);
 
   // Clock tick
   useEffect(() => {
@@ -1307,6 +1340,7 @@ const DashboardPage = () => {
     // Reference via bootstrap here — `dashboardState` is declared later in the
     // component body (TDZ) so the direct name isn't safe at effect-definition time.
     if (id === 'survey-status') { setModalTab('chat'); return; }
+    if (id === 'newsletter') { setModalTab('preview'); return; }
     if (id === 'seo-performance') { setModalTab('report'); return; }
     if (id === 'agent-readiness') { setModalTab('report'); return; }
     if (id === 'design-evaluation' && bootstrap?.dashboardState?.analyzerOutputs?.['design-evaluation']) { setModalTab('report'); return; }
@@ -1883,6 +1917,27 @@ const DashboardPage = () => {
     return () => { cancelAnimationFrame(modalMarqueeAnimRef.current); modalMarqueePrevTimeRef.current = null; };
   }, [showIntakeModal]);
 
+  // Marquee rAF for no-workspace associate screen
+  useEffect(() => {
+    if (!noWorkspaceState) return undefined;
+    const SPEED = 72;
+    const tick = (timestamp) => {
+      if (noWorkspaceMarqueePrevTimeRef.current === null) noWorkspaceMarqueePrevTimeRef.current = timestamp;
+      const delta = Math.min(timestamp - noWorkspaceMarqueePrevTimeRef.current, 64);
+      noWorkspaceMarqueePrevTimeRef.current = timestamp;
+      const track = noWorkspaceMarqueeTrackRef.current;
+      if (track && track.children[0]) {
+        const singleWidth = track.children[0].offsetWidth;
+        noWorkspaceMarqueeOffsetRef.current -= SPEED * (delta / 1000);
+        if (noWorkspaceMarqueeOffsetRef.current <= -singleWidth) noWorkspaceMarqueeOffsetRef.current += singleWidth;
+        track.style.transform = `translate3d(${noWorkspaceMarqueeOffsetRef.current}px, 0, 0)`;
+      }
+      noWorkspaceMarqueeAnimRef.current = requestAnimationFrame(tick);
+    };
+    noWorkspaceMarqueeAnimRef.current = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(noWorkspaceMarqueeAnimRef.current); noWorkspaceMarqueePrevTimeRef.current = null; };
+  }, [noWorkspaceState]);
+
   useEffect(() => {
     const shell = heroMarqueeShellRef.current;
     const track = heroMarqueeTrackRef.current;
@@ -2380,6 +2435,8 @@ const DashboardPage = () => {
   const hasBusinessModelData = Boolean(resolvedBusinessModel);
   const hasPrioritySignalData = Boolean(resolvedPrioritySignal);
   const hasDraftPostData = Boolean(resolvedDraftPost);
+  const hasNewsletterData = Boolean(dashboardState?.newsletter?.content?.hero_story);
+  const newsletterHeroPreview = dashboardState?.newsletter?.content?.hero_story?.slice(0, 140) || '';
   const hasContentAngleData = Boolean(resolvedContentAngle);
   const hasOpportunitiesData = resolvedOpportunities.length > 0;
   const hasSeoAuditData = Boolean((seoAudit?.status === 'ok' || seoAudit?.status === 'partial') && seoAudit?.scores);
@@ -3578,6 +3635,22 @@ const DashboardPage = () => {
       footerLeft: WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
     },
+    {
+      id: 'newsletter',
+      category: 'content',
+      number: 'NL',
+      label: 'NEWSLETTER',
+      title: 'Newsletter',
+      description: hasNewsletterData
+        ? 'Auto-generated newsletter from your latest intelligence brief.'
+        : 'Newsletter generation requires a completed Scout brief.',
+      placeholderLabel: hasNewsletterData ? 'READY' : 'NO\nBRIEF',
+      rows: hasNewsletterData
+        ? [{ key: 'preview', label: 'Lead', value: newsletterHeroPreview + (newsletterHeroPreview.length >= 140 ? '…' : '') }]
+        : buildWorkNeededRows('Run the Scout pipeline first to generate newsletter content.'),
+      footerLeft: hasNewsletterData ? 'Live' : WORK_NEEDED_LABEL,
+      footerRight: 'REVIEWED',
+    },
 
     // ── GROWTH SIGNALS ────────────────────────────────────────────────────────
     {
@@ -4384,108 +4457,139 @@ const DashboardPage = () => {
       <main id="founders-shell">
 
         {noWorkspaceState ? (
-          <section
-            id="dashboard-recovery-shell"
-            style={{
+          <div id="dashboard-associate-shell" style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 200,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 'clamp(1rem, 5vw, 2rem)',
+            boxSizing: 'border-box',
+            overflowX: 'hidden',
+            fontFamily: '"Space Grotesk", system-ui, sans-serif',
+          }}>
+            <InternalPageBackground />
+            <style>{`
+              #dashboard-associate-submit-btn:disabled {
+                opacity: 0.25;
+                cursor: not-allowed;
+              }
+              @media (max-width: 480px) {
+                #dashboard-associate-shell {
+                  align-items: start;
+                  padding-top: 1.5rem;
+                  padding-bottom: 1.5rem;
+                }
+                #dashboard-associate-card {
+                  padding: 1.25rem;
+                  width: 100%;
+                  max-width: none !important;
+                  box-sizing: border-box;
+                }
+              }
+            `}</style>
+            <div id="dashboard-associate-gradient" style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'radial-gradient(60% 60% at 10% 15%, rgba(102, 184, 164, 0.12), transparent 60%), radial-gradient(50% 50% at 82% 72%, rgba(171, 148, 218, 0.14), transparent 65%), linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.04))',
+              pointerEvents: 'none',
+              zIndex: 1,
+            }} />
+
+            <div id="dashboard-associate-card" style={{
+              position: 'relative',
+              zIndex: 2,
               width: '100%',
-              maxWidth: '56rem',
-              margin: '2rem auto 0',
-              padding: '1.5rem',
-              borderRadius: '20px',
+              maxWidth: '30rem',
+              padding: 'clamp(1.25rem, 5vw, 2rem)',
+              borderRadius: '1.1rem',
+              boxSizing: 'border-box',
               ...internalPageGlassCardStyle,
-            }}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div>
-                <p style={{ margin: 0, fontSize: '0.8rem', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.48)', fontFamily: '"Space Mono", monospace' }}>
-                  Client access
-                </p>
-                <h1 style={{ margin: '0.5rem 0 0', fontSize: 'clamp(1.8rem, 4vw, 3rem)', lineHeight: 1.05, letterSpacing: '-0.04em' }}>
-                  This login is not linked to a dashboard yet.
-                </h1>
+              boxShadow: '0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4), 0px 5px 10px rgba(0,0,0,0.1), 0px 15px 30px rgba(0,0,0,0.1), 0px 20px 40px rgba(0,0,0,0.15)',
+            }}>
+              <div id="dashboard-associate-brand-row" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', justifyContent: 'space-between' }}>
+                <img src="/img/sig.png" alt="" aria-hidden="true" style={{ width: '2.75rem', height: 'auto', display: 'block' }} />
+                <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.44)', fontWeight: 700, fontFamily: '"Space Mono", monospace' }}>Client Access</span>
+                <Link href="/" id="dashboard-associate-back-btn" aria-label="Back to site" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '2.4rem', height: '2.4rem', borderRadius: '999px', background: 'rgba(255,255,255,0.34)', border: '1px solid rgba(42,36,32,0.12)', color: 'rgba(42,36,32,0.58)', textDecoration: 'none', fontSize: '1.05rem', fontFamily: '"Space Mono", monospace', lineHeight: 1 }}>✕</Link>
               </div>
-              <p style={{ margin: 0, color: 'rgba(42,36,32,0.72)', lineHeight: 1.7, maxWidth: '46rem' }}>
-                You signed in successfully, but this account does not currently have a client workspace attached to it. If you expected an existing dashboard, sign out and use the correct account. If you want to start a new workspace, enter a website below and create it intentionally.
-              </p>
-              <div style={{ display: 'grid', gap: '0.75rem' }}>
-                <label htmlFor="dashboard-recovery-url" style={{ fontSize: '0.82rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.5)', fontFamily: '"Space Mono", monospace' }}>
-                  Website URL
-                </label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
+
+              <div id="dashboard-associate-marquee-viewport" style={{ width: '100%', overflow: 'hidden', margin: '0 0 0.7rem' }}>
+                <div ref={noWorkspaceMarqueeTrackRef} style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform' }}>
+                  <span style={{ margin: 0, flexShrink: 0, color: '#2a2420', fontSize: 'clamp(2rem, 8.5vw, 7rem)', lineHeight: 1, letterSpacing: '-0.04em', fontFamily: '"Doto", "Space Mono", monospace', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                    LINK YOUR DASHBOARD&nbsp;&nbsp;·&nbsp;&nbsp;ASSOCIATE WEBSITE&nbsp;&nbsp;·&nbsp;&nbsp;
+                  </span>
+                  <span aria-hidden="true" style={{ margin: 0, flexShrink: 0, color: '#2a2420', fontSize: 'clamp(2rem, 8.5vw, 7rem)', lineHeight: 1, letterSpacing: '-0.04em', fontFamily: '"Doto", "Space Mono", monospace', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                    LINK YOUR DASHBOARD&nbsp;&nbsp;·&nbsp;&nbsp;ASSOCIATE WEBSITE&nbsp;&nbsp;·&nbsp;&nbsp;
+                  </span>
+                </div>
+              </div>
+
+              <div id="dashboard-associate-email-chip" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1rem', padding: '0.6rem 0.75rem', borderRadius: '0.75rem', background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(42,36,32,0.1)', overflow: 'hidden' }}>
+                <Lock size={14} strokeWidth={1.5} style={{ flexShrink: 0, color: 'rgba(42,36,32,0.45)' }} aria-hidden="true" />
+                <span id="dashboard-associate-email-text" style={{ flex: 1, fontSize: '0.82rem', color: 'rgba(42,36,32,0.72)', fontFamily: '"Space Grotesk", system-ui, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.email}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', flexShrink: 0, fontSize: '0.6rem', fontFamily: '"Space Mono", monospace', letterSpacing: '0.07em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.4)', background: 'rgba(42,36,32,0.06)', borderRadius: '999px', padding: '0.2rem 0.5rem' }}>
+                  <Lock size={10} strokeWidth={2} aria-hidden="true" />
+                  SIGNED IN
+                </span>
+              </div>
+
+              <form
+                id="dashboard-associate-form"
+                style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem', marginTop: '1.2rem' }}
+                onSubmit={(e) => { e.preventDefault(); handleReseed(); }}
+              >
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  <span style={{ color: 'rgba(42,36,32,0.55)', fontSize: '0.72rem', fontWeight: 400, fontFamily: '"Space Mono", monospace', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Website URL</span>
                   <input
-                    id="dashboard-recovery-url"
+                    id="dashboard-associate-url"
                     type="url"
                     value={reseedUrl}
                     onChange={(e) => { setReseedUrl(e.target.value); setReseedError(''); setReseedSuccess(false); }}
                     placeholder="yourbusiness.com"
                     spellCheck={false}
-                    style={{
-                      flex: '1 1 22rem',
-                      minWidth: '18rem',
-                      borderRadius: '999px',
-                      border: '1px solid rgba(42,36,32,0.14)',
-                      background: 'rgba(255,255,255,0.72)',
-                      padding: '0.95rem 1.1rem',
-                      fontSize: '1rem',
-                      color: '#2a2420',
-                    }}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '0.9rem 1rem', borderRadius: '0.95rem', border: '1px solid rgba(42,36,32,0.12)', background: 'rgba(255,255,255,0.72)', color: '#2a2420', fontSize: '1rem', fontFamily: '"Space Grotesk", system-ui, sans-serif' }}
                   />
-                  <button
-                    type="button"
-                    onClick={handleReseed}
-                    disabled={reseedLoading || !reseedUrl.trim()}
-                    style={{
-                      borderRadius: '999px',
-                      border: 'none',
-                      background: '#2a2420',
-                      color: '#fff',
-                      padding: '0.95rem 1.2rem',
-                      fontWeight: 600,
-                      cursor: reseedLoading || !reseedUrl.trim() ? 'not-allowed' : 'pointer',
-                      opacity: reseedLoading || !reseedUrl.trim() ? 0.55 : 1,
-                    }}
-                  >
-                    {reseedLoading ? 'Creating…' : 'Create dashboard'}
-                  </button>
-                </div>
+                </label>
+
                 {reseedError ? (
-                  <div style={{ color: '#9f2d2d', fontSize: '0.94rem' }}>{reseedError}</div>
+                  <div id="dashboard-associate-error" style={{ color: '#8b1e1e', fontSize: '0.82rem', fontFamily: '"Space Mono", monospace', letterSpacing: '0.04em' }}>[ERROR: {reseedError}]</div>
                 ) : null}
                 {reseedSuccess ? (
-                  <div style={{ color: '#2d6a4f', fontSize: '0.94rem' }}>Dashboard creation has been queued. This page will refresh when bootstrap data is ready.</div>
+                  <div id="dashboard-associate-success" style={{ color: '#2d6a4f', fontSize: '0.82rem', fontFamily: '"Space Mono", monospace', letterSpacing: '0.04em' }}>Dashboard creation queued. This page will update when ready.</div>
                 ) : null}
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
-                <Link
-                  href="/"
-                  style={{
-                    borderRadius: '999px',
-                    border: '1px solid rgba(42,36,32,0.14)',
-                    padding: '0.82rem 1.1rem',
-                    textDecoration: 'none',
-                    color: '#2a2420',
-                    background: 'rgba(255,255,255,0.6)',
-                  }}
-                >
-                  Back to homepage
-                </Link>
+
                 <button
-                  type="button"
-                  onClick={handleSignOut}
-                  style={{
-                    borderRadius: '999px',
-                    border: '1px solid rgba(42,36,32,0.14)',
-                    padding: '0.82rem 1.1rem',
-                    color: '#2a2420',
-                    background: 'rgba(255,255,255,0.6)',
-                    cursor: 'pointer',
-                  }}
+                  type="submit"
+                  id="dashboard-associate-submit-btn"
+                  className="cta-pill-btn"
+                  disabled={reseedLoading || !reseedUrl.trim()}
+                  style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minHeight: '3rem', border: 'none', borderRadius: '999px', background: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)', color: '#fff', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer', marginTop: '0.4rem', fontFamily: '"Space Mono", monospace', letterSpacing: '0.05em', textTransform: 'uppercase' }}
                 >
-                  Sign out
+                  {reseedLoading ? 'Working…' : 'Create Dashboard'}
                 </button>
-              </div>
+
+                <div id="dashboard-associate-secondary-actions" style={{ display: 'flex', gap: '0.6rem', marginTop: '0.2rem' }}>
+                  <button
+                    type="button"
+                    id="dashboard-associate-signout-btn"
+                    onClick={handleSignOut}
+                    style={{ flex: 1, borderRadius: '999px', border: '1px solid rgba(42,36,32,0.14)', padding: '0.75rem 1rem', color: 'rgba(42,36,32,0.65)', background: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontSize: '0.82rem', fontFamily: '"Space Mono", monospace', letterSpacing: '0.04em', textTransform: 'uppercase' }}
+                  >
+                    Sign Out
+                  </button>
+                  <Link
+                    href="/"
+                    id="dashboard-associate-back-site-link"
+                    style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '999px', border: '1px solid rgba(42,36,32,0.14)', padding: '0.75rem 1rem', textDecoration: 'none', color: 'rgba(42,36,32,0.65)', background: 'rgba(255,255,255,0.6)', fontSize: '0.82rem', fontFamily: '"Space Mono", monospace', letterSpacing: '0.04em', textTransform: 'uppercase' }}
+                  >
+                    Back to Site
+                  </Link>
+                </div>
+              </form>
             </div>
-          </section>
+          </div>
         ) : (
         <>
         {/* ── Hero ── */}
@@ -5769,6 +5873,8 @@ const DashboardPage = () => {
                         onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }}
                       />
                     </div>
+                  ) : activeTileModal.cardId === 'newsletter' ? (
+                    <span className="tile-empty-label">{activeTileModal.placeholderLabel}</span>
                   ) : activeTileModal.cardId === 'brief' && briefPreviewHtml ? (
                     <iframe
                       key={dashboardState?.latestRunId || 'brief-preview-modal'}
@@ -5913,8 +6019,84 @@ const DashboardPage = () => {
                   </div>
                 )}
 
+                {/* Newsletter card — PREVIEW + DATA tabs */}
+                {activeTileModal.cardId === 'newsletter' && (
+                  <div
+                    id="newsletter-modal-tabs-container"
+                    className="tile-detail-bento-cell tile-detail-tabbed-container"
+                  >
+                    <div className="tile-detail-tabs">
+                      <button
+                        type="button"
+                        className={`tile-detail-tab${modalTab === 'preview' ? ' tile-detail-tab--active' : ''}`}
+                        onClick={() => setModalTab('preview')}
+                      >NEWSLETTER</button>
+                      <button
+                        type="button"
+                        className={`tile-detail-tab${modalTab === 'data' ? ' tile-detail-tab--active' : ''}`}
+                        onClick={() => setModalTab('data')}
+                      >DETAILS</button>
+                    </div>
+                    <div className="tile-detail-tab-content">
+                      {modalTab === 'preview' && (
+                        <div className="tile-detail-tab-pane" style={{ padding: 0, height: '100%', overflow: 'hidden' }}>
+                          {newsletterPreviewHtml ? (
+                            <iframe
+                              key="newsletter-preview-tab"
+                              title="Newsletter email preview"
+                              srcDoc={newsletterPreviewHtml}
+                              sandbox="allow-same-origin"
+                              style={{ width: '100%', height: '100%', minHeight: '500px', border: 'none', borderRadius: '8px', background: '#f8f7f4' }}
+                            />
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '400px', gap: '16px', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'center', padding: '40px' }}>
+                              <span style={{ fontSize: '11px', letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.7 }}>Newsletter Preview</span>
+                              <span style={{ fontSize: '13px', lineHeight: '1.6', maxWidth: '340px' }}>
+                                No newsletter has been generated yet. Run the Scout pipeline to generate intelligence, then the newsletter will be auto-generated from that data.
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {modalTab === 'data' && (
+                        <div id="newsletter-data-tab" className="tile-detail-tab-pane">
+                          {(() => {
+                            const nl = dashboardState?.newsletter;
+                            if (!nl?.content) {
+                              return <p className="tile-analyzer-solutions-empty">No newsletter data available yet.</p>;
+                            }
+                            const dataRows = [
+                              { key: 'nl-header',    isHeader: true, label: 'NEWSLETTER OUTPUT' },
+                              { key: 'nl-status',    label: 'Status',           value: nl.status || 'generated' },
+                              { key: 'nl-alert',     label: 'Alert Level',      value: nl.alertLevel || '—' },
+                              { key: 'nl-scout-ts',  label: 'Scout Brief',      value: nl.scoutBriefTimestamp || '—' },
+                              { key: 'nl-timestamp', label: 'Generated',        value: nl.timestamp || '—' },
+                              { key: 'nl-sections',  isHeader: true, label: 'SECTIONS' },
+                              { key: 'nl-hero',      label: 'Hero Story',       value: nl.content.hero_story ? `${nl.content.hero_story.length} chars` : 'Empty' },
+                              { key: 'nl-hits',      label: 'Quick Hits',       value: nl.content.quick_hits ? `${nl.content.quick_hits.length} chars` : 'Empty' },
+                              { key: 'nl-metrics',   label: 'Metrics Snapshot', value: nl.content.metrics_snapshot ? `${nl.content.metrics_snapshot.length} chars` : 'Empty' },
+                              { key: 'nl-upcoming',  label: 'On the Radar',     value: nl.content.upcoming ? `${nl.content.upcoming.length} chars` : 'Empty' },
+                              { key: 'nl-cta',       label: 'This Week\'s Move', value: nl.content.cta ? `${nl.content.cta.length} chars` : 'Empty' },
+                            ];
+                            return dataRows.map((row) =>
+                              row.isHeader
+                                ? <div key={row.key} className="tile-detail-row-section-head">{row.label}</div>
+                                : (
+                                  <div key={row.key} className="tile-detail-stat-row">
+                                    <span className="tile-detail-stat-label">{row.label}</span>
+                                    <span className="tile-detail-stat-value">{row.value}</span>
+                                  </div>
+                                )
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Tabbed SOLUTIONS / PROBLEMS / DATA for most cards */}
-                {!['multi-device-view', 'brief', 'audit-summary', 'survey-status'].includes(activeTileModal.cardId) && (activeTileModal.analyzer || (activeTileModal.cardId === 'social-preview' && siteMeta)) ? (
+                {!['multi-device-view', 'brief', 'audit-summary', 'survey-status', 'newsletter'].includes(activeTileModal.cardId) && (activeTileModal.analyzer || (activeTileModal.cardId === 'social-preview' && siteMeta)) ? (
                   <div
                     id={`${activeTileModal.cardId}-analyzer-findings`}
                     className="tile-detail-bento-cell tile-detail-tabbed-container"
