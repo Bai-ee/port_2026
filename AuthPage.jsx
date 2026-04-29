@@ -321,6 +321,23 @@ const AuthPageInner = () => {
             </div>
 
             <form id="auth-form" style={formStyle} onSubmit={handleSubmit}>
+              <button
+                type="button"
+                id="auth-google-btn"
+                style={googleButtonStyle}
+                onClick={handleGoogle}
+                disabled={submitting || !isFirebaseConfigured}
+              >
+                <GoogleLogo />
+                <span>Sign Up with Google</span>
+              </button>
+
+              <div id="auth-divider" style={dividerStyle}>
+                <span style={dividerLineStyle} />
+                <span style={dividerLabelStyle}>or</span>
+                <span style={dividerLineStyle} />
+              </div>
+
               <label style={labelStyle}>
                 <span style={labelTextStyle}>Email</span>
                 <input
@@ -362,23 +379,6 @@ const AuthPageInner = () => {
               >
                 {submitting ? 'Working…' : 'Sign Up'}
               </button>
-
-              <div id="auth-divider" style={dividerStyle}>
-                <span style={dividerLineStyle} />
-                <span style={dividerLabelStyle}>or</span>
-                <span style={dividerLineStyle} />
-              </div>
-
-              <button
-                type="button"
-                id="auth-google-btn"
-                style={googleButtonStyle}
-                onClick={handleGoogle}
-                disabled={submitting || !isFirebaseConfigured}
-              >
-                <GoogleLogo />
-                <span>Sign Up with Google</span>
-              </button>
             </form>
           </>
         ) : (
@@ -418,6 +418,23 @@ const AuthPageInner = () => {
             </div>
 
             <form id="auth-form" style={formStyle} onSubmit={handleSubmit}>
+              <button
+                type="button"
+                id="auth-google-btn"
+                style={googleButtonStyle}
+                onClick={handleGoogle}
+                disabled={submitting || !isFirebaseConfigured}
+              >
+                <GoogleLogo />
+                <span>{mode === 'signin' ? 'Continue with Google' : 'Sign Up with Google'}</span>
+              </button>
+
+              <div id="auth-divider" style={dividerStyle}>
+                <span style={dividerLineStyle} />
+                <span style={dividerLabelStyle}>or</span>
+                <span style={dividerLineStyle} />
+              </div>
+
               {mode === 'create' ? (
                 <div id="auth-create-columns">
                   <div id="auth-create-col-left">
@@ -520,23 +537,6 @@ const AuthPageInner = () => {
                 disabled={submitting || !isFirebaseConfigured || !form.email.trim() || !form.password}
               >
                 {submitting ? 'Working…' : mode === 'signin' ? 'Enter Dashboard' : 'Sign Up'}
-              </button>
-
-              <div id="auth-divider" style={dividerStyle}>
-                <span style={dividerLineStyle} />
-                <span style={dividerLabelStyle}>or</span>
-                <span style={dividerLineStyle} />
-              </div>
-
-              <button
-                type="button"
-                id="auth-google-btn"
-                style={googleButtonStyle}
-                onClick={handleGoogle}
-                disabled={submitting || !isFirebaseConfigured}
-              >
-                <GoogleLogo />
-                <span>{mode === 'signin' ? 'Continue with Google' : 'Sign Up with Google'}</span>
               </button>
             </form>
           </>
