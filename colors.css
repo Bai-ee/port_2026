@@ -80,6 +80,14 @@
   pointer-events: none;
 }
 
+/* Prevent iOS Safari from auto-zooming focused input fields.
+   Safari zooms when font-size < 16px; clamping to 16px on touch devices stops it. */
+@media (max-width: 767px), (pointer: coarse) {
+  input, textarea, select {
+    font-size: max(16px, 1em) !important;
+  }
+}
+
 /* Yellow Color Palette */
 :root, .light, .light-theme {
   --yellow-1: #fefdfa;

@@ -1107,6 +1107,8 @@ const StackedSlidesSection = () => {
   // inline CTA's original position.
   const [ctaPinned, setCtaPinned] = useState(false);
   const [ctaPinnedRight, setCtaPinnedRight] = useState(0);
+  const [ctaPinnedWidth, setCtaPinnedWidth] = useState(null);
+  const [ctaPinnedIsMobile, setCtaPinnedIsMobile] = useState(false);
 
   useLayoutEffect(() => {
     const cta = document.getElementById('panel-hero-cta');
@@ -1114,9 +1116,14 @@ const StackedSlidesSection = () => {
     const wrapper = cta.parentElement;
     if (!wrapper) return;
 
-    const computeRightOffset = () => {
-      const rect = wrapper.getBoundingClientRect();
-      return Math.max(0, window.innerWidth - rect.right);
+    const computeMetrics = () => {
+      const ctaRect = cta.getBoundingClientRect();
+      const wrapperRect = wrapper.getBoundingClientRect();
+      return {
+        right: Math.max(0, window.innerWidth - wrapperRect.right),
+        width: ctaRect.width,
+        isMobile: window.innerWidth <= 767,
+      };
     };
 
     const ctaST = ScrollTrigger.create({
@@ -1124,7 +1131,10 @@ const StackedSlidesSection = () => {
       start: 'top 74px',
       // No end — stays pinned for the rest of the page.
       onEnter: () => {
-        setCtaPinnedRight(computeRightOffset());
+        const m = computeMetrics();
+        setCtaPinnedIsMobile(m.isMobile);
+        setCtaPinnedRight(m.right);
+        setCtaPinnedWidth(m.width);
         setCtaPinned(true);
       },
       onLeaveBack: () => {
@@ -1141,10 +1151,14 @@ const StackedSlidesSection = () => {
   useEffect(() => {
     if (!ctaPinned) return;
     const handleResize = () => {
-      const wrapper = document.getElementById('panel-hero-cta')?.parentElement;
-      if (!wrapper) return;
-      const rect = wrapper.getBoundingClientRect();
-      setCtaPinnedRight(Math.max(0, window.innerWidth - rect.right));
+      const cta = document.getElementById('panel-hero-cta');
+      const wrapper = cta?.parentElement;
+      if (!cta || !wrapper) return;
+      const ctaRect = cta.getBoundingClientRect();
+      const wrapperRect = wrapper.getBoundingClientRect();
+      setCtaPinnedIsMobile(window.innerWidth <= 767);
+      setCtaPinnedRight(Math.max(0, window.innerWidth - wrapperRect.right));
+      setCtaPinnedWidth(ctaRect.width);
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
@@ -2102,10 +2116,11 @@ const StackedSlidesSection = () => {
             textDecoration: 'none',
             position: 'fixed',
             top: '74px',
-            right: ctaPinnedRight + 'px',
-            left: 'auto',
             zIndex: 240,
             margin: 0,
+            ...(ctaPinnedIsMobile
+              ? { left: '50%', right: 'auto', transform: 'translateX(-50%)', width: ctaPinnedWidth ?? 'auto' }
+              : { right: ctaPinnedRight + 'px', left: 'auto' }),
           }}
         >
           <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
