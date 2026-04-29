@@ -1204,6 +1204,10 @@ const StackedSlidesSection = () => {
           }
         }
         @media (max-width: 767px) {
+          #panel-grid-layout {
+            padding-left: max(2.5vw, 10px) !important;
+            padding-right: max(2.5vw, 10px) !important;
+          }
           #stacked-grid-row {
             grid-template-columns: 1fr !important;
           }
@@ -1287,10 +1291,10 @@ const StackedSlidesSection = () => {
           /* ── Onboarding card / table overflow fix ── */
           #dashboard-stack-shell {
             overflow: hidden;
-            padding-top: 0 !important;
           }
           [data-peek-card] {
-            display: none !important;
+            width: 33% !important;
+            min-width: 0 !important;
           }
           #cmo-dashboard-card,
           [data-capability-card] {
@@ -1589,7 +1593,7 @@ const StackedSlidesSection = () => {
             <div style={contentStyle}>
               <div data-stack-inner style={innerStyle}>
                 {slide.layout === 'grid' ? (
-                  <div style={gridLayoutStyle}>
+                  <div id="panel-grid-layout" style={gridLayoutStyle}>
                     <div id="panel-hero-intro-centering" style={textCenteringStyle}>
                       <div id="panel-hero-text-row" style={textRowStyle}>
                         <div id="panel-hero-headline-col" style={textColumnStyle}>
