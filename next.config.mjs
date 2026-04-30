@@ -9,7 +9,7 @@ const nextConfig = {
   turbopack: {
     root: __dirname,
     resolveAlias: {
-      playwright: { browser: false },
+      playwright: './lib/playwright-stub.js',
     },
   },
   async headers() {
