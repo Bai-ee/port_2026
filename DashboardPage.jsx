@@ -10331,6 +10331,11 @@ const dashboardCss = `
     .reseed-run-btn-label-desktop { display: none; }
     .reseed-run-btn-label-mobile { display: inline; }
     #reseed-run-btn-icon { display: none; }
+    #founders-hero-meta { width: 100%; max-width: 100%; overflow: hidden; }
+    .meta-row { overflow: hidden; }
+    .meta-row .value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    #dashboard-source-cta-row { max-width: 100%; box-sizing: border-box; }
+    #reseed-run-btn { min-width: 0; }
   }
 
   #reseed-control-row {
