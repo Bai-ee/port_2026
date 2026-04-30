@@ -2143,7 +2143,7 @@ const StackedSlidesSection = () => {
             border: 'none',
             textDecoration: 'none',
             position: 'fixed',
-            top: '74px',
+            ...(ctaPinnedIsMobile ? { bottom: '16px', top: 'auto' } : { top: '74px', bottom: 'auto' }),
             zIndex: 240,
             margin: 0,
             ...(ctaPinnedIsMobile
