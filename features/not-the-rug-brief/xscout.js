@@ -13,7 +13,7 @@
 require('./load-env');
 const { getProvider } = require('./providers');
 const { randomUUID } = require('crypto');
-const { saveLatestBrief, saveLatestWeather, saveLatestReviews, saveLatestInstagram, saveLatestReddit, getLatestBrief, getLatestWeather, getLatestReviews, getLatestInstagram, getLatestReddit, saveLatestLast30Days, getLatestLast30Days, logError } = require('./store');
+const { saveLatestBrief, saveLatestWeather, saveLatestReviews, saveLatestInstagram, saveLatestReddit, getLatestBrief, getLatestWeather, getLatestReviews, getLatestInstagram, getLatestReddit, saveLatestLast30Days, getLatestLast30Days, logError } = require('./store.cjs');
 const { MODELS, trimAllSearchResults, buildCompactContext, logCostEstimate, computeStageCost } = require('./optimizer');
 const { getDefaultClientConfig, requireClientConfig } = require('./clients');
 const { loadBrandVoice, loadBriefContext } = require('./knowledge');

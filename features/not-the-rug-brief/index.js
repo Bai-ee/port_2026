@@ -8,7 +8,7 @@
 require('./load-env');
 
 const { runClientPipeline } = require('./runtime');
-const { getLatestBrief, getLatestContent, DATA_DIR } = require('./store');
+const { getLatestBrief, getLatestContent, DATA_DIR } = require('./store.cjs');
 const path = require('path');
 
 // ─── Generic entrypoint ───────────────────────────────────────────────────────

@@ -2,7 +2,7 @@
 
 require('./load-env');
 const { requireClientConfig } = require('./clients');
-const { getLatestReviews, saveLatestReviews, logError } = require('./store');
+const { getLatestReviews, saveLatestReviews, logError } = require('./store.cjs');
 const { fetchReviewStatusViaWebSearch } = require('./services/reviews');
 
 async function runReviews(clientId) {

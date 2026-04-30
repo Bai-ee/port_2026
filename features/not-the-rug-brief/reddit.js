@@ -2,7 +2,7 @@
 
 require('./load-env');
 const { requireClientConfig } = require('./clients');
-const { getLatestReddit, saveLatestReddit, logError } = require('./store');
+const { getLatestReddit, saveLatestReddit, logError } = require('./store.cjs');
 const { fetchRedditSignals } = require('./services/reddit');
 
 async function runReddit(clientId) {

@@ -10,7 +10,7 @@
 
 const fs   = require('fs').promises;
 const path = require('path');
-const { DATA_DIR, ensureDir, generateFilename, getLatestBrief, getLatestInstagram } = require('./store');
+const { DATA_DIR, ensureDir, generateFilename, getLatestBrief, getLatestInstagram } = require('./store.cjs');
 const { requireClientConfig } = require('./clients');
 const { getIntelligenceConfig, normalizeIntelligence } = require('./intelligence');
 const { loadBrandVoice } = require('./knowledge');

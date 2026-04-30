@@ -23,7 +23,7 @@ const { initProvider } = require('./providers');
 const { loadRuntimeConfig } = require('./config-loader');
 const { runXScout } = require('./xscout');
 const { runScribe } = require('./scribe');
-const { DATA_DIR } = require('./store');
+const { DATA_DIR } = require('./store.cjs');
 
 /**
  * Delete the prior brief file so Scout treats the next run as a first run.

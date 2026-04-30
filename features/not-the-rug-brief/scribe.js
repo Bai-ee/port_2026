@@ -6,7 +6,7 @@
 require('./load-env');
 const { getProvider } = require('./providers');
 const { randomUUID } = require('crypto');
-const { getLatestBrief, saveLatestContent, logError } = require('./store');
+const { getLatestBrief, saveLatestContent, logError } = require('./store.cjs');
 const { MODELS, logCostEstimate, computeStageCost } = require('./optimizer');
 const { runGuardian } = require('./guardian');
 const { getDefaultClientConfig, requireClientConfig } = require('./clients');

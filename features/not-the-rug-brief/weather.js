@@ -2,7 +2,7 @@
 
 require('./load-env');
 const { requireClientConfig } = require('./clients');
-const { saveLatestWeather, logError } = require('./store');
+const { saveLatestWeather, logError } = require('./store.cjs');
 const { fetchOperationalWeather } = require('./services/weather');
 
 async function runWeather(clientId) {

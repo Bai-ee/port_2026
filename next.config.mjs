@@ -8,6 +8,9 @@ const nextConfig = {
   serverExternalPackages: ['playwright'],
   turbopack: {
     root: __dirname,
+    resolveAlias: {
+      playwright: { browser: false },
+    },
   },
   async headers() {
     return [

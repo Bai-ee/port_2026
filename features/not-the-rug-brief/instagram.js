@@ -3,7 +3,7 @@
 require('./load-env');
 
 const { requireClientConfig } = require('./clients');
-const { getLatestInstagram, saveLatestInstagram, logError } = require('./store');
+const { getLatestInstagram, saveLatestInstagram, logError } = require('./store.cjs');
 const { fetchInstagramInsights } = require('./services/instagram');
 
 async function runInstagramMonitor(clientId) {
