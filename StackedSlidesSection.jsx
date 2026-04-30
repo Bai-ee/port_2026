@@ -2147,7 +2147,7 @@ const StackedSlidesSection = () => {
             zIndex: 240,
             margin: 0,
             ...(ctaPinnedIsMobile
-              ? { left: '50%', right: 'auto', transform: 'translateX(-50%)', width: ctaPinnedWidth ?? 'auto' }
+              ? { left: 'max(2.5vw, 10px)', right: 'max(2.5vw, 10px)', width: 'auto', justifyContent: 'center' }
               : { right: ctaPinnedRight + 'px', left: 'auto' }),
           }}
         >
