@@ -1271,11 +1271,6 @@ const StackedSlidesSection = () => {
             justify-content: center !important;
             box-sizing: border-box !important;
           }
-          #footer-cta {
-            width: 100% !important;
-            justify-content: center !important;
-            box-sizing: border-box !important;
-          }
           #hero-panel-filter-pills {
             gap: 0.4rem !important;
             padding-top: 0.45rem !important;
@@ -1861,18 +1856,6 @@ const StackedSlidesSection = () => {
                             <p style={{ ...supportTextStyle, marginTop: 'clamp(0.75rem, 1.5vw, 1.25rem)', textAlign: 'left' }}>
                               <strong>Bryan Balli</strong> leads a team across design and engineering as a Creative Technologist, with experience spanning agencies in Chicago, San Francisco, and remote teams. I'm ready to step into your process, see what's working, fix what's not, and build what's missing across design, content, and systems.
                             </p>
-                            <a
-                              id="footer-cta"
-                              href="https://calendly.com/bballi/30min"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="cta-pill-btn"
-                              style={{ ...ctaStyle, marginTop: '20px', marginBottom: '20px' }}
-                            >
-                              <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
-                              Meet with Bryan
-                              <span style={ctaIconStyle}>↗</span>
-                            </a>
                             <div id="agency-marquee-shell" ref={marqueeShellRef} style={agencyMarqueeShellStyle}>
                               <div ref={marqueeTrackRef} style={agencyMarqueeTrackStyle}>
                                 <div ref={marqueeSetRef} style={agencyMarqueeSetStyle}>
