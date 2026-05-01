@@ -1136,7 +1136,7 @@ const StackedSlidesSection = () => {
         margin: '0',
         ...(isMobile
           ? { left: 'max(2.5vw, 10px)', right: 'max(2.5vw, 10px)', width: 'auto', justifyContent: 'center' }
-          : { right: `${Math.max(0, window.innerWidth - wr.right)}px`, left: 'auto' }),
+          : { right: `${Math.max(0, window.innerWidth - wr.right)}px`, left: 'auto', width: `${r.width}px` }),
       });
       document.body.appendChild(cta);
       pinned = true;
