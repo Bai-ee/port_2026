@@ -1128,15 +1128,6 @@ const StackedSlidesSection = () => {
       origParent.insertBefore(spacer, cta);
 
       const isMobile = window.innerWidth <= 767;
-
-      // On desktop only: inject a stylesheet rule so the pixel width survives
-      // React re-renders (stylesheet !important beats inline style without !important).
-      // Mobile uses left+right stretch so no width lock needed there.
-      if (!isMobile) {
-        widthStyle = document.createElement('style');
-        widthStyle.textContent = `#panel-hero-cta { width: ${r.width}px !important; }`;
-        document.head.appendChild(widthStyle);
-      }
       const wr = origParent.getBoundingClientRect();
       const h  = navH();
       Object.assign(cta.style, {
@@ -1148,6 +1139,16 @@ const StackedSlidesSection = () => {
           ? { left: 'max(2.5vw, 10px)', right: 'max(2.5vw, 10px)', justifyContent: 'center' }
           : { right: `${Math.max(0, window.innerWidth - wr.right)}px`, left: 'auto' }),
       });
+      // Mobile: setProperty locks the captured px width against width:100%!important media rule
+      // Desktop: inject a <style> tag instead — React re-renders reset inline style.width='auto'
+      //          and strip the !important flag, but a stylesheet !important survives that.
+      if (isMobile) {
+        cta.style.setProperty('width', `${r.width}px`, 'important');
+      } else {
+        widthStyle = document.createElement('style');
+        widthStyle.textContent = `#panel-hero-cta { width: ${r.width}px !important; }`;
+        document.head.appendChild(widthStyle);
+      }
       document.body.appendChild(cta);
       pinned = true;
     };
@@ -1156,6 +1157,7 @@ const StackedSlidesSection = () => {
       if (!pinned || !origParent) return;
       widthStyle?.parentNode?.removeChild(widthStyle);
       widthStyle = null;
+      cta.style.removeProperty('width');
       ['position','top','zIndex','margin','left','right','justifyContent']
         .forEach(p => { cta.style[p] = ''; });
       origParent.insertBefore(cta, spacer);
