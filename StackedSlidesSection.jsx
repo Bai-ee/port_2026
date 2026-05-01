@@ -1100,13 +1100,17 @@ const StackedSlidesSection = () => {
     const cta = document.getElementById('panel-hero-cta');
     if (!cta) return;
 
+    const navH = () => document.getElementById('founders-top-strip')?.offsetHeight ?? 64;
+
     const st = ScrollTrigger.create({
       trigger: cta,
-      start: 'top 64px',
+      start: () => `top ${navH()}px`,
       pin: true,
       pinSpacing: false,
-      end: 'max',
+      end: () => ScrollTrigger.maxScroll(window),
       invalidateOnRefresh: true,
+      onEnter:     () => { cta.style.zIndex = '240'; },
+      onLeaveBack: () => { cta.style.zIndex = ''; },
     });
 
     return () => st.kill();
