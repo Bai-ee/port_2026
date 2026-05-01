@@ -1110,10 +1110,11 @@ const StackedSlidesSection = () => {
     sentinel.style.cssText = 'width:0;height:0;pointer-events:none;position:absolute;';
     cta.parentNode.insertBefore(sentinel, cta);
 
-    let origParent = null;
-    let origNext   = null;
-    let spacer     = null;
-    let pinned     = false;
+    let origParent  = null;
+    let origNext    = null;
+    let spacer      = null;
+    let pinned      = false;
+    let widthStyle  = null;
 
     const doPin = () => {
       if (pinned) return;
@@ -1125,6 +1126,13 @@ const StackedSlidesSection = () => {
       const r = cta.getBoundingClientRect();
       spacer.style.cssText = `width:${r.width}px;height:${r.height}px;flex-shrink:0;pointer-events:none;`;
       origParent.insertBefore(spacer, cta);
+
+      // Inject a stylesheet rule so the width lock survives React re-renders.
+      // A stylesheet !important beats an inline style without !important, so
+      // React's style={{ width:'auto' }} re-application cannot override this.
+      widthStyle = document.createElement('style');
+      widthStyle.textContent = `#panel-hero-cta { width: ${r.width}px !important; }`;
+      document.head.appendChild(widthStyle);
 
       const isMobile = window.innerWidth <= 767;
       const wr = origParent.getBoundingClientRect();
@@ -1138,15 +1146,14 @@ const StackedSlidesSection = () => {
           ? { left: 'max(2.5vw, 10px)', right: 'max(2.5vw, 10px)', justifyContent: 'center' }
           : { right: `${Math.max(0, window.innerWidth - wr.right)}px`, left: 'auto' }),
       });
-      // Must run after Object.assign — beats width:auto inline and width:100%!important media rule
-      cta.style.setProperty('width', `${r.width}px`, 'important');
       document.body.appendChild(cta);
       pinned = true;
     };
 
     const doUnpin = () => {
       if (!pinned || !origParent) return;
-      cta.style.removeProperty('width');
+      widthStyle?.parentNode?.removeChild(widthStyle);
+      widthStyle = null;
       ['position','top','zIndex','margin','left','right','justifyContent']
         .forEach(p => { cta.style[p] = ''; });
       origParent.insertBefore(cta, spacer);
