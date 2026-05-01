@@ -1102,18 +1102,72 @@ const StackedSlidesSection = () => {
 
     const navH = () => document.getElementById('founders-top-strip')?.offsetHeight ?? 64;
 
+    // Sentinel stays in the DOM at the CTA's original position so
+    // ScrollTrigger always measures from the correct scroll offset,
+    // even after the CTA is reparented to body to escape the
+    // transformed ancestor (same reason hover images append to body).
+    const sentinel = document.createElement('div');
+    sentinel.style.cssText = 'width:0;height:0;pointer-events:none;position:absolute;';
+    cta.parentNode.insertBefore(sentinel, cta);
+
+    let origParent = null;
+    let origNext   = null;
+    let spacer     = null;
+    let pinned     = false;
+
+    const doPin = () => {
+      if (pinned) return;
+      origParent = cta.parentNode;
+      origNext   = cta.nextSibling;
+
+      // Spacer holds the layout so sentinel position stays stable on refresh
+      spacer = document.createElement('div');
+      const r = cta.getBoundingClientRect();
+      spacer.style.cssText = `width:${r.width}px;height:${r.height}px;flex-shrink:0;pointer-events:none;`;
+      origParent.insertBefore(spacer, cta);
+
+      const isMobile = window.innerWidth <= 767;
+      const wr = origParent.getBoundingClientRect();
+      const h  = navH();
+      Object.assign(cta.style, {
+        position: 'fixed',
+        top: `${h}px`,
+        zIndex: '240',
+        margin: '0',
+        ...(isMobile
+          ? { left: 'max(2.5vw, 10px)', right: 'max(2.5vw, 10px)', width: 'auto', justifyContent: 'center' }
+          : { right: `${Math.max(0, window.innerWidth - wr.right)}px`, left: 'auto' }),
+      });
+      document.body.appendChild(cta);
+      pinned = true;
+    };
+
+    const doUnpin = () => {
+      if (!pinned || !origParent) return;
+      ['position','top','zIndex','margin','left','right','width','justifyContent']
+        .forEach(p => { cta.style[p] = ''; });
+      origParent.insertBefore(cta, spacer);
+      spacer?.parentNode?.removeChild(spacer);
+      spacer    = null;
+      origParent = null;
+      origNext   = null;
+      pinned     = false;
+    };
+
     const st = ScrollTrigger.create({
-      trigger: cta,
+      trigger: sentinel,
       start: () => `top ${navH()}px`,
-      pin: true,
-      pinSpacing: false,
       end: () => ScrollTrigger.maxScroll(window),
       invalidateOnRefresh: true,
-      onEnter:     () => { cta.style.zIndex = '240'; },
-      onLeaveBack: () => { cta.style.zIndex = ''; },
+      onEnter:     doPin,
+      onLeaveBack: doUnpin,
     });
 
-    return () => st.kill();
+    return () => {
+      st.kill();
+      doUnpin();
+      sentinel.parentNode?.removeChild(sentinel);
+    };
   }, []);
 
   return (
