@@ -1135,16 +1135,19 @@ const StackedSlidesSection = () => {
         zIndex: '240',
         margin: '0',
         ...(isMobile
-          ? { left: 'max(2.5vw, 10px)', right: 'max(2.5vw, 10px)', width: 'auto', justifyContent: 'center' }
-          : { right: `${Math.max(0, window.innerWidth - wr.right)}px`, left: 'auto', width: `${r.width}px` }),
+          ? { left: 'max(2.5vw, 10px)', right: 'max(2.5vw, 10px)', justifyContent: 'center' }
+          : { right: `${Math.max(0, window.innerWidth - wr.right)}px`, left: 'auto' }),
       });
+      // Override width !important rule that would resolve against body instead of original parent
+      cta.style.setProperty('width', `${r.width}px`, 'important');
       document.body.appendChild(cta);
       pinned = true;
     };
 
     const doUnpin = () => {
       if (!pinned || !origParent) return;
-      ['position','top','zIndex','margin','left','right','width','justifyContent']
+      cta.style.removeProperty('width');
+      ['position','top','zIndex','margin','left','right','justifyContent']
         .forEach(p => { cta.style[p] = ''; });
       origParent.insertBefore(cta, spacer);
       spacer?.parentNode?.removeChild(spacer);
