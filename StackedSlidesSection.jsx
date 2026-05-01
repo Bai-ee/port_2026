@@ -1,6 +1,5 @@
 'use client';
 import React, { useLayoutEffect, useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -1096,42 +1095,6 @@ const StackedSlidesSection = () => {
     return () => ctx.revert();
   }, []);
 
-  // Pinned CTA — only one CTA is ever visible. The inline #panel-hero-cta is
-  // the hero CTA. Once the user scrolls past it, ScrollTrigger flips
-  // panel-hero-cta-pinned is always portaled into document.body (escaping
-  // GSAP-transformed ancestors). GSAP autoAlpha controls visibility —
-  // shown when panel-hero-cta scrolls past the nav, hidden on scroll back.
-  useLayoutEffect(() => {
-    const cta = document.getElementById('panel-hero-cta');
-    const pinned = document.getElementById('panel-hero-cta-pinned');
-    if (!cta || !pinned) return;
-
-    const updateDesktopPosition = () => {
-      const wrapperRect = cta.parentElement.getBoundingClientRect();
-      const right = Math.max(0, window.innerWidth - wrapperRect.right);
-      document.documentElement.style.setProperty('--pinned-cta-right', `${right}px`);
-    };
-    updateDesktopPosition();
-
-    const ctaST = ScrollTrigger.create({
-      trigger: cta,
-      start: 'bottom 64px',
-      onEnter: () => {
-        updateDesktopPosition();
-        gsap.set(pinned, { autoAlpha: 1, pointerEvents: 'auto' });
-      },
-      onLeaveBack: () => {
-        gsap.set(pinned, { autoAlpha: 0, pointerEvents: 'none' });
-      },
-      invalidateOnRefresh: true,
-      onRefresh: updateDesktopPosition,
-    });
-
-    return () => {
-      ctaST.kill();
-      gsap.set(pinned, { autoAlpha: 0, pointerEvents: 'none' });
-    };
-  }, []);
 
   return (
     <section style={sectionStyle}>
@@ -1239,13 +1202,6 @@ const StackedSlidesSection = () => {
             width: 100% !important;
             justify-content: center !important;
             box-sizing: border-box !important;
-          }
-          #panel-hero-cta-pinned {
-            top: auto !important;
-            bottom: 16px !important;
-            left: max(2.5vw, 10px) !important;
-            right: max(2.5vw, 10px) !important;
-            justify-content: center !important;
           }
           #hero-panel-filter-pills {
             gap: 0.4rem !important;
@@ -2089,34 +2045,6 @@ const StackedSlidesSection = () => {
         </div>
       )}
 
-      {typeof document !== 'undefined' && createPortal(
-        <a
-          id="panel-hero-cta-pinned"
-          href="https://calendly.com/bballi/30min"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="cta-pill-btn"
-          style={{
-            ...heroCtaStyle,
-            padding: '0.55rem 0.75rem',
-            border: 'none',
-            textDecoration: 'none',
-            position: 'fixed',
-            top: '74px',
-            right: 'var(--pinned-cta-right, 0px)',
-            zIndex: 240,
-            margin: 0,
-            opacity: 0,
-            visibility: 'hidden',
-            pointerEvents: 'none',
-          }}
-        >
-          <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
-          Meet with Bryan
-          <span style={ctaIconStyle}>↗</span>
-        </a>,
-        document.body
-      )}
     </section>
   );
 };
