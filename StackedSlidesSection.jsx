@@ -1146,7 +1146,7 @@ const StackedSlidesSection = () => {
         cta.style.setProperty('width', `${r.width}px`, 'important');
       } else {
         widthStyle = document.createElement('style');
-        widthStyle.textContent = `#panel-hero-cta { width: ${r.width}px !important; }`;
+        widthStyle.textContent = `#panel-hero-cta { width: ${r.width}px !important; box-sizing: border-box !important; }`;
         document.head.appendChild(widthStyle);
       }
       document.body.appendChild(cta);
