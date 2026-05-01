@@ -1,3 +1,4 @@
+'use client';
 import React, { useLayoutEffect, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
@@ -1114,7 +1115,7 @@ const StackedSlidesSection = () => {
 
     const ctaST = ScrollTrigger.create({
       trigger: cta,
-      start: 'top 64px',
+      start: 'bottom 64px',
       onEnter: () => {
         updateDesktopPosition();
         gsap.set(pinned, { autoAlpha: 1, pointerEvents: 'auto' });
