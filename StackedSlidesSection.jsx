@@ -1132,7 +1132,7 @@ const StackedSlidesSection = () => {
       const h  = navH();
       Object.assign(cta.style, {
         position: 'fixed',
-        top: `${h}px`,
+        top: `${h + 10}px`,
         zIndex: '240',
         margin: '0',
         ...(isMobile
