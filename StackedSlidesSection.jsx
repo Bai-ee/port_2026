@@ -1097,72 +1097,40 @@ const StackedSlidesSection = () => {
 
   // Pinned CTA — only one CTA is ever visible. The inline #panel-hero-cta is
   // the hero CTA. Once the user scrolls past it, ScrollTrigger flips
-  // `ctaPinned` true and we render a clone of the CTA via a Portal directly
-  // into document.body with position: fixed at top: 74px. Rendering into
-  // <body> escapes any GSAP-transformed ancestors that would otherwise be
-  // the containing block for position: fixed (the same workaround that the
-  // hover-reveal feature in this file already uses). The inline CTA is
-  // scrolled off-screen above at this point, so the user only ever sees one
-  // CTA. The portal stays mounted until the user scrolls back above the
-  // inline CTA's original position.
-  const [ctaPinned, setCtaPinned] = useState(false);
-  const [ctaPinnedRight, setCtaPinnedRight] = useState(0);
-  const [ctaPinnedWidth, setCtaPinnedWidth] = useState(null);
-  const [ctaPinnedIsMobile, setCtaPinnedIsMobile] = useState(false);
-
+  // panel-hero-cta-pinned is always portaled into document.body (escaping
+  // GSAP-transformed ancestors). GSAP autoAlpha controls visibility —
+  // shown when panel-hero-cta scrolls past the nav, hidden on scroll back.
   useLayoutEffect(() => {
     const cta = document.getElementById('panel-hero-cta');
-    if (!cta) return;
-    const wrapper = cta.parentElement;
-    if (!wrapper) return;
+    const pinned = document.getElementById('panel-hero-cta-pinned');
+    if (!cta || !pinned) return;
 
-    const computeMetrics = () => {
-      const ctaRect = cta.getBoundingClientRect();
-      const wrapperRect = wrapper.getBoundingClientRect();
-      return {
-        right: Math.max(0, window.innerWidth - wrapperRect.right),
-        width: ctaRect.width,
-        isMobile: window.innerWidth <= 767,
-      };
+    const updateDesktopPosition = () => {
+      const wrapperRect = cta.parentElement.getBoundingClientRect();
+      const right = Math.max(0, window.innerWidth - wrapperRect.right);
+      document.documentElement.style.setProperty('--pinned-cta-right', `${right}px`);
     };
+    updateDesktopPosition();
 
     const ctaST = ScrollTrigger.create({
-      trigger: wrapper,
-      start: 'top 74px',
-      // No end — stays pinned for the rest of the page.
+      trigger: cta,
+      start: 'top 64px',
       onEnter: () => {
-        const m = computeMetrics();
-        setCtaPinnedIsMobile(m.isMobile);
-        setCtaPinnedRight(m.right);
-        setCtaPinnedWidth(m.width);
-        setCtaPinned(true);
+        updateDesktopPosition();
+        gsap.set(pinned, { autoAlpha: 1, pointerEvents: 'auto' });
       },
       onLeaveBack: () => {
-        setCtaPinned(false);
+        gsap.set(pinned, { autoAlpha: 0, pointerEvents: 'none' });
       },
       invalidateOnRefresh: true,
+      onRefresh: updateDesktopPosition,
     });
 
     return () => {
       ctaST.kill();
+      gsap.set(pinned, { autoAlpha: 0, pointerEvents: 'none' });
     };
   }, []);
-
-  useEffect(() => {
-    if (!ctaPinned) return;
-    const handleResize = () => {
-      const cta = document.getElementById('panel-hero-cta');
-      const wrapper = cta?.parentElement;
-      if (!cta || !wrapper) return;
-      const ctaRect = cta.getBoundingClientRect();
-      const wrapperRect = wrapper.getBoundingClientRect();
-      setCtaPinnedIsMobile(window.innerWidth <= 767);
-      setCtaPinnedRight(Math.max(0, window.innerWidth - wrapperRect.right));
-      setCtaPinnedWidth(ctaRect.width);
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [ctaPinned]);
 
   return (
     <section style={sectionStyle}>
@@ -1270,6 +1238,13 @@ const StackedSlidesSection = () => {
             width: 100% !important;
             justify-content: center !important;
             box-sizing: border-box !important;
+          }
+          #panel-hero-cta-pinned {
+            top: auto !important;
+            bottom: 16px !important;
+            left: max(2.5vw, 10px) !important;
+            right: max(2.5vw, 10px) !important;
+            justify-content: center !important;
           }
           #hero-panel-filter-pills {
             gap: 0.4rem !important;
@@ -2113,7 +2088,7 @@ const StackedSlidesSection = () => {
         </div>
       )}
 
-      {ctaPinned && typeof document !== 'undefined' && createPortal(
+      {typeof document !== 'undefined' && createPortal(
         <a
           id="panel-hero-cta-pinned"
           href="https://calendly.com/bballi/30min"
@@ -2126,12 +2101,13 @@ const StackedSlidesSection = () => {
             border: 'none',
             textDecoration: 'none',
             position: 'fixed',
-            ...(ctaPinnedIsMobile ? { bottom: '16px', top: 'auto' } : { top: '74px', bottom: 'auto' }),
+            top: '74px',
+            right: 'var(--pinned-cta-right, 0px)',
             zIndex: 240,
             margin: 0,
-            ...(ctaPinnedIsMobile
-              ? { left: 'max(2.5vw, 10px)', right: 'max(2.5vw, 10px)', width: 'auto', justifyContent: 'center' }
-              : { right: ctaPinnedRight + 'px', left: 'auto' }),
+            opacity: 0,
+            visibility: 'hidden',
+            pointerEvents: 'none',
           }}
         >
           <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
