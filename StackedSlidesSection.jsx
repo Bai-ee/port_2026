@@ -1170,7 +1170,7 @@ const StackedSlidesSection = () => {
 
     const st = ScrollTrigger.create({
       trigger: sentinel,
-      start: () => `top ${navH()}px`,
+      start: () => `top ${navH() + 10}px`,
       end: () => ScrollTrigger.maxScroll(window),
       invalidateOnRefresh: true,
       onEnter:     doPin,
