@@ -1127,14 +1127,16 @@ const StackedSlidesSection = () => {
       spacer.style.cssText = `width:${r.width}px;height:${r.height}px;flex-shrink:0;pointer-events:none;`;
       origParent.insertBefore(spacer, cta);
 
-      // Inject a stylesheet rule so the width lock survives React re-renders.
-      // A stylesheet !important beats an inline style without !important, so
-      // React's style={{ width:'auto' }} re-application cannot override this.
-      widthStyle = document.createElement('style');
-      widthStyle.textContent = `#panel-hero-cta { width: ${r.width}px !important; }`;
-      document.head.appendChild(widthStyle);
-
       const isMobile = window.innerWidth <= 767;
+
+      // On desktop only: inject a stylesheet rule so the pixel width survives
+      // React re-renders (stylesheet !important beats inline style without !important).
+      // Mobile uses left+right stretch so no width lock needed there.
+      if (!isMobile) {
+        widthStyle = document.createElement('style');
+        widthStyle.textContent = `#panel-hero-cta { width: ${r.width}px !important; }`;
+        document.head.appendChild(widthStyle);
+      }
       const wr = origParent.getBoundingClientRect();
       const h  = navH();
       Object.assign(cta.style, {
