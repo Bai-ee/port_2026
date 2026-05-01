@@ -1096,6 +1096,84 @@ const StackedSlidesSection = () => {
   }, []);
 
 
+  useLayoutEffect(() => {
+    const inline = document.getElementById('panel-hero-cta');
+    if (!inline) return;
+
+    const node = document.createElement('a');
+    node.id = 'panel-hero-cta-pinned';
+    node.href = 'https://calendly.com/bballi/30min';
+    node.target = '_blank';
+    node.rel = 'noopener noreferrer';
+    node.className = 'cta-pill-btn';
+    node.innerHTML = `
+      <img src="/img/profile2_400x400.png?v=1774582808"
+        style="width:1.75rem;height:1.75rem;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,0.35);flex-shrink:0;display:block;"
+        alt="" />
+      Meet with Bryan
+      <span style="font-size:0.7rem;opacity:0.75;margin-left:0.1rem;">↗</span>
+    `;
+
+    Object.assign(node.style, {
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: '0.5rem',
+      padding: '0.55rem 0.75rem',
+      lineHeight: '1',
+      fontSize: '0.84rem',
+      fontWeight: '700',
+      letterSpacing: '0.01em',
+      textDecoration: 'none',
+      color: '#ffffff',
+      background: 'linear-gradient(175deg,rgba(255,255,255,0.18) 0%,rgba(255,255,255,0) 52%),linear-gradient(135deg,hsl(185,100%,45%) 0%,hsl(262,100%,55%) 52%,hsl(314,100%,50%) 100%)',
+      border: 'none',
+      borderRadius: '999px',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.2),inset 0 1px 0 rgba(255,255,255,0.28),inset 0 -1px 0 rgba(0,0,0,0.1)',
+      whiteSpace: 'nowrap',
+      cursor: 'pointer',
+      position: 'fixed',
+      top: '64px',
+      zIndex: '240',
+      margin: '0',
+      opacity: '0',
+      visibility: 'hidden',
+      pointerEvents: 'none',
+    });
+
+    const position = () => {
+      if (window.innerWidth <= 767) {
+        node.style.left = 'max(2.5vw, 10px)';
+        node.style.right = 'max(2.5vw, 10px)';
+        node.style.width = 'auto';
+      } else {
+        const r = inline.parentElement.getBoundingClientRect();
+        node.style.right = `${Math.max(0, window.innerWidth - r.right)}px`;
+        node.style.left = 'auto';
+        node.style.width = `${inline.getBoundingClientRect().width}px`;
+      }
+    };
+
+    position();
+    document.body.appendChild(node);
+
+    const st = ScrollTrigger.create({
+      trigger: inline,
+      start: 'bottom 64px',
+      onEnter:     () => { position(); gsap.set(node, { autoAlpha: 1, pointerEvents: 'auto' }); },
+      onLeaveBack: () => { gsap.set(node, { autoAlpha: 0, pointerEvents: 'none' }); },
+      invalidateOnRefresh: true,
+      onRefresh: position,
+    });
+
+    window.addEventListener('resize', position);
+    return () => {
+      st.kill();
+      window.removeEventListener('resize', position);
+      node.parentNode?.removeChild(node);
+    };
+  }, []);
+
   return (
     <section style={sectionStyle}>
       <style>{`
