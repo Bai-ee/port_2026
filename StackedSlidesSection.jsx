@@ -1138,7 +1138,7 @@ const StackedSlidesSection = () => {
           ? { left: 'max(2.5vw, 10px)', right: 'max(2.5vw, 10px)', justifyContent: 'center' }
           : { right: `${Math.max(0, window.innerWidth - wr.right)}px`, left: 'auto' }),
       });
-      // Override width !important rule that would resolve against body instead of original parent
+      // Must run after Object.assign — beats width:auto inline and width:100%!important media rule
       cta.style.setProperty('width', `${r.width}px`, 'important');
       document.body.appendChild(cta);
       pinned = true;
