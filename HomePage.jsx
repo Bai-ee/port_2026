@@ -271,6 +271,9 @@ const HomePage = () => {
   }, []);
 
   return (
+    <>
+    {/* Header outside overflow-clip container so backdrop-filter composites against the viewport correctly */}
+    <Header logoRef={headerLogoRef} onOpenPage={setActivePageId} />
     <div style={{ position: 'relative', width: '100vw', minHeight: '100dvh', background: 'transparent', overflowX: 'clip' }}>
       <style>{`
         @keyframes heroGradientDrift {
@@ -332,9 +335,6 @@ const HomePage = () => {
         </h2>
       </section>
 
-      {/* Header/Nav */}
-      <Header logoRef={headerLogoRef} onOpenPage={setActivePageId} />
-
       {/* Content Section */}
       <section
         ref={contentSectionRef}
@@ -355,6 +355,7 @@ const HomePage = () => {
       </section>
       <PortfolioModal activePageId={activePageId} onClose={() => setActivePageId(null)} onOpenPage={setActivePageId} />
     </div>
+    </>
   );
 };
 
