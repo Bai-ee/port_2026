@@ -1107,7 +1107,10 @@ const StackedSlidesSection = () => {
     // even after the CTA is reparented to body to escape the
     // transformed ancestor (same reason hover images append to body).
     const sentinel = document.createElement('div');
-    sentinel.style.cssText = 'width:0;height:0;pointer-events:none;position:absolute;';
+    // position:relative keeps sentinel in flex flow so getBoundingClientRect()
+    // matches the CTA's actual position on all layouts, including mobile single-column.
+    // position:absolute resolves to the flex-line origin, not the CTA's position.
+    sentinel.style.cssText = 'width:0;height:0;pointer-events:none;position:relative;flex-shrink:0;';
     cta.parentNode.insertBefore(sentinel, cta);
 
     let origParent  = null;
