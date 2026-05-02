@@ -1599,6 +1599,8 @@ const StackedSlidesSection = () => {
             style={{
               ...panelStyle,
               background: index === 0 ? 'rgba(245, 241, 223, 0.38)' : slide.bg,
+              backdropFilter: index === 0 ? 'blur(24px)' : 'none',
+              WebkitBackdropFilter: index === 0 ? 'blur(24px)' : 'none',
               boxShadow: index === 0 ? 'inset 0 0 0 1px rgba(255,255,255,0.45), inset 0 1px 0 rgba(255,255,255,0.6)' : 'none',
               color: slide.fg,
             }}
