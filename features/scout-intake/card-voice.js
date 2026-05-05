@@ -39,7 +39,7 @@ DO NOT:
 // ── Per-action-class priority rules ───────────────────────────────────────────
 //
 // Keys match card.actionClass values from card-contract.js:
-//   runtime | describe | diagnose | recommend | service-offer
+//   runtime | describe | diagnose | recommend | service-offer | generate
 //
 // NOTE: card.role holds card-specific semantic labels ('brand-voice',
 // 'technical-health', etc.) and is NOT the right keying field. Voice logic
@@ -73,6 +73,15 @@ const VOICE_BY_ACTION_CLASS = {
   ].join(' '),
 
   runtime: 'Minimal — this role is chrome only, typically no copy needed.',
+
+  // 'generate' — card produces a deliverable artifact (prompt JSON, asset, doc).
+  // Copy frames the artifact's readiness, not a problem to fix.
+  generate: [
+    'State whether the artifact is ready to use, partial, or not yet generated.',
+    'If ready, name what was assembled (e.g. "Master Prompt + JSON for Image 2.0 are ready to copy").',
+    'If partial, name the single biggest missing input that would unlock a stronger output.',
+    'No urgency framing — this is a creator tool, not a diagnostic.',
+  ].join(' '),
 };
 
 function getVoiceForActionClass(actionClass) {

@@ -42,6 +42,16 @@ const TileDetailAnalysisContent = dynamic(() => import('./components/dashboard/T
   loading: () => null,
 });
 
+const BrandSystemChat = dynamic(() => import('./components/dashboard/BrandSystemChat'), {
+  loading: () => null,
+  ssr: false,
+});
+
+const BrandSystemBuildModal = dynamic(() => import('./components/dashboard/BrandSystemBuildModal'), {
+  loading: () => null,
+  ssr: false,
+});
+
 // Entry-flow survey surfaces every question step (excludes the summary, which
 // is added in Phase 4). Ordered by the `order` field in questions.config.cjs.
 const ONBOARDING_ENTRY_STEPS = onboardingConfig.QUESTION_STEPS;
@@ -58,6 +68,7 @@ const ONBOARDING_CARD_IDS = new Set([
   'style-guide',
   'design-evaluation',
   'priority-signal',
+  'brand-system',
   'survey-status',
 ]);
 const PENDING_DASHBOARD_SIGNUP_KEY = 'pending-dashboard-signup';
@@ -741,6 +752,13 @@ const MODULE_TERMINAL_STAGES = {
     { tag: 'AI',      label: 'Run AI SEO audit' },
     { tag: 'WRITE',   label: 'Write SEO module' },
   ],
+  'brand-system': [
+    { tag: 'SCAN',    label: 'Read pipeline data' },
+    { tag: 'CHAT',    label: 'Resolve gap questions' },
+    { tag: 'VISION',  label: 'Run Claude vision on uploads' },
+    { tag: 'BUILD',   label: 'Assemble Brand Guide JSON' },
+    { tag: 'WRITE',   label: 'Generate output templates' },
+  ],
 };
 
 function _detectQueuedModule(dashboardState) {
@@ -1199,6 +1217,14 @@ const DashboardPage = () => {
   const [briefFullScreen, setBriefFullScreen] = useState(false);
   const [auditFullScreen, setAuditFullScreen] = useState(false);
   const [modalTab, setModalTab] = useState('solutions');
+  const [brandSystemBuildOpen, setBrandSystemBuildOpen] = useState(false);
+  // Stays true after first open so the modal stays mounted (chat history preserved).
+  const [hasBrandSystemMounted, setHasBrandSystemMounted] = useState(false);
+  // Stable token getter for BrandSystemChat — re-binding when `user` changes only.
+  const brandSystemGetIdToken = useCallback(() => {
+    if (!user) return Promise.reject(new Error('No authenticated user.'));
+    return user.getIdToken();
+  }, [user]);
   // null until bootstrap resolves, then synchronously set to 'onboarding' for
   // modular clients without brief data, or 'brief' otherwise. Avoids the flash
   // where the default 'brief' view paints before the effect corrects it.
@@ -1345,6 +1371,7 @@ const DashboardPage = () => {
     if (id === 'agent-readiness') { setModalTab('report'); return; }
     if (id === 'design-evaluation' && bootstrap?.dashboardState?.analyzerOutputs?.['design-evaluation']) { setModalTab('report'); return; }
     if (id === 'social-preview' && bootstrap?.dashboardState?.siteMeta) { setModalTab('report'); return; }
+    if (id === 'brand-system') { setModalTab('master-prompt'); return; }
     setModalTab('solutions');
   }, [activeTileModal?.cardId, bootstrap?.dashboardState?.artifacts?.skillDocs]);
 
@@ -3481,6 +3508,38 @@ const DashboardPage = () => {
       footerRight: 'REVIEWED',
     },
 
+    // ── BRAND SYSTEM (Image 2.0 prompt generator) ──────────────────────────
+    // Standalone card. RUN opens the Brand System terminal modal (P2);
+    // Details ↗ opens the 3-tab output modal (MASTER PROMPT / JSON / DATA).
+    // No moduleControls — this card runs its own flow, not the runner pipeline.
+    (() => {
+      const bsRun = dashboardState?.brandSystem || null;
+      const hasBsRun = Boolean(bsRun?.masterPrompt && bsRun?.json);
+      return {
+        id: 'brand-system',
+        category: 'onboarding',
+        number: 'BG',
+        label: 'BRAND SYSTEM',
+        title: 'Brand System',
+        description: 'Generate a Master Prompt + JSON object you can paste into ChatGPT (Image 2.0) to produce an agency-grade brand identity poster — pulled from your pipeline data with a short chat to fill any gaps.',
+        placeholderLabel: hasBsRun ? 'PROMPT\nREADY' : 'BRAND\nSYSTEM',
+        rows: hasBsRun
+          ? [
+              { key: 'bs-prompt-status', label: 'Master Prompt', value: 'Ready to copy' },
+              { key: 'bs-json-status',   label: 'JSON Object',   value: 'Ready to copy' },
+              { key: 'bs-last-run',      label: 'Generated',     value: bsRun?.generatedAt || '—' },
+            ]
+          : buildWorkNeededRows('No prompt generated yet — click RUN to scan your pipeline and fill any gaps.'),
+        footerLeft: hasBsRun ? 'Live' : WORK_NEEDED_LABEL,
+        footerRight: 'GENERATED',
+        footerAction: {
+          label: hasBsRun ? 'Re-run' : 'RUN',
+          loading: false,
+          onClick: () => { setBrandSystemBuildOpen(true); setHasBrandSystemMounted(true); },
+        },
+      };
+    })(),
+
     {
       id: 'survey-status',
       category: 'onboarding',
@@ -5403,6 +5462,42 @@ const DashboardPage = () => {
       </main>
 
       {/* ── Intake build modal — unified card: shared top rows + 2-col body (terminal / survey) ── */}
+      {hasBrandSystemMounted && user ? (
+        <BrandSystemBuildModal
+          open={brandSystemBuildOpen}
+          onClose={() => setBrandSystemBuildOpen(false)}
+          getIdToken={brandSystemGetIdToken}
+          onComplete={() => {
+            // Refresh dashboardState so brandSystem.masterPrompt is in memory,
+            // close the build modal, then surface the Details modal on the
+            // MASTER PROMPT tab so the user sees the generated output.
+            const openDetails = () => {
+              setBrandSystemBuildOpen(false);
+              setActiveTileModal({
+                cardId: 'brand-system',
+                title: 'Brand System',
+                description: 'Generate a Master Prompt + JSON object you can paste into ChatGPT (Image 2.0) to produce an agency-grade brand identity poster — pulled from your pipeline data with a short chat to fill any gaps.',
+                rows: [],
+                placeholderLabel: 'PROMPT\nREADY',
+                number: 'BG',
+                label: 'BRAND SYSTEM',
+                isCapabilityCard: true,
+                vizType: null,
+                recommendation: null,
+                analyzer: null,
+                readinessBadge: null,
+              });
+            };
+            fetchDashboardBootstrap(user)
+              .then((data) => {
+                if (!cancelledRef.current) setBootstrap(data);
+                openDetails();
+              })
+              .catch(() => openDetails());
+          }}
+        />
+      ) : null}
+
       {showIntakeModal ? (
         <div id="intake-modal-overlay" role="dialog" aria-modal="true" aria-label="Dashboard build in progress">
 
@@ -6019,6 +6114,84 @@ const DashboardPage = () => {
                   </div>
                 )}
 
+                {/* Brand System card — MASTER PROMPT + JSON + DATA tabs.
+                    The chat / build flow lives in BrandSystemBuildModal,
+                    opened from the card's RUN button. */}
+                {activeTileModal.cardId === 'brand-system' && (() => {
+                  const bsRun = dashboardState?.brandSystem || null;
+                  const masterPrompt = bsRun?.masterPrompt || '';
+                  const jsonObj = bsRun?.json || null;
+                  const sources = bsRun?.sources || {};
+                  const hasRun = Boolean(masterPrompt && jsonObj);
+                  const emptyState = (label) => (
+                    <div className="tile-detail-tab-pane" style={{ padding: 24 }}>
+                      <p className="tile-analyzer-solutions-empty" style={{ fontFamily: 'var(--font-mono)', fontSize: 12, opacity: 0.7 }}>
+                        No {label} yet — click RUN on the Brand System card to scan your pipeline and fill any gaps.
+                      </p>
+                    </div>
+                  );
+                  return (
+                    <div
+                      id="brand-system-modal-tabs-container"
+                      className="tile-detail-bento-cell tile-detail-tabbed-container"
+                    >
+                      <div className="tile-detail-tabs">
+                        <button
+                          id="brand-system-tab-master-prompt"
+                          type="button"
+                          className={`tile-detail-tab${modalTab === 'master-prompt' ? ' tile-detail-tab--active' : ''}`}
+                          onClick={() => setModalTab('master-prompt')}
+                        >MASTER PROMPT</button>
+                        <button
+                          id="brand-system-tab-json"
+                          type="button"
+                          className={`tile-detail-tab${modalTab === 'json' ? ' tile-detail-tab--active' : ''}`}
+                          onClick={() => setModalTab('json')}
+                        >JSON</button>
+                        <button
+                          id="brand-system-tab-data"
+                          type="button"
+                          className={`tile-detail-tab${modalTab === 'data' ? ' tile-detail-tab--active' : ''}`}
+                          onClick={() => setModalTab('data')}
+                        >DATA</button>
+                      </div>
+                      <div className="tile-detail-tab-content">
+                        {modalTab === 'master-prompt' && (
+                          hasRun ? (
+                            <div id="brand-system-master-prompt-pane" className="tile-detail-tab-pane" style={{ padding: 16 }}>
+                              <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.5, color: 'var(--text-primary)', margin: 0 }}>
+                                {masterPrompt}
+                              </pre>
+                            </div>
+                          ) : emptyState('master prompt')
+                        )}
+                        {modalTab === 'json' && (
+                          jsonObj ? (
+                            <div id="brand-system-json-pane" className="tile-detail-tab-pane" style={{ padding: 16 }}>
+                              <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'var(--font-mono)', fontSize: 11, lineHeight: 1.5, color: 'var(--text-primary)', margin: 0 }}>
+                                {JSON.stringify(jsonObj, null, 2)}
+                              </pre>
+                            </div>
+                          ) : emptyState('json object')
+                        )}
+                        {modalTab === 'data' && (
+                          hasRun ? (
+                            <div id="brand-system-data-pane" className="tile-detail-tab-pane">
+                              <div className="tile-detail-row-section-head">SOURCES</div>
+                              {Object.entries(sources).map(([key, val]) => (
+                                <div key={key} className="tile-detail-stat-row">
+                                  <span className="tile-detail-stat-label">{key}</span>
+                                  <span className="tile-detail-stat-value">{String(val)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : emptyState('data')
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Newsletter card — PREVIEW + DATA tabs */}
                 {activeTileModal.cardId === 'newsletter' && (
                   <div
@@ -6096,7 +6269,7 @@ const DashboardPage = () => {
                 )}
 
                 {/* Tabbed SOLUTIONS / PROBLEMS / DATA for most cards */}
-                {!['multi-device-view', 'brief', 'audit-summary', 'survey-status', 'newsletter'].includes(activeTileModal.cardId) && (activeTileModal.analyzer || (activeTileModal.cardId === 'social-preview' && siteMeta)) ? (
+                {!['multi-device-view', 'brief', 'audit-summary', 'survey-status', 'newsletter', 'brand-system'].includes(activeTileModal.cardId) && (activeTileModal.analyzer || (activeTileModal.cardId === 'social-preview' && siteMeta)) ? (
                   <div
                     id={`${activeTileModal.cardId}-analyzer-findings`}
                     className="tile-detail-bento-cell tile-detail-tabbed-container"
@@ -10781,10 +10954,13 @@ const dashboardCss = `
   #intake-modal-survey-col {
     min-width: 0;
     min-height: 0;
-    overflow: hidden;
+    /* clip for border-radius without creating a blocking scroll context */
+    overflow: clip;
     border-radius: 10px;
     display: flex;
     flex-direction: column;
+    /* explicit height lets flex children use flex: 1 correctly */
+    height: 100%;
   }
   @media (max-width: 900px) {
     #intake-modal-overlay {
@@ -10807,6 +10983,11 @@ const dashboardCss = `
     #intake-modal-card[data-with-survey="true"] #intake-modal-terminal-embed {
       height: 0;
       max-height: none;
+    }
+    #intake-modal-survey-col {
+      /* on mobile the body is height:auto — cap the chat column so it scrolls */
+      max-height: 420px;
+      height: auto;
     }
   }
 
@@ -11356,6 +11537,46 @@ const dashboardCss = `
   }
   .chat-confirm-btn:hover:not(:disabled) { background: #1a1412; border-color: #1a1412; }
   .chat-confirm-btn:disabled { opacity: 0.45; cursor: default; }
+  /* Inline helpers used by file upload + short-text-list step types */
+  .chat-header-image {
+    width: 100%;
+    margin: 0.45rem 0 0.5rem;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid rgba(42, 36, 32, 0.08);
+    max-height: 140px;
+    background: #0d0d0d;
+  }
+  .chat-header-image img {
+    display: block;
+    width: 100%;
+    height: 140px;
+    object-fit: cover;
+    object-position: top;
+  }
+  .chat-files-summary {
+    font-family: "Space Mono", monospace;
+    font-size: 0.7rem;
+    line-height: 1.45;
+    color: rgba(42, 36, 32, 0.6);
+    background: rgba(42, 36, 32, 0.03);
+    border: 1px solid rgba(42, 36, 32, 0.08);
+    border-radius: 6px;
+    padding: 0.45rem 0.6rem;
+    word-break: break-word;
+  }
+  .chat-upload-error {
+    font-family: "Space Mono", monospace;
+    font-size: 0.68rem;
+    color: #D71921;
+    margin-top: 0.3rem;
+  }
+  .chat-helper-inline {
+    font-family: "Space Mono", monospace;
+    font-size: 0.66rem;
+    color: rgba(42, 36, 32, 0.5);
+    line-height: 1.45;
+  }
   /* Footer */
   #onboarding-chat-footer {
     display: flex;

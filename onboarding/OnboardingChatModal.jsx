@@ -2,12 +2,68 @@
 
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 
+// Compress a base64 data URL to stay under Anthropic's 5 MB base64 limit.
+// SVGs are skipped (already small). Raster images are progressively downscaled to JPEG.
+const MAX_IMAGE_B64_BYTES = 4_500_000;
+async function compressImageDataUrl(dataUrl) {
+  if (typeof dataUrl !== 'string') return dataUrl;
+  if (dataUrl.startsWith('data:image/svg')) return dataUrl;
+  const b64 = dataUrl.split(',')[1] || '';
+  if (b64.length <= MAX_IMAGE_B64_BYTES) return dataUrl;
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const cfg = [
+        { maxDim: 1920, q: 0.85 },
+        { maxDim: 1440, q: 0.80 },
+        { maxDim: 1280, q: 0.75 },
+        { maxDim: 960,  q: 0.70 },
+        { maxDim: 800,  q: 0.65 },
+      ];
+      for (const { maxDim, q } of cfg) {
+        let w = img.width, h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w >= h) { h = Math.round(h * maxDim / w); w = maxDim; }
+          else        { w = Math.round(w * maxDim / h); h = maxDim; }
+        }
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        const out = c.toDataURL('image/jpeg', q);
+        if ((out.split(',')[1] || '').length <= MAX_IMAGE_B64_BYTES) { resolve(out); return; }
+      }
+      resolve(dataUrl);
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result || ''));
+    r.onerror = () => reject(new Error('read_failed'));
+    r.readAsDataURL(file);
+  });
+}
+
 /**
- * Conversational replacement for OnboardingSurveyModal.
- * Same prop contract — drop-in swap.
+ * Conversational survey/chat shell.
  *
  * Props:
  *   steps, initialAnswers, onAnswer, onSkipStep, onSkipAll, onComplete, onResolved
+ *
+ * Step shape:
+ *   { id, title, eyebrow?, helper?, headerImage?, selectType, options?, maxLength?,
+ *     accept?, maxFiles?, required? }
+ *
+ * Supported selectType values: 'single' (chips, default), 'multi', 'text',
+ *   'short-text-list', 'image', 'image-multi'.
+ *
+ * onAnswer is called as onAnswer(stepId, value, extras?) where extras may carry
+ * { imageBase64, mediaType, images } for image steps. Existing callers that
+ * destructure (stepId, value) only continue to work unchanged.
  */
 export default function OnboardingChatModal({
   steps,
@@ -30,8 +86,13 @@ export default function OnboardingChatModal({
   const [activeStep, setActiveStep] = useState(0);
   const [pendingMulti, setPendingMulti] = useState([]);
   const [textValue, setTextValue] = useState('');
+  const [pendingFiles, setPendingFiles] = useState([]);
+  const [uploadError, setUploadError] = useState('');
   const [typing, setTyping] = useState(true);
   const [busy, setBusy] = useState(false);
+
+  const fileInputRef = useRef(null);
+  const multiFileInputRef = useRef(null);
 
   const scrollRef = useRef(null);
   const step = steps[activeStep];
@@ -79,13 +140,14 @@ export default function OnboardingChatModal({
   }, []);
 
   const advance = useCallback(
-    async (value, label) => {
+    async (value, label, extras) => {
       if (busy) return;
       setBusy(true);
+      setUploadError('');
       markAnswered(activeStep);
       pushUser(label);
       try {
-        await onAnswer(step.id, value);
+        await onAnswer(step.id, value, extras);
         if (isLastStep) {
           await onComplete();
           onResolved?.();
@@ -98,6 +160,7 @@ export default function OnboardingChatModal({
           pushBot(next);
           setPendingMulti([]);
           setTextValue('');
+          setPendingFiles([]);
         }
       } finally {
         setBusy(false);
@@ -105,6 +168,39 @@ export default function OnboardingChatModal({
     },
     [busy, activeStep, isLastStep, step, markAnswered, pushUser, pushBot, onAnswer, onComplete, onResolved]
   );
+
+  const handleSingleFile = useCallback(async (file) => {
+    if (!file || busy) return;
+    setUploadError('');
+    try {
+      const raw = await readFileAsDataUrl(file);
+      const compressed = await compressImageDataUrl(raw);
+      const m = compressed.match(/^data:([^;]+);base64,(.+)$/);
+      if (!m) { setUploadError('Could not read uploaded file.'); return; }
+      await advance(file.name, `Uploaded ${file.name}`, { imageBase64: m[2], mediaType: m[1] });
+    } catch (err) {
+      setUploadError(err?.message || 'Upload failed.');
+    }
+  }, [advance, busy]);
+
+  const handleMultiFiles = useCallback(async () => {
+    if (!pendingFiles.length || busy) return;
+    setUploadError('');
+    try {
+      const out = [];
+      for (const f of pendingFiles) {
+        const raw = await readFileAsDataUrl(f);
+        const compressed = await compressImageDataUrl(raw);
+        const m = compressed.match(/^data:([^;]+);base64,(.+)$/);
+        if (m) out.push({ imageBase64: m[2], mediaType: m[1] });
+      }
+      const count = out.length;
+      const label = `Uploaded ${count} image${count === 1 ? '' : 's'}`;
+      await advance(`${count} image${count === 1 ? '' : 's'} uploaded`, label, { images: out });
+    } catch (err) {
+      setUploadError(err?.message || 'Upload failed.');
+    }
+  }, [advance, busy, pendingFiles]);
 
   const handleSkipStep = useCallback(async () => {
     if (busy) return;
@@ -266,6 +362,11 @@ export default function OnboardingChatModal({
                 <img className="chat-avatar-sm" src="/img/profile2_400x400.png" alt="" aria-hidden="true" />
                 <div className="chat-bubble chat-bubble-bot">
                   {s.eyebrow && <span className="chat-eyebrow">{s.eyebrow}</span>}
+                  {s.headerImage && (
+                    <div id={`chat-header-image-${s.id}`} className="chat-header-image">
+                      <img src={s.headerImage} alt="" loading="lazy" />
+                    </div>
+                  )}
                   <span className="chat-question">{s.title}</span>
                   {s.helper && <span className="chat-helper">{s.helper}</span>}
                 </div>
@@ -274,7 +375,106 @@ export default function OnboardingChatModal({
               {/* Options — only for the active (unanswered) step */}
               {isActive && (
                 <div className="chat-options-zone">
-                  {s.selectType === 'text' ? (
+                  {s.selectType === 'image' ? (
+                    <div className="chat-text-wrap">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept={s.accept || 'image/png,image/jpeg,image/svg+xml,image/webp'}
+                        onChange={(e) => handleSingleFile(e.target.files?.[0])}
+                        style={{ display: 'none' }}
+                      />
+                      <div className="chat-text-actions">
+                        <button className="chat-skip-btn" type="button" onClick={handleSkipStep} disabled={busy || s.required}>
+                          Skip
+                        </button>
+                        <button
+                          className="chat-confirm-btn"
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={busy}
+                        >
+                          {busy ? 'Uploading…' : 'Upload image →'}
+                        </button>
+                      </div>
+                      {uploadError && <div className="chat-upload-error">{uploadError}</div>}
+                    </div>
+                  ) : s.selectType === 'image-multi' ? (
+                    <div className="chat-text-wrap">
+                      <input
+                        ref={multiFileInputRef}
+                        type="file"
+                        accept={s.accept || 'image/png,image/jpeg,image/webp,image/gif'}
+                        multiple
+                        onChange={(e) => setPendingFiles(Array.from(e.target.files || []).slice(0, s.maxFiles || 5))}
+                        style={{ display: 'none' }}
+                      />
+                      {pendingFiles.length > 0 && (
+                        <div className="chat-files-summary">
+                          {pendingFiles.length} file{pendingFiles.length === 1 ? '' : 's'} ready: {pendingFiles.map((f) => f.name).join(', ')}
+                        </div>
+                      )}
+                      <div className="chat-text-actions">
+                        <button className="chat-skip-btn" type="button" onClick={handleSkipStep} disabled={busy || s.required}>
+                          Skip
+                        </button>
+                        <button
+                          className="chat-confirm-btn"
+                          type="button"
+                          onClick={() => multiFileInputRef.current?.click()}
+                          disabled={busy}
+                        >
+                          {pendingFiles.length ? 'Choose different' : 'Choose images'}
+                        </button>
+                        {pendingFiles.length > 0 && (
+                          <button
+                            className="chat-confirm-btn"
+                            type="button"
+                            onClick={handleMultiFiles}
+                            disabled={busy}
+                          >
+                            {busy ? 'Uploading…' : `Send ${pendingFiles.length} →`}
+                          </button>
+                        )}
+                      </div>
+                      {uploadError && <div className="chat-upload-error">{uploadError}</div>}
+                    </div>
+                  ) : s.selectType === 'short-text-list' ? (() => {
+                    const tokens = textValue
+                      .split(/\s*(?:[,/]|\band\b)\s*|\s{2,}/i)
+                      .map((t) => t.trim())
+                      .filter(Boolean)
+                      .slice(0, 3);
+                    const ready = tokens.length === 3;
+                    return (
+                      <div className="chat-text-wrap">
+                        <textarea
+                          className="chat-text-input"
+                          value={textValue}
+                          onChange={(e) => setTextValue(e.target.value)}
+                          placeholder="raw / futuristic / grounded"
+                          rows={2}
+                          disabled={busy}
+                        />
+                        <div className="chat-helper-inline">
+                          {ready ? `Will send: ${tokens.join(' / ')}` : `Three words separated by commas, slashes, or "and". (${tokens.length}/3)`}
+                        </div>
+                        <div className="chat-text-actions">
+                          <button className="chat-skip-btn" type="button" onClick={handleSkipStep} disabled={busy || s.required}>
+                            Skip
+                          </button>
+                          <button
+                            className="chat-confirm-btn"
+                            type="button"
+                            onClick={() => ready && advance(tokens, tokens.join(' / '))}
+                            disabled={busy || !ready}
+                          >
+                            Send →
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })() : s.selectType === 'text' ? (
                     <div className="chat-text-wrap">
                       <textarea
                         className="chat-text-input"

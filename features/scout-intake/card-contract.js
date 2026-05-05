@@ -612,6 +612,48 @@ const CARD_CONTRACT = [
     ],
   },
 
+  // ── Brand System (data-visualization tier — generate action) ────────────
+  // Standalone card for ALL clients. Reviews pipeline data, fills gaps via
+  // chat + image upload + vision analysis, outputs a Master Prompt + JSON
+  // object the client copies into OpenAI Image 2.0 (ChatGPT). Sits alongside
+  // — does not replace — the upgrade-tier image-generation tile below.
+  {
+    id: 'brand-system',
+    navLabel: 'BRAND SYSTEM',
+    navTitle: 'Brand System',
+    // Contract category stays in the existing taxonomy. The dashboard renders
+    // this card under the "Data Visualization" filter via the inline card list
+    // (category: 'onboarding') in DashboardPage.jsx.
+    category: 'design',
+    role: 'brand-deliverable',
+    sourceField: 'snapshot.brandSystem',
+    analyzer: { impl: 'passthrough', required: false },
+    analyzerSkill: null,
+    analyzerSkills: [],
+    copy: {
+      short:    { min: 80,  max: 200 },
+      expanded: { min: 300, max: 800 },
+    },
+    qualityScaling: true,
+    tier: 'all',
+    actionClass: 'generate',
+    sources: ['synth.styleGuide', 'synth.intake', 'site.meta', 'userContext'],
+    missingStateRules: [
+      {
+        id: 'no-style-guide',
+        when: 'snapshot.visualIdentity.styleGuide is null',
+        reason: 'No design-system tokens captured — colors and typography must be filled by the user before the prompt is strong.',
+        offer: 'Run the Style Guide module first, or upload a logo + answer the gap-fill chat to populate the prompt.',
+      },
+      {
+        id: 'no-logo',
+        when: 'siteMeta.favicon empty AND siteMeta.ogImage empty AND no user-uploaded logo',
+        reason: 'No logo found on the site or in user uploads — visual grammar (shape, motifs, iconography) cannot be derived.',
+        offer: 'Upload a logo in the Brand System chat to extract shape language and visual DNA.',
+      },
+    ],
+  },
+
   // ── Upgrade-tier tiles (paid) ───────────────────────────────────────────
   // All paid tiles share a uniform budget and default to 'service-offer'
   // action class — the free-tier view shows the locked CTA that pitches
