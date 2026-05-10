@@ -21,11 +21,12 @@ import {
   Settings2,
   Workflow,
   Globe,
+  Radar,
   X as XIcon,
 } from 'lucide-react';
 import { BrainIcon } from './components/ui/brain';
 import { useAuth } from './AuthContext';
-import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { collection, doc, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from './firebase';
 import { internalPageGlassCardStyle } from './pageSurfaceSystem';
 import InternalPageBackground from './InternalPageBackground';
@@ -33,6 +34,11 @@ import onboardingConfig from './onboarding/questions.config.cjs';
 import { resolveAnalyzerSource, buildCardDescription, buildModuleStateDescription } from './features/scout-intake/card-description-builder.mjs';
 import { deriveFindings } from './features/scout-intake/derived-findings.mjs';
 import ModuleCardControls from './components/dashboard/ModuleCardControls';
+
+const LeadGenDashboard = dynamic(() => import('./components/dashboard/LeadGenDashboard'), {
+  loading: () => null,
+  ssr: false,
+});
 
 const OnboardingChatModal = dynamic(() => import('./onboarding/OnboardingChatModal'), {
   loading: () => null,
@@ -48,6 +54,11 @@ const BrandSystemChat = dynamic(() => import('./components/dashboard/BrandSystem
 });
 
 const BrandSystemBuildModal = dynamic(() => import('./components/dashboard/BrandSystemBuildModal'), {
+  loading: () => null,
+  ssr: false,
+});
+
+const LeadgenModulePanel = dynamic(() => import('./components/dashboard/leadgen/LeadgenModulePanel'), {
   loading: () => null,
   ssr: false,
 });
@@ -70,6 +81,10 @@ const ONBOARDING_CARD_IDS = new Set([
   'priority-signal',
   'brand-system',
   'survey-status',
+  // Per-client leadgen flow cards.
+  'client-brief',
+  'client-mockup',
+  'client-site',
 ]);
 const PENDING_DASHBOARD_SIGNUP_KEY = 'pending-dashboard-signup';
 import {
@@ -1225,6 +1240,56 @@ const DashboardPage = () => {
     if (!user) return Promise.reject(new Error('No authenticated user.'));
     return user.getIdToken();
   }, [user]);
+
+  // Per-client leadgen flow (Prepare Brief / Generate Mockup / Generate Site).
+  // Opened by clicking client-* cards in the Data Visualization bucket. Reuses
+  // the existing /api/leadgen/* routes against a synthetic prospect doc seeded
+  // by /api/leadgen/seed-client-prospect.
+  const [clientFlowState, setClientFlowState] = useState(null);
+  // null | { open, placeId, moduleId, moduleLabel, endpoint }
+  const [clientFlowSeeding, setClientFlowSeeding] = useState(false);
+  const [clientFlowError, setClientFlowError] = useState(null);
+
+  const openLeadgenFlow = useCallback(async (step) => {
+    if (!user) return;
+    setClientFlowError(null);
+    setClientFlowSeeding(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/leadgen/seed-client-prospect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      setClientFlowState({
+        open: true,
+        placeId:     data.placeId,
+        moduleId:    step.moduleId,
+        moduleLabel: step.moduleLabel,
+        endpoint:    step.endpoint,
+      });
+    } catch (err) {
+      console.error('[openLeadgenFlow] seed failed:', err);
+      setClientFlowError(err?.message || 'Failed to open leadgen flow.');
+    } finally {
+      setClientFlowSeeding(false);
+    }
+  }, [user]);
+
+  const closeLeadgenFlow = useCallback(() => {
+    setClientFlowState(null);
+    setClientFlowError(null);
+  }, []);
+
+  const leadgenFlowGetIdToken = useCallback(() => {
+    if (!user) return Promise.reject(new Error('No authenticated user.'));
+    return user.getIdToken();
+  }, [user]);
+
+  // Live synthetic per-client prospect — listener attached after `client` is
+  // derived from bootstrap, below.
+  const [clientProspect, setClientProspect] = useState(null);
   // null until bootstrap resolves, then synchronously set to 'onboarding' for
   // modular clients without brief data, or 'brief' otherwise. Avoids the flash
   // where the default 'brief' view paints before the effect corrects it.
@@ -1367,6 +1432,9 @@ const DashboardPage = () => {
     // component body (TDZ) so the direct name isn't safe at effect-definition time.
     if (id === 'survey-status') { setModalTab('chat'); return; }
     if (id === 'newsletter') { setModalTab('preview'); return; }
+    if (id === 'client-brief')  { setModalTab('preview'); return; }
+    if (id === 'client-mockup') { setModalTab('preview'); return; }
+    if (id === 'client-site')   { setModalTab('preview'); return; }
     if (id === 'seo-performance') { setModalTab('report'); return; }
     if (id === 'agent-readiness') { setModalTab('report'); return; }
     if (id === 'design-evaluation' && bootstrap?.dashboardState?.analyzerOutputs?.['design-evaluation']) { setModalTab('report'); return; }
@@ -1439,6 +1507,21 @@ const DashboardPage = () => {
 
   // ── Derived state ─────────────────────────────────────────────────────────
   const client = bootstrap.client;
+
+  // Live snapshot of the synthetic per-client prospect doc — drives card state
+  // (status dot, footer text, DETAILS modal content) for the leadgen flow cards.
+  useEffect(() => {
+    const cid = client?.clientId || client?.id;
+    if (!cid || !db) return undefined;
+    const ref = doc(db, 'leadgen_prospects', `client:${cid}`);
+    const unsub = onSnapshot(
+      ref,
+      (snap) => setClientProspect(snap.exists() ? snap.data() : null),
+      (err) => { if (process.env.NODE_ENV !== 'production') console.warn('[client-prospect] snapshot:', err?.message || err); },
+    );
+    return () => unsub();
+  }, [client?.clientId, client?.id]);
+
   const recentRuns = bootstrap.recentRuns || [];
   const displayProfile = bootstrap.userProfile || userProfile;
   const currentRun = recentRuns[0] || null;
@@ -3245,6 +3328,130 @@ const DashboardPage = () => {
       footerLeft: hasIntakeData ? 'Live' : 'Run all cards to unlock Brief',
       footerRight: 'REVIEWED',
     },
+    // ── LEADGEN FLOW (per-client) ─────────────────────────────────────────
+    // Reuses /api/leadgen/* routes against a synthetic prospect doc seeded by
+    // /api/leadgen/seed-client-prospect. Phase B exposes only Prepare Brief;
+    // Generate Mockup / Generate Site cards land in Phase C.
+    (() => {
+      const gen = clientProspect?.generation || {};
+      const hasBrief = !!gen.designMd;
+      const briefLines = gen.briefLines || (gen.designMd ? gen.designMd.split('\n').length : 0);
+      let parsedContent = null;
+      try { parsedContent = gen.contentJson ? JSON.parse(gen.contentJson) : null; } catch { parsedContent = null; }
+      const services = parsedContent?.copy?.serviceNames?.length || 0;
+      const testimonials = parsedContent?.copy?.testimonials?.length || 0;
+      const heroHeadline = parsedContent?.copy?.heroHeadline || '';
+      const generatedAt = gen.briefGeneratedAt || null;
+      return {
+        id: 'client-brief',
+        category: 'onboarding',
+        number: 'PB',
+        label: 'PREPARE BRIEF',
+        title: 'Prepare Brief',
+        description: 'Scrapes your website and builds a structured creative brief (DESIGN.MD) — used as the foundation for the visual mockup and the generated site preview.',
+        placeholderLabel: hasBrief ? 'BRIEF' : 'NO\nBRIEF',
+        rows: hasBrief
+          ? [
+              { key: 'cb-target',     label: 'Target',         value: clientProspect?.website || client?.websiteUrl || '—' },
+              { key: 'cb-vertical',   label: 'Vertical',       value: clientProspect?.vertical || 'default' },
+              { key: 'cb-headline',   label: 'Hero headline',  value: heroHeadline ? `"${heroHeadline.slice(0, 80)}"` : '—' },
+              { key: 'cb-services',   label: 'Services',       value: String(services) },
+              { key: 'cb-testimon',   label: 'Testimonials',   value: String(testimonials) },
+              { key: 'cb-lines',      label: 'Brief size',     value: `${briefLines} lines` },
+              { key: 'cb-generated',  label: 'Generated',      value: generatedAt ? new Date(generatedAt).toLocaleString() : '—' },
+            ]
+          : [
+              { key: 'cb-target',  label: 'Target',  value: client?.websiteUrl || 'No website on file' },
+              { key: 'cb-action',  label: 'Action',  value: 'Click RUN to scrape your site and build the brief' },
+              { key: 'cb-output',  label: 'Output',  value: 'DESIGN.MD creative brief + scraped content' },
+            ],
+        footerLeft: hasBrief ? 'Live' : 'Not run yet',
+        footerRight: 'LEADGEN',
+        // Drives status dot — set tone:'ok' when brief is ready so the card flips
+        // to STATUS: Passed. When absent, the standard "needs work" treatment applies.
+        readinessBadge: hasBrief ? { tone: 'ok', label: 'Passed' } : null,
+        // Triggers RUN/DETAILS dual-button footer. tech is decorative metadata.
+        moduleControls: { tech: ['nano-banana', 'firebase-storage'] },
+        leadgenStep: {
+          moduleId:    'prepare-brief',
+          moduleLabel: 'Prepare Brief',
+          endpoint:    '/api/leadgen/prepare-brief',
+        },
+      };
+    })(),
+    (() => {
+      const gen = clientProspect?.generation || {};
+      const hasMockup = !!gen.mockupUrl;
+      const hasBrief = !!gen.designMd;
+      return {
+        id: 'client-mockup',
+        category: 'onboarding',
+        number: 'GM',
+        label: 'GENERATE MOCKUP',
+        title: 'Generate Mockup',
+        description: 'Generates a visual concept of the homepage from your brief — Nano Banana primary, with gpt-image-1 / Imagen 4 fallbacks. Used as the visual reference for the generated site.',
+        placeholderLabel: hasMockup ? 'MOCKUP' : 'NO\nMOCKUP',
+        rows: hasMockup
+          ? [
+              { key: 'cm-target',    label: 'Target',       value: clientProspect?.website || client?.websiteUrl || '—' },
+              { key: 'cm-provider',  label: 'Provider',     value: gen.mockupProvider || '—' },
+              { key: 'cm-generated', label: 'Generated',    value: gen.mockupGeneratedAt ? new Date(gen.mockupGeneratedAt).toLocaleString() : '—' },
+              { key: 'cm-url',       label: 'Image URL',    value: gen.mockupUrl ? 'Stored' : '—' },
+            ]
+          : [
+              { key: 'cm-target',  label: 'Target',  value: client?.websiteUrl || 'No website on file' },
+              { key: 'cm-prereq',  label: 'Prereq',  value: hasBrief ? 'Brief ready' : 'Run Prepare Brief first' },
+              { key: 'cm-action',  label: 'Action',  value: 'Click RUN to generate the visual concept' },
+            ],
+        footerLeft: hasMockup ? 'Live' : (hasBrief ? 'Ready to run' : 'Needs brief'),
+        footerRight: 'LEADGEN',
+        readinessBadge: hasMockup ? { tone: 'ok', label: 'Passed' } : null,
+        moduleControls: { tech: ['nano-banana', 'firebase-storage'] },
+        leadgenStep: {
+          moduleId:    'generate-mockup',
+          moduleLabel: 'Generate Mockup',
+          endpoint:    '/api/leadgen/generate-mockup',
+        },
+      };
+    })(),
+    (() => {
+      const gen = clientProspect?.generation || {};
+      const hasSite   = !!gen.previewUrl;
+      const hasMockup = !!gen.mockupUrl;
+      const cmp = gen.readinessComparison || null;
+      return {
+        id: 'client-site',
+        category: 'onboarding',
+        number: 'GS',
+        label: 'GENERATE SITE',
+        title: 'Generate Site',
+        description: 'Generates a working homepage from your brief and mockup, validates the HTML, and deploys a live preview to Vercel. Returns a side-by-side AI Readiness comparison vs your current site.',
+        placeholderLabel: hasSite ? 'SITE' : 'NO\nSITE',
+        rows: hasSite
+          ? [
+              { key: 'cs-target',    label: 'Target',         value: clientProspect?.website || client?.websiteUrl || '—' },
+              { key: 'cs-preview',   label: 'Preview URL',    value: gen.previewUrl || '—' },
+              { key: 'cs-deployed',  label: 'Deployed',       value: gen.deployedAt ? new Date(gen.deployedAt).toLocaleString() : '—' },
+              { key: 'cs-size',      label: 'HTML size',      value: gen.htmlSizeBytes ? `${(gen.htmlSizeBytes / 1024).toFixed(1)} KB` : '—' },
+              { key: 'cs-readiness', label: 'AI Readiness',   value: cmp?.before?.score != null && cmp?.after?.score != null ? `${cmp.before.score} → ${cmp.after.score}` : '—' },
+              { key: 'cs-cost',      label: 'Estimated cost', value: gen.estimatedCostUsd ? `$${gen.estimatedCostUsd.toFixed(4)}` : '—' },
+            ]
+          : [
+              { key: 'cs-target',  label: 'Target',  value: client?.websiteUrl || 'No website on file' },
+              { key: 'cs-prereq',  label: 'Prereq',  value: hasMockup ? 'Mockup ready' : 'Run Generate Mockup first' },
+              { key: 'cs-action',  label: 'Action',  value: 'Click RUN to generate + deploy the site preview' },
+            ],
+        footerLeft: hasSite ? 'Live' : (hasMockup ? 'Ready to run' : 'Needs mockup'),
+        footerRight: 'LEADGEN',
+        readinessBadge: hasSite ? { tone: 'ok', label: 'Passed' } : null,
+        moduleControls: { tech: ['claude-sonnet', 'vercel'] },
+        leadgenStep: {
+          moduleId:    'generate-site',
+          moduleLabel: 'Generate Site',
+          endpoint:    '/api/leadgen/generate-site',
+        },
+      };
+    })(),
     {
       id: 'multi-device-view',
       category: 'onboarding',
@@ -4484,7 +4691,7 @@ const DashboardPage = () => {
       <header id="founders-top-strip">
         <div id="founders-top-strip-inner">
           <Link href="/" id="founders-brand" aria-label="Back to homepage">
-            <img src="/img/sig.png" alt="" aria-hidden="true" />
+            <img src="/img/circle_logo.png" alt="" aria-hidden="true" />
           </Link>
           <div id="founders-top-actions">
             <Link href="/" id="founders-linkedin" aria-label="Homepage">
@@ -4804,7 +5011,12 @@ const DashboardPage = () => {
 
           {/* Left — grid */}
           <div id="capability-grid-col">
-          <div id="capability-grid" ref={capabilityGridRef}>
+          {activeCapabilityFilter === 'leadgen' ? (
+            <div id="leadgen-grid-col-shell">
+              <LeadGenDashboard />
+            </div>
+          ) : null}
+          <div id="capability-grid" ref={capabilityGridRef} style={activeCapabilityFilter === 'leadgen' ? { display: 'none' } : undefined}>
             {activeCapabilityFilter === 'brief' ? (
               <div id="brief-embed-container">
                 {briefPdfUrl && (
@@ -4940,8 +5152,12 @@ const DashboardPage = () => {
               const isLocked = activeCapabilityFilter === 'onboarding' && isCardLocked(card.id);
               // Unlocked but not yet run (enabled/disabled without a succeeded status) —
               // we want no card-level hover effect, only direct button hover.
-              const isInactiveUnlocked = !isLocked && Boolean(card.moduleControls)
-                && !(_mStatus === 'succeeded' || _mStatus === 'running' || _mStatus === 'queued');
+              // Leadgen flow cards aren't tracked in moduleState — drive the
+              // disabled state from the synthetic-prospect-derived readinessBadge.
+              const isInactiveUnlocked = card.leadgenStep
+                ? (!isLocked && !card.readinessBadge)
+                : (!isLocked && Boolean(card.moduleControls)
+                   && !(_mStatus === 'succeeded' || _mStatus === 'running' || _mStatus === 'queued'));
               return (
               <article
                 data-capability-card
@@ -5207,6 +5423,19 @@ const DashboardPage = () => {
                           </>
                         );
                       }
+                      // Leadgen flow cards: drive status from synthetic prospect state, not moduleState.
+                      if (card.leadgenStep) {
+                        const ok = card.readinessBadge?.tone === 'ok';
+                        const meta = ok
+                          ? { dot: '#22c55e', label: 'Passed',  glow: '0 0 5px 2px rgba(34,197,94,0.45)' }
+                          : { dot: '#6b7280', label: 'Not run', glow: 'none' };
+                        return (
+                          <>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', display: 'inline-block', background: meta.dot, boxShadow: meta.glow, flexShrink: 0 }} />
+                            {meta.label}
+                          </>
+                        );
+                      }
                       if (card.moduleControls) {
                         let s = moduleState?.[card.id]?.status ?? 'inactive';
                         // multi-device-view: treat succeeded-but-partial (or missing both)
@@ -5331,7 +5560,11 @@ const DashboardPage = () => {
                       // so the server flips the flag before dispatching.
                       const interactive =
                         !mBusy && (mIsInactive || (mEnabled && (mIsRetry || tierAllowsRerun)) || cardNotPassed);
-                      const label = mLoading ? '…' : mIsRetry ? 'Retry' : mIsRerun ? 'Re-run' : mIsInactive ? 'RUN' : 'Run';
+                      let label = mLoading ? '…' : mIsRetry ? 'Retry' : mIsRerun ? 'Re-run' : mIsInactive ? 'RUN' : 'Run';
+                      // Leadgen cards aren't tracked in moduleState — derive label from readinessBadge.
+                      if (card.leadgenStep && !mLoading) {
+                        label = card.readinessBadge?.tone === 'ok' ? 'Re-run' : 'RUN';
+                      }
                       return (
                         <button
                           type="button"
@@ -5341,6 +5574,9 @@ const DashboardPage = () => {
                           onClick={(e) => {
                             e.stopPropagation();
                             if (!interactive) return;
+                            // Leadgen flow cards run via /api/leadgen/* not the
+                            // module pipeline — short-circuit before handleModuleRun.
+                            if (card.leadgenStep) { openLeadgenFlow(card.leadgenStep); return; }
                             if (mIsInactive) {
                               // First-run: single call with autoEnable so the
                               // server flips enabled=true and runs in one shot.
@@ -5401,6 +5637,7 @@ const DashboardPage = () => {
               { key: 'growth',     label: 'Growth Signals',          sub: 'Trends & competitors',     icon: Settings2,             color: '#10b981' },
               { key: 'automation', label: 'Automation & Systems',    sub: 'Scale & automate',         icon: BrainIcon,             color: '#6366f1' },
               { key: 'services',   label: 'Work With Me',            sub: 'Get it done',              icon: MessageSquareMore,     color: '#ec4899' },
+              { key: 'leadgen',    label: 'Lead Generation',         sub: 'Prospect pipeline',        icon: Radar,                 color: '#ff3b30' },
             ].map(({ key, label, sub, icon: NavIcon, color }) => {
               const isLocked = !isAdmin && isModularOnboardingClient && key !== 'onboarding';
               return (
@@ -5415,6 +5652,13 @@ const DashboardPage = () => {
                   const grid = capabilityGridRef.current;
                   if (!grid) { setActiveCapabilityFilter(key); return; }
                   const cards = grid.querySelectorAll('[data-capability-card]');
+                  // Skip the fade choreography for leadgen transitions —
+                  // the grid is hidden in that view so there are no cards
+                  // to animate on either side.
+                  if (key === 'leadgen' || activeCapabilityFilter === 'leadgen' || cards.length === 0) {
+                    setActiveCapabilityFilter(key);
+                    return;
+                  }
                   gsap.killTweensOf(cards);
                   gsap.to(cards, {
                     opacity: 0,
@@ -5460,6 +5704,20 @@ const DashboardPage = () => {
         )}
 
       </main>
+
+      {/* ── Leadgen flow panel (per-client cards: Prepare Brief, etc.) ── */}
+      {clientFlowState?.open && user ? (
+        <LeadgenModulePanel
+          open={clientFlowState.open}
+          placeId={clientFlowState.placeId}
+          moduleId={clientFlowState.moduleId}
+          moduleLabel={clientFlowState.moduleLabel}
+          endpoint={clientFlowState.endpoint}
+          getIdToken={leadgenFlowGetIdToken}
+          onClose={closeLeadgenFlow}
+          onDone={() => { /* Phase D will refresh the card body from the synthetic prospect doc */ }}
+        />
+      ) : null}
 
       {/* ── Intake build modal — unified card: shared top rows + 2-col body (terminal / survey) ── */}
       {hasBrandSystemMounted && user ? (
@@ -6192,6 +6450,239 @@ const DashboardPage = () => {
                   );
                 })()}
 
+                {/* Client-brief card — BRIEF + DATA tabs (synthetic prospect doc) */}
+                {activeTileModal.cardId === 'client-brief' && (() => {
+                  const gen = clientProspect?.generation || {};
+                  const designMd = gen.designMd || '';
+                  let parsed = null;
+                  try { parsed = gen.contentJson ? JSON.parse(gen.contentJson) : null; } catch { parsed = null; }
+                  const copy = parsed?.copy || {};
+                  const colors = parsed?.colors || {};
+                  const structure = parsed?.structure || {};
+                  return (
+                    <div
+                      id="client-brief-modal-tabs-container"
+                      className="tile-detail-bento-cell tile-detail-tabbed-container"
+                    >
+                      <div className="tile-detail-tabs">
+                        <button type="button" className={`tile-detail-tab${modalTab === 'preview' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('preview')}>BRIEF</button>
+                        <button type="button" className={`tile-detail-tab${modalTab === 'data' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('data')}>DATA</button>
+                      </div>
+                      <div className="tile-detail-tab-content">
+                        {modalTab === 'preview' && (
+                          <div className="tile-detail-tab-pane" style={{ padding: 0, height: '100%', overflow: 'hidden' }}>
+                            {designMd ? (
+                              <pre
+                                style={{
+                                  margin: 0, padding: '16px 18px', height: '100%', overflow: 'auto',
+                                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                                  fontSize: 12, lineHeight: 1.55, color: '#2a2420',
+                                  background: '#f8f7f4', border: '1px solid rgba(42,36,32,0.08)', borderRadius: 8,
+                                  whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                                }}
+                              >{designMd}</pre>
+                            ) : (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 400, gap: 16, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'center', padding: 40 }}>
+                                <span style={{ fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.7 }}>No brief yet</span>
+                                <span style={{ fontSize: 13, lineHeight: 1.6, maxWidth: 340 }}>Click RUN on the Prepare Brief card to scrape your website and generate the creative brief.</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {modalTab === 'data' && (
+                          <div id="client-brief-data-tab" className="tile-detail-tab-pane">
+                            {(() => {
+                              const dataRows = [
+                                { key: 'cb-h1',         isHeader: true, label: 'PROSPECT' },
+                                { key: 'cb-d-name',     label: 'Name',          value: clientProspect?.name      || '—' },
+                                { key: 'cb-d-website',  label: 'Website',       value: clientProspect?.website   || '—' },
+                                { key: 'cb-d-vertical', label: 'Vertical',      value: clientProspect?.vertical  || '—' },
+                                { key: 'cb-d-stage',    label: 'Stage',         value: clientProspect?.stage     || '—' },
+                                { key: 'cb-d-gen',      label: 'Generated',     value: gen.briefGeneratedAt ? new Date(gen.briefGeneratedAt).toLocaleString() : '—' },
+                                { key: 'cb-d-lines',    label: 'Brief size',    value: gen.briefLines ? `${gen.briefLines} lines` : (designMd ? `${designMd.split('\n').length} lines` : '—') },
+
+                                { key: 'cb-h2',         isHeader: true, label: 'SCRAPED COPY' },
+                                { key: 'cb-c-headline', label: 'Hero headline', value: copy.heroHeadline    || '—' },
+                                { key: 'cb-c-subhead',  label: 'Subheadline',   value: copy.heroSubheadline || '—' },
+                                { key: 'cb-c-tagline',  label: 'Tagline',       value: copy.tagline         || '—' },
+                                { key: 'cb-c-services', label: 'Services',      value: (copy.serviceNames?.length ? copy.serviceNames.join(', ') : '—') },
+                                { key: 'cb-c-ctas',     label: 'CTA texts',     value: (copy.ctaTexts?.length ? copy.ctaTexts.join(' · ') : '—') },
+                                { key: 'cb-c-testim',   label: 'Testimonials',  value: String(copy.testimonials?.length || 0) },
+                                { key: 'cb-c-about',    label: 'About text',    value: copy.aboutText ? `${copy.aboutText.slice(0, 120)}${copy.aboutText.length > 120 ? '…' : ''}` : '—' },
+
+                                { key: 'cb-h3',         isHeader: true, label: 'STRUCTURE' },
+                                { key: 'cb-s-nav',      label: 'Nav items',     value: (structure.navItems?.length ? structure.navItems.join(' · ') : '—') },
+                                { key: 'cb-s-sections', label: 'Sections',      value: String(structure.sectionCount || '—') },
+
+                                { key: 'cb-h4',         isHeader: true, label: 'COLORS' },
+                                { key: 'cb-col-prim',   label: 'Primary',       value: colors.primary   || '—' },
+                                { key: 'cb-col-sec',    label: 'Secondary',     value: colors.secondary || '—' },
+                                { key: 'cb-col-acc',    label: 'Accent',        value: colors.accent    || '—' },
+
+                                { key: 'cb-h5',         isHeader: true, label: 'ASSETS' },
+                                { key: 'cb-a-logo',     label: 'Logo',          value: gen.assetManifest?.logo?.url ? 'Found' : '—' },
+                                { key: 'cb-a-hero',     label: 'Hero images',   value: String(gen.assetManifest?.heroImages?.length || 0) },
+                                { key: 'cb-a-section',  label: 'Section images', value: String(gen.assetManifest?.sectionImages?.length || 0) },
+                              ];
+                              return dataRows.map((row) =>
+                                row.isHeader
+                                  ? <div key={row.key} className="tile-detail-row-section-head">{row.label}</div>
+                                  : (
+                                    <div key={row.key} className="tile-detail-stat-row">
+                                      <span className="tile-detail-stat-label">{row.label}</span>
+                                      <span className="tile-detail-stat-value" style={{ wordBreak: 'break-word' }}>{row.value}</span>
+                                    </div>
+                                  )
+                              );
+                            })()}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Client-mockup card — MOCKUP + DATA tabs (synthetic prospect doc) */}
+                {activeTileModal.cardId === 'client-mockup' && (() => {
+                  const gen = clientProspect?.generation || {};
+                  const url = gen.mockupUrl || '';
+                  return (
+                    <div
+                      id="client-mockup-modal-tabs-container"
+                      className="tile-detail-bento-cell tile-detail-tabbed-container"
+                    >
+                      <div className="tile-detail-tabs">
+                        <button type="button" className={`tile-detail-tab${modalTab === 'preview' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('preview')}>MOCKUP</button>
+                        <button type="button" className={`tile-detail-tab${modalTab === 'data' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('data')}>DATA</button>
+                      </div>
+                      <div className="tile-detail-tab-content">
+                        {modalTab === 'preview' && (
+                          <div className="tile-detail-tab-pane" style={{ padding: 0, height: '100%', overflow: 'auto', background: '#f8f7f4', border: '1px solid rgba(42,36,32,0.08)', borderRadius: 8 }}>
+                            {url ? (
+                              <img src={url} alt="Generated homepage mockup" style={{ display: 'block', width: '100%', height: 'auto' }} />
+                            ) : (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 400, gap: 16, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'center', padding: 40 }}>
+                                <span style={{ fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.7 }}>No mockup yet</span>
+                                <span style={{ fontSize: 13, lineHeight: 1.6, maxWidth: 340 }}>Click RUN on the Generate Mockup card to produce the visual concept from your brief.</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {modalTab === 'data' && (
+                          <div id="client-mockup-data-tab" className="tile-detail-tab-pane">
+                            {(() => {
+                              const dataRows = [
+                                { key: 'cm-h1',          isHeader: true, label: 'MOCKUP' },
+                                { key: 'cm-d-target',    label: 'Target',         value: clientProspect?.website || '—' },
+                                { key: 'cm-d-provider',  label: 'Provider',       value: gen.mockupProvider || '—' },
+                                { key: 'cm-d-generated', label: 'Generated',      value: gen.mockupGeneratedAt ? new Date(gen.mockupGeneratedAt).toLocaleString() : '—' },
+                                { key: 'cm-d-url',       label: 'Storage URL',    value: url ? url : '—' },
+                                { key: 'cm-h2',          isHeader: true, label: 'PROMPT' },
+                                { key: 'cm-d-prompt',    label: 'Prompt size',    value: gen.mockupPrompt ? `${gen.mockupPrompt.length} chars` : '—' },
+                              ];
+                              return dataRows.map((row) =>
+                                row.isHeader
+                                  ? <div key={row.key} className="tile-detail-row-section-head">{row.label}</div>
+                                  : (
+                                    <div key={row.key} className="tile-detail-stat-row">
+                                      <span className="tile-detail-stat-label">{row.label}</span>
+                                      <span className="tile-detail-stat-value" style={{ wordBreak: 'break-all' }}>{row.value}</span>
+                                    </div>
+                                  )
+                              );
+                            })()}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Client-site card — PREVIEW + DATA tabs (synthetic prospect doc) */}
+                {activeTileModal.cardId === 'client-site' && (() => {
+                  const gen = clientProspect?.generation || {};
+                  const previewUrl = gen.previewUrl || '';
+                  const cmp = gen.readinessComparison || null;
+                  return (
+                    <div
+                      id="client-site-modal-tabs-container"
+                      className="tile-detail-bento-cell tile-detail-tabbed-container"
+                    >
+                      <div className="tile-detail-tabs">
+                        <button type="button" className={`tile-detail-tab${modalTab === 'preview' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('preview')}>PREVIEW</button>
+                        <button type="button" className={`tile-detail-tab${modalTab === 'data' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('data')}>DATA</button>
+                      </div>
+                      <div className="tile-detail-tab-content">
+                        {modalTab === 'preview' && (
+                          <div className="tile-detail-tab-pane" style={{ padding: 24, height: '100%', overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {previewUrl ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18, maxWidth: 480, textAlign: 'center', fontFamily: 'var(--font-mono)' }}>
+                                <span style={{ fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.55)' }}>Preview deployed</span>
+                                <a
+                                  href={previewUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: 8,
+                                    padding: '12px 20px', borderRadius: 8,
+                                    background: '#2a2420', color: '#fff',
+                                    fontSize: '0.78rem', letterSpacing: '0.08em', fontWeight: 700, textTransform: 'uppercase',
+                                    textDecoration: 'none', boxShadow: '0 6px 18px rgba(0,0,0,0.2)',
+                                  }}
+                                >Open Preview ↗</a>
+                                <span style={{ fontSize: 11, color: 'rgba(42,36,32,0.55)', wordBreak: 'break-all', padding: '8px 12px', background: 'rgba(42,36,32,0.04)', borderRadius: 6 }}>{previewUrl}</span>
+                                <span style={{ fontSize: 11, lineHeight: 1.5, color: 'rgba(42,36,32,0.45)', maxWidth: 360 }}>
+                                  Vercel preview deployments block iframe embedding by default. Use the link above to view the live site in a new tab.
+                                </span>
+                              </div>
+                            ) : (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 400, gap: 16, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'center', padding: 40 }}>
+                                <span style={{ fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.7 }}>No site yet</span>
+                                <span style={{ fontSize: 13, lineHeight: 1.6, maxWidth: 340 }}>Click RUN on the Generate Site card to produce + deploy the homepage preview.</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {modalTab === 'data' && (
+                          <div id="client-site-data-tab" className="tile-detail-tab-pane">
+                            {(() => {
+                              const dataRows = [
+                                { key: 'cs-h1',          isHeader: true, label: 'DEPLOYMENT' },
+                                { key: 'cs-d-target',    label: 'Target',         value: clientProspect?.website || '—' },
+                                { key: 'cs-d-preview',   label: 'Preview URL',    value: previewUrl || '—' },
+                                { key: 'cs-d-deployed',  label: 'Deployed',       value: gen.deployedAt ? new Date(gen.deployedAt).toLocaleString() : '—' },
+                                { key: 'cs-d-htmlat',    label: 'HTML generated', value: gen.htmlGeneratedAt ? new Date(gen.htmlGeneratedAt).toLocaleString() : '—' },
+                                { key: 'cs-d-size',      label: 'HTML size',      value: gen.htmlSizeBytes ? `${(gen.htmlSizeBytes / 1024).toFixed(1)} KB` : '—' },
+                                { key: 'cs-d-issues',    label: 'Validation issues', value: Array.isArray(gen.validationIssues) ? `${gen.validationIssues.length}` : '—' },
+
+                                { key: 'cs-h2',          isHeader: true, label: 'AI READINESS' },
+                                { key: 'cs-d-before',    label: 'Before',         value: cmp?.before?.score != null ? String(cmp.before.score) : '—' },
+                                { key: 'cs-d-after',     label: 'After',          value: cmp?.after?.score  != null ? String(cmp.after.score)  : '—' },
+                                { key: 'cs-d-improve',   label: 'Improvement',    value: cmp?.improvement   != null ? `+${cmp.improvement} points` : '—' },
+
+                                { key: 'cs-h3',          isHeader: true, label: 'COST' },
+                                { key: 'cs-d-tokens-in', label: 'Input tokens',   value: gen.tokenUsage?.input  != null ? String(gen.tokenUsage.input)  : '—' },
+                                { key: 'cs-d-tokens-out',label: 'Output tokens',  value: gen.tokenUsage?.output != null ? String(gen.tokenUsage.output) : '—' },
+                                { key: 'cs-d-cost',      label: 'Estimated cost', value: gen.estimatedCostUsd != null ? `$${gen.estimatedCostUsd.toFixed(4)}` : '—' },
+                              ];
+                              return dataRows.map((row) =>
+                                row.isHeader
+                                  ? <div key={row.key} className="tile-detail-row-section-head">{row.label}</div>
+                                  : (
+                                    <div key={row.key} className="tile-detail-stat-row">
+                                      <span className="tile-detail-stat-label">{row.label}</span>
+                                      <span className="tile-detail-stat-value" style={{ wordBreak: 'break-all' }}>{row.value}</span>
+                                    </div>
+                                  )
+                              );
+                            })()}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Newsletter card — PREVIEW + DATA tabs */}
                 {activeTileModal.cardId === 'newsletter' && (
                   <div
@@ -6269,7 +6760,7 @@ const DashboardPage = () => {
                 )}
 
                 {/* Tabbed SOLUTIONS / PROBLEMS / DATA for most cards */}
-                {!['multi-device-view', 'brief', 'audit-summary', 'survey-status', 'newsletter', 'brand-system'].includes(activeTileModal.cardId) && (activeTileModal.analyzer || (activeTileModal.cardId === 'social-preview' && siteMeta)) ? (
+                {!['multi-device-view', 'brief', 'audit-summary', 'survey-status', 'newsletter', 'brand-system', 'client-brief', 'client-mockup', 'client-site'].includes(activeTileModal.cardId) && (activeTileModal.analyzer || (activeTileModal.cardId === 'social-preview' && siteMeta)) ? (
                   <div
                     id={`${activeTileModal.cardId}-analyzer-findings`}
                     className="tile-detail-bento-cell tile-detail-tabbed-container"

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useAuth } from './AuthContext';
 
 const REFRESH_INTERVAL_SECONDS = 30;
 
@@ -55,6 +56,7 @@ function safeJson(value) {
 }
 
 export default function OpsOverviewPage({ initialData = null, initialError = '' }) {
+  const { user } = useAuth();
   const [data, setData] = useState(initialData);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(!initialData && !initialError);
@@ -68,10 +70,18 @@ export default function OpsOverviewPage({ initialData = null, initialError = '' 
   const [countdown, setCountdown] = useState(REFRESH_INTERVAL_SECONDS);
 
   const loadAll = useCallback(async () => {
+    if (!user) {
+      setStatusLine('Waiting for auth…');
+      return;
+    }
     setStatusLine('Refreshing…');
     setError('');
     try {
-      const res = await fetch('/api/ops/overview', { cache: 'no-store' });
+      const token = await user.getIdToken();
+      const res = await fetch('/api/ops/overview', {
+        cache: 'no-store',
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`);
       setData(json);
@@ -87,13 +97,15 @@ export default function OpsOverviewPage({ initialData = null, initialError = '' 
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
+  // Initial load when no SSR data was provided. Also re-fires once `user`
+  // resolves so the first authed fetch lands as soon as the auth context is ready.
   useEffect(() => {
-    if (!initialData && !initialError) {
+    if (!initialData && !initialError && user) {
       loadAll();
     }
-  }, [loadAll]);
+  }, [loadAll, initialData, initialError, user]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -225,6 +237,16 @@ export default function OpsOverviewPage({ initialData = null, initialError = '' 
             <div className="stat-value">{formatCurrency(data?.stats?.averageRunCostUsd, 4)}</div>
             <div className="stat-sub">{`${data?.stats?.pricedRunCount || 0} priced run${data?.stats?.pricedRunCount === 1 ? '' : 's'}`}</div>
           </div>
+          <div className="stat-card purple">
+            <div className="stat-label">Module Spend</div>
+            <div className="stat-value">{formatCurrency(data?.stats?.moduleCostUsd, 4)}</div>
+            <div className="stat-sub">{`${data?.stats?.moduleEventCount || 0} usage event${data?.stats?.moduleEventCount === 1 ? '' : 's'}`}</div>
+          </div>
+          <div className="stat-card purple">
+            <div className="stat-label">Combined Spend</div>
+            <div className="stat-value">{formatCurrency(data?.stats?.combinedCostUsd, 4)}</div>
+            <div className="stat-sub">Runs + modules</div>
+          </div>
           <div className="stat-card"><div className="stat-label">Configs Tracked</div><div className="stat-value">{data?.stats?.configsTracked ?? '—'}</div></div>
           <div className="stat-card"><div className="stat-label">Dashboards Tracked</div><div className="stat-value">{data?.stats?.dashboardStatesTracked ?? '—'}</div></div>
           <div className="stat-card"><div className="stat-label">SEO Audits</div><div className="stat-value">{data?.stats?.seoAuditsTracked ?? '—'}</div></div>
@@ -317,6 +339,98 @@ export default function OpsOverviewPage({ initialData = null, initialError = '' 
                 })
               )}
             </div>
+          </div>
+        </section>
+
+        <section className="section">
+          <div className="section-head">Module Costs <div className="section-head-line" /></div>
+          <div className="card-shell" id="module-costs-shell">
+            <div id="module-costs-grid">
+              <div className="detail-card">
+                <span className="eyebrow">By Module</span>
+                {!data?.moduleUsage?.byModule?.length ? (
+                  <p className="cell-dim">{loading ? 'Loading…' : 'No usage events recorded yet.'}</p>
+                ) : (
+                  <div id="module-cost-rows">
+                    {data.moduleUsage.byModule.map((row) => {
+                      const max = data.moduleUsage.byModule[0]?.costUsd || 1;
+                      return (
+                        <div className="cost-row" key={row.module}>
+                          <div className="cost-name" title={row.module}>{row.module}</div>
+                          <div className="cost-track"><div className="cost-fill" style={{ width: `${((row.costUsd || 0) / max * 100).toFixed(1)}%` }} /></div>
+                          <div className="cost-val">{formatCurrency(row.costUsd, 4)}</div>
+                          <div className="cost-sub">{`${row.eventCount} event${row.eventCount === 1 ? '' : 's'}`}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              <div className="detail-card">
+                <span className="eyebrow">By Provider</span>
+                {!data?.moduleUsage?.byProvider?.length ? (
+                  <p className="cell-dim">{loading ? 'Loading…' : 'No usage events recorded yet.'}</p>
+                ) : (
+                  <div id="provider-cost-rows">
+                    {data.moduleUsage.byProvider.map((row) => {
+                      const max = data.moduleUsage.byProvider[0]?.costUsd || 1;
+                      return (
+                        <div className="cost-row" key={row.provider}>
+                          <div className="cost-name" title={row.provider}>{row.provider}</div>
+                          <div className="cost-track"><div className="cost-fill" style={{ width: `${((row.costUsd || 0) / max * 100).toFixed(1)}%` }} /></div>
+                          <div className="cost-val">{formatCurrency(row.costUsd, 4)}</div>
+                          <div className="cost-sub">{`${row.eventCount} event${row.eventCount === 1 ? '' : 's'}`}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="card-shell" id="recent-events-shell">
+            <table>
+              <thead>
+                <tr>
+                  <th>When</th>
+                  <th>Module</th>
+                  <th>Action</th>
+                  <th>Provider</th>
+                  <th>Model</th>
+                  <th>Tokens / Calls</th>
+                  <th>Cost</th>
+                  <th>Place / Client</th>
+                </tr>
+              </thead>
+              <tbody>
+                {!data?.moduleUsage?.recentEvents?.length ? (
+                  <tr className="empty-row"><td colSpan={8}>{loading ? 'Loading…' : 'No usage events recorded yet'}</td></tr>
+                ) : (
+                  data.moduleUsage.recentEvents.map((ev) => {
+                    const tokens = (ev.inputTokens || 0) + (ev.outputTokens || 0);
+                    const callsLabel = ev.imageCount
+                      ? `${ev.imageCount} img`
+                      : ev.calls
+                        ? `${ev.calls} call${ev.calls === 1 ? '' : 's'}`
+                        : tokens
+                          ? `${tokens.toLocaleString()} tok`
+                          : '—';
+                    return (
+                      <tr key={ev.id}>
+                        <td className="cell-dim">{fmtDate(ev.timestamp)}</td>
+                        <td className="cell-primary">{ev.module || '—'}</td>
+                        <td className="cell-dim">{ev.action || '—'}</td>
+                        <td className="cell-dim">{ev.provider || '—'}</td>
+                        <td className="cell-dim">{ev.model || '—'}</td>
+                        <td className="cell-dim">{callsLabel}</td>
+                        <td className="cell-dim">{formatCurrency(ev.estimatedCostUsd, 4)}</td>
+                        <td className="cell-dim">{ev.placeId || ev.clientId || '—'}</td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         </section>
 
@@ -939,6 +1053,33 @@ const opsOverviewCss = `
     font-family: var(--font-mono);
     font-size: 11px;
     color: var(--purple);
+  }
+  .cost-sub {
+    width: 80px;
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text2);
+    opacity: 0.75;
+  }
+  #module-costs-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    padding: 1rem 1.1rem;
+  }
+  #module-cost-rows,
+  #provider-cost-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    margin-top: 0.6rem;
+  }
+  #recent-events-shell {
+    margin-top: 1rem;
+  }
+  @media (max-width: 760px) {
+    #module-costs-grid { grid-template-columns: 1fr; }
   }
   pre {
     width: 100%;

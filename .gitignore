@@ -13,6 +13,10 @@ public/img/port_videos/
 features/not-the-rug-brief/data/
 .vercel
 
+# Lead gen generated client folders (scraped content + generated sites)
+clients/*/
+!clients/_shared/
+
 # Local AI / editor workflow
 .claude/
 .vscode/

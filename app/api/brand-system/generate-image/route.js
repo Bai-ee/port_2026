@@ -5,6 +5,7 @@ const require = createRequire(import.meta.url);
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
 const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
 const { callOpenAiImages } = require('../../../../features/scout-intake/_openai-client.js');
+const { logUsage, computeImageCost } = require('../../../../api/_lib/usage-logger.cjs');
 
 // Map templateId → gpt-image-1 size.
 const TEMPLATE_SIZES = {
@@ -56,16 +57,18 @@ export async function POST(request) {
     return jerror('prompt is required.');
   }
 
-  const size = TEMPLATE_SIZES[templateId] || '1024x1024';
+  const size    = TEMPLATE_SIZES[templateId] || '1024x1024';
+  const quality = 'medium';
+  const model   = 'gpt-image-1';
 
   let openAiResponse;
   try {
     openAiResponse = await callOpenAiImages({
-      model: 'gpt-image-1',
+      model,
       prompt: prompt.trim(),
       n: 1,
       size,
-      quality: 'medium',
+      quality,
     });
   } catch (err) {
     console.error('[brand-system/generate-image] OpenAI error:', err.message);
@@ -79,11 +82,18 @@ export async function POST(request) {
 
   const generatedAt = new Date().toISOString();
 
-  // Persist b64 reference to Firestore so the dashboard can surface it later.
+  // Resolve clientId once and reuse for both dashboard write and usage log.
+  let clientId = null;
   try {
     const userSnap = await fb.adminDb.collection('users').doc(decoded.uid).get();
-    const clientId = userSnap.exists ? (userSnap.data()?.clientId || null) : null;
-    if (clientId) {
+    clientId = userSnap.exists ? (userSnap.data()?.clientId || null) : null;
+  } catch (err) {
+    console.warn('[brand-system/generate-image] user lookup failed:', err.message);
+  }
+
+  // Persist b64 reference to Firestore so the dashboard can surface it later.
+  if (clientId) {
+    try {
       await fb.adminDb.collection('dashboard_state').doc(clientId).set(
         {
           brandSystem: {
@@ -93,11 +103,22 @@ export async function POST(request) {
         },
         { merge: true }
       );
+    } catch (err) {
+      // Non-fatal — image still returned to client.
+      console.warn('[brand-system/generate-image] Firestore write failed:', err.message);
     }
-  } catch (err) {
-    // Non-fatal — image still returned to client.
-    console.warn('[brand-system/generate-image] Firestore write failed:', err.message);
   }
+
+  await logUsage({
+    module:     'brand-system',
+    action:     'generate-image',
+    provider:   'openai',
+    model,
+    imageCount: 1,
+    costUsd:    computeImageCost({ model, size, quality, count: 1 }),
+    clientId,
+    metadata:   { templateId, size, quality },
+  });
 
   return NextResponse.json(
     { b64, mediaType: 'image/png', size, templateId, generatedAt },

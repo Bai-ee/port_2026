@@ -73,7 +73,7 @@ async function runIntelligenceSource(clientId, sourceId, options = {}) {
   // Failure is non-fatal: narrative stays null, fetch still commits.
   if (sourceId === 'pagespeed-insights') {
     try {
-      const narration = await narratePsiRecord(sourceRecord);
+      const narration = await narratePsiRecord(sourceRecord, { clientId });
       if (narration.narrative) {
         sourceRecord.facts.narrative = narration.narrative;
         sourceRecord.cost.model        = narration.model;

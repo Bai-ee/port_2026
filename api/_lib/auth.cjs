@@ -76,15 +76,20 @@ async function verifyAdminRequest(req) {
   }
 
   const decoded = await verifyRequestUser(req);
-  const email = decoded.email;
+  const rawEmail = decoded.email;
 
-  if (!email) {
+  if (!rawEmail) {
     throw new Error('Forbidden: token has no email claim.');
   }
 
+  // Normalize to lowercase — emails are case-insensitive per RFC 5321, and the
+  // `admins` collection stores keys in lowercase. Without this, a token with
+  // any capitalized character would miss the lookup and falsely 403.
+  const email = String(rawEmail).trim().toLowerCase();
+
   const adminSnapshot = await fb.adminDb.collection('admins').doc(email).get();
   if (!adminSnapshot.exists) {
-    throw new Error('Forbidden: admin access required.');
+    throw new Error(`Forbidden: admin access required (email=${email}).`);
   }
 
   return decoded;

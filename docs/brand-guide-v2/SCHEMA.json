@@ -1,0 +1,372 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "brand-guide-v2",
+  "title": "Brand Guide v2 — Universal Brand DNA Schema",
+  "description": "Multi-mode brand identity schema that drives poster, storyboard, product shot, web design, character sheet, and social media prompt generation from a single source of truth.",
+  "type": "object",
+  "required": ["schema_version", "brand_header"],
+  "properties": {
+    "schema_version": { "const": 2 },
+    "title": { "type": "string" },
+
+    "brand_header": {
+      "type": "object",
+      "required": ["brand_name"],
+      "properties": {
+        "brand_name": { "type": "string" },
+        "brand_statement": { "type": ["string", "null"], "description": "6-8 word brand statement" },
+        "soul_descriptors": {
+          "type": ["array", "null"],
+          "items": { "type": "string" },
+          "minItems": 3, "maxItems": 3,
+          "description": "Exactly 3 single-word brand personality descriptors"
+        },
+        "brand_archetype": {
+          "type": ["string", "null"],
+          "enum": ["creator", "explorer", "sage", "hero", "outlaw", "magician", "everyman", "lover", "jester", "caregiver", "ruler", "innocent", null]
+        },
+        "tagline": { "type": ["string", "null"] },
+        "industry": { "type": ["string", "null"] },
+        "target_audience": { "type": ["string", "null"] }
+      }
+    },
+
+    "color_system": {
+      "type": ["object", "null"],
+      "properties": {
+        "foundation": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/color_swatch" },
+          "description": "3-5 foundation colors: blacks, whites, neutrals"
+        },
+        "emphasis": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/color_swatch" },
+          "description": "3-5 emphasis colors: primary accent, secondary accent, CTA"
+        },
+        "atmosphere": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/color_swatch" },
+          "description": "3-5 atmosphere colors: soft backgrounds, states, moods"
+        },
+        "gradients": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "stops": { "type": "array", "items": { "type": "string" }, "minItems": 2 },
+              "direction": { "type": "string" }
+            }
+          }
+        },
+        "pairings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "foreground": { "type": "string" },
+              "background": { "type": "string" }
+            }
+          }
+        },
+        "color_mood": {
+          "type": ["string", "null"],
+          "enum": ["optimistic", "calm", "bold", "neutral", "moody", "playful", null]
+        }
+      }
+    },
+
+    "typography_system": {
+      "type": ["object", "null"],
+      "properties": {
+        "headline": { "$ref": "#/$defs/type_spec" },
+        "subheadline": { "$ref": "#/$defs/type_spec" },
+        "body": { "$ref": "#/$defs/type_spec" },
+        "specimens": {
+          "type": ["object", "null"],
+          "properties": {
+            "headline_example": { "type": ["string", "null"] },
+            "subheadline_example": { "type": ["string", "null"] },
+            "body_example": { "type": ["string", "null"] }
+          }
+        }
+      }
+    },
+
+    "visual_language": {
+      "type": ["object", "null"],
+      "properties": {
+        "style": {
+          "type": ["string", "null"],
+          "enum": ["editorial", "cinematic", "industrial", "organic", "futuristic", null]
+        },
+        "lighting": { "type": ["string", "null"] },
+        "texture": { "type": ["string", "null"] },
+        "industry": { "type": ["string", "null"] },
+        "mood_keywords": { "type": "array", "items": { "type": "string" } },
+        "composition": {
+          "type": ["object", "null"],
+          "properties": {
+            "style": {
+              "type": ["string", "null"],
+              "enum": ["layered-dense", "minimal-breathing", "grid-strict", "asymmetric", "organic-flow", null]
+            },
+            "density": { "type": ["string", "null"] },
+            "whitespace": { "type": ["string", "null"] }
+          }
+        }
+      }
+    },
+
+    "photography_direction": {
+      "type": ["object", "null"],
+      "properties": {
+        "style": {
+          "type": ["string", "null"],
+          "enum": ["editorial", "documentary", "studio", "lifestyle", "abstract", null]
+        },
+        "subject_treatment": {
+          "type": ["string", "null"],
+          "enum": ["posed-formal", "candid-natural", "action-dynamic", "still-life", "environmental", null]
+        },
+        "lighting_setup": { "type": ["string", "null"] },
+        "color_treatment": {
+          "type": ["string", "null"],
+          "enum": ["desaturated", "natural", "warm-saturated", "cool-toned", "high-contrast-bw", null]
+        },
+        "depth_of_field": {
+          "type": ["string", "null"],
+          "enum": ["deep", "selective", "shallow-bokeh", null]
+        },
+        "framing": {
+          "type": ["string", "null"],
+          "enum": ["wide-environmental", "medium", "tight-crop", "extreme-close-up", null]
+        },
+        "post_processing": {
+          "type": ["string", "null"],
+          "enum": ["raw-unedited", "minimal-clean", "editorial-graded", "heavy-stylized", null]
+        },
+        "art_direction_notes": { "type": ["string", "null"] },
+        "reference_mood": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+
+    "iconography": {
+      "type": ["object", "null"],
+      "properties": {
+        "style": { "type": ["string", "null"] },
+        "stroke_rule": { "type": ["string", "null"] },
+        "shape_grammar": { "type": ["string", "null"] },
+        "stroke_logic": {
+          "type": ["object", "null"],
+          "properties": {
+            "treatment": { "type": "string" },
+            "weight": { "type": "string" }
+          }
+        },
+        "count": { "type": ["string", "null"] },
+        "icon_names": { "type": "array", "items": { "type": "string" } },
+        "containment": {
+          "type": ["string", "null"],
+          "enum": ["circular", "square", "rounded-square", "none", null]
+        }
+      }
+    },
+
+    "patterns_and_motifs": {
+      "type": ["object", "null"],
+      "properties": {
+        "sources": { "type": ["string", "null"] },
+        "seeds": { "type": "array", "items": { "type": "string" } },
+        "application_rules": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+
+    "material_and_depth": {
+      "type": ["object", "null"],
+      "properties": {
+        "surface": { "type": ["string", "null"] },
+        "shadow_style": {
+          "type": ["string", "null"],
+          "enum": ["directional", "ambient", "dramatic", "flat-none", null]
+        },
+        "layer_depth": {
+          "type": ["string", "null"],
+          "enum": ["flat", "subtle", "pronounced", "dramatic", null]
+        },
+        "reasoning": { "type": ["string", "null"] }
+      }
+    },
+
+    "brand_applications": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string" },
+          "detail": { "type": "string" },
+          "priority": { "type": "integer", "minimum": 1, "maximum": 3 }
+        }
+      }
+    },
+
+    "brand_voice": {
+      "type": ["object", "null"],
+      "properties": {
+        "tone_pillars": { "type": "array", "items": { "type": "string" } },
+        "writing_style": {
+          "type": ["string", "null"],
+          "enum": ["formal", "conversational", "playful", "authoritative", null]
+        },
+        "vocabulary_level": {
+          "type": ["string", "null"],
+          "enum": ["simple", "moderate", "sophisticated", "technical", null]
+        },
+        "sentence_style": {
+          "type": ["string", "null"],
+          "enum": ["short-punchy", "medium-flowing", "long-complex", "varied", null]
+        }
+      }
+    },
+
+    "design_direction": {
+      "type": ["object", "null"],
+      "properties": {
+        "keep": { "type": "array", "items": { "type": "string" } },
+        "change": { "type": "array", "items": { "type": "string" } },
+        "add": { "type": "array", "items": { "type": "string" } },
+        "confidence_score": { "type": ["integer", "null"], "minimum": 1, "maximum": 5 },
+        "site_vision_analysis": { "type": ["object", "null"] }
+      }
+    },
+
+    "motion": {
+      "type": ["object", "null"],
+      "properties": {
+        "style": {
+          "type": ["string", "null"],
+          "enum": ["none", "subtle", "expressive", "cinematic", null]
+        },
+        "easing": {
+          "type": ["string", "null"],
+          "enum": ["linear", "ease-in-out", "spring", "bounce", null]
+        },
+        "speed": {
+          "type": ["string", "null"],
+          "enum": ["instant", "fast", "moderate", "slow-deliberate", null]
+        },
+        "transitions": {
+          "type": ["string", "null"],
+          "enum": ["fade", "slide", "scale", "morph", null]
+        }
+      }
+    },
+
+    "layout_grammar": {
+      "type": ["object", "null"],
+      "properties": {
+        "grid_system": {
+          "type": ["string", "null"],
+          "enum": ["12-col", "8-col", "fluid", "masonry", "freeform", null]
+        },
+        "spacing_scale": { "type": ["string", "null"] },
+        "border_radius": {
+          "type": ["string", "null"],
+          "enum": ["sharp", "subtle", "rounded", "pill", "circle", null]
+        },
+        "card_style": {
+          "type": ["string", "null"],
+          "enum": ["flat", "elevated", "bordered", "glass", null]
+        }
+      }
+    },
+
+    "quality_standard": {
+      "type": ["object", "null"],
+      "properties": {
+        "benchmark": { "type": "string" },
+        "total_elements": { "type": "string" },
+        "failure_conditions": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+
+    "format": {
+      "type": ["object", "null"],
+      "properties": {
+        "layout": { "type": "string" },
+        "aspect_ratio": { "type": "string" },
+        "orientation": { "type": "string" },
+        "composition": { "type": "string" }
+      }
+    },
+
+    "sources": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "enum": ["pipeline", "user", "vision", "inferred"]
+      }
+    },
+
+    "generated_at": { "type": ["string", "null"], "format": "date-time" },
+
+    "assets": {
+      "type": ["object", "null"],
+      "properties": {
+        "logo": {
+          "type": ["object", "null"],
+          "properties": {
+            "url": { "type": ["string", "null"] },
+            "vision_analysis": { "type": ["object", "null"] }
+          }
+        },
+        "mood_board": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "url": { "type": ["string", "null"] },
+              "vision_analysis": { "type": ["object", "null"] }
+            }
+          }
+        },
+        "brand_photos": { "type": "array" },
+        "competitor_screenshots": { "type": "array" },
+        "product_shots": { "type": "array" },
+        "homepage_screenshot": {
+          "type": ["object", "null"],
+          "properties": {
+            "url": { "type": ["string", "null"] },
+            "vision_analysis": { "type": ["object", "null"] }
+          }
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "color_swatch": {
+      "type": "object",
+      "required": ["hex", "role"],
+      "properties": {
+        "hex": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+        "name": { "type": ["string", "null"] },
+        "role": { "type": "string", "enum": ["foundation", "emphasis", "atmosphere"] },
+        "usage": { "type": ["string", "null"] }
+      }
+    },
+    "type_spec": {
+      "type": ["object", "null"],
+      "properties": {
+        "font_family": { "type": ["string", "null"] },
+        "weight": { "type": ["string", "null"] },
+        "style": { "type": ["string", "null"] },
+        "case": { "type": ["string", "null"], "enum": ["sentence", "uppercase", "lowercase", "title", null] },
+        "letter_spacing": { "type": ["string", "null"], "enum": ["tight", "normal", "wide", "extra-wide", null] },
+        "line_height": { "type": ["string", "null"], "enum": ["tight", "normal", "relaxed", null] }
+      }
+    }
+  }
+}

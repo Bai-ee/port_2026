@@ -205,20 +205,78 @@ function buildTechStack(hasSeoAudit, hasBrowserlessRequests) {
   ];
 }
 
+async function readUsageEvents() {
+  // Cap reads at 2000 most-recent events. Bigger horizons can move to a
+  // pre-aggregated doc if/when this grows expensive.
+  try {
+    const snap = await fb.adminDb.collection('usage_events')
+      .orderBy('createdAt', 'desc')
+      .limit(2000)
+      .get();
+    return snap.docs.map(serializeDoc);
+  } catch (err) {
+    // First run before the collection exists, or missing index — degrade gracefully.
+    console.warn('[ops-overview] usage_events read failed:', err?.message || err);
+    return [];
+  }
+}
+
+function aggregateUsageEvents(events) {
+  const totalCostUsd = events.reduce((sum, e) => sum + (Number(e.estimatedCostUsd) || 0), 0);
+
+  const byModuleMap   = new Map();
+  const byProviderMap = new Map();
+
+  for (const e of events) {
+    const mod  = e.module   || 'unknown';
+    const prov = e.provider || 'unknown';
+    const cost = Number(e.estimatedCostUsd) || 0;
+
+    const m = byModuleMap.get(mod) || { module: mod, eventCount: 0, costUsd: 0 };
+    m.eventCount += 1;
+    m.costUsd    += cost;
+    byModuleMap.set(mod, m);
+
+    const p = byProviderMap.get(prov) || { provider: prov, eventCount: 0, costUsd: 0 };
+    p.eventCount += 1;
+    p.costUsd    += cost;
+    byProviderMap.set(prov, p);
+  }
+
+  const round4 = (n) => Math.round(n * 10000) / 10000;
+  const finalize = (rows) => rows
+    .map((r) => ({ ...r, costUsd: round4(r.costUsd) }))
+    .sort((a, b) => b.costUsd - a.costUsd);
+
+  return {
+    totalCostUsd: round4(totalCostUsd),
+    eventCount:   events.length,
+    byModule:     finalize(Array.from(byModuleMap.values())),
+    byProvider:   finalize(Array.from(byProviderMap.values())),
+    // Already ordered desc by createdAt from the query — slice off the first 20.
+    recentEvents: events.slice(0, 20),
+  };
+}
+
 async function buildOpsOverview() {
-  const [clientsSnap, runsSnap, clientConfigsSnap, dashboardStatesSnap, browserlessRequestsSnap] = await Promise.all([
+  const [clientsSnap, runsSnap, clientConfigsSnap, dashboardStatesSnap, browserlessRequestsSnap, usageEvents] = await Promise.all([
     fb.adminDb.collection('clients').get(),
     fb.adminDb.collection('brief_runs').get(),
     fb.adminDb.collection('client_configs').get(),
     fb.adminDb.collection('dashboard_state').get(),
-    fb.adminDb.collection('browserless_requests').orderBy('createdAt', 'desc').limit(50).get(),
+    // Read a large window so aggregates (count, succeeded/failed, bytes, avg duration)
+    // reflect lifetime activity, not just the last 50. The display table still slices 50.
+    fb.adminDb.collection('browserless_requests').orderBy('createdAt', 'desc').limit(2000).get(),
+    readUsageEvents(),
   ]);
 
   const clients = clientsSnap.docs.map(serializeDoc);
   const runs = runsSnap.docs.map(serializeDoc);
   const clientConfigs = clientConfigsSnap.docs.map(serializeDoc);
   const dashboardStates = dashboardStatesSnap.docs.map(serializeDoc);
-  const browserlessRequests = browserlessRequestsSnap.docs.map(serializeDoc);
+  const browserlessRequestsAll = browserlessRequestsSnap.docs.map(serializeDoc);
+  const browserlessRequests    = browserlessRequestsAll.slice(0, 50); // table-display window
+  const moduleUsage = aggregateUsageEvents(usageEvents);
 
   const configsByClientId = Object.fromEntries(
     clientConfigs.map((config) => [config.clientId || config.id, config])
@@ -276,20 +334,22 @@ async function buildOpsOverview() {
   }, {});
 
   const hasSeoAudit = dashboardStates.some((state) => state?.seoAudit);
-  const hasBrowserlessRequests = browserlessRequests.length > 0;
-  const succeededBrowserlessRequests = browserlessRequests.filter((request) => request.status === 'succeeded');
-  const failedBrowserlessRequests = browserlessRequests.filter((request) => request.status === 'failed');
+  // Aggregates use the full read window (browserlessRequestsAll), not the
+  // 50-row display slice. Display table continues to use `browserlessRequests`.
+  const hasBrowserlessRequests = browserlessRequestsAll.length > 0;
+  const succeededBrowserlessRequests = browserlessRequestsAll.filter((request) => request.status === 'succeeded');
+  const failedBrowserlessRequests = browserlessRequestsAll.filter((request) => request.status === 'failed');
   const browserlessBytesReturned = succeededBrowserlessRequests.reduce(
     (sum, request) => sum + (request.bytesReturned || 0),
     0
   );
-  const browserlessDurationSamples = browserlessRequests
+  const browserlessDurationSamples = browserlessRequestsAll
     .map((request) => request.durationMs)
     .filter((duration) => typeof duration === 'number');
   const averageBrowserlessDurationMs = browserlessDurationSamples.length
     ? browserlessDurationSamples.reduce((sum, duration) => sum + duration, 0) / browserlessDurationSamples.length
     : 0;
-  const latestBrowserlessRequest = browserlessRequests[0] || null;
+  const latestBrowserlessRequest = browserlessRequestsAll[0] || null;
 
   return {
     generatedAt: new Date().toISOString(),
@@ -308,10 +368,15 @@ async function buildOpsOverview() {
       lastRunCostUsd,
       averageRunCostUsd: pricedRuns.length ? totalCostUsd / pricedRuns.length : 0,
       pricedRunCount: pricedRuns.length,
+      // Module-level spend (leadgen, brand-system, etc.) tracked via usage_events.
+      // `combinedCostUsd` is the sum of brief_runs (scout-intake) + module spend.
+      moduleCostUsd:   moduleUsage.totalCostUsd,
+      moduleEventCount: moduleUsage.eventCount,
+      combinedCostUsd: Math.round((totalCostUsd + moduleUsage.totalCostUsd) * 10000) / 10000,
       configsTracked: clientConfigs.length,
       dashboardStatesTracked: dashboardStates.length,
       seoAuditsTracked: dashboardStates.filter((state) => state?.seoAudit).length,
-      browserlessRequests: browserlessRequests.length,
+      browserlessRequests: browserlessRequestsAll.length,
       browserlessSucceeded: succeededBrowserlessRequests.length,
       browserlessFailed: failedBrowserlessRequests.length,
       browserlessBytesReturned,
@@ -322,9 +387,10 @@ async function buildOpsOverview() {
       briefRuns: runs.length,
       clientConfigs: clientConfigs.length,
       dashboardStates: dashboardStates.length,
-      browserlessRequests: browserlessRequests.length,
+      browserlessRequests: browserlessRequestsAll.length,
     },
     costByClient,
+    moduleUsage,
     techStack: buildTechStack(hasSeoAudit, hasBrowserlessRequests),
     dataInventory: summarizeCollectionPresence(latestClientConfig, latestDashboardState, latestRun, latestBrowserlessRequest),
     latest: {

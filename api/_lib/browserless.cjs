@@ -737,6 +737,93 @@ async function persistBriefPdfArtifact({ clientId, runId, html }) {
   }
 }
 
+/**
+ * Fetch JS-rendered HTML via Browserless `/content`. Logs every attempt to the
+ * `browserless_requests` collection so the OpsOverview dashboard reflects all
+ * Browserless usage (not just screenshots and PDFs).
+ *
+ * Returns { ok: true, html, bytes, durationMs } on success,
+ *         { ok: false, reason, durationMs } when Browserless is not configured
+ *           or the request fails. Never throws.
+ */
+async function fetchBrowserlessContent({
+  url,
+  clientId = null,
+  runId = null,
+  variant = null,
+  gotoTimeoutMs: gotoTimeoutOverride = null,
+  postLoadWaitMs: postLoadWaitOverride = null,
+} = {}) {
+  if (!url) {
+    return { ok: false, reason: 'no_url', durationMs: 0 };
+  }
+
+  const config = getBrowserlessConfig();
+  if (!config.enabled) {
+    return { ok: false, reason: config.reason || 'browserless_disabled', durationMs: 0 };
+  }
+
+  const endpoint = '/content';
+  const endpointUrl = buildEndpointUrl(config.baseUrl, endpoint, config.token, config.requestTimeoutMs);
+  const gotoTimeoutMs = Number.isFinite(gotoTimeoutOverride) ? gotoTimeoutOverride : config.gotoTimeoutMs;
+  const postLoadWaitMs = Number.isFinite(postLoadWaitOverride) ? postLoadWaitOverride : config.postLoadWaitMs;
+
+  const { requestRef } = await createBrowserlessRequestLog({
+    clientId,
+    runId,
+    websiteUrl: url,
+    endpoint,
+    requestTimeoutMs: config.requestTimeoutMs,
+    variant,
+  });
+
+  const startedAt = Date.now();
+  try {
+    const res = await fetch(endpointUrl, {
+      method: 'POST',
+      signal: AbortSignal.timeout(config.requestTimeoutMs + 5_000),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url,
+        gotoOptions: { waitUntil: 'domcontentloaded', timeout: gotoTimeoutMs },
+        waitForTimeout: postLoadWaitMs,
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      const durationMs = Date.now() - startedAt;
+      await finalizeBrowserlessRequestLog(requestRef, {
+        status: 'failed',
+        httpStatus: res.status,
+        durationMs,
+        errorMessage: errText.slice(0, 400) || `HTTP ${res.status}`,
+      });
+      return { ok: false, reason: `http_${res.status}`, durationMs };
+    }
+
+    const html = await res.text();
+    const durationMs = Date.now() - startedAt;
+    const bytes = Buffer.byteLength(html || '', 'utf8');
+    await finalizeBrowserlessRequestLog(requestRef, {
+      status: 'succeeded',
+      httpStatus: res.status,
+      durationMs,
+      bytesReturned: bytes,
+    });
+    return { ok: true, html, bytes, durationMs };
+
+  } catch (err) {
+    const durationMs = Date.now() - startedAt;
+    await finalizeBrowserlessRequestLog(requestRef, {
+      status: 'failed',
+      durationMs,
+      errorMessage: String(err?.message || err).slice(0, 400),
+    });
+    return { ok: false, reason: 'fetch_error', durationMs };
+  }
+}
+
 module.exports = {
   getBrowserlessConfig,
   SCREENSHOT_VARIANTS,
@@ -744,4 +831,5 @@ module.exports = {
   FULL_PAGE_SCREENSHOT_VARIANTS,
   persistWebsiteScreenshotArtifact,
   persistBriefPdfArtifact,
+  fetchBrowserlessContent,
 };

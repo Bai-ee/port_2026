@@ -18,6 +18,30 @@ const { analyzeCompetitors } = require('../../../../features/scout-intake/module
 const { analyzePalette }     = require('../../../../features/scout-intake/modules/brand-system-palette-vision.js');
 const { buildAllPrompts }    = require('../../../../features/scout-intake/prompt-templates/index.js');
 const { saveBufferArtifact } = require('../../../../api/_lib/storage-artifacts.cjs');
+const { logUsage, computeAnthropicCost } = require('../../../../api/_lib/usage-logger.cjs');
+
+// Brand-system vision modules all use the same Sonnet 4 vision model.
+const VISION_MODEL = 'claude-sonnet-4-20250514';
+
+// Logs an Anthropic vision call to `usage_events`. `usage` is the
+// { inputTokens, outputTokens } object that each analyze* function returns.
+async function logVisionUsage({ gapId, usage, clientId, metadata = {} }) {
+  if (!usage) return;
+  const inputTokens  = Number(usage.inputTokens)  || 0;
+  const outputTokens = Number(usage.outputTokens) || 0;
+  if (!inputTokens && !outputTokens) return;
+  await logUsage({
+    module:   'brand-system',
+    action:   `chat.${gapId}`,
+    provider: 'anthropic',
+    model:    VISION_MODEL,
+    inputTokens,
+    outputTokens,
+    costUsd:  computeAnthropicCost({ model: VISION_MODEL, inputTokens, outputTokens }),
+    clientId,
+    metadata,
+  });
+}
 
 // ── Storage helpers ────────────────────────────────────────────────────────────
 
@@ -156,6 +180,7 @@ export async function POST(request) {
       brandSystemUploads.logoVisionAnalysis = visionResult.vision;
       brandSystemUploads.logoVisionUsage    = visionResult.usage;
       if (logoUploadUrl) brandSystemUploads.uploadUrls = { logo: logoUploadUrl };
+      await logVisionUsage({ gapId, usage: visionResult.usage, clientId });
 
     } else if (gapId === 'mood-board') {
       if (!images.length) return jerror('images array required for mood-board gap.');
@@ -168,6 +193,7 @@ export async function POST(request) {
       brandSystemUploads.moodBoard = result.perImage.map((v) => ({ vision_analysis: v }));
       if (result.synthesis) brandSystemUploads.moodBoardSynthesis = result.synthesis;
       if (moodBoardUrls.length) brandSystemUploads.uploadUrls = { moodBoard: moodBoardUrls };
+      await logVisionUsage({ gapId, usage: result.usage, clientId, metadata: { imageCount: capped.length } });
 
     } else if (gapId === 'brand-photos') {
       if (!images.length) return jerror('images array required for brand-photos gap.');
@@ -180,6 +206,7 @@ export async function POST(request) {
       brandSystemUploads.brandPhotos = [{ vision_analysis: result.vision }];
       brandSystemUploads.brandPhotoAnalysis = result.vision;
       if (brandPhotoUrls.length) brandSystemUploads.uploadUrls = { brandPhotos: brandPhotoUrls };
+      await logVisionUsage({ gapId, usage: result.usage, clientId, metadata: { imageCount: capped.length } });
 
     } else if (gapId === 'competitor-refs') {
       if (!images.length) return jerror('images array required for competitor-refs gap.');
@@ -192,6 +219,7 @@ export async function POST(request) {
       brandSystemUploads.competitorRefs = [{ vision_analysis: result.vision }];
       brandSystemUploads.competitorAnalysis = result.vision;
       if (competitorUrls.length) brandSystemUploads.uploadUrls = { competitorRefs: competitorUrls };
+      await logVisionUsage({ gapId, usage: result.usage, clientId, metadata: { imageCount: capped.length } });
 
     } else if (gapId === 'product-shots') {
       const capped = images.slice(0, gapDef?.maxFiles || 5);
@@ -210,6 +238,7 @@ export async function POST(request) {
       brandSystemUploads.colorPalette = { vision_analysis: result.vision };
       brandSystemUploads.colorPaletteAnalysis = result.vision;
       if (paletteUrl) brandSystemUploads.uploadUrls = { colorPalette: paletteUrl };
+      await logVisionUsage({ gapId, usage: result.usage, clientId });
 
     } else {
       // All remaining gaps — use fieldForGap to determine where to write.

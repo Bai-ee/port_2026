@@ -25,8 +25,10 @@ function makeReqShim(request) {
 export async function GET(request) {
   try {
     await verifyAdminRequest(makeReqShim(request));
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unauthorized.';
+    const status  = /Forbidden/i.test(message) ? 403 : 401;
+    return NextResponse.json({ error: message }, { status, headers: RESPONSE_HEADERS });
   }
 
   try {

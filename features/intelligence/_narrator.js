@@ -12,6 +12,8 @@
 const NARRATOR_MODEL = 'claude-haiku-4-5-20251001';
 const MAX_TOKENS = 256;
 
+const { logUsage, computeAnthropicCost } = require('../../api/_lib/usage-logger.cjs');
+
 // ── Anthropic client (matches intake-synthesizer.js pattern) ──────────────────
 
 function getApiKey() {
@@ -126,7 +128,7 @@ Keep the response under 80 words.`;
  * @param {object} sourceRecord  — validated PSI SourceRecord
  * @returns {Promise<{ narrative: string|null, model: string|null, inputTokens: number|null, outputTokens: number|null }>}
  */
-async function narratePsiRecord(sourceRecord) {
+async function narratePsiRecord(sourceRecord, { clientId = null } = {}) {
   // Only handle PSI records
   if (sourceRecord.id !== 'pagespeed-insights') {
     return { narrative: null, model: null, inputTokens: null, outputTokens: null };
@@ -166,6 +168,22 @@ async function narratePsiRecord(sourceRecord) {
   const narrative = response?.content?.[0]?.text?.trim() || null;
   const inputTokens  = response?.usage?.input_tokens  ?? null;
   const outputTokens = response?.usage?.output_tokens ?? null;
+
+  await logUsage({
+    module:       'intelligence',
+    action:       'narrate-psi',
+    provider:     'anthropic',
+    model:        NARRATOR_MODEL,
+    inputTokens:  inputTokens  || 0,
+    outputTokens: outputTokens || 0,
+    costUsd:      computeAnthropicCost({
+      model:        NARRATOR_MODEL,
+      inputTokens:  inputTokens  || 0,
+      outputTokens: outputTokens || 0,
+    }),
+    clientId,
+    metadata:     { sourceId: sourceRecord?.id || null, websiteUrl: sourceRecord?.facts?.websiteUrl || null },
+  });
 
   return { narrative, model: NARRATOR_MODEL, inputTokens, outputTokens };
 }
