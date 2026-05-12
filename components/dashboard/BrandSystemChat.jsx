@@ -152,7 +152,7 @@ function buildHistoryMessages(allGapDefs, previousUploads, homepageScreenshotUrl
  * Renders inside BrandSystemBuildModal's survey column using the same chat-shell
  * visual language as OnboardingChatModal (avatar, bubbles, chips, progress rail).
  */
-export default function BrandSystemChat({ getIdToken, onComplete, onLog }) {
+export default function BrandSystemChat({ getIdToken, onComplete, onLog, apiPath }) {
   // ── State ──────────────────────────────────────────────────────────────────
   const [messages, setMessages]                 = useState([]);
   const [typing, setTyping]                     = useState(true);
@@ -248,7 +248,7 @@ export default function BrandSystemChat({ getIdToken, onComplete, onLog }) {
         const tid = setTimeout(() => controller.abort(), 30_000);
         let res;
         try {
-          res = await fetch('/api/brand-system/scan', {
+          res = await fetch(apiPath ? apiPath('/api/brand-system/scan') : '/api/brand-system/scan', {
             headers: { Authorization: `Bearer ${token}` },
             cache: 'no-store',
             signal: controller.signal,
@@ -381,7 +381,7 @@ export default function BrandSystemChat({ getIdToken, onComplete, onLog }) {
 
     let res, data;
     try {
-      res = await fetch('/api/brand-system/chat', {
+      res = await fetch(apiPath ? apiPath('/api/brand-system/chat') : '/api/brand-system/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
@@ -435,7 +435,7 @@ export default function BrandSystemChat({ getIdToken, onComplete, onLog }) {
     setTextInput('');
     setSelectedFiles([]);
     setSubmitting(false);
-  }, [currentGap, submitting, getIdToken, log, markAnswered, pushMessage]);
+  }, [currentGap, submitting, getIdToken, log, markAnswered, pushMessage, apiPath]);
 
   const handleSkip = useCallback(() => submitAnswer({ skipped: true, value: null }), [submitAnswer]);
 
@@ -504,7 +504,7 @@ export default function BrandSystemChat({ getIdToken, onComplete, onLog }) {
 
     let res, data;
     try {
-      res = await fetch('/api/brand-system/generate-image', {
+      res = await fetch(apiPath ? apiPath('/api/brand-system/generate-image') : '/api/brand-system/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ prompt, templateId: selectedTemplateId }),
@@ -528,7 +528,7 @@ export default function BrandSystemChat({ getIdToken, onComplete, onLog }) {
       b64: data.b64, mediaType: data.mediaType, size: data.size, templateId: data.templateId,
     });
     setGenerating(false);
-  }, [finalResult, selectedTemplateId, generating, getIdToken, log, pushMessage]);
+  }, [finalResult, selectedTemplateId, generating, getIdToken, log, pushMessage, apiPath]);
 
   // ── Gap input renderer (inside options-zone) ───────────────────────────────
   const renderGapInput = useCallback((gap) => {

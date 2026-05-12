@@ -14,7 +14,7 @@ const BrandSystemChat = dynamic(() => import('./BrandSystemChat'), { ssr: false 
  * term-pfx, term-msg, term-caret, term-win-dot, etc.) so the look matches the
  * established intake terminal one-to-one.
  */
-export default function BrandSystemBuildModal({ open, onClose, getIdToken, onComplete }) {
+export default function BrandSystemBuildModal({ open, onClose, getIdToken, onComplete, apiPath }) {
   const [terminalLines, setTerminalLines] = useState([]);
   const [phase, setPhase] = useState('running'); // running | done | failed
   const terminalRef = useRef(null);
@@ -133,6 +133,7 @@ export default function BrandSystemBuildModal({ open, onClose, getIdToken, onCom
           <div id="intake-modal-survey-col" data-resolved={phase === 'done' ? 'true' : 'false'}>
             <BrandSystemChat
               getIdToken={getIdToken}
+              apiPath={apiPath}
               onComplete={handleComplete}
               onLog={handleLog}
             />

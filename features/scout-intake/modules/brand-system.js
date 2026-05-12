@@ -253,19 +253,6 @@ const GAP_DEFS = [
     },
   },
   {
-    id: 'product-shots',
-    phase: 2,
-    label: 'Upload existing product shots or packaging if you have them.',
-    type: 'image-multi',
-    acceptsImage: true,
-    required: false,
-    maxFiles: 5,
-    isMissing: (state) => {
-      const existing = state?.userUploads?.brandSystem?.productShots;
-      return !Array.isArray(existing) || existing.length === 0;
-    },
-  },
-  {
     id: 'color-palette',
     phase: 2,
     label: 'Upload a color palette image or screenshot if you have specific colors in mind.',

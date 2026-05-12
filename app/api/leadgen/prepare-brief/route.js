@@ -40,7 +40,9 @@ export async function POST(request) {
   try { body = await request.json().catch(() => ({})); }
   catch { return new Response(JSON.stringify({ type: 'error', message: 'Invalid JSON.' }) + '\n', { status: 400, headers: { 'Content-Type': 'application/x-ndjson' } }); }
 
-  const placeId = String(body?.placeId || '').trim();
+  const placeId        = String(body?.placeId || '').trim();
+  const useBrandSystem = body?.useBrandSystem !== false; // ON by default
+  const useDesignEval  = body?.useDesignEval !== false;  // ON by default
   if (!placeId) return new Response(JSON.stringify({ type: 'error', message: 'Provide placeId.' }) + '\n', { status: 400, headers: { 'Content-Type': 'application/x-ndjson' } });
 
   const snap = await fb.adminDb.collection('leadgen_prospects').doc(placeId).get();
@@ -104,17 +106,25 @@ export async function POST(request) {
 
         // ── Step 4: Build DESIGN.MD ────────────────────────────────────
         emit({ type: 'progress', stage: 'brief', label: 'Building creative brief…' });
-        const brandGuide = prospect.brandGuide
-          || prospect.userUploads?.brandSystem?.brandGuideV2
-          || null;
+        const brandGuide = useBrandSystem
+          ? (prospect.brandGuide || prospect.userUploads?.brandSystem?.brandGuideV2 || null)
+          : null;
         const designRefs = prospect.generation?.designReferences || null;
+        const onboardForBrief = { ...(prospect.onboard || {}) };
+        if (!useDesignEval) {
+          delete onboardForBrief.designEval;
+        }
+        if (!useBrandSystem || !useDesignEval) {
+          emit({ type: 'progress', stage: 'brief', label: `Building without ${[!useBrandSystem && 'Brand System', !useDesignEval && 'Design Eval'].filter(Boolean).join(' + ')}` });
+        }
         const designMd = generateDesignMd({
           prospect,
-          onboard:          prospect.onboard || {},
+          onboard:          onboardForBrief,
           content,
           assetManifest,
           brandSystem:      brandGuide,
           designReferences: designRefs,
+          visualDna:        prospect.visualDna || null,
         });
 
         const lines = designMd.split('\n').length;

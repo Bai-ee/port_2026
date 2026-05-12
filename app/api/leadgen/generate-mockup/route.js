@@ -1,5 +1,6 @@
 import { createRequire } from 'module';
 import { formatReferencesForMockupPrompt } from '../../../../features/leadgen/design-references.js';
+import { buildVisualDnaPromptBlock } from '../../../../features/leadgen/visual-dna.js';
 
 // Generates a visual mockup from the stored DESIGN.MD brief.
 // Cascade: Gemini 2.5 Flash Image (Nano Banana) → gpt-image-1 → Imagen 4.
@@ -32,7 +33,7 @@ const VERTICAL_STYLE = {
 
 // ─── PROMPT BUILDER ───────────────────────────────────────────────────────────
 
-function buildMockupPrompt(prospect, content, designReferences = null) {
+function buildMockupPrompt(prospect, content, designReferences = null, visualDna = null) {
   const copy    = content?.copy    || {};
   const colors  = content?.colors  || {};
   const struct  = content?.structure || {};
@@ -58,6 +59,7 @@ Navigation: ${navItems.join(' · ')} + CTA "${cta}"
 Brand colors: primary ${primary} · secondary ${secondary} · accent ${accent}`;
 
   const refDirection = formatReferencesForMockupPrompt(designReferences?.summary);
+  const visualDnaDirection = buildVisualDnaPromptBlock(visualDna || prospect.visualDna || null);
 
   return `${briefContext}
 
@@ -91,7 +93,7 @@ VISUAL DIRECTION:
 - Typography: strong hierarchy, mix of large display type and tight body text
 - Motion/animation feel: static image but should imply kinetic energy, scroll animations, transitions
 - Photography or illustration style consistent with "${style}"
-- Text integrated into imagery, not just placed on top${refDirection ? `\n\n${refDirection}` : ''}
+- Text integrated into imagery, not just placed on top${visualDnaDirection ? `\n\nCLIENT-SPECIFIC VISUAL DNA:\n${visualDnaDirection}` : ''}${refDirection ? `\n\n${refDirection}` : ''}
 
 Render as a single tall vertical image, pixel-perfect, photorealistic UI. No lorem ipsum. No placeholder boxes. No wireframes. Looks like a real, shipped, award-winning website.`;
 }
@@ -296,9 +298,12 @@ export async function POST(request) {
             ? JSON.parse(prospect.generation.contentJson)
             : {};
           const designRefs = prospect.generation?.designReferences || null;
-          prompt = buildMockupPrompt(prospect, content, designRefs);
+          prompt = buildMockupPrompt(prospect, content, designRefs, prospect.visualDna || null);
           if (designRefs?.summary?.length) {
             emit({ type: 'progress', stage: 'mockup', label: `Injecting ${designRefs.summary.length} Lazyweb reference descriptions into prompt…` });
+          }
+          if (prospect.visualDna?.subjects?.length) {
+            emit({ type: 'progress', stage: 'mockup', label: `Injecting Visual DNA for ${prospect.visualDna.subjects.length} subject profile${prospect.visualDna.subjects.length === 1 ? '' : 's'}…` });
           }
         }
         emit({ type: 'progress', stage: 'mockup', label: `Prompt ready — calling Nano Banana (fallbacks: gpt-image-1, Imagen 4) — this takes ~20–40s…` });

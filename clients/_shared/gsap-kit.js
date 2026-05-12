@@ -6,6 +6,15 @@
 (function () {
   'use strict';
 
+  if (!window.gsap || !window.ScrollTrigger) {
+    document.querySelectorAll('[data-reveal], [data-animate]').forEach((el) => {
+      el.style.opacity = '1';
+      el.style.visibility = 'visible';
+      el.style.transform = 'none';
+    });
+    return;
+  }
+
   gsap.registerPlugin(ScrollTrigger);
 
   const DEFAULTS = {
@@ -15,6 +24,29 @@
     stagger: 0.1,
   };
 
+  function isInInitialViewport(el) {
+    const rect = el.getBoundingClientRect();
+    return rect.top < window.innerHeight * 0.85 && rect.bottom > 0;
+  }
+
+  function animateIn(targets, fromVars, toVars, triggerEl) {
+    const finalVars = {
+      ...toVars,
+      duration: toVars.duration || DEFAULTS.duration,
+      ease: toVars.ease || DEFAULTS.ease,
+    };
+
+    if (!isInInitialViewport(triggerEl)) {
+      finalVars.scrollTrigger = {
+        trigger: triggerEl,
+        start: DEFAULTS.triggerOffset,
+        toggleActions: 'play none none none',
+      };
+    }
+
+    gsap.fromTo(targets, fromVars, finalVars);
+  }
+
   // ─── PRESETS ─────────────────────────────────────────────────────────────────
 
   const presets = {
@@ -22,88 +54,87 @@
     // Hero parallax — background image moves slower than scroll
     heroParallax: (el) => {
       const bg = el.querySelector('[data-parallax]') || el.querySelector('img');
-      if (!bg) return;
-      gsap.to(bg, {
-        yPercent: 30,
-        ease: 'none',
-        scrollTrigger: {
-          trigger: el,
-          start: 'top top',
-          end: 'bottom top',
-          scrub: true,
-        },
-      });
+      if (bg) {
+        gsap.to(bg, {
+          yPercent: 30,
+          ease: 'none',
+          scrollTrigger: {
+            trigger: el,
+            start: 'top top',
+            end: 'bottom top',
+            scrub: true,
+          },
+        });
+      }
+      presets.textReveal(el);
     },
 
     // Text reveal — elements stagger in from below
     textReveal: (el) => {
-      el.querySelectorAll('[data-reveal]').forEach((target) => {
-        gsap.from(target, {
-          y: 40,
-          opacity: 0,
+      const targets = el.querySelectorAll('[data-reveal]');
+      if (!targets.length) return;
+      animateIn(targets,
+        { y: 40, autoAlpha: 0 },
+        {
+          y: 0,
+          autoAlpha: 1,
           duration: DEFAULTS.duration,
           ease: DEFAULTS.ease,
-          scrollTrigger: {
-            trigger: target,
-            start: DEFAULTS.triggerOffset,
-            toggleActions: 'play none none none',
-          },
-        });
-      });
+          stagger: DEFAULTS.stagger,
+        },
+        el
+      );
     },
 
     // Fade up — universal section entrance
     fadeUp: (el) => {
       const items = el.querySelectorAll('[data-animate]');
       const targets = items.length ? items : [el];
-      gsap.from(targets, {
-        y: 30,
-        opacity: 0,
-        duration: DEFAULTS.duration,
-        ease: DEFAULTS.ease,
-        stagger: DEFAULTS.stagger,
-        scrollTrigger: {
-          trigger: el,
-          start: DEFAULTS.triggerOffset,
-          toggleActions: 'play none none none',
+      animateIn(targets,
+        { y: 30, autoAlpha: 0 },
+        {
+          y: 0,
+          autoAlpha: 1,
+          duration: DEFAULTS.duration,
+          ease: DEFAULTS.ease,
+          stagger: DEFAULTS.stagger,
         },
-      });
+        el
+      );
     },
 
     // Stagger grid — cards/items appear one by one
     staggerGrid: (el) => {
       const items = el.querySelectorAll('[data-animate]');
       if (!items.length) return;
-      gsap.from(items, {
-        y: 40,
-        opacity: 0,
-        duration: 0.6,
-        ease: 'power2.out',
-        stagger: 0.12,
-        scrollTrigger: {
-          trigger: el,
-          start: DEFAULTS.triggerOffset,
-          toggleActions: 'play none none none',
+      animateIn(items,
+        { y: 40, autoAlpha: 0 },
+        {
+          y: 0,
+          autoAlpha: 1,
+          duration: 0.6,
+          ease: 'power2.out',
+          stagger: 0.12,
         },
-      });
+        el
+      );
     },
 
     // Slide cards — horizontal entrance for testimonials / card carousels
     slideCards: (el) => {
       const items = el.querySelectorAll('[data-animate]');
       if (!items.length) return;
-      gsap.from(items, {
-        x: 60,
-        opacity: 0,
-        duration: 0.7,
-        ease: 'power2.out',
-        stagger: 0.15,
-        scrollTrigger: {
-          trigger: el,
-          start: DEFAULTS.triggerOffset,
-          toggleActions: 'play none none none',
+      animateIn(items,
+        { x: 60, autoAlpha: 0 },
+        {
+          x: 0,
+          autoAlpha: 1,
+          duration: 0.7,
+          ease: 'power2.out',
+          stagger: 0.15,
         },
-      });
+        el
+      );
     },
 
     // Counter up — number counts from 0 to data-counter value
@@ -132,18 +163,17 @@
     scaleIn: (el) => {
       const items = el.querySelectorAll('[data-animate]');
       const targets = items.length ? items : [el];
-      gsap.from(targets, {
-        scale: 0.8,
-        opacity: 0,
-        duration: 0.6,
-        ease: 'back.out(1.4)',
-        stagger: 0.08,
-        scrollTrigger: {
-          trigger: el,
-          start: DEFAULTS.triggerOffset,
-          toggleActions: 'play none none none',
+      animateIn(targets,
+        { scale: 0.8, autoAlpha: 0 },
+        {
+          scale: 1,
+          autoAlpha: 1,
+          duration: 0.6,
+          ease: 'back.out(1.4)',
+          stagger: 0.08,
         },
-      });
+        el
+      );
     },
 
     // Line draw — for decorative SVG paths
@@ -170,9 +200,17 @@
 
   function init() {
     document.querySelectorAll('[data-gsap]').forEach((el) => {
-      const name = el.dataset.gsap;
-      if (presets[name]) presets[name](el);
+      const names = String(el.dataset.gsap || '')
+        .split(/[,+]/)
+        .map((name) => name.trim())
+        .filter(Boolean);
+
+      names.forEach((name) => {
+        if (presets[name]) presets[name](el);
+      });
     });
+
+    requestAnimationFrame(() => ScrollTrigger.refresh());
   }
 
   if (document.readyState === 'loading') {

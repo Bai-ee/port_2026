@@ -4,6 +4,7 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
 const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
+const { getEffectiveClientContext } = require('../../../../api/_lib/client-provisioning.cjs');
 
 function makeReqShim(request) {
   return {
@@ -32,11 +33,16 @@ export async function GET(request) {
     );
   }
 
-  const userSnap = await fb.adminDb.collection('users').doc(decoded.uid).get();
-  if (!userSnap.exists) {
+  let context;
+  try {
+    context = await getEffectiveClientContext({ uid: decoded.uid, email: decoded.email, request });
+  } catch (err) {
+    return NextResponse.json({ error: err.message || 'Forbidden.' }, { status: err.status || 403, headers: { 'cache-control': 'no-store' } });
+  }
+  if (!context.userProfile) {
     return NextResponse.json({ error: 'No user record.' }, { status: 404, headers: { 'cache-control': 'no-store' } });
   }
-  const clientId = userSnap.data()?.clientId || null;
+  const clientId = context.clientId || null;
   if (!clientId) {
     return NextResponse.json({ error: 'No clientId on user record.' }, { status: 404, headers: { 'cache-control': 'no-store' } });
   }

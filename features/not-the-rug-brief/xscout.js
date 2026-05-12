@@ -348,6 +348,7 @@ function buildSearchPrompt(config, weatherReport = null, reviewReport = null, in
   const sourceFocus = config.scout?.sourceFocus || 'Focus on recent web and social content relevant to the client.';
   const analysisInstructions = config.scout?.analysisInstructions || 'Prioritize live signal and clear actionability.';
   const preferredSources = (config.scout?.preferredSources || []).join(', ') || 'current web and social sources';
+  const enabledSourceLabels = (config.scout?.enabledSourceLabels || config.scout?.preferredSources || []).join(', ');
   const deprioritizedSources = (config.scout?.deprioritizedSources || []).join(', ');
   const structuredContextBlock = buildStructuredContextBlock(config);
   const weatherContextBlock = buildWeatherContextBlock(weatherReport);
@@ -369,6 +370,7 @@ For each search, output:
 
 ${sourceFocus}
 ${analysisInstructions}
+${enabledSourceLabels ? `Enabled source platforms: ${enabledSourceLabels}. Do not spend search effort on disabled social platforms unless they appear in unavoidable broad web/news coverage.` : ''}
 Preferred sources: ${preferredSources}
 ${deprioritizedSources ? `Deprioritize or ignore these unless there is no better source: ${deprioritizedSources}` : ''}
 ${weatherContextBlock ? `${weatherContextBlock}\nUse this live NWS data as the canonical weather source for the day. Do not spend search effort rediscovering basic forecast conditions.\n` : ''}
@@ -401,7 +403,9 @@ function buildBriefPrompt(config, compactContext, previousBrief, weatherReport =
     ? `PREVIOUS BRIEF (${previousBrief.timestamp}):\n${previousBrief.humanBrief || 'None'}`
     : 'No previous brief — this is the first run. Treat everything as NEW.';
   const preferredSources = (config.scout?.preferredSources || []).join(', ');
+  const enabledSourceLabels = (config.scout?.enabledSourceLabels || config.scout?.preferredSources || []).join(', ');
   const deprioritizedSources = (config.scout?.deprioritizedSources || []).join(', ');
+  const analysisInstructions = config.scout?.analysisInstructions || '';
   const agentDataTemplate = config.scout?.agentDataTemplate || `{
   "brandMentions": [{"source":"...","author":"...","content":"...","sentiment":"positive|neutral|negative","reach":"high|medium|low","url":"..."}],
   "competitorIntel": [{"competitor":"...","finding":"...","impact":"high|medium|low","url":"..."}],
@@ -450,8 +454,10 @@ ${last30daysContextBlock ? `\n${last30daysContextBlock}` : ''}
 ${structuredContextBlock ? `\n${structuredContextBlock}` : ''}
 
 EXCLUSIONS — never surface content about: ${(config.viralTargets?.exclusions || []).join(', ')}
+${enabledSourceLabels ? `ENABLED SOURCE PLATFORMS: ${enabledSourceLabels}. Treat unchecked social platforms as out of scope unless they appear incidentally in broad web/news results.` : ''}
 ${preferredSources ? `PREFERRED SOURCE WEIGHTING: prioritize signal from ${preferredSources}.` : ''}
 ${deprioritizedSources ? `DEPRIORITIZE: ${deprioritizedSources} unless corroborated or uniquely important.` : ''}
+${analysisInstructions ? `CUSTOM SCOUT INSTRUCTIONS:\n${analysisInstructions}` : ''}
 
 REASONING (required):
 Before writing output, think through:

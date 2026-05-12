@@ -4,6 +4,7 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
 const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
+const { getEffectiveClientContext } = require('../../../../api/_lib/client-provisioning.cjs');
 const { callOpenAiImages } = require('../../../../features/scout-intake/_openai-client.js');
 const { logUsage, computeImageCost } = require('../../../../api/_lib/usage-logger.cjs');
 
@@ -57,6 +58,14 @@ export async function POST(request) {
     return jerror('prompt is required.');
   }
 
+  let clientId = null;
+  try {
+    const context = await getEffectiveClientContext({ uid: decoded.uid, email: decoded.email, request });
+    clientId = context.clientId || null;
+  } catch (err) {
+    return jerror(err.message || 'Forbidden.', err.status || 403);
+  }
+
   const size    = TEMPLATE_SIZES[templateId] || '1024x1024';
   const quality = 'medium';
   const model   = 'gpt-image-1';
@@ -81,15 +90,6 @@ export async function POST(request) {
   }
 
   const generatedAt = new Date().toISOString();
-
-  // Resolve clientId once and reuse for both dashboard write and usage log.
-  let clientId = null;
-  try {
-    const userSnap = await fb.adminDb.collection('users').doc(decoded.uid).get();
-    clientId = userSnap.exists ? (userSnap.data()?.clientId || null) : null;
-  } catch (err) {
-    console.warn('[brand-system/generate-image] user lookup failed:', err.message);
-  }
 
   // Persist b64 reference to Firestore so the dashboard can surface it later.
   if (clientId) {

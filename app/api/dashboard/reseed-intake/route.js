@@ -4,7 +4,7 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const fb                             = require('../../../../api/_lib/firebase-admin.cjs');
 const { buildAuthRequestShim, verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
-const { reseedIntakeForClient }      = require('../../../../api/_lib/client-provisioning.cjs');
+const { getEffectiveClientContext, reseedIntakeForClient } = require('../../../../api/_lib/client-provisioning.cjs');
 // Importing the runner registers source modules and exposes listRegisteredSourceMeta
 const { listRegisteredSourceMeta }   = require('../../../../api/_lib/intelligence-runner.cjs');
 const { getMaster, appendEvent }     = require('../../../../features/intelligence/_store');
@@ -40,12 +40,16 @@ export async function POST(request) {
     return json({ error: 'websiteUrl is required.' }, 400);
   }
 
-  // Resolve clientId from the authenticated user's record
-  const userDoc = await fb.adminDb.collection('users').doc(decoded.uid).get();
-  if (!userDoc.exists) {
+  let context;
+  try {
+    context = await getEffectiveClientContext({ uid: decoded.uid, email: decoded.email, request });
+  } catch (err) {
+    return json({ error: err.message || 'Forbidden.' }, err.status || 403);
+  }
+  if (!context.userProfile) {
     return json({ error: 'User record not found.' }, 404);
   }
-  const clientId = userDoc.data()?.clientId;
+  const clientId = context.clientId;
   if (!clientId) {
     return json({ error: 'No client associated with this account.' }, 404);
   }

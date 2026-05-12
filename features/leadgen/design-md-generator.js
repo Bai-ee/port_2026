@@ -3,6 +3,8 @@
 // a precise creative brief that Claude can use to one-shot a homepage.
 // Returns a markdown string. No I/O — caller writes to clients/{slug}/DESIGN.MD.
 
+import { formatVisualDnaForBrief } from './visual-dna.js';
+
 // ─── VERTICAL DESIGN DEFAULTS ────────────────────────────────────────────────
 
 const VERTICAL_DEFAULTS = {
@@ -212,7 +214,7 @@ function buildOperatorNotes(bs, designReferences = null) {
 
 // ─── DESIGN.MD BUILDER ───────────────────────────────────────────────────────
 
-export function generateDesignMd({ prospect, onboard = {}, content = {}, assetManifest = null, brandSystem = null, designReferences = null }) {
+export function generateDesignMd({ prospect, onboard = {}, content = {}, assetManifest = null, brandSystem = null, designReferences = null, visualDna = null }) {
   const def    = getDefaults(prospect.vertical);
   const copy   = content.copy    || {};
   const colors = content.colors  || {};
@@ -256,6 +258,7 @@ export function generateDesignMd({ prospect, onboard = {}, content = {}, assetMa
   const bsPatterns = bs.patterns_and_motifs || {};
   const bsMaterial = bs.material_and_depth  || {};
   const bsHeader   = bs.brand_header    || {};
+  const visualDnaBrief = formatVisualDnaForBrief(visualDna || prospect.visualDna || null);
 
   // ── Color resolution: Brand System > Design Eval > Scraper > Vertical Default ──
   const primaryHex    = bsColors.foundation?.[0]?.hex || deColors.primary?.hex || colors.primary || def.primary;
@@ -425,6 +428,7 @@ ${gridSystem ? `- **Grid System:** ${gridSystem}` : ''}
 - **Reference mood:** ${mood}
 ${bsVisual.style ? `\n### Visual Language\n- **Style:** ${bsVisual.style}${bsVisual.lighting ? `\n- **Lighting:** ${bsVisual.lighting}` : ''}${bsVisual.composition?.style ? `\n- **Composition:** ${bsVisual.composition.style} · density: ${bsVisual.composition.density || '—'} · whitespace: ${bsVisual.composition.whitespace || '—'}` : ''}` : ''}
 ${bsPhoto.style ? `\n### Photography Direction\n- **Style:** ${bsPhoto.style}${bsPhoto.lighting_setup ? `\n- **Lighting:** ${bsPhoto.lighting_setup}` : ''}${bsPhoto.color_treatment ? `\n- **Color Treatment:** ${bsPhoto.color_treatment}` : ''}${bsPhoto.framing ? `\n- **Framing:** ${bsPhoto.framing}` : ''}` : ''}
+${visualDnaBrief ? `\n${visualDnaBrief}` : ''}
 
 ---
 

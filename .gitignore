@@ -11,6 +11,7 @@ yarn-debug.log*
 !.env.example
 public/img/port_videos/
 features/not-the-rug-brief/data/
+data/
 .vercel
 
 # Lead gen generated client folders (scraped content + generated sites)

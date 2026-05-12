@@ -151,6 +151,32 @@ function buildDashboardProjection(clientId, pipelineResult, runId) {
     errorState: null,
   };
 
+  if (pipelineResult.pipelineType === 'scout-brief') {
+    base.marketingBrief = {
+      status: 'generated',
+      headline: scoutPriorityAction || null,
+      scoutBrief: pipelineResult.brief ? {
+        timestamp: pipelineResult.brief.timestamp || null,
+        humanBrief: pipelineResult.brief.humanBrief || null,
+        delta: pipelineResult.brief.delta || null,
+        agentData: pipelineResult.brief.agentData || null,
+      } : null,
+      content: content || null,
+      contentOpportunities: contentOpportunities || [],
+      guardianFlags: pipelineResult.guardianFlags || null,
+      providerName: pipelineResult.providerName || null,
+      generatedAtIso: new Date().toISOString(),
+    };
+    base.modules = {
+      'marketing-brief': {
+        enabled: true,
+        status: 'succeeded',
+        lastRunId: runId,
+        lastSuccessAt: fb.FieldValue.serverTimestamp(),
+      },
+    };
+  }
+
   // Only emit artifact sub-keys when the current run actually produced content
   // for them. Setting an empty map would overwrite existing values on merge
   // (e.g. a mockup-only retry would wipe previously-stored full-page refs).

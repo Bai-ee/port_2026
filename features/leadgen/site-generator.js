@@ -7,6 +7,7 @@ import { createRequire } from 'module';
 import { readFileSync, writeFileSync, copyFileSync, existsSync, mkdirSync } from 'fs';
 import path from 'path';
 import { subdir as clientSubdir } from './client-folder.js';
+import { buildSiteFrame, normalizeGeneratedBody, validateFramedHtml, validateGeneratedBody } from './site-frame.js';
 
 const require = createRequire(import.meta.url);
 const { callAnthropic } = require('../scout-intake/_anthropic-client.js');
@@ -18,14 +19,18 @@ const MAX_TOKENS    = 16000;
 
 // ─── SYSTEM PROMPT ────────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are a senior frontend engineer generating production-quality HTML5 homepages for local businesses. You produce a SINGLE complete index.html file per request.
+const SYSTEM_PROMPT = `You are a senior frontend engineer generating production-quality HTML5 homepage body markup for local businesses. You produce ONLY the markup that belongs inside <body>.
 
 TECH STACK:
 - HTML5 semantic markup (header, nav, main, section, article, footer)
-- Tailwind CSS via CDN (https://cdn.tailwindcss.com) — use arbitrary values [#hexcolor] for brand colors
-- GSAP 3.12 + ScrollTrigger via CDN — already handled by gsap-kit.js
-- gsap-kit.js shared library — loaded after GSAP CDN. You do NOT write GSAP code.
-- No other JS libraries. No build step. Single self-contained file.
+- Tailwind CSS utilities are available globally — use arbitrary values [#hexcolor] for brand colors.
+- GSAP 3.12 + ScrollTrigger + gsap-kit.js are loaded by the server frame. You do NOT write GSAP code.
+- No other JS libraries. No build step.
+
+DOCUMENT FRAME:
+- Do NOT output <!DOCTYPE>, <html>, <head>, <body>, CDN scripts, Tailwind config, JSON-LD, Open Graph, Twitter Card, canonical, or meta tags.
+- The server owns the document shell and will wrap your body markup in the shared frame.
+- You may include one <style> tag only if Tailwind utilities cannot express a necessary visual detail.
 
 ANIMATION SYSTEM (critical — follow exactly):
 You declare animations via HTML data attributes. You NEVER write custom GSAP code.
@@ -36,42 +41,6 @@ You declare animations via HTML data attributes. You NEVER write custom GSAP cod
 - data-gsap="slideCards" on a testimonials section → add data-animate on each card
 - data-gsap="counterUp" on a stats section → add data-counter="TARGET_NUMBER" on counter elements
 - data-gsap="scaleIn" on logos/badges → add data-animate on each element
-
-CDN SCRIPTS (always include, in this exact order, at end of body):
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
-<script src="gsap-kit.js" defer></script>
-
-TAILWIND CONFIG (always include in a <script> tag before cdn.tailwindcss.com):
-<script>
-  tailwind.config = {
-    theme: {
-      extend: {
-        colors: {
-          brand: {
-            primary: '#REPLACE_WITH_PRIMARY',
-            secondary: '#REPLACE_WITH_SECONDARY',
-            accent: '#REPLACE_WITH_ACCENT',
-          }
-        },
-        fontFamily: {
-          heading: ['REPLACE_WITH_HEADING_FONT'],
-          body: ['REPLACE_WITH_BODY_FONT'],
-        }
-      }
-    }
-  }
-</script>
-
-REQUIRED IN <head>:
-1. Complete JSON-LD: LocalBusiness schema with @context, @type, name, address (PostalAddress), telephone, url, geo (GeoCoordinates if available), openingHours if hours present
-2. Open Graph: og:title, og:description, og:image (use scraped hero or OG image URL), og:type=website, og:url
-3. Twitter Card: twitter:card=summary_large_image, twitter:title, twitter:description, twitter:image
-4. Standard: charset=UTF-8, viewport, meta name=description, canonical link
-5. robots meta: <meta name="robots" content="index, follow">
-6. Google Fonts if heading/body fonts are Google Fonts (use preconnect + stylesheet link)
-7. llms.txt inline script: window.__llms = { business: '...', services: [...], location: '...' }
 
 CONTENT RULES (non-negotiable):
 - Use the copy VERBATIM from the DESIGN.MD content inventory. Do not paraphrase or invent.
@@ -87,7 +56,7 @@ QUALITY STANDARDS:
 - No inline event handlers (use addEventListener in a deferred script if needed)
 - Subtle footer: "Preview redesign by Bballi Studio · bballi.com"
 
-OUTPUT: Return ONLY the complete HTML. No explanations, no markdown fences, no comments about what you did.`;
+OUTPUT: Return ONLY body markup. No explanations, no markdown fences, no comments about what you did.`;
 
 // ─── GENERATION PROMPT BUILDER ────────────────────────────────────────────────
 
@@ -118,62 +87,7 @@ ${contactBlock || '(see DESIGN.MD)'}
 AVAILABLE ASSET FILES (reference by relative path from index.html):
 ${assetList}
 
-Generate the complete index.html now. Return only the HTML.`;
-}
-
-// ─── HTML POST-PROCESSING ─────────────────────────────────────────────────────
-
-const CDN_SCRIPT_BLOCK = `<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
-<script src="gsap-kit.js" defer></script>`;
-
-function postProcess(html, contentJson) {
-  let out = html.trim();
-
-  // Strip any markdown fences Claude might have added despite instructions
-  if (out.startsWith('```')) {
-    out = out.replace(/^```[a-z]*\n?/i, '').replace(/\n?```\s*$/, '').trim();
-  }
-
-  // Ensure DOCTYPE
-  if (!out.startsWith('<!DOCTYPE') && !out.startsWith('<!doctype')) {
-    out = '<!DOCTYPE html>\n' + out;
-  }
-
-  // Inject GSAP CDN scripts before </body> if Claude omitted them
-  if (!out.includes('gsap.min.js')) {
-    out = out.replace('</body>', `${CDN_SCRIPT_BLOCK}\n</body>`);
-  }
-
-  // Inject gsap-kit.js reference if missing
-  if (!out.includes('gsap-kit.js')) {
-    out = out.replace('</body>', `<script src="gsap-kit.js" defer></script>\n</body>`);
-  }
-
-  // Ensure Tailwind CDN
-  if (!out.includes('cdn.tailwindcss.com')) {
-    out = out.replace('</head>', `<script src="https://cdn.tailwindcss.com"></script>\n</head>`);
-  }
-
-  // Ensure skip-to-content link
-  if (!out.includes('skip') && !out.includes('#main')) {
-    out = out.replace('<body', '<body');  // noop — just a reminder if needed
-  }
-
-  return out;
-}
-
-// ─── VALIDATION ───────────────────────────────────────────────────────────────
-
-function validateHtml(html) {
-  const issues = [];
-  if (!html.includes('<!DOCTYPE html') && !html.includes('<!doctype html')) issues.push('Missing DOCTYPE');
-  if (!html.includes('<head>') && !html.includes('<head '))         issues.push('Missing <head>');
-  if (!html.includes('</body>'))                                     issues.push('Missing </body>');
-  if (!html.includes('application/ld+json'))                        issues.push('Missing JSON-LD');
-  if (!html.includes('og:title'))                                    issues.push('Missing og:title');
-  if (!html.includes('data-gsap'))                                   issues.push('No data-gsap animation attributes');
-  return issues;
+Generate the body markup now. Return only the inner <body> content.`;
 }
 
 // ─── PUBLIC API ───────────────────────────────────────────────────────────────
@@ -229,10 +143,20 @@ export async function generateSite(slug) {
   const rawHtml = response?.content?.[0]?.text || '';
   if (!rawHtml) throw new Error('Claude returned empty response');
 
-  const html = postProcess(rawHtml, contentJson);
+  const normalized = normalizeGeneratedBody(rawHtml);
+  const { html, warnings } = buildSiteFrame({
+    bodyHtml: normalized.bodyHtml,
+    styleHtml: normalized.styleHtml,
+    contentJson,
+  });
 
   // Validate and log issues (non-fatal)
-  const issues = validateHtml(html);
+  const issues = [
+    ...normalized.warnings,
+    ...warnings,
+    ...validateGeneratedBody(normalized.bodyHtml),
+    ...validateFramedHtml(html),
+  ];
   if (issues.length) console.warn(`[site-generator] HTML validation issues for ${slug}:`, issues);
 
   writeFileSync(htmlOutPath, html, 'utf8');

@@ -50,8 +50,8 @@ export async function GET(request) {
     return errorPage(401, err instanceof Error ? err.message : 'Unauthorized.');
   }
 
-  const bootstrap = await getDashboardBootstrap(decoded.uid);
-  const clientId = bootstrap?.userProfile?.clientId || null;
+  const bootstrap = await getDashboardBootstrap({ uid: decoded.uid, email: decoded.email, request });
+  const clientId = bootstrap?.effectiveClientId || bootstrap?.userProfile?.clientId || null;
   const dash = bootstrap?.dashboardState || null;
   if (!clientId) return errorPage(404, 'No client record for user.');
   if (!dash) return errorPage(404, 'No dashboard_state for client — run the pipeline first.');

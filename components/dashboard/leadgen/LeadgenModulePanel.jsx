@@ -93,7 +93,7 @@ function buildDoneMessage(moduleId, result, succeeded) {
 }
 
 export default function LeadgenModulePanel({
-  open, placeId, moduleId, moduleLabel, endpoint, getIdToken, onClose, onDone,
+  open, placeId, moduleId, moduleLabel, endpoint, extraBody, getIdToken, onClose, onDone,
 }) {
   const [termLines,    setTermLines]    = useState([]);
   const [chatMessages, setChatMessages] = useState([]);
@@ -168,7 +168,7 @@ export default function LeadgenModulePanel({
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ placeId, moduleId }),
+        body: JSON.stringify({ placeId, moduleId, ...(extraBody || {}) }),
       });
     } catch (err) {
       if (err.name === 'AbortError') return;

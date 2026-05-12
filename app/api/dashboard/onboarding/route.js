@@ -4,6 +4,7 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
 const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
+const { getEffectiveClientContext } = require('../../../../api/_lib/client-provisioning.cjs');
 const { getStep, validateAnswer } = require('../../../../onboarding/questions.config.cjs');
 
 function makeReqShim(request) {
@@ -13,12 +14,6 @@ function makeReqShim(request) {
       Authorization: request.headers.get('authorization'),
     },
   };
-}
-
-async function resolveClientId(uid) {
-  const userSnap = await fb.adminDb.collection('users').doc(uid).get();
-  if (!userSnap.exists) return null;
-  return userSnap.data()?.clientId || null;
 }
 
 function unauthorized(message) {
@@ -41,7 +36,13 @@ export async function GET(request) {
     return unauthorized(err instanceof Error ? err.message : 'Unauthorized.');
   }
 
-  const clientId = await resolveClientId(decoded.uid);
+  let context;
+  try {
+    context = await getEffectiveClientContext({ uid: decoded.uid, email: decoded.email, request });
+  } catch (err) {
+    return NextResponse.json({ error: err.message || 'Forbidden.' }, { status: err.status || 403 });
+  }
+  const clientId = context.clientId;
   if (!clientId) return notFound('No client record for user.');
 
   const snap = await fb.adminDb.collection('client_configs').doc(clientId).get();
@@ -74,7 +75,13 @@ export async function POST(request) {
   const action = String(body.action || '').trim();
   if (!action) return badRequest('Missing "action".');
 
-  const clientId = await resolveClientId(decoded.uid);
+  let context;
+  try {
+    context = await getEffectiveClientContext({ uid: decoded.uid, email: decoded.email, request });
+  } catch (err) {
+    return NextResponse.json({ error: err.message || 'Forbidden.' }, { status: err.status || 403 });
+  }
+  const clientId = context.clientId;
   if (!clientId) return notFound('No client record for user.');
 
   const configRef = fb.adminDb.collection('client_configs').doc(clientId);

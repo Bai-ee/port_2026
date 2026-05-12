@@ -4,6 +4,7 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
 const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
+const { getEffectiveClientContext } = require('../../../../api/_lib/client-provisioning.cjs');
 const { fetchSiteEvidence } = require('../../../../features/scout-intake/site-fetcher');
 const { ensureScoutConfig } = require('../../../../features/scout-intake/scout-config-generator');
 const { buildUserContext } = require('../../../../features/scout-intake/user-context');
@@ -39,9 +40,14 @@ export async function POST(request) {
     return json({ error: err instanceof Error ? err.message : 'Unauthorized.' }, 401);
   }
 
-  const userSnap = await fb.adminDb.collection('users').doc(decoded.uid).get();
-  if (!userSnap.exists) return json({ error: 'No user record.' }, 404);
-  const clientId = userSnap.data()?.clientId || null;
+  let context;
+  try {
+    context = await getEffectiveClientContext({ uid: decoded.uid, email: decoded.email, request });
+  } catch (err) {
+    return json({ error: err.message || 'Forbidden.' }, err.status || 403);
+  }
+  if (!context.userProfile) return json({ error: 'No user record.' }, 404);
+  const clientId = context.clientId || null;
   if (!clientId) return json({ error: 'No clientId on user record.' }, 404);
 
   const [clientSnap, clientConfigSnap, dashSnap] = await Promise.all([

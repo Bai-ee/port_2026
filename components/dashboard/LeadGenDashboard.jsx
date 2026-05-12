@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Filter, Settings2, Radar, ArrowUpRight, Play, Loader2, ChevronDown, Info, MapPin, Mail, Share2, Monitor, Gauge, Bot, Layers, Paintbrush, RotateCcw, Wand2, ExternalLink, Package, Send, Star, Images } from 'lucide-react';
+import { Plus, Filter, Settings2, Radar, ArrowUpRight, Play, Loader2, ChevronDown, Info, MapPin, Mail, Share2, Monitor, Gauge, Bot, Layers, Paintbrush, RotateCcw, Wand2, ExternalLink, Package, Send, Star, Images, LayoutDashboard } from 'lucide-react';
 import { collection, doc, onSnapshot, query as fsQuery, orderBy, limit, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../../firebase';
 import { VERTICAL_MAP, VERTICAL_KEYS, getVerticalLabel } from '../../features/leadgen/vertical-map';
@@ -20,6 +20,7 @@ import BriefEditorModal         from './leadgen/BriefEditorModal';
 import MockupPromptEditorModal  from './leadgen/MockupPromptEditorModal';
 import SitePromptEditorModal    from './leadgen/SitePromptEditorModal';
 import SendPreviewModal         from './leadgen/SendPreviewModal';
+import VisualDnaModal           from './leadgen/VisualDnaModal';
 import BrandSystemBuildModal from './BrandSystemBuildModal';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -195,6 +196,14 @@ const LEADGEN_MODULE_REGISTRY = [
     storeKey: null,
   },
   {
+    id: 'visual-dna',
+    label: 'Visual DNA',
+    description: 'Food · products · locations · lifestyle references',
+    Icon: Images,
+    type: 'experience',
+    storeKey: null,
+  },
+  {
     id: 'design-references',
     label: 'Design References',
     description: 'Lazyweb · vertical-matched design inspiration',
@@ -224,14 +233,37 @@ export default function LeadGenDashboard() {
   const [expandedRows, setExpandedRows] = useState(() => new Set());
   const [legendOpen, setLegendOpen]     = useState(false);
   const [onboardBusy, setOnboardBusy]     = useState({});
+  const [dashboardBusy, setDashboardBusy] = useState({});
   // { placeId, moduleId, moduleLabel } — null when panel is closed
   const [modulePanel, setModulePanel]   = useState(null);
+  // Generation feature toggles — keyed by placeId so each prospect has its own state
+  const [genToggles, setGenToggles] = useState({});
+  const getToggles = (placeId) => genToggles[placeId] || {
+    useMockup: true,
+    useLazywebVision: false,
+    useBrandSystem: true,
+    useDesignEval: true,
+    runComparison: true,
+  };
+  const setToggle = (placeId, key, value) => {
+    setGenToggles((prev) => ({
+      ...prev,
+      [placeId]: { ...(prev[placeId] || {
+        useMockup: true,
+        useLazywebVision: false,
+        useBrandSystem: true,
+        useDesignEval: true,
+        runComparison: true,
+      }), [key]: value },
+    }));
+  };
   // prospect object for brief editor — null when closed
   const [briefEditorProspect, setBriefEditorProspect] = useState(null);
   const [mockupPromptEditorProspect, setMockupPromptEditorProspect] = useState(null);
   const [sitePromptEditorProspect, setSitePromptEditorProspect]     = useState(null);
   const [sendModal, setSendModal] = useState(null);
   const [brandSystemOpen, setBrandSystemOpen] = useState(false);
+  const [visualDnaProspect, setVisualDnaProspect] = useState(null);
 
   const toggleRow = (placeId) => {
     setExpandedRows((prev) => {
@@ -329,9 +361,14 @@ export default function LeadGenDashboard() {
       setBrandSystemOpen(true);
       return;
     }
+    if (moduleType === 'experience' && moduleId === 'visual-dna') {
+      const prospect = prospects.find((p) => p.placeId === placeId);
+      setVisualDnaProspect(prospect || { placeId });
+      return;
+    }
     const mod = LEADGEN_MODULE_REGISTRY.find(m => m.id === moduleId);
     setModulePanel({ placeId, moduleId, moduleLabel, endpoint: mod?.endpoint });
-  }, []);
+  }, [prospects]);
 
   function handlePackage(placeId) {
     setModulePanel({ placeId, moduleId: 'outreach-package', moduleLabel: 'Package Outreach', endpoint: '/api/leadgen/package' });
@@ -339,6 +376,33 @@ export default function LeadGenDashboard() {
 
   function handleSendPreview(prospect) {
     setSendModal(prospect);
+  }
+
+  async function handleMakeDashboard(placeId) {
+    setDashboardBusy((b) => ({ ...b, [placeId]: true }));
+    try {
+      const token = await getIdToken();
+      const res = await fetch('/api/leadgen/make-dashboard', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ placeId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        console.error('[leadgen] make-dashboard failed:', data?.error || res.status);
+      }
+    } catch (err) {
+      console.error('[leadgen] make-dashboard request failed:', err);
+    } finally {
+      setDashboardBusy((b) => {
+        const next = { ...b };
+        delete next[placeId];
+        return next;
+      });
+    }
   }
 
   async function toggleStar(placeId, currentStarred) {
@@ -937,11 +1001,11 @@ const stageCounts = useMemo(() => {
                             ) : null}
                           </div>
                           {LEADGEN_MODULE_REGISTRY.map((mod) => {
-                            const stored = mod.storeKey ? p.onboard?.[mod.storeKey] : null;
+                            const stored = mod.id === 'visual-dna' ? p.visualDna : (mod.storeKey ? p.onboard?.[mod.storeKey] : null);
                             const hasData  = Boolean(stored);
                             const status   = stored?.status || null;
-                            const runAt    = stored?.runAt  || null;
-                            const dotColor = status === 'succeeded' ? '#0cce6b' : status === 'failed' ? '#ff4e42' : '#3a3a3a';
+                            const runAt    = stored?.runAt || stored?.updatedAt || null;
+                            const dotColor = status === 'succeeded' || status === 'ready' ? '#0cce6b' : status === 'failed' ? '#ff4e42' : '#3a3a3a';
                             const hasWebsite = Boolean(p.website);
                             return (
                               <div key={mod.id} className="leadgen-module-row">
@@ -960,7 +1024,9 @@ const stageCounts = useMemo(() => {
                                   onClick={(e) => { e.stopPropagation(); handleModuleRun(p.placeId, mod.id, mod.label, mod.type); }}
                                   title={!hasWebsite && mod.type === 'analysis' ? 'Prospect has no website' : undefined}
                                 >
-                                  {hasData ? <><RotateCcw size={9} strokeWidth={2.5} /><span>Re-run</span></> : <span>{mod.type === 'chat' ? 'Open' : 'Run'}</span>}
+                                  {hasData && mod.type === 'analysis'
+                                    ? <><RotateCcw size={9} strokeWidth={2.5} /><span>Re-run</span></>
+                                    : <span>{mod.type === 'chat' || mod.type === 'experience' ? 'Open' : 'Run'}</span>}
                                 </button>
                               </div>
                             );
@@ -1127,7 +1193,17 @@ const stageCounts = useMemo(() => {
                                 <button
                                   type="button"
                                   className="leadgen-btn leadgen-btn--generate"
-                                  onClick={(e) => { e.stopPropagation(); setModulePanel({ placeId: p.placeId, moduleId: 'prepare-brief', moduleLabel: 'Prepare Brief', endpoint: '/api/leadgen/prepare-brief' }); }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const t = getToggles(p.placeId);
+                                    setModulePanel({
+                                      placeId: p.placeId,
+                                      moduleId: 'prepare-brief',
+                                      moduleLabel: 'Prepare Brief',
+                                      endpoint: '/api/leadgen/prepare-brief',
+                                      extraBody: { useBrandSystem: t.useBrandSystem, useDesignEval: t.useDesignEval },
+                                    });
+                                  }}
                                 >
                                   {p.generation?.designMd
                                     ? <><RotateCcw size={10} strokeWidth={2.4} /><span>Re-prepare</span></>
@@ -1192,12 +1268,67 @@ const stageCounts = useMemo(() => {
                                       View / Edit Prompt
                                     </button>
                                   ) : null}
+                                  <div
+                                    id={`leadgen-gen-toggles-${p.placeId}`}
+                                    className="leadgen-gen-toggles"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <label className="leadgen-gen-toggle" title="Include mockup as vision context">
+                                      <input
+                                        type="checkbox"
+                                        checked={getToggles(p.placeId).useMockup}
+                                        onChange={(e) => setToggle(p.placeId, 'useMockup', e.target.checked)}
+                                      />
+                                      <span>Mockup</span>
+                                    </label>
+                                    <label className="leadgen-gen-toggle" title="Fetch Lazyweb reference screenshots as vision context">
+                                      <input
+                                        type="checkbox"
+                                        checked={getToggles(p.placeId).useLazywebVision}
+                                        onChange={(e) => setToggle(p.placeId, 'useLazywebVision', e.target.checked)}
+                                      />
+                                      <span>Lazyweb</span>
+                                    </label>
+                                    <label className="leadgen-gen-toggle" title="Include Brand System in brief priority chain">
+                                      <input
+                                        type="checkbox"
+                                        checked={getToggles(p.placeId).useBrandSystem}
+                                        onChange={(e) => setToggle(p.placeId, 'useBrandSystem', e.target.checked)}
+                                      />
+                                      <span>Brand</span>
+                                    </label>
+                                    <label className="leadgen-gen-toggle" title="Include Design Eval in brief priority chain">
+                                      <input
+                                        type="checkbox"
+                                        checked={getToggles(p.placeId).useDesignEval}
+                                        onChange={(e) => setToggle(p.placeId, 'useDesignEval', e.target.checked)}
+                                      />
+                                      <span>DesignEval</span>
+                                    </label>
+                                    <label className="leadgen-gen-toggle" title="Run AI Readiness before/after comparison">
+                                      <input
+                                        type="checkbox"
+                                        checked={getToggles(p.placeId).runComparison}
+                                        onChange={(e) => setToggle(p.placeId, 'runComparison', e.target.checked)}
+                                      />
+                                      <span>Readiness</span>
+                                    </label>
+                                  </div>
                                 </div>
                                 <button
                                   type="button"
                                   className="leadgen-btn leadgen-btn--generate"
                                   disabled={!p.generation?.designMd}
-                                  onClick={(e) => { e.stopPropagation(); setModulePanel({ placeId: p.placeId, moduleId: 'generate-site', moduleLabel: 'Generate Site', endpoint: '/api/leadgen/generate-site' }); }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setModulePanel({
+                                      placeId: p.placeId,
+                                      moduleId: 'generate-site',
+                                      moduleLabel: 'Generate Site',
+                                      endpoint: '/api/leadgen/generate-site',
+                                      extraBody: getToggles(p.placeId),
+                                    });
+                                  }}
                                 >
                                   {p.generation?.previewUrl
                                     ? <><RotateCcw size={10} strokeWidth={2.4} /><span>Re-generate</span></>
@@ -1252,6 +1383,42 @@ const stageCounts = useMemo(() => {
                                   {p.outreach?.sentAt
                                     ? <><RotateCcw size={10} strokeWidth={2.4} /><span>Re-send</span></>
                                     : <><Send size={10} strokeWidth={2.4} /><span>Send</span></>}
+                                </button>
+                              </div>
+
+                              {/* Step 6 — Make Dashboard */}
+                              <div className={`leadgen-gen-step ${!p.generation?.previewUrl ? 'leadgen-gen-step--locked' : ''}`}>
+                                <span className={`leadgen-gen-step-dot ${p.dashboard?.clientId ? 'leadgen-gen-step-dot--done' : ''}`} />
+                                <div className="leadgen-gen-step-body">
+                                  <span className="leadgen-gen-step-title">6. Make Dashboard</span>
+                                  <span className="leadgen-gen-step-desc">
+                                    {p.dashboard?.clientId
+                                      ? `Dashboard live · ${p.dashboard.name || p.name || p.dashboard.clientId}`
+                                      : p.generation?.previewUrl
+                                        ? 'Provision client workspace from prospect'
+                                        : 'Complete step 3 first'}
+                                  </span>
+                                  {p.dashboard?.clientId ? (
+                                    <a
+                                      className="leadgen-brief-view-link"
+                                      href={`/dashboard?as=${encodeURIComponent(p.dashboard.clientId)}`}
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      View Dashboard
+                                    </a>
+                                  ) : null}
+                                </div>
+                                <button
+                                  type="button"
+                                  className="leadgen-btn leadgen-btn--generate"
+                                  disabled={!p.generation?.previewUrl || dashboardBusy[p.placeId]}
+                                  onClick={(e) => { e.stopPropagation(); handleMakeDashboard(p.placeId); }}
+                                >
+                                  {dashboardBusy[p.placeId]
+                                    ? <><Loader2 size={10} strokeWidth={2.4} className="leadgen-spin" /><span>Making</span></>
+                                    : p.dashboard?.clientId
+                                      ? <><LayoutDashboard size={10} strokeWidth={2.4} /><span>Refresh</span></>
+                                      : <><LayoutDashboard size={10} strokeWidth={2.4} /><span>Make</span></>}
                                 </button>
                               </div>
                             </div>
@@ -1433,6 +1600,7 @@ const stageCounts = useMemo(() => {
         moduleId={modulePanel?.moduleId}
         moduleLabel={modulePanel?.moduleLabel}
         endpoint={modulePanel?.endpoint}
+        extraBody={modulePanel?.extraBody}
         getIdToken={getIdToken}
         onClose={() => setModulePanel(null)}
         onDone={() => {}}
@@ -1471,6 +1639,12 @@ const stageCounts = useMemo(() => {
         onClose={() => setBrandSystemOpen(false)}
         getIdToken={getIdToken}
         onComplete={() => setBrandSystemOpen(false)}
+      />
+      <VisualDnaModal
+        open={Boolean(visualDnaProspect)}
+        prospect={visualDnaProspect}
+        onClose={() => setVisualDnaProspect(null)}
+        getIdToken={getIdToken}
       />
 
       <style jsx>{`
@@ -2809,6 +2983,29 @@ const stageCounts = useMemo(() => {
           text-decoration-color: rgba(124, 58, 237, 0.4);
         }
         .leadgen-brief-view-link:hover { text-decoration-color: #7c3aed; }
+        .leadgen-gen-toggles {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px 10px;
+          margin-top: 6px;
+        }
+        .leadgen-gen-toggle {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 10px;
+          color: var(--lg-muted);
+          cursor: pointer;
+          user-select: none;
+          line-height: 1;
+        }
+        .leadgen-gen-toggle input[type="checkbox"] {
+          width: 12px;
+          height: 12px;
+          margin: 0;
+          accent-color: #7c3aed;
+          cursor: pointer;
+        }
         .leadgen-gen-step--locked {
           opacity: 0.45;
           pointer-events: none;

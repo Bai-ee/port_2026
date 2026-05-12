@@ -4,6 +4,7 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
 const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
+const { getEffectiveClientContext } = require('../../../../api/_lib/client-provisioning.cjs');
 const { cancelRun } = require('../../../../api/_lib/run-lifecycle.cjs');
 
 function makeReqShim(request) {
@@ -24,12 +25,16 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
   }
 
-  // Resolve clientId from user record
-  const userDoc = await fb.adminDb.collection('users').doc(decoded.uid).get();
-  if (!userDoc.exists) {
+  let context;
+  try {
+    context = await getEffectiveClientContext({ uid: decoded.uid, email: decoded.email, request });
+  } catch (err) {
+    return NextResponse.json({ error: err.message || 'Forbidden.' }, { status: err.status || 403 });
+  }
+  if (!context.userProfile) {
     return NextResponse.json({ error: 'User record not found.' }, { status: 404 });
   }
-  const clientId = userDoc.data()?.clientId;
+  const clientId = context.clientId;
   if (!clientId) {
     return NextResponse.json({ error: 'No client associated with this account.' }, { status: 404 });
   }

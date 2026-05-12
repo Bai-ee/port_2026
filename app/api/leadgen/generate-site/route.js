@@ -1,6 +1,7 @@
 import { createRequire } from 'module';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import path from 'path';
+import { buildVisualDnaPromptBlock } from '../../../../features/leadgen/visual-dna.js';
 
 // Generates homepage HTML from the stored DESIGN.MD brief, deploys to Vercel,
 // then runs the before/after AI Readiness comparison.
@@ -16,20 +17,25 @@ const { logUsage, computeAnthropicCost } = require('../../../../api/_lib/usage-l
 import { runReadinessComparison, formatComparison } from '../../../../features/leadgen/readiness-comparison.js';
 import { downloadAssetsToBuffers } from '../../../../features/leadgen/asset-manager.js';
 import { ensureClientFolder, subdir, assetsDir, clientRoot, syncClientFolder } from '../../../../features/leadgen/client-folder.js';
+import { buildSiteFrame, normalizeGeneratedBody, validateFramedHtml, validateGeneratedBody } from '../../../../features/leadgen/site-frame.js';
 
 const MODEL      = 'claude-sonnet-4-6';
 const MAX_TOKENS = 16000;
 
 // ─── SYSTEM PROMPT ────────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are a senior frontend engineer generating production-quality HTML5 homepages for local businesses. You produce a SINGLE complete index.html file per request.
+const SYSTEM_PROMPT = `You are a senior frontend engineer generating production-quality HTML5 homepage body markup for local businesses. You produce ONLY the markup that belongs inside <body>.
 
 TECH STACK:
 - HTML5 semantic markup (header, nav, main, section, article, footer)
-- Tailwind CSS via CDN (https://cdn.tailwindcss.com) — use arbitrary values [#hexcolor] for brand colors
-- GSAP 3.12 + ScrollTrigger via CDN — already handled by gsap-kit.js
-- gsap-kit.js shared library loaded after GSAP CDN. You do NOT write custom GSAP code.
-- No other JS libraries. No build step. Single self-contained file.
+- Tailwind CSS utilities are available globally — use arbitrary values [#hexcolor] for brand colors.
+- GSAP 3.12 + ScrollTrigger + gsap-kit.js are loaded by the server frame. You do NOT write custom GSAP code.
+- No other JS libraries. No build step.
+
+DOCUMENT FRAME:
+- Do NOT output <!DOCTYPE>, <html>, <head>, <body>, CDN scripts, Tailwind config, JSON-LD, Open Graph, Twitter Card, canonical, or meta tags.
+- The server owns the document shell and will wrap your body markup in the shared frame.
+- You may include one <style> tag only if Tailwind utilities cannot express a necessary visual detail.
 
 ANIMATION SYSTEM (follow exactly — no custom GSAP):
 - data-gsap="heroParallax" on hero section. Add data-parallax on bg image, data-reveal on headline/subheadline.
@@ -39,25 +45,6 @@ ANIMATION SYSTEM (follow exactly — no custom GSAP):
 - data-gsap="slideCards" on testimonials section → add data-animate on each card
 - data-gsap="counterUp" on stats section → add data-counter="NUMBER" on counter elements
 - data-gsap="scaleIn" on logos/badges → add data-animate on each element
-
-CDN SCRIPTS (end of body, this exact order):
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
-<script src="gsap-kit.js" defer></script>
-
-TAILWIND CONFIG (before cdn.tailwindcss.com script):
-<script>
-  tailwind.config = { theme: { extend: { colors: { brand: { primary: 'REPLACE', secondary: 'REPLACE', accent: 'REPLACE' } }, fontFamily: { heading: ['REPLACE'], body: ['REPLACE'] } } } }
-</script>
-
-REQUIRED IN <head>:
-1. JSON-LD: LocalBusiness schema — @context, @type, name, address (PostalAddress), telephone, url
-2. Open Graph: og:title, og:description, og:image, og:type=website, og:url
-3. Twitter Card: twitter:card=summary_large_image, twitter:title, twitter:description, twitter:image
-4. Standard: charset, viewport, meta description, canonical, robots index/follow
-5. Google Fonts preconnect + stylesheet if fonts are Google Fonts
-6. llms.txt inline: <script>window.__llms={business:'NAME',services:[],location:'CITY'}</script>
 
 CONTENT RULES:
 - Use copy VERBATIM from the brief. Do not paraphrase or invent.
@@ -71,29 +58,9 @@ QUALITY:
 - Skip-to-content link, focus-visible styles, keyboard accessible
 - Subtle footer: "Preview redesign by Bballi Studio · bballi.com"
 
-OUTPUT: Return ONLY the complete HTML. No explanations, no markdown fences.`;
+OUTPUT: Return ONLY body markup. No explanations, no markdown fences.`;
 
-// ─── HTML POST-PROCESSING ─────────────────────────────────────────────────────
-
-function postProcess(html) {
-  let out = html.trim();
-  if (out.startsWith('```')) out = out.replace(/^```[a-z]*\n?/i, '').replace(/\n?```\s*$/, '').trim();
-  if (!out.startsWith('<!DOCTYPE') && !out.startsWith('<!doctype')) out = '<!DOCTYPE html>\n' + out;
-  if (!out.includes('gsap.min.js')) {
-    out = out.replace('</body>', `<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>\n<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>\n<script src="gsap-kit.js" defer></script>\n</body>`);
-  }
-  if (!out.includes('gsap-kit.js')) out = out.replace('</body>', `<script src="gsap-kit.js" defer></script>\n</body>`);
-  if (!out.includes('cdn.tailwindcss.com')) out = out.replace('</head>', `<script src="https://cdn.tailwindcss.com"></script>\n</head>`);
-  return out;
-}
-
-function validateHtml(html) {
-  const issues = [];
-  if (!html.includes('application/ld+json')) issues.push('Missing JSON-LD');
-  if (!html.includes('og:title'))            issues.push('Missing og:title');
-  if (!html.includes('data-gsap'))           issues.push('No data-gsap attributes');
-  return issues;
-}
+// ─── FRAMED HTML ASSEMBLY ─────────────────────────────────────────────────────
 
 // ─── VERCEL DEPLOY ────────────────────────────────────────────────────────────
 
@@ -168,8 +135,12 @@ export async function POST(request) {
   try { body = await request.json().catch(() => ({})); }
   catch { return new Response(JSON.stringify({ type: 'error', message: 'Invalid JSON.' }) + '\n', { status: 400, headers: { 'Content-Type': 'application/x-ndjson' } }); }
 
-  const placeId        = String(body?.placeId || '').trim();
-  const skipComparison = body?.skipComparison === true;
+  const placeId          = String(body?.placeId || '').trim();
+  const skipComparison   = body?.skipComparison === true || body?.runComparison === false;
+  const useMockup        = body?.useMockup !== false;          // ON by default
+  const useLazywebVision = body?.useLazywebVision === true;    // OFF by default
+  const useBrandSystem   = body?.useBrandSystem !== false;     // ON by default
+  const useDesignEval    = body?.useDesignEval !== false;      // ON by default
   if (!placeId) return new Response(JSON.stringify({ type: 'error', message: 'Provide placeId.' }) + '\n', { status: 400, headers: { 'Content-Type': 'application/x-ndjson' } });
 
   const snap = await fb.adminDb.collection('leadgen_prospects').doc(placeId).get();
@@ -221,16 +192,25 @@ export async function POST(request) {
         emit({ type: 'progress', stage: 'prompt', label: 'Building generation prompt…' });
 
         let userPrompt;
+        let contentJsonForFrame = {};
         const storedSitePrompt   = prospect?.generation?.sitePrompt;
         const sitePromptEditedAt = prospect?.generation?.sitePromptEditedAt;
 
+        try {
+          contentJsonForFrame = prospect?.generation?.contentJson
+            ? (typeof prospect.generation.contentJson === 'string'
+                ? JSON.parse(prospect.generation.contentJson)
+                : prospect.generation.contentJson)
+            : {};
+        } catch {
+          contentJsonForFrame = {};
+        }
+
         if (storedSitePrompt && sitePromptEditedAt) {
-          userPrompt = storedSitePrompt;
+          userPrompt = `${storedSitePrompt}\n\nIMPORTANT OUTPUT OVERRIDE: Return only inner <body> markup. Do not include <!DOCTYPE>, <html>, <head>, <body>, CDN scripts, Tailwind config, JSON-LD, Open Graph, Twitter Card, canonical, or meta tags.`;
           emit({ type: 'progress', stage: 'prompt', label: 'Using edited site prompt…' });
         } else {
-          const contentJson = prospect?.generation?.contentJson
-            ? JSON.parse(prospect.generation.contentJson)
-            : {};
+          const contentJson = contentJsonForFrame;
           const copy = contentJson?.copy || {};
           const ci   = copy.contactInfo || {};
           const contactBlock = [
@@ -238,22 +218,64 @@ export async function POST(request) {
             ci.email   ? `Email: ${ci.email}`   : null,
             ci.address ? `Address: ${ci.address}` : null,
           ].filter(Boolean).join('\n');
-          userPrompt = `Below is the complete DESIGN.MD creative brief. Follow it precisely.\n\n---\n${designMd}\n---\n\nCONTACT INFORMATION (copy verbatim):\n${contactBlock || '(see brief)'}\n\nGenerate the complete index.html now. Return only the HTML.`;
+          userPrompt = `Below is the complete DESIGN.MD creative brief. Follow it precisely.\n\n---\n${designMd}\n---\n\nCONTACT INFORMATION (copy verbatim):\n${contactBlock || '(see brief)'}\n\nGenerate the body markup now. Return only the inner <body> content.`;
+        }
+        // If brief-level toggles differ from what the stored brief was built with,
+        // rebuild DESIGN.MD on-the-fly. Skipped when both are ON (default path).
+        const briefNeedsRebuild = (!useBrandSystem || !useDesignEval) && !!designMd && !(storedSitePrompt && sitePromptEditedAt);
+        if (briefNeedsRebuild) {
+          try {
+            emit({ type: 'progress', stage: 'prompt', label: 'Rebuilding brief with toggled features…' });
+            const { generateDesignMd } = await import('../../../../features/leadgen/design-md-generator.js');
+            const contentJson = contentJsonForFrame;
+            const assetManifest = prospect?.generation?.assetManifest || null;
+            const brandGuide = useBrandSystem
+              ? (prospect.brandGuide || prospect.userUploads?.brandSystem?.brandGuideV2 || null)
+              : null;
+            const designRefs = prospect.generation?.designReferences || null;
+
+            const onboardForBrief = { ...(prospect.onboard || {}) };
+            if (!useDesignEval) {
+              delete onboardForBrief.designEval;
+            }
+
+            const rebuiltMd = generateDesignMd({
+              prospect,
+              onboard:          onboardForBrief,
+              content:          contentJson,
+              assetManifest,
+              brandSystem:      brandGuide,
+              designReferences: designRefs,
+              visualDna:        prospect.visualDna || null,
+            });
+
+            const copy = contentJson?.copy || {};
+            const ci   = copy.contactInfo || {};
+            const contactBlock = [
+              ci.phone   ? `Phone: ${ci.phone}`   : null,
+              ci.email   ? `Email: ${ci.email}`   : null,
+              ci.address ? `Address: ${ci.address}` : null,
+            ].filter(Boolean).join('\n');
+            userPrompt = `Below is the complete DESIGN.MD creative brief. Follow it precisely.\n\n---\n${rebuiltMd}\n---\n\nCONTACT INFORMATION (copy verbatim):\n${contactBlock || '(see brief)'}\n\nGenerate the body markup now. Return only the inner <body> content.`;
+            emit({ type: 'progress', stage: 'prompt', label: `Brief rebuilt without ${[!useBrandSystem && 'Brand System', !useDesignEval && 'Design Eval'].filter(Boolean).join(' + ')}` });
+          } catch (err) {
+            emit({ type: 'progress', stage: 'prompt', label: `⚠ Brief rebuild failed — using stored brief: ${err.message}` });
+          }
+        }
+
+        const visualDnaBlock = buildVisualDnaPromptBlock(prospect.visualDna || null);
+        if (visualDnaBlock && !(storedSitePrompt && sitePromptEditedAt)) {
+          userPrompt += `\n\nCLIENT-SPECIFIC VISUAL DNA FOR ALL GENERATED IMAGERY:\n${visualDnaBlock}`;
         }
         const promptLen = Math.round((SYSTEM_PROMPT.length + userPrompt.length) / 4);
         emit({ type: 'progress', stage: 'prompt', label: `Prompt ready — ~${promptLen} tokens input` });
 
-        // ── Step 2: Load vision context (mockup only) ─────────────────
-        // Lazyweb reference images are no longer sent here — Phase 3
-        // aligned the mockup with reference descriptions, so the mockup
-        // already carries the vertical's design direction. Reference
-        // metadata still flows through DESIGN.MD §9 as text context.
-        // To re-enable reference images, set LAZYWEB_VISION=1 env var.
+        // ── Step 2: Load vision context (mockup + optional Lazyweb refs) ─────
         let messageContent = userPrompt;
         const mockupUrl    = prospect?.generation?.mockupUrl;
         let mockupImage    = null; // { type: 'image', source: { type: 'base64', ... } }
 
-        if (mockupUrl) {
+        if (useMockup && mockupUrl) {
           try {
             emit({ type: 'progress', stage: 'generate', label: 'Loading visual mockup…' });
             const imgRes = await fetch(mockupUrl, { signal: AbortSignal.timeout(20_000) });
@@ -288,14 +310,65 @@ export async function POST(request) {
           }
         }
 
+        // Lazyweb reference images — OFF by default, enabled via toggle
+        const refImages = [];
+        if (useLazywebVision && process.env.LAZYWEB_TOKEN) {
+          try {
+            emit({ type: 'progress', stage: 'references', label: 'Fetching Lazyweb references (toggled ON)…' });
+            const { fetchDesignReferences } = await import('../../../../features/leadgen/design-references.js');
+            const { references } = await fetchDesignReferences({
+              vertical: prospect.vertical || 'default',
+              onProgress: (label) => emit({ type: 'progress', stage: 'references', label }),
+            });
+
+            for (const ref of references) {
+              for (const img of (ref.images || [])) {
+                if (!img.url) continue;
+                try {
+                  const imgRes = await fetch(img.url, { signal: AbortSignal.timeout(10_000) });
+                  if (imgRes.ok) {
+                    const buf = Buffer.from(await imgRes.arrayBuffer());
+                    if (buf.byteLength > 1_500_000) continue;
+                    refImages.push({
+                      type: 'image',
+                      source: { type: 'base64', media_type: img.mimeType || 'image/png', data: buf.toString('base64') },
+                    });
+                  }
+                } catch { /* skip individual image */ }
+              }
+            }
+            if (refImages.length > 0) {
+              emit({ type: 'progress', stage: 'references', label: `Loaded ${refImages.length} reference image${refImages.length > 1 ? 's' : ''}` });
+            }
+          } catch (err) {
+            emit({ type: 'progress', stage: 'references', label: `⚠ References skipped: ${err.message}` });
+          }
+        } else if (useLazywebVision && !process.env.LAZYWEB_TOKEN) {
+          emit({ type: 'progress', stage: 'references', label: '⚠ Lazyweb toggle ON but LAZYWEB_TOKEN not set — skipping.' });
+        }
+
         // Build final message content
-        if (mockupImage) {
-          const visionPreamble = 'The image above is the visual mockup target — match its layout, color scheme, and section structure.';
+        const visionImages = [
+          ...(mockupImage ? [mockupImage] : []),
+          ...refImages,
+        ];
+
+        if (visionImages.length > 0) {
+          const hasMockup = !!mockupImage;
+          const refCount  = refImages.length;
+          let visionPreamble;
+          if (hasMockup && refCount > 0) {
+            visionPreamble = `The first image is the visual mockup target — match its layout, color scheme, and section structure exactly. The remaining ${refCount} image${refCount > 1 ? 's are' : ' is a'} real-world design reference${refCount > 1 ? 's' : ''} from top websites in this vertical — use them as inspiration for section layout, typography treatment, and visual polish.`;
+          } else if (hasMockup) {
+            visionPreamble = 'The image above is the visual mockup target — match its layout, color scheme, and section structure.';
+          } else {
+            visionPreamble = `The ${refCount} image${refCount > 1 ? 's are' : ' is a'} real-world design reference${refCount > 1 ? 's' : ''} from top websites in this vertical — use them as inspiration.`;
+          }
           messageContent = [
-            mockupImage,
+            ...visionImages,
             { type: 'text', text: `${visionPreamble}\n\n${userPrompt}` },
           ];
-          emit({ type: 'progress', stage: 'generate', label: `Calling ${MODEL} with mockup image…` });
+          emit({ type: 'progress', stage: 'generate', label: `Calling ${MODEL} with ${visionImages.length} image${visionImages.length > 1 ? 's' : ''}…` });
         } else {
           emit({ type: 'progress', stage: 'generate', label: `Calling ${MODEL} — generating homepage (no vision context)…` });
         }
@@ -327,8 +400,10 @@ export async function POST(request) {
           costUsd:      generationCostUsd,
           placeId,
           metadata:     {
-            visionImages: mockupImage ? 1 : 0,
+            visionImages: (mockupImage ? 1 : 0) + refImages.length,
             mockupLoaded: !!mockupImage,
+            lazywebVision: refImages.length,
+            toggles:      { useMockup, useLazywebVision, useBrandSystem, useDesignEval, runComparison: !skipComparison },
             slug,
           },
         });
@@ -336,8 +411,19 @@ export async function POST(request) {
 
         // ── Step 3: Validate ───────────────────────────────────────────
         emit({ type: 'progress', stage: 'validate', label: 'Validating output…' });
-        const html   = postProcess(rawHtml);
-        const issues = validateHtml(html);
+        const normalized = normalizeGeneratedBody(rawHtml);
+        const { html, warnings } = buildSiteFrame({
+          bodyHtml: normalized.bodyHtml,
+          styleHtml: normalized.styleHtml,
+          contentJson: contentJsonForFrame,
+          prospect,
+        });
+        const issues = [
+          ...normalized.warnings,
+          ...warnings,
+          ...validateGeneratedBody(normalized.bodyHtml),
+          ...validateFramedHtml(html),
+        ];
         if (issues.length) {
           emit({ type: 'progress', stage: 'validate', label: `⚠ ${issues.join(' · ')}` });
         } else {

@@ -27,12 +27,12 @@ export async function GET(request) {
   }
 
   try {
-    let bootstrap = await getDashboardBootstrap(decoded.uid);
+    let bootstrap = await getDashboardBootstrap({ uid: decoded.uid, email: decoded.email, request });
 
     // Auto-create sample brief for admin if missing
     const isAdmin = decoded.email === 'edittraxnft@gmail.com';
     if (isAdmin && bootstrap?.dashboardState && !bootstrap.dashboardState.scribe?.brief) {
-      const clientId = bootstrap.userProfile?.clientId;
+      const clientId = bootstrap.effectiveClientId || bootstrap.userProfile?.clientId;
       if (clientId) {
         const now = new Date().toISOString();
         const sampleBrief = {
@@ -56,7 +56,7 @@ export async function GET(request) {
         );
 
         // Re-fetch bootstrap to include the new brief
-        bootstrap = await getDashboardBootstrap(decoded.uid);
+        bootstrap = await getDashboardBootstrap({ uid: decoded.uid, email: decoded.email, request });
       }
     }
 
@@ -68,7 +68,7 @@ export async function GET(request) {
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unauthorized.' },
-      { status: 401 }
+      { status: error?.status || 401 }
     );
   }
 }

@@ -11,6 +11,7 @@ import {
   ArrowRightLeft,
   ArrowUpRight,
   BriefcaseBusiness,
+  ChevronDown,
   House,
   ChartColumnIncreasing,
   LaptopMinimalCheck,
@@ -21,6 +22,7 @@ import {
   Settings2,
   Workflow,
   Globe,
+  Images,
   Radar,
   X as XIcon,
 } from 'lucide-react';
@@ -63,9 +65,15 @@ const LeadgenModulePanel = dynamic(() => import('./components/dashboard/leadgen/
   ssr: false,
 });
 
+const VisualDnaModal = dynamic(() => import('./components/dashboard/leadgen/VisualDnaModal'), {
+  loading: () => null,
+  ssr: false,
+});
+
 // Entry-flow survey surfaces every question step (excludes the summary, which
 // is added in Phase 4). Ordered by the `order` field in questions.config.cjs.
 const ONBOARDING_ENTRY_STEPS = onboardingConfig.QUESTION_STEPS;
+const IMPERSONATE_STORAGE_KEY = 'dashboard.impersonateClientId';
 
 const ONBOARDING_CARD_IDS = new Set([
   'audit-summary',
@@ -80,6 +88,8 @@ const ONBOARDING_CARD_IDS = new Set([
   'design-evaluation',
   'priority-signal',
   'brand-system',
+  'visual-dna',
+  'marketing-brief',
   'survey-status',
   // Per-client leadgen flow cards.
   'client-brief',
@@ -87,6 +97,62 @@ const ONBOARDING_CARD_IDS = new Set([
   'client-site',
 ]);
 const PENDING_DASHBOARD_SIGNUP_KEY = 'pending-dashboard-signup';
+const MARKETING_BRIEF_SOURCE_PLATFORMS = [
+  { key: 'web', label: 'Web / News', status: 'ready', description: 'General web search, news, launches, blogs, and indexed coverage.' },
+  { key: 'x', label: 'X / Twitter', status: 'ready', description: 'KOL commentary, reply windows, and fast-moving social narratives.' },
+  { key: 'reddit', label: 'Reddit', status: 'ready', description: 'Community threads, recommendation requests, pain points, and buyer language.' },
+  { key: 'instagram', label: 'Instagram', status: 'ready', description: 'Creator and brand content surfaced through available social search/context.' },
+  { key: 'youtube', label: 'YouTube', status: 'available', description: 'Video commentary and creator discussions when social search is configured.' },
+  { key: 'tiktok', label: 'TikTok', status: 'available', description: 'Short-form trend signals when social search is configured.' },
+  { key: 'hackernews', label: 'Hacker News', status: 'available', description: 'Tech/startup discussion for relevant clients.' },
+];
+const DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS = ['web', 'x', 'reddit', 'instagram'];
+
+function buildDefaultMarketingBriefConfig(client, dashboardState) {
+  const companyName = client?.companyName || dashboardState?.clientName || 'the brand';
+  const websiteUrl = client?.websiteUrl || '';
+  let hostname = '';
+  try { hostname = websiteUrl ? new URL(websiteUrl).hostname.replace(/^www\./, '') : ''; } catch { hostname = ''; }
+  const brandQuery = [`"${companyName}"`, hostname ? `"${hostname}"` : null, hostname ? `site:${hostname}` : null]
+    .filter(Boolean)
+    .join(' OR ');
+  return {
+    sourceFocus: `Find timely market signals, founder-relevant news, KOL commentary, and social conversations ${companyName} can credibly participate in. Prioritize X/Twitter-ready angles.`,
+    scoutInstructions: [
+      'Prioritize live community momentum, current news, sentiment shifts, and moments where the brand can credibly enter the conversation.',
+      'Treat KOL posts, X/Twitter discussions, Reddit threads, launch announcements, and comparison conversations as high-value signals.',
+      'Separate [LIVE] signals from [BACKGROUND] context.',
+      'The final brief should help a founder decide what to say today, where to say it, and why now.',
+    ].join('\n'),
+    freshnessDays: 1,
+    sourcePlatforms: DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS,
+    kols: '',
+    competitors: '',
+    agentDataTemplate: `{
+  "brandMentions": [{"source":"...","author":"...","content":"...","sentiment":"positive|neutral|negative","reach":"high|medium|low","url":"..."}],
+  "competitorIntel": [{"competitor":"...","finding":"...","impact":"high|medium|low","url":"..."}],
+  "categoryTrends": [{"trend":"...","relevance":"high|medium|low","detail":"..."}],
+  "kolActivity": [{"name":"...","platform":"x","content":"...","followers":"...","sentiment":"...","url":"..."}],
+  "escalations": [{"level":"CRITICAL|IMPORTANT|QUIET","status":"NEW|CHANGED|ESCALATED|RESOLVED","summary":"..."}],
+  "viralOpportunities": {
+    "found": true,
+    "opportunities": [{"conversation":"...","url":"...","injectionAngle":"...","authenticity":"high|medium|low","windowHours":0,"suggestedReply":"..."}],
+    "searchedFor": ["trigger 1","trigger 2"]
+  }
+}`,
+    searches: [
+      { label: 'BRAND', query: brandQuery || `"${companyName}"`, goal: 'Find direct brand mentions, web coverage, and conversation hooks.' },
+      { label: 'COMPETITORS', query: `${companyName} competitors OR alternatives OR launches`, goal: 'Find competitor launches, sentiment shifts, and adjacent attention pockets.' },
+      { label: 'CATEGORY', query: `${companyName} industry news OR market trends`, goal: 'Capture broader category movement and external narratives the brand can react to.' },
+      { label: 'KOLS + SOCIAL', query: `${companyName} Twitter OR X OR influencers OR KOLs`, goal: 'Find creator commentary, viral posts, and reply windows.' },
+      { label: 'VIRAL WINDOWS', query: `best ${companyName} alternatives OR problems OR recommendations`, goal: 'Find conversations where the brand can contribute credibly.' },
+    ],
+  };
+}
+
+function joinConfigList(value) {
+  return Array.isArray(value) ? value.join('\n') : String(value || '');
+}
 import {
   trackDashboardCreated,
   trackPipelineRerun,
@@ -599,9 +665,38 @@ const PRICING_MODAL_OPTIONS = [
   },
 ];
 
-async function fetchDashboardBootstrap(user) {
+function readImpersonateClientId() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const fromUrl = new URLSearchParams(window.location.search).get('as');
+    if (fromUrl) {
+      window.sessionStorage.setItem(IMPERSONATE_STORAGE_KEY, fromUrl);
+      return fromUrl;
+    }
+    return window.sessionStorage.getItem(IMPERSONATE_STORAGE_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
+function writeImpersonateClientId(clientId) {
+  if (typeof window === 'undefined') return;
+  try {
+    if (clientId) window.sessionStorage.setItem(IMPERSONATE_STORAGE_KEY, clientId);
+    else window.sessionStorage.removeItem(IMPERSONATE_STORAGE_KEY);
+  } catch {}
+}
+
+function withImpersonation(path, clientId) {
+  if (!clientId) return path;
+  const [base, hash = ''] = String(path).split('#');
+  const joiner = base.includes('?') ? '&' : '?';
+  return `${base}${joiner}as=${encodeURIComponent(clientId)}${hash ? `#${hash}` : ''}`;
+}
+
+async function fetchDashboardBootstrap(user, impersonateId = null) {
   const token = await user.getIdToken();
-  const response = await fetch('/api/dashboard/bootstrap', {
+  const response = await fetch(withImpersonation('/api/dashboard/bootstrap', impersonateId), {
     headers: { Authorization: `Bearer ${token}` },
     cache: 'no-store',
   });
@@ -1233,13 +1328,19 @@ const DashboardPage = () => {
   const [auditFullScreen, setAuditFullScreen] = useState(false);
   const [modalTab, setModalTab] = useState('solutions');
   const [brandSystemBuildOpen, setBrandSystemBuildOpen] = useState(false);
+  const [visualDnaProspect, setVisualDnaProspect] = useState(null);
+  const [visualDnaOpening, setVisualDnaOpening] = useState(false);
   // Stays true after first open so the modal stays mounted (chat history preserved).
   const [hasBrandSystemMounted, setHasBrandSystemMounted] = useState(false);
+  const [impersonateId, setImpersonateId] = useState(() => readImpersonateClientId());
+  const [clientSwitcherOpen, setClientSwitcherOpen] = useState(false);
+
+  const apiPath = useCallback((path) => withImpersonation(path, impersonateId), [impersonateId]);
   // Stable token getter for BrandSystemChat — re-binding when `user` changes only.
   const brandSystemGetIdToken = useCallback(() => {
     if (!user) return Promise.reject(new Error('No authenticated user.'));
     return user.getIdToken();
-  }, [user]);
+  }, [user, impersonateId]);
 
   // Per-client leadgen flow (Prepare Brief / Generate Mockup / Generate Site).
   // Opened by clicking client-* cards in the Data Visualization bucket. Reuses
@@ -1249,6 +1350,11 @@ const DashboardPage = () => {
   // null | { open, placeId, moduleId, moduleLabel, endpoint }
   const [clientFlowSeeding, setClientFlowSeeding] = useState(false);
   const [clientFlowError, setClientFlowError] = useState(null);
+  // Live synthetic per-client prospect — listener attached after `client` is
+  // derived from bootstrap, below.
+  const [clientProspect, setClientProspect] = useState(null);
+  const [bootstrap, setBootstrap] = useState({ userProfile: null, client: null, dashboardState: null, recentRuns: [], intelligence: null, moduleConfig: null, moduleState: null });
+  const client = bootstrap.client;
 
   const openLeadgenFlow = useCallback(async (step) => {
     if (!user) return;
@@ -1256,7 +1362,7 @@ const DashboardPage = () => {
     setClientFlowSeeding(true);
     try {
       const token = await user.getIdToken();
-      const res = await fetch('/api/leadgen/seed-client-prospect', {
+      const res = await fetch(apiPath('/api/leadgen/seed-client-prospect'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       });
@@ -1275,21 +1381,46 @@ const DashboardPage = () => {
     } finally {
       setClientFlowSeeding(false);
     }
-  }, [user]);
+  }, [user, apiPath]);
 
   const closeLeadgenFlow = useCallback(() => {
     setClientFlowState(null);
     setClientFlowError(null);
   }, []);
 
+  const openVisualDna = useCallback(async () => {
+    if (!user || visualDnaOpening) return;
+    setClientFlowError(null);
+    setVisualDnaOpening(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(apiPath('/api/leadgen/seed-client-prospect'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      setVisualDnaProspect({
+        ...(clientProspect || {}),
+        name: data.name || clientProspect?.name || client?.companyName || 'Client',
+        website: data.website || clientProspect?.website || client?.websiteUrl || null,
+        vertical: data.vertical || clientProspect?.vertical || 'default',
+        placeId: data.placeId,
+        visualDna: clientProspect?.visualDna || null,
+      });
+    } catch (err) {
+      console.error('[openVisualDna] seed failed:', err);
+      setClientFlowError(err?.message || 'Failed to open Visual DNA.');
+    } finally {
+      setVisualDnaOpening(false);
+    }
+  }, [user, apiPath, visualDnaOpening, clientProspect, client]);
+
   const leadgenFlowGetIdToken = useCallback(() => {
     if (!user) return Promise.reject(new Error('No authenticated user.'));
     return user.getIdToken();
-  }, [user]);
+  }, [user, apiPath]);
 
-  // Live synthetic per-client prospect — listener attached after `client` is
-  // derived from bootstrap, below.
-  const [clientProspect, setClientProspect] = useState(null);
   // null until bootstrap resolves, then synchronously set to 'onboarding' for
   // modular clients without brief data, or 'brief' otherwise. Avoids the flash
   // where the default 'brief' view paints before the effect corrects it.
@@ -1304,7 +1435,6 @@ const DashboardPage = () => {
   });
   const capabilityGridRef = useRef(null);
   const dashboardVisibleRef = useRef(false);
-  const [bootstrap, setBootstrap] = useState({ userProfile: null, client: null, dashboardState: null, recentRuns: [], intelligence: null, moduleConfig: null, moduleState: null });
   const [pendingSignupProvision, setPendingSignupProvision] = useState(null);
   const [moduleRunLoading, setModuleRunLoading] = useState({});
   const [moduleToggleLoading, setModuleToggleLoading] = useState({});
@@ -1351,6 +1481,78 @@ const DashboardPage = () => {
   const [briefPreviewHtml, setBriefPreviewHtml] = useState('');
   // HTML preview for the newsletter tile — fetched from /api/dashboard/newsletter-preview
   const [newsletterPreviewHtml, setNewsletterPreviewHtml] = useState('');
+  const [marketingBriefConfig, setMarketingBriefConfig] = useState(null);
+  const [marketingBriefLoading, setMarketingBriefLoading] = useState(false);
+  const [marketingBriefSaving, setMarketingBriefSaving] = useState(false);
+  const [marketingBriefRunning, setMarketingBriefRunning] = useState(false);
+  const [marketingBriefError, setMarketingBriefError] = useState('');
+
+  const hydrateMarketingBriefConfig = useCallback((config) => {
+    const fallback = buildDefaultMarketingBriefConfig(client, bootstrap?.dashboardState);
+    const next = config || fallback;
+    return {
+      ...fallback,
+      ...next,
+      sourcePlatforms: Array.isArray(next.sourcePlatforms) && next.sourcePlatforms.length > 0
+        ? next.sourcePlatforms
+        : fallback.sourcePlatforms,
+      kols: joinConfigList(next.kols),
+      competitors: joinConfigList(next.competitors),
+      searches: Array.isArray(next.searches) && next.searches.length > 0 ? next.searches : fallback.searches,
+    };
+  }, [client, bootstrap?.dashboardState]);
+
+  useEffect(() => {
+    if (!user || !client) return undefined;
+    let cancelled = false;
+    (async () => {
+      setMarketingBriefLoading(true);
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch(apiPath('/api/dashboard/marketing-brief/config'), {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!cancelled) {
+          setMarketingBriefConfig(hydrateMarketingBriefConfig(res.ok ? data.config : null));
+          setMarketingBriefError('');
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setMarketingBriefConfig(hydrateMarketingBriefConfig(null));
+          setMarketingBriefError(err instanceof Error ? err.message : 'Could not load marketing brief config.');
+        }
+      } finally {
+        if (!cancelled) setMarketingBriefLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user, client, apiPath, hydrateMarketingBriefConfig]);
+
+  const saveMarketingBriefConfig = useCallback(async () => {
+    if (!user || !marketingBriefConfig) return null;
+    setMarketingBriefSaving(true);
+    setMarketingBriefError('');
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(apiPath('/api/dashboard/marketing-brief/config'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(marketingBriefConfig),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Could not save Scout config.');
+      const next = hydrateMarketingBriefConfig(data.config);
+      setMarketingBriefConfig(next);
+      return next;
+    } catch (err) {
+      setMarketingBriefError(err instanceof Error ? err.message : 'Could not save Scout config.');
+      return null;
+    } finally {
+      setMarketingBriefSaving(false);
+    }
+  }, [user, marketingBriefConfig, apiPath, hydrateMarketingBriefConfig]);
 
   // Fetch the brief HTML for the Brief tile's miniature preview. Re-fetches
   // whenever latestRunId changes so the tile always shows the newest render.
@@ -1368,7 +1570,7 @@ const DashboardPage = () => {
         const url = runId
           ? `/api/dashboard/brief-preview?runId=${encodeURIComponent(runId)}`
           : '/api/dashboard/brief-preview';
-        const res = await fetch(url, {
+        const res = await fetch(apiPath(url), {
           headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
         });
@@ -1380,7 +1582,7 @@ const DashboardPage = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, [user, bootstrap?.dashboardState?.latestRunId, bootstrap?.dashboardState?.scribe?.brief?.headline]);
+  }, [user, apiPath, bootstrap?.dashboardState?.latestRunId, bootstrap?.dashboardState?.scribe?.brief?.headline]);
 
   // Fetch the newsletter HTML for the Newsletter tile's PREVIEW tab.
   // Loads the real newsletter if available, otherwise the generic template.
@@ -1395,7 +1597,7 @@ const DashboardPage = () => {
         const url = hasReal
           ? '/api/dashboard/newsletter-preview'
           : '/api/dashboard/newsletter-preview?template=generic';
-        const res = await fetch(url, {
+        const res = await fetch(apiPath(url), {
           headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
         });
@@ -1407,7 +1609,7 @@ const DashboardPage = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, [user, bootstrap?.dashboardState?.newsletter?.content?.hero_story]);
+  }, [user, apiPath, bootstrap?.dashboardState?.newsletter?.content?.hero_story]);
 
   // Clock tick
   useEffect(() => {
@@ -1431,6 +1633,7 @@ const DashboardPage = () => {
     // Reference via bootstrap here — `dashboardState` is declared later in the
     // component body (TDZ) so the direct name isn't safe at effect-definition time.
     if (id === 'survey-status') { setModalTab('chat'); return; }
+    if (id === 'marketing-brief') { setModalTab('data'); return; }
     if (id === 'newsletter') { setModalTab('preview'); return; }
     if (id === 'client-brief')  { setModalTab('preview'); return; }
     if (id === 'client-mockup') { setModalTab('preview'); return; }
@@ -1472,10 +1675,76 @@ const DashboardPage = () => {
   // Bootstrap fetch (stable reference)
   const doBootstrap = useCallback(() => {
     if (!user) return;
-    fetchDashboardBootstrap(user)
+    fetchDashboardBootstrap(user, impersonateId)
       .then((data) => { if (!cancelledRef.current) setBootstrap(data); })
       .catch((err) => { if (!cancelledRef.current) setBootstrapError(err instanceof Error ? err.message : 'Could not load dashboard data.'); });
-  }, [user]);
+  }, [user, impersonateId]);
+
+  const runMarketingBrief = useCallback(async () => {
+    if (!user || marketingBriefRunning) return;
+    setMarketingBriefRunning(true);
+    setMarketingBriefError('');
+    setIntakeModalDismissed(false);
+    let pollHandle = null;
+    const kickBootstrap = () => { try { doBootstrap(); } catch {} };
+    setTimeout(kickBootstrap, 400);
+    pollHandle = setInterval(kickBootstrap, 2000);
+    try {
+      const saved = await saveMarketingBriefConfig();
+      if (!saved) throw new Error('Scout config was not saved.');
+      const token = await user.getIdToken();
+      const res = await fetch(apiPath('/api/dashboard/marketing-brief/run'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Marketing brief run failed.');
+      doBootstrap();
+    } catch (err) {
+      setMarketingBriefError(err instanceof Error ? err.message : 'Marketing brief run failed.');
+    } finally {
+      if (pollHandle) clearInterval(pollHandle);
+      setMarketingBriefRunning(false);
+    }
+  }, [user, marketingBriefRunning, saveMarketingBriefConfig, apiPath, doBootstrap]);
+
+  const updateMarketingBriefSearch = useCallback((index, patch) => {
+    setMarketingBriefConfig((prev) => {
+      const searches = [...(prev?.searches || [])];
+      searches[index] = { ...(searches[index] || {}), ...patch };
+      return { ...(prev || {}), searches };
+    });
+  }, []);
+
+  const addMarketingBriefSearch = useCallback(() => {
+    setMarketingBriefConfig((prev) => ({
+      ...(prev || {}),
+      searches: [...(prev?.searches || []), { label: 'NEW SEARCH', query: '', goal: '' }],
+    }));
+  }, []);
+
+  const removeMarketingBriefSearch = useCallback((index) => {
+    setMarketingBriefConfig((prev) => {
+      const searches = (prev?.searches || []).filter((_, i) => i !== index);
+      return { ...(prev || {}), searches: searches.length ? searches : [{ label: 'BRAND', query: '', goal: '' }] };
+    });
+  }, []);
+
+  const toggleMarketingBriefSourcePlatform = useCallback((key) => {
+    setMarketingBriefConfig((prev) => {
+      const current = Array.isArray(prev?.sourcePlatforms) && prev.sourcePlatforms.length > 0
+        ? prev.sourcePlatforms
+        : DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS;
+      const next = current.includes(key)
+        ? current.filter((item) => item !== key)
+        : [...current, key];
+      return {
+        ...(prev || {}),
+        sourcePlatforms: next.length ? next : ['web'],
+      };
+    });
+  }, []);
 
   // Initial load
   useEffect(() => {
@@ -1487,12 +1756,12 @@ const DashboardPage = () => {
     }
     setBootstrapLoading(true);
     setBootstrapError('');
-    fetchDashboardBootstrap(user)
+    fetchDashboardBootstrap(user, impersonateId)
       .then((data) => { if (!cancelledRef.current) setBootstrap(data); })
       .catch((err) => { if (!cancelledRef.current) setBootstrapError(err instanceof Error ? err.message : 'Could not load dashboard data.'); })
       .finally(() => { if (!cancelledRef.current) setBootstrapLoading(false); });
     return () => { cancelledRef.current = true; };
-  }, [user]);
+  }, [user, impersonateId]);
 
   useEffect(() => {
     if (!user) {
@@ -1503,16 +1772,36 @@ const DashboardPage = () => {
     }
     setPendingSignupProvision(readPendingDashboardSignup());
     autoProvisionRecoveryAttemptedRef.current = false;
-  }, [user]);
+  }, [user, apiPath]);
 
   // ── Derived state ─────────────────────────────────────────────────────────
-  const client = bootstrap.client;
+  const isImpersonating = Boolean(bootstrap.impersonating || impersonateId);
+  const adminDashboards = bootstrap.adminDashboards || [];
+
+  const switchDashboard = useCallback((clientId) => {
+    const nextId = clientId || null;
+    writeImpersonateClientId(nextId);
+    setImpersonateId(nextId);
+    setClientSwitcherOpen(false);
+    setShowTierModal(false);
+    setShowClientEditModal(false);
+    setShowDeleteAccountModal(false);
+    setActiveTileModal(null);
+    setBrandSystemBuildOpen(false);
+    setClientFlowState(null);
+    setIntakeModalDismissed(true);
+    setBootstrapLoading(true);
+    setBootstrapError('');
+  }, []);
 
   // Live snapshot of the synthetic per-client prospect doc — drives card state
   // (status dot, footer text, DETAILS modal content) for the leadgen flow cards.
   useEffect(() => {
     const cid = client?.clientId || client?.id;
-    if (!cid || !db) return undefined;
+    if (!cid || !db || isImpersonating) {
+      setClientProspect(null);
+      return undefined;
+    }
     const ref = doc(db, 'leadgen_prospects', `client:${cid}`);
     const unsub = onSnapshot(
       ref,
@@ -1520,7 +1809,7 @@ const DashboardPage = () => {
       (err) => { if (process.env.NODE_ENV !== 'production') console.warn('[client-prospect] snapshot:', err?.message || err); },
     );
     return () => unsub();
-  }, [client?.clientId, client?.id]);
+  }, [client?.clientId, client?.id, isImpersonating]);
 
   const recentRuns = bootstrap.recentRuns || [];
   const displayProfile = bootstrap.userProfile || userProfile;
@@ -1760,22 +2049,22 @@ const DashboardPage = () => {
   useEffect(() => {
     if (!user || !isRunActive) return undefined;
     const interval = setInterval(() => {
-      fetchDashboardBootstrap(user)
+      fetchDashboardBootstrap(user, impersonateId)
         .then((data) => { if (!cancelledRef.current) setBootstrap(data); })
         .catch(() => {});
     }, 4000);
     return () => clearInterval(interval);
-  }, [user, isRunActive]);
+  }, [user, isRunActive, impersonateId]);
 
   useEffect(() => {
     if (!awaitingSignupProvision) return;
     const interval = setInterval(() => {
-      fetchDashboardBootstrap(user)
+      fetchDashboardBootstrap(user, impersonateId)
         .then((data) => { if (!cancelledRef.current) setBootstrap(data); })
         .catch(() => {});
     }, 2000);
     return () => clearInterval(interval);
-  }, [user, awaitingSignupProvision]);
+  }, [user, awaitingSignupProvision, impersonateId]);
 
   useEffect(() => {
     if (!awaitingSignupProvision || hasClientWorkspace) return;
@@ -1947,7 +2236,7 @@ const DashboardPage = () => {
     (async () => {
       try {
         const token = await user.getIdToken();
-        const res = await fetch('/api/dashboard/onboarding', {
+        const res = await fetch(apiPath('/api/dashboard/onboarding'), {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok || cancelled) return;
@@ -1967,7 +2256,7 @@ const DashboardPage = () => {
   const postOnboarding = useCallback(async (body) => {
     if (!user) throw new Error('No user.');
     const token = await user.getIdToken();
-    const res = await fetch('/api/dashboard/onboarding', {
+    const res = await fetch(apiPath('/api/dashboard/onboarding'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify(body),
@@ -2121,7 +2410,7 @@ const DashboardPage = () => {
     setClientEditError(null);
     try {
       const token = await user.getIdToken();
-      const res = await fetch('/api/account/update-client', {
+      const res = await fetch(apiPath('/api/account/update-client'), {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ companyName: next }),
@@ -2135,7 +2424,7 @@ const DashboardPage = () => {
     } finally {
       setClientEditLoading(false);
     }
-  }, [user, clientEditLoading, clientNameInput, doBootstrap]);
+  }, [user, clientEditLoading, clientNameInput, doBootstrap, apiPath]);
 
   const handleDeleteAccount = useCallback(async () => {
     if (!user || deleteAccountLoading) return;
@@ -2169,7 +2458,7 @@ const DashboardPage = () => {
       const token = await user.getIdToken();
       // No provisioned client yet → provision; otherwise reseed
       const isFirstRun = !client;
-      const endpoint = isFirstRun ? '/api/clients/provision' : '/api/dashboard/reseed-intake';
+      const endpoint = isFirstRun ? '/api/clients/provision' : apiPath('/api/dashboard/reseed-intake');
       const body = isFirstRun
         ? { websiteUrl: reseedUrl.trim(), displayName: user.displayName || '', companyName: '' }
         : { websiteUrl: reseedUrl.trim() };
@@ -2189,7 +2478,7 @@ const DashboardPage = () => {
     } finally {
       setReseedLoading(false);
     }
-  }, [user, client, reseedUrl, reseedLoading, doBootstrap]);
+  }, [user, client, reseedUrl, reseedLoading, doBootstrap, apiPath]);
 
   const handleCancelRun = useCallback(async () => {
     if (!user || cancelLoading) return;
@@ -2197,7 +2486,7 @@ const DashboardPage = () => {
     setCancelError('');
     try {
       const token = await user.getIdToken();
-      const res = await fetch('/api/dashboard/cancel-intake', {
+      const res = await fetch(apiPath('/api/dashboard/cancel-intake'), {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -2211,7 +2500,7 @@ const DashboardPage = () => {
     } finally {
       setCancelLoading(false);
     }
-  }, [user, cancelLoading, doBootstrap]);
+  }, [user, cancelLoading, doBootstrap, apiPath]);
 
 
   const handleModuleToggle = useCallback(async (cardId, enabled) => {
@@ -2230,7 +2519,7 @@ const DashboardPage = () => {
     try {
       const token = await user.getIdToken();
       // Step 1: persist the config change
-      const res = await fetch('/api/dashboard/modules/config', {
+      const res = await fetch(apiPath('/api/dashboard/modules/config'), {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ cardId, enabled }),
@@ -2239,7 +2528,7 @@ const DashboardPage = () => {
       if (!res.ok) throw new Error(data?.error || 'Toggle failed.');
       // Step 2: enabling a card immediately triggers its first run
       if (enabled) {
-        await fetch('/api/dashboard/modules/run', {
+        await fetch(apiPath('/api/dashboard/modules/run'), {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ cardIds: [cardId], force: false }),
@@ -2252,7 +2541,7 @@ const DashboardPage = () => {
       if (pollHandle) clearInterval(pollHandle);
       setModuleToggleLoading((prev) => ({ ...prev, [cardId]: false }));
     }
-  }, [user, moduleToggleLoading, doBootstrap]);
+  }, [user, moduleToggleLoading, doBootstrap, apiPath]);
 
   const handleModuleRun = useCallback(async (cardId, force = false, options = null, autoEnable = false) => {
     if (!user || moduleRunLoading[cardId]) return;
@@ -2276,7 +2565,7 @@ const DashboardPage = () => {
         body.moduleOptions = { [cardId]: options };
       }
       if (autoEnable) body.autoEnable = true;
-      const res = await fetch('/api/dashboard/modules/run', {
+      const res = await fetch(apiPath('/api/dashboard/modules/run'), {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -2290,7 +2579,7 @@ const DashboardPage = () => {
       if (pollHandle) clearInterval(pollHandle);
       setModuleRunLoading((prev) => ({ ...prev, [cardId]: false }));
     }
-  }, [user, moduleRunLoading, doBootstrap]);
+  }, [user, moduleRunLoading, doBootstrap, apiPath]);
 
   const terminalLines = useMemo(
     () => buildTerminalLines(currentRun, dashboardState, latestRunStatus, client),
@@ -2308,7 +2597,7 @@ const DashboardPage = () => {
   useEffect(() => {
     const cid = client?.clientId || client?.id || null;
     const rid = currentRun?.runId || currentRun?.id || null;
-    if (!cid || !rid || !db) {
+    if (!cid || !rid || !db || isImpersonating) {
       setRealEvents([]);
       eventsRunKeyRef.current = null;
       return undefined;
@@ -2339,7 +2628,7 @@ const DashboardPage = () => {
       setRealEvents(list);
     }, () => { /* non-fatal snapshot error */ });
     return () => unsub();
-  }, [client?.clientId, client?.id, currentRun?.runId, currentRun?.id]);
+  }, [client?.clientId, client?.id, currentRun?.runId, currentRun?.id, isImpersonating]);
 
   // Map a pipeline event to a terminal line. Stages from runner.js:
   //   capture, fetch, analyze, styleguide, synthesize, compose,
@@ -2547,6 +2836,11 @@ const DashboardPage = () => {
   const hasDraftPostData = Boolean(resolvedDraftPost);
   const hasNewsletterData = Boolean(dashboardState?.newsletter?.content?.hero_story);
   const newsletterHeroPreview = dashboardState?.newsletter?.content?.hero_story?.slice(0, 140) || '';
+  const marketingBrief = dashboardState?.marketingBrief || null;
+  const hasMarketingBriefData = Boolean(marketingBrief?.content || dashboardState?.headline || latestInsights.length > 0);
+  const marketingBriefStatus = moduleState?.['marketing-brief']?.status || (hasMarketingBriefData ? 'succeeded' : 'idle');
+  const marketingBriefPreview = marketingBrief?.headline || dashboardState?.headline || 'Scout, Scribe, and Guardian are ready to build the daily founder brief.';
+  const marketingScoutAgentData = marketingBrief?.scoutBrief?.agentData || null;
   const hasContentAngleData = Boolean(resolvedContentAngle);
   const hasOpportunitiesData = resolvedOpportunities.length > 0;
   const hasSeoAuditData = Boolean((seoAudit?.status === 'ok' || seoAudit?.status === 'partial') && seoAudit?.scores);
@@ -3452,6 +3746,43 @@ const DashboardPage = () => {
         },
       };
     })(),
+    (() => {
+      const vd = clientProspect?.visualDna || {};
+      const subjects = Array.isArray(vd.subjects) ? vd.subjects : [];
+      const hasVisualDna = subjects.length > 0;
+      const domainLabel = vd.domain
+        ? vd.domain.charAt(0).toUpperCase() + vd.domain.slice(1)
+        : 'Not selected';
+      return {
+        id: 'visual-dna',
+        category: 'onboarding',
+        number: 'VD',
+        label: 'VISUAL DNA',
+        title: 'Visual DNA',
+        description: 'Upload client-specific reference images for food, products, locations, lifestyle, people, or environments. Each subject profile becomes prompt direction for more accurate generated artwork and website imagery.',
+        placeholderLabel: hasVisualDna ? 'VISUAL\nDNA' : 'NO\nDNA',
+        rows: hasVisualDna
+          ? [
+              { key: 'vd-domain',   label: 'Domain',   value: domainLabel },
+              { key: 'vd-subjects', label: 'Subjects', value: `${subjects.length}` },
+              { key: 'vd-list',     label: 'Profiles', value: subjects.slice(0, 4).map((s) => s.label || s.id).join(' · ') || '—' },
+              { key: 'vd-updated',  label: 'Updated',  value: vd.updatedAt ? new Date(vd.updatedAt).toLocaleString() : '—' },
+            ]
+          : [
+              { key: 'vd-domain', label: 'Domains', value: 'Food · Product · Location · Lifestyle · People · Environment' },
+              { key: 'vd-food',   label: 'Food example', value: 'Tacos, enchiladas, nachitos, drinks, table spreads' },
+              { key: 'vd-action', label: 'Action', value: 'Click OPEN to upload reference images and create subject profiles' },
+            ],
+        footerLeft: hasVisualDna ? 'Live' : 'Not trained',
+        footerRight: 'REFERENCES',
+        readinessBadge: hasVisualDna ? { tone: 'ok', label: 'Passed' } : null,
+        footerAction: {
+          label: visualDnaOpening ? '…' : 'OPEN',
+          loading: visualDnaOpening,
+          onClick: openVisualDna,
+        },
+      };
+    })(),
     {
       id: 'multi-device-view',
       category: 'onboarding',
@@ -3900,6 +4231,34 @@ const DashboardPage = () => {
       rows: buildWorkNeededRows('Platform analysis requires social link data from crawled pages.'),
       footerLeft: WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
+    },
+    {
+      id: 'marketing-brief',
+      category: 'onboarding',
+      number: 'MB',
+      label: 'MARKETING BRIEF',
+      title: 'Marketing Brief',
+      description: 'Customize Scout searches per client, then run Scout, Scribe, and Guardian to produce a founder-ready brief with X/Twitter angles and content opportunities.',
+      placeholderLabel: hasMarketingBriefData ? 'BRIEF' : 'SCOUT',
+      rows: [
+        { key: 'mb-status', label: 'Status', value: marketingBriefStatus },
+        { key: 'mb-focus', label: 'Scout focus', value: marketingBriefConfig?.sourceFocus || 'Not configured' },
+        { key: 'mb-instructions', label: 'Instructions', value: marketingBriefConfig?.scoutInstructions ? 'Custom' : 'Default' },
+        { key: 'mb-sources', label: 'Sources', value: (marketingBriefConfig?.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS).join(' · ') },
+        { key: 'mb-searches', label: 'Searches', value: String(marketingBriefConfig?.searches?.filter((row) => row.query)?.length || 0) },
+        { key: 'mb-kols', label: 'KOL signals', value: String(marketingScoutAgentData?.kolActivity?.length || 0) },
+        { key: 'mb-viral', label: 'Viral windows', value: String(marketingScoutAgentData?.viralOpportunities?.opportunities?.length || marketingBrief?.contentOpportunities?.length || 0) },
+        { key: 'mb-preview', label: 'Latest signal', value: marketingBriefPreview },
+        { key: 'mb-x-post', label: 'X post', value: marketingBrief?.content?.x_post || dashboardState?.summaryCards?.find((c) => c.type === 'content_post')?.value || null },
+      ],
+      footerLeft: hasMarketingBriefData ? 'Live' : 'Configure Scout',
+      footerRight: 'REVIEWED',
+      footerAction: {
+        label: marketingBriefRunning ? '…' : hasMarketingBriefData ? 'Re-run' : 'Run Brief',
+        loading: marketingBriefRunning || marketingBriefSaving,
+        onClick: runMarketingBrief,
+      },
+      readinessBadge: hasMarketingBriefData ? { tone: 'ok', label: 'Passed' } : null,
     },
     {
       id: 'newsletter',
@@ -4899,6 +5258,49 @@ const DashboardPage = () => {
                   <Pencil size={12} strokeWidth={1.75} aria-hidden="true" />
                 </button>
               )}
+              {isAdmin ? (
+                <div className="client-switcher">
+                  <button
+                    type="button"
+                    className="client-switcher-trigger"
+                    aria-label="Switch dashboard client"
+                    aria-expanded={clientSwitcherOpen}
+                    title="Switch dashboard client"
+                    onClick={() => setClientSwitcherOpen((open) => !open)}
+                  >
+                    <span>{impersonateId ? 'Viewing client' : 'My dashboard'}</span>
+                    <ChevronDown size={13} strokeWidth={1.9} aria-hidden="true" />
+                  </button>
+                  {clientSwitcherOpen ? (
+                    <div className="client-switcher-menu" role="menu">
+                      <button
+                        type="button"
+                        className={!impersonateId ? 'active' : undefined}
+                        role="menuitem"
+                        onClick={() => switchDashboard(null)}
+                      >
+                        Switch to my dashboard
+                      </button>
+                      {adminDashboards.length > 0 ? (
+                        adminDashboards.map((item) => (
+                          <button
+                            key={item.clientId}
+                            type="button"
+                            className={impersonateId === item.clientId ? 'active' : undefined}
+                            role="menuitem"
+                            onClick={() => switchDashboard(item.clientId)}
+                          >
+                            <span>{item.name || item.clientId}</span>
+                            <small>{item.websiteUrl || item.clientId}</small>
+                          </button>
+                        ))
+                      ) : (
+                        <span className="client-switcher-empty">No provisioned dashboards</span>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
             <div className="meta-row" id="account-meta-row">
               <span className="label">ACCOUNT</span>
@@ -5123,9 +5525,10 @@ const DashboardPage = () => {
               const isCardLocked = () => false;
               const chainSortKey = (cardId) => {
                 if (cardId === 'audit-summary')  return -1;
-                if (cardId === 'social-preview') return 0.5; // 3rd
-                if (cardId === 'style-guide')    return 0.6; // 4th — Brand Snapshot right after Social
-                if (cardId === 'survey-status')  return Number.MAX_SAFE_INTEGER;
+                      if (cardId === 'social-preview') return 0.5; // 3rd
+                      if (cardId === 'style-guide')    return 0.6; // 4th — Brand Snapshot right after Social
+                      if (cardId === 'visual-dna')     return 3.4; // after generated site, before analysis cards
+                      if (cardId === 'survey-status')  return Number.MAX_SAFE_INTEGER;
                 const idx = CARD_UNLOCK_CHAIN.indexOf(cardId);
                 return idx === -1 ? 999 + cardId.charCodeAt(0) : idx;
               };
@@ -5213,7 +5616,12 @@ const DashboardPage = () => {
                       srcDoc={briefPreviewHtml}
                       sandbox="allow-same-origin"
                     />
-                  ) : card.id === 'style-guide' && hasSgQuadrant ? (
+	                  ) : card.id === 'visual-dna' ? (
+	                    <div id="visual-dna-card-preview">
+	                      <Images size={34} strokeWidth={1.55} aria-hidden="true" />
+	                      <span>{clientProspect?.visualDna?.subjects?.length ? `${clientProspect.visualDna.subjects.length} profiles` : 'Reference DNA'}</span>
+	                    </div>
+	                  ) : card.id === 'style-guide' && hasSgQuadrant ? (
                     <div id="sg-preview-shell" className="sg-preview">
                       {(() => {
                         const sgHead = sgDisplayData?.typography?.headingSystem;
@@ -5719,12 +6127,20 @@ const DashboardPage = () => {
         />
       ) : null}
 
+      <VisualDnaModal
+        open={Boolean(visualDnaProspect)}
+        prospect={visualDnaProspect}
+        onClose={() => setVisualDnaProspect(null)}
+        getIdToken={leadgenFlowGetIdToken}
+      />
+
       {/* ── Intake build modal — unified card: shared top rows + 2-col body (terminal / survey) ── */}
       {hasBrandSystemMounted && user ? (
         <BrandSystemBuildModal
           open={brandSystemBuildOpen}
           onClose={() => setBrandSystemBuildOpen(false)}
           getIdToken={brandSystemGetIdToken}
+          apiPath={apiPath}
           onComplete={() => {
             // Refresh dashboardState so brandSystem.masterPrompt is in memory,
             // close the build modal, then surface the Details modal on the
@@ -5746,7 +6162,7 @@ const DashboardPage = () => {
                 readinessBadge: null,
               });
             };
-            fetchDashboardBootstrap(user)
+            fetchDashboardBootstrap(user, impersonateId)
               .then((data) => {
                 if (!cancelledRef.current) setBootstrap(data);
                 openDetails();
@@ -6683,6 +7099,212 @@ const DashboardPage = () => {
                   );
                 })()}
 
+                {/* Marketing Brief card — Scout config + launch */}
+                {activeTileModal.cardId === 'marketing-brief' && (
+                  <div id="marketing-brief-config-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
+                    <div className="tile-detail-tabs">
+                      <button type="button" className={`tile-detail-tab${modalTab === 'data' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('data')}>SCOUT CONFIG</button>
+                      <button type="button" className={`tile-detail-tab${modalTab === 'preview' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('preview')}>LATEST OUTPUT</button>
+                    </div>
+                    <div className="tile-detail-tab-content">
+                      {modalTab === 'data' && (
+                        <div className="tile-detail-tab-pane">
+                          {marketingBriefLoading || !marketingBriefConfig ? (
+                            <p className="tile-analyzer-solutions-empty">Loading Scout config...</p>
+                          ) : (
+                            <div className="mb-config-shell">
+                              <div className="mb-config-summary" aria-label="Scout configuration summary">
+                                <span className="mb-config-summary-item">
+                                  <span className="mb-config-summary-key">Freshness</span>
+                                  <span className="mb-config-summary-val">{marketingBriefConfig.freshnessDays || 1}d</span>
+                                </span>
+                                <span className="mb-config-summary-item">
+                                  <span className="mb-config-summary-key">Searches</span>
+                                  <span className="mb-config-summary-val">{(marketingBriefConfig.searches || []).filter((row) => row.query).length}</span>
+                                </span>
+                                <span className="mb-config-summary-item">
+                                  <span className="mb-config-summary-key">Sources</span>
+                                  <span className="mb-config-summary-val">{(marketingBriefConfig.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS).length}</span>
+                                </span>
+                                <span className="mb-config-summary-item">
+                                  <span className="mb-config-summary-key">KOLs</span>
+                                  <span className="mb-config-summary-val">{String(marketingBriefConfig.kols || '').split(/\n|,/).filter((item) => item.trim()).length}</span>
+                                </span>
+                                <span className="mb-config-summary-item">
+                                  <span className="mb-config-summary-key">Competitors</span>
+                                  <span className="mb-config-summary-val">{String(marketingBriefConfig.competitors || '').split(/\n|,/).filter((item) => item.trim()).length}</span>
+                                </span>
+                              </div>
+
+                              <section className="mb-config-section">
+                                <div className="mb-config-section-head">
+                                  <span className="mb-config-section-index">01</span>
+                                  <div>
+                                    <h4>Scout Focus</h4>
+                                    <p>Sets the overall research lens before Scout builds the daily market brief.</p>
+                                  </div>
+                                </div>
+                                <label className="mb-config-field">
+                                  <span className="mb-config-label">What should Scout care about?</span>
+                                  <textarea className="mb-config-textarea" value={marketingBriefConfig.sourceFocus || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), sourceFocus: e.target.value }))} rows={4} />
+                                </label>
+                              </section>
+
+                              <section className="mb-config-section">
+                                <div className="mb-config-section-head">
+                                  <span className="mb-config-section-index">02</span>
+                                  <div>
+                                    <h4>Source Platforms</h4>
+                                    <p>Controls where Scout should look for signals. Ready sources are safe defaults; available sources depend on the social search layer being configured.</p>
+                                  </div>
+                                </div>
+                                <div className="mb-config-platform-grid" role="group" aria-label="Scout source platforms">
+                                  {MARKETING_BRIEF_SOURCE_PLATFORMS.map((platform) => {
+                                    const selected = (marketingBriefConfig.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS).includes(platform.key);
+                                    return (
+                                      <button
+                                        key={platform.key}
+                                        type="button"
+                                        className={`mb-config-platform-toggle${selected ? ' is-on' : ''}`}
+                                        onClick={() => toggleMarketingBriefSourcePlatform(platform.key)}
+                                        aria-pressed={selected}
+                                      >
+                                        <span className="mb-config-platform-check">{selected ? '✓' : ''}</span>
+                                        <span className="mb-config-platform-body">
+                                          <span className="mb-config-platform-title">
+                                            {platform.label}
+                                            <span className={`mb-config-platform-status mb-config-platform-status--${platform.status}`}>{platform.status}</span>
+                                          </span>
+                                          <span className="mb-config-platform-desc">{platform.description}</span>
+                                        </span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </section>
+
+                              <section className="mb-config-section">
+                                <div className="mb-config-section-head">
+                                  <span className="mb-config-section-index">03</span>
+                                  <div>
+                                    <h4>Search Plan</h4>
+                                    <p>Each row becomes a targeted Scout query. Use the goal to explain why that query matters.</p>
+                                  </div>
+                                  <button type="button" className="mb-config-mini-btn" onClick={addMarketingBriefSearch}>Add Search</button>
+                                </div>
+                                <div className="mb-config-search-list">
+                                  {(marketingBriefConfig.searches || []).map((row, index) => (
+                                    <div key={`mb-search-${index}`} className="mb-config-search-row">
+                                      <div className="mb-config-search-meta">
+                                        <span className="mb-config-row-dot" aria-hidden="true" />
+                                        <span className="mb-config-row-num">{String(index + 1).padStart(2, '0')}</span>
+                                      </div>
+                                      <label className="mb-config-field mb-config-field--label">
+                                        <span className="mb-config-label">Label</span>
+                                        <input className="mb-config-input" value={row.label || ''} placeholder="Brand / KOLs / Viral Windows" onChange={(e) => updateMarketingBriefSearch(index, { label: e.target.value })} />
+                                      </label>
+                                      <label className="mb-config-field mb-config-field--query">
+                                        <span className="mb-config-label">Search query</span>
+                                        <textarea className="mb-config-textarea mb-config-textarea--compact" value={row.query || ''} placeholder="Terms, handles, competitor names, category phrases..." onChange={(e) => updateMarketingBriefSearch(index, { query: e.target.value })} rows={2} />
+                                      </label>
+                                      <label className="mb-config-field mb-config-field--goal">
+                                        <span className="mb-config-label">Signal Scout should extract</span>
+                                        <input className="mb-config-input" value={row.goal || ''} placeholder="Find founder-ready angles, KOL reactions, competitor moves..." onChange={(e) => updateMarketingBriefSearch(index, { goal: e.target.value })} />
+                                      </label>
+                                      <button type="button" className="mb-config-remove-btn" onClick={() => removeMarketingBriefSearch(index)} disabled={(marketingBriefConfig.searches || []).length <= 1}>Remove</button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </section>
+
+                              <section className="mb-config-section">
+                                <div className="mb-config-section-head">
+                                  <span className="mb-config-section-index">04</span>
+                                  <div>
+                                    <h4>Watchlists</h4>
+                                    <p>Named accounts and competitors are injected into the search strategy and final angle selection.</p>
+                                  </div>
+                                </div>
+                                <div className="mb-config-grid">
+                                  <label className="mb-config-field">
+                                    <span className="mb-config-label">Freshness window in days</span>
+                                    <input className="mb-config-input" type="number" min="1" max="30" value={marketingBriefConfig.freshnessDays || 1} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), freshnessDays: Number(e.target.value || 1) }))} aria-label="Freshness days" />
+                                  </label>
+                                  <label className="mb-config-field">
+                                    <span className="mb-config-label">KOLs / handles</span>
+                                    <textarea className="mb-config-textarea" placeholder="@handle or name, one per line" value={marketingBriefConfig.kols || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), kols: e.target.value }))} rows={4} />
+                                  </label>
+                                  <label className="mb-config-field">
+                                    <span className="mb-config-label">Competitors</span>
+                                    <textarea className="mb-config-textarea" placeholder="Competitor names, one per line" value={marketingBriefConfig.competitors || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), competitors: e.target.value }))} rows={4} />
+                                  </label>
+                                </div>
+                              </section>
+
+                              <section className="mb-config-section">
+                                <div className="mb-config-section-head">
+                                  <span className="mb-config-section-index">05</span>
+                                  <div>
+                                    <h4>Advanced Scout Instructions</h4>
+                                    <p>Controls the judgment layer: what to prioritize, what to ignore, and how to separate live signals from background context.</p>
+                                  </div>
+                                </div>
+                                <label className="mb-config-field">
+                                  <span className="mb-config-label">Instruction block</span>
+                                  <textarea className="mb-config-textarea" value={marketingBriefConfig.scoutInstructions || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), scoutInstructions: e.target.value }))} rows={7} />
+                                </label>
+                              </section>
+
+                              <section className="mb-config-section">
+                                <div className="mb-config-section-head">
+                                  <span className="mb-config-section-index">06</span>
+                                  <div>
+                                    <h4>Agent Data Contract</h4>
+                                    <p>Defines the structured fields Scout should return for Scribe and Guardian. Edit only when the output shape needs to change.</p>
+                                  </div>
+                                </div>
+                                <label className="mb-config-field">
+                                  <span className="mb-config-label">Expected structured output</span>
+                                  <textarea className="mb-config-textarea mb-config-textarea--code" value={marketingBriefConfig.agentDataTemplate || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), agentDataTemplate: e.target.value }))} rows={12} spellCheck={false} />
+                                </label>
+                              </section>
+
+                              {marketingBriefError && <p className="mb-config-error">{marketingBriefError}</p>}
+
+                              <div className="mb-config-actionbar">
+                                <span className="mb-config-actionbar-note">Save updates before running, or Run Brief to save and launch Scout immediately.</span>
+                                <div className="mb-config-actionbar-buttons">
+                                  <button type="button" className="tile-foot-rerun-btn" onClick={saveMarketingBriefConfig} disabled={marketingBriefSaving}>{marketingBriefSaving ? 'Saving...' : 'Save Config'}</button>
+                                  <button type="button" className="tile-foot-rerun-btn" onClick={runMarketingBrief} disabled={marketingBriefRunning || marketingBriefSaving}>{marketingBriefRunning ? 'Running...' : 'Run Brief'}</button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {modalTab === 'preview' && (
+                        <div className="tile-detail-tab-pane">
+                          {[
+                            ['Priority', marketingBrief?.headline || dashboardState?.headline],
+                            ['Scout Brief', marketingBrief?.scoutBrief?.humanBrief],
+                            ['X Post', marketingBrief?.content?.x_post || dashboardState?.summaryCards?.find((c) => c.type === 'content_post')?.value],
+                            ['Thread Opener', marketingBrief?.content?.x_thread_opener || dashboardState?.summaryCards?.find((c) => c.type === 'thread_opener')?.value],
+                            ['Content Angle', marketingBrief?.content?.content_angle || dashboardState?.summaryCards?.find((c) => c.type === 'content_angle')?.value],
+                            ['KOLs', marketingScoutAgentData?.kolActivity?.map((item) => item.name || item.content).filter(Boolean).slice(0, 3).join(' · ')],
+                            ['Viral Windows', marketingScoutAgentData?.viralOpportunities?.opportunities?.map((item) => item.conversation || item.injectionAngle).filter(Boolean).slice(0, 3).join(' · ')],
+                            ['Guardian', marketingBrief?.guardianFlags?.readyToPublish === undefined ? null : (marketingBrief.guardianFlags.readyToPublish ? 'Ready to publish' : 'Needs review')],
+                          ].map(([label, value]) => (
+                            <div key={label} className="tile-detail-stat-row">
+                              <span className="tile-detail-stat-label">{label}</span>
+                              <span className="tile-detail-stat-value">{value || 'No output yet'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Newsletter card — PREVIEW + DATA tabs */}
                 {activeTileModal.cardId === 'newsletter' && (
                   <div
@@ -6760,7 +7382,7 @@ const DashboardPage = () => {
                 )}
 
                 {/* Tabbed SOLUTIONS / PROBLEMS / DATA for most cards */}
-                {!['multi-device-view', 'brief', 'audit-summary', 'survey-status', 'newsletter', 'brand-system', 'client-brief', 'client-mockup', 'client-site'].includes(activeTileModal.cardId) && (activeTileModal.analyzer || (activeTileModal.cardId === 'social-preview' && siteMeta)) ? (
+                {!['multi-device-view', 'brief', 'audit-summary', 'survey-status', 'marketing-brief', 'newsletter', 'brand-system', 'client-brief', 'client-mockup', 'client-site'].includes(activeTileModal.cardId) && (activeTileModal.analyzer || (activeTileModal.cardId === 'social-preview' && siteMeta)) ? (
                   <div
                     id={`${activeTileModal.cardId}-analyzer-findings`}
                     className="tile-detail-bento-cell tile-detail-tabbed-container"
@@ -6803,6 +7425,7 @@ const DashboardPage = () => {
                           seoAudit={seoAudit}
                           moduleRunLoading={moduleRunLoading}
                           handleModuleRun={handleModuleRun}
+                          apiPath={apiPath}
                         />
                       )}
 
@@ -7786,6 +8409,81 @@ const dashboardCss = `
   .meta-row-action-btn--danger:hover {
     /* Kept black-themed to match other action buttons. No red accent. */
   }
+  .client-switcher {
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 0;
+  }
+  .client-switcher-trigger {
+    min-height: 22px;
+    border: 1px solid #000;
+    background: transparent;
+    color: #000;
+    border-radius: 3px;
+    padding: 0 7px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--font-mono);
+    font-size: 0.64rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  }
+  .client-switcher-trigger:hover {
+    background: #000;
+    color: #fff;
+    border-color: #000;
+  }
+  .client-switcher-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 30;
+    min-width: 238px;
+    max-width: min(320px, 82vw);
+    padding: 5px;
+    border: 1px solid #000;
+    background: rgba(255, 255, 255, 0.98);
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
+  }
+  .client-switcher-menu button {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: #111;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 8px 9px;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    text-align: left;
+    cursor: pointer;
+  }
+  .client-switcher-menu button:hover,
+  .client-switcher-menu button.active {
+    background: #000;
+    color: #fff;
+  }
+  .client-switcher-menu small {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.62;
+    font-size: 0.64rem;
+  }
+  .client-switcher-empty {
+    display: block;
+    padding: 8px 9px;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+  }
   #tier-trigger-btn {
     /* Icon-only action button — styled via .meta-row-action-btn. No underline. */
     text-decoration: none;
@@ -8099,13 +8797,27 @@ const dashboardCss = `
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.45);
     overflow: hidden;
   }
-  .tile-intake-placeholder-style-guide {
-    align-items: stretch;
-    justify-content: stretch;
-    padding: 0;
-    font-family: 'Doto', var(--font-mono);
-    font-size: clamp(14px, 1.4vw, 20px);
-  }
+	  .tile-intake-placeholder-style-guide {
+	    align-items: stretch;
+	    justify-content: stretch;
+	    padding: 0;
+	    font-family: 'Doto', var(--font-mono);
+	    font-size: clamp(14px, 1.4vw, 20px);
+	  }
+	  .tile-intake-placeholder-visual-dna {
+	    background:
+	      radial-gradient(circle at 24% 24%, rgba(245, 158, 11, 0.26), transparent 32%),
+	      radial-gradient(circle at 72% 70%, rgba(20, 184, 166, 0.22), transparent 34%),
+	      linear-gradient(135deg, rgba(255,255,255,0.82), rgba(255,255,255,0.28));
+	  }
+	  #visual-dna-card-preview {
+	    display: flex;
+	    flex-direction: column;
+	    align-items: center;
+	    justify-content: center;
+	    gap: 8px;
+	    color: rgba(42,36,32,0.64);
+	  }
   /* Brief tile — miniaturized iframe preview of the full brief document.
      Render iframe at 4x the tile size, scale to 25% via transform to fit. */
   .tile-intake-placeholder-brief {
@@ -9616,6 +10328,334 @@ const dashboardCss = `
     display: flex;
     flex-direction: column;
     gap: 12px;
+  }
+  .mb-config-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+  }
+  .mb-config-summary {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(255,255,255,0.045);
+  }
+  .mb-config-summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+    padding: 12px 14px;
+    border-right: 1px solid rgba(255,255,255,0.1);
+  }
+  .mb-config-summary-item:last-child { border-right: 0; }
+  .mb-config-summary-key,
+  .mb-config-label,
+  .mb-config-row-num {
+    font-family: var(--font-ui);
+    font-size: 0.66rem;
+    line-height: 1.2;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+  .mb-config-summary-val {
+    font-family: var(--font-mono);
+    font-size: 0.92rem;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mb-config-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px 0 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+  }
+  .mb-config-section:last-of-type { border-bottom: 0; }
+  .mb-config-section-head {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 12px;
+  }
+  .mb-config-section-index {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 24px;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.16);
+    background: rgba(0,0,0,0.24);
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--text-secondary);
+  }
+  .mb-config-section-head h4 {
+    margin: 0;
+    font-family: var(--font-ui);
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    letter-spacing: 0;
+  }
+  .mb-config-section-head p {
+    margin: 4px 0 0;
+    max-width: 760px;
+    font-family: var(--font-ui);
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--text-secondary);
+  }
+  .mb-config-field {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    min-width: 0;
+  }
+  .mb-config-grid {
+    display: grid;
+    grid-template-columns: minmax(120px, 0.42fr) repeat(2, minmax(180px, 1fr));
+    gap: 10px;
+    align-items: stretch;
+  }
+  .mb-config-platform-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 8px;
+  }
+  .mb-config-platform-toggle {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr);
+    gap: 9px;
+    align-items: start;
+    min-height: 72px;
+    padding: 10px;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.035);
+    color: var(--text-primary);
+    text-align: left;
+    cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+  }
+  .mb-config-platform-toggle:hover {
+    border-color: rgba(255,255,255,0.25);
+    background: rgba(255,255,255,0.07);
+  }
+  .mb-config-platform-toggle.is-on {
+    border-color: rgba(12,206,107,0.36);
+    background: rgba(12,206,107,0.08);
+  }
+  .mb-config-platform-check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    margin-top: 1px;
+    border: 1px solid rgba(255,255,255,0.22);
+    border-radius: 4px;
+    color: #0cce6b;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    line-height: 1;
+  }
+  .is-on .mb-config-platform-check {
+    border-color: rgba(12,206,107,0.55);
+    background: rgba(12,206,107,0.12);
+  }
+  .mb-config-platform-body {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+  }
+  .mb-config-platform-title {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+    font-family: var(--font-ui);
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+  .mb-config-platform-status {
+    display: inline-flex;
+    align-items: center;
+    min-height: 16px;
+    padding: 0 5px;
+    border-radius: 3px;
+    font-family: var(--font-ui);
+    font-size: 0.58rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border: 1px solid rgba(255,255,255,0.12);
+    color: var(--text-secondary);
+  }
+  .mb-config-platform-status--ready {
+    color: #0cce6b;
+    border-color: rgba(12,206,107,0.32);
+    background: rgba(12,206,107,0.08);
+  }
+  .mb-config-platform-desc {
+    font-family: var(--font-ui);
+    font-size: 0.72rem;
+    line-height: 1.35;
+    color: var(--text-secondary);
+  }
+  .mb-config-input,
+  .mb-config-textarea {
+    width: 100%;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.14);
+    background: rgba(0,0,0,0.28);
+    color: var(--text-primary);
+    padding: 10px 11px;
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    line-height: 1.45;
+    outline: none;
+  }
+  .mb-config-input:focus,
+  .mb-config-textarea:focus {
+    border-color: rgba(14,165,233,0.68);
+    box-shadow: 0 0 0 2px rgba(14,165,233,0.12);
+  }
+  .mb-config-textarea {
+    resize: vertical;
+  }
+  .mb-config-textarea--compact {
+    min-height: 58px;
+  }
+  .mb-config-textarea--code {
+    font-size: 0.72rem;
+    line-height: 1.55;
+  }
+  .mb-config-search-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .mb-config-search-row {
+    display: grid;
+    grid-template-columns: 50px minmax(110px, 0.36fr) minmax(220px, 1fr) minmax(180px, 0.7fr) auto;
+    gap: 8px;
+    align-items: end;
+    padding: 10px;
+    border: 1px solid rgba(255,255,255,0.11);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.035);
+  }
+  .mb-config-search-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    align-self: center;
+  }
+  .mb-config-row-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: #0cce6b;
+    box-shadow: 0 0 0 3px rgba(12,206,107,0.13);
+  }
+  .mb-config-mini-btn,
+  .mb-config-remove-btn {
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 6px;
+    background: rgba(255,255,255,0.04);
+    color: var(--text-primary);
+    font-family: var(--font-ui);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+  }
+  .mb-config-mini-btn {
+    padding: 8px 10px;
+    white-space: nowrap;
+  }
+  .mb-config-remove-btn {
+    min-height: 37px;
+    padding: 0 10px;
+    color: var(--text-secondary);
+  }
+  .mb-config-mini-btn:hover,
+  .mb-config-remove-btn:hover:not(:disabled) {
+    background: rgba(255,255,255,0.1);
+    border-color: rgba(255,255,255,0.28);
+    color: var(--text-primary);
+  }
+  .mb-config-remove-btn:disabled {
+    opacity: 0.38;
+    cursor: not-allowed;
+  }
+  .mb-config-error {
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid rgba(255,59,48,0.28);
+    border-radius: 6px;
+    background: rgba(255,59,48,0.08);
+    color: #ff8b84;
+    font-family: var(--font-ui);
+    font-size: 0.78rem;
+    line-height: 1.4;
+  }
+  .mb-config-actionbar {
+    position: sticky;
+    bottom: -18px;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 0 4px;
+    background: linear-gradient(180deg, rgba(16,16,18,0) 0%, rgba(16,16,18,0.96) 32%, rgba(16,16,18,0.98) 100%);
+  }
+  .mb-config-actionbar-note {
+    font-family: var(--font-ui);
+    font-size: 0.74rem;
+    line-height: 1.35;
+    color: var(--text-secondary);
+  }
+  .mb-config-actionbar-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    flex-shrink: 0;
+  }
+  @media (max-width: 900px) {
+    .mb-config-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .mb-config-summary-item { border-bottom: 1px solid rgba(255,255,255,0.1); }
+    .mb-config-summary-item:nth-child(2n) { border-right: 0; }
+    .mb-config-grid { grid-template-columns: 1fr; }
+    .mb-config-platform-grid { grid-template-columns: 1fr; }
+    .mb-config-search-row {
+      grid-template-columns: 44px 1fr;
+      align-items: stretch;
+    }
+    .mb-config-field--label,
+    .mb-config-field--query,
+    .mb-config-field--goal,
+    .mb-config-remove-btn {
+      grid-column: 1 / -1;
+    }
+    .mb-config-remove-btn { width: 100%; }
+    .mb-config-actionbar {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .mb-config-actionbar-buttons { justify-content: flex-start; }
   }
   .tile-analyzer-readiness {
     display: inline-flex;

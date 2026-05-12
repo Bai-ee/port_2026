@@ -1,4 +1,5 @@
 const fb = require('./firebase-admin.cjs');
+const crypto = require('crypto');
 const { getMaster, listSources }        = require('../../features/intelligence/_store');
 const { buildIntelligencePayload }      = require('./intelligence-bootstrap-utils.cjs');
 const { getDefaultModuleConfig, getDefaultModuleState } = require('../../features/scout-intake/module-registry');
@@ -60,6 +61,108 @@ function deriveCompanyName({ companyName, hostname, displayName, email }) {
 
 function buildDashboardTitle(companyName) {
   return `${companyName} Dashboard`;
+}
+
+function normalizeAdminEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+function getRequestedClientIdFromRequest(request) {
+  try {
+    const url = new URL(request.url);
+    return String(url.searchParams.get('as') || '').trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+function prospectClientId(placeId) {
+  const digest = crypto.createHash('sha256').update(String(placeId || '')).digest('hex').slice(0, 16);
+  return `prospect-${digest}`;
+}
+
+async function loadAdminAccess(email) {
+  const adminEmail = normalizeAdminEmail(email);
+  if (!adminEmail) return { isAdmin: false, adminEmail: null, dashboardIds: [] };
+
+  const snap = await fb.adminDb.collection('admins').doc(adminEmail).get();
+  if (!snap.exists) return { isAdmin: false, adminEmail, dashboardIds: [] };
+
+  const data = snap.data() || {};
+  return {
+    isAdmin: true,
+    adminEmail,
+    dashboardIds: Array.isArray(data.adminDashboards)
+      ? data.adminDashboards.filter((id) => typeof id === 'string' && id.trim()).map((id) => id.trim())
+      : [],
+  };
+}
+
+async function listAdminDashboards(email) {
+  const access = await loadAdminAccess(email);
+  if (!access.isAdmin || access.dashboardIds.length === 0) return [];
+
+  const uniqueIds = Array.from(new Set(access.dashboardIds));
+  const docs = await Promise.all(uniqueIds.map(async (clientId) => {
+    const [clientSnap, dashSnap] = await Promise.all([
+      fb.adminDb.collection('clients').doc(clientId).get(),
+      fb.adminDb.collection('dashboard_state').doc(clientId).get(),
+    ]);
+    const client = clientSnap.exists ? clientSnap.data() : null;
+    const dash = dashSnap.exists ? dashSnap.data() : null;
+    return {
+      clientId,
+      name: client?.companyName || client?.dashboardTitle || dash?.companyName || dash?.clientName || clientId,
+      websiteUrl: client?.websiteUrl || dash?.websiteUrl || null,
+      source: client?.source || dash?.source || null,
+    };
+  }));
+
+  return docs.sort((a, b) => String(a.name || a.clientId).localeCompare(String(b.name || b.clientId)));
+}
+
+async function getEffectiveClientContext({ uid, email, request, requestedClientId }) {
+  const userSnapshot = await fb.adminDb.collection('users').doc(uid).get();
+  const userProfile = userSnapshot.exists ? userSnapshot.data() : null;
+  const ownClientId = userProfile?.clientId || null;
+  const requested = String(requestedClientId || getRequestedClientIdFromRequest(request) || '').trim() || null;
+
+  if (!requested || requested === ownClientId) {
+    return {
+      uid,
+      userProfile,
+      ownClientId,
+      clientId: ownClientId,
+      requestedClientId: requested,
+      impersonating: false,
+      isAdmin: false,
+      adminDashboards: [],
+    };
+  }
+
+  const adminAccess = await loadAdminAccess(email);
+  if (!adminAccess.isAdmin) {
+    const err = new Error('Forbidden: admin access required for dashboard impersonation.');
+    err.status = 403;
+    throw err;
+  }
+
+  if (!adminAccess.dashboardIds.includes(requested)) {
+    const err = new Error('Forbidden: dashboard is not provisioned for this admin.');
+    err.status = 403;
+    throw err;
+  }
+
+  return {
+    uid,
+    userProfile,
+    ownClientId,
+    clientId: requested,
+    requestedClientId: requested,
+    impersonating: true,
+    isAdmin: true,
+    adminDashboards: await listAdminDashboards(email),
+  };
 }
 
 
@@ -332,19 +435,23 @@ function inferModuleStateFromDashboard(dashboardState) {
   return base;
 }
 
-async function getDashboardBootstrap(uid) {
-  const userSnapshot = await fb.adminDb.collection('users').doc(uid).get();
-  if (!userSnapshot.exists) {
+async function getDashboardBootstrap(input) {
+  const opts = typeof input === 'string' ? { uid: input } : (input || {});
+  const context = await getEffectiveClientContext(opts);
+  const { uid, userProfile, clientId, ownClientId, impersonating } = context;
+
+  if (!userProfile) {
     return {
       userProfile: null,
       client: null,
       dashboardState: null,
       recentRuns: [],
+      effectiveClientId: null,
+      ownClientId: null,
+      impersonating: false,
+      adminDashboards: [],
     };
   }
-
-  const userProfile = userSnapshot.data();
-  const clientId = userProfile.clientId;
 
   if (!clientId) {
     return {
@@ -352,6 +459,10 @@ async function getDashboardBootstrap(uid) {
       client: null,
       dashboardState: null,
       recentRuns: [],
+      effectiveClientId: null,
+      ownClientId,
+      impersonating: false,
+      adminDashboards: await listAdminDashboards(opts.email),
     };
   }
 
@@ -426,7 +537,10 @@ async function getDashboardBootstrap(uid) {
   }
 
   return {
-    userProfile,
+    userProfile: {
+      ...userProfile,
+      effectiveClientId: clientId,
+    },
     client:         clientData,
     dashboardState,
     recentRuns:     runsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
@@ -434,7 +548,186 @@ async function getDashboardBootstrap(uid) {
     moduleConfig,
     moduleState,
     onboardingSummary,
+    effectiveClientId: clientId,
+    ownClientId,
+    impersonating,
+    adminDashboards: context.adminDashboards.length
+      ? context.adminDashboards
+      : await listAdminDashboards(opts.email),
   };
+}
+
+async function provisionClientFromProspect({ placeId, adminUid, adminEmail }) {
+  const trimmedPlaceId = String(placeId || '').trim();
+  if (!trimmedPlaceId) {
+    const err = new Error('placeId is required.');
+    err.status = 400;
+    throw err;
+  }
+
+  const adminAccess = await loadAdminAccess(adminEmail);
+  if (!adminAccess.isAdmin) {
+    const err = new Error('Forbidden: admin access required.');
+    err.status = 403;
+    throw err;
+  }
+
+  const prospectRef = fb.adminDb.collection('leadgen_prospects').doc(trimmedPlaceId);
+  const prospectSnap = await prospectRef.get();
+  if (!prospectSnap.exists) {
+    const err = new Error('Prospect not found.');
+    err.status = 404;
+    throw err;
+  }
+
+  const prospect = prospectSnap.data() || {};
+  const normalized = normalizeOptionalUrl(
+    prospect.generation?.previewUrl ||
+    prospect.website ||
+    prospect.websiteUrl ||
+    ''
+  );
+  const clientId = prospect.dashboard?.clientId || prospectClientId(trimmedPlaceId);
+  const now = fb.FieldValue.serverTimestamp();
+  const name = prospect.name || deriveCompanyName({
+    companyName: prospect.companyName,
+    hostname: normalized?.hostname || '',
+    displayName: '',
+    email: '',
+  });
+
+  const clientRef = fb.adminDb.collection('clients').doc(clientId);
+  const clientSnap = await clientRef.get();
+  const alreadyExisted = clientSnap.exists;
+  const clientConfigRef = fb.adminDb.collection('client_configs').doc(clientId);
+  const dashboardStateRef = fb.adminDb.collection('dashboard_state').doc(clientId);
+
+  const clientPayload = {
+    clientId,
+    source: 'leadgen-prospect',
+    sourcePlaceId: trimmedPlaceId,
+    ownerUid: adminUid || '',
+    ownerEmail: normalizeAdminEmail(adminEmail),
+    companyName: name,
+    dashboardTitle: buildDashboardTitle(name),
+    dashboardDescription: `Lead Gen dashboard seeded from ${name}.`,
+    websiteUrl: normalized?.websiteUrl || prospect.website || '',
+    normalizedOrigin: normalized?.origin || '',
+    normalizedHost: normalized?.hostname || '',
+    status: 'active',
+    onboardingStatus: 'leadgen_seeded',
+    pipelineType: 'leadgen-prospect',
+    activeModules: [],
+    activeAddOns: [],
+    pricingTier: 'starter',
+    providerStrategy: 'anthropic',
+    active: true,
+    latestRunId: null,
+    latestRunStatus: null,
+    createdAt: alreadyExisted ? clientSnap.data()?.createdAt || now : now,
+    updatedAt: now,
+  };
+
+  const clientConfigPayload = {
+    clientId,
+    sourceInputs: {
+      websiteUrl: normalized?.websiteUrl || prospect.website || '',
+      ideaDescription: prospect.generation?.designMd || prospect.description || '',
+      uploadedImageRefs: [],
+    },
+    leadgenProspect: {
+      placeId: trimmedPlaceId,
+      score: prospect.score ?? null,
+      tier: prospect.tier || null,
+      vertical: prospect.vertical || null,
+      previewUrl: prospect.generation?.previewUrl || null,
+      mockupUrl: prospect.generation?.mockupUrl || null,
+    },
+    onboardingAnswers: null,
+    ingestionConfig: null,
+    briefConfig: null,
+    dashboardConfig: null,
+    providerConfig: { defaultProvider: 'anthropic' },
+    moduleFlags: {},
+    moduleConfig: getDefaultModuleConfig(),
+    createdAt: alreadyExisted ? undefined : now,
+    updatedAt: now,
+  };
+
+  const dashboardStatePayload = {
+    clientId,
+    source: 'leadgen-prospect',
+    sourcePlaceId: trimmedPlaceId,
+    status: 'active',
+    companyName: name,
+    clientName: name,
+    websiteUrl: normalized?.websiteUrl || prospect.website || '',
+    headline: `${name} Dashboard`,
+    summaryCards: [],
+    latestInsights: [],
+    latestRunId: null,
+    latestRunStatus: null,
+    modules: getDefaultModuleState(Boolean(normalized?.websiteUrl)),
+    leadgen: {
+      placeId: trimmedPlaceId,
+      score: prospect.score ?? null,
+      tier: prospect.tier || null,
+      vertical: prospect.vertical || null,
+      previewUrl: prospect.generation?.previewUrl || null,
+      mockupUrl: prospect.generation?.mockupUrl || null,
+      outreach: prospect.outreach || null,
+    },
+    artifacts: {
+      homepageDeviceMockup: prospect.generation?.mockupUrl
+        ? { downloadUrl: prospect.generation.mockupUrl, source: 'leadgen' }
+        : null,
+    },
+    updatedAt: now,
+    provisioningState: null,
+    errorState: null,
+  };
+
+  const cleanClientConfigPayload = Object.fromEntries(
+    Object.entries(clientConfigPayload).filter(([, value]) => value !== undefined)
+  );
+
+  const writes = [
+    clientRef.set(clientPayload, { merge: true }),
+    clientConfigRef.set(cleanClientConfigPayload, { merge: true }),
+    dashboardStateRef.set(dashboardStatePayload, { merge: true }),
+    prospectRef.set({
+      dashboard: {
+        clientId,
+        name,
+        provisionedAt: prospect.dashboard?.provisionedAt || now,
+        provisionedByUid: adminUid || null,
+        updatedAt: now,
+      },
+      stage: prospect.stage === 'contacted' ? prospect.stage : 'packaged',
+      updatedAt: now,
+    }, { merge: true }),
+    fb.adminDb.collection('admins').doc(adminAccess.adminEmail).set({
+      adminDashboards: fb.FieldValue.arrayUnion(clientId),
+      updatedAt: now,
+    }, { merge: true }),
+  ];
+
+  if (adminUid) {
+    writes.push(
+      clientRef.collection('members').doc(adminUid).set({
+        uid: adminUid,
+        email: normalizeAdminEmail(adminEmail),
+        role: 'admin',
+        status: 'active',
+        createdAt: now,
+        updatedAt: now,
+      }, { merge: true })
+    );
+  }
+
+  await Promise.all(writes);
+
+  return { clientId, name, alreadyExisted };
 }
 
 /**
@@ -544,7 +837,9 @@ async function reseedIntakeForClient({ clientId, uid, websiteUrl }) {
 }
 
 module.exports = {
+  getEffectiveClientContext,
   getDashboardBootstrap,
+  provisionClientFromProspect,
   provisionClientForUser,
   reseedIntakeForClient,
 };

@@ -44,6 +44,7 @@ export default function TileDetailAnalysisContent({
   seoAudit,
   moduleRunLoading,
   handleModuleRun,
+  apiPath,
 }) {
   if (!activeTileModal || !['report', 'solutions', 'problems'].includes(modalTab)) {
     return null;
@@ -190,7 +191,8 @@ export default function TileDetailAnalysisContent({
           window.alert('Sign-in required to download.');
           return;
         }
-        const response = await fetch(`/api/dashboard/skill-doc?skillId=${encodeURIComponent(skillId)}&format=${format}`, {
+        const path = `/api/dashboard/skill-doc?skillId=${encodeURIComponent(skillId)}&format=${format}`;
+        const response = await fetch(apiPath ? apiPath(path) : path, {
           headers: { authorization: `Bearer ${token}` },
         });
         if (!response.ok) {
