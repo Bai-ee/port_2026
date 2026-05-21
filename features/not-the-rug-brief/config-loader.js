@@ -16,27 +16,34 @@ const { getClientConfig } = require('./clients');
 
 // ─── Generic agent data template ──────────────────────────────────────────────
 
+// In every schema below, "url" MUST be the canonical permalink of the SPECIFIC
+// post / thread / comment / article being cited — never a profile page,
+// homepage, or search results page. Omit the field if you cannot locate the
+// post permalink. "profileUrl" is an optional separate field for the author's
+// profile page. See the SOURCE LINK RULE block in xscout.js for full per-
+// platform format rules.
+
 const DEFAULT_AGENT_DATA_TEMPLATE = `{
-  "brandMentions": [{"source":"...","author":"...","content":"...","sentiment":"positive|neutral|negative","reach":"high|medium|low","url":"..."}],
-  "competitorIntel": [{"competitor":"...","finding":"...","impact":"high|medium|low","url":"..."}],
-  "categoryTrends": [{"trend":"...","relevance":"high|medium|low","detail":"..."}],
+  "brandMentions": [{"source":"...","author":"...","content":"...","sentiment":"positive|neutral|negative","reach":"high|medium|low","url":"<post permalink — not profile or homepage>"}],
+  "competitorIntel": [{"competitor":"...","finding":"...","impact":"high|medium|low","url":"<post permalink — not profile or homepage>"}],
+  "categoryTrends": [{"trend":"...","relevance":"high|medium|low","detail":"...","url":"<post or article permalink, optional>"}],
   "contentOpportunities": {
     "found": true,
-    "opportunities": [{"topic":"...","whyNow":"...","format":"...","priority":"high|medium|low","source":"...","url":"..."}],
+    "opportunities": [{"topic":"...","whyNow":"...","format":"...","priority":"high|medium|low","source":"...","url":"<post permalink — not profile or homepage>"}],
     "searchedFor": ["trigger 1","trigger 2"]
   },
   "escalations": [{"level":"CRITICAL|IMPORTANT|QUIET","status":"NEW|CHANGED|ESCALATED|RESOLVED","summary":"..."}]
 }`;
 
 const MARKETING_BRIEF_AGENT_DATA_TEMPLATE = `{
-  "brandMentions": [{"source":"...","author":"...","content":"...","sentiment":"positive|neutral|negative","reach":"high|medium|low","url":"..."}],
-  "competitorIntel": [{"competitor":"...","finding":"...","impact":"high|medium|low","url":"..."}],
-  "categoryTrends": [{"trend":"...","relevance":"high|medium|low","detail":"..."}],
-  "kolActivity": [{"name":"...","platform":"x","content":"...","followers":"...","sentiment":"...","url":"..."}],
+  "brandMentions": [{"source":"...","author":"...","content":"...","sentiment":"positive|neutral|negative","reach":"high|medium|low","url":"<post permalink — not profile or homepage>"}],
+  "competitorIntel": [{"competitor":"...","finding":"...","impact":"high|medium|low","url":"<post permalink — not profile or homepage>"}],
+  "categoryTrends": [{"trend":"...","relevance":"high|medium|low","detail":"...","url":"<post or article permalink, optional>"}],
+  "kolActivity": [{"name":"...","platform":"x","content":"...","followers":"...","sentiment":"...","url":"<post permalink — the specific tweet/comment, not the profile>","profileUrl":"<author profile URL, optional>"}],
   "escalations": [{"level":"CRITICAL|IMPORTANT|QUIET","status":"NEW|CHANGED|ESCALATED|RESOLVED","summary":"..."}],
   "viralOpportunities": {
     "found": true,
-    "opportunities": [{"conversation":"...","url":"...","injectionAngle":"...","authenticity":"high|medium|low","windowHours":0,"suggestedReply":"..."}],
+    "opportunities": [{"conversation":"...","url":"<permalink of the specific conversation/thread to engage with>","injectionAngle":"...","authenticity":"high|medium|low","windowHours":0,"suggestedReply":"..."}],
     "searchedFor": ["trigger 1","trigger 2"]
   }
 }`;
@@ -79,7 +86,7 @@ const MARKETING_BRIEF_INTELLIGENCE_CONFIG = {
 };
 
 const ALLOWED_SOURCE_PLATFORMS = new Set(['web', 'x', 'reddit', 'instagram', 'youtube', 'tiktok', 'hackernews']);
-const DEFAULT_SOURCE_PLATFORMS = ['web', 'x', 'reddit', 'instagram'];
+const DEFAULT_SOURCE_PLATFORMS = ['web', 'x', 'reddit', 'hackernews', 'instagram'];
 const PLATFORM_LABELS = {
   web: 'web/news',
   x: 'X/Twitter',
@@ -98,15 +105,40 @@ function normalizeSourcePlatforms(input) {
   return Array.from(new Set(normalized.length ? normalized : ['web']));
 }
 
-function buildPlatformSearchQuery(sourcePlatforms = []) {
-  const terms = [];
-  if (sourcePlatforms.includes('x')) terms.push('Twitter OR X');
-  if (sourcePlatforms.includes('reddit')) terms.push('site:reddit.com OR Reddit');
-  if (sourcePlatforms.includes('instagram')) terms.push('site:instagram.com OR Instagram');
-  if (sourcePlatforms.includes('youtube')) terms.push('site:youtube.com OR YouTube');
-  if (sourcePlatforms.includes('tiktok')) terms.push('site:tiktok.com OR TikTok');
-  if (sourcePlatforms.includes('hackernews')) terms.push('site:news.ycombinator.com OR Hacker News');
-  return terms.join(' OR ');
+// Site-restricted query templates per platform. Each emits a focused
+// `site:<host>` search so Claude's web_search can probe one platform at a
+// time — much higher hit rate than a single OR'd super-query.
+const PLATFORM_SITE_QUERIES = {
+  reddit:     { host: 'reddit.com',             label: 'REDDIT' },
+  hackernews: { host: 'news.ycombinator.com',   label: 'HACKER NEWS' },
+  youtube:    { host: 'youtube.com',            label: 'YOUTUBE' },
+  // X tweet permalinks are indexed by Google but x.com is the canonical
+  // host; site:x.com OR site:twitter.com catches both.
+  x:          { host: 'x.com OR site:twitter.com', label: 'X / TWITTER' },
+  // Instagram & TikTok are mostly anti-crawl — site: queries rarely return
+  // useful results. We still emit the row so users see the attempt, but
+  // expect thin output until last30days/ScrapeCreators can reach them.
+  instagram:  { host: 'instagram.com',          label: 'INSTAGRAM' },
+  tiktok:     { host: 'tiktok.com',             label: 'TIKTOK' },
+};
+
+// One dedicated search row per enabled non-web platform. The subject is
+// "<brand> <category>" so the search is grounded in the client's beat.
+function buildPerPlatformSearchRows({ companyName, ideaDescription, sourcePlatforms = [] }) {
+  const subject = [companyName, ideaDescription ? ideaDescription.split(/\s+/).slice(0, 4).join(' ') : '']
+    .filter(Boolean)
+    .join(' ')
+    .trim() || companyName;
+  return sourcePlatforms
+    .filter((key) => PLATFORM_SITE_QUERIES[key])
+    .map((key) => {
+      const spec = PLATFORM_SITE_QUERIES[key];
+      return {
+        label: spec.label,
+        query: `site:${spec.host} ${subject}`,
+        goal: `Find ${PLATFORM_LABELS[key] || key} threads/posts/videos directly via web search using a site-restricted query.`,
+      };
+    });
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -140,17 +172,16 @@ function buildSearchPlan({ websiteUrl, ideaDescription, hostname, companyName, m
         .filter((row) => row.query)
     : [];
 
+  const perPlatformRows = buildPerPlatformSearchRows({ companyName, ideaDescription, sourcePlatforms });
+  // De-dupe: don't append a platform row whose label collides with a
+  // user-saved row (case-insensitive match on label OR same query string).
+  const isDuplicate = (row, existing) => existing.some((e) =>
+    e.label.toLowerCase() === row.label.toLowerCase() || e.query === row.query
+  );
+  const novelPlatformRows = perPlatformRows.filter((row) => !isDuplicate(row, configuredSearches));
+
   if (configuredSearches.length > 0) {
-    const platformQuery = buildPlatformSearchQuery(sourcePlatforms);
-    if (!platformQuery) return configuredSearches;
-    return [
-      ...configuredSearches,
-      {
-        label: 'SOURCE PLATFORMS',
-        query: `${companyName} ${platformQuery}`,
-        goal: `Find platform-specific conversation signals only from enabled sources: ${sourcePlatforms.map((key) => PLATFORM_LABELS[key] || key).join(', ')}.`,
-      },
-    ];
+    return [...configuredSearches, ...novelPlatformRows];
   }
 
   const brandQuery = [`"${companyName}"`, hostname ? `"${hostname}"` : null, hostname ? `site:${hostname}` : null]
@@ -166,7 +197,6 @@ function buildSearchPlan({ websiteUrl, ideaDescription, hostname, companyName, m
     ? `best ${ideaDescription.split(/\s+/).slice(0, 4).join(' ')}`
     : `${companyName} reviews OR ${hostname} competitors`;
 
-  const platformQuery = buildPlatformSearchQuery(sourcePlatforms);
   return [
     {
       label: 'BRAND',
@@ -183,11 +213,7 @@ function buildSearchPlan({ websiteUrl, ideaDescription, hostname, companyName, m
       query: opportunityQuery,
       goal: 'Find live conversations and topics where the brand can contribute credibly.',
     },
-    ...(platformQuery ? [{
-      label: 'SOURCE PLATFORMS',
-      query: `${companyName} ${platformQuery}`,
-      goal: `Find platform-specific conversation signals only from enabled sources: ${sourcePlatforms.map((key) => PLATFORM_LABELS[key] || key).join(', ')}.`,
-    }] : []),
+    ...novelPlatformRows,
   ];
 }
 
@@ -215,6 +241,14 @@ function buildRuntimeConfigFromFirestore(clientId, clientConfig) {
   const configuredSourceFocus = String(marketingBriefConfig?.sourceFocus || '').trim();
   const configuredScoutInstructions = String(marketingBriefConfig?.scoutInstructions || '').trim();
   const configuredAgentDataTemplate = String(marketingBriefConfig?.agentDataTemplate || '').trim();
+  const configuredScribeTone = String(marketingBriefConfig?.scribeTone || '').trim();
+  const configuredScribeHardConstraints = Array.isArray(marketingBriefConfig?.scribeHardConstraints)
+    ? marketingBriefConfig.scribeHardConstraints.map((item) => String(item || '').trim()).filter(Boolean)
+    : [];
+  const configuredGuardianReviewerContext = String(marketingBriefConfig?.guardianReviewerContext || '').trim();
+  const configuredGuardianRestrictedPatterns = Array.isArray(marketingBriefConfig?.guardianRestrictedPatterns)
+    ? marketingBriefConfig.guardianRestrictedPatterns.map((item) => String(item || '').trim()).filter(Boolean)
+    : [];
   const freshnessDays = Math.max(1, Math.min(30, Number(marketingBriefConfig?.freshnessDays || 7)));
   const hasMarketingBriefConfig = Boolean(marketingBriefConfig);
   const sourcePlatforms = hasMarketingBriefConfig
@@ -293,29 +327,31 @@ function buildRuntimeConfigFromFirestore(clientId, clientConfig) {
 
     scribe: {
       role: hasMarketingBriefConfig ? 'founder brief content strategist' : 'content writer',
-      fallbackTone: hasMarketingBriefConfig
+      fallbackTone: configuredScribeTone || (hasMarketingBriefConfig
         ? `Tone: sharp, timely, founder-ready, specific to ${companyName}.\nPrioritize concrete market signals, KOL windows, and X/Twitter-ready angles. Never use generic hype language, forced urgency, or empty superlatives.`
-        : `Tone: clear, credible, human, specific to ${companyName}.\nNever use: generic hype language, forced urgency, or empty superlatives.`,
+        : `Tone: clear, credible, human, specific to ${companyName}.\nNever use: generic hype language, forced urgency, or empty superlatives.`),
       pillarHints: hasMarketingBriefConfig ? {
         CRITICAL: 'urgent market response — the founder needs a fast, concrete communication angle.',
         IMPORTANT: 'timely market participation — lead with the live signal and the opening for the brand.',
         QUIET: 'signal creation — no live mention means create a useful, current conversation starter.',
       } : undefined,
-      hardConstraints: hasMarketingBriefConfig ? [
-        'Every piece connects to Scout\'s priority action',
-        'Zero live signal = create signal, not react to it',
-        'Never fabricate competitor activity',
-        'Never make claims Scout did not surface',
-        'Prioritize X/Twitter-ready hooks and credible reply windows',
-        'Make the Content Angle useful to a founder deciding what to say today',
-        'Each output complete and ready to copy-paste',
-      ] : undefined,
+      hardConstraints: configuredScribeHardConstraints.length > 0
+        ? configuredScribeHardConstraints
+        : (hasMarketingBriefConfig ? [
+            'Every piece connects to Scout\'s priority action',
+            'Zero live signal = create signal, not react to it',
+            'Never fabricate competitor activity',
+            'Never make claims Scout did not surface',
+            'Prioritize X/Twitter-ready hooks and credible reply windows',
+            'Make the Content Angle useful to a founder deciding what to say today',
+            'Each output complete and ready to copy-paste',
+          ] : undefined),
     },
 
     guardian: {
-      reviewerContext: ideaDescription || `a business at ${websiteUrl || clientId}`,
+      reviewerContext: configuredGuardianReviewerContext || ideaDescription || `a business at ${websiteUrl || clientId}`,
       competitorNames: configuredCompetitors,
-      restrictedPatterns: [],
+      restrictedPatterns: configuredGuardianRestrictedPatterns,
     },
 
     providerConfig: clientConfig?.providerConfig || { defaultProvider: 'anthropic' },

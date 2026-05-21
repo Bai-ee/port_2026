@@ -31,7 +31,7 @@ function normalizeSearches(input) {
 }
 
 const ALLOWED_SOURCE_PLATFORMS = new Set(['web', 'x', 'reddit', 'instagram', 'youtube', 'tiktok', 'hackernews']);
-const DEFAULT_SOURCE_PLATFORMS = ['web', 'x', 'reddit', 'instagram'];
+const DEFAULT_SOURCE_PLATFORMS = ['web', 'x', 'reddit', 'hackernews', 'instagram'];
 
 function normalizeSourcePlatforms(input) {
   const rows = Array.isArray(input) ? input : DEFAULT_SOURCE_PLATFORMS;
@@ -40,6 +40,18 @@ function normalizeSourcePlatforms(input) {
     .filter((item) => ALLOWED_SOURCE_PLATFORMS.has(item));
   const unique = Array.from(new Set(normalized)).slice(0, 10);
   return unique.length ? unique : ['web'];
+}
+
+// Accepts either a string (newline / comma separated) or an array. Returns a
+// cleaned string array, max `maxItems` items each up to `maxLen` chars.
+function normalizeLineList(input, { maxItems = 20, maxLen = 240 } = {}) {
+  const raw = Array.isArray(input)
+    ? input
+    : String(input || '').split(/\n+/);
+  return raw
+    .map((item) => String(item || '').trim().slice(0, maxLen))
+    .filter(Boolean)
+    .slice(0, maxItems);
 }
 
 async function resolveContext(request) {
@@ -115,6 +127,10 @@ export async function POST(request) {
       .map((item) => item.trim())
       .filter(Boolean)
       .slice(0, 20),
+    scribeTone: String(body?.scribeTone || '').trim().slice(0, 4000),
+    scribeHardConstraints: normalizeLineList(body?.scribeHardConstraints, { maxItems: 20, maxLen: 240 }),
+    guardianReviewerContext: String(body?.guardianReviewerContext || '').trim().slice(0, 800),
+    guardianRestrictedPatterns: normalizeLineList(body?.guardianRestrictedPatterns, { maxItems: 30, maxLen: 240 }),
     updatedAtIso: new Date().toISOString(),
   };
 

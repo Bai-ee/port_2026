@@ -806,4 +806,4 @@ function renderBriefHtml(input = {}) {
 </html>`;
 }
 
-module.exports = { renderBriefHtml };
+module.exports = { renderBriefHtml, BRIEF_CSS: CSS };

@@ -170,6 +170,51 @@ function collectRedditSignalsFromSearchResults(searchResults = [], compactContex
   return uniqueSignals;
 }
 
+const { validatePostUrl } = require('./post-url-validator.cjs');
+
+// Walk an agentData payload and strip any item.url that isn't a real post
+// permalink. Keeps the item itself (the finding may still be useful) — only
+// the unverifiable link is removed so the brief never shows a fabricated link.
+function stripUngroundedUrls(agentData) {
+  if (!agentData || typeof agentData !== 'object') return agentData;
+  const stripList = (arr) => {
+    if (!Array.isArray(arr)) return arr;
+    return arr.map((item) => {
+      if (!item || typeof item !== 'object') return item;
+      const next = { ...item };
+      if (typeof next.url === 'string' && next.url) {
+        const validated = validatePostUrl(next.url);
+        if (!validated) delete next.url;
+      }
+      // profileUrl is allowed to be a profile root, just sanity-check it parses.
+      if (typeof next.profileUrl === 'string' && next.profileUrl) {
+        try { new URL(next.profileUrl); } catch { delete next.profileUrl; }
+      }
+      return next;
+    });
+  };
+  const out = { ...agentData };
+  for (const key of [
+    'brandMentions', 'competitorIntel', 'categoryTrends',
+    'kolActivity', 'redditSignals', 'reviewInsights', 'localDemandSignals',
+  ]) {
+    if (Array.isArray(out[key])) out[key] = stripList(out[key]);
+  }
+  if (out.viralOpportunities && Array.isArray(out.viralOpportunities.opportunities)) {
+    out.viralOpportunities = {
+      ...out.viralOpportunities,
+      opportunities: stripList(out.viralOpportunities.opportunities),
+    };
+  }
+  if (out.contentOpportunities && Array.isArray(out.contentOpportunities.opportunities)) {
+    out.contentOpportunities = {
+      ...out.contentOpportunities,
+      opportunities: stripList(out.contentOpportunities.opportunities),
+    };
+  }
+  return out;
+}
+
 function hydrateAgentData(agentData = {}, weatherReport = null, redditReport = null, searchResults = [], compactContext = '', last30daysMapped = null) {
   const next = agentData && typeof agentData === 'object' ? { ...agentData } : {};
 
@@ -257,7 +302,7 @@ function hydrateAgentData(agentData = {}, weatherReport = null, redditReport = n
     }
   }
 
-  return next;
+  return stripUngroundedUrls(next);
 }
 
 function buildFallbackSearchPlan(config) {
@@ -477,19 +522,66 @@ VISIBILITY GAP RULE:
 If brandMentions is empty AND upcoming event within 30 days → escalate to IMPORTANT.
 PRIORITY ACTION must be a specific content recommendation, not "monitor" or "investigate".
 
+SOURCE LINK RULE (required):
+Every item that has a "url" field MUST be the canonical permalink of the SPECIFIC post, thread, or comment the finding is drawn from — never a profile page, search results page, channel, subreddit root, or website homepage. The founder must be able to click the link and land directly on the exact piece of content to engage with.
+
+Per-platform canonical formats:
+- X / Twitter:    https://x.com/<handle>/status/<id>            (or twitter.com/<handle>/status/<id>)
+- Reddit:         https://www.reddit.com/r/<sub>/comments/<id>/<slug>/  (or a /comments/<id>/<slug>/<comment_id> permalink)
+- Instagram:      https://www.instagram.com/p/<id>/  or  /reel/<id>/  or  /tv/<id>/
+- YouTube:        https://www.youtube.com/watch?v=<id>          (or youtu.be/<id>, optionally with &t=<seconds>)
+- TikTok:         https://www.tiktok.com/@<handle>/video/<id>
+- Hacker News:    https://news.ycombinator.com/item?id=<id>
+- LinkedIn posts: https://www.linkedin.com/posts/<slug>
+- News / blogs:   the article's canonical URL — not the publication homepage or section index.
+
+If you cannot find the specific post permalink for a finding, OMIT the "url" field for that item entirely. Do NOT substitute the profile page, the platform homepage, or a search query URL.
+
+The author's profile may optionally be added as a separate "profileUrl" field, but "url" must always point to the post itself.
+
+GROUNDED CLAIMS RULE (required — no exceptions):
+Every specific factual claim in your output — named people, named brands, named events, dollar amounts, view counts, follower counts, dates, quotes, descriptions of someone's post or video — MUST be directly traceable to a SEARCH RESULT YOU ACTUALLY RECEIVED IN THIS RUN. If a claim is not backed by a real search result with a citable URL you can place on the item, you may NOT make that claim. Do not invent:
+- specific dollar figures ("a $242k private game", "Jupiter stakes tournaments")
+- specific incidents, scams, or controversies you did not see in a fetched result
+- quotes or paraphrased posts from named creators you did not actually retrieve
+- launch announcements, partnerships, or product claims about competitors you did not see in a fetched result
+- precise audience numbers, engagement numbers, or "trending" assertions
+- the existence of a specific thread, video, or post you cannot link to
+
+Two-step self-check before writing the HUMAN BRIEF:
+1. List every named entity, dollar amount, event, quote, or specific-incident claim you are about to make.
+2. For each one, identify the exact search result (and URL) that supports it. If you cannot, REMOVE that claim from the brief.
+
+What you MAY do without a citation:
+- State public, dated, widely-known context ("WSOP 2026 main event begins July 3") if it is genuinely common knowledge — and only as context, not as a specific finding.
+- State generic categorical observations ("on-chain poker remains a small but rising category") clearly framed as your own framing rather than as a sourced fact.
+- Recommend a PRIORITY ACTION that synthesizes — that is your job — as long as the underlying signals it relies on are themselves grounded above.
+
+If Scout's search results this run were thin and you do NOT have grounded findings, the HUMAN BRIEF must SAY SO explicitly (e.g. "No live signal surfaced this cycle. Background context only.") and the PRIORITY ACTION must be a signal-creation move, not a fabricated reaction to a non-existent event. Returning a thin-but-honest brief is REQUIRED behavior — fabricating a richer one is a critical failure.
+
+The AGENT DATA "url" fields are the citation surface — every specific claim you make in the HUMAN BRIEF should correspond to an item in AGENT DATA whose "url" is the real permalink for that claim. The reader's brief tab renders those URLs as clickable source links, so the audit trail is preserved there; you do not need to inline cites in the HUMAN BRIEF text itself.
+
 OUTPUT — three sections, in order:
 
 === DELTA ===
 What changed since last brief. Format: [CRITICAL|IMPORTANT|QUIET] [NEW|CHANGED|ESCALATED|RESOLVED] — description
 
 === HUMAN BRIEF ===
-HARD LIMIT: 150 words max. Plain language. Last line MUST be:
-PRIORITY ACTION: <single sentence starting with action verb>
+HARD LIMIT: 150 words max. Plain language.
+Every specific factual claim must be backed by an AGENT DATA item with a real permalink per the GROUNDED CLAIMS RULE.
+If signals were thin, say so directly — do not pad with fabricated specifics.
+Last line MUST be:
+PRIORITY ACTION: <single sentence starting with action verb — may synthesize, but must rely only on claims grounded above>
 
 === AGENT DATA ===
-Valid JSON only (no markdown fences):
+Valid JSON only (no markdown fences). Every item with a "url" MUST be a permalink that appeared in your search results this run — do not invent URLs:
 ${agentDataTemplate}`;
 }
+
+// TODO(guardian-grounding): Future phase — pass Scout's agentData + raw
+// search snippets into Guardian and add a `groundingScore` to the QA pass so
+// claim-to-evidence verification lives there rather than only at the prompt
+// layer. See conversation 2026-05-12 for context.
 
 // ─── Search result extraction ─────────────────────────────────────────────────
 

@@ -60,6 +60,21 @@ const BrandSystemBuildModal = dynamic(() => import('./components/dashboard/Brand
   ssr: false,
 });
 
+const SocialPostingPanel = dynamic(() => import('./components/dashboard/SocialPostingPanel'), {
+  loading: () => null,
+  ssr: false,
+});
+
+const StrategyBuilderCard = dynamic(() => import('./components/dashboard/StrategyBuilderCard'), {
+  loading: () => null,
+  ssr: false,
+});
+
+const MarketCategoryPanel = dynamic(() => import('./components/dashboard/MarketCategoryPanel'), {
+  loading: () => null,
+  ssr: false,
+});
+
 const LeadgenModulePanel = dynamic(() => import('./components/dashboard/leadgen/LeadgenModulePanel'), {
   loading: () => null,
   ssr: false,
@@ -89,6 +104,9 @@ const ONBOARDING_CARD_IDS = new Set([
   'priority-signal',
   'brand-system',
   'visual-dna',
+  'strategy-builder',
+  'creative-builder',
+  'social-media-posting',
   'marketing-brief',
   'survey-status',
   // Per-client leadgen flow cards.
@@ -106,7 +124,85 @@ const MARKETING_BRIEF_SOURCE_PLATFORMS = [
   { key: 'tiktok', label: 'TikTok', status: 'available', description: 'Short-form trend signals when social search is configured.' },
   { key: 'hackernews', label: 'Hacker News', status: 'available', description: 'Tech/startup discussion for relevant clients.' },
 ];
-const DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS = ['web', 'x', 'reddit', 'instagram'];
+const DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS = ['web', 'x', 'reddit', 'hackernews', 'instagram'];
+
+function classifyMarketingBriefPlatform(url, explicitPlatform) {
+  if (explicitPlatform) {
+    const p = String(explicitPlatform).toLowerCase();
+    if (p === 'twitter') return 'x';
+    if (['web', 'x', 'reddit', 'instagram', 'youtube', 'tiktok', 'hackernews'].includes(p)) return p;
+  }
+  const u = String(url || '').toLowerCase();
+  if (u.includes('twitter.com') || u.includes('x.com/')) return 'x';
+  if (u.includes('reddit.com')) return 'reddit';
+  if (u.includes('instagram.com')) return 'instagram';
+  if (u.includes('youtube.com') || u.includes('youtu.be')) return 'youtube';
+  if (u.includes('tiktok.com')) return 'tiktok';
+  if (u.includes('news.ycombinator.com')) return 'hackernews';
+  return 'web';
+}
+
+function deriveMarketingBriefPerPlatformResults(agentData, selectedPlatforms) {
+  const platforms = Array.isArray(selectedPlatforms) && selectedPlatforms.length
+    ? selectedPlatforms
+    : DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS;
+  const buckets = Object.fromEntries(platforms.map((k) => [k, []]));
+  const push = (key, item) => { if (buckets[key]) buckets[key].push(item); };
+
+  if (agentData && typeof agentData === 'object') {
+    (agentData.kolActivity || []).forEach((row) => {
+      if (!row) return;
+      push(classifyMarketingBriefPlatform(row.url, row.platform), {
+        title: row.name || row.content || 'KOL signal',
+        summary: row.content || '',
+        url: row.url || null,
+        kind: 'KOL',
+      });
+    });
+    (agentData.brandMentions || []).forEach((row) => {
+      if (!row) return;
+      push(classifyMarketingBriefPlatform(row.url, row.source), {
+        title: row.author || row.source || 'Mention',
+        summary: row.content || '',
+        url: row.url || null,
+        kind: 'Mention',
+      });
+    });
+    (agentData.competitorIntel || []).forEach((row) => {
+      if (!row) return;
+      push(classifyMarketingBriefPlatform(row.url, null), {
+        title: row.competitor || 'Competitor move',
+        summary: row.finding || '',
+        url: row.url || null,
+        kind: 'Competitor',
+      });
+    });
+    (agentData.viralOpportunities?.opportunities || []).forEach((row) => {
+      if (!row) return;
+      push(classifyMarketingBriefPlatform(row.url, null), {
+        title: row.injectionAngle || row.conversation || 'Viral window',
+        summary: row.conversation || row.suggestedReply || '',
+        url: row.url || null,
+        kind: 'Viral',
+      });
+    });
+    (agentData.categoryTrends || []).forEach((row) => {
+      if (!row) return;
+      push('web', {
+        title: row.trend || 'Category trend',
+        summary: row.detail || '',
+        url: null,
+        kind: 'Trend',
+      });
+    });
+  }
+
+  const out = {};
+  platforms.forEach((k) => {
+    out[k] = { count: buckets[k].length, items: buckets[k].slice(0, 5) };
+  });
+  return out;
+}
 
 function buildDefaultMarketingBriefConfig(client, dashboardState) {
   const companyName = client?.companyName || dashboardState?.clientName || 'the brand';
@@ -129,14 +225,14 @@ function buildDefaultMarketingBriefConfig(client, dashboardState) {
     kols: '',
     competitors: '',
     agentDataTemplate: `{
-  "brandMentions": [{"source":"...","author":"...","content":"...","sentiment":"positive|neutral|negative","reach":"high|medium|low","url":"..."}],
-  "competitorIntel": [{"competitor":"...","finding":"...","impact":"high|medium|low","url":"..."}],
-  "categoryTrends": [{"trend":"...","relevance":"high|medium|low","detail":"..."}],
-  "kolActivity": [{"name":"...","platform":"x","content":"...","followers":"...","sentiment":"...","url":"..."}],
+  "brandMentions": [{"source":"...","author":"...","content":"...","sentiment":"positive|neutral|negative","reach":"high|medium|low","url":"<post permalink — not profile or homepage>"}],
+  "competitorIntel": [{"competitor":"...","finding":"...","impact":"high|medium|low","url":"<post permalink — not profile or homepage>"}],
+  "categoryTrends": [{"trend":"...","relevance":"high|medium|low","detail":"...","url":"<post or article permalink, optional>"}],
+  "kolActivity": [{"name":"...","platform":"x","content":"...","followers":"...","sentiment":"...","url":"<post permalink — the specific tweet/comment, not the profile>","profileUrl":"<author profile URL, optional>"}],
   "escalations": [{"level":"CRITICAL|IMPORTANT|QUIET","status":"NEW|CHANGED|ESCALATED|RESOLVED","summary":"..."}],
   "viralOpportunities": {
     "found": true,
-    "opportunities": [{"conversation":"...","url":"...","injectionAngle":"...","authenticity":"high|medium|low","windowHours":0,"suggestedReply":"..."}],
+    "opportunities": [{"conversation":"...","url":"<permalink of the specific conversation/thread to engage with>","injectionAngle":"...","authenticity":"high|medium|low","windowHours":0,"suggestedReply":"..."}],
     "searchedFor": ["trigger 1","trigger 2"]
   }
 }`,
@@ -147,11 +243,114 @@ function buildDefaultMarketingBriefConfig(client, dashboardState) {
       { label: 'KOLS + SOCIAL', query: `${companyName} Twitter OR X OR influencers OR KOLs`, goal: 'Find creator commentary, viral posts, and reply windows.' },
       { label: 'VIRAL WINDOWS', query: `best ${companyName} alternatives OR problems OR recommendations`, goal: 'Find conversations where the brand can contribute credibly.' },
     ],
+    scribeTone: `Tone: sharp, timely, founder-ready, specific to ${companyName}.\nPrioritize concrete market signals, KOL windows, and X/Twitter-ready angles. Never use generic hype language, forced urgency, or empty superlatives.`,
+    scribeHardConstraints: [
+      'Every piece connects to Scout\'s priority action',
+      'Zero live signal = create signal, not react to it',
+      'Never fabricate competitor activity',
+      'Never make claims Scout did not surface',
+      'Prioritize X/Twitter-ready hooks and credible reply windows',
+      'Make the Content Angle useful to a founder deciding what to say today',
+      'Each output complete and ready to copy-paste',
+    ].join('\n'),
+    guardianReviewerContext: `${companyName} — review for factual accuracy against the brand's known positioning and for brand-voice match. Flag forced hype, unsupported claims, or off-tone phrasing.`,
+    guardianRestrictedPatterns: '',
   };
 }
 
 function joinConfigList(value) {
   return Array.isArray(value) ? value.join('\n') : String(value || '');
+}
+
+function cloneJson(value) {
+  try { return JSON.parse(JSON.stringify(value || null)); } catch { return value || null; }
+}
+
+function buildBrandSnapshotDraft(styleGuide) {
+  const sg = cloneJson(styleGuide) || {};
+  return {
+    brandMark: {
+      logoUrl: sg.assets?.logoUrl || '',
+      alt: sg.assets?.logoAlt || 'Brand mark',
+    },
+    colors: {
+      primary: {
+        hex: sg.colors?.primary?.hex || '',
+        role: sg.colors?.primary?.role || 'Primary brand color',
+      },
+      secondary: {
+        hex: sg.colors?.secondary?.hex || '',
+        role: sg.colors?.secondary?.role || 'Secondary / support color',
+      },
+      tertiary: {
+        hex: sg.colors?.tertiary?.hex || '',
+        role: sg.colors?.tertiary?.role || 'Accent color',
+      },
+      neutral: {
+        hex: sg.colors?.neutral?.hex || '',
+        role: sg.colors?.neutral?.role || 'Background / neutral color',
+      },
+    },
+    typography: {
+      headingSystem: {
+        fontFamily: sg.typography?.headingSystem?.fontFamily || '',
+        fontWeight: sg.typography?.headingSystem?.fontWeight || '',
+        fontSize: sg.typography?.headingSystem?.fontSize || '',
+      },
+      bodySystem: {
+        fontFamily: sg.typography?.bodySystem?.fontFamily || '',
+        fontWeight: sg.typography?.bodySystem?.fontWeight || '',
+        fontSize: sg.typography?.bodySystem?.fontSize || '',
+      },
+    },
+    gradient: {
+      from: sg.gradient?.from || sg.colors?.primary?.hex || '',
+      to: sg.gradient?.to || sg.colors?.secondary?.hex || sg.colors?.neutral?.hex || '',
+      angle: sg.gradient?.angle || '135deg',
+    },
+    summary: sg.summary || '',
+  };
+}
+
+function draftToStyleGuide(draft, fallbackStyleGuide = null) {
+  const fallback = cloneJson(fallbackStyleGuide) || {};
+  return {
+    ...fallback,
+    confidence: 'manual',
+    source: 'brand-snapshot-data-tab',
+    updatedByUser: true,
+    summary: draft?.summary || fallback.summary || '',
+    assets: {
+      ...(fallback.assets || {}),
+      logoUrl: draft?.brandMark?.logoUrl || '',
+      logoAlt: draft?.brandMark?.alt || 'Brand mark',
+    },
+    colors: {
+      ...(fallback.colors || {}),
+      primary:   { ...(fallback.colors?.primary || {}),   ...(draft?.colors?.primary || {}) },
+      secondary: { ...(fallback.colors?.secondary || {}), ...(draft?.colors?.secondary || {}) },
+      tertiary:  { ...(fallback.colors?.tertiary || {}),  ...(draft?.colors?.tertiary || {}) },
+      neutral:   { ...(fallback.colors?.neutral || {}),   ...(draft?.colors?.neutral || {}) },
+    },
+    typography: {
+      ...(fallback.typography || {}),
+      headingSystem: { ...(fallback.typography?.headingSystem || {}), ...(draft?.typography?.headingSystem || {}) },
+      bodySystem:    { ...(fallback.typography?.bodySystem || {}),    ...(draft?.typography?.bodySystem || {}) },
+    },
+    gradient: {
+      ...(fallback.gradient || {}),
+      ...(draft?.gradient || {}),
+    },
+  };
+}
+
+function colorInputValue(value, fallback = '#000000') {
+  const raw = String(value || '').trim();
+  if (/^#[0-9a-f]{6}$/i.test(raw)) return raw;
+  if (/^#[0-9a-f]{3}$/i.test(raw)) {
+    return `#${raw.slice(1).split('').map((ch) => `${ch}${ch}`).join('')}`;
+  }
+  return fallback;
 }
 import {
   trackDashboardCreated,
@@ -1354,6 +1553,46 @@ const DashboardPage = () => {
   // derived from bootstrap, below.
   const [clientProspect, setClientProspect] = useState(null);
   const [bootstrap, setBootstrap] = useState({ userProfile: null, client: null, dashboardState: null, recentRuns: [], intelligence: null, moduleConfig: null, moduleState: null });
+
+  // Market Category RUN — on-tile agent classify (mirrors the in-modal button).
+  const [marketCategoryRunLoading, setMarketCategoryRunLoading] = useState(false);
+  const openMarketCategoryCard = useCallback(() => {
+    setActiveTileModal({
+      title: 'Market Category',
+      description: 'Set the category the client operates in.',
+      cardId: 'industry',
+      isCapabilityCard: true,
+      vizType: null,
+    });
+  }, []);
+  const runMarketCategoryAnalyze = useCallback(async () => {
+    setMarketCategoryRunLoading(true);
+    try {
+      const token = await brandSystemGetIdToken();
+      const res = await fetch('/api/dashboard/market-category/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.enough && data.marketCategory) {
+        setBootstrap((prev) => ({
+          ...prev,
+          dashboardState: {
+            ...(prev?.dashboardState || {}),
+            marketCategory: data.marketCategory,
+          },
+        }));
+      } else {
+        // Not enough data (or error) — open the card so the user can pick manually.
+        openMarketCategoryCard();
+      }
+    } catch {
+      openMarketCategoryCard();
+    } finally {
+      setMarketCategoryRunLoading(false);
+    }
+  }, [brandSystemGetIdToken, openMarketCategoryCard]);
   const client = bootstrap.client;
 
   const openLeadgenFlow = useCallback(async (step) => {
@@ -1479,6 +1718,10 @@ const DashboardPage = () => {
   // and injected via iframe srcDoc. Keeps the brief's <style> isolated from
   // the dashboard's own styles.
   const [briefPreviewHtml, setBriefPreviewHtml] = useState('');
+  // Dedicated HTML preview for the Marketing Brief modal's BRIEF tab.
+  // Always fetched with `?type=marketing` so it shows the marketing render
+  // regardless of which pipeline produced the latest run.
+  const [marketingBriefPreviewHtml, setMarketingBriefPreviewHtml] = useState('');
   // HTML preview for the newsletter tile — fetched from /api/dashboard/newsletter-preview
   const [newsletterPreviewHtml, setNewsletterPreviewHtml] = useState('');
   const [marketingBriefConfig, setMarketingBriefConfig] = useState(null);
@@ -1486,6 +1729,9 @@ const DashboardPage = () => {
   const [marketingBriefSaving, setMarketingBriefSaving] = useState(false);
   const [marketingBriefRunning, setMarketingBriefRunning] = useState(false);
   const [marketingBriefError, setMarketingBriefError] = useState('');
+  const [brandSnapshotDraft, setBrandSnapshotDraft] = useState(() => buildBrandSnapshotDraft(null));
+  const [brandSnapshotSaving, setBrandSnapshotSaving] = useState(false);
+  const [brandSnapshotError, setBrandSnapshotError] = useState('');
 
   const hydrateMarketingBriefConfig = useCallback((config) => {
     const fallback = buildDefaultMarketingBriefConfig(client, bootstrap?.dashboardState);
@@ -1499,6 +1745,12 @@ const DashboardPage = () => {
       kols: joinConfigList(next.kols),
       competitors: joinConfigList(next.competitors),
       searches: Array.isArray(next.searches) && next.searches.length > 0 ? next.searches : fallback.searches,
+      scribeTone: typeof next.scribeTone === 'string' && next.scribeTone.trim() ? next.scribeTone : fallback.scribeTone,
+      scribeHardConstraints: joinConfigList(next.scribeHardConstraints) || fallback.scribeHardConstraints,
+      guardianReviewerContext: typeof next.guardianReviewerContext === 'string' && next.guardianReviewerContext.trim()
+        ? next.guardianReviewerContext
+        : fallback.guardianReviewerContext,
+      guardianRestrictedPatterns: joinConfigList(next.guardianRestrictedPatterns),
     };
   }, [client, bootstrap?.dashboardState]);
 
@@ -1562,7 +1814,7 @@ const DashboardPage = () => {
     if (!user) return;
     const dash = bootstrap?.dashboardState;
     const runId = dash?.latestRunId || null;
-    if (!dash?.scribe?.brief) { setBriefPreviewHtml(''); return; }
+    if (!dash?.scribe?.brief && !dash?.marketingBrief) { setBriefPreviewHtml(''); return; }
     let cancelled = false;
     (async () => {
       try {
@@ -1582,7 +1834,32 @@ const DashboardPage = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, [user, apiPath, bootstrap?.dashboardState?.latestRunId, bootstrap?.dashboardState?.scribe?.brief?.headline]);
+  }, [user, apiPath, bootstrap?.dashboardState?.latestRunId, bootstrap?.dashboardState?.scribe?.brief?.headline, bootstrap?.dashboardState?.marketingBrief?.generatedAtIso]);
+
+  // Always fetch the Marketing Brief render (?type=marketing) for the
+  // Marketing Brief modal's BRIEF tab. Independent of the main brief preview
+  // so the modal stays correct after any subsequent non-marketing run.
+  useEffect(() => {
+    if (!user) return;
+    const dash = bootstrap?.dashboardState;
+    if (!dash?.marketingBrief) { setMarketingBriefPreviewHtml(''); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch(apiPath('/api/dashboard/brief-preview?type=marketing'), {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        });
+        if (!res.ok) return;
+        const html = await res.text();
+        if (!cancelled) setMarketingBriefPreviewHtml(html);
+      } catch {
+        // non-fatal — tab falls back to placeholder
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user, apiPath, bootstrap?.dashboardState?.marketingBrief?.generatedAtIso, bootstrap?.dashboardState?.modules?.['marketing-brief']?.lastRunId]);
 
   // Fetch the newsletter HTML for the Newsletter tile's PREVIEW tab.
   // Loads the real newsletter if available, otherwise the generic template.
@@ -1746,6 +2023,46 @@ const DashboardPage = () => {
     });
   }, []);
 
+  const updateBrandSnapshotDraft = useCallback((path, value) => {
+    setBrandSnapshotDraft((prev) => {
+      const next = cloneJson(prev) || buildBrandSnapshotDraft(null);
+      let cursor = next;
+      path.slice(0, -1).forEach((key) => {
+        cursor[key] = cursor[key] || {};
+        cursor = cursor[key];
+      });
+      cursor[path[path.length - 1]] = value;
+      return next;
+    });
+  }, []);
+
+  const saveBrandSnapshotConfig = useCallback(async () => {
+    if (!user) return;
+    setBrandSnapshotSaving(true);
+    setBrandSnapshotError('');
+    try {
+      const token = await user.getIdToken();
+      const styleGuide = draftToStyleGuide(brandSnapshotDraft, bootstrap?.dashboardState?.snapshot?.visualIdentity?.styleGuide || null);
+      const res = await fetch(apiPath('/api/dashboard/brand-snapshot/config'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ styleGuide }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Could not save Brand Snapshot.');
+      setBrandSnapshotDraft(buildBrandSnapshotDraft(data.styleGuide || styleGuide));
+      doBootstrap();
+    } catch (err) {
+      setBrandSnapshotError(err instanceof Error ? err.message : 'Could not save Brand Snapshot.');
+    } finally {
+      setBrandSnapshotSaving(false);
+    }
+  }, [user, brandSnapshotDraft, bootstrap?.dashboardState?.snapshot?.visualIdentity?.styleGuide, apiPath, doBootstrap]);
+
+  useEffect(() => {
+    setBrandSnapshotDraft(buildBrandSnapshotDraft(bootstrap?.dashboardState?.snapshot?.visualIdentity?.styleGuide || null));
+  }, [bootstrap?.dashboardState?.snapshot?.visualIdentity?.styleGuide]);
+
   // Initial load
   useEffect(() => {
     cancelledRef.current = false;
@@ -1881,6 +2198,9 @@ const DashboardPage = () => {
   const visualIdentity  = snapshot?.visualIdentity || null;
   const styleGuideData  = visualIdentity?.styleGuide ?? null;
   const sgDisplayData   = styleGuideData || null;
+  const sgModalDisplayData = activeTileModal?.cardId === 'style-guide'
+    ? draftToStyleGuide(brandSnapshotDraft, styleGuideData)
+    : sgDisplayData;
   const isStyleGuideMock = !styleGuideData;
   const outputsPreview  = dashboardState?.outputsPreview || null;
   // Phase-4 Scribe: per-card short + expanded copy. When present for a card,
@@ -2822,13 +3142,37 @@ const DashboardPage = () => {
   const resolvedDraftPost = outputsPreview?.samplePost || summaryCards.find((card) => card.label === 'Draft Post')?.value || '';
   const resolvedContentAngle = strategy?.contentAngles?.[0]?.angle || summaryCards.find((card) => card.label === 'Content Angle')?.value || '';
   const resolvedIndustry = brandOverview?.industry || '';
+  // User-set Market Category override wins over auto-detected industry; this is
+  // what feeds the Strategy Builder vertical.
+  const resolvedCategory = dashboardState?.marketCategory?.value || resolvedIndustry;
+  const hasCategoryData = Boolean(resolvedCategory);
+  // Shell label + description react to how the category was reached.
+  const _mc = dashboardState?.marketCategory || null;
+  const _mcSource = _mc?.source || (_mc?.value ? 'user' : (resolvedIndustry ? 'auto' : ''));
+  const _mcRationale = String(_mc?.rationale || '').trim();
+  const _mcConfidence = Number.isFinite(_mc?.confidence) ? Math.round(_mc.confidence * 100) : null;
+  const _mcEvidence = Array.isArray(_mc?.evidence) ? _mc.evidence.slice(0, 3).join(' · ') : '';
+  const marketCategoryImageUrl = dashboardState?.marketCategory?.cardImageUrl || null;
+  const categoryShellLabel = hasCategoryData
+    ? String(resolvedCategory).replace(/-/g, '\n').toUpperCase()
+    : 'RUN TO\nCLASSIFY';
+  const categoryDescription = !hasCategoryData
+    ? 'We map your business into a clear category. Run it to auto-classify from Social Preview, Brand Snapshot and Scout data — or set it manually. Feeds competitor benchmarking and the Strategy Builder.'
+    : _mcSource === 'agent'
+      ? `Classified as "${resolvedCategory}"${_mcConfidence != null ? ` (${_mcConfidence}% confidence)` : ''} by analysing your pipeline${_mcRationale ? `: ${_mcRationale}` : _mcEvidence ? ` from ${_mcEvidence}.` : ' from Social Preview, Brand Snapshot and Scout data.'} Feeds competitor benchmarking and the Strategy Builder.`
+      : _mcSource === 'user'
+        ? `Set to "${resolvedCategory}" manually. Re-run to re-classify from your pipeline data. Feeds competitor benchmarking and the Strategy Builder.`
+        : `Detected as "${resolvedCategory}" from your brand snapshot. Run to re-classify from Social Preview / Scout data, or open the card to edit. Feeds competitor benchmarking and the Strategy Builder.`;
   const resolvedBusinessModel = brandOverview?.businessModel || '';
   const resolvedOpportunities = (strategy?.opportunityMap?.length ? strategy.opportunityMap : latestInsights.length ? latestInsights : []).slice(0, 4);
   const hasBrandToneData = Boolean(brandTone?.primary || brandTone?.secondary || brandTone?.writingStyle || brandTone?.tags?.length);
   const hasStyleGuideData = Boolean(visualIdentity?.summary || visualIdentity?.colorPalette || visualIdentity?.styleNotes || visualIdentity?.styleGuide);
-  const sgLogoSrc = siteMeta?.appleTouchIcon || siteMeta?.favicon || null;
-  const hasSgColors = Boolean(sgDisplayData?.colors && (sgDisplayData.colors.primary || sgDisplayData.colors.secondary || sgDisplayData.colors.neutral));
+  const sgLogoSrc = sgDisplayData?.assets?.logoUrl || siteMeta?.appleTouchIcon || siteMeta?.favicon || null;
+  const hasSgColors = Boolean(sgDisplayData?.colors && [sgDisplayData.colors.primary, sgDisplayData.colors.secondary, sgDisplayData.colors.tertiary, sgDisplayData.colors.neutral].some((color) => color?.hex));
   const hasSgType = Boolean(sgDisplayData?.typography?.headingSystem?.fontFamily);
+  const sgModalLogoSrc = sgModalDisplayData?.assets?.logoUrl || siteMeta?.appleTouchIcon || siteMeta?.favicon || null;
+  const hasSgModalColors = Boolean(sgModalDisplayData?.colors && [sgModalDisplayData.colors.primary, sgModalDisplayData.colors.secondary, sgModalDisplayData.colors.tertiary, sgModalDisplayData.colors.neutral].some((color) => color?.hex));
+  const hasSgModalType = Boolean(sgModalDisplayData?.typography?.headingSystem?.fontFamily);
   const hasSgQuadrant = true; // brand-mark quadrant always renders (logo or "NO LOGO" fallback)
   const hasIndustryData = Boolean(resolvedIndustry);
   const hasBusinessModelData = Boolean(resolvedBusinessModel);
@@ -2838,9 +3182,20 @@ const DashboardPage = () => {
   const newsletterHeroPreview = dashboardState?.newsletter?.content?.hero_story?.slice(0, 140) || '';
   const marketingBrief = dashboardState?.marketingBrief || null;
   const hasMarketingBriefData = Boolean(marketingBrief?.content || dashboardState?.headline || latestInsights.length > 0);
+  const hasBriefDocumentData = Boolean(hasIntakeData || hasMarketingBriefData);
   const marketingBriefStatus = moduleState?.['marketing-brief']?.status || (hasMarketingBriefData ? 'succeeded' : 'idle');
   const marketingBriefPreview = marketingBrief?.headline || dashboardState?.headline || 'Scout, Scribe, and Guardian are ready to build the daily founder brief.';
   const marketingScoutAgentData = marketingBrief?.scoutBrief?.agentData || null;
+  const marketingBriefSelectedPlatforms = (marketingBriefConfig?.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS);
+  const marketingBriefPerPlatformResults = deriveMarketingBriefPerPlatformResults(marketingScoutAgentData, marketingBriefSelectedPlatforms);
+  const marketingBriefHasRunResults = Boolean(marketingScoutAgentData);
+  const socialGeneratedDraft =
+    marketingBrief?.content?.x_post
+    || marketingBrief?.content?.primary_post
+    || dashboardState?.summaryCards?.find((c) => c.type === 'content_post')?.value
+    || resolvedDraftPost
+    || '';
+  const hasSocialGeneratedDraft = Boolean(socialGeneratedDraft);
   const hasContentAngleData = Boolean(resolvedContentAngle);
   const hasOpportunitiesData = resolvedOpportunities.length > 0;
   const hasSeoAuditData = Boolean((seoAudit?.status === 'ok' || seoAudit?.status === 'partial') && seoAudit?.scores);
@@ -3326,8 +3681,10 @@ const DashboardPage = () => {
       title: 'Client Brief',
       description: brandOverview?.headline
         ? brandOverview.headline
-        : 'A structured breakdown of your business, positioning, and site. This becomes the baseline for all strategy and recommendations.',
-      placeholderLabel: hasIntakeData ? 'BRIEF' : 'NO\nBRIEF',
+        : hasMarketingBriefData
+          ? 'Founder-ready daily marketing brief generated from Scout, Scribe, and Guardian.'
+          : 'A structured breakdown of your business, positioning, and site. This becomes the baseline for all strategy and recommendations.',
+      placeholderLabel: hasBriefDocumentData ? 'BRIEF' : 'NO\nBRIEF',
       rows: hasIntakeData
         ? [
             { key: 'industry',   label: 'Industry',  value: resolvedIndustry || 'Pending' },
@@ -3336,8 +3693,15 @@ const DashboardPage = () => {
             { key: 'priority',   label: 'Priority',  value: resolvedPrioritySignal || 'Pending' },
             { key: 'channels',   label: 'Channels',  value: strategy?.postStrategy?.formats?.join(' · ') || 'Pending' },
           ]
-        : buildWorkNeededRows('Intake has not produced enough signal to generate a reliable brief.'),
-      footerLeft: hasIntakeData ? 'Live' : WORK_NEEDED_LABEL,
+        : hasMarketingBriefData
+          ? [
+              { key: 'mb-brief-priority', label: 'Priority', value: marketingBrief?.headline || dashboardState?.headline || 'Generated' },
+              { key: 'mb-brief-x', label: 'X Post', value: marketingBrief?.content?.x_post || marketingBrief?.content?.primary_post || 'Generated' },
+              { key: 'mb-brief-scout', label: 'Scout Brief', value: marketingBrief?.scoutBrief?.humanBrief ? 'Available' : 'No Scout text' },
+              { key: 'mb-brief-guardian', label: 'Guardian', value: marketingBrief?.guardianFlags?.readyToPublish ? 'Ready to publish' : 'Needs review' },
+            ]
+          : buildWorkNeededRows('Intake has not produced enough signal to generate a reliable brief.'),
+      footerLeft: hasBriefDocumentData ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
     },
     {
@@ -4007,13 +4371,30 @@ const DashboardPage = () => {
       number: 'MC',
       label: 'CATEGORY',
       title: 'Market Category',
-      description: 'We mapped your business into a clear category. This helps benchmark competitors and identify where you should be showing up.',
-      placeholderLabel: hasIndustryData ? 'CATEGORY' : 'UNKNOWN',
-      rows: hasIndustryData
-        ? [{ key: 'sector', label: 'Sector', value: resolvedIndustry }]
-        : buildWorkNeededRows('Fetched pages did not clearly identify the market category or service vertical.'),
-      footerLeft: hasIndustryData ? 'Live' : WORK_NEEDED_LABEL,
-      footerRight: 'REVIEWED',
+      description: categoryDescription,
+      placeholderLabel: categoryShellLabel,
+      rows: hasCategoryData
+        ? [
+            { key: 'sector', label: 'Sector', value: resolvedCategory },
+            {
+              key: 'sector-src',
+              label: 'Source',
+              value:
+                dashboardState?.marketCategory?.source === 'agent'
+                  ? 'Agent-classified'
+                  : dashboardState?.marketCategory?.value
+                  ? 'User-set'
+                  : 'Auto-detected',
+            },
+          ]
+        : buildWorkNeededRows('No category yet — open this card and Run analysis, or set it manually.'),
+      footerLeft: hasCategoryData ? 'Live' : WORK_NEEDED_LABEL,
+      footerRight: 'RUN · EDIT',
+      footerAction: {
+        label: marketCategoryRunLoading ? '…' : hasCategoryData ? 'Re-run' : 'RUN',
+        loading: marketCategoryRunLoading,
+        onClick: runMarketCategoryAnalyze,
+      },
     },
     {
       id: 'visibility-snapshot',
@@ -4205,6 +4586,57 @@ const DashboardPage = () => {
       rows: buildWorkNeededRows('Post strategy requires brand tone, audience signals, and content gap data.'),
       footerLeft: WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
+    },
+    {
+      id: 'strategy-builder',
+      category: 'onboarding',
+      number: 'SB',
+      label: 'STRATEGY',
+      title: 'Strategy Builder',
+      description: 'Turns Scout signals, brand voice, and content gaps into a focused social direction for the next post.',
+      placeholderLabel: hasMarketingBriefData ? 'STRATEGY' : 'NO\nBRIEF',
+      rows: [
+        { key: 'sb-source', label: 'Source', value: hasMarketingBriefData ? 'Marketing Brief' : 'Needs Scout brief' },
+        { key: 'sb-angle', label: 'Angle', value: marketingBrief?.content?.content_angle || marketingBrief?.headline || resolvedContentAngle || 'Run Marketing Brief to generate the angle.' },
+        { key: 'sb-platform', label: 'Platform', value: 'X / Twitter' },
+      ],
+      footerLeft: hasMarketingBriefData ? 'Live' : WORK_NEEDED_LABEL,
+      footerRight: 'REVIEWED',
+      readinessBadge: hasMarketingBriefData ? { tone: 'ok', label: 'Ready' } : null,
+    },
+    {
+      id: 'creative-builder',
+      category: 'onboarding',
+      number: 'CB',
+      label: 'CREATIVE',
+      title: 'Creative Builder',
+      description: 'Collects generated copy and creative hooks for publishing. Video and audio generation hooks are reserved here.',
+      placeholderLabel: hasSocialGeneratedDraft ? 'CREATIVE' : 'NO\nDRAFT',
+      rows: [
+        { key: 'cb-copy', label: 'Copy', value: hasSocialGeneratedDraft ? socialGeneratedDraft : 'No generated X draft yet.' },
+        { key: 'cb-media', label: 'Media', value: 'Video/audio generation queued for next phase' },
+        { key: 'cb-source', label: 'Source', value: hasMarketingBriefData ? 'Strategy Builder' : 'Manual / Draft Content' },
+      ],
+      footerLeft: hasSocialGeneratedDraft ? 'Live' : WORK_NEEDED_LABEL,
+      footerRight: 'REVIEWED',
+      readinessBadge: hasSocialGeneratedDraft ? { tone: 'ok', label: 'Ready' } : null,
+    },
+    {
+      id: 'social-media-posting',
+      category: 'onboarding',
+      number: 'XP',
+      label: 'POST',
+      title: 'Social Media Posting',
+      description: 'Compose, optimize, schedule, and post to X/Twitter using the integrated multi-agent publishing workflow.',
+      placeholderLabel: 'X\nPOST',
+      rows: [
+        { key: 'smp-channel', label: 'Channel', value: 'X / Twitter' },
+        { key: 'smp-agent-system', label: 'Agents', value: 'Content Creator · Hashtag Specialist · Engagement Optimizer' },
+        { key: 'smp-source', label: 'Creative Source', value: hasSocialGeneratedDraft ? 'Creative Builder output available' : 'Manual composer ready' },
+      ],
+      footerLeft: 'Ready',
+      footerRight: 'LIVE',
+      readinessBadge: { tone: 'ok', label: 'Ready' },
     },
     {
       id: 'draft-post',
@@ -4853,6 +5285,7 @@ const DashboardPage = () => {
     const readinessContext = (() => {
       if (card.id === 'seo-performance') return '';
       if (card.id === 'survey-status') return '';
+      if (card.id === 'industry') return '';
       if (!analyzer?.readiness) return '';
       switch (analyzer.readiness) {
         case 'critical':
@@ -4867,7 +5300,10 @@ const DashboardPage = () => {
     })();
 
     const baseDescription = (() => {
-      if ((card.id === 'audit-summary' || card.id === 'social-preview' || card.id === 'multi-device-view' || card.id === 'style-guide' || card.id === 'industry' || card.id === 'priority-signal') && built?.description) {
+      // Market Category owns its own dynamic description (value + how it was
+      // reached). Bypass the generic analyzer/scribe copy entirely.
+      if (card.id === 'industry') return card.description;
+      if ((card.id === 'audit-summary' || card.id === 'social-preview' || card.id === 'multi-device-view' || card.id === 'style-guide' || card.id === 'priority-signal') && built?.description) {
         return built.description;
       }
       if (card.id === 'seo-performance' && built?.description) {
@@ -4900,6 +5336,13 @@ const DashboardPage = () => {
           : s === 'partial'
           ? { tone: 'partial',  label: 'In Progress' }
           : { tone: 'critical', label: 'Not Started' };
+      }
+      if (card.id === 'industry') {
+        if (!hasCategoryData) return { tone: 'partial', label: 'Set category' };
+        return {
+          tone: 'ok',
+          label: _mcSource === 'agent' ? 'Classified' : _mcSource === 'user' ? 'User-set' : 'Detected',
+        };
       }
       const seoSignalReadiness = card.id === 'seo-performance' ? built?.dominantSignal?.readiness || null : null;
       const seoSignalId = card.id === 'seo-performance' ? built?.dominantSignal?.id || '' : '';
@@ -5029,8 +5472,10 @@ const DashboardPage = () => {
     return {
       ...card,
       description:             baseDescription + readinessContext,
-      scribeShort:             DETERMINISTIC_CARD_IDS.has(card.id) ? null : (scribe?.short || null),
-      dynamicShortDescription,
+      // Market Category owns its copy on the tile face too — suppress the
+      // generic module/scribe short text so the face uses its description.
+      scribeShort:             card.id === 'industry' ? null : (DETERMINISTIC_CARD_IDS.has(card.id) ? null : (scribe?.short || null)),
+      dynamicShortDescription: card.id === 'industry' ? null : dynamicShortDescription,
       recommendation:          scribe?.recommendation || null,
       readinessBadge,
       analyzer,
@@ -5760,6 +6205,21 @@ const DashboardPage = () => {
                         />
                       )}
                     </div>
+                  ) : card.id === 'industry' && marketCategoryImageUrl ? (
+                    <div id="market-category-card-image-shell" style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', borderRadius: 'inherit' }}>
+                      <img
+                        id="market-category-card-image"
+                        src={marketCategoryImageUrl}
+                        alt={resolvedCategory || 'Market category'}
+                        onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', mixBlendMode: 'difference' }}
+                      />
+                      <span id="market-category-card-label" style={{ position: 'absolute', bottom: 8, left: 10, right: 10, fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#fff', pointerEvents: 'none' }}>Market Category</span>
+                    </div>
+                  ) : card.id === 'industry' ? (
+                    <span className="tile-empty-label" id="market-category-shell-label">
+                      {card.placeholderLabel}
+                    </span>
                   ) : (
                     <span className="tile-empty-label">{card.title || card.placeholderLabel}</span>
                   )}
@@ -6543,17 +7003,17 @@ const DashboardPage = () => {
                 <div className={`tile-intake-placeholder tile-intake-placeholder-${activeTileModal.cardId || 'draft-post'} tile-detail-bento-placeholder`}>
                 {activeTileModal.cardId === 'style-guide' ? (
                     <div className="sg-preview">
-                      {!sgDisplayData || sgDisplayData?.confidence === 'low' ? (
+                      {!sgModalDisplayData || sgModalDisplayData?.confidence === 'low' ? (
                         <div className="sg-empty">
                           <span className="sg-empty-label">NO CSS EXTRACTED</span>
-                          <span className="sg-empty-msg">{!sgDisplayData ? 'Brand Snapshot has no data yet — run the intake pipeline or trigger a re-extraction.' : 'Site may be JS-rendered or stylesheet-free'}</span>
+                          <span className="sg-empty-msg">{!sgModalDisplayData ? 'Brand Snapshot has no data yet — run the intake pipeline or trigger a re-extraction.' : 'Site may be JS-rendered or stylesheet-free'}</span>
                         </div>
                       ) : (() => {
                         // Mirror the dashboard card shell exactly — same four
                         // quadrants (BRAND MARK / COLOR / TYPE / GRADIENT) so
                         // the modal reads as a zoomed-in version of the card.
-                        const sgHead = sgDisplayData.typography?.headingSystem;
-                        const sgBody = sgDisplayData.typography?.bodySystem;
+                        const sgHead = sgModalDisplayData.typography?.headingSystem;
+                        const sgBody = sgModalDisplayData.typography?.bodySystem;
                         const headName = sanitizeStylePreviewLabel(
                           sgHead?.fontFamily?.split(',')[0].replace(/["']/g, '').trim() || null
                         );
@@ -6563,11 +7023,11 @@ const DashboardPage = () => {
                             {/* BRAND MARK (top-left) */}
                             <div
                               className="sg-quad sg-q-brand-mark"
-                              style={{ background: sgLogoSrc ? (sgDisplayData?.colors?.neutral?.hex || sgDisplayData?.colors?.primary?.hex || '#f0efed') : 'rgba(255, 255, 255, 0.65)' }}
+                              style={{ background: sgModalLogoSrc ? (sgModalDisplayData?.colors?.neutral?.hex || sgModalDisplayData?.colors?.primary?.hex || '#f0efed') : 'rgba(255, 255, 255, 0.65)' }}
                             >
-                              {sgLogoSrc ? (
+                              {sgModalLogoSrc ? (
                                 <img
-                                  src={sgLogoSrc}
+                                  src={sgModalLogoSrc}
                                   alt="Site brand mark"
                                   onError={(e) => { e.currentTarget.style.display = 'none'; const p = e.currentTarget.parentElement; if (p) { const s = document.createElement('span'); s.className = 'sg-no-logo'; s.textContent = 'LOGO'; p.appendChild(s); } }}
                                 />
@@ -6577,13 +7037,13 @@ const DashboardPage = () => {
                             </div>
 
                             {/* COLOR (top-right) */}
-                            <div className="sg-quad sg-q-color" style={!hasSgColors ? { background: 'rgba(255,255,255,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center' } : undefined}>
-                              {hasSgColors ? [
-                                sgDisplayData.colors.primary,
-                                sgDisplayData.colors.secondary,
-                                sgDisplayData.colors.tertiary,
-                                sgDisplayData.colors.neutral,
-                              ].filter(Boolean).map((color, ci) => (
+                            <div className="sg-quad sg-q-color" style={!hasSgModalColors ? { background: 'rgba(255,255,255,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center' } : undefined}>
+                              {hasSgModalColors ? [
+                                sgModalDisplayData.colors.primary,
+                                sgModalDisplayData.colors.secondary,
+                                sgModalDisplayData.colors.tertiary,
+                                sgModalDisplayData.colors.neutral,
+                              ].filter((color) => color?.hex).map((color, ci) => (
                                 <div key={ci} className="sg-swatch" style={{ background: color.hex }} title={color.role} />
                               )) : (
                                 <span className="sg-no-data">{"COLOR"}</span>
@@ -6593,9 +7053,9 @@ const DashboardPage = () => {
                             {/* TYPE (bottom-left) */}
                             <div
                               className="sg-quad sg-q-type"
-                              style={{ background: hasSgType ? (sgDisplayData?.colors?.neutral?.shades?.[0] || sgDisplayData?.colors?.primary?.shades?.[0] || sgDisplayData?.colors?.neutral?.hex || '#faf8f4') : 'rgba(255,255,255,0.65)' }}
+                              style={{ background: hasSgModalType ? (sgModalDisplayData?.colors?.neutral?.shades?.[0] || sgModalDisplayData?.colors?.primary?.shades?.[0] || sgModalDisplayData?.colors?.neutral?.hex || '#faf8f4') : 'rgba(255,255,255,0.65)' }}
                             >
-                              {hasSgType && headName ? (
+                              {hasSgModalType && headName ? (
                                 <>
                                   <p className="sg-h1" style={{ fontFamily: sgHead?.fontFamily || 'serif' }}>
                                     {headName}
@@ -6612,11 +7072,11 @@ const DashboardPage = () => {
                             {/* GRADIENT (bottom-right) */}
                             <div
                               className="sg-quad sg-q-gradient"
-                              style={hasSgColors ? {
-                                background: `linear-gradient(135deg, ${sgDisplayData.colors.primary?.hex || '#888'}, ${sgDisplayData.colors.secondary?.hex || sgDisplayData.colors.neutral?.hex || '#ddd'})`,
+                              style={hasSgModalColors ? {
+                                background: `linear-gradient(${sgModalDisplayData.gradient?.angle || '135deg'}, ${sgModalDisplayData.gradient?.from || sgModalDisplayData.colors.primary?.hex || '#888'}, ${sgModalDisplayData.gradient?.to || sgModalDisplayData.colors.secondary?.hex || sgModalDisplayData.colors.neutral?.hex || '#ddd'})`,
                               } : { background: 'rgba(255,255,255,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                             >
-                              {!hasSgColors && <span className="sg-no-data">{"GRADIENT"}</span>}
+                              {!hasSgModalColors && <span className="sg-no-data">{"GRADIENT"}</span>}
                             </div>
                           </>
                         );
@@ -6640,6 +7100,16 @@ const DashboardPage = () => {
                         src={homepageScreenshotUrl}
                         alt="Homepage screenshot"
                         onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }}
+                      />
+                    </div>
+                  ) : activeTileModal.cardId === 'industry' && marketCategoryImageUrl ? (
+                    <div id="market-category-modal-image-shell">
+                      <img
+                        id="market-category-modal-image"
+                        src={marketCategoryImageUrl}
+                        alt={resolvedCategory || 'Market category'}
+                        onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
                     </div>
                   ) : activeTileModal.cardId === 'newsletter' ? (
@@ -7104,6 +7574,7 @@ const DashboardPage = () => {
                   <div id="marketing-brief-config-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
                     <div className="tile-detail-tabs">
                       <button type="button" className={`tile-detail-tab${modalTab === 'data' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('data')}>SCOUT CONFIG</button>
+                      <button type="button" className={`tile-detail-tab${modalTab === 'brief' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('brief')}>BRIEF</button>
                       <button type="button" className={`tile-detail-tab${modalTab === 'preview' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('preview')}>LATEST OUTPUT</button>
                     </div>
                     <div className="tile-detail-tab-content">
@@ -7133,6 +7604,14 @@ const DashboardPage = () => {
                                 <span className="mb-config-summary-item">
                                   <span className="mb-config-summary-key">Competitors</span>
                                   <span className="mb-config-summary-val">{String(marketingBriefConfig.competitors || '').split(/\n|,/).filter((item) => item.trim()).length}</span>
+                                </span>
+                                <span className="mb-config-summary-item">
+                                  <span className="mb-config-summary-key">Scribe</span>
+                                  <span className="mb-config-summary-val">{(marketingBriefConfig.scribeTone || '').trim() ? 'Custom' : 'Default'}</span>
+                                </span>
+                                <span className="mb-config-summary-item">
+                                  <span className="mb-config-summary-key">Guardian</span>
+                                  <span className="mb-config-summary-val">{String(marketingBriefConfig.guardianRestrictedPatterns || '').split(/\n/).filter((item) => item.trim()).length} rule{String(marketingBriefConfig.guardianRestrictedPatterns || '').split(/\n/).filter((item) => item.trim()).length === 1 ? '' : 's'}</span>
                                 </span>
                               </div>
 
@@ -7178,6 +7657,54 @@ const DashboardPage = () => {
                                           <span className="mb-config-platform-desc">{platform.description}</span>
                                         </span>
                                       </button>
+                                    );
+                                  })}
+                                </div>
+
+                                <div id="mb-config-platform-results" className="mb-config-platform-results" aria-label="Latest results by platform">
+                                  <div className="mb-config-platform-results-head">
+                                    <span className="mb-config-platform-results-title">Latest results by platform</span>
+                                    <span className="mb-config-platform-results-sub">
+                                      {marketingBriefRunning
+                                        ? 'Scout is running — results will populate when the run completes.'
+                                        : marketingBriefHasRunResults
+                                          ? 'Counts and samples below come from the latest Scout brief.'
+                                          : 'No Scout brief yet. Run the brief to populate per-platform results.'}
+                                    </span>
+                                  </div>
+                                  {marketingBriefSelectedPlatforms.map((key) => {
+                                    const meta = MARKETING_BRIEF_SOURCE_PLATFORMS.find((p) => p.key === key) || { key, label: key, status: 'available' };
+                                    const bucket = marketingBriefPerPlatformResults[key] || { count: 0, items: [] };
+                                    return (
+                                      <div key={`mb-platform-result-${key}`} className="mb-config-platform-result-row" data-platform={key}>
+                                        <div className="mb-config-platform-result-meta">
+                                          <span className="mb-config-platform-result-label">{meta.label}</span>
+                                          <span className={`mb-config-platform-status mb-config-platform-status--${meta.status}`}>{meta.status}</span>
+                                          <span className="mb-config-platform-result-count">{bucket.count} result{bucket.count === 1 ? '' : 's'}</span>
+                                        </div>
+                                        {bucket.items.length === 0 ? (
+                                          <p className="mb-config-platform-result-empty">
+                                            {marketingBriefHasRunResults
+                                              ? 'No items attributed to this platform in the latest run.'
+                                              : '—'}
+                                          </p>
+                                        ) : (
+                                          <ul className="mb-config-platform-result-list">
+                                            {bucket.items.map((item, i) => (
+                                              <li key={`mb-platform-result-${key}-${i}`} className="mb-config-platform-result-item">
+                                                <div className="mb-config-platform-result-item-head">
+                                                  <span className="mb-config-platform-result-item-tag">{item.kind}</span>
+                                                  <span className="mb-config-platform-result-item-title">{item.title}</span>
+                                                </div>
+                                                {item.summary && <p className="mb-config-platform-result-item-summary">{item.summary}</p>}
+                                                {item.url && (
+                                                  <a className="mb-config-platform-result-item-link" href={item.url} target="_blank" rel="noopener noreferrer">{item.url}</a>
+                                                )}
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        )}
+                                      </div>
                                     );
                                   })}
                                 </div>
@@ -7269,6 +7796,70 @@ const DashboardPage = () => {
                                 </label>
                               </section>
 
+                              <section id="mb-config-scribe-section" className="mb-config-section">
+                                <div className="mb-config-section-head">
+                                  <span className="mb-config-section-index">07</span>
+                                  <div>
+                                    <h4>Scribe Tone &amp; Constraints</h4>
+                                    <p>Controls how Scribe writes the founder brief: voice, posture, and the hard rules each output must respect. Used as the voice block when no separate brand-voice doc exists.</p>
+                                  </div>
+                                </div>
+                                <label className="mb-config-field">
+                                  <span className="mb-config-label">Scribe tone</span>
+                                  <textarea
+                                    id="mb-config-scribe-tone"
+                                    className="mb-config-textarea"
+                                    value={marketingBriefConfig.scribeTone || ''}
+                                    onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), scribeTone: e.target.value }))}
+                                    rows={6}
+                                    placeholder="Tone: sharp, timely, founder-ready..."
+                                  />
+                                </label>
+                                <label className="mb-config-field">
+                                  <span className="mb-config-label">Hard constraints (one per line)</span>
+                                  <textarea
+                                    id="mb-config-scribe-hard-constraints"
+                                    className="mb-config-textarea"
+                                    value={marketingBriefConfig.scribeHardConstraints || ''}
+                                    onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), scribeHardConstraints: e.target.value }))}
+                                    rows={7}
+                                    placeholder={"Every piece connects to Scout's priority action\nNever fabricate competitor activity\n..."}
+                                  />
+                                </label>
+                              </section>
+
+                              <section id="mb-config-guardian-section" className="mb-config-section">
+                                <div className="mb-config-section-head">
+                                  <span className="mb-config-section-index">08</span>
+                                  <div>
+                                    <h4>Guardian Rules</h4>
+                                    <p>Guides Guardian&apos;s QA pass: what the reviewer should know about the brand, and any words or phrases that should be flagged as off-brand or risky.</p>
+                                  </div>
+                                </div>
+                                <label className="mb-config-field">
+                                  <span className="mb-config-label">Reviewer context</span>
+                                  <textarea
+                                    id="mb-config-guardian-context"
+                                    className="mb-config-textarea"
+                                    value={marketingBriefConfig.guardianReviewerContext || ''}
+                                    onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), guardianReviewerContext: e.target.value }))}
+                                    rows={4}
+                                    placeholder="Brand positioning, audience, and what Guardian should care about most."
+                                  />
+                                </label>
+                                <label className="mb-config-field">
+                                  <span className="mb-config-label">Restricted phrases / patterns (one per line)</span>
+                                  <textarea
+                                    id="mb-config-guardian-patterns"
+                                    className="mb-config-textarea"
+                                    value={marketingBriefConfig.guardianRestrictedPatterns || ''}
+                                    onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), guardianRestrictedPatterns: e.target.value }))}
+                                    rows={5}
+                                    placeholder={"revolutionary\ngame-changer\nguaranteed returns\n..."}
+                                  />
+                                </label>
+                              </section>
+
                               {marketingBriefError && <p className="mb-config-error">{marketingBriefError}</p>}
 
                               <div className="mb-config-actionbar">
@@ -7279,6 +7870,22 @@ const DashboardPage = () => {
                                 </div>
                               </div>
                             </div>
+                          )}
+                        </div>
+                      )}
+                      {modalTab === 'brief' && (
+                        <div id="marketing-brief-modal-doc-pane" className="tile-detail-tab-pane" style={{ padding: 0, height: '100%', minHeight: '70vh', overflow: 'hidden', display: 'flex' }}>
+                          {marketingBriefPreviewHtml ? (
+                            <iframe
+                              id="marketing-brief-modal-iframe"
+                              key={marketingBrief?.generatedAtIso || dashboardState?.modules?.['marketing-brief']?.lastRunId || 'marketing-brief-document'}
+                              title="Marketing brief document"
+                              srcDoc={marketingBriefPreviewHtml}
+                              sandbox="allow-same-origin"
+                              style={{ flex: 1, width: '100%', minHeight: '70vh', border: 'none', background: '#fff', borderRadius: '8px' }}
+                            />
+                          ) : (
+                            <p className="tile-analyzer-solutions-empty">Run the Marketing Brief card to generate the designed founder brief.</p>
                           )}
                         </div>
                       )}
@@ -7301,6 +7908,87 @@ const DashboardPage = () => {
                           ))}
                         </div>
                       )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Social Media Posting card — X composer + queue */}
+                {activeTileModal.cardId === 'social-media-posting' && (
+                  <div id="social-posting-modal-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
+                    <div className="tile-detail-tabs">
+                      <button type="button" className="tile-detail-tab tile-detail-tab--active">X PUBLISHING</button>
+                    </div>
+                    <div className="tile-detail-tab-content">
+                      <div className="tile-detail-tab-pane">
+                        <SocialPostingPanel
+                          getIdToken={brandSystemGetIdToken}
+                          sourceDraft={socialGeneratedDraft}
+                          sourceLabel={hasSocialGeneratedDraft ? 'creative-builder' : 'manual'}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Strategy Builder card */}
+                {activeTileModal.cardId === 'strategy-builder' && (
+                  <div id="strategy-builder-modal-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
+                    <StrategyBuilderCard
+                      bootstrap={bootstrap}
+                      getIdToken={brandSystemGetIdToken}
+                      onOpenCard={(cardId) => {
+                        const c = intakeCapabilityCards.find((x) => x.id === cardId);
+                        if (!c) return;
+                        setActiveTileModal({
+                          title: c.title,
+                          description: c.description,
+                          rows: c.rows,
+                          cardId: c.id,
+                          placeholderLabel: c.placeholderLabel,
+                          number: c.number,
+                          label: c.label,
+                          isCapabilityCard: true,
+                          vizType: null,
+                          recommendation: c.recommendation || null,
+                          analyzer: c.analyzer || null,
+                          readinessBadge: c.readinessBadge || null,
+                        });
+                      }}
+                      onOpenSocialPosting={() => {
+                        setActiveTileModal({
+                          title: 'Social Media Posting',
+                          description: 'Compose, optimize, schedule, and post to X/Twitter.',
+                          cardId: 'social-media-posting',
+                          isCapabilityCard: true,
+                          vizType: null,
+                        });
+                      }}
+                    />
+                  </div>
+                )}
+
+                {/* Market Category card — auto-detect + user override */}
+                {activeTileModal.cardId === 'industry' && (
+                  <div id="market-category-modal-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
+                    <div className="tile-detail-tabs">
+                      <button type="button" className="tile-detail-tab tile-detail-tab--active">CATEGORY</button>
+                    </div>
+                    <div className="tile-detail-tab-content">
+                      <div className="tile-detail-tab-pane">
+                        <MarketCategoryPanel
+                          bootstrap={bootstrap}
+                          getIdToken={brandSystemGetIdToken}
+                          onSaved={(mc) => {
+                            setBootstrap((prev) => ({
+                              ...prev,
+                              dashboardState: {
+                                ...(prev?.dashboardState || {}),
+                                marketCategory: mc && typeof mc === 'object' ? mc : { value: String(mc || '') },
+                              },
+                            }));
+                          }}
+                        />
+                      </div>
                     </div>
                   </div>
                 )}
@@ -7382,7 +8070,7 @@ const DashboardPage = () => {
                 )}
 
                 {/* Tabbed SOLUTIONS / PROBLEMS / DATA for most cards */}
-                {!['multi-device-view', 'brief', 'audit-summary', 'survey-status', 'marketing-brief', 'newsletter', 'brand-system', 'client-brief', 'client-mockup', 'client-site'].includes(activeTileModal.cardId) && (activeTileModal.analyzer || (activeTileModal.cardId === 'social-preview' && siteMeta)) ? (
+                {!['multi-device-view', 'brief', 'audit-summary', 'survey-status', 'marketing-brief', 'newsletter', 'brand-system', 'industry', 'client-brief', 'client-mockup', 'client-site'].includes(activeTileModal.cardId) && (activeTileModal.analyzer || (activeTileModal.cardId === 'social-preview' && siteMeta)) ? (
                   <div
                     id={`${activeTileModal.cardId}-analyzer-findings`}
                     className="tile-detail-bento-cell tile-detail-tabbed-container"
@@ -7431,6 +8119,155 @@ const DashboardPage = () => {
 
                       {modalTab === 'data' && (
                         <div id="tile-detail-bento-rows">
+                          {activeTileModal.cardId === 'style-guide' && (
+                            <div className="brand-snapshot-editor">
+                              <div className="tile-detail-row-section-head">BRAND SNAPSHOT OVERRIDES</div>
+                              <p className="brand-snapshot-editor-note">
+                                Edit the four Brand Snapshot quadrants here. Saving updates the shared style guide used by the Brief, Design Evaluation, Brand System, and downstream content generation.
+                              </p>
+                              <section className="brand-snapshot-editor-section">
+                                <div className="brand-snapshot-editor-section-title">01 · Brand Mark</div>
+                                <div className="brand-snapshot-editor-grid">
+                                  <label className="brand-snapshot-field">
+                                    <span>Logo URL or uploaded mark</span>
+                                    <input
+                                      className="brand-snapshot-input"
+                                      value={brandSnapshotDraft.brandMark.logoUrl}
+                                      onChange={(e) => updateBrandSnapshotDraft(['brandMark', 'logoUrl'], e.target.value)}
+                                      placeholder="https://... or upload below"
+                                    />
+                                  </label>
+                                  <label className="brand-snapshot-field">
+                                    <span>Alt label</span>
+                                    <input
+                                      className="brand-snapshot-input"
+                                      value={brandSnapshotDraft.brandMark.alt}
+                                      onChange={(e) => updateBrandSnapshotDraft(['brandMark', 'alt'], e.target.value)}
+                                      placeholder="Brand mark"
+                                    />
+                                  </label>
+                                  <label className="brand-snapshot-file">
+                                    <span>Upload logo / mark</span>
+                                    <input
+                                      type="file"
+                                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                                      onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (!file) return;
+                                        if (file.size > 700000) {
+                                          setBrandSnapshotError('Logo upload is too large. Use a smaller image or hosted URL.');
+                                          return;
+                                        }
+                                        const reader = new FileReader();
+                                        reader.onload = () => updateBrandSnapshotDraft(['brandMark', 'logoUrl'], String(reader.result || ''));
+                                        reader.onerror = () => setBrandSnapshotError('Could not read uploaded logo.');
+                                        reader.readAsDataURL(file);
+                                      }}
+                                    />
+                                  </label>
+                                </div>
+                              </section>
+                              <section className="brand-snapshot-editor-section">
+                                <div className="brand-snapshot-editor-section-title">02 · Color System</div>
+                                <div className="brand-snapshot-color-grid">
+                                  {[
+                                    ['primary', 'Primary'],
+                                    ['secondary', 'Secondary'],
+                                    ['tertiary', 'Accent'],
+                                    ['neutral', 'Neutral'],
+                                  ].map(([key, label]) => (
+                                    <div key={key} className="brand-snapshot-color-row">
+                                      <label className="brand-snapshot-field">
+                                        <span>{label} hex</span>
+                                        <div className="brand-snapshot-color-input">
+                                          <input
+                                            type="color"
+                                            value={colorInputValue(brandSnapshotDraft.colors[key].hex)}
+                                            onChange={(e) => updateBrandSnapshotDraft(['colors', key, 'hex'], e.target.value)}
+                                            aria-label={`${label} color picker`}
+                                          />
+                                          <input
+                                            className="brand-snapshot-input"
+                                            value={brandSnapshotDraft.colors[key].hex}
+                                            onChange={(e) => updateBrandSnapshotDraft(['colors', key, 'hex'], e.target.value)}
+                                            placeholder="#000000"
+                                          />
+                                        </div>
+                                      </label>
+                                      <label className="brand-snapshot-field">
+                                        <span>{label} role</span>
+                                        <input
+                                          className="brand-snapshot-input"
+                                          value={brandSnapshotDraft.colors[key].role}
+                                          onChange={(e) => updateBrandSnapshotDraft(['colors', key, 'role'], e.target.value)}
+                                          placeholder="How this color should be used"
+                                        />
+                                      </label>
+                                    </div>
+                                  ))}
+                                </div>
+                              </section>
+                              <section className="brand-snapshot-editor-section">
+                                <div className="brand-snapshot-editor-section-title">03 · Type System</div>
+                                <div className="brand-snapshot-editor-grid">
+                                  <label className="brand-snapshot-field">
+                                    <span>Heading font</span>
+                                    <input className="brand-snapshot-input" value={brandSnapshotDraft.typography.headingSystem.fontFamily} onChange={(e) => updateBrandSnapshotDraft(['typography', 'headingSystem', 'fontFamily'], e.target.value)} placeholder="Inter, Space Grotesk, serif..." />
+                                  </label>
+                                  <label className="brand-snapshot-field">
+                                    <span>Heading weight</span>
+                                    <input className="brand-snapshot-input" value={brandSnapshotDraft.typography.headingSystem.fontWeight} onChange={(e) => updateBrandSnapshotDraft(['typography', 'headingSystem', 'fontWeight'], e.target.value)} placeholder="700" />
+                                  </label>
+                                  <label className="brand-snapshot-field">
+                                    <span>Body font</span>
+                                    <input className="brand-snapshot-input" value={brandSnapshotDraft.typography.bodySystem.fontFamily} onChange={(e) => updateBrandSnapshotDraft(['typography', 'bodySystem', 'fontFamily'], e.target.value)} placeholder="Inter, system-ui, sans-serif..." />
+                                  </label>
+                                  <label className="brand-snapshot-field">
+                                    <span>Body weight</span>
+                                    <input className="brand-snapshot-input" value={brandSnapshotDraft.typography.bodySystem.fontWeight} onChange={(e) => updateBrandSnapshotDraft(['typography', 'bodySystem', 'fontWeight'], e.target.value)} placeholder="400" />
+                                  </label>
+                                </div>
+                              </section>
+                              <section className="brand-snapshot-editor-section">
+                                <div className="brand-snapshot-editor-section-title">04 · Gradient / Treatment</div>
+                                <div className="brand-snapshot-editor-grid">
+                                  <label className="brand-snapshot-field">
+                                    <span>Gradient from</span>
+                                    <div className="brand-snapshot-color-input">
+                                      <input type="color" value={colorInputValue(brandSnapshotDraft.gradient.from)} onChange={(e) => updateBrandSnapshotDraft(['gradient', 'from'], e.target.value)} />
+                                      <input className="brand-snapshot-input" value={brandSnapshotDraft.gradient.from} onChange={(e) => updateBrandSnapshotDraft(['gradient', 'from'], e.target.value)} placeholder="#000000" />
+                                    </div>
+                                  </label>
+                                  <label className="brand-snapshot-field">
+                                    <span>Gradient to</span>
+                                    <div className="brand-snapshot-color-input">
+                                      <input type="color" value={colorInputValue(brandSnapshotDraft.gradient.to, '#ffffff')} onChange={(e) => updateBrandSnapshotDraft(['gradient', 'to'], e.target.value)} />
+                                      <input className="brand-snapshot-input" value={brandSnapshotDraft.gradient.to} onChange={(e) => updateBrandSnapshotDraft(['gradient', 'to'], e.target.value)} placeholder="#ffffff" />
+                                    </div>
+                                  </label>
+                                  <label className="brand-snapshot-field">
+                                    <span>Angle</span>
+                                    <input className="brand-snapshot-input" value={brandSnapshotDraft.gradient.angle} onChange={(e) => updateBrandSnapshotDraft(['gradient', 'angle'], e.target.value)} placeholder="135deg" />
+                                  </label>
+                                </div>
+                              </section>
+                              <label className="brand-snapshot-field">
+                                <span>Snapshot notes</span>
+                                <textarea
+                                  className="brand-snapshot-textarea"
+                                  value={brandSnapshotDraft.summary}
+                                  onChange={(e) => updateBrandSnapshotDraft(['summary'], e.target.value)}
+                                  rows={3}
+                                  placeholder="Optional notes that explain the visual system."
+                                />
+                              </label>
+                              {brandSnapshotError && <p className="brand-snapshot-error">{brandSnapshotError}</p>}
+                              <div className="brand-snapshot-actions">
+                                <button type="button" className="tile-foot-rerun-btn" onClick={() => setBrandSnapshotDraft(buildBrandSnapshotDraft(styleGuideData))} disabled={brandSnapshotSaving}>Reset</button>
+                                <button type="button" className="tile-foot-rerun-btn" onClick={saveBrandSnapshotConfig} disabled={brandSnapshotSaving}>{brandSnapshotSaving ? 'Saving...' : 'Save Brand Snapshot'}</button>
+                              </div>
+                            </div>
+                          )}
                           {activeTileModal.rows.map((row) => (
                             row.isHeader ? <div key={row.key} className="tile-detail-row-section-head">{row.label}</div>
                             : row.isAuditRow ? (
@@ -10329,6 +11166,200 @@ const dashboardCss = `
     flex-direction: column;
     gap: 12px;
   }
+  /* Strategy Builder + Market Category — aligned to the dashboard design system.
+     Reuses .tile-detail-tab, .mb-config-platform-toggle, .tile-detail-stat-row,
+     .brand-snapshot-* and .tile-foot-rerun-btn; these add only the gaps. */
+  .sb-section { display: flex; flex-direction: column; gap: 8px; margin-bottom: 22px; }
+  .sb-label {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--text-secondary);
+  }
+  .sb-hint { font-family: var(--font-ui); font-size: 11px; line-height: 1.5; color: var(--text-disabled); }
+  .sb-select, .sb-input {
+    width: 100%; box-sizing: border-box; border: 1px solid var(--border-visible);
+    background: var(--surface-raised); color: var(--text-primary);
+    font-family: var(--font-mono); font-size: 12px; padding: 9px 11px;
+    border-radius: 6px; outline: none; transition: border-color 160ms var(--ease);
+  }
+  .sb-select:focus, .sb-input:focus { border-color: var(--text-secondary); }
+  .sb-range { width: 100%; accent-color: var(--accent); cursor: pointer; }
+  .sb-range-scale {
+    display: flex; justify-content: space-between; margin-top: 3px;
+    font-family: var(--font-mono); font-size: 9px; color: var(--text-disabled);
+  }
+  .sb-seg { display: flex; gap: 6px; }
+  .sb-seg-btn {
+    flex: 1; padding: 7px 0; font-family: var(--font-mono); font-size: 10px;
+    letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; border-radius: 6px;
+    border: 1px solid var(--border-visible); background: var(--surface); color: var(--text-secondary);
+    transition: color 160ms var(--ease), border-color 160ms var(--ease), background 160ms var(--ease);
+  }
+  .sb-seg-btn:hover { color: var(--text-primary); border-color: var(--text-disabled); }
+  .sb-seg-btn.is-active {
+    color: var(--text-display); border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .sb-cta {
+    width: 100%; padding: 11px 0; font-family: var(--font-mono); font-size: 12px;
+    font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; border-radius: 6px;
+    cursor: pointer; border: 1px solid var(--accent); background: var(--accent); color: #fff;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: opacity 160ms var(--ease), transform 120ms var(--ease);
+  }
+  .sb-cta:hover:not(:disabled) { opacity: 0.88; }
+  .sb-cta:active:not(:disabled) { transform: translateY(1px); }
+  .sb-cta:disabled {
+    cursor: not-allowed; border-color: var(--border-visible);
+    background: var(--surface-raised); color: var(--text-disabled);
+  }
+  .sb-chip {
+    font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em;
+    text-transform: uppercase; padding: 2px 8px; border-radius: 999px;
+    border: 1px solid var(--border-visible); color: var(--text-secondary); flex-shrink: 0;
+  }
+  .sb-chip--ready { color: var(--success); border-color: color-mix(in srgb, var(--success) 45%, transparent); }
+  .sb-chip--partial { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 45%, transparent); }
+  .sb-chip--empty { color: var(--text-disabled); }
+  .sb-notice { font-family: var(--font-ui); font-size: 11px; }
+  .sb-notice--ok { color: var(--success); }
+  .sb-notice--error { color: var(--accent); }
+  .sb-link-btn {
+    background: transparent; border: 1px solid var(--border-visible); border-radius: 6px;
+    color: var(--text-secondary); cursor: pointer; font-size: 12px; line-height: 1;
+    padding: 5px 8px; flex-shrink: 0;
+    transition: color 160ms var(--ease), border-color 160ms var(--ease);
+  }
+  .sb-link-btn:hover { color: var(--text-primary); border-color: var(--text-disabled); }
+  .sb-toggle-row-meta { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+  .sb-spinner {
+    width: 14px; height: 14px; border: 2px solid color-mix(in srgb, var(--text-primary) 30%, transparent);
+    border-top-color: var(--text-primary); border-radius: 50%; animation: sb-spin 0.7s linear infinite;
+  }
+  @keyframes sb-spin { to { transform: rotate(360deg); } }
+  .brand-snapshot-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 0 0 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.12);
+    margin-bottom: 8px;
+  }
+  .brand-snapshot-editor-note {
+    margin: -4px 0 0;
+    max-width: 780px;
+    font-family: var(--font-ui);
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--text-secondary);
+  }
+  .brand-snapshot-editor-section {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    padding: 12px;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.035);
+  }
+  .brand-snapshot-editor-section-title {
+    font-family: var(--font-ui);
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+  .brand-snapshot-editor-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+  }
+  .brand-snapshot-color-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 10px;
+  }
+  .brand-snapshot-color-row {
+    display: grid;
+    gap: 8px;
+  }
+  .brand-snapshot-field,
+  .brand-snapshot-file {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    font-family: var(--font-ui);
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+  .brand-snapshot-input,
+  .brand-snapshot-textarea {
+    width: 100%;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.14);
+    background: rgba(0,0,0,0.3);
+    color: var(--text-primary);
+    padding: 10px 11px;
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    line-height: 1.45;
+    outline: none;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .brand-snapshot-textarea {
+    resize: vertical;
+  }
+  .brand-snapshot-input:focus,
+  .brand-snapshot-textarea:focus {
+    border-color: rgba(14,165,233,0.68);
+    box-shadow: 0 0 0 2px rgba(14,165,233,0.12);
+  }
+  .brand-snapshot-color-input {
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1fr);
+    gap: 8px;
+    align-items: center;
+  }
+  .brand-snapshot-color-input input[type="color"] {
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+  }
+  .brand-snapshot-file input[type="file"] {
+    width: 100%;
+    border-radius: 6px;
+    border: 1px dashed rgba(255,255,255,0.18);
+    padding: 9px;
+    color: var(--text-secondary);
+    background: rgba(0,0,0,0.2);
+    font-family: var(--font-ui);
+    font-size: 0.74rem;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .brand-snapshot-error {
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid rgba(255,59,48,0.28);
+    border-radius: 6px;
+    background: rgba(255,59,48,0.08);
+    color: #ff8b84;
+    font-family: var(--font-ui);
+    font-size: 0.78rem;
+    line-height: 1.4;
+  }
+  .brand-snapshot-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
   .mb-config-shell {
     display: flex;
     flex-direction: column;
@@ -10509,6 +11540,127 @@ const dashboardCss = `
     font-size: 0.72rem;
     line-height: 1.35;
     color: var(--text-secondary);
+  }
+  .mb-config-platform-results {
+    margin-top: 16px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    padding-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .mb-config-platform-results-head {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .mb-config-platform-results-title {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+  .mb-config-platform-results-sub {
+    font-family: var(--font-ui);
+    font-size: 0.7rem;
+    line-height: 1.4;
+    color: var(--text-secondary);
+  }
+  .mb-config-platform-result-row {
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: rgba(255,255,255,0.025);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .mb-config-platform-result-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .mb-config-platform-result-label {
+    font-family: var(--font-ui);
+    font-size: 0.78rem;
+    color: var(--text-primary);
+    letter-spacing: 0.01em;
+  }
+  .mb-config-platform-result-count {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-left: auto;
+  }
+  .mb-config-platform-result-empty {
+    font-family: var(--font-ui);
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    margin: 0;
+    opacity: 0.75;
+  }
+  .mb-config-platform-result-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .mb-config-platform-result-item {
+    border-top: 1px dashed rgba(255,255,255,0.07);
+    padding-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .mb-config-platform-result-item:first-child {
+    border-top: 0;
+    padding-top: 0;
+  }
+  .mb-config-platform-result-item-head {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    flex-wrap: wrap;
+  }
+  .mb-config-platform-result-item-tag {
+    font-family: var(--font-mono);
+    font-size: 0.55rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.14);
+    color: var(--text-secondary);
+    background: rgba(255,255,255,0.04);
+  }
+  .mb-config-platform-result-item-title {
+    font-family: var(--font-ui);
+    font-size: 0.78rem;
+    color: var(--text-primary);
+    line-height: 1.35;
+  }
+  .mb-config-platform-result-item-summary {
+    font-family: var(--font-ui);
+    font-size: 0.72rem;
+    line-height: 1.45;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+  .mb-config-platform-result-item-link {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    color: rgba(12,206,107,0.85);
+    word-break: break-all;
+    text-decoration: none;
+  }
+  .mb-config-platform-result-item-link:hover {
+    text-decoration: underline;
   }
   .mb-config-input,
   .mb-config-textarea {

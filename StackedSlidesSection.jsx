@@ -209,7 +209,7 @@ const AUTOMATION_CAPABILITIES = [
     tablePreview: true,
     previewVideo: '/vid/dashboard.mov',
     title: "Onboard now, save time later.",
-    body: 'Access automation tools and download a Client Brief based on your current website, brand identity and visibility.',
+    body: 'Onboard now to access custom tools and dashboard.',
   },
   {
     badge: 'BI',
@@ -1655,7 +1655,7 @@ const StackedSlidesSection = () => {
                           <div style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', animation: 'agentMarquee 28s linear infinite' }}>
                             {[0, 1].map((i) => (
                               <div key={i} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
-                                {['TOOLS', '•', 'TOOLS', '•'].map((w, j) => (
+                                {['HELLO', '•', 'HELLO', '•'].map((w, j) => (
                                   <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
                                 ))}
                               </div>
@@ -1735,7 +1735,7 @@ const StackedSlidesSection = () => {
                                     </div>
                                   ) : null}
                                   <div style={capabilityContentStyle}>
-                                    <h2 style={{ ...capabilityCardTitleStyle, fontSize: 'clamp(2rem, 5vw, 12.4rem)', lineHeight: 1.1, marginBottom: '0.5rem', textAlign: 'center' }}>Onboard now,<br />save time later.</h2>
+                                    <h2 style={{ ...capabilityCardTitleStyle, fontSize: 'clamp(2rem, 5vw, 12.4rem)', lineHeight: 0.9, marginBottom: '0.5rem', paddingTop: '20px', textAlign: 'center' }}>Lets Connect.</h2>
                                     {item.body && <p style={{ ...capabilityCardBodyStyle, maxWidth: 'none', textAlign: 'center' }}>{item.body}</p>}
                                     <div id="cmo-url-input-row" className="cmo-url-input-desktop" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.85rem', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                                       <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
@@ -1877,7 +1877,7 @@ const StackedSlidesSection = () => {
                               "Get all the high-impact deliverables needed to launch digital products and integrate automation into daily operations."
                             </blockquote>
                             <p style={{ ...supportTextStyle, marginTop: 'clamp(0.75rem, 1.5vw, 1.25rem)', textAlign: 'left' }}>
-                              <strong>Bryan Balli</strong> leads a team across design and engineering as a Creative Technologist, with experience spanning agencies in Chicago, San Francisco, and remote teams. I'm ready to step into your process, see what's working, fix what's not, and build what's missing across design, content, and systems.
+                              <strong>Bryan Balli</strong> leads a team across design and engineering as a Creative Technologist, with experience spanning agencies in Chicago, San Francisco, and remote international teams. I'm ready to step into your process, see what's working, fix what's not, and build what's missing across design, content, and systems.
                             </p>
                             <div id="agency-marquee-shell" ref={marqueeShellRef} style={agencyMarqueeShellStyle}>
                               <div ref={marqueeTrackRef} style={agencyMarqueeTrackStyle}>

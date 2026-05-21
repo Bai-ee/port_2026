@@ -127,6 +127,16 @@ export async function POST(request) {
 
   // Brand guide carry-over so prepare-brief can use uploaded brand assets.
   const brandGuideV2 = dashboardState?.userUploads?.brandSystem?.brandGuideV2 || null;
+  const styleGuide = dashboardState?.snapshot?.visualIdentity?.styleGuide || null;
+  const existingData = existing.exists ? existing.data() || {} : {};
+  const onboard = { ...(existingData.onboard || {}) };
+  if (styleGuide) {
+    onboard.designEvaluation = {
+      ...(onboard.designEvaluation || {}),
+      styleGuide,
+      source: 'dashboard-brand-snapshot',
+    };
+  }
 
   const baseDoc = {
     // Synthetic-doc tagging — used by admin LeadGen list to filter these out.
@@ -145,7 +155,8 @@ export async function POST(request) {
     userUploads:  { brandSystem: { brandGuideV2 } },
 
     // Preserve any prior generation output across re-seeds.
-    generation:   existing.data()?.generation || {},
+    generation:   existingData.generation || {},
+    onboard,
 
     updatedAt:    new Date().toISOString(),
     ...(seeded ? { createdAt: new Date().toISOString() } : {}),
