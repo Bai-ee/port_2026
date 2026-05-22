@@ -21,7 +21,7 @@ const OUTPUT_RATE = 4.00  / 1_000_000;
 /**
  * Build a compact tech-context string from site-fetch evidence.
  */
-function buildTechContext(websiteUrl, evidence) {
+function buildTechContext(websiteUrl, evidence, knowledgeBaseContext = null) {
   const lines = [`URL: ${websiteUrl}`];
   const headers = evidence?.pages?.[0]?._responseHeaders || evidence?.headers || {};
   const server  = headers['server'] || headers['Server'];
@@ -37,6 +37,9 @@ function buildTechContext(websiteUrl, evidence) {
   if (robotsBody) {
     lines.push(`robots.txt excerpt:\n${String(robotsBody).slice(0, 400)}`);
   }
+  if (knowledgeBaseContext?.available && knowledgeBaseContext.block) {
+    lines.push(`Knowledge Base excerpt for truthful llms.txt/schema/API descriptions:\n${String(knowledgeBaseContext.block).slice(0, 1800)}`);
+  }
 
   return lines.join('\n');
 }
@@ -51,14 +54,14 @@ function buildTechContext(websiteUrl, evidence) {
  * }} opts
  * @returns {Promise<Record<string, { prompt: string, snippet: string }>>}
  */
-async function generateCustomFixes({ websiteUrl, failedChecks, evidence = null }) {
+async function generateCustomFixes({ websiteUrl, failedChecks, evidence = null, knowledgeBaseContext = null }) {
   if (!failedChecks || failedChecks.length === 0) return {};
 
   // Only generate for checks that have a fixId in the static library
   const fixable = failedChecks.filter((c) => c.fixId && FIX_LIBRARY_CJS[c.fixId]);
   if (fixable.length === 0) return {};
 
-  const techContext = buildTechContext(websiteUrl, evidence);
+  const techContext = buildTechContext(websiteUrl, evidence, knowledgeBaseContext);
 
   const checkList = fixable.map((c) => {
     const lib = FIX_LIBRARY_CJS[c.fixId];

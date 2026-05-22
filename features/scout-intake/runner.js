@@ -312,6 +312,43 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
     logWarn('intake_intelligence_read_failed', { clientId, pipelineRunId, error: err.message });
   }
 
+  // ── Knowledge Base priority context ─────────────────────────────────────
+  // Client-owned Brain content is treated as high-priority factual context for
+  // business model, market category, positioning, and audience. Retrieval is
+  // capped to top chunks and never injects raw documents.
+  let knowledgeBaseContext = null;
+  try {
+    const kb = await import('../knowledge-base/pipeline-context.js');
+    const query = kb.buildKnowledgeBaseRuntimeQuery({
+      intent: 'business model market category brand positioning offer target audience product facts',
+      websiteUrl,
+      clientName: clientConfig?.displayName || clientConfig?.companyName || '',
+      sourceInputs: clientConfig?.sourceInputs || {},
+    });
+    knowledgeBaseContext = await kb.getKnowledgeBaseRuntimeContext({
+      clientId,
+      query,
+      topK: 5,
+      charCap: 3600,
+    });
+    if (knowledgeBaseContext.available) {
+      logInfo('intake_knowledge_base_context_loaded', {
+        clientId,
+        pipelineRunId,
+        sourceCount: knowledgeBaseContext.sources.length,
+      });
+    } else if (knowledgeBaseContext.error) {
+      logWarn('intake_knowledge_base_context_failed', {
+        clientId,
+        pipelineRunId,
+        error: knowledgeBaseContext.error,
+      });
+    }
+  } catch (err) {
+    knowledgeBaseContext = { available: false, block: '', sources: [], error: err.message };
+    logWarn('intake_knowledge_base_context_threw', { clientId, pipelineRunId, error: err.message });
+  }
+
   // ── Stage 2: LLM synthesis + design system extraction (parallel) ─────────
   // Both hit Anthropic and are independent — run concurrently to cut wall time.
   // Design system extraction is non-fatal: any failure becomes a warning and
@@ -331,6 +368,7 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
       synthesizeSiteEvidence(evidence, {
         onProgress: () => emitProgress('synthesize', 'Running AI brand analysis…'),
         intelligenceBriefing,
+        knowledgeBaseBriefing: knowledgeBaseContext?.available ? knowledgeBaseContext.block : null,
       }),
       'AI synthesis',
     );
@@ -887,6 +925,12 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
       artifactRefs,
       warnings,
       siteMeta,
+      knowledgeBase: knowledgeBaseContext?.available
+        ? {
+            sources: knowledgeBaseContext.sources,
+            injectedAtIso: new Date().toISOString(),
+          }
+        : null,
       styleGuide,
       styleGuideCost,
       userContext,

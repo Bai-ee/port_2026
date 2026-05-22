@@ -214,7 +214,7 @@ function buildOperatorNotes(bs, designReferences = null) {
 
 // ─── DESIGN.MD BUILDER ───────────────────────────────────────────────────────
 
-export function generateDesignMd({ prospect, onboard = {}, content = {}, assetManifest = null, brandSystem = null, designReferences = null, visualDna = null }) {
+export function generateDesignMd({ prospect, onboard = {}, content = {}, assetManifest = null, brandSystem = null, designReferences = null, visualDna = null, knowledgeBaseContext = null }) {
   const def    = getDefaults(prospect.vertical);
   const copy   = content.copy    || {};
   const colors = content.colors  || {};
@@ -259,6 +259,19 @@ export function generateDesignMd({ prospect, onboard = {}, content = {}, assetMa
   const bsMaterial = bs.material_and_depth  || {};
   const bsHeader   = bs.brand_header    || {};
   const visualDnaBrief = formatVisualDnaForBrief(visualDna || prospect.visualDna || null);
+  const knowledgeBaseBlock = knowledgeBaseContext?.available && knowledgeBaseContext.block
+    ? `## CLIENT KNOWLEDGE BASE — MASTER SOURCE OF TRUTH
+
+Use this section as the highest-priority source for offer structure, proof points, FAQs, product truth, audience, positioning, and claims. Do not invent copy that conflicts with it.
+
+${String(knowledgeBaseContext.block).slice(0, 3400)}
+
+${Array.isArray(knowledgeBaseContext.sources) && knowledgeBaseContext.sources.length
+  ? `**Sources:** ${knowledgeBaseContext.sources.slice(0, 5).map((s) => [s.title, s.sectionTitle].filter(Boolean).join(' / ')).join('; ')}`
+  : ''}
+
+---`
+    : '';
 
   // ── Color resolution: Brand System > Design Eval > Scraper > Vertical Default ──
   const primaryHex    = bsColors.foundation?.[0]?.hex || deColors.primary?.hex || colors.primary || def.primary;
@@ -376,6 +389,8 @@ export function generateDesignMd({ prospect, onboard = {}, content = {}, assetMa
 > Status: DRAFT
 
 ---
+
+${knowledgeBaseBlock ? `${knowledgeBaseBlock}\n\n` : ''}
 
 ## 1. CLIENT IDENTITY
 

@@ -269,7 +269,14 @@ export function normalizePostText(content) {
 export function runPostingAgents(content, context = {}) {
   const base = normalizePostText(content);
   const withoutTags = base.replace(/\s+#\w+/g, '').trim();
-  const suggestedTags = ['#CreativeTech', '#AI', '#BuildInPublic'];
+  const kbTerms = Array.isArray(context.knowledgeBaseContext?.chunks)
+    ? context.knowledgeBaseContext.chunks.flatMap((chunk) => chunk.matchedTerms || [])
+    : [];
+  const kbTags = kbTerms
+    .filter((term) => /^[a-z0-9][a-z0-9-]{2,18}$/i.test(term))
+    .slice(0, 3)
+    .map((term) => `#${term.replace(/[^a-z0-9]/gi, '')}`);
+  const suggestedTags = kbTags.length ? kbTags : ['#CreativeTech', '#AI', '#BuildInPublic'];
   const currentTags = base.match(/#\w+/g) || [];
   const tags = Array.from(new Set([...currentTags, ...suggestedTags])).slice(0, 3);
 
@@ -284,7 +291,9 @@ export function runPostingAgents(content, context = {}) {
     agents: {
       contentCreator: {
         status: 'complete',
-        note: context.source ? `Adapted from ${context.source}.` : 'Cleaned into a concise X-ready draft.',
+        note: context.knowledgeBaseContext?.available
+          ? `Adapted with Knowledge Base context from ${context.knowledgeBaseContext.sources?.length || 0} source(s).`
+          : context.source ? `Adapted from ${context.source}.` : 'Cleaned into a concise X-ready draft.',
       },
       hashtagSpecialist: {
         status: 'complete',
@@ -296,6 +305,16 @@ export function runPostingAgents(content, context = {}) {
           ? 'Kept short enough for replies and quote reposts.'
           : 'Trimmed toward the 280-character limit.',
       },
+      knowledgeBaseVerifier: context.knowledgeBaseContext?.available
+        ? {
+            status: 'complete',
+            note: 'Matched the draft against retrieved client-owned context.',
+            sources: context.knowledgeBaseContext.sources || [],
+          }
+        : {
+            status: 'skipped',
+            note: 'No Knowledge Base context available for this draft.',
+          },
       mediaGenerator: {
         status: 'queued',
         note: 'Video/audio generation hooks are reserved for the next build phase.',

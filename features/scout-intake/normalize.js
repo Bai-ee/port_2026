@@ -93,6 +93,7 @@ function normalizeIntakeResult(
     scribeResult = null,
     briefHtml = null,
     scoutConfig = null,
+    knowledgeBase = null,
     tier = 'free',
   }
 ) {
@@ -212,6 +213,7 @@ function normalizeIntakeResult(
       html:  briefHtml || null,
     } : null,
     scoutConfig: scoutConfig || null,
+    knowledgeBase: knowledgeBase || null,
     tier,
     artifactRefs: Array.isArray(artifactRefs) ? artifactRefs : [],
     warnings: Array.isArray(warnings) ? warnings : [],

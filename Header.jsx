@@ -29,7 +29,7 @@ const Header = ({ logoRef, onOpenPage }) => {
           <div ref={logoRef} aria-hidden="true" style={{ width: 0, height: 0, pointerEvents: 'none', position: 'absolute' }} />
 
           <a href="/" id="founders-brand" aria-label="Back to homepage">
-            <img src="/img/circle_logo.png" alt="Bryan Balli logo" width="44" height="44" loading="eager" decoding="async" style={{ mixBlendMode: 'darken' }} />
+            <img src="/img/sig.png" alt="Bryan Balli signature" width="276" height="208" loading="eager" decoding="async" style={{ mixBlendMode: 'darken' }} />
           </a>
 
           <div id="founders-top-actions">

@@ -9,6 +9,23 @@
 
 const SOURCE_INVENTORY = [
   {
+    id: 'knowledge-base',
+    label: 'Knowledge Base',
+    category: 'client',
+    collection: {
+      method: 'Firestore native vector search over per-client chunks',
+      detail: 'Top-K semantic retrieval from knowledge_base/{clientId}/chunks. Raw documents are never injected.',
+      auth: 'server-side Firebase Admin + embedding provider',
+      costPerRun: 'one query embedding + Firestore vector read',
+      file: 'features/knowledge-base/pipeline-context.js',
+    },
+    payloadFields: [
+      'block (top chunks, hard-capped)',
+      'sources[] ({title, sectionTitle, sourceType, sourceUrl, relevance})',
+    ],
+    freshness: 'On demand per card or generation run.',
+  },
+  {
     id: 'site.html',
     label: 'Site HTML',
     category: 'site',

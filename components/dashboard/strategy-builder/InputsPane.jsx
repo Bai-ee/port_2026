@@ -73,6 +73,22 @@ const DATA_SOURCES = [
     readiness: (ds) =>
       ds?.leadgen?.businessName || ds?.leadgen?.city ? 'ready' : 'empty',
   },
+  {
+    key: 'knowledge-base',
+    label: 'Knowledge Base',
+    card: 'knowledge-base',
+    readiness: (ds) => {
+      const sources = [
+        ...(Array.isArray(ds?.knowledgeBase?.sources) ? ds.knowledgeBase.sources : []),
+        ...(Array.isArray(ds?.strategyBuilder?.lastPlan?.knowledgeBaseSources) ? ds.strategyBuilder.lastPlan.knowledgeBaseSources : []),
+        ...(Array.isArray(ds?.marketingBrief?.knowledgeBaseSources) ? ds.marketingBrief.knowledgeBaseSources : []),
+        ...(Array.isArray(ds?.brandSystem?.knowledgeBaseSources) ? ds.brandSystem.knowledgeBaseSources : []),
+        ...(Array.isArray(ds?.marketCategory?.knowledgeBaseSources) ? ds.marketCategory.knowledgeBaseSources : []),
+      ];
+      if (sources.length) return 'ready';
+      return ds?.knowledgeBase ? 'partial' : 'empty';
+    },
+  },
 ];
 
 /**

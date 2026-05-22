@@ -70,6 +70,11 @@ const StrategyBuilderCard = dynamic(() => import('./components/dashboard/Strateg
   ssr: false,
 });
 
+const KnowledgeBaseCard = dynamic(() => import('./components/dashboard/KnowledgeBaseCard'), {
+  loading: () => null,
+  ssr: false,
+});
+
 const MarketCategoryPanel = dynamic(() => import('./components/dashboard/MarketCategoryPanel'), {
   loading: () => null,
   ssr: false,
@@ -104,6 +109,7 @@ const ONBOARDING_CARD_IDS = new Set([
   'priority-signal',
   'brand-system',
   'visual-dna',
+  'knowledge-base',
   'strategy-builder',
   'creative-builder',
   'social-media-posting',
@@ -2132,6 +2138,25 @@ const DashboardPage = () => {
   const displayProfile = bootstrap.userProfile || userProfile;
   const currentRun = recentRuns[0] || null;
   const dashboardState = bootstrap.dashboardState;
+  const getKnowledgeBaseSources = (...candidateLists) => {
+    for (const list of candidateLists) {
+      if (Array.isArray(list) && list.length) return list;
+    }
+    return [];
+  };
+  const summarizeKnowledgeBaseSources = (sources, fallback = 'Not retrieved this run') => {
+    const list = Array.isArray(sources) ? sources : [];
+    if (!list.length) return fallback;
+    return list
+      .slice(0, 3)
+      .map((source) => {
+        const title = source?.title || source?.itemTitle || source?.sourceUrl || 'Knowledge item';
+        const section = source?.sectionTitle || source?.heading || '';
+        return section ? `${title} / ${section}` : title;
+      })
+      .join(' · ');
+  };
+  const globalKnowledgeBaseSources = getKnowledgeBaseSources(dashboardState?.knowledgeBase?.sources);
   const artifactVersionKey =
     dashboardState?.latestRunId
     || dashboardState?.updatedAt?.seconds
@@ -3181,6 +3206,23 @@ const DashboardPage = () => {
   const hasNewsletterData = Boolean(dashboardState?.newsletter?.content?.hero_story);
   const newsletterHeroPreview = dashboardState?.newsletter?.content?.hero_story?.slice(0, 140) || '';
   const marketingBrief = dashboardState?.marketingBrief || null;
+  const marketingBriefKnowledgeBaseSources = getKnowledgeBaseSources(
+    marketingBrief?.knowledgeBaseSources,
+    globalKnowledgeBaseSources
+  );
+  const strategyBuilderKnowledgeBaseSources = getKnowledgeBaseSources(
+    dashboardState?.strategyBuilder?.lastPlan?.knowledgeBaseSources,
+    globalKnowledgeBaseSources
+  );
+  const brandSystemKnowledgeBaseSources = getKnowledgeBaseSources(
+    dashboardState?.brandSystem?.knowledgeBaseSources,
+    globalKnowledgeBaseSources
+  );
+  const marketCategoryKnowledgeBaseSources = getKnowledgeBaseSources(
+    dashboardState?.marketCategory?.knowledgeBaseSources,
+    globalKnowledgeBaseSources
+  );
+  const knowledgeBaseSourceSummary = summarizeKnowledgeBaseSources(globalKnowledgeBaseSources, 'Available as client master knowledge');
   const hasMarketingBriefData = Boolean(marketingBrief?.content || dashboardState?.headline || latestInsights.length > 0);
   const hasBriefDocumentData = Boolean(hasIntakeData || hasMarketingBriefData);
   const marketingBriefStatus = moduleState?.['marketing-brief']?.status || (hasMarketingBriefData ? 'succeeded' : 'idle');
@@ -3588,6 +3630,11 @@ const DashboardPage = () => {
     rows.push({ key: 'seo-skill-highlights', label: 'SEO skill highlights', value: formatLogList(seoDepthAudit?.highlights) });
     rows.push({ key: 'seo-skill-warning-codes', label: 'Skill warning codes', value: formatLogList(skillRunWarnings, (w) => w?.code) });
     rows.push({ key: 'seo-skill-warning-msgs', label: 'Skill warning messages', value: formatLogList(skillRunWarnings, (w) => w?.message) });
+    rows.push({
+      key: 'seo-knowledge-base',
+      label: 'Knowledge Base',
+      value: summarizeKnowledgeBaseSources(globalKnowledgeBaseSources, 'Available for claim-check context'),
+    });
     rows.push({ key: 'seo-scribe-warning-codes', label: 'Scribe warning codes', value: formatLogList(scribeRunWarnings, (w) => w?.code) });
     rows.push({ key: 'seo-scribe-warning-msgs', label: 'Scribe warning messages', value: formatLogList(scribeRunWarnings, (w) => w?.message) });
     rows.push({ key: 'seo-guardian-source', label: 'SEO guardian source', value: formatLogScalar(seoGuardianState?.source) });
@@ -3644,6 +3691,11 @@ const DashboardPage = () => {
     }
     const aiScore = agentReadinessAiSeo?.aiVisibility?.score;
     if (aiScore != null) rows.push({ key: 'ar-ai-score', label: 'AI Visibility', value: `${aiScore} / 100` });
+    rows.push({
+      key: 'ar-knowledge-base',
+      label: 'Knowledge Base',
+      value: summarizeKnowledgeBaseSources(globalKnowledgeBaseSources, 'Available for claim-check context'),
+    });
     const failedChecks = (agentReadinessData.checks || []).filter((c) => c.status === 'fail' || c.status === 'warn');
     if (failedChecks.length > 0) {
       rows.push({ key: 'ar-checks-hdr', label: '── CHECKS NEEDING ATTENTION ──', isHeader: true });
@@ -4229,7 +4281,10 @@ const DashboardPage = () => {
       description: 'Based on your site, we identified your business model and positioning. This helps shape how content, SEO, and messaging should be structured.',
       placeholderLabel: hasBusinessModelData ? 'MODEL' : 'NO\nMODEL',
       rows: hasBusinessModelData
-        ? [{ key: 'model', label: 'Structure', value: resolvedBusinessModel }]
+        ? [
+            { key: 'model', label: 'Structure', value: resolvedBusinessModel },
+            { key: 'bm-knowledge-base', label: 'Knowledge Base', value: knowledgeBaseSourceSummary },
+          ]
         : buildWorkNeededRows('No pricing, packaging, or service structure was clear in fetched pages.'),
       footerLeft: hasBusinessModelData ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
@@ -4386,6 +4441,11 @@ const DashboardPage = () => {
                   ? 'User-set'
                   : 'Auto-detected',
             },
+            {
+              key: 'sector-kb',
+              label: 'Knowledge Base',
+              value: summarizeKnowledgeBaseSources(marketCategoryKnowledgeBaseSources, 'Available for category evidence'),
+            },
           ]
         : buildWorkNeededRows('No category yet — open this card and Run analysis, or set it manually.'),
       footerLeft: hasCategoryData ? 'Live' : WORK_NEEDED_LABEL,
@@ -4446,6 +4506,7 @@ const DashboardPage = () => {
           ? [
               { key: 'bs-prompt-status', label: 'Master Prompt', value: 'Ready to copy' },
               { key: 'bs-json-status',   label: 'JSON Object',   value: 'Ready to copy' },
+              { key: 'bs-knowledge-base', label: 'Knowledge Base', value: summarizeKnowledgeBaseSources(brandSystemKnowledgeBaseSources, 'Available for brand truth') },
               { key: 'bs-last-run',      label: 'Generated',     value: bsRun?.generatedAt || '—' },
             ]
           : buildWorkNeededRows('No prompt generated yet — click RUN to scan your pipeline and fill any gaps.'),
@@ -4498,6 +4559,7 @@ const DashboardPage = () => {
             { key: 'primary', label: 'Primary', value: brandTone?.primary || 'Pending' },
             { key: 'secondary', label: 'Secondary', value: brandTone?.secondary || 'Pending' },
             { key: 'tags', label: 'Tags', value: brandTone?.tags?.slice(0, 3).join(' · ') || 'Pending' },
+            { key: 'bv-knowledge-base', label: 'Knowledge Base', value: knowledgeBaseSourceSummary },
           ]
         : buildWorkNeededRows('Not enough long-form copy or repeated messaging was fetched to infer voice.'),
       footerLeft: hasBrandToneData ? 'Live' : WORK_NEEDED_LABEL,
@@ -4583,7 +4645,12 @@ const DashboardPage = () => {
       title: 'Post Strategy',
       description: 'What to post, where, and why—based on gaps and audience signals.',
       placeholderLabel: 'NO\nSTRATEGY',
-      rows: buildWorkNeededRows('Post strategy requires brand tone, audience signals, and content gap data.'),
+      rows: hasContentAngleData
+        ? [
+            { key: 'ps-angle', label: 'Angle', value: resolvedContentAngle },
+            { key: 'ps-knowledge-base', label: 'Knowledge Base', value: knowledgeBaseSourceSummary },
+          ]
+        : buildWorkNeededRows('Post strategy requires brand tone, audience signals, and content gap data.'),
       footerLeft: WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
     },
@@ -4597,12 +4664,35 @@ const DashboardPage = () => {
       placeholderLabel: hasMarketingBriefData ? 'STRATEGY' : 'NO\nBRIEF',
       rows: [
         { key: 'sb-source', label: 'Source', value: hasMarketingBriefData ? 'Marketing Brief' : 'Needs Scout brief' },
+        {
+          key: 'sb-knowledge-base',
+          label: 'Knowledge Base',
+          value: summarizeKnowledgeBaseSources(strategyBuilderKnowledgeBaseSources, 'Toggleable priority source'),
+        },
         { key: 'sb-angle', label: 'Angle', value: marketingBrief?.content?.content_angle || marketingBrief?.headline || resolvedContentAngle || 'Run Marketing Brief to generate the angle.' },
         { key: 'sb-platform', label: 'Platform', value: 'X / Twitter' },
       ],
       footerLeft: hasMarketingBriefData ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
       readinessBadge: hasMarketingBriefData ? { tone: 'ok', label: 'Ready' } : null,
+    },
+    {
+      id: 'knowledge-base',
+      category: 'onboarding',
+      number: 'KB',
+      label: 'BRAIN',
+      title: 'Knowledge Base',
+      description: 'Stores client-owned context from pasted text and URLs so Strategy Builder can later retrieve the most relevant chunks as a controlled source.',
+      placeholderLabel: 'CLIENT\nBRAIN',
+      rows: [
+        { key: 'kb-source', label: 'Sources', value: 'Text · URLs · documents' },
+        { key: 'kb-limit', label: 'Limit', value: '100 items / client' },
+        { key: 'kb-retrieval', label: 'Retrieval', value: 'OpenAI embeddings · Firestore vector search · top 5 chunks' },
+        { key: 'kb-runtime-source', label: 'Pipeline source', value: 'Priority context for Strategy Builder, cards, briefs, posts, and generated sites' },
+      ],
+      footerLeft: 'Ready',
+      footerRight: 'CLIENT DATA',
+      readinessBadge: { tone: 'ok', label: 'Ready' },
     },
     {
       id: 'creative-builder',
@@ -4616,6 +4706,7 @@ const DashboardPage = () => {
         { key: 'cb-copy', label: 'Copy', value: hasSocialGeneratedDraft ? socialGeneratedDraft : 'No generated X draft yet.' },
         { key: 'cb-media', label: 'Media', value: 'Video/audio generation queued for next phase' },
         { key: 'cb-source', label: 'Source', value: hasMarketingBriefData ? 'Strategy Builder' : 'Manual / Draft Content' },
+        { key: 'cb-knowledge-base', label: 'Knowledge Base', value: knowledgeBaseSourceSummary },
       ],
       footerLeft: hasSocialGeneratedDraft ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
@@ -4633,6 +4724,7 @@ const DashboardPage = () => {
         { key: 'smp-channel', label: 'Channel', value: 'X / Twitter' },
         { key: 'smp-agent-system', label: 'Agents', value: 'Content Creator · Hashtag Specialist · Engagement Optimizer' },
         { key: 'smp-source', label: 'Creative Source', value: hasSocialGeneratedDraft ? 'Creative Builder output available' : 'Manual composer ready' },
+        { key: 'smp-knowledge-base', label: 'Knowledge Base', value: knowledgeBaseSourceSummary },
       ],
       footerLeft: 'Ready',
       footerRight: 'LIVE',
@@ -4647,7 +4739,10 @@ const DashboardPage = () => {
       description: 'Ready-to-use posts tailored to your brand.',
       placeholderLabel: hasDraftPostData ? 'DRAFT' : 'NO\nDRAFT',
       rows: hasDraftPostData
-        ? [{ key: 'post', label: 'Draft', value: resolvedDraftPost }]
+        ? [
+            { key: 'post', label: 'Draft', value: resolvedDraftPost },
+            { key: 'draft-knowledge-base', label: 'Knowledge Base', value: knowledgeBaseSourceSummary },
+          ]
         : buildWorkNeededRows('Not enough brand voice clarity to draft content credibly.'),
       footerLeft: hasDraftPostData ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
@@ -4677,6 +4772,7 @@ const DashboardPage = () => {
         { key: 'mb-focus', label: 'Scout focus', value: marketingBriefConfig?.sourceFocus || 'Not configured' },
         { key: 'mb-instructions', label: 'Instructions', value: marketingBriefConfig?.scoutInstructions ? 'Custom' : 'Default' },
         { key: 'mb-sources', label: 'Sources', value: (marketingBriefConfig?.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS).join(' · ') },
+        { key: 'mb-knowledge-base', label: 'Knowledge Base', value: summarizeKnowledgeBaseSources(marketingBriefKnowledgeBaseSources, 'Priority client context') },
         { key: 'mb-searches', label: 'Searches', value: String(marketingBriefConfig?.searches?.filter((row) => row.query)?.length || 0) },
         { key: 'mb-kols', label: 'KOL signals', value: String(marketingScoutAgentData?.kolActivity?.length || 0) },
         { key: 'mb-viral', label: 'Viral windows', value: String(marketingScoutAgentData?.viralOpportunities?.opportunities?.length || marketingBrief?.contentOpportunities?.length || 0) },
@@ -7328,6 +7424,12 @@ const DashboardPage = () => {
                                   <span className="tile-detail-stat-value">{String(val)}</span>
                                 </div>
                               ))}
+                              <div className="tile-detail-stat-row">
+                                <span className="tile-detail-stat-label">Knowledge Base</span>
+                                <span className="tile-detail-stat-value">
+                                  {summarizeKnowledgeBaseSources(brandSystemKnowledgeBaseSources, 'Available for brand truth')}
+                                </span>
+                              </div>
                             </div>
                           ) : emptyState('data')
                         )}
@@ -7386,6 +7488,7 @@ const DashboardPage = () => {
                                 { key: 'cb-d-stage',    label: 'Stage',         value: clientProspect?.stage     || '—' },
                                 { key: 'cb-d-gen',      label: 'Generated',     value: gen.briefGeneratedAt ? new Date(gen.briefGeneratedAt).toLocaleString() : '—' },
                                 { key: 'cb-d-lines',    label: 'Brief size',    value: gen.briefLines ? `${gen.briefLines} lines` : (designMd ? `${designMd.split('\n').length} lines` : '—') },
+                                { key: 'cb-d-kb',       label: 'Knowledge Base', value: summarizeKnowledgeBaseSources(gen.knowledgeBaseSources || globalKnowledgeBaseSources, 'Available for offer / proof context') },
 
                                 { key: 'cb-h2',         isHeader: true, label: 'SCRAPED COPY' },
                                 { key: 'cb-c-headline', label: 'Hero headline', value: copy.heroHeadline    || '—' },
@@ -7540,6 +7643,7 @@ const DashboardPage = () => {
                                 { key: 'cs-d-htmlat',    label: 'HTML generated', value: gen.htmlGeneratedAt ? new Date(gen.htmlGeneratedAt).toLocaleString() : '—' },
                                 { key: 'cs-d-size',      label: 'HTML size',      value: gen.htmlSizeBytes ? `${(gen.htmlSizeBytes / 1024).toFixed(1)} KB` : '—' },
                                 { key: 'cs-d-issues',    label: 'Validation issues', value: Array.isArray(gen.validationIssues) ? `${gen.validationIssues.length}` : '—' },
+                                { key: 'cs-d-kb',        label: 'Knowledge Base', value: summarizeKnowledgeBaseSources(gen.knowledgeBaseSources || globalKnowledgeBaseSources, 'Available for offer / FAQ / proof context') },
 
                                 { key: 'cs-h2',          isHeader: true, label: 'AI READINESS' },
                                 { key: 'cs-d-before',    label: 'Before',         value: cmp?.before?.score != null ? String(cmp.before.score) : '—' },
@@ -7967,6 +8071,17 @@ const DashboardPage = () => {
                   </div>
                 )}
 
+                {/* Knowledge Base card */}
+                {activeTileModal.cardId === 'knowledge-base' && (
+                  <div
+                    id="knowledge-base-modal-panel"
+                    className="tile-detail-bento-cell tile-detail-tabbed-container"
+                    style={{ overflowY: 'auto', minHeight: 0 }}
+                  >
+                    <KnowledgeBaseCard getIdToken={brandSystemGetIdToken} />
+                  </div>
+                )}
+
                 {/* Market Category card — auto-detect + user override */}
                 {activeTileModal.cardId === 'industry' && (
                   <div id="market-category-modal-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
@@ -8070,7 +8185,7 @@ const DashboardPage = () => {
                 )}
 
                 {/* Tabbed SOLUTIONS / PROBLEMS / DATA for most cards */}
-                {!['multi-device-view', 'brief', 'audit-summary', 'survey-status', 'marketing-brief', 'newsletter', 'brand-system', 'industry', 'client-brief', 'client-mockup', 'client-site'].includes(activeTileModal.cardId) && (activeTileModal.analyzer || (activeTileModal.cardId === 'social-preview' && siteMeta)) ? (
+                {!['multi-device-view', 'brief', 'audit-summary', 'survey-status', 'marketing-brief', 'newsletter', 'brand-system', 'industry', 'knowledge-base', 'client-brief', 'client-mockup', 'client-site'].includes(activeTileModal.cardId) && (activeTileModal.analyzer || (activeTileModal.cardId === 'social-preview' && siteMeta)) ? (
                   <div
                     id={`${activeTileModal.cardId}-analyzer-findings`}
                     className="tile-detail-bento-cell tile-detail-tabbed-container"

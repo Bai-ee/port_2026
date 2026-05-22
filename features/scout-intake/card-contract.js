@@ -164,7 +164,7 @@ const CARD_CONTRACT = [
     // missing canonical). Scribe opens with the top problem and points to the
     // Solutions tab via the diagnose-role voice rules in card-voice.js.
     actionClass: 'diagnose',
-    sources: ['synth.intake', 'site.meta'],
+    sources: ['synth.intake', 'site.meta', 'knowledge-base'],
     missingStateRules: [
       {
         id: 'no-brand-tone-signals',
@@ -251,7 +251,7 @@ const CARD_CONTRACT = [
     qualityScaling: true,
     tier: 'all',
     actionClass: 'diagnose',
-    sources: ['intel.pagespeed', 'site.meta'],
+    sources: ['intel.pagespeed', 'site.meta', 'knowledge-base'],
     missingStateRules: [
       {
         id: 'pagespeed-performance-critical',
@@ -283,7 +283,7 @@ const CARD_CONTRACT = [
     qualityScaling: true,
     tier: 'all',
     actionClass: 'describe',
-    sources: ['synth.intake'],
+    sources: ['synth.intake', 'knowledge-base'],
     missingStateRules: [
       {
         id: 'industry-unknown',
@@ -309,7 +309,7 @@ const CARD_CONTRACT = [
     qualityScaling: true,
     tier: 'all',
     actionClass: 'describe',
-    sources: ['synth.intake', 'site.html'],
+    sources: ['synth.intake', 'site.html', 'knowledge-base'],
     missingStateRules: [
       {
         id: 'no-pricing-signal',
@@ -637,7 +637,7 @@ const CARD_CONTRACT = [
     qualityScaling: true,
     tier: 'all',
     actionClass: 'generate',
-    sources: ['synth.styleGuide', 'synth.intake', 'site.meta', 'userContext'],
+    sources: ['synth.styleGuide', 'synth.intake', 'site.meta', 'userContext', 'knowledge-base'],
     missingStateRules: [
       {
         id: 'no-style-guide',

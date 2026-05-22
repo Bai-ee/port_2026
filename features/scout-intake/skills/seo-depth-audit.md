@@ -8,6 +8,7 @@ inputs:
   - intel.pagespeed
   - site.meta
   - site.html
+  - knowledge-base
 output:
   tool: write_seo_depth_audit
   schemaRef: seo-depth-audit-v1
@@ -30,6 +31,8 @@ Every finding must cite the exact source field that triggered it AND be substant
 **Output only a tool call to `write_seo_depth_audit`. No prose outside the tool call.**
 
 **Out of scope:** Do not emit findings for accessibility (a11y) or best-practices issues. This audit covers SEO, performance, content depth, E-E-A-T, and schema only.
+
+**Knowledge Base rule:** `knowledge-base` is client-owned truth for product facts, offer language, audience, proof points, and claims. Use it to recommend SEO topics, schema descriptions, E-E-A-T copy, FAQs, and content-depth improvements. Do not override live technical findings from PageSpeed or site HTML with Knowledge Base text.
 
 ## Quality bar for findings
 

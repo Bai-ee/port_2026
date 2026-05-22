@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
+import {
+  buildKnowledgeBaseRuntimeQuery,
+  getKnowledgeBaseRuntimeContext,
+} from '../../../../features/knowledge-base/pipeline-context.js';
 
 const require = createRequire(import.meta.url);
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
@@ -275,12 +279,28 @@ export async function POST(request) {
   }
 
   // ── Re-fetch + re-run mapper ───────────────────────────────────────────────
-  const [stateSnap, clientSnap] = await Promise.all([
+  const [stateSnap, clientSnap, configSnap] = await Promise.all([
     stateRef.get(),
     fb.adminDb.collection('clients').doc(clientId).get(),
+    fb.adminDb.collection('client_configs').doc(clientId).get(),
   ]);
   const dashboardState = stateSnap.exists ? stateSnap.data() : {};
   const client = clientSnap.exists ? clientSnap.data() : null;
+  const clientConfig = configSnap.exists ? configSnap.data() : {};
+  const brandOverview = dashboardState.snapshot?.brandOverview || {};
+  const sourceInputs = clientConfig.sourceInputs || {};
+  const knowledgeBaseContext = await getKnowledgeBaseRuntimeContext({
+    clientId,
+    query: buildKnowledgeBaseRuntimeQuery({
+      intent: 'brand system visual identity brand voice positioning audience product facts category',
+      websiteUrl: sourceInputs.websiteUrl || client?.websiteUrl || '',
+      clientName: client?.displayName || client?.companyName || brandOverview.headline || '',
+      brandOverview,
+      sourceInputs,
+    }),
+    topK: 5,
+    charCap: 2600,
+  });
 
   const mapperInput = {
     snapshot:        dashboardState.snapshot        || {},
@@ -288,6 +308,7 @@ export async function POST(request) {
     siteMeta:        dashboardState.siteMeta        || {},
     userUploads:     dashboardState.userUploads     || {},
     artifacts:       dashboardState.artifacts       || {},
+    knowledgeBaseContext,
     client,
   };
 
@@ -325,6 +346,7 @@ export async function POST(request) {
     designDirection: uo.designDirection                            ? 'user'     : 'inferred',
     moodBoard:      uo.moodBoard?.length                           ? 'vision'   : 'inferred',
     photoDirection: uo.photoDirection                              ? 'user'     : 'inferred',
+    knowledgeBase: knowledgeBaseContext.available                  ? 'runtime-retrieval' : null,
   };
 
   const jsonV1 = buildBrandSystemJson({ filled: result.filled });
@@ -355,6 +377,7 @@ export async function POST(request) {
         selectedPrompt,
         selectedTemplateId,
         sources,
+        knowledgeBaseSources: knowledgeBaseContext.available ? knowledgeBaseContext.sources : [],
         generatedAt,
         schemaVersion: result.schemaVersion,
       },
@@ -375,6 +398,7 @@ export async function POST(request) {
       selectedPrompt,
       selectedTemplateId,
       sources,
+      knowledgeBaseSources: knowledgeBaseContext.available ? knowledgeBaseContext.sources : [],
       generatedAt,
       completeness: result.completeness,
     },

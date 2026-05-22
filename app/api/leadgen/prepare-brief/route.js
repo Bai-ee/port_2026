@@ -12,6 +12,10 @@ const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
 import { scrapeClientContent } from '../../../../features/leadgen/content-scraper.js';
 import { generateDesignMd }    from '../../../../features/leadgen/design-md-generator.js';
 import { buildAssetManifest, getGbpPhotoUrls, makeClientSlug } from '../../../../features/leadgen/asset-manager.js';
+import {
+  buildKnowledgeBaseRuntimeQuery,
+  getKnowledgeBaseRuntimeContext,
+} from '../../../../features/knowledge-base/pipeline-context.js';
 
 function makeReqShim(request) {
   return {
@@ -27,6 +31,12 @@ function normalizeUrl(raw) {
   if (!s) return null;
   const c = /^https?:\/\//i.test(s) ? s : `https://${s}`;
   try { return new URL(c).toString(); } catch { return null; }
+}
+
+function resolveProspectClientId(placeId, prospect) {
+  if (prospect?.clientId) return prospect.clientId;
+  const match = String(placeId || '').match(/^client:(.+)$/);
+  return match ? match[1] : null;
 }
 
 // POST /api/leadgen/prepare-brief
@@ -109,6 +119,23 @@ export async function POST(request) {
         const brandGuide = useBrandSystem
           ? (prospect.brandGuide || prospect.userUploads?.brandSystem?.brandGuideV2 || null)
           : null;
+        const prospectClientId = resolveProspectClientId(placeId, prospect);
+        const knowledgeBaseContext = prospectClientId
+          ? await getKnowledgeBaseRuntimeContext({
+              clientId: prospectClientId,
+              query: buildKnowledgeBaseRuntimeQuery({
+                intent: 'leadgen generated site offer structure proof points FAQ product truth audience positioning services',
+                websiteUrl,
+                clientName: prospect.name || '',
+                brandOverview: {
+                  industry: prospect.vertical || '',
+                  summary: prospect.description || '',
+                },
+              }),
+              topK: 5,
+              charCap: 3400,
+            })
+          : null;
         const designRefs = prospect.generation?.designReferences || null;
         const onboardForBrief = { ...(prospect.onboard || {}) };
         if (!useDesignEval) {
@@ -125,6 +152,7 @@ export async function POST(request) {
           brandSystem:      brandGuide,
           designReferences: designRefs,
           visualDna:        prospect.visualDna || null,
+          knowledgeBaseContext,
         });
 
         const lines = designMd.split('\n').length;
@@ -135,6 +163,7 @@ export async function POST(request) {
 
         await fb.adminDb.collection('leadgen_prospects').doc(placeId).update({
           'generation.designMd':            designMd,
+          'generation.knowledgeBaseSources': knowledgeBaseContext?.available ? knowledgeBaseContext.sources : [],
           'generation.contentJson':         JSON.stringify(content),
           'generation.assetManifest':       assetManifest,
           'generation.briefGeneratedAt':    new Date().toISOString(),

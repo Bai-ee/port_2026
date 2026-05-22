@@ -480,6 +480,13 @@ function fieldForGap(gapId) {
 function mapPipelineToBrandSystem(state) {
   const safe = state || {};
   const uo = safe?.userUploads?.brandSystem || {};
+  const kb = safe?.knowledgeBaseContext || safe?.knowledgeBase || null;
+  const kbBlock = typeof kb?.block === 'string'
+    ? kb.block
+    : Array.isArray(kb?.chunks)
+      ? kb.chunks.map((chunk) => chunk?.excerpt || chunk?.text || '').filter(Boolean).join('\n')
+      : '';
+  const kbSources = Array.isArray(kb?.sources) ? kb.sources : [];
 
   // ── Core fields ────────────────────────────────────────────────────────────
   const brandName       = uo.brandName       || getBrandName(safe);
@@ -645,6 +652,13 @@ function mapPipelineToBrandSystem(state) {
       product_shots:         productShots,
       homepage_screenshot:   { url: homepageUrl, vision_analysis: uo.siteVisionAnalysis || null },
     },
+    knowledge_base_context: kbBlock
+      ? {
+          role: 'client-owned source of truth for brand facts, positioning, audience, category, and product claims',
+          excerpt: kbBlock.slice(0, 2600),
+          sources: kbSources.slice(0, 5),
+        }
+      : null,
   };
 
   // Compute remaining gaps in declaration order.
@@ -806,6 +820,7 @@ function buildBrandSystemJsonV2({ filled, sources, generatedAt } = {}) {
       composition: 'Layered, dense, intentional — zero wasted space',
     },
     sources: sources || {},
+    knowledge_base_context: f.knowledge_base_context || null,
     generated_at: generatedAt || new Date().toISOString(),
     assets: f.assets || null,
   };
@@ -855,6 +870,7 @@ function buildBrandSystemJson({ filled }) {
       surface:   f.material_and_depth?.surface   || null,
       reasoning: f.material_and_depth?.reasoning || null,
     },
+    knowledge_base_context: f.knowledge_base_context || null,
     brand_applications: f.brand_applications || [],
     quality_standard: {
       benchmark: 'Must look like it costs $15,000 to produce.',
@@ -902,6 +918,9 @@ function buildMasterPrompt(json) {
     `Industry: ${j.visual_language?.industry || '[industry]'}`,
     `Style: ${j.visual_language?.style || '[style]'} · Lighting: ${j.visual_language?.lighting || '[lighting]'} · Surface: ${j.visual_language?.texture || '[material]'}`,
     `Add 3–5 art-directed mood tiles that read like stills from a real shoot brief.`,
+    j.knowledge_base_context?.excerpt ? `` : null,
+    j.knowledge_base_context?.excerpt ? `CLIENT KNOWLEDGE BASE — use this as source-of-truth context for business facts, positioning, audience, offer language, and product claims:` : null,
+    j.knowledge_base_context?.excerpt ? j.knowledge_base_context.excerpt : null,
     ``,
     `ICONOGRAPHY (6–10 icons)`,
     `Style: ${j.iconography?.style || '[icon style]'} · Stroke rule: ${j.iconography?.stroke_rule || '[stroke rule]'} · Shape grammar: ${j.iconography?.shape_grammar || '[grammar]'}`,
@@ -919,7 +938,7 @@ function buildMasterPrompt(json) {
     ``,
     `QUALITY BAR`,
     `${j.quality_standard?.benchmark} ${j.quality_standard?.total_elements} ${(j.quality_standard?.failure_conditions || []).map((fc) => `Avoid: ${fc}.`).join(' ')}`,
-  ].join('\n');
+  ].filter((line) => line !== null).join('\n');
 }
 
 /**

@@ -212,6 +212,7 @@ function buildSourcePayloads({
   scoutConfig   = null,
   userContext   = null,
   runtimeHealth = null,
+  knowledgeBase = null,
 } = {}) {
   // Unwrap pagespeed SourceRecord — skill prompts cite `intel.pagespeed.scores.*`,
   // which lives under `.facts` in the SourceRecord envelope. When `pagespeed` is
@@ -226,6 +227,7 @@ function buildSourcePayloads({
     'synth.styleGuide':               styleGuide  || null,
     'intel.pagespeed':                pagespeedPayload,
     'runtime.health':                 runtimeHealth || null,
+    'knowledge-base':                 knowledgeBase || null,
     'scout.reddit':                   null,  // Phase E — not wired
     'scout.weather':                  null,
     'scout.reviews':                  null,

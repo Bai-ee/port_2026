@@ -222,11 +222,14 @@ const SYNTHESIS_TOOL = {
 
 // ── Prompt builder ────────────────────────────────────────────────────────────
 
-function buildSynthesisPrompt(evidenceText, intelligenceBriefing = null) {
+function buildSynthesisPrompt(evidenceText, intelligenceBriefing = null, knowledgeBaseBriefing = null) {
   // Intelligence briefing is appended AFTER the website evidence and
   // explicitly labeled as optional background. Keeping it below evidence
   // (and reminding the model it may be stale) prevents a poisoned briefing
   // from overriding what the live crawl actually says about the site.
+  const knowledgeSection = knowledgeBaseBriefing
+    ? `\nCLIENT KNOWLEDGE BASE — CLIENT-OWNED SOURCE OF TRUTH\n${knowledgeBaseBriefing}\n`
+    : '';
   const briefingSection = intelligenceBriefing
     ? `\nOPTIONAL BACKGROUND (may be stale from prior runs — IGNORE any item that contradicts the WEBSITE EVIDENCE above):\n${intelligenceBriefing}\n`
     : '';
@@ -245,10 +248,14 @@ Rules:
 WEBSITE EVIDENCE — GROUND TRUTH
 ================
 ${evidenceText}
+${knowledgeSection}
 ${briefingSection}
 AUTHORITY RULE
 ==============
-The WEBSITE EVIDENCE above is the only authoritative source of truth about this brand. If OPTIONAL BACKGROUND contradicts it (e.g. describes a different industry, product, or audience), IGNORE the background completely. Fabricating a business that doesn't match the evidence is a failure.`;
+The CLIENT KNOWLEDGE BASE is the highest-priority client-owned source for business model, market category, target audience, positioning, offer details, product facts, and brand language.
+The WEBSITE EVIDENCE is authoritative for what is currently visible on the live site.
+If the WEBSITE EVIDENCE and CLIENT KNOWLEDGE BASE disagree about core business facts, prefer the CLIENT KNOWLEDGE BASE and keep the output faithful to it.
+If OPTIONAL BACKGROUND contradicts either source, ignore the background completely. Fabricating a business that doesn't match the evidence is a failure.`;
 }
 
 // ── Extraction helpers ────────────────────────────────────────────────────────
@@ -284,7 +291,7 @@ function extractUsage(response) {
  *   the LLM request begins. May be async; awaited before the API call.
  * @returns {Promise<SynthesisResult>}
  */
-async function synthesizeSiteEvidence(evidence, { onProgress, intelligenceBriefing = null } = {}) {
+async function synthesizeSiteEvidence(evidence, { onProgress, intelligenceBriefing = null, knowledgeBaseBriefing = null } = {}) {
   const evidenceText = formatEvidenceForPrompt(evidence);
 
   // Emit progress right before the blocking API call — gives the frontend
@@ -301,7 +308,7 @@ async function synthesizeSiteEvidence(evidence, { onProgress, intelligenceBriefi
       messages: [
         {
           role: 'user',
-          content: buildSynthesisPrompt(evidenceText, intelligenceBriefing),
+          content: buildSynthesisPrompt(evidenceText, intelligenceBriefing, knowledgeBaseBriefing),
         },
       ],
     });

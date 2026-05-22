@@ -117,6 +117,17 @@ function buildPublishingWindowBlock(briefData) {
 - If Scout surfaces both a live same-day angle and a future event angle, prefer the live same-day angle for the actual post and reserve the future event for planning notes.`;
 }
 
+function buildKnowledgeBaseBlock(config) {
+  const kb = config?.knowledgeBaseContext;
+  if (!kb?.available || !kb.block) return '';
+  return `CLIENT KNOWLEDGE BASE — MASTER SOURCE OF TRUTH:
+${String(kb.block).slice(0, 3400)}
+
+Use this to keep offer details, positioning, ICP, product claims, proof points, and brand language accurate.
+If Scout/social signals conflict with the Knowledge Base on core business facts, prefer the Knowledge Base.
+Do not invent claims beyond Scout signals or the Knowledge Base.`;
+}
+
 // --- Prompt construction ---
 
 /**
@@ -147,6 +158,7 @@ function buildScribePrompt(briefData, config = getDefaultClientConfig()) {
   const voiceBlock = buildVoiceBlock(voice, config);
   const instagramBlock = buildInstagramFormattingBlock(voice);
   const businessFactsBlock = buildBusinessFactsBlock(config);
+  const knowledgeBaseBlock = buildKnowledgeBaseBlock(config);
   const temporalGuardrailsBlock = buildTemporalGuardrailsBlock(briefData);
   const publishingWindowBlock = buildPublishingWindowBlock(briefData);
   const outputSchema = getContentSchema(config);
@@ -216,6 +228,7 @@ You produce content that is indistinguishable from the team's own voice.
 ${voiceBlock}
 ${instagramBlock ? `\n\n${instagramBlock}` : ''}
 ${businessFactsBlock ? `\n\n${businessFactsBlock}` : ''}
+${knowledgeBaseBlock ? `\n\n${knowledgeBaseBlock}` : ''}
 ${temporalGuardrailsBlock ? `\n\n${temporalGuardrailsBlock}` : ''}
 ${publishingWindowBlock ? `\n\n${publishingWindowBlock}` : ''}
 ${platformInterpretation ? `\n\n${platformInterpretation}` : ''}

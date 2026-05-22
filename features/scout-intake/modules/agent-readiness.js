@@ -8,7 +8,7 @@ const { generateCustomFixes } = require('../agent-ready/llm-fix-generator');
 
 const CARD_ID = 'agent-readiness';
 
-async function runAgentReadinessModule({ websiteUrl, onProgress = null }) {
+async function runAgentReadinessModule({ clientId = null, websiteUrl, onProgress = null }) {
   const warningCodes = [];
   const emit = async (stage, label, extra = {}) => {
     if (!onProgress) return;
@@ -22,6 +22,23 @@ async function runAgentReadinessModule({ websiteUrl, onProgress = null }) {
     warningCodes.push(fetchResult.warning.code);
   }
   const evidence = fetchResult?.evidence || null;
+  let knowledgeBaseContext = null;
+  if (clientId) {
+    try {
+      const kb = await import('../../knowledge-base/pipeline-context.js');
+      knowledgeBaseContext = await kb.getKnowledgeBaseRuntimeContext({
+        clientId,
+        query: kb.buildKnowledgeBaseRuntimeQuery({
+          intent: 'agent readiness llms.txt schema API catalog product facts offer audience claims',
+          websiteUrl,
+        }),
+        topK: 5,
+        charCap: 2400,
+      });
+    } catch {
+      warningCodes.push('knowledge_base_context_failed');
+    }
+  }
 
   // Step 2: agent-ready probes + AI SEO + Cloudflare scan in parallel (Phase 7)
   await emit('agent-ready', 'Probe agent-readiness signals…');
@@ -60,7 +77,7 @@ async function runAgentReadinessModule({ websiteUrl, onProgress = null }) {
       (c) => (c.status === 'fail' || c.status === 'warn' || c.status === 'na') && c.fixId
     );
     if (failedChecks.length > 0) {
-      customFixes = await generateCustomFixes({ websiteUrl, failedChecks, evidence });
+      customFixes = await generateCustomFixes({ websiteUrl, failedChecks, evidence, knowledgeBaseContext });
     }
   }
 
@@ -81,6 +98,7 @@ async function runAgentReadinessModule({ websiteUrl, onProgress = null }) {
         findings:    agentReadyResult.findings,
         highlights:  agentReadyResult.highlights,
         customFixes,
+        knowledgeBaseSources: knowledgeBaseContext?.available ? knowledgeBaseContext.sources : [],
         cfSignals:   cfScan.cfSignals || {},
         cfFindings:  cfScan.findings  || [],
       } : null,

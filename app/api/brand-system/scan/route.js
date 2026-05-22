@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
+import {
+  buildKnowledgeBaseRuntimeQuery,
+  getKnowledgeBaseRuntimeContext,
+} from '../../../../features/knowledge-base/pipeline-context.js';
 
 const require = createRequire(import.meta.url);
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
@@ -52,13 +56,29 @@ export async function GET(request) {
     return NextResponse.json({ error: 'No clientId on user record.' }, { status: 404, headers: { 'cache-control': 'no-store' } });
   }
 
-  const [stateSnap, clientSnap] = await Promise.all([
+  const [stateSnap, clientSnap, configSnap] = await Promise.all([
     fb.adminDb.collection('dashboard_state').doc(clientId).get(),
     fb.adminDb.collection('clients').doc(clientId).get(),
+    fb.adminDb.collection('client_configs').doc(clientId).get(),
   ]);
 
   const dashboardState = stateSnap.exists ? stateSnap.data() : {};
   const client = clientSnap.exists ? clientSnap.data() : null;
+  const clientConfig = configSnap.exists ? configSnap.data() : {};
+  const brandOverview = dashboardState.snapshot?.brandOverview || {};
+  const sourceInputs = clientConfig.sourceInputs || {};
+  const knowledgeBaseContext = await getKnowledgeBaseRuntimeContext({
+    clientId,
+    query: buildKnowledgeBaseRuntimeQuery({
+      intent: 'brand system visual identity brand voice positioning audience product facts category',
+      websiteUrl: sourceInputs.websiteUrl || client?.websiteUrl || '',
+      clientName: client?.displayName || client?.companyName || brandOverview.headline || '',
+      brandOverview,
+      sourceInputs,
+    }),
+    topK: 5,
+    charCap: 2600,
+  });
 
   const mapperInput = {
     snapshot:        dashboardState.snapshot        || {},
@@ -66,6 +86,7 @@ export async function GET(request) {
     siteMeta:        dashboardState.siteMeta        || {},
     userUploads:     dashboardState.userUploads     || {},
     artifacts:       dashboardState.artifacts       || {},
+    knowledgeBaseContext,
     client,
   };
 
@@ -100,6 +121,7 @@ export async function GET(request) {
       clientId,
       ...result,
       homepageScreenshotUrl,
+      knowledgeBaseSources: knowledgeBaseContext.available ? knowledgeBaseContext.sources : [],
       lastRun:          dashboardState.brandSystem || null,
       allGapDefs,
       previousUploads:  dashboardState.userUploads?.brandSystem || null,

@@ -1,145 +1,114 @@
-# Brain Feature — Master Prompt for Claude Code CLI
+# Brain Feature - Master Prompt for Claude Code CLI
 
-> **Usage:** Copy everything below the line into Claude Code CLI (Opus) from the repo root.
-> It will produce a phased execution plan with file-level specifics, then pause for your approval before writing any code.
+> Usage: copy everything below the line into Claude Code CLI from the repo root.
+> This is the master orchestration prompt. It should read `docs/BRAIN_FEATURE_PLAN.md`,
+> use the phase prompts in `docs/BRAIN_CLAUDE_PHASE_INDEX.md`, and stop at every
+> phase gate for human approval.
 
 ---
 
-```
-You are planning the "Brain" feature — a per-client knowledge base that ingests whitepapers, URLs, and pasted text, then exposes its contents to the existing Strategy Builder as one more toggleable data source. Your job is to produce a detailed, phased implementation plan. DO NOT write any code yet — output the plan only, then wait for my approval on each phase before executing.
+```text
+You are implementing the Brain feature: a per-client knowledge base that ingests pasted text, URLs, PDFs, DOCX files, and common text-like files, then exposes retrieved knowledge-base context to the existing Strategy Builder as one more toggleable data source.
 
-## 1. PROJECT CONTEXT
+Your job is to complete the feature start to finish using the gated phase prompts in this repository. Do not skip phases. Do not continue to the next phase until the current phase is implemented, verified, summarized, and explicitly approved.
 
-This is a Next.js 16 app (App Router, ES modules) with React 19, Firebase/Firestore (`firebase-admin` v13), and Claude Sonnet via `@anthropic-ai/sdk`. The app is a multi-tenant SaaS dashboard for social media strategy generation. Each client has isolated data under `dashboard_state/{clientId}` and `client_configs/{clientId}`.
+## Required Reading
 
-The Strategy Builder is FROZEN AND VERIFIED across 5+ phases (see docs/STRATEGY_BUILDER_PLAN.md). It generates 30-day social media posting plans by aggregating multiple data sources, sending them to Claude, and validating the structured JSON output. Everything works end-to-end including auto-posting to Twitter/X.
+Read these files first:
 
-## 2. EXISTING PATTERNS YOU MUST FOLLOW
+1. docs/BRAIN_FEATURE_PLAN.md
+2. docs/BRAIN_CLAUDE_PHASE_INDEX.md
+3. docs/STRATEGY_BUILDER_PLAN.md
+4. The phase prompt for the phase you are executing.
 
-### Source toggle pattern (generate/route.js)
-Sources are gated by a per-client enable map stored at `client_configs/{clientId}.strategyBuilder.sources`:
-```js
-const sourceMap = clientConfig.sources || {};
-const srcOn = (key) => sourceMap?.[key]?.enabled !== false;
-// Example: const seo = srcOn('seo-performance') ? { summary, topics } : null;
-```
-The Brain becomes source key `knowledge-base`, following this exact pattern.
+Also inspect the current repo before editing. In particular:
 
-### InputsPane.jsx DATA_SOURCES array
-Each source is an object in the array:
-```js
-{ key: 'knowledge-base', label: 'Knowledge Base', card: 'knowledge-base', readiness: (ds) => /* check */ }
-```
-Renders as a toggle row with readiness chip (ready/partial/empty) and an open-card button.
+- Dashboard shell: DashboardPage.jsx
+- Strategy Builder card: components/dashboard/StrategyBuilderCard.jsx
+- Strategy Builder inputs: components/dashboard/strategy-builder/InputsPane.jsx
+- Strategy Builder generation route: app/api/dashboard/strategy-builder/generate/route.js
+- Strategy Builder config route: app/api/dashboard/strategy-builder/config/route.js
+- Prompt builder: features/strategy-builder/prompt.js
+- Strategy context docs: features/strategy-builder/schemas.js
+- Firebase Admin helper: api/_lib/firebase-admin.cjs
+- Auth/client context pattern: existing app/api/dashboard/** route handlers
 
-### DashboardPage.jsx card registration
-Cards are dynamically imported:
-```js
-const KnowledgeBaseCard = dynamic(() => import('./components/dashboard/KnowledgeBaseCard'), { loading: () => null, ssr: false });
-```
-And included in ONBOARDING_CARD_IDS if needed.
+## Project Context
 
-### prompt.js injection
-Data sources are conditionally injected as compact text blocks with character caps. Example:
-```js
-const seoBlock = seo ? [seo.summary, line(seo.topics, 6)].filter(Boolean).join(' · ') : '';
-```
-The knowledge base block should follow this pattern: top-K chunks concatenated with a hard character cap, never raw documents.
+This is a Next.js 16 App Router app using ES modules, React 19, Firebase/Firestore through firebase-admin v13, and Claude Sonnet through @anthropic-ai/sdk. The app is a multi-tenant SaaS dashboard for social media strategy generation. Client data is isolated by server-resolved clientId.
 
-### StrategyContext shape
-The context object passed to prompt building includes: client, brand, brief, intelligence, media, seo, cardFindings, campaign, signals, config, sources. The Brain adds one new field.
+The Strategy Builder is frozen and verified. It generates 30-day social media posting plans by aggregating server-side data sources, sending compact context to Claude, and validating structured JSON output. Do not rebuild it.
 
-## 3. TECH DECISIONS (CONFIRMED)
+## Repo-Correct Paths
 
-### Firestore native vector search — USE THIS, not Pinecone/Weaviate
-Firestore supports native vector embeddings and `findNearest()` for nearest-neighbor search. This is the retrieval layer. Key details:
-- Max 2048 dimensions supported
-- Node.js `firebase-admin` supports `findNearest()` with cosine distance
-- Pre-filtering with `.where('clientId', '==', clientId)` before vector search gives per-client isolation
-- Handles thousands of vectors per client with no performance issues
-- No separate vector DB needed
+Use these actual repo paths:
 
-### Embeddings — plain fetch(), no SDK
-Call Voyage AI (`voyage-3`, 1024 dims) or OpenAI (`text-embedding-3-small`, 1536 dims) embeddings endpoint via `fetch()`. Zero new package.json dependencies. Approval gate: which provider + where the API key lives in env.
+- Root dashboard page: DashboardPage.jsx
+- Dashboard route wrapper: app/dashboard/page.jsx
+- Dashboard card components: components/dashboard/
+- Strategy Builder card: components/dashboard/StrategyBuilderCard.jsx
+- Strategy Builder subcomponents: components/dashboard/strategy-builder/
+- Strategy Builder route: app/api/dashboard/strategy-builder/generate/route.js
+- Knowledge Base API namespace to add: app/api/dashboard/knowledge-base/
+- Knowledge Base feature utilities to add: features/knowledge-base/
 
-### PDF parsing — approval gate at Phase 5
-`pdf-parse` is the cheapest option (~one dep, no native build). Do not add until Phase 5, and flag it as an approval gate.
+## Current Toggle Storage Caveat
 
-### URL scraping — cheerio is ALREADY in package.json
-Cheerio v1.0.0 is already installed. No new dependency needed for HTML parsing.
+The original product note says source toggles live at client_configs/{clientId}.strategyBuilder.sources. The current repo implementation saves Strategy Builder config, including sources, under dashboard_state/{clientId}.strategyBuilder.config.sources via app/api/dashboard/strategy-builder/config/route.js, and passes that config to generate/route.js.
 
-### Storage
-- Firestore `knowledge_base/{clientId}/items/{itemId}` — item metadata (title, type, sourceUrl, status, createdAt)
-- Firestore `knowledge_base/{clientId}/chunks/{chunkId}` — chunk text, embedding vector, parent itemId, position
-- Firebase Storage `knowledge-base/{clientId}/{itemId}.*` — raw file uploads (PDFs in Phase 5)
+Default implementation: follow the current repo behavior and do not migrate toggle storage.
 
-## 4. CONSTRAINTS
+If a human explicitly approves migration to client_configs, implement that as a separate planned change with compatibility handling. Do not sneak it into a Brain phase.
 
-- **Do not rebuild or modify the Strategy Builder** except the minimal wiring in Phase 4 (one source branch in generate/route.js, one row in InputsPane, one block in prompt.js, one field in StrategyContext).
-- **No silent dependency additions.** Every new package requires explicit approval before installation. Currently there are exactly 20 dependencies in package.json — keep it tight.
-- **Cap items at 100 per client for v1.** Cap individual chunk length. Flag when approaching limits.
-- **Top-K = 5 chunks with hard character cap** when injecting into strategy prompt. Never raw documents.
-- **Follow existing design system:** accent #4ade80, surfaces rgba(255,255,255,0.04-0.12), text #e5e5e5/#888/#666, monospace font, uppercase labels at 0.08em letter-spacing, `tile-detail-tab` classes.
-- **Stable DOM IDs** using kebab-case prefixed with `kb-` for testability.
-- **All API routes under** `app/api/dashboard/knowledge-base/` with 60s default timeout.
-- **Server-side only** for all Firestore reads/writes and embedding calls. Never trust client-supplied knowledge data.
+## Core Constraints
 
-## 5. PHASE STRUCTURE TO PLAN
+- Do not modify Strategy Builder outside Phase 4.
+- In Phase 4, make only the minimal wiring: one source branch in generate/route.js, one field in StrategyContext docs, one compact prompt block, one InputsPane source row, and dashboard open-card support if needed.
+- No silent dependency additions. Every new package requires explicit approval before installation.
+- There are currently 20 top-level dependencies in package.json. Keep it tight.
+- Use Firestore native vector search. Do not add Pinecone, Weaviate, Chroma, Supabase Vector, or another vector database.
+- Embeddings use plain fetch() calls. Do not add embedding SDKs.
+- All knowledge-base reads, writes, embedding calls, retrieval, and ownership checks are server-side.
+- Never trust client-supplied clientId or client-supplied knowledge data.
+- Cap v1 at 100 items per client.
+- Retrieval cap is topK=5 chunks with a hard prompt character cap.
+- Never inject raw documents into Strategy Builder prompts.
+- All Knowledge Base API routes go under app/api/dashboard/knowledge-base/ and export maxDuration = 60.
+- Stable DOM IDs must be kebab-case and prefixed with kb-.
 
-Plan these phases with file-level detail (exact paths, function signatures, Firestore schema). Each phase should list: files created, files edited, Firestore collections/fields touched, API endpoints added, approval gates, and acceptance criteria.
+## Recommended OSS Additions
 
-### Phase 1: Storage + Ingest Backbone
-- Firestore schema for items + chunks collections
-- Chunking utility (features/knowledge-base/chunk.js) — split text into ~500-token chunks with overlap
-- Ingest API routes: paste-text ingest, URL ingest (fetch + cheerio extract + chunk)
-- List items API, delete item API (cascade delete chunks)
-- No UI, no embeddings, no strategy wiring, no PDF
-- Acceptance: can ingest text and URLs via API, chunks stored in Firestore, list and delete work
+Use open-source tools selectively:
 
-### Phase 2: Card UI
-- KnowledgeBaseCard.jsx — tile + modal following existing card shell pattern
-- AddItemPanel.jsx — paste text / enter URL input
-- ItemsList.jsx — list items with status, delete action
-- Wire into DashboardPage.jsx card registration
-- Follow existing design tokens, stable kb-* DOM IDs
-- Acceptance: can add items via UI, see them listed, delete them
+- Use existing cheerio for Phase 1 URL extraction.
+- Keep custom chunking in features/knowledge-base/chunk.js; do not add LangChain or LlamaIndex for v1.
+- Phase 3 embeddings stay direct fetch() calls; no provider SDK.
+- Phase 3 concurrency default is a small custom batch limiter. Optional p-limit only if explicitly approved.
+- Phase 5 document upload uses pdf-parse for PDFs and mammoth for DOCX after approval; common text-like files use UTF-8 extraction with no extra parser.
+- Future optional URL-quality upgrade: @mozilla/readability plus a DOM parser such as linkedom, only if Cheerio extraction quality is inadequate.
+- Future optional premium PDF/document parsing: IBM Docling, not in v1 because it is heavier and Python-oriented.
+- Explicitly avoid Pinecone, Weaviate, LangChain, LlamaIndex, Unstructured, Firecrawl, and full crawlers for v1 unless the architecture is intentionally reopened.
 
-### Phase 3: Embeddings + Retrieval
-- Embed chunks on ingest (features/knowledge-base/embed.js)
-- Store embedding vectors in chunk documents
-- Query-time embedding of search/strategy context
-- `findNearest()` retrieval with cosine distance, top-K=5
-- Reindex API endpoint for re-embedding existing chunks
-- APPROVAL GATE: which embedding provider (Voyage vs OpenAI vs Vertex) + env key name
-- Acceptance: semantic search returns relevant chunks for a query
+## Agent Operating Model
 
-### Phase 4: Strategy Builder Wiring
-- New `knowledge-base` source branch in generate/route.js aggregator
-- New field in StrategyContext
-- New compact block in prompt.js with character cap
-- New source row in InputsPane.jsx DATA_SOURCES array
-- Per-client toggle works end-to-end: enable → generate includes KB context → disable → excluded
-- APPROVAL GATE: approve after Phase 3 verified
-- Acceptance: generated strategy references knowledge base content when enabled, ignores when disabled
+You may use agents, but preserve phase gates.
 
-### Phase 5: PDF Ingest
-- Add pdf-parse dependency (approval gate)
-- Upload route accepting PDF via FormData
-- Store raw PDF in Firebase Storage
-- Extract text → chunk → embed pipeline
-- APPROVAL GATE: approve pdf-parse dep before starting
-- Acceptance: upload a PDF, see it chunked and searchable, strategy can reference its content
+- Lead Agent owns the phase and final patch.
+- Explorer Agent may inspect repo patterns and report paths/functions; read-only only.
+- Worker Agent may implement scoped files for the current phase only.
+- Reviewer Agent verifies diffs, tests, route behavior, and acceptance criteria.
+- Agents must not modify Strategy Builder outside Phase 4.
+- Agents must not add dependencies unless the phase prompt includes an approval gate that has already been satisfied.
+- Each phase ends with: summarize changes, list tests run, list risks, and stop.
 
-## 6. OUTPUT FORMAT
+## Execution Rules
 
-For each phase, produce:
-1. **Files to create** — exact paths, purpose, key exports/functions
-2. **Files to edit** — exact paths, what changes, which lines/functions affected
-3. **Firestore schema** — collection paths, document fields with types
-4. **API endpoints** — method, path, request/response shape, timeout
-5. **Approval gates** — what needs sign-off before starting
-6. **Acceptance criteria** — how to verify the phase works
-7. **Risks** — what could go wrong and mitigation
+1. Start with docs/BRAIN_CLAUDE_PHASE_01_STORAGE_INGEST.md.
+2. Execute exactly one phase at a time.
+3. Verify acceptance criteria for that phase.
+4. Summarize changed files and tests.
+5. Stop and ask for approval before continuing.
+6. If an approval gate is reached, stop before making the gated change.
 
-Do NOT write code. Produce the plan, then stop and wait for my go-ahead on Phase 1.
+Begin by reading docs/BRAIN_FEATURE_PLAN.md and docs/BRAIN_CLAUDE_PHASE_INDEX.md, then execute Phase 1 only.
 ```

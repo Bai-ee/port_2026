@@ -76,7 +76,7 @@ function kolLine(x, max = 260) {
  * @returns {Array<{ role: string, content: string }>}
  */
 export function buildTodayPrompt(ctx) {
-  const { client, brand, campaign, intelligence, now } = ctx;
+  const { client, brand, campaign, intelligence, knowledgeBase, now } = ctx;
   const today = (now || new Date().toISOString()).slice(0, 10);
   const c = campaign || {};
 
@@ -92,6 +92,10 @@ export function buildTodayPrompt(ctx) {
     intelLines.push(`COMPETITOR MOVES: ${line(intelligence.competitorIntel, 3, (t) => lbl(t, 100))}`);
   if ((intelligence?.categoryTrends || []).length)
     intelLines.push(`CATEGORY TRENDS: ${line(intelligence.categoryTrends, 4, (t) => lbl(t, 100))}`);
+
+  const knowledgeBaseBlock = knowledgeBase?.block
+    ? `CLIENT KNOWLEDGE BASE — MASTER SOURCE OF TRUTH\n${cap(knowledgeBase.block, 2800)}`
+    : '';
 
   const todaySchema = `{
   "date": "${today}",
@@ -117,6 +121,8 @@ Every post must trace directly to a specific signal — no invented angles, no g
 MARKETING BRIEF SIGNALS
 ${intelLines.join('\n') || 'none'}
 
+${knowledgeBaseBlock || 'CLIENT KNOWLEDGE BASE: none'}
+
 BRAND
 - Voice: ${cap(brand?.voice)}
 - Tone: ${cap(brand?.tone)}
@@ -127,7 +133,7 @@ ${c.ctaText ? `- Primary CTA: "${cap(c.ctaText, 80)}"${c.ctaUrl ? ` → ${cap(c.
 
 RULES
 1. Return ONLY the JSON below. No markdown, no prose.
-2. 1–3 posts. Prioritise viral windows and KOL hooks — they have the shortest shelf life.
+2. 1–3 posts. Prioritise viral windows and KOL hooks, but keep factual claims aligned to the Knowledge Base when present.
 3. Each post content <=280 chars.
 4. signal_used must name the exact signal (e.g. "KOL: @handle", "Viral: conversation title").
 5. strategy_intent ties the day's theme to one dominant brief signal.
@@ -139,7 +145,7 @@ ${todaySchema}`;
 }
 
 export function buildPrompt(ctx, todayStrategy = null) {
-  const { client, brand, brief, intelligence, media, seo, cardFindings, campaign, signals, config, now } = ctx;
+  const { client, brand, brief, intelligence, media, seo, knowledgeBase, cardFindings, campaign, signals, config, now } = ctx;
 
   const loc = client?.location || {};
   const clientBlock = [
@@ -193,6 +199,10 @@ export function buildPrompt(ctx, todayStrategy = null) {
       ]
         .filter(Boolean)
         .join(' · ')
+    : '';
+
+  const knowledgeBaseBlock = knowledgeBase?.block
+    ? cap(knowledgeBase.block, 3400)
     : '';
 
   // Signals — compact serialization
@@ -298,6 +308,9 @@ ${mediaBlock || 'none'}
 SEO CONTEXT (topic gaps worth posting about)
 ${seoBlock || 'none'}
 
+CLIENT KNOWLEDGE BASE (master source for offer, claims, positioning, ICP, product facts, and brand language)
+${knowledgeBaseBlock || 'none'}
+
 PIPELINE SIGNALS (read-only context, do not echo)
 ${findingsSummary}
 
@@ -333,7 +346,7 @@ RULES
 8. Weather-tied posts (kind='special', anchorId omitted) allowed only when forecast shows a notable signal (storm, heat wave, snow). Max 2 per 30 days.
 9. Each item.rationale: one short sentence.
 10. Tone strictly follows BRAND voice. Emoji usage = CAMPAIGN emoji policy: 'none' → no emojis; 'sparing' → at most 1 where natural; 'liberal' → tasteful emojis allowed. Hashtags per post must not exceed CAMPAIGN max hashtags.
-11. Draw post angles from INTELLIGENCE (trends, viral angles, content ops) when present, but never state facts not supported by the brief or signals. Set item.mediaHint from MEDIA DIRECTION where relevant.
+11. Draw post angles from INTELLIGENCE (trends, viral angles, content ops) when present, but never state facts not supported by the brief, signals, or Knowledge Base. Set item.mediaHint from MEDIA DIRECTION where relevant.
 12. If a NEXT HORIZON ANCHOR exists, you may add up to 2 light forward-looking posts referencing it (kind='baseline', anchorId=null — it is outside this window). Never schedule its actual ramp arc inside this window.
 13. CAMPAIGN guardrails are absolute hard constraints — never produce content that violates them, in any post.
 14. Bias post intent and CTAs toward the CAMPAIGN objective. Weave the primary CTA (and link, if given) into a meaningful share of posts — not every post, but every ramp/event/promotion post.

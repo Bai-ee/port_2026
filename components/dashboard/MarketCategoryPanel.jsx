@@ -38,6 +38,7 @@ export default function MarketCategoryPanel({ bootstrap, getIdToken, onSaved }) 
           confidence: ds.marketCategory.confidence,
           rationale: ds.marketCategory.rationale,
           evidence: ds.marketCategory.evidence || [],
+          knowledgeBaseSources: ds.marketCategory.knowledgeBaseSources || [],
         }
       : null
   );
@@ -82,7 +83,12 @@ export default function MarketCategoryPanel({ bootstrap, getIdToken, onSaved }) 
       const mc = data.marketCategory || {};
       setLiveValue(mc.value || '');
       setLiveSource('Agent-classified');
-      setAgentInfo({ confidence: mc.confidence, rationale: mc.rationale, evidence: mc.evidence || [] });
+      setAgentInfo({
+        confidence: mc.confidence,
+        rationale: mc.rationale,
+        evidence: mc.evidence || [],
+        knowledgeBaseSources: mc.knowledgeBaseSources || [],
+      });
       syncEditorTo(mc.value || '');
       setNotice({
         kind: 'ok',
@@ -164,6 +170,17 @@ export default function MarketCategoryPanel({ bootstrap, getIdToken, onSaved }) 
               <div className="tile-detail-stat-row">
                 <span className="tile-detail-stat-label">Evidence</span>
                 <span className="tile-detail-stat-value">{agentInfo.evidence.join(' · ')}</span>
+              </div>
+            )}
+            {(agentInfo.knowledgeBaseSources || []).length > 0 && (
+              <div className="tile-detail-stat-row">
+                <span className="tile-detail-stat-label">Knowledge Base</span>
+                <span className="tile-detail-stat-value">
+                  {agentInfo.knowledgeBaseSources
+                    .slice(0, 3)
+                    .map((source) => source?.sectionTitle ? `${source.title || 'Knowledge item'} / ${source.sectionTitle}` : (source?.title || source?.sourceUrl || 'Knowledge item'))
+                    .join(' · ')}
+                </span>
               </div>
             )}
           </div>

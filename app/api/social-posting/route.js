@@ -10,6 +10,9 @@ import {
   runPostingAgents,
   schedulePost,
 } from '../../../features/social-posting/twitter-service.js';
+import {
+  getKnowledgeBaseRuntimeContext,
+} from '../../../features/knowledge-base/pipeline-context.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -79,9 +82,22 @@ export async function POST(request) {
 
   try {
     const action = body.action || 'draft';
+    let knowledgeBaseContext = null;
+    if (body.content) {
+      knowledgeBaseContext = await getKnowledgeBaseRuntimeContext({
+        clientId: context.clientId,
+        query: String(body.content).slice(0, 1000),
+        topK: 5,
+        charCap: 2200,
+      });
+    }
+    const agentContext = {
+      source: body.source || null,
+      knowledgeBaseContext,
+    };
 
     if (action === 'optimize') {
-      const result = runPostingAgents(body.content, { source: body.source || null });
+      const result = runPostingAgents(body.content, agentContext);
       return json({ ok: true, ...result });
     }
 
@@ -91,13 +107,13 @@ export async function POST(request) {
     }
 
     if (action === 'post-now') {
-      const agents = body.agents || runPostingAgents(body.content, { source: body.source || null }).agents;
+      const agents = body.agents || runPostingAgents(body.content, agentContext).agents;
       const post = await postNow(context.clientId, { ...body, agents });
       return json({ ok: true, post });
     }
 
     if (action === 'schedule') {
-      const agents = body.agents || runPostingAgents(body.content, { source: body.source || null }).agents;
+      const agents = body.agents || runPostingAgents(body.content, agentContext).agents;
       const post = await schedulePost(context.clientId, { ...body, agents });
       return json({ ok: true, post });
     }
@@ -107,7 +123,7 @@ export async function POST(request) {
       return json({ ok: true, ...result });
     }
 
-    const agents = body.agents || runPostingAgents(body.content, { source: body.source || null }).agents;
+    const agents = body.agents || runPostingAgents(body.content, agentContext).agents;
     const post = await createSocialPost(context.clientId, { ...body, agents, status: 'draft' });
     return json({ ok: true, post });
   } catch (err) {

@@ -9,6 +9,10 @@ const { createAnthropicClient } = require('../../../../../features/not-the-rug-b
 const { saveBufferArtifact } = require('../../../../../api/_lib/storage-artifacts.cjs');
 
 import { CANONICAL_VERTICALS } from '../../../../../features/strategy-builder/normalize-vertical.js';
+import {
+  buildKnowledgeBaseRuntimeQuery,
+  getKnowledgeBaseRuntimeContext,
+} from '../../../../../features/knowledge-base/pipeline-context.js';
 
 // Keep the agent's own specific term — just tidy formatting. Canonicalisation
 // to a holiday bucket happens downstream (Strategy Builder), not here.
@@ -149,6 +153,20 @@ export async function POST(request) {
   const leadgen = dsData.leadgen || {};
   const sourceInputs = ccData.sourceInputs || {};
 
+  const kbQuery = buildKnowledgeBaseRuntimeQuery({
+    intent: 'market category industry vertical product business model offer audience positioning',
+    websiteUrl: leadgen.website || sourceInputs.websiteUrl || '',
+    clientName: ccData.displayName || ccData.companyName || leadgen.businessName || leadgen.name || '',
+    brandOverview,
+    sourceInputs,
+  });
+  const knowledgeBase = await getKnowledgeBaseRuntimeContext({
+    clientId,
+    query: kbQuery,
+    topK: 5,
+    charCap: 2800,
+  });
+
   // Compact evidence — the social-preview OG fields are the strongest signal.
   const evidence = {
     ogTitle: cap(siteMeta.title, 160),
@@ -168,13 +186,15 @@ export async function POST(request) {
     offers: Array.isArray(leadgen.offers) ? leadgen.offers.slice(0, 8).map((o) => cap(o, 60)) : [],
     ideaDescription: cap(sourceInputs.ideaDescription, 400),
     priorVertical: cap(leadgen.vertical || prospectData.vertical, 60),
+    knowledgeBase: knowledgeBase.available ? cap(knowledgeBase.block, 3000) : '',
   };
 
   const hasEvidence = Boolean(
     evidence.ogTitle || evidence.ogDescription || evidence.brandIndustry ||
     evidence.brandSummary || evidence.brandHeadline || evidence.positioning ||
     evidence.marketingHeadline || evidence.scoutBrief || evidence.website ||
-    evidence.offers.length || evidence.ideaDescription || evidence.priorVertical
+    evidence.offers.length || evidence.ideaDescription || evidence.priorVertical ||
+    knowledgeBase.available
   );
 
   if (!hasEvidence) {
@@ -185,7 +205,9 @@ export async function POST(request) {
     });
   }
 
-  const prompt = `Determine the single most accurate market category for this business from evidence gathered by other dashboard cards. The Social Preview / Open Graph fields are usually the strongest signal.
+  const prompt = `Determine the single most accurate market category for this business from evidence gathered by other dashboard cards and the client Knowledge Base.
+
+The client Knowledge Base is the master source of truth for product facts, business model, audience, category language, positioning, and offer details. Prefer it over inferred website metadata when it is specific and relevant. Website and Open Graph evidence still describe what is currently visible on the live site.
 
 Be SPECIFIC and faithful to what the business actually is — do NOT force it into a broad bucket. A real-money poker site is "poker" (not "e-games" and not generic "gambling"); a sportsbook is "sportsbook"; an esports team is "esports"; a wine bar is "wine-bar". Choose the precise term a human would use for this exact business.
 
@@ -253,6 +275,7 @@ Return ONLY this JSON, no prose, no markdown:
     confidence,
     rationale,
     evidence: evidenceList,
+    knowledgeBaseSources: knowledgeBase.available ? knowledgeBase.sources : [],
     updatedAtIso: new Date().toISOString(),
     ...(cardImageUrl ? { cardImageUrl } : {}),
   };

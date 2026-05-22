@@ -57,6 +57,28 @@ async function runClientPipeline({ clientId, clientConfig = null, fresh = false 
 
   // ── 1. Resolve runtime config ───────────────────────────────────────────────
   const config = loadRuntimeConfig(clientId, clientConfig);
+  try {
+    const kb = await import('../knowledge-base/pipeline-context.js');
+    const query = kb.buildKnowledgeBaseRuntimeQuery({
+      intent: 'marketing brief offer positioning ICP messaging claims brand voice content angles',
+      websiteUrl: config.websiteUrl || clientConfig?.sourceInputs?.websiteUrl || clientConfig?.websiteUrl || '',
+      clientName: config.clientName || clientConfig?.displayName || clientConfig?.companyName || '',
+      brandOverview: clientConfig?.snapshot?.brandOverview || null,
+      sourceInputs: clientConfig?.sourceInputs || {},
+    });
+    const knowledgeBaseContext = await kb.getKnowledgeBaseRuntimeContext({
+      clientId,
+      query,
+      topK: 5,
+      charCap: 3400,
+    });
+    if (knowledgeBaseContext.available) {
+      config.knowledgeBaseContext = knowledgeBaseContext;
+      console.log(`[${new Date().toISOString()}] RUNTIME: knowledge base context loaded — ${knowledgeBaseContext.sources.length} source(s)`);
+    }
+  } catch (err) {
+    console.warn(`[${new Date().toISOString()}] RUNTIME: knowledge base context skipped — ${err.message}`);
+  }
 
   // ── 2. Initialize provider from config ─────────────────────────────────────
   const provider = initProvider(config.providerConfig || { defaultProvider: 'anthropic' });
@@ -142,6 +164,12 @@ async function runClientPipeline({ clientId, clientConfig = null, fresh = false 
     contentOpportunities: scribeOutput.contentOpportunities,
     guardianFlags: scribeOutput.guardianFlags,
     scoutPriorityAction: scribeOutput.scoutPriorityAction,
+    knowledgeBase: config.knowledgeBaseContext?.available
+      ? {
+          sources: config.knowledgeBaseContext.sources,
+          injectedAtIso: new Date().toISOString(),
+        }
+      : null,
     runCostData: { stageCosts },
     artifactRefs: [
       { type: 'brief_json', path: path.join(DATA_DIR, 'briefs', clientId, 'latest.json') },

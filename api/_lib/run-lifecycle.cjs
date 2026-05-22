@@ -165,8 +165,14 @@ function buildDashboardProjection(clientId, pipelineResult, runId) {
       contentOpportunities: contentOpportunities || [],
       guardianFlags: pipelineResult.guardianFlags || null,
       providerName: pipelineResult.providerName || null,
+      knowledgeBaseSources: Array.isArray(pipelineResult.knowledgeBase?.sources)
+        ? pipelineResult.knowledgeBase.sources
+        : [],
       generatedAtIso: new Date().toISOString(),
     };
+    if (pipelineResult.knowledgeBase) {
+      base.knowledgeBase = pipelineResult.knowledgeBase;
+    }
     base.modules = {
       'marketing-brief': {
         enabled: true,

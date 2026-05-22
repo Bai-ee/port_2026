@@ -37,6 +37,23 @@ async function runSeoPerformance({ clientId = null, websiteUrl, onProgress = nul
   const homepage = evidence?.pages?.[0] || null;
   const homepageHtml = homepage?._rawHtml || null;
   const siteMeta = homepageHtml ? extractSiteMeta(homepageHtml, websiteUrl) : (homepage?.siteMeta || null);
+  let knowledgeBaseContext = null;
+  if (clientId) {
+    try {
+      const kb = await import('../../knowledge-base/pipeline-context.js');
+      knowledgeBaseContext = await kb.getKnowledgeBaseRuntimeContext({
+        clientId,
+        query: kb.buildKnowledgeBaseRuntimeQuery({
+          intent: 'SEO content depth schema FAQ proof points offer product claims audience',
+          websiteUrl,
+        }),
+        topK: 5,
+        charCap: 2600,
+      });
+    } catch (err) {
+      warningCodes.push('knowledge_base_context_failed');
+    }
+  }
 
   // Step 2: PageSpeed only — AI features moved to agent-readiness card
   await emit('analyze', 'Run PageSpeed Insights…');
@@ -98,6 +115,12 @@ async function runSeoPerformance({ clientId = null, websiteUrl, onProgress = nul
       evidence: evidenceForSkill,
       siteMeta,
       pagespeed: skillPagespeed,
+      knowledgeBase: knowledgeBaseContext?.available
+        ? {
+            block: knowledgeBaseContext.block,
+            sources: knowledgeBaseContext.sources,
+          }
+        : null,
       // intake/styleGuide/scoutConfig/userContext intentionally omitted —
       // this skill doesn't declare them as inputs.
     });
@@ -136,6 +159,7 @@ async function runSeoPerformance({ clientId = null, websiteUrl, onProgress = nul
       skillAggregate: aggregate,
       skillDoc,
       skillId: SKILL_ID,
+      knowledgeBaseSources: knowledgeBaseContext?.available ? knowledgeBaseContext.sources : [],
     },
   };
 }

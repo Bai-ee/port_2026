@@ -18,6 +18,10 @@ import { runReadinessComparison, formatComparison } from '../../../../features/l
 import { downloadAssetsToBuffers } from '../../../../features/leadgen/asset-manager.js';
 import { ensureClientFolder, subdir, assetsDir, clientRoot, syncClientFolder } from '../../../../features/leadgen/client-folder.js';
 import { buildSiteFrame, normalizeGeneratedBody, validateFramedHtml, validateGeneratedBody } from '../../../../features/leadgen/site-frame.js';
+import {
+  buildKnowledgeBaseRuntimeQuery,
+  getKnowledgeBaseRuntimeContext,
+} from '../../../../features/knowledge-base/pipeline-context.js';
 
 const MODEL      = 'claude-sonnet-4-6';
 const MAX_TOKENS = 16000;
@@ -124,6 +128,12 @@ function makeReqShim(request) {
   return { headers: { authorization: request.headers.get('authorization'), Authorization: request.headers.get('authorization') } };
 }
 
+function resolveProspectClientId(placeId, prospect) {
+  if (prospect?.clientId) return prospect.clientId;
+  const match = String(placeId || '').match(/^client:(.+)$/);
+  return match ? match[1] : null;
+}
+
 // POST /api/leadgen/generate-site
 //   body: { placeId: string, skipComparison?: boolean }
 //   → streams NDJSON: HTML gen + Vercel deploy + readiness comparison
@@ -160,9 +170,30 @@ export async function POST(request) {
         try { controller.enqueue(encoder.encode(JSON.stringify(obj) + '\n')); } catch {}
       };
 
-      emit({ type: 'start', websiteUrl: prospect.website });
+        emit({ type: 'start', websiteUrl: prospect.website });
 
       try {
+        const prospectClientId = resolveProspectClientId(placeId, prospect);
+        const knowledgeBaseContext = prospectClientId
+          ? await getKnowledgeBaseRuntimeContext({
+              clientId: prospectClientId,
+              query: buildKnowledgeBaseRuntimeQuery({
+                intent: 'generated homepage offer structure proof points FAQ product truth audience positioning services',
+                websiteUrl: prospect.website || '',
+                clientName: prospect.name || '',
+                brandOverview: {
+                  industry: prospect.vertical || '',
+                  summary: prospect.description || '',
+                },
+              }),
+              topK: 5,
+              charCap: 3400,
+            })
+          : null;
+        const knowledgeBasePromptBlock = knowledgeBaseContext?.available
+          ? `\n\nCLIENT KNOWLEDGE BASE — MASTER SOURCE OF TRUTH FOR COPY AND CLAIMS:\n${knowledgeBaseContext.block}\n\nUse this for offer structure, proof points, FAQs, product truth, audience, positioning, and claims. Do not invent copy that conflicts with it.`
+          : '';
+
         // ── Step 0: Materialize per-client folder on local disk ───────────
         // Mirrors briefs / assets / deploy artifacts under clients/{slug}/ so
         // every generated client has a single reviewable folder.
@@ -207,7 +238,7 @@ export async function POST(request) {
         }
 
         if (storedSitePrompt && sitePromptEditedAt) {
-          userPrompt = `${storedSitePrompt}\n\nIMPORTANT OUTPUT OVERRIDE: Return only inner <body> markup. Do not include <!DOCTYPE>, <html>, <head>, <body>, CDN scripts, Tailwind config, JSON-LD, Open Graph, Twitter Card, canonical, or meta tags.`;
+          userPrompt = `${storedSitePrompt}${knowledgeBasePromptBlock}\n\nIMPORTANT OUTPUT OVERRIDE: Return only inner <body> markup. Do not include <!DOCTYPE>, <html>, <head>, <body>, CDN scripts, Tailwind config, JSON-LD, Open Graph, Twitter Card, canonical, or meta tags.`;
           emit({ type: 'progress', stage: 'prompt', label: 'Using edited site prompt…' });
         } else {
           const contentJson = contentJsonForFrame;
@@ -218,7 +249,7 @@ export async function POST(request) {
             ci.email   ? `Email: ${ci.email}`   : null,
             ci.address ? `Address: ${ci.address}` : null,
           ].filter(Boolean).join('\n');
-          userPrompt = `Below is the complete DESIGN.MD creative brief. Follow it precisely.\n\n---\n${designMd}\n---\n\nCONTACT INFORMATION (copy verbatim):\n${contactBlock || '(see brief)'}\n\nGenerate the body markup now. Return only the inner <body> content.`;
+          userPrompt = `Below is the complete DESIGN.MD creative brief. Follow it precisely.\n\n---\n${designMd}\n---${knowledgeBasePromptBlock}\n\nCONTACT INFORMATION (copy verbatim):\n${contactBlock || '(see brief)'}\n\nGenerate the body markup now. Return only the inner <body> content.`;
         }
         // If brief-level toggles differ from what the stored brief was built with,
         // rebuild DESIGN.MD on-the-fly. Skipped when both are ON (default path).
@@ -247,6 +278,7 @@ export async function POST(request) {
               brandSystem:      brandGuide,
               designReferences: designRefs,
               visualDna:        prospect.visualDna || null,
+              knowledgeBaseContext,
             });
 
             const copy = contentJson?.copy || {};
@@ -256,7 +288,7 @@ export async function POST(request) {
               ci.email   ? `Email: ${ci.email}`   : null,
               ci.address ? `Address: ${ci.address}` : null,
             ].filter(Boolean).join('\n');
-            userPrompt = `Below is the complete DESIGN.MD creative brief. Follow it precisely.\n\n---\n${rebuiltMd}\n---\n\nCONTACT INFORMATION (copy verbatim):\n${contactBlock || '(see brief)'}\n\nGenerate the body markup now. Return only the inner <body> content.`;
+            userPrompt = `Below is the complete DESIGN.MD creative brief. Follow it precisely.\n\n---\n${rebuiltMd}\n---${knowledgeBasePromptBlock}\n\nCONTACT INFORMATION (copy verbatim):\n${contactBlock || '(see brief)'}\n\nGenerate the body markup now. Return only the inner <body> content.`;
             emit({ type: 'progress', stage: 'prompt', label: `Brief rebuilt without ${[!useBrandSystem && 'Brand System', !useDesignEval && 'Design Eval'].filter(Boolean).join(' + ')}` });
           } catch (err) {
             emit({ type: 'progress', stage: 'prompt', label: `⚠ Brief rebuild failed — using stored brief: ${err.message}` });
@@ -404,6 +436,7 @@ export async function POST(request) {
             mockupLoaded: !!mockupImage,
             lazywebVision: refImages.length,
             toggles:      { useMockup, useLazywebVision, useBrandSystem, useDesignEval, runComparison: !skipComparison },
+            knowledgeBaseSources: knowledgeBaseContext?.available ? knowledgeBaseContext.sources.length : 0,
             slug,
           },
         });
@@ -438,6 +471,7 @@ export async function POST(request) {
           'generation.tokenUsage':         { input: usage.input_tokens || 0, output: usage.output_tokens || 0 },
           'generation.estimatedCostUsd':   Math.round(generationCostUsd * 10000) / 10000,
           'generation.sitePrompt':         userPrompt,
+          'generation.knowledgeBaseSources': knowledgeBaseContext?.available ? knowledgeBaseContext.sources : [],
           'generation.sitePromptEditedAt': null,
           stage: 'generating',
         });

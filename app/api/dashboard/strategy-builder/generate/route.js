@@ -7,6 +7,10 @@ const { verifyRequestUser } = require('../../../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../../../api/_lib/client-provisioning.cjs');
 
 import { normalizeVertical } from '../../../../../features/strategy-builder/normalize-vertical.js';
+import {
+  buildKnowledgeBaseRuntimeQuery,
+  getKnowledgeBaseRuntimeContext,
+} from '../../../../../features/knowledge-base/pipeline-context.js';
 
 export const maxDuration = 120;
 
@@ -181,6 +185,21 @@ export async function POST(request) {
     ? { summary: seoAudit?.summary || '', topics: seoAudit?.topics || [] }
     : null;
 
+  const knowledgeBase = srcOn('knowledge-base')
+    ? await getKnowledgeBaseRuntimeContext({
+        clientId,
+        query: buildKnowledgeBaseRuntimeQuery({
+          intent: 'social strategy content angles brand voice offer claims ICP positioning product proof points',
+          websiteUrl: ccData.sourceInputs?.websiteUrl || ccData.websiteUrl || leadgen.website || '',
+          clientName: leadgen.businessName || leadgen.name || ccData.businessName || ccData.displayName || '',
+          brandOverview: dsData.snapshot?.brandOverview || {},
+          sourceInputs: ccData.sourceInputs || {},
+        }),
+        topK: 5,
+        charCap: 3400,
+      })
+    : null;
+
   const brandIncluded = srcOn('brand-snapshot');
   const includedCardFindings = srcOn('analyzer') ? cardFindings : {};
 
@@ -273,6 +292,12 @@ export async function POST(request) {
     intelligence,
     media,
     seo,
+    knowledgeBase: knowledgeBase?.available
+      ? {
+          block: knowledgeBase.block,
+          sources: knowledgeBase.sources,
+        }
+      : null,
     cardFindings: includedCardFindings,
     campaign,
     signals,
@@ -304,6 +329,9 @@ export async function POST(request) {
 
   // Attach today strategy to the plan before saving
   if (todayStrategy) plan.today = todayStrategy;
+  if (knowledgeBase?.available) {
+    plan.knowledgeBaseSources = knowledgeBase.sources || [];
+  }
 
   // Save plan to Firestore
   try {

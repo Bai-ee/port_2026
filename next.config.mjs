@@ -5,7 +5,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: ['playwright'],
+  serverExternalPackages: ['playwright', 'pdf-parse', 'mammoth'],
   turbopack: {
     root: __dirname,
     resolveAlias: {
