@@ -17,6 +17,7 @@ const {
   completeRun,
   failRun,
 } = require('../../../../../api/_lib/run-lifecycle.cjs');
+const { narrateDqCard } = require('../../../../../features/intelligence/_dq-narrator.js');
 
 function makeReqShim(request) {
   return {
@@ -237,6 +238,29 @@ export async function POST(request) {
   }
 
   await updateModuleState(clientId, results, runId);
+
+  // Blocking: generate AI description for the Data Stream card before responding.
+  // Must complete before the client re-fetches bootstrap so the description lands
+  // in moduleState on the very next load. Haiku adds ~1–2s — acceptable on a 15s run.
+  if (results.some((r) => r.ok)) {
+    try {
+      console.log('[dq-narrator] starting description generation for', clientId);
+      const freshSnap = await fb.adminDb.collection('dashboard_state').doc(clientId).get();
+      const freshModules = freshSnap.exists ? (freshSnap.data()?.modules || {}) : {};
+      console.log('[dq-narrator] module keys:', Object.keys(freshModules));
+      const aiDescription = await narrateDqCard(freshModules, { clientId });
+      console.log('[dq-narrator] description result:', aiDescription);
+      if (aiDescription) {
+        await fb.adminDb.collection('dashboard_state').doc(clientId).update({
+          'modules.audit-summary.aiDescription': aiDescription,
+          'modules.audit-summary.aiDescriptionUpdatedAt': fb.FieldValue.serverTimestamp(),
+        });
+        console.log('[dq-narrator] written to Firestore');
+      }
+    } catch (err) {
+      console.warn('[run/route] dq-narrator failed (non-fatal):', err.message, err.stack);
+    }
+  }
 
   // Complete or fail the run so latestRunStatus flips to succeeded/failed
   const anyOk = results.some((r) => r.ok);
