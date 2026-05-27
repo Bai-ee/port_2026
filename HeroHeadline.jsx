@@ -66,7 +66,8 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       const gapHeight = Math.max(contentDocTop - navHeight, 180);
       const centeredTop = gapTop + Math.max((gapHeight - headlineHeight) / 2, 0);
 
-      metrics.centeredTop = centeredTop;
+      const desktopRaise = useSimpleScrollViewport ? 0 : window.innerHeight * 0.05;
+      metrics.centeredTop = centeredTop - desktopRaise;
       metrics.maxWidth = maxWidth;
       metrics.gapHeight = gapHeight;
     };
@@ -179,7 +180,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
         }}
       >
         <div ref={headlineContentRef}>
-          <p id="hero-headline-prehead" style={{ margin: '0 0 0.35rem', fontSize: 'clamp(0.93rem, 2.33vw, 1.63rem)', fontWeight: 300, letterSpacing: '-0.05em', lineHeight: 0.9, color: 'rgba(42,36,32,0.4)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>Bryan Balli</p>
+          <p id="hero-headline-prehead" style={{ margin: '0 0 2.35rem', fontSize: 'clamp(1.4rem, 2.33vw, 1.63rem)', fontWeight: 300, letterSpacing: '-0.05em', lineHeight: 0.9, color: '#2a2420', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>Bryan Balli</p>
           <h1 style={{
             fontWeight: 700,
             fontFamily: "'Doto', 'Space Mono', monospace",

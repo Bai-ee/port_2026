@@ -443,6 +443,7 @@ const StackedSlidesSection = () => {
   const peekCard2Ref = useRef(null);
   const peekCard3Ref = useRef(null);
   const peekCard4Ref = useRef(null);
+  const scrambleRef = useRef(null);
   const [pokerHovered, setPokerHovered] = useState(false);
   const [activeFilter, setActiveFilter] = useState(null);
   const [filterCopy, setFilterCopy] = useState(FILTER_COPY.default);
@@ -1114,8 +1115,10 @@ const StackedSlidesSection = () => {
       if (pinned) return;
       origParent = cta.parentNode;
       origNext   = cta.nextSibling;
-      const scrollBtn = document.getElementById('nav-scroll-top');
-      if (scrollBtn) scrollBtn.style.display = 'inline-flex';
+      const arrowEl    = document.getElementById('nav-scroll-top-arrow');
+      const settingsEl = document.getElementById('nav-scroll-top-settings');
+      if (arrowEl)    arrowEl.style.display    = '';
+      if (settingsEl) settingsEl.style.display = 'none';
 
       // Spacer holds the layout so sentinel position stays stable on refresh
       spacer = document.createElement('div');
@@ -1150,8 +1153,10 @@ const StackedSlidesSection = () => {
     };
 
     const hideScrollBtn = () => {
-      const scrollBtn = document.getElementById('nav-scroll-top');
-      if (scrollBtn) scrollBtn.style.display = 'none';
+      const arrowEl    = document.getElementById('nav-scroll-top-arrow');
+      const settingsEl = document.getElementById('nav-scroll-top-settings');
+      if (arrowEl)    arrowEl.style.display    = 'none';
+      if (settingsEl) settingsEl.style.display = '';
     };
 
     const doUnpin = () => {
@@ -1193,6 +1198,91 @@ const StackedSlidesSection = () => {
       doUnpin();
       hideScrollBtn();
       sentinel.parentNode?.removeChild(sentinel);
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    const container = scrambleRef.current;
+    if (!container) return;
+
+    const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ#@!%$&*';
+    const lineEls = Array.from(container.querySelectorAll('[data-scramble-line]'));
+    let scrollProgress = 0;
+    let tickerFn = null;
+    let held = false; // true once final text is set during hold phase
+
+    gsap.set(container, { autoAlpha: 0 });
+
+    const scramble = () => {
+      const p = scrollProgress;
+
+      // Hold phase: 0.35→0.65 — set text once and go silent until phase changes
+      if (p >= 0.35 && p < 0.65) {
+        if (!held) {
+          lineEls.forEach(el => { el.textContent = el.dataset.scrambleLine; });
+          held = true;
+        }
+        return;
+      }
+      held = false;
+
+      // 0→0.35 scramble IN (left→right), 0.65→1 scramble OUT (right→left)
+      let resolveIn, resolveOut;
+      if (p < 0.35) {
+        resolveIn  = p / 0.35;
+        resolveOut = 0;
+      } else {
+        resolveIn  = 1;
+        resolveOut = (p - 0.65) / 0.35;
+      }
+
+      lineEls.forEach((el) => {
+        const line = el.dataset.scrambleLine;
+        const nsIndices = [];
+        line.split('').forEach((c, i) => { if (c !== ' ') nsIndices.push(i); });
+        const n = nsIndices.length;
+
+        const result = line.split('').map((ch, i) => {
+          if (ch === ' ') return ' ';
+          const nsPos = nsIndices.indexOf(i);
+          // resolvedIn: char resolves when resolveIn passes its left→right position
+          const resolvedIn   = nsPos < resolveIn  * (n + 0.5);
+          // scrambledOut: char re-scrambles when resolveOut passes its right→left position
+          const scrambledOut = (n - 1 - nsPos) < resolveOut * (n + 0.5);
+          if (resolvedIn && !scrambledOut) return ch;
+          return CHARS[Math.floor(Math.random() * CHARS.length)];
+        });
+        el.textContent = result.join('');
+      });
+    };
+
+    const startTicker = () => {
+      if (tickerFn) return;
+      held = false;
+      gsap.set(container, { autoAlpha: 1 });
+      tickerFn = scramble;
+      gsap.ticker.add(tickerFn);
+    };
+
+    const stopTicker = (hide = false) => {
+      if (tickerFn) { gsap.ticker.remove(tickerFn); tickerFn = null; }
+      if (hide) gsap.set(container, { autoAlpha: 0 });
+    };
+
+    const stScramble = ScrollTrigger.create({
+      trigger: '#section-break-spacer',
+      start: 'center bottom',
+      end: 'center top',
+      onEnter:     () => startTicker(),
+      onLeave:     () => stopTicker(false),
+      onEnterBack: () => startTicker(),
+      onLeaveBack: () => stopTicker(true),
+      onUpdate:    (self) => { scrollProgress = self.progress; },
+    });
+
+    return () => {
+      stScramble.kill();
+      stopTicker(false);
     };
   }, []);
 
@@ -1302,6 +1392,7 @@ const StackedSlidesSection = () => {
           #panel-hero-cta {
             width: max-content !important;
             align-self: center !important;
+            padding: 0.5rem 3.75rem !important;
           }
           /* ── Onboarding card / table overflow fix ── */
           #dashboard-stack-shell {
@@ -1748,7 +1839,16 @@ const StackedSlidesSection = () => {
 
       {/* transparent gap — Three.js scene shows through */}
       <div id="section-break-spacer" style={{ height: 'clamp(24rem, 48vw, 56rem)', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <h2 style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontWeight: 700, fontSize: 'clamp(2rem, 10vw, 7.83rem)', letterSpacing: '-0.02em', lineHeight: 1.05, color: '#2a2420', margin: 0, textAlign: 'center' }}>YOUR HUMAN<br />IN THE<br />LOOP</h2>
+        <div
+          id="section-break-scramble"
+          ref={scrambleRef}
+          aria-label="YOUR HUMAN IN THE LOOP"
+          style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontWeight: 700, fontSize: 'clamp(2rem, 10vw, 7.83rem)', letterSpacing: '-0.02em', lineHeight: 1.05, color: '#2a2420', margin: 0, textAlign: 'center' }}
+        >
+          <div data-scramble-line="YOUR HUMAN"></div>
+          <div data-scramble-line="IN THE"></div>
+          <div data-scramble-line="LOOP"></div>
+        </div>
       </div>
 
       {/* second blurry panel — capability cards + footer */}

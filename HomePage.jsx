@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useLayoutEffect, useEffect } from 'react';
+import React, { useState, useRef, useLayoutEffect, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -13,6 +13,7 @@ import StackedSlidesSection from './StackedSlidesSection';
 // import FontSelector from './FontSelector';
 // import LoopControls from './LoopControls';
 import PortfolioModal from './PortfolioModal';
+import SceneSettingsPanel from './SceneSettingsPanel';
 
 const AppCanvas = dynamic(() => import('./ox.jsx'), { ssr: false });
 
@@ -64,6 +65,20 @@ const HERO_PARAMS_END = {
   opacity: 0.18,
 };
 
+// Builds the scroll animation start from user params:
+// - Params that exist in HERO_PARAMS_END always start from HERO_PARAMS_START so the
+//   scroll animation runs the same consistent range regardless of user settings
+//   (prevents reversed-direction or oversized swings when user values are outside the range).
+// - Params NOT in HERO_PARAMS_END (rotationX/Y/Z etc.) use the user's value so the
+//   shape stays at whatever orientation the user set throughout the scroll.
+const getScrollBase = (userParams) => {
+  const base = { ...HERO_PARAMS_START };
+  Object.keys(userParams).forEach((k) => {
+    if (!(k in HERO_PARAMS_END)) base[k] = userParams[k];
+  });
+  return base;
+};
+
 const interpolateHeroParams = (start, end, progress) => {
   const next = { ...start };
 
@@ -102,6 +117,7 @@ const heroGradientStyle = {
 
 const HomePage = () => {
   const [params, setParams] = useState(HERO_PARAMS_START);
+  const [showSettings, setShowSettings] = useState(false);
 
   const [canvasBackground, setCanvasBackground] = useState('#ffffff');
   const [textColor, setTextColor] = useState('#000000');
@@ -111,7 +127,9 @@ const HomePage = () => {
   const canvasWrapperRef = useRef(null);
   const contentSectionRef = useRef(null);
   const paramsRef = useRef(HERO_PARAMS_START);
+  const userParamsRef = useRef(HERO_PARAMS_START); // user's intentional settings (panel changes)
   const isScrollMorphActiveRef = useRef(false);
+  const heroProgressRef = useRef(0); // current scroll progress, kept in sync with ScrollTrigger
 
   // Keep #content-section.marginTop = -peekHeight so the capabilitySectionStyle
   // borderTop always lands exactly at the 100dvh fold on page load.
@@ -143,14 +161,6 @@ const HomePage = () => {
       window.removeEventListener('orientationchange', applyPeek);
     };
   }, []);
-
-  useEffect(() => {
-    if (isScrollMorphActiveRef.current) {
-      return;
-    }
-
-    paramsRef.current = params;
-  }, [params]);
 
   useLayoutEffect(() => {
     const useSimpleScrollViewport =
@@ -201,11 +211,13 @@ const HomePage = () => {
       onUpdate: (self) => {
         isScrollMorphActiveRef.current = true;
         heroProxy.progress = self.progress;
-        paramsRef.current = interpolateHeroParams(HERO_PARAMS_START, HERO_PARAMS_END, heroProxy.progress);
+        heroProgressRef.current = self.progress;
+        paramsRef.current = interpolateHeroParams(getScrollBase(userParamsRef.current), HERO_PARAMS_END, heroProxy.progress);
       },
       onLeaveBack: () => {
-        paramsRef.current = HERO_PARAMS_START;
-        setParams(HERO_PARAMS_START);
+        heroProgressRef.current = 0;
+        paramsRef.current = userParamsRef.current;
+        setParams(userParamsRef.current);
       },
       onToggle: (self) => {
         if (!self.isActive) {
@@ -219,9 +231,10 @@ const HomePage = () => {
       requestAnimationFrame(() => {
         heroST.refresh();
         heroProxy.progress = heroST.progress;
-        paramsRef.current = interpolateHeroParams(HERO_PARAMS_START, HERO_PARAMS_END, heroProxy.progress);
+        heroProgressRef.current = heroST.progress;
+        paramsRef.current = interpolateHeroParams(getScrollBase(userParamsRef.current), HERO_PARAMS_END, heroProxy.progress);
         if (!isScrollMorphActiveRef.current) {
-          setParams(paramsRef.current);
+          setParams(userParamsRef.current);
         }
       });
     };
@@ -269,10 +282,41 @@ const HomePage = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const handler = () => setShowSettings((v) => !v);
+    window.addEventListener('openSceneSettings', handler);
+    return () => window.removeEventListener('openSceneSettings', handler);
+  }, []);
+
+  // Stable callbacks so SceneSettingsPanel never re-renders due to prop identity changes
+  const handleParamsChange = useCallback((next) => {
+    // Resolve against user's base settings so slider spreads never lock in mid-scroll values.
+    const resolved = typeof next === 'function' ? next(userParamsRef.current) : next;
+    userParamsRef.current = resolved;
+    // At rest (top): show full user settings so panel changes are visible immediately.
+    // During scroll: use the normalized scroll base so the canvas doesn't jump direction.
+    const p = heroProgressRef.current;
+    paramsRef.current = p > 0
+      ? interpolateHeroParams(getScrollBase(resolved), HERO_PARAMS_END, p)
+      : resolved;
+    setParams(resolved);
+  }, []);
+
+  const handleCloseSettings = useCallback(() => setShowSettings(false), []);
+
   return (
     <>
     {/* Header outside overflow-clip container so backdrop-filter composites against the viewport correctly */}
     <Header logoRef={headerLogoRef} onOpenPage={setActivePageId} />
+    {showSettings && (
+      <SceneSettingsPanel
+        initialParams={userParamsRef.current}
+        liveParamsRef={paramsRef}
+        onParamsChange={handleParamsChange}
+        defaultParams={HERO_PARAMS_START}
+        onClose={handleCloseSettings}
+      />
+    )}
     <div style={{ position: 'relative', width: '100vw', minHeight: '100dvh', background: 'transparent', overflowX: 'clip' }}>
       <style>{`
         @keyframes heroGradientDrift {

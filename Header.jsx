@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Settings2 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 
 const Header = ({ logoRef, onOpenPage }) => {
@@ -35,11 +36,19 @@ const Header = ({ logoRef, onOpenPage }) => {
           <button
             id="nav-scroll-top"
             type="button"
-            aria-label="Scroll to top"
-            style={{ display: 'none', marginLeft: 'auto' }}
-            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            aria-label="Scene settings / Scroll to top"
+            style={{ marginLeft: 'auto' }}
+            onClick={() => {
+              const arrow = document.getElementById('nav-scroll-top-arrow');
+              if (arrow && arrow.style.display !== 'none') {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              } else {
+                window.dispatchEvent(new CustomEvent('openSceneSettings'));
+              }
+            }}
           >
-            ↑
+            <span id="nav-scroll-top-arrow" style={{ display: 'none' }}>↑</span>
+            <Settings2 id="nav-scroll-top-settings" size={16} strokeWidth={2.5} />
           </button>
 
           <div id="founders-top-actions">

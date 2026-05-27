@@ -168,7 +168,7 @@ body.cmo-modal-open #founders-top-strip { display: none; }
   display: none;
 }
 #nav-scroll-top {
-  display: none;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0.25rem;
@@ -301,5 +301,12 @@ body.cmo-modal-open #founders-top-strip { display: none; }
       --yellow-indicator: oklch(85.6% 0.0469 91.02);
       --yellow-track: oklch(85.6% 0.0469 91.02);
     }
+  }
+}
+
+/* Hero prehead — restore tighter margin in mobile landscape */
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+  #hero-headline-prehead {
+    margin: 0 0 0.35rem !important;
   }
 }
