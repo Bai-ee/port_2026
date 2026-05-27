@@ -14,12 +14,12 @@ const personSchema = {
   alternateName: ['Bai-ee', 'bballi'],
   url: SITE_URL,
   image: `${SITE_URL}/img/og_meta.optimized.jpg`,
-  jobTitle: 'AI Design Engineer & Creative Technologist',
+  jobTitle: 'Digital Media Developer & Creative Technologist',
   email: 'mailto:bryanballi@gmail.com',
   description:
-    'Bryan Balli builds AI-assisted client dashboards, modular intake pipelines, and high-performance web experiences. Creator of the Bballi client intelligence platform.',
+    'Bryan Balli builds client dashboards, modular intake pipelines, and high-performance web experiences. Creator of the Bballi client intelligence platform.',
   knowsAbout: [
-    'AI design engineering',
+    'Digital media development',
     'Generative engine optimization',
     'Client intelligence dashboards',
     'Next.js',
@@ -44,7 +44,7 @@ const websiteSchema = {
   url: SITE_URL,
   name: 'Bryan Balli — Portfolio',
   description:
-    'Portfolio, case studies, and the Bballi modular AI-assisted client intelligence platform.',
+    'Portfolio, case studies, and the Bballi modular client intelligence platform.',
   publisher: { '@id': `${SITE_URL}#bryan-balli` },
   inLanguage: 'en-US',
 };

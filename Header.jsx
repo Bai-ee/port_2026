@@ -32,6 +32,16 @@ const Header = ({ logoRef, onOpenPage }) => {
             <img src="/img/sig.png" alt="Bryan Balli signature" width="276" height="208" loading="eager" decoding="async" style={{ mixBlendMode: 'darken' }} />
           </a>
 
+          <button
+            id="nav-scroll-top"
+            type="button"
+            aria-label="Scroll to top"
+            style={{ display: 'none', marginLeft: 'auto' }}
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          >
+            ↑
+          </button>
+
           <div id="founders-top-actions">
             {user ? (
               <>

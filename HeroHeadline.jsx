@@ -79,10 +79,6 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       el.style.maxWidth = `${metrics.maxWidth}px`;
       el.style.setProperty('--hero-gap-height', `${metrics.gapHeight}px`);
 
-      // Hide subheadline when vertical space is too tight to avoid overlap with section 2
-      const sub = el.querySelector('#hero-subheadline');
-      if (sub) sub.style.display = metrics.gapHeight < 240 ? 'none' : '';
-
       if (useSimpleScrollViewport) {
         contentEl.style.transform = `translate3d(0, ${travelY * progress}px, 0)`;
         contentEl.style.opacity = `${1 - progress}`;
@@ -183,6 +179,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
         }}
       >
         <div ref={headlineContentRef}>
+          <p id="hero-headline-prehead" style={{ margin: '0 0 0.35rem', fontSize: 'clamp(0.93rem, 2.33vw, 1.63rem)', fontWeight: 300, letterSpacing: '-0.05em', lineHeight: 0.9, color: 'rgba(42,36,32,0.4)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>Bryan Balli</p>
           <h1 style={{
             fontWeight: 700,
             fontFamily: "'Doto', 'Space Mono', monospace",
@@ -193,20 +190,8 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
             fontSize: 'clamp(1.25rem, min(13vw, calc(var(--hero-gap-height) / 5)), 7.83rem)',
             textTransform: 'none',
           }}>
-            YOUR<br />HUMAN<br />IN THE<br />LOOP
+            DIGITAL<br />MEDIA<br />DEVELOPER
           </h1>
-          <p id="hero-subheadline" style={{
-            margin: '1rem 0 0',
-            fontFamily: "'Space Grotesk', system-ui, sans-serif",
-            fontSize: 'clamp(0.7rem, 1vw, 0.82rem)',
-            lineHeight: 1.5,
-            color: textColor,
-            opacity: 0.85,
-            fontWeight: 400,
-            maxWidth: '42ch',
-          }}>
-            I'm ready to step into your process, see what's working, fix what's not, and build what's missing across design, content, and systems.
-          </p>
         </div>
       </div>
 
