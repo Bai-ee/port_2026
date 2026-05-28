@@ -443,7 +443,7 @@ const StackedSlidesSection = () => {
   const peekCard2Ref = useRef(null);
   const peekCard3Ref = useRef(null);
   const peekCard4Ref = useRef(null);
-  const scrambleRef = useRef(null);
+
   const [pokerHovered, setPokerHovered] = useState(false);
   const [activeFilter, setActiveFilter] = useState(null);
   const [filterCopy, setFilterCopy] = useState(FILTER_COPY.default);
@@ -1138,12 +1138,10 @@ const StackedSlidesSection = () => {
           ? { left: '50%', right: 'auto', transform: 'translateX(-50%)', justifyContent: 'center' }
           : { right: `${Math.max(0, window.innerWidth - wr.right)}px`, left: 'auto' }),
       });
-      // Mobile: setProperty locks the captured px width against width:100%!important media rule
       // Desktop: inject a <style> tag instead — React re-renders reset inline style.width='auto'
       //          and strip the !important flag, but a stylesheet !important survives that.
-      if (isMobile) {
-        cta.style.setProperty('width', `${r.width}px`, 'important');
-      } else {
+      // Mobile: width is CSS-driven (max-content) — no px lock needed; doUnpin clears nothing extra.
+      if (!isMobile) {
         widthStyle = document.createElement('style');
         widthStyle.textContent = `#panel-hero-cta { width: ${r.width}px !important; box-sizing: border-box !important; }`;
         document.head.appendChild(widthStyle);
@@ -1201,90 +1199,6 @@ const StackedSlidesSection = () => {
     };
   }, []);
 
-  useLayoutEffect(() => {
-    const container = scrambleRef.current;
-    if (!container) return;
-
-    const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ#@!%$&*';
-    const lineEls = Array.from(container.querySelectorAll('[data-scramble-line]'));
-    let scrollProgress = 0;
-    let tickerFn = null;
-    let held = false; // true once final text is set during hold phase
-
-    gsap.set(container, { autoAlpha: 0 });
-
-    const scramble = () => {
-      const p = scrollProgress;
-
-      // Hold phase: 0.35→0.65 — set text once and go silent until phase changes
-      if (p >= 0.35 && p < 0.65) {
-        if (!held) {
-          lineEls.forEach(el => { el.textContent = el.dataset.scrambleLine; });
-          held = true;
-        }
-        return;
-      }
-      held = false;
-
-      // 0→0.35 scramble IN (left→right), 0.65→1 scramble OUT (right→left)
-      let resolveIn, resolveOut;
-      if (p < 0.35) {
-        resolveIn  = p / 0.35;
-        resolveOut = 0;
-      } else {
-        resolveIn  = 1;
-        resolveOut = (p - 0.65) / 0.35;
-      }
-
-      lineEls.forEach((el) => {
-        const line = el.dataset.scrambleLine;
-        const nsIndices = [];
-        line.split('').forEach((c, i) => { if (c !== ' ') nsIndices.push(i); });
-        const n = nsIndices.length;
-
-        const result = line.split('').map((ch, i) => {
-          if (ch === ' ') return ' ';
-          const nsPos = nsIndices.indexOf(i);
-          // resolvedIn: char resolves when resolveIn passes its left→right position
-          const resolvedIn   = nsPos < resolveIn  * (n + 0.5);
-          // scrambledOut: char re-scrambles when resolveOut passes its right→left position
-          const scrambledOut = (n - 1 - nsPos) < resolveOut * (n + 0.5);
-          if (resolvedIn && !scrambledOut) return ch;
-          return CHARS[Math.floor(Math.random() * CHARS.length)];
-        });
-        el.textContent = result.join('');
-      });
-    };
-
-    const startTicker = () => {
-      if (tickerFn) return;
-      held = false;
-      gsap.set(container, { autoAlpha: 1 });
-      tickerFn = scramble;
-      gsap.ticker.add(tickerFn);
-    };
-
-    const stopTicker = (hide = false) => {
-      if (tickerFn) { gsap.ticker.remove(tickerFn); tickerFn = null; }
-      if (hide) gsap.set(container, { autoAlpha: 0 });
-    };
-
-    const stScramble = ScrollTrigger.create({
-      trigger: '#section-break-spacer',
-      start: 'center bottom',
-      end: 'center top',
-      onEnter:     () => startTicker(),
-      onLeave:     () => stopTicker(false),
-      onEnterBack: () => startTicker(),
-      onLeaveBack: () => stopTicker(true),
-      onUpdate:    (self) => { scrollProgress = self.progress; },
-    });
-
-    return () => {
-      stScramble.kill();
-      stopTicker(false);
-    };
-  }, []);
 
   return (
     <section style={sectionStyle}>
@@ -1391,6 +1305,7 @@ const StackedSlidesSection = () => {
           }
           #panel-hero-cta {
             width: max-content !important;
+            max-width: calc(100vw - 2rem) !important;
             align-self: center !important;
             padding: 0.5rem 3.75rem !important;
           }
@@ -1841,13 +1756,12 @@ const StackedSlidesSection = () => {
       <div id="section-break-spacer" style={{ height: 'clamp(24rem, 48vw, 56rem)', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div
           id="section-break-scramble"
-          ref={scrambleRef}
           aria-label="YOUR HUMAN IN THE LOOP"
           style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontWeight: 700, fontSize: 'clamp(2rem, 10vw, 7.83rem)', letterSpacing: '-0.02em', lineHeight: 1.05, color: '#2a2420', margin: 0, textAlign: 'center' }}
         >
-          <div data-scramble-line="YOUR HUMAN"></div>
-          <div data-scramble-line="IN THE"></div>
-          <div data-scramble-line="LOOP"></div>
+          <div>YOUR HUMAN</div>
+          <div>IN THE</div>
+          <div>LOOP</div>
         </div>
       </div>
 

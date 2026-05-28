@@ -130,6 +130,7 @@ const HomePage = () => {
   const userParamsRef = useRef(HERO_PARAMS_START); // user's intentional settings (panel changes)
   const isScrollMorphActiveRef = useRef(false);
   const heroProgressRef = useRef(0); // current scroll progress, kept in sync with ScrollTrigger
+  const snapCanvasRef = useRef(false); // signals canvas to reset smoothedParamsRef on next frame
 
   // Keep #content-section.marginTop = -peekHeight so the capabilitySectionStyle
   // borderTop always lands exactly at the 100dvh fold on page load.
@@ -217,6 +218,7 @@ const HomePage = () => {
       onLeaveBack: () => {
         heroProgressRef.current = 0;
         paramsRef.current = userParamsRef.current;
+        snapCanvasRef.current = true; // flush smoothedParamsRef drift accumulated from repeated scroll cycles
         setParams(userParamsRef.current);
       },
       onToggle: (self) => {
@@ -353,7 +355,7 @@ const HomePage = () => {
       >
         <div id="hero-gradient-overlay" style={heroGradientStyle} />
         <div id="hero-canvas-wrapper" ref={canvasWrapperRef} style={{ position: 'absolute', inset: 0, opacity: 0 }}>
-          <AppCanvas params={params} liveParamsRef={paramsRef} backgroundColor={canvasBackground} />
+          <AppCanvas params={params} liveParamsRef={paramsRef} backgroundColor={canvasBackground} snapRef={snapCanvasRef} />
         </div>
         <HeroHeadline headerLogoRef={headerLogoRef} textColor={textColor} />
         {/* Keyword-rich subheading for crawlers — visually hidden but read by

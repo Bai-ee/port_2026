@@ -55,7 +55,7 @@ const SceneBackground = ({ color }) => {
   return null;
 };
 
-const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {} }) => {
+const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {}, snapRef = null }) => {
   const meshRef = useRef();
   const groupRef = useRef();
   const simTimeRef = useRef(0);
@@ -178,6 +178,12 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {} 
     let PARAMS;
     if (liveParamsRef?.current) {
       const targetParams = liveParamsRef.current;
+      // Snap: parent signals scroll returned to top — reset smoothed state to exactly
+      // match the target so accumulated drift from quick scroll cycles is eliminated.
+      if (snapRef?.current) {
+        smoothedParamsRef.current = { ...targetParams };
+        snapRef.current = false;
+      }
       const nextParams = smoothedParamsRef.current ?? { ...targetParams };
       const smoothing = 1 - Math.exp(-clampedDelta * (runtimeProfile.paramSmoothing ?? 10));
 
@@ -326,7 +332,7 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {} 
   );
 };
 
-export default function App({ params = {}, liveParamsRef = null, backgroundColor = '#1a1a1a', onReady = null }) {
+export default function App({ params = {}, liveParamsRef = null, backgroundColor = '#1a1a1a', onReady = null, snapRef = null }) {
   const useSimpleScrollViewport = useMediaMatch(SIMPLE_SCROLL_MEDIA_QUERY);
   const isMobile = useMediaMatch(MOBILE_MEDIA_QUERY);
   const prefersReducedMotion = useMediaMatch(REDUCED_MOTION_QUERY);
@@ -421,7 +427,7 @@ export default function App({ params = {}, liveParamsRef = null, backgroundColor
         }}
       >
         <SceneBackground color={backgroundColor} />
-        <ParticleSwarm params={optimizedParams} liveParamsRef={liveParamsRef} runtimeProfile={qualityProfile} />
+        <ParticleSwarm params={optimizedParams} liveParamsRef={liveParamsRef} runtimeProfile={qualityProfile} snapRef={snapRef} />
         {qualityProfile.enableControls ? (
           <OrbitControls autoRotate={qualityProfile.autoRotate} enableZoom enablePan={false} enableRotate enableDamping dampingFactor={0.08} rotateSpeed={0.45} zoomSpeed={0.75} minDistance={45} maxDistance={180} />
         ) : null}
