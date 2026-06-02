@@ -838,6 +838,24 @@ const memoryNodes = Array.from({ length: 96 }, (_, index) => {
 
 const WORK_NEEDED_LABEL = 'Work is Needed';
 const CONTACT_HUMAN_LABEL = 'Contact your human in the loop';
+const CUSTOM_DETAIL_CARD_IDS = new Set([
+  'multi-device-view',
+  'brief',
+  'audit-summary',
+  'survey-status',
+  'submit-custom-brief',
+  'marketing-brief',
+  'marketing-brief-doc',
+  'newsletter',
+  'brand-system',
+  'industry',
+  'knowledge-base',
+  'client-brief',
+  'client-mockup',
+  'client-site',
+  'social-media-posting',
+  'strategy-builder',
+]);
 
 const buildUnavailableDescription = (subject) => `Insufficient source evidence to determine ${subject} reliably.`;
 
@@ -902,6 +920,85 @@ function withImpersonation(path, clientId) {
   const [base, hash = ''] = String(path).split('#');
   const joiner = base.includes('?') ? '&' : '?';
   return `${base}${joiner}as=${encodeURIComponent(clientId)}${hash ? `#${hash}` : ''}`;
+}
+
+function briefSlugify(value, fallback = 'custom-brief') {
+  const slug = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/['’]/g, '')
+    .replace(/[^a-z0-9]+/g, '');
+  return slug || fallback;
+}
+
+function escapeHtmlText(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function titlePdfFileName(value, fallback = 'Custom Brief') {
+  const base = String(value || fallback)
+    .replace(/[\\/:*?"<>|]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^\.+|\.+$/g, '');
+  const safeBase = base || fallback;
+  return `${safeBase.slice(0, 120)}.pdf`;
+}
+
+function withDownloadParam(url) {
+  const value = String(url || '');
+  if (!value) return '';
+  return `${value}${value.includes('?') ? '&' : '?'}download=1`;
+}
+
+function buildCustomBriefStarterHtml(client) {
+  const clientName = escapeHtmlText(client?.companyName || client?.name || client?.dashboardTitle || 'Client Name');
+  const prepared = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${clientName} Custom Brief</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Doto:wght@900&family=Space+Grotesk:wght@300;400;600&family=Space+Mono&display=swap" rel="stylesheet">
+  <style>
+    :root { --ink:#0a0a0a; --soft:#5a5346; --line:rgba(212,196,171,.65); --card:rgba(255,255,255,.45); }
+    * { box-sizing: border-box; }
+    body { margin:0; color:var(--ink); font-family:'Space Grotesk',sans-serif; background:radial-gradient(700px 420px at 0% 4%, rgba(255,120,90,.22) 0%, transparent 65%),radial-gradient(620px 380px at 100% 18%, rgba(176,90,255,.18) 0%, transparent 65%),linear-gradient(180deg,#fefdf9 0%,#fbf8f0 60%,#fdfaf2 100%); }
+    .cover { min-height:100vh; padding:40px; display:flex; flex-direction:column; justify-content:space-between; }
+    .top { display:flex; justify-content:space-between; gap:24px; font-family:'Space Mono',monospace; font-size:12px; letter-spacing:.12em; text-transform:uppercase; }
+    h1 { font-family:'Doto',monospace; font-size:clamp(56px,14vw,180px); line-height:.82; margin:0; text-transform:uppercase; }
+    .sub { max-width:760px; font-size:clamp(20px,3vw,36px); line-height:1.1; color:var(--soft); }
+    section { padding:80px 40px; }
+    .card { border:1px solid var(--line); background:var(--card); border-radius:18px; padding:28px; max-width:1000px; }
+    .label { font-family:'Space Mono',monospace; font-size:12px; letter-spacing:.18em; text-transform:uppercase; color:var(--soft); }
+    h2 { font-size:clamp(32px,7vw,86px); line-height:.9; margin:16px 0; font-family:'Doto',monospace; text-transform:uppercase; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="cover">
+      <div class="top"><span>Bryan Balli</span><span>Prepared ${prepared}</span></div>
+      <h1>${clientName}</h1>
+      <p class="sub">Custom project brief. Replace this text with the recommendation, estimate, and next steps.</p>
+    </div>
+    <section>
+      <div class="card">
+        <div class="label">Recommendation</div>
+        <h2>Project Direction</h2>
+        <p>Paste the final brief content here. Keep the language clear, direct, and easy to act on.</p>
+      </div>
+    </section>
+  </main>
+</body>
+</html>`;
 }
 
 function getBootstrapCacheKey(user, impersonateId = null) {
@@ -1614,6 +1711,7 @@ const DashboardPage = () => {
   const [hasBrandSystemMounted, setHasBrandSystemMounted] = useState(false);
   const [impersonateId, setImpersonateId] = useState(() => readImpersonateClientId());
   const [clientSwitcherOpen, setClientSwitcherOpen] = useState(false);
+  const [adminClientOptions, setAdminClientOptions] = useState([]);
 
   const apiPath = useCallback((path) => withImpersonation(path, impersonateId), [impersonateId]);
   // Stable token getter for BrandSystemChat — re-binding when `user` changes only.
@@ -1621,6 +1719,38 @@ const DashboardPage = () => {
     if (!user) return Promise.reject(new Error('No authenticated user.'));
     return user.getIdToken();
   }, [user, impersonateId]);
+
+  useEffect(() => {
+    if (!user || !isAdmin) {
+      setAdminClientOptions([]);
+      return undefined;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const response = await fetch('/api/admin/clients', {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data?.error || 'Could not load clients.');
+        if (cancelled) return;
+        const clients = Array.isArray(data?.clients) ? data.clients : [];
+        setAdminClientOptions(clients.map((item) => ({
+          clientId: item.clientId,
+          name: item.companyName || item.dashboardTitle || item.clientId,
+          websiteUrl: item.websiteUrl || item.normalizedHost || null,
+          source: item.source || null,
+        })).filter((item) => item.clientId));
+      } catch {
+        if (!cancelled) setAdminClientOptions([]);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [user, isAdmin]);
 
   // Per-client leadgen flow (Prepare Brief / Generate Mockup / Generate Site).
   // Opened by clicking client-* cards in the Data Visualization bucket. Reuses
@@ -1650,7 +1780,7 @@ const DashboardPage = () => {
     setMarketCategoryRunLoading(true);
     try {
       const token = await brandSystemGetIdToken();
-      const res = await fetch('/api/dashboard/market-category/analyze', {
+      const res = await fetch(apiPath('/api/dashboard/market-category/analyze'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({}),
@@ -1673,7 +1803,7 @@ const DashboardPage = () => {
     } finally {
       setMarketCategoryRunLoading(false);
     }
-  }, [brandSystemGetIdToken, openMarketCategoryCard]);
+  }, [brandSystemGetIdToken, openMarketCategoryCard, apiPath]);
   const client = bootstrap.client;
 
   const openLeadgenFlow = useCallback(async (step) => {
@@ -1815,6 +1945,25 @@ const DashboardPage = () => {
   const [marketingBriefSaving, setMarketingBriefSaving] = useState(false);
   const [marketingBriefRunning, setMarketingBriefRunning] = useState(false);
   const [marketingBriefError, setMarketingBriefError] = useState('');
+  const [customBriefs, setCustomBriefs] = useState([]);
+  const [customBriefsLoading, setCustomBriefsLoading] = useState(false);
+  const [customBriefsError, setCustomBriefsError] = useState('');
+  const [customBriefDraft, setCustomBriefDraft] = useState(() => ({
+    title: '',
+    briefSlug: '',
+    description: '',
+    ogLabel: 'BRYAN BALLI',
+    hideOgSubhead: false,
+    html: '',
+    public: true,
+    addToClientBrain: true,
+    knowledgeBaseTitle: '',
+  }));
+  const [customBriefSaving, setCustomBriefSaving] = useState(false);
+  const [customBriefDeletingId, setCustomBriefDeletingId] = useState('');
+  const [customBriefVercelLaunchingId, setCustomBriefVercelLaunchingId] = useState('');
+  const [customBriefSubmitError, setCustomBriefSubmitError] = useState('');
+  const [customBriefSubmitSuccess, setCustomBriefSubmitSuccess] = useState('');
   const [brandSnapshotDraft, setBrandSnapshotDraft] = useState(() => buildBrandSnapshotDraft(null));
   const [brandSnapshotSaving, setBrandSnapshotSaving] = useState(false);
   const [brandSnapshotError, setBrandSnapshotError] = useState('');
@@ -1947,6 +2096,208 @@ const DashboardPage = () => {
     return () => { cancelled = true; };
   }, [user, apiPath, bootstrap?.dashboardState?.marketingBrief?.generatedAtIso, bootstrap?.dashboardState?.modules?.['marketing-brief']?.lastRunId]);
 
+  useEffect(() => {
+    if (!user || !client) {
+      setCustomBriefs([]);
+      setCustomBriefsError('');
+      setCustomBriefsLoading(false);
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      setCustomBriefsLoading(true);
+      setCustomBriefsError('');
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch(apiPath('/api/dashboard/custom-briefs'), {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || 'Could not load custom briefs.');
+        if (!cancelled) setCustomBriefs(Array.isArray(data.briefs) ? data.briefs : []);
+      } catch (err) {
+        if (!cancelled) {
+          setCustomBriefs([]);
+          setCustomBriefsError(err instanceof Error ? err.message : 'Could not load custom briefs.');
+        }
+      } finally {
+        if (!cancelled) setCustomBriefsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user, client?.clientId, client?.id, bootstrap?.effectiveClientId, apiPath]);
+
+  const updateCustomBriefDraft = useCallback((patch) => {
+    setCustomBriefDraft((prev) => ({ ...prev, ...patch }));
+  }, []);
+
+  const loadCustomBriefStarter = useCallback(() => {
+    const title = `${client?.companyName || client?.name || client?.dashboardTitle || 'Client'} Custom Brief`;
+      setCustomBriefDraft((prev) => ({
+        ...prev,
+        title: prev.title || title,
+        briefSlug: prev.briefSlug || briefSlugify(title),
+        knowledgeBaseTitle: prev.knowledgeBaseTitle || title,
+        ogLabel: prev.ogLabel || 'BRYAN BALLI',
+        html: buildCustomBriefStarterHtml(client),
+      }));
+    setCustomBriefSubmitError('');
+    setCustomBriefSubmitSuccess('');
+  }, [client]);
+
+  const handleCustomBriefFile = useCallback(async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setCustomBriefSubmitError('');
+    setCustomBriefSubmitSuccess('');
+    try {
+      const html = await file.text();
+      const baseName = file.name.replace(/\.html?$/i, '');
+      const title = customBriefDraft.title || baseName.replace(/[-_]+/g, ' ');
+      setCustomBriefDraft((prev) => ({
+        ...prev,
+        title,
+        briefSlug: prev.briefSlug || briefSlugify(baseName.replace(/-brief$/i, '')),
+        knowledgeBaseTitle: prev.knowledgeBaseTitle || title,
+        ogLabel: prev.ogLabel || 'BRYAN BALLI',
+        html,
+      }));
+    } catch (err) {
+      setCustomBriefSubmitError(err instanceof Error ? err.message : 'Could not read HTML file.');
+    } finally {
+      event.target.value = '';
+    }
+  }, [customBriefDraft.title]);
+
+  const submitCustomBrief = useCallback(async () => {
+    if (!user || customBriefSaving) return;
+    setCustomBriefSaving(true);
+    setCustomBriefSubmitError('');
+    setCustomBriefSubmitSuccess('');
+    try {
+      const token = await user.getIdToken();
+      const title = customBriefDraft.title.trim();
+      const html = customBriefDraft.html.trim();
+      const briefSlug = briefSlugify(customBriefDraft.briefSlug || title);
+      const res = await fetch(apiPath('/api/dashboard/custom-briefs'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({
+          title,
+          briefSlug,
+          description: customBriefDraft.description,
+          ogLabel: customBriefDraft.ogLabel,
+          hideOgSubhead: customBriefDraft.hideOgSubhead,
+          html,
+          public: customBriefDraft.public,
+          addToClientBrain: customBriefDraft.addToClientBrain,
+          knowledgeBaseTitle: customBriefDraft.knowledgeBaseTitle || title,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Could not save custom brief.');
+      if (data?.brief) {
+        setCustomBriefs((prev) => [data.brief, ...prev.filter((item) => item.id !== data.brief.id)]);
+      }
+      setCustomBriefDraft({
+        title: '',
+        briefSlug: '',
+        description: '',
+        ogLabel: 'BRYAN BALLI',
+        hideOgSubhead: false,
+        html: '',
+        public: true,
+        addToClientBrain: true,
+        knowledgeBaseTitle: '',
+      });
+      const pdfMessage = data?.pdf?.ok === false ? 'PDF generation is not available for this save.' : 'PDF ready.';
+      const brainMessage = customBriefDraft.addToClientBrain
+        ? (data?.brain?.ok
+          ? (data?.brain?.status === 'error' ? 'Added to Client Brain; embedding needs attention.' : 'Added to Client Brain.')
+          : 'Client Brain ingest needs attention.')
+        : 'Client Brain skipped.';
+      setCustomBriefSubmitSuccess(`Brief saved. ${pdfMessage} ${brainMessage}`);
+    } catch (err) {
+      setCustomBriefSubmitError(err instanceof Error ? err.message : 'Could not save custom brief.');
+    } finally {
+      setCustomBriefSaving(false);
+    }
+  }, [user, customBriefSaving, customBriefDraft, apiPath]);
+
+  const deleteCustomBrief = useCallback(async (brief) => {
+    const briefId = brief?.id || brief?.briefSlug;
+    if (!user || !briefId || customBriefDeletingId) return;
+    const title = brief?.title || brief?.briefSlug || 'this custom brief';
+    if (typeof window !== 'undefined' && !window.confirm(`Delete "${title}"? This removes the public brief and its Client Brain data.`)) {
+      return;
+    }
+
+    setCustomBriefDeletingId(briefId);
+    setCustomBriefSubmitError('');
+    setCustomBriefSubmitSuccess('');
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(apiPath('/api/dashboard/custom-briefs'), {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ briefId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Could not delete custom brief.');
+      setCustomBriefs((prev) => prev.filter((item) => item.id !== briefId && item.briefSlug !== briefId));
+      const deletedChunks = Number(data?.brain?.deletedChunks) || 0;
+      const vercelMessage = data?.vercel?.deleted
+        ? ` Vercel site deleted${data.vercel.projectName ? ` (${data.vercel.projectName})` : ''}.`
+        : data?.vercel?.alreadyDeleted
+          ? ' Vercel site was already deleted.'
+          : '';
+      setCustomBriefSubmitSuccess(`Brief deleted. Removed ${deletedChunks} Client Brain chunk${deletedChunks === 1 ? '' : 's'}.${vercelMessage}`);
+    } catch (err) {
+      setCustomBriefSubmitError(err instanceof Error ? err.message : 'Could not delete custom brief.');
+    } finally {
+      setCustomBriefDeletingId('');
+    }
+  }, [user, customBriefDeletingId, apiPath]);
+
+  const launchCustomBriefVercel = useCallback(async (brief) => {
+    const briefId = brief?.id || brief?.briefSlug;
+    if (!user || !briefId || customBriefVercelLaunchingId) return;
+
+    setCustomBriefVercelLaunchingId(briefId);
+    setCustomBriefSubmitError('');
+    setCustomBriefSubmitSuccess('');
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(apiPath('/api/dashboard/custom-briefs/vercel'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ briefId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Could not launch custom brief on Vercel.');
+      setCustomBriefs((prev) => prev.map((item) => {
+        if (item.id !== briefId && item.briefSlug !== briefId) return item;
+        return {
+          ...item,
+          vercel: data.vercel || item.vercel || null,
+          vercelUrl: data.vercel?.url || item.vercelUrl || '',
+          vercelReadyState: data.vercel?.readyState || item.vercelReadyState || '',
+        };
+      }));
+      setCustomBriefSubmitSuccess(data?.vercel?.url
+        ? `Brief launched on Vercel. Link added to the brief card: ${data.vercel.url}`
+        : 'Brief deploy sent to Vercel.');
+    } catch (err) {
+      setCustomBriefSubmitError(err instanceof Error ? err.message : 'Could not launch custom brief on Vercel.');
+    } finally {
+      setCustomBriefVercelLaunchingId('');
+    }
+  }, [user, customBriefVercelLaunchingId, apiPath]);
+
   // Fetch the newsletter HTML for the Newsletter tile's PREVIEW tab.
   // Loads the real newsletter if available, otherwise the generic template.
   useEffect(() => {
@@ -1982,13 +2333,12 @@ const DashboardPage = () => {
     return () => window.clearInterval(timer);
   }, []);
 
-  // Reset modal tab to SOLUTIONS each time a card modal opens so users land on
-  // the action view first. If the card has no analyzer data, the tab bar isn't
-  // rendered and this value is unused.
+  // Reset modal tab each time a card modal opens. Standard cards now land on
+  // the shared report page; custom cards keep their purpose-built default tabs.
   // Exceptions:
   //   - multi-device-view → defaults to the 'desktop' viewport tab.
-  //   - seo-performance → if a skill report exists, default to 'report' so users
-  //     land on the deliverable instead of the solutions list.
+  //   - seo-performance / social-preview / agent-readiness / design-evaluation
+  //     use their specialized mini-brief report adapters.
   useEffect(() => {
     if (!activeTileModal?.cardId) return;
     const id = activeTileModal.cardId;
@@ -1996,6 +2346,7 @@ const DashboardPage = () => {
     // Reference via bootstrap here — `dashboardState` is declared later in the
     // component body (TDZ) so the direct name isn't safe at effect-definition time.
     if (id === 'survey-status') { setModalTab('chat'); return; }
+    if (id === 'submit-custom-brief') { setModalTab('upload'); return; }
     if (id === 'marketing-brief') { setModalTab('brief'); return; }
     if (id === 'newsletter') { setModalTab('preview'); return; }
     if (id === 'client-brief')  { setModalTab('preview'); return; }
@@ -2005,8 +2356,9 @@ const DashboardPage = () => {
     if (id === 'agent-readiness') { setModalTab('report'); return; }
     if (id === 'design-evaluation' && bootstrap?.dashboardState?.analyzerOutputs?.['design-evaluation']) { setModalTab('report'); return; }
     if (id === 'social-preview' && bootstrap?.dashboardState?.siteMeta) { setModalTab('report'); return; }
+    if (id === 'industry') { setModalTab('report'); return; }
     if (id === 'brand-system') { setModalTab('master-prompt'); return; }
-    setModalTab('solutions');
+    setModalTab(CUSTOM_DETAIL_CARD_IDS.has(id) ? 'solutions' : 'report');
   }, [activeTileModal?.cardId, bootstrap?.dashboardState?.artifacts?.skillDocs]);
 
   useEffect(() => {
@@ -2179,7 +2531,20 @@ const DashboardPage = () => {
 
   // ── Derived state ─────────────────────────────────────────────────────────
   const isImpersonating = Boolean(bootstrap.impersonating || impersonateId);
-  const adminDashboards = bootstrap.adminDashboards || [];
+  const adminDashboards = useMemo(() => {
+    const byId = new Map();
+    [...(bootstrap.adminDashboards || []), ...adminClientOptions].forEach((item) => {
+      if (!item?.clientId) return;
+      const existing = byId.get(item.clientId) || {};
+      byId.set(item.clientId, {
+        ...existing,
+        ...item,
+        name: item.name || item.companyName || existing.name || existing.companyName || item.clientId,
+        websiteUrl: item.websiteUrl || existing.websiteUrl || null,
+      });
+    });
+    return Array.from(byId.values()).sort((a, b) => String(a.name || a.clientId).localeCompare(String(b.name || b.clientId)));
+  }, [bootstrap.adminDashboards, adminClientOptions]);
 
   const switchDashboard = useCallback((clientId) => {
     const nextId = clientId || null;
@@ -2886,6 +3251,7 @@ const DashboardPage = () => {
       if (isFirstRun) trackDashboardCreated(reseedUrl.trim());
       else trackPipelineRerun(reseedUrl.trim());
       setReseedSuccess(true);
+      setMarketingBriefConfig(null);
       doBootstrap();
     } catch (err) {
       setReseedError(err instanceof Error ? err.message : 'Request failed.');
@@ -3279,6 +3645,9 @@ const DashboardPage = () => {
     marketingBrief?.knowledgeBaseSources,
     globalKnowledgeBaseSources
   );
+  const customBriefCount = customBriefs.length;
+  const hasCustomBriefs = customBriefCount > 0;
+  const latestCustomBrief = hasCustomBriefs ? customBriefs[0] : null;
   const strategyBuilderKnowledgeBaseSources = getKnowledgeBaseSources(
     dashboardState?.strategyBuilder?.lastPlan?.knowledgeBaseSources,
     globalKnowledgeBaseSources
@@ -3293,9 +3662,10 @@ const DashboardPage = () => {
   );
   const knowledgeBaseSourceSummary = summarizeKnowledgeBaseSources(globalKnowledgeBaseSources, 'Available as client master knowledge');
   const hasMarketingBriefData = Boolean(marketingBrief?.content || dashboardState?.headline || latestInsights.length > 0);
-  const hasBriefDocumentData = Boolean(hasIntakeData || hasMarketingBriefData);
+  const hasDailyBriefData = hasMarketingBriefData || hasCustomBriefs;
+  const hasBriefDocumentData = Boolean(hasIntakeData || hasDailyBriefData);
   const marketingBriefStatus = moduleState?.['marketing-brief']?.status || (hasMarketingBriefData ? 'succeeded' : 'idle');
-  const marketingBriefPreview = marketingBrief?.headline || dashboardState?.headline || 'Scout, Scribe, and Guardian are ready to build the daily founder brief.';
+  const marketingBriefPreview = marketingBrief?.headline || dashboardState?.headline || latestCustomBrief?.title || 'Scout, Scribe, and Guardian are ready to build the daily founder brief.';
   const marketingScoutAgentData = marketingBrief?.scoutBrief?.agentData || null;
   const marketingBriefSelectedPlatforms = (marketingBriefConfig?.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS);
   const marketingBriefPerPlatformResults = deriveMarketingBriefPerPlatformResults(marketingScoutAgentData, marketingBriefSelectedPlatforms);
@@ -4931,6 +5301,24 @@ const DashboardPage = () => {
     },
 
     // ── DAILY BRIEFS ────────────────────────────────────────────────────────
+    ...(isAdmin ? [{
+      id: 'submit-custom-brief',
+      category: 'brief',
+      number: 'SC',
+      label: 'SUBMIT CUSTOM BRIEF',
+      title: 'Submit Custom Brief',
+      description: 'Admin workspace for publishing a client-facing HTML brief and downloadable PDF into this client dashboard.',
+      placeholderLabel: 'HTML',
+      rows: [
+        { key: 'sc-client', label: 'Client', value: client?.companyName || client?.name || client?.dashboardTitle || bootstrap?.effectiveClientId || 'Selected client' },
+        { key: 'sc-existing', label: 'Saved briefs', value: customBriefsLoading ? 'Loading' : String(customBriefCount) },
+        { key: 'sc-pdf', label: 'PDF export', value: 'Generated on save' },
+        { key: 'sc-access', label: 'Access', value: 'Admin only' },
+      ],
+      footerLeft: 'Ready',
+      footerRight: 'ADMIN',
+      readinessBadge: { tone: 'ok', label: 'Ready' },
+    }] : []),
     {
       id: 'brief-competitor',
       category: 'brief',
@@ -5003,9 +5391,10 @@ const DashboardPage = () => {
       label: 'EXECUTIVE DAILY BRIEF',
       title: 'Executive Daily Brief',
       description: 'Morning snapshot of what matters. Pulls live signals from GA4, Search Console, Firebase, and Vercel to surface business health, active risks, and the 2–3 things worth your attention today.',
-      placeholderLabel: hasMarketingBriefData ? 'BRIEF' : 'SCOUT',
+      placeholderLabel: hasDailyBriefData ? 'BRIEF' : 'SCOUT',
       rows: [
         { key: 'mb-status', label: 'Status', value: marketingBriefStatus },
+        { key: 'mb-custom-briefs', label: 'Custom briefs', value: customBriefsLoading ? 'Loading' : hasCustomBriefs ? `${customBriefCount} imported` : 'None imported' },
         { key: 'mb-focus', label: 'Scout focus', value: marketingBriefConfig?.sourceFocus || 'Not configured' },
         { key: 'mb-instructions', label: 'Instructions', value: marketingBriefConfig?.scoutInstructions ? 'Custom' : 'Default' },
         { key: 'mb-sources', label: 'Sources', value: (marketingBriefConfig?.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS).join(' · ') },
@@ -5016,14 +5405,14 @@ const DashboardPage = () => {
         { key: 'mb-preview', label: 'Latest signal', value: marketingBriefPreview },
         { key: 'mb-x-post', label: 'X post', value: marketingBrief?.content?.x_post || dashboardState?.summaryCards?.find((c) => c.type === 'content_post')?.value || null },
       ],
-      footerLeft: hasMarketingBriefData ? 'Live' : 'Configure Scout',
+      footerLeft: hasDailyBriefData ? 'Live' : 'Configure Scout',
       footerRight: 'REVIEWED',
       footerAction: {
         label: marketingBriefRunning ? '…' : hasMarketingBriefData ? 'Re-run' : 'Run Brief',
         loading: marketingBriefRunning || marketingBriefSaving,
         onClick: runMarketingBrief,
       },
-      readinessBadge: hasMarketingBriefData ? { tone: 'ok', label: 'Passed' } : null,
+      readinessBadge: hasDailyBriefData ? { tone: 'ok', label: 'Passed' } : null,
     },
 
     {
@@ -7905,11 +8294,302 @@ const DashboardPage = () => {
                   );
                 })()}
 
+                {/* Submit Custom Brief — admin HTML/PDF publishing */}
+                {activeTileModal.cardId === 'submit-custom-brief' && (
+                  <div id="submit-custom-brief-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
+                    <div className="tile-detail-tabs">
+                      <button type="button" className={`tile-detail-tab${modalTab === 'upload' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('upload')}>UPLOAD HTML</button>
+                      <button type="button" className={`tile-detail-tab${modalTab === 'create' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('create')}>CREATE HTML</button>
+                      <button type="button" className={`tile-detail-tab${modalTab === 'brain' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('brain')}>CLIENT BRAIN</button>
+                      <button type="button" className={`tile-detail-tab${modalTab === 'custom' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('custom')}>SAVED BRIEFS</button>
+                    </div>
+                    <div className="tile-detail-tab-content">
+                      {(modalTab === 'upload' || modalTab === 'create') && (
+                        <div className="tile-detail-tab-pane custom-brief-submit-pane">
+                          <div className="custom-brief-submit-grid">
+                            <label className="mb-config-field">
+                              <span className="mb-config-label">Brief title</span>
+                              <input
+                                className="mb-config-input"
+                                value={customBriefDraft.title}
+                                onChange={(e) => {
+                                  const title = e.target.value;
+                                  updateCustomBriefDraft({
+                                    title,
+                                    briefSlug: customBriefDraft.briefSlug ? customBriefDraft.briefSlug : briefSlugify(title),
+                                    knowledgeBaseTitle: customBriefDraft.knowledgeBaseTitle ? customBriefDraft.knowledgeBaseTitle : title,
+                                  });
+                                }}
+                                placeholder="Platform Brief"
+                              />
+                            </label>
+                            <label className="mb-config-field">
+                              <span className="mb-config-label">URL slug</span>
+                              <input
+                                className="mb-config-input"
+                                value={customBriefDraft.briefSlug}
+                                onChange={(e) => updateCustomBriefDraft({ briefSlug: briefSlugify(e.target.value) })}
+                                placeholder="platform"
+                              />
+                            </label>
+                          </div>
+
+                          <label className="mb-config-field">
+                            <span className="mb-config-label">OG top label</span>
+                            <input
+                              className="mb-config-input"
+                              value={customBriefDraft.ogLabel}
+                              onChange={(e) => updateCustomBriefDraft({ ogLabel: e.target.value })}
+                              placeholder="BRYAN BALLI"
+                            />
+                          </label>
+
+                          <label className="mb-config-field">
+                            <span className="mb-config-label">Description</span>
+                            <input
+                              className="mb-config-input"
+                              value={customBriefDraft.description}
+                              onChange={(e) => updateCustomBriefDraft({ description: e.target.value })}
+                              placeholder="OG meta description and dashboard summary"
+                            />
+                          </label>
+
+                          <label className="custom-brief-public-toggle">
+                            <input
+                              type="checkbox"
+                              checked={customBriefDraft.hideOgSubhead}
+                              onChange={(e) => updateCustomBriefDraft({ hideOgSubhead: e.target.checked })}
+                            />
+                            <span>Remove subhead from OG image</span>
+                          </label>
+
+                          {modalTab === 'upload' ? (
+                            <label className="custom-brief-file-drop">
+                              <input type="file" accept=".html,text/html" onChange={handleCustomBriefFile} />
+                              <span className="custom-brief-file-label">Select HTML File</span>
+                              <span className="custom-brief-file-meta">{customBriefDraft.html ? `${customBriefDraft.html.length.toLocaleString()} characters loaded` : 'No file selected'}</span>
+                            </label>
+                          ) : (
+                            <div className="custom-brief-create-actions">
+                              <button type="button" className="tile-foot-rerun-btn" onClick={loadCustomBriefStarter}>Use Starter HTML</button>
+                            </div>
+                          )}
+
+                          <label className="mb-config-field">
+                            <span className="mb-config-label">HTML document</span>
+                            <textarea
+                              className="mb-config-textarea mb-config-textarea--code custom-brief-html-textarea"
+                              value={customBriefDraft.html}
+                              onChange={(e) => updateCustomBriefDraft({ html: e.target.value })}
+                              rows={18}
+                              spellCheck={false}
+                              placeholder="<!doctype html>..."
+                            />
+                          </label>
+
+                          <label className="custom-brief-public-toggle">
+                            <input
+                              type="checkbox"
+                              checked={customBriefDraft.public}
+                              onChange={(e) => updateCustomBriefDraft({ public: e.target.checked })}
+                            />
+                            <span>Public URL enabled</span>
+                          </label>
+
+                          <label className="custom-brief-public-toggle">
+                            <input
+                              type="checkbox"
+                              checked={customBriefDraft.addToClientBrain}
+                              onChange={(e) => updateCustomBriefDraft({ addToClientBrain: e.target.checked })}
+                            />
+                            <span>Add to Client Brain</span>
+                          </label>
+
+                          {customBriefSubmitError && <p className="mb-config-error">{customBriefSubmitError}</p>}
+                          {customBriefSubmitSuccess && <p className="custom-brief-submit-success">{customBriefSubmitSuccess}</p>}
+
+                          <div className="mb-config-actionbar">
+                            <span className="mb-config-actionbar-note">Saves to the selected client and renders a PDF when Browserless is configured.</span>
+                            <div className="mb-config-actionbar-buttons">
+                              <button
+                                type="button"
+                                className="tile-foot-rerun-btn"
+                                onClick={submitCustomBrief}
+                                disabled={customBriefSaving || !customBriefDraft.html.trim() || !customBriefDraft.title.trim()}
+                              >
+                                {customBriefSaving ? 'Saving...' : 'Save Brief'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {modalTab === 'brain' && (
+                        <div className="tile-detail-tab-pane custom-brief-submit-pane">
+                          <section className="mb-config-section">
+                            <div className="mb-config-section-head">
+                              <span className="mb-config-section-index">KB</span>
+                              <div>
+                                <h4>Client Brain Ingest</h4>
+                                <p>Saved briefs can be embedded into the selected client's knowledge base for questions and downstream pipeline context.</p>
+                              </div>
+                              <span className="mb-config-section-status">{customBriefDraft.addToClientBrain ? 'Enabled' : 'Skipped'}</span>
+                            </div>
+
+                            <label className="custom-brief-public-toggle">
+                              <input
+                                type="checkbox"
+                                checked={customBriefDraft.addToClientBrain}
+                                onChange={(e) => updateCustomBriefDraft({ addToClientBrain: e.target.checked })}
+                              />
+                              <span>Reference this brief in the client brain</span>
+                            </label>
+
+                            <label className="mb-config-field">
+                              <span className="mb-config-label">Brain title</span>
+                              <input
+                                className="mb-config-input"
+                                value={customBriefDraft.knowledgeBaseTitle}
+                                onChange={(e) => updateCustomBriefDraft({ knowledgeBaseTitle: e.target.value })}
+                                placeholder={customBriefDraft.title || 'Custom Brief'}
+                              />
+                            </label>
+
+                            <div className="custom-brief-brain-summary">
+                              <span className="custom-brief-brain-pill">
+                                HTML {customBriefDraft.html ? `${customBriefDraft.html.length.toLocaleString()} chars` : 'not loaded'}
+                              </span>
+                              <span className="custom-brief-brain-pill">
+                                Saved brain briefs {customBriefs.filter((brief) => brief.addedToClientBrain).length}
+                              </span>
+                            </div>
+                          </section>
+
+                          {customBriefSubmitError && <p className="mb-config-error">{customBriefSubmitError}</p>}
+                          {customBriefSubmitSuccess && <p className="custom-brief-submit-success">{customBriefSubmitSuccess}</p>}
+
+                          <div className="mb-config-actionbar">
+                            <span className="mb-config-actionbar-note">Ingest saves the brief as a Knowledge Base item and embeds its text for downstream questions and pipeline use.</span>
+                            <div className="mb-config-actionbar-buttons">
+                              <button
+                                type="button"
+                                className="tile-foot-rerun-btn"
+                                onClick={submitCustomBrief}
+                                disabled={customBriefSaving || !customBriefDraft.html.trim() || !customBriefDraft.title.trim()}
+                              >
+                                {customBriefSaving ? 'Saving...' : 'Save Brief'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {modalTab === 'custom' && (
+                        <div className="tile-detail-tab-pane custom-briefs-pane">
+                          <div className="custom-briefs-head">
+                            <span className="custom-briefs-kicker">Saved Briefs</span>
+                            <span className="custom-briefs-count">{customBriefsLoading ? 'Loading' : `${customBriefCount} available`}</span>
+                          </div>
+                          {customBriefSubmitError && <p className="mb-config-error">{customBriefSubmitError}</p>}
+                          {customBriefSubmitSuccess && <p className="custom-brief-submit-success">{customBriefSubmitSuccess}</p>}
+                          {customBriefsError ? (
+                            <p className="tile-analyzer-solutions-empty">{customBriefsError}</p>
+                          ) : customBriefsLoading ? (
+                            <p className="tile-analyzer-solutions-empty">Loading custom briefs...</p>
+                          ) : hasCustomBriefs ? (
+                            <div className="custom-briefs-list">
+                              {customBriefs.map((brief) => (
+                                <article key={`submit-${brief.id || brief.publicPath}`} className="custom-brief-card">
+                                  <div className="custom-brief-card-main">
+                                    <span className="custom-brief-card-label">PUBLIC BRIEF</span>
+                                    <h4>{brief.title || brief.briefSlug || 'Custom brief'}</h4>
+                                    {brief.description && <p>{brief.description}</p>}
+                                    <div className="custom-brief-card-meta">
+                                      <span>{brief.updatedAt ? new Date(brief.updatedAt).toLocaleString() : 'Imported'}</span>
+                                      {brief.sourcePath && <span>{brief.sourcePath}</span>}
+                                      {brief.addedToClientBrain ? (
+                                        <span>Client Brain - {brief.knowledgeBaseChunkCount || 0} chunks</span>
+                                      ) : brief.knowledgeBaseStatus ? (
+                                        <span>Client Brain - {brief.knowledgeBaseStatus}</span>
+                                      ) : null}
+                                      {brief.vercelReadyState && <span>Vercel - {brief.vercelReadyState}</span>}
+                                      {brief.vercelUrl && (
+                                        <a className="custom-brief-meta-link" href={brief.vercelUrl} target="_blank" rel="noopener noreferrer">
+                                          Live Site <ArrowUpRight size={12} strokeWidth={2} />
+                                        </a>
+                                      )}
+                                      {brief.hideOgSubhead && <span>OG subhead hidden</span>}
+                                    </div>
+                                  </div>
+                                  <div className="custom-brief-card-actions">
+                                    {brief.publicUrl && (
+                                      <a className="custom-brief-open-btn" href={brief.publicUrl} target="_blank" rel="noopener noreferrer">
+                                        Open <ArrowUpRight size={16} strokeWidth={2} />
+                                      </a>
+                                    )}
+                                    {brief.ogImageUrl && (
+                                      <a className="custom-brief-open-btn" href={brief.ogImageUrl} target="_blank" rel="noopener noreferrer">
+                                        OG Image
+                                      </a>
+                                    )}
+                                    {brief.ogImageUrl && (
+                                      <a className="custom-brief-open-btn" href={withDownloadParam(brief.ogImageUrl)} download={`${brief.title || brief.briefSlug || 'custom-brief'} OG Image.png`}>
+                                        Download OG
+                                      </a>
+                                    )}
+                                    {brief.vercelUrl && (
+                                      <a className="custom-brief-open-btn custom-brief-vercel-btn" href={brief.vercelUrl} target="_blank" rel="noopener noreferrer">
+                                        Vercel <ArrowUpRight size={16} strokeWidth={2} />
+                                      </a>
+                                    )}
+                                    {isAdmin && (
+                                      <button
+                                        type="button"
+                                        className="custom-brief-open-btn custom-brief-vercel-btn"
+                                        onClick={() => launchCustomBriefVercel(brief)}
+                                        disabled={customBriefVercelLaunchingId === (brief.id || brief.briefSlug)}
+                                      >
+                                        {customBriefVercelLaunchingId === (brief.id || brief.briefSlug)
+                                          ? 'Launching...'
+                                          : brief.vercelUrl ? 'Redeploy' : 'Launch'}
+                                      </button>
+                                    )}
+                                    {(brief.pdfDownloadUrl || brief.pdfUrl) ? (
+                                      <a className="custom-brief-open-btn" href={brief.pdfDownloadUrl || brief.pdfUrl} target="_blank" rel="noopener noreferrer" download={brief.pdfFileName || titlePdfFileName(brief.title || brief.briefSlug)}>
+                                        PDF ↓
+                                      </a>
+                                    ) : (
+                                      <span className="custom-brief-pdf-empty">No PDF</span>
+                                    )}
+                                    {isAdmin && (
+                                      <button
+                                        type="button"
+                                        className="custom-brief-open-btn custom-brief-delete-btn"
+                                        onClick={() => deleteCustomBrief(brief)}
+                                        disabled={customBriefDeletingId === (brief.id || brief.briefSlug)}
+                                      >
+                                        {customBriefDeletingId === (brief.id || brief.briefSlug) ? 'Deleting...' : 'Delete'}
+                                      </button>
+                                    )}
+                                  </div>
+                                </article>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="tile-analyzer-solutions-empty">No custom briefs are saved for this client yet.</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Marketing Brief card — Scout config + launch */}
                 {activeTileModal.cardId === 'marketing-brief' && (
                   <div id="marketing-brief-config-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
                     <div className="tile-detail-tabs">
                       <button type="button" className={`tile-detail-tab${modalTab === 'brief' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('brief')}>BRIEF</button>
+                      <button type="button" className={`tile-detail-tab${modalTab === 'custom' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('custom')}>CUSTOM BRIEFS</button>
                       <button type="button" className={`tile-detail-tab${modalTab === 'data' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('data')}>SCOUT CONFIG</button>
                       <button type="button" className={`tile-detail-tab${modalTab === 'preview' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('preview')}>LATEST OUTPUT</button>
                     </div>
@@ -8209,6 +8889,102 @@ const DashboardPage = () => {
                           )}
                         </div>
                       )}
+                      {modalTab === 'custom' && (
+                        <div className="tile-detail-tab-pane custom-briefs-pane">
+                          <div className="custom-briefs-head">
+                            <span className="custom-briefs-kicker">Imported Briefs</span>
+                            <span className="custom-briefs-count">{customBriefsLoading ? 'Loading' : `${customBriefCount} available`}</span>
+                          </div>
+                          {customBriefSubmitError && <p className="mb-config-error">{customBriefSubmitError}</p>}
+                          {customBriefSubmitSuccess && <p className="custom-brief-submit-success">{customBriefSubmitSuccess}</p>}
+                          {customBriefsError ? (
+                            <p className="tile-analyzer-solutions-empty">{customBriefsError}</p>
+                          ) : customBriefsLoading ? (
+                            <p className="tile-analyzer-solutions-empty">Loading custom briefs...</p>
+                          ) : hasCustomBriefs ? (
+                            <div className="custom-briefs-list">
+                              {customBriefs.map((brief) => (
+                                <article key={brief.id || brief.publicPath} className="custom-brief-card">
+                                  <div className="custom-brief-card-main">
+                                    <span className="custom-brief-card-label">PUBLIC BRIEF</span>
+                                    <h4>{brief.title || brief.briefSlug || 'Custom brief'}</h4>
+                                    {brief.description && <p>{brief.description}</p>}
+                                    <div className="custom-brief-card-meta">
+                                      <span>{brief.updatedAt ? new Date(brief.updatedAt).toLocaleString() : 'Imported'}</span>
+                                      {brief.sourcePath && <span>{brief.sourcePath}</span>}
+                                      {brief.addedToClientBrain ? (
+                                        <span>Client Brain - {brief.knowledgeBaseChunkCount || 0} chunks</span>
+                                      ) : brief.knowledgeBaseStatus ? (
+                                        <span>Client Brain - {brief.knowledgeBaseStatus}</span>
+                                      ) : null}
+                                      {brief.vercelReadyState && <span>Vercel - {brief.vercelReadyState}</span>}
+                                      {brief.vercelUrl && (
+                                        <a className="custom-brief-meta-link" href={brief.vercelUrl} target="_blank" rel="noopener noreferrer">
+                                          Live Site <ArrowUpRight size={12} strokeWidth={2} />
+                                        </a>
+                                      )}
+                                      {brief.hideOgSubhead && <span>OG subhead hidden</span>}
+                                    </div>
+                                  </div>
+                                  <div className="custom-brief-card-actions">
+                                    {brief.publicUrl && (
+                                      <a className="custom-brief-open-btn" href={brief.publicUrl} target="_blank" rel="noopener noreferrer">
+                                        Open Brief <ArrowUpRight size={16} strokeWidth={2} />
+                                      </a>
+                                    )}
+                                    {brief.ogImageUrl && (
+                                      <a className="custom-brief-open-btn" href={brief.ogImageUrl} target="_blank" rel="noopener noreferrer">
+                                        OG Image
+                                      </a>
+                                    )}
+                                    {brief.ogImageUrl && (
+                                      <a className="custom-brief-open-btn" href={withDownloadParam(brief.ogImageUrl)} download={`${brief.title || brief.briefSlug || 'custom-brief'} OG Image.png`}>
+                                        Download OG
+                                      </a>
+                                    )}
+                                    {brief.vercelUrl && (
+                                      <a className="custom-brief-open-btn custom-brief-vercel-btn" href={brief.vercelUrl} target="_blank" rel="noopener noreferrer">
+                                        Vercel <ArrowUpRight size={16} strokeWidth={2} />
+                                      </a>
+                                    )}
+                                    {isAdmin && (
+                                      <button
+                                        type="button"
+                                        className="custom-brief-open-btn custom-brief-vercel-btn"
+                                        onClick={() => launchCustomBriefVercel(brief)}
+                                        disabled={customBriefVercelLaunchingId === (brief.id || brief.briefSlug)}
+                                      >
+                                        {customBriefVercelLaunchingId === (brief.id || brief.briefSlug)
+                                          ? 'Launching...'
+                                          : brief.vercelUrl ? 'Redeploy' : 'Launch'}
+                                      </button>
+                                    )}
+                                    {(brief.pdfDownloadUrl || brief.pdfUrl) ? (
+                                      <a className="custom-brief-open-btn" href={brief.pdfDownloadUrl || brief.pdfUrl} target="_blank" rel="noopener noreferrer" download={brief.pdfFileName || titlePdfFileName(brief.title || brief.briefSlug)}>
+                                        PDF ↓
+                                      </a>
+                                    ) : (
+                                      <span className="custom-brief-pdf-empty">No PDF</span>
+                                    )}
+                                    {isAdmin && (
+                                      <button
+                                        type="button"
+                                        className="custom-brief-open-btn custom-brief-delete-btn"
+                                        onClick={() => deleteCustomBrief(brief)}
+                                        disabled={customBriefDeletingId === (brief.id || brief.briefSlug)}
+                                      >
+                                        {customBriefDeletingId === (brief.id || brief.briefSlug) ? 'Deleting...' : 'Delete'}
+                                      </button>
+                                    )}
+                                  </div>
+                                </article>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="tile-analyzer-solutions-empty">No custom briefs are imported for this client yet.</p>
+                          )}
+                        </div>
+                      )}
                       {modalTab === 'brief' && (
                         <div id="marketing-brief-modal-doc-pane" className="tile-detail-tab-pane" style={{ padding: 0, height: '100%', minHeight: '70vh', overflow: 'hidden', display: 'flex' }}>
                           {marketingBriefPreviewHtml ? (
@@ -8343,10 +9119,37 @@ const DashboardPage = () => {
                 {activeTileModal.cardId === 'industry' && (
                   <div id="market-category-modal-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
                     <div className="tile-detail-tabs">
-                      <button type="button" className="tile-detail-tab tile-detail-tab--active">CATEGORY</button>
+                      <button
+                        type="button"
+                        className={`tile-detail-tab${modalTab === 'report' ? ' tile-detail-tab--active' : ''}`}
+                        onClick={() => setModalTab('report')}
+                      >REPORT</button>
+                      <button
+                        type="button"
+                        className={`tile-detail-tab${modalTab === 'category' ? ' tile-detail-tab--active' : ''}`}
+                        onClick={() => setModalTab('category')}
+                      >CATEGORY</button>
+                      <button
+                        type="button"
+                        className={`tile-detail-tab${modalTab === 'data' ? ' tile-detail-tab--active' : ''}`}
+                        onClick={() => setModalTab('data')}
+                      >DATA</button>
                     </div>
                     <div className="tile-detail-tab-content">
-                      <div className="tile-detail-tab-pane">
+                      {modalTab === 'report' && (
+                        <TileDetailAnalysisContent
+                          modalTab={modalTab}
+                          activeTileModal={activeTileModal}
+                          client={client}
+                          styleGuideData={styleGuideData}
+                          analyzerOutputs={analyzerOutputs}
+                          dashboardState={dashboardState}
+                          siteMeta={siteMeta}
+                          seoAudit={seoAudit}
+                        />
+                      )}
+                      {modalTab === 'category' && (
+                        <div className="tile-detail-tab-pane">
                         <MarketCategoryPanel
                           bootstrap={bootstrap}
                           getIdToken={brandSystemGetIdToken}
@@ -8360,7 +9163,21 @@ const DashboardPage = () => {
                             }));
                           }}
                         />
-                      </div>
+                        </div>
+                      )}
+                      {modalTab === 'data' && (
+                        <div id="market-category-data-tab" className="tile-detail-tab-pane">
+                          {activeTileModal.rows.map((row) => (
+                            row.isHeader ? <div key={row.key} className="tile-detail-row-section-head">{row.label}</div>
+                            : (
+                              <div key={row.key} className={`tile-detail-stat-row${row.isFailing ? ' tile-detail-stat-row--flag' : ''}`}>
+                                <span className="tile-detail-stat-label">{row.label}</span>
+                                <span className="tile-detail-stat-value">{row.value}</span>
+                              </div>
+                            )
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -8441,25 +9258,20 @@ const DashboardPage = () => {
                   </div>
                 )}
 
-                {/* Tabbed SOLUTIONS / PROBLEMS / DATA for most cards */}
-                {!['multi-device-view', 'brief', 'audit-summary', 'survey-status', 'marketing-brief', 'marketing-brief-doc', 'newsletter', 'brand-system', 'industry', 'knowledge-base', 'client-brief', 'client-mockup', 'client-site'].includes(activeTileModal.cardId) && (activeTileModal.analyzer || (activeTileModal.cardId === 'social-preview' && siteMeta)) ? (
+                {/* Shared REPORT / SOLUTIONS / PROBLEMS / DATA tabs for standard cards */}
+                {!CUSTOM_DETAIL_CARD_IDS.has(activeTileModal.cardId) ? (
                   <div
                     id={`${activeTileModal.cardId}-analyzer-findings`}
                     className="tile-detail-bento-cell tile-detail-tabbed-container"
                   >
                     <div className="tile-detail-tabs">
                       {(() => {
-                        // Per-card tab list. Skill report tab appears only when a
-                        // doc is available for that card. seo-performance opens to
-                        // it by default (see modal-tab reset effect).
-                        const SKILL_DOC_BY_CARD = { 'seo-performance': 'seo-depth-audit' };
-                        const docSkillId = SKILL_DOC_BY_CARD[activeTileModal.cardId];
-                        const hasReport = ['design-evaluation', 'seo-performance', 'social-preview', 'agent-readiness'].includes(activeTileModal.cardId)
-                          || !!(docSkillId && dashboardState?.artifacts?.skillDocs?.[docSkillId]?.html);
                         const tabs = [
-                          ...(hasReport ? [{ key: 'report', label: 'REPORT' }] : []),
-                          { key: 'solutions', label: 'SOLUTIONS' },
-                          { key: 'problems', label: 'PROBLEMS' },
+                          { key: 'report', label: 'REPORT' },
+                          ...(activeTileModal.analyzer ? [
+                            { key: 'solutions', label: 'SOLUTIONS' },
+                            { key: 'problems', label: 'PROBLEMS' },
+                          ] : []),
                           { key: 'data', label: 'DATA' },
                         ];
                         return tabs.map(({ key, label }) => (
@@ -8483,9 +9295,6 @@ const DashboardPage = () => {
                           dashboardState={dashboardState}
                           siteMeta={siteMeta}
                           seoAudit={seoAudit}
-                          moduleRunLoading={moduleRunLoading}
-                          handleModuleRun={handleModuleRun}
-                          apiPath={apiPath}
                         />
                       )}
 
@@ -11898,6 +12707,257 @@ const dashboardCss = `
     display: flex;
     flex-direction: column;
     gap: 12px;
+  }
+  .custom-briefs-pane {
+    gap: 16px;
+  }
+  .custom-briefs-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .custom-briefs-kicker,
+  .custom-briefs-count,
+  .custom-brief-card-label,
+  .custom-brief-card-meta {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+  .custom-briefs-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .custom-brief-submit-pane {
+    gap: 16px;
+  }
+  .custom-brief-submit-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 0.45fr);
+    gap: 12px;
+  }
+  .custom-brief-file-drop {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border: 1px dashed var(--border-visible);
+    border-radius: 8px;
+    background: var(--surface-raised);
+    padding: 14px;
+    cursor: pointer;
+  }
+  .custom-brief-file-drop input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .custom-brief-file-label {
+    font-family: var(--font-ui);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-display);
+  }
+  .custom-brief-file-meta,
+  .custom-brief-pdf-empty {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+  .custom-brief-create-actions {
+    display: flex;
+    justify-content: flex-start;
+  }
+  .custom-brief-html-textarea {
+    min-height: 360px;
+    white-space: pre;
+  }
+  .custom-brief-public-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+  .custom-brief-public-toggle input {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--accent);
+  }
+  .custom-brief-submit-success {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    color: #15803d;
+  }
+  .custom-brief-brain-summary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .custom-brief-brain-pill,
+  .mb-config-section-status {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    border: 1px solid var(--border-visible);
+    border-radius: 6px;
+    background: var(--surface-raised);
+    padding: 0 10px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+  .mb-config-section-status {
+    justify-self: end;
+  }
+  .custom-brief-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 16px;
+    align-items: start;
+    border: 1px solid var(--border-visible);
+    border-radius: 8px;
+    background: var(--surface-raised);
+    padding: 16px;
+  }
+  .custom-brief-card-main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+  .custom-brief-card h4 {
+    margin: 0;
+    font-family: var(--font-ui);
+    font-size: 16px;
+    line-height: 1.25;
+    color: var(--text-display);
+  }
+  .custom-brief-card p {
+    margin: 0;
+    font-family: var(--font-ui);
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--text-secondary);
+  }
+  .custom-brief-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+    text-transform: none;
+    letter-spacing: 0.02em;
+    min-height: 20px;
+    max-height: 46px;
+    overflow: hidden;
+  }
+  .custom-brief-card-meta > span,
+  .custom-brief-meta-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 220px;
+    min-height: 20px;
+    line-height: 20px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+  .custom-brief-meta-link {
+    color: var(--text-display);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+  }
+  .custom-brief-meta-link svg {
+    flex: 0 0 auto;
+  }
+  .custom-brief-open-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid var(--border-visible);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text-display);
+    font-family: var(--font-ui);
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: border-color 160ms var(--ease), transform 120ms var(--ease);
+  }
+  .custom-brief-open-btn:hover {
+    border-color: var(--accent);
+    transform: translateY(-1px);
+  }
+  .custom-brief-open-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.58;
+    transform: none;
+  }
+  .custom-brief-delete-btn {
+    color: #991b1b;
+    border-color: rgba(153, 27, 27, 0.32);
+  }
+  .custom-brief-delete-btn:hover:not(:disabled) {
+    border-color: rgba(153, 27, 27, 0.68);
+    background: rgba(153, 27, 27, 0.06);
+  }
+  .custom-brief-vercel-btn {
+    border-color: rgba(0, 173, 181, 0.34);
+  }
+  .custom-brief-vercel-btn:hover:not(:disabled) {
+    border-color: rgba(0, 173, 181, 0.7);
+    background: rgba(0, 173, 181, 0.06);
+  }
+  .custom-brief-card-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  @media (max-width: 720px) {
+    .custom-brief-submit-grid {
+      grid-template-columns: 1fr;
+    }
+    .custom-brief-brain-summary {
+      grid-template-columns: 1fr;
+    }
+    .custom-brief-file-drop {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+    .custom-brief-card {
+      grid-template-columns: 1fr;
+      align-items: stretch;
+    }
+    .custom-brief-card-actions {
+      justify-content: stretch;
+    }
+    .custom-brief-open-btn {
+      width: 100%;
+    }
   }
   /* Strategy Builder + Market Category — aligned to the dashboard design system.
      Reuses .tile-detail-tab, .mb-config-platform-toggle, .tile-detail-stat-row,

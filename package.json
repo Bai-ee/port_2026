@@ -22,6 +22,7 @@
     "dotenv": "^17.3.1",
     "firebase": "^12.12.0",
     "firebase-admin": "^13.8.0",
+    "fontkit": "^2.0.4",
     "googleapis": "^171.4.0",
     "gsap": "^3.14.2",
     "lucide-react": "^1.8.0",

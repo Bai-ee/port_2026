@@ -8,8 +8,7 @@ import { designEvaluationAdapter } from '../../features/scout-intake/mini-briefs
 import { seoPerformanceAdapter } from '../../features/scout-intake/mini-briefs/seo-performance-adapter.mjs';
 import { socialPreviewAdapter } from '../../features/scout-intake/mini-briefs/social-preview-adapter.mjs';
 import { agentReadinessAdapter } from '../../features/scout-intake/mini-briefs/agent-readiness-adapter.mjs';
-
-const SKILL_DOC_BY_CARD = { 'seo-performance': 'seo-depth-audit' };
+import { cardReportAdapter } from '../../features/scout-intake/mini-briefs/card-report-adapter.mjs';
 
 function getSiteName(client) {
   const raw = client?.websiteUrl || client?.name || '';
@@ -42,9 +41,6 @@ export default function TileDetailAnalysisContent({
   dashboardState,
   siteMeta,
   seoAudit,
-  moduleRunLoading,
-  handleModuleRun,
-  apiPath,
 }) {
   if (!activeTileModal || !['report', 'solutions', 'problems'].includes(modalTab)) {
     return null;
@@ -82,6 +78,13 @@ export default function TileDetailAnalysisContent({
     }))
   ), [analyzerOutputs, siteName]);
 
+  const genericCardReportHtml = useMemo(() => (
+    renderMiniBriefHtml(cardReportAdapter({
+      card: activeTileModal,
+      siteName,
+    }))
+  ), [activeTileModal, siteName]);
+
   const designReportMd = useMemo(() => (
     renderDesignMd({
       siteName,
@@ -100,6 +103,14 @@ export default function TileDetailAnalysisContent({
   }, [activeTileModal.cardId, activeTileModal.analyzer, siteName, styleGuideData]);
 
   if (modalTab === 'report') {
+    const reportHtmlByCard = {
+      'design-evaluation': designEvalMiniBriefHtml,
+      'seo-performance': seoMiniBriefHtml,
+      'social-preview': socialMiniBriefHtml,
+      'agent-readiness': agentReadinessMiniBriefHtml,
+    };
+    const reportHtml = reportHtmlByCard[activeTileModal.cardId] || genericCardReportHtml;
+
     if (activeTileModal.cardId === 'design-evaluation') {
       return (
         <div className="tile-detail-tab-pane" id="design-eval-report-pane" style={{ display: 'flex', flexDirection: 'column', padding: 0, height: '100%' }}>
@@ -126,139 +137,20 @@ export default function TileDetailAnalysisContent({
       );
     }
 
-    if (activeTileModal.cardId === 'seo-performance') {
+    if (reportHtml) {
       return (
-        <div className="tile-detail-tab-pane" id="seo-perf-report-pane" style={{ padding: 0, height: '100%' }}>
+        <div className="tile-detail-tab-pane" id={`${activeTileModal.cardId}-report-pane`} style={{ padding: 0, height: '100%' }}>
           <iframe
-            key={`seo-report-${dashboardState?.latestRunId || 'static'}`}
-            id="seo-perf-report-iframe"
-            title="SEO Performance brief"
-            srcDoc={seoMiniBriefHtml}
+            key={`${activeTileModal.cardId}-report-${dashboardState?.latestRunId || 'static'}`}
+            id={`${activeTileModal.cardId}-report-iframe`}
+            title={`${activeTileModal.title || 'Card'} report`}
+            srcDoc={reportHtml}
             sandbox="allow-same-origin"
             style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
           />
         </div>
       );
     }
-
-    if (activeTileModal.cardId === 'social-preview') {
-      return (
-        <div className="tile-detail-tab-pane" id="social-preview-report-pane" style={{ padding: 0, height: '100%' }}>
-          <iframe
-            key={`social-report-${dashboardState?.latestRunId || 'static'}`}
-            id="social-preview-report-iframe"
-            title="Social Preview brief"
-            srcDoc={socialMiniBriefHtml}
-            sandbox="allow-same-origin"
-            style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
-          />
-        </div>
-      );
-    }
-
-    if (activeTileModal.cardId === 'agent-readiness') {
-      return (
-        <div className="tile-detail-tab-pane" id="agent-readiness-report-pane" style={{ padding: 0, height: '100%' }}>
-          <iframe
-            key={`agent-readiness-report-${dashboardState?.latestRunId || 'static'}`}
-            id="agent-readiness-report-iframe"
-            title="Agent Readiness brief"
-            srcDoc={agentReadinessMiniBriefHtml}
-            sandbox="allow-same-origin"
-            style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
-          />
-        </div>
-      );
-    }
-
-    const skillId = SKILL_DOC_BY_CARD[activeTileModal.cardId];
-    const doc = dashboardState?.artifacts?.skillDocs?.[skillId] || null;
-    if (!doc) {
-      return (
-        <div className="tile-detail-tab-pane">
-          <p className="tile-analyzer-solutions-empty">Report not generated yet. Run the card to produce one.</p>
-        </div>
-      );
-    }
-
-    const isRerunning = !!moduleRunLoading?.[activeTileModal.cardId];
-
-    const downloadDoc = async (format) => {
-      try {
-        const auth = (typeof window !== 'undefined' && window.__auth) || null;
-        const token = await auth?.currentUser?.getIdToken?.();
-        if (!token) {
-          window.alert('Sign-in required to download.');
-          return;
-        }
-        const path = `/api/dashboard/skill-doc?skillId=${encodeURIComponent(skillId)}&format=${format}`;
-        const response = await fetch(apiPath ? apiPath(path) : path, {
-          headers: { authorization: `Bearer ${token}` },
-        });
-        if (!response.ok) {
-          window.alert(`Download failed: ${response.status}`);
-          return;
-        }
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = (doc.filename || `${skillId}.html`).replace(/\.html?$/i, format === 'md' ? '.md' : '.html');
-        document.body.appendChild(anchor);
-        anchor.click();
-        anchor.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-      } catch (err) {
-        window.alert(`Download error: ${err?.message || 'unknown'}`);
-      }
-    };
-
-    return (
-      <div className="tile-detail-tab-pane">
-        <div id={`${activeTileModal.cardId}-report-toolbar`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 8 }}>
-          <div style={{ fontSize: 12, opacity: 0.7 }}>
-            {doc.title} · {new Date(doc.runAt).toLocaleString()}
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              id={`${activeTileModal.cardId}-report-rerun`}
-              type="button"
-              className="tile-solution-expert-cta"
-              onClick={() => handleModuleRun(activeTileModal.cardId, true)}
-              disabled={isRerunning}
-              style={{ cursor: isRerunning ? 'wait' : 'pointer', border: 'none', opacity: isRerunning ? 0.6 : 1 }}
-            >{isRerunning ? 'Rerunning…' : 'Rerun audit ↻'}</button>
-            <button
-              id={`${activeTileModal.cardId}-report-download-html`}
-              type="button"
-              className="tile-solution-expert-cta"
-              onClick={() => downloadDoc('html')}
-              style={{ cursor: 'pointer', border: 'none' }}
-            >Download HTML ↓</button>
-            <button
-              id={`${activeTileModal.cardId}-report-download-md`}
-              type="button"
-              className="tile-solution-expert-cta"
-              onClick={() => downloadDoc('md')}
-              style={{ cursor: 'pointer', border: 'none' }}
-            >Download MD ↓</button>
-          </div>
-        </div>
-        <iframe
-          id={`${activeTileModal.cardId}-report-frame`}
-          title={doc.title}
-          srcDoc={doc.html}
-          sandbox=""
-          style={{
-            width: '100%',
-            height: '60vh',
-            border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: 6,
-            background: '#fff',
-          }}
-        />
-      </div>
-    );
   }
 
   if (modalTab === 'solutions' && activeTileModal.cardId === 'design-evaluation') {

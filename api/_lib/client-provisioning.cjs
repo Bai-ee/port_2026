@@ -100,9 +100,12 @@ async function loadAdminAccess(email) {
 
 async function listAdminDashboards(email) {
   const access = await loadAdminAccess(email);
-  if (!access.isAdmin || access.dashboardIds.length === 0) return [];
+  if (!access.isAdmin) return [];
 
-  const uniqueIds = Array.from(new Set(access.dashboardIds));
+  const clientSnaps = await fb.adminDb.collection('clients').get();
+  const allClientIds = clientSnaps.docs.map((doc) => doc.id).filter(Boolean);
+  const uniqueIds = Array.from(new Set([...access.dashboardIds, ...allClientIds]));
+
   const docs = await Promise.all(uniqueIds.map(async (clientId) => {
     const [clientSnap, dashSnap] = await Promise.all([
       fb.adminDb.collection('clients').doc(clientId).get(),
@@ -119,6 +122,15 @@ async function listAdminDashboards(email) {
   }));
 
   return docs.sort((a, b) => String(a.name || a.clientId).localeCompare(String(b.name || b.clientId)));
+}
+
+async function canAdminAccessClient(email, clientId) {
+  const access = await loadAdminAccess(email);
+  if (!access.isAdmin) return false;
+  if (access.dashboardIds.includes(clientId)) return true;
+
+  const clientSnap = await fb.adminDb.collection('clients').doc(clientId).get();
+  return clientSnap.exists;
 }
 
 async function getEffectiveClientContext({ uid, email, request, requestedClientId }) {
@@ -147,7 +159,7 @@ async function getEffectiveClientContext({ uid, email, request, requestedClientI
     throw err;
   }
 
-  if (!adminAccess.dashboardIds.includes(requested)) {
+  if (!(await canAdminAccessClient(email, requested))) {
     const err = new Error('Forbidden: dashboard is not provisioned for this admin.');
     err.status = 403;
     throw err;
@@ -374,6 +386,22 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
       { merge: true }
     ),
   ]);
+
+  // Non-fatal: register the new clientId in the admin's dashboard list if applicable.
+  try {
+    const access = await loadAdminAccess(email);
+    if (access.isAdmin) {
+      await fb.adminDb.collection('admins').doc(access.adminEmail).set(
+        {
+          adminDashboards: fb.FieldValue.arrayUnion(clientId),
+          updatedAt: fb.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
+  } catch (adminWriteErr) {
+    console.warn('[provisionClientForUser] non-fatal: failed to update adminDashboards', adminWriteErr?.message);
+  }
 
   let run = null;
   if (normalized?.websiteUrl) {
@@ -745,6 +773,13 @@ async function reseedIntakeForClient({ clientId, uid, websiteUrl }) {
   const normalized = normalizeOptionalUrl(websiteUrl);
   if (!normalized) throw new Error('Invalid website URL.');
 
+  const existingClientSnap = await fb.adminDb.collection('clients').doc(clientId).get();
+  const existingClientData = existingClientSnap.exists ? existingClientSnap.data() : null;
+  const hostChanged = existingClientData?.normalizedHost !== normalized.hostname;
+  const newCompanyName = hostChanged
+    ? deriveCompanyName({ hostname: normalized.hostname, companyName: null, displayName: null, email: null })
+    : null;
+
   const runRef = fb.adminDb.collection('brief_runs').doc();
   const runId = runRef.id;
   const now = fb.FieldValue.serverTimestamp();
@@ -783,6 +818,10 @@ async function reseedIntakeForClient({ clientId, uid, websiteUrl }) {
         latestRunStatus: 'queued',
         status: 'provisioning',
         updatedAt: now,
+        ...(hostChanged && newCompanyName ? {
+          companyName: newCompanyName,
+          dashboardTitle: buildDashboardTitle(newCompanyName),
+        } : {}),
       },
       { merge: true }
     ),
