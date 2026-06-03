@@ -34,3 +34,6 @@ clients/*/
 .tmp-device-mockup/
 input/
 output/
+
+# Original unoptimized reel (use reel.optimized.mp4 for production)
+public/vid/reel.mp4

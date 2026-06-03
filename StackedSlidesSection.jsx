@@ -1,6 +1,7 @@
 'use client';
 import React, { useLayoutEffect, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import ReelPlayer from './ReelPlayer';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { createSharedParticleGalleryRenderer } from './sharedParticleGalleryRenderer';
@@ -1752,17 +1753,9 @@ const StackedSlidesSection = () => {
         ))}
       </div>
 
-      {/* transparent gap — Three.js scene shows through */}
-      <div id="section-break-spacer" style={{ height: 'clamp(24rem, 48vw, 56rem)', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div
-          id="section-break-scramble"
-          aria-label="YOUR HUMAN IN THE LOOP"
-          style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontWeight: 700, fontSize: 'clamp(2rem, 10vw, 7.83rem)', letterSpacing: '-0.02em', lineHeight: 1.05, color: '#2a2420', margin: 0, textAlign: 'center' }}
-        >
-          <div>YOUR HUMAN</div>
-          <div>IN THE</div>
-          <div>LOOP</div>
-        </div>
+      {/* reel video section */}
+      <div id="section-break-spacer" style={{ width: '100%', boxSizing: 'border-box', padding: 'clamp(3rem, 6vw, 5rem) clamp(1rem, 4vw, 3rem)' }}>
+        <ReelPlayer />
       </div>
 
       {/* second blurry panel — capability cards + footer */}
