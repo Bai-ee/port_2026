@@ -131,6 +131,7 @@ const HomePage = () => {
   const isScrollMorphActiveRef = useRef(false);
   const heroProgressRef = useRef(0); // current scroll progress, kept in sync with ScrollTrigger
   const snapCanvasRef = useRef(false); // signals canvas to reset smoothedParamsRef on next frame
+  const scatterCanvasRef = useRef(false); // signals canvas to re-scatter particles (replay load-in formation)
   const heroMaxProgressRef = useRef(0); // deepest scroll reached this cycle — gates the return-to-top replay
 
   // Keep #content-section.marginTop = -peekHeight so the capabilitySectionStyle
@@ -207,6 +208,7 @@ const HomePage = () => {
     let entranceTween = null;
     const replayHeroEntrance = () => {
       if (entranceTween && entranceTween.isActive()) return;
+      scatterCanvasRef.current = true; // re-scatter particles so they converge back into the loop
       entranceTween = gsap.timeline()
         .fromTo(gradient,      { autoAlpha: 0, scale: 1.06 }, { autoAlpha: 1, scale: 1, duration: 0.9, ease: 'power2.out' })
         .fromTo(canvasWrapper, { autoAlpha: 0 },              { autoAlpha: 1, duration: 1.0, ease: 'power2.out' }, '<0.1');
@@ -373,7 +375,7 @@ const HomePage = () => {
       >
         <div id="hero-gradient-overlay" style={heroGradientStyle} />
         <div id="hero-canvas-wrapper" ref={canvasWrapperRef} style={{ position: 'absolute', inset: 0, opacity: 0 }}>
-          <AppCanvas params={params} liveParamsRef={paramsRef} backgroundColor={canvasBackground} snapRef={snapCanvasRef} />
+          <AppCanvas params={params} liveParamsRef={paramsRef} backgroundColor={canvasBackground} snapRef={snapCanvasRef} scatterRef={scatterCanvasRef} />
         </div>
         <HeroHeadline headerLogoRef={headerLogoRef} textColor={textColor} />
         {/* Keyword-rich subheading for crawlers — visually hidden but read by

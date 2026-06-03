@@ -55,7 +55,7 @@ const SceneBackground = ({ color }) => {
   return null;
 };
 
-const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {}, snapRef = null }) => {
+const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {}, snapRef = null, scatterRef = null }) => {
   const meshRef = useRef();
   const groupRef = useRef();
   const simTimeRef = useRef(0);
@@ -173,6 +173,14 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {},
     if (!mesh || !groupRef.current) return;
     if (hiddenRef.current) return;
     const clampedDelta = Math.min(delta, runtimeProfile.maxDelta ?? 1 / 30);
+
+    // Scatter: parent signals a re-entrance (e.g. scrolled back to top). Re-randomize the
+    // live positions into the spawn cloud; the per-frame lerp below re-assembles the shape,
+    // replaying the load-in "particles converge into the loop" formation.
+    if (scatterRef?.current) {
+      for (let i = 0; i < positions.length; i++) positions[i] = (Math.random() - 0.5) * 100;
+      scatterRef.current = false;
+    }
 
     // Param smoothing: only when live params are provided; otherwise use static directly.
     let PARAMS;
@@ -332,7 +340,7 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {},
   );
 };
 
-export default function App({ params = {}, liveParamsRef = null, backgroundColor = '#1a1a1a', onReady = null, snapRef = null }) {
+export default function App({ params = {}, liveParamsRef = null, backgroundColor = '#1a1a1a', onReady = null, snapRef = null, scatterRef = null }) {
   const useSimpleScrollViewport = useMediaMatch(SIMPLE_SCROLL_MEDIA_QUERY);
   const isMobile = useMediaMatch(MOBILE_MEDIA_QUERY);
   const prefersReducedMotion = useMediaMatch(REDUCED_MOTION_QUERY);
@@ -427,7 +435,7 @@ export default function App({ params = {}, liveParamsRef = null, backgroundColor
         }}
       >
         <SceneBackground color={backgroundColor} />
-        <ParticleSwarm params={optimizedParams} liveParamsRef={liveParamsRef} runtimeProfile={qualityProfile} snapRef={snapRef} />
+        <ParticleSwarm params={optimizedParams} liveParamsRef={liveParamsRef} runtimeProfile={qualityProfile} snapRef={snapRef} scatterRef={scatterRef} />
         {qualityProfile.enableControls ? (
           <OrbitControls autoRotate={qualityProfile.autoRotate} enableZoom enablePan={false} enableRotate enableDamping dampingFactor={0.08} rotateSpeed={0.45} zoomSpeed={0.75} minDistance={45} maxDistance={180} />
         ) : null}

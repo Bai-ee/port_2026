@@ -74,6 +74,8 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
 
     const applyLayout = (progress = 0) => {
       const travelY = useSimpleScrollViewport ? -32 : -60;
+      // Fade the hero text out twice as fast as the scroll — fully gone by half travel.
+      const fadeOpacity = Math.max(0, 1 - progress * 2);
 
       el.style.position = useSimpleScrollViewport ? 'absolute' : 'fixed';
       el.style.top = `${metrics.centeredTop}px`;
@@ -82,11 +84,11 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
 
       if (useSimpleScrollViewport) {
         contentEl.style.transform = `translate3d(0, ${travelY * progress}px, 0)`;
-        contentEl.style.opacity = `${1 - progress}`;
+        contentEl.style.opacity = `${fadeOpacity}`;
         contentEl.style.filter = 'blur(0px)';
       } else {
         contentEl.style.transform = `translate3d(0, ${travelY * progress}px, 0)`;
-        contentEl.style.opacity = `${1 - progress}`;
+        contentEl.style.opacity = `${fadeOpacity}`;
         contentEl.style.filter = `blur(${10 * progress}px)`;
       }
     };
