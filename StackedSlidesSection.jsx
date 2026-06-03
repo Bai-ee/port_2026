@@ -1776,10 +1776,10 @@ const StackedSlidesSection = () => {
                           style={{ position: 'relative', gridColumn: '1 / -1', paddingTop: '70px', marginTop: 'clamp(2rem, 5vw, 4rem)', zIndex: isMobileCapabilityOpen ? 6 : 1 }}
                         >
                           {[
-                            { ref: peekCard1Ref, id: 'dash-peek-card-1', left: '0%',  rotate: '-3.2deg', objPos: '0% 12%',  label: 'Brand Overview', img: '/img/port/dash_ss2.webp', height: '200px' },
-                            { ref: peekCard2Ref, id: 'dash-peek-card-2', left: '33%', rotate: '1.2deg',  objPos: '33% 8%',  label: 'SEO Visibility', img: '/img/port/dash_ss2.webp', height: '168px' },
-                            { ref: peekCard3Ref, id: 'dash-peek-card-3', left: '66%', rotate: '-1.4deg', objPos: '66% 12%', label: 'Automations',    img: '/img/port/dash_ss2.webp', height: '190px' },
-                          ].map(({ ref: cardRef, id, left, rotate, objPos, label, img, height }, i) => (
+                            { ref: peekCard1Ref, id: 'dash-peek-card-1', left: '0%',  rotate: '-3.2deg', objPos: 'center center', label: '', img: '/img/interactive_ss_1.webp', height: '200px', topOffset: '0', bg: 'rgb(116,253,232)' },
+                            { ref: peekCard2Ref, id: 'dash-peek-card-2', left: '33%', rotate: '1.2deg',  objPos: 'center center', label: '', img: '/img/interactive_ss_2.webp', height: '168px', topOffset: '0' },
+                            { ref: peekCard3Ref, id: 'dash-peek-card-3', left: '66%', rotate: '-1.4deg', objPos: 'center center', label: '', img: '/img/interactive_ss_3.webp', height: '190px', topOffset: '0', bg: '#000000' },
+                          ].map(({ ref: cardRef, id, left, rotate, objPos, label, img, height, topOffset, bg }, i) => (
                             <div
                               key={id}
                               ref={cardRef}
@@ -1790,14 +1790,14 @@ const StackedSlidesSection = () => {
                               onMouseLeave={() => gsap.to(cardRef.current, { y: 0,   duration: 0.48, ease: 'power2.inOut' })}
                               style={{
                                 position: 'absolute',
-                                top: '0',
+                                top: topOffset,
                                 left,
                                 width: 'clamp(180px, 33%, 400px)',
                                 height,
                                 zIndex: i + 1,
                                 borderRadius: '10px',
-                                border: '1px solid rgba(212,196,171,0.9)',
-                                background: '#fcfaf4',
+                                border: '1px solid rgba(200,200,200,0.85)',
+                                background: bg || '#fcfaf4',
                                 overflow: 'hidden',
                                 cursor: 'pointer',
                                 willChange: 'transform',
@@ -1806,10 +1806,7 @@ const StackedSlidesSection = () => {
                                 boxShadow: '0 6px 20px rgba(0,0,0,0.09), 0 1px 0 rgba(255,255,255,0.85)',
                               }}
                             >
-                              <div style={{ padding: '7px 10px 5px', borderBottom: '1px solid rgba(42,36,32,0.09)', background: 'rgba(245,241,223,0.8)', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                <span style={{ fontFamily: "'Space Mono', monospace", fontSize: '7.5px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.45)', lineHeight: 1 }}>{label}</span>
-                              </div>
-                              <img src={img} alt="" style={{ width: '100%', height: 'calc(100% - 26px)', objectFit: 'cover', objectPosition: objPos, display: 'block', pointerEvents: 'none', userSelect: 'none' }} />
+                              <img src={img} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', objectPosition: objPos, display: 'block', pointerEvents: 'none', userSelect: 'none' }} />
                             </div>
                           ))}
                           <article

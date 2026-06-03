@@ -11,7 +11,6 @@ export default function ReelPlayer() {
   const progressRef = useRef(null);
   const hideTimerRef = useRef(null);
   const [playing, setPlaying] = useState(false);
-  const [muted, setMuted] = useState(true);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [showControls, setShowControls] = useState(true);
@@ -33,19 +32,21 @@ export default function ReelPlayer() {
     return () => clearTimeout(hideTimerRef.current);
   }, [playing, scheduleHide]);
 
+  // Scroll lock + nav disable while playing
+  useEffect(() => {
+    document.body.classList.toggle('reel-playing', playing);
+    document.body.style.overflow = playing ? 'hidden' : '';
+    return () => {
+      document.body.classList.remove('reel-playing');
+      document.body.style.overflow = '';
+    };
+  }, [playing]);
+
   const togglePlay = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
     if (v.paused) { v.play().catch(() => {}); setPlaying(true); }
     else { v.pause(); setPlaying(false); }
-  }, []);
-
-  const toggleMute = useCallback((e) => {
-    e.stopPropagation();
-    const v = videoRef.current;
-    if (!v) return;
-    v.muted = !v.muted;
-    setMuted(v.muted);
   }, []);
 
   const onTimeUpdate = useCallback(() => {
@@ -97,18 +98,19 @@ export default function ReelPlayer() {
 
   return (
     <>
-      {/* theater dimmer */}
+      {/* theater dimmer — click outside the player stops playback */}
       <div
         id="reel-theater-dimmer"
+        onClick={() => { if (playing) togglePlay(); }}
         style={{
           position: 'fixed', inset: 0,
-          background: 'rgba(0,0,0,0.48)',
+          background: 'rgba(0,0,0,0.62)',
           zIndex: 99,
           opacity: playing ? 1 : 0,
           pointerEvents: playing ? 'auto' : 'none',
+          cursor: 'pointer',
           transition: 'opacity 0.6s ease',
         }}
-        onClick={togglePlay}
       />
 
       <div
@@ -123,7 +125,7 @@ export default function ReelPlayer() {
           margin: '0 auto',
           borderRadius: 'clamp(10px, 2vw, 20px)',
           overflow: 'hidden',
-          background: '#ffffff',
+          background: fullscreen ? '#000000' : '#ffffff',
           border: '2px solid rgba(42,36,32,0.1)',
           boxShadow: '0 8px 32px rgba(0,0,0,0.1), 0 2px 8px rgba(0,0,0,0.05)',
           cursor: playing && !showControls ? 'none' : 'pointer',
@@ -135,13 +137,14 @@ export default function ReelPlayer() {
         <video
           ref={videoRef}
           src="/vid/reel.optimized.mp4"
-          muted={muted}
+          poster="/vid/reel.poster.jpg"
+          muted
           playsInline
           preload="metadata"
           onTimeUpdate={onTimeUpdate}
           onLoadedMetadata={onLoadedMetadata}
           onEnded={onEnded}
-          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          style={{ width: '100%', height: '100%', objectFit: fullscreen ? 'contain' : 'cover', display: 'block' }}
         />
 
         {/* centered gradient play button — visible when paused */}
@@ -240,27 +243,6 @@ export default function ReelPlayer() {
                 <rect x="5" y="3" width="4" height="18" rx="1" />
                 <rect x="15" y="3" width="4" height="18" rx="1" />
               </svg>
-            </button>
-
-            {/* mute */}
-            <button
-              id="reel-mute-btn"
-              onClick={toggleMute}
-              aria-label={muted ? 'Unmute' : 'Mute'}
-              style={{ ...darkBtnStyle }}
-            >
-              {muted ? (
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2a2420" strokeWidth="1.8" strokeLinecap="round">
-                  <polygon points="11,5 6,9 2,9 2,15 6,15 11,19" fill="#2a2420" stroke="none" />
-                  <line x1="23" y1="9" x2="17" y2="15" /><line x1="17" y1="9" x2="23" y2="15" />
-                </svg>
-              ) : (
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2a2420" strokeWidth="1.8" strokeLinecap="round">
-                  <polygon points="11,5 6,9 2,9 2,15 6,15 11,19" fill="#2a2420" stroke="none" />
-                  <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-                </svg>
-              )}
             </button>
 
             {/* time */}

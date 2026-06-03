@@ -36,19 +36,22 @@ const Header = ({ logoRef, onOpenPage }) => {
           <button
             id="nav-scroll-top"
             type="button"
-            aria-label="Scene settings / Scroll to top"
+            aria-label="Scroll to top"
             style={{ marginLeft: 'auto' }}
             onClick={() => {
               const arrow = document.getElementById('nav-scroll-top-arrow');
               if (arrow && arrow.style.display !== 'none') {
                 window.scrollTo({ top: 0, behavior: 'smooth' });
-              } else {
-                window.dispatchEvent(new CustomEvent('openSceneSettings'));
               }
             }}
           >
-            <span id="nav-scroll-top-arrow" style={{ display: 'none' }}>↑</span>
-            <Settings2 id="nav-scroll-top-settings" size={16} strokeWidth={2.5} />
+            <span id="nav-scroll-top-arrow" style={{ display: 'none', lineHeight: 0 }}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="8" y1="13" x2="8" y2="3" />
+                <polyline points="4,7 8,3 12,7" />
+              </svg>
+            </span>
+            <Settings2 id="nav-scroll-top-settings" size={16} strokeWidth={1.5} />
           </button>
 
           <div id="founders-top-actions">

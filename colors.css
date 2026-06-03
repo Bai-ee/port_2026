@@ -310,3 +310,23 @@ body.cmo-modal-open #founders-top-strip { display: none; }
     margin: 0 0 0.35rem !important;
   }
 }
+
+/* ── Nav scroll-top button states ──────────────────────────────────────────── */
+
+/* Settings icon is always visually inactive */
+#nav-scroll-top-settings {
+  opacity: 0.32;
+}
+
+/* Button is fully disabled while showing settings icon (arrow is display:none) */
+#nav-scroll-top:has(#nav-scroll-top-arrow[style*="none"]) {
+  pointer-events: none;
+  cursor: default;
+}
+
+/* Disable nav button entirely while reel is playing */
+body.reel-playing #nav-scroll-top {
+  pointer-events: none !important;
+  opacity: 0.32;
+  cursor: default;
+}
