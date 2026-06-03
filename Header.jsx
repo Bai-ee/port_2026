@@ -24,7 +24,15 @@ const Header = ({ logoRef, onOpenPage }) => {
 
   return (
     <>
-      <header id="founders-top-strip">
+      <header
+        id="founders-top-strip"
+        style={{
+          background: 'rgba(245, 241, 223, 0.55)',
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
+          boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.45), inset 0 -1px 0 rgba(42,36,32,0.08)',
+        }}
+      >
         <div id="founders-top-strip-inner">
           {/* Hidden anchor for GSAP intro animation */}
           <div ref={logoRef} aria-hidden="true" style={{ width: 0, height: 0, pointerEvents: 'none', position: 'absolute' }} />

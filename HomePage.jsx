@@ -131,6 +131,7 @@ const HomePage = () => {
   const isScrollMorphActiveRef = useRef(false);
   const heroProgressRef = useRef(0); // current scroll progress, kept in sync with ScrollTrigger
   const snapCanvasRef = useRef(false); // signals canvas to reset smoothedParamsRef on next frame
+  const heroMaxProgressRef = useRef(0); // deepest scroll reached this cycle — gates the return-to-top replay
 
   // Keep #content-section.marginTop = -peekHeight so the capabilitySectionStyle
   // borderTop always lands exactly at the 100dvh fold on page load.
@@ -199,6 +200,18 @@ const HomePage = () => {
       .to(panelCta,      { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '<0.15')
       .to(panelGrid,     { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '<0.15');
 
+    // Replays the hero's entrance when the user returns to the top after scrolling
+    // through it — fades the 3D element back onto the page. Opacity-only on the
+    // canvas wrapper (transforms would shift ScrollTrigger pin positions); the
+    // gradient may scale since it is a separate overlay.
+    let entranceTween = null;
+    const replayHeroEntrance = () => {
+      if (entranceTween && entranceTween.isActive()) return;
+      entranceTween = gsap.timeline()
+        .fromTo(gradient,      { autoAlpha: 0, scale: 1.06 }, { autoAlpha: 1, scale: 1, duration: 0.9, ease: 'power2.out' })
+        .fromTo(canvasWrapper, { autoAlpha: 0 },              { autoAlpha: 1, duration: 1.0, ease: 'power2.out' }, '<0.1');
+    };
+
     // Scrub hero params directly from scroll progress to keep the transition
     // tied to the gesture instead of firing a one-shot time tween.
     const heroProxy = { progress: 0 };
@@ -213,6 +226,7 @@ const HomePage = () => {
         isScrollMorphActiveRef.current = true;
         heroProxy.progress = self.progress;
         heroProgressRef.current = self.progress;
+        if (self.progress > heroMaxProgressRef.current) heroMaxProgressRef.current = self.progress;
         paramsRef.current = interpolateHeroParams(getScrollBase(userParamsRef.current), HERO_PARAMS_END, heroProxy.progress);
       },
       onLeaveBack: () => {
@@ -220,6 +234,9 @@ const HomePage = () => {
         paramsRef.current = userParamsRef.current;
         snapCanvasRef.current = true; // flush smoothedParamsRef drift accumulated from repeated scroll cycles
         setParams(userParamsRef.current);
+        // Only replay if the user actually scrolled through the hero (not a micro-scroll).
+        if (heroMaxProgressRef.current > 0.5) replayHeroEntrance();
+        heroMaxProgressRef.current = 0;
       },
       onToggle: (self) => {
         if (!self.isActive) {
@@ -275,6 +292,7 @@ const HomePage = () => {
 
     return () => {
       tl.kill();
+      entranceTween?.kill();
       heroST.kill();
       isScrollMorphActiveRef.current = false;
       document.removeEventListener('visibilitychange', handleVisibilityChange);
