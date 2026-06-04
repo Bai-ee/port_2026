@@ -16,6 +16,27 @@ const VERCEL_PROJECT_ID = 'prj_h2AHIKHmJu7eV1DdmiTra2WFmPv6';
 const VERCEL_TEAM_ID = 'team_xmgNCNc6fHyZZinuszh8B6ZB';
 const GA4_PROPERTY_ID = process.env.GA4_PROPERTY_ID || '532567174';
 const RUN_STATUS_BUCKETS = ['queued', 'running', 'succeeded', 'failed', 'cancelled', 'provisioning'];
+const DIGEST_EVENT_NAMES = [
+  'sign_up',
+  'sign_in',
+  'sign_out',
+  'dashboard_created',
+  'pipeline_rerun',
+  'pipeline_cancelled',
+  'seo_rerun',
+  'tile_opened',
+  'theme_changed',
+  'tier_modal_opened',
+  'homepage_nav_click',
+  'homepage_cta_click',
+  'homepage_portfolio_click',
+  'homepage_outbound_click',
+  'homepage_button_click',
+  'homepage_form_focus',
+  'homepage_form_change',
+  'homepage_scroll_depth',
+  'homepage_web_vital',
+];
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -26,6 +47,26 @@ function json(body, status = 200) {
 function readAggregateCount(snapshot) {
   const count = snapshot?.data?.()?.count;
   return typeof count === 'number' ? count : 0;
+}
+
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function incrementCounter(counter, key, amount = 1) {
+  const normalized = String(key || 'unknown').trim() || 'unknown';
+  counter[normalized] = (counter[normalized] || 0) + amount;
+}
+
+function topCounterEntries(counter, limit = 8) {
+  return Object.entries(counter)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([name, count]) => ({ name, count }));
 }
 
 function hasValidSecret(request) {
@@ -294,7 +335,7 @@ async function getGA4Metrics() {
         filter: {
           fieldName: 'eventName',
           inListFilter: {
-            values: ['sign_up', 'sign_in', 'dashboard_created', 'pipeline_rerun', 'seo_rerun', 'tile_opened', 'theme_changed', 'tier_modal_opened'],
+            values: DIGEST_EVENT_NAMES,
           },
         },
       },
@@ -313,9 +354,173 @@ async function getGA4Metrics() {
   }
 }
 
+// ── Homepage interaction analytics ──────────────────────────────────────────
+
+function homepageTargetLabel(event) {
+  return (
+    event.elementText ||
+    event.fieldLabel ||
+    event.linkUrl ||
+    event.metricName ||
+    event.eventName ||
+    'unknown'
+  );
+}
+
+async function getHomepageAnalyticsMetrics() {
+  const now = new Date();
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+  try {
+    const snap = await fb.adminDb
+      .collection('homepage_events')
+      .where('createdAt', '>=', yesterday)
+      .orderBy('createdAt', 'desc')
+      .limit(1000)
+      .get();
+
+    const byEventName = {};
+    const byInteractionType = {};
+    const topTargets = {};
+    const outboundLinks = {};
+    const scrollDepths = {};
+    const webVitals = {};
+
+    snap.docs.forEach((doc) => {
+      const event = doc.data() || {};
+      incrementCounter(byEventName, event.eventName);
+      incrementCounter(byInteractionType, event.interactionType || event.eventName);
+
+      if (event.eventName === 'homepage_outbound_click' && event.linkUrl) {
+        incrementCounter(outboundLinks, event.linkUrl);
+      }
+
+      if (event.eventName === 'homepage_scroll_depth') {
+        incrementCounter(scrollDepths, `${event.scrollDepth || 0}%`);
+      }
+
+      if (event.eventName === 'homepage_web_vital' && event.metricName) {
+        const metric = event.metricName;
+        webVitals[metric] = webVitals[metric] || { count: 0, total: 0, needsImprovement: 0, poor: 0 };
+        webVitals[metric].count += 1;
+        webVitals[metric].total += Number(event.metricValue) || 0;
+        if (event.metricRating === 'needs-improvement') webVitals[metric].needsImprovement += 1;
+        if (event.metricRating === 'poor') webVitals[metric].poor += 1;
+      }
+
+      if (event.eventName !== 'homepage_web_vital') {
+        incrementCounter(topTargets, `${homepageTargetLabel(event)} (${event.eventName || 'event'})`);
+      }
+    });
+
+    return {
+      totalEvents: snap.size,
+      byEventName: topCounterEntries(byEventName, 10),
+      byInteractionType: topCounterEntries(byInteractionType, 8),
+      topTargets: topCounterEntries(topTargets, 10),
+      outboundLinks: topCounterEntries(outboundLinks, 8),
+      scrollDepths: topCounterEntries(scrollDepths, 5),
+      webVitals: Object.entries(webVitals)
+        .map(([name, stats]) => ({
+          name,
+          count: stats.count,
+          average: stats.count ? Math.round(stats.total / stats.count) : 0,
+          needsImprovement: stats.needsImprovement,
+          poor: stats.poor,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+      error: null,
+    };
+  } catch (err) {
+    logError('daily_digest_homepage_analytics_error', { error: err.message });
+    return {
+      totalEvents: 0,
+      byEventName: [],
+      byInteractionType: [],
+      topTargets: [],
+      outboundLinks: [],
+      scrollDepths: [],
+      webVitals: [],
+      error: err.message,
+    };
+  }
+}
+
 // ── Email builder ───────────────────────────────────────────────────────────
 
-function buildEmailHtml(firebase, vercel, ga4, timestamp) {
+function buildHomepageAnalyticsSection(homepage) {
+  if (homepage.error) {
+    return `
+      <div style="margin-bottom:24px;">
+        <h2 style="font-size:18px;color:#1a1a1a;margin:0 0 8px 0;font-weight:600;">Homepage Interactions</h2>
+        <p style="font-size:13px;color:#cc7700;">Homepage analytics unavailable: ${escapeHtml(homepage.error)}</p>
+      </div>`;
+  }
+
+  if (!homepage.totalEvents) {
+    return `
+      <div style="margin-bottom:24px;">
+        <h2 style="font-size:18px;color:#1a1a1a;margin:0 0 8px 0;font-weight:600;">Homepage Interactions</h2>
+        <p style="font-size:13px;color:#999;">No homepage interaction events recorded in the last 24 hours.</p>
+      </div>`;
+  }
+
+  const chips = homepage.byInteractionType
+    .map((item) => `<span style="display:inline-block;margin:2px 6px 2px 0;padding:4px 10px;background:#f5f5f5;border-radius:4px;font-size:13px;">${escapeHtml(item.name.replace(/_/g, ' '))}: <strong>${item.count}</strong></span>`)
+    .join('');
+
+  const targetRows = homepage.topTargets.length
+    ? homepage.topTargets.map((item) => `
+      <tr>
+        <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:13px;max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.name)}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:13px;text-align:right;font-weight:600;">${item.count}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="2" style="padding:12px;color:#999;text-align:center;">No click targets recorded</td></tr>';
+
+  const outboundRows = homepage.outboundLinks.length
+    ? homepage.outboundLinks.map((item) => `
+      <tr>
+        <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:13px;max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.name)}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:13px;text-align:right;font-weight:600;">${item.count}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="2" style="padding:12px;color:#999;text-align:center;">No outbound clicks recorded</td></tr>';
+
+  const scrollChips = homepage.scrollDepths.length
+    ? homepage.scrollDepths.map((item) => `<span style="display:inline-block;margin:2px 6px 2px 0;padding:4px 10px;background:#f7fbff;border-radius:4px;font-size:13px;">${escapeHtml(item.name)}: <strong>${item.count}</strong></span>`).join('')
+    : '<span style="color:#999;font-size:13px;">No scroll milestones yet</span>';
+
+  const vitalChips = homepage.webVitals.length
+    ? homepage.webVitals.map((item) => `<span style="display:inline-block;margin:2px 6px 2px 0;padding:4px 10px;background:#fff8ee;border-radius:4px;font-size:13px;">${escapeHtml(item.name)} avg: <strong>${item.average}</strong>${item.poor ? ` · poor: <strong>${item.poor}</strong>` : ''}</span>`).join('')
+    : '<span style="color:#999;font-size:13px;">No web vitals yet</span>';
+
+  return `
+    <div style="margin-bottom:24px;">
+      <h2 style="font-size:18px;color:#1a1a1a;margin:0 0 12px 0;font-weight:600;">Homepage Interactions (${homepage.totalEvents})</h2>
+      <div style="background:#fff;border-radius:8px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.08);margin-bottom:12px;">${chips}</div>
+      <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);margin-bottom:12px;">
+        <thead><tr style="background:#fafafa;">
+          <th style="padding:10px 12px;text-align:left;font-size:13px;color:#888;">Top Clicks / Fields</th>
+          <th style="padding:10px 12px;text-align:right;font-size:13px;color:#888;">Events</th>
+        </tr></thead>
+        <tbody>${targetRows}</tbody>
+      </table>
+      <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);margin-bottom:12px;">
+        <thead><tr style="background:#fafafa;">
+          <th style="padding:10px 12px;text-align:left;font-size:13px;color:#888;">Outbound Links</th>
+          <th style="padding:10px 12px;text-align:right;font-size:13px;color:#888;">Clicks</th>
+        </tr></thead>
+        <tbody>${outboundRows}</tbody>
+      </table>
+      <div style="background:#fff;border-radius:8px;padding:12px 16px;box-shadow:0 1px 3px rgba(0,0,0,0.08);font-size:13px;color:#888;margin-bottom:12px;">
+        Scroll depth: ${scrollChips}
+      </div>
+      <div style="background:#fff;border-radius:8px;padding:12px 16px;box-shadow:0 1px 3px rgba(0,0,0,0.08);font-size:13px;color:#888;">
+        Web vitals: ${vitalChips}
+      </div>
+    </div>`;
+}
+
+function buildEmailHtml(firebase, vercel, ga4, homepage, timestamp) {
   const dateStr = new Date(timestamp).toLocaleDateString('en-US', {
     weekday: 'long',
     year: 'numeric',
@@ -513,6 +718,9 @@ function buildEmailHtml(firebase, vercel, ga4, timestamp) {
     </div>
     ` : ''}
 
+    <!-- Homepage Interaction Detail -->
+    ${buildHomepageAnalyticsSection(homepage)}
+
     <!-- New Sign-ups -->
     <div style="margin-bottom:24px;">
       <h2 style="font-size:18px;color:#1a1a1a;margin:0 0 12px 0;font-weight:600;">New Sign-ups</h2>
@@ -623,10 +831,11 @@ export async function GET(request) {
   try {
     const timestamp = Date.now();
     logInfo('daily_digest_start', { timestamp: new Date(timestamp).toISOString() });
-    const [firebase, vercel, ga4] = await Promise.all([
+    const [firebase, vercel, ga4, homepage] = await Promise.all([
       getFirebaseMetrics(),
       getVercelMetrics(),
       getGA4Metrics(),
+      getHomepageAnalyticsMetrics(),
     ]);
 
     const dateStr = new Date(timestamp).toLocaleDateString('en-US', {
@@ -637,7 +846,7 @@ export async function GET(request) {
     const sessionStr = ga4.overview ? `, ${ga4.overview.sessions} session${ga4.overview.sessions !== 1 ? 's' : ''}` : '';
     const subject = `HitLoop Daily — ${firebase.newUsers} sign-up${firebase.newUsers !== 1 ? 's' : ''}, ${firebase.recentRuns} dashboard${firebase.recentRuns !== 1 ? 's' : ''}${sessionStr} · ${dateStr}`;
 
-    const html = buildEmailHtml(firebase, vercel, ga4, timestamp);
+    const html = buildEmailHtml(firebase, vercel, ga4, homepage, timestamp);
     const emailResult = await sendEmail(subject, html);
     logInfo('daily_digest_complete', {
       timestamp: new Date(timestamp).toISOString(),
@@ -649,7 +858,7 @@ export async function GET(request) {
     return json({
       ok: true,
       timestamp: new Date(timestamp).toISOString(),
-      metrics: { firebase, vercel: { totalDeployments: vercel.totalDeployments, errorCount: vercel.errorLogs?.length || 0 }, ga4: { overview: ga4.overview, topPagesCount: ga4.topPages?.length, sourcesCount: ga4.trafficSources?.length, events: ga4.events, error: ga4.error || null } },
+      metrics: { firebase, vercel: { totalDeployments: vercel.totalDeployments, errorCount: vercel.errorLogs?.length || 0 }, ga4: { overview: ga4.overview, topPagesCount: ga4.topPages?.length, sourcesCount: ga4.trafficSources?.length, events: ga4.events, error: ga4.error || null }, homepage: { totalEvents: homepage.totalEvents, byInteractionType: homepage.byInteractionType, topTargets: homepage.topTargets, error: homepage.error || null } },
       email: emailResult,
     });
   } catch (err) {
