@@ -17,6 +17,12 @@ const VERCEL_TEAM_ID = 'team_xmgNCNc6fHyZZinuszh8B6ZB';
 const GA4_PROPERTY_ID = process.env.GA4_PROPERTY_ID || '532567174';
 const RUN_STATUS_BUCKETS = ['queued', 'running', 'succeeded', 'failed', 'cancelled', 'provisioning'];
 
+// Personal calendar to surface in the "Today's Agenda" section. Defaults to the
+// digest recipient's calendar. The digest service account must have read access
+// to this calendar (share it with FIREBASE_ADMIN_CLIENT_EMAIL).
+const DIGEST_CALENDAR_ID = process.env.DIGEST_CALENDAR_ID || DIGEST_TO;
+const DIGEST_TIMEZONE = process.env.DIGEST_TIMEZONE || 'America/Chicago';
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function json(body, status = 200) {
@@ -313,9 +319,141 @@ async function getGA4Metrics() {
   }
 }
 
+// ── Calendar (Today's Agenda) ────────────────────────────────────────────────
+
+/** GMT offset string (e.g. "-05:00") for a timezone at a given instant. */
+function tzOffset(tz, date) {
+  try {
+    const name = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'longOffset' })
+      .formatToParts(date)
+      .find((p) => p.type === 'timeZoneName')?.value || 'GMT+00:00';
+    const m = name.match(/GMT([+-]\d{2}):?(\d{2})?/);
+    return m ? `${m[1]}:${m[2] || '00'}` : '+00:00';
+  } catch {
+    return '+00:00';
+  }
+}
+
+/** Local calendar date (YYYY-MM-DD) in a timezone for a given instant. */
+function localDateStr(tz, date) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+/** Mint a Google access token scoped for the Calendar API (read-only). */
+async function getCalendarAccessToken() {
+  const { GoogleAuth } = require('google-auth-library');
+  const auth = new GoogleAuth({
+    credentials: {
+      client_email: process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
+      private_key: String(process.env.FIREBASE_ADMIN_PRIVATE_KEY || '')
+        .replace(/^"|"$/g, '')
+        .replace(/\\n/g, '\n'),
+    },
+    scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
+  });
+  const client = await auth.getClient();
+  const token = await client.getAccessToken();
+  return token.token;
+}
+
+/** Fetch today's events for DIGEST_CALENDAR_ID, expanding recurrences. */
+async function getCalendarAgenda(timestamp) {
+  try {
+    const now = new Date(timestamp);
+    const day = localDateStr(DIGEST_TIMEZONE, now);
+    const offset = tzOffset(DIGEST_TIMEZONE, now);
+    const timeMin = `${day}T00:00:00${offset}`;
+    const timeMax = `${day}T23:59:59${offset}`;
+
+    const accessToken = await getCalendarAccessToken();
+    const url =
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(DIGEST_CALENDAR_ID)}/events` +
+      `?singleEvents=true&orderBy=startTime&maxResults=50` +
+      `&timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}` +
+      `&timeZone=${encodeURIComponent(DIGEST_TIMEZONE)}`;
+
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(15_000),
+      cache: 'no-store',
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Calendar API error (${res.status}): ${err.slice(0, 200)}`);
+    }
+    const data = await res.json();
+
+    const events = (data.items || [])
+      .filter((e) => e.status !== 'cancelled')
+      .map((e) => {
+        const allDay = Boolean(e.start?.date && !e.start?.dateTime);
+        let timeLabel = 'All day';
+        if (!allDay && e.start?.dateTime) {
+          timeLabel = new Date(e.start.dateTime).toLocaleTimeString('en-US', {
+            hour: 'numeric',
+            minute: '2-digit',
+            timeZone: DIGEST_TIMEZONE,
+          });
+        }
+        return {
+          summary: e.summary || '(no title)',
+          location: e.location || '',
+          allDay,
+          timeLabel,
+          sortKey: allDay ? '' : (e.start?.dateTime || ''),
+        };
+      })
+      .sort((a, b) => {
+        if (a.allDay !== b.allDay) return a.allDay ? -1 : 1; // all-day first
+        return a.sortKey.localeCompare(b.sortKey);
+      });
+
+    return { events, error: null };
+  } catch (err) {
+    logError('daily_digest_calendar_error', { error: err.message });
+    return { events: [], error: err.message };
+  }
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/** Build the "Today's Agenda" HTML block for the brief. */
+function buildAgendaSection(agenda) {
+  let inner;
+  if (agenda.error) {
+    inner = `<p style="margin:0;padding:12px 0;font-size:13px;color:#cc7700;">Calendar unavailable: ${escapeHtml(agenda.error)}</p>`;
+  } else if (!agenda.events.length) {
+    inner = `<p style="margin:0;padding:12px 0;font-size:14px;color:#1a7a1a;">Nothing on your calendar today — enjoy the day!</p>`;
+  } else {
+    inner = agenda.events
+      .map((ev) => `
+        <div style="display:flex;align-items:baseline;gap:12px;padding:10px 0;border-bottom:1px solid #f0efe9;">
+          <div style="min-width:84px;font-size:13px;font-weight:600;color:#7a5c2e;white-space:nowrap;">${escapeHtml(ev.timeLabel)}</div>
+          <div style="font-size:14px;color:#1a1a1a;">${escapeHtml(ev.summary)}${ev.location ? `<span style="color:#999;font-size:13px;"> · ${escapeHtml(ev.location)}</span>` : ''}</div>
+        </div>`)
+      .join('');
+  }
+
+  return `
+    <div style="background:#fffdf6;border:1px solid #f0e6c8;border-radius:12px;padding:20px 24px;margin-bottom:24px;">
+      <h2 style="margin:0 0 4px 0;font-size:18px;color:#1a1a1a;font-weight:600;">📅 Today's Agenda</h2>
+      <div>${inner}</div>
+    </div>`;
+}
+
 // ── Email builder ───────────────────────────────────────────────────────────
 
-function buildEmailHtml(firebase, vercel, ga4, timestamp) {
+function buildEmailHtml(firebase, vercel, ga4, agenda, timestamp) {
   const dateStr = new Date(timestamp).toLocaleDateString('en-US', {
     weekday: 'long',
     year: 'numeric',
@@ -405,6 +543,9 @@ function buildEmailHtml(firebase, vercel, ga4, timestamp) {
       <h1 style="margin:0 0 4px 0;font-size:24px;color:#fff;font-weight:700;">HitLoop Daily Digest</h1>
       <p style="margin:0;font-size:14px;color:rgba(255,255,255,0.6);">${dateStr}</p>
     </div>
+
+    <!-- Today's Agenda -->
+    ${buildAgendaSection(agenda)}
 
     <!-- Key Metrics -->
     <div style="display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;">
@@ -623,10 +764,11 @@ export async function GET(request) {
   try {
     const timestamp = Date.now();
     logInfo('daily_digest_start', { timestamp: new Date(timestamp).toISOString() });
-    const [firebase, vercel, ga4] = await Promise.all([
+    const [firebase, vercel, ga4, agenda] = await Promise.all([
       getFirebaseMetrics(),
       getVercelMetrics(),
       getGA4Metrics(),
+      getCalendarAgenda(timestamp),
     ]);
 
     const dateStr = new Date(timestamp).toLocaleDateString('en-US', {
@@ -637,7 +779,7 @@ export async function GET(request) {
     const sessionStr = ga4.overview ? `, ${ga4.overview.sessions} session${ga4.overview.sessions !== 1 ? 's' : ''}` : '';
     const subject = `HitLoop Daily — ${firebase.newUsers} sign-up${firebase.newUsers !== 1 ? 's' : ''}, ${firebase.recentRuns} dashboard${firebase.recentRuns !== 1 ? 's' : ''}${sessionStr} · ${dateStr}`;
 
-    const html = buildEmailHtml(firebase, vercel, ga4, timestamp);
+    const html = buildEmailHtml(firebase, vercel, ga4, agenda, timestamp);
     const emailResult = await sendEmail(subject, html);
     logInfo('daily_digest_complete', {
       timestamp: new Date(timestamp).toISOString(),
@@ -649,7 +791,7 @@ export async function GET(request) {
     return json({
       ok: true,
       timestamp: new Date(timestamp).toISOString(),
-      metrics: { firebase, vercel: { totalDeployments: vercel.totalDeployments, errorCount: vercel.errorLogs?.length || 0 }, ga4: { overview: ga4.overview, topPagesCount: ga4.topPages?.length, sourcesCount: ga4.trafficSources?.length, events: ga4.events, error: ga4.error || null } },
+      metrics: { firebase, vercel: { totalDeployments: vercel.totalDeployments, errorCount: vercel.errorLogs?.length || 0 }, ga4: { overview: ga4.overview, topPagesCount: ga4.topPages?.length, sourcesCount: ga4.trafficSources?.length, events: ga4.events, error: ga4.error || null }, agenda: { eventCount: agenda.events?.length || 0, error: agenda.error || null } },
       email: emailResult,
     });
   } catch (err) {

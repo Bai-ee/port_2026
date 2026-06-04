@@ -273,6 +273,137 @@ function joinConfigList(value) {
   return Array.isArray(value) ? value.join('\n') : String(value || '');
 }
 
+function formatEstimateMoney(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? String(n) : '0';
+}
+
+function formatEstimateLineItems(items) {
+  const rows = Array.isArray(items) ? items : [];
+  return rows
+    .map((item) => [
+      item?.label || '',
+      item?.description || '',
+      formatEstimateMoney(item?.unitPrice ?? item?.price),
+      formatEstimateMoney(item?.quantity || 1),
+    ].join(' | '))
+    .join('\n');
+}
+
+function parseEstimateLineItems(text) {
+  return String(text || '')
+    .split(/\n+/)
+    .map((line, index) => {
+      const [label, description, unitPrice, quantity] = line.split('|').map((part) => part.trim());
+      if (!label) return null;
+      return {
+        id: `line-${index + 1}`,
+        label,
+        description: description || '',
+        unitPrice: Number(unitPrice || 0),
+        quantity: Number(quantity || 1) || 1,
+      };
+    })
+    .filter(Boolean);
+}
+
+function formatEstimateAddOns(items) {
+  const rows = Array.isArray(items) ? items : [];
+  return rows
+    .map((item) => [
+      item?.label || '',
+      item?.description || '',
+      formatEstimateMoney(item?.price ?? item?.unitPrice),
+    ].join(' | '))
+    .join('\n');
+}
+
+function parseEstimateAddOns(text) {
+  return String(text || '')
+    .split(/\n+/)
+    .map((line, index) => {
+      const [label, description, price] = line.split('|').map((part) => part.trim());
+      if (!label) return null;
+      return {
+        id: `addon-${index + 1}`,
+        label,
+        description: description || '',
+        price: Number(price || 0),
+      };
+    })
+    .filter(Boolean);
+}
+
+function buildDefaultEstimateBriefDraft(client) {
+  const companyName = client?.companyName || client?.businessName || client?.name || 'Client';
+  return {
+    offerSummary: `Website redesign and launch support for ${companyName}.`,
+    pricingModel: 'line_items',
+    currency: 'USD',
+    lineItemsText: [
+      'Website redesign | Client-facing homepage redesign based on the generated preview, responsive layout, conversion structure, and launch-ready handoff. | 4500 | 1',
+      'Launch QA and handoff | Final review, mobile checks, metadata review, and implementation notes for launch. | 750 | 1',
+    ].join('\n'),
+    timeline: '2-4 weeks after approval',
+    scopeText: [
+      'Homepage redesign based on the generated preview direction.',
+      'Responsive implementation guidance for desktop, tablet, and mobile.',
+      'Conversion-focused page structure, primary CTA treatment, and handoff notes.',
+    ].join('\n'),
+    exclusionsText: [
+      'Third-party platform fees, paid media, and hosting subscriptions are not included unless listed as line items.',
+      'New brand identity, logo design, or custom photography are separate unless explicitly included.',
+    ].join('\n'),
+    termsText: [
+      'Estimate is valid for 14 days.',
+      'Final production scope may adjust if new requirements are added after approval.',
+    ].join('\n'),
+    paymentScheduleText: [
+      '50% due to begin work.',
+      '50% due before final handoff or launch.',
+    ].join('\n'),
+    optionalAddOnsText: [
+      'Monthly maintenance | Small content updates, uptime checks, and light technical support. | 650',
+      'SEO content support | Monthly content and AI-search visibility improvements. | 1200',
+    ].join('\n'),
+    estimateTone: 'clear, direct, premium, client-facing',
+    sendMessageInstructions: 'Write a concise email that references the preview URL and next step.',
+  };
+}
+
+function hydrateEstimateBriefDraft(config, client) {
+  const fallback = buildDefaultEstimateBriefDraft(client);
+  const next = config || {};
+  return {
+    ...fallback,
+    ...next,
+    lineItemsText: Array.isArray(next.lineItems) ? formatEstimateLineItems(next.lineItems) : (next.lineItemsText || fallback.lineItemsText),
+    scopeText: Array.isArray(next.scope) ? next.scope.join('\n') : (next.scopeText || fallback.scopeText),
+    exclusionsText: Array.isArray(next.exclusions) ? next.exclusions.join('\n') : (next.exclusionsText || fallback.exclusionsText),
+    termsText: Array.isArray(next.terms) ? next.terms.join('\n') : (next.termsText || fallback.termsText),
+    paymentScheduleText: Array.isArray(next.paymentSchedule) ? next.paymentSchedule.join('\n') : (next.paymentScheduleText || fallback.paymentScheduleText),
+    optionalAddOnsText: Array.isArray(next.optionalAddOns) ? formatEstimateAddOns(next.optionalAddOns) : (next.optionalAddOnsText || fallback.optionalAddOnsText),
+  };
+}
+
+function buildEstimateBriefConfigPayload(draft) {
+  return {
+    enabled: true,
+    offerSummary: draft.offerSummary || '',
+    pricingModel: draft.pricingModel || 'line_items',
+    currency: draft.currency || 'USD',
+    lineItems: parseEstimateLineItems(draft.lineItemsText),
+    timeline: draft.timeline || '',
+    scope: String(draft.scopeText || '').split(/\n+/).map((item) => item.trim()).filter(Boolean),
+    exclusions: String(draft.exclusionsText || '').split(/\n+/).map((item) => item.trim()).filter(Boolean),
+    terms: String(draft.termsText || '').split(/\n+/).map((item) => item.trim()).filter(Boolean),
+    paymentSchedule: String(draft.paymentScheduleText || '').split(/\n+/).map((item) => item.trim()).filter(Boolean),
+    optionalAddOns: parseEstimateAddOns(draft.optionalAddOnsText),
+    estimateTone: draft.estimateTone || '',
+    sendMessageInstructions: draft.sendMessageInstructions || '',
+  };
+}
+
 function cloneJson(value) {
   try { return JSON.parse(JSON.stringify(value || null)); } catch { return value || null; }
 }
@@ -1945,6 +2076,10 @@ const DashboardPage = () => {
   const [marketingBriefSaving, setMarketingBriefSaving] = useState(false);
   const [marketingBriefRunning, setMarketingBriefRunning] = useState(false);
   const [marketingBriefError, setMarketingBriefError] = useState('');
+  const [estimateBriefDraft, setEstimateBriefDraft] = useState(() => buildDefaultEstimateBriefDraft(null));
+  const [estimateBriefLoading, setEstimateBriefLoading] = useState(false);
+  const [estimateBriefSaving, setEstimateBriefSaving] = useState(false);
+  const [estimateBriefError, setEstimateBriefError] = useState('');
   const [customBriefs, setCustomBriefs] = useState([]);
   const [customBriefsLoading, setCustomBriefsLoading] = useState(false);
   const [customBriefsError, setCustomBriefsError] = useState('');
@@ -2040,6 +2175,60 @@ const DashboardPage = () => {
       setMarketingBriefSaving(false);
     }
   }, [user, marketingBriefConfig, apiPath, hydrateMarketingBriefConfig]);
+
+  useEffect(() => {
+    if (!user || !client) return undefined;
+    let cancelled = false;
+    (async () => {
+      setEstimateBriefLoading(true);
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch(apiPath('/api/dashboard/estimate-brief/config'), {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!cancelled) {
+          setEstimateBriefDraft(hydrateEstimateBriefDraft(res.ok ? data.config : null, client));
+          setEstimateBriefError('');
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setEstimateBriefDraft(hydrateEstimateBriefDraft(null, client));
+          setEstimateBriefError(err instanceof Error ? err.message : 'Could not load estimate config.');
+        }
+      } finally {
+        if (!cancelled) setEstimateBriefLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user, client, apiPath]);
+
+  const saveEstimateBriefConfig = useCallback(async () => {
+    if (!user || !estimateBriefDraft) return null;
+    setEstimateBriefSaving(true);
+    setEstimateBriefError('');
+    try {
+      const token = await user.getIdToken();
+      const payload = buildEstimateBriefConfigPayload(estimateBriefDraft);
+      if (!payload.lineItems.length) throw new Error('Add at least one estimate line item.');
+      const res = await fetch(apiPath('/api/dashboard/estimate-brief/config'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Could not save estimate config.');
+      const next = hydrateEstimateBriefDraft(data.config, client);
+      setEstimateBriefDraft(next);
+      return next;
+    } catch (err) {
+      setEstimateBriefError(err instanceof Error ? err.message : 'Could not save estimate config.');
+      return null;
+    } finally {
+      setEstimateBriefSaving(false);
+    }
+  }, [user, estimateBriefDraft, apiPath, client]);
 
   // Fetch the brief HTML for the Brief tile's miniature preview. Re-fetches
   // whenever latestRunId changes so the tile always shows the newest render.
@@ -2352,6 +2541,7 @@ const DashboardPage = () => {
     if (id === 'client-brief')  { setModalTab('preview'); return; }
     if (id === 'client-mockup') { setModalTab('preview'); return; }
     if (id === 'client-site')   { setModalTab('preview'); return; }
+    if (id === 'client-estimate') { setModalTab('estimate'); return; }
     if (id === 'seo-performance') { setModalTab('report'); return; }
     if (id === 'agent-readiness') { setModalTab('report'); return; }
     if (id === 'design-evaluation' && bootstrap?.dashboardState?.analyzerOutputs?.['design-evaluation']) { setModalTab('report'); return; }
@@ -5068,6 +5258,49 @@ const DashboardPage = () => {
         },
       };
     })(),
+    (() => {
+      const gen = clientProspect?.generation || {};
+      const estimate = gen.estimate?.latest || null;
+      const hasSite = !!gen.previewUrl;
+      const hasEstimate = !!estimate?.estimateJson;
+      const total = estimate?.estimateJson?.total;
+      const currency = estimate?.estimateJson?.currency || 'USD';
+      const totalLabel = total != null
+        ? new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(total)
+        : '—';
+      return {
+        id: 'client-estimate',
+        category: 'website',
+        number: 'CE',
+        label: 'CREATE ESTIMATE',
+        title: 'Create Estimate',
+        description: 'Creates a client-facing estimate from the generated site, scope defaults, pricing inputs, and before/after readiness proof.',
+        placeholderLabel: hasEstimate ? 'ESTIMATE' : 'NO\nESTIMATE',
+        rows: hasEstimate
+          ? [
+              { key: 'ce-client',    label: 'Client',      value: clientProspect?.name || client?.companyName || '—' },
+              { key: 'ce-total',     label: 'Total',       value: totalLabel },
+              { key: 'ce-version',   label: 'Version',     value: estimate.versionId || '—' },
+              { key: 'ce-generated', label: 'Generated',   value: estimate.generatedAt ? new Date(estimate.generatedAt).toLocaleString() : '—' },
+              { key: 'ce-preview',   label: 'Preview URL', value: estimate.proof?.previewUrl ? 'Included' : 'Not included' },
+              { key: 'ce-pdf',       label: 'PDF',         value: estimate.pdfArtifact?.downloadUrl ? 'Ready' : 'Unavailable' },
+            ]
+          : [
+              { key: 'ce-target', label: 'Target', value: clientProspect?.website || client?.websiteUrl || '—' },
+              { key: 'ce-prereq', label: 'Prereq', value: hasSite ? 'Generated site ready' : 'Run Generate Site first' },
+              { key: 'ce-action', label: 'Action', value: 'Click RUN to create the client-facing estimate' },
+            ],
+        footerLeft: hasEstimate ? 'Live' : (hasSite ? 'Ready to run' : 'Needs site'),
+        footerRight: 'LEADGEN',
+        readinessBadge: hasEstimate ? { tone: 'ok', label: 'Passed' } : null,
+        moduleControls: { tech: ['estimate', 'pdf', 'firebase-storage'] },
+        leadgenStep: {
+          moduleId:    'create-estimate',
+          moduleLabel: 'Create Estimate',
+          endpoint:    '/api/leadgen/create-estimate',
+        },
+      };
+    })(),
 
     // ── MARKETING DIRECTOR ──────────────────────────────────────────────────
     {
@@ -7114,6 +7347,7 @@ const DashboardPage = () => {
                       // has been run but hasn't reached STATUS: Passed, allow retry
                       // regardless of the enabled flag — the onClick forwards autoEnable=true
                       // so the server flips the flag before dispatching.
+                      const leadgenPrereqMissing = card.leadgenStep && /^Needs\b/i.test(String(card.footerLeft || ''));
                       const interactive =
                         !mBusy && (mIsInactive || (mEnabled && (mIsRetry || tierAllowsRerun)) || cardNotPassed);
                       let label = mLoading ? '…' : mIsRetry ? 'Retry' : mIsRerun ? 'Re-run' : mIsInactive ? 'RUN' : 'Run';
@@ -7126,10 +7360,10 @@ const DashboardPage = () => {
                           type="button"
                           id={`tile-${card.id}-rerun-btn`}
                           className="tile-foot-rerun-btn"
-                          disabled={!interactive || mLoading}
+                          disabled={!interactive || mLoading || leadgenPrereqMissing}
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (!interactive) return;
+                            if (!interactive || leadgenPrereqMissing) return;
                             // Leadgen flow cards run via /api/leadgen/* not the
                             // module pipeline — short-circuit before handleModuleRun.
                             if (card.leadgenStep) { openLeadgenFlow(card.leadgenStep); return; }
@@ -8287,6 +8521,232 @@ const DashboardPage = () => {
                                   )
                               );
                             })()}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Client-estimate card — ESTIMATE + DATA + MESSAGE tabs */}
+                {activeTileModal.cardId === 'client-estimate' && (() => {
+                  const gen = clientProspect?.generation || {};
+                  const estimate = gen.estimate?.latest || null;
+                  const estimateJson = estimate?.estimateJson || null;
+                  const html = estimate?.html || '';
+                  const pdfUrl = estimate?.pdfArtifact?.downloadUrl || '';
+                  const currency = estimateJson?.currency || 'USD';
+                  const formatMoney = (value) => {
+                    if (value == null) return '—';
+                    try {
+                      return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(Number(value));
+                    } catch {
+                      return `$${Number(value || 0).toFixed(2)}`;
+                    }
+                  };
+                  return (
+                    <div
+                      id="client-estimate-modal-tabs-container"
+                      className="tile-detail-bento-cell tile-detail-tabbed-container"
+                    >
+                      <div className="tile-detail-tabs">
+                        <button type="button" className={`tile-detail-tab${modalTab === 'estimate' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('estimate')}>ESTIMATE</button>
+                        <button type="button" className={`tile-detail-tab${modalTab === 'config' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('config')}>CONFIG</button>
+                        <button type="button" className={`tile-detail-tab${modalTab === 'data' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('data')}>DATA</button>
+                        <button type="button" className={`tile-detail-tab${modalTab === 'message' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('message')}>MESSAGE</button>
+                      </div>
+                      <div className="tile-detail-tab-content">
+                        {modalTab === 'config' && (
+                          <div id="client-estimate-config-tab" className="tile-detail-tab-pane custom-brief-submit-pane">
+                            {estimateBriefLoading ? (
+                              <p className="tile-analyzer-solutions-empty">Loading estimate config...</p>
+                            ) : (
+                              <>
+                                <section className="mb-config-section">
+                                  <div className="mb-config-section-head">
+                                    <span className="mb-config-section-index">01</span>
+                                    <div>
+                                      <h4>Offer and pricing</h4>
+                                      <p>Line format: Label | Description | Unit Price | Quantity. Save before running Create Estimate.</p>
+                                    </div>
+                                    <span className="mb-config-section-status">{parseEstimateLineItems(estimateBriefDraft.lineItemsText).length} item{parseEstimateLineItems(estimateBriefDraft.lineItemsText).length === 1 ? '' : 's'}</span>
+                                  </div>
+                                  <label className="mb-config-field">
+                                    <span className="mb-config-label">Offer summary</span>
+                                    <textarea className="mb-config-textarea" value={estimateBriefDraft.offerSummary || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), offerSummary: e.target.value }))} rows={3} />
+                                  </label>
+                                  <div className="custom-brief-submit-grid">
+                                    <label className="mb-config-field">
+                                      <span className="mb-config-label">Pricing model</span>
+                                      <select className="mb-config-input" value={estimateBriefDraft.pricingModel || 'line_items'} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), pricingModel: e.target.value }))}>
+                                        <option value="line_items">Line items</option>
+                                        <option value="fixed">Fixed price</option>
+                                        <option value="package">Package</option>
+                                        <option value="hourly">Hourly</option>
+                                        <option value="tiered">Tiered</option>
+                                      </select>
+                                    </label>
+                                    <label className="mb-config-field">
+                                      <span className="mb-config-label">Currency</span>
+                                      <input className="mb-config-input" value={estimateBriefDraft.currency || 'USD'} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), currency: e.target.value.toUpperCase().slice(0, 3) }))} />
+                                    </label>
+                                  </div>
+                                  <label className="mb-config-field">
+                                    <span className="mb-config-label">Line items</span>
+                                    <textarea className="mb-config-textarea mb-config-textarea--code" value={estimateBriefDraft.lineItemsText || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), lineItemsText: e.target.value }))} rows={7} spellCheck={false} />
+                                  </label>
+                                  <label className="mb-config-field">
+                                    <span className="mb-config-label">Optional add-ons</span>
+                                    <textarea className="mb-config-textarea mb-config-textarea--code" value={estimateBriefDraft.optionalAddOnsText || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), optionalAddOnsText: e.target.value }))} rows={4} spellCheck={false} />
+                                  </label>
+                                </section>
+
+                                <section className="mb-config-section">
+                                  <div className="mb-config-section-head">
+                                    <span className="mb-config-section-index">02</span>
+                                    <div>
+                                      <h4>Scope, terms, and message</h4>
+                                      <p>One item per line for scope, exclusions, terms, and payment schedule.</p>
+                                    </div>
+                                    <span className="mb-config-section-status">Editable</span>
+                                  </div>
+                                  <label className="mb-config-field">
+                                    <span className="mb-config-label">Timeline</span>
+                                    <input className="mb-config-input" value={estimateBriefDraft.timeline || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), timeline: e.target.value }))} />
+                                  </label>
+                                  <label className="mb-config-field">
+                                    <span className="mb-config-label">Scope</span>
+                                    <textarea className="mb-config-textarea" value={estimateBriefDraft.scopeText || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), scopeText: e.target.value }))} rows={5} />
+                                  </label>
+                                  <label className="mb-config-field">
+                                    <span className="mb-config-label">Exclusions</span>
+                                    <textarea className="mb-config-textarea" value={estimateBriefDraft.exclusionsText || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), exclusionsText: e.target.value }))} rows={4} />
+                                  </label>
+                                  <div className="custom-brief-submit-grid">
+                                    <label className="mb-config-field">
+                                      <span className="mb-config-label">Terms</span>
+                                      <textarea className="mb-config-textarea" value={estimateBriefDraft.termsText || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), termsText: e.target.value }))} rows={4} />
+                                    </label>
+                                    <label className="mb-config-field">
+                                      <span className="mb-config-label">Payment schedule</span>
+                                      <textarea className="mb-config-textarea" value={estimateBriefDraft.paymentScheduleText || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), paymentScheduleText: e.target.value }))} rows={4} />
+                                    </label>
+                                  </div>
+                                  <label className="mb-config-field">
+                                    <span className="mb-config-label">Estimate tone</span>
+                                    <input className="mb-config-input" value={estimateBriefDraft.estimateTone || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), estimateTone: e.target.value }))} />
+                                  </label>
+                                  <label className="mb-config-field">
+                                    <span className="mb-config-label">Send message instructions</span>
+                                    <textarea className="mb-config-textarea" value={estimateBriefDraft.sendMessageInstructions || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), sendMessageInstructions: e.target.value }))} rows={3} />
+                                  </label>
+                                </section>
+
+                                {estimateBriefError && <p className="mb-config-error">{estimateBriefError}</p>}
+                                <div className="mb-config-actionbar">
+                                  <span className="mb-config-actionbar-note">Saved config is used by the next Create Estimate run.</span>
+                                  <div className="mb-config-actionbar-buttons">
+                                    <button type="button" className="tile-foot-rerun-btn" onClick={saveEstimateBriefConfig} disabled={estimateBriefSaving}>{estimateBriefSaving ? 'Saving...' : 'Save Config'}</button>
+                                  </div>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        )}
+                        {modalTab === 'estimate' && (
+                          <div className="tile-detail-tab-pane" style={{ padding: 0, height: '100%', overflow: 'hidden' }}>
+                            {html ? (
+                              <iframe
+                                key={estimate?.versionId || 'estimate-document'}
+                                title="Client estimate"
+                                srcDoc={html}
+                                style={{ width: '100%', height: '100%', minHeight: 620, border: '1px solid rgba(42,36,32,0.08)', borderRadius: 8, background: '#fff' }}
+                              />
+                            ) : (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 400, gap: 16, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'center', padding: 40 }}>
+                                <span style={{ fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.7 }}>No estimate yet</span>
+                                <span style={{ fontSize: 13, lineHeight: 1.6, maxWidth: 360 }}>Run Create Estimate after the site preview is generated to produce the client-facing estimate and PDF.</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {modalTab === 'data' && (
+                          <div id="client-estimate-data-tab" className="tile-detail-tab-pane">
+                            {(() => {
+                              const proof = estimateJson?.proof || {};
+                              const versions = Array.isArray(gen.estimate?.versions) ? gen.estimate.versions : [];
+                              const dataRows = [
+                                { key: 'ce-h1',          isHeader: true, label: 'ESTIMATE' },
+                                { key: 'ce-d-client',    label: 'Client',        value: estimateJson?.clientName || clientProspect?.name || '—' },
+                                { key: 'ce-d-version',   label: 'Version',       value: estimate?.versionId || '—' },
+                                { key: 'ce-d-generated', label: 'Generated',     value: estimate?.generatedAt ? new Date(estimate.generatedAt).toLocaleString() : '—' },
+                                { key: 'ce-d-model',     label: 'Pricing model', value: estimateJson?.pricingModel || '—' },
+                                { key: 'ce-d-subtotal',  label: 'Subtotal',      value: formatMoney(estimateJson?.subtotal) },
+                                { key: 'ce-d-total',     label: 'Total',         value: formatMoney(estimateJson?.total) },
+                                { key: 'ce-d-pdf',       label: 'PDF',           value: pdfUrl ? 'Ready' : (estimate?.pdfWarning?.message || 'Unavailable') },
+
+                                { key: 'ce-h2',          isHeader: true, label: 'PROOF' },
+                                { key: 'ce-d-preview',   label: 'Preview URL',   value: proof.previewUrl || gen.previewUrl || '—' },
+                                { key: 'ce-d-readiness', label: 'AI Readiness',  value: proof.readinessBefore != null && proof.readinessAfter != null ? `${proof.readinessBefore} → ${proof.readinessAfter}` : '—' },
+                                { key: 'ce-d-improve',   label: 'Improvement',   value: proof.readinessImprovement != null ? `+${proof.readinessImprovement} points` : '—' },
+
+                                { key: 'ce-h3',          isHeader: true, label: 'VERSIONING' },
+                                { key: 'ce-d-current',   label: 'Current',       value: gen.estimate?.currentVersionId || '—' },
+                                { key: 'ce-d-versions',  label: 'Versions',      value: String(versions.length || 0) },
+                              ];
+                              return (
+                                <>
+                                  {dataRows.map((row) =>
+                                    row.isHeader
+                                      ? <div key={row.key} className="tile-detail-row-section-head">{row.label}</div>
+                                      : (
+                                        <div key={row.key} className="tile-detail-stat-row">
+                                          <span className="tile-detail-stat-label">{row.label}</span>
+                                          <span className="tile-detail-stat-value" style={{ wordBreak: 'break-all' }}>{row.value}</span>
+                                        </div>
+                                      )
+                                  )}
+                                  {pdfUrl && (
+                                    <a
+                                      href={pdfUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      download="estimate.pdf"
+                                      className="tile-foot-rerun-btn"
+                                      style={{ display: 'inline-flex', marginTop: 14, textDecoration: 'none' }}
+                                    >
+                                      Download PDF
+                                    </a>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          </div>
+                        )}
+                        {modalTab === 'message' && (
+                          <div id="client-estimate-message-tab" className="tile-detail-tab-pane">
+                            {estimateJson?.sendMessage ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                                <div className="tile-detail-stat-row">
+                                  <span className="tile-detail-stat-label">Subject</span>
+                                  <span className="tile-detail-stat-value">{estimateJson.sendMessage.subject || '—'}</span>
+                                </div>
+                                <pre
+                                  style={{
+                                    margin: 0, padding: '16px 18px', minHeight: 360, overflow: 'auto',
+                                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                                    fontSize: 12, lineHeight: 1.6, color: '#2a2420',
+                                    background: '#f8f7f4', border: '1px solid rgba(42,36,32,0.08)', borderRadius: 8,
+                                    whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                                  }}
+                                >{estimateJson.sendMessage.body || ''}</pre>
+                              </div>
+                            ) : (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 400, gap: 16, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'center', padding: 40 }}>
+                                <span style={{ fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.7 }}>No message yet</span>
+                                <span style={{ fontSize: 13, lineHeight: 1.6, maxWidth: 340 }}>The send-ready message is generated with the estimate.</span>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
