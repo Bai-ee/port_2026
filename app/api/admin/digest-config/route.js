@@ -19,18 +19,25 @@ export async function GET(request) {
   try {
     const clientId = await digestConfig.resolveDigestClientId();
     const config = await digestConfig.getDigestConfig(clientId);
+    const homeClientId = config.homeClientId || clientId;
     let docs = [];
-    if (clientId) {
+    if (homeClientId) {
       try {
         const result = await digestConfig.getRecentDocsText({
-          clientId, count: config.recentDocsCount, maxChars: config.maxDocChars,
+          clientId: homeClientId, count: config.recentDocsCount, maxChars: config.maxDocChars,
         });
         docs = result.docs;
       } catch {
         docs = [];
       }
     }
-    return json({ ok: true, clientId, config, docs });
+    let clients = [];
+    try {
+      clients = await digestConfig.listSelectableClients();
+    } catch {
+      clients = [];
+    }
+    return json({ ok: true, clientId, homeClientId, config, docs, clients });
   } catch (err) {
     return json({ error: err.message || 'Could not load digest config.' }, 500);
   }

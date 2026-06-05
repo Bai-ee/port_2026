@@ -771,7 +771,7 @@ function buildSummarySection(summary) {
 }
 
 /** Strategic brief block — mirrors the established daily brief's strategy. */
-function buildStrategicBriefSection(intel) {
+function buildStrategicBriefSection(intel, clientName) {
   if (!intel) return '';
   const hasContent =
     intel.opportunities?.length || intel.kols?.length || intel.competitors?.length ||
@@ -812,7 +812,7 @@ function buildStrategicBriefSection(intel) {
     : '';
 
   return `<div style="margin-bottom:32px;">
-    ${dKicker('Today &middot; Strategic Brief')}
+    ${dKicker(`Strategic Brief${clientName ? ` &middot; ${escapeHtml(clientName)}` : ''}`)}
     ${intel.humanBrief ? `<div style="background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:18px 20px;margin-bottom:16px;font-family:${DT.fBody};font-size:14px;line-height:1.6;color:${DT.ink};">${escapeHtml(intel.humanBrief)}</div>` : ''}
     ${oppRows ? `<div style="margin-bottom:14px;">${dMini('Post opportunities')}${dDataTable([{ label: 'Conversation / angle' }], oppRows)}</div>` : ''}
     ${signalsHtml ? `<div style="margin-bottom:14px;">${dMini('Signals · KOLs / competitors / narratives')}${dDataTable([{ label: 'Type' }, { label: 'Finding' }], signalsHtml)}</div>` : ''}
@@ -820,7 +820,11 @@ function buildStrategicBriefSection(intel) {
   </div>`;
 }
 
-function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, intel) {
+function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs) {
+  const strategicSections = (Array.isArray(briefs) ? briefs : [])
+    .map((b) => buildStrategicBriefSection(b.intel, b.clientName))
+    .filter(Boolean)
+    .join('');
   const dateStr = new Date(timestamp).toLocaleDateString('en-US', {
     weekday: 'long',
     year: 'numeric',
@@ -914,7 +918,7 @@ a{text-decoration:none;}
           ${buildSummarySection(summary)}
 
           <!-- Strategic brief (mirrors established daily brief) -->
-          ${buildStrategicBriefSection(intel)}
+          ${strategicSections}
 
           <!-- Key metrics -->
           ${dSection('Platform', 'Overview', dStatCells([
@@ -1074,24 +1078,33 @@ export async function GET(request) {
     });
 
     // Strategic brief intelligence (post ideas, KOLs, competitors, narratives)
-    // mirrored from the established daily brief. Null if the client has no brief
-    // yet. Resolved once and reused for both the summary and the email section.
+    // mirrored from the established daily brief, aggregated across the home
+    // client + any included clients. Additive — calendar/analytics are rendered
+    // unconditionally elsewhere and never depend on this block.
     let summary = null;
-    let intel = null;
+    let briefs = [];
     try {
       const fullDateStr = new Date(timestamp).toLocaleDateString('en-US', {
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
       });
-      const clientId = await digestConfig.resolveDigestClientId();
-      const cfg = await digestConfig.getDigestConfig(clientId);
-      intel = await briefIntel.getBriefIntelligence(clientId);
+      const configClientId = await digestConfig.resolveDigestClientId();
+      const cfg = await digestConfig.getDigestConfig(configClientId);
+      const homeClientId = cfg.homeClientId || configClientId;
+      const briefClientIds = [...new Set([homeClientId, ...(cfg.includeClientIds || [])].filter(Boolean))];
+
+      briefs = (await Promise.all(briefClientIds.map((cid) => briefIntel.getBriefForClient(cid)))).filter(Boolean);
+
       if (cfg.summaryEnabled) {
         const { text: docsText } = await digestConfig.getRecentDocsText({
-          clientId, count: cfg.recentDocsCount, maxChars: cfg.maxDocChars,
+          clientId: homeClientId, count: cfg.recentDocsCount, maxChars: cfg.maxDocChars,
         });
+        const briefText = briefs
+          .map((b) => `[${b.clientName}]\n${briefIntel.briefIntelToText(b.intel)}`)
+          .join('\n\n')
+          .slice(0, 12000);
         summary = await briefSummary.generateBriefSummary({
           dateStr: fullDateStr, agenda, ga4, firebase, homepage, docsText,
-          briefText: briefIntel.briefIntelToText(intel), config: cfg,
+          briefText, config: cfg,
         });
       }
     } catch (err) {
@@ -1101,7 +1114,7 @@ export async function GET(request) {
     const sessionStr = ga4.overview ? `, ${ga4.overview.sessions} session${ga4.overview.sessions !== 1 ? 's' : ''}` : '';
     const subject = `HitLoop Daily — ${firebase.newUsers} sign-up${firebase.newUsers !== 1 ? 's' : ''}, ${firebase.recentRuns} dashboard${firebase.recentRuns !== 1 ? 's' : ''}${sessionStr} · ${dateStr}`;
 
-    const html = buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, intel);
+    const html = buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs);
 
     // Preview mode (admin dashboard): build everything, send nothing.
     if (isPreview) {

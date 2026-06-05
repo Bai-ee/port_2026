@@ -97,4 +97,19 @@ function briefIntelToText(intel) {
   return lines.join('\n');
 }
 
-module.exports = { getBriefIntelligence, briefIntelToText };
+/** Resolve { clientId, clientName, intel } for a client, or null if no brief. */
+async function getBriefForClient(clientId) {
+  if (!clientId) return null;
+  const intel = await getBriefIntelligence(clientId);
+  if (!intel) return null;
+  let clientName = clientId;
+  try {
+    const snap = await fb.adminDb.collection('clients').doc(clientId).get();
+    if (snap.exists) clientName = snap.data()?.companyName || clientId;
+  } catch {
+    /* fall back to clientId */
+  }
+  return { clientId, clientName, intel };
+}
+
+module.exports = { getBriefIntelligence, briefIntelToText, getBriefForClient };

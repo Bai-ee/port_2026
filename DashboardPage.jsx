@@ -40,7 +40,7 @@ import onboardingConfig from './onboarding/questions.config.cjs';
 import { resolveAnalyzerSource, buildCardDescription, buildModuleStateDescription } from './features/scout-intake/card-description-builder.mjs';
 import { deriveFindings } from './features/scout-intake/derived-findings.mjs';
 import ModuleCardControls from './components/dashboard/ModuleCardControls';
-import { AdminEmailDigestView, AdminEmailSettingsView } from './components/AdminEmailModals';
+import { AdminEmailDigestView, AdminEmailSettingsView, AdminCreateClientView } from './components/AdminEmailModals';
 
 const LeadGenDashboard = dynamic(() => import('./components/dashboard/LeadGenDashboard'), {
   loading: () => null,
@@ -990,6 +990,7 @@ const CUSTOM_DETAIL_CARD_IDS = new Set([
   'strategy-builder',
   'email-digest',
   'email-settings',
+  'create-client',
 ]);
 
 const buildUnavailableDescription = (subject) => `Insufficient source evidence to determine ${subject} reliably.`;
@@ -5592,6 +5593,23 @@ const DashboardPage = () => {
       footerLeft: 'Ready',
       footerRight: 'ADMIN',
       readinessBadge: { tone: 'ok', label: 'Ready' },
+    }, {
+      id: 'create-client',
+      category: 'admin',
+      number: 'NC',
+      label: 'NEW CLIENT',
+      title: 'Create Client',
+      description: 'Provision a website-less client (survey-only / from-scratch / email-only template). Feed it via the brain + a brief after switching to it in the client dropdown.',
+      placeholderLabel: 'NEW',
+      rows: [
+        { key: 'nc-type', label: 'Type', value: 'Website-less workspace' },
+        { key: 'nc-feed', label: 'Feed', value: 'Brain uploads + brief' },
+        { key: 'nc-owner', label: 'Owner', value: 'You (admin)' },
+        { key: 'nc-access', label: 'Access', value: 'Client dropdown' },
+      ],
+      footerLeft: 'Ready',
+      footerRight: 'ADMIN',
+      readinessBadge: { tone: 'ok', label: 'Ready' },
     }] : []),
 
     {
@@ -8199,6 +8217,11 @@ const DashboardPage = () => {
                 {/* Admin · Email Settings — enable / format / customize summary */}
                 {activeTileModal.cardId === 'email-settings' && (
                   <AdminEmailSettingsView user={user} />
+                )}
+
+                {/* Admin · Create Client — website-less workspace */}
+                {activeTileModal.cardId === 'create-client' && (
+                  <AdminCreateClientView user={user} />
                 )}
 
                 {/* Survey card — CHAT + DATA tabs */}

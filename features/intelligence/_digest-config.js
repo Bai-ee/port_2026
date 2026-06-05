@@ -13,12 +13,19 @@ const DEFAULTS = {
   recentDocsCount: 5,
   maxDocChars: 8000,
   extraInstructions: '',
+  homeClientId: null,      // brain + primary brief source (defaults to email-resolved client)
+  includeClientIds: [],    // additional clients whose latest brief to fold in
 };
 
 function clampInt(value, min, max, fallback) {
   const n = parseInt(value, 10);
   if (!Number.isFinite(n)) return fallback;
   return Math.max(min, Math.min(max, n));
+}
+
+function cleanIdList(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((v) => String(v || '').trim()).filter(Boolean))].slice(0, 25);
 }
 
 function configDocRef(clientId) {
@@ -36,6 +43,8 @@ async function getDigestConfig(clientId) {
     recentDocsCount: clampInt(data.recentDocsCount, 1, 20, DEFAULTS.recentDocsCount),
     maxDocChars: clampInt(data.maxDocChars, 500, 40000, DEFAULTS.maxDocChars),
     extraInstructions: typeof data.extraInstructions === 'string' ? data.extraInstructions : '',
+    homeClientId: data.homeClientId || null,
+    includeClientIds: cleanIdList(data.includeClientIds),
     updatedAt: data.updatedAt?.toDate?.()?.toISOString?.() || null,
   };
 }
@@ -48,6 +57,8 @@ async function saveDigestConfig(clientId, patch = {}) {
   if (patch.recentDocsCount != null) next.recentDocsCount = clampInt(patch.recentDocsCount, 1, 20, DEFAULTS.recentDocsCount);
   if (patch.maxDocChars != null) next.maxDocChars = clampInt(patch.maxDocChars, 500, 40000, DEFAULTS.maxDocChars);
   if (typeof patch.extraInstructions === 'string') next.extraInstructions = patch.extraInstructions.slice(0, 2000);
+  if ('homeClientId' in patch) next.homeClientId = patch.homeClientId ? String(patch.homeClientId).trim() : null;
+  if ('includeClientIds' in patch) next.includeClientIds = cleanIdList(patch.includeClientIds);
   next.updatedAt = fb.FieldValue.serverTimestamp();
   await configDocRef(clientId).set(next, { merge: true });
   return getDigestConfig(clientId);
@@ -121,10 +132,24 @@ async function getRecentDocsText({ clientId, count = 5, maxChars = 8000 } = {}) 
   return { text: text.trim(), docs };
 }
 
+/** List clients for the email-settings pickers: [{ clientId, name, hasBrief }]. */
+async function listSelectableClients() {
+  const snap = await fb.adminDb.collection('clients').orderBy('createdAt', 'desc').limit(100).get();
+  return snap.docs.map((d) => {
+    const data = d.data() || {};
+    return {
+      clientId: data.clientId || d.id,
+      name: data.companyName || data.dashboardTitle || d.id,
+      websiteUrl: data.websiteUrl || '',
+    };
+  });
+}
+
 module.exports = {
   DEFAULTS,
   getDigestConfig,
   saveDigestConfig,
   resolveDigestClientId,
   getRecentDocsText,
+  listSelectableClients,
 };

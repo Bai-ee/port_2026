@@ -111,6 +111,7 @@ export function AdminEmailSettingsView({ user }) {
   const [form, setForm] = useState(null);
   const [docs, setDocs] = useState([]);
   const [clientId, setClientId] = useState('');
+  const [clients, setClients] = useState([]);
   const [status, setStatus] = useState(null);
 
   const load = useCallback(async () => {
@@ -122,12 +123,20 @@ export function AdminEmailSettingsView({ user }) {
       setForm(data.config || null);
       setDocs(data.docs || []);
       setClientId(data.clientId || '');
+      setClients(data.clients || []);
     } catch (e) {
       setError(e.message);
     } finally {
       setLoading(false);
     }
   }, [user]);
+
+  const toggleInclude = useCallback((cid) => {
+    setForm((f) => {
+      const cur = Array.isArray(f.includeClientIds) ? f.includeClientIds : [];
+      return { ...f, includeClientIds: cur.includes(cid) ? cur.filter((x) => x !== cid) : [...cur, cid] };
+    });
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 
@@ -161,8 +170,46 @@ export function AdminEmailSettingsView({ user }) {
             <div className="mb-config-section-head">
               <span className="mb-config-section-index">01</span>
               <div>
+                <h4>Client data sources</h4>
+                <p>Home client feeds your brain + primary brief. Include others to fold their latest brief into the email. Calendar & site analytics always show regardless.</p>
+              </div>
+              <span className="mb-config-section-status">{(form.includeClientIds || []).length + 1} feeding</span>
+            </div>
+            <label className="mb-config-field">
+              <span className="mb-config-label">Home client (brain + brief)</span>
+              <select
+                className="mb-config-input"
+                value={form.homeClientId || ''}
+                onChange={(e) => setForm((f) => ({ ...f, homeClientId: e.target.value || null }))}
+              >
+                <option value="">Default ({clientId || 'email-resolved'})</option>
+                {clients.map((c) => (
+                  <option key={c.clientId} value={c.clientId}>{c.name}{c.websiteUrl ? '' : ' · no site'}</option>
+                ))}
+              </select>
+            </label>
+            <div className="mb-config-field">
+              <span className="mb-config-label">Include client briefs</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 180, overflow: 'auto' }}>
+                {clients.length ? clients.map((c) => {
+                  const checked = (form.includeClientIds || []).includes(c.clientId);
+                  return (
+                    <label key={c.clientId} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-display)', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={checked} onChange={() => toggleInclude(c.clientId)} />
+                      <span>{c.name}{c.websiteUrl ? '' : ' · no site'}</span>
+                    </label>
+                  );
+                }) : <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>No clients.</span>}
+              </div>
+            </div>
+          </section>
+
+          <section className="mb-config-section">
+            <div className="mb-config-section-head">
+              <span className="mb-config-section-index">02</span>
+              <div>
                 <h4>Summary generation</h4>
-                <p>The LLM writes the opening paragraph from your calendar, analytics, and recent uploads.</p>
+                <p>The LLM writes the opening paragraph from your brief, calendar, analytics, and recent uploads.</p>
               </div>
               <span className="mb-config-section-status">{clientId || 'no client'}</span>
             </div>
@@ -191,10 +238,10 @@ export function AdminEmailSettingsView({ user }) {
 
           <section className="mb-config-section">
             <div className="mb-config-section-head">
-              <span className="mb-config-section-index">02</span>
+              <span className="mb-config-section-index">03</span>
               <div>
                 <h4>Documents feeding the summary</h4>
-                <p>The most recent uploads from this client's Company Brain.</p>
+                <p>The most recent uploads from the home client's Company Brain.</p>
               </div>
               <span className="mb-config-section-status">{docs.length} doc{docs.length === 1 ? '' : 's'}</span>
             </div>
@@ -219,6 +266,63 @@ export function AdminEmailSettingsView({ user }) {
             </span>
             <div className="mb-config-actionbar-buttons">
               <button type="button" className="tile-foot-rerun-btn" onClick={save} disabled={status?.kind === 'pending'}>{status?.kind === 'pending' ? 'Saving…' : 'Save Config'}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Create Client: website-less workspace (template for from-scratch signups) ──
+export function AdminCreateClientView({ user }) {
+  const [companyName, setCompanyName] = useState('');
+  const [ideaDescription, setIdeaDescription] = useState('');
+  const [status, setStatus] = useState(null); // { kind, msg, clientId }
+
+  const create = useCallback(async () => {
+    if (!user) return;
+    if (!companyName.trim()) { setStatus({ kind: 'error', msg: 'Enter a client name.' }); return; }
+    setStatus({ kind: 'pending', msg: 'Creating…' });
+    try {
+      const data = await authFetch(user, '/api/admin/create-client', {
+        method: 'POST',
+        body: JSON.stringify({ companyName, ideaDescription }),
+      });
+      setStatus({ kind: 'ok', msg: `Created ${data.clientId}. Switch to it via the client dropdown to feed its pipeline.`, clientId: data.clientId });
+      setCompanyName('');
+      setIdeaDescription('');
+    } catch (e) {
+      setStatus({ kind: 'error', msg: e.message });
+    }
+  }, [user, companyName, ideaDescription]);
+
+  return (
+    <div className="tile-detail-bento-cell tile-detail-tabbed-container">
+      <div className="tile-detail-tab-content">
+        <div className="tile-detail-tab-pane custom-brief-submit-pane">
+          <section className="mb-config-section">
+            <div className="mb-config-section-head">
+              <span className="mb-config-section-index">01</span>
+              <div>
+                <h4>New website-less client</h4>
+                <p>Creates a workspace with no site attached — the template for survey-only / email-only / from-scratch signups. Feed it via uploads and a brief run after switching to it in the client dropdown.</p>
+              </div>
+            </div>
+            <label className="mb-config-field">
+              <span className="mb-config-label">Client name</span>
+              <input className="mb-config-input" value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="e.g. Bryan Balli" />
+            </label>
+            <label className="mb-config-field">
+              <span className="mb-config-label">Idea / positioning (no website)</span>
+              <textarea className="mb-config-textarea" rows={4} value={ideaDescription} onChange={(e) => setIdeaDescription(e.target.value)} placeholder="What this brand/person is about — seeds the brief's search plan in place of a website." />
+            </label>
+          </section>
+          {status?.kind === 'error' && <p className="mb-config-error">{status.msg}</p>}
+          <div className="mb-config-actionbar">
+            <span className="mb-config-actionbar-note">{status && status.kind !== 'error' ? status.msg : 'Owner: you (admin). Added to your client dropdown automatically.'}</span>
+            <div className="mb-config-actionbar-buttons">
+              <button type="button" className="tile-foot-rerun-btn" onClick={create} disabled={status?.kind === 'pending'}>{status?.kind === 'pending' ? 'Creating…' : 'Create Client'}</button>
             </div>
           </div>
         </div>
