@@ -316,10 +316,6 @@ body.cmo-modal-open #founders-top-strip { display: none; }
 /* ── Nav scroll-top button states ──────────────────────────────────────────── */
 
 /* Settings icon is always visually inactive */
-#nav-scroll-top-settings {
-  opacity: 0.32;
-}
-
 /* Button is fully disabled while showing settings icon (arrow is display:none) */
 #nav-scroll-top:has(#nav-scroll-top-arrow[style*="none"]) {
   pointer-events: none;

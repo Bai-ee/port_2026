@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Settings2 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 
 const Header = ({ logoRef, onOpenPage }) => {
@@ -59,7 +58,6 @@ const Header = ({ logoRef, onOpenPage }) => {
                 <polyline points="4,7 8,3 12,7" />
               </svg>
             </span>
-            <Settings2 id="nav-scroll-top-settings" size={16} strokeWidth={1.5} />
           </button>
 
           <div id="founders-top-actions">

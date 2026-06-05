@@ -13,7 +13,6 @@ import StackedSlidesSection from './StackedSlidesSection';
 // import FontSelector from './FontSelector';
 // import LoopControls from './LoopControls';
 import PortfolioModal from './PortfolioModal';
-import SceneSettingsPanel from './SceneSettingsPanel';
 import HomepageAnalytics from './components/HomepageAnalytics';
 
 const AppCanvas = dynamic(() => import('./ox.jsx'), { ssr: false });
@@ -118,7 +117,6 @@ const heroGradientStyle = {
 
 const HomePage = () => {
   const [params, setParams] = useState(HERO_PARAMS_START);
-  const [showSettings, setShowSettings] = useState(false);
 
   const [canvasBackground, setCanvasBackground] = useState('#ffffff');
   const [textColor, setTextColor] = useState('#000000');
@@ -305,42 +303,11 @@ const HomePage = () => {
     };
   }, []);
 
-  useEffect(() => {
-    const handler = () => setShowSettings((v) => !v);
-    window.addEventListener('openSceneSettings', handler);
-    return () => window.removeEventListener('openSceneSettings', handler);
-  }, []);
-
-  // Stable callbacks so SceneSettingsPanel never re-renders due to prop identity changes
-  const handleParamsChange = useCallback((next) => {
-    // Resolve against user's base settings so slider spreads never lock in mid-scroll values.
-    const resolved = typeof next === 'function' ? next(userParamsRef.current) : next;
-    userParamsRef.current = resolved;
-    // At rest (top): show full user settings so panel changes are visible immediately.
-    // During scroll: use the normalized scroll base so the canvas doesn't jump direction.
-    const p = heroProgressRef.current;
-    paramsRef.current = p > 0
-      ? interpolateHeroParams(getScrollBase(resolved), HERO_PARAMS_END, p)
-      : resolved;
-    setParams(resolved);
-  }, []);
-
-  const handleCloseSettings = useCallback(() => setShowSettings(false), []);
-
   return (
     <>
     <HomepageAnalytics />
     {/* Header outside overflow-clip container so backdrop-filter composites against the viewport correctly */}
     <Header logoRef={headerLogoRef} onOpenPage={setActivePageId} />
-    {showSettings && (
-      <SceneSettingsPanel
-        initialParams={userParamsRef.current}
-        liveParamsRef={paramsRef}
-        onParamsChange={handleParamsChange}
-        defaultParams={HERO_PARAMS_START}
-        onClose={handleCloseSettings}
-      />
-    )}
     <div style={{ position: 'relative', width: '100vw', minHeight: '100dvh', background: 'transparent', overflowX: 'clip' }}>
       <style>{`
         @keyframes heroGradientDrift {
