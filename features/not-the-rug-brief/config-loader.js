@@ -161,6 +161,32 @@ function deriveCompanyName(hostname, clientId) {
     .join(' ');
 }
 
+// Build dedicated searches for the watchlist (marketingBriefConfig.kols).
+// These ALWAYS run — even when custom searches exist — so the configured
+// accounts are actually queried by name (per-handle) or together (combined),
+// instead of being silently skipped. Each handle is its own search so its
+// results land in their own bucket and don't overwrite other queries.
+function buildKolSearches({ marketingBriefConfig, companyName }) {
+  const kols = Array.isArray(marketingBriefConfig?.kols)
+    ? marketingBriefConfig.kols.map((k) => String(k || '').trim()).filter(Boolean)
+    : [];
+  if (!kols.length) return [];
+  const brand = companyName || 'the brand';
+  const mode = marketingBriefConfig?.kolSearchMode === 'combined' ? 'combined' : 'per-handle';
+  if (mode === 'combined') {
+    return [{
+      label: 'WATCHLIST',
+      query: kols.join(' OR '),
+      goal: `Report recent activity from each watched account (${kols.join(', ')}). Note what each posted and flag anything worth a ${brand} narrative — even if not brand-specific.`,
+    }];
+  }
+  return kols.map((handle) => ({
+    label: `WATCHLIST ${handle}`,
+    query: handle,
+    goal: `Report ${handle}'s recent posts/activity. Attribute findings to ${handle} by name and flag anything worth a ${brand} narrative push, even if not brand-specific.`,
+  }));
+}
+
 function buildSearchPlan({ websiteUrl, ideaDescription, hostname, companyName, marketingBriefConfig = null, sourcePlatforms = DEFAULT_SOURCE_PLATFORMS }) {
   const configuredSearches = Array.isArray(marketingBriefConfig?.searches)
     ? marketingBriefConfig.searches
@@ -173,15 +199,23 @@ function buildSearchPlan({ websiteUrl, ideaDescription, hostname, companyName, m
     : [];
 
   const perPlatformRows = buildPerPlatformSearchRows({ companyName, ideaDescription, sourcePlatforms });
-  // De-dupe: don't append a platform row whose label collides with a
-  // user-saved row (case-insensitive match on label OR same query string).
+  const kolRows = buildKolSearches({ marketingBriefConfig, companyName });
+
+  // De-dupe: don't append a row whose label collides with an existing row
+  // (case-insensitive match on label OR same query string).
   const isDuplicate = (row, existing) => existing.some((e) =>
     e.label.toLowerCase() === row.label.toLowerCase() || e.query === row.query
   );
-  const novelPlatformRows = perPlatformRows.filter((row) => !isDuplicate(row, configuredSearches));
+  const appendNovel = (base, rows) => {
+    const out = [...base];
+    for (const row of rows) { if (!isDuplicate(row, out)) out.push(row); }
+    return out;
+  };
 
   if (configuredSearches.length > 0) {
-    return [...configuredSearches, ...novelPlatformRows];
+    // Watchlist searches run even alongside custom searches — they were
+    // previously skipped, which is why named handles never got queried.
+    return appendNovel(configuredSearches, [...kolRows, ...perPlatformRows]);
   }
 
   const brandQuery = [`"${companyName}"`, hostname ? `"${hostname}"` : null, hostname ? `site:${hostname}` : null]
@@ -197,7 +231,7 @@ function buildSearchPlan({ websiteUrl, ideaDescription, hostname, companyName, m
     ? `best ${ideaDescription.split(/\s+/).slice(0, 4).join(' ')}`
     : `${companyName} reviews OR ${hostname} competitors`;
 
-  return [
+  const defaultPlan = [
     {
       label: 'BRAND',
       query: brandQuery,
@@ -213,8 +247,9 @@ function buildSearchPlan({ websiteUrl, ideaDescription, hostname, companyName, m
       query: opportunityQuery,
       goal: 'Find live conversations and topics where the brand can contribute credibly.',
     },
-    ...novelPlatformRows,
   ];
+
+  return appendNovel(defaultPlan, [...kolRows, ...perPlatformRows]);
 }
 
 // ─── Core builder ─────────────────────────────────────────────────────────────

@@ -235,6 +235,7 @@ function buildDefaultMarketingBriefConfig(client, dashboardState) {
     ].join('\n'),
     freshnessDays: 1,
     sourcePlatforms: DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS,
+    kolSearchMode: 'per-handle',
     kols: '',
     competitors: '',
     agentDataTemplate: `{
@@ -9255,8 +9256,63 @@ const DashboardPage = () => {
                                     <span className="mb-config-label">Competitors</span>
                                     <textarea className="mb-config-textarea" placeholder="Competitor names, one per line" value={marketingBriefConfig.competitors || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), competitors: e.target.value }))} rows={4} />
                                   </label>
+                                  <label className="mb-config-field">
+                                    <span className="mb-config-label">KOL search mode</span>
+                                    <select className="mb-config-input" value={marketingBriefConfig.kolSearchMode || 'per-handle'} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), kolSearchMode: e.target.value }))}>
+                                      <option value="per-handle">Per handle — one search each (most accurate)</option>
+                                      <option value="combined">Combined — one search for all handles (cheaper)</option>
+                                    </select>
+                                    <span className="mb-config-hint">Watchlist handles are searched every run, separately from your other queries.</span>
+                                  </label>
                                 </div>
                               </section>
+
+                              {(() => {
+                                const SEARCH_RATE = 0.045;   // ~$/search (Scout web_search + trim), from run logs
+                                const SYNTH_FLAT = 0.08;     // ~$ fixed: brief synthesis + Scribe + Guardian
+                                const customSearches = (marketingBriefConfig.searches || []).filter((s) => String(s?.query || '').trim()).length;
+                                const handles = String(marketingBriefConfig.kols || '').split(/[\n,]+/).map((s) => s.trim()).filter(Boolean).length;
+                                const mode = marketingBriefConfig.kolSearchMode === 'combined' ? 'combined' : 'per-handle';
+                                const watchlistSearches = mode === 'combined' ? (handles ? 1 : 0) : handles;
+                                const platformSearches = (marketingBriefConfig.sourcePlatforms || []).filter((p) => p !== 'web').length;
+                                const totalSearches = customSearches + watchlistSearches + platformSearches;
+                                const usd = (n) => `$${n.toFixed(2)}`;
+                                const lineItems = [
+                                  { label: 'Custom search rows', count: customSearches, cost: customSearches * SEARCH_RATE },
+                                  { label: `Watchlist searches (${mode})`, count: watchlistSearches, cost: watchlistSearches * SEARCH_RATE },
+                                  { label: 'Platform searches (max, pre-dedupe)', count: platformSearches, cost: platformSearches * SEARCH_RATE },
+                                  { label: 'Synthesis (brief + scribe + guardian)', count: 1, cost: SYNTH_FLAT },
+                                ];
+                                const total = totalSearches * SEARCH_RATE + SYNTH_FLAT;
+                                return (
+                                  <section id="mb-config-cost-section" className="mb-config-section">
+                                    <div className="mb-config-section-head">
+                                      <span className="mb-config-section-index">$</span>
+                                      <div>
+                                        <h4>Run cost estimate</h4>
+                                        <p>Approximate cost per brief run for the current settings. Updates live as you edit searches, platforms, watchlist, and mode. Estimate only (~{usd(SEARCH_RATE)}/search).</p>
+                                      </div>
+                                      <span className="mb-config-section-status">{usd(total)} / run</span>
+                                    </div>
+                                    <table className="mb-config-cost-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                                      <tbody>
+                                        {lineItems.map((li) => (
+                                          <tr key={li.label}>
+                                            <td style={{ padding: '6px 0', color: 'var(--text-secondary)' }}>{li.label}</td>
+                                            <td style={{ padding: '6px 0', textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--text-display)' }}>{li.count}</td>
+                                            <td style={{ padding: '6px 0 6px 16px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--text-display)' }}>{usd(li.cost)}</td>
+                                          </tr>
+                                        ))}
+                                        <tr style={{ borderTop: '1px solid rgba(42,36,32,0.12)' }}>
+                                          <td style={{ padding: '8px 0', fontWeight: 700, color: 'var(--text-display)' }}>Total / run</td>
+                                          <td style={{ padding: '8px 0', textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>{totalSearches} searches</td>
+                                          <td style={{ padding: '8px 0 8px 16px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-display)' }}>{usd(total)}</td>
+                                        </tr>
+                                      </tbody>
+                                    </table>
+                                  </section>
+                                );
+                              })()}
 
                               <section className="mb-config-section">
                                 <div className="mb-config-section-head">

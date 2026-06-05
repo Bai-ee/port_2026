@@ -117,6 +117,7 @@ export async function POST(request) {
     freshnessDays: Math.max(1, Math.min(30, Number(body?.freshnessDays || 7))),
     sourcePlatforms: normalizeSourcePlatforms(body?.sourcePlatforms),
     searches,
+    kolSearchMode: body?.kolSearchMode === 'combined' ? 'combined' : 'per-handle',
     kols: String(body?.kols || '')
       .split(/[\n,]+/)
       .map((item) => item.trim())

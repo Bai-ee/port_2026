@@ -775,7 +775,7 @@ function buildStrategicBriefSection(intel, clientName) {
   if (!intel) return '';
   const hasContent =
     intel.opportunities?.length || intel.kols?.length || intel.competitors?.length ||
-    intel.narratives?.length || intel.humanBrief;
+    intel.narratives?.length || intel.humanBrief || intel.watchlist?.length;
   if (!hasContent) return '';
 
   const linkBit = (url) => (url ? ` <a href="${escapeHtml(url)}" style="color:${DT.accent};font-family:${DT.fMono};font-size:11px;">↗</a>` : '');
@@ -798,6 +798,20 @@ function buildStrategicBriefSection(intel, clientName) {
       </tr>`).join('')
     : '';
 
+  // Watchlist — every configured account, name-for-name, with its activity
+  // this run (or a "quiet" note). Surfaces named accounts even when not
+  // brand-specific, for narrative opportunities.
+  const watchlistHtml = (intel.watchlist || []).length
+    ? intel.watchlist.map((w) => `<tr>
+        <td style="${TD}width:150px;font-family:${DT.fMono};font-size:12px;font-weight:700;color:${DT.ink};vertical-align:top;">${escapeHtml(w.handle)}</td>
+        <td style="${TD}">${
+          w.found
+            ? w.activity.map((a) => `<div style="margin-bottom:4px;color:${DT.soft};font-size:12px;">${escapeHtml((a.text || '').slice(0, 240))}${linkBit(a.url)}</div>`).join('')
+            : `<span style="color:${DT.light};font-size:12px;">No activity surfaced this run.</span>`
+        }</td>
+      </tr>`).join('')
+    : '';
+
   const c = intel.content || {};
   const postBlocks = [
     c.x_post && { label: 'X post', text: c.x_post },
@@ -816,6 +830,7 @@ function buildStrategicBriefSection(intel, clientName) {
     ${intel.humanBrief ? `<div style="background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:18px 20px;margin-bottom:16px;font-family:${DT.fBody};font-size:14px;line-height:1.6;color:${DT.ink};">${escapeHtml(intel.humanBrief)}</div>` : ''}
     ${oppRows ? `<div style="margin-bottom:14px;">${dMini('Post opportunities')}${dDataTable([{ label: 'Conversation / angle' }], oppRows)}</div>` : ''}
     ${signalsHtml ? `<div style="margin-bottom:14px;">${dMini('Signals · KOLs / competitors / narratives')}${dDataTable([{ label: 'Type' }, { label: 'Finding' }], signalsHtml)}</div>` : ''}
+    ${watchlistHtml ? `<div style="margin-bottom:14px;">${dMini('Watchlist · accounts (name-for-name)')}${dDataTable([{ label: 'Account' }, { label: 'Activity this run' }], watchlistHtml)}</div>` : ''}
     ${postsHtml ? `<div>${dMini('Suggested posts')}${postsHtml}</div>` : ''}
   </div>`;
 }

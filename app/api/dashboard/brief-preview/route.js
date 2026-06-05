@@ -7,6 +7,7 @@ const { getDashboardBootstrap } = require('../../../../api/_lib/client-provision
 const { renderBriefHtml } = require('../../../../features/scout-intake/brief-renderer');
 const { BRIEF_CSS } = require('../../../../features/scout-intake/brief-css.cjs');
 const { validatePostUrl } = require('../../../../features/not-the-rug-brief/post-url-validator.cjs');
+const { buildWatchlist } = require('../../../../features/intelligence/_brief-intel.js');
 
 function makeReqShim(request) {
   return {
@@ -123,7 +124,7 @@ function hostnameOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return String(url); }
 }
 
-function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier }) {
+function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [] }) {
   const content = marketingBrief?.content || {};
   const agentData = marketingBrief?.scoutBrief?.agentData || {};
   const opportunities = agentData?.viralOpportunities?.opportunities || marketingBrief?.contentOpportunities || [];
@@ -249,6 +250,22 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   const threadOpener = content.x_thread_opener || content.thread_opener || '';
   const contentAngle = content.content_angle || content.angle || '';
 
+  // Watchlist — every configured account, name-for-name, with this run's activity.
+  const watchlist = buildWatchlist(watchlistKols, agentData);
+  const watchlistSection = watchlist.length ? `
+  <section class="page">
+    <div class="sec-num">W</div>
+    <div class="eyebrow"><span class="dot"></span><span>MB · Watchlist</span><span>Name for name</span></div>
+    <h2 class="headline">Watch<br/>list.</h2>
+    <div class="card">
+      ${watchlist.map((w) => `<div class="stat-row"><div class="k">${esc(w.handle)}</div><div class="v">${
+        w.found
+          ? w.activity.map((a) => linkify(a.text || '')).join('<br/>')
+          : '<span style="opacity:.55">No activity surfaced this run.</span>'
+      }</div></div>`).join('')}
+    </div>
+  </section>` : '';
+
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -297,7 +314,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
       ${renderRows(signalRows, 'No structured signals stored for this run.')}
     </div>
   </section>
-
+${watchlistSection}
   <section class="page">
     <div class="sec-num">03</div>
     <div class="eyebrow"><span class="dot"></span><span>MB · Viral Windows</span><span>Where To Enter</span></div>
@@ -355,6 +372,14 @@ export async function GET(request) {
   if (!clientId) return errorPage(404, 'No client record for user.');
   if (!dash) return errorPage(404, 'No dashboard_state for client — run the pipeline first.');
 
+  // Configured watchlist handles (for the name-for-name Watchlist section).
+  let watchlistKols = [];
+  try {
+    const cfgSnap = await fb.adminDb.collection('client_configs').doc(clientId).get();
+    const cfgKols = cfgSnap.data()?.marketingBriefConfig?.kols;
+    watchlistKols = Array.isArray(cfgKols) ? cfgKols : [];
+  } catch { /* no config — empty watchlist */ }
+
   // Optional run-level detail (warnings, cost) from the latest brief_run.
   let runCostData = null;
   let runWarnings = 0;
@@ -386,6 +411,7 @@ export async function GET(request) {
   if (preferMarketingBrief) {
     return htmlResponse(renderMarketingBriefHtml({
       marketingBrief,
+      watchlistKols,
       clientName: bootstrap?.client?.companyName || dash.clientName || clientId,
       websiteUrl: bootstrap?.client?.websiteUrl || null,
       generatedAt: marketingBrief.generatedAtIso || null,
@@ -399,6 +425,7 @@ export async function GET(request) {
   if ((!scribe || !scribe.brief) && marketingBrief) {
     return htmlResponse(renderMarketingBriefHtml({
       marketingBrief,
+      watchlistKols,
       clientName: bootstrap?.client?.companyName || dash.clientName || clientId,
       websiteUrl: bootstrap?.client?.websiteUrl || null,
       generatedAt: marketingBrief.generatedAtIso || null,
