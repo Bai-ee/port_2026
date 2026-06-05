@@ -1,6 +1,7 @@
 'use client';
 import React, { useLayoutEffect, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import ReelPlayer from './ReelPlayer';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { createSharedParticleGalleryRenderer } from './sharedParticleGalleryRenderer';
@@ -128,7 +129,7 @@ const slides = [
     bg: '#f5f1df',
     fg: '#2a2420',
     layout: 'grid',
-    headlineText: 'Digital Media Consultant',
+    headlineText: 'Your Human in the Loop',
     supportText: 'Meet with Bryan',
     gridItems: Array(17).fill(null).map((_, i) => ({ id: i })),
     serviceItems: [
@@ -189,28 +190,10 @@ const PORTFOLIO_IMAGES = [
 ];
 
 const CMO_TABLE_ROWS = [
-  { task: 'Cross-Device Mockups',    value: 'Full Page Screenshots' },
-  { task: 'Social Preview Check',    value: 'OG Meta Data Review' },
-  { task: 'Brand Snapshot',          value: 'Core Design Tokens' },
-  { task: 'SEO + AI Visibility',     value: 'Searchability Score' },
-  { task: 'Client Brief',          value: 'Downloadable summary' },
-  { task: 'Brand tone',              value: "How you're being perceived" },
-  { task: 'Competitor info',         value: 'How you compare' },
-  { task: 'Signals',                 value: 'Geo, events & social' },
-  { task: 'Marketing',               value: 'Signal based strategies' },
-  { task: 'Agentic automation',      value: 'Advanced systems' },
+  { task: 'Dashboard',               value: 'Onboarding' },
 ];
 
 const AUTOMATION_CAPABILITIES = [
-  {
-    badge: 'YB',
-    badgeColor: '#0ea5e9',
-    icon: 'chart',
-    tablePreview: true,
-    previewVideo: '/vid/dashboard.mov',
-    title: "Onboard now, save time later.",
-    body: 'Onboard now to access custom tools and dashboard.',
-  },
   {
     badge: 'BI',
     badgeColor: '#8b5cf6',
@@ -372,6 +355,15 @@ const AUTOMATION_CAPABILITIES = [
   //   title: 'Knowledge-File Client Configuration',
   //   body: 'The entire system adapts to a new client by swapping four JSON files: brand voice rules, intelligence config, business facts, and a restricted-terms glossary. No code changes required to onboard a new brand or vertical.',
   // },
+  {
+    badge: 'YB',
+    badgeColor: '#0ea5e9',
+    icon: 'chart',
+    tablePreview: true,
+    previewVideo: '/vid/dashboard.mov',
+    title: "Onboard now, save time later.",
+    body: 'Onboard now to save time later.',
+  },
 ];
 
 const AUTOMATION_ICON_COMPONENTS = {
@@ -452,6 +444,7 @@ const StackedSlidesSection = () => {
   const peekCard2Ref = useRef(null);
   const peekCard3Ref = useRef(null);
   const peekCard4Ref = useRef(null);
+
   const [pokerHovered, setPokerHovered] = useState(false);
   const [activeFilter, setActiveFilter] = useState(null);
   const [filterCopy, setFilterCopy] = useState(FILTER_COPY.default);
@@ -830,7 +823,7 @@ const StackedSlidesSection = () => {
             <p style="margin:0 0 0.7rem;font-size:0.6rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:rgba(42,36,32,0.4);font-family:'Space Mono',monospace;">Your Business, Mapped</p>
             <table style="width:100%;border-collapse:collapse;font-size:0.78rem;flex:1;">
               <thead><tr style="border-bottom:1.5px solid rgba(42,36,32,0.15);">
-                <th style="text-align:left;padding:0.3rem 0.4rem;font-weight:600;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;">Modules</th>
+                <th style="text-align:left;padding:0.3rem 0.4rem;font-weight:600;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;">Access</th>
                 <th style="width:1.2rem;"></th>
               </tr></thead>
               <tbody>
@@ -1123,6 +1116,10 @@ const StackedSlidesSection = () => {
       if (pinned) return;
       origParent = cta.parentNode;
       origNext   = cta.nextSibling;
+      const arrowEl    = document.getElementById('nav-scroll-top-arrow');
+      const settingsEl = document.getElementById('nav-scroll-top-settings');
+      if (arrowEl)    arrowEl.style.display    = '';
+      if (settingsEl) settingsEl.style.display = 'none';
 
       // Spacer holds the layout so sentinel position stays stable on refresh
       spacer = document.createElement('div');
@@ -1139,15 +1136,13 @@ const StackedSlidesSection = () => {
         zIndex: '240',
         margin: '0',
         ...(isMobile
-          ? { left: 'max(2.5vw, 10px)', right: 'max(2.5vw, 10px)', justifyContent: 'center' }
+          ? { left: '50%', right: 'auto', transform: 'translateX(-50%)', justifyContent: 'center' }
           : { right: `${Math.max(0, window.innerWidth - wr.right)}px`, left: 'auto' }),
       });
-      // Mobile: setProperty locks the captured px width against width:100%!important media rule
       // Desktop: inject a <style> tag instead — React re-renders reset inline style.width='auto'
       //          and strip the !important flag, but a stylesheet !important survives that.
-      if (isMobile) {
-        cta.style.setProperty('width', `${r.width}px`, 'important');
-      } else {
+      // Mobile: width is CSS-driven (max-content) — no px lock needed; doUnpin clears nothing extra.
+      if (!isMobile) {
         widthStyle = document.createElement('style');
         widthStyle.textContent = `#panel-hero-cta { width: ${r.width}px !important; box-sizing: border-box !important; }`;
         document.head.appendChild(widthStyle);
@@ -1156,12 +1151,19 @@ const StackedSlidesSection = () => {
       pinned = true;
     };
 
+    const hideScrollBtn = () => {
+      const arrowEl    = document.getElementById('nav-scroll-top-arrow');
+      const settingsEl = document.getElementById('nav-scroll-top-settings');
+      if (arrowEl)    arrowEl.style.display    = 'none';
+      if (settingsEl) settingsEl.style.display = '';
+    };
+
     const doUnpin = () => {
       if (!pinned || !origParent) return;
       widthStyle?.parentNode?.removeChild(widthStyle);
       widthStyle = null;
       cta.style.removeProperty('width');
-      ['position','top','zIndex','margin','left','right','justifyContent']
+      ['position','top','zIndex','margin','left','right','transform','justifyContent']
         .forEach(p => { cta.style[p] = ''; });
       origParent.insertBefore(cta, spacer);
       spacer?.parentNode?.removeChild(spacer);
@@ -1177,15 +1179,27 @@ const StackedSlidesSection = () => {
       end: () => ScrollTrigger.maxScroll(window),
       invalidateOnRefresh: true,
       onEnter:     doPin,
-      onLeaveBack: doUnpin,
+      onLeaveBack: () => { doUnpin(); hideScrollBtn(); },
     });
+
+    const firstSection = document.getElementById('panel-grid-layout');
+    const stFooter = firstSection ? ScrollTrigger.create({
+      trigger: firstSection,
+      start: 'bottom bottom',
+      invalidateOnRefresh: true,
+      onLeave:     doUnpin,
+      onEnterBack: doPin,
+    }) : null;
 
     return () => {
       st.kill();
+      stFooter?.kill();
       doUnpin();
+      hideScrollBtn();
       sentinel.parentNode?.removeChild(sentinel);
     };
   }, []);
+
 
   return (
     <section style={sectionStyle}>
@@ -1199,13 +1213,13 @@ const StackedSlidesSection = () => {
           font-family: 'Doto', monospace;
         }
         /* Hide scroll-animated elements before GSAP ScrollTrigger initializes to prevent FOUC */
-        [data-capability-header],
-        [data-grid-window],
-        #stacked-inline-footer,
-        #inline-footer-value-block,
-        #agency-marquee-shell,
-        #inline-footer-seo-nav,
-        #inline-footer-bottom {
+        #stacked-slides-wrapper [data-capability-header],
+        #stacked-slides-wrapper [data-grid-window],
+        #stacked-slides-wrapper #stacked-inline-footer,
+        #stacked-slides-wrapper #inline-footer-value-block,
+        #stacked-slides-wrapper #agency-marquee-shell,
+        #stacked-slides-wrapper #inline-footer-seo-nav,
+        #stacked-slides-wrapper #inline-footer-bottom {
           opacity: 0;
           visibility: hidden;
         }
@@ -1214,20 +1228,21 @@ const StackedSlidesSection = () => {
            visible on mobile or they stay hidden forever. Also unhide when the
            user prefers reduced motion. */
         @media (max-width: 767px), (prefers-reduced-motion: reduce) {
-          [data-capability-header],
-          [data-grid-window],
-          #stacked-inline-footer,
-          #inline-footer-value-block,
-          #agency-marquee-shell,
-          #inline-footer-seo-nav,
-          #inline-footer-bottom {
+          #stacked-slides-wrapper [data-capability-header],
+          #stacked-slides-wrapper [data-grid-window],
+          #stacked-slides-wrapper #stacked-inline-footer,
+          #stacked-slides-wrapper #inline-footer-value-block,
+          #stacked-slides-wrapper #agency-marquee-shell,
+          #stacked-slides-wrapper #inline-footer-seo-nav,
+          #stacked-slides-wrapper #inline-footer-bottom {
             opacity: 1 !important;
             visibility: visible !important;
             transform: none !important;
           }
         }
         @media (max-width: 767px) {
-          #panel-grid-layout {
+          #panel-grid-layout,
+          #panel-capabilities-layout {
             padding-left: max(2.5vw, 10px) !important;
             padding-right: max(2.5vw, 10px) !important;
           }
@@ -1290,21 +1305,10 @@ const StackedSlidesSection = () => {
             display: none !important;
           }
           #panel-hero-cta {
-            width: 100% !important;
-            justify-content: center !important;
-            box-sizing: border-box !important;
-          }
-          #hero-panel-filter-pills {
-            gap: 0.4rem !important;
-            padding-top: 0.45rem !important;
-            padding-bottom: 0.5rem !important;
-            justify-content: center;
-          }
-          #hero-panel-filter-pills .filter-chip {
-            padding: 0.25rem 0.55rem !important;
-            font-size: 0.58rem !important;
-            border-radius: 999px !important;
-            letter-spacing: 0.02em !important;
+            width: max-content !important;
+            max-width: calc(100vw - 2rem) !important;
+            align-self: center !important;
+            padding: 0.5rem 3.75rem !important;
           }
           /* ── Onboarding card / table overflow fix ── */
           #dashboard-stack-shell {
@@ -1590,6 +1594,21 @@ const StackedSlidesSection = () => {
           transition: color 160ms ease;
         }
         #cmo-no-site-link:hover { color: rgba(42,36,32,0.75); }
+        #cmo-url-input-row button:disabled::before,
+        #cmo-url-input-row .cta-pill-inactive::before { display: none; }
+        #inline-footer-seo-nav a,
+        #inline-footer-bottom a {
+          pointer-events: none;
+          opacity: 0.4;
+          cursor: default;
+          text-decoration: none;
+        }
+        #inline-footer-bottom a[href*="linkedin"],
+        #inline-footer-bottom a[href*="x.com"] {
+          pointer-events: auto;
+          opacity: 1;
+          cursor: pointer;
+        }
         @media (max-width: 767px), (prefers-reduced-motion: reduce) {
           #cmo-modal-overlay, #cmo-auth-card { animation: none; }
         }
@@ -1611,8 +1630,8 @@ const StackedSlidesSection = () => {
             <div style={contentStyle}>
               <div data-stack-inner style={innerStyle}>
                 {slide.layout === 'grid' ? (
-                  <div id="panel-grid-layout" style={gridLayoutStyle}>
-                    <div id="panel-hero-intro-centering" style={textCenteringStyle}>
+                  <div id="panel-grid-layout" style={{ ...gridLayoutStyle, paddingBottom: 'clamp(5.75rem, 1.5vw, 1.4rem)' }}>
+                    <div id="panel-hero-intro-centering" style={{ ...textCenteringStyle, marginTop: 'clamp(1.5rem, 3vw, 3rem)', marginBottom: 'clamp(1.5rem, 3vw, 3rem)' }}>
                       <div id="panel-hero-text-row" style={textRowStyle}>
                         <div id="panel-hero-headline-col" style={textColumnStyle}>
                           <h2 id="panel-hero-headline" style={{ ...headingStyle, fontSize: 'clamp(1.4rem, 3.5vw, 2.45rem)', fontWeight: 300, textAlign: 'left', margin: 0, whiteSpace: 'nowrap', visibility: 'hidden' }}>{slide.headlineText}</h2>
@@ -1624,29 +1643,13 @@ const StackedSlidesSection = () => {
                             target="_blank"
                             rel="noopener noreferrer"
                             className="cta-pill-btn"
-                            style={{ ...heroCtaStyle, padding: '0.55rem 0.75rem', cursor: 'pointer', border: 'none', textDecoration: 'none' }}
+                            style={{ ...heroCtaStyle, cursor: 'pointer', border: 'none', textDecoration: 'none' }}
                           >
                             <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
                             Meet with Bryan
                             <span style={ctaIconStyle}>↗</span>
                           </a>
                         </div>
-                      </div>
-                      <div id="hero-panel-filter-pills" style={filterDropdownStyle}>
-                        {FILTERS.map((f) => (
-                          <button
-                            key={f}
-                            type="button"
-                            className="filter-chip"
-                            style={{ ...filterChipStyle, ...(activeFilter === f ? filterChipActiveStyle : {}), visibility: 'hidden' }}
-                            onClick={() => {
-                              setActiveFilter(f);
-                              setFilterCopy(FILTER_COPY[f] ?? FILTER_COPY.default);
-                            }}
-                          >
-                            {f}
-                          </button>
-                        ))}
                       </div>
                     </div>
                     <section data-capability-grid style={capabilitySectionStyle}>
@@ -1661,152 +1664,6 @@ const StackedSlidesSection = () => {
                               </div>
                             ))}
                           </div>
-                        </div>
-                      </div>
-                      <div id="capability-cards-grid" style={capabilityGridStyle}>
-                        {AUTOMATION_CAPABILITIES.map((item, index) => {
-                          const Icon = AUTOMATION_ICON_COMPONENTS[item.icon];
-                          const isMobileCapabilityOpen = isTouchScrollDevice() && activeMobileCapability === item.title;
-                          return (
-                            <React.Fragment key={item.title}>
-                            {item.tablePreview ? (
-                              <div
-                                id="dashboard-stack-shell"
-                                style={{ position: 'relative', gridColumn: '1 / -1', paddingTop: '70px', zIndex: isMobileCapabilityOpen ? 6 : 1 }}
-                              >
-                                {/* ── Peek cards: top: 0 in wrapper, article sits below with z-index 10 ── */}
-                                {[
-                                  { ref: peekCard1Ref, id: 'dash-peek-card-1', left: '0%',  rotate: '-3.2deg', objPos: '0% 12%',  label: 'Brand Overview', img: '/img/port/dash_ss2.webp', height: '200px' },
-                                  { ref: peekCard2Ref, id: 'dash-peek-card-2', left: '33%', rotate: '1.2deg',  objPos: '33% 8%',  label: 'SEO Visibility', img: '/img/port/dash_ss2.webp', height: '168px' },
-                                  { ref: peekCard3Ref, id: 'dash-peek-card-3', left: '66%', rotate: '-1.4deg', objPos: '66% 12%', label: 'Automations',    img: '/img/port/dash_ss2.webp', height: '190px' },
-                                ].map(({ ref: cardRef, id, left, rotate, objPos, label, img, height }, i) => (
-                                  <div
-                                    key={id}
-                                    ref={cardRef}
-                                    data-peek-card
-                                    className="dash-peek-card"
-                                    id={id}
-                                    onMouseEnter={() => gsap.to(cardRef.current, { y: -46, duration: 0.38, ease: 'power2.out' })}
-                                    onMouseLeave={() => gsap.to(cardRef.current, { y: 0,   duration: 0.48, ease: 'power2.inOut' })}
-                                    style={{
-                                      position: 'absolute',
-                                      top: '0',
-                                      left,
-                                      width: 'clamp(180px, 33%, 400px)',
-                                      height,
-                                      zIndex: i + 1,
-                                      borderRadius: '10px',
-                                      border: '1px solid rgba(212,196,171,0.9)',
-                                      background: '#fcfaf4',
-                                      overflow: 'hidden',
-                                      cursor: 'pointer',
-                                      willChange: 'transform',
-                                      boxSizing: 'border-box',
-                                      transform: `rotate(${rotate})`,
-                                      boxShadow: '0 6px 20px rgba(0,0,0,0.09), 0 1px 0 rgba(255,255,255,0.85)',
-                                    }}
-                                  >
-                                    <div style={{ padding: '7px 10px 5px', borderBottom: '1px solid rgba(42,36,32,0.09)', background: 'rgba(245,241,223,0.8)', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                      <span style={{ fontFamily: "'Space Mono', monospace", fontSize: '7.5px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.45)', lineHeight: 1 }}>{label}</span>
-                                    </div>
-                                    <img src={img} alt="" style={{ width: '100%', height: 'calc(100% - 26px)', objectFit: 'cover', objectPosition: objPos, display: 'block', pointerEvents: 'none', userSelect: 'none' }} />
-                                  </div>
-                                ))}
-                                {/* ── Main table card — z-index 10 covers bottom of peek cards ── */}
-                                <article
-                                  data-capability-card
-                                  id="cmo-dashboard-card"
-                                  style={{ ...capabilityCardTablePreviewStyle, position: 'relative', zIndex: 10 }}
-                                  onClick={() => {
-                                    if (!isTouchScrollDevice()) return;
-                                    setActiveMobileCapability((current) => (current === item.title ? null : item.title));
-                                  }}
-                                >
-                                  <div data-hover-placeholder aria-hidden="true" style={{ display: 'none' }} />
-                                  {isMobileCapabilityOpen ? (
-                                    <div style={mobileCapabilityPreviewStyle} aria-hidden="true">
-                                      <div style={{ width: '100%', height: '100%', background: '#f5f1df', borderRadius: '0.75rem', padding: '1rem', boxSizing: 'border-box', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-                                        <p style={{ margin: '0 0 0.6rem', fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.4)', fontFamily: "'Space Mono', monospace" }}>Your Business, Mapped</p>
-                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem', fontFamily: "'Space Grotesk', system-ui, sans-serif", flex: 1 }}>
-                                          <thead><tr style={{ borderBottom: '1px solid rgba(42,36,32,0.15)' }}><th style={{ textAlign: 'left', padding: '0.28rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.45)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Modules</th><th style={{ width: '1.2rem' }} /></tr></thead>
-                                          <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.38rem 0.4rem', color: '#2a2420', fontWeight: 500 }}>{row.task}</td><td style={{ padding: '0.38rem 0.2rem', textAlign: 'center' }}>{row.task === 'Cross-Device Mockups' || row.task === 'Social Preview Check' || row.task === 'Brand Snapshot' || row.task === 'SEO + AI Visibility' || row.task === 'Client Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : <span className="cmo-arrow"><Lock size={12} /></span>}</td></tr>))}</tbody>
-                                        </table>
-                                      </div>
-                                    </div>
-                                  ) : null}
-                                  <div style={capabilityContentStyle}>
-                                    <h2 style={{ ...capabilityCardTitleStyle, fontSize: 'clamp(2rem, 5vw, 12.4rem)', lineHeight: 0.9, marginBottom: '0.5rem', paddingTop: '20px', textAlign: 'center' }}>Lets Connect.</h2>
-                                    {item.body && <p style={{ ...capabilityCardBodyStyle, maxWidth: 'none', textAlign: 'center' }}>{item.body}</p>}
-                                    <div id="cmo-url-input-row" className="cmo-url-input-desktop" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.85rem', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
-                                      <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
-                                      <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
-                                      <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: 'none', flexShrink: 0, background: 'rgba(255,255,255,0.72)', color: '#2a2420', boxShadow: 'none', opacity: 0.65, cursor: 'default', padding: '0.75rem 0.75rem' }}>Onboard in 30 Seconds<span style={ctaIconStyle}>↗</span></button>
-                                    </div>
-                                    <div className="cmo-table-inner" style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
-                                      <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
-                                        <colgroup><col style={{ width: 'calc(50% - 0.75rem)' }} /><col style={{ width: '1.5rem' }} /><col style={{ width: 'calc(50% - 0.75rem)' }} /></colgroup>
-                                        <thead><tr><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Modules</th><th /><th style={{ textAlign: 'right', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Automations</th></tr></thead>
-                                        <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.task}</td><td style={{ padding: '0.32rem 0.2rem', textAlign: 'center', verticalAlign: 'middle' }}>{row.task === 'Cross-Device Mockups' || row.task === 'Social Preview Check' || row.task === 'Brand Snapshot' || row.task === 'SEO + AI Visibility' || row.task === 'Client Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : <span className="cmo-arrow"><Lock size={12} /></span>}</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.value}</td></tr>))}</tbody>
-                                      </table>
-                                    </div>
-                                  </div>
-                                  <div id="cmo-dashboard-table" className="cmo-table-outer" style={{ gridColumn: '1 / -1', marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
-                                    <div className="cmo-url-input-mobile" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
-                                      <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
-                                      <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
-                                      <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: 'none', flexShrink: 0, background: 'rgba(255,255,255,0.72)', color: '#2a2420', boxShadow: 'none', opacity: 0.65, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="cmo-table-submit-label">Onboard in 30 Seconds</span><span className="cmo-table-submit-arrow" style={ctaIconStyle}>↗</span></button>
-                                    </div>
-                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
-                                      <thead><tr><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Modules</th><th style={{ width: '1.5rem' }} /><th style={{ textAlign: 'right', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Automations</th></tr></thead>
-                                      <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500 }}>{row.task}</td><td style={{ padding: '0.32rem 0.2rem', textAlign: 'center' }}>{row.task === 'Cross-Device Mockups' || row.task === 'Social Preview Check' || row.task === 'Brand Snapshot' || row.task === 'SEO + AI Visibility' || row.task === 'Client Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : <span className="cmo-arrow"><Lock size={12} /></span>}</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
-                                    </table>
-                                    <a id="cmo-no-website-hint" href="/login?flow=homepage-create" style={cmoNoWebsiteLinkStyle}>Don't Have a Website?</a>
-                                  </div>
-                                </article>
-                              </div>
-                            ) : (
-                              <article
-                                data-capability-card
-                                style={{ ...capabilityCardStyle, zIndex: isMobileCapabilityOpen ? 6 : 1 }}
-                                onClick={() => {
-                                  if (!isTouchScrollDevice()) return;
-                                  setActiveMobileCapability((current) => (current === item.title ? null : item.title));
-                                }}
-                              >
-                                {isMobileCapabilityOpen ? (
-                                  <div style={mobileCapabilityPreviewStyle} aria-hidden="true">
-                                    {item.previewVideo ? (
-                                      <video src={item.previewVideo} autoPlay muted loop playsInline style={mobileCapabilityPreviewImageStyle} />
-                                    ) : (
-                                      <img src={item.previewImage} alt="" style={mobileCapabilityPreviewImageStyle} />
-                                    )}
-                                  </div>
-                                ) : null}
-                                <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 'clamp(0.8rem, 1.5vw, 1rem)' }}>
-                                  <div style={capabilityContentStyle}>
-                                    <h4 style={capabilityCardTitleStyle}>{item.title}</h4>
-                                    {item.body && <p style={capabilityCardBodyStyle}>{item.body}</p>}
-                                  </div>
-                                  <div style={{ ...capabilityBadgeStyle, color: item.badgeColor, flexShrink: 0 }}>
-                                    {Icon ? <Icon size={20} strokeWidth={2.1} /> : item.badge}
-                                  </div>
-                                </div>
-                              </article>
-                            )}
-                            {item.tablePreview && null}
-                            </React.Fragment>
-                          );
-                        })}
-                      </div>
-                      <div id="agent-marquee-shell" ref={agentMarqueeShellRef} style={{ width: '100%', overflow: 'hidden', margin: 'clamp(24px, 5vw, 75px) 0', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
-                        <div ref={agentMarqueeTrackRef} style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', backfaceVisibility: 'hidden', transform: 'translate3d(0, 0, 0)' }}>
-                          {[0, 1].map((i) => (
-                            <div key={i} ref={i === 0 ? agentMarqueeSetRef : undefined} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
-                              {['WORK', '•', 'WORK', '•'].map((w, j) => (
-                                <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
-                              ))}
-                            </div>
-                          ))}
                         </div>
                       </div>
                       <div id="testimonials-section" style={{ ...testimonialsShellStyle, marginTop: 0, paddingTop: 0, borderTop: 'none' }}>
@@ -1840,127 +1697,303 @@ const StackedSlidesSection = () => {
                           ))}
                         </div>
                       </div>
-                    </section>
-                    <div data-grid-window style={gridWindowStyle}>
-                      <div data-grid-inner style={gridInnerContainerStyle}>
-                        {/* <div id="stacked-grid-row" style={gridRowStyle}>
-                          {PORTFOLIO_IMAGES.map((src, index) => (
-                            <div
-                              key={src}
-                              style={{ ...gridItemStyle, overflow: 'hidden', backgroundColor: 'rgba(42, 36, 32, 0.08)', border: '1px solid rgba(42, 36, 32, 0.2)', borderRadius: '0.5rem' }}
-                            >
-                              <img
-                                src={src}
-                                alt={`Project frame ${index + 1}`}
-                                style={index === 0 ? gridFeatureImageStyle : gridFrameImageStyle}
-                              />
+                      <div id="iship-marquee-shell" style={{ width: '100%', overflow: 'hidden', margin: 'calc(clamp(24px, 5vw, 75px) + clamp(1rem, 2vw, 1.5rem)) 0', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', animation: 'agentMarquee 28s linear infinite' }}>
+                          {[0, 1].map((i) => (
+                            <div key={i} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
+                              {['I SHIP', '•', 'I SHIP', '•'].map((w, j) => (
+                                <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
+                              ))}
                             </div>
                           ))}
-                        </div> */}
-                        {/* Inline footer */}
-                        <div id="stacked-inline-footer" style={inlineFooterStyle}>
-                          <div id="inline-footer-value-block" style={inlineFooterNewsletterStyle}>
-                            <div id="footer-marquee-shell" style={{ width: '100%', overflow: 'hidden', marginBottom: 'clamp(24px, 5vw, 75px)', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', animation: 'agentMarquee 28s linear infinite' }}>
-                                {[0, 1].map((i) => (
-                                  <div key={i} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
-                                    {['CONTACT', '•', 'CONTACT', '•'].map((w, j) => (
-                                      <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
-                                    ))}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                            <img src="/img/sig.png" alt="Bryan Balli signature" style={inlineFooterSignatureStyle} />
-
-                            <blockquote style={{ margin: 'clamp(1rem, 2vw, 1.5rem) 0', padding: 'clamp(1rem, 2vw, 1.5rem) clamp(1.25rem, 3vw, 2rem)', borderLeft: '3px solid rgba(42, 36, 32, 0.15)', fontSize: 'clamp(1.35rem, 1.85vw, 1.65rem)', lineHeight: 1.55, color: 'rgba(42, 36, 32, 0.72)', fontStyle: 'italic', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
-                              "Get all the high-impact deliverables needed to launch digital products and integrate automation into daily operations."
-                            </blockquote>
-                            <p style={{ ...supportTextStyle, marginTop: 'clamp(0.75rem, 1.5vw, 1.25rem)', textAlign: 'left' }}>
-                              <strong>Bryan Balli</strong> leads a team across design and engineering as a Creative Technologist, with experience spanning agencies in Chicago, San Francisco, and remote international teams. I'm ready to step into your process, see what's working, fix what's not, and build what's missing across design, content, and systems.
-                            </p>
-                            <div id="agency-marquee-shell" ref={marqueeShellRef} style={agencyMarqueeShellStyle}>
-                              <div ref={marqueeTrackRef} style={agencyMarqueeTrackStyle}>
-                                <div ref={marqueeSetRef} style={agencyMarqueeSetStyle}>
-                                  {agencyLogos.map((logo) => (
-                                    <img key={`agency-a-${logo.alt}`} src={logo.src} alt={logo.alt} style={logo.scale ? { ...agencyLogoStyle, height: `${22 * logo.scale}px` } : agencyLogoStyle} />
-                                  ))}
-                                </div>
-                                <div aria-hidden="true" style={agencyMarqueeSetStyle}>
-                                  {agencyLogos.map((logo) => (
-                                    <img key={`agency-b-${logo.alt}`} src={logo.src} alt="" style={logo.scale ? { ...agencyLogoStyle, height: `${22 * logo.scale}px` } : agencyLogoStyle} />
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                          <div id="inline-footer-seo-nav" style={inlineFooterSeoNavStyle}>
-                            <div style={inlineFooterNavColStyle}>
-                              <span style={inlineFooterNavHeadingStyle}>Work</span>
-                              <a href="/work" style={inlineFooterNavLinkStyle}>Featured Projects</a>
-                              <a href="/case-studies" style={inlineFooterNavLinkStyle}>Case Studies</a>
-                              <a href="/process" style={inlineFooterNavLinkStyle}>Process</a>
-                            </div>
-                            <div style={inlineFooterNavColStyle}>
-                              <span style={inlineFooterNavHeadingStyle}>Services</span>
-                              <a href="/services/ai-design-consulting" style={inlineFooterNavLinkStyle}>AI Design Consulting</a>
-                              <a href="/services/web-development" style={inlineFooterNavLinkStyle}>Web Development</a>
-                              <a href="/services/brand-identity" style={inlineFooterNavLinkStyle}>Brand Identity</a>
-                              <a href="/services/design-systems" style={inlineFooterNavLinkStyle}>Design Systems</a>
-                              <a href="/services/seo-geo" style={inlineFooterNavLinkStyle}>SEO &amp; GEO</a>
-                            </div>
-                            <div style={inlineFooterNavColStyle}>
-                              <span style={inlineFooterNavHeadingStyle}>FAQ</span>
-                              <a href="/faq#what-is-a-creative-technologist" style={inlineFooterNavLinkStyle}>What Is a Creative Technologist?</a>
-                              <a href="/faq#ai-design-engineer" style={inlineFooterNavLinkStyle}>What Is an AI Design Engineer?</a>
-                              <a href="/faq#how-i-work" style={inlineFooterNavLinkStyle}>How I Work</a>
-                              <a href="/faq#pricing" style={inlineFooterNavLinkStyle}>Pricing &amp; Engagements</a>
-                              <a href="/faq#turnaround" style={inlineFooterNavLinkStyle}>Turnaround &amp; Availability</a>
-                            </div>
-                            <div style={inlineFooterNavColStyle}>
-                              <span style={inlineFooterNavHeadingStyle}>Company</span>
-                              <a href="/about" style={inlineFooterNavLinkStyle}>About</a>
-                              <a href="/how-it-works" style={inlineFooterNavLinkStyle}>How It Works</a>
-                              <a href="/contact" style={inlineFooterNavLinkStyle}>Contact</a>
-                              <a href="https://calendly.com/bballi/30min" target="_blank" rel="noopener noreferrer" style={inlineFooterNavLinkStyle}>Book a Call</a>
-                            </div>
-                          </div>
-
-                          <div id="inline-footer-bottom" style={inlineFooterBottomStyle}>
-                            <span style={inlineFooterCopyrightStyle}>© 2026 Bryan Balli · All rights reserved</span>
-                            <div style={inlineFooterLegalStyle}>
-                              <a href="https://www.linkedin.com/in/bryanballi" style={inlineFooterLegalLinkStyle}>LinkedIn</a>
-                              <a href="https://x.com/bai_ee" style={inlineFooterLegalLinkStyle}>𝕏</a>
-                              <a href="#" style={inlineFooterLegalLinkStyle}>Privacy</a>
-                              <a href="#" style={inlineFooterLegalLinkStyle}>Terms</a>
-                            </div>
-                          </div>
                         </div>
-
                       </div>
-                    </div>
+                      <div id="capability-cards-grid" style={capabilityGridStyle}>
+                        {AUTOMATION_CAPABILITIES.filter((item) => !item.tablePreview).map((item) => {
+                          const Icon = AUTOMATION_ICON_COMPONENTS[item.icon];
+                          const isMobileCapabilityOpen = isTouchScrollDevice() && activeMobileCapability === item.title;
+                          return (
+                            <article
+                              key={item.title}
+                              data-capability-card
+                              style={{ ...capabilityCardStyle, zIndex: isMobileCapabilityOpen ? 6 : 1 }}
+                              onClick={() => {
+                                if (!isTouchScrollDevice()) return;
+                                setActiveMobileCapability((current) => (current === item.title ? null : item.title));
+                              }}
+                            >
+                              {isMobileCapabilityOpen ? (
+                                <div style={mobileCapabilityPreviewStyle} aria-hidden="true">
+                                  {item.previewVideo ? (
+                                    <video src={item.previewVideo} autoPlay muted loop playsInline style={mobileCapabilityPreviewImageStyle} />
+                                  ) : (
+                                    <img src={item.previewImage} alt="" style={mobileCapabilityPreviewImageStyle} />
+                                  )}
+                                </div>
+                              ) : null}
+                              <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 'clamp(0.8rem, 1.5vw, 1rem)' }}>
+                                <div style={capabilityContentStyle}>
+                                  <h4 style={capabilityCardTitleStyle}>{item.title}</h4>
+                                  {item.body && <p style={capabilityCardBodyStyle}>{item.body}</p>}
+                                </div>
+                                <div style={{ ...capabilityBadgeStyle, color: item.badgeColor, flexShrink: 0 }}>
+                                  {Icon ? <Icon size={20} strokeWidth={2.1} /> : item.badge}
+                                </div>
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    </section>
                   </div>
-                ) : (
-                  <>
-                    <h2 style={headingStyle}>{slide.title}</h2>
-                    {slide.image ? (
-                      <img src={slide.image} alt="" style={imageStyle} />
-                    ) : (
-                      <div style={copyWrapStyle}>
-                        {slide.body.map((paragraph) => (
-                          <p key={paragraph} style={paragraphStyle}>
-                            {paragraph}
-                          </p>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
+                ) : null}
               </div>
             </div>
           </section>
         ))}
       </div>
+
+      {/* reel video section */}
+      <div id="section-break-spacer" style={{ width: '100%', boxSizing: 'border-box', padding: 'clamp(3rem, 6vw, 5rem) clamp(1rem, 4vw, 3rem)' }}>
+        <ReelPlayer />
+      </div>
+
+      {/* second blurry panel — capability cards + footer */}
+      <section id="capabilities-panel" data-stack-panel style={{ ...panelStyle, minHeight: 'auto', background: 'rgba(245, 241, 223, 0.38)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.45), inset 0 1px 0 rgba(255,255,255,0.6)', color: '#2a2420' }}>
+        <div style={contentStyle}>
+          <div data-stack-inner style={innerStyle}>
+            <div id="panel-capabilities-layout" style={gridLayoutStyle}>
+              <section data-capability-grid style={capabilitySectionStyle}>
+                <div id="capability-cards-grid" style={capabilityGridStyle}>
+                  {AUTOMATION_CAPABILITIES.filter((item) => item.tablePreview).map((item, index) => {
+                    const Icon = AUTOMATION_ICON_COMPONENTS[item.icon];
+                    const isMobileCapabilityOpen = isTouchScrollDevice() && activeMobileCapability === item.title;
+                    return (
+                      <React.Fragment key={item.title}>
+                      {item.tablePreview ? (
+                        <div
+                          id="dashboard-stack-shell"
+                          style={{ position: 'relative', gridColumn: '1 / -1', paddingTop: '70px', marginTop: 'clamp(2rem, 5vw, 4rem)', zIndex: isMobileCapabilityOpen ? 6 : 1 }}
+                        >
+                          {[
+                            { ref: peekCard1Ref, id: 'dash-peek-card-1', left: '0%',  rotate: '-3.2deg', objPos: 'center center', label: '', img: '/img/interactive_ss_1.webp', height: '200px', topOffset: '0', bg: 'rgb(116,253,232)' },
+                            { ref: peekCard2Ref, id: 'dash-peek-card-2', left: '33%', rotate: '1.2deg',  objPos: 'center center', label: '', img: '/img/interactive_ss_2.webp', height: '168px', topOffset: '0' },
+                            { ref: peekCard3Ref, id: 'dash-peek-card-3', left: '66%', rotate: '-1.4deg', objPos: 'center center', label: '', img: '/img/interactive_ss_3.webp', height: '190px', topOffset: '0', bg: '#000000' },
+                          ].map(({ ref: cardRef, id, left, rotate, objPos, label, img, height, topOffset, bg }, i) => (
+                            <div
+                              key={id}
+                              ref={cardRef}
+                              data-peek-card
+                              className="dash-peek-card"
+                              id={id}
+                              onMouseEnter={() => gsap.to(cardRef.current, { y: -46, duration: 0.38, ease: 'power2.out' })}
+                              onMouseLeave={() => gsap.to(cardRef.current, { y: 0,   duration: 0.48, ease: 'power2.inOut' })}
+                              style={{
+                                position: 'absolute',
+                                top: topOffset,
+                                left,
+                                width: 'clamp(180px, 33%, 400px)',
+                                height,
+                                zIndex: i + 1,
+                                borderRadius: '10px',
+                                border: '1px solid rgba(200,200,200,0.85)',
+                                background: bg || '#fcfaf4',
+                                overflow: 'hidden',
+                                cursor: 'pointer',
+                                willChange: 'transform',
+                                boxSizing: 'border-box',
+                                transform: `rotate(${rotate})`,
+                                boxShadow: '0 6px 20px rgba(0,0,0,0.09), 0 1px 0 rgba(255,255,255,0.85)',
+                              }}
+                            >
+                              <img src={img} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', objectPosition: objPos, display: 'block', pointerEvents: 'none', userSelect: 'none' }} />
+                            </div>
+                          ))}
+                          <article
+                            data-capability-card
+                            id="cmo-dashboard-card"
+                            style={{ ...capabilityCardTablePreviewStyle, position: 'relative', zIndex: 10 }}
+                            onClick={() => {
+                              if (!isTouchScrollDevice()) return;
+                              setActiveMobileCapability((current) => (current === item.title ? null : item.title));
+                            }}
+                          >
+                            <div data-hover-placeholder aria-hidden="true" style={{ display: 'none' }} />
+                            {isMobileCapabilityOpen ? (
+                              <div style={mobileCapabilityPreviewStyle} aria-hidden="true">
+                                <div style={{ width: '100%', height: '100%', background: '#f5f1df', borderRadius: '0.75rem', padding: '1rem', boxSizing: 'border-box', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+                                  <p style={{ margin: '0 0 0.6rem', fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.4)', fontFamily: "'Space Mono', monospace" }}>Your Business, Mapped</p>
+                                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem', fontFamily: "'Space Grotesk', system-ui, sans-serif", flex: 1 }}>
+                                    <thead><tr style={{ borderBottom: '1px solid rgba(42,36,32,0.15)' }}><th style={{ textAlign: 'left', padding: '0.28rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.45)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Access</th><th style={{ width: '1.2rem' }} /></tr></thead>
+                                    <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.38rem 0.4rem', color: '#2a2420', fontWeight: 500 }}>{row.task}</td><td style={{ padding: '0.38rem 0.2rem', textAlign: 'center' }}>{row.task === 'Dashboard' || row.task === 'Cross-Device Mockups' || row.task === 'Social Preview Check' || row.task === 'Brand Snapshot' || row.task === 'SEO + AI Visibility' || row.task === 'Client Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : <span className="cmo-arrow"><Lock size={12} /></span>}</td></tr>))}</tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            ) : null}
+                            <div style={capabilityContentStyle}>
+                              <h2 style={{ ...capabilityCardTitleStyle, fontSize: 'clamp(2rem, 5vw, 12.4rem)', lineHeight: 0.9, marginBottom: '0.5rem', paddingTop: '20px', textAlign: 'center' }}>Lets Get Started...</h2>
+                              {item.body && <p style={{ ...capabilityCardBodyStyle, maxWidth: 'none', textAlign: 'center' }}>{item.body}</p>}
+                              <div id="cmo-url-input-row" className="cmo-url-input-desktop" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.85rem', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1, pointerEvents: 'none', userSelect: 'none', opacity: 0.7 }}>
+                                <Lock size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: 'rgba(42,36,32,0.4)' }} />
+                                <input readOnly placeholder="Enter your website" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.55)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0, cursor: 'default' }} />
+                                <button disabled className="cta-pill-inactive" style={{ ...ctaStyle, border: 'none', flexShrink: 0, background: 'rgba(255,255,255,0.72)', color: '#2a2420', boxShadow: 'none', opacity: 0.65, cursor: 'default', padding: '0.75rem 0.75rem' }}>Enter Website</button>
+                                <span className="cta-pill-btn cta-pill-inactive" style={{ ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem', opacity: 0.45, cursor: 'default' }}>Don't Have A Website?</span>
+                              </div>
+                              <div className="cmo-table-inner" style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
+                                <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
+                                  <colgroup><col style={{ width: 'calc(50% - 0.75rem)' }} /><col style={{ width: '1.5rem' }} /><col style={{ width: 'calc(50% - 0.75rem)' }} /></colgroup>
+                                  <thead><tr><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Access</th><th /><th style={{ textAlign: 'right', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Automations</th></tr></thead>
+                                  <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.task}</td><td style={{ padding: '0.32rem 0.2rem', textAlign: 'center', verticalAlign: 'middle' }}>{row.task === 'Dashboard' || row.task === 'Cross-Device Mockups' || row.task === 'Social Preview Check' || row.task === 'Brand Snapshot' || row.task === 'SEO + AI Visibility' || row.task === 'Client Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : <span className="cmo-arrow"><Lock size={12} /></span>}</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.value}</td></tr>))}</tbody>
+                                </table>
+                              <blockquote style={{ margin: 'clamp(1rem, 2vw, 1.5rem) 0 0', padding: 'clamp(0.75rem, 1.5vw, 1rem) clamp(1rem, 2vw, 1.5rem)', borderLeft: '3px solid rgba(42,36,32,0.15)', fontSize: 'clamp(1rem, 1.5vw, 1.35rem)', lineHeight: 1.55, color: 'rgba(42,36,32,0.72)', fontStyle: 'italic', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>"Get all the high-impact deliverables needed to launch digital products and integrate automation into daily operations."</blockquote>
+                              </div>
+                            </div>
+                            <div id="cmo-dashboard-table" className="cmo-table-outer" style={{ gridColumn: '1 / -1', marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
+                              <div className="cmo-url-input-mobile" style={{ alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1, pointerEvents: 'none', userSelect: 'none', opacity: 0.7 }}>
+                                <Lock size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: 'rgba(42,36,32,0.4)' }} />
+                                <input readOnly placeholder="Enter your website" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.55)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0, cursor: 'default' }} />
+                                <button disabled className="cta-pill-inactive" style={{ ...ctaStyle, border: 'none', flexShrink: 0, background: 'rgba(255,255,255,0.72)', color: '#2a2420', boxShadow: 'none', opacity: 0.65, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="cmo-table-submit-label">Enter Website</span></button>
+                              </div>
+                              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
+                                <thead><tr><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Access</th><th style={{ width: '1.5rem' }} /><th style={{ textAlign: 'right', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Automations</th></tr></thead>
+                                <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500 }}>{row.task}</td><td style={{ padding: '0.32rem 0.2rem', textAlign: 'center' }}>{row.task === 'Dashboard' || row.task === 'Cross-Device Mockups' || row.task === 'Social Preview Check' || row.task === 'Brand Snapshot' || row.task === 'SEO + AI Visibility' || row.task === 'Client Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : <span className="cmo-arrow"><Lock size={12} /></span>}</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
+                              </table>
+                              <blockquote style={{ margin: 'clamp(1rem, 2vw, 1.5rem) 0 0', padding: 'clamp(0.75rem, 1.5vw, 1rem) clamp(1rem, 2vw, 1.5rem)', borderLeft: '3px solid rgba(42,36,32,0.15)', fontSize: 'clamp(1rem, 1.5vw, 1.35rem)', lineHeight: 1.55, color: 'rgba(42,36,32,0.72)', fontStyle: 'italic', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>"Get all the high-impact deliverables needed to launch digital products and integrate automation into daily operations."</blockquote>
+                              <a id="cmo-no-website-hint" href="/login?flow=homepage-create" style={cmoNoWebsiteLinkStyle}>No Website</a>
+                            </div>
+                          </article>
+                        </div>
+                      ) : (
+                        <article
+                          data-capability-card
+                          style={{ ...capabilityCardStyle, zIndex: isMobileCapabilityOpen ? 6 : 1 }}
+                          onClick={() => {
+                            if (!isTouchScrollDevice()) return;
+                            setActiveMobileCapability((current) => (current === item.title ? null : item.title));
+                          }}
+                        >
+                          {isMobileCapabilityOpen ? (
+                            <div style={mobileCapabilityPreviewStyle} aria-hidden="true">
+                              {item.previewVideo ? (
+                                <video src={item.previewVideo} autoPlay muted loop playsInline style={mobileCapabilityPreviewImageStyle} />
+                              ) : (
+                                <img src={item.previewImage} alt="" style={mobileCapabilityPreviewImageStyle} />
+                              )}
+                            </div>
+                          ) : null}
+                          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 'clamp(0.8rem, 1.5vw, 1rem)' }}>
+                            <div style={capabilityContentStyle}>
+                              <h4 style={capabilityCardTitleStyle}>{item.title}</h4>
+                              {item.body && <p style={capabilityCardBodyStyle}>{item.body}</p>}
+                            </div>
+                            <div style={{ ...capabilityBadgeStyle, color: item.badgeColor, flexShrink: 0 }}>
+                              {Icon ? <Icon size={20} strokeWidth={2.1} /> : item.badge}
+                            </div>
+                          </div>
+                        </article>
+                      )}
+                      {item.tablePreview && null}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+              </section>
+              <div data-grid-window style={gridWindowStyle}>
+                <div data-grid-inner style={gridInnerContainerStyle}>
+                  {/* Inline footer */}
+                  <div id="stacked-inline-footer" style={inlineFooterStyle}>
+                    <div id="inline-footer-value-block" style={inlineFooterNewsletterStyle}>
+                      <div id="footer-marquee-shell" style={{ width: '100%', overflow: 'hidden', marginBottom: 'clamp(24px, 5vw, 75px)', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', animation: 'agentMarquee 28s linear infinite' }}>
+                          {[0, 1].map((i) => (
+                            <div key={i} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
+                              {['CONTACT', '•', 'CONTACT', '•'].map((w, j) => (
+                                <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <img src="/img/sig.png" alt="Bryan Balli signature" style={inlineFooterSignatureStyle} />
+
+                      <p style={{ ...supportTextStyle, marginTop: 'clamp(0.75rem, 1.5vw, 1.25rem)', textAlign: 'left' }}>
+                        <strong>Bryan Balli</strong> leads a team across design and engineering as a Creative Technologist, with experience spanning agencies in Chicago, San Francisco, and remote international teams. I'm ready to step into your process, see what's working, fix what's not, and build what's missing across design, content, and systems.
+                      </p>
+                      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: 'clamp(1.25rem, 2.5vw, 2rem)', marginBottom: 'clamp(1.25rem, 2.5vw, 2rem)' }}>
+                        <a
+                          id="footer-contact-cta"
+                          href="https://calendly.com/bballi/30min"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="cta-pill-btn"
+                          style={{ ...heroCtaStyle, alignSelf: 'center', textDecoration: 'none', border: 'none', cursor: 'pointer' }}
+                        >
+                          <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
+                          Meet with Bryan
+                          <span style={ctaIconStyle}>↗</span>
+                        </a>
+                      </div>
+                      <a id="agency-marquee-shell" ref={marqueeShellRef} href="https://www.linkedin.com/in/bryanballi/" target="_blank" rel="noopener noreferrer" style={{ ...agencyMarqueeShellStyle, cursor: 'pointer', textDecoration: 'none', display: 'block' }}>
+                        <div ref={marqueeTrackRef} style={agencyMarqueeTrackStyle}>
+                          <div ref={marqueeSetRef} style={agencyMarqueeSetStyle}>
+                            {agencyLogos.map((logo) => (
+                              <img key={`agency-a-${logo.alt}`} src={logo.src} alt={logo.alt} style={logo.scale ? { ...agencyLogoStyle, height: `${22 * logo.scale}px` } : agencyLogoStyle} />
+                            ))}
+                          </div>
+                          <div aria-hidden="true" style={agencyMarqueeSetStyle}>
+                            {agencyLogos.map((logo) => (
+                              <img key={`agency-b-${logo.alt}`} src={logo.src} alt="" style={logo.scale ? { ...agencyLogoStyle, height: `${22 * logo.scale}px` } : agencyLogoStyle} />
+                            ))}
+                          </div>
+                        </div>
+                      </a>
+                    </div>
+                    <div id="inline-footer-seo-nav" style={inlineFooterSeoNavStyle}>
+                      <div style={inlineFooterNavColStyle}>
+                        <span style={inlineFooterNavHeadingStyle}>Work</span>
+                        <a href="/work" style={inlineFooterNavLinkStyle}>Featured Projects</a>
+                        <a href="/case-studies" style={inlineFooterNavLinkStyle}>Case Studies</a>
+                        <a href="/process" style={inlineFooterNavLinkStyle}>Process</a>
+                      </div>
+                      <div style={inlineFooterNavColStyle}>
+                        <span style={inlineFooterNavHeadingStyle}>Services</span>
+                        <a href="/services/ai-design-consulting" style={inlineFooterNavLinkStyle}>AI Design Consulting</a>
+                        <a href="/services/web-development" style={inlineFooterNavLinkStyle}>Web Development</a>
+                        <a href="/services/brand-identity" style={inlineFooterNavLinkStyle}>Brand Identity</a>
+                        <a href="/services/design-systems" style={inlineFooterNavLinkStyle}>Design Systems</a>
+                        <a href="/services/seo-geo" style={inlineFooterNavLinkStyle}>SEO &amp; GEO</a>
+                      </div>
+                      <div style={inlineFooterNavColStyle}>
+                        <span style={inlineFooterNavHeadingStyle}>FAQ</span>
+                        <a href="/faq#what-is-a-creative-technologist" style={inlineFooterNavLinkStyle}>What Is a Creative Technologist?</a>
+                        <a href="/faq#ai-design-engineer" style={inlineFooterNavLinkStyle}>What Is an AI Design Engineer?</a>
+                        <a href="/faq#how-i-work" style={inlineFooterNavLinkStyle}>How I Work</a>
+                        <a href="/faq#pricing" style={inlineFooterNavLinkStyle}>Pricing &amp; Engagements</a>
+                        <a href="/faq#turnaround" style={inlineFooterNavLinkStyle}>Turnaround &amp; Availability</a>
+                      </div>
+                      <div style={inlineFooterNavColStyle}>
+                        <span style={inlineFooterNavHeadingStyle}>Company</span>
+                        <a href="/about" style={inlineFooterNavLinkStyle}>About</a>
+                        <a href="/how-it-works" style={inlineFooterNavLinkStyle}>How It Works</a>
+                        <a href="/contact" style={inlineFooterNavLinkStyle}>Contact</a>
+                        <a href="https://calendly.com/bballi/30min" target="_blank" rel="noopener noreferrer" style={inlineFooterNavLinkStyle}>Book a Call</a>
+                      </div>
+                    </div>
+
+                    <div id="inline-footer-bottom" style={inlineFooterBottomStyle}>
+                      <span style={inlineFooterCopyrightStyle}>© 2026 Bryan Balli · All rights reserved</span>
+                      <div style={inlineFooterLegalStyle}>
+                        <a href="https://www.linkedin.com/in/bryanballi" style={inlineFooterLegalLinkStyle}>LinkedIn</a>
+                        <a href="https://x.com/bai_ee" style={inlineFooterLegalLinkStyle}>𝕏</a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* Particle debug panel */}
       {settingsOpen && (
@@ -2080,7 +2113,7 @@ const StackedSlidesSection = () => {
                   <div className="cmo-step-line cmo-step-line-hidden" />
                 </div>
                 <div className="cmo-step-labels">
-                  <span className="cmo-step-name cmo-step-name-inactive">Access Onboarding Tools</span>
+                  <span className="cmo-step-name cmo-step-name-inactive">Accesss Onboarding Tools</span>
                 </div>
               </div>
             </div>
@@ -2131,7 +2164,7 @@ const StackedSlidesSection = () => {
               </button>
             </form>
 
-            <a id="cmo-no-site-link" href="/login?flow=homepage-create">Don't Have a Website?</a>
+            <a id="cmo-no-site-link" href="/login?flow=homepage-create">Don't Have Website</a>
           </div>
         </div>
       )}
@@ -2384,6 +2417,7 @@ const capabilityGridStyle = {
   gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
   gap: 'clamp(0.75rem, 1.6vw, 1rem)',
   width: '100%',
+  marginTop: 'clamp(2rem, 4vw, 4rem)',
 };
 
 const capabilityCardTablePreviewStyle = {

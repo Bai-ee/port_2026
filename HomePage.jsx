@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useLayoutEffect, useEffect } from 'react';
+import React, { useState, useRef, useLayoutEffect, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -13,6 +13,7 @@ import StackedSlidesSection from './StackedSlidesSection';
 // import FontSelector from './FontSelector';
 // import LoopControls from './LoopControls';
 import PortfolioModal from './PortfolioModal';
+import SceneSettingsPanel from './SceneSettingsPanel';
 import HomepageAnalytics from './components/HomepageAnalytics';
 
 const AppCanvas = dynamic(() => import('./ox.jsx'), { ssr: false });
@@ -65,6 +66,20 @@ const HERO_PARAMS_END = {
   opacity: 0.18,
 };
 
+// Builds the scroll animation start from user params:
+// - Params that exist in HERO_PARAMS_END always start from HERO_PARAMS_START so the
+//   scroll animation runs the same consistent range regardless of user settings
+//   (prevents reversed-direction or oversized swings when user values are outside the range).
+// - Params NOT in HERO_PARAMS_END (rotationX/Y/Z etc.) use the user's value so the
+//   shape stays at whatever orientation the user set throughout the scroll.
+const getScrollBase = (userParams) => {
+  const base = { ...HERO_PARAMS_START };
+  Object.keys(userParams).forEach((k) => {
+    if (!(k in HERO_PARAMS_END)) base[k] = userParams[k];
+  });
+  return base;
+};
+
 const interpolateHeroParams = (start, end, progress) => {
   const next = { ...start };
 
@@ -103,6 +118,7 @@ const heroGradientStyle = {
 
 const HomePage = () => {
   const [params, setParams] = useState(HERO_PARAMS_START);
+  const [showSettings, setShowSettings] = useState(false);
 
   const [canvasBackground, setCanvasBackground] = useState('#ffffff');
   const [textColor, setTextColor] = useState('#000000');
@@ -112,7 +128,12 @@ const HomePage = () => {
   const canvasWrapperRef = useRef(null);
   const contentSectionRef = useRef(null);
   const paramsRef = useRef(HERO_PARAMS_START);
+  const userParamsRef = useRef(HERO_PARAMS_START); // user's intentional settings (panel changes)
   const isScrollMorphActiveRef = useRef(false);
+  const heroProgressRef = useRef(0); // current scroll progress, kept in sync with ScrollTrigger
+  const snapCanvasRef = useRef(false); // signals canvas to reset smoothedParamsRef on next frame
+  const scatterCanvasRef = useRef(false); // signals canvas to re-scatter particles (replay load-in formation)
+  const heroMaxProgressRef = useRef(0); // deepest scroll reached this cycle — gates the return-to-top replay
 
   // Keep #content-section.marginTop = -peekHeight so the capabilitySectionStyle
   // borderTop always lands exactly at the 100dvh fold on page load.
@@ -123,7 +144,10 @@ const HomePage = () => {
     const applyPeek = () => {
       const introBlock = document.querySelector('#panel-hero-intro-centering');
       if (!introBlock) return;
-      const peekHeight = introBlock.getBoundingClientRect().height;
+      const style = window.getComputedStyle(introBlock);
+      const marginTop = parseFloat(style.marginTop) || 0;
+      const marginBottom = parseFloat(style.marginBottom) || 0;
+      const peekHeight = introBlock.getBoundingClientRect().height + marginTop + marginBottom;
       contentSection.style.marginTop = `-${peekHeight}px`;
     };
 
@@ -141,14 +165,6 @@ const HomePage = () => {
       window.removeEventListener('orientationchange', applyPeek);
     };
   }, []);
-
-  useEffect(() => {
-    if (isScrollMorphActiveRef.current) {
-      return;
-    }
-
-    paramsRef.current = params;
-  }, [params]);
 
   useLayoutEffect(() => {
     const useSimpleScrollViewport =
@@ -170,11 +186,8 @@ const HomePage = () => {
     const panelHeadline = document.querySelector('#panel-hero-headline');
     const panelCta      = document.querySelector('#panel-hero-cta');
     const panelGrid     = document.querySelector('#stacked-grid-row');
-    const pills         = gsap.utils.toArray('#hero-panel-filter-pills .filter-chip');
-
     gsap.set([gradient, headline, canvasWrapper, nav].filter(Boolean), { autoAlpha: 0 });
     gsap.set([panelHeadline, panelCta, panelGrid].filter(Boolean), { autoAlpha: 0 });
-    if (pills.length) gsap.set(pills, { autoAlpha: 0, y: 8 });
 
     const tl = gsap.timeline({ delay: 0.2 });
     tl.fromTo(
@@ -187,8 +200,20 @@ const HomePage = () => {
       .to(headline,      { autoAlpha: 1, duration: 1.05, ease: 'power2.out' }, '0.32')
       .to(panelHeadline, { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '0.58')
       .to(panelCta,      { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '<0.15')
-      .to(panelGrid,     { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '<0.15')
-      .to(pills,         { autoAlpha: 1, y: 0, duration: 0.45, ease: 'power2.out', stagger: 0.055 }, '<0.2');
+      .to(panelGrid,     { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '<0.15');
+
+    // Replays the hero's entrance when the user returns to the top after scrolling
+    // through it — fades the 3D element back onto the page. Opacity-only on the
+    // canvas wrapper (transforms would shift ScrollTrigger pin positions); the
+    // gradient may scale since it is a separate overlay.
+    let entranceTween = null;
+    const replayHeroEntrance = () => {
+      if (entranceTween && entranceTween.isActive()) return;
+      scatterCanvasRef.current = true; // re-scatter particles so they converge back into the loop
+      entranceTween = gsap.timeline()
+        .fromTo(gradient,      { autoAlpha: 0, scale: 1.06 }, { autoAlpha: 1, scale: 1, duration: 0.9, ease: 'power2.out' })
+        .fromTo(canvasWrapper, { autoAlpha: 0 },              { autoAlpha: 1, duration: 1.0, ease: 'power2.out' }, '<0.1');
+    };
 
     // Scrub hero params directly from scroll progress to keep the transition
     // tied to the gesture instead of firing a one-shot time tween.
@@ -203,11 +228,18 @@ const HomePage = () => {
       onUpdate: (self) => {
         isScrollMorphActiveRef.current = true;
         heroProxy.progress = self.progress;
-        paramsRef.current = interpolateHeroParams(HERO_PARAMS_START, HERO_PARAMS_END, heroProxy.progress);
+        heroProgressRef.current = self.progress;
+        if (self.progress > heroMaxProgressRef.current) heroMaxProgressRef.current = self.progress;
+        paramsRef.current = interpolateHeroParams(getScrollBase(userParamsRef.current), HERO_PARAMS_END, heroProxy.progress);
       },
       onLeaveBack: () => {
-        paramsRef.current = HERO_PARAMS_START;
-        setParams(HERO_PARAMS_START);
+        heroProgressRef.current = 0;
+        paramsRef.current = userParamsRef.current;
+        snapCanvasRef.current = true; // flush smoothedParamsRef drift accumulated from repeated scroll cycles
+        setParams(userParamsRef.current);
+        // Only replay if the user actually scrolled through the hero (not a micro-scroll).
+        if (heroMaxProgressRef.current > 0.5) replayHeroEntrance();
+        heroMaxProgressRef.current = 0;
       },
       onToggle: (self) => {
         if (!self.isActive) {
@@ -221,9 +253,10 @@ const HomePage = () => {
       requestAnimationFrame(() => {
         heroST.refresh();
         heroProxy.progress = heroST.progress;
-        paramsRef.current = interpolateHeroParams(HERO_PARAMS_START, HERO_PARAMS_END, heroProxy.progress);
+        heroProgressRef.current = heroST.progress;
+        paramsRef.current = interpolateHeroParams(getScrollBase(userParamsRef.current), HERO_PARAMS_END, heroProxy.progress);
         if (!isScrollMorphActiveRef.current) {
-          setParams(paramsRef.current);
+          setParams(userParamsRef.current);
         }
       });
     };
@@ -262,6 +295,7 @@ const HomePage = () => {
 
     return () => {
       tl.kill();
+      entranceTween?.kill();
       heroST.kill();
       isScrollMorphActiveRef.current = false;
       document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -271,11 +305,42 @@ const HomePage = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const handler = () => setShowSettings((v) => !v);
+    window.addEventListener('openSceneSettings', handler);
+    return () => window.removeEventListener('openSceneSettings', handler);
+  }, []);
+
+  // Stable callbacks so SceneSettingsPanel never re-renders due to prop identity changes
+  const handleParamsChange = useCallback((next) => {
+    // Resolve against user's base settings so slider spreads never lock in mid-scroll values.
+    const resolved = typeof next === 'function' ? next(userParamsRef.current) : next;
+    userParamsRef.current = resolved;
+    // At rest (top): show full user settings so panel changes are visible immediately.
+    // During scroll: use the normalized scroll base so the canvas doesn't jump direction.
+    const p = heroProgressRef.current;
+    paramsRef.current = p > 0
+      ? interpolateHeroParams(getScrollBase(resolved), HERO_PARAMS_END, p)
+      : resolved;
+    setParams(resolved);
+  }, []);
+
+  const handleCloseSettings = useCallback(() => setShowSettings(false), []);
+
   return (
     <>
     <HomepageAnalytics />
     {/* Header outside overflow-clip container so backdrop-filter composites against the viewport correctly */}
     <Header logoRef={headerLogoRef} onOpenPage={setActivePageId} />
+    {showSettings && (
+      <SceneSettingsPanel
+        initialParams={userParamsRef.current}
+        liveParamsRef={paramsRef}
+        onParamsChange={handleParamsChange}
+        defaultParams={HERO_PARAMS_START}
+        onClose={handleCloseSettings}
+      />
+    )}
     <div style={{ position: 'relative', width: '100vw', minHeight: '100dvh', background: 'transparent', overflowX: 'clip' }}>
       <style>{`
         @keyframes heroGradientDrift {
@@ -291,8 +356,7 @@ const HomePage = () => {
         #founders-top-strip,
         #hero-panel-top-left,
         #panel-hero-headline,
-        #panel-hero-cta,
-        #hero-panel-filter-pills .filter-chip {
+        #panel-hero-cta {
           opacity: 0;
           visibility: hidden;
         }
@@ -313,7 +377,7 @@ const HomePage = () => {
       >
         <div id="hero-gradient-overlay" style={heroGradientStyle} />
         <div id="hero-canvas-wrapper" ref={canvasWrapperRef} style={{ position: 'absolute', inset: 0, opacity: 0 }}>
-          <AppCanvas params={params} liveParamsRef={paramsRef} backgroundColor={canvasBackground} />
+          <AppCanvas params={params} liveParamsRef={paramsRef} backgroundColor={canvasBackground} snapRef={snapCanvasRef} scatterRef={scatterCanvasRef} />
         </div>
         <HeroHeadline headerLogoRef={headerLogoRef} textColor={textColor} />
         {/* Keyword-rich subheading for crawlers — visually hidden but read by
@@ -333,7 +397,7 @@ const HomePage = () => {
             margin: 0,
           }}
         >
-          Bryan Balli is an AI design engineer and creative technologist based in Chicago. He builds AI-assisted client intelligence platforms, modular intake pipelines, and high-performance web experiences for founders, agencies, and growing teams — combining Next.js, Three.js, and GSAP with the Claude API and OpenAI to ship production-quality work with intelligent automation built in. Agency background spans Publicis, Epsilon, Conversant, and Alliance Data. Clients include TikTok, HBO Max, and TST. Starting engagement scope: $3,500. Typical project timeline: 2–6 weeks.
+          Bryan Balli is a digital media developer and creative technologist based in Chicago. He builds client intelligence platforms, modular intake pipelines, and high-performance web experiences for founders, agencies, and growing teams — combining Next.js, Three.js, and GSAP to ship production-quality work. Agency background spans Publicis, Epsilon, Conversant, and Alliance Data. Clients include TikTok, HBO Max, and TST. Starting engagement scope: $3,500. Typical project timeline: 2–6 weeks.
         </h2>
       </section>
 

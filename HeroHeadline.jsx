@@ -66,30 +66,29 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       const gapHeight = Math.max(contentDocTop - navHeight, 180);
       const centeredTop = gapTop + Math.max((gapHeight - headlineHeight) / 2, 0);
 
-      metrics.centeredTop = centeredTop;
+      const desktopRaise = useSimpleScrollViewport ? 0 : window.innerHeight * 0.05;
+      metrics.centeredTop = centeredTop - desktopRaise;
       metrics.maxWidth = maxWidth;
       metrics.gapHeight = gapHeight;
     };
 
     const applyLayout = (progress = 0) => {
       const travelY = useSimpleScrollViewport ? -32 : -60;
+      // Fade the hero text out twice as fast as the scroll — fully gone by half travel.
+      const fadeOpacity = Math.max(0, 1 - progress * 2);
 
       el.style.position = useSimpleScrollViewport ? 'absolute' : 'fixed';
       el.style.top = `${metrics.centeredTop}px`;
       el.style.maxWidth = `${metrics.maxWidth}px`;
       el.style.setProperty('--hero-gap-height', `${metrics.gapHeight}px`);
 
-      // Hide subheadline when vertical space is too tight to avoid overlap with section 2
-      const sub = el.querySelector('#hero-subheadline');
-      if (sub) sub.style.display = metrics.gapHeight < 240 ? 'none' : '';
-
       if (useSimpleScrollViewport) {
         contentEl.style.transform = `translate3d(0, ${travelY * progress}px, 0)`;
-        contentEl.style.opacity = `${1 - progress}`;
+        contentEl.style.opacity = `${fadeOpacity}`;
         contentEl.style.filter = 'blur(0px)';
       } else {
         contentEl.style.transform = `translate3d(0, ${travelY * progress}px, 0)`;
-        contentEl.style.opacity = `${1 - progress}`;
+        contentEl.style.opacity = `${fadeOpacity}`;
         contentEl.style.filter = `blur(${10 * progress}px)`;
       }
     };
@@ -183,6 +182,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
         }}
       >
         <div ref={headlineContentRef}>
+          <p id="hero-headline-prehead" style={{ margin: '0 0 2.35rem', fontSize: 'clamp(1.4rem, 2.33vw, 1.63rem)', fontWeight: 300, letterSpacing: '-0.05em', lineHeight: 0.9, color: '#2a2420', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>Bryan Balli</p>
           <h1 style={{
             fontWeight: 700,
             fontFamily: "'Doto', 'Space Mono', monospace",
@@ -193,20 +193,8 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
             fontSize: 'clamp(1.25rem, min(13vw, calc(var(--hero-gap-height) / 5)), 7.83rem)',
             textTransform: 'none',
           }}>
-            YOUR<br />HUMAN<br />IN THE<br />LOOP
+            DIGITAL<br />MEDIA<br />DEVELOPER
           </h1>
-          <p id="hero-subheadline" style={{
-            margin: '1rem 0 0',
-            fontFamily: "'Space Grotesk', system-ui, sans-serif",
-            fontSize: 'clamp(0.7rem, 1vw, 0.82rem)',
-            lineHeight: 1.5,
-            color: textColor,
-            opacity: 0.85,
-            fontWeight: 400,
-            maxWidth: '42ch',
-          }}>
-            I'm ready to step into your process, see what's working, fix what's not, and build what's missing across design, content, and systems.
-          </p>
         </div>
       </div>
 

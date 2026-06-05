@@ -10,12 +10,15 @@ SEO-aware image optimizer for the portfolio.
 - Uses that × 2 (retina) as a floor. Images are NEVER downscaled below that floor.
 - Writes an optimized WebP next to the original. Originals are preserved.
 - OG image (og_meta.*): re-encoded as optimized JPG at 1200x630, target <300 KB.
+- --rewrite-refs: after writing WebPs, swap <img src> / CSS url() references in
+  code from the raster source to the new .webp (skips OG — scrapers need PNG/JPG).
 - Dry-run by default. Pass --write to emit files.
 
 Usage (from repo root):
   scripts/.venv-img/bin/python scripts/optimize_images.py
   scripts/.venv-img/bin/python scripts/optimize_images.py --write
   scripts/.venv-img/bin/python scripts/optimize_images.py --write --only og
+  scripts/.venv-img/bin/python scripts/optimize_images.py --write --rewrite-refs
 """
 
 from __future__ import annotations
@@ -43,7 +46,10 @@ REPO = Path(__file__).resolve().parent.parent
 PUBLIC = REPO / "public"
 SCAN_EXTS = {".png", ".jpg", ".jpeg"}
 CODE_EXTS = {".jsx", ".tsx", ".js", ".ts", ".mjs", ".cjs", ".css", ".scss", ".html"}
-EXCLUDE_DIRS = {"node_modules", ".next", "dist", ".git", "scripts/.venv-img", ".venv-img"}
+EXCLUDE_DIRS = {"node_modules", ".next", "dist", ".git", "scripts/.venv-img", ".venv-img", ".claude"}
+# Ref-rewrite only touches browser-rendered markup — never server/build code that may
+# composite the raster source on purpose (e.g. sharp device-mockup .cjs).
+REWRITE_EXTS = {".jsx", ".tsx", ".css", ".scss", ".html"}
 
 # Safety floor when we can't infer DOM width — keeps retina sharpness on large displays.
 DEFAULT_RETINA_FLOOR_PX = 1600
@@ -277,6 +283,56 @@ def optimize_og(info: ImageInfo, dry_run: bool) -> tuple[str, int, int, str]:
     return (out_path.relative_to(REPO).as_posix(), len(chosen_bytes), OG_TARGET_W, note)
 
 
+def web_path(info: ImageInfo) -> str | None:
+    """Public web path for an image under public/, e.g. /img/foo.png. None if outside public/."""
+    try:
+        rel = info.path.relative_to(PUBLIC).as_posix()
+    except ValueError:
+        return None
+    return "/" + rel
+
+
+def rewrite_refs(written: list[ImageInfo], dry_run: bool) -> int:
+    """
+    Swap code references from each written image's raster path to its .webp sibling.
+    Only touches images we actually optimized this run; OG images are excluded upstream.
+    Returns number of files modified.
+    """
+    swaps: dict[str, str] = {}
+    for info in written:
+        wp = web_path(info)
+        if not wp:
+            continue
+        swaps[wp] = str(Path(wp).with_suffix(".webp"))
+    if not swaps:
+        print("\nrewrite-refs: nothing to rewrite.")
+        return 0
+
+    modified = 0
+    for cf in iter_code_files(REPO):
+        if cf.suffix.lower() not in REWRITE_EXTS:
+            continue
+        try:
+            text = cf.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            continue
+        new_text = text
+        hits: list[str] = []
+        for src, dst in swaps.items():
+            if src in new_text:
+                hits.append(src)
+                new_text = new_text.replace(src, dst)
+        if new_text != text:
+            modified += 1
+            rel = cf.relative_to(REPO).as_posix()
+            print(f"rewrite-refs: {'would patch' if dry_run else 'patched'} {rel}  ({len(hits)} ref(s))")
+            if not dry_run:
+                cf.write_text(new_text, encoding="utf-8")
+    if modified == 0:
+        print("\nrewrite-refs: no code references matched the optimized images.")
+    return modified
+
+
 def human(n: int) -> str:
     for unit in ("B", "KB", "MB", "GB"):
         if n < 1024:
@@ -289,6 +345,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--write", action="store_true", help="Actually write files. Default is dry-run.")
     ap.add_argument("--only", choices=("webp", "og", "all"), default="all", help="Which pass to run.")
+    ap.add_argument("--rewrite-refs", action="store_true",
+                    help="After WebP pass, swap code <img>/url() refs to the new .webp (skips OG).")
     ap.add_argument("--min-bytes", type=int, default=100 * 1024,
                     help="Skip sources smaller than this (default 100 KB).")
     ap.add_argument("--verbose", action="store_true")
@@ -307,6 +365,7 @@ def main() -> int:
 
     total_orig = 0
     total_new = 0
+    written_webp: list[ImageInfo] = []
 
     for info in sorted(images.values(), key=lambda i: -i.bytes):
         total_orig += info.bytes
@@ -335,6 +394,7 @@ def main() -> int:
                 total_new += info.bytes
             else:
                 total_new += new_bytes
+                written_webp.append(info)
         else:
             total_new += info.bytes
 
@@ -342,6 +402,10 @@ def main() -> int:
     print(f"totals: {human(total_orig)}  →  {human(total_new)}  "
           f"(Δ {human(max(0, total_orig - total_new))}, "
           f"{(1 - total_new/total_orig)*100:.1f}% smaller)" if total_orig else "no images")
+    if args.rewrite_refs and args.only in ("webp", "all"):
+        print("-" * 120)
+        rewrite_refs(written_webp, dry_run=not args.write)
+
     if not args.write:
         print("\n(dry-run) re-run with --write to emit files. Originals are never deleted.")
     return 0

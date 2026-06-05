@@ -34,3 +34,9 @@ clients/*/
 .tmp-device-mockup/
 input/
 output/
+
+# Original unoptimized reel (use reel.optimized.mp4 for production)
+public/vid/reel.mp4
+
+# Unoptimized screenshot masters (served as .webp; keep masters local only)
+public/img/interactive_ss_*.png
