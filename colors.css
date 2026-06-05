@@ -165,7 +165,9 @@ body.cmo-modal-open #founders-top-strip { display: none; }
 }
 #founders-top-actions {
   margin-left: auto;
-  display: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 #nav-scroll-top {
   display: inline-flex;
