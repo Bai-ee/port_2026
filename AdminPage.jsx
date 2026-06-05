@@ -23,7 +23,7 @@ async function adminFetch(user, path, options = {}) {
 
 // ── AdminPage ──────────────────────────────────────────────────────────────────
 
-const TABS = ['CLIENTS', 'QUEUE', 'FAILED', 'INTELLIGENCE'];
+const TABS = ['CLIENTS', 'QUEUE', 'FAILED', 'INTELLIGENCE', 'DIGEST'];
 
 const AdminPage = () => {
   const { user, signOutUser } = useAuth();
@@ -51,6 +51,15 @@ const AdminPage = () => {
   const [intelDataLoading, setIntelDataLoading]         = useState(false);
   const [intelDataError, setIntelDataError]             = useState('');
   const [intelActionStatus, setIntelActionStatus]       = useState(null);
+
+  // Digest panel state
+  const [digestForm, setDigestForm]         = useState(null);
+  const [digestDocs, setDigestDocs]         = useState([]);
+  const [digestClientId, setDigestClientId] = useState('');
+  const [digestLoading, setDigestLoading]   = useState(false);
+  const [digestError, setDigestError]       = useState('');
+  const [digestStatus, setDigestStatus]     = useState(null); // { status, message }
+  const [digestPreview, setDigestPreview]   = useState(null); // { paragraph }
 
   // ── Data loaders ─────────────────────────────────────────────────────────────
 
@@ -112,12 +121,68 @@ const AdminPage = () => {
     }
   }, [user]);
 
+  const loadDigest = useCallback(async () => {
+    if (!user) return;
+    setDigestLoading(true);
+    setDigestError('');
+    try {
+      const data = await adminFetch(user, '/api/admin/digest-config');
+      setDigestForm(data.config || null);
+      setDigestDocs(data.docs || []);
+      setDigestClientId(data.clientId || '');
+    } catch (err) {
+      setDigestError(err.message);
+    } finally {
+      setDigestLoading(false);
+    }
+  }, [user]);
+
+  const saveDigest = useCallback(async () => {
+    if (!user || !digestForm) return;
+    setDigestStatus({ status: 'pending', message: 'Saving…' });
+    try {
+      const data = await adminFetch(user, '/api/admin/digest-config', {
+        method: 'POST',
+        body: JSON.stringify(digestForm),
+      });
+      setDigestForm(data.config);
+      setDigestStatus({ status: 'ok', message: 'Saved.' });
+    } catch (err) {
+      setDigestStatus({ status: 'error', message: err.message });
+    }
+  }, [user, digestForm]);
+
+  const previewDigest = useCallback(async () => {
+    if (!user) return;
+    setDigestStatus({ status: 'pending', message: 'Generating preview…' });
+    try {
+      const data = await adminFetch(user, '/api/admin/daily-digest?preview=1');
+      setDigestPreview({ paragraph: data.paragraph || data.summary?.paragraph || '' });
+      setDigestStatus({ status: 'ok', message: 'Preview ready.' });
+    } catch (err) {
+      setDigestStatus({ status: 'error', message: err.message });
+    }
+  }, [user]);
+
+  const sendDigest = useCallback(async () => {
+    if (!user) return;
+    if (typeof window !== 'undefined' && !window.confirm('Send the digest email now?')) return;
+    setDigestStatus({ status: 'pending', message: 'Sending…' });
+    try {
+      await adminFetch(user, '/api/admin/daily-digest?send=1');
+      setDigestStatus({ status: 'ok', message: 'Sent.' });
+    } catch (err) {
+      setDigestStatus({ status: 'error', message: err.message });
+    }
+  }, [user]);
+
   useEffect(() => {
     if (tab === 'CLIENTS')      loadClients();
     if (tab === 'QUEUE')        loadRuns('queue');
     if (tab === 'FAILED')       loadRuns('failed');
     if (tab === 'INTELLIGENCE') loadIntelClientList();
-  }, [tab, loadClients, loadRuns, loadIntelClientList]);
+    if (tab === 'DIGEST')       loadDigest();
+  }, [tab, loadClients, loadRuns, loadIntelClientList, loadDigest]);
 
   useEffect(() => {
     if (tab === 'INTELLIGENCE' && selectedIntelClientId) loadIntelData(selectedIntelClientId);
@@ -786,6 +851,116 @@ const AdminPage = () => {
           </section>
         ) : null}
 
+        {/* ── DIGEST TAB ────────────────────────────────────────────────── */}
+        {tab === 'DIGEST' ? (
+          <section id="digest-config-section">
+            <div className="section-head">
+              <span className="section-title">DAILY DIGEST</span>
+              <button type="button" className="admin-refresh" onClick={loadDigest}>REFRESH</button>
+            </div>
+
+            {digestStatus ? (
+              <div className={`action-banner action-banner-${digestStatus.status}`} id="digest-action-banner">
+                {digestStatus.status === 'error' ? `ERROR: ${digestStatus.message}` : digestStatus.message}
+                <button type="button" className="banner-dismiss" onClick={() => setDigestStatus(null)}>✕</button>
+              </div>
+            ) : null}
+
+            {digestError ? <div className="admin-error">{digestError}</div> : null}
+            {digestLoading ? <div className="admin-loading">LOADING…</div> : null}
+
+            {!digestLoading && digestForm ? (
+              <>
+                <div id="digest-config-form" className="digest-form">
+                  <div className="digest-field-row">
+                    <span className="intel-label">CLIENT</span>
+                    <span className="cf-val">{digestClientId || '— (set DIGEST_CLIENT_ID)'}</span>
+                  </div>
+                  <div className="digest-field-row">
+                    <span className="intel-label">LLM SUMMARY</span>
+                    <button
+                      type="button"
+                      className={`status-badge ${digestForm.summaryEnabled ? 'status-active' : 'status-failed'} digest-toggle`}
+                      onClick={() => setDigestForm((f) => ({ ...f, summaryEnabled: !f.summaryEnabled }))}
+                    >
+                      {digestForm.summaryEnabled ? 'ENABLED' : 'DISABLED'}
+                    </button>
+                  </div>
+                  <div className="digest-field-row">
+                    <span className="intel-label">TONE</span>
+                    <input
+                      className="digest-input"
+                      value={digestForm.tone || ''}
+                      onChange={(e) => setDigestForm((f) => ({ ...f, tone: e.target.value }))}
+                    />
+                  </div>
+                  <div className="digest-field-row">
+                    <span className="intel-label">RECENT DOCS</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="20"
+                      className="digest-input digest-input-sm"
+                      value={digestForm.recentDocsCount}
+                      onChange={(e) => setDigestForm((f) => ({ ...f, recentDocsCount: Number(e.target.value) }))}
+                    />
+                  </div>
+                  <div className="digest-field-row digest-field-col">
+                    <span className="intel-label">EXTRA INSTRUCTIONS</span>
+                    <textarea
+                      className="digest-textarea"
+                      placeholder="Optional steering for the summary (e.g. flag overdue tasks, highlight revenue)…"
+                      value={digestForm.extraInstructions || ''}
+                      onChange={(e) => setDigestForm((f) => ({ ...f, extraInstructions: e.target.value }))}
+                    />
+                  </div>
+                  <div className="digest-actions">
+                    <button type="button" className="admin-action-btn" onClick={saveDigest}>SAVE</button>
+                    <button type="button" className="admin-action-btn admin-action-btn-secondary" onClick={previewDigest}>PREVIEW</button>
+                    <button type="button" className="admin-action-btn" onClick={sendDigest}>SEND NOW</button>
+                  </div>
+                </div>
+
+                <div className="intel-section">
+                  <div className="intel-section-label">DOCS FEEDING SUMMARY ({digestDocs.length})</div>
+                  {digestDocs.length ? (
+                    <table className="admin-table" id="digest-docs-table">
+                      <thead>
+                        <tr><th>TITLE</th><th>CHARS</th></tr>
+                      </thead>
+                      <tbody>
+                        {digestDocs.map((d) => (
+                          <tr key={d.id}>
+                            <td className="cell-primary">{d.title}</td>
+                            <td className="cell-dim cell-num">{d.chars}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="admin-empty">No knowledge-base docs found for this client.</div>
+                  )}
+                </div>
+
+                {digestPreview ? (
+                  <div className="intel-section" id="digest-preview">
+                    <div className="intel-section-label">SUMMARY PREVIEW</div>
+                    <textarea
+                      className="intel-briefing-text"
+                      readOnly
+                      value={digestPreview.paragraph || '(empty — summary may be disabled or returned no text)'}
+                    />
+                  </div>
+                ) : null}
+              </>
+            ) : null}
+
+            {!digestLoading && !digestForm && !digestError ? (
+              <div className="admin-empty">No digest config.</div>
+            ) : null}
+          </section>
+        ) : null}
+
       </main>
     </div>
   );
@@ -1392,6 +1567,53 @@ const adminCss = `
     resize: vertical;
     line-height: 1.6;
   }
+  /* ── Digest panel ──────────────────────────────────────────────────── */
+  .digest-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 720px;
+    margin-bottom: 32px;
+    padding: 20px;
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+  }
+  .digest-field-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .digest-field-row .intel-label { width: 140px; }
+  .digest-field-col {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .digest-input {
+    flex: 1;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border-visible);
+    color: var(--text-display);
+    padding: 7px 10px;
+  }
+  .digest-input-sm { flex: 0 0 90px; }
+  .digest-textarea {
+    width: 100%;
+    min-height: 90px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border-visible);
+    color: var(--text-display);
+    padding: 10px;
+    resize: vertical;
+    line-height: 1.5;
+  }
+  .digest-toggle { cursor: pointer; }
+  .digest-actions { display: flex; gap: 10px; margin-top: 8px; }
+  #digest-action-banner { margin-bottom: 16px; }
   @media (max-width: 900px) {
     #admin-content { padding: 24px 20px; }
     #admin-header { padding: 16px 20px; }

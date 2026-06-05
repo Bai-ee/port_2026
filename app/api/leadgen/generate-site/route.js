@@ -25,6 +25,8 @@ import {
 
 const MODEL      = 'claude-sonnet-4-6';
 const MAX_TOKENS = 16000;
+const MAX_VISION_IMAGE_DIMENSION = 1600;
+const MAX_VISION_IMAGE_BYTES = 1_500_000;
 
 // ─── SYSTEM PROMPT ────────────────────────────────────────────────────────────
 
@@ -132,6 +134,58 @@ function resolveProspectClientId(placeId, prospect) {
   if (prospect?.clientId) return prospect.clientId;
   const match = String(placeId || '').match(/^client:(.+)$/);
   return match ? match[1] : null;
+}
+
+function normalizeVisionMediaType(value) {
+  const mediaType = String(value || '').split(';')[0].trim().toLowerCase();
+  if (['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(mediaType)) return mediaType;
+  if (mediaType === 'image/jpg') return 'image/jpeg';
+  return 'image/png';
+}
+
+async function prepareAnthropicVisionImage(buffer, { maxDimension = MAX_VISION_IMAGE_DIMENSION, inputMediaType = 'image/png' } = {}) {
+  let finalBuf = buffer;
+  let width = null;
+  let height = null;
+  let resized = false;
+  let mediaType = 'image/png';
+
+  try {
+    const sharp = (await import('sharp')).default;
+    const image = sharp(buffer, { limitInputPixels: false });
+    const meta = await image.metadata();
+    width = meta.width || null;
+    height = meta.height || null;
+    const needsResize =
+      (width && width > maxDimension) ||
+      (height && height > maxDimension) ||
+      buffer.byteLength > MAX_VISION_IMAGE_BYTES;
+    finalBuf = await sharp(buffer, { limitInputPixels: false })
+      .resize(needsResize ? {
+        width: maxDimension,
+        height: maxDimension,
+        fit: 'inside',
+        withoutEnlargement: true,
+      } : undefined)
+      .png({ compressionLevel: 8, quality: 82 })
+      .toBuffer();
+    resized = needsResize || finalBuf.byteLength !== buffer.byteLength;
+    const nextMeta = await sharp(finalBuf).metadata();
+    width = nextMeta.width || width;
+    height = nextMeta.height || height;
+  } catch {
+    // If sharp is unavailable or cannot parse the image, keep the original.
+    // The caller may still skip it by byte size before sending to Anthropic.
+    mediaType = normalizeVisionMediaType(inputMediaType);
+  }
+
+  return {
+    buffer: finalBuf,
+    mediaType,
+    width,
+    height,
+    resized,
+  };
 }
 
 // POST /api/leadgen/generate-site
@@ -314,28 +368,21 @@ export async function POST(request) {
             if (imgRes.ok) {
               const origBuf  = Buffer.from(await imgRes.arrayBuffer());
               const origKB   = (origBuf.byteLength / 1024).toFixed(0);
-
-              // Downscale to ~680px wide to reduce vision tokens (~4K → ~2K tokens)
-              let finalBuf = origBuf;
-              try {
-                const sharp = (await import('sharp')).default;
-                const meta  = await sharp(origBuf).metadata();
-                if (meta.width && meta.width > 720) {
-                  finalBuf = await sharp(origBuf)
-                    .resize({ width: 680, withoutEnlargement: true })
-                    .png({ quality: 80, compressionLevel: 8 })
-                    .toBuffer();
-                }
-              } catch {
-                // sharp unavailable — use original buffer (still works, just costs more tokens)
+              const prepared = await prepareAnthropicVisionImage(origBuf, {
+                maxDimension: 1200,
+                inputMediaType: imgRes.headers.get('content-type') || 'image/png',
+              });
+              const finalBuf = prepared.buffer;
+              if ((prepared.width && prepared.width > 8000) || (prepared.height && prepared.height > 8000)) {
+                throw new Error(`Mockup dimensions remain too large (${prepared.width || '?'}x${prepared.height || '?'})`);
               }
 
               const finalKB = (finalBuf.byteLength / 1024).toFixed(0);
               mockupImage = {
                 type: 'image',
-                source: { type: 'base64', media_type: 'image/png', data: finalBuf.toString('base64') },
+                source: { type: 'base64', media_type: prepared.mediaType, data: finalBuf.toString('base64') },
               };
-              emit({ type: 'progress', stage: 'generate', label: `Mockup loaded (${origKB}KB → ${finalKB}KB resized)` });
+              emit({ type: 'progress', stage: 'generate', label: `Mockup loaded (${origKB}KB → ${finalKB}KB${prepared.width && prepared.height ? ` · ${prepared.width}x${prepared.height}` : ''})` });
             }
           } catch {
             emit({ type: 'progress', stage: 'generate', label: '⚠ Mockup load failed — continuing without.' });
@@ -359,11 +406,17 @@ export async function POST(request) {
                 try {
                   const imgRes = await fetch(img.url, { signal: AbortSignal.timeout(10_000) });
                   if (imgRes.ok) {
-                    const buf = Buffer.from(await imgRes.arrayBuffer());
-                    if (buf.byteLength > 1_500_000) continue;
+                    const rawBuf = Buffer.from(await imgRes.arrayBuffer());
+                    const prepared = await prepareAnthropicVisionImage(rawBuf, {
+                      maxDimension: MAX_VISION_IMAGE_DIMENSION,
+                      inputMediaType: img.mimeType || imgRes.headers.get('content-type') || 'image/png',
+                    });
+                    const buf = prepared.buffer;
+                    if ((prepared.width && prepared.width > 8000) || (prepared.height && prepared.height > 8000)) continue;
+                    if (buf.byteLength > MAX_VISION_IMAGE_BYTES) continue;
                     refImages.push({
                       type: 'image',
-                      source: { type: 'base64', media_type: img.mimeType || 'image/png', data: buf.toString('base64') },
+                      source: { type: 'base64', media_type: prepared.mediaType, data: buf.toString('base64') },
                     });
                   }
                 } catch { /* skip individual image */ }

@@ -560,7 +560,119 @@ async function persistWebsiteScreenshotArtifact({
 // Posts an HTML document to Browserless /pdf and persists the returned PDF
 // buffer as a Firebase Storage artifact. Mirrors the screenshot flow.
 
-async function renderPdfBuffer({ clientId, runId, html }) {
+function injectPdfPrintCss(html, mode = 'default') {
+  if (mode !== 'edge-to-edge') return String(html || '');
+
+  const printCss = `<style id="hitl-pdf-print-css">
+@page { size: 1200px 1697px; margin: 0; }
+html,
+body {
+  width: 1200px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
+}
+html {
+  background: transparent !important;
+}
+body {
+  min-width: 1200px !important;
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+}
+body,
+body::before,
+body::after,
+.shell,
+main {
+  max-width: none !important;
+}
+.shell,
+main {
+  width: 1200px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+section.page,
+.page,
+.pdf-page,
+.slide,
+[data-pdf-page],
+body > header,
+main > header,
+.shell > header,
+body > main > section,
+main > section,
+.shell > section,
+.shell > .section {
+  width: 1200px !important;
+  max-width: none !important;
+  min-height: 1697px !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+  break-inside: avoid-page !important;
+  page-break-inside: avoid !important;
+  break-after: page !important;
+  page-break-after: always !important;
+  overflow: hidden !important;
+}
+section.page:last-child,
+.page:last-child,
+.pdf-page:last-child,
+.slide:last-child,
+[data-pdf-page]:last-child,
+body > header:last-child,
+main > header:last-child,
+.shell > header:last-child,
+body > main > section:last-child,
+main > section:last-child,
+.shell > section:last-child,
+.shell > .section:last-child {
+  break-after: auto !important;
+  page-break-after: auto !important;
+}
+img,
+svg,
+canvas,
+video {
+  max-width: 100% !important;
+}
+table {
+  break-inside: avoid-page !important;
+  page-break-inside: avoid !important;
+}
+</style>`;
+  const body = String(html || '');
+  if (/<head[^>]*>/i.test(body)) {
+    return body.replace(/<head([^>]*)>/i, `<head$1>\n${printCss}\n`);
+  }
+  if (/<html[^>]*>/i.test(body)) {
+    return body.replace(/<html([^>]*)>/i, `<html$1>\n<head>\n${printCss}\n</head>\n`);
+  }
+  return `<!doctype html><html><head>${printCss}</head><body>${body}</body></html>`;
+}
+
+function pdfOptionsForMode(mode = 'default') {
+  if (mode === 'edge-to-edge') {
+    return {
+      width: '1200px',
+      height: '1697px',
+      printBackground: true,
+      preferCSSPageSize: true,
+      displayHeaderFooter: false,
+      scale: 1,
+      margin: { top: '0', right: '0', bottom: '0', left: '0' },
+    };
+  }
+
+  return {
+    format: 'A4',
+    printBackground: true,
+    margin: { top: '16mm', right: '14mm', bottom: '16mm', left: '14mm' },
+  };
+}
+
+async function renderPdfBuffer({ clientId, runId, html, pdfMode = 'default' }) {
   const config = getBrowserlessConfig();
   if (!config.enabled) {
     return {
@@ -598,12 +710,8 @@ async function renderPdfBuffer({ clientId, runId, html }) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        html,
-        options: {
-          format: 'A4',
-          printBackground: true,
-          margin: { top: '16mm', right: '14mm', bottom: '16mm', left: '14mm' },
-        },
+        html: injectPdfPrintCss(html, pdfMode),
+        options: pdfOptionsForMode(pdfMode),
         gotoOptions: { waitUntil: 'networkidle2', timeout: config.gotoTimeoutMs },
         waitForTimeout: config.postLoadWaitMs,
       }),
@@ -680,11 +788,29 @@ async function renderPdfBuffer({ clientId, runId, html }) {
   }
 }
 
-async function persistBriefPdfArtifact({ clientId, runId, html }) {
+function safePdfFileName(fileName) {
+  const base = String(fileName || 'brief.pdf')
+    .replace(/[\\/:*?"<>|]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^\.+|\.+$/g, '');
+  const withExtension = /\.pdf$/i.test(base) ? base : `${base || 'brief'}.pdf`;
+  return withExtension.slice(0, 140);
+}
+
+async function persistBriefPdfArtifact({
+  clientId,
+  runId,
+  html,
+  fileName = 'brief.pdf',
+  storageClientKey = null,
+  storageBriefKey = null,
+  pdfMode = 'default',
+}) {
   const renderedAt = new Date().toISOString();
 
   try {
-    const rendered = await renderPdfBuffer({ clientId, runId, html });
+    const rendered = await renderPdfBuffer({ clientId, runId, html, pdfMode });
 
     if (!rendered.ok) {
       return { ok: false, warning: rendered.warning };
@@ -692,11 +818,11 @@ async function persistBriefPdfArtifact({ clientId, runId, html }) {
 
     const storagePath = path.posix.join(
       'clients',
-      clientId,
+      storageClientKey || clientId,
       'brief-runs',
-      runId,
+      storageBriefKey || runId,
       'artifacts',
-      'brief.pdf'
+      safePdfFileName(fileName)
     );
 
     const stored = await saveBufferArtifact({
@@ -706,7 +832,10 @@ async function persistBriefPdfArtifact({ clientId, runId, html }) {
       metadata: {
         artifactType: 'brief_pdf',
         clientId,
+        storageClientKey: storageClientKey || clientId,
+        storageBriefKey: storageBriefKey || runId,
         runId,
+        fileName: safePdfFileName(fileName),
         renderedAt,
       },
     });
@@ -719,6 +848,7 @@ async function persistBriefPdfArtifact({ clientId, runId, html }) {
         bucket: stored.bucket,
         storagePath: stored.storagePath,
         contentType: stored.contentType,
+        fileName: safePdfFileName(fileName),
         sizeBytes: stored.sizeBytes,
         renderedAt,
         browserlessRequestId: rendered.requestId || null,

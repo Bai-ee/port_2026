@@ -145,7 +145,7 @@ export const AuthProvider = ({ children }) => {
     return unsubscribe;
   }, [user]);
 
-  const isAdmin = useMemo(() => user?.email === 'edittraxnft@gmail.com', [user?.email]);
+  const isAdmin = useMemo(() => user?.email === 'bryanballi@gmail.com', [user?.email]);
 
   const value = useMemo(() => ({
     user,

@@ -100,9 +100,12 @@ async function loadAdminAccess(email) {
 
 async function listAdminDashboards(email) {
   const access = await loadAdminAccess(email);
-  if (!access.isAdmin || access.dashboardIds.length === 0) return [];
+  if (!access.isAdmin) return [];
 
-  const uniqueIds = Array.from(new Set(access.dashboardIds));
+  const clientSnaps = await fb.adminDb.collection('clients').get();
+  const allClientIds = clientSnaps.docs.map((doc) => doc.id).filter(Boolean);
+  const uniqueIds = Array.from(new Set([...access.dashboardIds, ...allClientIds]));
+
   const docs = await Promise.all(uniqueIds.map(async (clientId) => {
     const [clientSnap, dashSnap] = await Promise.all([
       fb.adminDb.collection('clients').doc(clientId).get(),
@@ -119,6 +122,15 @@ async function listAdminDashboards(email) {
   }));
 
   return docs.sort((a, b) => String(a.name || a.clientId).localeCompare(String(b.name || b.clientId)));
+}
+
+async function canAdminAccessClient(email, clientId) {
+  const access = await loadAdminAccess(email);
+  if (!access.isAdmin) return false;
+  if (access.dashboardIds.includes(clientId)) return true;
+
+  const clientSnap = await fb.adminDb.collection('clients').doc(clientId).get();
+  return clientSnap.exists;
 }
 
 async function getEffectiveClientContext({ uid, email, request, requestedClientId }) {
@@ -147,7 +159,7 @@ async function getEffectiveClientContext({ uid, email, request, requestedClientI
     throw err;
   }
 
-  if (!adminAccess.dashboardIds.includes(requested)) {
+  if (!(await canAdminAccessClient(email, requested))) {
     const err = new Error('Forbidden: dashboard is not provisioned for this admin.');
     err.status = 403;
     throw err;
@@ -375,6 +387,22 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
     ),
   ]);
 
+  // Non-fatal: register the new clientId in the admin's dashboard list if applicable.
+  try {
+    const access = await loadAdminAccess(email);
+    if (access.isAdmin) {
+      await fb.adminDb.collection('admins').doc(access.adminEmail).set(
+        {
+          adminDashboards: fb.FieldValue.arrayUnion(clientId),
+          updatedAt: fb.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
+  } catch (adminWriteErr) {
+    console.warn('[provisionClientForUser] non-fatal: failed to update adminDashboards', adminWriteErr?.message);
+  }
+
   let run = null;
   if (normalized?.websiteUrl) {
     run = await queueInitialBriefRun({
@@ -413,6 +441,138 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
     initialRun: run,
     alreadyProvisioned: false,
   };
+}
+
+/**
+ * Admin-created, website-less client. Unlike provisionClientForUser this does
+ * NOT link the admin's own user record (so the admin can own many separate
+ * workspaces), is always website-less (idea-only), and never queues a brief.
+ * The new client is registered in the admin's adminDashboards roster so it is
+ * reachable from the dashboard client switcher (impersonation).
+ *
+ * @param {{ adminUid: string, adminEmail: string, companyName: string, ideaDescription?: string }} input
+ * @returns {Promise<{ clientId: string, client: object }>}
+ */
+async function createWebsitelessClient({ adminUid, adminEmail, companyName, ideaDescription }) {
+  const resolvedCompanyName = deriveCompanyName({
+    companyName,
+    hostname: '',
+    displayName: '',
+    email: adminEmail,
+  });
+  const trimmedIdeaDescription = String(ideaDescription || '').trim();
+  if (!resolvedCompanyName) {
+    const err = new Error('Provide a client name.');
+    err.status = 400;
+    throw err;
+  }
+
+  const clientKey = slugify(resolvedCompanyName || 'client');
+  const autoId = fb.adminDb.collection('clients').doc().id;
+  const clientId = `${clientKey}-${autoId.slice(0, 8)}`;
+  const clientRef = fb.adminDb.collection('clients').doc(clientId);
+  const memberRef = clientRef.collection('members').doc(adminUid);
+  const onboardingRef = clientRef.collection('system').doc('onboarding');
+  const clientConfigRef = fb.adminDb.collection('client_configs').doc(clientId);
+  const dashboardStateRef = fb.adminDb.collection('dashboard_state').doc(clientId);
+  const now = fb.FieldValue.serverTimestamp();
+
+  const clientPayload = {
+    clientId,
+    ownerUid: adminUid,
+    ownerEmail: adminEmail || '',
+    ownerDisplayName: '',
+    companyName: resolvedCompanyName,
+    dashboardTitle: buildDashboardTitle(resolvedCompanyName),
+    dashboardDescription: 'Website-less workspace. Feed it via uploads (brain) and a brief run.',
+    websiteUrl: '',
+    normalizedOrigin: '',
+    normalizedHost: '',
+    status: 'active',
+    onboardingStatus: 'intake_received',
+    pipelineType: 'free-tier-intake',
+    activeModules: [],
+    activeAddOns: [],
+    pricingTier: 'starter',
+    providerStrategy: 'anthropic',
+    active: true,
+    adminCreated: true,
+    latestRunId: null,
+    latestRunStatus: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await Promise.all([
+    clientRef.set(clientPayload),
+    memberRef.set({
+      uid: adminUid,
+      email: adminEmail || '',
+      displayName: '',
+      role: 'owner',
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    }),
+    onboardingRef.set({
+      state: 'intake_received',
+      sourceUrl: '',
+      ideaDescription: trimmedIdeaDescription,
+      queuedAt: null,
+      updatedAt: now,
+    }),
+    clientConfigRef.set({
+      clientId,
+      sourceInputs: {
+        websiteUrl: '',
+        ideaDescription: trimmedIdeaDescription,
+        uploadedImageRefs: [],
+      },
+      onboardingAnswers: null,
+      ingestionConfig: null,
+      briefConfig: null,
+      dashboardConfig: null,
+      providerConfig: { defaultProvider: 'anthropic' },
+      moduleFlags: {},
+      moduleConfig: getDefaultModuleConfig(),
+      createdAt: now,
+      updatedAt: now,
+    }),
+    dashboardStateRef.set({
+      clientId,
+      status: 'active',
+      headline: null,
+      summaryCards: [],
+      latestInsights: [],
+      latestRunId: null,
+      latestRunStatus: null,
+      modules: getDefaultModuleState(false),
+      updatedAt: now,
+      provisioningState: {
+        startedAt: now,
+        message: 'Website-less workspace ready. Upload to the brain and run a brief.',
+      },
+      errorState: null,
+    }),
+  ]);
+
+  // Register in the admin roster so it appears in the client switcher.
+  try {
+    const access = await loadAdminAccess(adminEmail);
+    if (access.isAdmin) {
+      await fb.adminDb.collection('admins').doc(access.adminEmail).set(
+        {
+          adminDashboards: fb.FieldValue.arrayUnion(clientId),
+          updatedAt: fb.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
+  } catch (adminWriteErr) {
+    console.warn('[createWebsitelessClient] non-fatal: failed to update adminDashboards', adminWriteErr?.message);
+  }
+
+  return { clientId, client: clientPayload };
 }
 
 function inferModuleStateFromDashboard(dashboardState) {
@@ -745,6 +905,13 @@ async function reseedIntakeForClient({ clientId, uid, websiteUrl }) {
   const normalized = normalizeOptionalUrl(websiteUrl);
   if (!normalized) throw new Error('Invalid website URL.');
 
+  const existingClientSnap = await fb.adminDb.collection('clients').doc(clientId).get();
+  const existingClientData = existingClientSnap.exists ? existingClientSnap.data() : null;
+  const hostChanged = existingClientData?.normalizedHost !== normalized.hostname;
+  const newCompanyName = hostChanged
+    ? deriveCompanyName({ hostname: normalized.hostname, companyName: null, displayName: null, email: null })
+    : null;
+
   const runRef = fb.adminDb.collection('brief_runs').doc();
   const runId = runRef.id;
   const now = fb.FieldValue.serverTimestamp();
@@ -783,6 +950,10 @@ async function reseedIntakeForClient({ clientId, uid, websiteUrl }) {
         latestRunStatus: 'queued',
         status: 'provisioning',
         updatedAt: now,
+        ...(hostChanged && newCompanyName ? {
+          companyName: newCompanyName,
+          dashboardTitle: buildDashboardTitle(newCompanyName),
+        } : {}),
       },
       { merge: true }
     ),
@@ -841,5 +1012,6 @@ module.exports = {
   getDashboardBootstrap,
   provisionClientFromProspect,
   provisionClientForUser,
+  createWebsitelessClient,
   reseedIntakeForClient,
 };

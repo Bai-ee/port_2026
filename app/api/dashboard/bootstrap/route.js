@@ -30,7 +30,7 @@ export async function GET(request) {
     let bootstrap = await getDashboardBootstrap({ uid: decoded.uid, email: decoded.email, request });
 
     // Auto-create sample brief for admin if missing
-    const isAdmin = decoded.email === 'edittraxnft@gmail.com';
+    const isAdmin = decoded.email === 'bryanballi@gmail.com';
     if (isAdmin && bootstrap?.dashboardState && !bootstrap.dashboardState.scribe?.brief) {
       const clientId = bootstrap.effectiveClientId || bootstrap.userProfile?.clientId;
       if (clientId) {

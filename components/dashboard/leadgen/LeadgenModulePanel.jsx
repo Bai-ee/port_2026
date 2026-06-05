@@ -32,6 +32,11 @@ const STAGE_CHAT = {
   validate:       'Validating HTML output…',
   deploy:         'Deploying preview to Vercel…',
   compare:        'Running AI Readiness before/after comparison…',
+  'load-context': 'Loading saved site, brief, and estimate settings…',
+  'build-estimate': 'Building the structured estimate…',
+  'verify-estimate': 'Checking pricing math and proof claims…',
+  'render-html':  'Rendering the client-facing estimate brief…',
+  'render-pdf':   'Rendering the downloadable PDF…',
 };
 
 // Human-readable completion messages per module
@@ -86,6 +91,12 @@ function buildDoneMessage(moduleId, result, succeeded) {
         return `Done. Preview live. AI Readiness: ${c.before.score} → ${c.after.score} (+${c.improvement ?? '?'} points).`;
       }
       return `Preview deployed — ${url}`;
+    }
+    case 'create-estimate': {
+      const total = result?.total != null
+        ? new Intl.NumberFormat('en-US', { style: 'currency', currency: result?.currency || 'USD' }).format(result.total)
+        : null;
+      return `Estimate generated${total ? ` — ${total}` : ''}${result?.pdfUrl ? ' · PDF ready.' : '.'}`;
     }
     default:
       return 'Analysis complete.';
@@ -188,7 +199,7 @@ export default function LeadgenModulePanel({
     }
 
     // Stage order used to advance the progress rail
-    const STAGES = ['fetch', 'analyze', 'capture', 'skill', 'ai-seo', 'agent-ready', 'synthesize', 'compose', 'normalize', 'persist'];
+    const STAGES = ['fetch', 'analyze', 'capture', 'skill', 'ai-seo', 'agent-ready', 'synthesize', 'compose', 'normalize', 'load-context', 'build-estimate', 'verify-estimate', 'render-html', 'render-pdf', 'persist'];
     let stageIdx = 0;
 
     const reader  = res.body.getReader();

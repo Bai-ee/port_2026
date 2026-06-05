@@ -37,11 +37,7 @@ export async function GET(request) {
     );
   }
 
-  const snapshot = await _fb.adminDb
-    .collection('clients')
-    .orderBy('createdAt', 'desc')
-    .limit(100)
-    .get();
+  const snapshot = await _fb.adminDb.collection('clients').get();
 
   const clients = snapshot.docs.map((doc) => {
     const data = doc.data();
@@ -59,6 +55,13 @@ export async function GET(request) {
       createdAt: data.createdAt,
       updatedAt: data.updatedAt,
     });
+  });
+
+  clients.sort((a, b) => {
+    const aTime = a.createdAt ? Date.parse(a.createdAt) : 0;
+    const bTime = b.createdAt ? Date.parse(b.createdAt) : 0;
+    if (aTime !== bTime) return bTime - aTime;
+    return String(a.companyName || a.clientId).localeCompare(String(b.companyName || b.clientId));
   });
 
   return json({ clients });
