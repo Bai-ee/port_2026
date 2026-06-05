@@ -138,6 +138,18 @@ export function AdminEmailSettingsView({ user }) {
     });
   }, []);
 
+  const [runState, setRunState] = useState({}); // { [clientId]: 'running' | 'done' | 'error: msg' }
+  const runBrief = useCallback(async (cid) => {
+    if (!user || !cid) return;
+    setRunState((s) => ({ ...s, [cid]: 'running' }));
+    try {
+      await authFetch(user, `/api/dashboard/marketing-brief/run?as=${encodeURIComponent(cid)}`, { method: 'POST', body: '{}' });
+      setRunState((s) => ({ ...s, [cid]: 'done' }));
+    } catch (e) {
+      setRunState((s) => ({ ...s, [cid]: `error: ${e.message}` }));
+    }
+  }, [user]);
+
   useEffect(() => { load(); }, [load]);
 
   const save = useCallback(async () => {
@@ -190,17 +202,26 @@ export function AdminEmailSettingsView({ user }) {
             </label>
             <div className="mb-config-field">
               <span className="mb-config-label">Include client briefs</span>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 180, overflow: 'auto' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 220, overflow: 'auto' }}>
                 {clients.length ? clients.map((c) => {
                   const checked = (form.includeClientIds || []).includes(c.clientId);
+                  const rs = runState[c.clientId];
                   return (
-                    <label key={c.clientId} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-display)', cursor: 'pointer' }}>
-                      <input type="checkbox" checked={checked} onChange={() => toggleInclude(c.clientId)} />
-                      <span>{c.name}{c.websiteUrl ? '' : ' · no site'}</span>
-                    </label>
+                    <div key={c.clientId} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-display)' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flex: 1, minWidth: 0 }}>
+                        <input type="checkbox" checked={checked} onChange={() => toggleInclude(c.clientId)} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}{c.websiteUrl ? '' : ' · no site'}</span>
+                      </label>
+                      {rs && rs.startsWith('error') ? <span style={{ fontSize: 10, color: 'var(--accent, #d71921)', whiteSpace: 'nowrap' }} title={rs}>failed</span> : null}
+                      {rs === 'done' ? <span style={{ fontSize: 10, color: 'var(--success, #4A9E5C)', whiteSpace: 'nowrap' }}>done</span> : null}
+                      <button type="button" className="mb-config-mini-btn" onClick={() => runBrief(c.clientId)} disabled={rs === 'running'} style={{ whiteSpace: 'nowrap' }}>
+                        {rs === 'running' ? 'Running…' : 'Run brief'}
+                      </button>
+                    </div>
                   );
                 }) : <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>No clients.</span>}
               </div>
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>Run brief generates today&apos;s strategy for that client (may take ~1 min). Re-open Email Digest to see it.</span>
             </div>
           </section>
 
@@ -279,23 +300,37 @@ export function AdminCreateClientView({ user }) {
   const [companyName, setCompanyName] = useState('');
   const [ideaDescription, setIdeaDescription] = useState('');
   const [status, setStatus] = useState(null); // { kind, msg, clientId }
+  const [runStatus, setRunStatus] = useState(null); // { kind, msg }
 
   const create = useCallback(async () => {
     if (!user) return;
     if (!companyName.trim()) { setStatus({ kind: 'error', msg: 'Enter a client name.' }); return; }
     setStatus({ kind: 'pending', msg: 'Creating…' });
+    setRunStatus(null);
     try {
       const data = await authFetch(user, '/api/admin/create-client', {
         method: 'POST',
         body: JSON.stringify({ companyName, ideaDescription }),
       });
-      setStatus({ kind: 'ok', msg: `Created ${data.clientId}. Switch to it via the client dropdown to feed its pipeline.`, clientId: data.clientId });
+      setStatus({ kind: 'ok', msg: `Created ${data.clientId}. Run its first brief below, then set it as Home in Email Settings.`, clientId: data.clientId });
       setCompanyName('');
       setIdeaDescription('');
     } catch (e) {
       setStatus({ kind: 'error', msg: e.message });
     }
   }, [user, companyName, ideaDescription]);
+
+  const runBrief = useCallback(async () => {
+    const cid = status?.clientId;
+    if (!user || !cid) return;
+    setRunStatus({ kind: 'pending', msg: 'Running brief… (~1 min)' });
+    try {
+      await authFetch(user, `/api/dashboard/marketing-brief/run?as=${encodeURIComponent(cid)}`, { method: 'POST', body: '{}' });
+      setRunStatus({ kind: 'ok', msg: 'Brief generated. It will appear in the email + Email Digest.' });
+    } catch (e) {
+      setRunStatus({ kind: 'error', msg: e.message });
+    }
+  }, [user, status]);
 
   return (
     <div className="tile-detail-bento-cell tile-detail-tabbed-container">
@@ -319,10 +354,18 @@ export function AdminCreateClientView({ user }) {
             </label>
           </section>
           {status?.kind === 'error' && <p className="mb-config-error">{status.msg}</p>}
+          {runStatus?.kind === 'error' && <p className="mb-config-error">{runStatus.msg}</p>}
           <div className="mb-config-actionbar">
-            <span className="mb-config-actionbar-note">{status && status.kind !== 'error' ? status.msg : 'Owner: you (admin). Added to your client dropdown automatically.'}</span>
+            <span className="mb-config-actionbar-note">
+              {runStatus && runStatus.kind !== 'error' ? runStatus.msg
+                : status && status.kind !== 'error' ? status.msg
+                : 'Owner: you (admin). Added to your client dropdown automatically.'}
+            </span>
             <div className="mb-config-actionbar-buttons">
               <button type="button" className="tile-foot-rerun-btn" onClick={create} disabled={status?.kind === 'pending'}>{status?.kind === 'pending' ? 'Creating…' : 'Create Client'}</button>
+              {status?.clientId ? (
+                <button type="button" className="mb-config-mini-btn" onClick={runBrief} disabled={runStatus?.kind === 'pending'}>{runStatus?.kind === 'pending' ? 'Running…' : 'Run brief'}</button>
+              ) : null}
             </div>
           </div>
         </div>
