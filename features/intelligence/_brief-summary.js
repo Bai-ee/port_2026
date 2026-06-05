@@ -54,22 +54,25 @@ function compactData({ dateStr, agenda, ga4, firebase, homepage }) {
  * Generate the executive-summary paragraph.
  * @returns {Promise<{ paragraph: string, model: string, usage: object }>}
  */
-async function generateBriefSummary({ dateStr, agenda, ga4, firebase, homepage, docsText = '', config = {} }) {
+async function generateBriefSummary({ dateStr, agenda, ga4, firebase, homepage, docsText = '', briefText = '', config = {} }) {
   const tone = config.tone || 'concise, professional, direct';
   const extra = config.extraInstructions ? `\nAdditional instructions: ${config.extraInstructions}` : '';
   const dataBlock = compactData({ dateStr, agenda, ga4, firebase, homepage });
+  const briefBlock = briefText ? `\n\n${briefText}` : '';
   const docBlock = docsText
     ? `\n\nReference documents the user uploaded (context on what's important/upcoming):\n${docsText}`
     : '';
 
   const system =
     `You write the opening executive summary for a daily briefing email. ` +
-    `Output ONE single paragraph — no headings, no bullet points, no markdown, 80–140 words. ` +
-    `Tone: ${tone}. In flowing prose cover: what is new and important today, the day's schedule, and what's coming up. ` +
-    `Ground every claim in the supplied data and documents — never invent numbers or events. ` +
+    `Output ONE single paragraph — no headings, no bullet points, no markdown, 90–160 words. ` +
+    `Tone: ${tone}. In flowing prose cover, in this order: the day's strategy from the brief — today's post ideas, ` +
+    `KOL and competitor moves, and narratives to get into; then what's new and important (analytics/platform); ` +
+    `then the day's schedule and what's coming up. ` +
+    `Ground every claim in the supplied data, brief, and documents — never invent numbers, posts, or events. ` +
     `If a topic has no data, omit it gracefully rather than noting its absence.${extra}`;
 
-  const userContent = `Here is today's data:\n\n${dataBlock}${docBlock}`;
+  const userContent = `Here is today's data:\n\n${dataBlock}${briefBlock}${docBlock}`;
 
   const response = await callAnthropic({
     model: SUMMARY_MODEL,

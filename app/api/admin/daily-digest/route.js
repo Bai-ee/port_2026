@@ -7,6 +7,7 @@ const { getHeaderValue, safeSecretEquals, buildAuthRequestShim, verifyAdminReque
 const { logError, logInfo, logWarn } = require('../../../../api/_lib/observability.cjs');
 const briefSummary = require('../../../../features/intelligence/_brief-summary.js');
 const digestConfig = require('../../../../features/intelligence/_digest-config.js');
+const briefIntel = require('../../../../features/intelligence/_brief-intel.js');
 
 // ── Config ──────────────────────────────────────────────────────────────────
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
@@ -769,7 +770,57 @@ function buildSummarySection(summary) {
   </div>`;
 }
 
-function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary) {
+/** Strategic brief block — mirrors the established daily brief's strategy. */
+function buildStrategicBriefSection(intel) {
+  if (!intel) return '';
+  const hasContent =
+    intel.opportunities?.length || intel.kols?.length || intel.competitors?.length ||
+    intel.narratives?.length || intel.humanBrief;
+  if (!hasContent) return '';
+
+  const linkBit = (url) => (url ? ` <a href="${escapeHtml(url)}" style="color:${DT.accent};font-family:${DT.fMono};font-size:11px;">↗</a>` : '');
+
+  const oppRows = (intel.opportunities || []).length
+    ? intel.opportunities.map((o) => `<tr>
+        <td style="${TD}">${escapeHtml(o.topic)}${o.windowHours ? ` <span style="color:${DT.light};font-family:${DT.fMono};font-size:11px;">${o.windowHours}h</span>` : ''}${linkBit(o.url)}<div style="margin-top:3px;color:${DT.soft};font-size:12px;">${escapeHtml(o.angle || '')}</div></td>
+      </tr>`).join('')
+    : '';
+
+  const signalRows = [
+    ...(intel.kols || []).map((k) => ({ tag: `KOL${k.platform ? ` · ${k.platform}` : ''}`, label: k.name, value: k.detail, url: k.url })),
+    ...(intel.competitors || []).map((c) => ({ tag: `Competitor${c.impact ? ` · ${c.impact}` : ''}`, label: c.name, value: c.finding, url: c.url })),
+    ...(intel.narratives || []).map((n) => ({ tag: 'Narrative', label: n.trend, value: n.detail, url: n.url })),
+  ];
+  const signalsHtml = signalRows.length
+    ? signalRows.map((s) => `<tr>
+        <td style="${TD}width:120px;font-family:${DT.fMono};font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:${DT.light};vertical-align:top;">${escapeHtml(s.tag)}</td>
+        <td style="${TD}"><strong>${escapeHtml(s.label)}</strong>${linkBit(s.url)}<div style="margin-top:2px;color:${DT.soft};font-size:12px;">${escapeHtml(s.value || '')}</div></td>
+      </tr>`).join('')
+    : '';
+
+  const c = intel.content || {};
+  const postBlocks = [
+    c.x_post && { label: 'X post', text: c.x_post },
+    c.x_thread_opener && { label: 'Thread opener', text: c.x_thread_opener },
+    c.discord_announcement && { label: 'Discord', text: c.discord_announcement },
+  ].filter(Boolean);
+  const postsHtml = postBlocks.length
+    ? postBlocks.map((p) => `<div style="margin-bottom:10px;padding:12px 14px;background:${DT.card};border:1px solid ${DT.line};border-radius:10px;">
+        <div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:${DT.light};margin-bottom:6px;">${escapeHtml(p.label)}</div>
+        <div style="font-family:${DT.fBody};font-size:13px;color:${DT.ink};line-height:1.5;">${escapeHtml(p.text)}</div>
+      </div>`).join('')
+    : '';
+
+  return `<div style="margin-bottom:32px;">
+    ${dKicker('Today &middot; Strategic Brief')}
+    ${intel.humanBrief ? `<div style="background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:18px 20px;margin-bottom:16px;font-family:${DT.fBody};font-size:14px;line-height:1.6;color:${DT.ink};">${escapeHtml(intel.humanBrief)}</div>` : ''}
+    ${oppRows ? `<div style="margin-bottom:14px;">${dMini('Post opportunities')}${dDataTable([{ label: 'Conversation / angle' }], oppRows)}</div>` : ''}
+    ${signalsHtml ? `<div style="margin-bottom:14px;">${dMini('Signals · KOLs / competitors / narratives')}${dDataTable([{ label: 'Type' }, { label: 'Finding' }], signalsHtml)}</div>` : ''}
+    ${postsHtml ? `<div>${dMini('Suggested posts')}${postsHtml}</div>` : ''}
+  </div>`;
+}
+
+function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, intel) {
   const dateStr = new Date(timestamp).toLocaleDateString('en-US', {
     weekday: 'long',
     year: 'numeric',
@@ -861,6 +912,9 @@ a{text-decoration:none;}
 
           <!-- Executive summary (LLM) -->
           ${buildSummarySection(summary)}
+
+          <!-- Strategic brief (mirrors established daily brief) -->
+          ${buildStrategicBriefSection(intel)}
 
           <!-- Key metrics -->
           ${dSection('Platform', 'Overview', dStatCells([
@@ -1019,21 +1073,25 @@ export async function GET(request) {
       day: 'numeric',
     });
 
-    // LLM executive summary — additive and flag-guarded. Any failure here must
-    // not block the digest from sending, so it is wrapped in try/catch.
+    // Strategic brief intelligence (post ideas, KOLs, competitors, narratives)
+    // mirrored from the established daily brief. Null if the client has no brief
+    // yet. Resolved once and reused for both the summary and the email section.
     let summary = null;
+    let intel = null;
     try {
       const fullDateStr = new Date(timestamp).toLocaleDateString('en-US', {
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
       });
       const clientId = await digestConfig.resolveDigestClientId();
       const cfg = await digestConfig.getDigestConfig(clientId);
+      intel = await briefIntel.getBriefIntelligence(clientId);
       if (cfg.summaryEnabled) {
         const { text: docsText } = await digestConfig.getRecentDocsText({
           clientId, count: cfg.recentDocsCount, maxChars: cfg.maxDocChars,
         });
         summary = await briefSummary.generateBriefSummary({
-          dateStr: fullDateStr, agenda, ga4, firebase, homepage, docsText, config: cfg,
+          dateStr: fullDateStr, agenda, ga4, firebase, homepage, docsText,
+          briefText: briefIntel.briefIntelToText(intel), config: cfg,
         });
       }
     } catch (err) {
@@ -1043,7 +1101,7 @@ export async function GET(request) {
     const sessionStr = ga4.overview ? `, ${ga4.overview.sessions} session${ga4.overview.sessions !== 1 ? 's' : ''}` : '';
     const subject = `HitLoop Daily — ${firebase.newUsers} sign-up${firebase.newUsers !== 1 ? 's' : ''}, ${firebase.recentRuns} dashboard${firebase.recentRuns !== 1 ? 's' : ''}${sessionStr} · ${dateStr}`;
 
-    const html = buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary);
+    const html = buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, intel);
 
     // Preview mode (admin dashboard): build everything, send nothing.
     if (isPreview) {

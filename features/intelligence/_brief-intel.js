@@ -1,0 +1,100 @@
+'use strict';
+
+// _brief-intel.js — reads the established daily-brief intelligence for a client
+// and normalizes it for the daily email. Mirrors the strategy of the dashboard
+// brief (renderMarketingBriefHtml): scout narrative, post opportunities, and
+// KOL / competitor / narrative signals + generated posts. Source of truth:
+// `dashboard_state/{clientId}.marketingBrief`.
+
+const fb = require('../../api/_lib/firebase-admin.cjs');
+
+function arr(v) {
+  return Array.isArray(v) ? v : [];
+}
+
+/**
+ * Read + normalize the latest brief intelligence for a client.
+ * Returns null if no marketingBrief has been generated for the client yet.
+ * @returns {Promise<null | {
+ *   headline: string, humanBrief: string, generatedAt: string|null,
+ *   opportunities: Array, kols: Array, competitors: Array, narratives: Array,
+ *   content: object, readyToPublish: boolean|null
+ * }>}
+ */
+async function getBriefIntelligence(clientId) {
+  if (!clientId) return null;
+  let state = null;
+  try {
+    const snap = await fb.adminDb.collection('dashboard_state').doc(clientId).get();
+    state = snap.exists ? snap.data() : null;
+  } catch {
+    return null;
+  }
+  const marketingBrief = state?.marketingBrief;
+  if (!marketingBrief) return null;
+
+  const agentData = marketingBrief?.scoutBrief?.agentData || {};
+  const opportunities = arr(agentData?.viralOpportunities?.opportunities).length
+    ? arr(agentData.viralOpportunities.opportunities)
+    : arr(marketingBrief?.contentOpportunities);
+
+  return {
+    headline: marketingBrief?.headline || state?.headline || '',
+    humanBrief: marketingBrief?.scoutBrief?.humanBrief || '',
+    generatedAt: marketingBrief?.generatedAtIso || null,
+    opportunities: opportunities.slice(0, 6).map((o) => ({
+      topic: o.conversation || o.topic || o.title || 'Opportunity',
+      angle: o.injectionAngle || o.whyNow || o.summary || '',
+      priority: o.priority || o.authenticity || '',
+      windowHours: o.windowHours || null,
+      url: o.url || '',
+    })),
+    kols: arr(agentData.kolActivity).slice(0, 5).map((k) => ({
+      name: k.name || k.author || 'KOL',
+      platform: k.platform || '',
+      detail: k.content || k.summary || '',
+      sentiment: k.sentiment || '',
+      url: k.url || '',
+    })),
+    competitors: arr(agentData.competitorIntel).slice(0, 5).map((c) => ({
+      name: c.competitor || 'Competitor',
+      finding: c.finding || '',
+      impact: c.impact || '',
+      url: c.url || '',
+    })),
+    narratives: arr(agentData.categoryTrends).slice(0, 5).map((t) => ({
+      trend: t.trend || t.topic || 'Trend',
+      detail: t.detail || '',
+      relevance: t.relevance || '',
+    })),
+    content: marketingBrief?.content || {},
+    readyToPublish: marketingBrief?.guardianFlags?.readyToPublish ?? null,
+  };
+}
+
+/** Compact, model-readable text block of the brief intelligence for the LLM. */
+function briefIntelToText(intel) {
+  if (!intel) return '';
+  const lines = ['Established daily brief (mirror this strategy):'];
+  if (intel.headline) lines.push(`Headline: ${intel.headline}`);
+  if (intel.humanBrief) lines.push(`Scout brief: ${intel.humanBrief}`);
+  if (intel.opportunities.length) {
+    lines.push('Post opportunities today:');
+    intel.opportunities.forEach((o) => lines.push(`- ${o.topic}${o.angle ? ` — ${o.angle}` : ''}${o.windowHours ? ` (act within ${o.windowHours}h)` : ''}`));
+  }
+  if (intel.kols.length) {
+    lines.push('KOL activity:');
+    intel.kols.forEach((k) => lines.push(`- ${k.name}${k.platform ? ` (${k.platform})` : ''}: ${k.detail}`));
+  }
+  if (intel.competitors.length) {
+    lines.push('Competitor moves:');
+    intel.competitors.forEach((c) => lines.push(`- ${c.name}: ${c.finding}${c.impact ? ` [${c.impact}]` : ''}`));
+  }
+  if (intel.narratives.length) {
+    lines.push('Narratives to get into:');
+    intel.narratives.forEach((n) => lines.push(`- ${n.trend}${n.detail ? ` — ${n.detail}` : ''}`));
+  }
+  return lines.join('\n');
+}
+
+module.exports = { getBriefIntelligence, briefIntelToText };
