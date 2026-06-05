@@ -4505,24 +4505,9 @@ const DashboardPage = () => {
         const allRows = [
           { key: 'col-header', isAuditRow: true, isColumnHeader: true, label: 'DATA FIELD', tier: 'TIER', status: 'STATUS' },
 
-          // ── EXECUTIVE DAILY BRIEF ──────────────────────────────────────────
-          { key: 'sec-daily-brief', isHeader: true, label: 'EXECUTIVE DAILY BRIEF', cardId: 'marketing-brief', cardCategory: 'brief' },
-          row('db-status',         'Brief status',          marketingBriefStatus),
-          row('db-headline',       'Brief headline',        marketingBrief?.headline),
-          row('db-x-post',         'X post',                marketingBrief?.content?.x_post),
-          row('db-content-angle',  'Content angle',         marketingBrief?.content?.content_angle),
-          row('db-guardian',       'Guardian approved',     marketingBrief?.guardianFlags?.readyToPublish),
-          row('db-kb-sources',     'KB sources used',       marketingBriefKnowledgeBaseSources?.length),
-          row('db-kol',            'KOL signals',           marketingScoutAgentData?.kolActivity?.length),
-          row('db-brand-mentions', 'Brand mentions',        marketingScoutAgentData?.brandMentions?.length),
-          row('db-competitor-intel','Competitor intel',     marketingScoutAgentData?.competitorIntel?.length),
-          row('db-viral',          'Viral windows',         marketingScoutAgentData?.viralOpportunities?.opportunities?.length),
-          row('db-category-trends','Category trends',       marketingScoutAgentData?.categoryTrends?.length),
-          row('db-escalations',    'Escalations',           marketingScoutAgentData?.escalations?.length),
-          row('db-scout-focus',    'Scout focus',           marketingBriefConfig?.sourceFocus),
-          row('db-scout-instr',    'Custom instructions',   marketingBriefConfig?.scoutInstructions),
-          row('db-searches',       'Configured searches',   marketingBriefConfig?.searches?.filter((s) => s?.query)?.length),
-          row('db-platforms',      'Source platforms',      marketingBriefConfig?.sourcePlatforms?.length),
+          // NOTE: EXECUTIVE DAILY BRIEF rows were removed from the Data Quality
+          // score — the brief is pipeline OUTPUT ("what's been run"), not incoming
+          // data. It still lives on its own card and in the daily email.
 
           // ── STRATEGY BUILDER ──────────────────────────────────────────────
           { key: 'sec-strategy', isHeader: true, label: 'STRATEGY BUILDER', cardId: 'strategy-builder', cardCategory: 'growth' },
@@ -4649,15 +4634,8 @@ const DashboardPage = () => {
           row('site-social',       'Social links',          homePage?.socialLinks?.length),
           row('site-contact',      'Contact clues',         homePage?.contactClues?.length),
 
-          // ── ARTIFACTS ────────────────────────────────────────────────────
-          { key: 'sec-artifacts', isHeader: true, label: 'ARTIFACTS' },
-          row('art-brief-html',    'Brief HTML',            briefPreviewHtml),
-          row('art-brief-pdf',     'Brief PDF',             briefPdfUrl),
-          row('art-skill-seo',     'SEO audit report',      dashboardState?.artifacts?.skillDocs?.['seo-depth-audit']),
-          row('art-skill-brand',   'Site meta report',      dashboardState?.artifacts?.skillDocs?.['site-meta-audit']),
-          row('art-skill-style',   'Style guide report',    dashboardState?.artifacts?.skillDocs?.['style-guide-audit']),
-          row('art-skill-conv',    'Conversion report',     dashboardState?.artifacts?.skillDocs?.['conversion-audit']),
-          row('art-skill-asset',   'Brand asset report',    dashboardState?.artifacts?.skillDocs?.['brand-asset-gap']),
+          // NOTE: ARTIFACTS rows (Brief HTML/PDF, audit reports) were removed from
+          // the Data Quality score — they are generated outputs, not incoming data.
 
           // NOTE: MODULE STATUS / RUN HEALTH / PSI TRACE sections were removed
           // from the Data Quality score — they are operational diagnostics, not
