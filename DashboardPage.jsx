@@ -22,6 +22,7 @@ import {
   MessageSquareMore,
   Pencil,
   Search,
+  Send,
   Settings2,
   Workflow,
   Globe,
@@ -39,6 +40,7 @@ import onboardingConfig from './onboarding/questions.config.cjs';
 import { resolveAnalyzerSource, buildCardDescription, buildModuleStateDescription } from './features/scout-intake/card-description-builder.mjs';
 import { deriveFindings } from './features/scout-intake/derived-findings.mjs';
 import ModuleCardControls from './components/dashboard/ModuleCardControls';
+import { AdminEmailDigestView, AdminEmailSettingsView } from './components/AdminEmailModals';
 
 const LeadGenDashboard = dynamic(() => import('./components/dashboard/LeadGenDashboard'), {
   loading: () => null,
@@ -5552,6 +5554,44 @@ const DashboardPage = () => {
       footerRight: 'ADMIN',
       readinessBadge: { tone: 'ok', label: 'Ready' },
     }] : []),
+
+    // ── ADMIN · EMAIL ─────────────────────────────────────────────────────────
+    ...(isAdmin ? [{
+      id: 'email-digest',
+      category: 'admin',
+      number: 'ED',
+      label: 'EMAIL DIGEST',
+      title: 'Email Digest',
+      description: 'View the daily digest email — executive summary, calendar agenda, and site analytics — and send it on demand.',
+      placeholderLabel: 'MAIL',
+      rows: [
+        { key: 'ed-recipient', label: 'Recipient', value: 'Configured (DIGEST_EMAIL)' },
+        { key: 'ed-schedule', label: 'Schedule', value: 'Daily · cron' },
+        { key: 'ed-content', label: 'Content', value: 'Summary + agenda + analytics' },
+        { key: 'ed-access', label: 'Access', value: 'Admin only' },
+      ],
+      footerLeft: 'Live',
+      footerRight: 'ADMIN',
+      readinessBadge: { tone: 'ok', label: 'Live' },
+    }, {
+      id: 'email-settings',
+      category: 'admin',
+      number: 'ES',
+      label: 'EMAIL SETTINGS',
+      title: 'Email Settings',
+      description: 'Enable, format, and customize the LLM summary — tone, how many uploaded documents feed it, and extra instructions.',
+      placeholderLabel: 'CFG',
+      rows: [
+        { key: 'es-summary', label: 'LLM summary', value: 'Toggle on/off' },
+        { key: 'es-tone', label: 'Tone', value: 'Customizable' },
+        { key: 'es-docs', label: 'Docs fed', value: 'Recent uploads' },
+        { key: 'es-access', label: 'Access', value: 'Admin only' },
+      ],
+      footerLeft: 'Ready',
+      footerRight: 'ADMIN',
+      readinessBadge: { tone: 'ok', label: 'Ready' },
+    }] : []),
+
     {
       id: 'brief-competitor',
       category: 'brief',
@@ -7428,6 +7468,7 @@ const DashboardPage = () => {
               { key: 'automation', label: 'Automation & Systems',    sub: 'Scale & automate',         icon: BrainIcon,             color: '#6366f1' },
               { key: 'services',   label: 'Work With Me',            sub: 'Get it done',              icon: MessageSquareMore,     color: '#ec4899' },
               { key: 'leadgen',    label: 'Sales',                    sub: 'Prospect pipeline',        icon: Radar,                 color: '#ff3b30' },
+              ...(isAdmin ? [{ key: 'admin', label: 'Admin', sub: 'Email & system', icon: Send, color: '#a855f7' }] : []),
             ].map(({ key, label, sub, icon: NavIcon, color }) => {
               const isLocked = false;
               return (
@@ -8147,6 +8188,16 @@ const DashboardPage = () => {
                     </div>
                   </div>
                 ) : null}
+
+                {/* Admin · Email Digest — view rendered email + analytics, send */}
+                {activeTileModal.cardId === 'email-digest' && (
+                  <AdminEmailDigestView user={user} />
+                )}
+
+                {/* Admin · Email Settings — enable / format / customize summary */}
+                {activeTileModal.cardId === 'email-settings' && (
+                  <AdminEmailSettingsView user={user} />
+                )}
 
                 {/* Survey card — CHAT + DATA tabs */}
                 {activeTileModal.cardId === 'survey-status' && (
