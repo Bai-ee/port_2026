@@ -988,6 +988,8 @@ const CUSTOM_DETAIL_CARD_IDS = new Set([
   'client-site',
   'social-media-posting',
   'strategy-builder',
+  'email-digest',
+  'email-settings',
 ]);
 
 const buildUnavailableDescription = (subject) => `Insufficient source evidence to determine ${subject} reliably.`;
