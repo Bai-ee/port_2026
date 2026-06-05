@@ -73,6 +73,14 @@ async function resolveDigestClientId() {
   if (explicit) return explicit;
   const email = String(process.env.DIGEST_EMAIL || 'bryanballi@gmail.com').toLowerCase();
   try {
+    // Deterministic: prefer the recipient's PRIMARY client (users.clientId).
+    // ownerEmail can match multiple clients (admins own several), so a plain
+    // "first owned client" query is order-unstable — avoid it as the primary path.
+    const userSnap = await fb.adminDb.collection('users').where('email', '==', email).limit(5).get();
+    for (const doc of userSnap.docs) {
+      const cid = doc.data()?.clientId;
+      if (cid) return cid;
+    }
     const snap = await fb.adminDb.collection('clients').where('ownerEmail', '==', email).limit(1).get();
     if (!snap.empty) {
       const doc = snap.docs[0];
