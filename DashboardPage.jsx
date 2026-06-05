@@ -3855,7 +3855,7 @@ const DashboardPage = () => {
     dashboardState?.marketCategory?.knowledgeBaseSources,
     globalKnowledgeBaseSources
   );
-  const knowledgeBaseSourceSummary = summarizeKnowledgeBaseSources(globalKnowledgeBaseSources, 'Available as client master knowledge');
+  const knowledgeBaseSourceSummary = summarizeKnowledgeBaseSources(globalKnowledgeBaseSources, "Available as this client's brain");
   const hasMarketingBriefData = Boolean(marketingBrief?.content || dashboardState?.headline || latestInsights.length > 0);
   const hasDailyBriefData = hasMarketingBriefData || hasCustomBriefs;
   const hasBriefDocumentData = Boolean(hasIntakeData || hasDailyBriefData);
@@ -4536,7 +4536,7 @@ const DashboardPage = () => {
 
           // ── COMPANY BRAIN (Knowledge Base) ────────────────────────────────
           { key: 'sec-knowledge', isHeader: true, label: 'COMPANY BRAIN', cardId: 'knowledge-base', cardCategory: 'knowledge' },
-          row('kb-global',         'Global KB sources',     globalKnowledgeBaseSources?.length),
+          row('kb-global',         'Brain sources',         globalKnowledgeBaseSources?.length),
           row('kb-brief',          'Brief KB sources',      marketingBriefKnowledgeBaseSources?.length),
           row('kb-strategy',       'Strategy KB sources',   strategyBuilderKnowledgeBaseSources?.length),
           row('kb-brand',          'Brand system KB',       brandSystemKnowledgeBaseSources?.length),
