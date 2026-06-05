@@ -5,6 +5,24 @@ const require = createRequire(import.meta.url);
 const fb = require('../../../../../api/_lib/firebase-admin.cjs');
 const { verifyRequestUser } = require('../../../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../../../api/_lib/client-provisioning.cjs');
+const { geocodeZip } = require('../../../../../features/intelligence/_weather.js');
+
+// Normalize + (re)geocode the weather config. Geocodes the zip on save so the
+// brief/email can fetch a forecast by lat/lon without geocoding every run.
+async function normalizeWeather(input, prior) {
+  const enabled = Boolean(input?.enabled);
+  const zip = String(input?.zip || '').trim().slice(0, 5);
+  const weather = { enabled, zip };
+  if (enabled && /^\d{5}$/.test(zip)) {
+    if (prior?.zip === zip && prior?.lat != null && prior?.lon != null) {
+      weather.lat = prior.lat; weather.lon = prior.lon; weather.place = prior.place || '';
+    } else {
+      const geo = await geocodeZip(zip);
+      if (geo) { weather.lat = geo.lat; weather.lon = geo.lon; weather.place = geo.place; }
+    }
+  }
+  return weather;
+}
 
 function makeReqShim(request) {
   return {
@@ -109,8 +127,16 @@ export async function POST(request) {
     return json({ error: 'At least one Scout search query is required.' }, 400);
   }
 
+  let priorWeather = null;
+  try {
+    const priorSnap = await fb.adminDb.collection('client_configs').doc(context.clientId).get();
+    priorWeather = priorSnap.data()?.marketingBriefConfig?.weather || null;
+  } catch { /* no prior */ }
+  const weather = await normalizeWeather(body?.weather, priorWeather);
+
   const marketingBriefConfig = {
     enabled: true,
+    weather,
     sourceFocus: String(body?.sourceFocus || '').trim().slice(0, 1000),
     scoutInstructions: String(body?.scoutInstructions || '').trim().slice(0, 6000),
     agentDataTemplate: String(body?.agentDataTemplate || '').trim().slice(0, 6000),

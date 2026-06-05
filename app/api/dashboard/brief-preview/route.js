@@ -8,6 +8,7 @@ const { renderBriefHtml } = require('../../../../features/scout-intake/brief-ren
 const { BRIEF_CSS } = require('../../../../features/scout-intake/brief-css.cjs');
 const { validatePostUrl } = require('../../../../features/not-the-rug-brief/post-url-validator.cjs');
 const { buildWatchlist } = require('../../../../features/intelligence/_brief-intel.js');
+const { getClientWeather } = require('../../../../features/intelligence/_weather.js');
 
 function makeReqShim(request) {
   return {
@@ -124,7 +125,7 @@ function hostnameOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return String(url); }
 }
 
-function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [] }) {
+function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [], weather = null }) {
   const content = marketingBrief?.content || {};
   const agentData = marketingBrief?.scoutBrief?.agentData || {};
   const opportunities = agentData?.viralOpportunities?.opportunities || marketingBrief?.contentOpportunities || [];
@@ -250,6 +251,17 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   const threadOpener = content.x_thread_opener || content.thread_opener || '';
   const contentAngle = content.content_angle || content.angle || '';
 
+  const weatherSection = weather?.today ? `
+  <section class="page">
+    <div class="sec-num">WX</div>
+    <div class="eyebrow"><span class="dot"></span><span>MB · Local Weather</span><span>${esc(weather.place || '')}</span></div>
+    <h2 class="headline">Local<br/>Weather.</h2>
+    <div class="card">
+      <div class="stat-row"><div class="k">${esc(weather.today.name)}</div><div class="v">${esc(weather.today.short)} · ${esc(String(weather.today.temp))}°${esc(weather.today.unit)}${weather.today.wind ? ` · wind ${esc(weather.today.wind)}` : ''}</div></div>
+      ${weather.threeDayLine ? `<div class="stat-row"><div class="k">3-Day outlook</div><div class="v">${esc(weather.threeDayLine)}</div></div>` : ''}
+    </div>
+  </section>` : '';
+
   // Watchlist — every configured account, name-for-name, with this run's activity.
   const watchlist = buildWatchlist(watchlistKols, agentData);
   const watchlistSection = watchlist.length ? `
@@ -305,7 +317,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     <h2 class="headline">What<br/>Scout<br/>Found.</h2>
     <div class="card" style="white-space:pre-wrap;font-family:'Space Grotesk';font-size:16px;line-height:1.6;color:#181818">${linkify(scoutBrief)}</div>
   </section>
-
+${weatherSection}
   <section class="page">
     <div class="sec-num">02</div>
     <div class="eyebrow"><span class="dot"></span><span>MB · Market Signals</span><span>KOL · Trend · Competitor</span></div>
@@ -380,6 +392,9 @@ export async function GET(request) {
     watchlistKols = Array.isArray(cfgKols) ? cfgKols : [];
   } catch { /* no config — empty watchlist */ }
 
+  let weather = null;
+  try { weather = await getClientWeather(clientId); } catch { /* no weather */ }
+
   // Optional run-level detail (warnings, cost) from the latest brief_run.
   let runCostData = null;
   let runWarnings = 0;
@@ -412,6 +427,7 @@ export async function GET(request) {
     return htmlResponse(renderMarketingBriefHtml({
       marketingBrief,
       watchlistKols,
+      weather,
       clientName: bootstrap?.client?.companyName || dash.clientName || clientId,
       websiteUrl: bootstrap?.client?.websiteUrl || null,
       generatedAt: marketingBrief.generatedAtIso || null,
@@ -426,6 +442,7 @@ export async function GET(request) {
     return htmlResponse(renderMarketingBriefHtml({
       marketingBrief,
       watchlistKols,
+      weather,
       clientName: bootstrap?.client?.companyName || dash.clientName || clientId,
       websiteUrl: bootstrap?.client?.websiteUrl || null,
       generatedAt: marketingBrief.generatedAtIso || null,

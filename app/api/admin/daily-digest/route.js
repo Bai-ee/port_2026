@@ -775,8 +775,18 @@ function buildStrategicBriefSection(intel, clientName) {
   if (!intel) return '';
   const hasContent =
     intel.opportunities?.length || intel.kols?.length || intel.competitors?.length ||
-    intel.narratives?.length || intel.humanBrief || intel.watchlist?.length;
+    intel.narratives?.length || intel.humanBrief || intel.watchlist?.length || intel.weather?.today;
   if (!hasContent) return '';
+
+  const w = intel.weather;
+  const weatherHtml = w?.today
+    ? `<div style="margin-bottom:14px;">${dMini(`Local weather${w.place ? ` · ${escapeHtml(w.place)}` : ''}`)}
+        <div style="background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:16px 18px;">
+          <div style="font-family:${DT.fBody};font-size:14px;color:${DT.ink};"><strong>${escapeHtml(w.today.name)}:</strong> ${escapeHtml(w.today.short)} · ${escapeHtml(String(w.today.temp))}°${escapeHtml(w.today.unit)}${w.today.wind ? ` · wind ${escapeHtml(w.today.wind)}` : ''}</div>
+          ${w.threeDayLine ? `<div style="margin-top:6px;font-family:${DT.fBody};font-size:12px;color:${DT.soft};">3-day: ${escapeHtml(w.threeDayLine)}</div>` : ''}
+        </div>
+      </div>`
+    : '';
 
   const linkBit = (url) => (url ? ` <a href="${escapeHtml(url)}" style="color:${DT.accent};font-family:${DT.fMono};font-size:11px;">↗</a>` : '');
 
@@ -828,6 +838,7 @@ function buildStrategicBriefSection(intel, clientName) {
   return `<div style="margin-bottom:32px;">
     ${dKicker(`Strategic Brief${clientName ? ` &middot; ${escapeHtml(clientName)}` : ''}`)}
     ${intel.humanBrief ? `<div style="background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:18px 20px;margin-bottom:16px;font-family:${DT.fBody};font-size:14px;line-height:1.6;color:${DT.ink};">${escapeHtml(intel.humanBrief)}</div>` : ''}
+    ${weatherHtml}
     ${oppRows ? `<div style="margin-bottom:14px;">${dMini('Post opportunities')}${dDataTable([{ label: 'Conversation / angle' }], oppRows)}</div>` : ''}
     ${signalsHtml ? `<div style="margin-bottom:14px;">${dMini('Signals · KOLs / competitors / narratives')}${dDataTable([{ label: 'Type' }, { label: 'Finding' }], signalsHtml)}</div>` : ''}
     ${watchlistHtml ? `<div style="margin-bottom:14px;">${dMini('Watchlist · accounts (name-for-name)')}${dDataTable([{ label: 'Account' }, { label: 'Activity this run' }], watchlistHtml)}</div>` : ''}

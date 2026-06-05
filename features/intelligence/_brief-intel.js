@@ -7,6 +7,7 @@
 // `dashboard_state/{clientId}.marketingBrief`.
 
 const fb = require('../../api/_lib/firebase-admin.cjs');
+const { getClientWeather } = require('./_weather.js');
 
 function arr(v) {
   return Array.isArray(v) ? v : [];
@@ -132,6 +133,9 @@ function briefIntelToText(intel) {
         : `- ${w.handle}: no activity surfaced this run`);
     });
   }
+  if (intel.weather?.today) {
+    lines.push(`Local weather (${intel.weather.place}): today ${intel.weather.today.short}, ${intel.weather.today.temp}°${intel.weather.today.unit}. 3-day — ${intel.weather.threeDayLine}`);
+  }
   return lines.join('\n');
 }
 
@@ -156,6 +160,11 @@ async function getBriefForClient(clientId) {
   }
   intel.watchlist = buildWatchlist(kols, intel._agentData);
   delete intel._agentData;
+  try {
+    intel.weather = await getClientWeather(clientId);
+  } catch {
+    intel.weather = null;
+  }
   return { clientId, clientName, intel };
 }
 

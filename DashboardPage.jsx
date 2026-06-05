@@ -236,6 +236,7 @@ function buildDefaultMarketingBriefConfig(client, dashboardState) {
     freshnessDays: 1,
     sourcePlatforms: DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS,
     kolSearchMode: 'per-handle',
+    weather: { enabled: false, zip: '' },
     kols: '',
     competitors: '',
     agentDataTemplate: `{
@@ -992,6 +993,7 @@ const CUSTOM_DETAIL_CARD_IDS = new Set([
   'email-digest',
   'email-settings',
   'create-client',
+  'local-weather',
 ]);
 
 const buildUnavailableDescription = (subject) => `Insufficient source evidence to determine ${subject} reliably.`;
@@ -2082,6 +2084,29 @@ const DashboardPage = () => {
   const [marketingBriefSaving, setMarketingBriefSaving] = useState(false);
   const [marketingBriefRunning, setMarketingBriefRunning] = useState(false);
   const [marketingBriefError, setMarketingBriefError] = useState('');
+  // Local weather — live forecast for the configured zip (Local Weather card).
+  const [localWeather, setLocalWeather] = useState(null);
+  const [localWeatherLoading, setLocalWeatherLoading] = useState(false);
+  const loadLocalWeather = useCallback(async () => {
+    if (!user || !client) return;
+    setLocalWeatherLoading(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(apiPath('/api/dashboard/local-weather'), { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+      const data = await res.json().catch(() => ({}));
+      setLocalWeather(res.ok ? (data.weather || null) : null);
+    } catch {
+      setLocalWeather(null);
+    } finally {
+      setLocalWeatherLoading(false);
+    }
+  }, [user, client, apiPath]);
+  useEffect(() => { loadLocalWeather(); }, [loadLocalWeather]);
+  // Conversation Intake — paste a team conversation dump; parser tags items the brief reads.
+  const [conversationIntakeText, setConversationIntakeText] = useState('');
+  const [conversationIntake, setConversationIntake] = useState(null);
+  const [conversationIntakeRunning, setConversationIntakeRunning] = useState(false);
+  const [conversationIntakeError, setConversationIntakeError] = useState('');
   const [estimateBriefDraft, setEstimateBriefDraft] = useState(() => buildDefaultEstimateBriefDraft(null));
   const [estimateBriefLoading, setEstimateBriefLoading] = useState(false);
   const [estimateBriefSaving, setEstimateBriefSaving] = useState(false);
@@ -2154,6 +2179,16 @@ const DashboardPage = () => {
       } finally {
         if (!cancelled) setMarketingBriefLoading(false);
       }
+      // Load the latest conversation intake digest (best-effort; non-blocking).
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch(apiPath('/api/dashboard/conversation-intake'), {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!cancelled && res.ok) setConversationIntake(data.intake || null);
+      } catch { /* non-fatal */ }
     })();
     return () => { cancelled = true; };
   }, [user, client, apiPath, hydrateMarketingBriefConfig]);
@@ -2554,6 +2589,7 @@ const DashboardPage = () => {
     if (id === 'social-preview' && bootstrap?.dashboardState?.siteMeta) { setModalTab('report'); return; }
     if (id === 'industry') { setModalTab('report'); return; }
     if (id === 'brand-system') { setModalTab('master-prompt'); return; }
+    if (id === 'local-weather') { setModalTab('config'); return; }
     setModalTab(CUSTOM_DETAIL_CARD_IDS.has(id) ? 'solutions' : 'report');
   }, [activeTileModal?.cardId, bootstrap?.dashboardState?.artifacts?.skillDocs]);
 
@@ -2619,6 +2655,30 @@ const DashboardPage = () => {
       setMarketingBriefRunning(false);
     }
   }, [user, marketingBriefRunning, saveMarketingBriefConfig, apiPath, doBootstrap]);
+
+  const digestConversation = useCallback(async () => {
+    if (!user || conversationIntakeRunning) return;
+    const rawText = conversationIntakeText.trim();
+    if (!rawText) { setConversationIntakeError('Paste a conversation first.'); return; }
+    setConversationIntakeRunning(true);
+    setConversationIntakeError('');
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(apiPath('/api/dashboard/conversation-intake'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rawText }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Conversation digest failed.');
+      setConversationIntake(data.intake || null);
+      setConversationIntakeText('');
+    } catch (err) {
+      setConversationIntakeError(err instanceof Error ? err.message : 'Conversation digest failed.');
+    } finally {
+      setConversationIntakeRunning(false);
+    }
+  }, [user, conversationIntakeRunning, conversationIntakeText, apiPath]);
 
   const updateMarketingBriefSearch = useCallback((index, patch) => {
     setMarketingBriefConfig((prev) => {
@@ -5442,6 +5502,29 @@ const DashboardPage = () => {
       footerRight: 'REVIEWED',
     },
     {
+      id: 'local-weather',
+      category: 'growth',
+      number: 'LW',
+      label: 'WEATHER',
+      title: 'Local Weather',
+      description: 'Daily local forecast + a 1-line 3-day outlook, added to your daily brief. Configurable by ZIP code.',
+      placeholderLabel: marketingBriefConfig?.weather?.enabled ? 'LIVE' : 'OFF',
+      rows: marketingBriefConfig?.weather?.enabled
+        ? [
+            { key: 'lw-zip', label: 'ZIP', value: marketingBriefConfig?.weather?.zip || '—' },
+            { key: 'lw-place', label: 'Area', value: localWeather?.place || marketingBriefConfig?.weather?.place || 'Pending' },
+            { key: 'lw-today', label: 'Today', value: localWeather?.today ? `${localWeather.today.short}, ${localWeather.today.temp}°${localWeather.today.unit}` : (localWeatherLoading ? 'Loading…' : 'Save a ZIP to fetch') },
+            { key: 'lw-brief', label: 'In brief', value: 'Yes — forecast + 3-day' },
+          ]
+        : [
+            { key: 'lw-status', label: 'Status', value: 'Off' },
+            { key: 'lw-hint', label: 'Setup', value: 'Open details → set ZIP → enable' },
+          ],
+      footerLeft: marketingBriefConfig?.weather?.enabled ? 'Live' : 'Off',
+      footerRight: 'BRIEFING',
+      readinessBadge: marketingBriefConfig?.weather?.enabled ? { tone: 'ok', label: 'On' } : null,
+    },
+    {
       id: 'newsletter',
       category: 'growth',
       number: 'NL',
@@ -5456,6 +5539,27 @@ const DashboardPage = () => {
         : buildWorkNeededRows('Run the Scout pipeline first to generate newsletter content.'),
       footerLeft: hasNewsletterData ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
+    },
+    {
+      id: 'conversation-intake',
+      category: 'growth',
+      number: 'CI',
+      label: 'CONVERSATION INTAKE',
+      title: 'Conversation Intake',
+      description: 'Paste a team conversation dump (Discord thread or WhatsApp "export chat"). The intake analyst tags what matters — campaign, social, or brief — and folds it into your Executive Daily Brief.',
+      placeholderLabel: conversationIntake?.itemCount ? 'TAGGED' : 'PASTE',
+      rows: conversationIntake?.itemCount
+        ? [
+            { key: 'ci-items', label: 'Tagged items', value: String(conversationIntake.itemCount) },
+            { key: 'ci-campaign', label: 'Campaign', value: String((conversationIntake.items || []).filter((i) => i.type === 'campaign').length) },
+            { key: 'ci-social', label: 'Social', value: String((conversationIntake.items || []).filter((i) => i.type === 'social').length) },
+            { key: 'ci-brief', label: 'Brief signals', value: String((conversationIntake.items || []).filter((i) => i.type === 'brief').length) },
+            { key: 'ci-digested', label: 'Last digest', value: conversationIntake.digestedAtIso ? new Date(conversationIntake.digestedAtIso).toLocaleString() : '—' },
+          ]
+        : buildWorkNeededRows('No conversation digested yet. Open to paste today’s team chat.'),
+      footerLeft: conversationIntake?.itemCount ? 'Feeding brief' : 'Empty',
+      footerRight: 'GROWTH',
+      readinessBadge: conversationIntake?.itemCount ? { tone: 'ok', label: 'Tagged' } : null,
     },
 
     // ── SOCIAL MEDIA MANAGER ────────────────────────────────────────────────
@@ -8163,6 +8267,82 @@ const DashboardPage = () => {
                   <AdminCreateClientView user={user} />
                 )}
 
+                {/* Local Weather — CONFIG (zip + toggle) + FORECAST tabs */}
+                {activeTileModal.cardId === 'local-weather' && marketingBriefConfig && (
+                  <div className="tile-detail-bento-cell tile-detail-tabbed-container">
+                    <div className="tile-detail-tabs">
+                      <button type="button" className={`tile-detail-tab${modalTab === 'config' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('config')}>CONFIG</button>
+                      <button type="button" className={`tile-detail-tab${modalTab === 'forecast' ? ' tile-detail-tab--active' : ''}`} onClick={() => { setModalTab('forecast'); loadLocalWeather(); }}>FORECAST</button>
+                    </div>
+                    <div className="tile-detail-tab-content">
+                      {modalTab === 'config' && (
+                        <div className="tile-detail-tab-pane custom-brief-submit-pane">
+                          <section className="mb-config-section">
+                            <div className="mb-config-section-head">
+                              <span className="mb-config-section-index">WX</span>
+                              <div>
+                                <h4>Local weather in your brief</h4>
+                                <p>Adds a daily forecast + a 1-line 3-day outlook for your service area to the daily brief and email.</p>
+                              </div>
+                              <span className={`status-badge ${marketingBriefConfig.weather?.enabled ? 'status-active' : 'status-failed'}`} style={{ alignSelf: 'center' }}>
+                                {marketingBriefConfig.weather?.enabled ? 'ON · IN BRIEF' : 'OFF'}
+                              </span>
+                            </div>
+                            <div className="custom-brief-submit-grid">
+                              <label className="mb-config-field">
+                                <span className="mb-config-label">Weather in brief</span>
+                                <select className="mb-config-input" value={marketingBriefConfig.weather?.enabled ? 'on' : 'off'} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), weather: { ...((prev || {}).weather || {}), enabled: e.target.value === 'on' } }))}>
+                                  <option value="on">Enabled</option>
+                                  <option value="off">Disabled</option>
+                                </select>
+                              </label>
+                              <label className="mb-config-field">
+                                <span className="mb-config-label">ZIP code</span>
+                                <input className="mb-config-input" inputMode="numeric" maxLength={5} placeholder="e.g. 10001" value={marketingBriefConfig.weather?.zip || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), weather: { ...((prev || {}).weather || {}), zip: e.target.value.replace(/\D/g, '').slice(0, 5) } }))} />
+                              </label>
+                            </div>
+                            {marketingBriefConfig.weather?.enabled && marketingBriefConfig.weather?.place ? (
+                              <p className="mb-config-actionbar-note">Resolved area: {marketingBriefConfig.weather.place}. Weather is on and part of your daily brief.</p>
+                            ) : null}
+                            <div className="mb-config-actionbar">
+                              <span className="mb-config-actionbar-note">{marketingBriefError ? `Error: ${marketingBriefError}` : 'Save to geocode the ZIP and confirm it in the brief.'}</span>
+                              <div className="mb-config-actionbar-buttons">
+                                <button type="button" className="tile-foot-rerun-btn" disabled={marketingBriefSaving} onClick={async () => { await saveMarketingBriefConfig(); loadLocalWeather(); }}>{marketingBriefSaving ? 'Saving…' : 'Save & confirm'}</button>
+                              </div>
+                            </div>
+                          </section>
+                        </div>
+                      )}
+                      {modalTab === 'forecast' && (
+                        <div className="tile-detail-tab-pane custom-brief-submit-pane">
+                          {localWeatherLoading ? (
+                            <p className="tile-analyzer-solutions-empty">Loading forecast…</p>
+                          ) : localWeather?.today ? (
+                            <section className="mb-config-section">
+                              <div className="mb-config-section-head">
+                                <span className="mb-config-section-index">WX</span>
+                                <div>
+                                  <h4>{localWeather.place || 'Forecast'}</h4>
+                                  <p><strong>{localWeather.today.name}:</strong> {localWeather.today.short} · {localWeather.today.temp}°{localWeather.today.unit}{localWeather.today.wind ? ` · wind ${localWeather.today.wind}` : ''}</p>
+                                </div>
+                              </div>
+                              {localWeather.today.detailed ? <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-display)' }}>{localWeather.today.detailed}</p> : null}
+                              <div style={{ marginTop: 8 }}>
+                                {(localWeather.days || []).map((d) => (
+                                  <div key={d.name} className="config-field"><span className="cf-key">{d.name}</span><span className="cf-val">{d.short} · {d.temp}°{d.unit}</span></div>
+                                ))}
+                              </div>
+                              <p className="mb-config-actionbar-note" style={{ marginTop: 10 }}>3-day: {localWeather.threeDayLine}</p>
+                            </section>
+                          ) : (
+                            <p className="tile-analyzer-solutions-empty">No forecast yet. Set a ZIP and enable weather in CONFIG, then Save.</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Survey card — CHAT + DATA tabs */}
                 {activeTileModal.cardId === 'survey-status' && (
                   <div
@@ -8768,6 +8948,57 @@ const DashboardPage = () => {
                     </div>
                   );
                 })()}
+
+                {/* Conversation Intake — paste a team conversation dump; parser tags items the brief reads */}
+                {activeTileModal.cardId === 'conversation-intake' && (
+                  <div id="conversation-intake-panel" className="tile-detail-bento-cell" style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: 20 }}>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
+                      Paste today’s team conversation
+                    </div>
+                    <p style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--text-secondary)', margin: 0 }}>
+                      Discord thread, Slack copy-paste, or WhatsApp “Export chat”. The intake analyst keeps only what’s relevant to your campaign and positioning, tags each item, and feeds it into the Executive Daily Brief.
+                    </p>
+                    <textarea
+                      id="conversation-intake-textarea"
+                      className="mb-config-textarea"
+                      placeholder="Paste the conversation here…"
+                      value={conversationIntakeText}
+                      onChange={(e) => setConversationIntakeText(e.target.value)}
+                      rows={12}
+                      disabled={conversationIntakeRunning}
+                    />
+                    {conversationIntakeError ? (
+                      <div style={{ fontSize: 12, color: 'var(--danger, #e5484d)' }}>{conversationIntakeError}</div>
+                    ) : null}
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        className="tile-foot-rerun-btn"
+                        onClick={digestConversation}
+                        disabled={conversationIntakeRunning || !conversationIntakeText.trim()}
+                      >
+                        {conversationIntakeRunning ? 'Digesting…' : 'Digest Conversation'}
+                      </button>
+                      {conversationIntake?.digestedAtIso ? (
+                        <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                          Last digest: {new Date(conversationIntake.digestedAtIso).toLocaleString()} · {conversationIntake.itemCount} item{conversationIntake.itemCount === 1 ? '' : 's'}
+                        </span>
+                      ) : null}
+                    </div>
+                    {(conversationIntake?.items || []).length ? (
+                      <div id="conversation-intake-results" style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                        <div className="tile-detail-row-section-head">TAGGED ITEMS</div>
+                        {conversationIntake.items.map((item, i) => (
+                          <div key={i} className="tile-detail-stat-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 3 }}>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>{item.type}</span>
+                            <span style={{ fontSize: 13, lineHeight: 1.5 }}>{item.summary}</span>
+                            {item.relevance ? <span style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{item.relevance}</span> : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
 
                 {/* Submit Custom Brief — admin HTML/PDF publishing */}
                 {activeTileModal.cardId === 'submit-custom-brief' && (
