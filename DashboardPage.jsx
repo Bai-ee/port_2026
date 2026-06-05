@@ -4477,7 +4477,10 @@ const DashboardPage = () => {
       title: 'Data Stream',
       description: 'A live read on how much data has been captured — across Brief, Market, Brain, Brand, and Web.',
       ...(() => {
-        const ok = (v) => v != null && v !== '' && v !== false;
+        // A field counts as captured only when it holds real data. Critically,
+        // numeric 0 (e.g. an empty `?.length` for KB sources, KOL signals, etc.)
+        // is NOT captured — otherwise every count row with zero items reads green.
+        const ok = (v) => v != null && v !== '' && v !== false && v !== 0;
         const st = (v) => ok(v) ? 'Captured' : 'Missing';
         const row = (key, label, v, tierLevel = 1) => ({
           key, label,
