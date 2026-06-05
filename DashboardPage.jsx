@@ -4656,53 +4656,11 @@ const DashboardPage = () => {
           row('art-skill-conv',    'Conversion report',     dashboardState?.artifacts?.skillDocs?.['conversion-audit']),
           row('art-skill-asset',   'Brand asset report',    dashboardState?.artifacts?.skillDocs?.['brand-asset-gap']),
 
-          // ── MODULE STATUS ─────────────────────────────────────────────────
-          { key: 'sec-modules', isHeader: true, label: 'MODULE STATUS' },
-          row('mod-marketing-brief',   'Executive Daily Brief', moduleState?.['marketing-brief']?.status),
-          row('mod-strategy-builder',  'Strategy Builder',      moduleState?.['strategy-builder']?.status),
-          row('mod-knowledge-base',    'Company Brain',         moduleState?.['knowledge-base']?.status),
-          row('mod-industry',          'Market Category',       moduleState?.['industry']?.status),
-          row('mod-seo',               'SEO Performance',       moduleState?.['seo-performance']?.status),
-          row('mod-style-guide',       'Style Guide',           moduleState?.['style-guide']?.status),
-          row('mod-social-preview',    'Social Preview',        moduleState?.['social-preview']?.status),
-          row('mod-multi-device',      'Multi-Device View',     moduleState?.['multi-device-view']?.status),
-          row('mod-agent-readiness',   'Agent Readiness',       moduleState?.['agent-readiness']?.status),
-          row('mod-brand-voice',       'Brand Voice',           moduleState?.['brand-voice']?.status),
-          row('mod-brand-system',      'Brand Identity',        moduleState?.['brand-system']?.status),
-          row('mod-newsletter',        'Newsletter',            moduleState?.['newsletter']?.status),
-          row('mod-social-posting',    'Schedule Posts',        moduleState?.['social-media-posting']?.status),
-
-          // ── RUN HEALTH ────────────────────────────────────────────────────
-          { key: 'sec-run', isHeader: true, label: 'RUN HEALTH' },
-          row('run-status',        'Run status',            currentRun?.status || latestRunStatus),
-          row('run-timestamp',     'Run timestamp',         currentRun?.updatedAt || dashboardState?.updatedAt),
-          row('run-source-url',    'Source URL',            currentRun?.sourceUrl || client?.websiteUrl),
-          row('run-error',         'Run error',             currentRun?.error?.message || errorState?.message),
-          row('run-warnings',      'Warnings raised',       currentRun ? runWarnings.length : null),
-          row('run-psi-warnings',  'PSI warnings',          currentRun ? psiWarnings.length : null),
-          row('ai-synth-model',    'Synthesis model',       currentRun?.providerUsage?.model),
-          row('ai-synth-cost',     'Synth cost USD',        currentRun?.providerUsage?.estimatedCostUsd),
-          row('ai-scribe-cost',    'Scribe cost USD',       dashboardState?.scribe?.cost?.estimatedCostUsd),
-          row('ai-skill-cost',     'SEO depth cost USD',    seoDepthAudit?.metadata?.estimatedCostUsd),
-          row('ai-scribe',         'Scribe output',         scribeCards),
-          row('ai-scribe-count',   'Scribe card count',     scribeCards ? Object.keys(scribeCards).length : null),
-          row('ai-az-count',       'Analyzer outputs',      analyzerOutputs ? Object.keys(analyzerOutputs).length : null),
-          row('ai-seo-guardian',   'SEO guardian source',   seoGuardianState?.source),
-
-          // ── PSI TRACE ─────────────────────────────────────────────────────
-          { key: 'sec-psi-trace', isHeader: true, label: 'PSI TRACE' },
-          row('psi-audit-status',  'PSI audit status',      seoAudit?.status),
-          row('psi-data',          'PSI data presence',     seoAudit?.scores),
-          row('psi-fail-code',     'Failure code',          seoDiagnostics?.failureCode),
-          row('psi-fail-reason',   'Failure reason',        seoDiagnostics?.failureReason || seoAudit?.error),
-          row('psi-final-url',     'Final URL',             seoMeta?.finalUrl),
-          row('psi-http-status',   'HTTP status',           seoDiagnostics?.httpStatus),
-          row('psi-host-service',  'Hosting service',       seoDiagnostics?.hostService),
-          row('psi-host-provider', 'Hosting provider',      seoDiagnostics?.hostingProvider),
-          row('psi-blocked-by',    'Blocked by',            seoDiagnostics?.blockedBy),
-          row('psi-redirects',     'Redirect count',        seoDiagnostics?.redirectCount),
-          row('psi-duration',      'Duration (ms)',         seoMeta?.totalDurationMs),
-          row('psi-lh-version',    'Lighthouse version',    seoMeta?.lighthouseVersion),
+          // NOTE: MODULE STATUS / RUN HEALTH / PSI TRACE sections were removed
+          // from the Data Quality score — they are operational diagnostics, not
+          // incoming-data opportunities, and inflated the captured count (every
+          // module reports a status string). Run health/status still live on the
+          // individual module cards.
 
           // ── PLATFORM SEARCH (upgrade) ─────────────────────────────────────
           { key: 'sec-platforms', isHeader: true, label: 'PLATFORM SEARCH' },
@@ -10313,7 +10271,7 @@ const DashboardPage = () => {
                                         <span className="adq-fr-label">{r.label}</span>
                                         {(() => { const src = FIELD_SOURCES[r.key] || 'AI'; return <span className={`adq-fr-src adq-fr-src--${src.toLowerCase()}`}>{src}</span>; })()}
                                         {r._captured && (
-                                          <span className="adq-fr-badge adq-fr-badge--ok">AVAILABLE</span>
+                                          <span className="adq-fr-badge adq-fr-badge--ok">CAPTURED</span>
                                         )}
                                         {!r._captured && !r.isUpgrade && (
                                           <span className="adq-fr-badge adq-fr-badge--miss">MISSING</span>
