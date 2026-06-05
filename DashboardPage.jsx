@@ -139,6 +139,24 @@ const MARKETING_BRIEF_SOURCE_PLATFORMS = [
 ];
 const DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS = ['web', 'x', 'reddit', 'hackernews', 'instagram'];
 
+// Full catalog of searchable sources shown on the Source Platforms card.
+// All locked behind an upgrade for now — Web + X drive the brief today; the
+// rest unlock when the social/directory search layer ships.
+const SCOUT_PLATFORM_CATALOG = [
+  {
+    section: 'Product & Startup Directories',
+    items: ['Product Hunt', 'Betalist', 'Uneed', 'TrustMRR', 'Fazier', 'OpenAlternative', 'Microlaunch', 'Peerlist', 'TinyLaunch', 'SaaSHub', 'Indie Hackers', 'Hacker News', 'Toolfolio', 'Tiny Startup', 'SideProjectors', 'AlternativeTo', 'LaunchIgniter', 'PeerPush', 'SaaS Genius', "There's an AI for that", 'DevHunt'],
+  },
+  {
+    section: 'Social Media Signals',
+    items: ['Instagram', 'LinkedIn', 'Facebook', 'TikTok', 'YouTube', 'Pinterest', 'Threads', 'Bluesky', 'Mastodon', 'Discord', 'Twitch', 'Snapchat', 'Reddit'],
+  },
+  {
+    section: 'External Signals',
+    items: ['Weather / local', 'Reviews', 'Yelp', 'Google Business Profile', 'Google Trends'],
+  },
+];
+
 function classifyMarketingBriefPlatform(url, explicitPlatform) {
   if (explicitPlatform) {
     const p = String(explicitPlatform).toLowerCase();
@@ -994,6 +1012,16 @@ const CUSTOM_DETAIL_CARD_IDS = new Set([
   'email-settings',
   'create-client',
   'local-weather',
+  // Conversation Intake + Scout Config slice cards — single top panel only,
+  // no generic REPORT/DATA container at the bottom.
+  'conversation-intake',
+  'scout-focus',
+  'watchlist',
+  'competitors',
+  'search-plan',
+  'source-platforms',
+  'brief-preview',
+  'events',
 ]);
 
 const buildUnavailableDescription = (subject) => `Insufficient source evidence to determine ${subject} reliably.`;
@@ -2107,6 +2135,13 @@ const DashboardPage = () => {
   const [conversationIntake, setConversationIntake] = useState(null);
   const [conversationIntakeRunning, setConversationIntakeRunning] = useState(false);
   const [conversationIntakeError, setConversationIntakeError] = useState('');
+  // Events card — search local events by ZIP or global events by keyword.
+  const [eventsMode, setEventsMode] = useState('local');
+  const [eventsZip, setEventsZip] = useState('');
+  const [eventsKeywords, setEventsKeywords] = useState('');
+  const [eventsRunning, setEventsRunning] = useState(false);
+  const [eventsResults, setEventsResults] = useState(null);
+  const [eventsError, setEventsError] = useState('');
   const [estimateBriefDraft, setEstimateBriefDraft] = useState(() => buildDefaultEstimateBriefDraft(null));
   const [estimateBriefLoading, setEstimateBriefLoading] = useState(false);
   const [estimateBriefSaving, setEstimateBriefSaving] = useState(false);
@@ -2563,6 +2598,28 @@ const DashboardPage = () => {
     return () => window.clearInterval(timer);
   }, []);
 
+  // Seed the Events ZIP from the saved weather ZIP (shared local context).
+  useEffect(() => {
+    const wxZip = marketingBriefConfig?.weather?.zip;
+    if (wxZip && !eventsZip) setEventsZip(String(wxZip).replace(/\D/g, '').slice(0, 5));
+  }, [marketingBriefConfig?.weather?.zip, eventsZip]);
+
+  // Visibility safety net — after a bucket switch, the GSAP entrance animation
+  // can be interrupted by an async re-render (e.g. marketingBriefConfig loading)
+  // and leave some cards stuck at opacity:0, showing as empty gaps. Once the
+  // animation window has passed, force any still-transparent card visible.
+  useEffect(() => {
+    if (!activeCapabilityFilter) return undefined;
+    const grid = capabilityGridRef.current;
+    if (!grid) return undefined;
+    const t = window.setTimeout(() => {
+      grid.querySelectorAll('[data-capability-card]').forEach((el) => {
+        if (Number(window.getComputedStyle(el).opacity) < 1) el.style.opacity = '1';
+      });
+    }, 2600);
+    return () => window.clearTimeout(t);
+  }, [activeCapabilityFilter]);
+
   // Reset modal tab each time a card modal opens. Standard cards now land on
   // the shared report page; custom cards keep their purpose-built default tabs.
   // Exceptions:
@@ -2679,6 +2736,32 @@ const DashboardPage = () => {
       setConversationIntakeRunning(false);
     }
   }, [user, conversationIntakeRunning, conversationIntakeText, apiPath]);
+
+  const searchEventsNow = useCallback(async () => {
+    if (!user || eventsRunning) return;
+    const mode = eventsMode === 'global' ? 'global' : 'local';
+    const zip = eventsZip.replace(/\D/g, '').slice(0, 5);
+    const keywords = eventsKeywords.trim();
+    if (mode === 'local' && !zip) { setEventsError('Enter a 5-digit ZIP code.'); return; }
+    if (mode === 'global' && !keywords) { setEventsError('Enter keywords to search.'); return; }
+    setEventsRunning(true);
+    setEventsError('');
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(apiPath('/api/dashboard/events-search'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode, zip, keywords }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Event search failed.');
+      setEventsResults({ mode, events: data.events || [] });
+    } catch (err) {
+      setEventsError(err instanceof Error ? err.message : 'Event search failed.');
+    } finally {
+      setEventsRunning(false);
+    }
+  }, [user, eventsRunning, eventsMode, eventsZip, eventsKeywords, apiPath]);
 
   const updateMarketingBriefSearch = useCallback((index, patch) => {
     setMarketingBriefConfig((prev) => {
@@ -4768,10 +4851,10 @@ const DashboardPage = () => {
       id: 'knowledge-base',
       category: 'knowledge',
       number: 'KB',
-      label: 'KNOWLEDGE',
-      title: 'Knowledge Base',
+      label: 'COMPANY BRAIN',
+      title: 'Company Brain',
       description: 'Add your own content — documents, URLs, or notes — so every card generates output using your real context, not generic assumptions.',
-      placeholderLabel: 'CLIENT\nBRAIN',
+      placeholderLabel: 'COMPANY\nBRAIN',
       rows: [
         { key: 'kb-source', label: 'Sources', value: 'Text · URLs · documents' },
         { key: 'kb-limit', label: 'Limit', value: '100 items / client' },
@@ -5525,6 +5608,28 @@ const DashboardPage = () => {
       readinessBadge: marketingBriefConfig?.weather?.enabled ? { tone: 'ok', label: 'On' } : null,
     },
     {
+      id: 'events',
+      category: 'growth',
+      number: 'EV',
+      label: 'EVENTS',
+      title: 'Events',
+      description: 'Find what’s happening — local events by ZIP code for neighborhood-driven businesses, or industry events by keyword for digital brands. Useful context for timely posts and briefs.',
+      placeholderLabel: eventsResults?.events?.length ? 'EVENTS' : 'FIND',
+      rows: eventsResults?.events?.length
+        ? [
+            { key: 'ev-mode', label: 'Mode', value: eventsResults.mode === 'global' ? 'Global · keywords' : 'Local · ZIP' },
+            { key: 'ev-count', label: 'Found', value: String(eventsResults.events.length) },
+            { key: 'ev-top', label: 'Top', value: eventsResults.events[0]?.title || '—' },
+          ]
+        : [
+            { key: 'ev-local', label: 'Local', value: 'Events near a ZIP code' },
+            { key: 'ev-global', label: 'Global', value: 'Industry events by keyword' },
+            { key: 'ev-hint', label: 'Setup', value: 'Open details → search' },
+          ],
+      footerLeft: eventsResults?.events?.length ? 'Searched' : 'Ready',
+      footerRight: 'GROWTH',
+    },
+    {
       id: 'newsletter',
       category: 'growth',
       number: 'NL',
@@ -5560,6 +5665,112 @@ const DashboardPage = () => {
       footerLeft: conversationIntake?.itemCount ? 'Feeding brief' : 'Empty',
       footerRight: 'GROWTH',
       readinessBadge: conversationIntake?.itemCount ? { tone: 'ok', label: 'Tagged' } : null,
+    },
+    {
+      id: 'scout-focus',
+      category: 'growth',
+      number: 'SF',
+      label: 'SCOUT FOCUS',
+      title: 'Scout Focus',
+      description: 'The research lens — what Scout should care about, how it reasons, and how fresh signals must be. Part of Scout Config; edits sync with the Daily Brief.',
+      placeholderLabel: 'FOCUS',
+      rows: marketingBriefConfig
+        ? [
+            { key: 'sf-focus', label: 'Focus', value: marketingBriefConfig.sourceFocus ? 'Configured' : 'Not set' },
+            { key: 'sf-instructions', label: 'Instructions', value: marketingBriefConfig.scoutInstructions ? 'Custom' : 'Default' },
+            { key: 'sf-freshness', label: 'Freshness', value: `${marketingBriefConfig.freshnessDays || 1}d` },
+          ]
+        : buildWorkNeededRows('Loading Scout config…'),
+      footerLeft: marketingBriefConfig ? 'Editable' : 'Loading',
+      footerRight: 'GROWTH',
+    },
+    {
+      id: 'watchlist',
+      category: 'growth',
+      number: 'WL',
+      label: 'WATCHLIST',
+      title: 'Watchlist',
+      description: 'KOLs and handles Scout tracks every run, plus per-handle or combined search mode. Part of Scout Config; edits sync with the Daily Brief.',
+      placeholderLabel: 'KOLS',
+      rows: marketingBriefConfig
+        ? [
+            { key: 'wl-kols', label: 'Handles', value: String(String(marketingBriefConfig.kols || '').split(/[\n,]+/).filter((s) => s.trim()).length) },
+            { key: 'wl-mode', label: 'Search mode', value: marketingBriefConfig.kolSearchMode === 'combined' ? 'Combined' : 'Per-handle' },
+          ]
+        : buildWorkNeededRows('Loading Scout config…'),
+      footerLeft: marketingBriefConfig ? 'Editable' : 'Loading',
+      footerRight: 'GROWTH',
+    },
+    {
+      id: 'competitors',
+      category: 'growth',
+      number: 'CP',
+      label: 'COMPETITORS',
+      title: 'Competitors',
+      description: 'Competitor names injected into Scout’s search strategy and angle selection. Part of Scout Config; edits sync with the Daily Brief.',
+      placeholderLabel: 'COMPS',
+      rows: marketingBriefConfig
+        ? [
+            { key: 'cp-count', label: 'Tracked', value: String(String(marketingBriefConfig.competitors || '').split(/[\n,]+/).filter((s) => s.trim()).length) },
+          ]
+        : buildWorkNeededRows('Loading Scout config…'),
+      footerLeft: marketingBriefConfig ? 'Editable' : 'Loading',
+      footerRight: 'GROWTH',
+    },
+    {
+      id: 'search-plan',
+      category: 'growth',
+      number: 'SP',
+      label: 'SEARCH PLAN',
+      title: 'Search Plan',
+      description: 'Custom Scout query rows — each is a targeted search with a label, query, and the signal to extract. Part of Scout Config; edits sync with the Daily Brief.',
+      placeholderLabel: 'PLAN',
+      rows: marketingBriefConfig
+        ? [
+            { key: 'spn-count', label: 'Active queries', value: String((marketingBriefConfig.searches || []).filter((row) => row.query).length) },
+            { key: 'spn-rows', label: 'Total rows', value: String((marketingBriefConfig.searches || []).length) },
+          ]
+        : buildWorkNeededRows('Loading Scout config…'),
+      footerLeft: marketingBriefConfig ? 'Editable' : 'Loading',
+      footerRight: 'GROWTH',
+    },
+    {
+      id: 'source-platforms',
+      category: 'growth',
+      number: 'PL',
+      label: 'SOURCE PLATFORMS',
+      title: 'Source Platforms',
+      description: 'Every source Scout can search — product directories, social platforms, and external signals. Web and X are active today; the rest unlock with an upgrade.',
+      placeholderLabel: 'SRC',
+      rows: [
+        { key: 'pl-active', label: 'Active now', value: 'Web · X' },
+        { key: 'pl-catalog', label: 'In catalog', value: `${SCOUT_PLATFORM_CATALOG.reduce((n, g) => n + g.items.length, 0)} sources` },
+        { key: 'pl-locked', label: 'Status', value: 'Upgrade to unlock' },
+      ],
+      footerLeft: 'Web + X live',
+      footerRight: 'GROWTH',
+    },
+    {
+      id: 'brief-preview',
+      category: 'growth',
+      number: 'BP',
+      label: 'BRIEF PREVIEW',
+      title: 'Brief Preview',
+      description: 'The Agent Data Contract Scout returns, the run-cost estimate, and a Run Now button that populates the Executive Daily Brief. Part of Scout Config; edits sync with the Daily Brief.',
+      placeholderLabel: 'RUN',
+      rows: marketingBriefConfig
+        ? [
+            { key: 'bp-contract', label: 'Data contract', value: marketingBriefConfig.agentDataTemplate ? 'Custom' : 'Default' },
+            { key: 'bp-status', label: 'Brief status', value: marketingBriefStatus },
+          ]
+        : buildWorkNeededRows('Loading Scout config…'),
+      footerLeft: 'Run-ready',
+      footerRight: 'GROWTH',
+      footerAction: {
+        label: marketingBriefRunning ? '…' : 'Run Now',
+        loading: marketingBriefRunning || marketingBriefSaving,
+        onClick: runMarketingBrief,
+      },
     },
 
     // ── SOCIAL MEDIA MANAGER ────────────────────────────────────────────────
@@ -6984,12 +7195,23 @@ const DashboardPage = () => {
                     if (!ONBOARDING_CARD_IDS.has(card.id)) return false;
                     return true;
                   }
-                  return activeCapabilityFilter === card.category;
+                  // A card shows in its own category, plus any bucket listed in
+                  // extraCategories (cross-listing — e.g. Executive Daily Brief
+                  // appears in both Daily Briefs and Marketing Director).
+                  return activeCapabilityFilter === card.category
+                    || (Array.isArray(card.extraCategories) && card.extraCategories.includes(activeCapabilityFilter));
                 })
                 .sort((a, b) => {
                   if (activeCapabilityFilter === 'onboarding') return chainSortKey(a.id) - chainSortKey(b.id);
                   if (activeCapabilityFilter === 'knowledge') {
                     const order = ['audit-summary', 'knowledge-base', 'survey-status', 'industry', 'business-model'];
+                    const ai = order.indexOf(a.id); const bi = order.indexOf(b.id);
+                    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+                  }
+                  if (activeCapabilityFilter === 'growth') {
+                    // Order the Marketing Director bucket by client-setup relevance:
+                    // today's intake + brief config first, then strategy cards, then rest.
+                    const order = ['conversation-intake', 'scout-focus', 'source-platforms', 'search-plan', 'watchlist', 'competitors', 'brief-preview', 'local-weather', 'events', 'strategy-builder', 'positioning'];
                     const ai = order.indexOf(a.id); const bi = order.indexOf(b.id);
                     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
                   }
@@ -7523,7 +7745,7 @@ const DashboardPage = () => {
             {[
               // { key: 'onboarding', label: 'Data Visualization',      sub: 'Capture & inspect',       icon: ClipboardList,         color: '#7b5fff' },
               { key: 'brief',      label: 'Daily Briefs',            sub: 'Your full report',         icon: ChartColumnIncreasing, color: '#2a2420' },
-              { key: 'knowledge',  label: 'Company Brain',           sub: 'Custom data & context',    icon: Database,              color: '#3b82f6' },
+              { key: 'knowledge',  label: 'Knowledge Officer',       sub: 'Custom data & context',    icon: Database,              color: '#3b82f6' },
               { key: 'growth',     label: 'Marketing Director',      sub: 'SEO, signals & growth',    icon: Settings2,             color: '#10b981' },
               { key: 'content',    label: 'Creative Director',        sub: 'Posts & platforms',        icon: Workflow,               color: '#14b8a6' },
               { key: 'social',     label: 'Social Media Manager',     sub: 'Schedule & publish',       icon: CalendarDays,          color: '#6366f1' },
@@ -7567,7 +7789,15 @@ const DashboardPage = () => {
                         gsap.fromTo(
                           newCards,
                           { opacity: 0 },
-                          { opacity: 1, duration: 0.4, ease: 'power2.out', stagger: 0.08 },
+                          {
+                            opacity: 1,
+                            duration: 0.4,
+                            ease: 'power2.out',
+                            stagger: 0.08,
+                            // Drop the inline opacity after animating so a card is
+                            // never left stuck transparent if a re-render interrupts.
+                            clearProps: 'opacity',
+                          },
                         );
                       }
                     },
@@ -8276,66 +8506,70 @@ const DashboardPage = () => {
                     </div>
                     <div className="tile-detail-tab-content">
                       {modalTab === 'config' && (
-                        <div className="tile-detail-tab-pane custom-brief-submit-pane">
-                          <section className="mb-config-section">
-                            <div className="mb-config-section-head">
-                              <span className="mb-config-section-index">WX</span>
+                        <div className="mu-tab-pane">
+                          <section className="mu-section">
+                            <div className="mu-section-head">
+                              <span className="mu-index">WX</span>
                               <div>
-                                <h4>Local weather in your brief</h4>
+                                <h3>Local weather in your brief</h3>
                                 <p>Adds a daily forecast + a 1-line 3-day outlook for your service area to the daily brief and email.</p>
                               </div>
-                              <span className={`status-badge ${marketingBriefConfig.weather?.enabled ? 'status-active' : 'status-failed'}`} style={{ alignSelf: 'center' }}>
+                              <span className={`mu-chip${marketingBriefConfig.weather?.enabled ? ' mu-chip--success' : ''}`}>
                                 {marketingBriefConfig.weather?.enabled ? 'ON · IN BRIEF' : 'OFF'}
                               </span>
                             </div>
-                            <div className="custom-brief-submit-grid">
-                              <label className="mb-config-field">
-                                <span className="mb-config-label">Weather in brief</span>
-                                <select className="mb-config-input" value={marketingBriefConfig.weather?.enabled ? 'on' : 'off'} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), weather: { ...((prev || {}).weather || {}), enabled: e.target.value === 'on' } }))}>
+                            <div className="mu-field-grid">
+                              <label className="mu-field">
+                                <span className="mu-label">Weather in brief</span>
+                                <select className="mu-select" value={marketingBriefConfig.weather?.enabled ? 'on' : 'off'} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), weather: { ...((prev || {}).weather || {}), enabled: e.target.value === 'on' } }))}>
                                   <option value="on">Enabled</option>
                                   <option value="off">Disabled</option>
                                 </select>
                               </label>
-                              <label className="mb-config-field">
-                                <span className="mb-config-label">ZIP code</span>
-                                <input className="mb-config-input" inputMode="numeric" maxLength={5} placeholder="e.g. 10001" value={marketingBriefConfig.weather?.zip || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), weather: { ...((prev || {}).weather || {}), zip: e.target.value.replace(/\D/g, '').slice(0, 5) } }))} />
+                              <label className="mu-field">
+                                <span className="mu-label">ZIP code</span>
+                                <input className="mu-input" inputMode="numeric" maxLength={5} placeholder="e.g. 10001" value={marketingBriefConfig.weather?.zip || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), weather: { ...((prev || {}).weather || {}), zip: e.target.value.replace(/\D/g, '').slice(0, 5) } }))} />
                               </label>
                             </div>
                             {marketingBriefConfig.weather?.enabled && marketingBriefConfig.weather?.place ? (
-                              <p className="mb-config-actionbar-note">Resolved area: {marketingBriefConfig.weather.place}. Weather is on and part of your daily brief.</p>
+                              <p className="mu-notice mu-notice--success">Resolved area: {marketingBriefConfig.weather.place}. Weather is on and part of your daily brief.</p>
                             ) : null}
-                            <div className="mb-config-actionbar">
-                              <span className="mb-config-actionbar-note">{marketingBriefError ? `Error: ${marketingBriefError}` : 'Save to geocode the ZIP and confirm it in the brief.'}</span>
-                              <div className="mb-config-actionbar-buttons">
-                                <button type="button" className="tile-foot-rerun-btn" disabled={marketingBriefSaving} onClick={async () => { await saveMarketingBriefConfig(); loadLocalWeather(); }}>{marketingBriefSaving ? 'Saving…' : 'Save & confirm'}</button>
-                              </div>
-                            </div>
                           </section>
+                          {marketingBriefError && <p className="mu-notice mu-notice--danger">{marketingBriefError}</p>}
+                          <div className="mu-footer">
+                            <span className="mu-footer-note">Save to geocode the ZIP and confirm it in the brief.</span>
+                            <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 140 }} disabled={marketingBriefSaving} onClick={async () => { await saveMarketingBriefConfig(); loadLocalWeather(); }}>
+                              <span>{marketingBriefSaving ? 'Saving…' : 'Save & confirm'}</span>
+                            </button>
+                          </div>
                         </div>
                       )}
                       {modalTab === 'forecast' && (
-                        <div className="tile-detail-tab-pane custom-brief-submit-pane">
+                        <div className="mu-tab-pane">
                           {localWeatherLoading ? (
-                            <p className="tile-analyzer-solutions-empty">Loading forecast…</p>
+                            <p className="mu-notice">Loading forecast…</p>
                           ) : localWeather?.today ? (
-                            <section className="mb-config-section">
-                              <div className="mb-config-section-head">
-                                <span className="mb-config-section-index">WX</span>
+                            <section className="mu-section">
+                              <div className="mu-section-head">
+                                <span className="mu-index">WX</span>
                                 <div>
-                                  <h4>{localWeather.place || 'Forecast'}</h4>
+                                  <h3>{localWeather.place || 'Forecast'}</h3>
                                   <p><strong>{localWeather.today.name}:</strong> {localWeather.today.short} · {localWeather.today.temp}°{localWeather.today.unit}{localWeather.today.wind ? ` · wind ${localWeather.today.wind}` : ''}</p>
                                 </div>
                               </div>
                               {localWeather.today.detailed ? <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-display)' }}>{localWeather.today.detailed}</p> : null}
-                              <div style={{ marginTop: 8 }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 8 }}>
                                 {(localWeather.days || []).map((d) => (
-                                  <div key={d.name} className="config-field"><span className="cf-key">{d.name}</span><span className="cf-val">{d.short} · {d.temp}°{d.unit}</span></div>
+                                  <div key={d.name} className="tile-detail-stat-row">
+                                    <span className="tile-detail-stat-label">{d.name}</span>
+                                    <span className="tile-detail-stat-value">{d.short} · {d.temp}°{d.unit}</span>
+                                  </div>
                                 ))}
                               </div>
-                              <p className="mb-config-actionbar-note" style={{ marginTop: 10 }}>3-day: {localWeather.threeDayLine}</p>
+                              <p className="mu-notice" style={{ marginTop: 8 }}>3-day: {localWeather.threeDayLine}</p>
                             </section>
                           ) : (
-                            <p className="tile-analyzer-solutions-empty">No forecast yet. Set a ZIP and enable weather in CONFIG, then Save.</p>
+                            <div className="mu-empty">No forecast yet. Set a ZIP and enable weather in CONFIG, then Save.</div>
                           )}
                         </div>
                       )}
@@ -8380,7 +8614,7 @@ const DashboardPage = () => {
                       {modalTab === 'data' && (
                         <div id="survey-answers-table" className="tile-detail-tab-pane">
                           {ONBOARDING_ENTRY_STEPS.length === 0 ? (
-                            <p className="tile-analyzer-solutions-empty">No questions found.</p>
+                            <div className="mu-empty">No questions found.</div>
                           ) : (() => {
                             const answers = onboardingAnswersSeed || {};
                             return ONBOARDING_ENTRY_STEPS.map((step) => {
@@ -8414,10 +8648,8 @@ const DashboardPage = () => {
                   const sources = bsRun?.sources || {};
                   const hasRun = Boolean(masterPrompt && jsonObj);
                   const emptyState = (label) => (
-                    <div className="tile-detail-tab-pane" style={{ padding: 24 }}>
-                      <p className="tile-analyzer-solutions-empty" style={{ fontFamily: 'var(--font-mono)', fontSize: 12, opacity: 0.7 }}>
-                        No {label} yet — click RUN on the Brand System card to scan your pipeline and fill any gaps.
-                      </p>
+                    <div className="mu-tab-pane">
+                      <div className="mu-empty">No {label} yet — click RUN on the Brand System card to scan your pipeline and fill any gaps.</div>
                     </div>
                   );
                   return (
@@ -8448,19 +8680,15 @@ const DashboardPage = () => {
                       <div className="tile-detail-tab-content">
                         {modalTab === 'master-prompt' && (
                           hasRun ? (
-                            <div id="brand-system-master-prompt-pane" className="tile-detail-tab-pane" style={{ padding: 16 }}>
-                              <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.5, color: 'var(--text-primary)', margin: 0 }}>
-                                {masterPrompt}
-                              </pre>
+                            <div id="brand-system-master-prompt-pane" className="mu-tab-pane">
+                              <pre className="mu-code-block">{masterPrompt}</pre>
                             </div>
                           ) : emptyState('master prompt')
                         )}
                         {modalTab === 'json' && (
                           jsonObj ? (
-                            <div id="brand-system-json-pane" className="tile-detail-tab-pane" style={{ padding: 16 }}>
-                              <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'var(--font-mono)', fontSize: 11, lineHeight: 1.5, color: 'var(--text-primary)', margin: 0 }}>
-                                {JSON.stringify(jsonObj, null, 2)}
-                              </pre>
+                            <div id="brand-system-json-pane" className="mu-tab-pane">
+                              <pre className="mu-code-block">{JSON.stringify(jsonObj, null, 2)}</pre>
                             </div>
                           ) : emptyState('json object')
                         )}
@@ -8508,22 +8736,11 @@ const DashboardPage = () => {
                       </div>
                       <div className="tile-detail-tab-content">
                         {modalTab === 'preview' && (
-                          <div className="tile-detail-tab-pane" style={{ padding: 0, height: '100%', overflow: 'hidden' }}>
+                          <div className="mu-tab-pane">
                             {designMd ? (
-                              <pre
-                                style={{
-                                  margin: 0, padding: '16px 18px', height: '100%', overflow: 'auto',
-                                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                                  fontSize: 12, lineHeight: 1.55, color: '#2a2420',
-                                  background: '#f8f7f4', border: '1px solid rgba(42,36,32,0.08)', borderRadius: 8,
-                                  whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                                }}
-                              >{designMd}</pre>
+                              <pre className="mu-code-block">{designMd}</pre>
                             ) : (
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 400, gap: 16, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'center', padding: 40 }}>
-                                <span style={{ fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.7 }}>No brief yet</span>
-                                <span style={{ fontSize: 13, lineHeight: 1.6, maxWidth: 340 }}>Click RUN on the Prepare Brief card to scrape your website and generate the creative brief.</span>
-                              </div>
+                              <div className="mu-empty">No brief yet. Click RUN on the Prepare Brief card to scrape your website and generate the creative brief.</div>
                             )}
                           </div>
                         )}
@@ -8596,14 +8813,11 @@ const DashboardPage = () => {
                       </div>
                       <div className="tile-detail-tab-content">
                         {modalTab === 'preview' && (
-                          <div className="tile-detail-tab-pane" style={{ padding: 0, height: '100%', overflow: 'auto', background: '#f8f7f4', border: '1px solid rgba(42,36,32,0.08)', borderRadius: 8 }}>
+                          <div className="mu-tab-pane" style={{ padding: 0, overflow: 'auto', background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(42,36,32,0.1)', borderRadius: 8 }}>
                             {url ? (
                               <img src={url} alt="Generated homepage mockup" style={{ display: 'block', width: '100%', height: 'auto' }} />
                             ) : (
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 400, gap: 16, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'center', padding: 40 }}>
-                                <span style={{ fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.7 }}>No mockup yet</span>
-                                <span style={{ fontSize: 13, lineHeight: 1.6, maxWidth: 340 }}>Click RUN on the Generate Mockup card to produce the visual concept from your brief.</span>
-                              </div>
+                              <div className="mu-empty">No mockup yet. Click RUN on the Generate Mockup card to produce the visual concept from your brief.</div>
                             )}
                           </div>
                         )}
@@ -8653,32 +8867,20 @@ const DashboardPage = () => {
                       </div>
                       <div className="tile-detail-tab-content">
                         {modalTab === 'preview' && (
-                          <div className="tile-detail-tab-pane" style={{ padding: 24, height: '100%', overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <div className="mu-tab-pane" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             {previewUrl ? (
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18, maxWidth: 480, textAlign: 'center', fontFamily: 'var(--font-mono)' }}>
-                                <span style={{ fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.55)' }}>Preview deployed</span>
-                                <a
-                                  href={previewUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  style={{
-                                    display: 'inline-flex', alignItems: 'center', gap: 8,
-                                    padding: '12px 20px', borderRadius: 8,
-                                    background: '#2a2420', color: '#fff',
-                                    fontSize: '0.78rem', letterSpacing: '0.08em', fontWeight: 700, textTransform: 'uppercase',
-                                    textDecoration: 'none', boxShadow: '0 6px 18px rgba(0,0,0,0.2)',
-                                  }}
-                                >Open Preview ↗</a>
-                                <span style={{ fontSize: 11, color: 'rgba(42,36,32,0.55)', wordBreak: 'break-all', padding: '8px 12px', background: 'rgba(42,36,32,0.04)', borderRadius: 6 }}>{previewUrl}</span>
-                                <span style={{ fontSize: 11, lineHeight: 1.5, color: 'rgba(42,36,32,0.45)', maxWidth: 360 }}>
-                                  Vercel preview deployments block iframe embedding by default. Use the link above to view the live site in a new tab.
-                                </span>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, maxWidth: 480, textAlign: 'center' }}>
+                                <span className="mu-label">Preview deployed</span>
+                                <a className="mu-btn-outline mu-btn-outline--accent" href={previewUrl} target="_blank" rel="noopener noreferrer">
+                                  Open Preview <ArrowUpRight size={14} strokeWidth={2} />
+                                </a>
+                                <span className="mu-notice" style={{ wordBreak: 'break-all', fontSize: 11, minHeight: 'unset', padding: '8px 12px' }}>{previewUrl}</span>
+                                <p style={{ fontSize: 11, lineHeight: 1.5, color: 'rgba(42,36,32,0.5)', margin: 0, maxWidth: 360 }}>
+                                  Vercel preview deployments block iframe embedding. Use the link above to view in a new tab.
+                                </p>
                               </div>
                             ) : (
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 400, gap: 16, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'center', padding: 40 }}>
-                                <span style={{ fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.7 }}>No site yet</span>
-                                <span style={{ fontSize: 13, lineHeight: 1.6, maxWidth: 340 }}>Click RUN on the Generate Site card to produce + deploy the homepage preview.</span>
-                              </div>
+                              <div className="mu-empty">No site yet. Click RUN on the Generate Site card to produce + deploy the homepage preview.</div>
                             )}
                           </div>
                         )}
@@ -8752,28 +8954,28 @@ const DashboardPage = () => {
                       </div>
                       <div className="tile-detail-tab-content">
                         {modalTab === 'config' && (
-                          <div id="client-estimate-config-tab" className="tile-detail-tab-pane custom-brief-submit-pane">
+                          <div id="client-estimate-config-tab" className="mu-tab-pane">
                             {estimateBriefLoading ? (
-                              <p className="tile-analyzer-solutions-empty">Loading estimate config...</p>
+                              <p className="mu-notice">Loading estimate config...</p>
                             ) : (
                               <>
-                                <section className="mb-config-section">
-                                  <div className="mb-config-section-head">
-                                    <span className="mb-config-section-index">01</span>
+                                <section className="mu-section">
+                                  <div className="mu-section-head">
+                                    <span className="mu-index">01</span>
                                     <div>
-                                      <h4>Offer and pricing</h4>
+                                      <h3>Offer and pricing</h3>
                                       <p>Line format: Label | Description | Unit Price | Quantity. Save before running Create Estimate.</p>
                                     </div>
-                                    <span className="mb-config-section-status">{parseEstimateLineItems(estimateBriefDraft.lineItemsText).length} item{parseEstimateLineItems(estimateBriefDraft.lineItemsText).length === 1 ? '' : 's'}</span>
+                                    <span className="mu-chip">{parseEstimateLineItems(estimateBriefDraft.lineItemsText).length} item{parseEstimateLineItems(estimateBriefDraft.lineItemsText).length === 1 ? '' : 's'}</span>
                                   </div>
-                                  <label className="mb-config-field">
-                                    <span className="mb-config-label">Offer summary</span>
-                                    <textarea className="mb-config-textarea" value={estimateBriefDraft.offerSummary || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), offerSummary: e.target.value }))} rows={3} />
+                                  <label className="mu-field">
+                                    <span className="mu-label">Offer summary</span>
+                                    <textarea className="mu-textarea" value={estimateBriefDraft.offerSummary || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), offerSummary: e.target.value }))} rows={3} />
                                   </label>
-                                  <div className="custom-brief-submit-grid">
-                                    <label className="mb-config-field">
-                                      <span className="mb-config-label">Pricing model</span>
-                                      <select className="mb-config-input" value={estimateBriefDraft.pricingModel || 'line_items'} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), pricingModel: e.target.value }))}>
+                                  <div className="mu-field-grid">
+                                    <label className="mu-field">
+                                      <span className="mu-label">Pricing model</span>
+                                      <select className="mu-select" value={estimateBriefDraft.pricingModel || 'line_items'} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), pricingModel: e.target.value }))}>
                                         <option value="line_items">Line items</option>
                                         <option value="fixed">Fixed price</option>
                                         <option value="package">Package</option>
@@ -8781,68 +8983,68 @@ const DashboardPage = () => {
                                         <option value="tiered">Tiered</option>
                                       </select>
                                     </label>
-                                    <label className="mb-config-field">
-                                      <span className="mb-config-label">Currency</span>
-                                      <input className="mb-config-input" value={estimateBriefDraft.currency || 'USD'} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), currency: e.target.value.toUpperCase().slice(0, 3) }))} />
+                                    <label className="mu-field">
+                                      <span className="mu-label">Currency</span>
+                                      <input className="mu-input" value={estimateBriefDraft.currency || 'USD'} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), currency: e.target.value.toUpperCase().slice(0, 3) }))} />
                                     </label>
                                   </div>
-                                  <label className="mb-config-field">
-                                    <span className="mb-config-label">Line items</span>
-                                    <textarea className="mb-config-textarea mb-config-textarea--code" value={estimateBriefDraft.lineItemsText || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), lineItemsText: e.target.value }))} rows={7} spellCheck={false} />
+                                  <label className="mu-field">
+                                    <span className="mu-label">Line items</span>
+                                    <textarea className="mu-textarea mu-code-textarea" value={estimateBriefDraft.lineItemsText || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), lineItemsText: e.target.value }))} rows={7} spellCheck={false} />
                                   </label>
-                                  <label className="mb-config-field">
-                                    <span className="mb-config-label">Optional add-ons</span>
-                                    <textarea className="mb-config-textarea mb-config-textarea--code" value={estimateBriefDraft.optionalAddOnsText || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), optionalAddOnsText: e.target.value }))} rows={4} spellCheck={false} />
+                                  <label className="mu-field">
+                                    <span className="mu-label">Optional add-ons</span>
+                                    <textarea className="mu-textarea mu-code-textarea" value={estimateBriefDraft.optionalAddOnsText || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), optionalAddOnsText: e.target.value }))} rows={4} spellCheck={false} />
                                   </label>
                                 </section>
 
-                                <section className="mb-config-section">
-                                  <div className="mb-config-section-head">
-                                    <span className="mb-config-section-index">02</span>
+                                <section className="mu-section">
+                                  <div className="mu-section-head">
+                                    <span className="mu-index">02</span>
                                     <div>
-                                      <h4>Scope, terms, and message</h4>
+                                      <h3>Scope, terms, and message</h3>
                                       <p>One item per line for scope, exclusions, terms, and payment schedule.</p>
                                     </div>
-                                    <span className="mb-config-section-status">Editable</span>
+                                    <span className="mu-chip">Editable</span>
                                   </div>
-                                  <label className="mb-config-field">
-                                    <span className="mb-config-label">Timeline</span>
-                                    <input className="mb-config-input" value={estimateBriefDraft.timeline || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), timeline: e.target.value }))} />
+                                  <label className="mu-field">
+                                    <span className="mu-label">Timeline</span>
+                                    <input className="mu-input" value={estimateBriefDraft.timeline || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), timeline: e.target.value }))} />
                                   </label>
-                                  <label className="mb-config-field">
-                                    <span className="mb-config-label">Scope</span>
-                                    <textarea className="mb-config-textarea" value={estimateBriefDraft.scopeText || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), scopeText: e.target.value }))} rows={5} />
+                                  <label className="mu-field">
+                                    <span className="mu-label">Scope</span>
+                                    <textarea className="mu-textarea" value={estimateBriefDraft.scopeText || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), scopeText: e.target.value }))} rows={5} />
                                   </label>
-                                  <label className="mb-config-field">
-                                    <span className="mb-config-label">Exclusions</span>
-                                    <textarea className="mb-config-textarea" value={estimateBriefDraft.exclusionsText || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), exclusionsText: e.target.value }))} rows={4} />
+                                  <label className="mu-field">
+                                    <span className="mu-label">Exclusions</span>
+                                    <textarea className="mu-textarea" value={estimateBriefDraft.exclusionsText || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), exclusionsText: e.target.value }))} rows={4} />
                                   </label>
-                                  <div className="custom-brief-submit-grid">
-                                    <label className="mb-config-field">
-                                      <span className="mb-config-label">Terms</span>
-                                      <textarea className="mb-config-textarea" value={estimateBriefDraft.termsText || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), termsText: e.target.value }))} rows={4} />
+                                  <div className="mu-field-grid">
+                                    <label className="mu-field">
+                                      <span className="mu-label">Terms</span>
+                                      <textarea className="mu-textarea" value={estimateBriefDraft.termsText || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), termsText: e.target.value }))} rows={4} />
                                     </label>
-                                    <label className="mb-config-field">
-                                      <span className="mb-config-label">Payment schedule</span>
-                                      <textarea className="mb-config-textarea" value={estimateBriefDraft.paymentScheduleText || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), paymentScheduleText: e.target.value }))} rows={4} />
+                                    <label className="mu-field">
+                                      <span className="mu-label">Payment schedule</span>
+                                      <textarea className="mu-textarea" value={estimateBriefDraft.paymentScheduleText || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), paymentScheduleText: e.target.value }))} rows={4} />
                                     </label>
                                   </div>
-                                  <label className="mb-config-field">
-                                    <span className="mb-config-label">Estimate tone</span>
-                                    <input className="mb-config-input" value={estimateBriefDraft.estimateTone || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), estimateTone: e.target.value }))} />
+                                  <label className="mu-field">
+                                    <span className="mu-label">Estimate tone</span>
+                                    <input className="mu-input" value={estimateBriefDraft.estimateTone || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), estimateTone: e.target.value }))} />
                                   </label>
-                                  <label className="mb-config-field">
-                                    <span className="mb-config-label">Send message instructions</span>
-                                    <textarea className="mb-config-textarea" value={estimateBriefDraft.sendMessageInstructions || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), sendMessageInstructions: e.target.value }))} rows={3} />
+                                  <label className="mu-field">
+                                    <span className="mu-label">Send message instructions</span>
+                                    <textarea className="mu-textarea" value={estimateBriefDraft.sendMessageInstructions || ''} onChange={(e) => setEstimateBriefDraft((prev) => ({ ...(prev || {}), sendMessageInstructions: e.target.value }))} rows={3} />
                                   </label>
                                 </section>
 
-                                {estimateBriefError && <p className="mb-config-error">{estimateBriefError}</p>}
-                                <div className="mb-config-actionbar">
-                                  <span className="mb-config-actionbar-note">Saved config is used by the next Create Estimate run.</span>
-                                  <div className="mb-config-actionbar-buttons">
-                                    <button type="button" className="tile-foot-rerun-btn" onClick={saveEstimateBriefConfig} disabled={estimateBriefSaving}>{estimateBriefSaving ? 'Saving...' : 'Save Config'}</button>
-                                  </div>
+                                {estimateBriefError && <p className="mu-notice mu-notice--danger">{estimateBriefError}</p>}
+                                <div className="mu-footer">
+                                  <span className="mu-footer-note">Saved config is used by the next Create Estimate run.</span>
+                                  <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 140 }} onClick={saveEstimateBriefConfig} disabled={estimateBriefSaving}>
+                                    <span>{estimateBriefSaving ? 'Saving...' : 'Save Config'}</span>
+                                  </button>
                                 </div>
                               </>
                             )}
@@ -8858,10 +9060,7 @@ const DashboardPage = () => {
                                 style={{ width: '100%', height: '100%', minHeight: 620, border: '1px solid rgba(42,36,32,0.08)', borderRadius: 8, background: '#fff' }}
                               />
                             ) : (
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 400, gap: 16, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'center', padding: 40 }}>
-                                <span style={{ fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.7 }}>No estimate yet</span>
-                                <span style={{ fontSize: 13, lineHeight: 1.6, maxWidth: 360 }}>Run Create Estimate after the site preview is generated to produce the client-facing estimate and PDF.</span>
-                              </div>
+                              <div className="mu-empty">No estimate yet. Run Create Estimate after the site preview is generated to produce the client-facing estimate and PDF.</div>
                             )}
                           </div>
                         )}
@@ -8907,10 +9106,10 @@ const DashboardPage = () => {
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       download="estimate.pdf"
-                                      className="tile-foot-rerun-btn"
+                                      className="mu-btn-outline mu-btn-outline--accent"
                                       style={{ display: 'inline-flex', marginTop: 14, textDecoration: 'none' }}
                                     >
-                                      Download PDF
+                                      Download PDF ↓
                                     </a>
                                   )}
                                 </>
@@ -8919,28 +9118,17 @@ const DashboardPage = () => {
                           </div>
                         )}
                         {modalTab === 'message' && (
-                          <div id="client-estimate-message-tab" className="tile-detail-tab-pane">
+                          <div id="client-estimate-message-tab" className="mu-tab-pane">
                             {estimateJson?.sendMessage ? (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                                 <div className="tile-detail-stat-row">
                                   <span className="tile-detail-stat-label">Subject</span>
                                   <span className="tile-detail-stat-value">{estimateJson.sendMessage.subject || '—'}</span>
                                 </div>
-                                <pre
-                                  style={{
-                                    margin: 0, padding: '16px 18px', minHeight: 360, overflow: 'auto',
-                                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                                    fontSize: 12, lineHeight: 1.6, color: '#2a2420',
-                                    background: '#f8f7f4', border: '1px solid rgba(42,36,32,0.08)', borderRadius: 8,
-                                    whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                                  }}
-                                >{estimateJson.sendMessage.body || ''}</pre>
+                                <pre className="mu-code-block" style={{ minHeight: 320 }}>{estimateJson.sendMessage.body || ''}</pre>
                               </div>
                             ) : (
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 400, gap: 16, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'center', padding: 40 }}>
-                                <span style={{ fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.7 }}>No message yet</span>
-                                <span style={{ fontSize: 13, lineHeight: 1.6, maxWidth: 340 }}>The send-ready message is generated with the estimate.</span>
-                              </div>
+                              <div className="mu-empty">No message yet. The send-ready message is generated with the estimate.</div>
                             )}
                           </div>
                         )}
@@ -8951,52 +9139,360 @@ const DashboardPage = () => {
 
                 {/* Conversation Intake — paste a team conversation dump; parser tags items the brief reads */}
                 {activeTileModal.cardId === 'conversation-intake' && (
-                  <div id="conversation-intake-panel" className="tile-detail-bento-cell" style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: 20 }}>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
-                      Paste today’s team conversation
-                    </div>
-                    <p style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--text-secondary)', margin: 0 }}>
-                      Discord thread, Slack copy-paste, or WhatsApp “Export chat”. The intake analyst keeps only what’s relevant to your campaign and positioning, tags each item, and feeds it into the Executive Daily Brief.
-                    </p>
-                    <textarea
-                      id="conversation-intake-textarea"
-                      className="mb-config-textarea"
-                      placeholder="Paste the conversation here…"
-                      value={conversationIntakeText}
-                      onChange={(e) => setConversationIntakeText(e.target.value)}
-                      rows={12}
-                      disabled={conversationIntakeRunning}
-                    />
-                    {conversationIntakeError ? (
-                      <div style={{ fontSize: 12, color: 'var(--danger, #e5484d)' }}>{conversationIntakeError}</div>
-                    ) : null}
-                    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                      <button
-                        type="button"
-                        className="tile-foot-rerun-btn"
-                        onClick={digestConversation}
-                        disabled={conversationIntakeRunning || !conversationIntakeText.trim()}
-                      >
-                        {conversationIntakeRunning ? 'Digesting…' : 'Digest Conversation'}
-                      </button>
-                      {conversationIntake?.digestedAtIso ? (
-                        <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-                          Last digest: {new Date(conversationIntake.digestedAtIso).toLocaleString()} · {conversationIntake.itemCount} item{conversationIntake.itemCount === 1 ? '' : 's'}
-                        </span>
+                  <div id="conversation-intake-panel" className="tile-detail-bento-cell">
+                    <div className="mu-tab-pane" style={{ padding: 18 }}>
+                      <span className="mu-label">Paste today's team conversation</span>
+                      <p style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--text-secondary)', margin: 0 }}>
+                        Discord thread, Slack copy-paste, or WhatsApp "Export chat". The intake analyst keeps only what's relevant to your campaign and positioning, tags each item, and feeds it into the Executive Daily Brief.
+                      </p>
+                      <textarea
+                        id="conversation-intake-textarea"
+                        className="mu-textarea"
+                        placeholder="Paste the conversation here…"
+                        value={conversationIntakeText}
+                        onChange={(e) => setConversationIntakeText(e.target.value)}
+                        rows={12}
+                        disabled={conversationIntakeRunning}
+                      />
+                      {conversationIntakeError ? <p className="mu-notice mu-notice--danger">{conversationIntakeError}</p> : null}
+                      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          className="mu-cta-primary"
+                          style={{ width: 'auto', minWidth: 180 }}
+                          onClick={digestConversation}
+                          disabled={conversationIntakeRunning || !conversationIntakeText.trim()}
+                        >
+                          <span>{conversationIntakeRunning ? 'Digesting…' : 'Digest Conversation'}</span>
+                        </button>
+                        {conversationIntake?.digestedAtIso ? (
+                          <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                            Last digest: {new Date(conversationIntake.digestedAtIso).toLocaleString()} · {conversationIntake.itemCount} item{conversationIntake.itemCount === 1 ? '' : 's'}
+                          </span>
+                        ) : null}
+                      </div>
+                      {(conversationIntake?.items || []).length ? (
+                        <div id="conversation-intake-results" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <div className="tile-detail-row-section-head">TAGGED ITEMS</div>
+                          {conversationIntake.items.map((item, i) => (
+                            <div key={i} className="mu-saved-card" style={{ gap: 4 }}>
+                              <span className="mu-saved-meta">{item.type}</span>
+                              <span style={{ fontSize: 13, lineHeight: 1.5 }}>{item.summary}</span>
+                              {item.relevance ? <span className="mu-saved-meta" style={{ fontSize: 11 }}>{item.relevance}</span> : null}
+                            </div>
+                          ))}
+                        </div>
                       ) : null}
                     </div>
-                    {(conversationIntake?.items || []).length ? (
-                      <div id="conversation-intake-results" style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
-                        <div className="tile-detail-row-section-head">TAGGED ITEMS</div>
-                        {conversationIntake.items.map((item, i) => (
-                          <div key={i} className="tile-detail-stat-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 3 }}>
-                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>{item.type}</span>
-                            <span style={{ fontSize: 13, lineHeight: 1.5 }}>{item.summary}</span>
-                            {item.relevance ? <span style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{item.relevance}</span> : null}
+                  </div>
+                )}
+
+                {/* ── Scout Config slice cards — each edits a slice of the shared marketingBriefConfig ── */}
+
+                {/* Scout Focus — research lens + analysis instructions + freshness */}
+                {activeTileModal.cardId === 'scout-focus' && (
+                  <div id="scout-focus-panel" className="tile-detail-bento-cell">
+                    <div className="mu-tab-pane" style={{ padding: 18 }}>
+                      {!marketingBriefConfig ? (
+                        <p className="mu-notice">Loading Scout config…</p>
+                      ) : (
+                        <>
+                          <label className="mu-field">
+                            <span className="mu-label">What should Scout care about?</span>
+                            <textarea className="mu-textarea" value={marketingBriefConfig.sourceFocus || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), sourceFocus: e.target.value }))} rows={4} />
+                          </label>
+                          <label className="mu-field">
+                            <span className="mu-label">Analysis instructions (how Scout should reason)</span>
+                            <textarea className="mu-textarea" value={marketingBriefConfig.scoutInstructions || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), scoutInstructions: e.target.value }))} rows={6} />
+                          </label>
+                          <label className="mu-field" style={{ maxWidth: 220 }}>
+                            <span className="mu-label">Freshness window (days)</span>
+                            <input className="mu-input" type="number" min="1" max="30" value={marketingBriefConfig.freshnessDays || 1} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), freshnessDays: Number(e.target.value || 1) }))} />
+                          </label>
+                          {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
+                          <div className="mu-footer">
+                            <span />
+                            <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 100 }} onClick={saveMarketingBriefConfig} disabled={marketingBriefSaving}>
+                              <span>{marketingBriefSaving ? 'Saving…' : 'Save'}</span>
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Watchlist — KOLs / handles + search mode */}
+                {activeTileModal.cardId === 'watchlist' && (
+                  <div id="watchlist-panel" className="tile-detail-bento-cell">
+                    <div className="mu-tab-pane" style={{ padding: 18 }}>
+                      {!marketingBriefConfig ? (
+                        <p className="mu-notice">Loading Scout config…</p>
+                      ) : (
+                        <>
+                          <label className="mu-field">
+                            <span className="mu-label">KOLs / handles</span>
+                            <textarea className="mu-textarea" placeholder="@handle or name, one per line" value={marketingBriefConfig.kols || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), kols: e.target.value }))} rows={6} />
+                          </label>
+                          <label className="mu-field">
+                            <span className="mu-label">KOL search mode</span>
+                            <select className="mu-select" value={marketingBriefConfig.kolSearchMode || 'per-handle'} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), kolSearchMode: e.target.value }))}>
+                              <option value="per-handle">Per handle — one search each (most accurate)</option>
+                              <option value="combined">Combined — one search for all handles (cheaper)</option>
+                            </select>
+                            <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Watchlist handles are searched every run, separately from your other queries.</span>
+                          </label>
+                          {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
+                          <div className="mu-footer">
+                            <span />
+                            <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 100 }} onClick={saveMarketingBriefConfig} disabled={marketingBriefSaving}>
+                              <span>{marketingBriefSaving ? 'Saving…' : 'Save'}</span>
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Competitors */}
+                {activeTileModal.cardId === 'competitors' && (
+                  <div id="competitors-panel" className="tile-detail-bento-cell">
+                    <div className="mu-tab-pane" style={{ padding: 18 }}>
+                      {!marketingBriefConfig ? (
+                        <p className="mu-notice">Loading Scout config…</p>
+                      ) : (
+                        <>
+                          <label className="mu-field">
+                            <span className="mu-label">Competitors</span>
+                            <textarea className="mu-textarea" placeholder="Competitor names, one per line" value={marketingBriefConfig.competitors || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), competitors: e.target.value }))} rows={8} />
+                            <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Injected into the search strategy and final angle selection every run.</span>
+                          </label>
+                          {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
+                          <div className="mu-footer">
+                            <span />
+                            <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 100 }} onClick={saveMarketingBriefConfig} disabled={marketingBriefSaving}>
+                              <span>{marketingBriefSaving ? 'Saving…' : 'Save'}</span>
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Search Plan — custom Scout query rows */}
+                {activeTileModal.cardId === 'search-plan' && (
+                  <div id="search-plan-panel" className="tile-detail-bento-cell">
+                    <div className="mu-tab-pane" style={{ padding: 18 }}>
+                    {!marketingBriefConfig ? (
+                      <p className="mu-notice">Loading Scout config…</p>
+                    ) : (
+                      <>
+                        <div className="mb-config-section-head" style={{ margin: 0 }}>
+                          <div><p style={{ margin: 0 }}>Each row becomes a targeted Scout query. Use the goal to explain why it matters.</p></div>
+                          <button type="button" className="mb-config-mini-btn" onClick={addMarketingBriefSearch}>Add Search</button>
+                        </div>
+                        <div className="mb-config-search-list">
+                          {(marketingBriefConfig.searches || []).map((row, index) => (
+                            <div key={`sp-search-${index}`} className="mb-config-search-row">
+                              <div className="mb-config-search-meta">
+                                <span className="mb-config-row-dot" aria-hidden="true" />
+                                <span className="mb-config-row-num">{String(index + 1).padStart(2, '0')}</span>
+                              </div>
+                              <label className="mb-config-field mb-config-field--label">
+                                <span className="mb-config-label">Label</span>
+                                <input className="mb-config-input" value={row.label || ''} placeholder="Brand / KOLs / Viral Windows" onChange={(e) => updateMarketingBriefSearch(index, { label: e.target.value })} />
+                              </label>
+                              <label className="mb-config-field mb-config-field--query">
+                                <span className="mb-config-label">Search query</span>
+                                <textarea className="mb-config-textarea mb-config-textarea--compact" value={row.query || ''} placeholder="Terms, handles, competitor names, category phrases..." onChange={(e) => updateMarketingBriefSearch(index, { query: e.target.value })} rows={2} />
+                              </label>
+                              <label className="mb-config-field mb-config-field--goal">
+                                <span className="mb-config-label">Signal Scout should extract</span>
+                                <input className="mb-config-input" value={row.goal || ''} placeholder="Find founder-ready angles, KOL reactions, competitor moves..." onChange={(e) => updateMarketingBriefSearch(index, { goal: e.target.value })} />
+                              </label>
+                              <button type="button" className="mb-config-remove-btn" onClick={() => removeMarketingBriefSearch(index)} disabled={(marketingBriefConfig.searches || []).length <= 1}>Remove</button>
+                            </div>
+                          ))}
+                        </div>
+                        {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
+                        <div className="mu-footer">
+                          <span />
+                          <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 100 }} onClick={saveMarketingBriefConfig} disabled={marketingBriefSaving}>
+                            <span>{marketingBriefSaving ? 'Saving…' : 'Save'}</span>
+                          </button>
+                        </div>
+                      </>
+                    )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Source Platforms — active toggles (web + X) on top, full locked catalog below */}
+                {activeTileModal.cardId === 'source-platforms' && (
+                  <div id="source-platforms-panel" className="tile-detail-bento-cell">
+                    <div className="mu-tab-pane" style={{ padding: 18 }}>
+                    <p style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--text-secondary)', margin: 0 }}>
+                      Web and X drive your brief today — toggle them below. The rest of the catalog unlocks with an upgrade as the social and directory search layer rolls out.
+                    </p>
+                    {marketingBriefConfig ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <div className="tile-detail-row-section-head">Active Sources</div>
+                        {[{ key: 'web', label: 'Web / News' }, { key: 'x', label: 'X / Twitter' }].map((p) => {
+                          const selected = (marketingBriefConfig.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS).includes(p.key);
+                          return (
+                            <button
+                              key={p.key}
+                              type="button"
+                              className={`mb-config-platform-toggle${selected ? ' is-on' : ''}`}
+                              onClick={() => toggleMarketingBriefSourcePlatform(p.key)}
+                              aria-pressed={selected}
+                            >
+                              <span className="mb-config-platform-check">{selected ? '✓' : ''}</span>
+                              <span className="mb-config-platform-body">
+                                <span className="mb-config-platform-title">
+                                  {p.label}
+                                  <span className="mb-config-platform-status mb-config-platform-status--ready">active</span>
+                                </span>
+                              </span>
+                            </button>
+                          );
+                        })}
+                        {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
+                        <div className="mu-footer" style={{ marginTop: 4 }}>
+                          <span />
+                          <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 100 }} onClick={saveMarketingBriefConfig} disabled={marketingBriefSaving}>
+                            <span>{marketingBriefSaving ? 'Saving…' : 'Save'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                    {SCOUT_PLATFORM_CATALOG.map((group) => (
+                      <div key={group.section} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <div className="tile-detail-row-section-head">{group.section}</div>
+                        {group.items.map((name) => (
+                          <div
+                            key={name}
+                            className="tile-detail-stat-row"
+                            data-platform-locked="true"
+                            style={{ alignItems: 'center', opacity: 0.85 }}
+                          >
+                            <span className="tile-detail-stat-label">{name}</span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Scout</span>
+                              <button
+                                type="button"
+                                onClick={() => setShowTierModal(true)}
+                                style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--accent, #10b981)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                              >Upgrade →</button>
+                            </span>
                           </div>
                         ))}
                       </div>
-                    ) : null}
+                    ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Brief Preview — Agent Data Contract + cost estimate + Run Now → populates the Executive Daily Brief */}
+                {activeTileModal.cardId === 'brief-preview' && (
+                  <div id="brief-preview-panel" className="tile-detail-bento-cell">
+                    <div className="mu-tab-pane" style={{ padding: 18 }}>
+                      {!marketingBriefConfig ? (
+                        <p className="mu-notice">Loading Scout config…</p>
+                      ) : (
+                        <>
+                          <label className="mu-field">
+                            <span className="mu-label">Agent Data Contract (JSON shape Scout returns)</span>
+                            <textarea className="mu-textarea mu-code-textarea" value={marketingBriefConfig.agentDataTemplate || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), agentDataTemplate: e.target.value }))} rows={12} spellCheck={false} />
+                          </label>
+                          {(() => {
+                            const SEARCH_RATE = 0.045;
+                            const SYNTH_FLAT = 0.08;
+                            const customSearches = (marketingBriefConfig.searches || []).filter((s) => String(s?.query || '').trim()).length;
+                            const handles = String(marketingBriefConfig.kols || '').split(/[\n,]+/).map((s) => s.trim()).filter(Boolean).length;
+                            const watchlistSearches = (marketingBriefConfig.kolSearchMode === 'combined') ? (handles ? 1 : 0) : handles;
+                            const platformSearches = (marketingBriefConfig.sourcePlatforms || []).filter((p) => p !== 'web').length;
+                            const total = (customSearches + watchlistSearches + platformSearches) * SEARCH_RATE + SYNTH_FLAT;
+                            return (
+                              <div className="tile-detail-stat-row">
+                                <span className="tile-detail-stat-label">Est. run cost</span>
+                                <span className="tile-detail-stat-value">≈ ${total.toFixed(2)} · {customSearches + watchlistSearches + platformSearches} searches</span>
+                              </div>
+                            );
+                          })()}
+                          <div className="tile-detail-stat-row">
+                            <span className="tile-detail-stat-label">Brief status</span>
+                            <span className="tile-detail-stat-value">{marketingBriefStatus}</span>
+                          </div>
+                          {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
+                          <div className="mu-footer">
+                            <span />
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <button type="button" className="mu-btn-update" onClick={saveMarketingBriefConfig} disabled={marketingBriefSaving}>{marketingBriefSaving ? 'Saving…' : 'Save'}</button>
+                              <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 110 }} onClick={runMarketingBrief} disabled={marketingBriefRunning || marketingBriefSaving}>
+                                <span>{marketingBriefRunning ? 'Running…' : 'Run Now'}</span>
+                              </button>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Events — local (ZIP) or global (keyword) event discovery */}
+                {activeTileModal.cardId === 'events' && (
+                  <div id="events-panel" className="tile-detail-bento-cell">
+                    <div className="mu-tab-pane" style={{ padding: 18 }}>
+                      <p style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--text-secondary)', margin: 0 }}>
+                        Search what's happening. <strong>Local</strong> finds events near a ZIP code (great for neighborhood-driven businesses). <strong>Global</strong> finds industry events by keyword (great for digital brands).
+                      </p>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        {[{ key: 'local', label: 'Local · ZIP' }, { key: 'global', label: 'Global · Keywords' }].map((m) => (
+                          <button
+                            key={m.key}
+                            type="button"
+                            className={`tile-detail-tab${eventsMode === m.key ? ' tile-detail-tab--active' : ''}`}
+                            onClick={() => { setEventsMode(m.key); setEventsError(''); }}
+                          >{m.label}</button>
+                        ))}
+                      </div>
+                      {eventsMode === 'local' ? (
+                        <label className="mu-field" style={{ maxWidth: 220 }}>
+                          <span className="mu-label">ZIP code</span>
+                          <input className="mu-input" inputMode="numeric" maxLength={5} placeholder="e.g. 10001" value={eventsZip} onChange={(e) => setEventsZip(e.target.value.replace(/\D/g, '').slice(0, 5))} />
+                          <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Defaults to your saved weather ZIP.</span>
+                        </label>
+                      ) : (
+                        <label className="mu-field">
+                          <span className="mu-label">Keywords / industry</span>
+                          <input className="mu-input" placeholder="e.g. AI design tools, SaaS launches, fintech" value={eventsKeywords} onChange={(e) => setEventsKeywords(e.target.value)} />
+                        </label>
+                      )}
+                      {eventsError ? <p className="mu-notice mu-notice--danger">{eventsError}</p> : null}
+                      <div style={{ display: 'flex' }}>
+                        <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 140 }} onClick={searchEventsNow} disabled={eventsRunning}>
+                          <span>{eventsRunning ? 'Searching…' : 'Search Events'}</span>
+                        </button>
+                      </div>
+                      {eventsResults?.events?.length ? (
+                        <div id="events-results" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          <div className="tile-detail-row-section-head">{eventsResults.events.length} EVENT{eventsResults.events.length === 1 ? '' : 'S'}</div>
+                          {eventsResults.events.map((ev, i) => (
+                            <div key={i} className="mu-saved-card" style={{ gap: 4 }}>
+                              <h4 className="mu-saved-title" style={{ fontSize: 13 }}>{ev.title}</h4>
+                              <span className="mu-saved-meta">{[ev.date, ev.location].filter(Boolean).join(' · ')}</span>
+                              {ev.summary ? <p className="mu-saved-body" style={{ fontSize: 12 }}>{ev.summary}</p> : null}
+                              {ev.url ? <a href={ev.url} target="_blank" rel="noopener noreferrer" className="mu-btn-outline" style={{ alignSelf: 'flex-start', textDecoration: 'none', fontSize: 11, minHeight: 28, padding: '0 10px' }}>Open ↗</a> : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : eventsResults ? (
+                        <div className="mu-empty">No events found. Try a different ZIP or broader keywords.</div>
+                      ) : null}
+                    </div>
                   </div>
                 )}
 
@@ -9010,13 +9506,14 @@ const DashboardPage = () => {
                       <button type="button" className={`tile-detail-tab${modalTab === 'custom' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('custom')}>SAVED BRIEFS</button>
                     </div>
                     <div className="tile-detail-tab-content">
+
                       {(modalTab === 'upload' || modalTab === 'create') && (
-                        <div className="tile-detail-tab-pane custom-brief-submit-pane">
-                          <div className="custom-brief-submit-grid">
-                            <label className="mb-config-field">
-                              <span className="mb-config-label">Brief title</span>
+                        <div className="mu-tab-pane">
+                          <div className="mu-field-grid">
+                            <label className="mu-field">
+                              <span className="mu-label">Brief title</span>
                               <input
-                                className="mb-config-input"
+                                className="mu-input"
                                 value={customBriefDraft.title}
                                 onChange={(e) => {
                                   const title = e.target.value;
@@ -9029,10 +9526,10 @@ const DashboardPage = () => {
                                 placeholder="Platform Brief"
                               />
                             </label>
-                            <label className="mb-config-field">
-                              <span className="mb-config-label">URL slug</span>
+                            <label className="mu-field">
+                              <span className="mu-label">URL slug</span>
                               <input
-                                className="mb-config-input"
+                                className="mu-input"
                                 value={customBriefDraft.briefSlug}
                                 onChange={(e) => updateCustomBriefDraft({ briefSlug: briefSlugify(e.target.value) })}
                                 placeholder="platform"
@@ -9040,27 +9537,28 @@ const DashboardPage = () => {
                             </label>
                           </div>
 
-                          <label className="mb-config-field">
-                            <span className="mb-config-label">OG top label</span>
-                            <input
-                              className="mb-config-input"
-                              value={customBriefDraft.ogLabel}
-                              onChange={(e) => updateCustomBriefDraft({ ogLabel: e.target.value })}
-                              placeholder="BRYAN BALLI"
-                            />
-                          </label>
+                          <div className="mu-field-grid">
+                            <label className="mu-field">
+                              <span className="mu-label">OG label</span>
+                              <input
+                                className="mu-input"
+                                value={customBriefDraft.ogLabel}
+                                onChange={(e) => updateCustomBriefDraft({ ogLabel: e.target.value })}
+                                placeholder="BRYAN BALLI"
+                              />
+                            </label>
+                            <label className="mu-field">
+                              <span className="mu-label">Description</span>
+                              <input
+                                className="mu-input"
+                                value={customBriefDraft.description}
+                                onChange={(e) => updateCustomBriefDraft({ description: e.target.value })}
+                                placeholder="OG meta description and dashboard summary"
+                              />
+                            </label>
+                          </div>
 
-                          <label className="mb-config-field">
-                            <span className="mb-config-label">Description</span>
-                            <input
-                              className="mb-config-input"
-                              value={customBriefDraft.description}
-                              onChange={(e) => updateCustomBriefDraft({ description: e.target.value })}
-                              placeholder="OG meta description and dashboard summary"
-                            />
-                          </label>
-
-                          <label className="custom-brief-public-toggle">
+                          <label className="mu-checkbox-row">
                             <input
                               type="checkbox"
                               checked={customBriefDraft.hideOgSubhead}
@@ -9070,21 +9568,21 @@ const DashboardPage = () => {
                           </label>
 
                           {modalTab === 'upload' ? (
-                            <label className="custom-brief-file-drop">
+                            <label className="mu-file-drop">
                               <input type="file" accept=".html,text/html" onChange={handleCustomBriefFile} />
-                              <span className="custom-brief-file-label">Select HTML File</span>
-                              <span className="custom-brief-file-meta">{customBriefDraft.html ? `${customBriefDraft.html.length.toLocaleString()} characters loaded` : 'No file selected'}</span>
+                              <strong>Select HTML File</strong>
+                              <span>{customBriefDraft.html ? `${customBriefDraft.html.length.toLocaleString()} characters loaded` : 'No file selected'}</span>
                             </label>
                           ) : (
-                            <div className="custom-brief-create-actions">
-                              <button type="button" className="tile-foot-rerun-btn" onClick={loadCustomBriefStarter}>Use Starter HTML</button>
+                            <div style={{ display: 'flex' }}>
+                              <button type="button" className="mu-btn-outline" onClick={loadCustomBriefStarter}>Use Starter HTML</button>
                             </div>
                           )}
 
-                          <label className="mb-config-field">
-                            <span className="mb-config-label">HTML document</span>
+                          <label className="mu-field">
+                            <span className="mu-label">HTML document</span>
                             <textarea
-                              className="mb-config-textarea mb-config-textarea--code custom-brief-html-textarea"
+                              className="mu-textarea mu-code-textarea"
                               value={customBriefDraft.html}
                               onChange={(e) => updateCustomBriefDraft({ html: e.target.value })}
                               rows={18}
@@ -9093,7 +9591,7 @@ const DashboardPage = () => {
                             />
                           </label>
 
-                          <label className="custom-brief-public-toggle">
+                          <label className="mu-checkbox-row">
                             <input
                               type="checkbox"
                               checked={customBriefDraft.public}
@@ -9102,7 +9600,7 @@ const DashboardPage = () => {
                             <span>Public URL enabled</span>
                           </label>
 
-                          <label className="custom-brief-public-toggle">
+                          <label className="mu-checkbox-row">
                             <input
                               type="checkbox"
                               checked={customBriefDraft.addToClientBrain}
@@ -9111,38 +9609,40 @@ const DashboardPage = () => {
                             <span>Add to Client Brain</span>
                           </label>
 
-                          {customBriefSubmitError && <p className="mb-config-error">{customBriefSubmitError}</p>}
-                          {customBriefSubmitSuccess && <p className="custom-brief-submit-success">{customBriefSubmitSuccess}</p>}
+                          {customBriefSubmitError && <p className="mu-notice mu-notice--danger">{customBriefSubmitError}</p>}
+                          {customBriefSubmitSuccess && <p className="mu-notice mu-notice--success">{customBriefSubmitSuccess}</p>}
 
-                          <div className="mb-config-actionbar">
-                            <span className="mb-config-actionbar-note">Saves to the selected client and renders a PDF when Browserless is configured.</span>
-                            <div className="mb-config-actionbar-buttons">
-                              <button
-                                type="button"
-                                className="tile-foot-rerun-btn"
-                                onClick={submitCustomBrief}
-                                disabled={customBriefSaving || !customBriefDraft.html.trim() || !customBriefDraft.title.trim()}
-                              >
-                                {customBriefSaving ? 'Saving...' : 'Save Brief'}
-                              </button>
-                            </div>
+                          <div className="mu-footer">
+                            <span className="mu-footer-note">Saves to the selected client. Renders a PDF when Browserless is configured.</span>
+                            <button
+                              type="button"
+                              className="mu-cta-primary"
+                              style={{ width: 'auto', minWidth: 160 }}
+                              onClick={submitCustomBrief}
+                              disabled={customBriefSaving || !customBriefDraft.html.trim() || !customBriefDraft.title.trim()}
+                            >
+                              <span>{customBriefSaving ? 'Saving...' : 'Save Brief'}</span>
+                              <span style={{ fontSize: 13, opacity: 0.82 }}>↗</span>
+                            </button>
                           </div>
                         </div>
                       )}
 
                       {modalTab === 'brain' && (
-                        <div className="tile-detail-tab-pane custom-brief-submit-pane">
-                          <section className="mb-config-section">
-                            <div className="mb-config-section-head">
-                              <span className="mb-config-section-index">KB</span>
+                        <div className="mu-tab-pane">
+                          <section className="mu-section">
+                            <div className="mu-section-head">
+                              <span className="mu-index">KB</span>
                               <div>
-                                <h4>Client Brain Ingest</h4>
+                                <h3>Client Brain Ingest</h3>
                                 <p>Saved briefs can be embedded into the selected client's knowledge base for questions and downstream pipeline context.</p>
                               </div>
-                              <span className="mb-config-section-status">{customBriefDraft.addToClientBrain ? 'Enabled' : 'Skipped'}</span>
+                              <span className={`mu-chip${customBriefDraft.addToClientBrain ? ' mu-chip--success' : ''}`}>
+                                {customBriefDraft.addToClientBrain ? 'Enabled' : 'Skipped'}
+                              </span>
                             </div>
 
-                            <label className="custom-brief-public-toggle">
+                            <label className="mu-checkbox-row">
                               <input
                                 type="checkbox"
                                 checked={customBriefDraft.addToClientBrain}
@@ -9151,107 +9651,114 @@ const DashboardPage = () => {
                               <span>Reference this brief in the client brain</span>
                             </label>
 
-                            <label className="mb-config-field">
-                              <span className="mb-config-label">Brain title</span>
+                            <label className="mu-field">
+                              <span className="mu-label">Brain title</span>
                               <input
-                                className="mb-config-input"
+                                className="mu-input"
                                 value={customBriefDraft.knowledgeBaseTitle}
                                 onChange={(e) => updateCustomBriefDraft({ knowledgeBaseTitle: e.target.value })}
                                 placeholder={customBriefDraft.title || 'Custom Brief'}
                               />
                             </label>
 
-                            <div className="custom-brief-brain-summary">
-                              <span className="custom-brief-brain-pill">
+                            <div className="mu-chip-row">
+                              <span className="mu-chip">
                                 HTML {customBriefDraft.html ? `${customBriefDraft.html.length.toLocaleString()} chars` : 'not loaded'}
                               </span>
-                              <span className="custom-brief-brain-pill">
-                                Saved brain briefs {customBriefs.filter((brief) => brief.addedToClientBrain).length}
+                              <span className="mu-chip">
+                                Brain briefs saved: {customBriefs.filter((brief) => brief.addedToClientBrain).length}
                               </span>
                             </div>
                           </section>
 
-                          {customBriefSubmitError && <p className="mb-config-error">{customBriefSubmitError}</p>}
-                          {customBriefSubmitSuccess && <p className="custom-brief-submit-success">{customBriefSubmitSuccess}</p>}
+                          {customBriefSubmitError && <p className="mu-notice mu-notice--danger">{customBriefSubmitError}</p>}
+                          {customBriefSubmitSuccess && <p className="mu-notice mu-notice--success">{customBriefSubmitSuccess}</p>}
 
-                          <div className="mb-config-actionbar">
-                            <span className="mb-config-actionbar-note">Ingest saves the brief as a Knowledge Base item and embeds its text for downstream questions and pipeline use.</span>
-                            <div className="mb-config-actionbar-buttons">
-                              <button
-                                type="button"
-                                className="tile-foot-rerun-btn"
-                                onClick={submitCustomBrief}
-                                disabled={customBriefSaving || !customBriefDraft.html.trim() || !customBriefDraft.title.trim()}
-                              >
-                                {customBriefSaving ? 'Saving...' : 'Save Brief'}
-                              </button>
-                            </div>
+                          <div className="mu-footer">
+                            <span className="mu-footer-note">Ingest saves the brief as a Knowledge Base item and embeds its text for downstream questions and pipeline use.</span>
+                            <button
+                              type="button"
+                              className="mu-cta-primary"
+                              style={{ width: 'auto', minWidth: 160 }}
+                              onClick={submitCustomBrief}
+                              disabled={customBriefSaving || !customBriefDraft.html.trim() || !customBriefDraft.title.trim()}
+                            >
+                              <span>{customBriefSaving ? 'Saving...' : 'Save Brief'}</span>
+                              <span style={{ fontSize: 13, opacity: 0.82 }}>↗</span>
+                            </button>
                           </div>
                         </div>
                       )}
 
                       {modalTab === 'custom' && (
-                        <div className="tile-detail-tab-pane custom-briefs-pane">
-                          <div className="custom-briefs-head">
-                            <span className="custom-briefs-kicker">Saved Briefs</span>
-                            <span className="custom-briefs-count">{customBriefsLoading ? 'Loading' : `${customBriefCount} available`}</span>
+                        <div className="mu-tab-pane">
+                          <div className="mu-cards-header">
+                            <span className="mu-label">Saved Briefs</span>
+                            <span className="mu-chip">{customBriefsLoading ? 'Loading' : `${customBriefCount} available`}</span>
                           </div>
-                          {customBriefSubmitError && <p className="mb-config-error">{customBriefSubmitError}</p>}
-                          {customBriefSubmitSuccess && <p className="custom-brief-submit-success">{customBriefSubmitSuccess}</p>}
+
+                          {customBriefSubmitError && <p className="mu-notice mu-notice--danger">{customBriefSubmitError}</p>}
+                          {customBriefSubmitSuccess && <p className="mu-notice mu-notice--success">{customBriefSubmitSuccess}</p>}
+
                           {customBriefsError ? (
-                            <p className="tile-analyzer-solutions-empty">{customBriefsError}</p>
+                            <p className="mu-notice mu-notice--danger">{customBriefsError}</p>
                           ) : customBriefsLoading ? (
-                            <p className="tile-analyzer-solutions-empty">Loading custom briefs...</p>
+                            <p className="mu-notice">Loading custom briefs...</p>
                           ) : hasCustomBriefs ? (
-                            <div className="custom-briefs-list">
+                            <div className="mu-cards-list">
                               {customBriefs.map((brief) => (
-                                <article key={`submit-${brief.id || brief.publicPath}`} className="custom-brief-card">
-                                  <div className="custom-brief-card-main">
-                                    <span className="custom-brief-card-label">PUBLIC BRIEF</span>
-                                    <h4>{brief.title || brief.briefSlug || 'Custom brief'}</h4>
-                                    {brief.description && <p>{brief.description}</p>}
-                                    <div className="custom-brief-card-meta">
-                                      <span>{brief.updatedAt ? new Date(brief.updatedAt).toLocaleString() : 'Imported'}</span>
-                                      {brief.sourcePath && <span>{brief.sourcePath}</span>}
-                                      {brief.addedToClientBrain ? (
-                                        <span>Client Brain - {brief.knowledgeBaseChunkCount || 0} chunks</span>
-                                      ) : brief.knowledgeBaseStatus ? (
-                                        <span>Client Brain - {brief.knowledgeBaseStatus}</span>
-                                      ) : null}
-                                      {brief.vercelReadyState && <span>Vercel - {brief.vercelReadyState}</span>}
-                                      {brief.vercelUrl && (
-                                        <a className="custom-brief-meta-link" href={brief.vercelUrl} target="_blank" rel="noopener noreferrer">
-                                          Live Site <ArrowUpRight size={12} strokeWidth={2} />
-                                        </a>
-                                      )}
-                                      {brief.hideOgSubhead && <span>OG subhead hidden</span>}
+                                <article key={`submit-${brief.id || brief.publicPath}`} className="mu-saved-card">
+                                  <div className="mu-saved-head">
+                                    <div style={{ minWidth: 0 }}>
+                                      <span className="mu-saved-meta">
+                                        Public Brief
+                                        {brief.sourcePath ? ` · ${brief.sourcePath}` : ''}
+                                        {brief.addedToClientBrain
+                                          ? ` · Client Brain ${brief.knowledgeBaseChunkCount || 0} chunks`
+                                          : brief.knowledgeBaseStatus
+                                          ? ` · Brain ${brief.knowledgeBaseStatus}`
+                                          : ''}
+                                      </span>
+                                      <h4 className="mu-saved-title">{brief.title || brief.briefSlug || 'Custom brief'}</h4>
+                                    </div>
+                                    <div className="mu-chip-row" style={{ flexShrink: 0 }}>
+                                      {brief.vercelReadyState && <span className="mu-chip">{brief.vercelReadyState}</span>}
+                                      {brief.hideOgSubhead && <span className="mu-chip">No OG subhead</span>}
                                     </div>
                                   </div>
-                                  <div className="custom-brief-card-actions">
+
+                                  {brief.description && <p className="mu-saved-body">{brief.description}</p>}
+
+                                  <span className="mu-saved-meta">
+                                    {brief.updatedAt ? new Date(brief.updatedAt).toLocaleString() : 'Imported'}
+                                  </span>
+
+                                  <div className="mu-card-actions">
                                     {brief.publicUrl && (
-                                      <a className="custom-brief-open-btn" href={brief.publicUrl} target="_blank" rel="noopener noreferrer">
-                                        Open <ArrowUpRight size={16} strokeWidth={2} />
+                                      <a className="mu-btn-outline" href={brief.publicUrl} target="_blank" rel="noopener noreferrer">
+                                        Open <ArrowUpRight size={13} strokeWidth={2} />
                                       </a>
                                     )}
                                     {brief.ogImageUrl && (
-                                      <a className="custom-brief-open-btn" href={brief.ogImageUrl} target="_blank" rel="noopener noreferrer">
+                                      <a className="mu-btn-outline" href={brief.ogImageUrl} target="_blank" rel="noopener noreferrer">
                                         OG Image
                                       </a>
                                     )}
                                     {brief.ogImageUrl && (
-                                      <a className="custom-brief-open-btn" href={withDownloadParam(brief.ogImageUrl)} download={`${brief.title || brief.briefSlug || 'custom-brief'} OG Image.png`}>
+                                      <a className="mu-btn-outline" href={withDownloadParam(brief.ogImageUrl)} download={`${brief.title || brief.briefSlug || 'custom-brief'} OG Image.png`}>
                                         Download OG
                                       </a>
                                     )}
                                     {brief.vercelUrl && (
-                                      <a className="custom-brief-open-btn custom-brief-vercel-btn" href={brief.vercelUrl} target="_blank" rel="noopener noreferrer">
-                                        Vercel <ArrowUpRight size={16} strokeWidth={2} />
+                                      <a className="mu-btn-outline mu-btn-outline--accent" href={brief.vercelUrl} target="_blank" rel="noopener noreferrer">
+                                        Vercel <ArrowUpRight size={13} strokeWidth={2} />
                                       </a>
                                     )}
                                     {isAdmin && (
                                       <button
                                         type="button"
-                                        className="custom-brief-open-btn custom-brief-vercel-btn"
+                                        className="mu-btn-update"
+                                        style={{ minHeight: 36, padding: '0 14px', fontSize: 12 }}
                                         onClick={() => launchCustomBriefVercel(brief)}
                                         disabled={customBriefVercelLaunchingId === (brief.id || brief.briefSlug)}
                                       >
@@ -9261,16 +9768,16 @@ const DashboardPage = () => {
                                       </button>
                                     )}
                                     {(brief.pdfDownloadUrl || brief.pdfUrl) ? (
-                                      <a className="custom-brief-open-btn" href={brief.pdfDownloadUrl || brief.pdfUrl} target="_blank" rel="noopener noreferrer" download={brief.pdfFileName || titlePdfFileName(brief.title || brief.briefSlug)}>
+                                      <a className="mu-btn-outline" href={brief.pdfDownloadUrl || brief.pdfUrl} target="_blank" rel="noopener noreferrer" download={brief.pdfFileName || titlePdfFileName(brief.title || brief.briefSlug)}>
                                         PDF ↓
                                       </a>
                                     ) : (
-                                      <span className="custom-brief-pdf-empty">No PDF</span>
+                                      <span className="mu-chip">No PDF</span>
                                     )}
                                     {isAdmin && (
                                       <button
                                         type="button"
-                                        className="custom-brief-open-btn custom-brief-delete-btn"
+                                        className="mu-btn-outline mu-btn-outline--danger"
                                         onClick={() => deleteCustomBrief(brief)}
                                         disabled={customBriefDeletingId === (brief.id || brief.briefSlug)}
                                       >
@@ -9282,15 +9789,16 @@ const DashboardPage = () => {
                               ))}
                             </div>
                           ) : (
-                            <p className="tile-analyzer-solutions-empty">No custom briefs are saved for this client yet.</p>
+                            <div className="mu-empty">No custom briefs saved for this client yet.</div>
                           )}
                         </div>
                       )}
+
                     </div>
                   </div>
                 )}
 
-                {/* Marketing Brief card — Scout config + launch */}
+                {/* Marketing Brief card — full Scout config editor (Daily Briefs bucket) */}
                 {activeTileModal.cardId === 'marketing-brief' && (
                   <div id="marketing-brief-config-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
                     <div className="tile-detail-tabs">
@@ -9303,7 +9811,7 @@ const DashboardPage = () => {
                       {modalTab === 'data' && (
                         <div className="tile-detail-tab-pane">
                           {marketingBriefLoading || !marketingBriefConfig ? (
-                            <p className="tile-analyzer-solutions-empty">Loading Scout config...</p>
+                            <div className="mu-notice">Loading Scout config...</div>
                           ) : (
                             <div className="mb-config-shell">
                               <div className="mb-config-summary" aria-label="Scout configuration summary">
@@ -9337,25 +9845,25 @@ const DashboardPage = () => {
                                 </span>
                               </div>
 
-                              <section className="mb-config-section">
-                                <div className="mb-config-section-head">
-                                  <span className="mb-config-section-index">01</span>
+                              <section className="mu-section">
+                                <div className="mu-section-head">
+                                  <span className="mu-index">01</span>
                                   <div>
-                                    <h4>Scout Focus</h4>
+                                    <h3>Scout Focus</h3>
                                     <p>Sets the overall research lens before Scout builds the daily market brief.</p>
                                   </div>
                                 </div>
-                                <label className="mb-config-field">
-                                  <span className="mb-config-label">What should Scout care about?</span>
-                                  <textarea className="mb-config-textarea" value={marketingBriefConfig.sourceFocus || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), sourceFocus: e.target.value }))} rows={4} />
+                                <label className="mu-field">
+                                  <span className="mu-label">What should Scout care about?</span>
+                                  <textarea className="mu-textarea" value={marketingBriefConfig.sourceFocus || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), sourceFocus: e.target.value }))} rows={4} />
                                 </label>
                               </section>
 
-                              <section className="mb-config-section">
-                                <div className="mb-config-section-head">
-                                  <span className="mb-config-section-index">02</span>
+                              <section className="mu-section">
+                                <div className="mu-section-head">
+                                  <span className="mu-index">02</span>
                                   <div>
-                                    <h4>Source Platforms</h4>
+                                    <h3>Source Platforms</h3>
                                     <p>Controls where Scout should look for signals. Ready sources are safe defaults; available sources depend on the social search layer being configured.</p>
                                   </div>
                                 </div>
@@ -9432,11 +9940,11 @@ const DashboardPage = () => {
                                 </div>
                               </section>
 
-                              <section className="mb-config-section">
-                                <div className="mb-config-section-head">
-                                  <span className="mb-config-section-index">03</span>
+                              <section className="mu-section">
+                                <div className="mu-section-head">
+                                  <span className="mu-index">03</span>
                                   <div>
-                                    <h4>Search Plan</h4>
+                                    <h3>Search Plan</h3>
                                     <p>Each row becomes a targeted Scout query. Use the goal to explain why that query matters.</p>
                                   </div>
                                   <button type="button" className="mb-config-mini-btn" onClick={addMarketingBriefSearch}>Add Search</button>
@@ -9448,17 +9956,17 @@ const DashboardPage = () => {
                                         <span className="mb-config-row-dot" aria-hidden="true" />
                                         <span className="mb-config-row-num">{String(index + 1).padStart(2, '0')}</span>
                                       </div>
-                                      <label className="mb-config-field mb-config-field--label">
-                                        <span className="mb-config-label">Label</span>
-                                        <input className="mb-config-input" value={row.label || ''} placeholder="Brand / KOLs / Viral Windows" onChange={(e) => updateMarketingBriefSearch(index, { label: e.target.value })} />
+                                      <label className="mu-field mb-config-field--label">
+                                        <span className="mu-label">Label</span>
+                                        <input className="mu-input" value={row.label || ''} placeholder="Brand / KOLs / Viral Windows" onChange={(e) => updateMarketingBriefSearch(index, { label: e.target.value })} />
                                       </label>
-                                      <label className="mb-config-field mb-config-field--query">
-                                        <span className="mb-config-label">Search query</span>
-                                        <textarea className="mb-config-textarea mb-config-textarea--compact" value={row.query || ''} placeholder="Terms, handles, competitor names, category phrases..." onChange={(e) => updateMarketingBriefSearch(index, { query: e.target.value })} rows={2} />
+                                      <label className="mu-field mb-config-field--query">
+                                        <span className="mu-label">Search query</span>
+                                        <textarea className="mu-textarea" style={{ minHeight: 64 }} value={row.query || ''} placeholder="Terms, handles, competitor names, category phrases..." onChange={(e) => updateMarketingBriefSearch(index, { query: e.target.value })} rows={2} />
                                       </label>
-                                      <label className="mb-config-field mb-config-field--goal">
-                                        <span className="mb-config-label">Signal Scout should extract</span>
-                                        <input className="mb-config-input" value={row.goal || ''} placeholder="Find founder-ready angles, KOL reactions, competitor moves..." onChange={(e) => updateMarketingBriefSearch(index, { goal: e.target.value })} />
+                                      <label className="mu-field mb-config-field--goal">
+                                        <span className="mu-label">Signal Scout should extract</span>
+                                        <input className="mu-input" value={row.goal || ''} placeholder="Find founder-ready angles, KOL reactions, competitor moves..." onChange={(e) => updateMarketingBriefSearch(index, { goal: e.target.value })} />
                                       </label>
                                       <button type="button" className="mb-config-remove-btn" onClick={() => removeMarketingBriefSearch(index)} disabled={(marketingBriefConfig.searches || []).length <= 1}>Remove</button>
                                     </div>
@@ -9466,34 +9974,33 @@ const DashboardPage = () => {
                                 </div>
                               </section>
 
-                              <section className="mb-config-section">
-                                <div className="mb-config-section-head">
-                                  <span className="mb-config-section-index">04</span>
+                              <section className="mu-section">
+                                <div className="mu-section-head">
+                                  <span className="mu-index">04</span>
                                   <div>
-                                    <h4>Watchlists</h4>
+                                    <h3>Watchlists</h3>
                                     <p>Named accounts and competitors are injected into the search strategy and final angle selection.</p>
                                   </div>
                                 </div>
-                                <div className="mb-config-grid">
-                                  <label className="mb-config-field">
-                                    <span className="mb-config-label">Freshness window in days</span>
-                                    <input className="mb-config-input" type="number" min="1" max="30" value={marketingBriefConfig.freshnessDays || 1} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), freshnessDays: Number(e.target.value || 1) }))} aria-label="Freshness days" />
+                                <div className="mu-field-grid">
+                                  <label className="mu-field">
+                                    <span className="mu-label">Freshness window in days</span>
+                                    <input className="mu-input" type="number" min="1" max="30" value={marketingBriefConfig.freshnessDays || 1} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), freshnessDays: Number(e.target.value || 1) }))} aria-label="Freshness days" />
                                   </label>
-                                  <label className="mb-config-field">
-                                    <span className="mb-config-label">KOLs / handles</span>
-                                    <textarea className="mb-config-textarea" placeholder="@handle or name, one per line" value={marketingBriefConfig.kols || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), kols: e.target.value }))} rows={4} />
-                                  </label>
-                                  <label className="mb-config-field">
-                                    <span className="mb-config-label">Competitors</span>
-                                    <textarea className="mb-config-textarea" placeholder="Competitor names, one per line" value={marketingBriefConfig.competitors || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), competitors: e.target.value }))} rows={4} />
-                                  </label>
-                                  <label className="mb-config-field">
-                                    <span className="mb-config-label">KOL search mode</span>
-                                    <select className="mb-config-input" value={marketingBriefConfig.kolSearchMode || 'per-handle'} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), kolSearchMode: e.target.value }))}>
+                                  <label className="mu-field">
+                                    <span className="mu-label">KOL search mode</span>
+                                    <select className="mu-select" value={marketingBriefConfig.kolSearchMode || 'per-handle'} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), kolSearchMode: e.target.value }))}>
                                       <option value="per-handle">Per handle — one search each (most accurate)</option>
                                       <option value="combined">Combined — one search for all handles (cheaper)</option>
                                     </select>
-                                    <span className="mb-config-hint">Watchlist handles are searched every run, separately from your other queries.</span>
+                                  </label>
+                                  <label className="mu-field">
+                                    <span className="mu-label">KOLs / handles</span>
+                                    <textarea className="mu-textarea" placeholder="@handle or name, one per line" value={marketingBriefConfig.kols || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), kols: e.target.value }))} rows={4} />
+                                  </label>
+                                  <label className="mu-field">
+                                    <span className="mu-label">Competitors</span>
+                                    <textarea className="mu-textarea" placeholder="Competitor names, one per line" value={marketingBriefConfig.competitors || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), competitors: e.target.value }))} rows={4} />
                                   </label>
                                 </div>
                               </section>
@@ -9516,16 +10023,16 @@ const DashboardPage = () => {
                                 ];
                                 const total = totalSearches * SEARCH_RATE + SYNTH_FLAT;
                                 return (
-                                  <section id="mb-config-cost-section" className="mb-config-section">
-                                    <div className="mb-config-section-head">
-                                      <span className="mb-config-section-index">$</span>
+                                  <section id="mb-config-cost-section" className="mu-section">
+                                    <div className="mu-section-head">
+                                      <span className="mu-index">$</span>
                                       <div>
-                                        <h4>Run cost estimate</h4>
-                                        <p>Approximate cost per brief run for the current settings. Updates live as you edit searches, platforms, watchlist, and mode. Estimate only (~{usd(SEARCH_RATE)}/search).</p>
+                                        <h3>Run cost estimate</h3>
+                                        <p>Approximate cost per brief run. Updates live as you edit searches, platforms, watchlist, and mode. Estimate only (~{usd(SEARCH_RATE)}/search).</p>
                                       </div>
-                                      <span className="mb-config-section-status">{usd(total)} / run</span>
+                                      <span className="mu-chip">{usd(total)} / run</span>
                                     </div>
-                                    <table className="mb-config-cost-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                                       <tbody>
                                         {lineItems.map((li) => (
                                           <tr key={li.label}>
@@ -9545,58 +10052,58 @@ const DashboardPage = () => {
                                 );
                               })()}
 
-                              <section className="mb-config-section">
-                                <div className="mb-config-section-head">
-                                  <span className="mb-config-section-index">05</span>
+                              <section className="mu-section">
+                                <div className="mu-section-head">
+                                  <span className="mu-index">05</span>
                                   <div>
-                                    <h4>Advanced Scout Instructions</h4>
+                                    <h3>Advanced Scout Instructions</h3>
                                     <p>Controls the judgment layer: what to prioritize, what to ignore, and how to separate live signals from background context.</p>
                                   </div>
                                 </div>
-                                <label className="mb-config-field">
-                                  <span className="mb-config-label">Instruction block</span>
-                                  <textarea className="mb-config-textarea" value={marketingBriefConfig.scoutInstructions || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), scoutInstructions: e.target.value }))} rows={7} />
+                                <label className="mu-field">
+                                  <span className="mu-label">Instruction block</span>
+                                  <textarea className="mu-textarea" value={marketingBriefConfig.scoutInstructions || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), scoutInstructions: e.target.value }))} rows={7} />
                                 </label>
                               </section>
 
-                              <section className="mb-config-section">
-                                <div className="mb-config-section-head">
-                                  <span className="mb-config-section-index">06</span>
+                              <section className="mu-section">
+                                <div className="mu-section-head">
+                                  <span className="mu-index">06</span>
                                   <div>
-                                    <h4>Agent Data Contract</h4>
+                                    <h3>Agent Data Contract</h3>
                                     <p>Defines the structured fields Scout should return for Scribe and Guardian. Edit only when the output shape needs to change.</p>
                                   </div>
                                 </div>
-                                <label className="mb-config-field">
-                                  <span className="mb-config-label">Expected structured output</span>
-                                  <textarea className="mb-config-textarea mb-config-textarea--code" value={marketingBriefConfig.agentDataTemplate || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), agentDataTemplate: e.target.value }))} rows={12} spellCheck={false} />
+                                <label className="mu-field">
+                                  <span className="mu-label">Expected structured output</span>
+                                  <textarea className="mu-textarea mu-code-textarea" value={marketingBriefConfig.agentDataTemplate || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), agentDataTemplate: e.target.value }))} rows={12} spellCheck={false} />
                                 </label>
                               </section>
 
-                              <section id="mb-config-scribe-section" className="mb-config-section">
-                                <div className="mb-config-section-head">
-                                  <span className="mb-config-section-index">07</span>
+                              <section id="mb-config-scribe-section" className="mu-section">
+                                <div className="mu-section-head">
+                                  <span className="mu-index">07</span>
                                   <div>
-                                    <h4>Scribe Tone &amp; Constraints</h4>
-                                    <p>Controls how Scribe writes the founder brief: voice, posture, and the hard rules each output must respect. Used as the voice block when no separate brand-voice doc exists.</p>
+                                    <h3>Scribe Tone &amp; Constraints</h3>
+                                    <p>Controls how Scribe writes the founder brief: voice, posture, and the hard rules each output must respect.</p>
                                   </div>
                                 </div>
-                                <label className="mb-config-field">
-                                  <span className="mb-config-label">Scribe tone</span>
+                                <label className="mu-field">
+                                  <span className="mu-label">Scribe tone</span>
                                   <textarea
                                     id="mb-config-scribe-tone"
-                                    className="mb-config-textarea"
+                                    className="mu-textarea"
                                     value={marketingBriefConfig.scribeTone || ''}
                                     onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), scribeTone: e.target.value }))}
                                     rows={6}
                                     placeholder="Tone: sharp, timely, founder-ready..."
                                   />
                                 </label>
-                                <label className="mb-config-field">
-                                  <span className="mb-config-label">Hard constraints (one per line)</span>
+                                <label className="mu-field">
+                                  <span className="mu-label">Hard constraints (one per line)</span>
                                   <textarea
                                     id="mb-config-scribe-hard-constraints"
-                                    className="mb-config-textarea"
+                                    className="mu-textarea"
                                     value={marketingBriefConfig.scribeHardConstraints || ''}
                                     onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), scribeHardConstraints: e.target.value }))}
                                     rows={7}
@@ -9605,30 +10112,30 @@ const DashboardPage = () => {
                                 </label>
                               </section>
 
-                              <section id="mb-config-guardian-section" className="mb-config-section">
-                                <div className="mb-config-section-head">
-                                  <span className="mb-config-section-index">08</span>
+                              <section id="mb-config-guardian-section" className="mu-section">
+                                <div className="mu-section-head">
+                                  <span className="mu-index">08</span>
                                   <div>
-                                    <h4>Guardian Rules</h4>
+                                    <h3>Guardian Rules</h3>
                                     <p>Guides Guardian&apos;s QA pass: what the reviewer should know about the brand, and any words or phrases that should be flagged as off-brand or risky.</p>
                                   </div>
                                 </div>
-                                <label className="mb-config-field">
-                                  <span className="mb-config-label">Reviewer context</span>
+                                <label className="mu-field">
+                                  <span className="mu-label">Reviewer context</span>
                                   <textarea
                                     id="mb-config-guardian-context"
-                                    className="mb-config-textarea"
+                                    className="mu-textarea"
                                     value={marketingBriefConfig.guardianReviewerContext || ''}
                                     onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), guardianReviewerContext: e.target.value }))}
                                     rows={4}
                                     placeholder="Brand positioning, audience, and what Guardian should care about most."
                                   />
                                 </label>
-                                <label className="mb-config-field">
-                                  <span className="mb-config-label">Restricted phrases / patterns (one per line)</span>
+                                <label className="mu-field">
+                                  <span className="mu-label">Restricted phrases / patterns (one per line)</span>
                                   <textarea
                                     id="mb-config-guardian-patterns"
-                                    className="mb-config-textarea"
+                                    className="mu-textarea"
                                     value={marketingBriefConfig.guardianRestrictedPatterns || ''}
                                     onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), guardianRestrictedPatterns: e.target.value }))}
                                     rows={5}
@@ -9637,13 +10144,15 @@ const DashboardPage = () => {
                                 </label>
                               </section>
 
-                              {marketingBriefError && <p className="mb-config-error">{marketingBriefError}</p>}
+                              {marketingBriefError && <p className="mu-notice mu-notice--danger">{marketingBriefError}</p>}
 
-                              <div className="mb-config-actionbar">
-                                <span className="mb-config-actionbar-note">Save updates before running, or Run Brief to save and launch Scout immediately.</span>
-                                <div className="mb-config-actionbar-buttons">
-                                  <button type="button" className="tile-foot-rerun-btn" onClick={saveMarketingBriefConfig} disabled={marketingBriefSaving}>{marketingBriefSaving ? 'Saving...' : 'Save Config'}</button>
-                                  <button type="button" className="tile-foot-rerun-btn" onClick={runMarketingBrief} disabled={marketingBriefRunning || marketingBriefSaving}>{marketingBriefRunning ? 'Running...' : 'Run Brief'}</button>
+                              <div className="mu-footer">
+                                <span className="mu-footer-note">Save updates before running, or Run Brief to save and launch Scout immediately.</span>
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                  <button type="button" className="mu-btn-update" onClick={saveMarketingBriefConfig} disabled={marketingBriefSaving}>{marketingBriefSaving ? 'Saving...' : 'Save Config'}</button>
+                                  <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 110 }} onClick={runMarketingBrief} disabled={marketingBriefRunning || marketingBriefSaving}>
+                                    <span>{marketingBriefRunning ? 'Running...' : 'Run Brief'}</span>
+                                  </button>
                                 </div>
                               </div>
                             </div>
@@ -9651,67 +10160,63 @@ const DashboardPage = () => {
                         </div>
                       )}
                       {modalTab === 'custom' && (
-                        <div className="tile-detail-tab-pane custom-briefs-pane">
-                          <div className="custom-briefs-head">
-                            <span className="custom-briefs-kicker">Imported Briefs</span>
-                            <span className="custom-briefs-count">{customBriefsLoading ? 'Loading' : `${customBriefCount} available`}</span>
+                        <div className="mu-tab-pane">
+                          <div className="mu-cards-header">
+                            <span className="mu-label">Imported Briefs</span>
+                            <span className="mu-chip">{customBriefsLoading ? 'Loading' : `${customBriefCount} available`}</span>
                           </div>
-                          {customBriefSubmitError && <p className="mb-config-error">{customBriefSubmitError}</p>}
-                          {customBriefSubmitSuccess && <p className="custom-brief-submit-success">{customBriefSubmitSuccess}</p>}
+                          {customBriefSubmitError && <p className="mu-notice mu-notice--danger">{customBriefSubmitError}</p>}
+                          {customBriefSubmitSuccess && <p className="mu-notice mu-notice--success">{customBriefSubmitSuccess}</p>}
                           {customBriefsError ? (
-                            <p className="tile-analyzer-solutions-empty">{customBriefsError}</p>
+                            <p className="mu-notice mu-notice--danger">{customBriefsError}</p>
                           ) : customBriefsLoading ? (
-                            <p className="tile-analyzer-solutions-empty">Loading custom briefs...</p>
+                            <p className="mu-notice">Loading custom briefs...</p>
                           ) : hasCustomBriefs ? (
-                            <div className="custom-briefs-list">
+                            <div className="mu-cards-list">
                               {customBriefs.map((brief) => (
-                                <article key={brief.id || brief.publicPath} className="custom-brief-card">
-                                  <div className="custom-brief-card-main">
-                                    <span className="custom-brief-card-label">PUBLIC BRIEF</span>
-                                    <h4>{brief.title || brief.briefSlug || 'Custom brief'}</h4>
-                                    {brief.description && <p>{brief.description}</p>}
-                                    <div className="custom-brief-card-meta">
-                                      <span>{brief.updatedAt ? new Date(brief.updatedAt).toLocaleString() : 'Imported'}</span>
-                                      {brief.sourcePath && <span>{brief.sourcePath}</span>}
-                                      {brief.addedToClientBrain ? (
-                                        <span>Client Brain - {brief.knowledgeBaseChunkCount || 0} chunks</span>
-                                      ) : brief.knowledgeBaseStatus ? (
-                                        <span>Client Brain - {brief.knowledgeBaseStatus}</span>
-                                      ) : null}
-                                      {brief.vercelReadyState && <span>Vercel - {brief.vercelReadyState}</span>}
-                                      {brief.vercelUrl && (
-                                        <a className="custom-brief-meta-link" href={brief.vercelUrl} target="_blank" rel="noopener noreferrer">
-                                          Live Site <ArrowUpRight size={12} strokeWidth={2} />
-                                        </a>
-                                      )}
-                                      {brief.hideOgSubhead && <span>OG subhead hidden</span>}
+                                <article key={brief.id || brief.publicPath} className="mu-saved-card">
+                                  <div className="mu-saved-head">
+                                    <div style={{ minWidth: 0 }}>
+                                      <span className="mu-saved-meta">
+                                        Public Brief
+                                        {brief.sourcePath ? ` · ${brief.sourcePath}` : ''}
+                                        {brief.addedToClientBrain ? ` · Brain ${brief.knowledgeBaseChunkCount || 0} chunks` : brief.knowledgeBaseStatus ? ` · Brain ${brief.knowledgeBaseStatus}` : ''}
+                                      </span>
+                                      <h4 className="mu-saved-title">{brief.title || brief.briefSlug || 'Custom brief'}</h4>
+                                    </div>
+                                    <div className="mu-chip-row" style={{ flexShrink: 0 }}>
+                                      {brief.vercelReadyState && <span className="mu-chip">{brief.vercelReadyState}</span>}
+                                      {brief.hideOgSubhead && <span className="mu-chip">No OG subhead</span>}
                                     </div>
                                   </div>
-                                  <div className="custom-brief-card-actions">
+                                  {brief.description && <p className="mu-saved-body">{brief.description}</p>}
+                                  <span className="mu-saved-meta">{brief.updatedAt ? new Date(brief.updatedAt).toLocaleString() : 'Imported'}</span>
+                                  <div className="mu-card-actions">
                                     {brief.publicUrl && (
-                                      <a className="custom-brief-open-btn" href={brief.publicUrl} target="_blank" rel="noopener noreferrer">
-                                        Open Brief <ArrowUpRight size={16} strokeWidth={2} />
+                                      <a className="mu-btn-outline" href={brief.publicUrl} target="_blank" rel="noopener noreferrer">
+                                        Open Brief <ArrowUpRight size={13} strokeWidth={2} />
                                       </a>
                                     )}
                                     {brief.ogImageUrl && (
-                                      <a className="custom-brief-open-btn" href={brief.ogImageUrl} target="_blank" rel="noopener noreferrer">
+                                      <a className="mu-btn-outline" href={brief.ogImageUrl} target="_blank" rel="noopener noreferrer">
                                         OG Image
                                       </a>
                                     )}
                                     {brief.ogImageUrl && (
-                                      <a className="custom-brief-open-btn" href={withDownloadParam(brief.ogImageUrl)} download={`${brief.title || brief.briefSlug || 'custom-brief'} OG Image.png`}>
+                                      <a className="mu-btn-outline" href={withDownloadParam(brief.ogImageUrl)} download={`${brief.title || brief.briefSlug || 'custom-brief'} OG Image.png`}>
                                         Download OG
                                       </a>
                                     )}
                                     {brief.vercelUrl && (
-                                      <a className="custom-brief-open-btn custom-brief-vercel-btn" href={brief.vercelUrl} target="_blank" rel="noopener noreferrer">
-                                        Vercel <ArrowUpRight size={16} strokeWidth={2} />
+                                      <a className="mu-btn-outline mu-btn-outline--accent" href={brief.vercelUrl} target="_blank" rel="noopener noreferrer">
+                                        Vercel <ArrowUpRight size={13} strokeWidth={2} />
                                       </a>
                                     )}
                                     {isAdmin && (
                                       <button
                                         type="button"
-                                        className="custom-brief-open-btn custom-brief-vercel-btn"
+                                        className="mu-btn-update"
+                                        style={{ minHeight: 36, padding: '0 14px', fontSize: 12 }}
                                         onClick={() => launchCustomBriefVercel(brief)}
                                         disabled={customBriefVercelLaunchingId === (brief.id || brief.briefSlug)}
                                       >
@@ -9721,16 +10226,16 @@ const DashboardPage = () => {
                                       </button>
                                     )}
                                     {(brief.pdfDownloadUrl || brief.pdfUrl) ? (
-                                      <a className="custom-brief-open-btn" href={brief.pdfDownloadUrl || brief.pdfUrl} target="_blank" rel="noopener noreferrer" download={brief.pdfFileName || titlePdfFileName(brief.title || brief.briefSlug)}>
+                                      <a className="mu-btn-outline" href={brief.pdfDownloadUrl || brief.pdfUrl} target="_blank" rel="noopener noreferrer" download={brief.pdfFileName || titlePdfFileName(brief.title || brief.briefSlug)}>
                                         PDF ↓
                                       </a>
                                     ) : (
-                                      <span className="custom-brief-pdf-empty">No PDF</span>
+                                      <span className="mu-chip">No PDF</span>
                                     )}
                                     {isAdmin && (
                                       <button
                                         type="button"
-                                        className="custom-brief-open-btn custom-brief-delete-btn"
+                                        className="mu-btn-outline mu-btn-outline--danger"
                                         onClick={() => deleteCustomBrief(brief)}
                                         disabled={customBriefDeletingId === (brief.id || brief.briefSlug)}
                                       >
@@ -9742,7 +10247,7 @@ const DashboardPage = () => {
                               ))}
                             </div>
                           ) : (
-                            <p className="tile-analyzer-solutions-empty">No custom briefs are imported for this client yet.</p>
+                            <div className="mu-empty">No custom briefs are imported for this client yet.</div>
                           )}
                         </div>
                       )}
@@ -9758,7 +10263,7 @@ const DashboardPage = () => {
                               style={{ flex: 1, width: '100%', minHeight: '70vh', border: 'none', background: '#fff', borderRadius: '8px' }}
                             />
                           ) : (
-                            <p className="tile-analyzer-solutions-empty">Run the Marketing Brief card to generate the designed founder brief.</p>
+                            <div className="mu-empty">Run the Marketing Brief card to generate the designed founder brief.</div>
                           )}
                         </div>
                       )}
@@ -9803,7 +10308,7 @@ const DashboardPage = () => {
                             style={{ flex: 1, width: '100%', minHeight: '70vh', border: 'none', background: '#fff', borderRadius: '8px' }}
                           />
                         ) : (
-                          <p className="tile-analyzer-solutions-empty">Run the Marketing Brief agent to generate the document.</p>
+                          <div className="mu-empty">Run the Marketing Brief agent to generate the document.</div>
                         )}
                       </div>
                     </div>
@@ -9973,12 +10478,7 @@ const DashboardPage = () => {
                               style={{ width: '100%', height: '100%', minHeight: '500px', border: 'none', borderRadius: '8px', background: '#f8f7f4' }}
                             />
                           ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '400px', gap: '16px', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', textAlign: 'center', padding: '40px' }}>
-                              <span style={{ fontSize: '11px', letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.7 }}>Newsletter Preview</span>
-                              <span style={{ fontSize: '13px', lineHeight: '1.6', maxWidth: '340px' }}>
-                                No newsletter has been generated yet. Run the Scout pipeline to generate intelligence, then the newsletter will be auto-generated from that data.
-                              </span>
-                            </div>
+                            <div className="mu-empty" style={{ minHeight: 400 }}>No newsletter generated yet. Run the Scout pipeline to generate intelligence, then the newsletter will be auto-generated from that data.</div>
                           )}
                         </div>
                       )}
@@ -9987,7 +10487,7 @@ const DashboardPage = () => {
                           {(() => {
                             const nl = dashboardState?.newsletter;
                             if (!nl?.content) {
-                              return <p className="tile-analyzer-solutions-empty">No newsletter data available yet.</p>;
+                              return <div className="mu-empty">No newsletter data available yet.</div>;
                             }
                             const dataRows = [
                               { key: 'nl-header',    isHeader: true, label: 'NEWSLETTER OUTPUT' },
@@ -10262,38 +10762,14 @@ const DashboardPage = () => {
                               <div className="tile-detail-row-section-head">EXTRACTED TOKENS (synth.styleGuide)</div>
                               <pre
                                 id="design-evaluation-tokens-json"
-                                style={{
-                                  margin: 0,
-                                  padding: 12,
-                                  background: 'rgba(0,0,0,0.35)',
-                                  color: '#e8e6e1',
-                                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                                  fontSize: 11,
-                                  lineHeight: 1.45,
-                                  whiteSpace: 'pre-wrap',
-                                  wordBreak: 'break-word',
-                                  borderRadius: 6,
-                                  maxHeight: '40vh',
-                                  overflow: 'auto',
-                                }}
+                                className="mu-code-block"
+                                style={{ background: 'rgba(0,0,0,0.35)', color: '#e8e6e1', maxHeight: '40vh' }}
                               >{JSON.stringify(styleGuideData ?? null, null, 2)}</pre>
                               <div className="tile-detail-row-section-head" style={{ marginTop: 12 }}>SKILL OUTPUT (design-evaluation)</div>
                               <pre
                                 id="design-evaluation-skill-json"
-                                style={{
-                                  margin: 0,
-                                  padding: 12,
-                                  background: 'rgba(0,0,0,0.35)',
-                                  color: '#e8e6e1',
-                                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                                  fontSize: 11,
-                                  lineHeight: 1.45,
-                                  whiteSpace: 'pre-wrap',
-                                  wordBreak: 'break-word',
-                                  borderRadius: 6,
-                                  maxHeight: '40vh',
-                                  overflow: 'auto',
-                                }}
+                                className="mu-code-block"
+                                style={{ background: 'rgba(0,0,0,0.35)', color: '#e8e6e1', maxHeight: '40vh' }}
                               >{JSON.stringify(activeTileModal.analyzer ?? null, null, 2)}</pre>
                             </div>
                           )}
@@ -10405,7 +10881,7 @@ const DashboardPage = () => {
                           const BUCKET_META = {
                             brief:    { label: 'Executive Daily Brief',  sub: 'Daily market intelligence & publishing', icon: ChartColumnIncreasing, color: '#2a2420' },
                             growth:   { label: 'Marketing Director',     sub: 'Strategy, signals & growth pipeline',   icon: Settings2,             color: '#10b981' },
-                            knowledge:{ label: 'Company Brain',          sub: 'Knowledge sources powering AI modules', icon: Database,              color: '#3b82f6' },
+                            knowledge:{ label: 'Knowledge Officer',      sub: 'Knowledge sources powering AI modules', icon: Database,              color: '#3b82f6' },
                             content:  { label: 'Creative Director',      sub: 'Brand voice, identity & systems',       icon: Workflow,              color: '#14b8a6' },
                             website:  { label: 'Website Developer',      sub: 'Speed, SEO & conversion metrics',       icon: LaptopMinimalCheck,    color: '#0ea5e9' },
                             _system:  { label: 'System',                 sub: 'Pipeline, artifacts & diagnostics',     icon: ClipboardList,         color: '#6b7280' },
@@ -11513,8 +11989,8 @@ const dashboardCss = `
     border-bottom: none;
   }
   .meta-row:last-child { border-bottom: none; }
-  .meta-row .label { font-size: 0.72rem; color: var(--text-secondary); font-family: var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; }
-  .meta-row .value { font-family: var(--font-mono); font-size: clamp(0.82rem, 1.1vw, 0.95rem); color: var(--text-display); flex: 1; text-align: center; }
+  .meta-row .label { font-size: 0.72rem; color: var(--text-secondary); font-family: var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; flex-shrink: 0; min-width: 92px; }
+  .meta-row .value { font-family: var(--font-mono); font-size: clamp(0.82rem, 1.1vw, 0.95rem); color: var(--text-display); flex: 1; text-align: left; }
   #client-meta-row, #account-meta-row, #tier-meta-row { display: flex; align-items: center; gap: 8px; }
   .meta-row-action-btn {
     background: transparent;
@@ -13139,6 +13615,20 @@ const dashboardCss = `
     min-height: 0;
     overflow: hidden;
   }
+  /* Custom single-panel cards (Conversation Intake + Scout Config slices) —
+     fill the content column and scroll internally instead of being clipped. */
+  #conversation-intake-panel,
+  #scout-focus-panel,
+  #watchlist-panel,
+  #competitors-panel,
+  #search-plan-panel,
+  #source-platforms-panel,
+  #brief-preview-panel,
+  #events-panel {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
   /* About cell — scrollable if description is very long */
   #tile-detail-bento-about .tile-intake-heading {
     margin: 0 0 8px 0;
@@ -13790,6 +14280,384 @@ const dashboardCss = `
     border-top-color: var(--text-primary); border-radius: 50%; animation: sb-spin 0.7s linear infinite;
   }
   @keyframes sb-spin { to { transform: rotate(360deg); } }
+
+  /* ── Dashboard modal pilot: Strategy Builder ─────────────────────────────
+     Scoped intentionally. Once approved, promote these primitives to the
+     shared dashboard modal tab system and migrate the remaining cards. */
+  #strategy-builder-card-shell.dashboard-modal-pilot {
+    --pilot-surface: rgba(255,255,255,0.62);
+    --pilot-surface-strong: rgba(255,255,255,0.78);
+    --pilot-surface-soft: rgba(255,255,255,0.88);
+    --pilot-line: rgba(42,36,32,0.12);
+    --pilot-line-soft: rgba(42,36,32,0.14);
+    --pilot-ink: #2a2420;
+    --pilot-muted: rgba(42,36,32,0.72);
+    --pilot-disabled: rgba(42,36,32,0.52);
+    --pilot-highlight: rgba(42,36,32,0.18);
+    color: var(--pilot-ink);
+  }
+  #strategy-builder-card-shell .dashboard-modal-pilot-content {
+    padding: 0 4px;
+  }
+  #strategy-builder-card-shell .tile-detail-tabs {
+    min-height: 54px;
+    border-bottom-color: var(--pilot-line);
+  }
+  #strategy-builder-card-shell .tile-detail-tab {
+    padding: 14px 10px;
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--pilot-muted);
+  }
+  #strategy-builder-card-shell .tile-detail-tab--active {
+    color: var(--pilot-ink);
+  }
+  #strategy-builder-card-shell .sb-pane {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 18px 0 6px;
+  }
+  #strategy-builder-card-shell .sb-section {
+    gap: 12px;
+    margin-bottom: 0;
+    padding: 18px;
+    border: 1px solid var(--pilot-line);
+    border-radius: 8px;
+    background: var(--pilot-surface);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.35);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+  }
+  #strategy-builder-card-shell .sb-label {
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--pilot-muted);
+  }
+  #strategy-builder-card-shell .sb-hint {
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--pilot-disabled);
+  }
+  #strategy-builder-card-shell .sb-field-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 6px !important;
+  }
+  #strategy-builder-card-shell .sb-list-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 6px 0 0 !important;
+  }
+  #strategy-builder-card-shell .sb-control-row {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(9.5rem, auto) auto;
+    gap: 10px !important;
+    align-items: stretch;
+  }
+  #strategy-builder-card-shell .sb-input,
+  #strategy-builder-card-shell .sb-select {
+    min-height: 44px;
+    border-color: var(--pilot-line);
+    background: var(--pilot-surface-soft);
+    color: var(--pilot-ink);
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.45;
+    padding: 10px 12px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.55);
+  }
+  #strategy-builder-card-shell textarea.sb-input {
+    min-height: 100px;
+  }
+  #strategy-builder-card-shell .sb-input:focus,
+  #strategy-builder-card-shell .sb-select:focus {
+    border-color: rgba(42,36,32,0.36);
+    box-shadow: 0 0 0 3px rgba(42,36,32,0.08), inset 0 1px 0 rgba(255,255,255,0.65);
+  }
+  #strategy-builder-card-shell .sb-range {
+    height: 28px;
+    accent-color: var(--pilot-ink);
+  }
+  #strategy-builder-card-shell .sb-range-scale {
+    font-size: 11px;
+    color: var(--pilot-disabled);
+  }
+  #strategy-builder-card-shell .sb-seg {
+    gap: 0;
+    padding: 4px;
+    border: 1px solid var(--pilot-line);
+    border-radius: 999px;
+    background: rgba(255,255,255,0.42);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.45);
+  }
+  #strategy-builder-card-shell .sb-seg-btn {
+    min-height: 36px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--pilot-muted);
+    font-size: 12px;
+    font-weight: 800;
+  }
+  #strategy-builder-card-shell .sb-seg-btn:hover {
+    background: rgba(255,255,255,0.46);
+    color: var(--pilot-ink);
+  }
+  #strategy-builder-card-shell .sb-seg-btn.is-active {
+    background: #2a2420;
+    color: #ffffff;
+    border-color: transparent;
+    box-shadow: 0 3px 10px rgba(42,36,32,0.14), inset 0 1px 0 rgba(255,255,255,0.16);
+  }
+  #strategy-builder-card-shell .sb-view-seg {
+    align-self: stretch;
+  }
+  #strategy-builder-card-shell .sb-chip {
+    border-color: var(--pilot-line);
+    background: rgba(255,255,255,0.5);
+    color: var(--pilot-muted);
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+  #strategy-builder-card-shell .sb-chip--ready {
+    color: #285f3b;
+    border-color: rgba(40,95,59,0.3);
+    background: rgba(40,95,59,0.08);
+  }
+  #strategy-builder-card-shell .sb-chip--partial {
+    color: rgba(42,36,32,0.72);
+    border-color: rgba(42,36,32,0.16);
+    background: rgba(42,36,32,0.04);
+  }
+  #strategy-builder-card-shell .sb-chip--empty {
+    color: var(--pilot-disabled);
+    background: rgba(255,255,255,0.28);
+  }
+  #strategy-builder-card-shell .mb-config-platform-grid,
+  #strategy-builder-card-shell .sb-toggle-grid {
+    gap: 12px;
+  }
+  #strategy-builder-card-shell .mb-config-platform-toggle {
+    min-height: 76px;
+    border-color: var(--pilot-line);
+    background: var(--pilot-surface);
+    border-radius: 8px;
+    padding: 12px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.45);
+  }
+  #strategy-builder-card-shell .mb-config-platform-toggle:hover {
+    border-color: rgba(42,36,32,0.2);
+    background: rgba(255,255,255,0.62);
+  }
+  #strategy-builder-card-shell .mb-config-platform-toggle.is-on {
+    border-color: rgba(42,36,32,0.22);
+    background: var(--pilot-surface-strong);
+  }
+  #strategy-builder-card-shell .mb-config-platform-check {
+    width: 24px;
+    height: 24px;
+    border-color: rgba(42,36,32,0.18);
+    background: rgba(255,255,255,0.5);
+    color: var(--pilot-ink);
+    border-radius: 999px;
+  }
+  #strategy-builder-card-shell .is-on .mb-config-platform-check {
+    background: #2a2420;
+    color: #ffffff;
+    border-color: #2a2420;
+  }
+  #strategy-builder-card-shell .mb-config-platform-title {
+    color: var(--pilot-ink);
+    font-size: 14px;
+    line-height: 1.3;
+  }
+  #strategy-builder-card-shell .sb-data-source-row {
+    min-height: 54px !important;
+    padding: 10px 12px;
+  }
+  #strategy-builder-card-shell .sb-toggle-row-meta {
+    color: inherit;
+  }
+  #strategy-builder-card-shell .sb-link-btn,
+  #strategy-builder-card-shell .tile-foot-rerun-btn,
+  #strategy-builder-card-shell .sb-small-action {
+    min-height: 34px;
+    border: 1px solid var(--pilot-line);
+    border-radius: 999px;
+    background: rgba(255,255,255,0.48);
+    color: var(--pilot-ink);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0 12px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.5);
+  }
+  #strategy-builder-card-shell .sb-link-btn:hover,
+  #strategy-builder-card-shell .tile-foot-rerun-btn:hover:not(:disabled),
+  #strategy-builder-card-shell .sb-small-action:hover:not(:disabled) {
+    border-color: rgba(42,36,32,0.28);
+    background: rgba(255,255,255,0.72);
+    color: var(--pilot-ink);
+  }
+  #strategy-builder-card-shell .sb-cta {
+    position: relative;
+    isolation: isolate;
+    min-height: 50px;
+    border: 0;
+    border-radius: 999px;
+    background:
+      linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%),
+      linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+    color: #fff;
+    font-size: 14px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1);
+    overflow: hidden;
+  }
+  #strategy-builder-card-shell .sb-cta::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 2px;
+    background: conic-gradient(
+      from var(--cta-angle),
+      transparent 0deg,
+      transparent 180deg,
+      hsla(185, 100%, 58%, 0.12) 200deg,
+      hsla(200, 100%, 62%, 0.35) 225deg,
+      hsla(225, 100%, 64%, 0.6) 250deg,
+      hsla(250, 100%, 66%, 0.78) 275deg,
+      hsla(275, 100%, 66%, 0.88) 300deg,
+      hsla(300, 100%, 68%, 0.94) 322deg,
+      hsla(320, 80%, 80%, 0.97) 338deg,
+      rgba(255, 255, 255, 1) 350deg,
+      transparent 358deg
+    );
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: cta-border-spin 2.4s linear infinite;
+    pointer-events: none;
+  }
+  #strategy-builder-card-shell .sb-cta:hover:not(:disabled) {
+    opacity: 1;
+    transform: translateY(-1px);
+    box-shadow: 0 5px 14px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.35);
+  }
+  #strategy-builder-card-shell .sb-cta:disabled {
+    border: 1px solid var(--pilot-line);
+    background: rgba(255,255,255,0.38);
+    color: var(--pilot-disabled);
+    box-shadow: none;
+  }
+  #strategy-builder-card-shell .sb-cta:disabled::before {
+    display: none;
+  }
+  #strategy-builder-card-shell .tile-detail-stat-row,
+  #strategy-builder-card-shell .sb-inline-row {
+    border-color: var(--pilot-line-soft);
+    padding: 10px 0;
+  }
+  #strategy-builder-card-shell .tile-detail-stat-label {
+    color: var(--pilot-ink);
+    font-size: 13px;
+  }
+  #strategy-builder-card-shell .tile-detail-stat-value {
+    color: var(--pilot-muted);
+    font-size: 13px;
+  }
+  #strategy-builder-card-shell .sb-feature-panel,
+  #strategy-builder-card-shell .sb-summary-panel,
+  #strategy-builder-card-shell .sb-post-row {
+    border: 1px solid var(--pilot-line) !important;
+    border-radius: 8px !important;
+    background: var(--pilot-surface-strong) !important;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4) !important;
+  }
+  #strategy-builder-card-shell .sb-post-row {
+    padding: 16px 18px !important;
+    margin-bottom: 12px !important;
+  }
+  #strategy-builder-card-shell .sb-post-row-head {
+    min-height: 34px;
+    gap: 12px !important;
+  }
+  #strategy-builder-card-shell .sb-kind-chip {
+    border-radius: 999px !important;
+    padding: 5px 10px !important;
+    background: rgba(255,255,255,0.55) !important;
+    color: var(--pilot-muted) !important;
+    border-color: var(--pilot-line) !important;
+    font-size: 12px !important;
+  }
+  #strategy-builder-card-shell .sb-post-row span:not(.sb-kind-chip),
+  #strategy-builder-card-shell .sb-post-row div,
+  #strategy-builder-card-shell #strategy-builder-today-section div {
+    font-size: 15px !important;
+    line-height: 1.5 !important;
+  }
+  #strategy-builder-card-shell .sb-pacing-strip {
+    gap: 12px !important;
+  }
+  #strategy-builder-card-shell .sb-pacing-card {
+    background: rgba(255,255,255,0.52) !important;
+    border-color: var(--pilot-line) !important;
+    border-radius: 8px !important;
+    min-width: 180px !important;
+    padding: 12px 16px !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.45);
+  }
+  #strategy-builder-card-shell .sb-pacing-card-hard {
+    border-color: rgba(42,36,32,0.22) !important;
+    background: var(--pilot-surface-strong) !important;
+  }
+  #strategy-builder-card-shell .sb-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 260px;
+    padding: 40px 20px;
+    border: 1px dashed var(--pilot-line);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.36);
+    color: var(--pilot-muted);
+    font-family: var(--font-ui);
+    font-size: 16px;
+    line-height: 1.5;
+    text-align: center;
+  }
+  #strategy-builder-card-shell .brand-snapshot-error {
+    color: #9f1f17;
+    border-color: rgba(159,31,23,0.22);
+    background: rgba(159,31,23,0.06);
+  }
+  #strategy-builder-card-shell .sb-notice--error {
+    color: #9f1f17;
+    font-size: 15px;
+  }
+  #strategy-builder-card-shell .sb-notice--ok {
+    color: #1d6d43;
+    font-size: 15px;
+  }
+  @media (max-width: 760px) {
+    #strategy-builder-card-shell .sb-control-row {
+      grid-template-columns: 1fr;
+    }
+    #strategy-builder-card-shell .sb-section {
+      padding: 12px;
+    }
+  }
   .brand-snapshot-editor {
     display: flex;
     flex-direction: column;
@@ -14897,14 +15765,14 @@ const dashboardCss = `
     flex-direction: column;
     height: 100%;
     overflow: hidden;
-    background: #fff;
+    background: transparent;
   }
   #adq-shell {
     display: flex;
     flex-direction: column;
     height: 100%;
     overflow: hidden;
-    background: #fff;
+    background: transparent;
   }
   /* Provenance bar */
   #adq-provenance {
@@ -14913,9 +15781,9 @@ const dashboardCss = `
     justify-content: space-between;
     gap: 12px;
     padding: 10px 16px 9px;
-    border-bottom: 1px solid #ebebeb;
+    border-bottom: 1px solid rgba(42,36,32,0.1);
     flex-shrink: 0;
-    background: #fafafa;
+    background: rgba(255,255,255,0.55);
     flex-wrap: wrap;
   }
   #adq-prov-left {
@@ -14930,26 +15798,26 @@ const dashboardCss = `
     font-weight: 700;
     letter-spacing: 0.18em;
     text-transform: uppercase;
-    color: #aaa;
+    color: rgba(42,36,32,0.45);
   }
   #adq-prov-ts {
     font-family: var(--font-mono);
     font-size: 11px;
     font-weight: 500;
-    color: #555;
+    color: rgba(42,36,32,0.65);
   }
   .adq-prov-sep {
-    color: #ccc;
+    color: rgba(42,36,32,0.2);
     font-size: 11px;
   }
   #adq-prov-stat {
     font-family: var(--font-mono);
     font-size: 11px;
-    color: #888;
+    color: rgba(42,36,32,0.55);
   }
   .adq-prov-num {
     font-weight: 700;
-    color: #111;
+    color: #2a2420;
   }
   .adq-prov-of {
     opacity: 0.45;
@@ -15008,11 +15876,11 @@ const dashboardCss = `
   #adq-scroll {
     flex: 1;
     overflow-y: auto;
-    background: #fff;
+    background: transparent;
   }
   /* Bucket section */
   .adq-bucket {
-    border-bottom: 1px solid #ebebeb;
+    border-bottom: 1px solid rgba(42,36,32,0.09);
     padding-bottom: 2px;
   }
   .adq-bucket:last-child { border-bottom: none; }
@@ -15021,7 +15889,7 @@ const dashboardCss = `
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 16px 16px 10px;
+    padding: 14px 14px 8px;
   }
   .adq-bucket-hdr-left {
     display: flex;
@@ -15033,8 +15901,8 @@ const dashboardCss = `
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
     flex-shrink: 0;
   }
   .adq-bucket-text {
@@ -15043,17 +15911,18 @@ const dashboardCss = `
     gap: 2px;
   }
   .adq-bucket-name {
-    font-family: var(--font-ui);
-    font-size: 17px;
-    font-weight: 800;
-    letter-spacing: -0.02em;
-    color: #111;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #2a2420;
     line-height: 1;
   }
   .adq-bucket-sub {
     font-family: var(--font-ui);
-    font-size: 12px;
-    color: #999;
+    font-size: 11px;
+    color: rgba(42,36,32,0.5);
     line-height: 1.4;
   }
   .adq-bucket-hdr-right {
@@ -15074,15 +15943,15 @@ const dashboardCss = `
     font-weight: 500;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: #bbb;
+    color: rgba(42,36,32,0.38);
     white-space: nowrap;
   }
   .adq-bucket-count {
     font-family: var(--font-mono);
-    font-size: 22px;
+    font-size: 20px;
     font-weight: 700;
     letter-spacing: -0.03em;
-    color: #111;
+    color: #2a2420;
     line-height: 1;
     white-space: nowrap;
   }
@@ -15122,19 +15991,19 @@ const dashboardCss = `
     gap: 8px;
     padding: 0 12px 14px;
   }
-  /* Section card — white bg, uniform border */
+  /* Section card */
   .adq-section-card {
-    background: #fff;
-    border: 1px solid #e2e2e2;
-    border-radius: 10px;
+    background: rgba(255,255,255,0.72);
+    border: 1px solid rgba(42,36,32,0.11);
+    border-radius: 8px;
     padding: 12px 12px 10px;
     display: flex;
     flex-direction: column;
     gap: 9px;
     transition: box-shadow 0.15s ease;
   }
-  .adq-section-card:hover { box-shadow: 0 2px 10px rgba(0,0,0,0.07); }
-  /* Card top row: name+sub | pct */
+  .adq-section-card:hover { box-shadow: 0 2px 12px rgba(42,36,32,0.07); }
+  /* Card top row */
   .adq-sc-top {
     display: flex;
     align-items: flex-start;
@@ -15149,34 +16018,34 @@ const dashboardCss = `
     min-width: 0;
   }
   .adq-sc-name {
-    font-family: var(--font-ui);
-    font-size: 12.5px;
+    font-family: var(--font-mono);
+    font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: #111;
+    color: #2a2420;
     line-height: 1.2;
   }
   .adq-sc-sub {
     font-family: var(--font-ui);
-    font-size: 10.5px;
-    color: #999;
+    font-size: 11px;
+    color: rgba(42,36,32,0.5);
     line-height: 1.35;
   }
   .adq-sc-pct {
     font-family: var(--font-mono);
-    font-size: 26px;
-    font-weight: 800;
-    letter-spacing: -0.04em;
-    color: #111;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    color: #2a2420;
     line-height: 1;
     white-space: nowrap;
     flex-shrink: 0;
   }
   .adq-sc-pct-unit {
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 600;
-    opacity: 0.55;
+    opacity: 0.45;
     margin-left: 1px;
   }
   .adq-sc-footer-row {
@@ -15190,22 +16059,23 @@ const dashboardCss = `
   .adq-sc-open-btn {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
+    gap: 4px;
     font-family: var(--font-mono);
     font-size: 9px;
     font-weight: 700;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.09em;
     text-transform: uppercase;
-    color: #888;
+    color: rgba(42,36,32,0.45);
     background: none;
-    border: none;
-    padding: 0;
+    border: 1px solid rgba(42,36,32,0.14);
+    border-radius: 4px;
+    padding: 3px 7px;
     cursor: pointer;
     white-space: nowrap;
-    transition: color 0.12s;
+    transition: color 0.12s, border-color 0.12s;
   }
-  .adq-sc-open-btn:hover { color: #111; }
-  /* Field rows — vertical stacked list items */
+  .adq-sc-open-btn:hover { color: #2a2420; border-color: rgba(42,36,32,0.35); }
+  /* Field rows */
   .adq-field-rows {
     list-style: none;
     margin: 0;
@@ -15213,14 +16083,14 @@ const dashboardCss = `
     display: flex;
     flex-direction: column;
     gap: 0;
-    border-top: 1px solid #f0f0f0;
+    border-top: 1px solid rgba(42,36,32,0.07);
   }
   .adq-fr {
     display: flex;
     align-items: center;
     gap: 7px;
     padding: 5px 0;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid rgba(42,36,32,0.07);
     min-height: 28px;
   }
   .adq-fr:last-child { border-bottom: none; }
@@ -15250,10 +16120,10 @@ const dashboardCss = `
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .adq-fr--ok  .adq-fr-label { color: #111; }
-  .adq-fr--miss .adq-fr-label { color: #dc2626; font-weight: 500; }
-  .adq-fr--lock .adq-fr-label { color: #9ca3af; }
-  .adq-fr--lock .adq-fr-indicator { color: #9ca3af; }
+  .adq-fr--ok  .adq-fr-label { color: #2a2420; }
+  .adq-fr--miss .adq-fr-label { color: #b91c1c; font-weight: 500; }
+  .adq-fr--lock .adq-fr-label { color: rgba(42,36,32,0.38); }
+  .adq-fr--lock .adq-fr-indicator { color: rgba(42,36,32,0.38); }
   .adq-fr-badge {
     font-family: var(--font-mono);
     font-size: 7.5px;
@@ -15280,9 +16150,9 @@ const dashboardCss = `
     font-size: 7.5px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: #9ca3af;
+    color: rgba(42,36,32,0.4);
     background: none;
-    border: 1px solid #e2e2e2;
+    border: 1px solid rgba(42,36,32,0.18);
     border-radius: 3px;
     padding: 1px 5px;
     cursor: pointer;
@@ -15290,15 +16160,15 @@ const dashboardCss = `
     transition: color 0.12s, border-color 0.12s;
     line-height: 1.6;
   }
-  .adq-fr-upgrade:hover { color: #555; border-color: #aaa; }
+  .adq-fr-upgrade:hover { color: #2a2420; border-color: rgba(42,36,32,0.4); }
   /* Footer */
   #adq-footer {
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 9px 16px;
-    border-top: 1px solid #e8e8e8;
-    background: #fff;
+    border-top: 1px solid rgba(42,36,32,0.09);
+    background: rgba(255,255,255,0.55);
     flex-shrink: 0;
     flex-wrap: wrap;
   }
@@ -15307,7 +16177,7 @@ const dashboardCss = `
     font-size: 7.5px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: #aaa;
+    color: rgba(42,36,32,0.38);
     flex-shrink: 0;
     margin-right: 2px;
   }
@@ -15316,8 +16186,8 @@ const dashboardCss = `
     align-items: center;
     gap: 5px;
     font-family: var(--font-ui);
-    font-size: 11.5px;
-    color: #555;
+    font-size: 11px;
+    color: rgba(42,36,32,0.6);
     white-space: nowrap;
   }
   .adq-legend-item--right { margin-left: auto; display: flex; gap: 4px; align-items: center; }
@@ -15370,8 +16240,7 @@ const dashboardCss = `
       flex-shrink: 0;
     }
     .adq-bucket-name {
-      font-size: 13px;
-      letter-spacing: -0.01em;
+      font-size: 10px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -17900,6 +18769,512 @@ const dashboardCss = `
   }
   .stroke-lit {
     filter: drop-shadow(0 0 3px color-mix(in srgb, currentColor 55%, transparent));
+  }
+
+  /* ── Dashboard Modal UI Kit — mu-* primitives ── */
+  .mu-tab-pane {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .mu-field-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .mu-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+  .mu-label {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(42,36,32,0.62);
+  }
+  .mu-input,
+  .mu-select {
+    width: 100%;
+    min-height: 52px;
+    border: 1px solid rgba(42,36,32,0.12);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.96);
+    color: #2a2420;
+    padding: 10px 14px;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 1.45;
+    outline: none;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.55);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    box-sizing: border-box;
+  }
+  .mu-input:focus,
+  .mu-select:focus {
+    border-color: rgba(42,36,32,0.36);
+    box-shadow: 0 0 0 3px rgba(42,36,32,0.08), inset 0 1px 0 rgba(255,255,255,0.65);
+  }
+  .mu-textarea {
+    width: 100%;
+    min-height: 120px;
+    resize: vertical;
+    border: 1px solid rgba(42,36,32,0.12);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.96);
+    color: #2a2420;
+    padding: 10px 14px;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 1.5;
+    outline: none;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.55);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    box-sizing: border-box;
+  }
+  .mu-code-textarea {
+    min-height: 320px;
+    white-space: pre;
+    overflow-x: auto;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .mu-textarea:focus {
+    border-color: rgba(42,36,32,0.36);
+    box-shadow: 0 0 0 3px rgba(42,36,32,0.08), inset 0 1px 0 rgba(255,255,255,0.65);
+  }
+  .mu-checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border: 1px solid rgba(42,36,32,0.12);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.72);
+    color: #2a2420;
+    font-family: var(--font-ui);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .mu-checkbox-row input[type="checkbox"] {
+    width: 16px;
+    min-width: 16px;
+    height: 16px;
+    accent-color: #2a2420;
+    cursor: pointer;
+    min-height: unset;
+    border: none;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    padding: 0;
+  }
+  .mu-file-drop {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 108px;
+    padding: 16px;
+    border: 1px dashed rgba(42,36,32,0.22);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.62);
+    text-align: center;
+    cursor: pointer;
+    position: relative;
+  }
+  .mu-file-drop input[type="file"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    width: 1px;
+    height: 1px;
+  }
+  .mu-file-drop strong {
+    color: #2a2420;
+    font-family: var(--font-ui);
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .mu-file-drop span {
+    color: rgba(42,36,32,0.52);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .mu-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+    border: 1px solid rgba(42,36,32,0.12);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.78);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.72), inset 0 1px 0 rgba(255,255,255,0.35);
+  }
+  .mu-section-head {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: start;
+  }
+  .mu-section-head h3 {
+    margin: 0;
+    font-family: var(--font-ui);
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1.25;
+    color: #2a2420;
+  }
+  .mu-section-head p {
+    margin: 5px 0 0;
+    font-family: var(--font-ui);
+    font-size: 13px;
+    line-height: 1.55;
+    color: rgba(42,36,32,0.72);
+  }
+  .mu-index {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 26px;
+    border: 1px solid rgba(42,36,32,0.12);
+    border-radius: 6px;
+    background: rgba(255,255,255,0.5);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: rgba(42,36,32,0.52);
+    flex-shrink: 0;
+  }
+  .mu-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 3px 10px;
+    border: 1px solid rgba(42,36,32,0.12);
+    border-radius: 999px;
+    background: rgba(255,255,255,0.5);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: rgba(42,36,32,0.62);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .mu-chip--success {
+    color: #285f3b;
+    border-color: rgba(40,95,59,0.3);
+    background: rgba(40,95,59,0.08);
+  }
+  .mu-chip--warning {
+    color: #67533d;
+    border-color: rgba(103,83,61,0.24);
+    background: rgba(185,167,141,0.14);
+  }
+  .mu-chip--danger {
+    color: #9f1f17;
+    border-color: rgba(159,31,23,0.24);
+    background: rgba(159,31,23,0.06);
+  }
+  .mu-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+  .mu-notice {
+    margin: 0;
+    border: 1px solid rgba(42,36,32,0.12);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-family: var(--font-ui);
+    font-size: 13px;
+    line-height: 1.45;
+    color: rgba(42,36,32,0.72);
+    background: rgba(255,255,255,0.72);
+  }
+  .mu-notice--success {
+    border-color: rgba(40,95,59,0.22);
+    background: rgba(40,95,59,0.06);
+    color: #285f3b;
+  }
+  .mu-notice--danger {
+    border-color: rgba(159,31,23,0.22);
+    background: rgba(159,31,23,0.05);
+    color: #9f1f17;
+  }
+  .mu-btn-outline {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    min-height: 36px;
+    padding: 0 16px;
+    border: 1.5px solid #111;
+    border-radius: 7px;
+    background: #fff;
+    color: #111;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s ease;
+  }
+  .mu-btn-outline:hover { background: #f7f7f7; }
+  .mu-btn-outline:disabled { opacity: 0.45; cursor: not-allowed; }
+  .mu-btn-outline--danger { color: #9f1f17; border-color: rgba(159,31,23,0.5); }
+  .mu-btn-outline--danger:hover { background: rgba(159,31,23,0.04); }
+  .mu-btn-outline--accent { border-color: rgba(0,173,181,0.45); color: rgba(0,150,158,1); }
+  .mu-btn-outline--accent:hover { background: rgba(0,173,181,0.04); }
+  .mu-btn-outline--active { background: #111; color: #fff; border-color: #111; }
+  .mu-btn-outline--active:hover { background: #222; }
+  .mu-btn-update {
+    position: relative;
+    isolation: isolate;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    overflow: hidden;
+    min-height: 46px;
+    padding: 0 20px;
+    border: none;
+    border-radius: 999px;
+    background: #fff;
+    color: #2a2420;
+    font-family: var(--font-ui);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: 0 4px 14px rgba(42,36,32,0.1), inset 0 1px 0 rgba(255,255,255,0.86);
+    transition: box-shadow 0.15s ease;
+  }
+  .mu-btn-update::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 2px;
+    background: conic-gradient(
+      from var(--cta-angle),
+      transparent 0deg, transparent 180deg,
+      hsla(185,100%,58%,0.12) 200deg,
+      hsla(200,100%,62%,0.35) 225deg,
+      hsla(225,100%,64%,0.6) 250deg,
+      hsla(250,100%,66%,0.78) 275deg,
+      hsla(275,100%,66%,0.88) 300deg,
+      hsla(300,100%,68%,0.94) 322deg,
+      hsla(320,80%,80%,0.97) 338deg,
+      rgba(255,255,255,1) 350deg,
+      transparent 358deg
+    );
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: cta-border-spin 2.4s linear infinite;
+    pointer-events: none;
+  }
+  .mu-btn-update > * { position: relative; z-index: 1; }
+  .mu-btn-update:disabled { opacity: 0.45; cursor: not-allowed; }
+  .mu-btn-update:disabled::before { display: none; }
+  .mu-cta-primary {
+    position: relative;
+    isolation: isolate;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    overflow: hidden;
+    min-height: 52px;
+    padding: 0 24px;
+    border: none;
+    border-radius: 999px;
+    color: #fff;
+    font-family: var(--font-ui);
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    background:
+      linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%),
+      linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+    box-shadow:
+      0 0 14px 3px rgba(0,200,228,0.22),
+      0 2px 8px rgba(0,0,0,0.2),
+      inset 0 1px 0 rgba(255,255,255,0.28),
+      inset 0 -1px 0 rgba(0,0,0,0.1);
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+  }
+  .mu-cta-primary::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 2px;
+    background: conic-gradient(
+      from var(--cta-angle),
+      transparent 0deg, transparent 180deg,
+      hsla(185,100%,58%,0.12) 200deg,
+      hsla(200,100%,62%,0.35) 225deg,
+      hsla(225,100%,64%,0.6) 250deg,
+      hsla(250,100%,66%,0.78) 275deg,
+      hsla(275,100%,66%,0.88) 300deg,
+      hsla(300,100%,68%,0.94) 322deg,
+      hsla(320,80%,80%,0.97) 338deg,
+      rgba(255,255,255,1) 350deg,
+      transparent 358deg
+    );
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: cta-border-spin 2.4s linear infinite;
+    pointer-events: none;
+  }
+  .mu-cta-primary > * { position: relative; z-index: 1; }
+  .mu-cta-primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow:
+      0 0 18px 5px rgba(0,200,228,0.28),
+      0 4px 12px rgba(0,0,0,0.22),
+      inset 0 1px 0 rgba(255,255,255,0.35),
+      inset 0 -1px 0 rgba(0,0,0,0.12);
+  }
+  .mu-cta-primary:disabled {
+    background: rgba(255,255,255,0.38);
+    border: 1px solid rgba(42,36,32,0.12);
+    color: rgba(42,36,32,0.42);
+    box-shadow: none;
+    cursor: not-allowed;
+  }
+  .mu-cta-primary:disabled::before { display: none; }
+  .mu-footer {
+    position: sticky;
+    bottom: -18px;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 0 0;
+    background: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.98) 28%);
+  }
+  .mu-footer-note {
+    font-family: var(--font-ui);
+    font-size: 12px;
+    line-height: 1.4;
+    color: rgba(42,36,32,0.52);
+  }
+  .mu-cards-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .mu-cards-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(42,36,32,0.12);
+  }
+  .mu-saved-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 16px;
+    border: 1px solid rgba(42,36,32,0.12);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.78);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.5);
+  }
+  .mu-saved-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .mu-saved-meta {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(42,36,32,0.52);
+    margin-bottom: 4px;
+  }
+  .mu-saved-title {
+    margin: 0;
+    font-family: var(--font-ui);
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.3;
+    color: #2a2420;
+  }
+  .mu-saved-body {
+    margin: 0;
+    font-family: var(--font-ui);
+    font-size: 13px;
+    line-height: 1.5;
+    color: rgba(42,36,32,0.72);
+  }
+  .mu-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .mu-code-block {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 14px 16px;
+    background: rgba(255,255,255,0.72);
+    border: 1px solid rgba(42,36,32,0.12);
+    border-radius: 8px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-x: auto;
+    box-sizing: border-box;
+  }
+  .mu-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 160px;
+    border: 1px dashed rgba(42,36,32,0.16);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.36);
+    font-family: var(--font-ui);
+    font-size: 14px;
+    color: rgba(42,36,32,0.52);
+    text-align: center;
+    padding: 24px;
+  }
+  @media (max-width: 720px) {
+    .mu-field-grid { grid-template-columns: 1fr; }
+    .mu-footer { flex-direction: column; align-items: stretch; bottom: -18px; }
+    .mu-saved-head { flex-direction: column; }
+    .mu-card-actions { justify-content: stretch; }
+    .mu-btn-outline { width: 100%; }
+    .mu-cta-primary { width: 100%; }
   }
 `;
 

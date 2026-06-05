@@ -23,8 +23,8 @@ Purpose:
 - large marketing/product showcase sections
 
 Construction:
-- translucent warm-neutral glass panel
-- `rgba(245, 241, 223, 0.18)` background family
+- translucent white glass panel
+- `rgba(255, 255, 255, 0.18)` background family
 - `blur(24px)` backdrop treatment
 - inset white highlight / border treatment
 - rounded large panel shell
@@ -46,7 +46,7 @@ This is the default card language for internal product cards and homepage capabi
 
 Core token set:
 - `background: rgba(255,255,255,0.5)`
-- `border: 1px solid rgba(212, 196, 171, 0.82)`
+- `border: 1px solid rgba(42, 36, 32, 0.12)`
 - `box-shadow: 0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4)`
 
 Shared token source:
@@ -117,7 +117,7 @@ Construction:
 - min height `clamp(7rem, 14vw, 9rem)`
 - radius `1.1rem`
 - shared card surface tokens
-- warm-neutral typography: dark title, softer brown body copy
+- white-theme typography: dark title, neutral secondary body copy
 
 Subparts:
 - badge/media block
@@ -222,7 +222,7 @@ Construction:
   - right: system / engine / owner
 - small uppercase table headers
 - soft row dividers
-- warm-neutral text colors consistent with the capability card
+- white-theme text colors consistent with the capability card
 - may be followed by an inline URL input + CTA row
 
 Source:
@@ -390,6 +390,27 @@ Source:
 - [DashboardPage.jsx](/Users/bballi/Documents/Repos/Bballi_Portfolio/DashboardPage.jsx:938)
 - [DashboardPage.jsx](/Users/bballi/Documents/Repos/Bballi_Portfolio/DashboardPage.jsx:1217)
 - [DashboardPage.jsx](/Users/bballi/Documents/Repos/Bballi_Portfolio/DashboardPage.jsx:2017)
+
+### 11. Dashboard modal tab system
+
+Use this as the default structure for client dashboard card detail modals.
+
+Purpose:
+- card detail modal tabs
+- report, data, config, artifact, app-workflow, and empty-state panes
+- future dashboard modules that need to inherit the existing REPORT/glass design direction
+
+Construction:
+- top-level modal cells use the existing `tile-detail-bento-cell` shell
+- tabs use `tile-detail-tabs` and `tile-detail-tab`
+- tab content uses one approved pane type: report, data, config, artifact, app, or empty
+- nested panels use the shared white glass card surface with neutral gray borders and 8px radius
+- controls inherit one button/input/notice system instead of component-local styles
+
+Source:
+- [docs/DASHBOARD_MODAL_CARD_UI_GUIDE.md](/Users/bballi/Documents/Repos/Bballi_Portfolio/docs/DASHBOARD_MODAL_CARD_UI_GUIDE.md:1)
+- [DashboardPage.jsx](/Users/bballi/Documents/Repos/Bballi_Portfolio/DashboardPage.jsx:8162)
+- [components/dashboard/TileDetailAnalysisContent.jsx](/Users/bballi/Documents/Repos/Bballi_Portfolio/components/dashboard/TileDetailAnalysisContent.jsx:1)
 
 ## Standard Composition Patterns
 

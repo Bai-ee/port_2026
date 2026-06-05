@@ -18,22 +18,11 @@ function formatDate(value) {
 
 export default function ItemsList({ items, loading, deletingId, onDelete }) {
   if (loading) {
-    return (
-      <div id="kb-items-loading" className="tile-detail-stat-row">
-        <span className="tile-detail-stat-label">Loading knowledge items...</span>
-      </div>
-    );
+    return <p className="mu-notice">Loading knowledge items...</p>;
   }
 
   if (!items.length) {
-    return (
-      <div id="kb-empty-state" className="tile-detail-stat-row">
-        <span className="tile-detail-stat-label">No Knowledge Base items yet.</span>
-        <span style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-          Add pasted text or a URL to begin.
-        </span>
-      </div>
-    );
+    return <div className="mu-empty" style={{ minHeight: 80 }}>No Knowledge Base items yet. Add pasted text or a URL to begin.</div>;
   }
 
   return (
@@ -45,58 +34,53 @@ export default function ItemsList({ items, loading, deletingId, onDelete }) {
           <div
             key={item.id}
             id={`kb-item-${itemId}`}
-            className="tile-detail-stat-row"
-            style={{ alignItems: 'center', gap: 10 }}
+            className="mu-saved-card"
+            style={{ padding: '10px 12px' }}
           >
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div
-                className="tile-detail-stat-label"
-                style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}
-                title={item.title}
-              >
-                {item.title || 'Untitled'}
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 3 }}>
-                <span className={`sb-chip sb-chip--${item.status === 'ready' ? 'ready' : item.status === 'error' ? 'empty' : 'partial'}`}>
-                  {item.status || 'ready'}
-                </span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  {item.type}
-                </span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-secondary)' }}>
-                  {item.chunkCount || 0} chunks
-                </span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-secondary)' }}>
-                  {formatDate(item.createdAt)}
-                </span>
-              </div>
-              {item.sourceUrl && (
-                <a
-                  href={item.sourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-secondary)', fontSize: 11, marginTop: 3, textDecoration: 'none' }}
+            <div className="mu-saved-head" style={{ alignItems: 'center' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <span
+                  className="mu-saved-title"
+                  style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', fontSize: 13 }}
+                  title={item.title}
                 >
-                  {item.sourceUrl}
-                </a>
-              )}
-              {item.error && (
-                <div style={{ color: '#ff8a8a', fontSize: 11, marginTop: 3 }}>{item.error}</div>
-              )}
-            </div>
+                  {item.title || 'Untitled'}
+                </span>
+                <div className="mu-saved-meta" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 3 }}>
+                  <span className={`mu-chip${item.status === 'error' ? ' mu-chip--danger' : ''}`}>{item.status || 'ready'}</span>
+                  {item.type && <span>{item.type.toUpperCase()}</span>}
+                  <span>{item.chunkCount || 0} chunks</span>
+                  <span>{formatDate(item.createdAt)}</span>
+                </div>
+                {item.sourceUrl && (
+                  <a
+                    href={item.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mu-saved-meta"
+                    style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2, textDecoration: 'none' }}
+                  >
+                    {item.sourceUrl}
+                  </a>
+                )}
+                {item.error && (
+                  <p className="mu-notice mu-notice--danger" style={{ marginTop: 4, padding: '4px 8px', fontSize: 11, minHeight: 'unset' }}>{item.error}</p>
+                )}
+              </div>
 
-            <button
-              id={`kb-delete-${itemId}`}
-              type="button"
-              aria-label={`Delete ${item.title || 'Knowledge Base item'}`}
-              title="Delete item"
-              onClick={() => onDelete(item.id)}
-              disabled={deleting}
-              className="sb-link-btn"
-              style={{ width: 30, height: 30 }}
-            >
-              <Trash2 size={14} strokeWidth={1.8} aria-hidden="true" />
-            </button>
+              <button
+                id={`kb-delete-${itemId}`}
+                type="button"
+                aria-label={`Delete ${item.title || 'Knowledge Base item'}`}
+                title="Delete item"
+                onClick={() => onDelete(item.id)}
+                disabled={deleting}
+                className="mu-btn-outline mu-btn-outline--danger"
+                style={{ minHeight: 30, width: 34, padding: 0, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <Trash2 size={13} strokeWidth={1.8} aria-hidden="true" />
+              </button>
+            </div>
           </div>
         );
       })}

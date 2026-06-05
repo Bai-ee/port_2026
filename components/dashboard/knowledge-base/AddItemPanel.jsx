@@ -47,8 +47,8 @@ export default function AddItemPanel({ mode, busy, onSubmit }) {
 
   return (
     <form id="kb-add-panel" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div>
-        <span className="sb-label" style={{ display: 'block', marginBottom: 4 }}>Title</span>
+      <div className="mu-field">
+        <label className="mu-label" htmlFor="kb-title-input">Title</label>
         <input
           id="kb-title-input"
           type="text"
@@ -56,47 +56,47 @@ export default function AddItemPanel({ mode, busy, onSubmit }) {
           onChange={(event) => setTitle(event.target.value)}
           maxLength={160}
           placeholder={isTextMode ? 'Positioning notes, FAQ, offer details' : isUploadMode ? 'Document title (optional)' : 'Source title (optional)'}
-          className="sb-input"
+          className="mu-input"
         />
       </div>
 
       {isTextMode ? (
-        <div>
-          <span className="sb-label" style={{ display: 'block', marginBottom: 4 }}>Pasted Text</span>
+        <div className="mu-field">
+          <label className="mu-label" htmlFor="kb-text-input">Pasted Text</label>
           <textarea
             id="kb-text-input"
             value={text}
             onChange={(event) => setText(event.target.value)}
             placeholder="Paste client-owned context: product details, service notes, FAQs, founder notes, whitepaper excerpts, positioning, or sales messaging."
             rows={5}
-            className="sb-input"
-            style={{ resize: 'vertical', minHeight: 118 }}
+            className="mu-textarea"
+            style={{ minHeight: 118 }}
           />
         </div>
       ) : isUploadMode ? (
-        <div>
-          <span className="sb-label" style={{ display: 'block', marginBottom: 4 }}>Document Upload</span>
+        <div className="mu-field">
+          <label className="mu-label" htmlFor="kb-file-input">Document Upload</label>
           <input
             id="kb-file-input"
             type="file"
             accept=".pdf,.docx,.txt,.md,.csv,.json,.html,.xml,.yaml,.yml,.rtf,.log"
             onChange={(event) => setFile(event.target.files?.[0] || null)}
-            className="sb-input"
+            className="mu-input"
           />
-          <span className="sb-hint" style={{ marginTop: 4 }}>
+          <span style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5, marginTop: 4 }}>
             Upload PDFs, DOCX, TXT, Markdown, CSV, JSON, HTML, XML, YAML, RTF, logs, and other text-based files. Max 10 MB. Legacy .doc is not supported.
           </span>
         </div>
       ) : (
-        <div>
-          <span className="sb-label" style={{ display: 'block', marginBottom: 4 }}>URL</span>
+        <div className="mu-field">
+          <label className="mu-label" htmlFor="kb-url-input">URL</label>
           <input
             id="kb-url-input"
             type="url"
             value={url}
             onChange={(event) => setUrl(event.target.value)}
             placeholder="https://example.com/resource"
-            className="sb-input"
+            className="mu-input"
           />
         </div>
       )}
@@ -106,39 +106,17 @@ export default function AddItemPanel({ mode, busy, onSubmit }) {
           id="kb-submit"
           type="submit"
           disabled={!canSubmit || busy}
-          className="tile-foot-rerun-btn kb-submit-btn"
+          className="mu-cta-primary"
+          style={{ minHeight: 42, padding: '0 20px', fontSize: 13 }}
         >
           {busy ? 'Adding...' : isUploadMode ? 'Upload File' : isTextMode ? 'Add Text' : 'Add URL'}
         </button>
         {!canSubmit && !busy && (
-          <span id="kb-submit-hint" className="sb-hint">
+          <span id="kb-submit-hint" style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
             {submitHint}
           </span>
         )}
       </div>
-
-      <style jsx>{`
-        .kb-submit-btn {
-          background: #2a2420;
-          border-color: #2a2420;
-          color: #fff;
-          min-height: 32px;
-          padding: 8px 13px;
-          font-weight: 700;
-          opacity: 1;
-        }
-        .kb-submit-btn:hover:not(:disabled) {
-          background: #111;
-          border-color: #111;
-          color: #fff;
-        }
-        .kb-submit-btn:disabled {
-          background: rgba(42, 36, 32, 0.12);
-          border-color: rgba(42, 36, 32, 0.2);
-          color: rgba(42, 36, 32, 0.6);
-          opacity: 1;
-        }
-      `}</style>
     </form>
   );
 }

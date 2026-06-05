@@ -27,18 +27,23 @@ async function authFetch(user, path, options = {}) {
 // ── Email Digest: view the rendered email + analytics, send on demand ─────────
 export function AdminEmailDigestView({ user }) {
   const [tab, setTab] = useState('email');
+  const [mode, setMode] = useState('template'); // 'template' (placeholder) | 'live'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [preview, setPreview] = useState(null); // { html, paragraph }
+  const [preview, setPreview] = useState(null); // { html, paragraph, placeholder }
   const [status, setStatus] = useState(null);    // { kind, msg }
 
-  const load = useCallback(async () => {
+  // Opening the card shows the TEMPLATE (placeholder) preview — no live data is
+  // gathered and nothing is generated. Live data is only fetched on request.
+  const load = useCallback(async (nextMode = 'template') => {
     if (!user) return;
     setLoading(true);
     setError('');
+    setMode(nextMode);
     try {
-      const data = await authFetch(user, '/api/admin/daily-digest?preview=1');
-      setPreview({ html: data.html || '', paragraph: data.paragraph || data.summary?.paragraph || '' });
+      const param = nextMode === 'live' ? '1' : 'template';
+      const data = await authFetch(user, `/api/admin/daily-digest?preview=${param}`);
+      setPreview({ html: data.html || '', paragraph: data.paragraph || data.summary?.paragraph || '', placeholder: Boolean(data.placeholder) });
     } catch (e) {
       setError(e.message);
     } finally {
@@ -46,12 +51,13 @@ export function AdminEmailDigestView({ user }) {
     }
   }, [user]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load('template'); }, [load]);
 
-  const send = useCallback(async () => {
+  // Run & Send — gathers live data and delivers the email to the configured recipient.
+  const runAndSend = useCallback(async () => {
     if (!user) return;
-    if (typeof window !== 'undefined' && !window.confirm('Send the digest email now?')) return;
-    setStatus({ kind: 'pending', msg: 'Sending…' });
+    if (typeof window !== 'undefined' && !window.confirm('Run the digest with live data and send it to the configured recipient now?')) return;
+    setStatus({ kind: 'pending', msg: 'Running & sending…' });
     try {
       await authFetch(user, '/api/admin/daily-digest?send=1');
       setStatus({ kind: 'ok', msg: 'Sent.' });
@@ -59,6 +65,8 @@ export function AdminEmailDigestView({ user }) {
       setStatus({ kind: 'error', msg: e.message });
     }
   }, [user]);
+
+  const isTemplate = mode === 'template';
 
   return (
     <div className="tile-detail-bento-cell tile-detail-tabbed-container">
@@ -68,16 +76,23 @@ export function AdminEmailDigestView({ user }) {
       </div>
       <div className="tile-detail-tab-content">
         {loading ? (
-          <div style={emptyWrap}><span style={emptyLabel}>Loading preview…</span></div>
+          <div style={emptyWrap}><span style={emptyLabel}>{isTemplate ? 'Loading template…' : 'Gathering live data…'}</span></div>
         ) : error ? (
           <div style={emptyWrap}><span style={emptyLabel}>Preview failed</span><span style={emptyBody}>{error}</span></div>
         ) : tab === 'email' ? (
-          <div className="tile-detail-tab-pane" style={{ padding: 0, height: '100%', overflow: 'hidden' }}>
+          <div className="tile-detail-tab-pane" style={{ padding: 0, height: '100%', overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+            <div style={{
+              flexShrink: 0, padding: '8px 12px', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase',
+              color: preview?.placeholder ? '#8a6a1f' : '#2f6b3d', background: preview?.placeholder ? '#f6f0e2' : '#edf4ec',
+              borderRadius: 6, marginBottom: 8,
+            }}>
+              {preview?.placeholder ? 'Template preview · placeholder data — sections fill in when you Run & Send' : 'Live preview · real data from the last 24 hours'}
+            </div>
             {preview?.html ? (
               <iframe
                 title="Daily digest email"
                 srcDoc={preview.html}
-                style={{ width: '100%', height: '100%', minHeight: 620, border: '1px solid rgba(42,36,32,0.08)', borderRadius: 8, background: '#fff' }}
+                style={{ width: '100%', flex: 1, minHeight: 560, border: '1px solid rgba(42,36,32,0.08)', borderRadius: 8, background: '#fff' }}
               />
             ) : (
               <div style={emptyWrap}><span style={emptyLabel}>No email content</span></div>
@@ -93,11 +108,17 @@ export function AdminEmailDigestView({ user }) {
       </div>
       <div className="mb-config-actionbar">
         <span className="mb-config-actionbar-note">
-          {status ? (status.kind === 'error' ? `Error: ${status.msg}` : status.msg) : 'Preview is generated live; Send delivers to the configured recipient.'}
+          {status
+            ? (status.kind === 'error' ? `Error: ${status.msg}` : status.msg)
+            : (isTemplate ? 'Reviewing the layout with placeholder data — nothing is generated or sent.' : 'Showing real data from the last 24 hours — still nothing sent.')}
         </span>
         <div className="mb-config-actionbar-buttons">
-          <button type="button" className="mb-config-mini-btn" onClick={load} disabled={loading}>{loading ? 'Loading…' : 'Refresh'}</button>
-          <button type="button" className="tile-foot-rerun-btn" onClick={send} disabled={status?.kind === 'pending'}>Send Now</button>
+          {isTemplate ? (
+            <button type="button" className="mb-config-mini-btn" onClick={() => load('live')} disabled={loading}>Preview live data</button>
+          ) : (
+            <button type="button" className="mb-config-mini-btn" onClick={() => load('template')} disabled={loading}>Back to template</button>
+          )}
+          <button type="button" className="tile-foot-rerun-btn" onClick={runAndSend} disabled={status?.kind === 'pending'}>Run &amp; Send</button>
         </div>
       </div>
     </div>

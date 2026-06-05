@@ -80,6 +80,38 @@ async function runClientPipeline({ clientId, clientConfig = null, fresh = false 
     console.warn(`[${new Date().toISOString()}] RUNTIME: knowledge base context skipped — ${err.message}`);
   }
 
+  // ── 1b. Conversation intake context ─────────────────────────────────────────
+  // The Marketing Director's pasted team-conversation dump is parsed into tagged
+  // items and stored on the same client_configs doc, so it arrives via the
+  // clientConfig param — no extra Firestore read. Mirror knowledgeBaseContext:
+  // attach a prompt-ready block onto config for Scribe to fold in.
+  try {
+    const intakeItems = Array.isArray(clientConfig?.conversationIntake?.items)
+      ? clientConfig.conversationIntake.items
+      : [];
+    if (intakeItems.length) {
+      const block = intakeItems
+        .slice(0, 20)
+        .map((item, i) => {
+          const type = String(item?.type || 'brief').toUpperCase();
+          const summary = String(item?.summary || '').trim();
+          const relevance = String(item?.relevance || '').trim();
+          const quote = String(item?.sourceQuote || '').trim();
+          return `${i + 1}. [${type}] ${summary}${relevance ? ` — ${relevance}` : ''}${quote ? ` (heard: "${quote}")` : ''}`;
+        })
+        .join('\n');
+      config.conversationContext = {
+        available: true,
+        block,
+        itemCount: intakeItems.length,
+        digestedAtIso: clientConfig.conversationIntake?.digestedAtIso || null,
+      };
+      console.log(`[${new Date().toISOString()}] RUNTIME: conversation intake context loaded — ${intakeItems.length} item(s)`);
+    }
+  } catch (err) {
+    console.warn(`[${new Date().toISOString()}] RUNTIME: conversation intake context skipped — ${err.message}`);
+  }
+
   // ── 2. Initialize provider from config ─────────────────────────────────────
   const provider = initProvider(config.providerConfig || { defaultProvider: 'anthropic' });
   console.log(`[${new Date().toISOString()}] RUNTIME: provider — ${provider.providerName}`);

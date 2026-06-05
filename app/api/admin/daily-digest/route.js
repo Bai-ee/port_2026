@@ -1065,17 +1065,97 @@ async function sendEmail(subject, html) {
   return res.json();
 }
 
+// ── Placeholder data (template preview) ───────────────────────────────────────
+// Renders the full email layout with representative sample data and NO live API
+// calls (GA4 / Vercel / Calendar / Firebase / LLM). Lets an admin review and
+// edit the layout + section structure without generating a real digest.
+function buildPlaceholderData(timestamp) {
+  const DAY = 24 * 60 * 60 * 1000;
+  const iso = (off = 0) => new Date(timestamp + off).toISOString();
+  const mkDay = (off, isToday, events) => {
+    const d = new Date(timestamp + off * DAY);
+    return {
+      weekday: d.toLocaleDateString('en-US', { weekday: 'short' }),
+      dateLabel: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      isToday,
+      events,
+    };
+  };
+  return {
+    firebase: {
+      totalUsers: 128,
+      newUsers: 3,
+      newUsersList: [
+        { email: 'sample.user@example.com', website: 'example.com', createdAt: iso() },
+        { email: 'placeholder@example.com', website: null, createdAt: iso(-3600000) },
+      ],
+      totalClients: 14,
+      totalRuns: 320,
+      recentRuns: 2,
+      recentRunsList: [
+        { id: 'sample-run-1', status: 'succeeded', website: 'example.com', createdAt: iso(-1800000) },
+        { id: 'sample-run-2', status: 'queued', website: 'placeholder.io', createdAt: iso(-5400000) },
+      ],
+      statusCounts: { succeeded: 280, failed: 12, queued: 4 },
+    },
+    vercel: {
+      deployments: [{ state: 'READY', url: 'sample.vercel.app', commit: 'feat: sample deployment (placeholder)', created: iso(-2700000) }],
+      errorLogs: [],
+      totalDeployments: 1,
+    },
+    ga4: {
+      overview: { sessions: 240, totalUsers: 180, newUsers: 90, pageViews: 760, avgSessionDuration: 95, bounceRate: 42, engagedSessions: 150 },
+      topPages: [
+        { path: '/ (placeholder)', views: 120, users: 80 },
+        { path: '/work (placeholder)', views: 64, users: 41 },
+      ],
+      trafficSources: [
+        { source: 'google', medium: 'organic', sessions: 140, users: 110 },
+        { source: 'direct', medium: '(none)', sessions: 60, users: 48 },
+      ],
+      events: { sign_up: 3, dashboard_created: 2, tile_opened: 18 },
+      error: null,
+    },
+    agenda: {
+      events: [{ summary: 'Sample standup', location: '', allDay: false, timeLabel: '9:00 AM' }],
+      days: [
+        mkDay(0, true, [{ summary: 'Sample standup', timeLabel: '9:00 AM', location: '', allDay: false }, { summary: 'Sample client call', timeLabel: '1:30 PM', location: 'Zoom', allDay: false }]),
+        mkDay(1, false, [{ summary: 'Sample review', timeLabel: '2:00 PM', location: '', allDay: false }]),
+        mkDay(2, false, []),
+      ],
+      tomorrowSummary: 'Sample — 1 event. First up — “Sample review” at 2:00 PM.',
+      error: null,
+    },
+    homepage: {
+      totalEvents: 42,
+      byEventName: [{ name: 'homepage_cta_click', count: 12 }, { name: 'homepage_scroll_depth', count: 18 }],
+      byInteractionType: [{ name: 'cta click', count: 12 }, { name: 'scroll', count: 18 }],
+      topTargets: [{ name: 'Get Started (homepage_cta_click)', count: 9 }, { name: 'View Work (homepage_button_click)', count: 5 }],
+      outboundLinks: [{ name: 'https://example.com (placeholder)', count: 4 }],
+      scrollDepths: [{ name: '50%', count: 20 }, { name: '75%', count: 14 }],
+      webVitals: [{ name: 'LCP', count: 30, average: 2100, needsImprovement: 2, poor: 0 }],
+      error: null,
+    },
+    summary: {
+      paragraph: 'This is placeholder executive-summary text. When you run the digest, an AI-written recap of the day’s sign-ups, traffic, deployments, and strategic brief will appear here in this slot.',
+    },
+    briefs: [],
+  };
+}
+
 // ── Route handler ───────────────────────────────────────────────────────────
 
 export async function GET(request) {
   const url = new URL(request.url);
-  const isPreview = url.searchParams.get('preview') === '1';
+  const previewParam = url.searchParams.get('preview');
+  const isPreview = previewParam === '1';
+  const isTemplate = previewParam === 'template';
   const isSendNow = url.searchParams.get('send') === '1';
 
   // Auth: cron/worker secret for the scheduled run; admin token for dashboard
   // preview / send-now actions.
   let adminOk = false;
-  if (isPreview || isSendNow) {
+  if (isPreview || isTemplate || isSendNow) {
     try {
       await verifyAdminRequest(buildAuthRequestShim(request));
       adminOk = true;
@@ -1085,6 +1165,20 @@ export async function GET(request) {
   }
   if (!hasValidSecret(request) && !hasValidCronSecret(request) && !adminOk) {
     return json({ error: 'Unauthorized' }, 401);
+  }
+
+  // Template preview: render the full layout with placeholder data only — no
+  // live API/LLM calls, nothing sent. Instant; for reviewing/editing the email.
+  if (isTemplate) {
+    try {
+      const ts = Date.now();
+      const ph = buildPlaceholderData(ts);
+      const html = buildEmailHtml(ph.firebase, ph.vercel, ph.ga4, ph.agenda, ph.homepage, ts, ph.summary, ph.briefs);
+      return json({ ok: true, template: true, placeholder: true, timestamp: new Date(ts).toISOString(), paragraph: ph.summary.paragraph, html });
+    } catch (err) {
+      logError('daily_digest_template_error', { error: err.message });
+      return json({ error: err.message || 'Template render failed' }, 500);
+    }
   }
 
   try {

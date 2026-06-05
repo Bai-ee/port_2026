@@ -34,7 +34,7 @@ export default function SignalToggles({ signals, onChange }) {
   return (
     <div id="strategy-builder-signal-toggles" className="sb-section">
       <span className="sb-label">Signal Inputs</span>
-      <div className="mb-config-platform-grid">
+      <div className="mb-config-platform-grid sb-toggle-grid">
         {SIGNALS.map(({ key, label, description }) => {
           const enabled = Boolean(signals?.[key]?.enabled);
           return (

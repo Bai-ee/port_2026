@@ -123,6 +123,7 @@ export default function StrategyBuilderCard({ bootstrap, getIdToken, onOpenCard,
   return (
     <div
       id="strategy-builder-card-shell"
+      className="dashboard-modal-pilot"
       style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 400 }}
     >
       {/* Tab bar — design-system tabs */}
@@ -161,6 +162,7 @@ export default function StrategyBuilderCard({ bootstrap, getIdToken, onOpenCard,
       {/* Pane content */}
       <div
         id="strategy-builder-pane-content"
+        className="dashboard-modal-pilot-content"
         style={{ flex: 1, overflowY: 'auto', padding: '0 2px', position: 'relative' }}
       >
         {/* Loading overlay */}
