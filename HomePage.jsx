@@ -13,6 +13,7 @@ import StackedSlidesSection from './StackedSlidesSection';
 // import FontSelector from './FontSelector';
 // import LoopControls from './LoopControls';
 import PortfolioModal from './PortfolioModal';
+import HomepageAnalytics from './components/HomepageAnalytics';
 
 const AppCanvas = dynamic(() => import('./ox.jsx'), { ssr: false });
 
@@ -272,6 +273,7 @@ const HomePage = () => {
 
   return (
     <>
+    <HomepageAnalytics />
     {/* Header outside overflow-clip container so backdrop-filter composites against the viewport correctly */}
     <Header logoRef={headerLogoRef} onOpenPage={setActivePageId} />
     <div style={{ position: 'relative', width: '100vw', minHeight: '100dvh', background: 'transparent', overflowX: 'clip' }}>
