@@ -3,8 +3,10 @@ import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
-const { getHeaderValue, safeSecretEquals } = require('../../../../api/_lib/auth.cjs');
+const { getHeaderValue, safeSecretEquals, buildAuthRequestShim, verifyAdminRequest } = require('../../../../api/_lib/auth.cjs');
 const { logError, logInfo, logWarn } = require('../../../../api/_lib/observability.cjs');
+const briefSummary = require('../../../../features/intelligence/_brief-summary.js');
+const digestConfig = require('../../../../features/intelligence/_digest-config.js');
 
 // ── Config ──────────────────────────────────────────────────────────────────
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
@@ -493,19 +495,34 @@ async function getCalendarAccessToken() {
   return token.token;
 }
 
-/** Fetch today's events for DIGEST_CALENDAR_ID, expanding recurrences. */
+/** Fetch up to 5 days of events for DIGEST_CALENDAR_ID, expanding recurrences,
+ *  grouped by local day, plus a one-line summary of tomorrow's schedule. */
 async function getCalendarAgenda(timestamp) {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const SPAN_DAYS = 5;
   try {
     const now = new Date(timestamp);
-    const day = localDateStr(DIGEST_TIMEZONE, now);
     const offset = tzOffset(DIGEST_TIMEZONE, now);
-    const timeMin = `${day}T00:00:00${offset}`;
-    const timeMax = `${day}T23:59:59${offset}`;
+
+    // Build the 5-day window (today .. today+4) in the digest timezone.
+    const days = [];
+    for (let d = 0; d < SPAN_DAYS; d++) {
+      const inst = new Date(timestamp + d * DAY_MS);
+      days.push({
+        key: localDateStr(DIGEST_TIMEZONE, inst),
+        weekday: inst.toLocaleDateString('en-US', { weekday: 'short', timeZone: DIGEST_TIMEZONE }),
+        dateLabel: inst.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: DIGEST_TIMEZONE }),
+        isToday: d === 0,
+        events: [],
+      });
+    }
+    const timeMin = `${days[0].key}T00:00:00${offset}`;
+    const timeMax = `${days[SPAN_DAYS - 1].key}T23:59:59${offset}`;
 
     const accessToken = await getCalendarAccessToken();
     const url =
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(DIGEST_CALENDAR_ID)}/events` +
-      `?singleEvents=true&orderBy=startTime&maxResults=50` +
+      `?singleEvents=true&orderBy=startTime&maxResults=250` +
       `&timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}` +
       `&timeZone=${encodeURIComponent(DIGEST_TIMEZONE)}`;
 
@@ -520,137 +537,239 @@ async function getCalendarAgenda(timestamp) {
     }
     const data = await res.json();
 
-    const events = (data.items || [])
+    // Bucket each event into its local day.
+    const dayByKey = new Map(days.map((d) => [d.key, d]));
+    (data.items || [])
       .filter((e) => e.status !== 'cancelled')
-      .map((e) => {
+      .forEach((e) => {
         const allDay = Boolean(e.start?.date && !e.start?.dateTime);
         let timeLabel = 'All day';
-        if (!allDay && e.start?.dateTime) {
-          timeLabel = new Date(e.start.dateTime).toLocaleTimeString('en-US', {
+        let dayKey;
+        if (allDay) {
+          dayKey = e.start.date; // already YYYY-MM-DD local
+        } else if (e.start?.dateTime) {
+          const dt = new Date(e.start.dateTime);
+          dayKey = localDateStr(DIGEST_TIMEZONE, dt);
+          timeLabel = dt.toLocaleTimeString('en-US', {
             hour: 'numeric',
             minute: '2-digit',
             timeZone: DIGEST_TIMEZONE,
           });
         }
-        return {
+        const bucket = dayKey && dayByKey.get(dayKey);
+        if (!bucket) return;
+        bucket.events.push({
           summary: e.summary || '(no title)',
           location: e.location || '',
           allDay,
           timeLabel,
           sortKey: allDay ? '' : (e.start?.dateTime || ''),
-        };
-      })
-      .sort((a, b) => {
+        });
+      });
+
+    // All-day events first, then chronological, within each day.
+    days.forEach((d) => {
+      d.events.sort((a, b) => {
         if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
         return a.sortKey.localeCompare(b.sortKey);
       });
+    });
 
-    return { events, error: null };
+    // One-line summary of the next day (tomorrow).
+    const tmrw = days[1];
+    let tomorrowSummary = '';
+    if (tmrw) {
+      if (!tmrw.events.length) {
+        tomorrowSummary = `Nothing scheduled for ${tmrw.weekday}, ${tmrw.dateLabel}.`;
+      } else {
+        const first = tmrw.events[0];
+        const n = tmrw.events.length;
+        const when = first.allDay ? 'all day' : `at ${first.timeLabel}`;
+        const where = first.location ? ` · ${first.location}` : '';
+        tomorrowSummary = `${tmrw.weekday}, ${tmrw.dateLabel}: ${n} event${n !== 1 ? 's' : ''}. First up — “${first.summary}” ${when}${where}.`;
+      }
+    }
+
+    // `events` stays scoped to today so the digest's eventCount metric is unchanged.
+    return { events: days[0].events, days, tomorrowSummary, error: null };
   } catch (err) {
     logError('daily_digest_calendar_error', { error: err.message });
-    return { events: [], error: err.message };
+    return { events: [], days: [], tomorrowSummary: '', error: err.message };
   }
 }
 
 // ── Email builder ───────────────────────────────────────────────────────────
 
 /** Build the "Today's Agenda" HTML block for the brief. */
+// ── Digest visual theme (ported from clients/.../platform-brief.html) ─────────
+// Email-safe adaptation: warm-cream surfaces, Doto display numerals, Space Mono
+// micro-labels, Space Grotesk body. Web fonts load via @import where supported
+// (Apple Mail); Gmail strips them and falls back to the monospace/sans stacks,
+// which preserves the data-terminal character.
+const DT = {
+  bg: '#fbf8f0',
+  card: '#fffdf7',
+  ink: '#12100c',
+  soft: '#5a5346',
+  light: '#8a8070',
+  line: '#e7ddc8',
+  dash: 'rgba(18,16,12,0.10)',
+  accent: '#b8542e',
+  fDisp: "'Doto','Space Mono','Courier New',monospace",
+  fBody: "'Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif",
+  fMono: "'Space Mono','Courier New',monospace",
+};
+
+// Shared data-cell styles
+const TH = `padding:10px 14px;text-align:left;font-family:${DT.fMono};font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:${DT.light};border-bottom:1px solid ${DT.line};`;
+const THR = TH + 'text-align:right;';
+const TD = `padding:11px 14px;border-bottom:1px dashed ${DT.dash};font-family:${DT.fBody};font-size:13px;color:${DT.ink};`;
+const TDsub = `padding:11px 14px;border-bottom:1px dashed ${DT.dash};font-family:${DT.fBody};font-size:13px;color:${DT.soft};`;
+const TDnum = `padding:11px 14px;border-bottom:1px dashed ${DT.dash};font-family:${DT.fMono};font-size:13px;font-weight:700;text-align:right;color:${DT.ink};`;
+const TDempty = `padding:18px;text-align:center;font-family:${DT.fBody};font-size:13px;color:${DT.light};`;
+
+function dKicker(text) {
+  return `<div style="font-family:${DT.fMono};font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:${DT.light};margin:0 0 8px;">${text}</div>`;
+}
+
+function dMini(text) {
+  return `<div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:${DT.light};margin:0 0 9px;">${text}</div>`;
+}
+
+function dSectionHead(kicker, title) {
+  return `${dKicker(kicker)}<div class="sec-title" style="font-family:${DT.fDisp};font-weight:900;font-size:30px;line-height:.95;letter-spacing:-.005em;text-transform:uppercase;color:${DT.ink};margin:0 0 18px;">${title}</div>`;
+}
+
+// Every section: top hairline divider + mono eyebrow + Doto display title + body
+function dSection(kicker, title, body) {
+  return `<div style="border-top:1px solid ${DT.line};padding-top:32px;margin-top:32px;">
+    ${dSectionHead(kicker, title)}
+    ${body}
+  </div>`;
+}
+
+function dStatusBadge(label) {
+  const k = String(label || '').toLowerCase();
+  let bg = '#f6f0e2', fg = '#8a6a1f';
+  if (['ready', 'complete', 'completed', 'succeeded', 'success'].includes(k)) { bg = '#edf4ec'; fg = '#2f6b3d'; }
+  else if (['error', 'failed', 'cancelled', 'canceled'].includes(k)) { bg = '#f7ece8'; fg = '#a8392a'; }
+  return `<span style="display:inline-block;padding:3px 9px;border-radius:5px;font-family:${DT.fMono};font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:${bg};color:${fg};">${escapeHtml(String(label))}</span>`;
+}
+
+function dChip(label, value) {
+  return `<span style="display:inline-block;margin:0 6px 8px 0;padding:6px 13px;border-radius:999px;background:rgba(18,16,12,0.04);border:1px solid rgba(18,16,12,0.09);font-family:${DT.fBody};font-size:12px;color:${DT.soft};">${label}${value != null ? `: <strong style="font-family:${DT.fMono};color:${DT.ink};">${value}</strong>` : ''}</span>`;
+}
+
+// Wrapping inline-block stat cards (reflow to 2-up on narrow screens)
+function dStatCells(stats, perRow) {
+  const width = perRow === 5 ? 18 : 23;
+  const mr = perRow === 5 ? 2.5 : 2;
+  const minw = perRow === 5 ? 92 : 118;
+  return `<div style="font-size:0;line-height:0;">${stats.map((s) => `
+    <div style="display:inline-block;vertical-align:top;width:${width}%;min-width:${minw}px;margin:0 ${mr}% 10px 0;background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:18px 14px;box-sizing:border-box;">
+      <div style="font-family:${DT.fDisp};font-weight:900;font-size:38px;line-height:1;letter-spacing:-.02em;color:${DT.ink};">${s.num}</div>
+      <div style="margin-top:9px;font-family:${DT.fMono};font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:${DT.light};">${s.label}</div>
+    </div>`).join('')}</div>`;
+}
+
+function dDataTable(headers, bodyRows) {
+  const head = headers.map((h) => `<th style="${h.right ? THR : TH}">${h.label}</th>`).join('');
+  return `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;background:${DT.card};border:1px solid ${DT.line};border-radius:14px;overflow:hidden;">
+    <thead><tr>${head}</tr></thead>
+    <tbody>${bodyRows}</tbody>
+  </table>`;
+}
+
 function buildAgendaSection(agenda) {
-  let inner;
   if (agenda.error) {
-    inner = `<p style="margin:0;padding:12px 0;font-size:13px;color:#cc7700;">Calendar unavailable: ${escapeHtml(agenda.error)}</p>`;
-  } else if (!agenda.events.length) {
-    inner = `<p style="margin:0;padding:12px 0;font-size:14px;color:#1a7a1a;">Nothing on your calendar today — enjoy the day!</p>`;
-  } else {
-    inner = agenda.events
-      .map((ev) => `
-        <div style="display:flex;align-items:baseline;gap:12px;padding:10px 0;border-bottom:1px solid #f0efe9;">
-          <div style="min-width:84px;font-size:13px;font-weight:600;color:#7a5c2e;white-space:nowrap;">${escapeHtml(ev.timeLabel)}</div>
-          <div style="font-size:14px;color:#1a1a1a;">${escapeHtml(ev.summary)}${ev.location ? `<span style="color:#999;font-size:13px;"> · ${escapeHtml(ev.location)}</span>` : ''}</div>
-        </div>`)
-      .join('');
+    return dSection('Schedule', 'Agenda', `<div style="background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:14px 16px;font-family:${DT.fBody};font-size:13px;color:${DT.accent};">Calendar unavailable: ${escapeHtml(agenda.error)}</div>`);
   }
 
-  return `
-    <div style="background:#fffdf6;border:1px solid #f0e6c8;border-radius:12px;padding:20px 24px;margin-bottom:24px;">
-      <h2 style="margin:0 0 4px 0;font-size:18px;color:#1a1a1a;font-weight:600;">📅 Today's Agenda</h2>
-      <div>${inner}</div>
+  const days = agenda.days || [];
+
+  // Each day renders as a fixed-width card; the row scrolls horizontally where
+  // the client supports overflow-x (Apple Mail, most webmail). Gmail does not
+  // scroll — it clips to the email width, showing the first ~2 days.
+  const dayCards = days.map((day) => {
+    const evs = day.events || [];
+    const rows = evs.length
+      ? evs.map((ev, i) => `
+        <div style="padding:10px 14px;${i ? `border-top:1px dashed ${DT.dash};` : ''}white-space:normal;font-family:${DT.fBody};font-size:13px;color:${DT.ink};">
+          <span style="display:block;font-family:${DT.fMono};font-size:10px;font-weight:700;letter-spacing:.04em;color:${DT.accent};margin-bottom:3px;">${escapeHtml(ev.timeLabel)}</span>
+          ${escapeHtml(ev.summary)}${ev.location ? `<span style="display:block;margin-top:2px;font-size:11px;color:${DT.light};">${escapeHtml(ev.location)}</span>` : ''}
+        </div>`).join('')
+      : `<div style="padding:20px 14px;white-space:normal;font-family:${DT.fBody};font-size:12px;color:${DT.light};">No events</div>`;
+
+    return `<div style="display:inline-block;vertical-align:top;white-space:normal;width:230px;margin-right:12px;background:${DT.card};border:1px solid ${day.isToday ? DT.accent : DT.line};border-radius:14px;overflow:hidden;">
+      <div style="padding:11px 14px;border-bottom:1px solid ${DT.line};background:${day.isToday ? 'rgba(184,84,46,0.07)' : 'transparent'};">
+        ${day.isToday ? `<span style="display:inline-block;margin-right:7px;font-family:${DT.fMono};font-size:8px;font-weight:700;letter-spacing:.12em;color:#fff;background:${DT.accent};border-radius:4px;padding:2px 5px;vertical-align:middle;">TODAY</span>` : ''}<span style="font-family:${DT.fMono};font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${day.isToday ? DT.accent : DT.ink};">${escapeHtml(day.weekday)}</span><span style="font-family:${DT.fMono};font-size:10px;letter-spacing:.06em;color:${DT.light};"> &middot; ${escapeHtml(day.dateLabel)}</span>
+      </div>
+      ${rows}
     </div>`;
+  }).join('');
+
+  const hint = `<div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:${DT.light};margin:0 0 10px;">Scroll &rarr; up to 5 days</div>`;
+  const carousel = `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap;font-size:0;padding-bottom:6px;">${dayCards}</div>`;
+
+  const tomorrow = agenda.tomorrowSummary
+    ? `<div style="margin-top:16px;background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:16px 18px;">
+        ${dMini('Looking ahead &middot; Tomorrow')}
+        <p style="font-family:${DT.fBody};font-size:14px;line-height:1.55;color:${DT.soft};margin:0;">${escapeHtml(agenda.tomorrowSummary)}</p>
+      </div>`
+    : '';
+
+  return dSection('Schedule', 'Agenda', `${hint}${carousel}${tomorrow}`);
 }
 
 function buildHomepageAnalyticsSection(homepage) {
   if (homepage.error) {
-    return `
-      <div style="margin-bottom:24px;">
-        <h2 style="font-size:18px;color:#1a1a1a;margin:0 0 8px 0;font-weight:600;">Homepage Interactions</h2>
-        <p style="font-size:13px;color:#cc7700;">Homepage analytics unavailable: ${escapeHtml(homepage.error)}</p>
-      </div>`;
+    return dSection('Engagement', 'Homepage', `<p style="font-family:${DT.fBody};font-size:13px;color:${DT.accent};margin:0;">Unavailable: ${escapeHtml(homepage.error)}</p>`);
   }
 
   if (!homepage.totalEvents) {
-    return `
-      <div style="margin-bottom:24px;">
-        <h2 style="font-size:18px;color:#1a1a1a;margin:0 0 8px 0;font-weight:600;">Homepage Interactions</h2>
-        <p style="font-size:13px;color:#999;">No homepage interaction events recorded in the last 24 hours.</p>
-      </div>`;
+    return dSection('Engagement', 'Homepage', `<p style="font-family:${DT.fBody};font-size:13px;color:${DT.light};margin:0;">No interaction events in the last 24 hours.</p>`);
   }
 
   const chips = homepage.byInteractionType
-    .map((item) => `<span style="display:inline-block;margin:2px 6px 2px 0;padding:4px 10px;background:#f5f5f5;border-radius:4px;font-size:13px;">${escapeHtml(item.name.replace(/_/g, ' '))}: <strong>${item.count}</strong></span>`)
+    .map((item) => dChip(escapeHtml(item.name.replace(/_/g, ' ')), item.count))
     .join('');
 
   const targetRows = homepage.topTargets.length
-    ? homepage.topTargets.map((item) => `
-      <tr>
-        <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:13px;max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.name)}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:13px;text-align:right;font-weight:600;">${item.count}</td>
-      </tr>`).join('')
-    : '<tr><td colspan="2" style="padding:12px;color:#999;text-align:center;">No click targets recorded</td></tr>';
+    ? homepage.topTargets.map((item) => `<tr><td style="${TD}max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.name)}</td><td style="${TDnum}">${item.count}</td></tr>`).join('')
+    : `<tr><td colspan="2" style="${TDempty}">No click targets recorded</td></tr>`;
 
   const outboundRows = homepage.outboundLinks.length
-    ? homepage.outboundLinks.map((item) => `
-      <tr>
-        <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:13px;max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.name)}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:13px;text-align:right;font-weight:600;">${item.count}</td>
-      </tr>`).join('')
-    : '<tr><td colspan="2" style="padding:12px;color:#999;text-align:center;">No outbound clicks recorded</td></tr>';
+    ? homepage.outboundLinks.map((item) => `<tr><td style="${TD}max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.name)}</td><td style="${TDnum}">${item.count}</td></tr>`).join('')
+    : `<tr><td colspan="2" style="${TDempty}">No outbound clicks recorded</td></tr>`;
 
   const scrollChips = homepage.scrollDepths.length
-    ? homepage.scrollDepths.map((item) => `<span style="display:inline-block;margin:2px 6px 2px 0;padding:4px 10px;background:#f7fbff;border-radius:4px;font-size:13px;">${escapeHtml(item.name)}: <strong>${item.count}</strong></span>`).join('')
-    : '<span style="color:#999;font-size:13px;">No scroll milestones yet</span>';
+    ? homepage.scrollDepths.map((item) => dChip(escapeHtml(item.name), item.count)).join('')
+    : `<span style="font-family:${DT.fBody};font-size:13px;color:${DT.light};">No scroll milestones yet</span>`;
 
   const vitalChips = homepage.webVitals.length
-    ? homepage.webVitals.map((item) => `<span style="display:inline-block;margin:2px 6px 2px 0;padding:4px 10px;background:#fff8ee;border-radius:4px;font-size:13px;">${escapeHtml(item.name)} avg: <strong>${item.average}</strong>${item.poor ? ` · poor: <strong>${item.poor}</strong>` : ''}</span>`).join('')
-    : '<span style="color:#999;font-size:13px;">No web vitals yet</span>';
+    ? homepage.webVitals.map((item) => dChip(`${escapeHtml(item.name)} avg`, `${item.average}${item.poor ? ` &middot; poor ${item.poor}` : ''}`)).join('')
+    : `<span style="font-family:${DT.fBody};font-size:13px;color:${DT.light};">No web vitals yet</span>`;
 
-  return `
-    <div style="margin-bottom:24px;">
-      <h2 style="font-size:18px;color:#1a1a1a;margin:0 0 12px 0;font-weight:600;">Homepage Interactions (${homepage.totalEvents})</h2>
-      <div style="background:#fff;border-radius:8px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.08);margin-bottom:12px;">${chips}</div>
-      <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);margin-bottom:12px;">
-        <thead><tr style="background:#fafafa;">
-          <th style="padding:10px 12px;text-align:left;font-size:13px;color:#888;">Top Clicks / Fields</th>
-          <th style="padding:10px 12px;text-align:right;font-size:13px;color:#888;">Events</th>
-        </tr></thead>
-        <tbody>${targetRows}</tbody>
-      </table>
-      <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);margin-bottom:12px;">
-        <thead><tr style="background:#fafafa;">
-          <th style="padding:10px 12px;text-align:left;font-size:13px;color:#888;">Outbound Links</th>
-          <th style="padding:10px 12px;text-align:right;font-size:13px;color:#888;">Clicks</th>
-        </tr></thead>
-        <tbody>${outboundRows}</tbody>
-      </table>
-      <div style="background:#fff;border-radius:8px;padding:12px 16px;box-shadow:0 1px 3px rgba(0,0,0,0.08);font-size:13px;color:#888;margin-bottom:12px;">
-        Scroll depth: ${scrollChips}
-      </div>
-      <div style="background:#fff;border-radius:8px;padding:12px 16px;box-shadow:0 1px 3px rgba(0,0,0,0.08);font-size:13px;color:#888;">
-        Web vitals: ${vitalChips}
-      </div>
-    </div>`;
+  return dSection('Engagement', `Homepage <span style="font-family:${DT.fMono};font-size:14px;color:${DT.light};">(${homepage.totalEvents})</span>`,
+    `<div style="margin-bottom:16px;">${chips}</div>
+    <div style="margin-bottom:14px;">${dDataTable([{ label: 'Top clicks / fields' }, { label: 'Events', right: true }], targetRows)}</div>
+    <div style="margin-bottom:14px;">${dDataTable([{ label: 'Outbound links' }, { label: 'Clicks', right: true }], outboundRows)}</div>
+    <div style="margin-bottom:16px;">${dMini('Scroll depth')}${scrollChips}</div>
+    <div>${dMini('Web vitals')}${vitalChips}</div>`
+  );
 }
 
-function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp) {
+/** LLM executive-summary block, rendered at the very top of the brief. */
+function buildSummarySection(summary) {
+  if (!summary || !summary.paragraph) return '';
+  const text = escapeHtml(summary.paragraph).replace(/\n+/g, ' ');
+  return `<div style="margin-bottom:32px;">
+    ${dKicker('Today &middot; Executive Summary')}
+    <div style="background:${DT.card};border:1px solid ${DT.line};border-left:3px solid ${DT.accent};border-radius:14px;padding:20px 22px;font-family:${DT.fBody};font-size:15px;line-height:1.62;color:${DT.ink};">${text}</div>
+  </div>`;
+}
+
+function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary) {
   const dateStr = new Date(timestamp).toLocaleDateString('en-US', {
     weekday: 'long',
     year: 'numeric',
@@ -661,262 +780,171 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp) {
   const newUsersRows = firebase.newUsersList.length
     ? firebase.newUsersList
         .map(
-          (u) => `
-        <tr>
-          <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;">${u.email}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;">${u.website || '—'}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;color:#888;">${new Date(u.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</td>
+          (u) => `<tr>
+          <td style="${TD}">${escapeHtml(u.email)}</td>
+          <td style="${TDsub}">${u.website ? escapeHtml(u.website) : '—'}</td>
+          <td style="${TDsub}font-family:${DT.fMono};text-align:right;white-space:nowrap;">${new Date(u.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</td>
         </tr>`
         )
         .join('')
-    : '<tr><td colspan="3" style="padding:12px;color:#999;text-align:center;">No new sign-ups in the last 24 hours</td></tr>';
+    : `<tr><td colspan="3" style="${TDempty}">No new sign-ups in the last 24 hours</td></tr>`;
 
   const recentRunsRows = firebase.recentRunsList.length
     ? firebase.recentRunsList
         .map(
-          (r) => `
-        <tr>
-          <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;">${r.website || r.id}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;">
-            <span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;background:${r.status === 'complete' ? '#e6f9e6' : r.status === 'error' ? '#ffe6e6' : '#fff3e0'};color:${r.status === 'complete' ? '#1a7a1a' : r.status === 'error' ? '#cc0000' : '#cc7700'};">${r.status}</span>
-          </td>
-          <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;color:#888;">${new Date(r.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</td>
+          (r) => `<tr>
+          <td style="${TD}">${escapeHtml(r.website || r.id)}</td>
+          <td style="${TD}">${dStatusBadge(r.status)}</td>
+          <td style="${TDsub}font-family:${DT.fMono};text-align:right;white-space:nowrap;">${new Date(r.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</td>
         </tr>`
         )
         .join('')
-    : '<tr><td colspan="3" style="padding:12px;color:#999;text-align:center;">No new dashboards created</td></tr>';
+    : `<tr><td colspan="3" style="${TDempty}">No new dashboards created</td></tr>`;
 
   const deploymentsRows = vercel.deployments?.length
     ? vercel.deployments
         .map(
-          (d) => `
-        <tr>
-          <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;">
-            <span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;background:${d.state === 'READY' ? '#e6f9e6' : '#ffe6e6'};color:${d.state === 'READY' ? '#1a7a1a' : '#cc0000'};">${d.state}</span>
-          </td>
-          <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:13px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${d.commit || '—'}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;color:#888;">${new Date(d.created).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</td>
+          (d) => `<tr>
+          <td style="${TD}">${dStatusBadge(d.state)}</td>
+          <td style="${TDsub}max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(d.commit || '—')}</td>
+          <td style="${TDsub}font-family:${DT.fMono};text-align:right;white-space:nowrap;">${new Date(d.created).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</td>
         </tr>`
         )
         .join('')
-    : '<tr><td colspan="3" style="padding:12px;color:#999;text-align:center;">No deployments in the last 24 hours</td></tr>';
+    : `<tr><td colspan="3" style="${TDempty}">No deployments in the last 24 hours</td></tr>`;
 
   const statusBreakdown = Object.entries(firebase.statusCounts)
-    .map(([status, count]) => `<span style="display:inline-block;margin:2px 6px 2px 0;padding:4px 10px;background:#f5f5f5;border-radius:4px;font-size:13px;">${status}: <strong>${count}</strong></span>`)
+    .map(([status, count]) => dChip(escapeHtml(status), count))
     .join('');
 
   const errorSection = vercel.errorLogs?.length
-    ? `
-      <div style="margin-top:32px;">
-        <h2 style="font-size:18px;color:#cc0000;margin:0 0 12px 0;font-weight:600;">Runtime Errors (${vercel.errorLogs.length})</h2>
-        <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-          <thead><tr style="background:#fff5f5;">
-            <th style="padding:10px 12px;text-align:left;font-size:13px;color:#cc0000;">Path</th>
-            <th style="padding:10px 12px;text-align:left;font-size:13px;color:#cc0000;">Message</th>
-            <th style="padding:10px 12px;text-align:left;font-size:13px;color:#cc0000;">Status</th>
-          </tr></thead>
-          <tbody>
-            ${vercel.errorLogs.map((e) => `
-              <tr>
-                <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:13px;">${e.path}</td>
-                <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:13px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.message}</td>
-                <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:13px;">${e.statusCode || '—'}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>`
+    ? dSection('Runtime', `Errors <span style="font-family:${DT.fMono};font-size:14px;color:${DT.accent};">(${vercel.errorLogs.length})</span>`, dDataTable(
+        [{ label: 'Path' }, { label: 'Message' }, { label: 'Status', right: true }],
+        vercel.errorLogs.map((e) => `<tr>
+            <td style="${TD}font-family:${DT.fMono};font-size:12px;">${escapeHtml(e.path)}</td>
+            <td style="${TDsub}max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(e.message)}</td>
+            <td style="${TDnum}">${e.statusCode || '—'}</td>
+          </tr>`).join('')
+      ))
     : '';
 
-  return `
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head>
-<body style="margin:0;padding:0;background:#f8f8f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-  <div style="max-width:640px;margin:0 auto;padding:32px 16px;">
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>HitLoop Daily Digest</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Doto:wght@400;700;900&family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+body{margin:0;padding:0;background:${DT.bg};}
+a{text-decoration:none;}
+@media only screen and (max-width:600px){
+  .container{padding:24px 16px !important;}
+  .hero-title{font-size:62px !important;}
+  .sec-title{font-size:26px !important;}
+}
+</style>
+</head>
+<body style="margin:0;padding:0;background:${DT.bg};-webkit-font-smoothing:antialiased;">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:${DT.bg};">
+    <tr><td align="center" style="padding:0;">
+      <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px;width:100%;">
+        <tr><td class="container" style="padding:40px 32px;">
 
-    <!-- Header -->
-    <div style="background:linear-gradient(135deg,#1a1a1a 0%,#2a2420 100%);border-radius:12px;padding:32px;margin-bottom:24px;">
-      <h1 style="margin:0 0 4px 0;font-size:24px;color:#fff;font-weight:700;">HitLoop Daily Digest</h1>
-      <p style="margin:0;font-size:14px;color:rgba(255,255,255,0.6);">${dateStr}</p>
-    </div>
+          <!-- Hero -->
+          <div style="padding-bottom:6px;">
+            ${dKicker('HitLoop.agency &middot; Daily Digest')}
+            <div class="hero-title" style="font-family:${DT.fDisp};font-weight:900;font-size:74px;line-height:.82;letter-spacing:-.04em;text-transform:uppercase;color:${DT.ink};margin:6px 0 16px;">Daily<br>Digest</div>
+            <div style="font-family:${DT.fMono};font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:${DT.light};">${dateStr}</div>
+          </div>
 
-    <!-- Today's Agenda -->
-    ${buildAgendaSection(agenda)}
+          <!-- Executive summary (LLM) -->
+          ${buildSummarySection(summary)}
 
-    <!-- Key Metrics -->
-    <div style="display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;">
-      <div style="flex:1;min-width:120px;background:#fff;border-radius:10px;padding:20px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-        <div style="font-size:32px;font-weight:700;color:#1a1a1a;">${firebase.newUsers}</div>
-        <div style="font-size:13px;color:#888;margin-top:4px;">New Sign-ups</div>
-      </div>
-      <div style="flex:1;min-width:120px;background:#fff;border-radius:10px;padding:20px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-        <div style="font-size:32px;font-weight:700;color:#1a1a1a;">${firebase.totalUsers}</div>
-        <div style="font-size:13px;color:#888;margin-top:4px;">Total Users</div>
-      </div>
-      <div style="flex:1;min-width:120px;background:#fff;border-radius:10px;padding:20px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-        <div style="font-size:32px;font-weight:700;color:#1a1a1a;">${firebase.recentRuns}</div>
-        <div style="font-size:13px;color:#888;margin-top:4px;">Dashboards Created</div>
-      </div>
-      <div style="flex:1;min-width:120px;background:#fff;border-radius:10px;padding:20px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-        <div style="font-size:32px;font-weight:700;color:#1a1a1a;">${vercel.totalDeployments || 0}</div>
-        <div style="font-size:13px;color:#888;margin-top:4px;">Deployments</div>
-      </div>
-    </div>
+          <!-- Key metrics -->
+          ${dSection('Platform', 'Overview', dStatCells([
+            { num: firebase.newUsers, label: 'New sign-ups' },
+            { num: firebase.totalUsers, label: 'Total users' },
+            { num: firebase.recentRuns, label: 'Dashboards' },
+            { num: vercel.totalDeployments || 0, label: 'Deployments' },
+          ], 4))}
 
-    <!-- GA4 Traffic Overview -->
-    ${ga4.overview ? `
-    <div style="margin-bottom:24px;">
-      <h2 style="font-size:18px;color:#1a1a1a;margin:0 0 12px 0;font-weight:600;">Site Traffic (Google Analytics)</h2>
-      <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
-        <div style="flex:1;min-width:90px;background:#fff;border-radius:10px;padding:16px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-          <div style="font-size:28px;font-weight:700;color:#1a1a1a;">${ga4.overview.sessions}</div>
-          <div style="font-size:12px;color:#888;margin-top:4px;">Sessions</div>
-        </div>
-        <div style="flex:1;min-width:90px;background:#fff;border-radius:10px;padding:16px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-          <div style="font-size:28px;font-weight:700;color:#1a1a1a;">${ga4.overview.pageViews}</div>
-          <div style="font-size:12px;color:#888;margin-top:4px;">Page Views</div>
-        </div>
-        <div style="flex:1;min-width:90px;background:#fff;border-radius:10px;padding:16px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-          <div style="font-size:28px;font-weight:700;color:#1a1a1a;">${ga4.overview.totalUsers}</div>
-          <div style="font-size:12px;color:#888;margin-top:4px;">Visitors</div>
-        </div>
-        <div style="flex:1;min-width:90px;background:#fff;border-radius:10px;padding:16px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-          <div style="font-size:28px;font-weight:700;color:#1a1a1a;">${ga4.overview.newUsers}</div>
-          <div style="font-size:12px;color:#888;margin-top:4px;">New Visitors</div>
-        </div>
-        <div style="flex:1;min-width:90px;background:#fff;border-radius:10px;padding:16px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-          <div style="font-size:28px;font-weight:700;color:#1a1a1a;">${ga4.overview.bounceRate}%</div>
-          <div style="font-size:12px;color:#888;margin-top:4px;">Bounce Rate</div>
-        </div>
-      </div>
-      <div style="background:#fff;border-radius:8px;padding:12px 16px;box-shadow:0 1px 3px rgba(0,0,0,0.08);font-size:13px;color:#888;">
-        Avg. session: <strong style="color:#1a1a1a;">${Math.floor(ga4.overview.avgSessionDuration / 60)}m ${ga4.overview.avgSessionDuration % 60}s</strong>
-        &middot; Engaged sessions: <strong style="color:#1a1a1a;">${ga4.overview.engagedSessions}</strong>
-      </div>
-    </div>
-    ` : (ga4.error ? `<div style="margin-bottom:24px;"><h2 style="font-size:18px;color:#1a1a1a;margin:0 0 8px 0;font-weight:600;">Site Traffic</h2><p style="font-size:13px;color:#cc7700;">GA4 unavailable: ${ga4.error}</p></div>` : '')}
+          <!-- GA4 overview -->
+          ${ga4.overview
+            ? dSection('Google Analytics', 'Traffic', `${dStatCells([
+                { num: ga4.overview.sessions, label: 'Sessions' },
+                { num: ga4.overview.pageViews, label: 'Page views' },
+                { num: ga4.overview.totalUsers, label: 'Visitors' },
+                { num: ga4.overview.newUsers, label: 'New' },
+                { num: `${ga4.overview.bounceRate}%`, label: 'Bounce' },
+              ], 5)}<div style="font-family:${DT.fMono};font-size:11px;color:${DT.soft};letter-spacing:.02em;">Avg session <strong style="color:${DT.ink};">${Math.floor(ga4.overview.avgSessionDuration / 60)}m ${ga4.overview.avgSessionDuration % 60}s</strong> &nbsp;&middot;&nbsp; Engaged <strong style="color:${DT.ink};">${ga4.overview.engagedSessions}</strong></div>`)
+            : (ga4.error ? dSection('Google Analytics', 'Traffic', `<p style="font-family:${DT.fBody};font-size:13px;color:${DT.accent};margin:0;">GA4 unavailable: ${escapeHtml(ga4.error)}</p>`) : '')}
 
-    <!-- Top Pages -->
-    ${ga4.topPages?.length ? `
-    <div style="margin-bottom:24px;">
-      <h2 style="font-size:18px;color:#1a1a1a;margin:0 0 12px 0;font-weight:600;">Top Pages</h2>
-      <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-        <thead><tr style="background:#fafafa;">
-          <th style="padding:10px 12px;text-align:left;font-size:13px;color:#888;">Page</th>
-          <th style="padding:10px 12px;text-align:right;font-size:13px;color:#888;">Views</th>
-          <th style="padding:10px 12px;text-align:right;font-size:13px;color:#888;">Users</th>
-        </tr></thead>
-        <tbody>
-          ${ga4.topPages.map((p) => `
-          <tr>
-            <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.path}</td>
-            <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;text-align:right;font-weight:600;">${p.views}</td>
-            <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;text-align:right;color:#888;">${p.users}</td>
-          </tr>`).join('')}
-        </tbody>
+          <!-- Today's Agenda -->
+          ${buildAgendaSection(agenda)}
+
+          <!-- Top pages -->
+          ${ga4.topPages?.length ? dSection('Analytics', 'Top Pages', dDataTable(
+            [{ label: 'Page' }, { label: 'Views', right: true }, { label: 'Users', right: true }],
+            ga4.topPages.map((p) => `<tr>
+              <td style="${TD}max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(p.path)}</td>
+              <td style="${TDnum}">${p.views}</td>
+              <td style="${TDnum}color:${DT.soft};font-weight:400;">${p.users}</td>
+            </tr>`).join('')
+          )) : ''}
+
+          <!-- Traffic sources -->
+          ${ga4.trafficSources?.length ? dSection('Analytics', 'Sources', dDataTable(
+            [{ label: 'Source / Medium' }, { label: 'Sessions', right: true }, { label: 'Users', right: true }],
+            ga4.trafficSources.map((s) => `<tr>
+              <td style="${TD}">${escapeHtml(s.source)} <span style="color:${DT.light};">/ ${escapeHtml(s.medium)}</span></td>
+              <td style="${TDnum}">${s.sessions}</td>
+              <td style="${TDnum}color:${DT.soft};font-weight:400;">${s.users}</td>
+            </tr>`).join('')
+          )) : ''}
+
+          <!-- Key events -->
+          ${Object.keys(ga4.events || {}).length ? dSection('Analytics', 'Key Events',
+            `<div>${Object.entries(ga4.events).map(([name, count]) => dChip(escapeHtml(name.replace(/_/g, ' ')), count)).join('')}</div>`
+          ) : ''}
+
+          <!-- Homepage interactions -->
+          ${buildHomepageAnalyticsSection(homepage)}
+
+          <!-- New sign-ups -->
+          ${dSection('Firebase', 'New Sign-ups', dDataTable([{ label: 'Email' }, { label: 'Website' }, { label: 'Time', right: true }], newUsersRows))}
+
+          <!-- Dashboards -->
+          ${dSection('Firebase', 'Dashboards', dDataTable([{ label: 'Website' }, { label: 'Status' }, { label: 'Time', right: true }], recentRunsRows))}
+
+          <!-- Pipeline status -->
+          ${dSection('Firebase', 'Pipeline Status',
+            `<div style="margin-bottom:10px;">${statusBreakdown || `<span style="color:${DT.light};font-family:${DT.fBody};font-size:13px;">No pipeline data</span>`}</div><div style="font-family:${DT.fMono};font-size:11px;color:${DT.soft};letter-spacing:.02em;">Total runs <strong style="color:${DT.ink};">${firebase.totalRuns}</strong> &nbsp;&middot;&nbsp; Clients <strong style="color:${DT.ink};">${firebase.totalClients}</strong></div>`
+          )}
+
+          <!-- Deployments -->
+          ${dSection('Vercel', 'Deployments',
+            `${vercel.errors ? `<p style="font-family:${DT.fBody};color:${DT.accent};font-size:12px;margin:0 0 10px;">Note: ${escapeHtml(vercel.errors)}</p>` : ''}${dDataTable([{ label: 'Status' }, { label: 'Commit' }, { label: 'Time', right: true }], deploymentsRows)}`
+          )}
+
+          ${errorSection}
+
+          <!-- Footer -->
+          <div style="border-top:1.5px solid ${DT.line};padding-top:22px;margin-top:32px;">
+            <div style="font-family:${DT.fMono};font-size:10px;letter-spacing:.08em;color:${DT.light};margin-bottom:10px;">Generated ${new Date(timestamp).toLocaleTimeString('en-US')}</div>
+            <div style="font-family:${DT.fMono};font-size:10px;letter-spacing:.06em;">
+              <a href="https://hitloop.agency/dashboard" style="color:${DT.accent};">Dashboard</a> &nbsp;&middot;&nbsp;
+              <a href="https://vercel.com/baiees-projects/port-2026" style="color:${DT.accent};">Vercel</a> &nbsp;&middot;&nbsp;
+              <a href="https://console.firebase.google.com/project/human-in-the-loop-a1a19" style="color:${DT.accent};">Firebase</a> &nbsp;&middot;&nbsp;
+              <a href="https://analytics.google.com" style="color:${DT.accent};">GA4</a>
+            </div>
+          </div>
+
+        </td></tr>
       </table>
-    </div>
-    ` : ''}
-
-    <!-- Traffic Sources -->
-    ${ga4.trafficSources?.length ? `
-    <div style="margin-bottom:24px;">
-      <h2 style="font-size:18px;color:#1a1a1a;margin:0 0 12px 0;font-weight:600;">Traffic Sources</h2>
-      <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-        <thead><tr style="background:#fafafa;">
-          <th style="padding:10px 12px;text-align:left;font-size:13px;color:#888;">Source / Medium</th>
-          <th style="padding:10px 12px;text-align:right;font-size:13px;color:#888;">Sessions</th>
-          <th style="padding:10px 12px;text-align:right;font-size:13px;color:#888;">Users</th>
-        </tr></thead>
-        <tbody>
-          ${ga4.trafficSources.map((s) => `
-          <tr>
-            <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;">${s.source} / ${s.medium}</td>
-            <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;text-align:right;font-weight:600;">${s.sessions}</td>
-            <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;text-align:right;color:#888;">${s.users}</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>
-    </div>
-    ` : ''}
-
-    <!-- GA4 Custom Events -->
-    ${Object.keys(ga4.events || {}).length ? `
-    <div style="margin-bottom:24px;">
-      <h2 style="font-size:18px;color:#1a1a1a;margin:0 0 12px 0;font-weight:600;">Key Events</h2>
-      <div style="background:#fff;border-radius:8px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-        ${Object.entries(ga4.events).map(([name, count]) => `<span style="display:inline-block;margin:2px 6px 2px 0;padding:4px 10px;background:#f5f5f5;border-radius:4px;font-size:13px;">${name.replace(/_/g, ' ')}: <strong>${count}</strong></span>`).join('')}
-      </div>
-    </div>
-    ` : ''}
-
-    <!-- Homepage Interaction Detail -->
-    ${buildHomepageAnalyticsSection(homepage)}
-
-    <!-- New Sign-ups -->
-    <div style="margin-bottom:24px;">
-      <h2 style="font-size:18px;color:#1a1a1a;margin:0 0 12px 0;font-weight:600;">New Sign-ups</h2>
-      <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-        <thead><tr style="background:#fafafa;">
-          <th style="padding:10px 12px;text-align:left;font-size:13px;color:#888;">Email</th>
-          <th style="padding:10px 12px;text-align:left;font-size:13px;color:#888;">Website</th>
-          <th style="padding:10px 12px;text-align:left;font-size:13px;color:#888;">Time</th>
-        </tr></thead>
-        <tbody>${newUsersRows}</tbody>
-      </table>
-    </div>
-
-    <!-- Dashboards Created -->
-    <div style="margin-bottom:24px;">
-      <h2 style="font-size:18px;color:#1a1a1a;margin:0 0 12px 0;font-weight:600;">Dashboards Created (Last 24h)</h2>
-      <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-        <thead><tr style="background:#fafafa;">
-          <th style="padding:10px 12px;text-align:left;font-size:13px;color:#888;">Website</th>
-          <th style="padding:10px 12px;text-align:left;font-size:13px;color:#888;">Status</th>
-          <th style="padding:10px 12px;text-align:left;font-size:13px;color:#888;">Time</th>
-        </tr></thead>
-        <tbody>${recentRunsRows}</tbody>
-      </table>
-    </div>
-
-    <!-- Pipeline Status Breakdown -->
-    <div style="margin-bottom:24px;">
-      <h2 style="font-size:18px;color:#1a1a1a;margin:0 0 12px 0;font-weight:600;">All-Time Pipeline Status</h2>
-      <div style="background:#fff;border-radius:8px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-        ${statusBreakdown || '<span style="color:#999;">No pipeline data</span>'}
-        <div style="margin-top:8px;font-size:13px;color:#888;">Total runs: <strong>${firebase.totalRuns}</strong> &middot; Total clients: <strong>${firebase.totalClients}</strong></div>
-      </div>
-    </div>
-
-    <!-- Deployments -->
-    <div style="margin-bottom:24px;">
-      <h2 style="font-size:18px;color:#1a1a1a;margin:0 0 12px 0;font-weight:600;">Deployments (Last 24h)</h2>
-      ${vercel.errors ? `<p style="color:#cc7700;font-size:13px;">Note: ${vercel.errors}</p>` : ''}
-      <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-        <thead><tr style="background:#fafafa;">
-          <th style="padding:10px 12px;text-align:left;font-size:13px;color:#888;">Status</th>
-          <th style="padding:10px 12px;text-align:left;font-size:13px;color:#888;">Commit</th>
-          <th style="padding:10px 12px;text-align:left;font-size:13px;color:#888;">Time</th>
-        </tr></thead>
-        <tbody>${deploymentsRows}</tbody>
-      </table>
-    </div>
-
-    ${errorSection}
-
-    <!-- Footer -->
-    <div style="text-align:center;padding:24px 0 0 0;border-top:1px solid #eee;margin-top:32px;">
-      <p style="margin:0;font-size:12px;color:#bbb;">
-        Generated at ${new Date(timestamp).toLocaleTimeString('en-US')} &middot;
-        <a href="https://hitloop.agency/dashboard" style="color:#888;">Open Dashboard</a> &middot;
-        <a href="https://vercel.com/baiees-projects/port-2026" style="color:#888;">Vercel</a> &middot;
-        <a href="https://console.firebase.google.com/project/human-in-the-loop-a1a19" style="color:#888;">Firebase</a> &middot;
-        <a href="https://analytics.google.com" style="color:#888;">GA4</a>
-      </p>
-    </div>
-
-  </div>
+    </td></tr>
+  </table>
 </body>
 </html>`;
 }
@@ -956,8 +984,22 @@ async function sendEmail(subject, html) {
 // ── Route handler ───────────────────────────────────────────────────────────
 
 export async function GET(request) {
-  // Auth: accept WORKER_SECRET or Vercel Cron secret
-  if (!hasValidSecret(request) && !hasValidCronSecret(request)) {
+  const url = new URL(request.url);
+  const isPreview = url.searchParams.get('preview') === '1';
+  const isSendNow = url.searchParams.get('send') === '1';
+
+  // Auth: cron/worker secret for the scheduled run; admin token for dashboard
+  // preview / send-now actions.
+  let adminOk = false;
+  if (isPreview || isSendNow) {
+    try {
+      await verifyAdminRequest(buildAuthRequestShim(request));
+      adminOk = true;
+    } catch {
+      adminOk = false;
+    }
+  }
+  if (!hasValidSecret(request) && !hasValidCronSecret(request) && !adminOk) {
     return json({ error: 'Unauthorized' }, 401);
   }
 
@@ -977,10 +1019,44 @@ export async function GET(request) {
       day: 'numeric',
     });
 
+    // LLM executive summary — additive and flag-guarded. Any failure here must
+    // not block the digest from sending, so it is wrapped in try/catch.
+    let summary = null;
+    try {
+      const fullDateStr = new Date(timestamp).toLocaleDateString('en-US', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+      });
+      const clientId = await digestConfig.resolveDigestClientId();
+      const cfg = await digestConfig.getDigestConfig(clientId);
+      if (cfg.summaryEnabled) {
+        const { text: docsText } = await digestConfig.getRecentDocsText({
+          clientId, count: cfg.recentDocsCount, maxChars: cfg.maxDocChars,
+        });
+        summary = await briefSummary.generateBriefSummary({
+          dateStr: fullDateStr, agenda, ga4, firebase, homepage, docsText, config: cfg,
+        });
+      }
+    } catch (err) {
+      logWarn('daily_digest_summary_failed', { error: err.message });
+    }
+
     const sessionStr = ga4.overview ? `, ${ga4.overview.sessions} session${ga4.overview.sessions !== 1 ? 's' : ''}` : '';
     const subject = `HitLoop Daily — ${firebase.newUsers} sign-up${firebase.newUsers !== 1 ? 's' : ''}, ${firebase.recentRuns} dashboard${firebase.recentRuns !== 1 ? 's' : ''}${sessionStr} · ${dateStr}`;
 
-    const html = buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp);
+    const html = buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary);
+
+    // Preview mode (admin dashboard): build everything, send nothing.
+    if (isPreview) {
+      return json({
+        ok: true,
+        preview: true,
+        timestamp: new Date(timestamp).toISOString(),
+        paragraph: summary?.paragraph || '',
+        summary,
+        html,
+      });
+    }
+
     const emailResult = await sendEmail(subject, html);
     logInfo('daily_digest_complete', {
       timestamp: new Date(timestamp).toISOString(),
@@ -992,6 +1068,7 @@ export async function GET(request) {
     return json({
       ok: true,
       timestamp: new Date(timestamp).toISOString(),
+      summary: summary?.paragraph || null,
       metrics: { firebase, vercel: { totalDeployments: vercel.totalDeployments, errorCount: vercel.errorLogs?.length || 0 }, ga4: { overview: ga4.overview, topPagesCount: ga4.topPages?.length, sourcesCount: ga4.trafficSources?.length, events: ga4.events, error: ga4.error || null }, agenda: { eventCount: agenda.events?.length || 0, error: agenda.error || null }, homepage: { totalEvents: homepage.totalEvents, byInteractionType: homepage.byInteractionType, topTargets: homepage.topTargets, error: homepage.error || null } },
       email: emailResult,
     });

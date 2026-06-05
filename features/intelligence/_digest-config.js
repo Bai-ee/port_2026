@@ -1,0 +1,130 @@
+'use strict';
+
+// _digest-config.js — persistence + helpers for the daily-digest summary feature.
+// Stores per-client config in Firestore `digest_config/{clientId}` and reads
+// recent knowledge-base document text to feed the LLM summary. CJS so it can be
+// required from both the ESM route and the admin API route via createRequire.
+
+const fb = require('../../api/_lib/firebase-admin.cjs');
+
+const DEFAULTS = {
+  summaryEnabled: true,
+  tone: 'concise, professional, direct',
+  recentDocsCount: 5,
+  maxDocChars: 8000,
+  extraInstructions: '',
+};
+
+function clampInt(value, min, max, fallback) {
+  const n = parseInt(value, 10);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
+}
+
+function configDocRef(clientId) {
+  return fb.adminDb.collection('digest_config').doc(clientId);
+}
+
+async function getDigestConfig(clientId) {
+  if (!clientId) return { ...DEFAULTS };
+  const snap = await configDocRef(clientId).get();
+  if (!snap.exists) return { ...DEFAULTS };
+  const data = snap.data() || {};
+  return {
+    summaryEnabled: data.summaryEnabled !== false,
+    tone: data.tone || DEFAULTS.tone,
+    recentDocsCount: clampInt(data.recentDocsCount, 1, 20, DEFAULTS.recentDocsCount),
+    maxDocChars: clampInt(data.maxDocChars, 500, 40000, DEFAULTS.maxDocChars),
+    extraInstructions: typeof data.extraInstructions === 'string' ? data.extraInstructions : '',
+    updatedAt: data.updatedAt?.toDate?.()?.toISOString?.() || null,
+  };
+}
+
+async function saveDigestConfig(clientId, patch = {}) {
+  if (!clientId) throw new Error('saveDigestConfig: clientId is required');
+  const next = {};
+  if (typeof patch.summaryEnabled === 'boolean') next.summaryEnabled = patch.summaryEnabled;
+  if (typeof patch.tone === 'string') next.tone = patch.tone.slice(0, 200);
+  if (patch.recentDocsCount != null) next.recentDocsCount = clampInt(patch.recentDocsCount, 1, 20, DEFAULTS.recentDocsCount);
+  if (patch.maxDocChars != null) next.maxDocChars = clampInt(patch.maxDocChars, 500, 40000, DEFAULTS.maxDocChars);
+  if (typeof patch.extraInstructions === 'string') next.extraInstructions = patch.extraInstructions.slice(0, 2000);
+  next.updatedAt = fb.FieldValue.serverTimestamp();
+  await configDocRef(clientId).set(next, { merge: true });
+  return getDigestConfig(clientId);
+}
+
+/**
+ * Resolve the clientId whose knowledge base feeds the digest. Prefers the
+ * DIGEST_CLIENT_ID env var; otherwise looks up the client owned by DIGEST_EMAIL.
+ */
+async function resolveDigestClientId() {
+  const explicit = process.env.DIGEST_CLIENT_ID;
+  if (explicit) return explicit;
+  const email = String(process.env.DIGEST_EMAIL || 'bryanballi@gmail.com').toLowerCase();
+  try {
+    const snap = await fb.adminDb.collection('clients').where('ownerEmail', '==', email).limit(1).get();
+    if (!snap.empty) {
+      const doc = snap.docs[0];
+      return doc.data()?.clientId || doc.id;
+    }
+  } catch {
+    // ignore — caller treats null as "no docs"
+  }
+  return null;
+}
+
+/**
+ * Pull text from the most recent ready knowledge-base items for a client.
+ * Caps total characters; returns the joined text plus a docs manifest.
+ * @returns {Promise<{ text: string, docs: Array<{id,title,chars}> }>}
+ */
+async function getRecentDocsText({ clientId, count = 5, maxChars = 8000 } = {}) {
+  if (!clientId) return { text: '', docs: [] };
+  const kbRoot = fb.adminDb.collection('knowledge_base').doc(clientId);
+  const itemsSnap = await kbRoot
+    .collection('items')
+    .orderBy('createdAt', 'desc')
+    .limit(clampInt(count, 1, 20, 5))
+    .get();
+
+  const docs = [];
+  let text = '';
+
+  for (const itemDoc of itemsSnap.docs) {
+    const item = itemDoc.data() || {};
+    if (item.status && item.status !== 'ready') continue;
+
+    const chunksSnap = await kbRoot
+      .collection('chunks')
+      .where('itemId', '==', itemDoc.id)
+      .limit(50)
+      .get();
+
+    const body = chunksSnap.docs
+      .map((d) => d.data() || {})
+      .sort((a, b) => (a.position || 0) - (b.position || 0))
+      .map((d) => d.text || '')
+      .join('\n')
+      .trim();
+
+    const title = item.title || item.fileName || 'Untitled';
+    const entry = `\n### ${title}\n${body}\n`;
+    docs.push({ id: itemDoc.id, title, chars: body.length });
+
+    if (text.length + entry.length > maxChars) {
+      text += entry.slice(0, Math.max(0, maxChars - text.length));
+      break;
+    }
+    text += entry;
+  }
+
+  return { text: text.trim(), docs };
+}
+
+module.exports = {
+  DEFAULTS,
+  getDigestConfig,
+  saveDigestConfig,
+  resolveDigestClientId,
+  getRecentDocsText,
+};
