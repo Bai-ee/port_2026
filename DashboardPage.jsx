@@ -28,6 +28,10 @@ import {
   Globe,
   Images,
   Radar,
+  Eye,
+  Ear,
+  Speech,
+  Trash2,
   X as XIcon,
 } from 'lucide-react';
 import { BrainIcon } from './components/ui/brain';
@@ -137,24 +141,57 @@ const MARKETING_BRIEF_SOURCE_PLATFORMS = [
   { key: 'tiktok', label: 'TikTok', status: 'available', description: 'Short-form trend signals when social search is configured.' },
   { key: 'hackernews', label: 'Hacker News', status: 'available', description: 'Tech/startup discussion for relevant clients.' },
 ];
-const DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS = ['web', 'x', 'reddit', 'hackernews', 'instagram'];
+// Web + X are the free defaults; Reddit is unlocked and default-on while we
+// troubleshoot its pipeline. Everything else stays locked behind an upgrade.
+const UNLOCKED_SOURCE_PLATFORMS = ['web', 'x', 'reddit'];
+const DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS = ['web', 'x', 'reddit'];
+const SEARCH_PLAN_CUSTOM_MAX = 8;
+const BRAND_KEYWORD_RECOMMENDED_MIN = 2;
+const BRAND_KEYWORD_RECOMMENDED_MAX = 6;
+const CATEGORY_TERM_RECOMMENDED_MIN = 3;
+const CATEGORY_TERM_RECOMMENDED_MAX = 6;
+const CATEGORY_TERMS_USED_IN_GENERATED_SEARCH = 4;
 
-// Full catalog of searchable sources shown on the Source Platforms card.
-// All locked behind an upgrade for now — Web + X drive the brief today; the
-// rest unlock when the social/directory search layer ships.
-const SCOUT_PLATFORM_CATALOG = [
-  {
-    section: 'Product & Startup Directories',
-    items: ['Product Hunt', 'Betalist', 'Uneed', 'TrustMRR', 'Fazier', 'OpenAlternative', 'Microlaunch', 'Peerlist', 'TinyLaunch', 'SaaSHub', 'Indie Hackers', 'Hacker News', 'Toolfolio', 'Tiny Startup', 'SideProjectors', 'AlternativeTo', 'LaunchIgniter', 'PeerPush', 'SaaS Genius', "There's an AI for that", 'DevHunt'],
-  },
-  {
-    section: 'Social Media Signals',
-    items: ['Instagram', 'LinkedIn', 'Facebook', 'TikTok', 'YouTube', 'Pinterest', 'Threads', 'Bluesky', 'Mastodon', 'Discord', 'Twitch', 'Snapchat', 'Reddit'],
-  },
-  {
-    section: 'External Signals',
-    items: ['Weather / local', 'Reviews', 'Yelp', 'Google Business Profile', 'Google Trends'],
-  },
+// Web Search + Platforms card — Web is the free, toggleable default; the launch
+// and startup directories are locked until their search layer ships.
+const WEB_SEARCH_SOURCES = [
+  { key: 'web',              label: 'Web / News',            locked: false, description: 'General web search, news, launches, blogs, and indexed coverage.' },
+  { key: 'producthunt',      label: 'Product Hunt',          locked: true },
+  { key: 'betalist',         label: 'Betalist',              locked: true },
+  { key: 'uneed',            label: 'Uneed',                 locked: true },
+  { key: 'trustmrr',         label: 'TrustMRR',              locked: true },
+  { key: 'fazier',           label: 'Fazier',                locked: true },
+  { key: 'openalternative',  label: 'OpenAlternative',       locked: true },
+  { key: 'microlaunch',      label: 'Microlaunch',           locked: true },
+  { key: 'peerlist',         label: 'Peerlist',              locked: true },
+  { key: 'tinylaunch',       label: 'TinyLaunch',            locked: true },
+  { key: 'saashub',          label: 'SaaSHub',               locked: true },
+  { key: 'indiehackers',     label: 'Indie Hackers',         locked: true },
+  { key: 'hackernews',       label: 'Hacker News',           locked: true },
+  { key: 'toolfolio',        label: 'Toolfolio',             locked: true },
+  { key: 'tinystartup',      label: 'Tiny Startup',          locked: true },
+  { key: 'sideprojectors',   label: 'SideProjectors',        locked: true },
+  { key: 'alternativeto',    label: 'AlternativeTo',         locked: true },
+  { key: 'launchigniter',    label: 'LaunchIgniter',         locked: true },
+  { key: 'peerpush',         label: 'PeerPush',              locked: true },
+  { key: 'saasgenius',       label: 'SaaS Genius',           locked: true },
+  { key: 'theresanaiforthat', label: "There's an AI for that", locked: true },
+  { key: 'devhunt',          label: 'DevHunt',               locked: true },
+];
+
+// Social Media Signals (Media) card — X and Reddit feed the brief today; the
+// rest are locked until the social search layer ships.
+const SOCIAL_SIGNAL_SOURCES = [
+  { key: 'x',         label: 'X / Twitter', locked: false, description: 'KOL commentary, reply windows, and fast-moving social narratives.' },
+  { key: 'reddit',    label: 'Reddit',      locked: false, description: 'Community threads, recommendation requests, pain points, and buyer language.' },
+  { key: 'instagram', label: 'Instagram',   locked: true,  description: 'Creator and brand content via social search.' },
+  { key: 'tiktok',    label: 'TikTok',      locked: true,  description: 'Short-form trend signals.' },
+  { key: 'youtube',   label: 'YouTube',     locked: true,  description: 'Video commentary and creator discussions.' },
+  { key: 'linkedin',  label: 'LinkedIn',    locked: true,  description: 'Professional and B2B conversation signals.' },
+  { key: 'facebook',  label: 'Facebook',    locked: true,  description: 'Group and page discussion signals.' },
+  { key: 'threads',   label: 'Threads',     locked: true,  description: 'Emerging social narratives.' },
+  { key: 'bluesky',   label: 'Bluesky',     locked: true,  description: 'Emerging social narratives.' },
+  { key: 'pinterest', label: 'Pinterest',   locked: true,  description: 'Visual discovery and intent signals.' },
 ];
 
 function classifyMarketingBriefPlatform(url, explicitPlatform) {
@@ -235,14 +272,137 @@ function deriveMarketingBriefPerPlatformResults(agentData, selectedPlatforms) {
   return out;
 }
 
+function splitMarketingBriefTerms(value) {
+  const raw = Array.isArray(value) ? value : String(value || '').split(/[\n,]+/);
+  return raw
+    .map((item) => String(item || '').trim())
+    .filter(Boolean);
+}
+
+function quoteBrandSearchTerm(term) {
+  const clean = String(term || '').trim();
+  if (!clean) return '';
+  if (/^".*"$/.test(clean) || /\b(OR|AND|site:)\b/i.test(clean)) return clean;
+  return /\s/.test(clean) ? `"${clean}"` : clean;
+}
+
+function getClientHostname(client) {
+  try {
+    const raw = client?.websiteUrl || client?.website || '';
+    return raw ? new URL(raw).hostname.replace(/^www\./, '') : '';
+  } catch {
+    return '';
+  }
+}
+
+function buildGeneratedScoutSearchRows(config, client) {
+  const brandName = String(config?.brandName || client?.companyName || client?.name || 'the brand').trim();
+  const hostname = getClientHostname(client);
+  const brandTerms = splitMarketingBriefTerms(config?.brandKeywords).length
+    ? splitMarketingBriefTerms(config?.brandKeywords).map(quoteBrandSearchTerm)
+    : [brandName ? quoteBrandSearchTerm(brandName) : '', hostname ? quoteBrandSearchTerm(hostname) : ''];
+  const brandQuery = [...brandTerms, hostname ? `site:${hostname}` : null].filter(Boolean).join(' OR ') || quoteBrandSearchTerm(brandName);
+  const categoryTerms = splitMarketingBriefTerms(config?.categoryTerms);
+  const categorySubject = categoryTerms.slice(0, CATEGORY_TERMS_USED_IN_GENERATED_SEARCH).join(' OR ');
+  const categoryQuery = categorySubject || `${brandName} industry news OR market trends`;
+  const opportunitySubject = categoryTerms[0] || brandName;
+
+  return [
+    {
+      label: 'BRAND',
+      query: brandQuery,
+      goal: 'Find direct brand mentions, official updates, web coverage, and discussion hooks.',
+    },
+    {
+      label: 'CATEGORY',
+      query: categoryQuery,
+      goal: `Track the top ${Math.min(CATEGORY_TERMS_USED_IN_GENERATED_SEARCH, Math.max(categoryTerms.length, 1))} category themes for market movement and narratives.`,
+    },
+    {
+      label: 'OPPORTUNITIES',
+      query: `${opportunitySubject} recommendations OR alternatives OR problems OR launches`,
+      goal: 'Find active conversations where the brand can contribute credibly.',
+    },
+  ];
+}
+
+function buildRecommendedCustomSearchRows(config, client) {
+  const generated = buildGeneratedScoutSearchRows(config, client);
+  const brandName = String(config?.brandName || client?.companyName || client?.name || 'the brand').trim();
+  const categoryTerms = splitMarketingBriefTerms(config?.categoryTerms);
+  const categorySubject = categoryTerms.slice(0, 3).join(' OR ') || `${brandName} industry`;
+  const competitors = splitMarketingBriefTerms(config?.competitors).slice(0, 4);
+  const competitorQuery = competitors.length
+    ? `${competitors.join(' OR ')} launch OR pricing OR reviews OR complaints`
+    : `${brandName} competitors OR alternatives OR reviews`;
+
+  return [
+    generated[0],
+    {
+      label: 'CATEGORY MOMENTUM',
+      query: `${categorySubject} news OR trends OR discussion`,
+      goal: 'Find current market movement, buyer language, and timely narratives.',
+    },
+    {
+      label: 'COMPETITORS',
+      query: competitorQuery,
+      goal: 'Find competitor launches, sentiment shifts, and comparison conversations.',
+    },
+    {
+      label: 'PAIN POINTS',
+      query: `${categorySubject} problem OR complaint OR recommendation OR how to`,
+      goal: 'Find audience pain, objections, and practical content opportunities.',
+    },
+    {
+      label: 'SOCIAL WINDOWS',
+      query: `${brandName} Twitter OR X OR Reddit OR community OR influencer`,
+      goal: 'Find reply windows, KOL commentary, and community threads worth entering.',
+    },
+  ].slice(0, SEARCH_PLAN_CUSTOM_MAX);
+}
+
+function getMarketingBriefSearchStats(config, client) {
+  const brandKeywords = splitMarketingBriefTerms(config?.brandKeywords);
+  const categoryTerms = splitMarketingBriefTerms(config?.categoryTerms);
+  const customSearches = Array.isArray(config?.searches)
+    ? config.searches.filter((row) => String(row?.query || '').trim())
+    : [];
+  const kols = splitMarketingBriefTerms(config?.kols);
+  const mode = config?.kolSearchMode === 'combined' ? 'combined' : 'per-handle';
+  const watchlistSearches = mode === 'combined' ? (kols.length ? 1 : 0) : kols.length;
+  const platforms = Array.isArray(config?.sourcePlatforms) && config.sourcePlatforms.length
+    ? config.sourcePlatforms
+    : DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS;
+  const platformSearches = platforms.filter((key) => key !== 'web').length;
+  const generatedRows = buildGeneratedScoutSearchRows(config, client);
+  const baseRows = customSearches.length ? customSearches.length : generatedRows.length;
+  const totalSearches = baseRows + watchlistSearches + platformSearches;
+  return {
+    brandKeywords,
+    categoryTerms,
+    customSearches,
+    generatedRows,
+    generatedMode: customSearches.length === 0,
+    baseRows,
+    watchlistSearches,
+    platformSearches,
+    totalSearches,
+  };
+}
+
 function buildDefaultMarketingBriefConfig(client, dashboardState) {
   const companyName = client?.companyName || dashboardState?.clientName || 'the brand';
-  const websiteUrl = client?.websiteUrl || '';
-  let hostname = '';
-  try { hostname = websiteUrl ? new URL(websiteUrl).hostname.replace(/^www\./, '') : ''; } catch { hostname = ''; }
-  const brandQuery = [`"${companyName}"`, hostname ? `"${hostname}"` : null, hostname ? `site:${hostname}` : null]
-    .filter(Boolean)
-    .join(' OR ');
+  // Inherit Brand & Keywords from the site-audit-generated scoutConfig so the
+  // card arrives prefilled — the user confirms/enhances rather than starts blank.
+  const auditScoutConfig = dashboardState?.scoutConfig || null;
+  const stripQuotes = (s) => String(s || '').replace(/^["']|["']$/g, '').trim();
+  const seededBrandKeywords = Array.isArray(auditScoutConfig?.brandKeywords)
+    ? auditScoutConfig.brandKeywords.map(stripQuotes).filter(Boolean)
+    : [];
+  const seededCategoryTerms = Array.isArray(auditScoutConfig?.categoryTerms)
+    ? auditScoutConfig.categoryTerms.map(stripQuotes).filter(Boolean)
+    : [];
+  const seededBrandName = auditScoutConfig?.clientName || companyName;
   return {
     sourceFocus: `Find timely market signals, founder-relevant news, KOL commentary, and social conversations ${companyName} can credibly participate in. Prioritize X/Twitter-ready angles.`,
     scoutInstructions: [
@@ -255,6 +415,9 @@ function buildDefaultMarketingBriefConfig(client, dashboardState) {
     sourcePlatforms: DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS,
     kolSearchMode: 'per-handle',
     weather: { enabled: false, zip: '' },
+    brandName: seededBrandName,
+    brandKeywords: seededBrandKeywords.join('\n'),
+    categoryTerms: seededCategoryTerms.join('\n'),
     kols: '',
     competitors: '',
     agentDataTemplate: `{
@@ -269,13 +432,7 @@ function buildDefaultMarketingBriefConfig(client, dashboardState) {
     "searchedFor": ["trigger 1","trigger 2"]
   }
 }`,
-    searches: [
-      { label: 'BRAND', query: brandQuery || `"${companyName}"`, goal: 'Find direct brand mentions, web coverage, and conversation hooks.' },
-      { label: 'COMPETITORS', query: `${companyName} competitors OR alternatives OR launches`, goal: 'Find competitor launches, sentiment shifts, and adjacent attention pockets.' },
-      { label: 'CATEGORY', query: `${companyName} industry news OR market trends`, goal: 'Capture broader category movement and external narratives the brand can react to.' },
-      { label: 'KOLS + SOCIAL', query: `${companyName} Twitter OR X OR influencers OR KOLs`, goal: 'Find creator commentary, viral posts, and reply windows.' },
-      { label: 'VIRAL WINDOWS', query: `best ${companyName} alternatives OR problems OR recommendations`, goal: 'Find conversations where the brand can contribute credibly.' },
-    ],
+    searches: [],
     scribeTone: `Tone: sharp, timely, founder-ready, specific to ${companyName}.\nPrioritize concrete market signals, KOL windows, and X/Twitter-ready angles. Never use generic hype language, forced urgency, or empty superlatives.`,
     scribeHardConstraints: [
       'Every piece connects to Scout\'s priority action',
@@ -1015,11 +1172,11 @@ const CUSTOM_DETAIL_CARD_IDS = new Set([
   // Conversation Intake + Scout Config slice cards — single top panel only,
   // no generic REPORT/DATA container at the bottom.
   'conversation-intake',
+  'brand-keywords',
   'scout-focus',
   'watchlist',
-  'competitors',
-  'search-plan',
-  'source-platforms',
+  'platform-search',
+  'social-signals',
   'brief-preview',
   'events',
 ]);
@@ -1854,6 +2011,53 @@ function buildTerminalLines(run, dashboardState, latestRunStatus, client) {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+// Per-bucket workflow steps. Each step's `id` is the first card in its group;
+// the segmented control above the grid lets users jump to that anchor.
+const CAP_STEPS = {
+  growth: [
+    { id: 'signals', label: "WHAT'S GOING ON IN THE MARKET", Icon: Eye },
+    { id: 'brand-keywords', label: 'WHO ARE WE LISTENING TO', Icon: Ear },
+    { id: 'brief-preview', label: "WHAT'S OUR STRATEGY", Icon: Speech },
+  ],
+  knowledge: [
+    { id: 'survey-status', label: 'ONBOARD YOUR COMPANY', Icon: ClipboardList },
+    { id: 'audit-summary', label: 'AUDIT YOUR KNOWLEDGE', Icon: Database },
+  ],
+  content: [
+    { id: 'visual-dna', label: 'INTAKE YOUR REFERENCES', Icon: Images },
+    { id: 'brand-voice', label: 'DEFINE YOUR BRAND SYSTEM', Icon: Settings2 },
+    { id: 'client-brief', label: 'PRODUCE YOUR ASSETS', Icon: Send },
+  ],
+  website: [
+    { id: 'seo-performance', label: 'AUDIT YOUR EXISTING SITE', Icon: Search },
+    { id: 'client-mockup', label: 'SHIP YOUR NEW SITE', Icon: LaptopMinimalCheck },
+  ],
+  social: [
+    { id: 'platform-coverage', label: 'REVIEW YOUR CREATIVE', Icon: Images },
+    { id: 'social-media-posting', label: 'SCHEDULE YOUR POSTS', Icon: CalendarDays },
+  ],
+  services: [
+    { id: 'contact', label: 'BOOK A CONSULT', Icon: MessageSquareMore },
+    { id: 'run-my-marketing', label: 'START A RETAINER', Icon: BriefcaseBusiness },
+    { id: 'build-a-page', label: 'ORDER PROJECT WORK', Icon: Workflow },
+  ],
+};
+
+// Per-bucket accent color — mirrors the nav item icon colors so step-tab icons
+// read as part of the same system.
+const CAP_BUCKET_COLOR = {
+  brief: '#2a2420',
+  knowledge: '#3b82f6',
+  growth: '#10b981',
+  content: '#14b8a6',
+  social: '#6366f1',
+  website: '#0ea5e9',
+  automation: '#6366f1',
+  services: '#ec4899',
+  leadgen: '#ff3b30',
+  admin: '#a855f7',
+};
+
 const DashboardPage = () => {
   const { user, userProfile, signOutUser, isAdmin } = useAuth();
   const [theme, setTheme] = useState('light');
@@ -1863,11 +2067,20 @@ const DashboardPage = () => {
   const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
   const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
   const [deleteAccountError, setDeleteAccountError] = useState(null);
+  const [pendingDeleteClient, setPendingDeleteClient] = useState(null);
+  const [deleteClientLoading, setDeleteClientLoading] = useState(false);
+  const [deleteClientError, setDeleteClientError] = useState('');
   const [showClientEditModal, setShowClientEditModal] = useState(false);
   const [clientNameInput, setClientNameInput] = useState('');
   const [clientEditLoading, setClientEditLoading] = useState(false);
   const [clientEditError, setClientEditError] = useState(null);
   const [activeTileModal, setActiveTileModal] = useState(null);
+  const [brandKeywordsTab, setBrandKeywordsTab] = useState('brand');
+  const [watchlistTab, setWatchlistTab] = useState('watchlist');
+  useEffect(() => {
+    if (activeTileModal?.cardId === 'brand-keywords') setBrandKeywordsTab('brand');
+    if (activeTileModal?.cardId === 'watchlist') setWatchlistTab('watchlist');
+  }, [activeTileModal?.cardId]);
   const [briefFullScreen, setBriefFullScreen] = useState(false);
   const [auditFullScreen, setAuditFullScreen] = useState(false);
   const [modalTab, setModalTab] = useState('solutions');
@@ -2040,8 +2253,30 @@ const DashboardPage = () => {
 
   // Default to Data Visualization immediately so a slow/unavailable bootstrap
   // cannot leave the nav and card shell hidden.
-  const [activeCapabilityFilter, setActiveCapabilityFilter] = useState('onboarding');
+  const [activeCapabilityFilter, setActiveCapabilityFilter] = useState('growth'); // default bucket: Marketing Director
+  const [activeStepIdx, setActiveStepIdx] = useState(0);
+  const [capView, setCapView] = useState('list'); // 'grid' | 'list' — default to table/line-items view
+  const [expandedListCards, setExpandedListCards] = useState(new Set());
+  const toggleListCard = useCallback((id) => {
+    setExpandedListCards((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
   const [expandedMobileCards, setExpandedMobileCards] = useState(new Set());
+  // Reset step on bucket change; jump to a step's anchor card on click.
+  useEffect(() => { setActiveStepIdx(0); }, [activeCapabilityFilter]);
+  const handleCapStepClick = useCallback((idx) => {
+    setActiveStepIdx(idx);
+    const steps = CAP_STEPS[activeCapabilityFilter];
+    const anchorId = steps?.[idx]?.id;
+    if (!anchorId) return;
+    const el = typeof document !== 'undefined' ? document.getElementById('tile-' + anchorId) : null;
+    if (el && typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [activeCapabilityFilter]);
   const [chatDraft, setChatDraft] = useState('');
   const [modalChatMode, setModalChatMode] = useState('ai');
   const toggleMobileCard = (id) => setExpandedMobileCards((prev) => {
@@ -2178,9 +2413,12 @@ const DashboardPage = () => {
       sourcePlatforms: Array.isArray(next.sourcePlatforms) && next.sourcePlatforms.length > 0
         ? next.sourcePlatforms
         : fallback.sourcePlatforms,
+      brandName: typeof next.brandName === 'string' && next.brandName.trim() ? next.brandName : fallback.brandName,
+      brandKeywords: joinConfigList(next.brandKeywords) || fallback.brandKeywords,
+      categoryTerms: joinConfigList(next.categoryTerms) || fallback.categoryTerms,
       kols: joinConfigList(next.kols),
       competitors: joinConfigList(next.competitors),
-      searches: Array.isArray(next.searches) && next.searches.length > 0 ? next.searches : fallback.searches,
+      searches: Array.isArray(next.searches) ? next.searches : fallback.searches,
       scribeTone: typeof next.scribeTone === 'string' && next.scribeTone.trim() ? next.scribeTone : fallback.scribeTone,
       scribeHardConstraints: joinConfigList(next.scribeHardConstraints) || fallback.scribeHardConstraints,
       guardianReviewerContext: typeof next.guardianReviewerContext === 'string' && next.guardianReviewerContext.trim()
@@ -2234,10 +2472,18 @@ const DashboardPage = () => {
     setMarketingBriefError('');
     try {
       const token = await user.getIdToken();
+      // Persist only unlocked platforms so legacy/locked selections can't feed
+      // the pipeline. Fall back to defaults if filtering empties the list.
+      const filteredPlatforms = (marketingBriefConfig.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS)
+        .filter((k) => UNLOCKED_SOURCE_PLATFORMS.includes(k));
+      const payload = {
+        ...marketingBriefConfig,
+        sourcePlatforms: filteredPlatforms.length ? filteredPlatforms : DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS,
+      };
       const res = await fetch(apiPath('/api/dashboard/marketing-brief/config'), {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(marketingBriefConfig),
+        body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Could not save Scout config.');
@@ -2681,7 +2927,19 @@ const DashboardPage = () => {
     if (!user) return;
     fetchDashboardBootstrap(user, impersonateId)
       .then(applyBootstrapResponse)
-      .catch((err) => { if (!cancelledRef.current) setBootstrapError(err instanceof Error ? err.message : 'Could not load dashboard data.'); });
+      .catch((err) => {
+        if (cancelledRef.current) return;
+        const msg = err instanceof Error ? err.message : '';
+        // Stale impersonateId from a previous admin session causes a 403 on fresh
+        // signups. Clear it and retry as the signed-in user's own dashboard.
+        if (msg.includes('impersonation') && impersonateId) {
+          setImpersonateId(null);
+          writeImpersonateClientId(null);
+          fetchDashboardBootstrap(user, null).then(applyBootstrapResponse).catch(() => {});
+          return;
+        }
+        setBootstrapError(msg || 'Could not load dashboard data.');
+      });
   }, [user, impersonateId, applyBootstrapResponse]);
 
   const runMarketingBrief = useCallback(async () => {
@@ -2774,18 +3032,58 @@ const DashboardPage = () => {
   const addMarketingBriefSearch = useCallback(() => {
     setMarketingBriefConfig((prev) => ({
       ...(prev || {}),
-      searches: [...(prev?.searches || []), { label: 'NEW SEARCH', query: '', goal: '' }],
+      searches: (prev?.searches || []).length >= SEARCH_PLAN_CUSTOM_MAX
+        ? (prev?.searches || [])
+        : [...(prev?.searches || []), { label: `CUSTOM ${(prev?.searches || []).length + 1}`, query: '', goal: '' }],
     }));
   }, []);
 
   const removeMarketingBriefSearch = useCallback((index) => {
     setMarketingBriefConfig((prev) => {
       const searches = (prev?.searches || []).filter((_, i) => i !== index);
-      return { ...(prev || {}), searches: searches.length ? searches : [{ label: 'BRAND', query: '', goal: '' }] };
+      return { ...(prev || {}), searches };
     });
   }, []);
 
+  const clearMarketingBriefSearches = useCallback(() => {
+    setMarketingBriefConfig((prev) => ({ ...(prev || {}), searches: [] }));
+  }, []);
+
+  // Newline-joined list fields (brandKeywords, categoryTerms) edited as discrete
+  // one-value-per-input rows. Storage stays a string so save/backend are unchanged.
+  const updateMarketingBriefListItem = useCallback((field, index, value) => {
+    setMarketingBriefConfig((prev) => {
+      const arr = String(prev?.[field] || '').split('\n');
+      arr[index] = value.replace(/\n/g, ' ');
+      return { ...(prev || {}), [field]: arr.join('\n') };
+    });
+  }, []);
+
+  const addMarketingBriefListItem = useCallback((field, max = 12) => {
+    setMarketingBriefConfig((prev) => {
+      const current = String(prev?.[field] || '');
+      const arr = current === '' ? [] : current.split('\n');
+      if (arr.filter((s) => s.trim()).length >= max) return prev;
+      return { ...(prev || {}), [field]: [...arr, ''].join('\n') };
+    });
+  }, []);
+
+  const removeMarketingBriefListItem = useCallback((field, index) => {
+    setMarketingBriefConfig((prev) => {
+      const arr = String(prev?.[field] || '').split('\n').filter((_, i) => i !== index);
+      return { ...(prev || {}), [field]: (arr.length ? arr : ['']).join('\n') };
+    });
+  }, []);
+
+  const seedRecommendedMarketingBriefSearches = useCallback(() => {
+    setMarketingBriefConfig((prev) => ({
+      ...(prev || {}),
+      searches: buildRecommendedCustomSearchRows(prev, client),
+    }));
+  }, [client]);
+
   const toggleMarketingBriefSourcePlatform = useCallback((key) => {
+    if (!UNLOCKED_SOURCE_PLATFORMS.includes(key)) return; // locked platforms can't be toggled
     setMarketingBriefConfig((prev) => {
       const current = Array.isArray(prev?.sourcePlatforms) && prev.sourcePlatforms.length > 0
         ? prev.sourcePlatforms
@@ -2799,6 +3097,184 @@ const DashboardPage = () => {
       };
     });
   }, []);
+
+  // Auto-save platform toggles (Save buttons were removed from the cards). Skips
+  // the initial load and only persists when the selected platforms actually
+  // change; saveMarketingBriefConfig re-hydrates with the same set, so the ref
+  // guard prevents a save loop.
+  const lastSavedPlatformsRef = useRef(null);
+  useEffect(() => {
+    if (!marketingBriefConfig) return;
+    const key = JSON.stringify(marketingBriefConfig.sourcePlatforms || []);
+    if (lastSavedPlatformsRef.current === null) { lastSavedPlatformsRef.current = key; return; }
+    if (lastSavedPlatformsRef.current === key) return;
+    lastSavedPlatformsRef.current = key;
+    saveMarketingBriefConfig();
+  }, [marketingBriefConfig, saveMarketingBriefConfig]);
+
+  // Per-source test search (web / x / reddit) — runs one platform's live search
+  // without the full brief. Keyed by platform: { loading, items, count, costUsd, error }.
+  const [scoutTestState, setScoutTestState] = useState({});
+  const [scoutTestExpanded, setScoutTestExpanded] = useState({});
+
+  const runScoutTestForPlatform = useCallback(async (platform) => {
+    if (!user) return;
+    setScoutTestExpanded((s) => ({ ...s, [platform]: true }));
+    setScoutTestState((s) => ({ ...s, [platform]: { ...(s[platform] || {}), loading: true, error: '' } }));
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(apiPath('/api/dashboard/scout-test'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Test search failed.');
+      setScoutTestState((s) => ({
+        ...s,
+        [platform]: { loading: false, items: data.items || [], count: data.count || 0, costUsd: data.costUsd, ms: data.ms, meta: data.meta || null, error: data.error || '' },
+      }));
+    } catch (err) {
+      setScoutTestState((s) => ({ ...s, [platform]: { loading: false, items: [], error: err instanceof Error ? err.message : 'Test search failed.' } }));
+    }
+  }, [user, apiPath]);
+
+  // Shared row renderer for the Web Search + Platforms and Social Media Signals
+  // cards: unlocked sources render as toggles, locked sources as Upgrade rows.
+  // Active (toggled-on) sources get a Test CTA + expandable caret with results.
+  // Reddit gets an inline note about its subreddit dependency when active.
+  const renderSourcePlatformRow = (p) => {
+    const selected = !p.locked && (marketingBriefConfig?.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS).includes(p.key);
+    if (p.locked) {
+      return (
+        <div key={p.key} className="tile-detail-stat-row" data-platform-locked="true" style={{ alignItems: 'center', opacity: 0.85 }}>
+          <span className="tile-detail-stat-label">{p.label}</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Locked</span>
+            <button type="button" onClick={() => setShowTierModal(true)} style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--accent, #10b981)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Upgrade →</button>
+          </span>
+        </div>
+      );
+    }
+    const test = scoutTestState[p.key];
+    const expanded = !!scoutTestExpanded[p.key];
+    return (
+      <React.Fragment key={p.key}>
+        <div
+          className={`mb-config-platform-toggle${selected ? ' is-on' : ''}`}
+          style={{ gridTemplateColumns: selected ? '22px minmax(0, 1fr) auto' : '22px minmax(0, 1fr)', alignItems: 'center', cursor: 'default' }}
+        >
+          {/* display:contents lets the toggle's check+body flow as grid cells of the green container while staying one clickable control */}
+          <button
+            type="button"
+            onClick={() => toggleMarketingBriefSourcePlatform(p.key)}
+            aria-pressed={selected}
+            style={{ display: 'contents', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', color: 'inherit', font: 'inherit' }}
+          >
+            <span className="mb-config-platform-check">{selected ? '✓' : ''}</span>
+            <span className="mb-config-platform-body">
+              <span className="mb-config-platform-title">
+                {p.label}
+                <span className={`mb-config-platform-status mb-config-platform-status--${selected ? 'ready' : 'available'}`}>{selected ? 'on' : 'off'}</span>
+              </span>
+              {p.description ? <span className="mb-config-platform-desc">{p.description}</span> : null}
+            </span>
+          </button>
+          {selected ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button
+                type="button"
+                className="tile-view-details-btn"
+                onClick={() => runScoutTestForPlatform(p.key)}
+                disabled={test?.loading}
+              >{test?.loading ? 'Running…' : 'Run'}</button>
+              <button
+                type="button"
+                aria-label={`${expanded ? 'Collapse' : 'Expand'} ${p.label} test results`}
+                aria-expanded={expanded}
+                onClick={() => setScoutTestExpanded((s) => ({ ...s, [p.key]: !s[p.key] }))}
+                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: '2px 4px' }}
+              >
+                <ChevronDown size={15} strokeWidth={1.9} aria-hidden="true" style={{ transition: 'transform 160ms ease', transform: expanded ? 'rotate(180deg)' : 'none' }} />
+              </button>
+            </div>
+          ) : null}
+        </div>
+        {selected && expanded ? (() => {
+          const m = test?.meta || null;
+          const loadingHint = p.key === 'x'
+            ? 'Running last30days (X) — real X pull, can take 30–60s…'
+            : p.key === 'reddit'
+              ? 'Searching DuckDuckGo (site:reddit.com)…'
+              : `Running ${p.label} web search…`;
+          const isRateLimit = /rate-limit/i.test(test?.error || '');
+          // NOTE: the debug meta row is NOT rendered here — it is hoisted to the
+          // bento grid (#scout-test-meta-band) so it can span the full modal width.
+          return (
+            <div className="mb-source-test-results" style={{ padding: '4px 8px 8px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {test?.loading ? (
+                <p className="mu-notice">{loadingHint}</p>
+              ) : !test ? (
+                <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: 0 }}>Click Run to test a live {p.label} search.</p>
+              ) : test.error ? (
+                <p className="mu-notice mu-notice--danger" style={{ margin: 0 }}>
+                  {test.error}{isRateLimit ? ' Cached results are reused for 15 min — wait a moment and Run again.' : ''}
+                </p>
+              ) : (test.items || []).length === 0 ? (
+                <p className="mu-notice" style={{ margin: 0 }}>{(m && m.note) || `No ${p.label} results for these queries.`}</p>
+              ) : (
+                <>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
+                    {test.items.length} result{test.items.length === 1 ? '' : 's'}{typeof test.costUsd === 'number' && test.costUsd > 0 ? ` · ≈ $${test.costUsd.toFixed(3)}` : ''}{m && m.stale ? ' · stale cache' : ''}
+                  </div>
+                  {test.items.map((it, i) => (
+                    <div key={`${p.key}-test-${i}`} style={{ borderLeft: '2px solid var(--border, #2a2420)', paddingLeft: 8 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{it.tag ? `[${it.tag}] ` : ''}{it.title}</div>
+                      {it.summary ? <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.4 }}>{it.summary}</div> : null}
+                      {it.url ? <a href={it.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: 'var(--accent, #10b981)', wordBreak: 'break-all' }}>{it.url}</a> : null}
+                    </div>
+                  ))}
+                  {m && m.note ? <p style={{ fontSize: 10, color: 'var(--text-secondary)', margin: 0 }}>{m.note}</p> : null}
+                </>
+              )}
+            </div>
+          );
+        })() : null}
+        {p.key === 'reddit' && selected ? (
+          <p style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--text-secondary)', margin: '0 0 2px 2px' }}>
+            Reddit uses search-engine indexing (<code>site:reddit.com</code>) via DuckDuckGo — no API. Results depend on what&apos;s indexed for your brand/category terms, and may be rate-limited (cached 15 min).
+          </p>
+        ) : null}
+      </React.Fragment>
+    );
+  };
+
+  // Full-width debug meta row for a tested source. Rendered at the bento-grid
+  // level (#scout-test-meta-band) — outside the panel column — so it spans the
+  // full modal width. Returns null unless that source has an expanded result.
+  const renderScoutTestMetaRow = (pkey, label) => {
+    const test = scoutTestState[pkey];
+    if (!scoutTestExpanded[pkey] || !test || test.loading) return null;
+    const m = test.meta;
+    if (!m) return null;
+    const queries = (m.queriesTried || m.terms) || [];
+    const metaBits = [
+      m.source,
+      typeof test.ms === 'number' ? `${(test.ms / 1000).toFixed(1)}s` : null,
+      typeof m.queriesRun === 'number' ? `${m.queriesRun} live queries` : (queries.length ? `${queries.length} queries` : null),
+      m.status ? `status: ${m.status}` : null,
+      m.cached ? (m.stale ? 'cached (stale fallback)' : `cached ${Math.round((m.cacheAgeMs || 0) / 60000)}m ago`) : null,
+    ].filter(Boolean).join('  ·  ');
+    if (!metaBits) return null;
+    return (
+      <div key={pkey} id={`scout-test-meta-${pkey}`} className="meta-row" style={{ width: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 2, padding: '6px 12px', borderTop: '1px solid var(--border, #2a2420)' }}>
+        <span className="meta-row-source" style={{ width: '100%', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>{label}: {metaBits}</span>
+        {queries.length ? (
+          <span className="meta-row-queries" style={{ width: '100%', fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.5, wordBreak: 'break-word' }}>Queries: {queries.slice(0, 6).join('  ·  ')}</span>
+        ) : null}
+      </div>
+    );
+  };
 
   const updateBrandSnapshotDraft = useCallback((path, value) => {
     setBrandSnapshotDraft((prev) => {
@@ -2900,6 +3376,37 @@ const DashboardPage = () => {
     setBootstrapLoading(true);
     setBootstrapError('');
   }, []);
+
+  const handleDeleteClient = useCallback(async () => {
+    if (!pendingDeleteClient || deleteClientLoading || !user) return;
+    setDeleteClientLoading(true);
+    setDeleteClientError('');
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/admin/delete-client', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: pendingDeleteClient.clientId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Delete failed.');
+      const deletedId = pendingDeleteClient.clientId;
+      // Remove immediately from both sources so the dropdown updates without
+      // waiting for the next full bootstrap cycle.
+      setAdminClientOptions((prev) => prev.filter((item) => item.clientId !== deletedId));
+      setBootstrap((prev) => ({
+        ...prev,
+        adminDashboards: (prev.adminDashboards || []).filter((item) => item.clientId !== deletedId),
+      }));
+      if (impersonateId === deletedId) switchDashboard(null);
+      setPendingDeleteClient(null);
+      doBootstrap();
+    } catch (err) {
+      setDeleteClientError(err instanceof Error ? err.message : 'Delete failed.');
+    } finally {
+      setDeleteClientLoading(false);
+    }
+  }, [pendingDeleteClient, deleteClientLoading, user, impersonateId, switchDashboard, doBootstrap]);
 
   // Live snapshot of the synthetic per-client prospect doc — drives card state
   // (status dot, footer text, DETAILS modal content) for the leadgen flow cards.
@@ -3299,12 +3806,13 @@ const DashboardPage = () => {
     setIntakeMockupSrc(homepageDeviceMockupUrl || null);
   }, [homepageDeviceMockupUrl]);
 
-  // Seed reseedUrl from client websiteUrl once loaded
+  // Reset the website input to the loaded client's URL whenever the client
+  // changes (admin client-switch). The old `!reseedUrl` guard left the previous
+  // client's URL stuck. Keying on client identity (not websiteUrl) means edits
+  // made for the current client aren't wiped by unrelated bootstrap refreshes.
   useEffect(() => {
-    if (client?.websiteUrl && !reseedUrl) {
-      setReseedUrl(client.websiteUrl);
-    }
-  }, [client?.websiteUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+    setReseedUrl(client?.websiteUrl || '');
+  }, [client?.clientId, client?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Detect run completion → start 3-second countdown before revealing dashboard.
   // Gated: hold the countdown until the onboarding survey is resolved so answers
@@ -4009,6 +4517,10 @@ const DashboardPage = () => {
   const marketingBriefSelectedPlatforms = (marketingBriefConfig?.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS);
   const marketingBriefPerPlatformResults = deriveMarketingBriefPerPlatformResults(marketingScoutAgentData, marketingBriefSelectedPlatforms);
   const marketingBriefHasRunResults = Boolean(marketingScoutAgentData);
+  const marketingBriefSearchStats = useMemo(
+    () => getMarketingBriefSearchStats(marketingBriefConfig, client),
+    [marketingBriefConfig, client]
+  );
   const socialGeneratedDraft =
     marketingBrief?.content?.x_post
     || marketingBrief?.content?.primary_post
@@ -4541,9 +5053,9 @@ const DashboardPage = () => {
       category: 'knowledge',
       number: 'SV',
       label: 'Q&A',
-      title: 'Q&A',
+      title: 'Founder Q&A',
       description: 'Across design, content, and systems. This survey helps me get the context I need upfront — so we skip the back-and-forth and get straight to the work that matters.',
-      placeholderLabel: 'SURVEY',
+      placeholderLabel: 'ANSWER\nQUESTIONS',
       rows: (() => {
         const total = onboardingSummary?.total ?? 10;
         const answered = onboardingSummary?.answeredCount ?? 0;
@@ -4567,7 +5079,7 @@ const DashboardPage = () => {
       label: 'MODEL',
       title: 'Business Model',
       description: 'Based on your site, we identified your business model and positioning. This helps shape how content, SEO, and messaging should be structured.',
-      placeholderLabel: hasBusinessModelData ? 'MODEL' : 'NO\nMODEL',
+      placeholderLabel: 'REVIEW\nMODEL',
       rows: hasBusinessModelData
         ? [
             { key: 'model', label: 'Structure', value: resolvedBusinessModel },
@@ -4584,7 +5096,7 @@ const DashboardPage = () => {
       label: 'CATEGORY',
       title: 'Market Category',
       description: categoryDescription,
-      placeholderLabel: categoryShellLabel,
+      placeholderLabel: 'CONFIRM\nCATEGORY',
       rows: hasCategoryData
         ? [
             { key: 'sector', label: 'Sector', value: resolvedCategory },
@@ -4618,7 +5130,7 @@ const DashboardPage = () => {
       category: 'knowledge',
       number: 'DQ',
       label: 'DATA QUALITY',
-      title: 'Data Stream',
+      title: 'Data Coverage',
       description: 'A live read on how much data has been captured — across Brief, Market, Brain, Brand, and Web.',
       ...(() => {
         // A field counts as captured only when it holds real data. Critically,
@@ -4854,7 +5366,7 @@ const DashboardPage = () => {
       label: 'COMPANY BRAIN',
       title: 'Company Brain',
       description: 'Add your own content — documents, URLs, or notes — so every card generates output using your real context, not generic assumptions.',
-      placeholderLabel: 'COMPANY\nBRAIN',
+      placeholderLabel: 'UPLOAD\nINFORMATION',
       rows: [
         { key: 'kb-source', label: 'Sources', value: 'Text · URLs · documents' },
         { key: 'kb-limit', label: 'Limit', value: '100 items / client' },
@@ -4872,9 +5384,9 @@ const DashboardPage = () => {
       category: 'content',
       number: 'BV',
       label: 'VOICE',
-      title: 'Brand Voice',
+      title: 'Voice & Tone',
       description: 'Your tone and messaging. Identifies unclear or inconsistent positioning.',
-      placeholderLabel: hasBrandToneData ? 'VOICE' : 'NO\nVOICE',
+      placeholderLabel: 'REVIEW\nVOICE',
       rows: hasBrandToneData
         ? [
             { key: 'primary', label: 'Primary', value: brandTone?.primary || 'Pending' },
@@ -4900,7 +5412,7 @@ const DashboardPage = () => {
         label: 'VISUAL DNA',
         title: 'Visual DNA',
         description: 'Upload reference photos of your products, spaces, or people. The system uses these to generate visuals that look like your brand — not stock photos.',
-        placeholderLabel: hasVisualDna ? 'VISUAL\nDNA' : 'NO\nDNA',
+        placeholderLabel: 'UPLOAD\nREFERENCES',
         rows: hasVisualDna
           ? [
               { key: 'vd-domain',   label: 'Domain',   value: domainLabel },
@@ -4928,9 +5440,9 @@ const DashboardPage = () => {
       category: 'content',
       number: 'BS',
       label: 'BRAND SNAPSHOT',
-      title: 'Brand Snapshot',
+      title: 'Visual Audit',
       description: 'Your visual system—colors, typography, layout. Highlights inconsistency and missing structure.',
-      placeholderLabel: hasStyleGuideData ? 'STYLE' : 'NO\nSTYLE',
+      placeholderLabel: 'RUN\nVISUAL\nAUDIT',
       rows: (() => {
         // Design Evaluation verifications cross-check the mechanically-extracted
         // tokens against the homepage screenshot. Map them to the Brand Snapshot
@@ -5039,9 +5551,9 @@ const DashboardPage = () => {
         category: 'content',
         number: 'BG',
         label: 'BRAND IDENTITY',
-        title: 'Brand Identity Card',
+        title: 'Brand System',
         description: 'Build a complete brand identity system from your pipeline data. Get creative specs ready to use across any channel or tool.',
-        placeholderLabel: hasBsRun ? 'PROMPT\nREADY' : 'BRAND\nIDENTITY',
+        placeholderLabel: 'GENERATE\nSYSTEM',
         rows: hasBsRun
           ? [
               { key: 'bs-prompt-status', label: 'Master Prompt', value: 'Ready to copy' },
@@ -5081,7 +5593,7 @@ const DashboardPage = () => {
         label: 'DESIGN BRIEF',
         title: 'Design Brief',
         description: 'Reads your current website and turns it into a creative direction document — the foundation for your mockup and site preview.',
-        placeholderLabel: hasBrief ? 'BRIEF' : 'NO\nBRIEF',
+        placeholderLabel: 'BUILD\nBRIEF',
         rows: hasBrief
           ? [
               { key: 'cb-target',     label: 'Target',         value: clientProspect?.website || client?.websiteUrl || '—' },
@@ -5120,9 +5632,9 @@ const DashboardPage = () => {
         category: 'content',
         number: 'GM',
         label: 'GENERATE MOCKUP',
-        title: 'Generate Mockup',
+        title: 'Homepage Mockup',
         description: 'Turns your brief into a visual homepage concept — see a creative direction before anything gets built.',
-        placeholderLabel: hasMockup ? 'MOCKUP' : 'NO\nMOCKUP',
+        placeholderLabel: 'CREATE\nMOCKUP',
         rows: hasMockup
           ? [
               { key: 'cm-target',    label: 'Target',       value: clientProspect?.website || client?.websiteUrl || '—' },
@@ -5155,7 +5667,7 @@ const DashboardPage = () => {
       label: 'SEO HEALTH',
       title: 'SEO + Performance Snapshot',
       description: 'We ran a performance and SEO scan on your site. Load speed, metadata, and structure all impact visibility and conversion — this card shows where you stand.',
-      placeholderLabel: isSeoError ? 'SEO\nAUDIT\nFAILED' : isSeoQueued ? 'AUDIT\nQUEUED' : hasSeoAuditData ? 'SEO' : 'NO\nAUDIT',
+      placeholderLabel: 'RUN\nAUDIT',
       rows: seoAuditRows,
       footerLeft: isSeoPartial ? 'Partial' : hasSeoAuditData ? 'Live' : isSeoQueued ? 'Queued' : isSeoError ? 'Error' : WORK_NEEDED_LABEL,
       domId: 'intake-card-seo-performance',
@@ -5169,7 +5681,7 @@ const DashboardPage = () => {
       label: 'PERFORMANCE',
       title: 'Site Performance',
       description: 'Load speed and technical issues impacting experience and rankings.',
-      placeholderLabel: hasSeoAuditData ? 'PERFORMANCE' : 'NO\nDATA',
+      placeholderLabel: 'RUN\nPERFORMANCE',
       rows: seoAuditRows.slice(0, 6),
       footerLeft: hasSeoAuditData ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
@@ -5181,7 +5693,7 @@ const DashboardPage = () => {
       label: 'SOCIAL PREVIEW',
       title: 'Social Preview Check',
       description: 'How your site appears when shared—title, description, and image. Missing previews reduce clicks and trust.',
-      placeholderLabel: siteMeta?.ogImage ? 'PREVIEW' : 'RUN\nSOCIAL\nPREVIEW',
+      placeholderLabel: 'CHECK\nPREVIEW',
       rows: (() => {
         const NP = 'Not provided';
         return siteMeta ? [
@@ -5208,7 +5720,7 @@ const DashboardPage = () => {
       label: 'AGENT READY',
       title: 'AI Agent Readiness',
       description: 'We checked how easy it is for AI tools and search engines to understand your site. This shows what\'s blocking visibility and what to fix first.',
-      placeholderLabel: agentReadinessState === 'queued' ? 'AUDIT\nQUEUED' : hasAgentReadinessData ? 'AGENT\nREADY' : 'NO\nAUDIT',
+      placeholderLabel: 'RUN\nREADINESS',
       rows: agentReadinessRows,
       footerLeft: hasAgentReadinessData ? 'Live' : agentReadinessState === 'queued' ? 'Queued' : WORK_NEEDED_LABEL,
       domId: 'intake-card-agent-readiness',
@@ -5222,7 +5734,7 @@ const DashboardPage = () => {
       label: 'DESIGN EVAL',
       title: 'Design Evaluation',
       description: 'We looked at your homepage and rated your visual design. See how your brand comes across to a first-time visitor — and what to tighten up.',
-      placeholderLabel: hasStyleGuideData ? 'DESIGN.md' : 'DESIGN\nEVALUATION',
+      placeholderLabel: 'RUN\nEVALUATION',
       rows: (() => {
         const ev = analyzerOutputs?.['design-evaluation'] || null;
         if (!ev) {
@@ -5250,7 +5762,7 @@ const DashboardPage = () => {
       label: 'LAYOUT',
       title: 'Cross-Device Layouts',
       description: 'Your site across desktop, tablet, and mobile. Identifies layout and usability issues.',
-      placeholderLabel: multiDevicePreviewSrc ? 'LAYOUT' : 'NO\nLAYOUT',
+      placeholderLabel: 'CAPTURE\nDEVICES',
       rows: multiDevicePreviewSrc ? [
         { key: 'md-desktop', label: 'Desktop capture', value: deviceScreenshots.desktop ? 'Captured' : homepageScreenshotUrl ? 'Captured' : 'Missing' },
         { key: 'md-tablet', label: 'Tablet capture', value: deviceScreenshots.tablet ? 'Captured' : 'Missing' },
@@ -5268,7 +5780,7 @@ const DashboardPage = () => {
       label: 'CONVERT',
       title: 'Conversion Readiness',
       description: 'How effectively your site turns visitors into customers—CTA, layout, flow.',
-      placeholderLabel: 'CONVERT',
+      placeholderLabel: 'CHECK\nCONVERSION',
       rows: buildWorkNeededRows('Conversion analysis requires page evidence with CTA and value proposition data.'),
       footerLeft: WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
@@ -5282,9 +5794,9 @@ const DashboardPage = () => {
         category: 'website',
         number: 'GM',
         label: 'GENERATE MOCKUP',
-        title: 'Generate Mockup',
+        title: 'Homepage Mockup',
         description: 'Turns your brief into a visual homepage concept — see a creative direction before anything gets built.',
-        placeholderLabel: hasMockup ? 'MOCKUP' : 'NO\nMOCKUP',
+        placeholderLabel: 'CREATE\nMOCKUP',
         rows: hasMockup
           ? [
               { key: 'cm-target',    label: 'Target',       value: clientProspect?.website || client?.websiteUrl || '—' },
@@ -5318,9 +5830,9 @@ const DashboardPage = () => {
         category: 'website',
         number: 'GS',
         label: 'GENERATE SITE',
-        title: 'Generate Site',
+        title: 'Build & Deploy Site',
         description: 'Builds and deploys a live homepage from your brief and mockup. Compare it side-by-side with your current site to see the improvement.',
-        placeholderLabel: hasSite ? 'SITE' : 'NO\nSITE',
+        placeholderLabel: 'BUILD\nSITE',
         rows: hasSite
           ? [
               { key: 'cs-target',    label: 'Target',         value: clientProspect?.website || client?.websiteUrl || '—' },
@@ -5361,9 +5873,9 @@ const DashboardPage = () => {
         category: 'website',
         number: 'CE',
         label: 'CREATE ESTIMATE',
-        title: 'Create Estimate',
+        title: 'Publish Client Estimate',
         description: 'Creates a client-facing estimate from the generated site, scope defaults, pricing inputs, and before/after readiness proof.',
-        placeholderLabel: hasEstimate ? 'ESTIMATE' : 'NO\nESTIMATE',
+        placeholderLabel: 'PUBLISH\nESTIMATE',
         rows: hasEstimate
           ? [
               { key: 'ce-client',    label: 'Client',      value: clientProspect?.name || client?.companyName || '—' },
@@ -5398,7 +5910,7 @@ const DashboardPage = () => {
       label: 'SIGNALS',
       title: 'Market Signals',
       description: 'Trends, conversations, and demand signals relevant to your business.',
-      placeholderLabel: 'NO\nSIGNALS',
+      placeholderLabel: 'VIEW\nSIGNALS',
       rows: buildWorkNeededRows('Signal collection requires active scout feeds.'),
       footerLeft: WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
@@ -5410,7 +5922,7 @@ const DashboardPage = () => {
       label: 'COMPETITION',
       title: 'Competitor Snapshot',
       description: 'How competitors position and communicate.',
-      placeholderLabel: 'NOT\nMAPPED',
+      placeholderLabel: 'VIEW\nCOMPETITORS',
       rows: buildWorkNeededRows('Competitor mapping requires validated industry and positioning signals.'),
       footerLeft: WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
@@ -5422,19 +5934,19 @@ const DashboardPage = () => {
       label: 'LOCAL',
       title: 'Local Signals',
       description: 'Events, location-based demand, and local activity.',
-      placeholderLabel: 'LOCAL',
+      placeholderLabel: 'VIEW\nLOCAL',
       rows: buildWorkNeededRows('Local signal data requires geo and location parameters.'),
       footerLeft: WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
     },
     {
       id: 'visibility-snapshot',
-      category: 'growth',
+      category: 'website',
       number: 'VS',
       label: 'VISIBILITY',
-      title: 'Visibility Snapshot',
+      title: 'Search & Social Visibility',
       description: 'We checked where your business shows up across search and platforms. This shows what\'s indexed, what\'s visible, and where there\'s room to expand reach.',
-      placeholderLabel: 'NO\nDATA',
+      placeholderLabel: 'VIEW\nVISIBILITY',
       rows: buildWorkNeededRows('AI Visibility data has moved to the AI Agent Readiness card.'),
       footerLeft: WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
@@ -5446,7 +5958,7 @@ const DashboardPage = () => {
       label: 'PRIORITY',
       title: 'Priority Action',
       description: 'The highest-impact fix based on current gaps.',
-      placeholderLabel: hasPrioritySignalData ? 'NEXT\nSTEP' : 'NO\nSIGNAL',
+      placeholderLabel: 'VIEW\nPRIORITY',
       rows: hasPrioritySignalData
         ? [
             { key: 'focus', label: 'Focus', value: resolvedPrioritySignal },
@@ -5461,9 +5973,9 @@ const DashboardPage = () => {
       category: 'growth',
       number: 'SB',
       label: 'STRATEGY',
-      title: 'Strategy Builder',
+      title: 'Next-Post Strategy',
       description: 'Turns Scout signals, brand voice, and content gaps into a focused social direction for the next post.',
-      placeholderLabel: hasMarketingBriefData ? 'STRATEGY' : 'NO\nBRIEF',
+      placeholderLabel: 'BUILD\nSTRATEGY',
       rows: [
         { key: 'sb-source', label: 'Source', value: hasMarketingBriefData ? 'Marketing Brief' : 'Needs Scout brief' },
         {
@@ -5480,12 +5992,12 @@ const DashboardPage = () => {
     },
     {
       id: 'trust-credibility',
-      category: 'growth',
+      category: 'website',
       number: 'TC',
       label: 'TRUST',
       title: 'Trust & Credibility',
       description: 'Proof signals like reviews, consistency, and authority. Missing trust reduces conversions.',
-      placeholderLabel: 'TRUST',
+      placeholderLabel: 'VIEW\nTRUST',
       rows: buildWorkNeededRows('Trust signal analysis requires contact clues, about page, and schema markup data.'),
       footerLeft: WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
@@ -5497,19 +6009,19 @@ const DashboardPage = () => {
       label: 'GAPS',
       title: 'Content Gaps',
       description: 'Topics and pages missing from your site that competitors are capturing.',
-      placeholderLabel: 'GAPS',
+      placeholderLabel: 'VIEW\nGAPS',
       rows: buildWorkNeededRows('Content gap analysis requires competitor and keyword data.'),
       footerLeft: WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
     },
     {
       id: 'search-opportunities',
-      category: 'growth',
+      category: 'website',
       number: 'SO',
       label: 'SEARCH',
       title: 'Search Opportunities',
       description: 'Keywords and topics with clear ranking potential.',
-      placeholderLabel: hasOpportunitiesData ? 'SEARCH' : 'NO\nDATA',
+      placeholderLabel: 'VIEW\nKEYWORDS',
       rows: hasOpportunitiesData
         ? resolvedOpportunities.map((op, index) => ({
             key: `op-${index}`,
@@ -5525,9 +6037,9 @@ const DashboardPage = () => {
       category: 'growth',
       number: 'PS',
       label: 'STRATEGY',
-      title: 'Post Strategy',
+      title: 'Posting Rules',
       description: 'What to post, where, and why—based on gaps and audience signals.',
-      placeholderLabel: 'NO\nSTRATEGY',
+      placeholderLabel: 'SET\nRULES',
       rows: hasContentAngleData
         ? [
             { key: 'ps-angle', label: 'Angle', value: resolvedContentAngle },
@@ -5539,24 +6051,24 @@ const DashboardPage = () => {
     },
     {
       id: 'platform-coverage',
-      category: 'growth',
+      category: 'social',
       number: 'PC',
       label: 'PLATFORMS',
       title: 'Platform Coverage',
       description: 'Where your brand is active and where visibility is missing.',
-      placeholderLabel: 'PLATFORMS',
+      placeholderLabel: 'REVIEW\nCOVERAGE',
       rows: buildWorkNeededRows('Platform analysis requires social link data from crawled pages.'),
       footerLeft: WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
     },
     {
       id: 'creative-builder',
-      category: 'growth',
+      category: 'social',
       number: 'CB',
       label: 'CREATIVE',
-      title: 'Creative Builder',
+      title: 'Copy & Creative',
       description: 'Your generated copy and creative output in one place — ready to review, refine, and publish.',
-      placeholderLabel: hasSocialGeneratedDraft ? 'CREATIVE' : 'NO\nDRAFT',
+      placeholderLabel: 'REVIEW\nCREATIVE',
       rows: [
         { key: 'cb-copy', label: 'Copy', value: hasSocialGeneratedDraft ? socialGeneratedDraft : 'No generated X draft yet.' },
         { key: 'cb-media', label: 'Media', value: 'Video/audio generation queued for next phase' },
@@ -5569,12 +6081,12 @@ const DashboardPage = () => {
     },
     {
       id: 'draft-post',
-      category: 'growth',
+      category: 'social',
       number: 'DC',
       label: 'DRAFT',
-      title: 'Draft Content',
+      title: 'Ready-to-Post Drafts',
       description: 'Ready-to-use posts tailored to your brand.',
-      placeholderLabel: hasDraftPostData ? 'DRAFT' : 'NO\nDRAFT',
+      placeholderLabel: 'REVIEW\nDRAFTS',
       rows: hasDraftPostData
         ? [
             { key: 'post', label: 'Draft', value: resolvedDraftPost },
@@ -5591,7 +6103,7 @@ const DashboardPage = () => {
       label: 'WEATHER',
       title: 'Local Weather',
       description: 'Daily local forecast + a 1-line 3-day outlook, added to your daily brief. Configurable by ZIP code.',
-      placeholderLabel: marketingBriefConfig?.weather?.enabled ? 'LIVE' : 'OFF',
+      placeholderLabel: 'SET\nZIP',
       rows: marketingBriefConfig?.weather?.enabled
         ? [
             { key: 'lw-zip', label: 'ZIP', value: marketingBriefConfig?.weather?.zip || '—' },
@@ -5612,9 +6124,9 @@ const DashboardPage = () => {
       category: 'growth',
       number: 'EV',
       label: 'EVENTS',
-      title: 'Events',
+      title: 'Local Events',
       description: 'Find what’s happening — local events by ZIP code for neighborhood-driven businesses, or industry events by keyword for digital brands. Useful context for timely posts and briefs.',
-      placeholderLabel: eventsResults?.events?.length ? 'EVENTS' : 'FIND',
+      placeholderLabel: 'FIND\nEVENTS',
       rows: eventsResults?.events?.length
         ? [
             { key: 'ev-mode', label: 'Mode', value: eventsResults.mode === 'global' ? 'Global · keywords' : 'Local · ZIP' },
@@ -5634,11 +6146,11 @@ const DashboardPage = () => {
       category: 'growth',
       number: 'NL',
       label: 'NEWSLETTER',
-      title: 'Newsletter',
+      title: 'Newsletter Roll-up',
       description: hasNewsletterData
         ? 'Auto-generated newsletter from your latest intelligence brief.'
         : 'Newsletter generation requires a completed Scout brief.',
-      placeholderLabel: hasNewsletterData ? 'READY' : 'NO\nBRIEF',
+      placeholderLabel: 'GENERATE\nNEWSLETTER',
       rows: hasNewsletterData
         ? [{ key: 'preview', label: 'Lead', value: newsletterHeroPreview + (newsletterHeroPreview.length >= 140 ? '…' : '') }]
         : buildWorkNeededRows('Run the Scout pipeline first to generate newsletter content.'),
@@ -5652,7 +6164,7 @@ const DashboardPage = () => {
       label: 'CONVERSATION INTAKE',
       title: 'Conversation Intake',
       description: 'Paste a team conversation dump (Discord thread or WhatsApp "export chat"). The intake analyst tags what matters — campaign, social, or brief — and folds it into your Executive Daily Brief.',
-      placeholderLabel: conversationIntake?.itemCount ? 'TAGGED' : 'PASTE',
+      placeholderLabel: 'PASTE\nCONVOS',
       rows: conversationIntake?.itemCount
         ? [
             { key: 'ci-items', label: 'Tagged items', value: String(conversationIntake.itemCount) },
@@ -5667,13 +6179,33 @@ const DashboardPage = () => {
       readinessBadge: conversationIntake?.itemCount ? { tone: 'ok', label: 'Tagged' } : null,
     },
     {
+      id: 'brand-keywords',
+      category: 'growth',
+      number: 'BK',
+      label: 'BRAND & KEYWORDS',
+      title: 'Brand & Keywords',
+      description: 'Brand name, exact-match identifiers, and category themes that drive the search plan. Generated mode auto-builds queries from these; Custom mode lets you write deliberate query clusters.',
+      placeholderLabel: 'SET\nBRAND',
+      rows: marketingBriefConfig
+        ? [
+            { key: 'bk-name', label: 'Brand', value: marketingBriefConfig.brandName || 'Not set' },
+            { key: 'bk-keywords', label: 'Exact identifiers', value: `${marketingBriefSearchStats.brandKeywords.length}/${BRAND_KEYWORD_RECOMMENDED_MAX}` },
+            { key: 'bk-category', label: 'Priority themes', value: `${marketingBriefSearchStats.categoryTerms.length}/${CATEGORY_TERM_RECOMMENDED_MAX}` },
+            { key: 'bk-mode', label: 'Search mode', value: marketingBriefSearchStats.generatedMode ? 'Generated' : 'Custom' },
+            { key: 'bk-searches', label: 'Est. searches', value: String(marketingBriefSearchStats.totalSearches) },
+          ]
+        : buildWorkNeededRows('Loading Scout config…'),
+      footerLeft: marketingBriefConfig ? 'Editable' : 'Loading',
+      footerRight: 'GROWTH',
+    },
+    {
       id: 'scout-focus',
       category: 'growth',
       number: 'SF',
       label: 'SCOUT FOCUS',
-      title: 'Scout Focus',
+      title: 'Research Focus',
       description: 'The research lens — what Scout should care about, how it reasons, and how fresh signals must be. Part of Scout Config; edits sync with the Daily Brief.',
-      placeholderLabel: 'FOCUS',
+      placeholderLabel: 'SET\nFOCUS',
       rows: marketingBriefConfig
         ? [
             { key: 'sf-focus', label: 'Focus', value: marketingBriefConfig.sourceFocus ? 'Configured' : 'Not set' },
@@ -5689,65 +6221,57 @@ const DashboardPage = () => {
       category: 'growth',
       number: 'WL',
       label: 'WATCHLIST',
-      title: 'Watchlist',
-      description: 'KOLs and handles Scout tracks every run, plus per-handle or combined search mode. Part of Scout Config; edits sync with the Daily Brief.',
-      placeholderLabel: 'KOLS',
+      title: 'Watchlist & Competitors',
+      description: 'KOLs and handles Scout tracks every run, plus competitors injected into the search strategy and angle selection.',
+      placeholderLabel: 'ADD\nHANDLES',
       rows: marketingBriefConfig
         ? [
             { key: 'wl-kols', label: 'Handles', value: String(String(marketingBriefConfig.kols || '').split(/[\n,]+/).filter((s) => s.trim()).length) },
-            { key: 'wl-mode', label: 'Search mode', value: marketingBriefConfig.kolSearchMode === 'combined' ? 'Combined' : 'Per-handle' },
+            { key: 'wl-mode', label: 'KOL mode', value: marketingBriefConfig.kolSearchMode === 'combined' ? 'Combined' : 'Per-handle' },
+            { key: 'wl-competitors', label: 'Competitors', value: String(String(marketingBriefConfig.competitors || '').split(/[\n,]+/).filter((s) => s.trim()).length) },
           ]
         : buildWorkNeededRows('Loading Scout config…'),
       footerLeft: marketingBriefConfig ? 'Editable' : 'Loading',
       footerRight: 'GROWTH',
     },
     {
-      id: 'competitors',
+      id: 'platform-search',
       category: 'growth',
-      number: 'CP',
-      label: 'COMPETITORS',
-      title: 'Competitors',
-      description: 'Competitor names injected into Scout’s search strategy and angle selection. Part of Scout Config; edits sync with the Daily Brief.',
-      placeholderLabel: 'COMPS',
-      rows: marketingBriefConfig
-        ? [
-            { key: 'cp-count', label: 'Tracked', value: String(String(marketingBriefConfig.competitors || '').split(/[\n,]+/).filter((s) => s.trim()).length) },
-          ]
-        : buildWorkNeededRows('Loading Scout config…'),
-      footerLeft: marketingBriefConfig ? 'Editable' : 'Loading',
+      number: 'PS',
+      label: 'WEB SEARCH + PLATFORMS',
+      title: 'Web Search + Platforms',
+      description: 'Web search plus launch and startup directories that feed Scout and your daily brief. Web is a free default; the directories unlock with an upgrade.',
+      placeholderLabel: 'WEB +\nPLATFORMS',
+      rows: (() => {
+        const sel = marketingBriefConfig?.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS;
+        const webOn = sel.includes('web');
+        return [
+          { key: 'ps-on', label: 'Web search', value: webOn ? 'On' : 'Off' },
+          { key: 'ps-free', label: 'Free default', value: 'Web' },
+          { key: 'ps-locked', label: 'Locked', value: `${WEB_SEARCH_SOURCES.filter((p) => p.locked).length} directories` },
+        ];
+      })(),
+      footerLeft: 'Web live',
       footerRight: 'GROWTH',
     },
     {
-      id: 'search-plan',
+      id: 'social-signals',
       category: 'growth',
-      number: 'SP',
-      label: 'SEARCH PLAN',
-      title: 'Search Plan',
-      description: 'Custom Scout query rows — each is a targeted search with a label, query, and the signal to extract. Part of Scout Config; edits sync with the Daily Brief.',
-      placeholderLabel: 'PLAN',
-      rows: marketingBriefConfig
-        ? [
-            { key: 'spn-count', label: 'Active queries', value: String((marketingBriefConfig.searches || []).filter((row) => row.query).length) },
-            { key: 'spn-rows', label: 'Total rows', value: String((marketingBriefConfig.searches || []).length) },
-          ]
-        : buildWorkNeededRows('Loading Scout config…'),
-      footerLeft: marketingBriefConfig ? 'Editable' : 'Loading',
-      footerRight: 'GROWTH',
-    },
-    {
-      id: 'source-platforms',
-      category: 'growth',
-      number: 'PL',
-      label: 'SOURCE PLATFORMS',
-      title: 'Source Platforms',
-      description: 'Every source Scout can search — product directories, social platforms, and external signals. Web and X are active today; the rest unlock with an upgrade.',
-      placeholderLabel: 'SRC',
-      rows: [
-        { key: 'pl-active', label: 'Active now', value: 'Web · X' },
-        { key: 'pl-catalog', label: 'In catalog', value: `${SCOUT_PLATFORM_CATALOG.reduce((n, g) => n + g.items.length, 0)} sources` },
-        { key: 'pl-locked', label: 'Status', value: 'Upgrade to unlock' },
-      ],
-      footerLeft: 'Web + X live',
+      number: 'SS',
+      label: 'SOCIAL MEDIA SIGNALS',
+      title: 'Social Media Signals',
+      description: 'Social-platform signals — X and Reddit feed your brief today; Instagram, TikTok, YouTube, LinkedIn, and more unlock with an upgrade.',
+      placeholderLabel: 'SOCIAL\nSIGNALS',
+      rows: (() => {
+        const sel = marketingBriefConfig?.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS;
+        const onList = SOCIAL_SIGNAL_SOURCES.filter((p) => !p.locked && sel.includes(p.key)).map((p) => p.label);
+        return [
+          { key: 'ss-on', label: 'Active', value: onList.length ? onList.join(' · ') : 'None' },
+          { key: 'ss-free', label: 'Free defaults', value: 'X · Reddit' },
+          { key: 'ss-locked', label: 'Locked', value: `${SOCIAL_SIGNAL_SOURCES.filter((p) => p.locked).length} more` },
+        ];
+      })(),
+      footerLeft: 'X · Reddit',
       footerRight: 'GROWTH',
     },
     {
@@ -5755,9 +6279,9 @@ const DashboardPage = () => {
       category: 'growth',
       number: 'BP',
       label: 'BRIEF PREVIEW',
-      title: 'Brief Preview',
+      title: 'Brief Preview (Pre-run)',
       description: 'The Agent Data Contract Scout returns, the run-cost estimate, and a Run Now button that populates the Executive Daily Brief. Part of Scout Config; edits sync with the Daily Brief.',
-      placeholderLabel: 'RUN',
+      placeholderLabel: 'PREVIEW\nBRIEF',
       rows: marketingBriefConfig
         ? [
             { key: 'bp-contract', label: 'Data contract', value: marketingBriefConfig.agentDataTemplate ? 'Custom' : 'Default' },
@@ -5781,7 +6305,7 @@ const DashboardPage = () => {
       label: 'POST',
       title: 'Schedule Posts',
       description: 'Write, optimize, and post to X/Twitter directly from the dashboard. Content is checked against your brand voice before it goes out.',
-      placeholderLabel: 'X\nPOST',
+      placeholderLabel: 'SCHEDULE\nPOSTS',
       rows: [
         { key: 'smp-channel', label: 'Channel', value: 'X / Twitter' },
         { key: 'smp-agent-system', label: 'Agents', value: 'Content Creator · Hashtag Specialist · Engagement Optimizer' },
@@ -5801,7 +6325,7 @@ const DashboardPage = () => {
       label: 'EXECUTIVE DAILY BRIEF',
       title: 'Executive Daily Brief',
       description: 'Morning snapshot of what matters. Pulls live signals from GA4, Search Console, Firebase, and Vercel to surface business health, active risks, and the 2–3 things worth your attention today.',
-      placeholderLabel: hasDailyBriefData ? 'BRIEF' : 'SCOUT',
+      placeholderLabel: 'RUN\nDAILY\nBRIEF',
       rows: [
         { key: 'mb-status', label: 'Status', value: marketingBriefStatus },
         { key: 'mb-custom-briefs', label: 'Custom briefs', value: customBriefsLoading ? 'Loading' : hasCustomBriefs ? `${customBriefCount} imported` : 'None imported' },
@@ -5989,7 +6513,7 @@ const DashboardPage = () => {
       label: 'ENGINE',
       title: 'Content Engine',
       description: 'Automated system for generating and distributing content.',
-      placeholderLabel: hasContentAngleData || hasOpportunitiesData ? 'ENGINE' : 'COMING\nSOON',
+      placeholderLabel: 'RUN\nENGINE',
       rows: (() => {
         const engineRows = [];
         if (hasContentAngleData) engineRows.push({ key: 'angle', label: 'Angle', value: resolvedContentAngle });
@@ -6034,7 +6558,7 @@ const DashboardPage = () => {
       label: 'CONTACT',
       title: 'Contact Your Human',
       description: 'Direct communication to execute work.',
-      placeholderLabel: 'CONTACT',
+      placeholderLabel: 'TALK\nTO HUMAN',
       rows: [{ key: 'cta', label: 'Action', value: 'Ask anything about your dashboard →' }],
       footerLeft: 'Available',
       footerRight: 'SERVICE',
@@ -6046,7 +6570,7 @@ const DashboardPage = () => {
       label: 'FIX',
       title: 'Fix This',
       description: 'Request a fix for any issue surfaced in the dashboard.',
-      placeholderLabel: 'FIX',
+      placeholderLabel: 'REQUEST\nFIX',
       rows: [{ key: 'cta', label: 'Action', value: 'Book a call to fix an issue →' }],
       footerLeft: 'Available',
       footerRight: 'SERVICE',
@@ -6058,7 +6582,7 @@ const DashboardPage = () => {
       label: 'RUN',
       title: 'Run My Marketing',
       description: 'Full execution across content, SEO, and distribution.',
-      placeholderLabel: 'RUN',
+      placeholderLabel: 'START\nRETAINER',
       rows: [{ key: 'cta', label: 'Action', value: 'Book a strategy call →' }],
       footerLeft: 'Available',
       footerRight: 'SERVICE',
@@ -6070,7 +6594,7 @@ const DashboardPage = () => {
       label: 'CREATE',
       title: 'Creative Work',
       description: 'Design, video, and brand asset creation.',
-      placeholderLabel: 'CREATE',
+      placeholderLabel: 'REQUEST\nCREATIVE',
       rows: [{ key: 'cta', label: 'Action', value: 'Book a creative session →' }],
       footerLeft: 'Available',
       footerRight: 'SERVICE',
@@ -6082,7 +6606,7 @@ const DashboardPage = () => {
       label: 'BUILD',
       title: 'Build a Page',
       description: 'Landing pages and website builds focused on conversion.',
-      placeholderLabel: 'BUILD',
+      placeholderLabel: 'REQUEST\nPAGE',
       rows: [{ key: 'cta', label: 'Action', value: 'Book a build session →' }],
       footerLeft: 'Available',
       footerRight: 'SERVICE',
@@ -6096,7 +6620,7 @@ const DashboardPage = () => {
       label: 'VIDEO',
       title: 'Short-Form Video',
       description: 'Vertical video edit up to 60 seconds. Includes cuts, captions, music, and brand framing—built for social performance and fast turnaround.',
-      placeholderLabel: 'VIDEO',
+      placeholderLabel: 'REQUEST\nSHORT\nVIDEO',
       rows: [
         { key: 'scope', label: 'Scope', value: 'Up to 60s vertical edit' },
         { key: 'includes', label: 'Includes', value: 'Cuts · captions · music · brand framing' },
@@ -6112,7 +6636,7 @@ const DashboardPage = () => {
       label: 'VIDEO',
       title: 'Long-Form Video',
       description: 'Edited video up to 5 minutes with multi-cam support, color grading, and sound mix. Designed for product, storytelling, or campaign content.',
-      placeholderLabel: 'VIDEO',
+      placeholderLabel: 'REQUEST\nLONG\nVIDEO',
       rows: [
         { key: 'scope', label: 'Scope', value: 'Up to 5 min · multi-cam' },
         { key: 'includes', label: 'Includes', value: 'Color grading · sound mix · titles' },
@@ -6130,7 +6654,7 @@ const DashboardPage = () => {
       label: 'DESIGN',
       title: 'Single Graphic',
       description: 'One static asset for social, ads, or web. Designed on-brand and ready to publish immediately.',
-      placeholderLabel: 'DESIGN',
+      placeholderLabel: 'REQUEST\nGRAPHIC',
       rows: [
         { key: 'scope', label: 'Scope', value: '1 static asset · any platform' },
         { key: 'cta', label: 'Action', value: 'Request a graphic →' },
@@ -6145,7 +6669,7 @@ const DashboardPage = () => {
       label: 'DESIGN',
       title: 'Carousel Kit',
       description: 'Multi-slide post with structured layout, copy, and flow. Built for engagement and clarity across platforms.',
-      placeholderLabel: 'DESIGN',
+      placeholderLabel: 'REQUEST\nCAROUSEL',
       rows: [
         { key: 'scope', label: 'Scope', value: 'Multi-slide · copy + layout' },
         { key: 'cta', label: 'Action', value: 'Request a carousel →' },
@@ -6162,7 +6686,7 @@ const DashboardPage = () => {
       label: 'SOCIAL',
       title: 'Social Management',
       description: 'Ongoing posting, scheduling, and light community interaction layered on top of automation. Keeps your presence active and consistent.',
-      placeholderLabel: 'SOCIAL',
+      placeholderLabel: 'START\nSOCIAL',
       rows: [
         { key: 'scope', label: 'Scope', value: 'Ongoing · posting + scheduling' },
         { key: 'cta', label: 'Action', value: 'Request social management →' },
@@ -6179,7 +6703,7 @@ const DashboardPage = () => {
       label: 'BRAND',
       title: 'Logo & Brand Refresh',
       description: 'Refined logo system including wordmark, icon, and platform-ready assets. Improves consistency and brand recognition.',
-      placeholderLabel: 'BRAND',
+      placeholderLabel: 'REQUEST\nLOGO',
       rows: [
         { key: 'scope', label: 'Scope', value: 'Wordmark · icon · platform assets' },
         { key: 'cta', label: 'Action', value: 'Request a brand refresh →' },
@@ -6196,7 +6720,7 @@ const DashboardPage = () => {
       label: 'BUILD',
       title: 'Landing Page Build',
       description: 'Single-page site designed and built to convert. Includes copy, layout, and deployment.',
-      placeholderLabel: 'BUILD',
+      placeholderLabel: 'REQUEST\nLANDING',
       rows: [
         { key: 'scope', label: 'Scope', value: 'Single page · copy + design + deploy' },
         { key: 'cta', label: 'Action', value: 'Request a landing page →' },
@@ -6213,7 +6737,7 @@ const DashboardPage = () => {
       label: 'EMAIL',
       title: 'Email Campaign',
       description: 'One complete campaign with template, copy, and send setup. Ready to deploy and track performance.',
-      placeholderLabel: 'EMAIL',
+      placeholderLabel: 'REQUEST\nEMAIL',
       rows: [
         { key: 'scope', label: 'Scope', value: '1 campaign · template + copy + send' },
         { key: 'cta', label: 'Action', value: 'Request an email campaign →' },
@@ -6230,7 +6754,7 @@ const DashboardPage = () => {
       label: 'UI',
       title: 'UI Screen Design',
       description: 'One production-ready Figma screen with components, variants, and dev-ready structure.',
-      placeholderLabel: 'UI',
+      placeholderLabel: 'REQUEST\nUI\nSCREEN',
       rows: [
         { key: 'scope', label: 'Scope', value: '1 Figma screen · components + variants' },
         { key: 'cta', label: 'Action', value: 'Request a UI screen →' },
@@ -6245,7 +6769,7 @@ const DashboardPage = () => {
       label: 'UI',
       title: 'UI Flow Design',
       description: 'Multi-screen flow with shared components and prototype. Built as a scalable system with consistent design logic.',
-      placeholderLabel: 'UI',
+      placeholderLabel: 'REQUEST\nUI\nFLOW',
       rows: [
         { key: 'scope', label: 'Scope', value: 'Multi-screen · prototype + system' },
         { key: 'cta', label: 'Action', value: 'Request a UI flow →' },
@@ -6974,16 +7498,31 @@ const DashboardPage = () => {
                       </button>
                       {adminDashboards.length > 0 ? (
                         adminDashboards.map((item) => (
-                          <button
-                            key={item.clientId}
-                            type="button"
-                            className={impersonateId === item.clientId ? 'active' : undefined}
-                            role="menuitem"
-                            onClick={() => switchDashboard(item.clientId)}
-                          >
-                            <span>{item.name || item.clientId}</span>
-                            <small>{item.websiteUrl || item.clientId}</small>
-                          </button>
+                          <div key={item.clientId} className="client-switcher-item">
+                            <button
+                              type="button"
+                              className={`client-switcher-item-select${impersonateId === item.clientId ? ' active' : ''}`}
+                              role="menuitem"
+                              onClick={() => switchDashboard(item.clientId)}
+                            >
+                              <span>{item.name || item.clientId}</span>
+                              <small>{item.websiteUrl || item.clientId}</small>
+                            </button>
+                            <button
+                              type="button"
+                              className="client-switcher-item-delete"
+                              aria-label={`Delete ${item.name || item.clientId}`}
+                              title="Delete client"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteClientError('');
+                                setPendingDeleteClient({ clientId: item.clientId, name: item.name || item.clientId });
+                                setClientSwitcherOpen(false);
+                              }}
+                            >
+                              <Trash2 size={12} strokeWidth={1.75} />
+                            </button>
+                          </div>
                         ))
                       ) : (
                         <span className="client-switcher-empty">No provisioned dashboards</span>
@@ -7027,10 +7566,91 @@ const DashboardPage = () => {
                 <ArrowUpRight size={12} strokeWidth={1.75} aria-hidden="true" />
               </button>
             </div>
+          </div>
+        </section>
+
+        {/* Full-width source/URL band — relocated out of the hero meta column to
+            sit between the hero and capability sections, stretching page width. */}
+        <div id="dashboard-source-band">
             <div className="meta-row meta-row-source">
               <div className="meta-row-source-body">
                 <div id="reseed-control-row">
                   <div id="dashboard-source-cta-row">
+                    <div className="cap-view-toggle cap-view-toggle--top" role="group" aria-label="Cards view toggle">
+                      <button
+                        type="button"
+                        title="Grid view"
+                        aria-label="Grid view"
+                        aria-pressed={capView === 'grid'}
+                        className={`cap-view-btn${capView === 'grid' ? ' is-active' : ''}`}
+                        onClick={() => setCapView('grid')}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                          <rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+                          <rect x="9" y="1.5" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+                          <rect x="1.5" y="9" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+                          <rect x="9" y="9" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        title="List view"
+                        aria-label="List view"
+                        aria-pressed={capView === 'list'}
+                        className={`cap-view-btn${capView === 'list' ? ' is-active' : ''}`}
+                        onClick={() => setCapView('list')}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                          <line x1="2" y1="4" x2="14" y2="4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                          <line x1="2" y1="8" x2="14" y2="8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                          <line x1="2" y1="12" x2="14" y2="12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                        </svg>
+                      </button>
+                    </div>
+                    <span className="cap-source-divider" aria-hidden="true" />
+                    {(() => {
+                      // Data Coverage micro-readout — mirrors the audit-summary
+                      // ("Data Coverage") card's gauge: captured tier-1 fields / total.
+                      const auditCard = intakeCapabilityCards.find((c) => c.id === 'audit-summary');
+                      const { captured, total, pct } = computeDataCoverage(auditCard?.rows);
+                      const SEMI = Math.PI * 15; // semicircle arc length (r=15)
+                      // Primary brand gradient, shared by the brain strokes (CSS),
+                      // the value text (background-clip), and the meter (SVG url).
+                      const GRAD = 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)';
+                      return (
+                        <div
+                          id="dashboard-coverage-chip"
+                          title={`Data coverage — ${captured}/${total} fields captured (${pct}%)`}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 2px', flexShrink: 0 }}
+                        >
+                          {/* Shared gradient def for the brain + meter strokes */}
+                          <svg width="0" height="0" aria-hidden="true" style={{ position: 'absolute' }}>
+                            <defs>
+                              <linearGradient id="coverage-grad" x1="0" y1="0" x2="1" y2="1">
+                                <stop offset="0%" stopColor="hsl(185,100%,45%)" />
+                                <stop offset="52%" stopColor="hsl(262,100%,55%)" />
+                                <stop offset="100%" stopColor="hsl(314,100%,50%)" />
+                              </linearGradient>
+                            </defs>
+                          </svg>
+                          <BrainIcon
+                            ref={(api) => { api?.startAnimation?.(); }}
+                            className="coverage-brain"
+                            size={22}
+                            aria-hidden="true"
+                            style={{ marginTop: 1 }}
+                          />
+                          <span style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: GRAD, WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>
+                            {pct}<span style={{ fontSize: 13 }}>%</span>
+                          </span>
+                          <svg width="28" height="16" viewBox="0 0 36 21" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+                            <path d="M3 18 A15 15 0 0 1 33 18" stroke="rgba(42,36,32,0.14)" strokeWidth="3.4" strokeLinecap="round" />
+                            <path d="M3 18 A15 15 0 0 1 33 18" stroke="url(#coverage-grad)" strokeWidth="3.4" strokeLinecap="round" strokeDasharray={SEMI} strokeDashoffset={SEMI - (SEMI * pct) / 100} />
+                          </svg>
+                        </div>
+                      );
+                    })()}
+                    <span className="cap-source-divider" aria-hidden="true" />
                     <Globe id="dashboard-source-cta-icon" size={15} strokeWidth={1.5} aria-hidden="true" />
                     <input
                       id="reseed-url-input"
@@ -7087,8 +7707,7 @@ const DashboardPage = () => {
                 {reseedError ? <div id="reseed-error-msg">{reseedError}</div> : null}
               </div>
             </div>
-          </div>
-        </section>
+        </div>
 
         {/* ── Capability section ── */}
         <section id="capability-section">
@@ -7100,7 +7719,7 @@ const DashboardPage = () => {
           {/* Hold render until the initial capability filter is resolved so the
               nav pills + grid don't flash 'brief' before correcting to
               'onboarding' for modular clients. */}
-          <div id="capability-section-shell" style={{ visibility: activeCapabilityFilter ? 'visible' : 'hidden' }}>
+          <div id="capability-section-shell" className={capView === 'list' ? 'cap-view-list' : ''} style={{ visibility: activeCapabilityFilter ? 'visible' : 'hidden' }}>
 
           {/* Left — grid */}
           <div id="capability-grid-col">
@@ -7189,7 +7808,8 @@ const DashboardPage = () => {
                 const idx = CARD_UNLOCK_CHAIN.indexOf(cardId);
                 return idx === -1 ? 999 + cardId.charCodeAt(0) : idx;
               };
-              return activeCapabilityFilter && intakeCapabilityCards
+              if (!activeCapabilityFilter) return null;
+              const _filteredSorted = intakeCapabilityCards
                 .filter((card) => {
                   if (activeCapabilityFilter === 'onboarding') {
                     if (!ONBOARDING_CARD_IDS.has(card.id)) return false;
@@ -7204,20 +7824,64 @@ const DashboardPage = () => {
                 .sort((a, b) => {
                   if (activeCapabilityFilter === 'onboarding') return chainSortKey(a.id) - chainSortKey(b.id);
                   if (activeCapabilityFilter === 'knowledge') {
-                    const order = ['audit-summary', 'knowledge-base', 'survey-status', 'industry', 'business-model'];
+                    // Knowledge Officer: intake first, audit (coverage) last.
+                    const order = ['survey-status', 'knowledge-base', 'business-model', 'industry', 'audit-summary'];
+                    const ai = order.indexOf(a.id); const bi = order.indexOf(b.id);
+                    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+                  }
+                  if (activeCapabilityFilter === 'content') {
+                    // Creative Director: intake → produce → ship.
+                    const order = ['visual-dna', 'brand-voice', 'style-guide', 'brand-system', 'client-brief', 'client-mockup-creative'];
+                    const ai = order.indexOf(a.id); const bi = order.indexOf(b.id);
+                    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+                  }
+                  if (activeCapabilityFilter === 'website') {
+                    // Website Developer: audit → ship. Audit now includes
+                    // search/visibility/trust cards moved from Marketing.
+                    const order = [
+                      // AUDIT EXISTING SITE
+                      'seo-performance', 'site-performance', 'social-preview',
+                      'agent-readiness', 'design-evaluation', 'multi-device-view',
+                      'website-landing', 'visibility-snapshot',
+                      'search-opportunities', 'trust-credibility',
+                      // SHIP NEW SITE
+                      'client-mockup', 'client-site', 'client-estimate',
+                    ];
+                    const ai = order.indexOf(a.id); const bi = order.indexOf(b.id);
+                    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+                  }
+                  if (activeCapabilityFilter === 'social') {
+                    // Social Media Manager: review creative → schedule & publish.
+                    const order = ['platform-coverage', 'creative-builder', 'draft-post', 'social-media-posting'];
+                    const ai = order.indexOf(a.id); const bi = order.indexOf(b.id);
+                    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+                  }
+                  if (activeCapabilityFilter === 'services') {
+                    // Work With Me: talk → ongoing → one-off.
+                    const order = ['contact', 'fix-this', 'run-my-marketing', 'social-management', 'build-a-page', 'landing-page-build', 'logo-brand-refresh', 'creative-work', 'single-graphic', 'carousel-kit', 'short-form-video', 'long-form-video', 'email-campaign', 'ui-screen-design', 'ui-flow-design'];
                     const ai = order.indexOf(a.id); const bi = order.indexOf(b.id);
                     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
                   }
                   if (activeCapabilityFilter === 'growth') {
-                    // Order the Marketing Director bucket by client-setup relevance:
-                    // today's intake + brief config first, then strategy cards, then rest.
-                    const order = ['conversation-intake', 'scout-focus', 'source-platforms', 'search-plan', 'watchlist', 'competitors', 'brief-preview', 'local-weather', 'events', 'strategy-builder', 'positioning'];
+                    // Marketing Director: market signals → listening sources → strategy outputs.
+                    const order = [
+                      // WHO ARE WE LISTENING TO (sources + inputs) — Brand & Keywords leads (root input)
+                      'brand-keywords', 'watchlist', 'platform-search', 'social-signals',
+                      'scout-focus', 'conversation-intake',
+                      // WHAT'S GOING ON IN THE MARKET (external signals)
+                      'signals', 'competitor-info', 'local-signals',
+                      'content-gaps', 'events', 'local-weather',
+                      // WHAT'S OUR STRATEGY (decisions + briefs)
+                      'brief-preview', 'brief', 'priority-signal',
+                      'strategy-builder', 'marketing', 'newsletter',
+                    ];
                     const ai = order.indexOf(a.id); const bi = order.indexOf(b.id);
                     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
                   }
                   return 0;
-                })
-                .map((card) => {
+                });
+
+              const _renderCard = (card) => {
               const _mEnabled = moduleConfig ? (moduleConfig[card.id]?.enabled ?? false) : true;
               const _mStatus = moduleState?.[card.id]?.status ?? 'inactive';
               const hasBothButtons = Boolean(card.moduleControls) && !(!_mEnabled && _mStatus === 'inactive');
@@ -7735,7 +8399,158 @@ const DashboardPage = () => {
                 </div>
               </article>
               );
-            });
+            };
+
+            const _bucketSteps = CAP_STEPS[activeCapabilityFilter] || null;
+            const _groups = _bucketSteps
+              ? _bucketSteps.map((step, i) => ({ step, stepIdx: i, cards: [] }))
+              : [{ step: null, stepIdx: -1, cards: _filteredSorted }];
+            if (_bucketSteps) {
+              let _cur = 0;
+              _filteredSorted.forEach((card) => {
+                const idx = _bucketSteps.findIndex((s) => s.id === card.id);
+                if (idx !== -1) _cur = idx;
+                _groups[_cur].cards.push(card);
+              });
+            }
+
+            const _viewToggle = (
+              <div className="cap-view-toggle" role="group" aria-label="View toggle">
+                <button
+                  type="button"
+                  title="Grid view"
+                  aria-label="Grid view"
+                  aria-pressed={capView === 'grid'}
+                  className={`cap-view-btn${capView === 'grid' ? ' is-active' : ''}`}
+                  onClick={() => setCapView('grid')}
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+                    <rect x="9" y="1.5" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+                    <rect x="1.5" y="9" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+                    <rect x="9" y="9" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  title="List view"
+                  aria-label="List view"
+                  aria-pressed={capView === 'list'}
+                  className={`cap-view-btn${capView === 'list' ? ' is-active' : ''}`}
+                  onClick={() => setCapView('list')}
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <line x1="2" y1="4" x2="14" y2="4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                    <line x1="2" y1="8" x2="14" y2="8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                    <line x1="2" y1="12" x2="14" y2="12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
+            );
+
+            // List view — one segmented at top, N columns below (each tab = column header).
+            if (capView === 'list' && _bucketSteps) {
+              return (
+                <React.Fragment>
+                  <div className="segmented cap-step-seg cap-step-seg--top" role="tablist" aria-label="Workflow steps">
+                    {_bucketSteps.map((s, i) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={i === activeStepIdx}
+                        className={i === activeStepIdx ? 'is-active' : ''}
+                        onClick={() => handleCapStepClick(i)}
+                      >
+                        {s.Icon && <s.Icon className="cap-step-icon" size={18} strokeWidth={2} aria-hidden="true" style={{ color: CAP_BUCKET_COLOR[activeCapabilityFilter] || 'currentColor' }} />}
+                        <span className="cap-step-text">{s.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="cap-list-columns" style={{ gridTemplateColumns: `repeat(${_groups.length}, minmax(0, 1fr))` }}>
+                    {_groups.map((g, gi) => (
+                      <div key={g.step ? g.step.id : `group-${gi}`} className="cap-list-col" data-step-idx={g.stepIdx}>
+                        {/* Mobile-only section label — desktop uses the cap-step-seg--top column headers */}
+                        {g.step && <div className="cap-list-col-label">{g.step.label}</div>}
+                        <div className="cap-list-col-body">
+                          {g.cards.map((card) => {
+                            const isExpanded = expandedListCards.has(card.id);
+                            return (
+                              <div key={card.id} className={`cap-list-row${isExpanded ? ' is-expanded' : ''}`}>
+                                <div className="cap-list-row-main">
+                                  {_renderCard(card)}
+                                  <button
+                                    type="button"
+                                    className="cap-list-run"
+                                    aria-label="Run module"
+                                    title="Run"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      // Delegate to the card's footer RUN/Re-run button —
+                                      // keeps run/retry/leadgen logic in one place.
+                                      e.currentTarget.closest('.cap-list-row-main')?.querySelector('.tile-foot-rerun-btn')?.click();
+                                    }}
+                                  >
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                      <path d="M21 12a9 9 0 1 1-2.64-6.36" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                      <polyline points="21 3 21 8 16 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                                    </svg>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="cap-list-caret"
+                                    aria-expanded={isExpanded}
+                                    aria-label={isExpanded ? 'Hide preview' : 'Show preview'}
+                                    onClick={(e) => { e.stopPropagation(); toggleListCard(card.id); }}
+                                  >
+                                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }}>
+                                      <polyline points="3,5 7,9 11,5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                                    </svg>
+                                  </button>
+                                </div>
+                                {isExpanded && (
+                                  <div className="cap-list-row-preview">
+                                    <div className="cap-list-status">
+                                      <span className="cap-list-status-label">Status</span>
+                                      <span className="cap-list-status-value">{card.footerLeft || 'Pending'}</span>
+                                    </div>
+                                    <div className="cap-list-desc">{card.description || ''}</div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </React.Fragment>
+              );
+            }
+
+            // Grid view — per-group segmented + sub-grid (current behavior).
+            return _groups.map((g, gi) => (
+              <div key={g.step ? g.step.id : `group-${gi}`} className="cap-step-group" data-step-idx={g.stepIdx}>
+                {_bucketSteps && (
+                  <div className="segmented cap-step-seg" role="tablist" aria-label="Workflow steps">
+                    {_bucketSteps.map((s, i) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={i === g.stepIdx}
+                        className={i === g.stepIdx ? 'is-active' : ''}
+                        onClick={() => handleCapStepClick(i)}
+                      >
+                        {s.Icon && <s.Icon className="cap-step-icon" size={18} strokeWidth={2} aria-hidden="true" style={{ color: CAP_BUCKET_COLOR[activeCapabilityFilter] || 'currentColor' }} />}
+                        <span className="cap-step-text">{s.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="cap-step-grid">{g.cards.map(_renderCard)}</div>
+              </div>
+            ));
             })()}
           </div>
           </div>{/* end capability-grid-col */}
@@ -7745,12 +8560,12 @@ const DashboardPage = () => {
             {[
               // { key: 'onboarding', label: 'Data Visualization',      sub: 'Capture & inspect',       icon: ClipboardList,         color: '#7b5fff' },
               { key: 'brief',      label: 'Daily Briefs',            sub: 'Your full report',         icon: ChartColumnIncreasing, color: '#2a2420' },
-              { key: 'knowledge',  label: 'Knowledge Officer',       sub: 'Custom data & context',    icon: Database,              color: '#3b82f6' },
+              { key: 'knowledge',  label: 'Knowledge Officer',       sub: 'Custom data & context',    icon: BrainIcon,             color: '#3b82f6' },
               { key: 'growth',     label: 'Marketing Director',      sub: 'SEO, signals & growth',    icon: Settings2,             color: '#10b981' },
               { key: 'content',    label: 'Creative Director',        sub: 'Posts & platforms',        icon: Workflow,               color: '#14b8a6' },
               { key: 'social',     label: 'Social Media Manager',     sub: 'Schedule & publish',       icon: CalendarDays,          color: '#6366f1' },
               { key: 'website',    label: 'Website Developer',        sub: 'Speed & conversion',       icon: LaptopMinimalCheck,    color: '#0ea5e9' },
-              { key: 'automation', label: 'Automation & Systems',    sub: 'Scale & automate',         icon: BrainIcon,             color: '#6366f1' },
+              { key: 'automation', label: 'Automation & Systems',    sub: 'Scale & automate',         icon: Database,              color: '#6366f1' },
               { key: 'services',   label: 'Work With Me',            sub: 'Get it done',              icon: MessageSquareMore,     color: '#ec4899' },
               { key: 'leadgen',    label: 'Sales',                    sub: 'Prospect pipeline',        icon: Radar,                 color: '#ff3b30' },
               ...(isAdmin ? [{ key: 'admin', label: 'Admin', sub: 'Email & system', icon: Send, color: '#a855f7' }] : []),
@@ -8154,6 +8969,53 @@ const DashboardPage = () => {
                 id="delete-account-modal-cancel"
                 onClick={() => setShowDeleteAccountModal(false)}
                 disabled={deleteAccountLoading}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingDeleteClient && (
+        <div
+          id="delete-client-modal-overlay"
+          onClick={() => { if (!deleteClientLoading) setPendingDeleteClient(null); }}
+        >
+          <div id="delete-client-modal" onClick={(e) => e.stopPropagation()}>
+            <div id="delete-client-modal-header">
+              <span id="delete-client-modal-eyebrow">Delete Client</span>
+              <button
+                type="button"
+                id="delete-client-modal-close"
+                aria-label="Close"
+                disabled={deleteClientLoading}
+                onClick={() => { if (!deleteClientLoading) setPendingDeleteClient(null); }}
+              >✕</button>
+            </div>
+            <h2 id="delete-client-modal-headline">DELETE CLIENT</h2>
+            <p id="delete-client-modal-copy">
+              This permanently removes <strong>{pendingDeleteClient.name}</strong> and all associated
+              Firestore data (config, dashboard state, runs, knowledge base). This cannot be undone.
+            </p>
+            {deleteClientError && (
+              <p id="delete-client-modal-error">{deleteClientError}</p>
+            )}
+            <div id="delete-client-modal-actions">
+              <button
+                type="button"
+                id="delete-client-modal-confirm"
+                className="cta-pill-btn"
+                onClick={handleDeleteClient}
+                disabled={deleteClientLoading}
+              >
+                {deleteClientLoading ? 'Deleting…' : 'Delete Client'}
+              </button>
+              <button
+                type="button"
+                id="delete-client-modal-cancel"
+                onClick={() => { if (!deleteClientLoading) setPendingDeleteClient(null); }}
+                disabled={deleteClientLoading}
               >
                 Cancel
               </button>
@@ -9190,6 +10052,163 @@ const DashboardPage = () => {
                 {/* ── Scout Config slice cards — each edits a slice of the shared marketingBriefConfig ── */}
 
                 {/* Scout Focus — research lens + analysis instructions + freshness */}
+                {activeTileModal.cardId === 'brand-keywords' && (
+                  <div id="brand-keywords-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
+                    <div className="tile-detail-tabs">
+                      <button type="button" className={`tile-detail-tab${brandKeywordsTab === 'brand' ? ' tile-detail-tab--active' : ''}`} onClick={() => setBrandKeywordsTab('brand')}>BRAND &amp; KEYWORDS</button>
+                      <button type="button" className={`tile-detail-tab${brandKeywordsTab === 'searches' ? ' tile-detail-tab--active' : ''}`} onClick={() => setBrandKeywordsTab('searches')}>SEARCH PLAN</button>
+                    </div>
+                    <div className="tile-detail-tab-content">
+                    {!marketingBriefConfig ? (
+                      <div className="mu-tab-pane"><p className="mu-notice">Loading Scout config…</p></div>
+                    ) : brandKeywordsTab === 'brand' ? (
+                    <div className="mu-tab-pane">
+                        <>
+                          <section className="mu-section">
+                            <div className="mu-section-head">
+                              <div>
+                                <h3>Brand &amp; Keywords</h3>
+                                <p>Identity and themes that build the default search plan.</p>
+                              </div>
+                            </div>
+
+                            <label className="mu-field">
+                              <span className="mu-label">Brand name</span>
+                              <input className="mu-input" value={marketingBriefConfig.brandName || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), brandName: e.target.value }))} placeholder="e.g. your brand name" />
+                            </label>
+                            <div className="mu-field">
+                              <span className="mu-label">Brand identifiers</span>
+                              <div className="mu-list">
+                                {(() => {
+                                  const items = String(marketingBriefConfig.brandKeywords || '').split('\n');
+                                  const list = items.length ? items : [''];
+                                  const BK_HINTS = ['Brand or product name', 'brand-domain.com', '$TICKER or product code', 'common misspelling'];
+                                  return list.map((val, i) => (
+                                    <div key={`bk-id-${i}`} className="mu-list-row">
+                                      <input className="mu-input" value={val} placeholder={BK_HINTS[i] || 'Exact identifier'} spellCheck={false} onChange={(e) => updateMarketingBriefListItem('brandKeywords', i, e.target.value)} />
+                                      <button type="button" className="mb-config-remove-btn" onClick={() => removeMarketingBriefListItem('brandKeywords', i)} disabled={list.length <= 1}>Remove</button>
+                                    </div>
+                                  ));
+                                })()}
+                              </div>
+                              <div className="mu-list-actions">
+                                <button type="button" className="mb-config-mini-btn" onClick={() => addMarketingBriefListItem('brandKeywords', 12)} disabled={String(marketingBriefConfig.brandKeywords || '').split('\n').filter((s) => s.trim()).length >= 12}>Add identifier</button>
+                              </div>
+                            </div>
+                            <div className="mu-field">
+                              <span className="mu-label">Category themes</span>
+                              <div className="mu-list">
+                                {(() => {
+                                  const items = String(marketingBriefConfig.categoryTerms || '').split('\n');
+                                  const list = items.length ? items : [''];
+                                  return list.map((val, i) => (
+                                    <div key={`ct-${i}`} className="mu-list-row">
+                                      <input className="mu-input" value={val} placeholder={i === 0 ? 'Core category' : i === 1 ? 'Related topic' : 'Buyer search term'} spellCheck={false} onChange={(e) => updateMarketingBriefListItem('categoryTerms', i, e.target.value)} />
+                                      <button type="button" className="mb-config-remove-btn" onClick={() => removeMarketingBriefListItem('categoryTerms', i)} disabled={list.length <= 1}>Remove</button>
+                                    </div>
+                                  ));
+                                })()}
+                              </div>
+                              <div className="mu-list-actions">
+                                <button type="button" className="mb-config-mini-btn" onClick={() => addMarketingBriefListItem('categoryTerms', 12)} disabled={String(marketingBriefConfig.categoryTerms || '').split('\n').filter((s) => s.trim()).length >= 12}>Add theme</button>
+                              </div>
+                            </div>
+
+                            <div className="mb-search-preview" aria-label="Generated search preview">
+                              <div className="tile-detail-row-section-head">GENERATED SEARCH PREVIEW</div>
+                              {marketingBriefSearchStats.generatedRows.map((row) => (
+                                <div key={`bk-preview-${row.label}`} className="mb-search-preview-row">
+                                  <span className="mb-search-preview-label">{row.label}</span>
+                                  <span className="mb-search-preview-query">{row.query || 'Add brand terms to preview query'}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </section>
+
+                          {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
+                          <div className="mu-footer">
+                            <span />
+                            <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 100 }} onClick={saveMarketingBriefConfig} disabled={marketingBriefSaving}>
+                              <span>{marketingBriefSaving ? 'Saving…' : 'Save'}</span>
+                            </button>
+                          </div>
+                        </>
+                    </div>
+                    ) : (
+                    <div className="mu-tab-pane" style={{ padding: 18 }}>
+                        <>
+                          <div className="mb-search-modebar">
+                            <div>
+                              <div className="tile-detail-row-section-head">SEARCH MODE</div>
+                              <p style={{ margin: '6px 0 0', fontSize: 12, lineHeight: 1.5, color: 'var(--text-secondary)' }}>
+                                Generated mode is the default: 3 balanced searches from Brand &amp; Keywords, plus watchlist/platform rows. Custom mode should be 4-8 high-intent query clusters, not one search per keyword.
+                              </p>
+                            </div>
+                            <div className="mb-search-mode-actions">
+                              <button type="button" className={`mb-config-mini-btn${marketingBriefSearchStats.generatedMode ? ' is-active' : ''}`} onClick={clearMarketingBriefSearches}>Use Generated</button>
+                              <button type="button" className="mb-config-mini-btn" onClick={seedRecommendedMarketingBriefSearches}>Seed 5 Queries</button>
+                              <button type="button" className="mb-config-mini-btn" onClick={addMarketingBriefSearch} disabled={(marketingBriefConfig.searches || []).length >= SEARCH_PLAN_CUSTOM_MAX}>Add Custom</button>
+                            </div>
+                          </div>
+                          <div className="mu-chip-row" aria-label="Search plan stats">
+                            <span className={`mu-chip${marketingBriefSearchStats.generatedMode ? ' mu-chip--success' : ''}`}>{marketingBriefSearchStats.generatedMode ? 'Generated' : 'Custom'} mode</span>
+                            <span className={`mu-chip${marketingBriefSearchStats.customSearches.length > SEARCH_PLAN_CUSTOM_MAX ? ' mu-chip--danger' : ' mu-chip--success'}`}>{marketingBriefSearchStats.customSearches.length || marketingBriefSearchStats.generatedRows.length} base queries</span>
+                            <span className="mu-chip">{marketingBriefSearchStats.watchlistSearches} watchlist</span>
+                            <span className="mu-chip">{marketingBriefSearchStats.platformSearches} platform</span>
+                            <span className={`mu-chip${marketingBriefSearchStats.totalSearches <= 12 ? ' mu-chip--success' : ' mu-chip--warning'}`}>{marketingBriefSearchStats.totalSearches} est. searches</span>
+                          </div>
+                          {marketingBriefSearchStats.generatedMode ? (
+                            <div className="mb-search-preview" aria-label="Generated search rows">
+                              {marketingBriefSearchStats.generatedRows.map((row) => (
+                                <div key={`sp-generated-${row.label}`} className="mb-search-preview-row">
+                                  <span className="mb-search-preview-label">{row.label}</span>
+                                  <span className="mb-search-preview-query">{row.query}</span>
+                                  <span className="mb-search-preview-goal">{row.goal}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="mb-config-search-list">
+                              {(marketingBriefConfig.searches || []).map((row, index) => (
+                                <div key={`sp-search-${index}`} className="mb-config-search-row">
+                                  <div className="mb-config-search-meta">
+                                    <span className="mb-config-row-dot" aria-hidden="true" />
+                                    <span className="mb-config-row-num">{String(index + 1).padStart(2, '0')}</span>
+                                  </div>
+                                  <label className="mb-config-field mb-config-field--label">
+                                    <span className="mb-config-label">Label</span>
+                                    <input className="mb-config-input" value={row.label || ''} placeholder="Category Momentum" onChange={(e) => updateMarketingBriefSearch(index, { label: e.target.value })} />
+                                  </label>
+                                  <label className="mb-config-field mb-config-field--query">
+                                    <span className="mb-config-label">Search query</span>
+                                    <textarea className="mb-config-textarea mb-config-textarea--compact" value={row.query || ''} placeholder="category OR topic news OR discussion" onChange={(e) => updateMarketingBriefSearch(index, { query: e.target.value })} rows={2} />
+                                  </label>
+                                  <label className="mb-config-field mb-config-field--goal">
+                                    <span className="mb-config-label">Signal Scout should extract</span>
+                                    <input className="mb-config-input" value={row.goal || ''} placeholder="Find current market narratives and participation windows." onChange={(e) => updateMarketingBriefSearch(index, { goal: e.target.value })} />
+                                  </label>
+                                  <button type="button" className="mb-config-remove-btn" onClick={() => removeMarketingBriefSearch(index)}>Remove</button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {!marketingBriefSearchStats.generatedMode && marketingBriefSearchStats.customSearches.length > SEARCH_PLAN_CUSTOM_MAX ? (
+                            <p className="mu-notice mu-notice--danger">Only the first {SEARCH_PLAN_CUSTOM_MAX} custom searches are saved. Collapse related keywords into OR clusters.</p>
+                          ) : null}
+                          {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
+                          <div className="mu-footer">
+                            <span />
+                            <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 100 }} onClick={saveMarketingBriefConfig} disabled={marketingBriefSaving}>
+                              <span>{marketingBriefSaving ? 'Saving…' : 'Save'}</span>
+                            </button>
+                          </div>
+                        </>
+                    </div>
+                    )}
+                    </div>
+                  </div>
+                )}
+
                 {activeTileModal.cardId === 'scout-focus' && (
                   <div id="scout-focus-panel" className="tile-detail-bento-cell">
                     <div className="mu-tab-pane" style={{ padding: 18 }}>
@@ -9222,13 +10241,18 @@ const DashboardPage = () => {
                   </div>
                 )}
 
-                {/* Watchlist — KOLs / handles + search mode */}
+                {/* Watchlist & Competitors */}
                 {activeTileModal.cardId === 'watchlist' && (
-                  <div id="watchlist-panel" className="tile-detail-bento-cell">
-                    <div className="mu-tab-pane" style={{ padding: 18 }}>
-                      {!marketingBriefConfig ? (
-                        <p className="mu-notice">Loading Scout config…</p>
-                      ) : (
+                  <div id="watchlist-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
+                    <div className="tile-detail-tabs">
+                      <button type="button" className={`tile-detail-tab${watchlistTab === 'watchlist' ? ' tile-detail-tab--active' : ''}`} onClick={() => setWatchlistTab('watchlist')}>WATCHLIST</button>
+                      <button type="button" className={`tile-detail-tab${watchlistTab === 'competitors' ? ' tile-detail-tab--active' : ''}`} onClick={() => setWatchlistTab('competitors')}>COMPETITORS</button>
+                    </div>
+                    <div className="tile-detail-tab-content">
+                    {!marketingBriefConfig ? (
+                      <div className="mu-tab-pane"><p className="mu-notice">Loading Scout config…</p></div>
+                    ) : watchlistTab === 'watchlist' ? (
+                      <div className="mu-tab-pane" style={{ padding: 18 }}>
                         <>
                           <label className="mu-field">
                             <span className="mu-label">KOLs / handles</span>
@@ -9250,18 +10274,9 @@ const DashboardPage = () => {
                             </button>
                           </div>
                         </>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Competitors */}
-                {activeTileModal.cardId === 'competitors' && (
-                  <div id="competitors-panel" className="tile-detail-bento-cell">
-                    <div className="mu-tab-pane" style={{ padding: 18 }}>
-                      {!marketingBriefConfig ? (
-                        <p className="mu-notice">Loading Scout config…</p>
-                      ) : (
+                      </div>
+                    ) : (
+                      <div className="mu-tab-pane" style={{ padding: 18 }}>
                         <>
                           <label className="mu-field">
                             <span className="mu-label">Competitors</span>
@@ -9276,121 +10291,44 @@ const DashboardPage = () => {
                             </button>
                           </div>
                         </>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Search Plan — custom Scout query rows */}
-                {activeTileModal.cardId === 'search-plan' && (
-                  <div id="search-plan-panel" className="tile-detail-bento-cell">
-                    <div className="mu-tab-pane" style={{ padding: 18 }}>
-                    {!marketingBriefConfig ? (
-                      <p className="mu-notice">Loading Scout config…</p>
-                    ) : (
-                      <>
-                        <div className="mb-config-section-head" style={{ margin: 0 }}>
-                          <div><p style={{ margin: 0 }}>Each row becomes a targeted Scout query. Use the goal to explain why it matters.</p></div>
-                          <button type="button" className="mb-config-mini-btn" onClick={addMarketingBriefSearch}>Add Search</button>
-                        </div>
-                        <div className="mb-config-search-list">
-                          {(marketingBriefConfig.searches || []).map((row, index) => (
-                            <div key={`sp-search-${index}`} className="mb-config-search-row">
-                              <div className="mb-config-search-meta">
-                                <span className="mb-config-row-dot" aria-hidden="true" />
-                                <span className="mb-config-row-num">{String(index + 1).padStart(2, '0')}</span>
-                              </div>
-                              <label className="mb-config-field mb-config-field--label">
-                                <span className="mb-config-label">Label</span>
-                                <input className="mb-config-input" value={row.label || ''} placeholder="Brand / KOLs / Viral Windows" onChange={(e) => updateMarketingBriefSearch(index, { label: e.target.value })} />
-                              </label>
-                              <label className="mb-config-field mb-config-field--query">
-                                <span className="mb-config-label">Search query</span>
-                                <textarea className="mb-config-textarea mb-config-textarea--compact" value={row.query || ''} placeholder="Terms, handles, competitor names, category phrases..." onChange={(e) => updateMarketingBriefSearch(index, { query: e.target.value })} rows={2} />
-                              </label>
-                              <label className="mb-config-field mb-config-field--goal">
-                                <span className="mb-config-label">Signal Scout should extract</span>
-                                <input className="mb-config-input" value={row.goal || ''} placeholder="Find founder-ready angles, KOL reactions, competitor moves..." onChange={(e) => updateMarketingBriefSearch(index, { goal: e.target.value })} />
-                              </label>
-                              <button type="button" className="mb-config-remove-btn" onClick={() => removeMarketingBriefSearch(index)} disabled={(marketingBriefConfig.searches || []).length <= 1}>Remove</button>
-                            </div>
-                          ))}
-                        </div>
-                        {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
-                        <div className="mu-footer">
-                          <span />
-                          <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 100 }} onClick={saveMarketingBriefConfig} disabled={marketingBriefSaving}>
-                            <span>{marketingBriefSaving ? 'Saving…' : 'Save'}</span>
-                          </button>
-                        </div>
-                      </>
+                      </div>
                     )}
                     </div>
                   </div>
                 )}
 
-                {/* Source Platforms — active toggles (web + X) on top, full locked catalog below */}
-                {activeTileModal.cardId === 'source-platforms' && (
-                  <div id="source-platforms-panel" className="tile-detail-bento-cell">
+                {/* Web Search + Platforms — Web toggles; launch/startup directories locked behind upgrade */}
+                {activeTileModal.cardId === 'platform-search' && (
+                  <div id="platform-search-panel" className="tile-detail-bento-cell">
                     <div className="mu-tab-pane" style={{ padding: 18 }}>
                     <p style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--text-secondary)', margin: 0 }}>
-                      Web and X drive your brief today — toggle them below. The rest of the catalog unlocks with an upgrade as the social and directory search layer rolls out.
+                      <strong>Web</strong> search feeds Scout and your daily brief — toggle it on or off. Launch and startup directories are locked until their search layer ships; upgrade to unlock.
                     </p>
                     {marketingBriefConfig ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        <div className="tile-detail-row-section-head">Active Sources</div>
-                        {[{ key: 'web', label: 'Web / News' }, { key: 'x', label: 'X / Twitter' }].map((p) => {
-                          const selected = (marketingBriefConfig.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS).includes(p.key);
-                          return (
-                            <button
-                              key={p.key}
-                              type="button"
-                              className={`mb-config-platform-toggle${selected ? ' is-on' : ''}`}
-                              onClick={() => toggleMarketingBriefSourcePlatform(p.key)}
-                              aria-pressed={selected}
-                            >
-                              <span className="mb-config-platform-check">{selected ? '✓' : ''}</span>
-                              <span className="mb-config-platform-body">
-                                <span className="mb-config-platform-title">
-                                  {p.label}
-                                  <span className="mb-config-platform-status mb-config-platform-status--ready">active</span>
-                                </span>
-                              </span>
-                            </button>
-                          );
-                        })}
+                        <div className="tile-detail-row-section-head">Web + Platforms</div>
+                        {WEB_SEARCH_SOURCES.map((p) => renderSourcePlatformRow(p))}
                         {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
-                        <div className="mu-footer" style={{ marginTop: 4 }}>
-                          <span />
-                          <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 100 }} onClick={saveMarketingBriefConfig} disabled={marketingBriefSaving}>
-                            <span>{marketingBriefSaving ? 'Saving…' : 'Save'}</span>
-                          </button>
-                        </div>
                       </div>
                     ) : null}
-                    {SCOUT_PLATFORM_CATALOG.map((group) => (
-                      <div key={group.section} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        <div className="tile-detail-row-section-head">{group.section}</div>
-                        {group.items.map((name) => (
-                          <div
-                            key={name}
-                            className="tile-detail-stat-row"
-                            data-platform-locked="true"
-                            style={{ alignItems: 'center', opacity: 0.85 }}
-                          >
-                            <span className="tile-detail-stat-label">{name}</span>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Scout</span>
-                              <button
-                                type="button"
-                                onClick={() => setShowTierModal(true)}
-                                style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--accent, #10b981)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                              >Upgrade →</button>
-                            </span>
-                          </div>
-                        ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Social Media Signals — X + Reddit toggle; remaining socials locked behind upgrade */}
+                {activeTileModal.cardId === 'social-signals' && (
+                  <div id="social-signals-panel" className="tile-detail-bento-cell">
+                    <div className="mu-tab-pane" style={{ padding: 18 }}>
+                    <p style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--text-secondary)', margin: 0 }}>
+                      <strong>X</strong> and <strong>Reddit</strong> feed your daily brief today — toggle each on or off. The remaining social platforms are locked until the social search layer ships; upgrade to unlock.
+                    </p>
+                    {marketingBriefConfig ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <div className="tile-detail-row-section-head">Social Platforms</div>
+                        {SOCIAL_SIGNAL_SOURCES.map((p) => renderSourcePlatformRow(p))}
+                        {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
                       </div>
-                    ))}
+                    ) : null}
                     </div>
                   </div>
                 )}
@@ -9819,10 +10757,10 @@ const DashboardPage = () => {
                                   <span className="mb-config-summary-key">Freshness</span>
                                   <span className="mb-config-summary-val">{marketingBriefConfig.freshnessDays || 1}d</span>
                                 </span>
-                                <span className="mb-config-summary-item">
-                                  <span className="mb-config-summary-key">Searches</span>
-                                  <span className="mb-config-summary-val">{(marketingBriefConfig.searches || []).filter((row) => row.query).length}</span>
-                                </span>
+	                                <span className="mb-config-summary-item">
+	                                  <span className="mb-config-summary-key">Search mode</span>
+	                                  <span className="mb-config-summary-val">{marketingBriefSearchStats.generatedMode ? 'Generated' : 'Custom'}</span>
+	                                </span>
                                 <span className="mb-config-summary-item">
                                   <span className="mb-config-summary-key">Sources</span>
                                   <span className="mb-config-summary-val">{(marketingBriefConfig.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS).length}</span>
@@ -9869,22 +10807,24 @@ const DashboardPage = () => {
                                 </div>
                                 <div className="mb-config-platform-grid" role="group" aria-label="Scout source platforms">
                                   {MARKETING_BRIEF_SOURCE_PLATFORMS.map((platform) => {
-                                    const selected = (marketingBriefConfig.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS).includes(platform.key);
+                                    const locked = !UNLOCKED_SOURCE_PLATFORMS.includes(platform.key);
+                                    const selected = !locked && (marketingBriefConfig.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS).includes(platform.key);
                                     return (
                                       <button
                                         key={platform.key}
                                         type="button"
-                                        className={`mb-config-platform-toggle${selected ? ' is-on' : ''}`}
-                                        onClick={() => toggleMarketingBriefSourcePlatform(platform.key)}
+                                        className={`mb-config-platform-toggle${selected ? ' is-on' : ''}${locked ? ' is-locked' : ''}`}
+                                        onClick={() => locked ? setShowTierModal(true) : toggleMarketingBriefSourcePlatform(platform.key)}
                                         aria-pressed={selected}
+                                        aria-disabled={locked}
                                       >
                                         <span className="mb-config-platform-check">{selected ? '✓' : ''}</span>
                                         <span className="mb-config-platform-body">
                                           <span className="mb-config-platform-title">
                                             {platform.label}
-                                            <span className={`mb-config-platform-status mb-config-platform-status--${platform.status}`}>{platform.status}</span>
+                                            <span className={`mb-config-platform-status mb-config-platform-status--${locked ? 'available' : 'ready'}`}>{locked ? 'locked' : (selected ? 'on' : 'off')}</span>
                                           </span>
-                                          <span className="mb-config-platform-desc">{platform.description}</span>
+                                          <span className="mb-config-platform-desc">{locked ? 'Upgrade to unlock this source.' : platform.description}</span>
                                         </span>
                                       </button>
                                     );
@@ -9940,39 +10880,58 @@ const DashboardPage = () => {
                                 </div>
                               </section>
 
-                              <section className="mu-section">
-                                <div className="mu-section-head">
-                                  <span className="mu-index">03</span>
-                                  <div>
-                                    <h3>Search Plan</h3>
-                                    <p>Each row becomes a targeted Scout query. Use the goal to explain why that query matters.</p>
-                                  </div>
-                                  <button type="button" className="mb-config-mini-btn" onClick={addMarketingBriefSearch}>Add Search</button>
-                                </div>
-                                <div className="mb-config-search-list">
-                                  {(marketingBriefConfig.searches || []).map((row, index) => (
-                                    <div key={`mb-search-${index}`} className="mb-config-search-row">
-                                      <div className="mb-config-search-meta">
-                                        <span className="mb-config-row-dot" aria-hidden="true" />
-                                        <span className="mb-config-row-num">{String(index + 1).padStart(2, '0')}</span>
-                                      </div>
-                                      <label className="mu-field mb-config-field--label">
-                                        <span className="mu-label">Label</span>
-                                        <input className="mu-input" value={row.label || ''} placeholder="Brand / KOLs / Viral Windows" onChange={(e) => updateMarketingBriefSearch(index, { label: e.target.value })} />
-                                      </label>
-                                      <label className="mu-field mb-config-field--query">
-                                        <span className="mu-label">Search query</span>
-                                        <textarea className="mu-textarea" style={{ minHeight: 64 }} value={row.query || ''} placeholder="Terms, handles, competitor names, category phrases..." onChange={(e) => updateMarketingBriefSearch(index, { query: e.target.value })} rows={2} />
-                                      </label>
-                                      <label className="mu-field mb-config-field--goal">
-                                        <span className="mu-label">Signal Scout should extract</span>
-                                        <input className="mu-input" value={row.goal || ''} placeholder="Find founder-ready angles, KOL reactions, competitor moves..." onChange={(e) => updateMarketingBriefSearch(index, { goal: e.target.value })} />
-                                      </label>
-                                      <button type="button" className="mb-config-remove-btn" onClick={() => removeMarketingBriefSearch(index)} disabled={(marketingBriefConfig.searches || []).length <= 1}>Remove</button>
-                                    </div>
-                                  ))}
-                                </div>
-                              </section>
+	                              <section className="mu-section">
+	                                <div className="mu-section-head">
+	                                  <span className="mu-index">03</span>
+	                                  <div>
+	                                    <h3>Search Plan</h3>
+	                                    <p>Generated mode uses Brand & Keywords for a balanced baseline. Custom mode is capped at {SEARCH_PLAN_CUSTOM_MAX} targeted query clusters.</p>
+	                                  </div>
+	                                  <div className="mb-search-mode-actions">
+	                                    <button type="button" className={`mb-config-mini-btn${marketingBriefSearchStats.generatedMode ? ' is-active' : ''}`} onClick={clearMarketingBriefSearches}>Generated</button>
+	                                    <button type="button" className="mb-config-mini-btn" onClick={seedRecommendedMarketingBriefSearches}>Seed</button>
+	                                    <button type="button" className="mb-config-mini-btn" onClick={addMarketingBriefSearch} disabled={(marketingBriefConfig.searches || []).length >= SEARCH_PLAN_CUSTOM_MAX}>Add</button>
+	                                  </div>
+	                                </div>
+	                                <div className="mu-chip-row">
+	                                  <span className={`mu-chip${marketingBriefSearchStats.generatedMode ? ' mu-chip--success' : ''}`}>{marketingBriefSearchStats.generatedMode ? 'Generated baseline' : 'Custom override'}</span>
+	                                  <span className="mu-chip">{marketingBriefSearchStats.totalSearches} est. searches</span>
+	                                </div>
+	                                {marketingBriefSearchStats.generatedMode ? (
+	                                  <div className="mb-search-preview">
+	                                    {marketingBriefSearchStats.generatedRows.map((row) => (
+	                                      <div key={`mb-generated-${row.label}`} className="mb-search-preview-row">
+	                                        <span className="mb-search-preview-label">{row.label}</span>
+	                                        <span className="mb-search-preview-query">{row.query}</span>
+	                                      </div>
+	                                    ))}
+	                                  </div>
+	                                ) : (
+	                                  <div className="mb-config-search-list">
+	                                    {(marketingBriefConfig.searches || []).map((row, index) => (
+	                                      <div key={`mb-search-${index}`} className="mb-config-search-row">
+	                                        <div className="mb-config-search-meta">
+	                                          <span className="mb-config-row-dot" aria-hidden="true" />
+	                                          <span className="mb-config-row-num">{String(index + 1).padStart(2, '0')}</span>
+	                                        </div>
+	                                        <label className="mu-field mb-config-field--label">
+	                                          <span className="mu-label">Label</span>
+	                                          <input className="mu-input" value={row.label || ''} placeholder="Category Momentum" onChange={(e) => updateMarketingBriefSearch(index, { label: e.target.value })} />
+	                                        </label>
+	                                        <label className="mu-field mb-config-field--query">
+	                                          <span className="mu-label">Search query</span>
+	                                          <textarea className="mu-textarea" style={{ minHeight: 64 }} value={row.query || ''} placeholder="Terms, handles, competitor names, category phrases..." onChange={(e) => updateMarketingBriefSearch(index, { query: e.target.value })} rows={2} />
+	                                        </label>
+	                                        <label className="mu-field mb-config-field--goal">
+	                                          <span className="mu-label">Signal Scout should extract</span>
+	                                          <input className="mu-input" value={row.goal || ''} placeholder="Find founder-ready angles, KOL reactions, competitor moves..." onChange={(e) => updateMarketingBriefSearch(index, { goal: e.target.value })} />
+	                                        </label>
+	                                        <button type="button" className="mb-config-remove-btn" onClick={() => removeMarketingBriefSearch(index)}>Remove</button>
+	                                      </div>
+	                                    ))}
+	                                  </div>
+	                                )}
+	                              </section>
 
                               <section className="mu-section">
                                 <div className="mu-section-head">
@@ -10008,7 +10967,7 @@ const DashboardPage = () => {
                               {(() => {
                                 const SEARCH_RATE = 0.045;   // ~$/search (Scout web_search + trim), from run logs
                                 const SYNTH_FLAT = 0.08;     // ~$ fixed: brief synthesis + Scribe + Guardian
-                                const customSearches = (marketingBriefConfig.searches || []).filter((s) => String(s?.query || '').trim()).length;
+	                                const customSearches = marketingBriefSearchStats.generatedMode ? marketingBriefSearchStats.generatedRows.length : (marketingBriefConfig.searches || []).filter((s) => String(s?.query || '').trim()).length;
                                 const handles = String(marketingBriefConfig.kols || '').split(/[\n,]+/).map((s) => s.trim()).filter(Boolean).length;
                                 const mode = marketingBriefConfig.kolSearchMode === 'combined' ? 'combined' : 'per-handle';
                                 const watchlistSearches = mode === 'combined' ? (handles ? 1 : 0) : handles;
@@ -10016,7 +10975,7 @@ const DashboardPage = () => {
                                 const totalSearches = customSearches + watchlistSearches + platformSearches;
                                 const usd = (n) => `$${n.toFixed(2)}`;
                                 const lineItems = [
-                                  { label: 'Custom search rows', count: customSearches, cost: customSearches * SEARCH_RATE },
+	                                  { label: marketingBriefSearchStats.generatedMode ? 'Generated search rows' : 'Custom search rows', count: customSearches, cost: customSearches * SEARCH_RATE },
                                   { label: `Watchlist searches (${mode})`, count: watchlistSearches, cost: watchlistSearches * SEARCH_RATE },
                                   { label: 'Platform searches (max, pre-dedupe)', count: platformSearches, cost: platformSearches * SEARCH_RATE },
                                   { label: 'Synthesis (brief + scribe + guardian)', count: 1, cost: SYNTH_FLAT },
@@ -10881,7 +11840,7 @@ const DashboardPage = () => {
                           const BUCKET_META = {
                             brief:    { label: 'Executive Daily Brief',  sub: 'Daily market intelligence & publishing', icon: ChartColumnIncreasing, color: '#2a2420' },
                             growth:   { label: 'Marketing Director',     sub: 'Strategy, signals & growth pipeline',   icon: Settings2,             color: '#10b981' },
-                            knowledge:{ label: 'Knowledge Officer',      sub: 'Knowledge sources powering AI modules', icon: Database,              color: '#3b82f6' },
+                            knowledge:{ label: 'Knowledge Officer',      sub: 'Knowledge sources powering AI modules', icon: BrainIcon,             color: '#3b82f6' },
                             content:  { label: 'Creative Director',      sub: 'Brand voice, identity & systems',       icon: Workflow,              color: '#14b8a6' },
                             website:  { label: 'Website Developer',      sub: 'Speed, SEO & conversion metrics',       icon: LaptopMinimalCheck,    color: '#0ea5e9' },
                             _system:  { label: 'System',                 sub: 'Pipeline, artifacts & diagnostics',     icon: ClipboardList,         color: '#6b7280' },
@@ -11125,6 +12084,15 @@ const DashboardPage = () => {
 
               </div>
 
+              {/* Full-width debug meta band — direct child of the bento grid so it spans both columns (out of the panel column) */}
+              {(activeTileModal.cardId === 'platform-search' || activeTileModal.cardId === 'social-signals') ? (
+                <div id="scout-test-meta-band" style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column' }}>
+                  {(activeTileModal.cardId === 'platform-search'
+                    ? [['web', 'WEB']]
+                    : [['x', 'X / TWITTER'], ['reddit', 'REDDIT']]
+                  ).map(([k, lbl]) => renderScoutTestMetaRow(k, lbl))}
+                </div>
+              ) : null}
 
             </div>
           </div>
@@ -11222,6 +12190,17 @@ const renderGaugeViz = ({ score, verdictLabel, rings, gaugePct: gaugePctOverride
   );
 };
 
+// Single source of truth for the "Data Coverage" score. Captured audit fields
+// over total — INCLUDING upgrade-locked rows, matching the Data Coverage card
+// gauge. Both the card (renderAuditViz) and the toolbar coverage chip call this
+// so the percentage and the "X / X" count can never drift apart.
+function computeDataCoverage(auditRows) {
+  const rows = (auditRows || []).filter((r) => r.isAuditRow && !r.isColumnHeader);
+  const captured = rows.filter((r) => r._captured).length;
+  const total = rows.length;
+  return { captured, total, pct: total > 0 ? Math.round((captured / total) * 100) : 0 };
+}
+
 // Data Summary — counts how many runnable Data Visualization cards have
 // completed and surfaces the five most important ones as the dimension rings.
 // Half-circle gauge: count-of-run cards in the center, "OUT OF X" pill below,
@@ -11269,11 +12248,8 @@ const renderAuditViz = (auditRows, _moduleState) => {
     }
   }
 
-  // Gauge center: all rows including upgrade-locked
-  const allRows     = (auditRows || []).filter((r) => r.isAuditRow && !r.isColumnHeader);
-  const allCaptured = allRows.filter((r) => r._captured).length;
-  const allTotal    = allRows.length;
-  const gaugePct    = allTotal > 0 ? Math.round((allCaptured / allTotal) * 100) : 0;
+  // Gauge center: shared source of truth (all rows including upgrade-locked).
+  const { captured: allCaptured, total: allTotal, pct: gaugePct } = computeDataCoverage(auditRows);
 
   const rings = [
     ...BUCKET_ORDER.map((b) => {
@@ -12048,7 +13024,7 @@ const dashboardCss = `
     position: absolute;
     top: calc(100% + 6px);
     right: 0;
-    z-index: 30;
+    z-index: 100;
     min-width: 238px;
     max-width: min(320px, 82vw);
     padding: 5px;
@@ -12056,7 +13032,7 @@ const dashboardCss = `
     background: rgba(255, 255, 255, 0.98);
     box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
   }
-  .client-switcher-menu button {
+  .client-switcher-menu > button {
     width: 100%;
     border: 0;
     background: transparent;
@@ -12071,8 +13047,8 @@ const dashboardCss = `
     text-align: left;
     cursor: pointer;
   }
-  .client-switcher-menu button:hover,
-  .client-switcher-menu button.active {
+  .client-switcher-menu > button:hover,
+  .client-switcher-menu > button.active {
     background: #000;
     color: #fff;
   }
@@ -12091,6 +13067,156 @@ const dashboardCss = `
     font-family: var(--font-mono);
     font-size: 0.7rem;
   }
+  .client-switcher-item {
+    display: flex;
+    align-items: stretch;
+  }
+  .client-switcher-item-select {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    color: #111;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 8px 9px;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    text-align: left;
+    cursor: pointer;
+  }
+  .client-switcher-item-select:hover,
+  .client-switcher-item-select.active {
+    background: #000;
+    color: #fff;
+  }
+  .client-switcher-item-select.active + .client-switcher-item-delete {
+    background: #000;
+    color: #fff;
+  }
+  .client-switcher-item-delete {
+    flex-shrink: 0;
+    border: 0;
+    background: transparent;
+    color: rgba(0,0,0,0.35);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 8px;
+    transition: color 120ms ease, background 120ms ease;
+  }
+  .client-switcher-item-delete:hover {
+    color: #c0392b;
+    background: rgba(192,57,43,0.08);
+  }
+  #delete-client-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: clamp(1rem, 5vw, 2rem);
+  }
+  #delete-client-modal {
+    position: relative;
+    background: #14100c;
+    color: #e7d9c3;
+    border: 1px solid rgba(231, 217, 195, 0.18);
+    border-radius: 6px;
+    padding: 1.5rem 1.5rem 1.25rem;
+    max-width: 420px;
+    width: 100%;
+    font-family: var(--font-mono, monospace);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  }
+  #delete-client-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+  }
+  #delete-client-modal-eyebrow {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: rgba(231,217,195,0.55);
+  }
+  #delete-client-modal-close {
+    background: transparent;
+    border: none;
+    color: rgba(231,217,195,0.55);
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 0;
+    line-height: 1;
+  }
+  #delete-client-modal-close:hover { color: #e7d9c3; }
+  #delete-client-modal-headline {
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin: 0 0 0.75rem;
+    color: #e7d9c3;
+  }
+  #delete-client-modal-copy {
+    font-size: 0.8rem;
+    line-height: 1.6;
+    color: rgba(231,217,195,0.78);
+    margin: 0 0 1rem;
+  }
+  #delete-client-modal-copy strong { color: #e7d9c3; }
+  #delete-client-modal-error {
+    font-size: 0.75rem;
+    color: #e87070;
+    margin: 0 0 0.75rem;
+  }
+  #delete-client-modal-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  #delete-client-modal-confirm {
+    background: #c0392b;
+    color: #fff;
+    border: none;
+    border-radius: 999px;
+    padding: 0.5rem 1.25rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: opacity 120ms ease;
+  }
+  #delete-client-modal-confirm:hover:not(:disabled) { opacity: 0.85; }
+  #delete-client-modal-confirm:disabled { opacity: 0.4; cursor: not-allowed; }
+  #delete-client-modal-cancel {
+    background: transparent;
+    border: 1px solid rgba(231,217,195,0.25);
+    color: rgba(231,217,195,0.7);
+    border-radius: 999px;
+    padding: 0.5rem 1.25rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: border-color 120ms ease, color 120ms ease;
+  }
+  #delete-client-modal-cancel:hover:not(:disabled) {
+    border-color: rgba(231,217,195,0.55);
+    color: #e7d9c3;
+  }
+  #delete-client-modal-cancel:disabled { opacity: 0.4; cursor: not-allowed; }
   #tier-trigger-btn {
     /* Icon-only action button — styled via .meta-row-action-btn. No underline. */
     text-decoration: none;
@@ -12288,6 +13414,10 @@ const dashboardCss = `
     color: var(--text-display);
     line-height: 1.15;
   }
+  .capability-nav-btn:hover .capability-nav-btn-label,
+  .capability-nav-btn--active .capability-nav-btn-label {
+    font-weight: 600;
+  }
   .capability-nav-btn-label-short { display: none; }
   .capability-nav-btn-sub {
     font-family: var(--font-mono);
@@ -12297,14 +13427,34 @@ const dashboardCss = `
     line-height: 1.2;
   }
   #capability-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-auto-rows: minmax(470px, auto);
-    gap: 1px;
+    display: flex;
+    flex-direction: column;
     border: 1px solid rgba(42, 36, 32, 0.1);
     border-radius: 28px;
     overflow: hidden;
     isolation: isolate;
+    background: var(--surface);
+  }
+  .cap-step-group {
+    display: flex;
+    flex-direction: column;
+  }
+  .cap-step-group + .cap-step-group {
+    border-top: 1px solid rgba(42, 36, 32, 0.1);
+  }
+  .cap-step-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: auto;
+    gap: 1px;
+    background: rgba(42, 36, 32, 0.1);
+  }
+  .cap-step-group:not(:has(.cap-step-seg)) .cap-step-grid {
+    background: transparent;
+  }
+  .cap-step-grid > .tile-intake-card {
+    min-height: 470px;
+    background: var(--surface);
   }
   .tile {
     aspect-ratio: 16 / 9;
@@ -12345,6 +13495,312 @@ const dashboardCss = `
   }
   .tile-intake-card--wide {
     grid-column: 1 / -1;
+  }
+  /* Step nav uses the UI-kit / modal tab system (.tile-detail-tabs) — flat
+     underline tabs with a gradient active border. Identical in grid + list
+     views so toggling never shifts text position. */
+  .cap-step-seg {
+    display: flex;
+    gap: 0;
+    padding: 0;
+    margin: 16px 16px 12px;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .cap-step-seg > button {
+    flex: 1;
+    min-height: 44px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    color: var(--text-secondary);
+    /* Match capability-nav-btn-label font formatting */
+    font-family: var(--font-ui);
+    font-size: clamp(0.8rem, 1.1vw, 0.875rem);
+    font-weight: 400;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    text-transform: none;
+    cursor: pointer;
+    transition: color 0.2s ease;
+    padding: 0 12px;
+    margin-bottom: -1px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    min-width: 0;
+  }
+  .cap-step-icon {
+    flex-shrink: 0;
+  }
+  .cap-step-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+  .cap-step-seg > button:hover {
+    color: var(--text-display);
+    font-weight: 600;
+  }
+  /* Vertical divider between tab selections */
+  .cap-step-seg > button + button {
+    border-left: 1px solid var(--border);
+  }
+  .cap-step-seg > button.is-active {
+    color: var(--text-display);
+    font-weight: 600;
+    background: transparent;
+    box-shadow: none;
+    border-bottom: 2px solid transparent;
+    border-image: linear-gradient(90deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) 0 0 1 0;
+  }
+  /* List view: full-width gradient bottom border under the whole header row */
+  .cap-step-seg--top {
+    border-bottom: 2px solid transparent;
+    border-image: linear-gradient(90deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) 0 0 1 0;
+  }
+  /* List view: static column headers — no hover, all at active weight, no per-tab underline */
+  .cap-step-seg--top > button,
+  .cap-step-seg--top > button:hover,
+  .cap-step-seg--top > button.is-active {
+    color: var(--text-display);
+    font-weight: 600;
+    cursor: default;
+    border-bottom: 0;
+    border-image: none;
+  }
+  /* Data coverage chip — brain strokes use the shared primary gradient */
+  #dashboard-coverage-chip .coverage-brain { display: inline-flex; }
+  #dashboard-coverage-chip .coverage-brain svg path { stroke: url(#coverage-grad); }
+  /* Grid/list view toggle — sits left of the step buttons inside cap-step-seg */
+  .cap-view-toggle {
+    display: flex;
+    gap: 0;
+    margin-right: 4px;
+    flex-shrink: 0;
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .cap-view-btn {
+    width: 36px;
+    min-height: 36px;
+    align-self: center;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease, color 0.15s ease;
+    padding: 0;
+  }
+  .cap-view-btn:hover {
+    color: var(--text-primary);
+    background: rgba(42,36,32,0.04);
+  }
+  .cap-view-btn.is-active {
+    background: linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+    color: #ffffff;
+  }
+  .cap-view-btn.is-active:hover {
+    color: #ffffff;
+  }
+  /* List view — N-column kanban; top variant uses the SAME tab styling as grid
+     (base .cap-step-seg rules) so switching views never shifts text. */
+  .cap-list-columns {
+    display: grid;
+    gap: 1px;
+    background: rgba(42, 36, 32, 0.08);
+    margin: 0 16px 12px;
+  }
+  .cap-list-col {
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    min-width: 0;
+  }
+  /* Mobile-only section label inside each list column (shown ≤520px) */
+  .cap-list-col-label {
+    display: none;
+  }
+  /* Top-variant view toggle — small inline pair inside the URL bar */
+  .cap-view-toggle--top {
+    margin-right: 4px;
+    flex-shrink: 0;
+  }
+  .cap-view-toggle--top .cap-view-btn {
+    width: 30px;
+    min-height: 30px;
+  }
+  .cap-list-col-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  /* Row wrapper — holds the card + caret + optional preview block */
+  .cap-list-row {
+    border-bottom: 1px solid var(--border);
+  }
+  .cap-list-row:last-child {
+    border-bottom: 0;
+  }
+  .cap-list-row-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-right: 12px;
+  }
+  .cap-list-row-main > .tile-intake-card {
+    min-height: 0;
+    height: auto;
+    aspect-ratio: auto;
+    flex: 1;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    /* No right padding — RUN button hugs the caret (row gap = 8px) */
+    padding: 16px 0 16px 16px;
+    border: 0;
+    background: transparent;
+  }
+  /* Strip card to title + footer only in list view */
+  .cap-list-row-main .tile-intake-placeholder,
+  .cap-list-row-main .tile-intake-body,
+  .cap-list-row-main .tile-mobile-chevron,
+  .cap-list-row-main .tile-foot-meta {
+    display: none !important;
+  }
+  /* Footer becomes transparent wrapper — its children lay out as direct row
+     items: dot (order -1) · title · run btn · caret. */
+  .cap-list-row-main .tile-foot {
+    display: contents;
+  }
+  /* Status dot only (label text collapsed via font-size) — sits left of title. */
+  .cap-list-row-main .tile-foot-status {
+    order: -1;
+    flex-shrink: 0;
+    align-self: center;
+    font-size: 0;
+    gap: 0;
+    letter-spacing: 0;
+    line-height: 1;
+    align-items: center;
+    margin-top: 0;
+    padding-top: 0;
+  }
+  .cap-list-row-main .tile-foot-status .power-dot,
+  .cap-list-row-main .tile-foot-status > span {
+    align-self: center;
+  }
+  .cap-list-row-main .tile-intake-card > .tile-number {
+    width: auto;
+    align-self: center;
+  }
+  .cap-list-row-main .tile-number {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    justify-content: flex-start;
+  }
+  .cap-list-row-main .tile-header-label {
+    font-family: var(--font-ui);
+    font-size: clamp(0.8rem, 1.1vw, 0.875rem);
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    text-transform: none;
+    color: var(--text-display);
+    line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+  }
+  /* List rows: hide footer buttons — the .cap-list-run circle delegates to the
+     hidden RUN/Re-run button; row click opens modal */
+  .cap-list-row-main .tile-foot-rerun-btn,
+  .cap-list-row-main .tile-module-buttons,
+  .cap-list-row-main .tile-view-details-btn {
+    display: none !important;
+  }
+  /* Add up-out arrow glyph sticking to the title text */
+  .cap-list-row-main .tile-header-label::after {
+    content: ' ↗';
+    display: inline-block;
+    margin-left: 6px;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-secondary);
+    vertical-align: middle;
+  }
+  .cap-list-row-main > .tile-intake-card {
+    cursor: pointer;
+  }
+  .cap-list-row-main > .tile-intake-card:hover .tile-header-label::after {
+    color: var(--text-display);
+  }
+  /* Run + caret toggle — matching circular buttons on the right */
+  .cap-list-run,
+  .cap-list-caret {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    border: 1px solid #000;
+    background: rgba(255,255,255,0.6);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+  .cap-list-run:hover,
+  .cap-list-caret:hover {
+    background: var(--text-display);
+    color: #ffffff;
+    border-color: var(--text-display);
+  }
+  /* Preview reveal — compact vertical block under the row */
+  .cap-list-row-preview {
+    padding: 4px 16px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: rgba(42, 36, 32, 0.02);
+  }
+  .cap-list-status {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .cap-list-status-label {
+    color: var(--text-disabled);
+  }
+  .cap-list-status-value {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+  .cap-list-desc {
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--text-secondary);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
   .tile-intake-card--wide .tile-intake-placeholder {
     aspect-ratio: auto;
@@ -13618,11 +15074,13 @@ const dashboardCss = `
   /* Custom single-panel cards (Conversation Intake + Scout Config slices) —
      fill the content column and scroll internally instead of being clipped. */
   #conversation-intake-panel,
+  #brand-keywords-panel,
   #scout-focus-panel,
   #watchlist-panel,
   #competitors-panel,
   #search-plan-panel,
-  #source-platforms-panel,
+  #platform-search-panel,
+  #social-signals-panel,
   #brief-preview-panel,
   #events-panel {
     flex: 1;
@@ -15112,14 +16570,62 @@ const dashboardCss = `
     font-size: 0.72rem;
     line-height: 1.55;
   }
-  .mb-config-search-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .mb-config-search-row {
-    display: grid;
-    grid-template-columns: 50px minmax(110px, 0.36fr) minmax(220px, 1fr) minmax(180px, 0.7fr) auto;
+	  .mb-config-search-list {
+	    display: flex;
+	    flex-direction: column;
+	    gap: 8px;
+	  }
+	  .mb-search-modebar {
+	    display: grid;
+	    grid-template-columns: minmax(0, 1fr) auto;
+	    gap: 12px;
+	    align-items: start;
+	  }
+	  .mb-search-mode-actions {
+	    display: flex;
+	    gap: 8px;
+	    flex-wrap: wrap;
+	    justify-content: flex-end;
+	  }
+	  .mb-search-preview {
+	    display: flex;
+	    flex-direction: column;
+	    gap: 8px;
+	  }
+	  .mb-search-preview-row {
+	    display: grid;
+	    grid-template-columns: minmax(110px, 0.32fr) minmax(0, 1fr);
+	    gap: 10px;
+	    align-items: start;
+	    padding: 10px 12px;
+	    border: 1px solid rgba(255,255,255,0.11);
+	    border-radius: 8px;
+	    background: rgba(255,255,255,0.035);
+	  }
+	  .mb-search-preview-label {
+	    font-family: var(--font-mono);
+	    font-size: 0.64rem;
+	    letter-spacing: 0.12em;
+	    text-transform: uppercase;
+	    color: var(--text-secondary);
+	  }
+	  .mb-search-preview-query,
+	  .mb-search-preview-goal {
+	    min-width: 0;
+	    font-family: var(--font-mono);
+	    font-size: 0.72rem;
+	    line-height: 1.45;
+	    color: var(--text-primary);
+	    word-break: break-word;
+	  }
+	  .mb-search-preview-goal {
+	    grid-column: 2 / -1;
+	    color: var(--text-secondary);
+	    font-family: var(--font-ui);
+	  }
+	  .mb-config-search-row {
+	    display: grid;
+	    grid-template-columns: 50px minmax(110px, 0.36fr) minmax(220px, 1fr) minmax(180px, 0.7fr) auto;
     gap: 8px;
     align-items: end;
     padding: 10px;
@@ -15163,15 +16669,21 @@ const dashboardCss = `
     padding: 0 10px;
     color: var(--text-secondary);
   }
-  .mb-config-mini-btn:hover,
-  .mb-config-remove-btn:hover:not(:disabled) {
-    background: rgba(255,255,255,0.1);
-    border-color: rgba(255,255,255,0.28);
-    color: var(--text-primary);
-  }
-  .mb-config-remove-btn:disabled {
-    opacity: 0.38;
-    cursor: not-allowed;
+	  .mb-config-mini-btn:hover,
+	  .mb-config-remove-btn:hover:not(:disabled) {
+	    background: rgba(255,255,255,0.1);
+	    border-color: rgba(255,255,255,0.28);
+	    color: var(--text-primary);
+	  }
+	  .mb-config-mini-btn.is-active {
+	    border-color: rgba(12,206,107,0.38);
+	    background: rgba(12,206,107,0.1);
+	    color: #0cce6b;
+	  }
+	  .mb-config-mini-btn:disabled,
+	  .mb-config-remove-btn:disabled {
+	    opacity: 0.38;
+	    cursor: not-allowed;
   }
   .mb-config-error {
     margin: 0;
@@ -15209,13 +16721,23 @@ const dashboardCss = `
     flex-shrink: 0;
   }
   @media (max-width: 900px) {
-    .mb-config-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .mb-config-summary-item { border-bottom: 1px solid rgba(255,255,255,0.1); }
-    .mb-config-summary-item:nth-child(2n) { border-right: 0; }
-    .mb-config-grid { grid-template-columns: 1fr; }
-    .mb-config-platform-grid { grid-template-columns: 1fr; }
-    .mb-config-search-row {
-      grid-template-columns: 44px 1fr;
+	    .mb-config-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	    .mb-config-summary-item { border-bottom: 1px solid rgba(255,255,255,0.1); }
+	    .mb-config-summary-item:nth-child(2n) { border-right: 0; }
+	    .mb-config-grid { grid-template-columns: 1fr; }
+	    .mb-config-platform-grid { grid-template-columns: 1fr; }
+	    .mb-search-modebar,
+	    .mb-search-preview-row {
+	      grid-template-columns: 1fr;
+	    }
+	    .mb-search-mode-actions {
+	      justify-content: flex-start;
+	    }
+	    .mb-search-preview-goal {
+	      grid-column: 1 / -1;
+	    }
+	    .mb-config-search-row {
+	      grid-template-columns: 44px 1fr;
       align-items: stretch;
     }
     .mb-config-field--label,
@@ -17205,6 +18727,43 @@ const dashboardCss = `
     .tile-intake-card--mobile-expanded .tile-intake-body {
       flex-direction: column;
     }
+
+    /* ── Mobile: tab system → vertical section labels ─────────────────── */
+    /* Grid view: each group's seg collapses to its own label only —
+       the active tab restyled as a static section header. */
+    .cap-step-seg {
+      margin: 12px 16px 4px;
+    }
+    .cap-step-seg > button { display: none; }
+    .cap-step-seg > button.is-active {
+      display: block;
+      flex: none;
+      min-height: 0;
+      padding: 8px 0 8px;
+      text-align: left;
+      border-image: none;
+      cursor: default;
+      pointer-events: none;
+    }
+    .cap-step-grid { grid-template-columns: 1fr; }
+    /* List view: hide column-header tab row, stack columns vertically,
+       show the per-section label above each column's rows. */
+    .cap-step-seg--top { display: none; }
+    /* Re-assert over the mobile-expanded .tile-foot{display:flex} rule above */
+    .cap-list-row-main .tile-foot { display: contents; }
+    .cap-list-columns { grid-template-columns: 1fr !important; }
+    .cap-list-col-label {
+      display: block;
+      font-family: var(--font-ui);
+      font-size: clamp(0.8rem, 1.1vw, 0.875rem);
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: var(--text-display);
+      line-height: 1.15;
+      margin: 12px 16px 4px;
+      padding: 8px 0 8px;
+      border-bottom: 1px solid var(--border);
+    }
   }
   /* Chevron hidden above mobile breakpoint */
   @media (min-width: 521px) {
@@ -17228,11 +18787,35 @@ const dashboardCss = `
     #reseed-run-btn-icon { display: none; }
     #founders-hero-meta { width: 100%; max-width: 100%; overflow: hidden; }
     .meta-row { overflow: hidden; }
+    #client-meta-row { overflow: visible; }
     .meta-row .value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
     #dashboard-source-cta-row { max-width: 100%; box-sizing: border-box; }
     #reseed-run-btn { min-width: 0; }
   }
 
+  /* Full-width source band between hero + capability sections */
+  #dashboard-source-band {
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0 0 18px;
+  }
+  /* Vertical divider between the view toggle and the globe/URL group */
+  .cap-source-divider {
+    flex-shrink: 0;
+    width: 1px;
+    align-self: stretch;
+    margin: 4px 4px 4px 2px;
+    background: rgba(42, 36, 32, 0.14);
+  }
+  #dashboard-source-band .meta-row-source,
+  #dashboard-source-band .meta-row-source-body {
+    width: 100%;
+    margin: 0;
+  }
+  #dashboard-source-band #dashboard-source-cta-row {
+    max-width: none;
+    width: 100%;
+  }
   #reseed-control-row {
     display: block;
   }
@@ -18788,6 +20371,26 @@ const dashboardCss = `
     gap: 6px;
     min-width: 0;
   }
+  /* Discrete one-value-per-input list (brand identifiers, category themes) */
+  .mu-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .mu-list-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .mu-list-row .mu-input {
+    flex: 1;
+    min-height: 44px;
+  }
+  .mu-list-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 2px;
+  }
   .mu-label {
     display: block;
     font-family: var(--font-mono);
@@ -18796,6 +20399,13 @@ const dashboardCss = `
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: rgba(42,36,32,0.62);
+  }
+  .mu-field-hint {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.03em;
+    line-height: 1.5;
+    color: rgba(42,36,32,0.45);
   }
   .mu-input,
   .mu-select {

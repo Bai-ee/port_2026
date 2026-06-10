@@ -146,6 +146,28 @@ async function runClientPipeline({ clientId, clientConfig = null, fresh = false 
     };
   }
 
+  // ── 4b. News monitor (Phase 1, Tier A) ───────────────────────────────────────
+  // Augment Scout's brandMentions with broad news coverage from GDELT (free).
+  // Best-effort: failures never block the brief.
+  try {
+    const { fetchBrandNews } = require('./news-monitor');
+    const newsItems = await fetchBrandNews({
+      brandName: config.clientName,
+      brandKeywords: config.brandKeywords,
+      lookbackDays: config.scout?.freshnessDays || 1,
+    });
+    if (newsItems.length) {
+      brief.agentData = brief.agentData || {};
+      const existing = Array.isArray(brief.agentData.brandMentions) ? brief.agentData.brandMentions : [];
+      const seen = new Set(existing.map((m) => String(m?.url || '').trim()).filter(Boolean));
+      const fresh = newsItems.filter((m) => m.url && !seen.has(m.url)).slice(0, 20);
+      brief.agentData.brandMentions = [...existing, ...fresh];
+      console.log(`[${new Date().toISOString()}] RUNTIME: news monitor added ${fresh.length} brand mention(s) from GDELT`);
+    }
+  } catch (err) {
+    console.warn(`[${new Date().toISOString()}] RUNTIME: news monitor skipped — ${err.message}`);
+  }
+
   // ── 5. Scribe — brief passed directly, no filesystem coupling ───────────────
   const scribeOutput = await runScribe(clientId, config, brief);
   const completedAt = new Date().toISOString();

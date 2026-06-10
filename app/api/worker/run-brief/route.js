@@ -30,6 +30,15 @@ function getIntakePipeline() {
   return require('../../../../features/scout-intake/runner');
 }
 
+// Lazy-loaded: brand identity generation utils (Phase 2)
+function getScoutConfigUtils() {
+  return {
+    fetchSiteEvidence: require('../../../../features/scout-intake/site-fetcher').fetchSiteEvidence,
+    ensureScoutConfig: require('../../../../features/scout-intake/scout-config-generator').ensureScoutConfig,
+    buildUserContext: require('../../../../features/scout-intake/user-context').buildUserContext,
+  };
+}
+
 function json(body, status = 200) {
   return NextResponse.json(body, {
     status,
@@ -131,6 +140,28 @@ export async function POST(request) {
         onProgress,
       });
       await updateModuleState(clientId, results, runId);
+
+      // Generate brand identity after modules complete (non-fatal)
+      if (websiteUrl) {
+        try {
+          const { fetchSiteEvidence, ensureScoutConfig, buildUserContext } = getScoutConfigUtils();
+          const evidence = await fetchSiteEvidence(websiteUrl);
+          const userContext = buildUserContext(clientConfig);
+          const clientName = clientConfig?.clientName || clientConfig?.sourceInputs?.clientName || null;
+          await ensureScoutConfig({
+            clientId,
+            clientName,
+            intakeResult: { websiteUrl },
+            userContext,
+            evidence,
+            websiteUrl,
+            force: claimedRun.trigger === 'reseed',
+          });
+          console.log(`[WORKER] scoutConfig ensured for ${clientId}`);
+        } catch (scoutErr) {
+          console.warn(`[WORKER] scoutConfig generation non-fatal failure for ${clientId}: ${scoutErr?.message}`);
+        }
+      }
 
       const anyOk = results.some((r) => r.ok);
       const artifactRefs = results.flatMap((r) => Array.isArray(r.artifacts) ? r.artifacts : []);

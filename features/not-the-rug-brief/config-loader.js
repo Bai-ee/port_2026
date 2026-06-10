@@ -168,7 +168,7 @@ function deriveCompanyName(hostname, clientId) {
 // results land in their own bucket and don't overwrite other queries.
 function buildKolSearches({ marketingBriefConfig, companyName }) {
   const kols = Array.isArray(marketingBriefConfig?.kols)
-    ? marketingBriefConfig.kols.map((k) => String(k || '').trim()).filter(Boolean)
+    ? marketingBriefConfig.kols.map((k) => String(k || '').trim()).filter((k) => k.replace(/^@+/, '').trim().length >= 2)
     : [];
   if (!kols.length) return [];
   const brand = companyName || 'the brand';
@@ -187,7 +187,7 @@ function buildKolSearches({ marketingBriefConfig, companyName }) {
   }));
 }
 
-function buildSearchPlan({ websiteUrl, ideaDescription, hostname, companyName, marketingBriefConfig = null, sourcePlatforms = DEFAULT_SOURCE_PLATFORMS }) {
+function buildSearchPlan({ websiteUrl, ideaDescription, hostname, companyName, brandKeywords = [], categoryTerms = [], marketingBriefConfig = null, sourcePlatforms = DEFAULT_SOURCE_PLATFORMS }) {
   const configuredSearches = Array.isArray(marketingBriefConfig?.searches)
     ? marketingBriefConfig.searches
         .map((row, index) => ({
@@ -218,17 +218,26 @@ function buildSearchPlan({ websiteUrl, ideaDescription, hostname, companyName, m
     return appendNovel(configuredSearches, [...kolRows, ...perPlatformRows]);
   }
 
-  const brandQuery = [`"${companyName}"`, hostname ? `"${hostname}"` : null, hostname ? `site:${hostname}` : null]
+  const brandTokens = Array.isArray(brandKeywords) && brandKeywords.length
+    ? brandKeywords.map((t) => (/\s/.test(t) && !/^".*"$/.test(t) ? `"${t}"` : t))
+    : [`"${companyName}"`, hostname ? `"${hostname}"` : null];
+  const brandQuery = [...brandTokens, hostname ? `site:${hostname}` : null]
     .filter(Boolean)
     .join(' OR ');
 
+  const categoryQuery = Array.isArray(categoryTerms) && categoryTerms.length
+    ? categoryTerms.slice(0, 4).join(' OR ')
+    : null;
   const ideaTerms = ideaDescription
     ? ideaDescription.split(/[\s,./]+/).filter((t) => t.length > 3).slice(0, 6).join(' OR ')
     : null;
 
-  const categoryQuery = ideaTerms || `${companyName} industry trends 2026`;
-  const opportunityQuery = ideaDescription
-    ? `best ${ideaDescription.split(/\s+/).slice(0, 4).join(' ')}`
+  const resolvedCategoryQuery = categoryQuery || ideaTerms || `${companyName} industry trends 2026`;
+  const opportunitySubject = Array.isArray(categoryTerms) && categoryTerms.length
+    ? categoryTerms[0]
+    : (ideaDescription ? ideaDescription.split(/\s+/).slice(0, 4).join(' ') : companyName);
+  const opportunityQuery = (categoryQuery || ideaDescription)
+    ? `best ${opportunitySubject} recommendations OR alternatives OR problems`
     : `${companyName} reviews OR ${hostname} competitors`;
 
   const defaultPlan = [
@@ -239,7 +248,7 @@ function buildSearchPlan({ websiteUrl, ideaDescription, hostname, companyName, m
     },
     {
       label: 'CATEGORY',
-      query: categoryQuery,
+      query: resolvedCategoryQuery,
       goal: 'Capture broader category movement and external narratives the brand can react to.',
     },
     {
@@ -267,10 +276,26 @@ function buildSearchPlan({ websiteUrl, ideaDescription, hostname, companyName, m
 function buildRuntimeConfigFromFirestore(clientId, clientConfig) {
   const sourceInputs = clientConfig?.sourceInputs || {};
   const marketingBriefConfig = clientConfig?.marketingBriefConfig || null;
+  const scoutConfig = clientConfig?.scoutConfig || null;
   const websiteUrl = String(sourceInputs.websiteUrl || '');
   const ideaDescription = String(sourceInputs.ideaDescription || '').trim();
   const hostname = extractHostname(websiteUrl);
-  const companyName = deriveCompanyName(hostname, clientId);
+  // Brand identity is canonical in scoutConfig (the audit store, kept in sync by
+  // the Brand & Keywords card save → scoutConfig mirror). Read scoutConfig first
+  // so a Run resolves the same brandKeywords / categoryTerms / clientName the
+  // audit and external scouts use; fall back to the card config, then to derived.
+  // These drive the BRAND search row, the X/last30days topic, and Reddit mentions.
+  const cleanList = (arr) => (Array.isArray(arr) ? arr.map((s) => String(s || '').trim()).filter(Boolean) : []);
+  const configuredBrandName = String(scoutConfig?.clientName || marketingBriefConfig?.brandName || '').trim();
+  const scoutBrandKeywords = cleanList(scoutConfig?.brandKeywords);
+  const configuredBrandKeywords = scoutBrandKeywords.length
+    ? scoutBrandKeywords
+    : cleanList(marketingBriefConfig?.brandKeywords);
+  const scoutCategoryTerms = cleanList(scoutConfig?.categoryTerms);
+  const configuredCategoryTerms = scoutCategoryTerms.length
+    ? scoutCategoryTerms
+    : cleanList(marketingBriefConfig?.categoryTerms);
+  const companyName = configuredBrandName || deriveCompanyName(hostname, clientId);
   const configuredKols = Array.isArray(marketingBriefConfig?.kols) ? marketingBriefConfig.kols.filter(Boolean) : [];
   const configuredCompetitors = Array.isArray(marketingBriefConfig?.competitors) ? marketingBriefConfig.competitors.filter(Boolean) : [];
   const configuredSourceFocus = String(marketingBriefConfig?.sourceFocus || '').trim();
@@ -304,14 +329,18 @@ function buildRuntimeConfigFromFirestore(clientId, clientConfig) {
     clientName: companyName,
     clientDescriptor: ideaDescription || `a business at ${websiteUrl || clientId}`,
     websiteUrl,
-    brandKeywords: [
-      companyName ? `"${companyName}"` : null,
-      hostname ? `"${hostname}"` : null,
-    ].filter(Boolean),
+    brandKeywords: configuredBrandKeywords.length
+      ? configuredBrandKeywords.map((t) => (/^".*"$/.test(t) ? t : `"${t}"`))
+      : [
+          companyName ? `"${companyName}"` : null,
+          hostname ? `"${hostname}"` : null,
+        ].filter(Boolean),
     competitors: configuredCompetitors,
-    categoryTerms: ideaDescription
-      ? ideaDescription.split(/[,.\n]+/).map((t) => t.trim()).filter(Boolean).slice(0, 6)
-      : [],
+    categoryTerms: configuredCategoryTerms.length
+      ? configuredCategoryTerms
+      : (ideaDescription
+        ? ideaDescription.split(/[,.\n]+/).map((t) => t.trim()).filter(Boolean).slice(0, 6)
+        : []),
     kols: configuredKols,
     upcomingEvents: [],
 
@@ -326,7 +355,7 @@ function buildRuntimeConfigFromFirestore(clientId, clientConfig) {
       sourcePlatforms,
       enabledSourceLabels: enabledPlatformLabels,
       preferredSources: enabledPlatformLabels,
-      searchPlan: buildSearchPlan({ websiteUrl, ideaDescription, hostname, companyName, marketingBriefConfig, sourcePlatforms }),
+      searchPlan: buildSearchPlan({ websiteUrl, ideaDescription, hostname, companyName, brandKeywords: configuredBrandKeywords, categoryTerms: configuredCategoryTerms, marketingBriefConfig, sourcePlatforms }),
       agentDataTemplate: configuredAgentDataTemplate || (hasMarketingBriefConfig ? MARKETING_BRIEF_AGENT_DATA_TEMPLATE : DEFAULT_AGENT_DATA_TEMPLATE),
     },
 
@@ -359,6 +388,24 @@ function buildRuntimeConfigFromFirestore(clientId, clientConfig) {
       brandTerms: [companyName, hostname].filter(Boolean),
       competitorNames: configuredCompetitors,
     } : { enabled: false },
+
+    // Dedicated Reddit scout for the daily brief. Only emitted when the user
+    // toggled Reddit as a source platform. provider 'web-search' = credential-free
+    // site:reddit.com via Claude web_search (no Reddit OAuth needed). Queries are
+    // sourced from the Marketing Director's generated scoutConfig.reddit; brand
+    // mention queries fall back to the company name so a brand-new config still
+    // returns mentions. Note: runRedditWebSearch requires ≥1 subreddit to run.
+    reddit: sourcePlatforms.includes('reddit') ? (() => {
+      const sr = clientConfig?.scoutConfig?.reddit || {};
+      const toList = (v) => (Array.isArray(v) ? v.filter(Boolean) : []);
+      const mentions = toList(sr.mentionQueries);
+      return {
+        provider:           'web-search',
+        subreddits:         toList(sr.subreddits),
+        mentionQueries:     mentions.length ? mentions : [companyName].filter(Boolean),
+        opportunityQueries: toList(sr.opportunityQueries),
+      };
+    })() : undefined,
 
     scribe: {
       role: hasMarketingBriefConfig ? 'founder brief content strategist' : 'content writer',

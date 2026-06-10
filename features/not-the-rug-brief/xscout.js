@@ -21,6 +21,7 @@ const { fetchOperationalWeather, buildWeatherContextBlock } = require('./service
 const { fetchReviewStatusViaWebSearch, buildReviewContextBlock } = require('./services/reviews');
 const { fetchInstagramInsights, buildInstagramContextBlock } = require('./services/instagram');
 const { fetchRedditSignals, buildRedditContextBlock } = require('./services/reddit');
+const { runRedditWebSearch } = require('../scout-intake/external-scouts/reddit-web-search');
 const { fetchLast30Days } = require('./services/last30days');
 const { normalizeSignals, mapToScoutFields, buildLast30DaysContextBlock, summarizeLast30DaysResult } = require('./normalize-last30days');
 
@@ -635,6 +636,35 @@ function extractSearchResults(responseContent) {
 
 // ─── Core execution ──────────────────────────────────────────────────────────
 
+// Adapt a web-search reddit report (mentions/opportunities use `url` and lack
+// comment counts/dates) into the field shape buildRedditContextBlock expects
+// (`permalink`, `numComments`, `createdAt`) so links survive and rendering is clean.
+function adaptWebSearchRedditReport(report) {
+  if (!report) return null;
+  const adapt = (item = {}) => ({
+    ...item,
+    permalink:   item.permalink || item.url || '',
+    createdAt:   item.createdAt || null,
+    numComments: item.numComments ?? 0,
+  });
+  return {
+    ...report,
+    mentions:                  (report.mentions || []).map(adapt),
+    participationOpportunities: (report.participationOpportunities || []).map(adapt),
+  };
+}
+
+// Route the daily-brief Reddit fetch by provider. `web-search` is the
+// credential-free default (Marketing Director sets this) — site:reddit.com via
+// Claude web_search. `oauth-app-only` uses the native Reddit Data API.
+async function fetchRedditForBrief(config, previousReport) {
+  if (config.reddit?.provider === 'web-search') {
+    const { ok, report } = await runRedditWebSearch({ clientId: config.clientId, redditConfig: config.reddit });
+    return ok ? adaptWebSearchRedditReport(report) : null;
+  }
+  return fetchRedditSignals(config, previousReport);
+}
+
 async function runXScout(config = DEFAULT_CONFIG) {
   const runId = randomUUID();
   const startTime = new Date();
@@ -673,7 +703,7 @@ async function runXScout(config = DEFAULT_CONFIG) {
       config.weather?.provider   ? fetchOperationalWeather(config)                              : Promise.resolve(null),
       config.reviews?.provider   ? fetchReviewStatusViaWebSearch(config, previousReviewReport)  : Promise.resolve(null),
       config.instagram?.provider ? fetchInstagramInsights(config, previousInstagramReport)      : Promise.resolve(null),
-      config.reddit?.provider    ? fetchRedditSignals(config, previousRedditReport)             : Promise.resolve(null),
+      config.reddit?.provider    ? fetchRedditForBrief(config, previousRedditReport)            : Promise.resolve(null),
       config.last30days?.enabled ? fetchLast30Days(config)                                      : Promise.resolve(null),
     ]);
 

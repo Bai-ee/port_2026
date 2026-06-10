@@ -88,10 +88,17 @@ const AuthPageInner = () => {
     onboardingInitRef.current = true;
     const flow = searchParams.get('flow');
     const urlParam = searchParams.get('url');
+    const ideaParam = searchParams.get('idea');
     if (flow === 'homepage-create') {
       setIsHomepageCreate(true);
       setMode('create');
-      if (urlParam) setForm((current) => ({ ...current, websiteUrl: urlParam }));
+      if (urlParam || ideaParam) {
+        setForm((current) => ({
+          ...current,
+          ...(urlParam ? { websiteUrl: urlParam } : {}),
+          ...(ideaParam ? { ideaDescription: ideaParam } : {}),
+        }));
+      }
     }
   }, [searchParams]);
 
@@ -113,6 +120,11 @@ const AuthPageInner = () => {
 
     if (!form.password) {
       throw new Error('Password is required.');
+    }
+
+    // A dashboard needs something to analyze — a website OR a brand name / idea.
+    if (!form.websiteUrl.trim() && !form.ideaDescription.trim()) {
+      throw new Error('Enter a website, or a brand name / idea, to create your dashboard.');
     }
   };
 
@@ -310,15 +322,31 @@ const AuthPageInner = () => {
               </div>
             ) : null}
 
-            {/* Captured website — read-only, locked */}
-            <div id="auth-captured-url" style={capturedUrlStyle}>
-              <Globe size={14} strokeWidth={1.5} style={{ flexShrink: 0, color: 'rgba(42,36,32,0.45)' }} aria-hidden="true" />
-              <span id="auth-captured-url-text" style={capturedUrlTextStyle}>{form.websiteUrl}</span>
-              <span style={capturedUrlBadgeStyle}>
-                <Lock size={10} strokeWidth={2} aria-hidden="true" />
-                CAPTURED
-              </span>
-            </div>
+            {form.websiteUrl ? (
+              /* Captured website — read-only, locked */
+              <div id="auth-captured-url" style={capturedUrlStyle}>
+                <Globe size={14} strokeWidth={1.5} style={{ flexShrink: 0, color: 'rgba(42,36,32,0.45)' }} aria-hidden="true" />
+                <span id="auth-captured-url-text" style={capturedUrlTextStyle}>{form.websiteUrl}</span>
+                <span style={capturedUrlBadgeStyle}>
+                  <Lock size={10} strokeWidth={2} aria-hidden="true" />
+                  CAPTURED
+                </span>
+              </div>
+            ) : (
+              /* No website — capture a brand name / idea instead (editable) */
+              <label id="auth-captured-idea" style={labelStyle}>
+                <span style={labelTextStyle}>Brand name or idea</span>
+                <textarea
+                  id="auth-form-idea"
+                  name="ideaDescription"
+                  value={form.ideaDescription}
+                  onChange={handleChange}
+                  style={textareaStyle}
+                  placeholder="Your brand name, or describe your project / idea"
+                  rows={2}
+                />
+              </label>
+            )}
 
             <form id="auth-form" style={formStyle} onSubmit={handleSubmit}>
               <button

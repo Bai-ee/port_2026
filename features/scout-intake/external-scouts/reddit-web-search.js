@@ -19,7 +19,10 @@ const MAX_TOKENS = 2000;
 
 function buildPrompt({ redditConfig }) {
   const subs = (redditConfig.subreddits || []).join(', r/');
-  const mentionQ = (redditConfig.mentionQueries || []).join(' | ');
+  const mentionList = (redditConfig.mentionQueries || []).length
+    ? redditConfig.mentionQueries
+    : (redditConfig.brandTerms || []); // fall back to brand terms when no explicit mention queries
+  const mentionQ = mentionList.join(' | ');
   const oppQ = (redditConfig.opportunityQueries || []).join(' | ');
   return `Use web_search with site:reddit.com to find posts and threads relevant to this client.
 
@@ -75,8 +78,14 @@ function extractCost(response) {
  * of the OAuth-native `fetchRedditSignals`.
  */
 async function runRedditWebSearch({ clientId, redditConfig }) {
-  if (!redditConfig || !Array.isArray(redditConfig.subreddits) || redditConfig.subreddits.length === 0) {
-    return { ok: false, report: null, cost: 0, error: 'no subreddits configured' };
+  // Reddit search runs via site:reddit.com web_search, so it works with queries
+  // alone — subreddits are optional scoping, not a hard requirement.
+  const subs    = Array.isArray(redditConfig?.subreddits)         ? redditConfig.subreddits.filter(Boolean)         : [];
+  const mention = Array.isArray(redditConfig?.mentionQueries)     ? redditConfig.mentionQueries.filter(Boolean)     : [];
+  const opp     = Array.isArray(redditConfig?.opportunityQueries) ? redditConfig.opportunityQueries.filter(Boolean) : [];
+  const brand   = Array.isArray(redditConfig?.brandTerms)         ? redditConfig.brandTerms.filter(Boolean)         : [];
+  if (!redditConfig || (subs.length === 0 && mention.length === 0 && opp.length === 0 && brand.length === 0)) {
+    return { ok: false, report: null, cost: 0, error: 'no reddit queries or subreddits configured' };
   }
 
   let response;
@@ -90,6 +99,14 @@ async function runRedditWebSearch({ clientId, redditConfig }) {
   } catch (err) {
     return { ok: false, report: null, cost: 0, error: err.message };
   }
+
+  // TEMP DEBUG — remove after diagnosing empty reddit results.
+  try {
+    const blockTypes = (response.content || []).map((b) => b.type);
+    const textJoined = (response.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n');
+    console.log('[reddit-web-search] blocks:', JSON.stringify(blockTypes));
+    console.log('[reddit-web-search] text:', textJoined.slice(0, 1500));
+  } catch { /* ignore */ }
 
   const parsed = extractJson(response);
   const cost = extractCost(response);

@@ -430,6 +430,17 @@ function isValidHomepageUrl(raw) {
   }
 }
 
+// Classify the hero input: a website URL/domain, or a free-text brand name / idea.
+// Lets a user without a website spin up a dashboard from a name or idea instead.
+function classifyHomepageInput(raw) {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return { kind: 'empty', value: '' };
+  const looksUrl = /^https?:\/\//i.test(trimmed) || (!/\s/.test(trimmed) && /\.[a-z]{2,}$/i.test(trimmed));
+  if (looksUrl && isValidHomepageUrl(trimmed)) return { kind: 'url', value: normalizeHomepageUrl(trimmed) };
+  if (trimmed.length >= 2) return { kind: 'idea', value: trimmed };
+  return { kind: 'empty', value: '' };
+}
+
 const StackedSlidesSection = () => {
   const wrapperRef = useRef(null);
   const servicesViewportRef = useRef(null);
@@ -480,13 +491,17 @@ const StackedSlidesSection = () => {
   const handleHomepageUrlChange = (e) => {
     const val = e.target.value;
     setHomepageUrl(val);
-    setUrlIsValid(isValidHomepageUrl(val));
+    // Valid when the input is a website OR a substantive name/idea.
+    setUrlIsValid(classifyHomepageInput(val).kind !== 'empty');
   };
 
   const handleCreateDashboard = () => {
-    if (!urlIsValid || homepageUrl === CMO_PLACEHOLDER_URL) return;
-    const normalized = normalizeHomepageUrl(homepageUrl);
-    const params = new URLSearchParams({ flow: 'homepage-create', url: normalized });
+    const input = classifyHomepageInput(homepageUrl);
+    if (input.kind === 'empty' || homepageUrl === CMO_PLACEHOLDER_URL) return;
+    const params = new URLSearchParams({
+      flow: 'homepage-create',
+      ...(input.kind === 'url' ? { url: input.value } : { idea: input.value }),
+    });
     router.push(`/login?${params.toString()}`);
   };
 
@@ -2152,6 +2167,7 @@ const StackedSlidesSection = () => {
                 id="cmo-modal-url-input"
                 value={homepageUrl}
                 onChange={handleHomepageUrlChange}
+                placeholder="Enter your website — or a brand name / idea"
               />
               <button
                 type="submit"

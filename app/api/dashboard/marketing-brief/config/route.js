@@ -45,7 +45,8 @@ function normalizeSearches(input) {
       query: String(row?.query || '').trim().slice(0, 600),
       goal:  String(row?.goal || '').trim().slice(0, 240),
     }))
-    .filter((row) => row.query);
+    .filter((row) => row.query)
+    .slice(0, 8);
 }
 
 const ALLOWED_SOURCE_PLATFORMS = new Set(['web', 'x', 'reddit', 'instagram', 'youtube', 'tiktok', 'hackernews']);
@@ -123,20 +124,30 @@ export async function POST(request) {
   }
 
   const searches = normalizeSearches(body?.searches);
-  if (searches.length === 0) {
-    return json({ error: 'At least one Scout search query is required.' }, 400);
-  }
 
   let priorWeather = null;
+  let priorScoutConfig = null;
+  let priorSourceWebsiteUrl = null;
   try {
     const priorSnap = await fb.adminDb.collection('client_configs').doc(context.clientId).get();
     priorWeather = priorSnap.data()?.marketingBriefConfig?.weather || null;
+    priorScoutConfig = priorSnap.data()?.scoutConfig || null;
+    priorSourceWebsiteUrl = priorSnap.data()?.sourceInputs?.websiteUrl || null;
   } catch { /* no prior */ }
   const weather = await normalizeWeather(body?.weather, priorWeather);
+
+  const splitTerms = (input, max) => String(input || '')
+    .split(/[\n,]+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, max);
 
   const marketingBriefConfig = {
     enabled: true,
     weather,
+    brandName: String(body?.brandName || '').trim().slice(0, 120),
+    brandKeywords: splitTerms(body?.brandKeywords, 12),
+    categoryTerms: splitTerms(body?.categoryTerms, 12),
     sourceFocus: String(body?.sourceFocus || '').trim().slice(0, 1000),
     scoutInstructions: String(body?.scoutInstructions || '').trim().slice(0, 6000),
     agentDataTemplate: String(body?.agentDataTemplate || '').trim().slice(0, 6000),
@@ -161,11 +172,49 @@ export async function POST(request) {
     updatedAtIso: new Date().toISOString(),
   };
 
+  // Mirror the canonical brand identity back into scoutConfig so the
+  // external-scout path (which reads scoutConfig, not marketingBriefConfig)
+  // sees card edits instead of the original audit values. Only mirror when an
+  // audit-generated scoutConfig already exists — never fabricate a partial one
+  // before the crawl has run. merge:true deep-merges, so untouched scoutConfig
+  // fields (industry, reddit.subreddits, …) are preserved.
+  const writePayload = {
+    marketingBriefConfig,
+    updatedAt: fb.FieldValue.serverTimestamp(),
+  };
+  // Re-quote multi-word terms to match the audit's exact-match form
+  // (same rule buildSearchPlan uses for the brand query).
+  const quoteTerm = (t) => (/\s/.test(t) && !/^".*"$/.test(t) ? `"${t}"` : t);
+  const quotedKeywords = marketingBriefConfig.brandKeywords.map(quoteTerm);
+
+  if (priorScoutConfig) {
+    // URL client: mirror card edits back into existing scoutConfig.
+    const scoutConfigMirror = {
+      brandKeywords: quotedKeywords,
+      categoryTerms: marketingBriefConfig.categoryTerms,
+    };
+    if (marketingBriefConfig.brandName) scoutConfigMirror.clientName = marketingBriefConfig.brandName;
+    // reddit.mentionQueries is the brand identity in the shape the reddit
+    // external scout actually queries — refresh it from the edited keywords.
+    if (priorScoutConfig.reddit) {
+      scoutConfigMirror.reddit = { mentionQueries: quotedKeywords };
+    }
+    writePayload.scoutConfig = scoutConfigMirror;
+  } else if (!priorSourceWebsiteUrl) {
+    // Name-only client: no URL means no crawl will ever run — seed store A from
+    // the first card save so external scouts have a canonical identity to read.
+    writePayload.scoutConfig = {
+      clientName: marketingBriefConfig.brandName || '',
+      brandKeywords: quotedKeywords,
+      categoryTerms: marketingBriefConfig.categoryTerms,
+      competitors: [],
+      industry: '',
+      reddit: { subreddits: [], mentionQueries: quotedKeywords },
+    };
+  }
+
   await fb.adminDb.collection('client_configs').doc(context.clientId).set(
-    {
-      marketingBriefConfig,
-      updatedAt: fb.FieldValue.serverTimestamp(),
-    },
+    writePayload,
     { merge: true }
   );
 
