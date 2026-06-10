@@ -84,10 +84,6 @@ const KnowledgeBaseCard = dynamic(() => import('./components/dashboard/Knowledge
   ssr: false,
 });
 
-const MarketCategoryPanel = dynamic(() => import('./components/dashboard/MarketCategoryPanel'), {
-  loading: () => null,
-  ssr: false,
-});
 
 const LeadgenModulePanel = dynamic(() => import('./components/dashboard/leadgen/LeadgenModulePanel'), {
   loading: () => null,
@@ -1179,6 +1175,7 @@ const CUSTOM_DETAIL_CARD_IDS = new Set([
   'social-signals',
   'brief-preview',
   'events',
+  'business-model',
 ]);
 
 const buildUnavailableDescription = (subject) => `Insufficient source evidence to determine ${subject} reliably.`;
@@ -2076,9 +2073,13 @@ const DashboardPage = () => {
   const [clientEditError, setClientEditError] = useState(null);
   const [activeTileModal, setActiveTileModal] = useState(null);
   const [brandKeywordsTab, setBrandKeywordsTab] = useState('brand');
+  const [searchPlanSubTab, setSearchPlanSubTab] = useState('generated');
   const [watchlistTab, setWatchlistTab] = useState('watchlist');
   useEffect(() => {
-    if (activeTileModal?.cardId === 'brand-keywords') setBrandKeywordsTab('brand');
+    if (activeTileModal?.cardId === 'brand-keywords') {
+      setBrandKeywordsTab('brand');
+      setSearchPlanSubTab(marketingBriefSearchStats?.generatedMode !== false ? 'generated' : 'custom');
+    }
     if (activeTileModal?.cardId === 'watchlist') setWatchlistTab('watchlist');
   }, [activeTileModal?.cardId]);
   const [briefFullScreen, setBriefFullScreen] = useState(false);
@@ -2403,6 +2404,13 @@ const DashboardPage = () => {
   const [brandSnapshotDraft, setBrandSnapshotDraft] = useState(() => buildBrandSnapshotDraft(null));
   const [brandSnapshotSaving, setBrandSnapshotSaving] = useState(false);
   const [brandSnapshotError, setBrandSnapshotError] = useState('');
+  // Editable Business Model (brandOverview) + Market Category — customizable foundation fields.
+  const [businessOverviewDraft, setBusinessOverviewDraft] = useState({ businessModel: '', positioning: '', targetAudience: '', headline: '', summary: '' });
+  const [businessOverviewSaving, setBusinessOverviewSaving] = useState(false);
+  const [businessOverviewError, setBusinessOverviewError] = useState('');
+  const [marketCategoryDraft, setMarketCategoryDraft] = useState('');
+  const [marketCategorySaving, setMarketCategorySaving] = useState(false);
+  const [marketCategoryError, setMarketCategoryError] = useState('');
 
   const hydrateMarketingBriefConfig = useCallback((config) => {
     const fallback = buildDefaultMarketingBriefConfig(client, bootstrap?.dashboardState);
@@ -3315,6 +3323,67 @@ const DashboardPage = () => {
   useEffect(() => {
     setBrandSnapshotDraft(buildBrandSnapshotDraft(bootstrap?.dashboardState?.snapshot?.visualIdentity?.styleGuide || null));
   }, [bootstrap?.dashboardState?.snapshot?.visualIdentity?.styleGuide]);
+
+  // ── Business Model (brandOverview) + Market Category — editable foundation ──
+  useEffect(() => {
+    const bo = bootstrap?.dashboardState?.snapshot?.brandOverview || {};
+    setBusinessOverviewDraft({
+      businessModel: bo.businessModel || '', positioning: bo.positioning || '',
+      targetAudience: bo.targetAudience || '', headline: bo.headline || '', summary: bo.summary || '',
+    });
+  }, [bootstrap?.dashboardState?.snapshot?.brandOverview]);
+
+  useEffect(() => {
+    setMarketCategoryDraft(
+      bootstrap?.dashboardState?.marketCategory?.value
+      || bootstrap?.dashboardState?.snapshot?.brandOverview?.industry
+      || ''
+    );
+  }, [bootstrap?.dashboardState?.marketCategory?.value, bootstrap?.dashboardState?.snapshot?.brandOverview?.industry]);
+
+  const saveBusinessOverview = useCallback(async () => {
+    if (!user) return;
+    setBusinessOverviewSaving(true);
+    setBusinessOverviewError('');
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(apiPath('/api/dashboard/brand-overview/config'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(businessOverviewDraft),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Could not save Business Model.');
+      doBootstrap();
+    } catch (err) {
+      setBusinessOverviewError(err instanceof Error ? err.message : 'Could not save Business Model.');
+    } finally {
+      setBusinessOverviewSaving(false);
+    }
+  }, [user, businessOverviewDraft, apiPath, doBootstrap]);
+
+  const saveMarketCategoryValue = useCallback(async () => {
+    if (!user) return;
+    const value = marketCategoryDraft.trim();
+    if (!value) { setMarketCategoryError('Enter a category.'); return; }
+    setMarketCategorySaving(true);
+    setMarketCategoryError('');
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(apiPath('/api/dashboard/market-category/config'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Could not save Market Category.');
+      doBootstrap();
+    } catch (err) {
+      setMarketCategoryError(err instanceof Error ? err.message : 'Could not save Market Category.');
+    } finally {
+      setMarketCategorySaving(false);
+    }
+  }, [user, marketCategoryDraft, apiPath, doBootstrap]);
 
   // Initial load
   useEffect(() => {
@@ -6181,10 +6250,10 @@ const DashboardPage = () => {
     {
       id: 'brand-keywords',
       category: 'growth',
-      number: 'BK',
-      label: 'BRAND & KEYWORDS',
-      title: 'Brand & Keywords',
-      description: 'Brand name, exact-match identifiers, and category themes that drive the search plan. Generated mode auto-builds queries from these; Custom mode lets you write deliberate query clusters.',
+      number: 'SP',
+      label: 'SEARCH PARAMETERS',
+      title: 'Search Parameters',
+      description: 'Brand identity, exact-match identifiers, and category themes that drive the search plan. Generated mode auto-builds queries from these; Custom mode lets you write deliberate query clusters.',
       placeholderLabel: 'SET\nBRAND',
       rows: marketingBriefConfig
         ? [
@@ -10056,7 +10125,7 @@ const DashboardPage = () => {
                   <div id="brand-keywords-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
                     <div className="tile-detail-tabs">
                       <button type="button" className={`tile-detail-tab${brandKeywordsTab === 'brand' ? ' tile-detail-tab--active' : ''}`} onClick={() => setBrandKeywordsTab('brand')}>BRAND &amp; KEYWORDS</button>
-                      <button type="button" className={`tile-detail-tab${brandKeywordsTab === 'searches' ? ' tile-detail-tab--active' : ''}`} onClick={() => setBrandKeywordsTab('searches')}>SEARCH PLAN</button>
+                      <button type="button" className={`tile-detail-tab${brandKeywordsTab === 'searches' ? ' tile-detail-tab--active' : ''}`} onClick={() => setBrandKeywordsTab('searches')}>SEARCH QUERIES</button>
                     </div>
                     <div className="tile-detail-tab-content">
                     {!marketingBriefConfig ? (
@@ -10068,7 +10137,7 @@ const DashboardPage = () => {
                             <div className="mu-section-head">
                               <div>
                                 <h3>Brand &amp; Keywords</h3>
-                                <p>Identity and themes that build the default search plan.</p>
+                                <p>Brand identity and category themes that seed the search plan. Changes here directly affect what Generated mode queries.</p>
                               </div>
                             </div>
 
@@ -10135,74 +10204,102 @@ const DashboardPage = () => {
                         </>
                     </div>
                     ) : (
-                    <div className="mu-tab-pane" style={{ padding: 18 }}>
-                        <>
-                          <div className="mb-search-modebar">
+                    <div className="mu-tab-pane">
+                      <div className="tile-detail-tabs tile-detail-tabs--sub">
+                        <button type="button" className={`tile-detail-tab${searchPlanSubTab === 'generated' ? ' tile-detail-tab--active' : ''}`} onClick={() => setSearchPlanSubTab('generated')}>GENERATED</button>
+                        <button type="button" className={`tile-detail-tab${searchPlanSubTab === 'custom' ? ' tile-detail-tab--active' : ''}`} onClick={() => setSearchPlanSubTab('custom')}>CUSTOM</button>
+                      </div>
+                      {searchPlanSubTab === 'generated' ? (
+                        <section className="mu-section">
+                          <div className="mu-section-head">
+                            <span className="mu-index">{marketingBriefSearchStats.generatedRows.length}</span>
                             <div>
-                              <div className="tile-detail-row-section-head">SEARCH MODE</div>
-                              <p style={{ margin: '6px 0 0', fontSize: 12, lineHeight: 1.5, color: 'var(--text-secondary)' }}>
-                                Generated mode is the default: 3 balanced searches from Brand &amp; Keywords, plus watchlist/platform rows. Custom mode should be 4-8 high-intent query clusters, not one search per keyword.
-                              </p>
+                              <h3>Generated Mode</h3>
+                              <p>Scout auto-builds {marketingBriefSearchStats.generatedRows.length} balanced queries from your Brand &amp; Keywords config. Queries update every time you save brand identifiers or category themes. <strong>Switching to Generated permanently removes any custom queries you have written — this cannot be undone after saving.</strong></p>
                             </div>
-                            <div className="mb-search-mode-actions">
-                              <button type="button" className={`mb-config-mini-btn${marketingBriefSearchStats.generatedMode ? ' is-active' : ''}`} onClick={clearMarketingBriefSearches}>Use Generated</button>
-                              <button type="button" className="mb-config-mini-btn" onClick={seedRecommendedMarketingBriefSearches}>Seed 5 Queries</button>
-                              <button type="button" className="mb-config-mini-btn" onClick={addMarketingBriefSearch} disabled={(marketingBriefConfig.searches || []).length >= SEARCH_PLAN_CUSTOM_MAX}>Add Custom</button>
+                            {marketingBriefSearchStats.generatedMode ? (
+                              <span className="mu-active-badge">✓ Active</span>
+                            ) : (
+                              <button type="button" className="mu-activate-btn" onClick={clearMarketingBriefSearches}>Activate</button>
+                            )}
+                          </div>
+                          <div className="mb-search-preview" aria-label="Generated query preview">
+                            <div className="tile-detail-row-section-head">QUERY PREVIEW</div>
+                            {marketingBriefSearchStats.generatedRows.map((row) => (
+                              <div key={`sp-gen-${row.label}`} className="mb-search-preview-row">
+                                <span className="mb-search-preview-label">{row.label}</span>
+                                <span className="mb-search-preview-query">{row.query || 'Add brand terms above to preview'}</span>
+                                <span className="mb-search-preview-goal">{row.goal}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+                      ) : (
+                        <section className="mu-section">
+                          <div className="mu-section-head">
+                            <span className="mu-index">{(marketingBriefConfig.searches || []).length}</span>
+                            <div>
+                              <h3>Custom Queries</h3>
+                              <p>Write 4–{SEARCH_PLAN_CUSTOM_MAX} targeted query clusters. Each row is a separate Scout search — use OR operators to group related terms, not one keyword per row. <strong>Custom mode fully replaces Generated: Scout runs only what you write here. Switching back to Generated will delete these rows.</strong></p>
+                            </div>
+                            <div style={{ display: 'flex', gap: 5, flexDirection: 'column', alignItems: 'flex-end' }}>
+                              {!marketingBriefSearchStats.generatedMode ? (
+                                <span className="mu-active-badge">✓ Active</span>
+                              ) : (
+                                <button type="button" className="mu-activate-btn" onClick={seedRecommendedMarketingBriefSearches}>Activate</button>
+                              )}
+                              <div style={{ display: 'flex', gap: 5 }}>
+                                <button type="button" className="mb-config-mini-btn" onClick={seedRecommendedMarketingBriefSearches}>Seed 5</button>
+                                <button type="button" className="mb-config-mini-btn" onClick={addMarketingBriefSearch} disabled={(marketingBriefConfig.searches || []).length >= SEARCH_PLAN_CUSTOM_MAX}>Add Row</button>
+                              </div>
                             </div>
                           </div>
-                          <div className="mu-chip-row" aria-label="Search plan stats">
-                            <span className={`mu-chip${marketingBriefSearchStats.generatedMode ? ' mu-chip--success' : ''}`}>{marketingBriefSearchStats.generatedMode ? 'Generated' : 'Custom'} mode</span>
-                            <span className={`mu-chip${marketingBriefSearchStats.customSearches.length > SEARCH_PLAN_CUSTOM_MAX ? ' mu-chip--danger' : ' mu-chip--success'}`}>{marketingBriefSearchStats.customSearches.length || marketingBriefSearchStats.generatedRows.length} base queries</span>
-                            <span className="mu-chip">{marketingBriefSearchStats.watchlistSearches} watchlist</span>
-                            <span className="mu-chip">{marketingBriefSearchStats.platformSearches} platform</span>
-                            <span className={`mu-chip${marketingBriefSearchStats.totalSearches <= 12 ? ' mu-chip--success' : ' mu-chip--warning'}`}>{marketingBriefSearchStats.totalSearches} est. searches</span>
-                          </div>
-                          {marketingBriefSearchStats.generatedMode ? (
-                            <div className="mb-search-preview" aria-label="Generated search rows">
-                              {marketingBriefSearchStats.generatedRows.map((row) => (
-                                <div key={`sp-generated-${row.label}`} className="mb-search-preview-row">
-                                  <span className="mb-search-preview-label">{row.label}</span>
-                                  <span className="mb-search-preview-query">{row.query}</span>
-                                  <span className="mb-search-preview-goal">{row.goal}</span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="mb-config-search-list">
-                              {(marketingBriefConfig.searches || []).map((row, index) => (
-                                <div key={`sp-search-${index}`} className="mb-config-search-row">
-                                  <div className="mb-config-search-meta">
-                                    <span className="mb-config-row-dot" aria-hidden="true" />
-                                    <span className="mb-config-row-num">{String(index + 1).padStart(2, '0')}</span>
+                          {(() => {
+                            const searches = marketingBriefConfig.searches || [];
+                            const rows = searches.length ? searches : [{ label: '', query: '', goal: '' }];
+                            return (
+                            <div className="mu-query-list">
+                              {rows.map((row, index) => (
+                                <div key={`sp-search-${index}`} className="mu-query">
+                                  <div className="mu-query-head">
+                                    <span className="mu-query-num">{String(index + 1).padStart(2, '0')}</span>
+                                    <button type="button" className="mb-config-remove-btn" onClick={() => removeMarketingBriefSearch(index)} disabled={rows.length <= 1}>Remove</button>
                                   </div>
-                                  <label className="mb-config-field mb-config-field--label">
-                                    <span className="mb-config-label">Label</span>
-                                    <input className="mb-config-input" value={row.label || ''} placeholder="Category Momentum" onChange={(e) => updateMarketingBriefSearch(index, { label: e.target.value })} />
+                                  <label className="mu-field">
+                                    <span className="mu-label">Label</span>
+                                    <input className="mu-input" value={row.label || ''} placeholder="Category Momentum" onChange={(e) => updateMarketingBriefSearch(index, { label: e.target.value })} />
                                   </label>
-                                  <label className="mb-config-field mb-config-field--query">
-                                    <span className="mb-config-label">Search query</span>
-                                    <textarea className="mb-config-textarea mb-config-textarea--compact" value={row.query || ''} placeholder="category OR topic news OR discussion" onChange={(e) => updateMarketingBriefSearch(index, { query: e.target.value })} rows={2} />
+                                  <label className="mu-field">
+                                    <span className="mu-label">Search query</span>
+                                    <textarea className="mu-textarea" value={row.query || ''} placeholder="category OR topic news OR discussion" onChange={(e) => updateMarketingBriefSearch(index, { query: e.target.value })} rows={2} spellCheck={false} />
                                   </label>
-                                  <label className="mb-config-field mb-config-field--goal">
-                                    <span className="mb-config-label">Signal Scout should extract</span>
-                                    <input className="mb-config-input" value={row.goal || ''} placeholder="Find current market narratives and participation windows." onChange={(e) => updateMarketingBriefSearch(index, { goal: e.target.value })} />
+                                  <label className="mu-field">
+                                    <span className="mu-label">Signal to extract</span>
+                                    <input className="mu-input" value={row.goal || ''} placeholder="Find current market narratives and participation windows." onChange={(e) => updateMarketingBriefSearch(index, { goal: e.target.value })} />
                                   </label>
-                                  <button type="button" className="mb-config-remove-btn" onClick={() => removeMarketingBriefSearch(index)}>Remove</button>
                                 </div>
                               ))}
                             </div>
-                          )}
-                          {!marketingBriefSearchStats.generatedMode && marketingBriefSearchStats.customSearches.length > SEARCH_PLAN_CUSTOM_MAX ? (
-                            <p className="mu-notice mu-notice--danger">Only the first {SEARCH_PLAN_CUSTOM_MAX} custom searches are saved. Collapse related keywords into OR clusters.</p>
+                            );
+                          })()}
+                          {marketingBriefSearchStats.customSearches.length > SEARCH_PLAN_CUSTOM_MAX ? (
+                            <p className="mu-notice mu-notice--danger">Only the first {SEARCH_PLAN_CUSTOM_MAX} rows are saved. Collapse related keywords into OR clusters.</p>
                           ) : null}
-                          {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
-                          <div className="mu-footer">
-                            <span />
-                            <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 100 }} onClick={saveMarketingBriefConfig} disabled={marketingBriefSaving}>
-                              <span>{marketingBriefSaving ? 'Saving…' : 'Save'}</span>
-                            </button>
-                          </div>
-                        </>
+                        </section>
+                      )}
+                      <div className="mu-chip-row" aria-label="Search plan stats">
+                        <span className={`mu-chip${marketingBriefSearchStats.generatedMode ? ' mu-chip--success' : ' mu-chip--warning'}`}>{marketingBriefSearchStats.generatedMode ? 'Generated active' : 'Custom active'}</span>
+                        <span className={`mu-chip${marketingBriefSearchStats.totalSearches <= 12 ? ' mu-chip--success' : ' mu-chip--warning'}`}>{marketingBriefSearchStats.totalSearches} est. searches</span>
+                        <span className="mu-chip">{marketingBriefSearchStats.watchlistSearches} watchlist</span>
+                        <span className="mu-chip">{marketingBriefSearchStats.platformSearches} platform</span>
+                      </div>
+                      {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
+                      <div className="mu-footer">
+                        <span />
+                        <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 100 }} onClick={saveMarketingBriefConfig} disabled={marketingBriefSaving}>
+                          <span>{marketingBriefSaving ? 'Saving…' : 'Save'}</span>
+                        </button>
+                      </div>
                     </div>
                     )}
                     </div>
@@ -10430,6 +10527,49 @@ const DashboardPage = () => {
                       ) : eventsResults ? (
                         <div className="mu-empty">No events found. Try a different ZIP or broader keywords.</div>
                       ) : null}
+                    </div>
+                  </div>
+                )}
+
+                {/* Business Model — editable brand overview (foundation) */}
+                {activeTileModal.cardId === 'business-model' && (
+                  <div id="business-model-panel" className="tile-detail-bento-cell">
+                    <div className="mu-tab-pane">
+                      <section className="mu-section">
+                        <div className="mu-section-head">
+                          <div>
+                            <h3>Business Model</h3>
+                            <p>What the business does, who it serves, and how it positions. Feeds the brief and search plan — fill this in when there's no website to read from.</p>
+                          </div>
+                        </div>
+                        <label className="mu-field">
+                          <span className="mu-label">Business model / structure</span>
+                          <textarea className="mu-textarea" rows={3} value={businessOverviewDraft.businessModel} placeholder="e.g. subscription SaaS; one-off services; marketplace…" onChange={(e) => setBusinessOverviewDraft((p) => ({ ...p, businessModel: e.target.value }))} />
+                        </label>
+                        <label className="mu-field">
+                          <span className="mu-label">Target audience</span>
+                          <input className="mu-input" value={businessOverviewDraft.targetAudience} placeholder="Who is this for?" onChange={(e) => setBusinessOverviewDraft((p) => ({ ...p, targetAudience: e.target.value }))} />
+                        </label>
+                        <label className="mu-field">
+                          <span className="mu-label">Positioning</span>
+                          <input className="mu-input" value={businessOverviewDraft.positioning} placeholder="How you're different / your angle" onChange={(e) => setBusinessOverviewDraft((p) => ({ ...p, positioning: e.target.value }))} />
+                        </label>
+                        <label className="mu-field">
+                          <span className="mu-label">Headline</span>
+                          <input className="mu-input" value={businessOverviewDraft.headline} placeholder="One-line description of the business" onChange={(e) => setBusinessOverviewDraft((p) => ({ ...p, headline: e.target.value }))} />
+                        </label>
+                        <label className="mu-field">
+                          <span className="mu-label">Summary</span>
+                          <textarea className="mu-textarea" rows={3} value={businessOverviewDraft.summary} placeholder="A short paragraph describing the business." onChange={(e) => setBusinessOverviewDraft((p) => ({ ...p, summary: e.target.value }))} />
+                        </label>
+                        {businessOverviewError ? <p className="mu-notice mu-notice--danger">{businessOverviewError}</p> : null}
+                      </section>
+                      <div className="mu-footer">
+                        <span />
+                        <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 100 }} onClick={saveBusinessOverview} disabled={businessOverviewSaving}>
+                          <span>{businessOverviewSaving ? 'Saving…' : 'Save'}</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -11374,20 +11514,28 @@ const DashboardPage = () => {
                         />
                       )}
                       {modalTab === 'category' && (
-                        <div className="tile-detail-tab-pane">
-                        <MarketCategoryPanel
-                          bootstrap={bootstrap}
-                          getIdToken={brandSystemGetIdToken}
-                          onSaved={(mc) => {
-                            setBootstrap((prev) => ({
-                              ...prev,
-                              dashboardState: {
-                                ...(prev?.dashboardState || {}),
-                                marketCategory: mc && typeof mc === 'object' ? mc : { value: String(mc || '') },
-                              },
-                            }));
-                          }}
-                        />
+                        <div id="market-category-edit-panel" className="tile-detail-tab-pane">
+                          <div className="mu-tab-pane">
+                            <section className="mu-section">
+                              <div className="mu-section-head">
+                                <div>
+                                  <h3>Market Category</h3>
+                                  <p>The industry/category the brand sits in. Drives benchmarking and the generated search plan. Set it manually or run analysis to classify from your site.</p>
+                                </div>
+                              </div>
+                              <label className="mu-field">
+                                <span className="mu-label">Category / sector</span>
+                                <input className="mu-input" value={marketCategoryDraft} placeholder="e.g. B2B SaaS · digital marketing agency · online poker" onChange={(e) => setMarketCategoryDraft(e.target.value)} />
+                              </label>
+                              {marketCategoryError ? <p className="mu-notice mu-notice--danger">{marketCategoryError}</p> : null}
+                            </section>
+                            <div className="mu-footer">
+                              <button type="button" className="mb-config-mini-btn" onClick={runMarketCategoryAnalyze} disabled={marketCategoryRunLoading}>{marketCategoryRunLoading ? 'Analyzing…' : 'Run analysis'}</button>
+                              <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 100 }} onClick={saveMarketCategoryValue} disabled={marketCategorySaving}>
+                                <span>{marketCategorySaving ? 'Saving…' : 'Save'}</span>
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       )}
                       {modalTab === 'data' && (
@@ -13752,8 +13900,8 @@ const dashboardCss = `
     flex-shrink: 0;
     width: 28px;
     height: 28px;
-    border-radius: 999px;
-    border: 1px solid #000;
+    border-radius: 8px;
+    border: 1px solid rgba(42,36,32,0.12);
     background: rgba(255,255,255,0.6);
     color: var(--text-secondary);
     cursor: pointer;
@@ -15082,7 +15230,9 @@ const dashboardCss = `
   #platform-search-panel,
   #social-signals-panel,
   #brief-preview-panel,
-  #events-panel {
+  #events-panel,
+  #business-model-panel,
+  #market-category-edit-panel {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
@@ -15398,6 +15548,28 @@ const dashboardCss = `
     flex: 1;
     overflow-y: auto;
     padding: 18px 22px;
+  }
+  .tile-detail-tabs--sub {
+    border-bottom: none;
+    background: rgba(42,36,32,0.06);
+    border-radius: 8px;
+    padding: 3px;
+    gap: 2px;
+    margin-bottom: 12px;
+  }
+  .tile-detail-tabs--sub .tile-detail-tab {
+    border-radius: 6px;
+    padding: 7px 10px;
+    font-size: 9px;
+    border-bottom: none;
+    margin-bottom: 0;
+  }
+  .tile-detail-tabs--sub .tile-detail-tab--active {
+    background: white;
+    border-image: none;
+    border-bottom: none;
+    color: #2a2420;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
   }
   /* Audit-summary fills its container edge-to-edge — no extra padding */
   #audit-summary-modal-tabs-container .tile-detail-tab-content {
@@ -20391,6 +20563,63 @@ const dashboardCss = `
     gap: 8px;
     margin-top: 2px;
   }
+  /* Custom query rows — mu-styled card per query (matches Brand & Keywords) */
+  .mu-query-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .mu-query {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    border: 1px solid rgba(42,36,32,0.12);
+    border-radius: 12px;
+    background: #fffdf7;
+  }
+  .mu-query-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .mu-query-num {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: rgba(42,36,32,0.5);
+  }
+  /* Active-mode badge + activate button (Generated vs Custom) */
+  .mu-active-badge {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #2f6b3d;
+    background: #edf4ec;
+    border: 1px solid rgba(47,107,61,0.32);
+    border-radius: 7px;
+    padding: 5px 11px;
+    white-space: nowrap;
+  }
+  .mu-activate-btn {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #fff;
+    cursor: pointer;
+    border: none;
+    border-radius: 7px;
+    padding: 6px 14px;
+    white-space: nowrap;
+    background: linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+    transition: filter 0.15s ease;
+  }
+  .mu-activate-btn:hover { filter: brightness(1.06); }
   .mu-label {
     display: block;
     font-family: var(--font-mono);
