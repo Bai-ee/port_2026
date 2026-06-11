@@ -127,6 +127,36 @@ const BRIEF_CSS = `
   .flow .node .t{font-family:"Doto";font-weight:900;font-size:26px;text-transform:uppercase;line-height:1}
   .flow .node p{font-family:"Space Grotesk";font-size:14px;margin:10px 0 0;color:#2a2a2a}
 
+  /* Mobile: stack labels above values and enlarge all body/label text so the
+     brief reads as a vertical breakdown on narrow screens. Presentation-only —
+     targets the shared .k/.v/tile/flow classes used by every brief renderer. */
+  @media(max-width:640px){
+    section.page{padding:clamp(40px,7vh,72px) var(--gutter) clamp(48px,8vh,96px)}
+    .eyebrow{font-size:13px;gap:12px;margin-bottom:20px}
+    .sub{font-size:clamp(19px,5.2vw,24px);line-height:1.4;margin-bottom:32px}
+
+    .stat-row{grid-template-columns:1fr;gap:6px;padding:18px 0}
+    .stat-row .k{font-size:13px;letter-spacing:.18em;padding-top:0}
+    .stat-row .v{font-size:18px;line-height:1.55}
+
+    .pull{font-size:clamp(22px,6vw,30px);padding:6px 0 6px 18px;max-width:none}
+
+    .meta-grid{grid-template-columns:1fr;margin-top:24px}
+    .meta-tile .k{font-size:12px}
+    .meta-tile .v{font-size:17px}
+
+    .cover .meta{grid-template-columns:1fr 1fr;gap:20px 24px;margin-top:32px}
+    .cover .meta .k{font-size:12px}
+    .cover .meta .v{font-size:17px}
+
+    .flow .node{padding:20px}
+    .flow .node .n{font-size:12px}
+    .flow .node .t{font-size:24px}
+    .flow .node p{font-size:16px;line-height:1.55}
+
+    footer{font-size:12px}
+  }
+
   @media print{
     section.page{min-height:auto;padding:48px 40px;page-break-after:always;page-break-inside:avoid}
     .sec-num{font-size:140px}

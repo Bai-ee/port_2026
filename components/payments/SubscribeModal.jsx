@@ -69,6 +69,7 @@ const SubscribeModal = ({ open, onClose }) => {
   const [clientSecret, setClientSecret] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [cryptoNotice, setCryptoNotice] = useState('');
 
   useEffect(() => {
     if (!open) {
@@ -89,6 +90,7 @@ const SubscribeModal = ({ open, onClose }) => {
       setClientSecret('');
       setError('');
       setLoading(false);
+      setCryptoNotice('');
     }
   }, [open]);
 
@@ -162,7 +164,45 @@ const SubscribeModal = ({ open, onClose }) => {
               <button type="submit" className="cta-pill-btn" style={primaryButtonStyle} disabled={loading}>
                 {loading ? 'Setting up…' : 'Continue to payment'}
               </button>
+              <button
+                id="subscribe-crypto-trigger"
+                type="button"
+                onClick={() => setStep('crypto')}
+                style={cryptoTriggerStyle}
+              >
+                Prefer crypto? ◎
+              </button>
             </form>
+          ) : step === 'crypto' ? (
+            <div id="subscribe-crypto-panel" style={formStackStyle}>
+              <div>
+                <span style={cryptoEyebrowStyle}>Solana · one-time</span>
+                <p style={cryptoPriceStyle}>$60<span style={cryptoUnitStyle}> / 1 year</span></p>
+                <p style={cryptoCopyStyle}>
+                  Pay once in SOL or USDC. Full year, no recurring charge.
+                </p>
+              </div>
+              <button
+                id="subscribe-crypto-connect-btn"
+                type="button"
+                style={cryptoConnectButtonStyle}
+                onClick={() => setCryptoNotice('Wallet connect lands in the next release.')}
+              >
+                ◎ Connect Solana Wallet
+              </button>
+              <button id="subscribe-crypto-pay-btn" type="button" style={cryptoPayButtonStyle} disabled>
+                Pay in SOL / USDC
+              </button>
+              {cryptoNotice ? <p style={cryptoNoticeStyle}>{cryptoNotice}</p> : null}
+              <button
+                id="subscribe-crypto-back-link"
+                type="button"
+                onClick={() => { setCryptoNotice(''); setStep('email'); }}
+                style={cryptoTriggerStyle}
+              >
+                ← Back to card payment
+              </button>
+            </div>
           ) : step === 'payment' && clientSecret ? (
             <Elements stripe={stripePromise} options={{ clientSecret, appearance: stripeAppearance }}>
               <PaymentStep onSuccess={() => setStep('success')} />
@@ -309,6 +349,87 @@ const successTitleStyle = {
   margin: 0,
   fontSize: '1.4rem',
   letterSpacing: '-0.03em',
+};
+
+const cryptoTriggerStyle = {
+  border: 'none',
+  background: 'none',
+  padding: 0,
+  alignSelf: 'flex-start',
+  fontSize: '0.78rem',
+  letterSpacing: '0.02em',
+  color: 'rgba(42, 36, 32, 0.45)',
+  textDecoration: 'underline',
+  textUnderlineOffset: '3px',
+  cursor: 'pointer',
+};
+
+const cryptoEyebrowStyle = {
+  display: 'block',
+  fontSize: '0.75rem',
+  letterSpacing: '0.08em',
+  textTransform: 'uppercase',
+  color: 'rgba(42, 36, 32, 0.48)',
+  marginBottom: '0.35rem',
+};
+
+const cryptoPriceStyle = {
+  margin: 0,
+  fontSize: '1.5rem',
+  fontWeight: 700,
+  letterSpacing: '-0.03em',
+  color: '#2a2420',
+};
+
+const cryptoUnitStyle = {
+  fontSize: '0.85rem',
+  fontWeight: 400,
+  color: 'rgba(42, 36, 32, 0.48)',
+};
+
+const cryptoCopyStyle = {
+  margin: '0.5rem 0 0',
+  fontSize: '0.9rem',
+  lineHeight: 1.6,
+  color: 'rgba(42, 36, 32, 0.7)',
+};
+
+const cryptoConnectButtonStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '0.5rem',
+  border: '1px solid rgba(42, 36, 32, 0.12)',
+  background: 'linear-gradient(135deg, rgba(153,69,255,0.12) 0%, rgba(20,241,149,0.12) 100%)',
+  color: '#2a2420',
+  borderRadius: '999px',
+  padding: '0.85rem 1.25rem',
+  fontSize: '0.85rem',
+  fontWeight: 700,
+  letterSpacing: '0.02em',
+  cursor: 'pointer',
+};
+
+const cryptoPayButtonStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  border: '1px solid rgba(42, 36, 32, 0.1)',
+  background: 'rgba(42, 36, 32, 0.06)',
+  color: 'rgba(42, 36, 32, 0.4)',
+  borderRadius: '999px',
+  padding: '0.85rem 1.25rem',
+  fontSize: '0.85rem',
+  fontWeight: 700,
+  letterSpacing: '0.02em',
+  cursor: 'not-allowed',
+};
+
+const cryptoNoticeStyle = {
+  margin: 0,
+  fontSize: '0.82rem',
+  lineHeight: 1.5,
+  color: 'rgba(42, 36, 32, 0.55)',
 };
 
 export default SubscribeModal;

@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { after, NextResponse } from 'next/server';
 import { createRequire } from 'module';
 
 export const maxDuration = 300;
@@ -53,6 +53,94 @@ export async function POST(request) {
   const configSnap = await fb.adminDb.collection('client_configs').doc(context.clientId).get();
   if (!configSnap.exists) return json({ error: 'No client config.' }, 404);
   const clientConfig = configSnap.data() || {};
+
+  // Fresh A→B pass: clients with a website + module config get a full
+  // intake run first (fresh screenshots, SEO, agent readiness, design,
+  // search terms), which the worker then chains into the scout-brief run.
+  // The executive brief always compiles from data captured this call.
+  // Idea-only clients (no URL) fall through to the inline scout-brief below.
+  const refreshUrl = clientConfig?.sourceInputs?.websiteUrl || clientConfig?.websiteUrl || null;
+  if (refreshUrl) {
+    // Legacy clients provisioned before module configs existed: seed the
+    // default set so the worker's modular branch (and moduleBriefs) runs.
+    if (!clientConfig.moduleConfig) {
+      const { getDefaultModuleConfig } = require('../../../../../features/scout-intake/module-registry');
+      await fb.adminDb.collection('client_configs').doc(context.clientId).set(
+        { moduleConfig: getDefaultModuleConfig(), updatedAt: fb.FieldValue.serverTimestamp() },
+        { merge: true }
+      );
+    }
+    const intakeRef = fb.adminDb.collection('brief_runs').doc();
+    const intakeRunId = intakeRef.id;
+    const queuedAt = fb.FieldValue.serverTimestamp();
+    const intakePayload = {
+      runId: intakeRunId,
+      id: intakeRunId,
+      clientId: context.clientId,
+      requestedByUid: decoded.uid,
+      trigger: 'brief-refresh',
+      source: 'user',
+      status: 'queued',
+      pipelineType: 'free-tier-intake',
+      attempts: 0,
+      workerLease: null,
+      startedAt: null,
+      completedAt: null,
+      error: null,
+      summary: null,
+      artifactRefs: [],
+      providerUsage: null,
+      moduleSnapshot: null,
+      sourceUrl: refreshUrl,
+      createdAt: queuedAt,
+      updatedAt: queuedAt,
+    };
+    await Promise.all([
+      intakeRef.set(intakePayload),
+      fb.adminDb.collection('clients').doc(context.clientId).collection('brief_runs').doc(intakeRunId).set(intakePayload),
+      fb.adminDb.collection('clients').doc(context.clientId).set(
+        { latestRunId: intakeRunId, latestRunStatus: 'queued', updatedAt: queuedAt },
+        { merge: true }
+      ),
+      fb.adminDb.collection('dashboard_state').doc(context.clientId).set(
+        {
+          latestRunId: intakeRunId,
+          latestRunStatus: 'queued',
+          modules: {
+            'marketing-brief': { enabled: true, status: 'queued', lastRunId: intakeRunId },
+          },
+          updatedAt: queuedAt,
+          errorState: null,
+        },
+        { merge: true }
+      ),
+    ]);
+
+    const proto = request.headers.get('x-forwarded-proto') || 'http';
+    const host = request.headers.get('host') || 'localhost:3000';
+    const workerUrl = `${proto}://${host}/api/worker/run-brief`;
+    after(async () => {
+      try {
+        const response = await fetch(workerUrl, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-worker-secret': process.env.WORKER_SECRET || '',
+          },
+          body: JSON.stringify({ runId: intakeRunId }),
+          cache: 'no-store',
+        });
+        if (!response.ok) {
+          const detail = await response.text().catch(() => '');
+          console.error(`[MARKETING-BRIEF] brief-refresh worker trigger failed for ${context.clientId}: ${response.status} ${detail.trim()}`);
+        }
+      } catch (err) {
+        console.warn(`[MARKETING-BRIEF] brief-refresh worker trigger threw for ${context.clientId}: ${err?.message}`);
+      }
+    });
+
+    return json({ ok: true, runId: intakeRunId, queued: true, chained: true });
+  }
 
   const runRef = fb.adminDb.collection('brief_runs').doc();
   const runId = runRef.id;

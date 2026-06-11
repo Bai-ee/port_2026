@@ -156,6 +156,15 @@ async function runScoutTest({ clientId, platform, clientConfig = {} }) {
     // SAME path the brief uses (e.g. Fast Poker), not web_search. Run it scoped
     // to X only and surface the normalized X signals.
     const l30 = (cfg.last30days && cfg.last30days.enabled) ? cfg.last30days : {};
+    // Build a CLEAN X topic — brand + a couple category terms only. The stored
+    // last30days.primaryTopic jams in competitor URLs and @handles, which makes
+    // the Bird (X) query malformed/over-long and it fails. Handles go via
+    // --x-related instead; competitor URLs are dropped from the topic.
+    const cleanBrand = String(companyName || '').replace(/^["']+|["']+$/g, '').trim();
+    const cleanTopic = [cleanBrand, ...(cfg.categoryTerms || []).slice(0, 2)]
+      .filter(Boolean).join(' ').slice(0, 120);
+    const xHandles = (Array.isArray(cfg.kols) ? cfg.kols : [])
+      .map((s) => String(s).trim().replace(/^@/, '')).filter(Boolean).slice(0, 6);
     const x30Config = {
       clientId,
       clientName: companyName,
@@ -163,10 +172,11 @@ async function runScoutTest({ clientId, platform, clientConfig = {} }) {
         ...l30,
         enabled:         true,
         sources:         'x',
-        primaryTopic:    l30.primaryTopic || [companyName, ...(cfg.competitors || [])].filter(Boolean).join(' '),
-        lookbackDays:    l30.lookbackDays || cfg.scout?.freshnessDays || 7,
-        brandTerms:      l30.brandTerms || (cfg.brandKeywords || []),
-        competitorNames: l30.competitorNames || (cfg.competitors || []),
+        primaryTopic:    cleanTopic || cleanBrand,
+        lookbackDays:    Math.max(7, Number(cfg.scout?.freshnessDays) || 7),
+        xRelated:        xHandles.join(','),
+        brandTerms:      cfg.brandKeywords || [],
+        competitorNames: cfg.competitors || [],
       },
     };
     const service = await fetchLast30Days(x30Config);

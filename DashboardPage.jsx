@@ -15,6 +15,7 @@ import {
   ChevronDown,
   ClipboardList,
   Database,
+  FileText,
   House,
   ChartColumnIncreasing,
   LaptopMinimalCheck,
@@ -44,6 +45,7 @@ import onboardingConfig from './onboarding/questions.config.cjs';
 import { resolveAnalyzerSource, buildCardDescription, buildModuleStateDescription } from './features/scout-intake/card-description-builder.mjs';
 import { deriveFindings } from './features/scout-intake/derived-findings.mjs';
 import ModuleCardControls from './components/dashboard/ModuleCardControls';
+import SubscribeModal from './components/payments/SubscribeModal';
 import { AdminEmailDigestView, AdminEmailSettingsView, AdminCreateClientView } from './components/AdminEmailModals';
 
 const LeadGenDashboard = dynamic(() => import('./components/dashboard/LeadGenDashboard'), {
@@ -414,6 +416,7 @@ function buildDefaultMarketingBriefConfig(client, dashboardState) {
     brandName: seededBrandName,
     brandKeywords: seededBrandKeywords.join('\n'),
     categoryTerms: seededCategoryTerms.join('\n'),
+    acknowledgedCards: {},
     kols: '',
     competitors: '',
     agentDataTemplate: `{
@@ -1174,8 +1177,17 @@ const CUSTOM_DETAIL_CARD_IDS = new Set([
   'platform-search',
   'social-signals',
   'brief-preview',
-  'events',
   'business-model',
+  'strategy-30',
+]);
+
+// Cards whose list-row icon is a pencil (editable/config) vs an eye (view-only,
+// generated results). Anything not listed here defaults to the eye (view) icon.
+const CARD_ACTION_EDIT = new Set([
+  'brand-keywords', 'watchlist', 'scout-focus', 'platform-search', 'social-signals',
+  'conversation-intake', 'local-weather', 'business-model', 'brief-preview',
+  'knowledge-base', 'email-settings', 'email-digest', 'industry', 'create-client',
+  'social-media-posting', 'strategy-30', 'strategy-builder',
 ]);
 
 const buildUnavailableDescription = (subject) => `Insufficient source evidence to determine ${subject} reliably.`;
@@ -1633,6 +1645,17 @@ function buildModuleTerminalLog(moduleId, dashboardState, latestRunStatus, run, 
 
   // Running — show active state
   add('ok', '✓', 'worker claimed job');
+  // Post-module step on the signup intake run: modules are done, the worker is
+  // generating search terms + scout config before handing off to the brief run.
+  if (run?.progress?.stage === 'search-terms') {
+    for (const [cardId, state] of Object.entries(dashboardState?.modules || {})) {
+      if (state?.status === 'succeeded') add('ok', '✓', `${cardId} — complete`);
+    }
+    add('active', '[SEARCH]', run?.progress?.progressLabel || 'generating search terms + scout config…', true);
+    add('dim', '·', '[CAMPAIGN]  30-day social media campaign');
+    add('dim', '·', "[BRIEF]     today's post + executive brief");
+    return lines;
+  }
   if (stages.length > 0) {
     add('active', `[${stages[0].tag}]`, `${stages[0].label}…`, true);
     for (const s of stages.slice(1)) {
@@ -1659,7 +1682,99 @@ function _termPath(url) {
   try { return new URL(url).pathname || '/'; } catch { return url || '/'; }
 }
 
+// ── Growth-engine terminal (scout-brief runs) ────────────────────────────────
+// Job board for the second onboarding pass (trigger: onboarding-chain) and for
+// manual Executive Daily Brief runs. One row per job; statuses driven by
+// run.progress.stage emitted from runtime.js (scout → strategy → scribe).
+
+const GROWTH_TERMINAL_JOBS = [
+  { stage: 'scout',    tag: 'SCOUT',    label: 'scan web + X + reddit market signals' },
+  { stage: 'strategy', tag: 'CAMPAIGN', label: 'build 30-day social media campaign' },
+  { stage: 'scribe',   tag: 'BRIEF',    label: "draft today's post + executive brief" },
+];
+
+function buildGrowthTerminalLog(run, dashboardState, latestRunStatus, client, countdown) {
+  const lines = [];
+  const add = (type, prefix, text, cursor = false) => lines.push({ type, prefix, text, cursor });
+  const host = _termHost(run, client);
+  const runId = run?.id ? `${run.id.slice(0, 8)}…` : '—';
+  const isChain = run?.trigger === 'onboarding-chain';
+
+  add('system', '$', `founders/growth-engine — run ${runId}`);
+  add('dim', '', '─'.repeat(46));
+  add('info', 'site', host);
+  add('info', 'trigger', isChain ? 'onboarding' : (run?.trigger || 'manual'));
+  add('dim', '', '─'.repeat(46));
+  if (isChain) {
+    add('ok', '✓', 'site intake complete — dashboard modules written');
+    add('ok', '✓', '[SEARCH]   search terms + scout config generated');
+  }
+
+  if (latestRunStatus === 'failed') {
+    add('error', '[ERR]', 'brief generation hit an issue');
+    if (isChain) {
+      add('dim', '', 'your dashboard is ready — retry from the Executive Daily Brief card');
+      add('dim', '', '─'.repeat(46));
+      if (countdown > 0) {
+        add('countdown', '▶', `launching dashboard in ${countdown}…`);
+      } else {
+        add('countdown', '▶', 'launching…');
+      }
+    } else {
+      add('dim', '', 'retry from the Executive Daily Brief card');
+    }
+    return lines;
+  }
+
+  if (latestRunStatus === 'queued') {
+    add('info', 'sys', 'locating available worker…');
+    add('active', '▶', 'queuing growth engine…', true);
+    for (const j of GROWTH_TERMINAL_JOBS) {
+      add('dim', '·', `[${j.tag}]  ${j.label}`);
+    }
+    return lines;
+  }
+
+  if (latestRunStatus === 'succeeded') {
+    add('ok', '✓', 'worker claimed job');
+    for (const j of GROWTH_TERMINAL_JOBS) {
+      add('ok', '✓', `[${j.tag}]  ${j.label}`);
+    }
+    add('ok', '✓', 'executive brief ready');
+    add('dim', '', '─'.repeat(46));
+    const launchVerb = isChain ? 'opening your executive brief' : 'launching dashboard';
+    if (countdown > 0) {
+      add('countdown', '▶', `${launchVerb} in ${countdown}…`);
+    } else {
+      add('countdown', '▶', `${launchVerb}…`);
+    }
+    return lines;
+  }
+
+  // Running — mark each job done / active / pending by stage position.
+  // No stage yet (just claimed) → first job shows as active.
+  const stage = run?.progress?.stage || null;
+  const stageIdx = GROWTH_TERMINAL_JOBS.findIndex((j) => j.stage === stage);
+  const activeIdx = stageIdx < 0 ? 0 : stageIdx;
+  add('ok', '✓', 'worker claimed job');
+  GROWTH_TERMINAL_JOBS.forEach((j, i) => {
+    if (i < activeIdx) {
+      add('ok', '✓', `[${j.tag}]  ${j.label}`);
+    } else if (i === activeIdx) {
+      add('active', `[${j.tag}]`, run?.progress?.progressLabel || `${j.label}…`, true);
+    } else {
+      add('dim', '·', `[${j.tag}]  ${j.label}`);
+    }
+  });
+  return lines;
+}
+
 function buildTerminalLog(run, dashboardState, latestRunStatus, client, countdown) {
+  // Scout-brief runs (onboarding chain or Executive Daily Brief card) render
+  // the growth-engine job board instead of the intake script.
+  if (run?.pipelineType === 'scout-brief') {
+    return buildGrowthTerminalLog(run, dashboardState, latestRunStatus, client, countdown);
+  }
   // Delegate to module-specific terminal for modular-only clients
   if (_isModularOnlyRun(dashboardState)) {
     const moduleId = _detectQueuedModule(dashboardState) ||
@@ -2011,10 +2126,18 @@ function buildTerminalLines(run, dashboardState, latestRunStatus, client) {
 // Per-bucket workflow steps. Each step's `id` is the first card in its group;
 // the segmented control above the grid lets users jump to that anchor.
 const CAP_STEPS = {
+  brief: [
+    { id: 'marketing-brief', label: 'MOST RECENT BRIEF', Icon: ChartColumnIncreasing },
+    { id: 'onboarding-brief', label: 'RUN BRIEFS', Icon: ClipboardList },
+    { id: 'past-briefs', label: 'PAST BRIEFS', Icon: CalendarDays },
+  ],
   growth: [
     { id: 'signals', label: "WHAT'S GOING ON IN THE MARKET", Icon: Eye },
     { id: 'brand-keywords', label: 'WHO ARE WE LISTENING TO', Icon: Ear },
-    { id: 'brief-preview', label: "WHAT'S OUR STRATEGY", Icon: Speech },
+    // Anchor must be the FIRST card of the strategy group in the growth sort
+    // order — group membership walks the sorted list and switches columns at
+    // each anchor. Day-of Post (priority-signal) leads, so it anchors the column.
+    { id: 'priority-signal', label: "WHAT'S OUR STRATEGY", Icon: Speech },
   ],
   knowledge: [
     { id: 'survey-status', label: 'ONBOARD YOUR COMPANY', Icon: ClipboardList },
@@ -2055,11 +2178,32 @@ const CAP_BUCKET_COLOR = {
   admin: '#a855f7',
 };
 
+// Per-tier wait between brief runs, in seconds. Arbitrary placeholder until
+// tier limits are wired to real plan data.
+const TIER_BRIEF_COOLDOWN_SECONDS = 300;
+
 const DashboardPage = () => {
   const { user, userProfile, signOutUser, isAdmin } = useAuth();
   const [theme, setTheme] = useState('light');
   const [countdownHours, setCountdownHours] = useState(14);
+  const [briefCooldownSeconds, setBriefCooldownSeconds] = useState(TIER_BRIEF_COOLDOWN_SECONDS);
   const [showTierModal, setShowTierModal] = useState(false);
+  // Payments/subscribe modal — opened by the content lock icons.
+  const [showSubscribeModal, setShowSubscribeModal] = useState(false);
+
+  // The brief renders in a sandboxed iframe; its in-cover "Send to my email"
+  // CTA can't call React directly, so it postMessages the parent. Open the
+  // subscribe modal when that message arrives.
+  useEffect(() => {
+    const onBriefMessage = (e) => {
+      if (e?.data?.type === 'brief-open-subscribe') {
+        setBriefFullScreen(false);
+        setShowSubscribeModal(true);
+      }
+    };
+    window.addEventListener('message', onBriefMessage);
+    return () => window.removeEventListener('message', onBriefMessage);
+  }, []);
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
   const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
@@ -2295,6 +2439,10 @@ const DashboardPage = () => {
   const cancelledRef = useRef(false);
   const prevRunStatusRef = useRef(null);
   const postSurveyRevealFiredRef = useRef(false);
+  // Set when the onboarding-chain brief succeeds; once the reveal countdown
+  // finishes and the brief HTML has loaded, the brief opens full-screen so a
+  // new onboard lands on the deliverable instead of the bare card grid.
+  const chainBriefRevealPendingRef = useRef(false);
   const runWasActiveRef = useRef(false);
   const prevRunIdRef = useRef(null);
   const terminalOutputRef = useRef(null);
@@ -2341,6 +2489,23 @@ const DashboardPage = () => {
   // Always fetched with `?type=marketing` so it shows the marketing render
   // regardless of which pipeline produced the latest run.
   const [marketingBriefPreviewHtml, setMarketingBriefPreviewHtml] = useState('');
+  // PAST BRIEFS tab — fetch + view a specific past brief run by runId.
+  const [pastBriefView, setPastBriefView] = useState(null); // { runId, html } | { runId, loading: true }
+  const openPastBrief = useCallback(async (runId) => {
+    if (!user || !runId) return;
+    setPastBriefView({ runId, loading: true });
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(apiPath(`/api/dashboard/brief-preview?runId=${encodeURIComponent(runId)}`), {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      });
+      const html = res.ok ? await res.text() : '';
+      setPastBriefView({ runId, html });
+    } catch {
+      setPastBriefView({ runId, html: '' });
+    }
+  }, [user, apiPath]);
   // HTML preview for the newsletter tile — fetched from /api/dashboard/newsletter-preview
   const [newsletterPreviewHtml, setNewsletterPreviewHtml] = useState('');
   const [marketingBriefConfig, setMarketingBriefConfig] = useState(null);
@@ -2411,6 +2576,10 @@ const DashboardPage = () => {
   const [marketCategoryDraft, setMarketCategoryDraft] = useState('');
   const [marketCategorySaving, setMarketCategorySaving] = useState(false);
   const [marketCategoryError, setMarketCategoryError] = useState('');
+  // 30-day strategy editor draft
+  const [strategy30Draft, setStrategy30Draft] = useState([]);
+  const [strategy30Saving, setStrategy30Saving] = useState(false);
+  const [strategy30Error, setStrategy30Error] = useState('');
 
   const hydrateMarketingBriefConfig = useCallback((config) => {
     const fallback = buildDefaultMarketingBriefConfig(client, bootstrap?.dashboardState);
@@ -2433,6 +2602,12 @@ const DashboardPage = () => {
         ? next.guardianReviewerContext
         : fallback.guardianReviewerContext,
       guardianRestrictedPatterns: joinConfigList(next.guardianRestrictedPatterns),
+      // Saved events + custom local signals feed the brief's Local Signals section.
+      events: Array.isArray(next.events) ? next.events : [],
+      localSignals: Array.isArray(next.localSignals) ? next.localSignals : [],
+      // Per-card user acknowledgment — { cardId: true } once the user saves that
+      // card. Drives the green status dot (audit prefill alone stays red).
+      acknowledgedCards: (next.acknowledgedCards && typeof next.acknowledgedCards === 'object') ? next.acknowledgedCards : (fallback.acknowledgedCards || {}),
     };
   }, [client, bootstrap?.dashboardState]);
 
@@ -2474,19 +2649,29 @@ const DashboardPage = () => {
     return () => { cancelled = true; };
   }, [user, client, apiPath, hydrateMarketingBriefConfig]);
 
-  const saveMarketingBriefConfig = useCallback(async () => {
-    if (!user || !marketingBriefConfig) return null;
+  const saveMarketingBriefConfig = useCallback(async (opts = {}) => {
+    // opts.override = a just-computed config object to persist; avoids the
+    // stale-closure race when saving immediately after setMarketingBriefConfig.
+    const sourceConfig = (opts && typeof opts === 'object' && opts.override) ? opts.override : marketingBriefConfig;
+    if (!user || !sourceConfig) return null;
+    // opts.acknowledge = the card id the user is saving — marks it acknowledged
+    // so its status dot greens (audit prefill alone never sets this).
+    const acknowledgeCardId = (opts && typeof opts === 'object' && typeof opts.acknowledge === 'string') ? opts.acknowledge : null;
     setMarketingBriefSaving(true);
     setMarketingBriefError('');
     try {
       const token = await user.getIdToken();
       // Persist only unlocked platforms so legacy/locked selections can't feed
       // the pipeline. Fall back to defaults if filtering empties the list.
-      const filteredPlatforms = (marketingBriefConfig.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS)
+      const filteredPlatforms = (sourceConfig.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS)
         .filter((k) => UNLOCKED_SOURCE_PLATFORMS.includes(k));
       const payload = {
-        ...marketingBriefConfig,
+        ...sourceConfig,
         sourcePlatforms: filteredPlatforms.length ? filteredPlatforms : DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS,
+        acknowledgedCards: {
+          ...(sourceConfig.acknowledgedCards || {}),
+          ...(acknowledgeCardId ? { [acknowledgeCardId]: true } : {}),
+        },
       };
       const res = await fetch(apiPath('/api/dashboard/marketing-brief/config'), {
         method: 'POST',
@@ -3029,6 +3214,32 @@ const DashboardPage = () => {
     }
   }, [user, eventsRunning, eventsMode, eventsZip, eventsKeywords, apiPath]);
 
+  // Save an event search result into marketingBriefConfig.events so it feeds
+  // the brief's upcomingEvents + Local Signals. Dedupe by title + url.
+  const addEventToBrief = useCallback((ev) => {
+    if (!marketingBriefConfig) return;
+    const entry = {
+      event: ev?.title || ev?.event || '',
+      date: ev?.date || '',
+      location: ev?.location || '',
+      url: ev?.url || '',
+      source: 'events-search',
+    };
+    if (!entry.event) return;
+    const existing = marketingBriefConfig.events || [];
+    if (existing.some((s) => s.event === entry.event && s.url === entry.url)) return;
+    const next = { ...marketingBriefConfig, events: [...existing, entry].slice(0, 20) };
+    setMarketingBriefConfig(next);
+    saveMarketingBriefConfig({ override: next });
+  }, [marketingBriefConfig, saveMarketingBriefConfig]);
+
+  const removeEventFromBrief = useCallback((index) => {
+    if (!marketingBriefConfig) return;
+    const next = { ...marketingBriefConfig, events: (marketingBriefConfig.events || []).filter((_, i) => i !== index) };
+    setMarketingBriefConfig(next);
+    saveMarketingBriefConfig({ override: next });
+  }, [marketingBriefConfig, saveMarketingBriefConfig]);
+
   const updateMarketingBriefSearch = useCallback((index, patch) => {
     setMarketingBriefConfig((prev) => {
       const searches = [...(prev?.searches || [])];
@@ -3159,7 +3370,7 @@ const DashboardPage = () => {
           <span className="tile-detail-stat-label">{p.label}</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Locked</span>
-            <button type="button" onClick={() => setShowTierModal(true)} style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--accent, #10b981)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Upgrade →</button>
+            <button type="button" onClick={() => setShowSubscribeModal(true)} style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--accent, #10b981)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Upgrade →</button>
           </span>
         </div>
       );
@@ -3385,6 +3596,33 @@ const DashboardPage = () => {
     }
   }, [user, marketCategoryDraft, apiPath, doBootstrap]);
 
+  // Seed the 30-day strategy editor from the latest rolled plan.
+  useEffect(() => {
+    const days = bootstrap?.dashboardState?.strategy30?.days;
+    setStrategy30Draft(Array.isArray(days) ? days.map((d) => ({ ...d })) : []);
+  }, [bootstrap?.dashboardState?.strategy30?.days]);
+
+  const saveStrategy30 = useCallback(async () => {
+    if (!user || !strategy30Draft.length) return;
+    setStrategy30Saving(true);
+    setStrategy30Error('');
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(apiPath('/api/dashboard/strategy-30/config'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ days: strategy30Draft }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Could not save strategy.');
+      doBootstrap();
+    } catch (err) {
+      setStrategy30Error(err instanceof Error ? err.message : 'Could not save strategy.');
+    } finally {
+      setStrategy30Saving(false);
+    }
+  }, [user, strategy30Draft, apiPath, doBootstrap]);
+
   // Initial load
   useEffect(() => {
     cancelledRef.current = false;
@@ -3588,6 +3826,7 @@ const DashboardPage = () => {
     : sgDisplayData;
   const isStyleGuideMock = !styleGuideData;
   const outputsPreview  = dashboardState?.outputsPreview || null;
+  const strategy30 = dashboardState?.strategy30 || null;
   // Phase-4 Scribe: per-card short + expanded copy. When present for a card,
   // the modal description is overridden with scribe.expanded. Absent → static
   // fallback copy already defined on each intakeCapabilityCards entry.
@@ -3644,6 +3883,20 @@ const DashboardPage = () => {
   const isModularOnboardingClient = Boolean(moduleConfig) && !hasIntakeData;
 
   const isRunActive = latestRunStatus === 'queued' || latestRunStatus === 'running';
+
+  // Brief cooldown timer — while a brief run is active the timer resets to the
+  // tier's full wait and holds; once the run ends it counts down to 0.
+  useEffect(() => {
+    if (isRunActive) {
+      setBriefCooldownSeconds(TIER_BRIEF_COOLDOWN_SECONDS);
+      return undefined;
+    }
+    const id = setInterval(() => {
+      setBriefCooldownSeconds((s) => (s > 0 ? s - 1 : s));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [isRunActive]);
+
   const noWorkspaceState = !bootstrapLoading
     && !bootstrapError
     && Boolean(user)
@@ -3660,6 +3913,17 @@ const DashboardPage = () => {
   if ((latestRunStatus === 'queued' || latestRunStatus === 'running') && activeRunIsIntake) {
     runWasActiveRef.current = true;
   }
+
+  // Onboarding chain: the signup intake hands off to a scout-brief run
+  // (search terms → campaign → brief). While that chained run is queued or
+  // running, hold the reveal countdown so the terminal can follow it; a chain
+  // failure is soft (intake already succeeded) and reveals the dashboard.
+  const marketingBriefModuleStatus = moduleState?.['marketing-brief']?.status || null;
+  const currentRunIsOnboardingChain = currentRun?.trigger === 'onboarding-chain';
+  const onboardingChainPending = Boolean(
+    (currentRun?.trigger === 'signup' || currentRun?.trigger === 'brief-refresh' || currentRunIsOnboardingChain) &&
+    (marketingBriefModuleStatus === 'queued' || marketingBriefModuleStatus === 'running')
+  );
 
   // Show terminal modal during active builds, failures, and the post-completion countdown.
   // Hold it while the run has succeeded but the onboarding survey is still unresolved,
@@ -3680,7 +3944,11 @@ const DashboardPage = () => {
     || moduleRunInFlight
     || (
     isRunActive
-    || latestRunStatus === 'failed'
+    // A failed onboarding-chain brief is a soft fail (intake succeeded): keep
+    // the modal only for the survey hold or the reveal countdown, never as a
+    // permanent failure screen.
+    || (latestRunStatus === 'failed' && !currentRunIsOnboardingChain)
+    || (latestRunStatus === 'failed' && currentRunIsOnboardingChain && !surveyResolved && runWasActiveRef.current)
     || completionCountdown !== null
     || (latestRunStatus === 'succeeded' && !surveyResolved && runWasActiveRef.current)
     || (Boolean(client) && clientStatus === 'provisioning' && !hasReadyDashboard)
@@ -3889,11 +4157,22 @@ const DashboardPage = () => {
   // Skip entirely for module re-runs — those don't need a reveal countdown.
   useEffect(() => {
     if (latestRunStatus === prevRunStatusRef.current) return;
-    if (latestRunStatus === 'succeeded' && (prevRunStatusRef.current === 'running' || prevRunStatusRef.current === 'queued')) {
-      if (surveyResolved && activeRunIsIntake) setCompletionCountdown(3);
+    const wasActive = prevRunStatusRef.current === 'running' || prevRunStatusRef.current === 'queued';
+    if (latestRunStatus === 'succeeded' && wasActive) {
+      // Hold the reveal while the onboarding chain (scout-brief) is still pending —
+      // the terminal follows the chained run and the countdown fires when IT resolves.
+      if (surveyResolved && activeRunIsIntake && !onboardingChainPending) {
+        if (currentRunIsOnboardingChain) chainBriefRevealPendingRef.current = true;
+        setCompletionCountdown(3);
+      }
+    }
+    // Chained brief soft-fail: the intake already succeeded, so reveal the
+    // dashboard anyway — the Executive Daily Brief card carries the retry.
+    if (latestRunStatus === 'failed' && wasActive && currentRunIsOnboardingChain && surveyResolved) {
+      setCompletionCountdown(4);
     }
     prevRunStatusRef.current = latestRunStatus;
-  }, [latestRunStatus, surveyResolved, activeRunIsIntake]);
+  }, [latestRunStatus, surveyResolved, activeRunIsIntake, onboardingChainPending, currentRunIsOnboardingChain]);
 
   // If the run finished during this session before the survey resolved, start
   // the countdown once the survey becomes resolved. Guarded by:
@@ -3905,11 +4184,29 @@ const DashboardPage = () => {
     if (postSurveyRevealFiredRef.current) return;
     if (!runWasActiveRef.current) return;
     if (!activeRunIsIntake) return;
-    if (surveyResolved && latestRunStatus === 'succeeded' && completionCountdown === null) {
+    // Run is "resolved" when succeeded with no chained brief pending, or when
+    // the chained brief soft-failed (intake already succeeded → reveal anyway).
+    const runResolved =
+      !onboardingChainPending &&
+      (latestRunStatus === 'succeeded' || (latestRunStatus === 'failed' && currentRunIsOnboardingChain));
+    if (surveyResolved && runResolved && completionCountdown === null) {
       postSurveyRevealFiredRef.current = true;
+      if (currentRunIsOnboardingChain && latestRunStatus === 'succeeded') {
+        chainBriefRevealPendingRef.current = true;
+      }
       setCompletionCountdown(3);
     }
-  }, [surveyResolved, latestRunStatus, completionCountdown, activeRunIsIntake]);
+  }, [surveyResolved, latestRunStatus, completionCountdown, activeRunIsIntake, onboardingChainPending, currentRunIsOnboardingChain]);
+
+  // Land the new onboard on the deliverable: once the chain-success countdown
+  // has finished and the rendered brief HTML is in, open it full-screen.
+  useEffect(() => {
+    if (!chainBriefRevealPendingRef.current) return;
+    if (completionCountdown !== null) return;
+    if (!briefPreviewHtml) return; // graceful: no render → user lands on the grid
+    chainBriefRevealPendingRef.current = false;
+    setBriefFullScreen(true);
+  }, [completionCountdown, briefPreviewHtml]);
 
   // When a new brief_run starts (run ID changes from a prior non-null value),
   // reset survey resolution so the bento survey reappears alongside the fresh
@@ -4338,6 +4635,10 @@ const DashboardPage = () => {
       synthesize:    ['ai',     '[AI]'],
       compose:       ['mock',   '[MOCK]'],
       'scout-config':    ['ai',     '[SCOUT]'],
+      'search-terms':    ['ai',     '[SEARCH]'],
+      scout:             ['ai',     '[SCOUT]'],
+      strategy:          ['ai',     '[CAMPAIGN]'],
+      chain:             ['ok',     '✓'],
       skills:            ['ai',     '[SKILL]'],
       scribe:            ['ai',     '[SCRIBE]'],
       brief:             ['ai',     '[BRIEF]'],
@@ -4437,22 +4738,40 @@ const DashboardPage = () => {
   //   - Survey unresolved → "complete the survey to continue →"
   const realEventLinesWithTail = useMemo(() => {
     if (realEventLines.length === 0) return realEventLines;
+    // Chained brief soft-fail: intake succeeded, so close out friendly and reveal.
+    if (latestRunStatus === 'failed' && currentRunIsOnboardingChain) {
+      const tail = [...realEventLines];
+      tail.push({ type: 'dim', prefix: '', text: '─'.repeat(46), cursor: false });
+      tail.push({ type: 'dim', prefix: '', text: 'your dashboard is ready — retry from the Executive Daily Brief card', cursor: false });
+      if (!surveyResolved) {
+        tail.push({ type: 'active', prefix: '▶', text: 'complete the survey above to reveal your dashboard →', cursor: true });
+      } else if (completionCountdown !== null && completionCountdown > 0) {
+        tail.push({ type: 'countdown', prefix: '▶', text: `launching dashboard in ${completionCountdown}…`, cursor: false });
+      } else {
+        tail.push({ type: 'countdown', prefix: '▶', text: 'launching…', cursor: false });
+      }
+      return tail;
+    }
     if (latestRunStatus !== 'succeeded') return realEventLines;
     const tail = [...realEventLines];
     tail.push({ type: 'dim', prefix: '', text: '─'.repeat(46), cursor: false });
     if (!activeRunIsIntake) {
       tail.push({ type: 'ok', prefix: '✓', text: 'module complete', cursor: false });
     } else if (surveyResolved) {
-      if (completionCountdown !== null && completionCountdown > 0) {
-        tail.push({ type: 'countdown', prefix: '▶', text: `launching dashboard in ${completionCountdown}…`, cursor: false });
+      if (onboardingChainPending) {
+        // Intake done, chained scout-brief queued — terminal follows it next.
+        tail.push({ type: 'active', prefix: '▶', text: 'handing off to growth engine — campaign + brief next…', cursor: true });
+      } else if (completionCountdown !== null && completionCountdown > 0) {
+        const tailVerb = currentRunIsOnboardingChain ? 'opening your executive brief' : 'launching dashboard';
+        tail.push({ type: 'countdown', prefix: '▶', text: `${tailVerb} in ${completionCountdown}…`, cursor: false });
       } else {
-        tail.push({ type: 'countdown', prefix: '▶', text: 'launching…', cursor: false });
+        tail.push({ type: 'countdown', prefix: '▶', text: currentRunIsOnboardingChain ? 'opening your executive brief…' : 'launching…', cursor: false });
       }
     } else {
       tail.push({ type: 'active', prefix: '▶', text: 'complete the survey above to reveal your dashboard →', cursor: true });
     }
     return tail;
-  }, [realEventLines, latestRunStatus, surveyResolved, completionCountdown, activeRunIsIntake]);
+  }, [realEventLines, latestRunStatus, surveyResolved, completionCountdown, activeRunIsIntake, onboardingChainPending, currentRunIsOnboardingChain]);
 
   // How many lines to show: events revealed so far + all synthetic tail
   // lines (no animation delay on the tail — it's just status/gating).
@@ -4583,6 +4902,9 @@ const DashboardPage = () => {
   const marketingBriefStatus = moduleState?.['marketing-brief']?.status || (hasMarketingBriefData ? 'succeeded' : 'idle');
   const marketingBriefPreview = marketingBrief?.headline || dashboardState?.headline || latestCustomBrief?.title || 'Scout, Scribe, and Guardian are ready to build the daily founder brief.';
   const marketingScoutAgentData = marketingBrief?.scoutBrief?.agentData || null;
+  // Wire market display cards to the brief's agentData.
+  const marketSignalTrends = (marketingScoutAgentData?.categoryTrends || []).filter((t) => t && (t.trend || t.detail));
+  const competitorIntelItems = (marketingScoutAgentData?.competitorIntel || []).filter((c) => c && (c.competitor || c.finding));
   const marketingBriefSelectedPlatforms = (marketingBriefConfig?.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS);
   const marketingBriefPerPlatformResults = deriveMarketingBriefPerPlatformResults(marketingScoutAgentData, marketingBriefSelectedPlatforms);
   const marketingBriefHasRunResults = Boolean(marketingScoutAgentData);
@@ -5082,6 +5404,12 @@ const DashboardPage = () => {
     'marketing-brief', 'brief-marketing', 'brief-creative', 'brief-competitor', 'brief-strategy', 'brief-performance',
   ]);
 
+  // Marketing Director config cards — they hold settings, so their status dot
+  // reads green when configured / amber when empty, never red (no audit data).
+  const MARKETING_CONFIG_CARD_IDS = new Set([
+    'brand-keywords', 'watchlist', 'competitors', 'scout-focus', 'search-plan', 'platform-search', 'social-signals',
+  ]);
+
   const intakeCapabilityCards = [
     // ── ONBOARDING ──────────────────────────────────────────────────────────
     {
@@ -5504,6 +5832,30 @@ const DashboardPage = () => {
         },
       };
     })(),
+    {
+      id: 'mockup-studio',
+      category: 'content',
+      number: 'MS',
+      label: 'MOCKUP STUDIO',
+      title: 'Mockup Studio',
+      description: 'Interactive 3D device mockup of your live site. Frame the shot, capture hi-res screenshots, and render promo scenes that feed the image pipeline.',
+      placeholderLabel: 'OPEN\nSTUDIO',
+      rows: [
+        { key: 'ms-devices', label: 'Devices', value: 'Desktop · Mobile · Tablet' },
+        { key: 'ms-capture', label: 'Capture', value: 'Hi-res up to 3x · full page' },
+        { key: 'ms-scenes',  label: 'Scenes',  value: '3D renders on studio backdrops' },
+        { key: 'ms-action',  label: 'Action',  value: 'Click OPEN to load your site in the 3D studio' },
+      ],
+      footerLeft: 'Live',
+      footerRight: 'STUDIO',
+      footerAction: {
+        label: 'OPEN',
+        onClick: () => {
+          const site = client?.websiteUrl || client?.website || '';
+          window.open(`/dashboard/studio${site ? `?url=${encodeURIComponent(site)}` : ''}`, '_blank');
+        },
+      },
+    },
     {
       id: 'style-guide',
       category: 'content',
@@ -5979,9 +6331,15 @@ const DashboardPage = () => {
       label: 'SIGNALS',
       title: 'Market Signals',
       description: 'Trends, conversations, and demand signals relevant to your business.',
-      placeholderLabel: 'VIEW\nSIGNALS',
-      rows: buildWorkNeededRows('Signal collection requires active scout feeds.'),
-      footerLeft: WORK_NEEDED_LABEL,
+      placeholderLabel: marketSignalTrends.length ? 'SIGNALS' : 'VIEW\nSIGNALS',
+      rows: marketSignalTrends.length
+        ? marketSignalTrends.slice(0, 6).map((t, i) => ({
+            key: `ms-${i}`,
+            label: String(t.relevance || 'trend').toUpperCase(),
+            value: t.trend || t.detail || '',
+          }))
+        : buildWorkNeededRows('Run the Executive Daily Brief to surface market trends.'),
+      footerLeft: marketSignalTrends.length ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
     },
     {
@@ -5991,9 +6349,15 @@ const DashboardPage = () => {
       label: 'COMPETITION',
       title: 'Competitor Snapshot',
       description: 'How competitors position and communicate.',
-      placeholderLabel: 'VIEW\nCOMPETITORS',
-      rows: buildWorkNeededRows('Competitor mapping requires validated industry and positioning signals.'),
-      footerLeft: WORK_NEEDED_LABEL,
+      placeholderLabel: competitorIntelItems.length ? 'COMPETITORS' : 'VIEW\nCOMPETITORS',
+      rows: competitorIntelItems.length
+        ? competitorIntelItems.slice(0, 6).map((c, i) => ({
+            key: `cs-${i}`,
+            label: c.competitor || 'Competitor',
+            value: c.finding || '',
+          }))
+        : buildWorkNeededRows('Run the Executive Daily Brief to surface competitor activity.'),
+      footerLeft: competitorIntelItems.length ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
     },
     {
@@ -6004,7 +6368,7 @@ const DashboardPage = () => {
       title: 'Local Signals',
       description: 'Events, location-based demand, and local activity.',
       placeholderLabel: 'VIEW\nLOCAL',
-      rows: buildWorkNeededRows('Local signal data requires geo and location parameters.'),
+      rows: buildWorkNeededRows('No local-market data source is wired to this card yet — running a brief won’t populate it.'),
       footerLeft: WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
     },
@@ -6023,28 +6387,44 @@ const DashboardPage = () => {
     {
       id: 'priority-signal',
       category: 'growth',
-      number: 'PA',
-      label: 'PRIORITY',
-      title: 'Priority Action',
-      description: 'The highest-impact fix based on current gaps.',
-      placeholderLabel: 'VIEW\nPRIORITY',
-      rows: hasPrioritySignalData
-        ? [
-            { key: 'focus', label: 'Focus', value: resolvedPrioritySignal },
-            { key: 'channel', label: 'Channel', value: strategy?.postStrategy?.formats?.join(' · ') || 'Pending' },
-          ]
-        : buildWorkNeededRows('Not enough validated signals to surface a priority action.'),
-      footerLeft: hasPrioritySignalData ? 'Live' : WORK_NEEDED_LABEL,
+      number: 'DP',
+      label: 'TODAY',
+      title: 'Day-of Post',
+      description: 'Today’s post from the rolling 30-day strategy — what to publish now, the angle, why today, and the priority finding behind it.',
+      placeholderLabel: strategy30?.today?.post ? 'TODAY' : 'VIEW\nPRIORITY',
+      rows: (() => {
+        // Day-of post from the rolled strategy, backed by the run's priority evidence.
+        const escalations = marketingScoutAgentData?.escalations || [];
+        const top = escalations.find((e) => e?.summary) || null;
+        const action = marketingBrief?.headline || resolvedPrioritySignal;
+        if (strategy30?.today?.post) {
+          return [
+            { key: 'dp-post', label: 'Post', value: strategy30.today.post },
+            ...(strategy30.today.angle ? [{ key: 'dp-angle', label: 'Angle', value: strategy30.today.angle }] : []),
+            ...(strategy30.today.rationale ? [{ key: 'dp-why', label: 'Why today', value: strategy30.today.rationale }] : []),
+            ...(action ? [{ key: 'dp-priority', label: 'Priority action', value: action }] : []),
+            ...(top ? [{ key: 'dp-finding', label: 'Key finding', value: top.summary }] : []),
+          ];
+        }
+        if (!action && !top) return buildWorkNeededRows('Run the Executive Daily Brief to generate today’s post.');
+        return [
+          { key: 'dp-priority', label: 'Priority action', value: action || '—' },
+          ...(top ? [{ key: 'dp-finding', label: 'Key finding', value: top.summary }] : []),
+          ...(marketingBrief?.content?.content_angle ? [{ key: 'dp-angle', label: 'Suggested angle', value: marketingBrief.content.content_angle }] : []),
+        ];
+      })(),
+      footerLeft: (strategy30?.today?.post || marketingBrief?.headline || hasPrioritySignalData) ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
     },
     {
       id: 'strategy-builder',
       category: 'growth',
-      number: 'SB',
-      label: 'STRATEGY',
-      title: 'Next-Post Strategy',
-      description: 'Turns Scout signals, brand voice, and content gaps into a focused social direction for the next post.',
-      placeholderLabel: 'BUILD\nSTRATEGY',
+      number: 'CP',
+      label: 'CUSTOM',
+      title: 'Custom Post Strategy',
+      locked: true,
+      description: 'Hands-on strategy tool — generate a custom day or week plan from the brief, Company Brain, and your own inputs. Overrides sit alongside the rolling 30-day strategy.',
+      placeholderLabel: 'CUSTOM\nSTRATEGY',
       rows: [
         { key: 'sb-source', label: 'Source', value: hasMarketingBriefData ? 'Marketing Brief' : 'Needs Scout brief' },
         {
@@ -6052,12 +6432,34 @@ const DashboardPage = () => {
           label: 'Knowledge Base',
           value: summarizeKnowledgeBaseSources(strategyBuilderKnowledgeBaseSources, 'Toggleable priority source'),
         },
-        { key: 'sb-angle', label: 'Angle', value: marketingBrief?.content?.content_angle || marketingBrief?.headline || resolvedContentAngle || 'Run Marketing Brief to generate the angle.' },
+        { key: 'sb-angle', label: 'Angle', value: marketingBrief?.content?.content_angle || marketingBrief?.headline || resolvedContentAngle || 'Run the Executive Daily Brief first.' },
         { key: 'sb-platform', label: 'Platform', value: 'X / Twitter' },
+        ...(strategy?.postStrategy?.formats?.length ? [{ key: 'sb-formats', label: 'Formats', value: strategy.postStrategy.formats.join(' · ') }] : []),
       ],
       footerLeft: hasMarketingBriefData ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
       readinessBadge: hasMarketingBriefData ? { tone: 'ok', label: 'Ready' } : null,
+    },
+    {
+      id: 'strategy-30',
+      category: 'growth',
+      number: '30',
+      label: '30-DAY STRATEGY',
+      title: '30-Day Strategy',
+      description: 'The rolling post plan. Auto-revised on every brief run from live signals, the Company Brain, and conversation uploads — your edits are kept and respected.',
+      placeholderLabel: strategy30?.days?.length ? 'PLAN' : 'RUN\nBRIEF',
+      rows: strategy30?.days?.length
+        ? [
+            ...strategy30.days.slice(0, 4).map((d, i) => ({
+              key: `s30-${i}`,
+              label: d.date,
+              value: `${d.theme ? `${d.theme} — ` : ''}${d.idea}${d.source === 'user' ? ' ✎' : ''}`,
+            })),
+            ...(strategy30.revisionNotes ? [{ key: 's30-notes', label: 'Last revision', value: strategy30.revisionNotes }] : []),
+          ]
+        : buildWorkNeededRows('Run the Executive Daily Brief — the 30-day strategy is generated and revised on each run.'),
+      footerLeft: strategy30?.days?.length ? `${strategy30.days.length} days` : WORK_NEEDED_LABEL,
+      footerRight: 'EDITABLE',
     },
     {
       id: 'trust-credibility',
@@ -6068,18 +6470,6 @@ const DashboardPage = () => {
       description: 'Proof signals like reviews, consistency, and authority. Missing trust reduces conversions.',
       placeholderLabel: 'VIEW\nTRUST',
       rows: buildWorkNeededRows('Trust signal analysis requires contact clues, about page, and schema markup data.'),
-      footerLeft: WORK_NEEDED_LABEL,
-      footerRight: 'REVIEWED',
-    },
-    {
-      id: 'content-gaps',
-      category: 'growth',
-      number: 'CG',
-      label: 'GAPS',
-      title: 'Content Gaps',
-      description: 'Topics and pages missing from your site that competitors are capturing.',
-      placeholderLabel: 'VIEW\nGAPS',
-      rows: buildWorkNeededRows('Content gap analysis requires competitor and keyword data.'),
       footerLeft: WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
     },
@@ -6099,23 +6489,6 @@ const DashboardPage = () => {
           }))
         : buildWorkNeededRows('No search opportunities surfaced from the current intake.'),
       footerLeft: hasOpportunitiesData ? 'Live' : WORK_NEEDED_LABEL,
-      footerRight: 'REVIEWED',
-    },
-    {
-      id: 'marketing',
-      category: 'growth',
-      number: 'PS',
-      label: 'STRATEGY',
-      title: 'Posting Rules',
-      description: 'What to post, where, and why—based on gaps and audience signals.',
-      placeholderLabel: 'SET\nRULES',
-      rows: hasContentAngleData
-        ? [
-            { key: 'ps-angle', label: 'Angle', value: resolvedContentAngle },
-            { key: 'ps-knowledge-base', label: 'Knowledge Base', value: knowledgeBaseSourceSummary },
-          ]
-        : buildWorkNeededRows('Post strategy requires brand tone, audience signals, and content gap data.'),
-      footerLeft: WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
     },
     {
@@ -6168,47 +6541,19 @@ const DashboardPage = () => {
     {
       id: 'local-weather',
       category: 'growth',
-      number: 'LW',
-      label: 'WEATHER',
-      title: 'Local Weather',
-      description: 'Daily local forecast + a 1-line 3-day outlook, added to your daily brief. Configurable by ZIP code.',
-      placeholderLabel: 'SET\nZIP',
-      rows: marketingBriefConfig?.weather?.enabled
-        ? [
-            { key: 'lw-zip', label: 'ZIP', value: marketingBriefConfig?.weather?.zip || '—' },
-            { key: 'lw-place', label: 'Area', value: localWeather?.place || marketingBriefConfig?.weather?.place || 'Pending' },
-            { key: 'lw-today', label: 'Today', value: localWeather?.today ? `${localWeather.today.short}, ${localWeather.today.temp}°${localWeather.today.unit}` : (localWeatherLoading ? 'Loading…' : 'Save a ZIP to fetch') },
-            { key: 'lw-brief', label: 'In brief', value: 'Yes — forecast + 3-day' },
-          ]
-        : [
-            { key: 'lw-status', label: 'Status', value: 'Off' },
-            { key: 'lw-hint', label: 'Setup', value: 'Open details → set ZIP → enable' },
-          ],
-      footerLeft: marketingBriefConfig?.weather?.enabled ? 'Live' : 'Off',
+      number: 'WE',
+      label: 'WEATHER & EVENTS',
+      title: 'Global Weather & Events',
+      description: 'Weather forecast added to your brief, plus event discovery — local by ZIP or industry by keyword. Timely context for posts and briefs.',
+      placeholderLabel: 'WEATHER\n+ EVENTS',
+      rows: [
+        { key: 'we-weather', label: 'Weather', value: marketingBriefConfig?.weather?.enabled ? ('On · ' + (marketingBriefConfig?.weather?.zip || '—')) : 'Off' },
+        { key: 'we-area', label: 'Area', value: localWeather?.place || marketingBriefConfig?.weather?.place || '—' },
+        { key: 'we-events', label: 'Events', value: eventsResults?.events?.length ? (String(eventsResults.events.length) + ' found') : 'Search in details' },
+      ],
+      footerLeft: marketingBriefConfig?.weather?.enabled ? 'Live' : 'Ready',
       footerRight: 'BRIEFING',
       readinessBadge: marketingBriefConfig?.weather?.enabled ? { tone: 'ok', label: 'On' } : null,
-    },
-    {
-      id: 'events',
-      category: 'growth',
-      number: 'EV',
-      label: 'EVENTS',
-      title: 'Local Events',
-      description: 'Find what’s happening — local events by ZIP code for neighborhood-driven businesses, or industry events by keyword for digital brands. Useful context for timely posts and briefs.',
-      placeholderLabel: 'FIND\nEVENTS',
-      rows: eventsResults?.events?.length
-        ? [
-            { key: 'ev-mode', label: 'Mode', value: eventsResults.mode === 'global' ? 'Global · keywords' : 'Local · ZIP' },
-            { key: 'ev-count', label: 'Found', value: String(eventsResults.events.length) },
-            { key: 'ev-top', label: 'Top', value: eventsResults.events[0]?.title || '—' },
-          ]
-        : [
-            { key: 'ev-local', label: 'Local', value: 'Events near a ZIP code' },
-            { key: 'ev-global', label: 'Global', value: 'Industry events by keyword' },
-            { key: 'ev-hint', label: 'Setup', value: 'Open details → search' },
-          ],
-      footerLeft: eventsResults?.events?.length ? 'Searched' : 'Ready',
-      footerRight: 'GROWTH',
     },
     {
       id: 'newsletter',
@@ -6216,6 +6561,7 @@ const DashboardPage = () => {
       number: 'NL',
       label: 'NEWSLETTER',
       title: 'Newsletter Roll-up',
+      locked: true,
       description: hasNewsletterData
         ? 'Auto-generated newsletter from your latest intelligence brief.'
         : 'Newsletter generation requires a completed Scout brief.',
@@ -6264,7 +6610,20 @@ const DashboardPage = () => {
             { key: 'bk-searches', label: 'Est. searches', value: String(marketingBriefSearchStats.totalSearches) },
           ]
         : buildWorkNeededRows('Loading Scout config…'),
-      footerLeft: marketingBriefConfig ? 'Editable' : 'Loading',
+      footerLeft: (() => {
+        if (!marketingBriefConfig) return 'Loading';
+        const hasName = Boolean(marketingBriefConfig.brandName?.trim());
+        const hasTerms = marketingBriefSearchStats.brandKeywords.length > 0 || marketingBriefSearchStats.categoryTerms.length > 0;
+        if (hasName && hasTerms) return 'Configured';
+        if (hasName) return 'Add identifiers';
+        return 'Set brand name';
+      })(),
+      readinessBadge: (() => {
+        if (!marketingBriefConfig) return null;
+        const hasName = Boolean(marketingBriefConfig.brandName?.trim());
+        const hasTerms = marketingBriefSearchStats.brandKeywords.length > 0 || marketingBriefSearchStats.categoryTerms.length > 0;
+        return hasName && hasTerms ? { tone: 'ok', label: 'Ready' } : null;
+      })(),
       footerRight: 'GROWTH',
     },
     {
@@ -6344,50 +6703,6 @@ const DashboardPage = () => {
       footerRight: 'GROWTH',
     },
     {
-      id: 'brief-preview',
-      category: 'growth',
-      number: 'BP',
-      label: 'BRIEF PREVIEW',
-      title: 'Brief Preview (Pre-run)',
-      description: 'The Agent Data Contract Scout returns, the run-cost estimate, and a Run Now button that populates the Executive Daily Brief. Part of Scout Config; edits sync with the Daily Brief.',
-      placeholderLabel: 'PREVIEW\nBRIEF',
-      rows: marketingBriefConfig
-        ? [
-            { key: 'bp-contract', label: 'Data contract', value: marketingBriefConfig.agentDataTemplate ? 'Custom' : 'Default' },
-            { key: 'bp-status', label: 'Brief status', value: marketingBriefStatus },
-          ]
-        : buildWorkNeededRows('Loading Scout config…'),
-      footerLeft: 'Run-ready',
-      footerRight: 'GROWTH',
-      footerAction: {
-        label: marketingBriefRunning ? '…' : 'Run Now',
-        loading: marketingBriefRunning || marketingBriefSaving,
-        onClick: runMarketingBrief,
-      },
-    },
-
-    // ── SOCIAL MEDIA MANAGER ────────────────────────────────────────────────
-    {
-      id: 'social-media-posting',
-      category: 'social',
-      number: 'XP',
-      label: 'POST',
-      title: 'Schedule Posts',
-      description: 'Write, optimize, and post to X/Twitter directly from the dashboard. Content is checked against your brand voice before it goes out.',
-      placeholderLabel: 'SCHEDULE\nPOSTS',
-      rows: [
-        { key: 'smp-channel', label: 'Channel', value: 'X / Twitter' },
-        { key: 'smp-agent-system', label: 'Agents', value: 'Content Creator · Hashtag Specialist · Engagement Optimizer' },
-        { key: 'smp-source', label: 'Creative Source', value: hasSocialGeneratedDraft ? 'Creative Builder output available' : 'Manual composer ready' },
-        { key: 'smp-knowledge-base', label: 'Knowledge Base', value: knowledgeBaseSourceSummary },
-      ],
-      footerLeft: 'Ready',
-      footerRight: 'LIVE',
-      readinessBadge: { tone: 'ok', label: 'Ready' },
-    },
-
-    // ── DAILY BRIEFS ────────────────────────────────────────────────────────
-    {
       id: 'marketing-brief',
       category: 'brief',
       number: 'DB',
@@ -6417,24 +6732,32 @@ const DashboardPage = () => {
       },
       readinessBadge: hasDailyBriefData ? { tone: 'ok', label: 'Passed' } : null,
     },
-    ...(isAdmin ? [{
-      id: 'submit-custom-brief',
+    {
+      // Onboarding Brief — duplicated from the Executive Daily Brief. A distinct
+      // iteration (will diverge from the executive brief); unlocked entry version.
+      id: 'onboarding-brief',
       category: 'brief',
-      number: 'SC',
-      label: 'SUBMIT CUSTOM BRIEF',
-      title: 'Submit Custom Brief',
-      description: 'Admin workspace for publishing a client-facing HTML brief and downloadable PDF into this client dashboard.',
-      placeholderLabel: 'HTML',
+      number: 'OB',
+      label: 'ONBOARDING BRIEF',
+      title: 'Onboarding Brief',
+      description: 'A first-run onboarding brief — a tailored introduction to your dashboard intelligence. A distinct iteration from the Executive Daily Brief (this version will diverge).',
+      placeholderLabel: 'RUN\nONBOARDING\nBRIEF',
       rows: [
-        { key: 'sc-client', label: 'Client', value: client?.companyName || client?.name || client?.dashboardTitle || bootstrap?.effectiveClientId || 'Selected client' },
-        { key: 'sc-existing', label: 'Saved briefs', value: customBriefsLoading ? 'Loading' : String(customBriefCount) },
-        { key: 'sc-pdf', label: 'PDF export', value: 'Generated on save' },
-        { key: 'sc-access', label: 'Access', value: 'Admin only' },
+        { key: 'ob-status', label: 'Status', value: marketingBriefStatus },
+        { key: 'ob-focus', label: 'Scout focus', value: marketingBriefConfig?.sourceFocus || 'Not configured' },
+        { key: 'ob-instructions', label: 'Instructions', value: marketingBriefConfig?.scoutInstructions ? 'Custom' : 'Default' },
+        { key: 'ob-sources', label: 'Sources', value: (marketingBriefConfig?.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS).join(' · ') },
+        { key: 'ob-preview', label: 'Latest signal', value: marketingBriefPreview },
       ],
-      footerLeft: 'Ready',
-      footerRight: 'ADMIN',
-      readinessBadge: { tone: 'ok', label: 'Ready' },
-    }] : []),
+      footerLeft: hasDailyBriefData ? 'Live' : 'Configure Scout',
+      footerRight: 'REVIEWED',
+      footerAction: {
+        label: marketingBriefRunning ? '…' : hasMarketingBriefData ? 'Re-run' : 'Run Brief',
+        loading: marketingBriefRunning || marketingBriefSaving,
+        onClick: runMarketingBrief,
+      },
+      readinessBadge: hasDailyBriefData ? { tone: 'ok', label: 'Passed' } : null,
+    },
 
     // ── ADMIN · EMAIL ─────────────────────────────────────────────────────────
     ...(isAdmin ? [{
@@ -6519,15 +6842,22 @@ const DashboardPage = () => {
     {
       id: 'brief-strategy',
       category: 'brief',
-      locked: true,
+      locked: !isAdmin,
       number: 'SB',
       label: 'STRATEGY BRIEF',
       title: 'Strategy Brief',
-      description: 'Founder-level recommendations built from live data. Combines operational metrics, market conditions, and system intelligence into prioritized next steps — not theory, specific actions.',
-      placeholderLabel: 'LOCK',
-      rows: [{ key: 'status', label: 'Status', value: 'Coming soon' }],
-      footerLeft: 'Locked',
-      footerRight: '',
+      description: 'The rolling 30-day post strategy as a brief — revised on every run from live signals and rolled up into the Executive Daily Brief.',
+      placeholderLabel: isAdmin ? (strategy30?.days?.length ? 'STRATEGY' : 'RUN\nBRIEF') : 'LOCK',
+      rows: isAdmin && strategy30?.days?.length
+        ? [
+            ...(strategy30.today?.post ? [{ key: 'bs-today', label: 'Today', value: strategy30.today.post }] : []),
+            ...(strategy30.revisionNotes ? [{ key: 'bs-notes', label: 'Revision', value: strategy30.revisionNotes }] : []),
+            { key: 'bs-span', label: 'Plan', value: `${strategy30.days.length} days · from ${strategy30.days[0]?.date || '—'}` },
+            { key: 'bs-rollup', label: 'Roll-up', value: 'Included in Executive Daily Brief' },
+          ]
+        : [{ key: 'status', label: 'Status', value: isAdmin ? 'Run the Executive Daily Brief to generate.' : 'Coming soon' }],
+      footerLeft: isAdmin ? (strategy30?.days?.length ? 'Live' : 'Pending') : 'Locked',
+      footerRight: isAdmin ? 'ADMIN' : '',
     },
     {
       id: 'brief-creative',
@@ -6555,6 +6885,68 @@ const DashboardPage = () => {
       footerLeft: 'Locked',
       footerRight: '',
     },
+    {
+      id: 'brief-preview',
+      category: 'brief',
+      number: 'BP',
+      label: 'BRIEF PREVIEW',
+      title: 'Brief Preview (Pre-run)',
+      description: 'The Agent Data Contract Scout returns, the run-cost estimate, and a Run Now button that populates the Executive Daily Brief. Part of Scout Config; edits sync with the Daily Brief.',
+      placeholderLabel: 'PREVIEW\nBRIEF',
+      rows: marketingBriefConfig
+        ? [
+            { key: 'bp-contract', label: 'Data contract', value: marketingBriefConfig.agentDataTemplate ? 'Custom' : 'Default' },
+            { key: 'bp-status', label: 'Brief status', value: marketingBriefStatus },
+          ]
+        : buildWorkNeededRows('Loading Scout config…'),
+      footerLeft: 'Run-ready',
+      footerRight: 'GROWTH',
+      footerAction: {
+        label: marketingBriefRunning ? '…' : 'Run Now',
+        loading: marketingBriefRunning || marketingBriefSaving,
+        onClick: runMarketingBrief,
+      },
+    },
+
+    // ── SOCIAL MEDIA MANAGER ────────────────────────────────────────────────
+    {
+      id: 'social-media-posting',
+      category: 'social',
+      number: 'XP',
+      label: 'POST',
+      title: 'Schedule Posts',
+      description: 'Write, optimize, and post to X/Twitter directly from the dashboard. Content is checked against your brand voice before it goes out.',
+      placeholderLabel: 'SCHEDULE\nPOSTS',
+      rows: [
+        { key: 'smp-channel', label: 'Channel', value: 'X / Twitter' },
+        { key: 'smp-agent-system', label: 'Agents', value: 'Content Creator · Hashtag Specialist · Engagement Optimizer' },
+        { key: 'smp-source', label: 'Creative Source', value: hasSocialGeneratedDraft ? 'Creative Builder output available' : 'Manual composer ready' },
+        { key: 'smp-knowledge-base', label: 'Knowledge Base', value: knowledgeBaseSourceSummary },
+      ],
+      footerLeft: 'Ready',
+      footerRight: 'LIVE',
+      readinessBadge: { tone: 'ok', label: 'Ready' },
+    },
+
+    // ── DAILY BRIEFS ────────────────────────────────────────────────────────
+    ...(isAdmin ? [{
+      id: 'submit-custom-brief',
+      category: 'brief',
+      number: 'SC',
+      label: 'SUBMIT CUSTOM BRIEF',
+      title: 'Submit Custom Brief',
+      description: 'Admin workspace for publishing a client-facing HTML brief and downloadable PDF into this client dashboard.',
+      placeholderLabel: 'HTML',
+      rows: [
+        { key: 'sc-client', label: 'Client', value: client?.companyName || client?.name || client?.dashboardTitle || bootstrap?.effectiveClientId || 'Selected client' },
+        { key: 'sc-existing', label: 'Saved briefs', value: customBriefsLoading ? 'Loading' : String(customBriefCount) },
+        { key: 'sc-pdf', label: 'PDF export', value: 'Generated on save' },
+        { key: 'sc-access', label: 'Access', value: 'Admin only' },
+      ],
+      footerLeft: 'Ready',
+      footerRight: 'ADMIN',
+      readinessBadge: { tone: 'ok', label: 'Ready' },
+    }] : []),
     {
       id: 'marketing-brief-doc',
       category: 'onboarding',
@@ -6853,9 +7245,26 @@ const DashboardPage = () => {
     // Derive readiness for cards without a real analyzer (skip services)
     if (!analyzer && card.category !== 'services') {
       const derivedReadiness = (() => {
-        if (card.footerLeft === 'Live') return 'healthy';
+        if (card.footerLeft === 'Live' || card.footerLeft === 'Feeding brief') return 'healthy';
         if (card.footerLeft === 'Partial' || card.footerLeft === 'Queued' || card.footerLeft === 'Coming Soon') return 'partial';
         if (card.footerLeft === 'Error') return 'critical';
+        // Marketing Director config cards hold settings, not audit data — they
+        // read green once configured and amber when empty, never red.
+        if (MARKETING_CONFIG_CARD_IDS.has(card.id)) {
+          const mc = marketingBriefConfig || {};
+          const sel = mc.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS;
+          // Default-active cards: green whenever a source is enabled (defaults on).
+          if (card.id === 'platform-search') return sel.includes('web') ? 'healthy' : 'critical';
+          if (card.id === 'social-signals')  return (sel.includes('x') || sel.includes('reddit')) ? 'healthy' : 'critical';
+          // Content cards: green ONLY when the user saved the card (acknowledged) AND it has content.
+          const ack = (mc.acknowledgedCards && typeof mc.acknowledgedCards === 'object') ? mc.acknowledgedCards : {};
+          const hasContent = {
+            'brand-keywords': Boolean(String(mc.brandName || '').trim() || String(mc.brandKeywords || '').trim() || (Array.isArray(mc.searches) && mc.searches.some((s) => String(s?.query || '').trim()))),
+            'watchlist':      Boolean(String(mc.kols || '').trim() || String(mc.competitors || '').trim()),
+            'scout-focus':    Boolean(String(mc.sourceFocus || '').trim() || String(mc.scoutInstructions || '').trim()),
+          }[card.id];
+          return (ack[card.id] && hasContent) ? 'healthy' : (hasContent ? 'partial' : 'critical');
+        }
         return 'critical'; // WORK_NEEDED_LABEL or no data = needs attention
       })();
       analyzer = { readiness: derivedReadiness, findings: [], gaps: [], highlights: [] };
@@ -7687,10 +8096,15 @@ const DashboardPage = () => {
                       // the value text (background-clip), and the meter (SVG url).
                       const GRAD = 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)';
                       return (
-                        <div
+                        <button
+                          type="button"
                           id="dashboard-coverage-chip"
-                          title={`Data coverage — ${captured}/${total} fields captured (${pct}%)`}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 2px', flexShrink: 0 }}
+                          title={`Data coverage — ${captured}/${total} fields captured (${pct}%) — click to view`}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 2px', flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer' }}
+                          onClick={() => {
+                            if (!auditCard) return;
+                            setActiveTileModal({ title: auditCard.title, description: auditCard.description, dynamicShortDescription: auditCard.dynamicShortDescription || null, rows: auditCard.rows, cardId: auditCard.id, placeholderLabel: auditCard.placeholderLabel, number: auditCard.number, label: auditCard.label, isCapabilityCard: true, vizType: null, recommendation: auditCard.recommendation || null, analyzer: auditCard.analyzer || null, readinessBadge: auditCard.readinessBadge || null });
+                          }}
                         >
                           {/* Shared gradient def for the brain + meter strokes */}
                           <svg width="0" height="0" aria-hidden="true" style={{ position: 'absolute' }}>
@@ -7716,9 +8130,29 @@ const DashboardPage = () => {
                             <path d="M3 18 A15 15 0 0 1 33 18" stroke="rgba(42,36,32,0.14)" strokeWidth="3.4" strokeLinecap="round" />
                             <path d="M3 18 A15 15 0 0 1 33 18" stroke="url(#coverage-grad)" strokeWidth="3.4" strokeLinecap="round" strokeDasharray={SEMI} strokeDashoffset={SEMI - (SEMI * pct) / 100} />
                           </svg>
-                        </div>
+                        </button>
                       );
                     })()}
+                    <span className="cap-source-divider" aria-hidden="true" />
+                    <button
+                      type="button"
+                      id="brief-cooldown-chip"
+                      title={`Brief cooldown — your tier allows another brief in ${briefCooldownSeconds}s — click to view the latest brief`}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 2px', flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer' }}
+                      onClick={() => {
+                        // Latest ran brief — same path as clicking the 'brief' card:
+                        // full-screen render when the HTML is loaded, card modal otherwise.
+                        if (briefPreviewHtml) { setBriefFullScreen(true); return; }
+                        const briefCard = intakeCapabilityCards.find((c) => c.id === 'brief');
+                        if (!briefCard) return;
+                        setActiveTileModal({ title: briefCard.title, description: briefCard.description, dynamicShortDescription: briefCard.dynamicShortDescription || null, rows: briefCard.rows, cardId: briefCard.id, placeholderLabel: briefCard.placeholderLabel, number: briefCard.number, label: briefCard.label, isCapabilityCard: true, vizType: null, recommendation: briefCard.recommendation || null, analyzer: briefCard.analyzer || null, readinessBadge: briefCard.readinessBadge || null });
+                      }}
+                    >
+                      <FileText size={18} strokeWidth={1.75} stroke="url(#coverage-grad)" aria-hidden="true" style={{ marginTop: 1 }} />
+                      <span style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>
+                        {briefCooldownSeconds}<span style={{ fontSize: 13 }}>s</span>
+                      </span>
+                    </button>
                     <span className="cap-source-divider" aria-hidden="true" />
                     <Globe id="dashboard-source-cta-icon" size={15} strokeWidth={1.5} aria-hidden="true" />
                     <input
@@ -7936,13 +8370,13 @@ const DashboardPage = () => {
                     const order = [
                       // WHO ARE WE LISTENING TO (sources + inputs) — Brand & Keywords leads (root input)
                       'brand-keywords', 'watchlist', 'platform-search', 'social-signals',
-                      'scout-focus', 'conversation-intake',
+                      'scout-focus', 'local-weather', 'conversation-intake',
                       // WHAT'S GOING ON IN THE MARKET (external signals)
                       'signals', 'competitor-info', 'local-signals',
-                      'content-gaps', 'events', 'local-weather',
-                      // WHAT'S OUR STRATEGY (decisions + briefs)
-                      'brief-preview', 'brief', 'priority-signal',
-                      'strategy-builder', 'marketing', 'newsletter',
+                      // WHAT'S OUR STRATEGY — Day-of Post on top, editable 30-day plan
+                      // under it; Custom Post Strategy + Newsletter locked at the bottom.
+                      'priority-signal', 'strategy-30', 'brief',
+                      'strategy-builder', 'newsletter',
                     ];
                     const ai = order.indexOf(a.id); const bi = order.indexOf(b.id);
                     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
@@ -7992,6 +8426,9 @@ const DashboardPage = () => {
               >
                 <div className="tile-number">
                   <span className="tile-header-label">{card.title}</span>
+                  <span className="cap-list-action-icon" aria-hidden="true">
+                    {CARD_ACTION_EDIT.has(card.id) ? <Pencil size={13} strokeWidth={1.9} /> : <Eye size={13} strokeWidth={1.9} />}
+                  </span>
                   <span className="tile-mobile-chevron" aria-hidden="true">
                     <svg viewBox="0 0 12 12"><polyline points="2,4 6,8 10,4" /></svg>
                   </span>
@@ -7999,7 +8436,11 @@ const DashboardPage = () => {
                 {isLocked ? (
                   <div
                     className={`tile-intake-placeholder tile-intake-placeholder-${card.id} tile-intake-placeholder--locked`}
-                    aria-label="Locked card"
+                    aria-label="Locked card — subscribe to unlock"
+                    role="button"
+                    tabIndex={0}
+                    style={{ cursor: 'pointer' }}
+                    onClick={(e) => { e.stopPropagation(); setShowSubscribeModal(true); }}
                   >
                     <span className="tile-intake-lock-overlay">
                       <Lock size={56} strokeWidth={1.25} className="tile-intake-lock-icon" aria-hidden="true" />
@@ -8309,9 +8750,25 @@ const DashboardPage = () => {
                           </>
                         );
                       }
+                      // Marketing Director config cards get a 3-state dot driven by
+                      // their readinessBadge tone: green = saved/active, amber =
+                      // auto-populated (prefilled, unsaved), red = empty/untouched.
+                      if (MARKETING_CONFIG_CARD_IDS.has(card.id)) {
+                        const t = card.readinessBadge?.tone;
+                        const dotColor = (t === 'ok' || t === 'healthy') ? '#22c55e' : (t === 'partial' ? '#f59e0b' : '#ef4444');
+                        const glow = (t === 'ok' || t === 'healthy')
+                          ? '0 0 5px 2px rgba(34,197,94,0.45)'
+                          : (t === 'partial' ? '0 0 5px 2px rgba(245,158,11,0.40)' : 'none');
+                        return (
+                          <>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', display: 'inline-block', background: dotColor, boxShadow: glow, flexShrink: 0 }} />
+                            {card.footerRight}
+                          </>
+                        );
+                      }
                       return (
                         <>
-                          <span className={`power-dot lamp${card.footerLeft !== 'Live' ? ' power-dot-needs-work' : ''}`} />
+                          <span className={`power-dot lamp${!['Live', 'Feeding brief'].includes(card.footerLeft) ? ' power-dot-needs-work' : ''}`} />
                           {card.footerRight}
                         </>
                       );
@@ -8482,16 +8939,27 @@ const DashboardPage = () => {
                 _groups[_cur].cards.push(card);
               });
             }
+            // Executive Daily Brief shows in MOST RECENT (rendered) AND in RUN BRIEFS (card).
+            if (_bucketSteps && activeCapabilityFilter === 'brief' && _groups[1]) {
+              const execCard = _filteredSorted.find((c) => c.id === 'marketing-brief');
+              if (execCard && !_groups[1].cards.some((c) => c.id === 'marketing-brief')) {
+                _groups[1].cards.splice(1, 0, execCard);
+              }
+            }
 
+            // Daily Briefs tab uses a fixed layout (featured Recent card + lists),
+            // so the grid view is disabled and the list is forced.
+            const _forceList = activeCapabilityFilter === 'brief';
             const _viewToggle = (
               <div className="cap-view-toggle" role="group" aria-label="View toggle">
                 <button
                   type="button"
-                  title="Grid view"
+                  title={_forceList ? 'Grid view unavailable for Daily Briefs' : 'Grid view'}
                   aria-label="Grid view"
-                  aria-pressed={capView === 'grid'}
-                  className={`cap-view-btn${capView === 'grid' ? ' is-active' : ''}`}
-                  onClick={() => setCapView('grid')}
+                  aria-pressed={capView === 'grid' && !_forceList}
+                  disabled={_forceList}
+                  className={`cap-view-btn${capView === 'grid' && !_forceList ? ' is-active' : ''}${_forceList ? ' is-disabled' : ''}`}
+                  onClick={() => { if (!_forceList) setCapView('grid'); }}
                 >
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                     <rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
@@ -8518,10 +8986,12 @@ const DashboardPage = () => {
             );
 
             // List view — one segmented at top, N columns below (each tab = column header).
-            if (capView === 'list' && _bucketSteps) {
+            if ((capView === 'list' || _forceList) && _bucketSteps) {
+              // Daily Briefs is a tab system: only the active tab's group shows, full width.
+              const _visibleGroups = _forceList ? [_groups[activeStepIdx]].filter(Boolean) : _groups;
               return (
                 <React.Fragment>
-                  <div className="segmented cap-step-seg cap-step-seg--top" role="tablist" aria-label="Workflow steps">
+                  <div className={`segmented cap-step-seg cap-step-seg--top${_forceList ? ' cap-step-seg--tabs' : ''}`} role="tablist" aria-label="Workflow steps">
                     {_bucketSteps.map((s, i) => (
                       <button
                         key={s.id}
@@ -8536,35 +9006,105 @@ const DashboardPage = () => {
                       </button>
                     ))}
                   </div>
-                  <div className="cap-list-columns" style={{ gridTemplateColumns: `repeat(${_groups.length}, minmax(0, 1fr))` }}>
-                    {_groups.map((g, gi) => (
+                  <div className="cap-list-columns" style={{ gridTemplateColumns: `repeat(${_visibleGroups.length}, minmax(0, 1fr))` }}>
+                    {_visibleGroups.map((g, gi) => (
                       <div key={g.step ? g.step.id : `group-${gi}`} className="cap-list-col" data-step-idx={g.stepIdx}>
                         {/* Mobile-only section label — desktop uses the cap-step-seg--top column headers */}
                         {g.step && <div className="cap-list-col-label">{g.step.label}</div>}
                         <div className="cap-list-col-body">
-                          {g.cards.map((card) => {
+                          {_forceList && g.stepIdx === 2 ? (() => {
+                            if (pastBriefView) {
+                              return (
+                                <div className="cap-brief-full">
+                                  <button type="button" className="mu-btn-outline" style={{ marginBottom: 8 }} onClick={() => setPastBriefView(null)}>← Back to list</button>
+                                  {pastBriefView.loading ? (
+                                    <p className="mu-notice">Loading brief…</p>
+                                  ) : pastBriefView.html ? (
+                                    <iframe className="cap-brief-full-frame" title="Past brief" srcDoc={pastBriefView.html} sandbox="allow-same-origin" />
+                                  ) : (
+                                    <p className="mu-notice">Could not load this brief.</p>
+                                  )}
+                                </div>
+                              );
+                            }
+                            const pastBriefs = (recentRuns || []).filter((r) => r && r.pipelineType === "scout-brief");
+                            if (!pastBriefs.length) return <div style={{ padding: 16, color: "var(--text-secondary)", fontSize: 13 }}>No briefs have been run yet.</div>;
+                            return pastBriefs.map((run, i) => {
+                              const rid = run.runId || run.id;
+                              const rawTs = run.completedAt || run.createdAt || run.updatedAt;
+                              let when = "";
+                              try { const d = rawTs?.toDate?.() || (rawTs?.seconds ? new Date(rawTs.seconds * 1000) : (rawTs ? new Date(rawTs) : null)); when = d && !isNaN(d.getTime()) ? d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : ""; } catch {}
+                              return (
+                                <button key={rid || i} type="button" className="cap-past-brief-row" onClick={() => openPastBrief(rid)}>
+                                  <span className="cap-past-brief-title">Daily Brief</span>
+                                  <span className="cap-past-brief-meta">{[when, run.status || "completed"].filter(Boolean).join(" · ")}</span>
+                                  <span className="cap-past-brief-view">View ↗</span>
+                                </button>
+                              );
+                            });
+                          })() : g.cards.map((card) => {
+                            // Featured Recent brief — show the ACTUAL rendered brief (full,
+                            // auto-sized to its content), not the card. Falls back to the card
+                            // (with its Run button) when no brief has been generated yet.
+                            if (activeCapabilityFilter === 'brief' && card.id === 'marketing-brief' && g.stepIdx === 0) {
+                              return (
+                                <div key={card.id} className="cap-brief-full">
+                                  {marketingBriefPreviewHtml ? (
+                                    <iframe
+                                      key={marketingBrief?.generatedAtIso || 'recent-brief-full'}
+                                      className="cap-brief-full-frame"
+                                      title="Executive Daily Brief"
+                                      srcDoc={marketingBriefPreviewHtml}
+                                      sandbox="allow-same-origin allow-scripts"
+                                    />
+                                  ) : (
+                                    <div className="cap-list-featured">{_renderCard(card)}</div>
+                                  )}
+                                </div>
+                              );
+                            }
                             const isExpanded = expandedListCards.has(card.id);
+                            const isRowLocked = Boolean(card.locked || card.lockBadge);
+                            const canRun = Boolean(card.moduleControls);
                             return (
-                              <div key={card.id} className={`cap-list-row${isExpanded ? ' is-expanded' : ''}`}>
+                              <div key={card.id} className={`cap-list-row${isExpanded ? ' is-expanded' : ''}${isRowLocked ? ' cap-list-row--locked' : ''}`}>
                                 <div className="cap-list-row-main">
                                   {_renderCard(card)}
-                                  <button
-                                    type="button"
-                                    className="cap-list-run"
-                                    aria-label="Run module"
-                                    title="Run"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      // Delegate to the card's footer RUN/Re-run button —
-                                      // keeps run/retry/leadgen logic in one place.
-                                      e.currentTarget.closest('.cap-list-row-main')?.querySelector('.tile-foot-rerun-btn')?.click();
-                                    }}
-                                  >
-                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                      <path d="M21 12a9 9 0 1 1-2.64-6.36" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                      <polyline points="21 3 21 8 16 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                                    </svg>
-                                  </button>
+                                  {isRowLocked && (
+                                    <button type="button" className="cap-list-lock-btn" aria-label="Locked — subscribe to unlock" onClick={(e) => { e.stopPropagation(); setShowSubscribeModal(true); }}><Lock size={12} strokeWidth={1.8} className="cap-list-lock-icon" aria-hidden="true" /></button>
+                                  )}
+                                  {canRun && (
+                                    <button
+                                      type="button"
+                                      className="cap-list-run"
+                                      aria-label="Run module"
+                                      title="Run"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        e.currentTarget.closest('.cap-list-row-main')?.querySelector('.tile-foot-rerun-btn')?.click();
+                                      }}
+                                    >
+                                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                        <path d="M21 12a9 9 0 1 1-2.64-6.36" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                        <polyline points="21 3 21 8 16 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                                      </svg>
+                                    </button>
+                                  )}
+                                  {activeCapabilityFilter === 'brief' && !['brief-preview', 'submit-custom-brief'].includes(card.id) && (
+                                    <button
+                                      type="button"
+                                      className="cap-list-run"
+                                      aria-label={isRowLocked ? 'Locked brief' : 'Run brief'}
+                                      title={isRowLocked ? 'Locked — subscribe to unlock' : 'Run brief'}
+                                      disabled={isRowLocked || !card.footerAction}
+                                      onClick={(e) => { e.stopPropagation(); if (!isRowLocked && card.footerAction?.onClick) card.footerAction.onClick(e); }}
+                                    >
+                                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                        <path d="M21 12a9 9 0 1 1-2.64-6.36" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                        <polyline points="21 3 21 8 16 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                                      </svg>
+                                    </button>
+                                  )}
                                   <button
                                     type="button"
                                     className="cap-list-caret"
@@ -8907,6 +9447,8 @@ const DashboardPage = () => {
 
 
       {/* ── Tile detail modal ── */}
+      {/* Payments / subscribe modal — triggered by content lock icons */}
+      <SubscribeModal open={showSubscribeModal} onClose={() => setShowSubscribeModal(false)} />
       {/* Pricing modal */}
       {showTierModal && (
         <div id="tier-modal-overlay" onClick={() => setShowTierModal(false)}>
@@ -9130,7 +9672,7 @@ const DashboardPage = () => {
                     <div key={row.key} className={`tile-detail-audit-row${row.isColumnHeader ? ' tile-detail-audit-row--header' : ''}`}>
                       <span className="tile-detail-audit-label">{row.label}</span>
                       <span className="tile-detail-audit-tier">{row.tier}</span>
-                      <span className={`tile-detail-audit-status${!row.isColumnHeader ? (row.isUpgrade ? ' audit-upgrade' : row.status === 'Captured' ? ' audit-ok' : ' audit-miss') : ''}`} onClick={row.isUpgrade ? () => setShowTierModal(true) : undefined}>{row.status}</span>
+                      <span className={`tile-detail-audit-status${!row.isColumnHeader ? (row.isUpgrade ? ' audit-upgrade' : row.status === 'Captured' ? ' audit-ok' : ' audit-miss') : ''}`} onClick={row.isUpgrade ? () => setShowSubscribeModal(true) : undefined}>{row.status}</span>
                     </div>
                   ) : (
                     <div key={row.key} className="tile-detail-stat-row">
@@ -9434,6 +9976,7 @@ const DashboardPage = () => {
                     <div className="tile-detail-tabs">
                       <button type="button" className={`tile-detail-tab${modalTab === 'config' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('config')}>CONFIG</button>
                       <button type="button" className={`tile-detail-tab${modalTab === 'forecast' ? ' tile-detail-tab--active' : ''}`} onClick={() => { setModalTab('forecast'); loadLocalWeather(); }}>FORECAST</button>
+                      <button type="button" className={`tile-detail-tab${modalTab === 'events' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('events')}>EVENTS</button>
                     </div>
                     <div className="tile-detail-tab-content">
                       {modalTab === 'config' && (
@@ -9503,6 +10046,97 @@ const DashboardPage = () => {
                             <div className="mu-empty">No forecast yet. Set a ZIP and enable weather in CONFIG, then Save.</div>
                           )}
                         </div>
+                      )}
+                      {modalTab === 'events' && (
+                  <div id="events-panel" className="tile-detail-bento-cell">
+                    <div className="mu-tab-pane" style={{ padding: 18 }}>
+                      <p style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--text-secondary)', margin: 0 }}>
+                        Search what's happening. <strong>Local</strong> finds events near a ZIP code (great for neighborhood-driven businesses). <strong>Global</strong> finds industry events by keyword (great for digital brands).
+                      </p>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        {[{ key: 'local', label: 'Local · ZIP' }, { key: 'global', label: 'Global · Keywords' }].map((m) => (
+                          <button
+                            key={m.key}
+                            type="button"
+                            className={`tile-detail-tab${eventsMode === m.key ? ' tile-detail-tab--active' : ''}`}
+                            onClick={() => { setEventsMode(m.key); setEventsError(''); }}
+                          >{m.label}</button>
+                        ))}
+                      </div>
+                      {eventsMode === 'local' ? (
+                        <label className="mu-field" style={{ maxWidth: 220 }}>
+                          <span className="mu-label">ZIP code</span>
+                          <input className="mu-input" inputMode="numeric" maxLength={5} placeholder="e.g. 10001" value={eventsZip} onChange={(e) => setEventsZip(e.target.value.replace(/\D/g, '').slice(0, 5))} />
+                          <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Defaults to your saved weather ZIP.</span>
+                        </label>
+                      ) : (
+                        <label className="mu-field">
+                          <span className="mu-label">Keywords / industry</span>
+                          <input className="mu-input" placeholder="e.g. AI design tools, SaaS launches, fintech" value={eventsKeywords} onChange={(e) => setEventsKeywords(e.target.value)} />
+                        </label>
+                      )}
+                      {eventsError ? <p className="mu-notice mu-notice--danger">{eventsError}</p> : null}
+                      <div style={{ display: 'flex' }}>
+                        <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 140 }} onClick={searchEventsNow} disabled={eventsRunning}>
+                          <span>{eventsRunning ? 'Searching…' : 'Search Events'}</span>
+                        </button>
+                      </div>
+                      {eventsResults?.events?.length ? (
+                        <div id="events-results" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          <div className="tile-detail-row-section-head">{eventsResults.events.length} EVENT{eventsResults.events.length === 1 ? '' : 'S'}</div>
+                          {eventsResults.events.map((ev, i) => {
+                            const alreadySaved = (marketingBriefConfig?.events || []).some((s) => s.event === ev.title && s.url === (ev.url || ''));
+                            return (
+                              <div key={i} className="mu-saved-card" style={{ gap: 4 }}>
+                                <h4 className="mu-saved-title" style={{ fontSize: 13 }}>{ev.title}</h4>
+                                <span className="mu-saved-meta">{[ev.date, ev.location].filter(Boolean).join(' · ')}</span>
+                                {ev.summary ? <p className="mu-saved-body" style={{ fontSize: 12 }}>{ev.summary}</p> : null}
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                  {ev.url ? <a href={ev.url} target="_blank" rel="noopener noreferrer" className="mu-btn-outline" style={{ alignSelf: 'flex-start', textDecoration: 'none', fontSize: 11, minHeight: 28, padding: '0 10px' }}>Open ↗</a> : null}
+                                  <button
+                                    type="button"
+                                    className="mu-btn-outline"
+                                    style={{ alignSelf: 'flex-start', fontSize: 11, minHeight: 28, padding: '0 10px' }}
+                                    disabled={alreadySaved || marketingBriefSaving}
+                                    onClick={() => addEventToBrief(ev)}
+                                  >{alreadySaved ? 'In brief ✓' : '+ Add to brief'}</button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : eventsResults ? (
+                        <div className="mu-empty">No events found. Try a different ZIP or broader keywords.</div>
+                      ) : null}
+                      {(marketingBriefConfig?.events || []).length > 0 ? (
+                        <div id="events-saved-for-brief" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <div className="tile-detail-row-section-head">SAVED FOR BRIEF · {(marketingBriefConfig.events || []).length}</div>
+                          {(marketingBriefConfig.events || []).map((ev, i) => (
+                            <div key={`saved-${i}`} className="mu-saved-card" style={{ gap: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <span className="mu-saved-meta" style={{ fontSize: 12 }}>{ev.event} · {ev.date}{ev.location ? ` · ${ev.location}` : ''}</span>
+                              <button type="button" className="mu-btn-outline" style={{ fontSize: 11, minHeight: 24, padding: '0 8px' }} disabled={marketingBriefSaving} onClick={() => removeEventFromBrief(i)}>Remove</button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                      <label className="mu-field" id="events-custom-local-signals">
+                        <span className="mu-label">Custom local signals (one per line)</span>
+                        <textarea
+                          className="mu-input"
+                          rows={3}
+                          placeholder={'e.g. Street festival on our block June 20\nNew competitor opened two doors down'}
+                          value={(marketingBriefConfig?.localSignals || []).join('\n')}
+                          onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), localSignals: e.target.value.split('\n') }))}
+                        />
+                        <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Merged into the brief's Local Signals section — never overwritten by search results.</span>
+                      </label>
+                      <div style={{ display: 'flex' }}>
+                        <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 140 }} disabled={marketingBriefSaving} onClick={() => saveMarketingBriefConfig()}>
+                          <span>{marketingBriefSaving ? 'Saving…' : 'Save Local Signals'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                       )}
                     </div>
                   </div>
@@ -10197,7 +10831,7 @@ const DashboardPage = () => {
                           {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
                           <div className="mu-footer">
                             <span />
-                            <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 100 }} onClick={saveMarketingBriefConfig} disabled={marketingBriefSaving}>
+                            <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 100 }} onClick={() => saveMarketingBriefConfig({ acknowledge: 'brand-keywords' })} disabled={marketingBriefSaving}>
                               <span>{marketingBriefSaving ? 'Saving…' : 'Save'}</span>
                             </button>
                           </div>
@@ -10296,7 +10930,7 @@ const DashboardPage = () => {
                       {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
                       <div className="mu-footer">
                         <span />
-                        <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 100 }} onClick={saveMarketingBriefConfig} disabled={marketingBriefSaving}>
+                        <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 100 }} onClick={() => saveMarketingBriefConfig({ acknowledge: 'brand-keywords' })} disabled={marketingBriefSaving}>
                           <span>{marketingBriefSaving ? 'Saving…' : 'Save'}</span>
                         </button>
                       </div>
@@ -10328,7 +10962,7 @@ const DashboardPage = () => {
                           {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
                           <div className="mu-footer">
                             <span />
-                            <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 100 }} onClick={saveMarketingBriefConfig} disabled={marketingBriefSaving}>
+                            <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 100 }} onClick={() => saveMarketingBriefConfig({ acknowledge: 'scout-focus' })} disabled={marketingBriefSaving}>
                               <span>{marketingBriefSaving ? 'Saving…' : 'Save'}</span>
                             </button>
                           </div>
@@ -10366,7 +11000,7 @@ const DashboardPage = () => {
                           {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
                           <div className="mu-footer">
                             <span />
-                            <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 100 }} onClick={saveMarketingBriefConfig} disabled={marketingBriefSaving}>
+                            <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 100 }} onClick={() => saveMarketingBriefConfig({ acknowledge: 'watchlist' })} disabled={marketingBriefSaving}>
                               <span>{marketingBriefSaving ? 'Saving…' : 'Save'}</span>
                             </button>
                           </div>
@@ -10383,7 +11017,7 @@ const DashboardPage = () => {
                           {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
                           <div className="mu-footer">
                             <span />
-                            <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 100 }} onClick={saveMarketingBriefConfig} disabled={marketingBriefSaving}>
+                            <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 100 }} onClick={() => saveMarketingBriefConfig({ acknowledge: 'watchlist' })} disabled={marketingBriefSaving}>
                               <span>{marketingBriefSaving ? 'Saving…' : 'Save'}</span>
                             </button>
                           </div>
@@ -10478,54 +11112,51 @@ const DashboardPage = () => {
                 )}
 
                 {/* Events — local (ZIP) or global (keyword) event discovery */}
-                {activeTileModal.cardId === 'events' && (
-                  <div id="events-panel" className="tile-detail-bento-cell">
-                    <div className="mu-tab-pane" style={{ padding: 18 }}>
-                      <p style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--text-secondary)', margin: 0 }}>
-                        Search what's happening. <strong>Local</strong> finds events near a ZIP code (great for neighborhood-driven businesses). <strong>Global</strong> finds industry events by keyword (great for digital brands).
-                      </p>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        {[{ key: 'local', label: 'Local · ZIP' }, { key: 'global', label: 'Global · Keywords' }].map((m) => (
-                          <button
-                            key={m.key}
-                            type="button"
-                            className={`tile-detail-tab${eventsMode === m.key ? ' tile-detail-tab--active' : ''}`}
-                            onClick={() => { setEventsMode(m.key); setEventsError(''); }}
-                          >{m.label}</button>
-                        ))}
-                      </div>
-                      {eventsMode === 'local' ? (
-                        <label className="mu-field" style={{ maxWidth: 220 }}>
-                          <span className="mu-label">ZIP code</span>
-                          <input className="mu-input" inputMode="numeric" maxLength={5} placeholder="e.g. 10001" value={eventsZip} onChange={(e) => setEventsZip(e.target.value.replace(/\D/g, '').slice(0, 5))} />
-                          <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Defaults to your saved weather ZIP.</span>
-                        </label>
-                      ) : (
-                        <label className="mu-field">
-                          <span className="mu-label">Keywords / industry</span>
-                          <input className="mu-input" placeholder="e.g. AI design tools, SaaS launches, fintech" value={eventsKeywords} onChange={(e) => setEventsKeywords(e.target.value)} />
-                        </label>
-                      )}
-                      {eventsError ? <p className="mu-notice mu-notice--danger">{eventsError}</p> : null}
-                      <div style={{ display: 'flex' }}>
-                        <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 140 }} onClick={searchEventsNow} disabled={eventsRunning}>
-                          <span>{eventsRunning ? 'Searching…' : 'Search Events'}</span>
-                        </button>
-                      </div>
-                      {eventsResults?.events?.length ? (
-                        <div id="events-results" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                          <div className="tile-detail-row-section-head">{eventsResults.events.length} EVENT{eventsResults.events.length === 1 ? '' : 'S'}</div>
-                          {eventsResults.events.map((ev, i) => (
-                            <div key={i} className="mu-saved-card" style={{ gap: 4 }}>
-                              <h4 className="mu-saved-title" style={{ fontSize: 13 }}>{ev.title}</h4>
-                              <span className="mu-saved-meta">{[ev.date, ev.location].filter(Boolean).join(' · ')}</span>
-                              {ev.summary ? <p className="mu-saved-body" style={{ fontSize: 12 }}>{ev.summary}</p> : null}
-                              {ev.url ? <a href={ev.url} target="_blank" rel="noopener noreferrer" className="mu-btn-outline" style={{ alignSelf: 'flex-start', textDecoration: 'none', fontSize: 11, minHeight: 28, padding: '0 10px' }}>Open ↗</a> : null}
-                            </div>
-                          ))}
+
+                {/* 30-Day Strategy — editable rolling plan (auto-revised each brief run) */}
+                {activeTileModal.cardId === 'strategy-30' && (
+                  <div id="strategy-30-panel" className="tile-detail-bento-cell">
+                    <div className="mu-tab-pane">
+                      <section className="mu-section">
+                        <div className="mu-section-head">
+                          <div>
+                            <h3>30-Day Strategy</h3>
+                            <p>Auto-revised on every brief run from live signals, the Company Brain, and conversation uploads. Edit any day — your edits are marked ✎ and the system keeps them unless new signals strongly contradict them.</p>
+                          </div>
                         </div>
-                      ) : eventsResults ? (
-                        <div className="mu-empty">No events found. Try a different ZIP or broader keywords.</div>
+                        {strategy30?.revisionNotes ? (
+                          <p className="mu-notice">Last revision: {strategy30.revisionNotes}</p>
+                        ) : null}
+                        {strategy30Draft.length ? (
+                          <div className="mu-list">
+                            {strategy30Draft.map((d, i) => (
+                              <div key={`s30-row-${i}`} className="mu-query" style={{ gap: 8 }}>
+                                <div className="mu-query-head">
+                                  <span className="mu-query-num">{d.date}{d.source === 'user' ? ' · ✎ edited' : ''}</span>
+                                </div>
+                                <label className="mu-field">
+                                  <span className="mu-label">Theme</span>
+                                  <input className="mu-input" value={d.theme || ''} onChange={(e) => setStrategy30Draft((prev) => prev.map((row, ri) => ri === i ? { ...row, theme: e.target.value, source: 'user' } : row))} />
+                                </label>
+                                <label className="mu-field">
+                                  <span className="mu-label">Post idea</span>
+                                  <textarea className="mu-textarea" rows={2} value={d.idea || ''} onChange={(e) => setStrategy30Draft((prev) => prev.map((row, ri) => ri === i ? { ...row, idea: e.target.value, source: 'user' } : row))} />
+                                </label>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="mu-notice">No strategy yet — run the Executive Daily Brief to generate the 30-day plan.</p>
+                        )}
+                        {strategy30Error ? <p className="mu-notice mu-notice--danger">{strategy30Error}</p> : null}
+                      </section>
+                      {strategy30Draft.length ? (
+                        <div className="mu-footer">
+                          <span className="mu-footer-note">Edited days are soft-locked against auto-revision.</span>
+                          <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 100 }} onClick={saveStrategy30} disabled={strategy30Saving}>
+                            <span>{strategy30Saving ? 'Saving…' : 'Save'}</span>
+                          </button>
+                        </div>
                       ) : null}
                     </div>
                   </div>
@@ -10954,7 +11585,7 @@ const DashboardPage = () => {
                                         key={platform.key}
                                         type="button"
                                         className={`mb-config-platform-toggle${selected ? ' is-on' : ''}${locked ? ' is-locked' : ''}`}
-                                        onClick={() => locked ? setShowTierModal(true) : toggleMarketingBriefSourcePlatform(platform.key)}
+                                        onClick={() => locked ? setShowSubscribeModal(true) : toggleMarketingBriefSourcePlatform(platform.key)}
                                         aria-pressed={selected}
                                         aria-disabled={locked}
                                       >
@@ -11823,7 +12454,7 @@ const DashboardPage = () => {
                               <div key={row.key} className={`tile-detail-audit-row${row.isColumnHeader ? ' tile-detail-audit-row--header' : ''}`}>
                                 <span className="tile-detail-audit-label">{row.label}</span>
                                 <span className="tile-detail-audit-tier">{row.tier}</span>
-                                <span className={`tile-detail-audit-status${!row.isColumnHeader ? (row.isUpgrade ? ' audit-upgrade' : row.status === 'Captured' ? ' audit-ok' : ' audit-miss') : ''}`} onClick={row.isUpgrade ? () => setShowTierModal(true) : undefined}>{row.status}</span>
+                                <span className={`tile-detail-audit-status${!row.isColumnHeader ? (row.isUpgrade ? ' audit-upgrade' : row.status === 'Captured' ? ' audit-ok' : ' audit-miss') : ''}`} onClick={row.isUpgrade ? () => setShowSubscribeModal(true) : undefined}>{row.status}</span>
                               </div>
                             ) : (
                               <div key={row.key} className={`tile-detail-stat-row${row.isFailing ? ' tile-detail-stat-row--flag' : ''}`}>
@@ -11900,7 +12531,7 @@ const DashboardPage = () => {
                           <div key={row.key} className={`tile-detail-audit-row${row.isColumnHeader ? ' tile-detail-audit-row--header' : ''}`}>
                             <span className="tile-detail-audit-label">{row.label}</span>
                             <span className="tile-detail-audit-tier">{row.tier}</span>
-                            <span className={`tile-detail-audit-status${!row.isColumnHeader ? (row.isUpgrade ? ' audit-upgrade' : row.status === 'Captured' ? ' audit-ok' : ' audit-miss') : ''}`} onClick={row.isUpgrade ? () => setShowTierModal(true) : undefined}>{row.status}</span>
+                            <span className={`tile-detail-audit-status${!row.isColumnHeader ? (row.isUpgrade ? ' audit-upgrade' : row.status === 'Captured' ? ' audit-ok' : ' audit-miss') : ''}`} onClick={row.isUpgrade ? () => setShowSubscribeModal(true) : undefined}>{row.status}</span>
                           </div>
                         ) : (
                           <div key={row.key} className={`tile-detail-stat-row${row.isFailing ? ' tile-detail-stat-row--flag' : ''}`}>
@@ -12127,7 +12758,7 @@ const DashboardPage = () => {
                                           <span className="adq-fr-badge adq-fr-badge--miss">MISSING</span>
                                         )}
                                         {r.isUpgrade && (
-                                          <button type="button" className="adq-fr-upgrade" onClick={() => setShowTierModal(true)}>UPGRADE →</button>
+                                          <button type="button" className="adq-fr-upgrade" onClick={() => setShowSubscribeModal(true)}>UPGRADE →</button>
                                         )}
                                       </li>
                                     ))}
@@ -13723,6 +14354,29 @@ const dashboardCss = `
     border-bottom: 0;
     border-image: none;
   }
+  /* Daily Briefs tab system — real active / inactive tab states. */
+  /* No full-width row border — only the active tab is underlined. */
+  .cap-step-seg--top.cap-step-seg--tabs {
+    border-bottom: 0;
+    border-image: none;
+  }
+  .cap-step-seg--top.cap-step-seg--tabs > button {
+    color: var(--text-secondary);
+    font-weight: 400;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    border-image: none;
+  }
+  .cap-step-seg--top.cap-step-seg--tabs > button:hover {
+    color: var(--text-display);
+  }
+  .cap-step-seg--top.cap-step-seg--tabs > button.is-active {
+    color: var(--text-display);
+    font-weight: 600;
+    cursor: default;
+    border-bottom: 2px solid transparent;
+    border-image: linear-gradient(90deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) 0 0 1 0;
+  }
   /* Data coverage chip — brain strokes use the shared primary gradient */
   #dashboard-coverage-chip .coverage-brain { display: inline-flex; }
   #dashboard-coverage-chip .coverage-brain svg path { stroke: url(#coverage-grad); }
@@ -13792,6 +14446,60 @@ const dashboardCss = `
     display: flex;
     flex-direction: column;
     gap: 0;
+  }
+  /* Featured 'Recent brief' — a full grid card at the top of a list column. */
+  .cap-list-featured {
+    margin: 0 0 14px;
+  }
+  /* Actual rendered brief shown full-width in the RECENT BRIEFS tab. */
+  .cap-brief-full {
+    width: 100%;
+    margin: 0 0 14px;
+  }
+  .cap-brief-full-frame {
+    width: 100%;
+    height: calc(100vh - 200px);
+    min-height: 480px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: #fff;
+    display: block;
+    overflow: auto;
+  }
+  /* PAST BRIEFS — chronological run rows. */
+  .cap-past-brief-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 14px 12px;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    font-family: var(--font-ui);
+    color: var(--text-display);
+    transition: background 0.15s ease;
+  }
+  .cap-past-brief-row:hover { background: rgba(0,0,0,0.03); }
+  .cap-past-brief-title { font-size: 0.875rem; font-weight: 500; flex-shrink: 0; }
+  .cap-past-brief-meta { font-size: 0.78rem; color: var(--text-secondary); flex: 1; min-width: 0; }
+  .cap-past-brief-view { font-size: 0.72rem; color: var(--accent, #10b981); font-family: var(--font-mono); flex-shrink: 0; }
+  .cap-list-featured > .tile-intake-card,
+  .cap-list-featured > .tile {
+    height: auto;
+    min-height: 0;
+    aspect-ratio: auto;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: rgba(255,255,255,0.55);
+  }
+  /* Disabled view-toggle button (grid view on the Daily Briefs tab). */
+  .cap-view-btn.is-disabled,
+  .cap-view-btn:disabled {
+    opacity: 0.32;
+    cursor: not-allowed;
   }
   /* Row wrapper — holds the card + caret + optional preview block */
   .cap-list-row {
@@ -13865,10 +14573,10 @@ const dashboardCss = `
     letter-spacing: -0.01em;
     text-transform: none;
     color: var(--text-display);
-    line-height: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    line-height: 1.25;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
     display: block;
   }
   /* List rows: hide footer buttons — the .cap-list-run circle delegates to the
@@ -13879,15 +14587,17 @@ const dashboardCss = `
     display: none !important;
   }
   /* Add up-out arrow glyph sticking to the title text */
-  .cap-list-row-main .tile-header-label::after {
-    content: ' ↗';
-    display: inline-block;
+  .cap-list-row-main .tile-header-label::after { content: none; }
+  /* List-row action affordance: pencil (editable) / eye (view), replaces the ↗. */
+  .cap-list-action-icon { display: none; }
+  .cap-list-row-main .cap-list-action-icon {
+    display: inline-flex;
+    align-items: center;
     margin-left: 6px;
-    font-size: 13px;
-    font-weight: 400;
     color: var(--text-secondary);
-    vertical-align: middle;
+    flex-shrink: 0;
   }
+  .cap-list-row-main > .tile-intake-card:hover .cap-list-action-icon { color: var(--text-display); }
   .cap-list-row-main > .tile-intake-card {
     cursor: pointer;
   }
@@ -13895,6 +14605,7 @@ const dashboardCss = `
     color: var(--text-display);
   }
   /* Run + caret toggle — matching circular buttons on the right */
+  .cap-list-run:disabled { opacity: 0.32; cursor: not-allowed; }
   .cap-list-run,
   .cap-list-caret {
     flex-shrink: 0;
@@ -13917,6 +14628,35 @@ const dashboardCss = `
     color: #ffffff;
     border-color: var(--text-display);
   }
+  /* Locked list row — dim interactive controls, show lock icon at full opacity */
+  .cap-list-row--locked .cap-list-run,
+  .cap-list-row--locked .cap-list-caret {
+    opacity: 0.28;
+    pointer-events: none;
+  }
+  .cap-list-row--locked .tile-header-label::after {
+    opacity: 0.28;
+  }
+  .cap-list-lock-icon {
+    flex-shrink: 0;
+    align-self: center;
+    color: var(--text-secondary);
+    margin-left: 1px;
+  }
+  /* Lock icon button — opens the payments modal; no button chrome. */
+  .cap-list-lock-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    align-self: center;
+    background: none;
+    border: 0;
+    padding: 2px;
+    margin: 0;
+    cursor: pointer;
+  }
+  .cap-list-lock-btn:hover .cap-list-lock-icon { color: var(--text-display); }
   /* Preview reveal — compact vertical block under the row */
   .cap-list-row-preview {
     padding: 4px 16px 14px;
@@ -15232,6 +15972,7 @@ const dashboardCss = `
   #brief-preview-panel,
   #events-panel,
   #business-model-panel,
+  #strategy-30-panel,
   #market-category-edit-panel {
     flex: 1;
     min-height: 0;

@@ -66,6 +66,18 @@ export async function POST(request) {
     return json({ error: `Firestore error: ${err.message}` }, 500);
   }
 
+  // Mirror to client_configs — the brief pipeline reads brandOverview from
+  // clientConfig.snapshot.brandOverview to build the knowledge-base query
+  // (runtime.js), so user edits must land there too. Best-effort.
+  try {
+    const cfgRef = fb.adminDb.collection('client_configs').doc(context.clientId);
+    try {
+      await cfgRef.update({ 'snapshot.brandOverview': brandOverview });
+    } catch {
+      await cfgRef.set({ snapshot: { brandOverview } }, { merge: true });
+    }
+  } catch { /* non-fatal — bridge + dashboard write already succeeded */ }
+
   // Fire-and-forget: derive sub-layer search terms from positioning and write
   // to scoutConfig.positioningContext so the next brief run gets better queries.
   applyPositioningBridge(context.clientId, brandOverview).catch(() => {});

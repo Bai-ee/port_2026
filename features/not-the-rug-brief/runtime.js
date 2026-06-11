@@ -47,11 +47,21 @@ async function deletePriorBrief(clientId) {
  * @param {object|null} [options.clientConfig] - Firestore client_configs doc.
  *                                               Pass null to use the static registry (local dev).
  * @param {boolean}     [options.fresh]        - Delete prior brief before running Scout.
+ * @param {function}    [options.onProgress]   - async (stage, label) telemetry callback.
+ *                                               Stages: scout, strategy, scribe.
+ * @param {Array|null}  [options.moduleBriefs] - per-module website-audit mini-briefs
+ *                                               from the intake run (dashboard_state.moduleBriefs.items).
  * @returns {Promise<object>} Normalized pipeline result (see shape below).
  */
-async function runClientPipeline({ clientId, clientConfig = null, fresh = false }) {
+async function runClientPipeline({ clientId, clientConfig = null, fresh = false, onProgress = null, moduleBriefs = null }) {
   const pipelineRunId = randomUUID();
   const startedAt = new Date().toISOString();
+
+  // Telemetry only — a progress write failure must never block the pipeline.
+  const emitProgress = async (stage, label) => {
+    if (typeof onProgress !== 'function') return;
+    try { await onProgress(stage, label); } catch { /* non-fatal */ }
+  };
 
   console.log(`[${startedAt}] RUNTIME: starting pipeline ${pipelineRunId} for ${clientId}`);
 
@@ -112,6 +122,23 @@ async function runClientPipeline({ clientId, clientConfig = null, fresh = false 
     console.warn(`[${new Date().toISOString()}] RUNTIME: conversation intake context skipped — ${err.message}`);
   }
 
+  // ── 1c. Website audit context ────────────────────────────────────────────────
+  // Per-module mini-briefs from the intake run (SEO/perf, agent readiness,
+  // device rendering, social metadata, design). Folded into Scribe so the
+  // executive brief speaks to the client's own site, not just market signals.
+  try {
+    if (Array.isArray(moduleBriefs) && moduleBriefs.length) {
+      const { buildWebsiteAuditPromptBlock } = require('../scout-intake/module-brief-builder');
+      const block = buildWebsiteAuditPromptBlock(moduleBriefs);
+      if (block) {
+        config.websiteAuditContext = { available: true, block, moduleCount: moduleBriefs.length };
+        console.log(`[${new Date().toISOString()}] RUNTIME: website audit context loaded — ${moduleBriefs.length} module brief(s)`);
+      }
+    }
+  } catch (err) {
+    console.warn(`[${new Date().toISOString()}] RUNTIME: website audit context skipped — ${err.message}`);
+  }
+
   // ── 2. Initialize provider from config ─────────────────────────────────────
   const provider = initProvider(config.providerConfig || { defaultProvider: 'anthropic' });
   console.log(`[${new Date().toISOString()}] RUNTIME: provider — ${provider.providerName}`);
@@ -122,6 +149,7 @@ async function runClientPipeline({ clientId, clientConfig = null, fresh = false 
   }
 
   // ── 4. Scout ─────────────────────────────────────────────────────────────────
+  await emitProgress('scout', 'Scanning web + X + reddit for market signals…');
   const brief = await runXScout(config);
 
   if (brief.status === 'error') {
@@ -168,7 +196,24 @@ async function runClientPipeline({ clientId, clientConfig = null, fresh = false 
     console.warn(`[${new Date().toISOString()}] RUNTIME: news monitor skipped — ${err.message}`);
   }
 
+  // ── 4c. Strategy roller — revise the rolling 30-day post strategy ────────────
+  // Uses yesterday's plan (memory) + today's signals; Scribe receives the result
+  // as context so the strategy rolls up into the Executive Daily Brief.
+  let strategy30 = null;
+  await emitProgress('strategy', 'Building 30-day social media campaign…');
+  try {
+    const { rollStrategy, buildScribeBlock } = require('./strategy-roller');
+    strategy30 = await rollStrategy({ clientId, config, brief, provider });
+    if (strategy30) {
+      config.strategy30Block = buildScribeBlock(strategy30);
+      console.log(`[${new Date().toISOString()}] RUNTIME: strategy roller — ${strategy30.days.length} day(s), notes: ${strategy30.revisionNotes.slice(0, 80)}`);
+    }
+  } catch (err) {
+    console.warn(`[${new Date().toISOString()}] RUNTIME: strategy roller skipped — ${err.message}`);
+  }
+
   // ── 5. Scribe — brief passed directly, no filesystem coupling ───────────────
+  await emitProgress('scribe', "Drafting today's post + composing executive brief…");
   const scribeOutput = await runScribe(clientId, config, brief);
   const completedAt = new Date().toISOString();
 
@@ -214,6 +259,7 @@ async function runClientPipeline({ clientId, clientConfig = null, fresh = false 
     completedAt,
     providerName: provider.providerName,
     brief,
+    strategy30,
     content: scribeOutput.content,
     contentOpportunities: scribeOutput.contentOpportunities,
     guardianFlags: scribeOutput.guardianFlags,

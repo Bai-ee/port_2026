@@ -128,6 +128,13 @@ If Scout/social signals conflict with the Knowledge Base on core business facts,
 Do not invent claims beyond Scout signals or the Knowledge Base.`;
 }
 
+function buildWebsiteAuditBlock(config) {
+  const audit = config?.websiteAuditContext;
+  if (!audit?.available || !audit.block) return '';
+  // Block text is pre-built by module-brief-builder (capped + instructed).
+  return String(audit.block);
+}
+
 function buildConversationBlock(config) {
   const convo = config?.conversationContext;
   if (!convo?.available || !convo.block) return '';
@@ -170,6 +177,8 @@ function buildScribePrompt(briefData, config = getDefaultClientConfig()) {
   const businessFactsBlock = buildBusinessFactsBlock(config);
   const knowledgeBaseBlock = buildKnowledgeBaseBlock(config);
   const conversationBlock = buildConversationBlock(config);
+  const websiteAuditBlock = buildWebsiteAuditBlock(config);
+  const strategy30Block = config?.strategy30Block || '';
   const temporalGuardrailsBlock = buildTemporalGuardrailsBlock(briefData);
   const publishingWindowBlock = buildPublishingWindowBlock(briefData);
   const outputSchema = getContentSchema(config);
@@ -241,6 +250,8 @@ ${instagramBlock ? `\n\n${instagramBlock}` : ''}
 ${businessFactsBlock ? `\n\n${businessFactsBlock}` : ''}
 ${knowledgeBaseBlock ? `\n\n${knowledgeBaseBlock}` : ''}
 ${conversationBlock ? `\n\n${conversationBlock}` : ''}
+${websiteAuditBlock ? `\n\n${websiteAuditBlock}` : ''}
+${strategy30Block ? `\n\n${strategy30Block}` : ''}
 ${temporalGuardrailsBlock ? `\n\n${temporalGuardrailsBlock}` : ''}
 ${publishingWindowBlock ? `\n\n${publishingWindowBlock}` : ''}
 ${platformInterpretation ? `\n\n${platformInterpretation}` : ''}

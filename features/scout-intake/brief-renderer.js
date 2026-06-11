@@ -274,6 +274,40 @@ const CSS = `
   .flow .node .t{font-family:"Doto";font-weight:900;font-size:26px;text-transform:uppercase;line-height:1}
   .flow .node p{font-family:"Space Grotesk";font-size:14px;margin:10px 0 0;color:#2a2a2a}
 
+  /* Mobile: stack labels above values and enlarge all body/label text so the
+     brief reads as a vertical breakdown on narrow screens. Presentation-only.
+     Mirrors the block in brief-css.cjs (which feeds the marketing preview). */
+  @media(max-width:640px){
+    section.page{padding:clamp(40px,7vh,72px) var(--gutter) clamp(48px,8vh,96px)}
+    .eyebrow{font-size:13px;gap:12px;margin-bottom:20px}
+    .sub{font-size:clamp(19px,5.2vw,24px);line-height:1.4;margin-bottom:32px}
+
+    .stat-row{grid-template-columns:1fr;gap:6px;padding:18px 0}
+    .stat-row .k{font-size:13px;letter-spacing:.18em;padding-top:0}
+    .stat-row .v{font-size:18px;line-height:1.55}
+
+    .pull{font-size:clamp(22px,6vw,30px);padding:6px 0 6px 18px;max-width:none}
+
+    .meta-grid{grid-template-columns:1fr;margin-top:24px}
+    .meta-tile .k{font-size:12px}
+    .meta-tile .v{font-size:17px}
+
+    .cover .meta{grid-template-columns:1fr 1fr;gap:20px 24px;margin-top:32px}
+    .cover .meta .k{font-size:12px}
+    .cover .meta .v{font-size:17px}
+
+    .flow .node{padding:20px}
+    .flow .node .n{font-size:12px}
+    .flow .node .t{font-size:24px}
+    .flow .node p{font-size:16px;line-height:1.55}
+
+    .score .lbl{font-size:12px}
+    .bar-row{font-size:13px}
+    .bar-row .name{font-size:12px;width:110px}
+
+    footer{font-size:12px}
+  }
+
   @media print{
     section.page{min-height:auto;padding:48px 40px;page-break-after:always;page-break-inside:avoid}
     .sec-num{font-size:140px}
@@ -297,12 +331,6 @@ function sectionCover({ brief, websiteUrl, when, tier, clientId, userEmail }) {
   return `
     <section class="page cover">
       <div class="sec-num">00</div>
-      <div class="eyebrow">
-        <span class="dot"></span>
-        <span>Intake Brief · Vol. 01</span>
-        ${clientId ? `<span>Client · ${esc(clientId.slice(0, 8))}</span>` : ''}
-        <span>Tier · ${esc(tierLabel.split(' · ')[0])}</span>
-      </div>
       <div class="title-stack">
         <h1 class="headline">${renderHeadline(brand || 'Intake Brief')}</h1>
       </div>
@@ -333,7 +361,6 @@ function sectionBrief({ ctx }) {
   return `
     <section class="page">
       <div class="sec-num">01</div>
-      <div class="eyebrow"><span class="dot"></span><span>BR · Brief</span><span>Live · Reviewed</span></div>
       <h2 class="headline">${renderHeadline('The Brief.')}</h2>
       ${sub ? `<p class="sub">${esc(sub)}</p>` : ''}
 
@@ -374,7 +401,6 @@ function sectionIntakeTerminal({ ctx }) {
   return `
     <section class="page" style="background:linear-gradient(180deg,transparent, rgba(10,10,10,.02))">
       <div class="sec-num">02</div>
-      <div class="eyebrow"><span class="dot"></span><span>IT · Intake Terminal</span><span>${esc(warnLine)}</span></div>
       <h2 class="headline">${renderHeadline('Intake Terminal.')}</h2>
       <p class="sub">Scraped pages, extracted signals, and normalization steps captured from the run lifecycle.</p>
 
@@ -425,7 +451,6 @@ function sectionBrandTone({ ctx }) {
   return `
     <section class="page">
       <div class="sec-num">03</div>
-      <div class="eyebrow"><span class="dot"></span><span>BT · Brand Tone</span><span>Live · Reviewed</span></div>
       <h2 class="headline">${renderHeadline(headlineText)}</h2>
       <p class="sub">${esc(subText)}</p>
 
@@ -493,7 +518,6 @@ function sectionStyleGuide({ ctx }) {
   return `
     <section class="page">
       <div class="sec-num">04</div>
-      <div class="eyebrow"><span class="dot"></span><span>SG · Style Guide</span><span>Live · Reviewed</span></div>
       <h2 class="headline">${renderHeadline(headlineText)}</h2>
       <p class="sub">${esc(subText)}</p>
 
@@ -587,7 +611,6 @@ function sectionSeoPerformance({ ctx }) {
   return `
     <section class="page">
       <div class="sec-num">05</div>
-      <div class="eyebrow"><span class="dot"></span><span>SP · SEO + Performance</span><span>Lighthouse${ps.status === 'partial' ? ' · Partial' : ''}</span></div>
       <h2 class="headline">${renderHeadline(headlineText)}</h2>
       <p class="sub">${esc(subText)}</p>
 
@@ -630,7 +653,6 @@ function sectionIndustry({ ctx }) {
   return `
     <section class="page">
       <div class="sec-num">06</div>
-      <div class="eyebrow"><span class="dot"></span><span>IN · Industry</span><span>Live · Reviewed</span></div>
       <h2 class="headline">${renderHeadline(headlineText)}</h2>
       <p class="sub">${esc(subText)}</p>
 
@@ -664,7 +686,6 @@ function sectionBusinessModel({ ctx }) {
   return `
     <section class="page">
       <div class="sec-num">07</div>
-      <div class="eyebrow"><span class="dot"></span><span>BM · Business Model</span><span>Live · Reviewed</span></div>
       <h2 class="headline">${renderHeadline(headlineText)}</h2>
       <p class="sub">${esc(subText)}</p>
 
@@ -717,7 +738,6 @@ function sectionStrategyCards({ ctx, sectionNumber }) {
   return `
     <section class="page">
       <div class="sec-num">${String(sectionNumber).padStart(2, '0')}</div>
-      <div class="eyebrow"><span class="dot"></span><span>PS · DP · CA · CO</span><span>Status · ${allEmpty ? 'Work Needed' : 'Live'}</span></div>
       <h2 class="headline">${renderHeadline(headlineText)}</h2>
       <p class="sub">${esc(subText)}</p>
 

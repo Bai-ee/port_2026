@@ -14,8 +14,8 @@ node('intake','Site Intake',0,'eng','seed');
 // col 1 — context (knowledge)
 node('brain','Company Brain',1,'in','ctx');
 node('founder','Founder Q&A',1,'in','ctx');
-node('bizmodel','Business Model',1,'out','ctx');
-node('category','Market Category',1,'out','ctx');
+node('bizmodel','Business Model',1,'in','ctx');
+node('category','Market Category',1,'in','ctx');
 node('coverage','Data Coverage',1,'meta','ctx');
 // col 2 — inputs (marketing) then brand-truth
 ['bk|Brand & Keywords','watch|Watchlist','comps|Competitors','splan|Search Plan','focus|Research Focus',
@@ -30,10 +30,10 @@ node('seoeng','SEO / Audit',3,'eng','e-web');
 node('creng','Copy & Creative',3,'eng','e-crea');
 node('sitebuild','Site Build',3,'eng','e-crea');
 // col 4 — outputs (block order: brief, website, creative)
-['execbrief|Executive Daily Brief','bcomp|Competitor Brief','bmkt|Marketing Brief','bstrat|Strategy Brief',
+['execbrief|Executive Daily Brief','bcomp|Competitor Brief','bmkt|Marketing Brief','bstrat|Strategy Brief (admin)','s30|30-Day Strategy',
  'bcrea|Creative Brief','bperf|Performance Brief','signals|Market Signals','compsnap|Competitor Snapshot',
- 'localsig|Local Signals','priority|Priority Action','npstrat|Next-Post Strategy','cgaps|Content Gaps',
- 'prules|Posting Rules','newsroll|Newsletter Roll-up','clientbrief|Client Brief','briefdoc|Brief Document']
+ 'localsig|Local Signals','priority|Day-of Post','npstrat|Custom Post Strategy (locked)','cgaps|Content Gaps',
+ 'newsroll|Newsletter Roll-up','clientbrief|Client Brief','briefdoc|Brief Document']
  .forEach(s=>{const[i,t]=s.split('|');node(i,t,4,'out','o-brief');});
 ['seoperf|SEO + Performance','siteperf|Site Performance','visib|Search & Social Visibility','searchopp|Search Opportunities',
  'trust|Trust & Credibility','airead|AI Agent Readiness','socprev|Social Preview','deseval|Design Evaluation',
@@ -54,10 +54,11 @@ e('voice','bsystem'); e('vdna','bsystem');
 e('bk','splan');
 // inputs -> brief engine
 ['bk','watch','comps','splan','focus','plat','social','weather','convo','platcov','bpreview',
- 'brain','founder','bizmodel','category'].forEach(s=>e(s,'briefeng'));
+ 'brain','founder','bizmodel'].forEach(s=>e(s,'briefeng'));
 // brief engine -> brief/marketing outputs
 ['execbrief','bcomp','bmkt','bstrat','bcrea','bperf','signals','compsnap','localsig','priority',
- 'npstrat','cgaps','prules','newsroll','clientbrief','briefdoc'].forEach(o=>e('briefeng',o,true));
+ 'npstrat','cgaps','newsroll','clientbrief','briefdoc'].forEach(o=>e('briefeng',o,true));
+e('briefeng','s30'); e('s30','priority'); e('s30','bstrat');
 e('execbrief','emaildig'); e('emailset','emaildig'); e('execbrief','submitbrief',true);
 // creative
 e('briefeng','creng',true); e('voice','creng'); e('bsystem','creng'); e('brain','creng',true);

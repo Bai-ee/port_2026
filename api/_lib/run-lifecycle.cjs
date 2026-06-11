@@ -154,6 +154,8 @@ function buildDashboardProjection(clientId, pipelineResult, runId) {
   if (latestInsights.length > 0) base.latestInsights = latestInsights;
 
   if (pipelineResult.pipelineType === 'scout-brief') {
+    // Rolling 30-day post strategy — only overwrite when the run produced one.
+    if (pipelineResult.strategy30) base.strategy30 = pipelineResult.strategy30;
     base.marketingBrief = {
       status: 'generated',
       headline: scoutPriorityAction || null,
@@ -350,12 +352,18 @@ async function completeRun(runId, clientId, pipelineResult) {
  * If attempts < MAX_ATTEMPTS, dashboard_state.errorState.retryPending = true so
  * Phase 5 admin UI can surface "retry available" without exposing the actual error.
  *
+ * Soft mode (details.soft = true): full error detail still lands in brief_runs,
+ * but dashboard_state keeps no errorState and the client doc is not downgraded.
+ * Used for chained follow-up runs (e.g. onboarding-chain scout-brief) whose
+ * failure must not error-screen a client whose primary run succeeded.
+ *
  * @param {string} runId
  * @param {string} clientId
  * @param {Error|object} error
  * @param {number} attempts - current attempt count (post-increment from claimRun)
  */
 async function failRun(runId, clientId, error, attempts, details = {}) {
+  const soft = details.soft === true;
   const runRef = fb.adminDb.collection('brief_runs').doc(runId);
   const clientRunRef = fb.adminDb.collection('clients').doc(clientId).collection('brief_runs').doc(runId);
   const dashboardStateRef = fb.adminDb.collection('dashboard_state').doc(clientId);
@@ -392,17 +400,21 @@ async function failRun(runId, clientId, error, attempts, details = {}) {
   };
 
   // Sanitized error for dashboard — no internal detail exposed to end users.
-  const dashboardUpdate = {
-    clientId,
-    latestRunId: runId,
-    latestRunStatus: 'failed',
-    updatedAt: now,
-    errorState: {
-      message: 'Initial setup encountered an issue. Our team has been notified.',
-      failedAt,
-      retryPending: !isExhausted,
-    },
-  };
+  // Soft fails leave latestRunId/latestRunStatus pointing at the succeeded
+  // primary run and never set errorState.
+  const dashboardUpdate = soft
+    ? { clientId, updatedAt: now }
+    : {
+        clientId,
+        latestRunId: runId,
+        latestRunStatus: 'failed',
+        updatedAt: now,
+        errorState: {
+          message: 'Initial setup encountered an issue. Our team has been notified.',
+          failedAt,
+          retryPending: !isExhausted,
+        },
+      };
 
   if (homepageScreenshot) {
     dashboardUpdate.artifacts = {
@@ -421,13 +433,15 @@ async function failRun(runId, clientId, error, attempts, details = {}) {
     };
   }
 
-  const clientUpdate = {
-    latestRunId: runId,
-    latestRunStatus: 'failed',
-    // Keep provisioning status unless fully exhausted — admin may retry
-    status: isExhausted ? 'error' : 'provisioning',
-    updatedAt: now,
-  };
+  const clientUpdate = soft
+    ? { updatedAt: now }
+    : {
+        latestRunId: runId,
+        latestRunStatus: 'failed',
+        // Keep provisioning status unless fully exhausted — admin may retry
+        status: isExhausted ? 'error' : 'provisioning',
+        updatedAt: now,
+      };
 
   await Promise.all([
     runRef.set(runUpdate, { merge: true }),
@@ -436,7 +450,11 @@ async function failRun(runId, clientId, error, attempts, details = {}) {
     clientRef.set(clientUpdate, { merge: true }),
     appendRunEvent(runId, clientId, {
       stage: 'error',
-      progressLabel: `Pipeline failed: ${error?.message || String(error)}`.slice(0, 500),
+      // Run events are client-readable — soft fails get a sanitized line,
+      // the raw error stays in brief_runs (admin only).
+      progressLabel: soft
+        ? 'Brief generation hit an issue — retry from the Executive Daily Brief card.'
+        : `Pipeline failed: ${error?.message || String(error)}`.slice(0, 500),
     }).catch(() => {}),
   ]);
 }

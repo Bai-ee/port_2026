@@ -61,6 +61,34 @@ function normalizeSourcePlatforms(input) {
   return unique.length ? unique : ['web'];
 }
 
+// Saved events feed the brief's upcomingEvents + Local Signals hydration.
+// Each entry: { event, date (YYYY-MM-DD), location?, url?, source? }.
+function normalizeEvents(input) {
+  const rows = Array.isArray(input) ? input : [];
+  return rows
+    .map((row) => {
+      // Event search results carry free-form dates — normalize anything
+      // parseable to YYYY-MM-DD, drop entries with no usable date.
+      const rawDate = String(row?.date || '').trim();
+      let date = '';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+        date = rawDate;
+      } else if (rawDate) {
+        const ms = Date.parse(rawDate);
+        if (!Number.isNaN(ms)) date = new Date(ms).toISOString().slice(0, 10);
+      }
+      return {
+        event:    String(row?.event || row?.name || row?.title || '').trim().slice(0, 200),
+        date,
+        location: String(row?.location || '').trim().slice(0, 160),
+        url:      String(row?.url || '').trim().slice(0, 500),
+        source:   String(row?.source || 'events-search').trim().slice(0, 60),
+      };
+    })
+    .filter((row) => row.event && row.date)
+    .slice(0, 20);
+}
+
 // Accepts either a string (newline / comma separated) or an array. Returns a
 // cleaned string array, max `maxItems` items each up to `maxLen` chars.
 function normalizeLineList(input, { maxItems = 20, maxLen = 240 } = {}) {
@@ -128,13 +156,26 @@ export async function POST(request) {
   let priorWeather = null;
   let priorScoutConfig = null;
   let priorSourceWebsiteUrl = null;
+  let priorAcknowledged = {};
+  let priorEvents = [];
+  let priorLocalSignals = [];
+  let priorAuditSeed = null;
   try {
     const priorSnap = await fb.adminDb.collection('client_configs').doc(context.clientId).get();
     priorWeather = priorSnap.data()?.marketingBriefConfig?.weather || null;
     priorScoutConfig = priorSnap.data()?.scoutConfig || null;
     priorSourceWebsiteUrl = priorSnap.data()?.sourceInputs?.websiteUrl || null;
+    const a = priorSnap.data()?.marketingBriefConfig?.acknowledgedCards;
+    if (a && typeof a === 'object') priorAcknowledged = a;
+    const pe = priorSnap.data()?.marketingBriefConfig?.events;
+    if (Array.isArray(pe)) priorEvents = pe;
+    const pl = priorSnap.data()?.marketingBriefConfig?.localSignals;
+    if (Array.isArray(pl)) priorLocalSignals = pl;
+    const ps = priorSnap.data()?.marketingBriefConfig?.auditSeed;
+    if (ps && typeof ps === 'object') priorAuditSeed = ps;
   } catch { /* no prior */ }
   const weather = await normalizeWeather(body?.weather, priorWeather);
+  const incomingAck = (body?.acknowledgedCards && typeof body.acknowledgedCards === 'object') ? body.acknowledgedCards : {};
 
   const splitTerms = (input, max) => String(input || '')
     .split(/[\n,]+/)
@@ -145,6 +186,16 @@ export async function POST(request) {
   const marketingBriefConfig = {
     enabled: true,
     weather,
+    // Omitted fields preserve prior values — a card save that doesn't carry
+    // events/localSignals must never wipe what another card stored.
+    events: body?.events !== undefined ? normalizeEvents(body.events) : priorEvents,
+    localSignals: body?.localSignals !== undefined
+      ? normalizeLineList(body.localSignals, { maxItems: 12, maxLen: 300 })
+      : priorLocalSignals,
+    // Provenance snapshot written by the audit merger — what the last website
+    // run produced per field group. Server-owned; never accepted from the body.
+    ...(priorAuditSeed ? { auditSeed: priorAuditSeed } : {}),
+    acknowledgedCards: { ...priorAcknowledged, ...incomingAck },
     brandName: String(body?.brandName || '').trim().slice(0, 120),
     brandKeywords: splitTerms(body?.brandKeywords, 12),
     categoryTerms: splitTerms(body?.categoryTerms, 12),

@@ -21,7 +21,7 @@ const { fetchOperationalWeather, buildWeatherContextBlock } = require('./service
 const { fetchReviewStatusViaWebSearch, buildReviewContextBlock } = require('./services/reviews');
 const { fetchInstagramInsights, buildInstagramContextBlock } = require('./services/instagram');
 const { fetchRedditSignals, buildRedditContextBlock } = require('./services/reddit');
-const { runRedditWebSearch } = require('../scout-intake/external-scouts/reddit-web-search');
+const { runRedditSerpSearch } = require('../scout-intake/external-scouts/reddit-serp-search');
 const { fetchLast30Days } = require('./services/last30days');
 const { normalizeSignals, mapToScoutFields, buildLast30DaysContextBlock, summarizeLast30DaysResult } = require('./normalize-last30days');
 
@@ -216,8 +216,88 @@ function stripUngroundedUrls(agentData) {
   return out;
 }
 
-function hydrateAgentData(agentData = {}, weatherReport = null, redditReport = null, searchResults = [], compactContext = '', last30daysMapped = null) {
+const SIGNAL_ARRAY_FIELDS = [
+  'brandMentions', 'competitorIntel', 'categoryTrends',
+  'kolActivity', 'redditSignals', 'localDemandSignals', 'contentOpportunities',
+];
+
+// Build localDemandSignals entries from configured local-market inputs:
+// live weather (operational takeaway), saved upcoming events (Events card),
+// and free-form custom signals the user typed in. These merge into whatever
+// Scout found — they never displace Scout's own findings.
+function buildConfiguredLocalSignals(weatherReport, config) {
+  const signals = [];
+
+  if (weatherReport?.overall) {
+    const w = buildWeatherAgentData(weatherReport);
+    if (w?.summary) {
+      signals.push({
+        signal: 'Local weather window',
+        insight: [w.summary, w.operationalTakeaway].filter(Boolean).join(' — '),
+        source: 'weather',
+        url: w.url || '',
+      });
+    }
+  }
+
+  for (const e of (config?.upcomingEvents || []).slice(0, 5)) {
+    if (!e?.event) continue;
+    signals.push({
+      signal: e.event,
+      insight: `${e.date} (${e.daysOut} day${e.daysOut === 1 ? '' : 's'} out)${e.location ? ` · ${e.location}` : ''}`,
+      source: 'events',
+      url: e.url || '',
+    });
+  }
+
+  for (const s of (config?.customLocalSignals || []).slice(0, 6)) {
+    signals.push({
+      signal: 'Custom local signal',
+      insight: s,
+      source: 'user',
+      url: '',
+    });
+  }
+
+  return signals;
+}
+
+// Stamps runMeta (queryTrace from real search queries) and emptySections
+// (machine-readable honest null state) into agentData after hydration.
+// Prevents Scribe from interpreting absent arrays as "Scout didn't look."
+function stampRunMeta(agentData, searchResults, startTime, config) {
+  if (!agentData || typeof agentData !== 'object') return agentData;
+  const next = { ...agentData };
+
+  next.runMeta = {
+    timestamp: startTime.toISOString(),
+    freshnessWindowDays: config?.scout?.freshnessDays || 1,
+    queryTrace: Array.isArray(searchResults)
+      ? searchResults.map((r) => r.query).filter(Boolean)
+      : [],
+  };
+
+  next.emptySections = SIGNAL_ARRAY_FIELDS.filter((field) => {
+    const val = next[field];
+    return !Array.isArray(val) || val.length === 0;
+  });
+
+  return next;
+}
+
+function hydrateAgentData(agentData = {}, weatherReport = null, redditReport = null, searchResults = [], compactContext = '', last30daysMapped = null, config = null) {
   const next = agentData && typeof agentData === 'object' ? { ...agentData } : {};
+
+  // Configured local-market inputs (weather window, saved events, custom user
+  // signals) merge into localDemandSignals. Dedupe by signal text + URL so
+  // reruns don't stack duplicates; Scout's own findings are kept, never replaced.
+  const configuredLocal = buildConfiguredLocalSignals(weatherReport, config);
+  if (configuredLocal.length > 0) {
+    const existing = Array.isArray(next.localDemandSignals) ? next.localDemandSignals : [];
+    const seen = new Set(existing.map((s) => `${s?.signal || s?.title || ''}|${s?.url || ''}`));
+    const novel = configuredLocal.filter((s) => !seen.has(`${s.signal}|${s.url}`));
+    next.localDemandSignals = [...existing, ...novel].slice(0, 10);
+  }
 
   if (weatherReport?.overall) {
     const canonicalWeather = buildWeatherAgentData(weatherReport);
@@ -659,7 +739,10 @@ function adaptWebSearchRedditReport(report) {
 // Claude web_search. `oauth-app-only` uses the native Reddit Data API.
 async function fetchRedditForBrief(config, previousReport) {
   if (config.reddit?.provider === 'web-search') {
-    const { ok, report } = await runRedditWebSearch({ clientId: config.clientId, redditConfig: config.reddit });
+    // Credential-free Reddit via search-engine indexing (DuckDuckGo). Same
+    // working fetcher the Reddit Test card uses — Claude web_search can't reach
+    // Reddit, so the brief must use this path too.
+    const { ok, report } = await runRedditSerpSearch({ clientId: config.clientId, redditConfig: config.reddit });
     return ok ? adaptWebSearchRedditReport(report) : null;
   }
   return fetchRedditSignals(config, previousReport);
@@ -890,7 +973,8 @@ async function runXScout(config = DEFAULT_CONFIG) {
     // Remove internal flag before saving
     delete brief.needsRetry;
 
-    brief.agentData = hydrateAgentData(brief.agentData, weatherReport, redditReport, searchResults, compactContext, last30daysMapped);
+    brief.agentData = hydrateAgentData(brief.agentData, weatherReport, redditReport, searchResults, compactContext, last30daysMapped, config);
+    brief.agentData = stampRunMeta(brief.agentData, searchResults, startTime, config);
 
     brief.stageCosts = scoutStageCosts;
 
