@@ -141,15 +141,17 @@ function buildDashboardProjection(clientId, pipelineResult, runId) {
   const base = {
     clientId,
     status: 'active',
-    headline: scoutPriorityAction || null,
-    summaryCards,
-    latestInsights,
     latestRunId: runId,
     latestRunStatus: 'succeeded',
     updatedAt: fb.FieldValue.serverTimestamp(),
     provisioningState: null,
     errorState: null,
   };
+  // Only write content fields when the run actually produced them — an empty
+  // run must not wipe a content angle or insight from a richer prior run.
+  if (scoutPriorityAction) base.headline = scoutPriorityAction;
+  if (summaryCards.length > 0) base.summaryCards = summaryCards;
+  if (latestInsights.length > 0) base.latestInsights = latestInsights;
 
   if (pipelineResult.pipelineType === 'scout-brief') {
     base.marketingBrief = {
@@ -222,7 +224,19 @@ function buildDashboardProjection(clientId, pipelineResult, runId) {
   if (pipelineResult.pipelineType === 'free-tier-intake') {
     if (pipelineResult.snapshot) base.snapshot = pipelineResult.snapshot;
     if (pipelineResult.signals) base.signals = pipelineResult.signals;
-    if (pipelineResult.strategy) base.strategy = pipelineResult.strategy;
+    // Only overwrite strategy when the new run produced meaningful content.
+    // An empty strategy object (no angles, no opportunities) should never
+    // blank out Posting Rules data from a prior richer run.
+    const newStrategy = pipelineResult.strategy;
+    const newStrategyHasContent = Boolean(
+      newStrategy &&
+      (
+        (Array.isArray(newStrategy.contentAngles) && newStrategy.contentAngles.some((a) => a?.angle)) ||
+        (Array.isArray(newStrategy.opportunityMap) && newStrategy.opportunityMap.length > 0) ||
+        newStrategy.postStrategy?.approach
+      )
+    );
+    if (newStrategyHasContent) base.strategy = newStrategy;
     if (pipelineResult.outputsPreview) base.outputsPreview = pipelineResult.outputsPreview;
     if (pipelineResult.systemPreview) base.systemPreview = pipelineResult.systemPreview;
     if (pipelineResult.siteMeta) base.siteMeta = pipelineResult.siteMeta;
@@ -750,7 +764,11 @@ function projectScreenshotArtifacts(update, artifactRefs = []) {
   }
 }
 
-function projectModuleResult(update, result) {
+// snapshotPatch accumulates dot-notation field paths for snapshot.* writes.
+// These are written via ref.update() rather than ref.set(merge:true) to avoid
+// Firestore's top-level-only merge replacing the entire snapshot map and wiping
+// unrelated fields like snapshot.brandOverview.
+function projectModuleResult(update, result, snapshotPatch) {
   if (!result?.ok) return;
 
   if (result.cardId === 'multi-device-view') {
@@ -766,7 +784,7 @@ function projectModuleResult(update, result) {
   if (result.cardId === 'style-guide') {
     if (result.result?.styleGuide) {
       // Brand Snapshot card reads snapshot.visualIdentity.styleGuide.
-      deepSet(update, ['snapshot', 'visualIdentity', 'styleGuide'], result.result.styleGuide);
+      snapshotPatch['snapshot.visualIdentity.styleGuide'] = result.result.styleGuide;
     }
     return;
   }
@@ -774,7 +792,7 @@ function projectModuleResult(update, result) {
   if (result.cardId === 'design-evaluation') {
     if (result.result?.styleGuide) {
       // Keep the shared brand snapshot in sync so subsequent cards reuse it.
-      deepSet(update, ['snapshot', 'visualIdentity', 'styleGuide'], result.result.styleGuide);
+      snapshotPatch['snapshot.visualIdentity.styleGuide'] = result.result.styleGuide;
     }
     if (result.result?.analyzerOutput) {
       deepSet(update, ['analyzerOutputs', 'design-evaluation'], result.result.analyzerOutput);
@@ -845,9 +863,9 @@ function projectModuleResult(update, result) {
 /**
  * Persist per-card module results to dashboard_state/{clientId}.
  *
- * Uses dot-notation field paths with merge:true so only the updated cards
- * and the dashboard fields they own are written — prior module metadata
- * and unrelated card outputs are preserved.
+ * snapshot.* fields are written via ref.update() with dot-notation paths so
+ * Firestore only touches the specific leaf fields — not the whole snapshot map.
+ * All other fields use ref.set(merge:true) as before.
  *
  * @param {string}   clientId
  * @param {object[]} moduleResults  - array of card result objects from runModules()
@@ -858,6 +876,7 @@ async function updateModuleState(clientId, moduleResults, runId) {
 
   const now = fb.FieldValue.serverTimestamp();
   const update = { updatedAt: now };
+  const snapshotPatch = {};
 
   for (const r of moduleResults) {
     const cardId = r.cardId;
@@ -889,11 +908,15 @@ async function updateModuleState(clientId, moduleResults, runId) {
       deepSet(update, ['modules', cardId, 'lastErrorMessage'], r.errorMessage || null);
     }
 
-    projectModuleResult(update, r);
+    projectModuleResult(update, r, snapshotPatch);
   }
 
   const ref = fb.adminDb.collection('dashboard_state').doc(clientId);
   await ref.set(update, { merge: true });
+
+  if (Object.keys(snapshotPatch).length > 0) {
+    await ref.update(snapshotPatch);
+  }
 }
 
 module.exports = {

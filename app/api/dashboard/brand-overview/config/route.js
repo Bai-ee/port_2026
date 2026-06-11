@@ -5,6 +5,7 @@ const require = createRequire(import.meta.url);
 const fb = require('../../../../../api/_lib/firebase-admin.cjs');
 const { verifyRequestUser } = require('../../../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../../../api/_lib/client-provisioning.cjs');
+const { applyPositioningBridge } = require('../../../../../features/scout-intake/brand-positioning-bridge');
 
 function makeReqShim(request) {
   return {
@@ -56,13 +57,18 @@ export async function POST(request) {
   brandOverview.updatedAtIso = new Date().toISOString();
 
   try {
-    await fb.adminDb.collection('dashboard_state').doc(context.clientId).set(
-      { snapshot: { brandOverview } },
-      { merge: true }
-    );
+    // Use dot-notation update to avoid Firestore shallow-merge replacing the
+    // entire snapshot map and wiping unrelated sub-fields (e.g. visualIdentity).
+    await fb.adminDb.collection('dashboard_state').doc(context.clientId).update({
+      'snapshot.brandOverview': brandOverview,
+    });
   } catch (err) {
     return json({ error: `Firestore error: ${err.message}` }, 500);
   }
+
+  // Fire-and-forget: derive sub-layer search terms from positioning and write
+  // to scoutConfig.positioningContext so the next brief run gets better queries.
+  applyPositioningBridge(context.clientId, brandOverview).catch(() => {});
 
   return json({ ok: true, brandOverview });
 }

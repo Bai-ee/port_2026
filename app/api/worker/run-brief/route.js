@@ -39,6 +39,14 @@ function getScoutConfigUtils() {
   };
 }
 
+function getMerger() {
+  return require('../../../../features/scout-intake/brand-overview-merger');
+}
+
+function getBrandOverviewSynthesizer() {
+  return require('../../../../features/scout-intake/brand-overview-synthesizer');
+}
+
 function json(body, status = 200) {
   return NextResponse.json(body, {
     status,
@@ -141,14 +149,16 @@ export async function POST(request) {
       });
       await updateModuleState(clientId, results, runId);
 
-      // Generate brand identity after modules complete (non-fatal)
+      // Generate brand identity + snapshot.brandOverview after modules complete (non-fatal)
       if (websiteUrl) {
+        let evidence = null;
+        let scoutConfigResult = null;
         try {
           const { fetchSiteEvidence, ensureScoutConfig, buildUserContext } = getScoutConfigUtils();
-          const evidence = await fetchSiteEvidence(websiteUrl);
+          evidence = await fetchSiteEvidence(websiteUrl);
           const userContext = buildUserContext(clientConfig);
           const clientName = clientConfig?.clientName || clientConfig?.sourceInputs?.clientName || null;
-          await ensureScoutConfig({
+          scoutConfigResult = await ensureScoutConfig({
             clientId,
             clientName,
             intakeResult: { websiteUrl },
@@ -160,6 +170,27 @@ export async function POST(request) {
           console.log(`[WORKER] scoutConfig ensured for ${clientId}`);
         } catch (scoutErr) {
           console.warn(`[WORKER] scoutConfig generation non-fatal failure for ${clientId}: ${scoutErr?.message}`);
+        }
+
+        // Synthesize snapshot.brandOverview from site evidence (OG meta + page content).
+        // Then merge with any user-saved content so manual edits are never overwritten.
+        if (evidence) {
+          try {
+            const { synthesizeBrandOverview } = getBrandOverviewSynthesizer();
+            const { mergeBrandOverview } = getMerger();
+            const crawled = await synthesizeBrandOverview(evidence, scoutConfigResult?.scoutConfig || null);
+            if (crawled) {
+              const merged = await mergeBrandOverview(clientId, crawled);
+              if (merged) {
+                await _fb.adminDb.collection('dashboard_state').doc(clientId).update({
+                  'snapshot.brandOverview': merged,
+                });
+                console.log(`[WORKER] snapshot.brandOverview written for ${clientId}: source=${merged.source}`);
+              }
+            }
+          } catch (boErr) {
+            console.warn(`[WORKER] brandOverview synthesis non-fatal failure for ${clientId}: ${boErr?.message}`);
+          }
         }
       }
 
@@ -209,7 +240,24 @@ export async function POST(request) {
     return json({ error: 'Pipeline execution failed.', runId }, 500);
   }
 
-  // Step 7 — Write result
+  // Step 7 — Brand overview merge (free-tier-intake only)
+  // If the pipeline produced a brandOverview and the client has user-set content,
+  // run a Haiku merge agent to reconcile crawl vs manual data before writing.
+  // Non-fatal — any failure falls back to the raw crawl value.
+  if (pipelineType === 'free-tier-intake' && pipelineResult.snapshot?.brandOverview) {
+    try {
+      const { mergeBrandOverview } = getMerger();
+      const merged = await mergeBrandOverview(clientId, pipelineResult.snapshot.brandOverview);
+      if (merged) {
+        pipelineResult.snapshot.brandOverview = merged;
+        console.log(`[WORKER] brandOverview merge complete for ${clientId}: source=${merged.source}`);
+      }
+    } catch (mergeErr) {
+      console.warn(`[WORKER] brandOverview merge threw for ${clientId}: ${mergeErr.message}`);
+    }
+  }
+
+  // Step 8 — Write result
   if (pipelineResult.status === 'failed') {
     const stageErr = new Error(pipelineResult.error || 'Pipeline returned failed status.');
     stageErr.stage = pipelineResult.failedStage || 'pipeline';

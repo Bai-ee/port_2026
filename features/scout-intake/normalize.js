@@ -125,6 +125,7 @@ function normalizeIntakeResult(
         businessModel: str(snapshot.brandOverview?.businessModel),
         targetAudience: str(snapshot.brandOverview?.targetAudience),
         positioning: str(snapshot.brandOverview?.positioning),
+        source: 'crawl',
       },
       brandTone: {
         primary: str(snapshot.brandTone?.primary),
