@@ -156,24 +156,54 @@ function buildDashboardProjection(clientId, pipelineResult, runId) {
   if (pipelineResult.pipelineType === 'scout-brief') {
     // Rolling 30-day post strategy — only overwrite when the run produced one.
     if (pipelineResult.strategy30) base.strategy30 = pipelineResult.strategy30;
-    base.marketingBrief = {
-      status: 'generated',
-      headline: scoutPriorityAction || null,
-      scoutBrief: pipelineResult.brief ? {
-        timestamp: pipelineResult.brief.timestamp || null,
-        humanBrief: pipelineResult.brief.humanBrief || null,
-        delta: pipelineResult.brief.delta || null,
-        agentData: pipelineResult.brief.agentData || null,
-      } : null,
-      content: content || null,
-      contentOpportunities: contentOpportunities || [],
-      guardianFlags: pipelineResult.guardianFlags || null,
-      providerName: pipelineResult.providerName || null,
-      knowledgeBaseSources: Array.isArray(pipelineResult.knowledgeBase?.sources)
-        ? pipelineResult.knowledgeBase.sources
-        : [],
-      generatedAtIso: new Date().toISOString(),
-    };
+    const scope = pipelineResult.scope || null;
+    if (scope === 'marketing-director') {
+      // Scoped run: only fresh scout signals. Omit content/guardian keys so
+      // the recursive Firestore merge keeps the stored today's-post, guardian
+      // flags, and contentOpportunities from the last full run.
+      base.marketingBrief = {
+        status: 'generated',
+        scoutBrief: pipelineResult.brief ? {
+          timestamp: pipelineResult.brief.timestamp || null,
+          humanBrief: pipelineResult.brief.humanBrief || null,
+          delta: pipelineResult.brief.delta || null,
+          agentData: pipelineResult.brief.agentData || null,
+        } : {},
+        providerName: pipelineResult.providerName || null,
+        generatedAtIso: new Date().toISOString(),
+      };
+    } else if (scope === 'social-media-manager') {
+      // Scoped run: fresh strategy + today's post; the stored scout brief
+      // (market/competitor/local signals) stays untouched.
+      base.marketingBrief = {
+        status: 'generated',
+        headline: scoutPriorityAction || null,
+        content: content || null,
+        contentOpportunities: contentOpportunities || [],
+        guardianFlags: pipelineResult.guardianFlags || null,
+        providerName: pipelineResult.providerName || null,
+        generatedAtIso: new Date().toISOString(),
+      };
+    } else {
+      base.marketingBrief = {
+        status: 'generated',
+        headline: scoutPriorityAction || null,
+        scoutBrief: pipelineResult.brief ? {
+          timestamp: pipelineResult.brief.timestamp || null,
+          humanBrief: pipelineResult.brief.humanBrief || null,
+          delta: pipelineResult.brief.delta || null,
+          agentData: pipelineResult.brief.agentData || null,
+        } : null,
+        content: content || null,
+        contentOpportunities: contentOpportunities || [],
+        guardianFlags: pipelineResult.guardianFlags || null,
+        providerName: pipelineResult.providerName || null,
+        knowledgeBaseSources: Array.isArray(pipelineResult.knowledgeBase?.sources)
+          ? pipelineResult.knowledgeBase.sources
+          : [],
+        generatedAtIso: new Date().toISOString(),
+      };
+    }
     if (pipelineResult.knowledgeBase) {
       base.knowledgeBase = pipelineResult.knowledgeBase;
     }

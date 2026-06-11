@@ -42,6 +42,8 @@ async function resolveContext(request) {
   return { decoded, context };
 }
 
+const BRIEF_RUN_SCOPES = new Set(['marketing-director', 'social-media-manager']);
+
 export async function POST(request) {
   let decoded, context;
   try {
@@ -50,17 +52,43 @@ export async function POST(request) {
     return json({ error: err.message || 'Unauthorized.' }, err.status || 401);
   }
 
+  // Scoped runs (individual agent briefs) skip the intake A→B chain and run
+  // an inline pipeline slice — fresh signals (marketing-director) or fresh
+  // strategy + today's post (social-media-manager).
+  let scope = null;
+  try {
+    const body = await request.json().catch(() => ({}));
+    if (body?.scope) {
+      if (!BRIEF_RUN_SCOPES.has(body.scope)) {
+        return json({ error: `Unknown brief run scope: ${body.scope}` }, 400);
+      }
+      scope = body.scope;
+    }
+  } catch { /* empty body — full run */ }
+
   const configSnap = await fb.adminDb.collection('client_configs').doc(context.clientId).get();
   if (!configSnap.exists) return json({ error: 'No client config.' }, 404);
   const clientConfig = configSnap.data() || {};
+
+  // The social scope reuses the stored scout brief — require one up front so
+  // the user gets a clear message instead of a failed run.
+  let priorScoutBrief = null;
+  if (scope === 'social-media-manager') {
+    const dashSnap = await fb.adminDb.collection('dashboard_state').doc(context.clientId).get();
+    priorScoutBrief = dashSnap.exists ? (dashSnap.data()?.marketingBrief?.scoutBrief || null) : null;
+    if (!priorScoutBrief?.agentData) {
+      return json({ error: 'No stored market signals yet — run the Executive Daily Brief (or Marketing Director) first.' }, 409);
+    }
+  }
 
   // Fresh A→B pass: clients with a website + module config get a full
   // intake run first (fresh screenshots, SEO, agent readiness, design,
   // search terms), which the worker then chains into the scout-brief run.
   // The executive brief always compiles from data captured this call.
   // Idea-only clients (no URL) fall through to the inline scout-brief below.
+  // Scoped runs always take the inline path — no intake chain.
   const refreshUrl = clientConfig?.sourceInputs?.websiteUrl || clientConfig?.websiteUrl || null;
-  if (refreshUrl) {
+  if (refreshUrl && !scope) {
     // Legacy clients provisioned before module configs existed: seed the
     // default set so the worker's modular branch (and moduleBriefs) runs.
     if (!clientConfig.moduleConfig) {
@@ -150,10 +178,11 @@ export async function POST(request) {
     id: runId,
     clientId: context.clientId,
     requestedByUid: decoded.uid,
-    trigger: 'marketing-brief-card',
+    trigger: scope ? `brief-scope-${scope}` : 'marketing-brief-card',
     source: 'user',
     status: 'queued',
     pipelineType: 'scout-brief',
+    scope: scope || null,
     attempts: 0,
     workerLease: null,
     startedAt: null,
@@ -212,7 +241,11 @@ export async function POST(request) {
     );
     await appendRunEvent(runId, context.clientId, {
       stage: 'marketing-brief',
-      progressLabel: 'Starting Scout → Scribe → Guardian marketing brief...',
+      progressLabel: scope === 'marketing-director'
+        ? 'Starting scoped run — fresh market signals (Scout only)…'
+        : scope === 'social-media-manager'
+          ? "Starting scoped run — 30-day campaign + today's post…"
+          : 'Starting Scout → Scribe → Guardian marketing brief...',
     }).catch(() => {});
   } catch (err) {
     return json({ error: err.message || 'Could not claim marketing brief run.', runId }, 409);
@@ -220,7 +253,7 @@ export async function POST(request) {
 
   try {
     const { runClientPipeline } = getPipeline();
-    const result = await runClientPipeline({ clientId: context.clientId, clientConfig });
+    const result = await runClientPipeline({ clientId: context.clientId, clientConfig, scope, priorScoutBrief });
     if (result.status === 'failed') {
       const pipelineErr = new Error(result.error || 'Marketing brief pipeline failed.');
       pipelineErr.stage = result.failedStage || 'pipeline';

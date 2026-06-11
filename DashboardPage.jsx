@@ -3175,7 +3175,11 @@ const DashboardPage = () => {
       });
   }, [user, impersonateId, applyBootstrapResponse]);
 
-  const runMarketingBrief = useCallback(async () => {
+  // Optional scope ('marketing-director' | 'social-media-manager') runs a
+  // pipeline slice for that agent brief. Callers wire it via an arrow —
+  // a bare onClick would pass the click event as scope.
+  const runMarketingBrief = useCallback(async (scope = null) => {
+    const briefScope = typeof scope === 'string' ? scope : null;
     if (!user || marketingBriefRunning) return;
     setMarketingBriefRunning(true);
     setMarketingBriefError('');
@@ -3191,7 +3195,7 @@ const DashboardPage = () => {
       const res = await fetch(apiPath('/api/dashboard/marketing-brief/run'), {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify(briefScope ? { scope: briefScope } : {}),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Marketing brief run failed.');
@@ -6905,9 +6909,18 @@ const DashboardPage = () => {
       title: 'Marketing Director',
       description: 'Market signals, viral windows, watchlist activity, and competitor intel in one read — what shifted in your market and where to enter, sourced from web, X, and Reddit.',
       placeholderLabel: briefCardLocked('brief-marketing') ? 'LOCK' : 'VIEW\nBRIEF',
-      rows: [{ key: 'status', label: 'Status', value: briefCardLocked('brief-marketing') ? 'Coming soon' : 'Included in your plan — click to preview.' }],
+      rows: [{ key: 'status', label: 'Status', value: briefCardLocked('brief-marketing') ? 'Coming soon' : 'Included in your plan — click to preview, Run to refresh signals.' }],
       footerLeft: briefCardLocked('brief-marketing') ? 'Locked' : 'Live',
       footerRight: '',
+      // Scoped run — fresh Scout sweep only (signals, competitors, viral
+      // windows); today's post + 30-day campaign keep their stored values.
+      ...(briefCardLocked('brief-marketing') ? {} : {
+        footerAction: {
+          label: marketingBriefRunning ? '…' : 'Run Brief',
+          loading: marketingBriefRunning || marketingBriefSaving,
+          onClick: () => runMarketingBrief('marketing-director'),
+        },
+      }),
     },
     {
       id: 'brief-strategy',
@@ -6928,6 +6941,15 @@ const DashboardPage = () => {
         : [{ key: 'status', label: 'Status', value: briefCardLocked('brief-strategy') ? 'Coming soon' : 'Run the Executive Daily Brief to generate.' }],
       footerLeft: briefCardLocked('brief-strategy') ? 'Locked' : (strategy30?.days?.length ? 'Live' : 'Pending'),
       footerRight: isAdmin ? 'ADMIN' : '',
+      // Scoped run — strategy roller + today's post, reusing stored market
+      // signals (no fresh Scout sweep).
+      ...(briefCardLocked('brief-strategy') ? {} : {
+        footerAction: {
+          label: marketingBriefRunning ? '…' : 'Run Brief',
+          loading: marketingBriefRunning || marketingBriefSaving,
+          onClick: () => runMarketingBrief('social-media-manager'),
+        },
+      }),
     },
     {
       id: 'brief-creative',

@@ -51,9 +51,17 @@ async function deletePriorBrief(clientId) {
  *                                               Stages: scout, strategy, scribe.
  * @param {Array|null}  [options.moduleBriefs] - per-module website-audit mini-briefs
  *                                               from the intake run (dashboard_state.moduleBriefs.items).
+ * @param {string|null} [options.scope]        - run a slice for an individual agent brief:
+ *                                               null/'full' → Scout → news → strategy → Scribe (default);
+ *                                               'marketing-director' → Scout + news only (today's post,
+ *                                               guardian, and 30-day campaign keep stored values);
+ *                                               'social-media-manager' → strategy + Scribe only, reusing
+ *                                               the stored scout brief (priorScoutBrief required).
+ * @param {object|null} [options.priorScoutBrief] - stored marketingBrief.scoutBrief, required for
+ *                                               the 'social-media-manager' scope.
  * @returns {Promise<object>} Normalized pipeline result (see shape below).
  */
-async function runClientPipeline({ clientId, clientConfig = null, fresh = false, onProgress = null, moduleBriefs = null }) {
+async function runClientPipeline({ clientId, clientConfig = null, fresh = false, onProgress = null, moduleBriefs = null, scope = null, priorScoutBrief = null }) {
   const pipelineRunId = randomUUID();
   const startedAt = new Date().toISOString();
 
@@ -149,8 +157,42 @@ async function runClientPipeline({ clientId, clientConfig = null, fresh = false,
   }
 
   // ── 4. Scout ─────────────────────────────────────────────────────────────────
-  await emitProgress('scout', 'Scanning web + X + reddit for market signals…');
-  const brief = await runXScout(config);
+  // 'social-media-manager' scope reuses the stored scout brief instead of a
+  // fresh search sweep — the strategy roller and Scribe only need signals as
+  // context, and the Marketing Director sections keep their stored values.
+  let brief;
+  if (scope === 'social-media-manager') {
+    if (!priorScoutBrief?.agentData) {
+      return {
+        pipelineRunId,
+        clientId,
+        status: 'failed',
+        failedStage: 'scout',
+        error: 'No stored scout brief to reuse — run the Executive Daily Brief (or Marketing Director) first.',
+        startedAt,
+        completedAt: new Date().toISOString(),
+        providerName: provider.providerName,
+        brief: null,
+        content: null,
+        guardianFlags: null,
+        runCostData: { stageCosts: [] },
+        artifactRefs: [],
+      };
+    }
+    await emitProgress('scout', 'Reusing stored market signals (scoped run)…');
+    brief = {
+      status: 'ok',
+      timestamp: priorScoutBrief.timestamp || null,
+      humanBrief: priorScoutBrief.humanBrief || null,
+      delta: priorScoutBrief.delta || null,
+      agentData: priorScoutBrief.agentData,
+      stageCosts: [],
+      scoutReused: true,
+    };
+  } else {
+    await emitProgress('scout', 'Scanning web + X + reddit for market signals…');
+    brief = await runXScout(config);
+  }
 
   if (brief.status === 'error') {
     const completedAt = new Date().toISOString();
@@ -176,8 +218,10 @@ async function runClientPipeline({ clientId, clientConfig = null, fresh = false,
 
   // ── 4b. News monitor (Phase 1, Tier A) ───────────────────────────────────────
   // Augment Scout's brandMentions with broad news coverage from GDELT (free).
-  // Best-effort: failures never block the brief.
+  // Best-effort: failures never block the brief. Skipped when the scout brief
+  // was reused — no fresh signals to augment.
   try {
+    if (brief.scoutReused) throw new Error('scout brief reused — skipping news fetch');
     const { fetchBrandNews } = require('./news-monitor');
     const newsItems = await fetchBrandNews({
       brandName: config.clientName,
@@ -194,6 +238,34 @@ async function runClientPipeline({ clientId, clientConfig = null, fresh = false,
     }
   } catch (err) {
     console.warn(`[${new Date().toISOString()}] RUNTIME: news monitor skipped — ${err.message}`);
+  }
+
+  // ── 4d. Marketing Director scope — fresh signals are the whole job. Today's
+  // post, guardian flags, and the 30-day campaign keep their stored values
+  // (the projection merges only the keys this result carries). ───────────────
+  if (scope === 'marketing-director') {
+    const completedAtScoped = new Date().toISOString();
+    console.log(`[${completedAtScoped}] RUNTIME: pipeline ${pipelineRunId} completed (scope=marketing-director, scout only)`);
+    return {
+      pipelineRunId,
+      clientId,
+      status: 'succeeded',
+      scope,
+      startedAt,
+      completedAt: completedAtScoped,
+      providerName: provider.providerName,
+      brief,
+      strategy30: null,
+      content: null,
+      contentOpportunities: null,
+      guardianFlags: null,
+      scoutPriorityAction: null,
+      knowledgeBase: null,
+      runCostData: { stageCosts: brief.stageCosts || [] },
+      artifactRefs: [
+        { type: 'brief_json', path: path.join(DATA_DIR, 'briefs', clientId, 'latest.json') },
+      ],
+    };
   }
 
   // ── 4c. Strategy roller — revise the rolling 30-day post strategy ────────────
@@ -255,6 +327,7 @@ async function runClientPipeline({ clientId, clientConfig = null, fresh = false,
     pipelineRunId,
     clientId,
     status: 'succeeded',
+    scope: scope || null,
     startedAt,
     completedAt,
     providerName: provider.providerName,
