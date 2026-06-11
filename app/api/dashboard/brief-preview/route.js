@@ -2,6 +2,20 @@ import { createRequire } from 'module';
 import { readSocialQueue } from '../../../../features/social-posting/twitter-service.js';
 
 const require = createRequire(import.meta.url);
+
+/* Dev only: Next hot-reloads this ESM route, but Node's CJS require cache
+   keeps stale copies of the brief modules — edits to them (or new exports
+   like isBriefAllowed) don't show until a server restart. Evict the
+   stateless brief/intel modules so each route reload requires fresh copies.
+   Stateful singletons (firebase-admin, auth, client-provisioning) stay
+   cached on purpose. */
+if (process.env.NODE_ENV !== 'production') {
+  const STALE_CJS = /(scout-intake[\\/](brief-sections\.cjs|brief-css\.cjs|brief-renderer\.js)|not-the-rug-brief[\\/]post-url-validator\.cjs|intelligence[\\/](_brief-intel|_weather)\.js)$/;
+  for (const key of Object.keys(require.cache)) {
+    if (STALE_CJS.test(key)) delete require.cache[key];
+  }
+}
+
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
 const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
 const { getDashboardBootstrap } = require('../../../../api/_lib/client-provisioning.cjs');
@@ -219,7 +233,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   const companyBriefSection = `
   <section class="page">
     <div class="sec-num">CO</div>
-    ${kicker('Company Brief')}
+    ${kicker('Knowledge Officer')}
     <h2 class="headline">Company<br/>Foundation.</h2>
     <div class="card">
       ${textOr('Headline', bo.headline, 'Not captured — rerun website intake.')}
@@ -252,7 +266,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   const researchBriefSection = `
   <section class="page">
     <div class="sec-num">RP</div>
-    ${kicker('Research Brief')}
+    ${kicker('Knowledge Officer')}
     <h2 class="headline">Search<br/>Parameters.</h2>
     <div class="card">
       ${listOr('Brand keywords', rc.brandKeywords, 'Not set — generated on next intake run.')}
@@ -281,7 +295,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   const campaignSection = `
   <section class="page">
     <div class="sec-num">SC</div>
-    ${kicker('Strategy Brief')}
+    ${kicker('Social Media Manager')}
     <h2 class="headline">30-Day<br/>Campaign.</h2>
     <div class="card">
       ${s30?.today ? valRow('Today', esc([s30.today.angle, s30.today.post].filter(Boolean).join(' — ').slice(0, 280))) : naRow('Today', 'Not generated yet — produced with each executive brief run.')}
@@ -489,7 +503,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   const performanceBriefSection = perfItems.length ? `
   <section class="page">
     <div class="sec-num">PB</div>
-    ${kicker('Performance Brief')}
+    ${kicker('Website Developer')}
     <h2 class="headline">Site<br/>Performance.</h2>
     ${screenshotStrip}
     <div class="card">
@@ -500,7 +514,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   const creativeBriefSection = creativeItems.length ? `
   <section class="page">
     <div class="sec-num">CB</div>
-    ${kicker('Creative Brief')}
+    ${kicker('Creative Director')}
     <h2 class="headline">Creative<br/>System.</h2>
     ${mockupSrc ? `<div class="card" style="padding:0;overflow:hidden;margin-bottom:14px"><img src="${esc(mockupSrc)}" alt="Homepage rendered across devices" style="display:block;width:100%;height:auto"/></div>` : ''}
     <div class="card">
@@ -527,7 +541,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   const scoutFoundSection = `
   <section class="page">
     <div class="sec-num">01</div>
-    ${kicker('Marketing Brief')}
+    ${kicker('Marketing Director')}
     <h2 class="headline">What<br/>Scout<br/>Found.</h2>
     <div class="card" style="white-space:pre-wrap;font-family:'Space Grotesk';font-size:16px;line-height:1.6;color:#181818">${linkify(scoutBrief)}</div>
   </section>`;
@@ -535,7 +549,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   const marketSignalsSection = `
   <section class="page">
     <div class="sec-num">02</div>
-    ${kicker('Marketing Brief')}
+    ${kicker('Marketing Director')}
     <h2 class="headline">Market<br/>Signals.</h2>
     <div class="card">
       ${renderRows(marketSignalRows, 'No market signals surfaced this run.')}
@@ -545,7 +559,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   const competitorSnapshotSection = `
   <section class="page">
     <div class="sec-num">03</div>
-    ${kicker('Competitor Brief')}
+    ${kicker('Marketing Director')}
     <h2 class="headline">Competitor<br/>Snapshot.</h2>
     <div class="card">
       ${renderRows(competitorRows, 'No competitor signals surfaced this run.')}
@@ -555,7 +569,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   const localSignalsSection = `
   <section class="page">
     <div class="sec-num">04</div>
-    ${kicker('Marketing Brief')}
+    ${kicker('Marketing Director')}
     <h2 class="headline">Local<br/>Signals.</h2>
     <div class="card">
       ${renderRows(redditLocalRows, 'No Reddit or local signals for this run.')}
@@ -565,7 +579,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   const viralWindowsSection = `
   <section class="page">
     <div class="sec-num">05</div>
-    ${kicker('Marketing Brief')}
+    ${kicker('Marketing Director')}
     <h2 class="headline">Viral<br/>Windows.</h2>
     <div class="card">
       ${renderRows(opportunityRows, 'No viral windows captured for this run.')}
@@ -575,7 +589,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   const todaysMoveSection = `
   <section class="page">
     <div class="sec-num">06</div>
-    ${kicker('Strategy Brief')}
+    ${kicker('Creative Director')}
     <h2 class="headline">Today's<br/>Move.</h2>
     <div class="brief-grid">
       <div>
@@ -613,7 +627,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   const postScheduleSection = `
   <section class="page">
     <div class="sec-num">XP</div>
-    ${kicker('Strategy Brief')}
+    ${kicker('Social Media Manager')}
     <h2 class="headline">Post<br/>Schedule.</h2>
     <div class="card">
       ${queuePosts.length
@@ -741,6 +755,17 @@ ${bodySections}
  * the last run without re-running the pipeline.
  */
 export async function GET(request) {
+  // Whole-handler guard: any uncaught throw surfaces its message in the
+  // response (and full stack in the server log) instead of a blank 500.
+  try {
+    return await handleGet(request);
+  } catch (err) {
+    console.error('[brief-preview] GET failed:', err);
+    return errorPage(500, `brief-preview failed: ${err?.message || 'unknown error'}`);
+  }
+}
+
+async function handleGet(request) {
   let decoded;
   try {
     decoded = await verifyRequestUser(makeReqShim(request));
@@ -846,37 +871,39 @@ export async function GET(request) {
       request.nextUrl?.searchParams?.get('type') === 'marketing' ||
       dash?.modules?.['marketing-brief']?.lastRunId === dash.latestRunId
     );
+  // Surface render failures with the real message — a bare 500 from a
+  // template crash is undiagnosable from the dashboard overlay.
+  const renderMarketing = () => renderMarketingBriefHtml({
+    marketingBrief,
+    watchlistKols,
+    weather,
+    ...cardRollup,
+    clientName: bootstrap?.client?.companyName || dash.clientName || clientId,
+    websiteUrl: bootstrap?.client?.websiteUrl || null,
+    generatedAt: marketingBrief?.generatedAtIso || null,
+    clientId,
+    userEmail: bootstrap?.userProfile?.email || decoded?.email || null,
+    tier: dash.tier || 'free',
+    briefType,
+  });
+
   if (preferMarketingBrief) {
-    return htmlResponse(renderMarketingBriefHtml({
-      marketingBrief,
-      watchlistKols,
-      weather,
-      ...cardRollup,
-      clientName: bootstrap?.client?.companyName || dash.clientName || clientId,
-      websiteUrl: bootstrap?.client?.websiteUrl || null,
-      generatedAt: marketingBrief.generatedAtIso || null,
-      clientId,
-      userEmail: bootstrap?.userProfile?.email || decoded?.email || null,
-      tier: dash.tier || 'free',
-      briefType,
-    }));
+    try {
+      return htmlResponse(renderMarketing());
+    } catch (err) {
+      console.error('[brief-preview] marketing render failed:', err);
+      return errorPage(500, `Brief render failed: ${err?.message || 'unknown error'}`);
+    }
   }
 
   const scribe = dash.scribe || null;
   if ((!scribe || !scribe.brief) && marketingBrief) {
-    return htmlResponse(renderMarketingBriefHtml({
-      marketingBrief,
-      watchlistKols,
-      weather,
-      ...cardRollup,
-      clientName: bootstrap?.client?.companyName || dash.clientName || clientId,
-      websiteUrl: bootstrap?.client?.websiteUrl || null,
-      generatedAt: marketingBrief.generatedAtIso || null,
-      clientId,
-      userEmail: bootstrap?.userProfile?.email || decoded?.email || null,
-      tier: dash.tier || 'free',
-      briefType,
-    }));
+    try {
+      return htmlResponse(renderMarketing());
+    } catch (err) {
+      console.error('[brief-preview] marketing render failed:', err);
+      return errorPage(500, `Brief render failed: ${err?.message || 'unknown error'}`);
+    }
   }
 
   if (!scribe || !scribe.brief) {

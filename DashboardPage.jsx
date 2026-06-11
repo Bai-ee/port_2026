@@ -1193,15 +1193,15 @@ const CARD_ACTION_EDIT = new Set([
 
 // Brief card → composition key in features/scout-intake/brief-sections.cjs.
 // Clicking an unlocked brief row previews that named brief via
-// /api/dashboard/brief-preview?brief=<key>.
+// /api/dashboard/brief-preview?brief=<key>. Brief names mirror the agent nav;
+// the former Competitor Brief folded into Marketing Director.
 const BRIEF_TYPE_BY_CARD = {
   'marketing-brief': 'executive-daily',
   'onboarding-brief': 'onboarding',
-  'brief-competitor': 'competitor',
-  'brief-marketing': 'marketing',
-  'brief-strategy': 'strategy',
-  'brief-creative': 'creative',
-  'brief-performance': 'performance',
+  'brief-marketing': 'marketing-director',
+  'brief-strategy': 'social-media-manager',
+  'brief-creative': 'creative-director',
+  'brief-performance': 'website-developer',
 };
 
 const buildUnavailableDescription = (subject) => `Insufficient source evidence to determine ${subject} reliably.`;
@@ -2827,11 +2827,16 @@ const DashboardPage = () => {
         headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
       });
-      if (!res.ok) { setNamedBriefView(null); return; }
       const html = await res.text();
+      if (!res.ok) {
+        // Keep the overlay open and name the failure — a silently closing
+        // preview is undiagnosable.
+        setNamedBriefView({ key, error: `HTTP ${res.status} — ${html.replace(/<[^>]*>/g, ' ').trim().slice(0, 300)}` });
+        return;
+      }
       setNamedBriefView({ key, html });
-    } catch {
-      setNamedBriefView(null);
+    } catch (err) {
+      setNamedBriefView({ key, error: err?.message || 'Brief preview fetch failed.' });
     }
   }, [user, apiPath]);
 
@@ -5479,7 +5484,7 @@ const DashboardPage = () => {
   const DETERMINISTIC_CARD_IDS = new Set([
     'audit-summary', 'brief', 'multi-device-view', 'social-preview',
     'business-model', 'seo-performance', 'agent-readiness', 'style-guide', 'design-evaluation', 'industry', 'visibility-snapshot', 'priority-signal',
-    'marketing-brief', 'brief-marketing', 'brief-creative', 'brief-competitor', 'brief-strategy', 'brief-performance',
+    'marketing-brief', 'brief-marketing', 'brief-creative', 'brief-strategy', 'brief-performance',
   ]);
 
   // Marketing Director config cards — they hold settings, so their status dot
@@ -6892,26 +6897,13 @@ const DashboardPage = () => {
     }] : []),
 
     {
-      id: 'brief-competitor',
-      category: 'brief',
-      locked: briefCardLocked('brief-competitor'),
-      number: 'CP',
-      label: 'COMPETITOR BRIEF',
-      title: 'Competitor Brief',
-      description: 'What your competitors shipped, changed, or said since yesterday. Tracks positioning shifts, new launches, messaging patterns, and engagement signals across your vertical.',
-      placeholderLabel: briefCardLocked('brief-competitor') ? 'LOCK' : 'VIEW\nBRIEF',
-      rows: [{ key: 'status', label: 'Status', value: briefCardLocked('brief-competitor') ? 'Coming soon' : 'Included in your plan — click to preview.' }],
-      footerLeft: briefCardLocked('brief-competitor') ? 'Locked' : 'Live',
-      footerRight: '',
-    },
-    {
       id: 'brief-marketing',
       category: 'brief',
       locked: briefCardLocked('brief-marketing'),
-      number: 'MB',
-      label: 'MARKETING BRIEF',
-      title: 'Marketing Brief',
-      description: 'Search visibility, audience growth, and campaign performance in one read. Monitors organic rankings, Core Web Vitals, PageSpeed trends, and discovery opportunities so you catch momentum shifts early.',
+      number: 'MD',
+      label: 'MARKETING DIRECTOR',
+      title: 'Marketing Director',
+      description: 'Market signals, viral windows, watchlist activity, and competitor intel in one read — what shifted in your market and where to enter, sourced from web, X, and Reddit.',
       placeholderLabel: briefCardLocked('brief-marketing') ? 'LOCK' : 'VIEW\nBRIEF',
       rows: [{ key: 'status', label: 'Status', value: briefCardLocked('brief-marketing') ? 'Coming soon' : 'Included in your plan — click to preview.' }],
       footerLeft: briefCardLocked('brief-marketing') ? 'Locked' : 'Live',
@@ -6921,10 +6913,10 @@ const DashboardPage = () => {
       id: 'brief-strategy',
       category: 'brief',
       locked: briefCardLocked('brief-strategy'),
-      number: 'SB',
-      label: 'STRATEGY BRIEF',
-      title: 'Strategy Brief',
-      description: 'The rolling 30-day post strategy as a brief — revised on every run from live signals and rolled up into the Executive Daily Brief.',
+      number: 'SM',
+      label: 'SOCIAL MEDIA MANAGER',
+      title: 'Social Media Manager',
+      description: 'The rolling 30-day post campaign, today\'s move, and the live post schedule — revised on every run from live signals and rolled up into the Executive Daily Brief.',
       placeholderLabel: briefCardLocked('brief-strategy') ? 'LOCK' : (strategy30?.days?.length ? 'STRATEGY' : 'RUN\nBRIEF'),
       rows: !briefCardLocked('brief-strategy') && strategy30?.days?.length
         ? [
@@ -6941,10 +6933,10 @@ const DashboardPage = () => {
       id: 'brief-creative',
       category: 'brief',
       locked: briefCardLocked('brief-creative'),
-      number: 'CB',
-      label: 'CREATIVE BRIEF',
-      title: 'Creative Brief',
-      description: 'Content direction you can act on today. Generates posting opportunities, messaging angles, and visual direction aligned to your brand system — calibrated to platform, audience, and calendar.',
+      number: 'CD',
+      label: 'CREATIVE DIRECTOR',
+      title: 'Creative Director',
+      description: 'Your creative system and today\'s content move — device rendering, share card, brand snapshot, and design evaluation, aligned to your brand system.',
       placeholderLabel: briefCardLocked('brief-creative') ? 'LOCK' : 'VIEW\nBRIEF',
       rows: [{ key: 'status', label: 'Status', value: briefCardLocked('brief-creative') ? 'Coming soon' : 'Included in your plan — click to preview, Run to refresh.' }],
       footerLeft: briefCardLocked('brief-creative') ? 'Locked' : 'Live',
@@ -6953,7 +6945,7 @@ const DashboardPage = () => {
         footerAction: {
           label: moduleRunLoading['brief-creative'] ? '…' : 'Run Brief',
           loading: Boolean(moduleRunLoading['brief-creative']),
-          onClick: () => runBriefProducers('creative', 'brief-creative'),
+          onClick: () => runBriefProducers('creative-director', 'brief-creative'),
         },
       }),
     },
@@ -6961,10 +6953,10 @@ const DashboardPage = () => {
       id: 'brief-performance',
       category: 'brief',
       locked: briefCardLocked('brief-performance'),
-      number: 'PB',
-      label: 'PERFORMANCE BRIEF',
-      title: 'Performance Brief',
-      description: 'Tracks traffic, search visibility, social reach, and conversions over time. Surfaces growth patterns, platform-level performance, and where momentum is building or stalling.',
+      number: 'WD',
+      label: 'WEBSITE DEVELOPER',
+      title: 'Website Developer',
+      description: 'Site speed and conversion health — SEO + performance audit and AI agent readiness, refreshed on demand and rolled up into the Executive Daily Brief.',
       placeholderLabel: briefCardLocked('brief-performance') ? 'LOCK' : 'VIEW\nBRIEF',
       rows: [{ key: 'status', label: 'Status', value: briefCardLocked('brief-performance') ? 'Coming soon' : 'Included in your plan — click to preview, Run to refresh.' }],
       footerLeft: briefCardLocked('brief-performance') ? 'Locked' : 'Live',
@@ -6973,7 +6965,7 @@ const DashboardPage = () => {
         footerAction: {
           label: moduleRunLoading['brief-performance'] ? '…' : 'Run Brief',
           loading: Boolean(moduleRunLoading['brief-performance']),
-          onClick: () => runBriefProducers('performance', 'brief-performance'),
+          onClick: () => runBriefProducers('website-developer', 'brief-performance'),
         },
       }),
     },
@@ -9831,8 +9823,8 @@ const DashboardPage = () => {
                 sandbox="allow-same-origin allow-scripts"
               />
             ) : (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.6)' }}>
-                Assembling brief…
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '0 10%', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', color: namedBriefView.error ? '#b42318' : 'rgba(42,36,32,0.6)' }}>
+                {namedBriefView.error || 'Assembling brief…'}
               </div>
             )}
           </div>

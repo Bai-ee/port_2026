@@ -4,11 +4,13 @@
 //
 // Single source of truth for how brief content is organized: every renderable
 // section is registered here with the dashboard card and agent group it
-// belongs to, and each named brief (Onboarding, Executive Daily, Competitor…)
-// is an ordered list of section ids. The HTML for each section still lives in
-// the renderer (app/api/dashboard/brief-preview/route.js) — this module only
-// describes organization, so tier gating and brief assembly can be driven
-// from one place without touching the design.
+// belongs to, and each named brief is an ordered list of section ids. Brief
+// names mirror the agent nav (Marketing Director, Creative Director, Social
+// Media Manager, Website Developer) — plus Onboarding and the full Executive
+// Daily roll-up. The HTML for each section still lives in the renderer
+// (app/api/dashboard/brief-preview/route.js) — this module only describes
+// organization, so tier gating and brief assembly are driven from one place
+// without touching the design.
 //
 // Agent keys mirror DashboardPage groups:
 //   knowledge  → Knowledge Officer
@@ -21,7 +23,7 @@
 const BRIEF_SECTIONS = {
   'scout-found': {
     title: 'What Scout Found.',
-    kicker: 'Marketing Brief',
+    kicker: 'Marketing Director',
     secNum: '01',
     agent: 'growth',
     agentLabel: 'Marketing Director',
@@ -29,7 +31,7 @@ const BRIEF_SECTIONS = {
   },
   'company-foundation': {
     title: 'Company Foundation.',
-    kicker: 'Company Brief',
+    kicker: 'Knowledge Officer',
     secNum: 'CO',
     agent: 'knowledge',
     agentLabel: 'Knowledge Officer',
@@ -37,7 +39,7 @@ const BRIEF_SECTIONS = {
   },
   'site-performance': {
     title: 'Site Performance.',
-    kicker: 'Performance Brief',
+    kicker: 'Website Developer',
     secNum: 'PB',
     agent: 'website',
     agentLabel: 'Website Developer',
@@ -45,7 +47,7 @@ const BRIEF_SECTIONS = {
   },
   'creative-system': {
     title: 'Creative System.',
-    kicker: 'Creative Brief',
+    kicker: 'Creative Director',
     secNum: 'CB',
     agent: 'content',
     agentLabel: 'Creative Director',
@@ -53,7 +55,7 @@ const BRIEF_SECTIONS = {
   },
   'search-parameters': {
     title: 'Search Parameters.',
-    kicker: 'Research Brief',
+    kicker: 'Knowledge Officer',
     secNum: 'RP',
     agent: 'knowledge',
     agentLabel: 'Knowledge Officer',
@@ -69,7 +71,7 @@ const BRIEF_SECTIONS = {
   },
   'market-signals': {
     title: 'Market Signals.',
-    kicker: 'Marketing Brief',
+    kicker: 'Marketing Director',
     secNum: '02',
     agent: 'growth',
     agentLabel: 'Marketing Director',
@@ -85,7 +87,7 @@ const BRIEF_SECTIONS = {
   },
   'competitor-snapshot': {
     title: 'Competitor Snapshot.',
-    kicker: 'Competitor Brief',
+    kicker: 'Marketing Director',
     secNum: '03',
     agent: 'growth',
     agentLabel: 'Marketing Director',
@@ -93,7 +95,7 @@ const BRIEF_SECTIONS = {
   },
   'local-signals': {
     title: 'Local Signals.',
-    kicker: 'Marketing Brief',
+    kicker: 'Marketing Director',
     secNum: '04',
     agent: 'growth',
     agentLabel: 'Marketing Director',
@@ -101,7 +103,7 @@ const BRIEF_SECTIONS = {
   },
   'viral-windows': {
     title: 'Viral Windows.',
-    kicker: 'Marketing Brief',
+    kicker: 'Marketing Director',
     secNum: '05',
     agent: 'growth',
     agentLabel: 'Marketing Director',
@@ -109,7 +111,7 @@ const BRIEF_SECTIONS = {
   },
   'todays-move': {
     title: "Today's Move.",
-    kicker: 'Strategy Brief',
+    kicker: 'Creative Director',
     secNum: '06',
     agent: 'content',
     agentLabel: 'Creative Director',
@@ -117,15 +119,15 @@ const BRIEF_SECTIONS = {
   },
   'campaign-30day': {
     title: '30-Day Campaign.',
-    kicker: 'Strategy Brief',
+    kicker: 'Social Media Manager',
     secNum: 'SC',
-    agent: 'growth',
-    agentLabel: 'Marketing Director',
+    agent: 'social',
+    agentLabel: 'Social Media Manager',
     card: 'strategy-30',
   },
   'post-schedule': {
     title: 'Post Schedule.',
-    kicker: 'Strategy Brief',
+    kicker: 'Social Media Manager',
     secNum: 'XP',
     agent: 'social',
     agentLabel: 'Social Media Manager',
@@ -135,8 +137,8 @@ const BRIEF_SECTIONS = {
 
 // Named briefs — ordered section lists. 'executive-daily' is the default and
 // MUST stay in exactly today's render order: it is the full report every
-// other brief is carved from. The others become selectable in Phase 2 and
-// tier-gated in Phase 3.
+// other brief is carved from. Agent briefs carry the nav names; the former
+// Competitor Brief folded into Marketing Director.
 const BRIEF_COMPOSITIONS = {
   'executive-daily': {
     label: 'Executive Daily Brief',
@@ -161,32 +163,42 @@ const BRIEF_COMPOSITIONS = {
     label: 'Onboarding Brief',
     sections: ['company-foundation', 'scout-found', 'search-parameters'],
   },
-  'competitor': {
-    label: 'Competitor Brief',
-    sections: ['competitor-snapshot', 'market-signals', 'watchlist'],
+  'marketing-director': {
+    label: 'Marketing Director Brief',
+    sections: ['scout-found', 'market-signals', 'local-signals', 'viral-windows', 'watchlist', 'competitor-snapshot', 'local-weather'],
   },
-  'marketing': {
-    label: 'Marketing Brief',
-    sections: ['scout-found', 'market-signals', 'local-signals', 'viral-windows', 'watchlist'],
-  },
-  'strategy': {
-    label: 'Strategy Brief',
-    sections: ['campaign-30day', 'todays-move', 'post-schedule'],
-  },
-  'creative': {
-    label: 'Creative Brief',
+  'creative-director': {
+    label: 'Creative Director Brief',
     sections: ['creative-system', 'todays-move'],
   },
-  'performance': {
-    label: 'Performance Brief',
-    sections: ['site-performance', 'local-weather'],
+  'social-media-manager': {
+    label: 'Social Media Manager Brief',
+    sections: ['campaign-30day', 'todays-move', 'post-schedule'],
+  },
+  'website-developer': {
+    label: 'Website Developer Brief',
+    sections: ['site-performance'],
   },
 };
 
 const DEFAULT_BRIEF_TYPE = 'executive-daily';
 
+// Legacy composition keys → current ones, so old links keep working.
+const BRIEF_TYPE_ALIASES = {
+  'marketing': 'marketing-director',
+  'competitor': 'marketing-director',
+  'strategy': 'social-media-manager',
+  'creative': 'creative-director',
+  'performance': 'website-developer',
+};
+
+function resolveBriefType(briefType) {
+  const key = BRIEF_TYPE_ALIASES[briefType] || briefType;
+  return BRIEF_COMPOSITIONS[key] ? key : DEFAULT_BRIEF_TYPE;
+}
+
 function getComposition(briefType) {
-  return BRIEF_COMPOSITIONS[briefType] || BRIEF_COMPOSITIONS[DEFAULT_BRIEF_TYPE];
+  return BRIEF_COMPOSITIONS[resolveBriefType(briefType)];
 }
 
 // Tier entitlements — which named briefs each plan can open. Admins bypass.
@@ -197,36 +209,37 @@ const BRIEF_TIER_ACCESS = {
   paid: [
     'onboarding',
     'executive-daily',
-    'competitor',
-    'marketing',
-    'strategy',
-    'creative',
-    'performance',
+    'marketing-director',
+    'creative-director',
+    'social-media-manager',
+    'website-developer',
   ],
 };
 
 function isBriefAllowed(tier, briefType, { isAdmin = false } = {}) {
   if (isAdmin) return true;
   const allowed = BRIEF_TIER_ACCESS[tier] || BRIEF_TIER_ACCESS.free;
-  return allowed.includes(briefType);
+  return allowed.includes(resolveBriefType(briefType));
 }
 
 // Producers — what an individual brief run executes. Module-backed briefs
 // run their card modules via /api/dashboard/modules/run and the results
 // upsert into dashboard_state.moduleBriefs, which the executive brief (and
-// the individual brief view) renders from. Scout-backed briefs (competitor,
-// marketing) and strategy get their producers in phase 4b/4c.
+// the individual brief view) renders from. Scout-backed briefs (marketing
+// director) and social get their producers in phase 4b/4c.
 const BRIEF_PRODUCERS = {
-  creative: { modules: ['multi-device-view', 'social-preview', 'style-guide', 'design-evaluation'] },
-  performance: { modules: ['seo-performance', 'agent-readiness'] },
+  'creative-director': { modules: ['multi-device-view', 'social-preview', 'style-guide', 'design-evaluation'] },
+  'website-developer': { modules: ['seo-performance', 'agent-readiness'] },
 };
 
 module.exports = {
   BRIEF_SECTIONS,
   BRIEF_COMPOSITIONS,
   DEFAULT_BRIEF_TYPE,
+  BRIEF_TYPE_ALIASES,
   BRIEF_TIER_ACCESS,
   BRIEF_PRODUCERS,
   getComposition,
+  resolveBriefType,
   isBriefAllowed,
 };
