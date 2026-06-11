@@ -1,4 +1,5 @@
 import { createRequire } from 'module';
+import { readSocialQueue } from '../../../../features/social-posting/twitter-service.js';
 
 const require = createRequire(import.meta.url);
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
@@ -126,7 +127,7 @@ function hostnameOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return String(url); }
 }
 
-function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [], weather = null, moduleBriefs = [], auditMockupUrl = null, company = null, researchConfig = null, strategyData = null, signalsCore = [], briefType = DEFAULT_BRIEF_TYPE }) {
+function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [], weather = null, moduleBriefs = [], auditMockupUrl = null, company = null, researchConfig = null, strategyData = null, signalsCore = [], socialQueue = [], briefType = DEFAULT_BRIEF_TYPE }) {
   const content = marketingBrief?.content || {};
   const agentData = marketingBrief?.scoutBrief?.agentData || {};
   const opportunities = agentData?.viralOpportunities?.opportunities || marketingBrief?.contentOpportunities || [];
@@ -590,6 +591,40 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     </div>
   </section>`;
 
+  // Post Schedule — the Schedule Posts card's actual queue: what is scheduled,
+  // drafted, posted, or failed on X. Empty queue is stated explicitly.
+  const queuePosts = Array.isArray(socialQueue) ? socialQueue : [];
+  const queueCounts = queuePosts.reduce((acc, p) => {
+    const s = p?.status || 'draft';
+    acc[s] = (acc[s] || 0) + 1;
+    return acc;
+  }, {});
+  const fmtWhen = (iso) => {
+    try { return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }
+    catch { return String(iso || ''); }
+  };
+  const upcomingPosts = queuePosts
+    .filter((p) => (p?.status === 'queued' || p?.status === 'scheduled') && p?.scheduledAt)
+    .sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt))
+    .slice(0, 5);
+  const recentPosted = queuePosts.filter((p) => p?.status === 'posted').slice(0, 3);
+  const failedPosts = queuePosts.filter((p) => p?.status === 'failed').slice(0, 3);
+  const postText = (p) => String(p?.text || p?.content || p?.body || '').slice(0, 160);
+  const postScheduleSection = `
+  <section class="page">
+    <div class="sec-num">XP</div>
+    ${kicker('Strategy Brief')}
+    <h2 class="headline">Post<br/>Schedule.</h2>
+    <div class="card">
+      ${queuePosts.length
+        ? valRow('Queue', esc(['queued', 'scheduled', 'draft', 'posted', 'failed'].filter((s) => queueCounts[s]).map((s) => `${queueCounts[s]} ${s}`).join(' · ')))
+        : naRow('Queue', 'Empty — no posts scheduled. Compose from the Schedule Posts card.')}
+      ${upcomingPosts.map((p) => valRow(esc(fmtWhen(p.scheduledAt)), esc(postText(p) || 'Scheduled post'))).join('')}
+      ${recentPosted.map((p) => valRow('Posted', esc(postText(p) || 'Published to X'))).join('')}
+      ${failedPosts.map((p) => valRow('✗ Failed', `<span style="color:#b42318">${esc(postText(p) || 'Post failed to publish')}</span>`)).join('')}
+    </div>
+  </section>`;
+
   // ── Assembly — section id → rendered HTML, ordered by the named brief's
   // composition (features/scout-intake/brief-sections.cjs). Conditional
   // sections that rendered '' (no data) stay '' — same as before. ──
@@ -607,6 +642,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     'viral-windows': viralWindowsSection,
     'todays-move': todaysMoveSection,
     'campaign-30day': campaignSection,
+    'post-schedule': postScheduleSection,
   };
   const composition = getComposition(briefType);
   const bodySections = composition.sections.map((id) => sectionHtmlById[id] || '').join('\n');
@@ -781,12 +817,19 @@ export async function GET(request) {
     researchConfig,
     strategyData: { strategy30: dash.strategy30 || null, strategy: dash.strategy || null },
     signalsCore: Array.isArray(dash.signals?.core) ? dash.signals.core : [],
+    socialQueue: await readSocialQueue(clientId).catch(() => []),
   };
 
   const marketingBrief = dash.marketingBrief || null;
+  // ?brief=<composition key> selects a named brief (onboarding, competitor,
+  // strategy, …) assembled from the section registry. Unknown keys fall back
+  // to the default executive-daily composition.
+  const briefTypeParam = request.nextUrl?.searchParams?.get('brief') || null;
+  const briefType = briefTypeParam || DEFAULT_BRIEF_TYPE;
   const preferMarketingBrief =
     Boolean(marketingBrief) &&
     (
+      Boolean(briefTypeParam) ||
       request.nextUrl?.searchParams?.get('type') === 'marketing' ||
       dash?.modules?.['marketing-brief']?.lastRunId === dash.latestRunId
     );
@@ -802,6 +845,7 @@ export async function GET(request) {
       clientId,
       userEmail: bootstrap?.userProfile?.email || decoded?.email || null,
       tier: dash.tier || 'free',
+      briefType,
     }));
   }
 
@@ -818,6 +862,7 @@ export async function GET(request) {
       clientId,
       userEmail: bootstrap?.userProfile?.email || decoded?.email || null,
       tier: dash.tier || 'free',
+      briefType,
     }));
   }
 

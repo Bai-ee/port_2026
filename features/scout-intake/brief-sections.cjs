@@ -123,6 +123,14 @@ const BRIEF_SECTIONS = {
     agentLabel: 'Marketing Director',
     card: 'strategy-30',
   },
+  'post-schedule': {
+    title: 'Post Schedule.',
+    kicker: 'Strategy Brief',
+    secNum: 'XP',
+    agent: 'social',
+    agentLabel: 'Social Media Manager',
+    card: 'social-media-posting',
+  },
 };
 
 // Named briefs — ordered section lists. 'executive-daily' is the default and
@@ -146,6 +154,7 @@ const BRIEF_COMPOSITIONS = {
       'viral-windows',
       'todays-move',
       'campaign-30day',
+      'post-schedule',
     ],
   },
   'onboarding': {
@@ -162,7 +171,7 @@ const BRIEF_COMPOSITIONS = {
   },
   'strategy': {
     label: 'Strategy Brief',
-    sections: ['campaign-30day', 'todays-move'],
+    sections: ['campaign-30day', 'todays-move', 'post-schedule'],
   },
   'creative': {
     label: 'Creative Brief',

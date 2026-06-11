@@ -1190,6 +1190,19 @@ const CARD_ACTION_EDIT = new Set([
   'social-media-posting', 'strategy-30', 'strategy-builder',
 ]);
 
+// Brief card → composition key in features/scout-intake/brief-sections.cjs.
+// Clicking an unlocked brief row previews that named brief via
+// /api/dashboard/brief-preview?brief=<key>.
+const BRIEF_TYPE_BY_CARD = {
+  'marketing-brief': 'executive-daily',
+  'onboarding-brief': 'onboarding',
+  'brief-competitor': 'competitor',
+  'brief-marketing': 'marketing',
+  'brief-strategy': 'strategy',
+  'brief-creative': 'creative',
+  'brief-performance': 'performance',
+};
+
 const buildUnavailableDescription = (subject) => `Insufficient source evidence to determine ${subject} reliably.`;
 
 const fmtBytes = (bytes) => {
@@ -2799,6 +2812,27 @@ const DashboardPage = () => {
     })();
     return () => { cancelled = true; };
   }, [user, apiPath, bootstrap?.dashboardState?.marketingBrief?.generatedAtIso, bootstrap?.dashboardState?.modules?.['marketing-brief']?.lastRunId]);
+
+  // Named-brief preview — fetch a composition render (?brief=<key>) on demand
+  // and show it in the brief fullscreen overlay. Keys map to compositions in
+  // features/scout-intake/brief-sections.cjs via BRIEF_TYPE_BY_CARD.
+  const [namedBriefView, setNamedBriefView] = useState(null); // { key, html } | { key, loading: true } | null
+  const openNamedBriefPreview = useCallback(async (key) => {
+    if (!user) return;
+    setNamedBriefView({ key, loading: true });
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(apiPath(`/api/dashboard/brief-preview?brief=${encodeURIComponent(key)}`), {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      });
+      if (!res.ok) { setNamedBriefView(null); return; }
+      const html = await res.text();
+      setNamedBriefView({ key, html });
+    } catch {
+      setNamedBriefView(null);
+    }
+  }, [user, apiPath]);
 
   useEffect(() => {
     if (!user || !client) {
@@ -8421,6 +8455,10 @@ const DashboardPage = () => {
                   }
                   if (isLocked || isInactiveUnlocked || card.id === 'survey-status' || hasBothButtons) return;
                   if (card.id === 'brief' && briefPreviewHtml) { setBriefFullScreen(true); return; }
+                  if (card.category === 'brief' && BRIEF_TYPE_BY_CARD[card.id] && dashboardState?.marketingBrief) {
+                    openNamedBriefPreview(BRIEF_TYPE_BY_CARD[card.id]);
+                    return;
+                  }
                   setActiveTileModal({ title: card.title, description: card.description, dynamicShortDescription: card.dynamicShortDescription || null, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null, recommendation: card.recommendation || null, analyzer: card.analyzer || null, readinessBadge: card.readinessBadge || null });
                 }}
               >
@@ -9712,6 +9750,33 @@ const DashboardPage = () => {
               srcDoc={briefPreviewHtml}
               sandbox="allow-same-origin"
             />
+          </div>
+        </div>
+      )}
+
+      {/* Named-brief preview — composition render fetched on brief-row click */}
+      {namedBriefView && (
+        <div id="brief-fullscreen-overlay" onClick={() => setNamedBriefView(null)}>
+          <div id="brief-fullscreen-container" onClick={(e) => e.stopPropagation()}>
+            <div id="brief-fullscreen-actions">
+              <button
+                type="button"
+                id="brief-fullscreen-close"
+                onClick={() => setNamedBriefView(null)}
+              >[ ✕ ]</button>
+            </div>
+            {namedBriefView.html ? (
+              <iframe
+                id="brief-fullscreen-iframe"
+                title="Brief preview"
+                srcDoc={namedBriefView.html}
+                sandbox="allow-same-origin allow-scripts"
+              />
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.6)' }}>
+                Assembling brief…
+              </div>
+            )}
           </div>
         </div>
       )}
