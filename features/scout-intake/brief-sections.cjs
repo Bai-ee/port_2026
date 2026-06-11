@@ -211,11 +211,22 @@ function isBriefAllowed(tier, briefType, { isAdmin = false } = {}) {
   return allowed.includes(briefType);
 }
 
+// Producers — what an individual brief run executes. Module-backed briefs
+// run their card modules via /api/dashboard/modules/run and the results
+// upsert into dashboard_state.moduleBriefs, which the executive brief (and
+// the individual brief view) renders from. Scout-backed briefs (competitor,
+// marketing) and strategy get their producers in phase 4b/4c.
+const BRIEF_PRODUCERS = {
+  creative: { modules: ['multi-device-view', 'social-preview', 'style-guide', 'design-evaluation'] },
+  performance: { modules: ['seo-performance', 'agent-readiness'] },
+};
+
 module.exports = {
   BRIEF_SECTIONS,
   BRIEF_COMPOSITIONS,
   DEFAULT_BRIEF_TYPE,
   BRIEF_TIER_ACCESS,
+  BRIEF_PRODUCERS,
   getComposition,
   isBriefAllowed,
 };

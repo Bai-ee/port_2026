@@ -18,6 +18,7 @@ const {
   failRun,
 } = require('../../../../../api/_lib/run-lifecycle.cjs');
 const { narrateDqCard } = require('../../../../../features/intelligence/_dq-narrator.js');
+const { buildModuleBriefs } = require('../../../../../features/scout-intake/module-brief-builder.js');
 
 function makeReqShim(request) {
   return {
@@ -238,6 +239,34 @@ export async function POST(request) {
   }
 
   await updateModuleState(clientId, results, runId);
+
+  // Upsert per-module mini-briefs so an individually run brief (Creative,
+  // Performance) rolls straight into the executive brief. Only the modules
+  // that ran are replaced — every other module's stored section is kept,
+  // so partial runs never detract from the full report.
+  try {
+    const freshBriefs = buildModuleBriefs(results, { expectedIds: moduleIds });
+    if (freshBriefs.length) {
+      const stateRef = fb.adminDb.collection('dashboard_state').doc(clientId);
+      const stateSnap = await stateRef.get();
+      const existing = stateSnap.exists ? (stateSnap.data()?.moduleBriefs?.items || []) : [];
+      const freshIds = new Set(freshBriefs.map((b) => b.moduleId));
+      const merged = [...existing.filter((b) => b?.moduleId && !freshIds.has(b.moduleId)), ...freshBriefs];
+      await stateRef.set(
+        {
+          moduleBriefs: {
+            items: merged,
+            generatedAtIso: new Date().toISOString(),
+            runId,
+          },
+          updatedAt: fb.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
+  } catch (mbErr) {
+    console.warn('[modules/run] moduleBriefs upsert non-fatal:', mbErr?.message);
+  }
 
   // Blocking: generate AI description for the Data Stream card before responding.
   // Must complete before the client re-fetches bootstrap so the description lands

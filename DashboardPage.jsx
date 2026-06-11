@@ -43,7 +43,7 @@ import { internalPageGlassCardStyle } from './pageSurfaceSystem';
 import InternalPageBackground from './InternalPageBackground';
 import onboardingConfig from './onboarding/questions.config.cjs';
 import { resolveAnalyzerSource, buildCardDescription, buildModuleStateDescription } from './features/scout-intake/card-description-builder.mjs';
-import { BRIEF_TIER_ACCESS } from './features/scout-intake/brief-sections.cjs';
+import { BRIEF_TIER_ACCESS, BRIEF_PRODUCERS } from './features/scout-intake/brief-sections.cjs';
 import { deriveFindings } from './features/scout-intake/derived-findings.mjs';
 import ModuleCardControls from './components/dashboard/ModuleCardControls';
 import SubscribeModal from './components/payments/SubscribeModal';
@@ -4620,6 +4620,38 @@ const DashboardPage = () => {
     }
   }, [user, moduleRunLoading, doBootstrap, apiPath]);
 
+  // Run an individual brief's producer modules (BRIEF_PRODUCERS in
+  // brief-sections.cjs). Results upsert into dashboard_state.moduleBriefs,
+  // so the brief's section — and the executive brief — refresh together.
+  // Loading state shares moduleRunLoading, keyed by the brief card id.
+  const runBriefProducers = useCallback(async (briefKey, briefCardId) => {
+    const producer = BRIEF_PRODUCERS[briefKey];
+    const moduleIds = producer?.modules || [];
+    if (!user || !moduleIds.length || moduleRunLoading[briefCardId]) return;
+    setModuleRunLoading((prev) => ({ ...prev, [briefCardId]: true }));
+    setIntakeModalDismissed(false);
+    let pollHandle = null;
+    const kickBootstrap = () => { try { doBootstrap(); } catch {} };
+    setTimeout(kickBootstrap, 400);
+    pollHandle = setInterval(kickBootstrap, 2000);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(apiPath('/api/dashboard/modules/run'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cardIds: moduleIds, force: true, autoEnable: true }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Brief run failed.');
+      doBootstrap();
+    } catch {
+      // non-fatal — terminal events show the failure
+    } finally {
+      if (pollHandle) clearInterval(pollHandle);
+      setModuleRunLoading((prev) => ({ ...prev, [briefCardId]: false }));
+    }
+  }, [user, moduleRunLoading, doBootstrap, apiPath]);
+
   const terminalLines = useMemo(
     () => buildTerminalLines(currentRun, dashboardState, latestRunStatus, client),
     [currentRun, dashboardState, latestRunStatus, client]
@@ -6914,9 +6946,16 @@ const DashboardPage = () => {
       title: 'Creative Brief',
       description: 'Content direction you can act on today. Generates posting opportunities, messaging angles, and visual direction aligned to your brand system — calibrated to platform, audience, and calendar.',
       placeholderLabel: briefCardLocked('brief-creative') ? 'LOCK' : 'VIEW\nBRIEF',
-      rows: [{ key: 'status', label: 'Status', value: briefCardLocked('brief-creative') ? 'Coming soon' : 'Included in your plan — click to preview.' }],
+      rows: [{ key: 'status', label: 'Status', value: briefCardLocked('brief-creative') ? 'Coming soon' : 'Included in your plan — click to preview, Run to refresh.' }],
       footerLeft: briefCardLocked('brief-creative') ? 'Locked' : 'Live',
       footerRight: '',
+      ...(briefCardLocked('brief-creative') ? {} : {
+        footerAction: {
+          label: moduleRunLoading['brief-creative'] ? '…' : 'Run Brief',
+          loading: Boolean(moduleRunLoading['brief-creative']),
+          onClick: () => runBriefProducers('creative', 'brief-creative'),
+        },
+      }),
     },
     {
       id: 'brief-performance',
@@ -6927,9 +6966,16 @@ const DashboardPage = () => {
       title: 'Performance Brief',
       description: 'Tracks traffic, search visibility, social reach, and conversions over time. Surfaces growth patterns, platform-level performance, and where momentum is building or stalling.',
       placeholderLabel: briefCardLocked('brief-performance') ? 'LOCK' : 'VIEW\nBRIEF',
-      rows: [{ key: 'status', label: 'Status', value: briefCardLocked('brief-performance') ? 'Coming soon' : 'Included in your plan — click to preview.' }],
+      rows: [{ key: 'status', label: 'Status', value: briefCardLocked('brief-performance') ? 'Coming soon' : 'Included in your plan — click to preview, Run to refresh.' }],
       footerLeft: briefCardLocked('brief-performance') ? 'Locked' : 'Live',
       footerRight: '',
+      ...(briefCardLocked('brief-performance') ? {} : {
+        footerAction: {
+          label: moduleRunLoading['brief-performance'] ? '…' : 'Run Brief',
+          loading: Boolean(moduleRunLoading['brief-performance']),
+          onClick: () => runBriefProducers('performance', 'brief-performance'),
+        },
+      }),
     },
     {
       id: 'brief-preview',
