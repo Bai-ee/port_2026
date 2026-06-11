@@ -9,6 +9,7 @@ const { BRIEF_CSS } = require('../../../../features/scout-intake/brief-css.cjs')
 const { validatePostUrl } = require('../../../../features/not-the-rug-brief/post-url-validator.cjs');
 const { buildWatchlist } = require('../../../../features/intelligence/_brief-intel.js');
 const { getClientWeather } = require('../../../../features/intelligence/_weather.js');
+const { getComposition, DEFAULT_BRIEF_TYPE } = require('../../../../features/scout-intake/brief-sections.cjs');
 
 function makeReqShim(request) {
   return {
@@ -125,7 +126,7 @@ function hostnameOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return String(url); }
 }
 
-function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [], weather = null, moduleBriefs = [], auditMockupUrl = null, company = null, researchConfig = null, strategyData = null, signalsCore = [] }) {
+function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [], weather = null, moduleBriefs = [], auditMockupUrl = null, company = null, researchConfig = null, strategyData = null, signalsCore = [], briefType = DEFAULT_BRIEF_TYPE }) {
   const content = marketingBrief?.content || {};
   const agentData = marketingBrief?.scoutBrief?.agentData || {};
   const opportunities = agentData?.viralOpportunities?.opportunities || marketingBrief?.contentOpportunities || [];
@@ -521,6 +522,95 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     </div>
   </section>` : '';
 
+  // ── Section consts for the remaining inline pages (HTML unchanged) ──
+  const scoutFoundSection = `
+  <section class="page">
+    <div class="sec-num">01</div>
+    ${kicker('Marketing Brief')}
+    <h2 class="headline">What<br/>Scout<br/>Found.</h2>
+    <div class="card" style="white-space:pre-wrap;font-family:'Space Grotesk';font-size:16px;line-height:1.6;color:#181818">${linkify(scoutBrief)}</div>
+  </section>`;
+
+  const marketSignalsSection = `
+  <section class="page">
+    <div class="sec-num">02</div>
+    ${kicker('Marketing Brief')}
+    <h2 class="headline">Market<br/>Signals.</h2>
+    <div class="card">
+      ${renderRows(marketSignalRows, 'No market signals surfaced this run.')}
+    </div>
+  </section>`;
+
+  const competitorSnapshotSection = `
+  <section class="page">
+    <div class="sec-num">03</div>
+    ${kicker('Competitor Brief')}
+    <h2 class="headline">Competitor<br/>Snapshot.</h2>
+    <div class="card">
+      ${renderRows(competitorRows, 'No competitor signals surfaced this run.')}
+    </div>
+  </section>`;
+
+  const localSignalsSection = `
+  <section class="page">
+    <div class="sec-num">04</div>
+    ${kicker('Marketing Brief')}
+    <h2 class="headline">Local<br/>Signals.</h2>
+    <div class="card">
+      ${renderRows(redditLocalRows, 'No Reddit or local signals for this run.')}
+    </div>
+  </section>`;
+
+  const viralWindowsSection = `
+  <section class="page">
+    <div class="sec-num">05</div>
+    ${kicker('Marketing Brief')}
+    <h2 class="headline">Viral<br/>Windows.</h2>
+    <div class="card">
+      ${renderRows(opportunityRows, 'No viral windows captured for this run.')}
+    </div>
+  </section>`;
+
+  const todaysMoveSection = `
+  <section class="page">
+    <div class="sec-num">06</div>
+    ${kicker('Strategy Brief')}
+    <h2 class="headline">Today's<br/>Move.</h2>
+    <div class="brief-grid">
+      <div>
+        <div class="pull">${linkify(xPost || 'No post generated yet.')}</div>
+      </div>
+      <div class="card">
+        <div class="stat-row"><div class="k">Format</div><div class="v">X Post</div></div>
+        ${threadOpener ? `<div class="stat-row"><div class="k">Thread Opener</div><div class="v">${linkify(threadOpener)}</div></div>` : ''}
+        ${contentAngle ? `<div class="stat-row"><div class="k">Angle</div><div class="v">${esc(contentAngle)}</div></div>` : ''}
+        <div class="stat-row"><div class="k">Guardian</div><div class="v">${esc(guardianText)}</div></div>
+        <div class="stat-row"><div class="k">Generated</div><div class="v">${esc(runTimestamp)}</div></div>
+      </div>
+    </div>
+  </section>`;
+
+  // ── Assembly — section id → rendered HTML, ordered by the named brief's
+  // composition (features/scout-intake/brief-sections.cjs). Conditional
+  // sections that rendered '' (no data) stay '' — same as before. ──
+  const sectionHtmlById = {
+    'scout-found': scoutFoundSection,
+    'company-foundation': companyBriefSection,
+    'site-performance': performanceBriefSection,
+    'creative-system': creativeBriefSection,
+    'search-parameters': researchBriefSection,
+    'local-weather': weatherSection,
+    'market-signals': marketSignalsSection,
+    'watchlist': watchlistSection,
+    'competitor-snapshot': competitorSnapshotSection,
+    'local-signals': localSignalsSection,
+    'viral-windows': viralWindowsSection,
+    'todays-move': todaysMoveSection,
+    'campaign-30day': campaignSection,
+  };
+  const composition = getComposition(briefType);
+  const bodySections = composition.sections.map((id) => sectionHtmlById[id] || '').join('\n');
+
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -583,77 +673,12 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     <div class="meta">
       <div><div class="k">Date</div><div class="v">${esc(dateLine)}</div></div>
       <div><div class="k">Site</div><div class="v">${esc(hostnameOf(websiteUrl) || '—')}</div></div>
-      <div><div class="k">Brief Title</div><div class="v">Daily Executive Brief</div></div>
+      <div><div class="k">Brief Title</div><div class="v">${esc(composition.label)}</div></div>
       <div><div class="k">Account</div><div class="v mono" style="font-size:13px">${esc(userEmail || '—')}</div></div>
     </div>
     <div class="marquee"><span>${esc(brandUpper)} • ${esc(brandUpper)} • ${esc(brandUpper)} • ${esc(brandUpper)} • ${esc(brandUpper)}</span></div>
   </section>
-
-  <section class="page">
-    <div class="sec-num">01</div>
-    ${kicker('Marketing Brief')}
-    <h2 class="headline">What<br/>Scout<br/>Found.</h2>
-    <div class="card" style="white-space:pre-wrap;font-family:'Space Grotesk';font-size:16px;line-height:1.6;color:#181818">${linkify(scoutBrief)}</div>
-  </section>
-${companyBriefSection}
-${performanceBriefSection}
-${creativeBriefSection}
-${researchBriefSection}
-${weatherSection}
-  <section class="page">
-    <div class="sec-num">02</div>
-    ${kicker('Marketing Brief')}
-    <h2 class="headline">Market<br/>Signals.</h2>
-    <div class="card">
-      ${renderRows(marketSignalRows, 'No market signals surfaced this run.')}
-    </div>
-  </section>
-${watchlistSection}
-  <section class="page">
-    <div class="sec-num">03</div>
-    ${kicker('Competitor Brief')}
-    <h2 class="headline">Competitor<br/>Snapshot.</h2>
-    <div class="card">
-      ${renderRows(competitorRows, 'No competitor signals surfaced this run.')}
-    </div>
-  </section>
-
-  <section class="page">
-    <div class="sec-num">04</div>
-    ${kicker('Marketing Brief')}
-    <h2 class="headline">Local<br/>Signals.</h2>
-    <div class="card">
-      ${renderRows(redditLocalRows, 'No Reddit or local signals for this run.')}
-    </div>
-  </section>
-
-  <section class="page">
-    <div class="sec-num">05</div>
-    ${kicker('Marketing Brief')}
-    <h2 class="headline">Viral<br/>Windows.</h2>
-    <div class="card">
-      ${renderRows(opportunityRows, 'No viral windows captured for this run.')}
-    </div>
-  </section>
-
-  <section class="page">
-    <div class="sec-num">06</div>
-    ${kicker('Strategy Brief')}
-    <h2 class="headline">Today's<br/>Move.</h2>
-    <div class="brief-grid">
-      <div>
-        <div class="pull">${linkify(xPost || 'No post generated yet.')}</div>
-      </div>
-      <div class="card">
-        <div class="stat-row"><div class="k">Format</div><div class="v">X Post</div></div>
-        ${threadOpener ? `<div class="stat-row"><div class="k">Thread Opener</div><div class="v">${linkify(threadOpener)}</div></div>` : ''}
-        ${contentAngle ? `<div class="stat-row"><div class="k">Angle</div><div class="v">${esc(contentAngle)}</div></div>` : ''}
-        <div class="stat-row"><div class="k">Guardian</div><div class="v">${esc(guardianText)}</div></div>
-        <div class="stat-row"><div class="k">Generated</div><div class="v">${esc(runTimestamp)}</div></div>
-      </div>
-    </div>
-  </section>
-${campaignSection}
+${bodySections}
   <footer>
     <span>Generated · ${esc(new Date(generated).toISOString().slice(0, 19).replace('T', ' '))}</span>
     ${clientId ? `<span>Client · ${esc(clientId)}</span>` : ''}
