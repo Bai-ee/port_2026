@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import SubscribeModal from './components/payments/SubscribeModal';
 import {
   benefits,
   plans,
@@ -18,7 +19,7 @@ const glassPanelStyle = {
   borderRadius: '1.5rem',
 };
 
-const renderPageBody = (pageId) => {
+const renderPageBody = (pageId, { onSubscribe } = {}) => {
   if (pageId === 'work') {
     return (
       <div style={gridStyle}>
@@ -125,6 +126,17 @@ const renderPageBody = (pageId) => {
             </article>
           ))}
         </div>
+        <article id="engage-subscription-card" style={featureCardStyle}>
+          <span style={eyebrowStyle}>Membership</span>
+          <h3 style={cardTitleStyle}>Monthly Subscription</h3>
+          <p style={priceStyle}>$5<span style={unitStyle}>/mo</span></p>
+          <p style={copyStyle}>Ongoing access to tools and updates. Cancel anytime.</p>
+          <button type="button" className="cta-pill-btn" style={{ ...primaryButtonStyle, border: 'none' }} onClick={onSubscribe}>
+            <img src="/img/profile2_400x400.png?v=1774582808" style={avatarStyle} alt="Bryan Balli, AI design engineer and creative technologist" />
+            Subscribe
+            <span style={btnIconStyle}>↗</span>
+          </button>
+        </article>
       </div>
     );
   }
@@ -180,6 +192,7 @@ const PortfolioModal = ({ activePageId, onClose, onOpenPage }) => {
     return portfolioPageMap[activePageId];
   }, [activePageId]);
   const bodyRef = useRef(null);
+  const [subscribeOpen, setSubscribeOpen] = useState(false);
 
   useEffect(() => {
     if (!page) {
@@ -188,7 +201,7 @@ const PortfolioModal = ({ activePageId, onClose, onOpenPage }) => {
 
     const previousOverflow = document.body.style.overflow;
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && !subscribeOpen) {
         onClose();
       }
     };
@@ -204,13 +217,14 @@ const PortfolioModal = ({ activePageId, onClose, onOpenPage }) => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [onClose, page]);
+  }, [onClose, page, subscribeOpen]);
 
   if (!page) {
     return null;
   }
 
   return (
+    <>
     <div style={overlayStyle} onClick={onClose}>
       <div style={{ ...modalStyle, ...glassPanelStyle }} onClick={(event) => event.stopPropagation()}>
         <div style={modalTopStyle}>
@@ -239,10 +253,12 @@ const PortfolioModal = ({ activePageId, onClose, onOpenPage }) => {
           ))}
         </div>
         <div ref={bodyRef} style={modalBodyStyle}>
-          {renderPageBody(page.id)}
+          {renderPageBody(page.id, { onSubscribe: () => setSubscribeOpen(true) })}
         </div>
       </div>
     </div>
+    <SubscribeModal open={subscribeOpen} onClose={() => setSubscribeOpen(false)} />
+    </>
   );
 };
 
