@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anatomy of the Executive Brief</title>
+<style>
+  :root {
+    --ink: #16140f;
+    --ink-soft: #5c574b;
+    --paper: #f4f1ea;
+    --paper-card: #fbf9f4;
+    --line: #d9d3c5;
+    --accent: #b4540a;
+    --accent-soft: #f3e3d3;
+    --mono: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, monospace;
+    --serifish: Georgia, "Times New Roman", serif;
+    --sans: -apple-system, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px 120px; }
+
+  .kicker {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 14px;
+  }
+  h1, h2, h3 { font-family: var(--serifish); font-weight: 400; }
+  h2 { font-size: 30px; margin-bottom: 8px; }
+  .section-lede { color: var(--ink-soft); max-width: 640px; margin-bottom: 36px; font-size: 15px; }
+
+  /* ---------- hero ---------- */
+  #anatomy-hero-shell {
+    padding: 96px 0 72px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 72px;
+  }
+  #anatomy-hero-shell h1 {
+    font-size: clamp(40px, 7vw, 76px);
+    line-height: 1.02;
+    letter-spacing: -0.01em;
+    max-width: 820px;
+  }
+  #anatomy-hero-shell h1 em { font-style: italic; color: var(--accent); }
+  #anatomy-hero-shell p {
+    margin-top: 22px;
+    max-width: 560px;
+    color: var(--ink-soft);
+    font-size: 17px;
+  }
+  #anatomy-hero-meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 28px;
+    margin-top: 44px;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  #anatomy-hero-meta-row .stat b {
+    display: block;
+    font-size: 28px;
+    font-family: var(--serifish);
+    font-weight: 400;
+    color: var(--ink);
+  }
+  #anatomy-hero-meta-row .stat span { color: var(--ink-soft); letter-spacing: 0.1em; text-transform: uppercase; }
+
+  /* ---------- layer diagram ---------- */
+  #aggregation-layers-panel { margin-bottom: 88px; }
+  .layer-stack { display: grid; gap: 10px; }
+  .layer {
+    background: var(--paper-card);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 18px 22px;
+    display: grid;
+    grid-template-columns: 120px 1fr 1fr;
+    gap: 18px;
+    align-items: baseline;
+  }
+  .layer .tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .layer .name { font-family: var(--serifish); font-size: 18px; }
+  .layer .desc { color: var(--ink-soft); font-size: 13.5px; }
+  .layer-arrow {
+    text-align: center;
+    font-family: var(--mono);
+    color: var(--ink-soft);
+    font-size: 13px;
+    padding: 2px 0;
+  }
+  .layer.is-output { border-color: var(--accent); background: var(--accent-soft); }
+
+  /* ---------- section registry ---------- */
+  #section-registry-panel { margin-bottom: 88px; }
+  .registry-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+  .section-card {
+    background: var(--paper-card);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 20px 22px 18px;
+    position: relative;
+  }
+  .section-card .sec-num {
+    position: absolute;
+    top: 18px;
+    right: 20px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+  .section-card .sec-kicker {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 6px;
+    min-height: 13px;
+  }
+  .section-card h3 { font-size: 20px; margin-bottom: 8px; }
+  .section-card .sec-source { color: var(--ink-soft); font-size: 13px; margin-bottom: 12px; }
+  .section-card .sec-meta {
+    display: flex;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+  }
+  .section-card .sec-meta span {
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 2px 7px;
+    color: var(--ink-soft);
+  }
+  .section-card .sec-meta .key { color: var(--ink); background: #efebe0; }
+
+  /* ---------- compositions ---------- */
+  #compositions-panel { margin-bottom: 88px; }
+  .composition-row {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--paper-card);
+    padding: 20px 22px;
+    margin-bottom: 12px;
+  }
+  .composition-row.is-default { border-color: var(--accent); }
+  .composition-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .composition-head h3 { font-size: 20px; }
+  .composition-head .comp-key {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-soft);
+  }
+  .composition-head .comp-key b { color: var(--accent); font-weight: 600; }
+  .chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 3px 9px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--paper);
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .default-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 3px;
+    padding: 3px 8px;
+  }
+
+  /* ---------- tiers ---------- */
+  #tier-entitlements-panel { margin-bottom: 88px; }
+  .tier-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .tier-card {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--paper-card);
+    padding: 24px;
+  }
+  .tier-card h3 { font-size: 22px; margin-bottom: 4px; }
+  .tier-card .tier-sub { color: var(--ink-soft); font-size: 13px; margin-bottom: 16px; }
+  .tier-card ul { list-style: none; }
+  .tier-card li {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    padding: 7px 0;
+    border-top: 1px solid var(--line);
+  }
+  .tier-card li.locked { color: var(--ink-soft); text-decoration: line-through; text-decoration-color: #c9c2b2; }
+  .tier-card li.locked::after { content: " — upgrade"; text-decoration: none; font-size: 10.5px; color: var(--accent); }
+  .admin-note {
+    margin-top: 14px;
+    font-size: 13px;
+    color: var(--ink-soft);
+    border-left: 3px solid var(--accent);
+    padding-left: 12px;
+  }
+
+  /* ---------- pipeline ---------- */
+  #assembly-pipeline-panel { margin-bottom: 88px; }
+  .pipeline-steps { counter-reset: step; }
+  .pipe-step {
+    display: grid;
+    grid-template-columns: 56px 1fr;
+    gap: 18px;
+    padding: 22px 0;
+    border-top: 1px solid var(--line);
+  }
+  .pipe-step:last-child { border-bottom: 1px solid var(--line); }
+  .pipe-step::before {
+    counter-increment: step;
+    content: counter(step, decimal-leading-zero);
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+    padding-top: 4px;
+  }
+  .pipe-step h3 { font-size: 19px; margin-bottom: 5px; }
+  .pipe-step p { color: var(--ink-soft); font-size: 14px; max-width: 640px; }
+  .pipe-step code {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: #efebe0;
+    border-radius: 3px;
+    padding: 1px 5px;
+  }
+
+  /* ---------- extras / delivery ---------- */
+  #delivery-extras-panel .extras-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+  .extra-card {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--paper-card);
+    padding: 22px;
+  }
+  .extra-card h3 { font-size: 18px; margin-bottom: 8px; }
+  .extra-card p { color: var(--ink-soft); font-size: 13.5px; }
+  .extra-card code { font-family: var(--mono); font-size: 11.5px; background: #efebe0; border-radius: 3px; padding: 1px 5px; }
+
+  footer {
+    margin-top: 96px;
+    padding-top: 28px;
+    border-top: 1px solid var(--line);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-soft);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  @media (max-width: 800px) {
+    .registry-grid, .tier-grid { grid-template-columns: 1fr; }
+    .layer { grid-template-columns: 1fr; gap: 4px; }
+    #delivery-extras-panel .extras-grid { grid-template-columns: 1fr; }
+    #anatomy-hero-shell { padding: 64px 0 48px; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+  <!-- ============ HERO ============ -->
+  <header id="anatomy-hero-shell">
+    <span class="kicker">System Documentation · Brief Engine</span>
+    <h1>Anatomy of the <em>Executive Brief</em>.</h1>
+    <p>One brief is not one document. It is a composition — an ordered selection of registered sections, each fed by its own data layer, assembled on demand and gated by tier.</p>
+    <div id="anatomy-hero-meta-row">
+      <div class="stat"><b>14</b><span>Registered Sections</span></div>
+      <div class="stat"><b>7</b><span>Named Compositions</span></div>
+      <div class="stat"><b>6</b><span>Data Layers</span></div>
+      <div class="stat"><b>2</b><span>Access Tiers</span></div>
+    </div>
+  </header>
+
+  <!-- ============ DATA LAYERS ============ -->
+  <section id="aggregation-layers-panel">
+    <span class="kicker">01 · Aggregation</span>
+    <h2>Where the content comes from.</h2>
+    <p class="section-lede">Every section pulls from exactly one of six data layers. Layers are produced at different times — some at intake, some by the AI pipeline, some live at render.</p>
+
+    <div class="layer-stack">
+      <div class="layer">
+        <span class="tag">Crawl + Edit</span>
+        <span class="name">Snapshot</span>
+        <span class="desc">Site evidence crawled, brand overview synthesized, then merged with user edits. Survives reruns.</span>
+      </div>
+      <div class="layer">
+        <span class="tag">Deterministic</span>
+        <span class="name">Module Briefs</span>
+        <span class="desc">Six audit mini-summaries (SEO, agent readiness, devices, social preview, style guide, design eval) compiled without an LLM. Missing modules get explicit NO DATA entries.</span>
+      </div>
+      <div class="layer">
+        <span class="tag">AI Pipeline</span>
+        <span class="name">Scout Brief</span>
+        <span class="desc">Narrative brief plus agent data: KOL activity, category trends, competitor intel, Reddit and local demand signals, brand mentions, viral windows.</span>
+      </div>
+      <div class="layer">
+        <span class="tag">AI Pipeline</span>
+        <span class="name">Strategy</span>
+        <span class="desc">30-day rolling campaign, today's content move, posting angles and revision notes.</span>
+      </div>
+      <div class="layer">
+        <span class="tag">User Config</span>
+        <span class="name">Client Config</span>
+        <span class="desc">Research parameters: brand keywords, category terms, competitors, watchlist KOLs, search focus, local signals, events.</span>
+      </div>
+      <div class="layer">
+        <span class="tag">Live at Render</span>
+        <span class="name">Weather + Social Queue</span>
+        <span class="desc">Local weather API and the scheduled post queue, fetched fresh when the brief renders.</span>
+      </div>
+      <div class="layer-arrow">▼ assembled by composition ▼</div>
+      <div class="layer is-output">
+        <span class="tag">Output</span>
+        <span class="name">Rendered Brief</span>
+        <span class="desc">Single HTML document: ordered sections, responsive CSS, print pagination, pinned email CTA.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SECTION REGISTRY ============ -->
+  <section id="section-registry-panel">
+    <span class="kicker">02 · The Section Registry</span>
+    <h2>Fourteen building blocks.</h2>
+    <p class="section-lede">Every renderable unit is registered once, with a stable key, a kicker label, an owning agent, and a single data source. Compositions can only reference what is registered here.</p>
+
+    <div class="registry-grid">
+      <article class="section-card">
+        <span class="sec-num">01</span>
+        <span class="sec-kicker">Marketing Brief</span>
+        <h3>What Scout Found.</h3>
+        <p class="sec-source">AI-synthesized narrative from the Scout pipeline — the editorial spine of the brief.</p>
+        <div class="sec-meta"><span class="key">scout-found</span><span>agent: growth</span></div>
+      </article>
+      <article class="section-card">
+        <span class="sec-num">CO</span>
+        <span class="sec-kicker">Company Brief</span>
+        <h3>Company Foundation.</h3>
+        <p class="sec-source">Brand overview from the website crawl, merged with user edits in the snapshot.</p>
+        <div class="sec-meta"><span class="key">company-foundation</span><span>agent: knowledge</span></div>
+      </article>
+      <article class="section-card">
+        <span class="sec-num">PB</span>
+        <span class="sec-kicker">Performance Brief</span>
+        <h3>Site Performance.</h3>
+        <p class="sec-source">SEO and PageSpeed audit results from the deterministic module briefs.</p>
+        <div class="sec-meta"><span class="key">site-performance</span><span>agent: website</span></div>
+      </article>
+      <article class="section-card">
+        <span class="sec-num">CB</span>
+        <span class="sec-kicker">Creative Brief</span>
+        <h3>Creative System.</h3>
+        <p class="sec-source">Fonts, colors, and design system extracted from the site's style guide module.</p>
+        <div class="sec-meta"><span class="key">creative-system</span><span>agent: content</span></div>
+      </article>
+      <article class="section-card">
+        <span class="sec-num">RP</span>
+        <span class="sec-kicker">Research Brief</span>
+        <h3>Search Parameters.</h3>
+        <p class="sec-source">The research configuration driving Scout: keywords, competitors, focus areas.</p>
+        <div class="sec-meta"><span class="key">search-parameters</span><span>agent: knowledge</span></div>
+      </article>
+      <article class="section-card">
+        <span class="sec-num">WX</span>
+        <span class="sec-kicker">&nbsp;</span>
+        <h3>Local Weather.</h3>
+        <p class="sec-source">Live weather for the client's locale, fetched at render time.</p>
+        <div class="sec-meta"><span class="key">local-weather</span><span>agent: growth</span></div>
+      </article>
+      <article class="section-card">
+        <span class="sec-num">02</span>
+        <span class="sec-kicker">Marketing Brief</span>
+        <h3>Market Signals.</h3>
+        <p class="sec-source">KOL activity, category trends, and core signals from Scout agent data.</p>
+        <div class="sec-meta"><span class="key">market-signals</span><span>agent: growth</span></div>
+      </article>
+      <article class="section-card">
+        <span class="sec-num">W</span>
+        <span class="sec-kicker">&nbsp;</span>
+        <h3>Watchlist.</h3>
+        <p class="sec-source">User-configured KOL watchlist matched against fresh agent data.</p>
+        <div class="sec-meta"><span class="key">watchlist</span><span>agent: growth</span></div>
+      </article>
+      <article class="section-card">
+        <span class="sec-num">03</span>
+        <span class="sec-kicker">Competitor Brief</span>
+        <h3>Competitor Snapshot.</h3>
+        <p class="sec-source">Competitor intelligence gathered by the Scout pipeline.</p>
+        <div class="sec-meta"><span class="key">competitor-snapshot</span><span>agent: growth</span></div>
+      </article>
+      <article class="section-card">
+        <span class="sec-num">04</span>
+        <span class="sec-kicker">Marketing Brief</span>
+        <h3>Local Signals.</h3>
+        <p class="sec-source">Reddit signals, local demand, and brand mentions in the client's market.</p>
+        <div class="sec-meta"><span class="key">local-signals</span><span>agent: growth</span></div>
+      </article>
+      <article class="section-card">
+        <span class="sec-num">05</span>
+        <span class="sec-kicker">Marketing Brief</span>
+        <h3>Viral Windows.</h3>
+        <p class="sec-source">Time-sensitive viral opportunities surfaced by agent data.</p>
+        <div class="sec-meta"><span class="key">viral-windows</span><span>agent: growth</span></div>
+      </article>
+      <article class="section-card">
+        <span class="sec-num">06</span>
+        <span class="sec-kicker">Strategy Brief</span>
+        <h3>Today's Move.</h3>
+        <p class="sec-source">The single recommended action: post copy, thread opener, content angle.</p>
+        <div class="sec-meta"><span class="key">todays-move</span><span>agent: content</span></div>
+      </article>
+      <article class="section-card">
+        <span class="sec-num">SC</span>
+        <span class="sec-kicker">Strategy Brief</span>
+        <h3>30-Day Campaign.</h3>
+        <p class="sec-source">Rolling campaign plan with 7-day detail and revision notes.</p>
+        <div class="sec-meta"><span class="key">campaign-30day</span><span>agent: growth</span></div>
+      </article>
+      <article class="section-card">
+        <span class="sec-num">XP</span>
+        <span class="sec-kicker">Strategy Brief</span>
+        <h3>Post Schedule.</h3>
+        <p class="sec-source">Queued social posts read live from the posting service.</p>
+        <div class="sec-meta"><span class="key">post-schedule</span><span>agent: social</span></div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ============ COMPOSITIONS ============ -->
+  <section id="compositions-panel">
+    <span class="kicker">03 · Compositions</span>
+    <h2>Seven named briefs, one registry.</h2>
+    <p class="section-lede">A composition is an ordered subset of registered sections, addressable by URL: <code style="font-family:var(--mono);font-size:13px;background:#efebe0;border-radius:3px;padding:1px 5px;">?brief=&lt;key&gt;</code>. The same section can appear in many briefs — content is aggregated once, composed many ways.</p>
+
+    <div class="composition-row is-default">
+      <div class="composition-head">
+        <h3>Executive Daily Brief</h3>
+        <span class="comp-key"><b>?brief=executive-daily</b> · 14 sections</span>
+        <span class="default-badge">Default</span>
+      </div>
+      <div class="chip-row">
+        <span class="chip">scout-found</span><span class="chip">company-foundation</span><span class="chip">site-performance</span><span class="chip">creative-system</span><span class="chip">search-parameters</span><span class="chip">local-weather</span><span class="chip">market-signals</span><span class="chip">watchlist</span><span class="chip">competitor-snapshot</span><span class="chip">local-signals</span><span class="chip">viral-windows</span><span class="chip">todays-move</span><span class="chip">campaign-30day</span><span class="chip">post-schedule</span>
+      </div>
+    </div>
+
+    <div class="composition-row">
+      <div class="composition-head">
+        <h3>Onboarding Brief</h3>
+        <span class="comp-key"><b>?brief=onboarding</b> · 3 sections</span>
+      </div>
+      <div class="chip-row">
+        <span class="chip">company-foundation</span><span class="chip">scout-found</span><span class="chip">search-parameters</span>
+      </div>
+    </div>
+
+    <div class="composition-row">
+      <div class="composition-head">
+        <h3>Competitor Brief</h3>
+        <span class="comp-key"><b>?brief=competitor</b> · 3 sections</span>
+      </div>
+      <div class="chip-row">
+        <span class="chip">competitor-snapshot</span><span class="chip">market-signals</span><span class="chip">watchlist</span>
+      </div>
+    </div>
+
+    <div class="composition-row">
+      <div class="composition-head">
+        <h3>Marketing Brief</h3>
+        <span class="comp-key"><b>?brief=marketing</b> · 5 sections</span>
+      </div>
+      <div class="chip-row">
+        <span class="chip">scout-found</span><span class="chip">market-signals</span><span class="chip">local-signals</span><span class="chip">viral-windows</span><span class="chip">watchlist</span>
+      </div>
+    </div>
+
+    <div class="composition-row">
+      <div class="composition-head">
+        <h3>Strategy Brief</h3>
+        <span class="comp-key"><b>?brief=strategy</b> · 3 sections</span>
+      </div>
+      <div class="chip-row">
+        <span class="chip">campaign-30day</span><span class="chip">todays-move</span><span class="chip">post-schedule</span>
+      </div>
+    </div>
+
+    <div class="composition-row">
+      <div class="composition-head">
+        <h3>Creative Brief</h3>
+        <span class="comp-key"><b>?brief=creative</b> · 2 sections</span>
+      </div>
+      <div class="chip-row">
+        <span class="chip">creative-system</span><span class="chip">todays-move</span>
+      </div>
+    </div>
+
+    <div class="composition-row">
+      <div class="composition-head">
+        <h3>Performance Brief</h3>
+        <span class="comp-key"><b>?brief=performance</b> · 2 sections</span>
+      </div>
+      <div class="chip-row">
+        <span class="chip">site-performance</span><span class="chip">local-weather</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TIERS ============ -->
+  <section id="tier-entitlements-panel">
+    <span class="kicker">04 · Entitlements</span>
+    <h2>Tier gating at a single point.</h2>
+    <p class="section-lede">Access is checked once — <code style="font-family:var(--mono);font-size:13px;background:#efebe0;border-radius:3px;padding:1px 5px;">isBriefAllowed(tier, briefType)</code> — at the preview route. Denied briefs return a 403 upgrade page; the dashboard renders them as locked cards.</p>
+
+    <div class="tier-grid">
+      <div class="tier-card">
+        <h3>Free</h3>
+        <p class="tier-sub">Default tier · 2 of 7 briefs</p>
+        <ul>
+          <li>onboarding</li>
+          <li>executive-daily</li>
+          <li class="locked">competitor</li>
+          <li class="locked">marketing</li>
+          <li class="locked">strategy</li>
+          <li class="locked">creative</li>
+          <li class="locked">performance</li>
+        </ul>
+      </div>
+      <div class="tier-card">
+        <h3>Paid</h3>
+        <p class="tier-sub">Full access · 7 of 7 briefs</p>
+        <ul>
+          <li>onboarding</li>
+          <li>executive-daily</li>
+          <li>competitor</li>
+          <li>marketing</li>
+          <li>strategy</li>
+          <li>creative</li>
+          <li>performance</li>
+        </ul>
+      </div>
+    </div>
+    <p class="admin-note">Admins bypass the tier check entirely, via an email lookup against the admins collection.</p>
+  </section>
+
+  <!-- ============ PIPELINE ============ -->
+  <section id="assembly-pipeline-panel">
+    <span class="kicker">05 · Assembly Pipeline</span>
+    <h2>From crawl to rendered page.</h2>
+    <p class="section-lede">Four stages. The first two produce durable data; the last two compose and deliver it.</p>
+
+    <div class="pipeline-steps">
+      <div class="pipe-step">
+        <div>
+          <h3>Intake run</h3>
+          <p>The free-tier intake pipeline runs the enabled audit modules, builds the six deterministic <code>moduleBriefs</code>, crawls site evidence, synthesizes the brand overview, and merges it with any user edits. It then queues a chained scout-brief run.</p>
+        </div>
+      </div>
+      <div class="pipe-step">
+        <div>
+          <h3>Scout-brief run</h3>
+          <p>The AI pipeline receives the module briefs (folded into the Scribe prompt) and produces the marketing brief narrative, agent data, and the 30-day strategy — all persisted to <code>dashboard_state</code>.</p>
+        </div>
+      </div>
+      <div class="pipe-step">
+        <div>
+          <h3>Composition + gating</h3>
+          <p>The preview route reads <code>?brief=&lt;key&gt;</code>, resolves the named composition (default <code>executive-daily</code>), and checks tier entitlement. Denied access renders the upgrade page instead.</p>
+        </div>
+      </div>
+      <div class="pipe-step">
+        <div>
+          <h3>Render</h3>
+          <p>The route aggregates all six layers — dashboard state, client config, module briefs, live weather, and the social queue — and renders the ordered sections as a single HTML document with responsive and print CSS.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DELIVERY EXTRAS ============ -->
+  <section id="delivery-extras-panel">
+    <span class="kicker">06 · Delivery Surface</span>
+    <h2>How the brief reaches the reader.</h2>
+    <p class="section-lede">The rendered brief carries its own delivery affordances.</p>
+
+    <div class="extras-grid">
+      <div class="extra-card">
+        <h3>Email CTA</h3>
+        <p>A pinned <em>Send to my email</em> button with an animated border, hidden in print. It posts a message to the parent dashboard iframe to trigger the subscribe flow.</p>
+      </div>
+      <div class="extra-card">
+        <h3>Dashboard previews</h3>
+        <p>Dashboard cards map to composition keys via <code>BRIEF_TYPE_BY_CARD</code>. A click opens the brief fullscreen; tier-locked briefs show a lock and upgrade prompt instead.</p>
+      </div>
+      <div class="extra-card">
+        <h3>Responsive + print</h3>
+        <p>Grid collapses to one column under 900px, stat rows restack under 640px, and each section becomes its own page when printed.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Brief Engine · Section registry → Compositions → Entitlements → Render</span>
+    <span>docs/brief-anatomy.html</span>
+  </footer>
+
+</main>
+</body>
+</html>

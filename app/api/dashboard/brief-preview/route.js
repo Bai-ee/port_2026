@@ -701,6 +701,18 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
      the headline so the cover sits where it did before. */
   .cover .title-stack{margin-top:56px}
   .cover .headline{margin:0 0 10px}
+  /* Brief name — sits above the date headline inside the title stack;
+     slightly heavier and larger than .sub (300 / clamp(20px,2.4vw,34px)).
+     flex-basis:100% forces its own row in the flex title-stack. */
+  .cover-brief-name{
+    flex-basis:100%;
+    width:100%;
+    font-family:"Space Grotesk",sans-serif;
+    font-weight:500;
+    font-size:clamp(23px,2.8vw,38px);
+    line-height:1.2;
+    margin:0 0 8px;
+  }
   .cover .sub{margin:0 0 16px}
   .cover .meta{margin-top:18px;padding-top:14px;gap:14px 32px}
   .cover .marquee{margin-top:20px}
@@ -717,6 +729,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
           <span class="arrow" aria-hidden="true">↗</span>
         </button>
       </div>
+      <div class="cover-brief-name">${esc(composition.label)}</div>
       <h1 class="headline">${headlineDateLines}</h1>
     </div>
     <p class="sub">${esc(headline)}</p>
