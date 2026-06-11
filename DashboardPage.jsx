@@ -43,6 +43,7 @@ import { internalPageGlassCardStyle } from './pageSurfaceSystem';
 import InternalPageBackground from './InternalPageBackground';
 import onboardingConfig from './onboarding/questions.config.cjs';
 import { resolveAnalyzerSource, buildCardDescription, buildModuleStateDescription } from './features/scout-intake/card-description-builder.mjs';
+import { BRIEF_TIER_ACCESS } from './features/scout-intake/brief-sections.cjs';
 import { deriveFindings } from './features/scout-intake/derived-findings.mjs';
 import ModuleCardControls from './components/dashboard/ModuleCardControls';
 import SubscribeModal from './components/payments/SubscribeModal';
@@ -3770,6 +3771,17 @@ const DashboardPage = () => {
   const displayProfile = bootstrap.userProfile || userProfile;
   const currentRun = recentRuns[0] || null;
   const dashboardState = bootstrap.dashboardState;
+
+  // Brief entitlements — locked flags on the brief rows follow the tier map
+  // in brief-sections.cjs (one source of truth with the API gate); admins
+  // see every brief.
+  const briefTier = dashboardState?.tier === 'paid' ? 'paid' : 'free';
+  const allowedBriefs = new Set(
+    isAdmin
+      ? Object.values(BRIEF_TYPE_BY_CARD)
+      : (BRIEF_TIER_ACCESS[briefTier] || BRIEF_TIER_ACCESS.free)
+  );
+  const briefCardLocked = (cardId) => !allowedBriefs.has(BRIEF_TYPE_BY_CARD[cardId]);
   const getKnowledgeBaseSources = (...candidateLists) => {
     for (const list of candidateLists) {
       if (Array.isArray(list) && list.length) return list;
@@ -6850,73 +6862,73 @@ const DashboardPage = () => {
     {
       id: 'brief-competitor',
       category: 'brief',
-      locked: true,
+      locked: briefCardLocked('brief-competitor'),
       number: 'CP',
       label: 'COMPETITOR BRIEF',
       title: 'Competitor Brief',
       description: 'What your competitors shipped, changed, or said since yesterday. Tracks positioning shifts, new launches, messaging patterns, and engagement signals across your vertical.',
-      placeholderLabel: 'LOCK',
-      rows: [{ key: 'status', label: 'Status', value: 'Coming soon' }],
-      footerLeft: 'Locked',
+      placeholderLabel: briefCardLocked('brief-competitor') ? 'LOCK' : 'VIEW\nBRIEF',
+      rows: [{ key: 'status', label: 'Status', value: briefCardLocked('brief-competitor') ? 'Coming soon' : 'Included in your plan — click to preview.' }],
+      footerLeft: briefCardLocked('brief-competitor') ? 'Locked' : 'Live',
       footerRight: '',
     },
     {
       id: 'brief-marketing',
       category: 'brief',
-      locked: true,
+      locked: briefCardLocked('brief-marketing'),
       number: 'MB',
       label: 'MARKETING BRIEF',
       title: 'Marketing Brief',
       description: 'Search visibility, audience growth, and campaign performance in one read. Monitors organic rankings, Core Web Vitals, PageSpeed trends, and discovery opportunities so you catch momentum shifts early.',
-      placeholderLabel: 'LOCK',
-      rows: [{ key: 'status', label: 'Status', value: 'Coming soon' }],
-      footerLeft: 'Locked',
+      placeholderLabel: briefCardLocked('brief-marketing') ? 'LOCK' : 'VIEW\nBRIEF',
+      rows: [{ key: 'status', label: 'Status', value: briefCardLocked('brief-marketing') ? 'Coming soon' : 'Included in your plan — click to preview.' }],
+      footerLeft: briefCardLocked('brief-marketing') ? 'Locked' : 'Live',
       footerRight: '',
     },
     {
       id: 'brief-strategy',
       category: 'brief',
-      locked: !isAdmin,
+      locked: briefCardLocked('brief-strategy'),
       number: 'SB',
       label: 'STRATEGY BRIEF',
       title: 'Strategy Brief',
       description: 'The rolling 30-day post strategy as a brief — revised on every run from live signals and rolled up into the Executive Daily Brief.',
-      placeholderLabel: isAdmin ? (strategy30?.days?.length ? 'STRATEGY' : 'RUN\nBRIEF') : 'LOCK',
-      rows: isAdmin && strategy30?.days?.length
+      placeholderLabel: briefCardLocked('brief-strategy') ? 'LOCK' : (strategy30?.days?.length ? 'STRATEGY' : 'RUN\nBRIEF'),
+      rows: !briefCardLocked('brief-strategy') && strategy30?.days?.length
         ? [
             ...(strategy30.today?.post ? [{ key: 'bs-today', label: 'Today', value: strategy30.today.post }] : []),
             ...(strategy30.revisionNotes ? [{ key: 'bs-notes', label: 'Revision', value: strategy30.revisionNotes }] : []),
             { key: 'bs-span', label: 'Plan', value: `${strategy30.days.length} days · from ${strategy30.days[0]?.date || '—'}` },
             { key: 'bs-rollup', label: 'Roll-up', value: 'Included in Executive Daily Brief' },
           ]
-        : [{ key: 'status', label: 'Status', value: isAdmin ? 'Run the Executive Daily Brief to generate.' : 'Coming soon' }],
-      footerLeft: isAdmin ? (strategy30?.days?.length ? 'Live' : 'Pending') : 'Locked',
+        : [{ key: 'status', label: 'Status', value: briefCardLocked('brief-strategy') ? 'Coming soon' : 'Run the Executive Daily Brief to generate.' }],
+      footerLeft: briefCardLocked('brief-strategy') ? 'Locked' : (strategy30?.days?.length ? 'Live' : 'Pending'),
       footerRight: isAdmin ? 'ADMIN' : '',
     },
     {
       id: 'brief-creative',
       category: 'brief',
-      locked: true,
+      locked: briefCardLocked('brief-creative'),
       number: 'CB',
       label: 'CREATIVE BRIEF',
       title: 'Creative Brief',
       description: 'Content direction you can act on today. Generates posting opportunities, messaging angles, and visual direction aligned to your brand system — calibrated to platform, audience, and calendar.',
-      placeholderLabel: 'LOCK',
-      rows: [{ key: 'status', label: 'Status', value: 'Coming soon' }],
-      footerLeft: 'Locked',
+      placeholderLabel: briefCardLocked('brief-creative') ? 'LOCK' : 'VIEW\nBRIEF',
+      rows: [{ key: 'status', label: 'Status', value: briefCardLocked('brief-creative') ? 'Coming soon' : 'Included in your plan — click to preview.' }],
+      footerLeft: briefCardLocked('brief-creative') ? 'Locked' : 'Live',
       footerRight: '',
     },
     {
       id: 'brief-performance',
       category: 'brief',
-      locked: true,
+      locked: briefCardLocked('brief-performance'),
       number: 'PB',
       label: 'PERFORMANCE BRIEF',
       title: 'Performance Brief',
       description: 'Tracks traffic, search visibility, social reach, and conversions over time. Surfaces growth patterns, platform-level performance, and where momentum is building or stalling.',
-      placeholderLabel: 'LOCK',
-      rows: [{ key: 'status', label: 'Status', value: 'Coming soon' }],
-      footerLeft: 'Locked',
+      placeholderLabel: briefCardLocked('brief-performance') ? 'LOCK' : 'VIEW\nBRIEF',
+      rows: [{ key: 'status', label: 'Status', value: briefCardLocked('brief-performance') ? 'Coming soon' : 'Included in your plan — click to preview.' }],
+      footerLeft: briefCardLocked('brief-performance') ? 'Locked' : 'Live',
       footerRight: '',
     },
     {

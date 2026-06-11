@@ -189,4 +189,33 @@ function getComposition(briefType) {
   return BRIEF_COMPOSITIONS[briefType] || BRIEF_COMPOSITIONS[DEFAULT_BRIEF_TYPE];
 }
 
-module.exports = { BRIEF_SECTIONS, BRIEF_COMPOSITIONS, DEFAULT_BRIEF_TYPE, getComposition };
+// Tier entitlements — which named briefs each plan can open. Admins bypass.
+// Drives both the API gate (?brief=) and the dashboard's locked brief rows,
+// so unlocking a brief for a tier is a one-line change here.
+const BRIEF_TIER_ACCESS = {
+  free: ['onboarding', 'executive-daily'],
+  paid: [
+    'onboarding',
+    'executive-daily',
+    'competitor',
+    'marketing',
+    'strategy',
+    'creative',
+    'performance',
+  ],
+};
+
+function isBriefAllowed(tier, briefType, { isAdmin = false } = {}) {
+  if (isAdmin) return true;
+  const allowed = BRIEF_TIER_ACCESS[tier] || BRIEF_TIER_ACCESS.free;
+  return allowed.includes(briefType);
+}
+
+module.exports = {
+  BRIEF_SECTIONS,
+  BRIEF_COMPOSITIONS,
+  DEFAULT_BRIEF_TYPE,
+  BRIEF_TIER_ACCESS,
+  getComposition,
+  isBriefAllowed,
+};

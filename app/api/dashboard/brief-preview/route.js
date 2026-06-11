@@ -10,7 +10,7 @@ const { BRIEF_CSS } = require('../../../../features/scout-intake/brief-css.cjs')
 const { validatePostUrl } = require('../../../../features/not-the-rug-brief/post-url-validator.cjs');
 const { buildWatchlist } = require('../../../../features/intelligence/_brief-intel.js');
 const { getClientWeather } = require('../../../../features/intelligence/_weather.js');
-const { getComposition, DEFAULT_BRIEF_TYPE } = require('../../../../features/scout-intake/brief-sections.cjs');
+const { getComposition, DEFAULT_BRIEF_TYPE, isBriefAllowed } = require('../../../../features/scout-intake/brief-sections.cjs');
 
 function makeReqShim(request) {
   return {
@@ -826,6 +826,19 @@ export async function GET(request) {
   // to the default executive-daily composition.
   const briefTypeParam = request.nextUrl?.searchParams?.get('brief') || null;
   const briefType = briefTypeParam || DEFAULT_BRIEF_TYPE;
+  // Tier gate — named briefs follow BRIEF_TIER_ACCESS; admins bypass. The
+  // admins lookup only runs when the tier alone would deny, so the common
+  // path costs no extra read.
+  if (briefTypeParam && !isBriefAllowed(dash.tier || 'free', briefType)) {
+    let isAdminUser = false;
+    try {
+      const email = String(decoded.email || '').trim().toLowerCase();
+      if (email) isAdminUser = (await fb.adminDb.collection('admins').doc(email).get()).exists;
+    } catch { /* treat as non-admin */ }
+    if (!isAdminUser) {
+      return errorPage(403, 'This brief is part of the paid plan — upgrade to unlock it.');
+    }
+  }
   const preferMarketingBrief =
     Boolean(marketingBrief) &&
     (
