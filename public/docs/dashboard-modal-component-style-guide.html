@@ -231,7 +231,12 @@
       cursor: pointer;
       font-size: 12px;
       font-weight: 700;
-      transition: color 0.15s ease;
+      transition: color var(--dur-base) ease, background var(--dur-fast) ease;
+    }
+
+    .tab:hover:not(.is-active) {
+      color: var(--ink);
+      background: rgba(255,255,255,0.38);
     }
 
     .tab.is-active {
@@ -246,6 +251,14 @@
       flex-wrap: wrap;
       gap: 12px;
       align-items: center;
+    }
+
+    /* ── Interaction tokens ─────────────────────────────────────────── */
+    :root {
+      --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+      --dur-fast: 140ms;
+      --dur-base: 160ms;
+      --dur-spring: 220ms;
     }
 
     @property --cta-angle {
@@ -275,10 +288,26 @@
       text-decoration: none;
       cursor: pointer;
       box-shadow: inset 0 1px 0 rgba(255,255,255,0.5);
-      transition: background 0.15s ease, box-shadow 0.15s ease;
+      transition:
+        background var(--dur-base) ease,
+        box-shadow var(--dur-base) ease,
+        border-color var(--dur-base) ease,
+        transform var(--dur-spring) var(--ease-spring),
+        color var(--dur-fast) ease;
     }
 
-    .btn:hover { background: rgba(255,255,255,0.76); }
+    .btn:hover:not(:disabled) {
+      background: rgba(255,255,255,0.82);
+      border-color: rgba(42,36,32,0.18);
+      box-shadow: 0 4px 14px rgba(42,36,32,0.08), inset 0 1px 0 rgba(255,255,255,0.5);
+      transform: translateY(-1px);
+    }
+
+    .btn:active:not(:disabled) {
+      transform: translateY(0px);
+      transition-duration: 80ms;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.5);
+    }
 
     .cta-pill-btn {
       isolation: isolate;
@@ -343,6 +372,17 @@
       background:
         linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%),
         linear-gradient(135deg, var(--accent-a) 0%, var(--accent-b) 52%, var(--accent-c) 100%);
+      box-shadow:
+        0 0 28px 6px rgba(0,200,228,0.36),
+        0 4px 14px rgba(0,0,0,0.26),
+        inset 0 1px 0 rgba(255,255,255,0.28),
+        inset 0 -1px 0 rgba(0,0,0,0.1);
+      transform: translateY(-1px);
+    }
+
+    .cta-pill-btn:active {
+      transform: translateY(0px);
+      transition-duration: 80ms;
     }
 
     .cta-pill-btn > * {
@@ -428,6 +468,8 @@
 
     .btn-outline:hover {
       background: #f7f7f7;
+      border-color: #222;
+      transform: translateY(-1px);
     }
 
     .btn-nav {
@@ -440,6 +482,32 @@
       font: 700 18px/1 var(--font-ui);
       letter-spacing: 0;
       text-transform: none;
+    }
+
+    .btn-nav:hover {
+      background: rgba(255,255,255,0.94);
+      border-color: rgba(42,36,32,0.22);
+    }
+
+    .btn-dark:hover {
+      background: rgba(42,36,32,0.82);
+      box-shadow: 0 4px 14px rgba(42,36,32,0.2), inset 0 1px 0 rgba(255,255,255,0.1);
+    }
+
+    .btn-danger:hover {
+      background: rgba(159,31,23,0.06);
+      border-color: rgba(159,31,23,0.4);
+    }
+
+    .btn-icon:hover { transform: scale(1.14); }
+
+    .btn-icon-cta:hover {
+      box-shadow:
+        0 0 28px 8px rgba(0,200,228,0.38),
+        0 4px 14px rgba(0,0,0,0.28),
+        inset 0 1px 0 rgba(255,255,255,0.28),
+        inset 0 -1px 0 rgba(0,0,0,0.1);
+      transform: scale(1.08);
     }
 
     .source-control {
@@ -456,6 +524,17 @@
         0 1px 0 rgba(255,255,255,0.8),
         inset 0 1px 0 rgba(255,255,255,0.6),
         0 10px 26px rgba(42,36,32,0.08);
+      transition:
+        border-color var(--dur-base) ease,
+        box-shadow var(--dur-base) ease;
+    }
+
+    .source-control:hover {
+      border-color: rgba(42,36,32,0.22);
+      box-shadow:
+        0 1px 0 rgba(255,255,255,0.8),
+        inset 0 1px 0 rgba(255,255,255,0.6),
+        0 14px 34px rgba(42,36,32,0.12);
     }
 
     .source-value {
@@ -487,6 +566,19 @@
       letter-spacing: 0;
       text-transform: none;
       box-shadow: 0 8px 18px rgba(42,36,32,0.1), inset 0 1px 0 rgba(255,255,255,0.86);
+      transition:
+        box-shadow var(--dur-base) ease,
+        transform var(--dur-spring) var(--ease-spring);
+    }
+
+    .btn-update:hover {
+      box-shadow: 0 12px 28px rgba(42,36,32,0.16), inset 0 1px 0 rgba(255,255,255,0.86);
+      transform: translateY(-1px);
+    }
+
+    .btn-update:active {
+      transform: translateY(0px);
+      transition-duration: 80ms;
     }
 
     .btn-update::before {
@@ -714,7 +806,12 @@
       letter-spacing: 0.12em;
       text-transform: uppercase;
       cursor: pointer;
-      transition: background 0.15s ease, color 0.15s ease;
+      transition: background var(--dur-base) ease, color var(--dur-fast) ease;
+    }
+
+    .segmented button:hover:not(.is-active) {
+      background: rgba(42,36,32,0.06);
+      color: var(--ink);
     }
 
     .segmented .is-active {
@@ -741,17 +838,29 @@
       text-align: left;
       cursor: pointer;
       box-shadow: inset 0 1px 0 rgba(255,255,255,0.45);
-      transition: background 0.15s ease, border-color 0.15s ease;
+      transition:
+        background var(--dur-base) ease,
+        border-color var(--dur-base) ease,
+        box-shadow var(--dur-base) ease,
+        transform var(--dur-spring) var(--ease-spring);
     }
 
     .toggle-card:hover {
       background: rgba(255,255,255,1);
-      border-color: rgba(42,36,32,0.18);
+      border-color: rgba(42,36,32,0.22);
+      box-shadow: 0 3px 12px rgba(42,36,32,0.07), inset 0 1px 0 rgba(255,255,255,0.45);
+      transform: translateY(-1px);
+    }
+
+    .toggle-card:active {
+      transform: translateY(0px);
+      transition-duration: 80ms;
     }
 
     .toggle-card.is-on {
       background: var(--surface-strong);
       border-color: rgba(42,36,32,0.22);
+      box-shadow: 0 2px 8px rgba(42,36,32,0.06), inset 0 1px 0 rgba(255,255,255,0.45);
     }
 
     .check {
@@ -823,6 +932,17 @@
       background: rgba(255,255,255,0.5);
       color: var(--ink-soft);
       font-size: 12px;
+      transition: color var(--dur-fast) ease, border-color var(--dur-fast) ease, background var(--dur-fast) ease;
+    }
+
+    button.chip, a.chip, .chip[role="button"] {
+      cursor: pointer;
+    }
+
+    button.chip:hover, a.chip:hover, .chip[role="button"]:hover {
+      background: rgba(42,36,32,0.07);
+      border-color: rgba(42,36,32,0.28);
+      color: var(--ink);
     }
 
     .chip-success {
@@ -831,16 +951,31 @@
       background: rgba(40,95,59,0.08);
     }
 
+    button.chip-success:hover, .chip-success[role="button"]:hover {
+      background: rgba(40,95,59,0.16);
+      border-color: rgba(40,95,59,0.5);
+    }
+
     .chip-warning {
       color: var(--warning);
       border-color: rgba(103,83,61,0.24);
       background: rgba(185,167,141,0.14);
     }
 
+    button.chip-warning:hover, .chip-warning[role="button"]:hover {
+      background: rgba(185,167,141,0.26);
+      border-color: rgba(103,83,61,0.44);
+    }
+
     .chip-danger {
       color: var(--danger);
       border-color: rgba(159,31,23,0.24);
       background: rgba(159,31,23,0.06);
+    }
+
+    button.chip-danger:hover, .chip-danger[role="button"]:hover {
+      background: rgba(159,31,23,0.12);
+      border-color: rgba(159,31,23,0.44);
     }
 
     .data-table {
@@ -871,6 +1006,28 @@
       color: var(--ink-soft);
       font-size: 14px;
       line-height: 1.45;
+      transition: color var(--dur-fast) ease;
+    }
+
+    .data-table tbody tr {
+      cursor: pointer;
+      transition: background var(--dur-base) ease;
+    }
+
+    .data-table tbody tr:hover {
+      background: rgba(42,36,32,0.03);
+    }
+
+    .data-table tbody tr:hover td {
+      color: var(--ink);
+    }
+
+    .data-table tbody tr.is-selected {
+      background: rgba(42,36,32,0.05);
+    }
+
+    .data-table tbody tr.is-selected td {
+      color: var(--ink);
     }
 
     .data-table tr:last-child td { border-bottom: 0; }
@@ -883,9 +1040,14 @@
       display: grid;
       grid-template-columns: minmax(180px, 0.45fr) minmax(0, 1fr);
       gap: 14px;
-      padding: 8px 0;
+      padding: 8px 4px;
       border-bottom: 1px solid var(--line-soft);
+      border-radius: 4px;
+      cursor: default;
+      transition: background var(--dur-base) ease;
     }
+
+    .stat-row:hover { background: rgba(42,36,32,0.02); }
 
     .stat-row:last-child { border-bottom: 0; }
 
@@ -909,6 +1071,16 @@
       border: 1px solid var(--line);
       border-radius: var(--radius);
       background: var(--surface-strong);
+      transition:
+        border-color var(--dur-base) ease,
+        box-shadow var(--dur-base) ease,
+        transform var(--dur-spring) var(--ease-spring);
+    }
+
+    .list-card:hover {
+      border-color: rgba(42,36,32,0.2);
+      box-shadow: 0 4px 16px rgba(42,36,32,0.07);
+      transform: translateY(-1px);
     }
 
     .list-head {
@@ -986,6 +1158,17 @@
       border: 1px solid var(--line);
       border-radius: var(--radius);
       background: rgba(255,255,255,0.78);
+      cursor: pointer;
+      transition:
+        border-color var(--dur-base) ease,
+        box-shadow var(--dur-base) ease,
+        transform var(--dur-spring) var(--ease-spring);
+    }
+
+    .metric-card:hover {
+      border-color: rgba(42,36,32,0.22);
+      box-shadow: 0 6px 20px rgba(42,36,32,0.09);
+      transform: translateY(-2px);
     }
 
     .metric-value {
@@ -1064,6 +1247,19 @@
       background: rgba(255,255,255,0.62);
       text-align: center;
       cursor: pointer;
+      transition:
+        border-color var(--dur-base) ease,
+        background var(--dur-base) ease;
+    }
+
+    .file-drop:hover {
+      border-color: rgba(42,36,32,0.44);
+      background: rgba(255,255,255,0.88);
+    }
+
+    .file-drop.is-dragging {
+      border-color: var(--accent-a);
+      background: rgba(0,173,181,0.06);
     }
 
     .file-drop strong {
@@ -1089,6 +1285,15 @@
       color: var(--ink);
       font-size: 14px;
       font-weight: 600;
+      cursor: pointer;
+      transition:
+        background var(--dur-fast) ease,
+        border-color var(--dur-fast) ease;
+    }
+
+    .checkbox-row:hover {
+      background: rgba(255,255,255,0.94);
+      border-color: rgba(42,36,32,0.2);
     }
 
     .checkbox-row input {
@@ -1105,6 +1310,7 @@
       background: rgba(255,255,255,0.72);
       font-size: 13px;
       line-height: 1.45;
+      transition: opacity var(--dur-base) ease;
     }
 
     .notice-success {
@@ -1129,6 +1335,24 @@
       border: 1px solid var(--line);
       border-radius: var(--radius);
       background: rgba(255,255,255,0.76);
+      transition:
+        border-color var(--dur-base) ease,
+        box-shadow var(--dur-base) ease,
+        transform var(--dur-spring) var(--ease-spring);
+    }
+
+    .result-card:hover,
+    .queue-card:hover,
+    .saved-card:hover,
+    .post-card:hover {
+      border-color: rgba(42,36,32,0.2);
+      box-shadow: 0 4px 16px rgba(42,36,32,0.08);
+      transform: translateY(-2px);
+    }
+
+    .result-card:hover .distance-pill {
+      border-color: rgba(42,36,32,0.28);
+      color: var(--ink);
     }
 
     .result-head,
@@ -1247,12 +1471,19 @@
       grid-template-columns: minmax(0, 1fr) 90px 100px;
       gap: 10px;
       align-items: center;
-      padding: 8px 0;
+      padding: 8px 4px;
       border-bottom: 1px solid var(--line-soft);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background var(--dur-base) ease;
     }
 
     .inventory-row:last-child {
       border-bottom: 0;
+    }
+
+    .inventory-row:hover {
+      background: rgba(42,36,32,0.03);
     }
 
     .inventory-row strong,
@@ -1313,6 +1544,134 @@
       top: 20px;
     }
 
+    /* ── Section L — interaction block primitives ─────────────────────── */
+
+    .interaction-block {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+      border: 1px solid var(--line-soft);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,0.44);
+    }
+
+    .interaction-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding-top: 6px;
+      border-top: 1px solid var(--line-soft);
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--ink-muted);
+      font: 10px/1.3 var(--font-mono);
+      letter-spacing: 0.06em;
+    }
+
+    .legend-dot {
+      flex-shrink: 0;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: rgba(42,36,32,0.22);
+    }
+
+    .legend-dot--spring { background: var(--accent-b); }
+    .legend-dot--accent { background: linear-gradient(90deg, var(--accent-a), var(--accent-c)); }
+    .legend-dot--dark   { background: var(--ink); }
+    .legend-dot--snap   { background: rgba(42,36,32,0.55); }
+    .legend-dot--star   { background: #f59e0b; }
+    .legend-dot--focus  { background: rgba(42,36,32,0.36); }
+    .legend-dot--danger { background: var(--danger); }
+
+    /* Star button */
+    .star-btn {
+      background: none;
+      border: none;
+      padding: 6px;
+      font-size: 22px;
+      line-height: 1;
+      color: rgba(42,36,32,0.22);
+      cursor: pointer;
+      border-radius: 6px;
+      transition:
+        color var(--dur-base) ease,
+        transform var(--dur-spring) var(--ease-spring);
+    }
+
+    .star-btn:hover { color: #f59e0b; transform: scale(1.25); }
+    .star-btn.is-on  { color: #f59e0b; }
+    .star-btn.is-on:hover { color: #d97706; }
+
+    /* Action link */
+    .action-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--ink-soft);
+      text-decoration: none;
+      font: 700 13px/1 var(--font-mono);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      transition:
+        color var(--dur-fast) ease,
+        transform var(--dur-spring) var(--ease-spring);
+    }
+
+    .action-link:hover {
+      color: var(--ink);
+      transform: translate(2px, -2px);
+    }
+
+    /* Input error state */
+    .input-error {
+      border-color: rgba(159,31,23,0.44) !important;
+      box-shadow: 0 0 0 3px rgba(159,31,23,0.1), inset 0 1px 0 rgba(255,255,255,0.55) !important;
+    }
+
+    /* Easing reference table */
+    .easing-grid {
+      display: grid;
+      gap: 0;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .easing-row {
+      display: grid;
+      grid-template-columns: 120px minmax(200px, auto) minmax(0,1fr);
+      gap: 0;
+      align-items: center;
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--line-soft);
+      transition: background var(--dur-fast) ease;
+    }
+
+    .easing-row:last-child { border-bottom: 0; }
+    .easing-row:hover { background: rgba(42,36,32,0.03); }
+
+    .easing-name {
+      color: var(--accent-b);
+      font: 700 11px/1.3 var(--font-mono);
+      letter-spacing: 0.08em;
+    }
+
+    .easing-value {
+      color: var(--ink);
+      font: 700 11px/1.3 var(--font-mono);
+      letter-spacing: 0.04em;
+    }
+
+    .easing-use {
+      color: var(--ink-muted);
+      font: 11px/1.45 var(--font-mono);
+    }
+
     @media (max-width: 920px) {
       .guide-hero,
       .component-grid,
@@ -1340,6 +1699,7 @@
 
     @media (max-width: 580px) {
       .toggle-grid { grid-template-columns: 1fr; }
+      .easing-row { grid-template-columns: 1fr; gap: 3px; }
     }
   </style>
 </head>
@@ -1784,6 +2144,300 @@
             </article>
           </section>
 
+          <section class="section" id="section-interaction-states">
+            <div class="section-head">
+              <span class="index">L</span>
+              <div>
+                <h3>Interaction &amp; Animation States</h3>
+                <p>Every interactive primitive has a defined rest → hover → active → disabled arc. Hover any item below to see its live state.</p>
+              </div>
+              <span class="chip chip-success">Live</span>
+            </div>
+
+            <!-- L1 — Button states -->
+            <div class="interaction-block">
+              <span class="label">Buttons — rest / hover / active / disabled</span>
+              <div class="button-row" style="flex-wrap:wrap;">
+                <button class="btn" type="button">Ghost</button>
+                <button class="btn btn-outline" type="button">Outline</button>
+                <button class="btn btn-dark" type="button">Dark</button>
+                <button class="btn btn-danger" type="button">Danger</button>
+                <button class="btn btn-update" type="button">Update <span class="cta-icon">↗</span></button>
+                <button class="btn cta-pill-btn" type="button"><span class="cta-text">Primary CTA</span><span class="cta-icon">↗</span></button>
+                <button class="btn btn-icon" type="button" aria-label="icon">✦</button>
+                <button class="btn btn-icon-cta" type="button" aria-label="refresh">↻</button>
+                <button class="btn" type="button" disabled>Disabled</button>
+              </div>
+              <div class="interaction-legend">
+                <span class="legend-item"><span class="legend-dot"></span>translateY(-1px) lift on hover</span>
+                <span class="legend-item"><span class="legend-dot legend-dot--spring"></span>spring easing on lift: cubic-bezier(0.34, 1.56, 0.64, 1)</span>
+                <span class="legend-item"><span class="legend-dot legend-dot--snap"></span>snap back on :active — 80ms</span>
+              </div>
+            </div>
+
+            <!-- L2 — Tab states -->
+            <div class="interaction-block">
+              <span class="label">Tabs — inactive / hover / active</span>
+              <div class="tabs" style="border-radius:var(--radius); overflow:hidden; border:1px solid var(--line);">
+                <button class="tab is-active" type="button">Active</button>
+                <button class="tab" type="button">Hover me</button>
+                <button class="tab" type="button">Inactive</button>
+              </div>
+              <div class="interaction-legend">
+                <span class="legend-item"><span class="legend-dot"></span>color ink-soft → ink on hover (160ms)</span>
+                <span class="legend-item"><span class="legend-dot legend-dot--accent"></span>active: gradient underline accent-a → accent-b → accent-c</span>
+              </div>
+            </div>
+
+            <!-- L3 — Segmented control states -->
+            <div class="interaction-block">
+              <span class="label">Segmented Control — inactive / hover / active</span>
+              <div class="segmented">
+                <button type="button" class="is-active">Active</button>
+                <button type="button">Hover me</button>
+                <button type="button">Option C</button>
+              </div>
+              <div class="interaction-legend">
+                <span class="legend-item"><span class="legend-dot"></span>hover: rgba(42,36,32,0.06) fill + ink color (160ms)</span>
+                <span class="legend-item"><span class="legend-dot legend-dot--dark"></span>active: ink background + white text</span>
+              </div>
+            </div>
+
+            <!-- L4 — Toggle card states -->
+            <div class="interaction-block">
+              <span class="label">Toggle Cards — off / hover / on (click to toggle)</span>
+              <div class="toggle-grid">
+                <button class="toggle-card" type="button" id="demo-toggle-a">
+                  <span class="check"></span>
+                  <span><span class="toggle-title">Off State</span><span class="toggle-desc">Click to activate. Hover lifts card.</span></span>
+                </button>
+                <button class="toggle-card is-on" type="button" id="demo-toggle-b">
+                  <span class="check">✓</span>
+                  <span><span class="toggle-title">On State</span><span class="toggle-desc">Active. Border + check filled.</span></span>
+                </button>
+              </div>
+              <div class="interaction-legend">
+                <span class="legend-item"><span class="legend-dot"></span>hover: translateY(-1px) + shadow lift (220ms spring)</span>
+                <span class="legend-item"><span class="legend-dot legend-dot--dark"></span>is-on: check filled ink, border rgba(0.22)</span>
+              </div>
+            </div>
+
+            <!-- L5 — Table row states -->
+            <div class="interaction-block">
+              <span class="label">Table Rows — rest / hover / selected (click to select)</span>
+              <table class="data-table">
+                <thead><tr><th>Module</th><th>Status</th><th>Action</th><th>Owner</th></tr></thead>
+                <tbody id="demo-table-body">
+                  <tr><td>Marketing Brief</td><td><span class="chip chip-success">Ready</span></td><td>Hover this row</td><td>System</td></tr>
+                  <tr><td>Knowledge Base</td><td><span class="chip chip-warning">Partial</span></td><td>Click to select</td><td>Client</td></tr>
+                  <tr class="is-selected"><td>Social Queue</td><td><span class="chip">Idle</span></td><td>Selected state</td><td>Operator</td></tr>
+                </tbody>
+              </table>
+              <div class="interaction-legend">
+                <span class="legend-item"><span class="legend-dot"></span>hover: rgba(42,36,32,0.03) row tint + ink color (160ms)</span>
+                <span class="legend-item"><span class="legend-dot legend-dot--dark"></span>selected: rgba(42,36,32,0.05) persistent</span>
+              </div>
+            </div>
+
+            <!-- L6 — Card hover states -->
+            <div class="interaction-block">
+              <span class="label">Cards — rest / hover (translateY + shadow)</span>
+              <div style="display:grid; gap:8px;">
+                <article class="list-card" style="cursor:pointer;">
+                  <div class="list-head">
+                    <span class="chip">Base</span>
+                    <span class="list-title">List card — hover lifts</span>
+                  </div>
+                  <div class="list-body">border-color shift + translateY(-1px) + box-shadow deepens</div>
+                </article>
+                <article class="result-card" style="cursor:pointer;">
+                  <div class="result-head">
+                    <div>
+                      <span class="result-meta"><span>[1] result card</span></span>
+                      <h4 class="result-title">Result card — hover lifts + distance pill reacts</h4>
+                    </div>
+                    <span class="distance-pill">0.183</span>
+                  </div>
+                  <p class="result-body">translateY(-2px) + shadow + distance pill border activates on parent hover</p>
+                </article>
+                <article class="saved-card" style="cursor:pointer;">
+                  <div class="saved-head">
+                    <div>
+                      <span class="saved-meta"><span>saved card</span></span>
+                      <h4 class="saved-title">Saved card — hover lifts</h4>
+                    </div>
+                    <button class="btn btn-outline" type="button">Open ↗</button>
+                  </div>
+                  <p class="saved-body">Same pattern as result-card.</p>
+                </article>
+              </div>
+              <div class="interaction-legend">
+                <span class="legend-item"><span class="legend-dot"></span>all cards: 220ms spring translateY + shadow deepens</span>
+              </div>
+            </div>
+
+            <!-- L7 — Metric card hover -->
+            <div class="interaction-block">
+              <span class="label">Metric Cards — hover</span>
+              <div class="metric-grid">
+                <div class="metric-card"><span class="metric-value">142</span><span class="metric-label">Posts queued</span></div>
+                <div class="metric-card"><span class="metric-value">98%</span><span class="metric-label">Coverage</span></div>
+                <div class="metric-card"><span class="metric-value">06</span><span class="metric-label">Days active</span></div>
+              </div>
+              <div class="interaction-legend">
+                <span class="legend-item"><span class="legend-dot"></span>hover: translateY(-2px) + shadow + border tightens</span>
+              </div>
+            </div>
+
+            <!-- L8 — Chips interactive hover -->
+            <div class="interaction-block">
+              <span class="label">Chips — interactive hover (semantic color shifts)</span>
+              <div class="chip-row">
+                <button class="chip" type="button">Default</button>
+                <button class="chip chip-success" type="button">Ready</button>
+                <button class="chip chip-warning" type="button">Partial</button>
+                <button class="chip chip-danger" type="button">Failed</button>
+              </div>
+              <div class="interaction-legend">
+                <span class="legend-item"><span class="legend-dot"></span>each chip darkens its own semantic color on hover (140ms)</span>
+              </div>
+            </div>
+
+            <!-- L9 — Icon actions (star, link, action) -->
+            <div class="interaction-block">
+              <span class="label">Icon Actions — star toggle / diagonal link / action button</span>
+              <div class="button-row">
+                <button class="star-btn" id="demo-star" type="button" aria-label="Star" title="Star (click to toggle)">★</button>
+                <a class="action-link" href="#" onclick="return false;">Open source ↗</a>
+                <button class="btn btn-icon" type="button" style="font-size:16px;" aria-label="copy">⧉</button>
+                <button class="btn btn-icon" type="button" style="font-size:16px;" aria-label="delete">✕</button>
+              </div>
+              <div class="interaction-legend">
+                <span class="legend-item"><span class="legend-dot legend-dot--star"></span>star: scale(1.25) + amber color (200ms spring)</span>
+                <span class="legend-item"><span class="legend-dot"></span>action link: translate(2px, -2px) diagonal (220ms spring)</span>
+                <span class="legend-item"><span class="legend-dot"></span>icon btn: scale(1.14) (220ms spring)</span>
+              </div>
+            </div>
+
+            <!-- L10 — Input states -->
+            <div class="interaction-block">
+              <span class="label">Inputs — rest / focus / error</span>
+              <div class="field-grid">
+                <label class="field">
+                  <span class="label">Default (click to focus)</span>
+                  <input type="text" placeholder="Click to see focus ring" />
+                </label>
+                <label class="field">
+                  <span class="label">Error state</span>
+                  <input type="text" value="Invalid entry" class="input-error" />
+                </label>
+                <label class="field">
+                  <span class="label">Disabled</span>
+                  <input type="text" value="Disabled field" disabled />
+                </label>
+                <label class="field">
+                  <span class="label">Filled</span>
+                  <input type="text" value="Filled value" />
+                </label>
+              </div>
+              <div class="interaction-legend">
+                <span class="legend-item"><span class="legend-dot legend-dot--focus"></span>focus: border rgba(0.36) + 3px shadow ring</span>
+                <span class="legend-item"><span class="legend-dot legend-dot--danger"></span>error: border danger + danger shadow ring</span>
+              </div>
+            </div>
+
+            <!-- L11 — File drop states -->
+            <div class="interaction-block">
+              <span class="label">File Drop — rest / hover / dragging</span>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <label class="file-drop">
+                  <strong>Hover me</strong>
+                  <span>border tightens, background brightens</span>
+                </label>
+                <label class="file-drop is-dragging">
+                  <strong>Drag active state</strong>
+                  <span>accent-a border + tinted background</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- L12 — Checkbox row -->
+            <div class="interaction-block">
+              <span class="label">Checkbox Row — rest / hover</span>
+              <label class="checkbox-row">
+                <input type="checkbox" checked />
+                <span>Public URL enabled — hover for background lift</span>
+              </label>
+              <label class="checkbox-row">
+                <input type="checkbox" />
+                <span>Unchecked row</span>
+              </label>
+            </div>
+
+            <!-- L13 — Source control -->
+            <div class="interaction-block">
+              <span class="label">Source Control — rest / hover</span>
+              <div class="source-control">
+                <div class="source-value">
+                  <svg class="source-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle><path d="M2 12h20"></path><path d="M12 2a15.3 15.3 0 0 1 0 20"></path><path d="M12 2a15.3 15.3 0 0 0 0 20"></path>
+                  </svg>
+                  <span>https://fast.poker/</span>
+                </div>
+                <button class="btn btn-update" type="button">Update &amp; Rerun <span class="cta-icon">↗</span></button>
+              </div>
+              <div class="interaction-legend">
+                <span class="legend-item"><span class="legend-dot"></span>hover: border tightens + shadow deepens (160ms)</span>
+              </div>
+            </div>
+
+            <!-- L14 — Inventory rows -->
+            <div class="interaction-block">
+              <span class="label">Inventory Rows — rest / hover</span>
+              <div class="preview-surface" style="padding:0 12px;">
+                <div class="inventory-row"><strong>Desktop screenshot</strong><span>Tier 1</span><span><span class="chip chip-success">Captured</span></span></div>
+                <div class="inventory-row"><strong>Competitor signal</strong><span>Tier 2</span><span><span class="chip chip-warning">Partial</span></span></div>
+                <div class="inventory-row"><strong>SEO snapshot</strong><span>Tier 1</span><span><span class="chip">Idle</span></span></div>
+              </div>
+              <div class="interaction-legend">
+                <span class="legend-item"><span class="legend-dot"></span>hover: rgba(42,36,32,0.03) row tint (160ms)</span>
+              </div>
+            </div>
+
+            <!-- L15 — Timing + easing reference -->
+            <div class="interaction-block">
+              <span class="label">Timing &amp; Easing Reference</span>
+              <div class="easing-grid">
+                <div class="easing-row">
+                  <span class="easing-name">--dur-fast</span>
+                  <span class="easing-value">140ms</span>
+                  <span class="easing-use">chip color, tab color, checkbox border</span>
+                </div>
+                <div class="easing-row">
+                  <span class="easing-name">--dur-base</span>
+                  <span class="easing-value">160ms ease</span>
+                  <span class="easing-use">button bg, card border, table row, source control</span>
+                </div>
+                <div class="easing-row">
+                  <span class="easing-name">--dur-spring</span>
+                  <span class="easing-value">220ms cubic-bezier(0.34, 1.56, 0.64, 1)</span>
+                  <span class="easing-use">translateY lifts, scale(1.25) icons, card hover</span>
+                </div>
+                <div class="easing-row">
+                  <span class="easing-name">active snap</span>
+                  <span class="easing-value">80ms ease</span>
+                  <span class="easing-use">:active on all buttons — instant press feel</span>
+                </div>
+                <div class="easing-row">
+                  <span class="easing-name">cta-border-spin</span>
+                  <span class="easing-value">2.4s linear infinite</span>
+                  <span class="easing-use">spinning conic gradient on CTA pill + btn-update + btn-icon-cta</span>
+                </div>
+              </div>
+            </div>
+
+          </section>
+
           <section class="section">
             <div class="section-head">
               <span class="index">K</span>
@@ -1884,6 +2538,7 @@
   </main>
 
   <script>
+    /* Segmented controls */
     document.querySelectorAll(".segmented button").forEach(function(button) {
       button.addEventListener("click", function() {
         button.parentElement.querySelectorAll("button").forEach(function(item) {
@@ -1893,6 +2548,7 @@
       });
     });
 
+    /* Toggle cards */
     document.querySelectorAll(".toggle-card").forEach(function(card) {
       card.addEventListener("click", function() {
         card.classList.toggle("is-on");
@@ -1900,6 +2556,25 @@
         if (check) check.textContent = card.classList.contains("is-on") ? "✓" : "";
       });
     });
+
+    /* Table row selection (Section L demo) */
+    var tableBody = document.getElementById("demo-table-body");
+    if (tableBody) {
+      tableBody.querySelectorAll("tr").forEach(function(row) {
+        row.addEventListener("click", function() {
+          tableBody.querySelectorAll("tr").forEach(function(r) { r.classList.remove("is-selected"); });
+          row.classList.add("is-selected");
+        });
+      });
+    }
+
+    /* Star toggle (Section L demo) */
+    var star = document.getElementById("demo-star");
+    if (star) {
+      star.addEventListener("click", function() {
+        star.classList.toggle("is-on");
+      });
+    }
   </script>
 </body>
 </html>

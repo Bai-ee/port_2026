@@ -21,6 +21,30 @@
 //   automation → Automation & Systems
 
 const BRIEF_SECTIONS = {
+  'last-hours': {
+    title: 'The Last N Hours.', // headline is computed from the run delta at render time
+    kicker: 'Marketing Director',
+    secNum: 'EX1',
+    agent: 'growth',
+    agentLabel: 'Marketing Director',
+    card: 'marketing-brief',
+  },
+  'listening': {
+    title: "Who We're Listening To.",
+    kicker: 'Marketing Director',
+    secNum: 'EX2',
+    agent: 'growth',
+    agentLabel: 'Marketing Director',
+    card: 'competitors',
+  },
+  'the-strategy': {
+    title: 'The Strategy.',
+    kicker: 'Marketing Director',
+    secNum: 'EX3',
+    agent: 'growth',
+    agentLabel: 'Marketing Director',
+    card: 'marketing-brief',
+  },
   'scout-found': {
     title: 'What Scout Found.',
     kicker: 'Marketing Director',
@@ -135,44 +159,49 @@ const BRIEF_SECTIONS = {
   },
 };
 
-// Named briefs — ordered section lists. 'executive-daily' is the default and
-// MUST stay in exactly today's render order: it is the full report every
-// other brief is carved from. Agent briefs carry the nav names; the former
-// Competitor Brief folded into Marketing Director.
+// Named briefs — ordered section lists. 'executive-daily' is the default; it
+// opens with the bento executive narrative (what changed → who we're
+// listening to → strategy → 30-day plan) and carries the detail sections
+// after it. Agent briefs carry the nav names; the former Competitor Brief
+// folded into Marketing Director.
+const EXECUTIVE_SECTIONS = [
+  'last-hours',
+  'listening',
+  'the-strategy',
+  'campaign-30day',
+  'site-performance',
+  'creative-system',
+  'market-signals',
+  'watchlist',
+  'competitor-snapshot',
+  'local-signals',
+  'viral-windows',
+  'todays-move',
+  'post-schedule',
+];
+
 const BRIEF_COMPOSITIONS = {
   'executive-daily': {
-    label: 'Executive Daily Brief',
-    sections: [
-      'scout-found',
-      'company-foundation',
-      'site-performance',
-      'creative-system',
-      'search-parameters',
-      'local-weather',
-      'market-signals',
-      'watchlist',
-      'competitor-snapshot',
-      'local-signals',
-      'viral-windows',
-      'todays-move',
-      'campaign-30day',
-      'post-schedule',
-    ],
+    label: 'Executive Brief',
+    sections: EXECUTIVE_SECTIONS,
   },
+  // The signup brief. Same content as the Executive Brief for now, but it is
+  // its own brief type — labeled and tracked as Onboarding everywhere
+  // (cover title, briefSummaries.onboarding, tier gate, analytics).
   'onboarding': {
     label: 'Onboarding Brief',
-    sections: ['company-foundation', 'scout-found', 'search-parameters'],
+    sections: EXECUTIVE_SECTIONS,
   },
   'marketing-director': {
-    label: 'Marketing Director Brief',
+    label: 'Market Brief',
     sections: ['scout-found', 'market-signals', 'local-signals', 'viral-windows', 'watchlist', 'competitor-snapshot', 'local-weather'],
   },
   'creative-director': {
-    label: 'Creative Director Brief',
+    label: 'Creative Brief',
     sections: ['creative-system', 'todays-move'],
   },
   'social-media-manager': {
-    label: 'Social Media Manager Brief',
+    label: 'Strategy Brief',
     sections: ['campaign-30day', 'todays-move', 'post-schedule'],
   },
   'website-developer': {
@@ -204,8 +233,21 @@ function getComposition(briefType) {
 // Tier entitlements — which named briefs each plan can open. Admins bypass.
 // Drives both the API gate (?brief=) and the dashboard's locked brief rows,
 // so unlocking a brief for a tier is a one-line change here.
+// Tier ladder: free (one-time understanding) → weekly (awareness) →
+// daily (decisions) → continuous (operations). 'paid' is kept as a
+// back-compat alias for existing subscribers — same access as continuous.
 const BRIEF_TIER_ACCESS = {
-  free: ['onboarding', 'executive-daily'],
+  free: ['onboarding'],
+  weekly: ['onboarding', 'executive-daily', 'marketing-director'],
+  daily: ['onboarding', 'executive-daily', 'marketing-director', 'social-media-manager'],
+  continuous: [
+    'onboarding',
+    'executive-daily',
+    'marketing-director',
+    'creative-director',
+    'social-media-manager',
+    'website-developer',
+  ],
   paid: [
     'onboarding',
     'executive-daily',

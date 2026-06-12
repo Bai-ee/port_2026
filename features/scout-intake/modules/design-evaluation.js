@@ -143,6 +143,7 @@ async function runDesignEvaluationModule({ clientId, websiteUrl, onProgress = nu
       ok: false, cardId: CARD_ID, status: 'failed',
       errorCode: 'skill_failed', errorMessage: msg,
       warningCodes, warnings, artifacts: [],
+      runCostData: skillResult?.runCostData || null,
     };
   }
 
@@ -154,6 +155,7 @@ async function runDesignEvaluationModule({ clientId, websiteUrl, onProgress = nu
     warningCodes,
     warnings,
     artifacts: [],
+    runCostData: skillResult.runCostData || null,
     result: {
       styleGuide,
       analyzerOutput: skillResult.output,

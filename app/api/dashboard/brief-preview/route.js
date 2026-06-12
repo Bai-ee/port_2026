@@ -24,7 +24,7 @@ const { BRIEF_CSS } = require('../../../../features/scout-intake/brief-css.cjs')
 const { validatePostUrl } = require('../../../../features/not-the-rug-brief/post-url-validator.cjs');
 const { buildWatchlist } = require('../../../../features/intelligence/_brief-intel.js');
 const { getClientWeather } = require('../../../../features/intelligence/_weather.js');
-const { getComposition, DEFAULT_BRIEF_TYPE, isBriefAllowed } = require('../../../../features/scout-intake/brief-sections.cjs');
+const { getComposition, resolveBriefType, DEFAULT_BRIEF_TYPE, isBriefAllowed } = require('../../../../features/scout-intake/brief-sections.cjs');
 
 function makeReqShim(request) {
   return {
@@ -141,7 +141,7 @@ function hostnameOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return String(url); }
 }
 
-function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [], weather = null, moduleBriefs = [], auditMockupUrl = null, company = null, researchConfig = null, strategyData = null, signalsCore = [], socialQueue = [], briefType = DEFAULT_BRIEF_TYPE }) {
+function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [], weather = null, moduleBriefs = [], auditMockupUrl = null, company = null, researchConfig = null, strategyData = null, signalsCore = [], socialQueue = [], briefType = DEFAULT_BRIEF_TYPE, coverSummary = null, previousRunAt = null }) {
   const content = marketingBrief?.content || {};
   const agentData = marketingBrief?.scoutBrief?.agentData || {};
   const opportunities = agentData?.viralOpportunities?.opportunities || marketingBrief?.contentOpportunities || [];
@@ -285,27 +285,165 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     </div>
   </section>`;
 
-  // 30-Day Campaign — rolling strategy + posting rules + content angles.
+  const opportunityRows = compactList(opportunities, (item) => buildRow({
+    label: item.conversation || item.topic || item.title || 'Opportunity',
+    value: item.injectionAngle || item.whyNow || item.summary || '',
+    url: item.url || '',
+    profileUrl: item.profileUrl || '',
+    platform: item.source || '',
+  }), 6);
+  const xPost = content.x_post || content.primary_post || content.post || '';
+  const threadOpener = content.x_thread_opener || content.thread_opener || '';
+  const contentAngle = content.content_angle || content.angle || '';
+
+  // ── Bento helpers — executive narrative boards. One number or one phrase
+  // per tile; detail demoted to .foot. ──
+  const bTile = ({ span = 's2', cls = '', label = '', labelTag = '', big = null, unit = '', word = '', lite = false, foot = '', verdict = '', tone = '' }) => `
+    <div class="tile${cls ? ` ${cls}` : ''} ${span}">
+      ${label ? `<div class="k">${esc(label)}${labelTag}</div>` : ''}
+      ${big != null ? `<div class="big${tone ? ` ${tone}` : ''}">${esc(String(big))}${unit ? `<span class="unit">${esc(unit)}</span>` : ''}</div>` : ''}
+      ${word ? `<div class="word${lite ? ' lite' : ''}">${esc(word)}</div>` : ''}
+      ${verdict ? `<div class="verdict${tone ? ` ${tone}` : ''}">${esc(verdict)}</div>` : ''}
+      ${foot ? `<div class="foot">${esc(foot)}</div>` : ''}
+    </div>`;
+  const bQuote = ({ span = 's2', ink = false, q = '', src = '', who = '', url = '' }) => `
+    <div class="tile say${ink ? ' ink' : ''} ${span}">
+      <div class="q">&ldquo;${esc(q)}&rdquo;</div>
+      <div class="who">${src ? `<span class="src">${esc(src)}</span>` : ''}<span>${esc(who)}</span>${url && validatePostUrl(url) ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline;text-underline-offset:3px">↗ View</a>` : ''}</div>
+    </div>`;
+  const clip = (text, max) => {
+    const t = String(text || '').trim();
+    return t.length > max ? `${t.slice(0, max).replace(/\s+\S*$/, '')}…` : t;
+  };
+  const firstSentenceOf = (text, max = 160) => {
+    const t = String(text || '').trim();
+    const m = t.match(/^[\s\S]+?[.!?](?=\s|$)/);
+    return clip(m ? m[0] : t, max);
+  };
+  const firstQuoted = (text) => {
+    const m = String(text || '').match(/[“"']([^”"']{30,240})[”"']/);
+    return m ? m[1] : '';
+  };
+
+  // EX1 · The Last N Hours — what changed since the previous brief run.
+  let lastHoursTitle = 'Since<br/>Day One.';
+  let lastHoursSub = 'Everything Scout has heard so far — this is the first brief for this account.';
+  if (previousRunAt) {
+    const prevDt = new Date(previousRunAt);
+    if (!Number.isNaN(prevDt.getTime())) {
+      const hrs = Math.max(1, Math.round((generatedDt - prevDt) / 3600000));
+      const span = hrs < 48 ? `${hrs} Hour${hrs === 1 ? '' : 's'}` : `${Math.round(hrs / 24)} Days`;
+      lastHoursTitle = `The Last<br/>${esc(span)}.`;
+      lastHoursSub = `Everything new since the previous brief ran ${prevDt.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}.`;
+    }
+  }
+  const sortedTrends = [...trends].sort((a, b) => ((a.relevance === 'high' ? 0 : 1) - (b.relevance === 'high' ? 0 : 1)));
+  const [leadTrend, ...restTrends] = sortedTrends;
+  const trendQuoteTiles = sortedTrends
+    .map((t) => ({ q: firstQuoted(t.detail), who: t.trend || t.topic || 'Market trend' }))
+    .filter((t) => t.q)
+    .slice(0, 2)
+    .map((t) => bQuote({ span: 's2', src: 'Web', q: t.q, who: clip(t.who, 60) }));
+  const kolQuoteTiles = compactList(kols, (item) => ({
+    q: clip(item.content || item.summary || '', 220),
+    who: item.name || item.author || 'KOL',
+    url: item.url || '',
+    platform: item.platform || 'X',
+  }), 3).filter((t) => t.q).map((t) => bQuote({ span: 's2', src: t.platform, q: t.q, who: t.who, url: t.url }));
+  const redditQuoteTiles = compactList(redditSignals, (item) => ({
+    q: clip(item.summary || item.actionableTakeaway || '', 220),
+    who: item.subreddit ? `r/${String(item.subreddit).replace(/^r\//, '')}` : 'Reddit',
+    url: item.url || '',
+  }), 2).filter((t) => t.q && t.q.length > 30).map((t) => bQuote({ span: 's2', src: 'Reddit', q: t.q, who: t.who, url: t.url }));
+  const quoteWall = [...trendQuoteTiles, ...kolQuoteTiles, ...redditQuoteTiles];
+  const lastHoursSection = `
+  <section class="page">
+    <div class="sec-num">01</div>
+    ${kicker('Marketing Director')}
+    <h2 class="headline">${lastHoursTitle}</h2>
+    <p class="sub">${esc(lastHoursSub)}</p>
+    <div class="bento">
+      ${leadTrend
+        ? bTile({ span: 's2', cls: 'ink', label: `Category Shift${leadTrend.relevance ? ` · ${leadTrend.relevance} relevance` : ''}`, word: clip(leadTrend.trend || leadTrend.topic, 90), foot: firstSentenceOf(leadTrend.detail || leadTrend.relevance, 200) })
+        : bTile({ span: 's2', label: 'Category Signal', word: 'No new category signal this run', lite: true, foot: 'Scout searches again on the next pass.' })}
+      ${restTrends.slice(0, 2).map((t) => bTile({ span: 's2', label: 'Market Trend', word: clip(t.trend || t.topic, 90), lite: true, foot: firstSentenceOf(t.detail || '', 160) })).join('')}
+      ${bTile({ span: 's2', label: 'Viral Windows', big: opportunityRows.length, foot: opportunityRows.length ? 'Open conversations to inject into — detail in Viral Windows.' : 'No live viral signal this cycle.' })}
+    </div>
+    ${quoteWall.length ? `<div class="bento-gap"></div><div class="bento">${quoteWall.join('')}</div>` : ''}
+  </section>`;
+
+  // EX2 · Who We're Listening To — competitors, mentions, watch coverage.
+  const competitorTiles = compactList(competitors, (item) => ({
+    name: item.competitor || 'Competitor',
+    finding: item.finding || item.impact || '',
+    impact: item.impact || '',
+  }), 2).map((c) => bTile({ span: 's2', label: `Competitor${c.impact ? ` · ${c.impact} impact` : ''}`, word: clip(c.name, 50), lite: true, foot: clip(c.finding, 220) }));
+  const mentionCount = brandMentions.length;
+  const kolCount = kols.length;
+  const listeningSection = `
+  <section class="page">
+    <div class="sec-num">02</div>
+    ${kicker('Marketing Director')}
+    <h2 class="headline">Who We're<br/>Listening To.</h2>
+    <div class="bento">
+      ${competitorTiles.join('') || bTile({ span: 's2', label: 'Competitors', word: 'No competitor signal this run', lite: true, foot: 'Add competitors on the Research card to sharpen this read.' })}
+      ${bTile({ span: '', label: 'Brand Mentions', big: mentionCount, foot: mentionCount ? 'Detail in Market Signals.' : 'No one is talking about the brand yet.' })}
+      ${bTile({ span: '', label: 'KOL Activity', big: kolCount, foot: kolCount ? 'Detail in Watchlist.' : 'Watchlist empty — add handles to track voices.' })}
+      ${mentionCount === 0 && kolCount === 0
+        ? bTile({ span: 's2', cls: 'ink', label: 'The Read', word: 'Silence is the finding — own the conversation before someone else does', foot: 'The category discourse is loud while the brand is invisible in it.' })
+        : bTile({ span: 's2', cls: 'ink', label: 'The Read', word: `${mentionCount + kolCount} voice${mentionCount + kolCount === 1 ? '' : 's'} captured this run`, foot: 'Full quotes and links in Market Signals and Watchlist.' })}
+    </div>
+  </section>`;
+
+  // EX3 · The Strategy — priority action pulled from the Scout brief text.
+  const priorityMatch = String(scoutBrief).match(/\*\*PRIORITY ACTION:?\*\*:?\s*([\s\S]+?)(?=\n{2}|\n---|$)/i);
+  const priorityAction = priorityMatch ? clip(priorityMatch[1].replace(/\s+/g, ' '), 280) : '';
+  const theStrategySection = `
+  <section class="page">
+    <div class="sec-num">03</div>
+    ${kicker('Marketing Director')}
+    <h2 class="headline">The<br/>Strategy.</h2>
+    <div class="bento">
+      ${priorityAction
+        ? bTile({ span: 's4', cls: 'ink quote', label: 'Priority Action', word: priorityAction })
+        : bTile({ span: 's4', label: 'Priority Action', word: 'No priority action this run', lite: true, foot: 'Produced with each Scout run — rerun the Marketing Director brief.' })}
+      ${bTile({ span: 's2', label: 'Content Angle', word: contentAngle ? firstSentenceOf(contentAngle, 180) : 'Not generated this run', lite: true, foot: contentAngle ? clip(contentAngle.slice(firstSentenceOf(contentAngle, 180).length), 200) : '' })}
+      ${bTile({ span: 's2', label: 'Ready To Post', word: xPost ? clip(xPost, 180) : 'No draft post this run', lite: true, foot: xPost ? "Full draft and guardian check in Today's Move." : '' })}
+    </div>
+  </section>`;
+
+  // SC · 30-Day Plan — today's move, plan config, weather hook, calendar.
   const s30 = strategyData?.strategy30 || null;
   const strat = strategyData?.strategy || null;
-  const upcomingDays = Array.isArray(s30?.days) ? s30.days.slice(0, 7) : [];
+  const planDays = Array.isArray(s30?.days) ? s30.days : [];
   const angleList = Array.isArray(strat?.contentAngles)
     ? strat.contentAngles.map((a) => a?.angle || a?.label || (typeof a === 'string' ? a : '')).filter(Boolean)
     : [];
+  const todayLine = s30?.today
+    ? [s30.today.angle, s30.today.post].filter(Boolean).join(' — ')
+    : xPost;
+  const dayTiles = planDays.slice(0, 14).map((d) => bTile({
+    span: 's2', cls: 'day',
+    label: d?.date || 'Day',
+    word: clip(d?.theme || d?.angle || d?.idea || '—', 80),
+    foot: clip(d?.idea || d?.post || '', 140),
+  })).join('');
   const campaignSection = `
   <section class="page">
     <div class="sec-num">SC</div>
     ${kicker('Social Media Manager')}
-    <h2 class="headline">30-Day<br/>Campaign.</h2>
-    <div class="card">
-      ${s30?.today ? valRow('Today', esc([s30.today.angle, s30.today.post].filter(Boolean).join(' — ').slice(0, 280))) : naRow('Today', 'Not generated yet — produced with each executive brief run.')}
-      ${upcomingDays.length
-        ? upcomingDays.map((d) => valRow(esc(d?.date || 'Day'), esc([d?.theme, d?.idea].filter(Boolean).join(' — ').slice(0, 200)))).join('')
-        : naRow('Next 7 days', 'No rolling campaign yet — runs with each executive brief.')}
-      ${textOr('Revision notes', s30?.revisionNotes, 'No revisions — first pass of the campaign.')}
-      ${textOr('Posting approach', strat?.postStrategy?.approach, 'Not derived yet — set on the Custom Post Strategy card or rerun intake.')}
-      ${listOr('Content angles', angleList, 'Not derived yet — rerun website intake.')}
+    <h2 class="headline">30-Day<br/>Plan.</h2>
+    <div class="bento">
+      ${todayLine
+        ? bTile({ span: 's2', cls: 'ink', label: 'Today · Ready To Post', word: clip(todayLine, 200), foot: angleList.length ? `Angles in rotation: ${clip(angleList.join(' · '), 160)}` : '' })
+        : bTile({ span: 's2', cls: 'ink', label: 'Today', word: 'Nothing staged for today', foot: 'Produced with each executive brief run.' })}
+      ${bTile({ span: '', label: 'Calendar', big: planDays.length || '—', unit: planDays.length ? ' DAYS' : '', foot: planDays.length ? 'Rolling window — regenerates with every run.' : 'First pass pending — runs with each executive brief.' })}
+      ${weather?.today
+        ? bTile({ span: '', label: `Local Weather${weather.place ? ` · ${weather.place}` : ''}`, big: weather.today.temp, unit: `°${weather.today.unit} ${String(weather.today.short).toUpperCase()}`, foot: weather.threeDayLine || '' })
+        : bTile({ span: '', label: 'Local Weather', word: 'Not configured', lite: true, foot: 'Set a ZIP on the Local Weather card.' })}
+      ${strat?.postStrategy?.approach ? bTile({ span: 's4', label: 'Posting Approach', word: clip(strat.postStrategy.approach, 160), lite: true, foot: s30?.revisionNotes ? clip(`Revisions: ${s30.revisionNotes}`, 200) : '' }) : ''}
     </div>
+    ${dayTiles ? `<div class="bento-gap"></div><div class="bento">${dayTiles}</div>` : ''}
   </section>`;
 
   // Competitor Snapshot: competitor intel from web search
@@ -319,13 +457,15 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
 
   // Local Signals: Reddit signals + local demand signals + brand mentions from Reddit/web
   const redditLocalRows = [
+    // Signals with no real text (xscout no longer invents takeaway prose)
+    // drop out instead of rendering an empty quote row.
     ...compactList(redditSignals, (item) => buildRow({
       label: item.subreddit ? `r/${item.subreddit}` : 'Reddit',
       value: [item.summary, item.actionableTakeaway].filter(Boolean).join(' — '),
       url: item.url || '',
       profileUrl: '',
       platform: 'Reddit',
-    }), 5),
+    }), 5).filter((row) => row.value),
     ...compactList(localDemandSignals, (item) => buildRow({
       label: item.signal || item.topic || item.title || 'Local signal',
       value: item.insight || item.detail || item.summary || '',
@@ -345,14 +485,6 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
       3,
     ),
   ];
-
-  const opportunityRows = compactList(opportunities, (item) => buildRow({
-    label: item.conversation || item.topic || item.title || 'Opportunity',
-    value: item.injectionAngle || item.whyNow || item.summary || '',
-    url: item.url || '',
-    profileUrl: item.profileUrl || '',
-    platform: item.source || '',
-  }), 6);
 
   // Partition: items with a real post permalink are the primary signals,
   // items without are background-only — same data, smaller treatment.
@@ -403,10 +535,6 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
       : '';
     return primaryHtml + backgroundHtml;
   };
-
-  const xPost = content.x_post || content.primary_post || content.post || '';
-  const threadOpener = content.x_thread_opener || content.thread_opener || '';
-  const contentAngle = content.content_angle || content.angle || '';
 
   const weatherSection = weather?.today ? `
   <section class="page">
@@ -643,6 +771,9 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   // composition (features/scout-intake/brief-sections.cjs). Conditional
   // sections that rendered '' (no data) stay '' — same as before. ──
   const sectionHtmlById = {
+    'last-hours': lastHoursSection,
+    'listening': listeningSection,
+    'the-strategy': theStrategySection,
     'scout-found': scoutFoundSection,
     'company-foundation': companyBriefSection,
     'site-performance': performanceBriefSection,
@@ -660,6 +791,20 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   };
   const composition = getComposition(briefType);
   const bodySections = composition.sections.map((id) => sectionHtmlById[id] || '').join('\n');
+
+  // Cover sub: the per-brief AI cover paragraph (briefSummaries) when present,
+  // else the run headline. The executive JARVIS brief is multi-paragraph —
+  // render each paragraph and let .cover-jarvis-sub size it down to body scale.
+  // Strip the salutation ("Good morning/night. Here's what matters.") — the
+  // cover reads conversational, not greeted.
+  const coverParas = String(coverSummary || '')
+    .replace(/^good\s+(morning|afternoon|evening|night)[.!,]*\s*/i, '')
+    .replace(/^here'?s what matters[.!:]*\s*/i, '')
+    .split(/\n+/).map((s) => s.trim()).filter(Boolean)
+    .map((p, i) => (i === 0 && p ? p.charAt(0).toUpperCase() + p.slice(1) : p));
+  const coverSubHtml = coverParas.length > 1
+    ? `<div class="sub cover-jarvis-sub" id="brief-cover-exec-summary">${coverParas.map((p) => `<p>${esc(p)}</p>`).join('')}</div>`
+    : `<p class="sub">${esc(coverParas[0] || headline)}</p>`;
 
   return `<!doctype html>
 <html lang="en">
@@ -700,7 +845,8 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   /* CTA is now fixed (out of flow) — restore the space it used to take above
      the headline so the cover sits where it did before. */
   .cover .title-stack{margin-top:56px}
-  .cover .headline{margin:0 0 10px}
+  /* Breathing room above the date/time stamp headline. */
+  .cover .headline{margin:20px 0 10px}
   /* Brief name — sits above the date headline inside the title stack;
      slightly heavier and larger than .sub (300 / clamp(20px,2.4vw,34px)).
      flex-basis:100% forces its own row in the flex title-stack. */
@@ -713,7 +859,13 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     line-height:1.2;
     margin:0 0 8px;
   }
-  .cover .sub{margin:0 0 16px}
+  /* Breathing room above the cover summary (single-line and JARVIS). */
+  .cover .sub{margin:28px 0 16px}
+  /* JARVIS-mode executive summary — multi-paragraph, body scale (the giant
+     .sub treatment is for one-line headlines only). */
+  #brief-cover-exec-summary{margin:28px 0 16px}
+  #brief-cover-exec-summary p{font-size:clamp(15px,1.45vw,18px);line-height:1.6;font-weight:400;margin:0 0 12px;max-width:72ch}
+  #brief-cover-exec-summary p:last-child{margin-bottom:0}
   .cover .meta{margin-top:18px;padding-top:14px;gap:14px 32px}
   .cover .marquee{margin-top:20px}
   </style>
@@ -729,10 +881,11 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
           <span class="arrow" aria-hidden="true">↗</span>
         </button>
       </div>
+      ${weather?.today ? `<div id="brief-cover-weather">${esc(`${weather.place || 'Local'} · ${weather.today.short} ${weather.today.temp}°${weather.today.unit}`)}${weather.days?.length > 1 ? esc(' · ' + weather.days.slice(1, 3).map((d) => `${d.name.slice(0, 3)} ${d.short.split(/\s+/).slice(0, 2).join(' ')} ${d.temp}°`).join(' · ')) : ''}</div>` : ''}
       <div class="cover-brief-name">${esc(composition.label)}</div>
       <h1 class="headline">${headlineDateLines}</h1>
     </div>
-    <p class="sub">${esc(headline)}</p>
+    ${coverSubHtml}
     <div class="meta">
       <div><div class="k">Date</div><div class="v">${esc(dateLine)}</div></div>
       <div><div class="k">Site</div><div class="v">${esc(hostnameOf(websiteUrl) || '—')}</div></div>
@@ -818,6 +971,22 @@ async function handleGet(request) {
   let runWarnings = 0;
   let runStyleGuideCost = null;
   let runScribeCost = null;
+  // Previous succeeded run timestamp — drives the "The Last N Hours" headline.
+  let previousRunAt = null;
+  try {
+    const prevSnap = await fb.adminDb
+      .collection('clients').doc(clientId)
+      .collection('brief_runs')
+      .orderBy('createdAt', 'desc')
+      .limit(6)
+      .get();
+    const prior = prevSnap.docs
+      .filter((d) => d.id !== dash.latestRunId)
+      .map((d) => d.data())
+      .find((r) => r?.status === 'succeeded' && (r.completedAt || r.createdAt));
+    const ts = prior?.completedAt || prior?.createdAt;
+    previousRunAt = ts?.toDate ? ts.toDate().toISOString() : (ts || null);
+  } catch { /* non-fatal — section falls back to "Since Day One." */ }
   if (dash.latestRunId) {
     try {
       const briefSnap = await fb.adminDb
@@ -898,6 +1067,11 @@ async function handleGet(request) {
     userEmail: bootstrap?.userProfile?.email || decoded?.email || null,
     tier: dash.tier || 'free',
     briefType,
+    // Per-brief cover paragraph (dashboard_state.briefSummaries, written by
+    // brief-summary-runner after each scout-brief run). Falls back to the
+    // run-level headline inside the renderer when absent.
+    coverSummary: dash.briefSummaries?.[resolveBriefType(briefType)]?.summary || null,
+    previousRunAt,
   });
 
   if (preferMarketingBrief) {

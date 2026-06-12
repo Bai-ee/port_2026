@@ -157,6 +157,96 @@ const BRIEF_CSS = `
     footer{font-size:12px}
   }
 
+  /* ── Bento board system — one number or one phrase per tile. All rules
+     scoped under .bento (plus the cover weather strip id) so the shared
+     stylesheet stays additive for estimate-renderer / brief-renderer. ── */
+  .bento{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .bento .s2{grid-column:span 2}
+  .bento-gap{height:clamp(20px,3vh,36px)}
+
+  .bento .tile{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:18px;
+    box-shadow:0 1px 0 var(--hl), inset 0 1px 0 rgba(255,255,255,0.4);
+    padding:clamp(16px,2.4vw,26px);
+    display:flex;flex-direction:column;justify-content:space-between;
+    gap:14px;min-height:128px;min-width:0;overflow:hidden;
+  }
+  .bento .tile .k{
+    font-family:"Space Mono",monospace;font-size:11px;
+    letter-spacing:.22em;text-transform:uppercase;color:var(--ink-soft);
+    display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;
+  }
+  .bento .tile .big{
+    font-family:"Doto",monospace;font-weight:900;line-height:.85;
+    font-size:clamp(44px,12.5vw,112px);letter-spacing:.01em;
+    max-width:100%;overflow-wrap:break-word;
+  }
+  .bento .tile .big .unit{font-size:.32em;letter-spacing:.06em;vertical-align:baseline}
+  .bento .tile .word{
+    font-family:"Space Grotesk";font-weight:500;line-height:1.02;
+    font-size:clamp(24px,6.5vw,48px);letter-spacing:-.01em;
+    text-wrap:balance;max-width:100%;overflow-wrap:break-word;
+  }
+  .bento .tile .word.lite{font-weight:300}
+  .bento .tile .foot{
+    font-family:"Space Grotesk";font-size:12px;line-height:1.45;
+    color:var(--ink-soft);max-width:42ch;
+  }
+  .bento .v-good{color:#166534}
+  .bento .v-avg{color:#b45309}
+  .bento .v-bad{color:#c2410c}
+  .bento .verdict{
+    font-family:"Space Mono";font-size:11px;letter-spacing:.22em;
+    text-transform:uppercase;font-weight:700;
+  }
+  .bento .tile.ink{background:var(--ink);border-color:var(--ink);color:#f6f3ea;box-shadow:none}
+  .bento .tile.ink .k{color:rgba(246,243,234,.65)}
+  .bento .tile.ink .foot{color:rgba(246,243,234,.6)}
+  .bento .tile.quote .word{font-weight:300;font-size:clamp(24px,6.5vw,46px);line-height:1.12;max-width:30ch}
+
+  /* Quote-wall tiles — tweets, web pulls, reddit voices. */
+  .bento .tile.say{justify-content:flex-start;gap:16px}
+  .bento .tile.say .q{
+    font-family:"Space Grotesk";font-weight:300;
+    font-size:clamp(19px,4.8vw,30px);line-height:1.28;
+    max-width:100%;overflow-wrap:break-word;
+  }
+  .bento .tile.say .who{
+    font-family:"Space Mono",monospace;font-size:11px;
+    letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);
+    display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+  }
+  .bento .tile.say .who .src{padding:3px 9px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.5)}
+  .bento .tile.ink.say .who{color:rgba(246,243,234,.65)}
+  .bento .tile.ink.say .who .src{background:transparent;border-color:rgba(246,243,234,.3)}
+
+  /* Calendar day tiles — compact, one post idea per day. */
+  .bento .tile.day{min-height:0;gap:8px;padding:14px 16px;justify-content:flex-start}
+  .bento .tile.day .word{font-size:clamp(16px,4.2vw,22px);line-height:1.15}
+  .bento .tile.day .foot{font-size:11px}
+
+  /* Cover weather strip — its own row at the top of the title stack. */
+  #brief-cover-weather{
+    flex-basis:100%;width:100%;
+    font-family:"Space Mono",monospace;font-size:11px;
+    letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft);
+    margin:0 0 14px;
+  }
+
+  @media(min-width:760px){
+    .bento{grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+    .bento .s2{grid-column:span 2}
+    .bento .s3{grid-column:span 3}
+    .bento .s4{grid-column:span 4}
+    .bento .tile{min-height:160px}
+    .bento .tile.day{min-height:0}
+    .bento .tile .big{font-size:clamp(64px,7.5vw,128px)}
+    .bento .tile .word{font-size:clamp(28px,3.2vw,48px)}
+    .bento .tile.day .word{font-size:clamp(16px,1.6vw,22px)}
+  }
+
   @media print{
     section.page{min-height:auto;padding:48px 40px;page-break-after:always;page-break-inside:avoid}
     .sec-num{font-size:140px}

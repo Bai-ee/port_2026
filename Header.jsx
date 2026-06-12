@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 
-const Header = ({ logoRef, onOpenPage }) => {
-  const { user, signOutUser } = useAuth();
+const Header = ({ logoRef, onOpenPage, logoSrc = '/img/sig.png' }) => {
+  const isSignatureLogo = logoSrc === '/img/sig.png';
+  const { user } = useAuth();
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -15,9 +16,17 @@ const Header = ({ logoRef, onOpenPage }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const handleDashClick = () => {
+  const handleDashboardCta = () => {
     if (user) {
       window.location.href = '/dashboard';
+      return;
+    }
+    // Logged out: open the onboarding modal on the homepage; elsewhere fall
+    // back to the login/onboard route since the modal only mounts on '/'.
+    if (window.location.pathname === '/') {
+      window.dispatchEvent(new CustomEvent('openOnboardModal'));
+    } else {
+      window.location.href = '/login?flow=homepage-create';
     }
   };
 
@@ -37,7 +46,7 @@ const Header = ({ logoRef, onOpenPage }) => {
           <div ref={logoRef} aria-hidden="true" style={{ width: 0, height: 0, pointerEvents: 'none', position: 'absolute' }} />
 
           <a href="/" id="founders-brand" aria-label="Back to homepage">
-            <img src="/img/sig.png" alt="Bryan Balli signature" width="276" height="208" loading="eager" decoding="async" style={{ mixBlendMode: 'darken' }} />
+            <img src={logoSrc} alt={isSignatureLogo ? 'Bryan Balli signature' : 'Bryan Balli logo'} width={isSignatureLogo ? 276 : 663} height={isSignatureLogo ? 208 : 552} loading="eager" decoding="async" style={{ mixBlendMode: 'darken' }} />
           </a>
 
           <button
@@ -61,28 +70,14 @@ const Header = ({ logoRef, onOpenPage }) => {
           </button>
 
           <div id="founders-top-actions">
-            {user ? (
-              <>
-                <button type="button" id="founders-logout-link" onClick={signOutUser}>
-                  Logout
-                </button>
-                <button type="button" id="founders-login-link" onClick={handleDashClick}>
-                  Dash
-                </button>
-              </>
-            ) : (
-              <a href="/login" id="founders-login-link">
-                Login
-              </a>
-            )}
             <button
               type="button"
               id="founders-chat-cta"
               className="founders-chat-cta--light"
-              onClick={() => window.dispatchEvent(new CustomEvent('openOnboardModal'))}
+              onClick={handleDashboardCta}
             >
-              <span className="founders-chat-label-full">Onboard</span>
-              <span className="founders-chat-label-short">Onboard</span>
+              <span className="founders-chat-label-full">Dashboard</span>
+              <span className="founders-chat-label-short">Dash</span>
               <span id="founders-chat-cta-icon">↗</span>
             </button>
           </div>

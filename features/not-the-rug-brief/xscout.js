@@ -74,8 +74,8 @@ function buildRedditSignalFromMention(item = {}) {
     title: item.title || item.author || 'Reddit mention',
     subreddit: item.subreddit || '',
     signalType: 'brand_mention',
-    summary: item.insight || item.excerpt || item.body || '',
-    actionableTakeaway: item.whyRelevant || 'Recent Reddit mention relevant to neighborhood dog-owner trust or demand language.',
+    summary: item.insight || item.excerpt || item.body || item.title || '',
+    actionableTakeaway: item.whyRelevant || '',
     url: item.permalink || item.url || '',
   };
 }
@@ -85,8 +85,8 @@ function buildRedditSignalFromOpportunity(item = {}) {
     title: item.title || 'Recommendation thread',
     subreddit: item.subreddit || '',
     signalType: item.opportunityType || 'participation_opportunity',
-    summary: item.excerpt || item.body || '',
-    actionableTakeaway: item.whyRelevant || 'Relevant neighborhood thread that may surface buyer language or participation opportunities.',
+    summary: item.excerpt || item.body || item.title || '',
+    actionableTakeaway: item.whyRelevant || '',
     url: item.permalink || item.url || '',
   };
 }
@@ -141,7 +141,7 @@ function extractRedditSignalsFromSearchText(searchText = '') {
       subreddit,
       signalType,
       summary: summary || title,
-      actionableTakeaway: 'Scout web search surfaced a Reddit thread with buyer language or neighborhood demand worth carrying into the brief.',
+      actionableTakeaway: '',
       url,
     });
   }
@@ -331,7 +331,7 @@ function hydrateAgentData(agentData = {}, weatherReport = null, redditReport = n
               subreddit: item.source || 'Reddit',
               signalType: 'brand_mention',
               summary: item.content || item.finding || '',
-              actionableTakeaway: 'Search surfaced a Reddit mention worth tracking in the brief.',
+              actionableTakeaway: '',
               url: item.url || '',
             }))
         : [];

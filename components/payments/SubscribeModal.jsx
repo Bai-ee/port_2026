@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
 
@@ -56,20 +56,99 @@ const PaymentStep = ({ onSuccess }) => {
     <form id="subscribe-payment-element-panel" onSubmit={handleSubmit} style={formStackStyle}>
       <PaymentElement />
       {error ? <p style={errorTextStyle}>{error}</p> : null}
-      <button type="submit" className="cta-pill-btn" style={primaryButtonStyle} disabled={submitting}>
-        {submitting ? 'Processing…' : 'Subscribe · $5/mo'}
-      </button>
+      <div id="subscribe-payment-cta-row" style={ctaRowStyle}>
+        <button type="submit" className="cta-pill-btn" style={primaryButtonStyle} disabled={submitting}>
+          {submitting ? 'Processing…' : 'Subscribe · $5/mo'}
+        </button>
+        <button id="subscribe-meet-human-btn" type="button" style={meetHumanButtonStyle}>
+          Meet with Human
+        </button>
+      </div>
     </form>
   );
 };
 
-const SubscribeModal = ({ open, onClose }) => {
+const StripeBadge = () => (
+  <div id="subscribe-stripe-badge" style={stripeBadgeStyle} aria-label="Powered by Stripe">
+    <span>Powered by</span>
+    <svg
+      viewBox="0 0 60 25"
+      width="42"
+      height="18"
+      fill="currentColor"
+      role="img"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M59.64 14.28h-8.06c.19 1.93 1.6 2.55 3.2 2.55 1.64 0 2.96-.37 4.05-.95v3.32a8.33 8.33 0 0 1-4.56 1.1c-4.01 0-6.83-2.5-6.83-7.48 0-4.19 2.39-7.52 6.3-7.52 3.92 0 5.96 3.28 5.96 7.5 0 .4-.04 1.26-.06 1.48zm-5.92-5.62c-1.03 0-2.17.73-2.17 2.58h4.25c0-1.85-1.07-2.58-2.08-2.58zM40.95 20.3c-1.44 0-2.32-.6-2.9-1.04l-.02 4.63-4.12.87V5.57h3.76l.08 1.02a4.7 4.7 0 0 1 3.23-1.29c2.9 0 5.62 2.6 5.62 7.4 0 5.23-2.7 7.6-5.65 7.6zM40 8.95c-.95 0-1.54.34-1.97.81l.02 6.12c.4.44.98.78 1.95.78 1.52 0 2.54-1.65 2.54-3.87 0-2.15-1.04-3.84-2.54-3.84zM28.24 5.57h4.13v14.44h-4.13V5.57zm0-4.7L32.37 0v3.36l-4.13.88V.88zm-4.32 9.35v9.79H19.8V5.57h3.7l.12 1.22c1-1.77 3.07-1.41 3.62-1.22v3.79c-.52-.17-2.29-.43-3.32.86zm-8.55 4.72c0 2.43 2.6 1.68 3.12 1.46v3.36c-.55.3-1.54.54-2.89.54a4.15 4.15 0 0 1-4.27-4.24l.01-13.17 4.02-.86v3.54h3.14V9.1h-3.13v5.85zm-4.91.7c0 2.97-2.31 4.66-5.73 4.66a11.2 11.2 0 0 1-4.46-.93v-3.93c1.38.75 3.1 1.31 4.46 1.31.92 0 1.53-.24 1.53-1C6.26 13.77 0 14.51 0 9.95 0 7.04 2.28 5.3 5.62 5.3c1.36 0 2.72.2 4.09.75v3.88a9.23 9.23 0 0 0-4.1-1.06c-.86 0-1.44.25-1.44.9 0 1.85 6.29.97 6.29 5.88z" />
+    </svg>
+  </div>
+);
+
+const SUBSCRIPTION_TIERS = [
+  {
+    id: 'weekly',
+    num: '01',
+    name: 'Weekly',
+    sub: 'Executive + Market',
+    priceMain: '$4',
+    priceUnit: '/month',
+    cadence: '1 brief a week sent to your email',
+    replaces: 'Start tracking trends, competitors, and how your business looks across digital with weekly Briefs and a Human in the Loop.',
+  },
+  {
+    id: 'weekly-plus',
+    num: '02',
+    name: 'Weekly+',
+    sub: 'Exec + Strategy',
+    priceMain: '$19',
+    priceUnit: '/month',
+    cadence: '1 brief a week sent to your email',
+    replaces: 'Trend and competitor tracking with 30 Days of Dynamic Content. Updating what to work on, post, and prioritize each week.',
+  },
+  {
+    id: 'daily',
+    num: '03',
+    name: 'Daily',
+    sub: 'Exec + Strategy',
+    priceMain: '$39',
+    priceUnit: '/month',
+    cadence: '1 brief a day',
+    replaces: 'Trend and competitor tracking with 30 Days of Dynamic Content. Updating what to work on, post, and prioritize each day.',
+  },
+  {
+    id: 'continuous',
+    num: '04',
+    name: 'Continuous ★',
+    sub: 'Full Brief System + Human Monitoring',
+    priceMain: '$99',
+    priceUnit: '/month',
+    cadence: '2–3 briefs a day',
+    replaces: 'Actively track your business, market, content, and site with a dedicated Human in the Loop managing the strategies.',
+  },
+  {
+    id: 'studio',
+    num: '05',
+    name: 'Studio',
+    sub: 'Creative Services',
+    priceMain: '$1.5K',
+    priceUnit: '/month',
+    cadence: '3 briefs / day',
+    replaces: 'A dedicated Human in the Loop running your system. Creative services on call. Design, content, and site fixes handled as they come up. Trend and competitor tracking.',
+  },
+];
+
+const DEFAULT_TIER_INDEX = 0; // Weekly — $5/month
+
+const SubscribeModal = ({ open, onClose, defaultEmail = '' }) => {
   const [step, setStep] = useState('email');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(defaultEmail);
   const [clientSecret, setClientSecret] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [cryptoNotice, setCryptoNotice] = useState('');
+  const [tierIndex, setTierIndex] = useState(DEFAULT_TIER_INDEX);
+  const carouselRef = useRef(null);
 
   useEffect(() => {
     if (!open) {
@@ -91,12 +170,42 @@ const SubscribeModal = ({ open, onClose }) => {
       setError('');
       setLoading(false);
       setCryptoNotice('');
+      setTierIndex(DEFAULT_TIER_INDEX);
+    } else if (defaultEmail) {
+      setEmail(defaultEmail);
+    }
+  }, [open, defaultEmail]);
+
+  // Land on the default tier (Weekly, $5/month) when the modal opens.
+  useEffect(() => {
+    if (!open) return;
+    const el = carouselRef.current;
+    if (el) {
+      el.scrollLeft = el.clientWidth * DEFAULT_TIER_INDEX;
     }
   }, [open]);
 
   if (!open) {
     return null;
   }
+
+  // Carousel position == selected tier; whichever slide the user lands on is
+  // what Continue to payment submits.
+  const handleCarouselScroll = () => {
+    const el = carouselRef.current;
+    if (!el || !el.clientWidth) return;
+    const next = Math.max(
+      0,
+      Math.min(SUBSCRIPTION_TIERS.length - 1, Math.round(el.scrollLeft / el.clientWidth)),
+    );
+    if (next !== tierIndex) setTierIndex(next);
+  };
+
+  const scrollToTier = (index) => {
+    const el = carouselRef.current;
+    if (!el) return;
+    el.scrollTo({ left: index * el.clientWidth, behavior: 'smooth' });
+  };
 
   const startSubscription = async (event) => {
     event.preventDefault();
@@ -109,7 +218,7 @@ const SubscribeModal = ({ open, onClose }) => {
       const res = await fetch('/api/payments/create-subscription', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, tier: SUBSCRIPTION_TIERS[tierIndex].id }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.clientSecret) {
@@ -134,15 +243,34 @@ const SubscribeModal = ({ open, onClose }) => {
         style={modalStyle}
         onClick={(event) => event.stopPropagation()}
       >
-        <div style={topRowStyle}>
-          <div>
-            <span style={eyebrowStyle}>Membership</span>
-            <h2 style={titleStyle}>Monthly Subscription</h2>
-            <p style={summaryStyle}>$5/month. Cancel anytime.</p>
+        <style>{subscribeModalCss}</style>
+        <div id="subscribe-header-row" style={headerRowStyle}>
+          <img
+            src="/img/profile2_400x400.png?v=1774582808"
+            alt=""
+            aria-hidden="true"
+            style={headerLogoStyle}
+          />
+          <span style={headerLabelStyle}>Membership</span>
+          <button
+            type="button"
+            id="subscribe-modal-close"
+            onClick={onClose}
+            aria-label="Close subscription modal"
+          >[ ✕ ]</button>
+        </div>
+        <div id="subscribe-title-marquee-shell" style={marqueeShellStyle}>
+          <div className="subscribe-title-marquee-track">
+            {['a', 'b'].map((k) => (
+              <span
+                key={k}
+                aria-hidden={k === 'b' ? 'true' : undefined}
+                style={marqueeTitleStyle}
+              >
+                {'MONTHLY SUBSCRIPTION · '}
+              </span>
+            ))}
           </div>
-          <button type="button" onClick={onClose} style={closeButtonStyle} aria-label="Close subscription modal">
-            Close
-          </button>
         </div>
 
         <div id="subscribe-modal-body" style={bodyStyle}>
@@ -152,6 +280,65 @@ const SubscribeModal = ({ open, onClose }) => {
             </p>
           ) : step === 'email' ? (
             <form onSubmit={startSubscription} style={formStackStyle}>
+              <div id="subscribe-tier-carousel-panel" style={productSummaryStyle}>
+                <button
+                  type="button"
+                  id="subscribe-tier-prev"
+                  className="subscribe-tier-nav"
+                  onClick={() => scrollToTier(Math.max(0, tierIndex - 1))}
+                  disabled={tierIndex === 0}
+                  aria-label="Previous tier"
+                >‹</button>
+                <button
+                  type="button"
+                  id="subscribe-tier-next"
+                  className="subscribe-tier-nav"
+                  onClick={() => scrollToTier(Math.min(SUBSCRIPTION_TIERS.length - 1, tierIndex + 1))}
+                  disabled={tierIndex === SUBSCRIPTION_TIERS.length - 1}
+                  aria-label="Next tier"
+                >›</button>
+                <div
+                  id="subscribe-tier-carousel"
+                  className="subscribe-tier-carousel"
+                  ref={carouselRef}
+                  onScroll={handleCarouselScroll}
+                >
+                  {SUBSCRIPTION_TIERS.map((tier) => (
+                    <div className="subscribe-tier-slide" key={tier.id}>
+                      <div style={productPriceColStyle}>
+                        <span style={tier.priceMain.length > 5 ? productPriceLongStyle : productPriceStyle}>
+                          {tier.priceMain}
+                          {tier.priceUnit ? (
+                            <span style={productPriceUnitStyle}>{tier.priceUnit}</span>
+                          ) : null}
+                        </span>
+                      </div>
+                      <div style={productSummaryTextStyle}>
+                        <p style={productCopyStyle}>{tier.replaces}</p>
+                        <p style={tierCadenceStyle}>{tier.cadence}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div
+                  id="subscribe-tier-dots"
+                  style={tierDotsRowStyle}
+                  role="tablist"
+                  aria-label="Pricing tiers"
+                >
+                  {SUBSCRIPTION_TIERS.map((tier, index) => (
+                    <button
+                      key={tier.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={index === tierIndex}
+                      aria-label={`${tier.num} ${tier.name}`}
+                      className={`subscribe-tier-dot${index === tierIndex ? ' subscribe-tier-dot--active' : ''}`}
+                      onClick={() => scrollToTier(index)}
+                    />
+                  ))}
+                </div>
+              </div>
               <input
                 type="email"
                 required
@@ -161,17 +348,17 @@ const SubscribeModal = ({ open, onClose }) => {
                 style={inputStyle}
               />
               {error ? <p style={errorTextStyle}>{error}</p> : null}
-              <button type="submit" className="cta-pill-btn" style={primaryButtonStyle} disabled={loading}>
-                {loading ? 'Setting up…' : 'Continue to payment'}
-              </button>
-              <button
-                id="subscribe-crypto-trigger"
-                type="button"
-                onClick={() => setStep('crypto')}
-                style={cryptoTriggerStyle}
-              >
-                Prefer crypto? ◎
-              </button>
+              <div id="subscribe-actions-row" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '0.6rem' }}>
+                <button type="submit" className="cta-pill-btn" style={primaryButtonStyle} disabled={loading}>
+                  {loading ? 'Setting up…' : 'Continue to payment'}
+                </button>
+                <div id="subscribe-below-cta-row" style={belowCtaRowStyle}>
+                  <StripeBadge />
+                  <a id="subscribe-signin-link" href="/login" style={signInLinkStyle}>
+                    Sign In
+                  </a>
+                </div>
+              </div>
             </form>
           ) : step === 'crypto' ? (
             <div id="subscribe-crypto-panel" style={formStackStyle}>
@@ -239,6 +426,7 @@ const overlayStyle = {
 };
 
 const modalStyle = {
+  position: 'relative',
   width: 'min(480px, 100%)',
   maxHeight: 'min(88dvh, 720px)',
   color: '#2a2420',
@@ -246,32 +434,160 @@ const modalStyle = {
   flexDirection: 'column',
   overflow: 'hidden',
   background: '#ffffff',
-  boxShadow: '0 32px 90px rgba(42,36,32,0.18)',
+  // Shadow + border match the dashboard loading card (DashboardLoadingOverlay).
+  boxShadow: '0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4), 0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.1), 0px 20px 40px rgba(0, 0, 0, 0.15)',
+  border: '1px solid #E4E4E4',
   borderRadius: '1.5rem',
 };
 
-const topRowStyle = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  gap: '1.5rem',
-  padding: 'clamp(1.25rem, 2.5vw, 1.75rem)',
-  borderBottom: '1px solid rgba(42, 36, 32, 0.1)',
+// Keyframes, hover states, and the responsive product grid live here because
+// inline styles can't express :hover or media queries.
+const subscribeModalCss = `
+  @keyframes subscribe-title-marquee {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+  .subscribe-title-marquee-track {
+    display: flex;
+    align-items: center;
+    width: max-content;
+    animation: subscribe-title-marquee 12s linear infinite;
+    will-change: transform;
+  }
+  #subscribe-modal-close {
+    flex-shrink: 0;
+    justify-self: end;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(42, 36, 32, 0.15);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-family: var(--font-mono, 'Space Mono', monospace);
+    font-size: 12px;
+    cursor: pointer;
+    color: #2a2420;
+  }
+  #subscribe-modal-close:hover {
+    background: #2a2420;
+    color: #fff;
+  }
+  .subscribe-tier-carousel {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    margin: 0 1.75rem;
+  }
+  .subscribe-tier-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 2;
+    width: 2rem;
+    height: 2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    border: 1px solid rgba(42, 36, 32, 0.15);
+    background: rgba(255, 255, 255, 0.9);
+    color: #2a2420;
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+    font-family: var(--font-mono, 'Space Mono', monospace);
+    padding: 0;
+  }
+  .subscribe-tier-nav:hover:not(:disabled) {
+    background: #2a2420;
+    color: #fff;
+  }
+  .subscribe-tier-nav:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+  #subscribe-tier-prev { left: 0.6rem; }
+  #subscribe-tier-next { right: 0.6rem; }
+  .subscribe-tier-carousel::-webkit-scrollbar {
+    display: none;
+  }
+  /* Two rows: price on top, description under it. */
+  .subscribe-tier-slide {
+    flex: 0 0 100%;
+    min-width: 100%;
+    box-sizing: border-box;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: start;
+    gap: 0.75rem;
+  }
+  .subscribe-tier-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    border: none;
+    padding: 0;
+    background: rgba(42, 36, 32, 0.18);
+    cursor: pointer;
+    transition: background 0.2s ease;
+  }
+  .subscribe-tier-dot--active {
+    background: #2a2420;
+  }
+`;
+
+// Mirrors the dashboard loading card header: avatar left, mono label dead
+// center, action right. 1fr/auto/1fr keeps the label centered regardless of
+// the side elements' widths.
+const headerRowStyle = {
+  display: 'grid',
+  gridTemplateColumns: '1fr auto 1fr',
+  alignItems: 'center',
+  gap: '0.75rem',
+  padding: 'clamp(1.25rem, 5vw, 2rem) clamp(1.25rem, 5vw, 2rem) 0',
+  flexShrink: 0,
 };
 
-const eyebrowStyle = {
+const headerLogoStyle = {
+  width: '2.75rem',
+  height: '2.75rem',
+  borderRadius: '50%',
+  objectFit: 'cover',
+  border: '2px solid rgba(255,255,255,0.35)',
   display: 'block',
-  fontStyle: 'italic',
-  fontSize: '0.85rem',
-  color: 'rgba(42, 36, 32, 0.5)',
-  marginBottom: '0.45rem',
+  flexShrink: 0,
 };
 
-const titleStyle = {
+const headerLabelStyle = {
+  fontSize: '0.82rem',
+  letterSpacing: '0.14em',
+  textTransform: 'uppercase',
+  color: 'rgba(42, 36, 32, 0.44)',
+  fontWeight: 700,
+  fontFamily: '"Space Mono", monospace',
+};
+
+// Side margins match the header/loading-card padding so the scrolling text
+// clips inside the card gutter instead of running edge to edge.
+const marqueeShellStyle = {
+  overflow: 'hidden',
+  margin: '0 clamp(1.25rem, 5vw, 2rem)',
+  padding: '1rem 0 0.5rem',
+  flexShrink: 0,
+};
+
+const marqueeTitleStyle = {
   margin: 0,
-  fontSize: 'clamp(1.5rem, 2.4vw, 2.1rem)',
+  flexShrink: 0,
+  color: '#2a2420',
+  fontSize: 'clamp(2.2rem, 8vw, 3.6rem)',
   lineHeight: 1,
   letterSpacing: '-0.04em',
-  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  fontFamily: "'Doto', 'Space Mono', monospace",
+  fontWeight: 700,
+  whiteSpace: 'nowrap',
 };
 
 const summaryStyle = {
@@ -281,23 +597,10 @@ const summaryStyle = {
   color: 'rgba(42, 36, 32, 0.7)',
 };
 
-const closeButtonStyle = {
-  border: '1px solid rgba(42, 36, 32, 0.12)',
-  background: 'rgba(255,255,255,0.42)',
-  color: '#2a2420',
-  borderRadius: '999px',
-  padding: '0.7rem 1rem',
-  fontSize: '0.78rem',
-  fontWeight: 700,
-  letterSpacing: '0.08em',
-  textTransform: 'uppercase',
-  cursor: 'pointer',
-  alignSelf: 'flex-start',
-};
-
 const bodyStyle = {
   overflowY: 'auto',
-  padding: 'clamp(1.25rem, 2.5vw, 1.75rem)',
+  padding:
+    '0.75rem clamp(1.25rem, 2.5vw, 1.75rem) clamp(2rem, 4vw, 2.5rem)',
 };
 
 const formStackStyle = {
@@ -323,12 +626,118 @@ const primaryButtonStyle = {
   alignItems: 'center',
   justifyContent: 'center',
   gap: '0.5rem',
-  alignSelf: 'flex-start',
+  width: '100%',
+  boxSizing: 'border-box',
   border: 'none',
   textDecoration: 'none',
   background: 'linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)',
   boxShadow: '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1)',
   color: '#ffffff',
+  borderRadius: '999px',
+  padding: '0.85rem 1.25rem',
+  fontSize: '0.875rem',
+  fontWeight: 700,
+  letterSpacing: '0.01em',
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+};
+
+// Layout (grid columns + mobile collapse) lives in subscribeModalCss.
+// Surface matches the dashboard card-grid shell (#capability-grid) with its
+// soft pastel radial gradients.
+const productSummaryStyle = {
+  position: 'relative',
+  padding: '1rem',
+  borderRadius: '1rem',
+  border: '1px solid rgba(42, 36, 32, 0.12)',
+  background:
+    'radial-gradient(60% 60% at 10% 15%, rgba(102, 184, 164, 0.12), transparent 60%), radial-gradient(50% 50% at 82% 72%, rgba(171, 148, 218, 0.14), transparent 65%), rgba(255,255,255,0.45)',
+  boxShadow: '0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4)',
+};
+
+const productSummaryTextStyle = {
+  minWidth: 0,
+  textAlign: 'center',
+};
+
+// Fixed row height = the full-size price line, so the description starts at
+// the same y on every slide even when a long price renders smaller.
+const productPriceColStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  minHeight: 'clamp(3.2rem, 12vw, 4.4rem)',
+};
+
+const productCopyStyle = {
+  margin: '0 auto',
+  maxWidth: '34ch',
+  fontSize: '0.85rem',
+  lineHeight: 1.45,
+  color: 'rgba(42, 36, 32, 0.65)',
+};
+
+// Same size as the original single-product $5 — keeps the price-to-copy
+// ratio. Long ranges (e.g. $99–$199) step down one notch so they still fit
+// beside the copy column.
+const productPriceStyle = {
+  fontSize: 'clamp(3.2rem, 12vw, 4.4rem)',
+  fontWeight: 900,
+  letterSpacing: '-0.02em',
+  lineHeight: 1,
+  color: '#2a2420',
+  fontFamily: "'Doto', 'Space Mono', monospace",
+  textAlign: 'center',
+  whiteSpace: 'nowrap',
+};
+
+const productPriceLongStyle = {
+  ...productPriceStyle,
+  fontSize: 'clamp(2.2rem, 8.5vw, 3rem)',
+};
+
+const productPriceUnitStyle = {
+  fontSize: '1.05rem',
+  fontWeight: 700,
+  letterSpacing: '0',
+  color: 'rgba(42, 36, 32, 0.75)',
+};
+
+const tierCadenceStyle = {
+  margin: '0.6rem 0 0',
+  fontSize: '0.72rem',
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  color: 'rgba(42, 36, 32, 0.55)',
+  fontFamily: '"Space Mono", monospace',
+  textAlign: 'center',
+};
+
+const tierDotsRowStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '0.5rem',
+  paddingTop: '0.65rem',
+};
+
+const ctaRowStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'stretch',
+  gap: '0.75rem',
+};
+
+const meetHumanButtonStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '0.5rem',
+  width: '100%',
+  boxSizing: 'border-box',
+  border: '1px solid transparent',
+  background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box',
+  color: '#2a2420',
   borderRadius: '999px',
   padding: '0.85rem 1.25rem',
   fontSize: '0.875rem',
@@ -349,6 +758,33 @@ const successTitleStyle = {
   margin: 0,
   fontSize: '1.4rem',
   letterSpacing: '-0.03em',
+};
+
+const stripeBadgeStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '0.35rem',
+  fontSize: '0.75rem',
+  color: 'rgba(42, 36, 32, 0.45)',
+};
+
+// Stripe badge left / existing-user sign-in right, under the CTA.
+const belowCtaRowStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: '1rem',
+};
+
+const signInLinkStyle = {
+  fontSize: '0.72rem',
+  letterSpacing: '0.08em',
+  textTransform: 'uppercase',
+  fontFamily: '"Space Mono", monospace',
+  color: 'rgba(42, 36, 32, 0.6)',
+  textDecoration: 'underline',
+  textUnderlineOffset: '3px',
 };
 
 const cryptoTriggerStyle = {

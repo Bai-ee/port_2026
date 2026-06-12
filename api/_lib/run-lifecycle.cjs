@@ -272,6 +272,9 @@ function buildDashboardProjection(clientId, pipelineResult, runId) {
     if (pipelineResult.outputsPreview) base.outputsPreview = pipelineResult.outputsPreview;
     if (pipelineResult.systemPreview) base.systemPreview = pipelineResult.systemPreview;
     if (pipelineResult.siteMeta) base.siteMeta = pipelineResult.siteMeta;
+    // Trimmed crawl evidence (normalize.js summarizeEvidencePages) — feeds the
+    // Data Quality SITE EVIDENCE rows and Trust/Platform Coverage cards.
+    if (pipelineResult.evidence) base.evidence = pipelineResult.evidence;
     if (pipelineResult.analyzerOutputs) base.analyzerOutputs = pipelineResult.analyzerOutputs;
     // skillDocs — per-skill downloadable doc (html + markdown), surfaced on DATA tab.
     if (pipelineResult.skillDocs && Object.keys(pipelineResult.skillDocs).length > 0) {

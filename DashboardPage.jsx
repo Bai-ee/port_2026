@@ -8,7 +8,6 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 gsap.registerPlugin(ScrollTrigger);
 import Link from 'next/link';
 import {
-  ArrowRightLeft,
   ArrowUpRight,
   BriefcaseBusiness,
   CalendarDays,
@@ -132,13 +131,13 @@ const PENDING_DASHBOARD_SIGNUP_KEY = 'pending-dashboard-signup';
 const DASHBOARD_BOOTSTRAP_TIMEOUT_MS = 20_000;
 const DASHBOARD_BOOTSTRAP_CACHE_PREFIX = 'dashboard-bootstrap-cache-v1';
 const MARKETING_BRIEF_SOURCE_PLATFORMS = [
-  { key: 'web', label: 'Web / News', status: 'ready', description: 'General web search, news, launches, blogs, and indexed coverage.' },
-  { key: 'x', label: 'X / Twitter', status: 'ready', description: 'KOL commentary, reply windows, and fast-moving social narratives.' },
-  { key: 'reddit', label: 'Reddit', status: 'ready', description: 'Community threads, recommendation requests, pain points, and buyer language.' },
-  { key: 'instagram', label: 'Instagram', status: 'ready', description: 'Creator and brand content surfaced through available social search/context.' },
-  { key: 'youtube', label: 'YouTube', status: 'available', description: 'Video commentary and creator discussions when social search is configured.' },
-  { key: 'tiktok', label: 'TikTok', status: 'available', description: 'Short-form trend signals when social search is configured.' },
-  { key: 'hackernews', label: 'Hacker News', status: 'available', description: 'Tech/startup discussion for relevant clients.' },
+  { key: 'web', label: 'Web / News', status: 'ready', description: 'Checks recent web results and news so the brief knows what people can find about your market.' },
+  { key: 'x', label: 'X / Twitter', status: 'ready', description: 'Looks for timely posts and conversations your marketing director should know about.' },
+  { key: 'reddit', label: 'Reddit', status: 'ready', description: 'Reads customer-style questions and complaints so the strategy uses real buyer language.' },
+  { key: 'instagram', label: 'Instagram', status: 'ready', description: 'Reviews creator and brand activity so visual and social ideas stay current.' },
+  { key: 'youtube', label: 'YouTube', status: 'available', description: 'Finds video discussions that can reveal education topics, objections, and content angles.' },
+  { key: 'tiktok', label: 'TikTok', status: 'available', description: 'Checks short-form trends that may shape what your audience is watching right now.' },
+  { key: 'hackernews', label: 'Hacker News', status: 'available', description: 'Reviews startup and technical discussions when they matter to the client category.' },
 ];
 // Web + X are the free defaults; Reddit is unlocked and default-on while we
 // troubleshoot its pipeline. Everything else stays locked behind an upgrade.
@@ -154,7 +153,7 @@ const CATEGORY_TERMS_USED_IN_GENERATED_SEARCH = 4;
 // Web Search + Platforms card — Web is the free, toggleable default; the launch
 // and startup directories are locked until their search layer ships.
 const WEB_SEARCH_SOURCES = [
-  { key: 'web',              label: 'Web / News',            locked: false, description: 'General web search, news, launches, blogs, and indexed coverage.' },
+  { key: 'web',              label: 'Web / News',            locked: false, description: 'Checks the open web for useful market news, launches, and pages your audience may see.' },
   { key: 'producthunt',      label: 'Product Hunt',          locked: true },
   { key: 'betalist',         label: 'Betalist',              locked: true },
   { key: 'uneed',            label: 'Uneed',                 locked: true },
@@ -181,16 +180,16 @@ const WEB_SEARCH_SOURCES = [
 // Social Media Signals (Media) card — X and Reddit feed the brief today; the
 // rest are locked until the social search layer ships.
 const SOCIAL_SIGNAL_SOURCES = [
-  { key: 'x',         label: 'X / Twitter', locked: false, description: 'KOL commentary, reply windows, and fast-moving social narratives.' },
-  { key: 'reddit',    label: 'Reddit',      locked: false, description: 'Community threads, recommendation requests, pain points, and buyer language.' },
-  { key: 'instagram', label: 'Instagram',   locked: true,  description: 'Creator and brand content via social search.' },
-  { key: 'tiktok',    label: 'TikTok',      locked: true,  description: 'Short-form trend signals.' },
-  { key: 'youtube',   label: 'YouTube',     locked: true,  description: 'Video commentary and creator discussions.' },
-  { key: 'linkedin',  label: 'LinkedIn',    locked: true,  description: 'Professional and B2B conversation signals.' },
-  { key: 'facebook',  label: 'Facebook',    locked: true,  description: 'Group and page discussion signals.' },
-  { key: 'threads',   label: 'Threads',     locked: true,  description: 'Emerging social narratives.' },
-  { key: 'bluesky',   label: 'Bluesky',     locked: true,  description: 'Emerging social narratives.' },
-  { key: 'pinterest', label: 'Pinterest',   locked: true,  description: 'Visual discovery and intent signals.' },
+  { key: 'x',         label: 'X / Twitter', locked: false, description: 'Finds timely conversations and reply windows a social manager could act on.' },
+  { key: 'reddit',    label: 'Reddit',      locked: false, description: 'Finds questions, complaints, and recommendations that reveal what buyers care about.' },
+  { key: 'instagram', label: 'Instagram',   locked: true,  description: 'Reviews creator and brand posts for visual direction and social ideas.' },
+  { key: 'tiktok',    label: 'TikTok',      locked: true,  description: 'Checks short-form trends that could shape quick content ideas.' },
+  { key: 'youtube',   label: 'YouTube',     locked: true,  description: 'Finds video topics and creator discussions worth learning from.' },
+  { key: 'linkedin',  label: 'LinkedIn',    locked: true,  description: 'Looks for professional conversations, buyer pain points, and B2B signals.' },
+  { key: 'facebook',  label: 'Facebook',    locked: true,  description: 'Checks group and page discussion where local or niche audiences may talk.' },
+  { key: 'threads',   label: 'Threads',     locked: true,  description: 'Looks for newer social conversations that may become content opportunities.' },
+  { key: 'bluesky',   label: 'Bluesky',     locked: true,  description: 'Looks for newer social conversations that may become content opportunities.' },
+  { key: 'pinterest', label: 'Pinterest',   locked: true,  description: 'Checks visual search behavior and inspiration patterns for the audience.' },
 ];
 
 function classifyMarketingBriefPlatform(url, explicitPlatform) {
@@ -676,10 +675,8 @@ function colorInputValue(value, fallback = '#000000') {
 import {
   trackDashboardCreated,
   trackPipelineRerun,
-  trackPipelineCancelled,
   trackTileOpened,
   trackThemeChanged,
-  trackTierModalOpened,
   trackSignOut,
 } from '@/lib/analytics';
 
@@ -856,7 +853,7 @@ const tiles = [
     number: '01',
     label: 'CREATIVE PIPELINES',
     title: 'Content that sounds like you.',
-    description: 'Posts drafted in real time, aligned to your brand voice and audience.',
+    description: 'Acts like a content producer: drafts posts in your voice so you have a strong starting point to review.',
     status: 'LIVE',
     metric: 'BRAND READY',
     viz: 'segbars',
@@ -867,7 +864,7 @@ const tiles = [
     number: '02',
     label: 'COMPANY BRAIN',
     title: 'Searchable, structured, stateful.',
-    description: 'Your entire knowledge stack indexed, organized, and instantly queryable.',
+    description: 'Acts like an organized company librarian: keeps your documents and notes easy to find and use.',
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'memory',
@@ -878,7 +875,7 @@ const tiles = [
     number: '03',
     label: 'KNOWLEDGE ASSISTANT',
     title: 'Answers from your data.',
-    description: 'Team asks a question; system pulls the answer directly from your own docs.',
+    description: 'Acts like an internal assistant: answers team questions using the material you have already provided.',
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'qa',
@@ -889,7 +886,7 @@ const tiles = [
     number: '04',
     label: 'EXECUTIVE SUPPORT',
     title: 'Walk in already briefed.',
-    description: 'Every meeting pre-briefed with full context loaded before you sit down.',
+    description: 'Acts like an executive assistant: prepares meeting context so decisions start with the right facts.',
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'meetings',
@@ -900,7 +897,7 @@ const tiles = [
     number: '05',
     label: 'DAILY OPERATIONS',
     title: 'Core tasks run themselves.',
-    description: 'Triage, task tracking, and reports — runs every day without oversight.',
+    description: 'Acts like an operations coordinator: sorts routine tasks, tracks work, and prepares simple updates.',
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'rings',
@@ -911,7 +908,7 @@ const tiles = [
     number: '06',
     label: 'EMAIL MARKETING',
     title: 'Campaigns that learn.',
-    description: 'Campaigns built, scheduled, and optimized across regions from one system.',
+    description: 'Acts like an email marketer: plans campaigns, prepares sends, and watches what should improve.',
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'spark',
@@ -922,7 +919,7 @@ const tiles = [
     number: '07',
     label: 'AI RESEARCH',
     title: 'Weeks of insight in hours.',
-    description: 'Consumer insights, competitive analysis, and market validation — in hours.',
+    description: 'Acts like a research analyst: gathers customer, competitor, and market notes you can act on.',
     status: 'LIVE',
     metric: 'BRAND READY',
     viz: 'countdown',
@@ -933,7 +930,7 @@ const tiles = [
     number: '09',
     label: 'COMPLIANCE MONITORING',
     title: 'Nothing critical gets missed.',
-    description: 'Deadlines, filings, and rules — monitored daily so nothing slips through.',
+    description: 'Acts like a compliance coordinator: watches important requirements and flags what needs review.',
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'deadlines',
@@ -944,7 +941,7 @@ const tiles = [
     number: '10',
     label: 'DISTRIBUTION & INSIGHT',
     title: 'One loop for everything.',
-    description: 'Publishing, SEO fixes, and rankings — unified into one continuous system.',
+    description: 'Acts like a distribution manager: connects publishing, search visibility, and reporting in one place.',
     status: 'LIVE',
     metric: 'BRAND READY',
     viz: 'table',
@@ -955,7 +952,7 @@ const tiles = [
     number: '11',
     label: 'RAPID PRODUCT DEV',
     title: 'Concept to launch, fast.',
-    description: 'Tools and integrations scoped, built, and shipped from a single request.',
+    description: 'Acts like a product builder: turns a clear request into a useful tool, page, or workflow.',
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'pipeline',
@@ -966,7 +963,7 @@ const tiles = [
     number: '12',
     label: 'SELF-IMPROVING',
     title: 'Every run smarter.',
-    description: 'Tracks outcomes and refines execution rules automatically from feedback.',
+    description: 'Acts like a process manager: learns from results and improves the next version of the work.',
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'delta',
@@ -977,7 +974,7 @@ const tiles = [
     number: '13',
     label: 'REDDIT & COMMUNITY',
     title: 'Conversations to be in.',
-    description: 'Finds relevant threads and drafts contextual replies — queued for review.',
+    description: 'Acts like a community manager: finds useful conversations and drafts replies for approval.',
     status: 'LIVE',
     metric: 'BRAND READY',
     viz: 'threads',
@@ -988,7 +985,7 @@ const tiles = [
     number: '14',
     label: 'SEO CONTENT',
     title: 'Keywords to capture.',
-    description: 'Surfaces content gaps and delivers drafts aligned to your keyword targets.',
+    description: 'Acts like an SEO writer: finds search topics and prepares drafts aimed at those opportunities.',
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'keywords',
@@ -1000,7 +997,7 @@ const tiles = [
     number: '15',
     label: 'MULTI-AGENT PIPELINE',
     title: 'Scout, Scribe, Guardian, Reporter.',
-    description: 'Four-agent pipeline running daily — Scout, Scribe, Guardian, and Reporter.',
+    description: 'Runs a daily team of specialist agents that find signals, write the brief, check quality, and report back.',
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'segbars',
@@ -1011,7 +1008,7 @@ const tiles = [
     number: '16',
     label: 'HYPERLOCAL SIGNALS',
     title: 'Live multi-source intelligence.',
-    description: 'X, Instagram, Reddit, reviews, and weather — normalized and synthesized.',
+    description: 'Collects local and social signals so the brief understands what is happening around the business.',
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'spark',
@@ -1022,7 +1019,7 @@ const tiles = [
     number: '17',
     label: 'PLATFORM CONTENT GEN',
     title: 'Platform-native drafts.',
-    description: 'Instagram, X, Facebook, Discord — formatted and voiced for each channel.',
+    description: 'Prepares channel-specific drafts so each platform gets copy that fits how people use it.',
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'threads',
@@ -1033,7 +1030,7 @@ const tiles = [
     number: '18',
     label: 'BRAND SAFETY GATE',
     title: 'Four-check quality gate.',
-    description: 'Restricted terms, competitor mentions, factual accuracy, voice scoring.',
+    description: 'Reviews content before it goes out, checking brand fit, accuracy, and risky wording.',
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'deadlines',
@@ -1044,7 +1041,7 @@ const tiles = [
     number: '19',
     label: 'FOUNDER DAILY BRIEF',
     title: 'One brief, every morning.',
-    description: 'Priority action, signals, and QA-approved drafts — delivered on schedule.',
+    description: 'Packages the day into a clear founder brief with the main action, signals, and approved drafts.',
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'meetings',
@@ -1055,7 +1052,7 @@ const tiles = [
     number: '20',
     label: 'ADMIN & BRIEF HISTORY',
     title: 'Every run, on the record.',
-    description: 'Real-time dashboard and complete archive of every brief and run on record.',
+    description: 'Keeps a record of every brief and run so progress, decisions, and changes are easy to review.',
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'table',
@@ -1066,7 +1063,7 @@ const tiles = [
     number: '21',
     label: 'IMAGE GENERATION',
     title: 'Post images on autopilot.',
-    description: 'Canvas generator with logo placement, text controls, and a live preview.',
+    description: 'Creates post images with brand assets, layout controls, and a preview before publishing.',
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'rings',
@@ -1077,7 +1074,7 @@ const tiles = [
     number: '22',
     label: 'KNOWLEDGE FILE CONFIG',
     title: 'Four files, new vertical.',
-    description: 'Swap JSON knowledge files to onboard a brand — no code changes.',
+    description: 'Lets a new brand use the same system by adding its facts, voice rules, and working notes.',
     status: 'PREVIEW',
     metric: 'CUSTOMIZATION',
     viz: 'memory',
@@ -1089,28 +1086,28 @@ const tiles = [
 // StackedSlidesSection.jsx (including commented reserved cards) so dashboard
 // blocked tiles align with homepage add-ons.
 const UPGRADE_TILE_DESCRIPTIONS = {
-  'creative-pipelines':      "Automates content creation in real time, aligning every post with your brand's voice while driving consistent engagement.",
-  'company-brain':           'Centralizes your entire operating stack into a structured, searchable system that powers faster decisions and smarter execution.',
-  'knowledge-assistant':     'Instantly answers team questions by pulling from your documents, conversations, and data—eliminating bottlenecks and repetitive work.',
-  'executive-support':       'Prepares meetings, surfaces insights, and drafts communications so you walk into every decision fully informed.',
-  'daily-operations':        'Runs core business tasks automatically—email triage, task tracking, reporting, and team updates—without manual oversight.',
-  'email-marketing':         'Builds, schedules, and optimizes campaigns across regions while learning and improving from feedback over time.',
-  'ai-research':             'Generates deep consumer insights, competitive analysis, and market validation in hours instead of weeks.',
-  'financial-tax':           'Organizes transactions, corrects discrepancies, and produces reporting-ready outputs aligned with accounting workflows.',
-  'compliance':              'Continuously checks deadlines, filings, and regulatory requirements to ensure nothing critical is missed.',
-  'distribution-insight':    'Unifies social publishing, SEO fixes, search visibility, and performance reporting into one continuous system that surfaces what to ship, where to publish, and what to improve next.',
-  'rapid-product':           'Builds and deploys functional tools, integrations, and experiences from concept to launch in a fraction of the time.',
-  'self-improving':          'Continuously refines workflows, tools, and outputs based on feedback, increasing performance over time.',
-  'reddit-community':        'Finds relevant threads and drafts reply ideas and post concepts for review before publishing.',
-  'seo-content':             'Surfaces keyword opportunities and drafts landing pages, blog outlines, and content directions for approval.',
-  'multi-agent-pipeline':    'A four-stage agent architecture — Scout, Scribe, Guardian, Reporter — runs automatically each day, taking raw market data from five sources and producing a founder-ready content brief with zero manual input.',
-  'hyperlocal-signals':      'Scout pulls live data from X/Twitter, Instagram, Reddit, customer reviews, and weather APIs, normalizes them into a unified intelligence format, and trims context to ~5K tokens before synthesis — optimized to under $0.10 per full run.',
-  'platform-content-gen':    "Scribe reads the day's brief and produces ready-to-publish drafts for Instagram, X/Twitter, Facebook, and Discord — each formatted to platform conventions and constrained by brand voice rules defined in client knowledge files.",
-  'brand-safety-gate':       'Guardian runs four sequential validation checks on every piece of generated content: restricted term scanning, competitor mention detection, factual accuracy, and brand voice scoring — outputting a readiness verdict and 0–100 quality score before anything moves forward.',
-  'founder-daily-brief':     "Reporter transforms the day's intelligence, content drafts, and QA results into a formatted HTML briefing — with operational context, review insights, Reddit signals, competitor activity, and content opportunities — delivered to the admin dashboard on schedule.",
-  'admin-dashboard-history': 'A real-time web dashboard surfaces the latest pipeline run: priority action, weather impact, content angle, Guardian verdict, and cost per run. A full archive of past runs lets the team compare briefs, track signal trends, and trigger fresh runs on demand.',
-  'image-generation':        'A canvas-based generator handles post image production — with configurable presets, logo placement controls, and live preview. Completed renders upload to Firebase Storage and attach automatically to the current brief run.',
-  'knowledge-file-config':   'The entire system adapts to a new client by swapping four JSON files: brand voice rules, intelligence config, business facts, and a restricted-terms glossary. No code changes required to onboard a new brand or vertical.',
+  'creative-pipelines':      'Acts like a content producer: drafts posts in the brand voice so the team can review faster.',
+  'company-brain':           'Acts like an organized company librarian: keeps documents, notes, and context ready for use.',
+  'knowledge-assistant':     'Acts like an internal assistant: answers team questions from approved company material.',
+  'executive-support':       'Acts like an executive assistant: prepares meeting notes, context, and follow-up drafts.',
+  'daily-operations':        'Acts like an operations coordinator: sorts routine tasks and prepares daily updates.',
+  'email-marketing':         'Acts like an email marketer: plans, writes, schedules, and improves campaigns.',
+  'ai-research':             'Acts like a research analyst: gathers customer, competitor, and market notes.',
+  'financial-tax':           'Acts like a finance assistant: organizes transactions and prepares clean reporting inputs.',
+  'compliance':              'Acts like a compliance coordinator: watches deadlines, filings, and review items.',
+  'distribution-insight':    'Acts like a distribution manager: connects publishing, search visibility, and reporting.',
+  'rapid-product':           'Acts like a product builder: turns a clear request into a useful tool or workflow.',
+  'self-improving':          'Acts like a process manager: uses feedback to improve the next run of work.',
+  'reddit-community':        'Acts like a community manager: finds useful discussions and drafts replies for review.',
+  'seo-content':             'Acts like an SEO writer: finds search opportunities and prepares content directions.',
+  'multi-agent-pipeline':    'Runs a daily specialist team that finds signals, writes the brief, checks quality, and reports back.',
+  'hyperlocal-signals':      'Collects local and social context so content can respond to what is happening now.',
+  'platform-content-gen':    'Prepares platform-specific drafts so each channel gets copy that fits the format.',
+  'brand-safety-gate':       'Reviews content before publishing, checking accuracy, brand fit, and risky wording.',
+  'founder-daily-brief':     'Packages the day into one clear brief with priorities, signals, and approved drafts.',
+  'admin-dashboard-history': 'Keeps every run and brief on record so progress and past decisions are easy to review.',
+  'image-generation':        'Creates branded post images with logo, layout, and text controls before publishing.',
+  'knowledge-file-config':   'Sets up a new brand by adding its facts, voice rules, and working notes.',
 };
 
 // Upgrade-overlay titles — must match AUTOMATION_CAPABILITIES in StackedSlidesSection.jsx
@@ -1148,6 +1145,26 @@ const memoryNodes = Array.from({ length: 96 }, (_, index) => {
 
 const WORK_NEEDED_LABEL = 'Work is Needed';
 const CONTACT_HUMAN_LABEL = 'Contact your human in the loop';
+const MOCKUP_STUDIO_VIEWPORTS = [
+  { id: 'desktop', label: 'Desktop' },
+  { id: 'mobile', label: 'Mobile' },
+  { id: 'tablet', label: 'Tablet' },
+];
+const MOCKUP_STUDIO_BACKDROPS = [
+  { id: 'home', label: 'Hitloop' },
+  { id: 'graphite', label: 'Graphite' },
+  { id: 'studio', label: 'Studio' },
+  { id: 'midnight', label: 'Midnight' },
+  { id: 'teal', label: 'Teal' },
+];
+const MOCKUP_STUDIO_TEMPLATES = [
+  { id: 'spiral-in', label: 'Spiral In' },
+  { id: 'hero-push', label: 'Hero Push-In' },
+  { id: 'orbit-reveal', label: 'Orbit Reveal' },
+  { id: 'showcase-loop', label: 'Showcase Loop' },
+  { id: 'close-pan', label: 'Corner Tour' },
+  { id: 'slow-drift', label: 'Slow Drift' },
+];
 const CUSTOM_DETAIL_CARD_IDS = new Set([
   'multi-device-view',
   'brief',
@@ -1162,6 +1179,7 @@ const CUSTOM_DETAIL_CARD_IDS = new Set([
   'knowledge-base',
   'client-brief',
   'client-mockup',
+  'mockup-studio',
   'client-site',
   'social-media-posting',
   'strategy-builder',
@@ -1188,7 +1206,7 @@ const CARD_ACTION_EDIT = new Set([
   'brand-keywords', 'watchlist', 'scout-focus', 'platform-search', 'social-signals',
   'conversation-intake', 'local-weather', 'business-model', 'brief-preview',
   'knowledge-base', 'email-settings', 'email-digest', 'industry', 'create-client',
-  'social-media-posting', 'strategy-30', 'strategy-builder',
+  'social-media-posting', 'strategy-30', 'strategy-builder', 'mockup-studio',
 ]);
 
 // Brief card → composition key in features/scout-intake/brief-sections.cjs.
@@ -1578,19 +1596,19 @@ const MODULE_TERMINAL_STAGES = {
   ],
   'social-preview': [
     { tag: 'FETCH',   label: 'Fetch homepage' },
-    { tag: 'META',    label: 'Extract social metadata' },
+    { tag: 'META',    label: 'Check share preview details' },
     { tag: 'WRITE',   label: 'Write preview module' },
   ],
   'seo-performance': [
-    { tag: 'PSI',     label: 'Run PageSpeed Insights' },
-    { tag: 'AI',      label: 'Run AI SEO audit' },
-    { tag: 'WRITE',   label: 'Write SEO module' },
+    { tag: 'PSI',     label: 'Run website speed check' },
+    { tag: 'AI',      label: 'Check AI visibility' },
+    { tag: 'WRITE',   label: 'Write website review' },
   ],
   'brand-system': [
-    { tag: 'SCAN',    label: 'Read pipeline data' },
+    { tag: 'SCAN',    label: 'Read dashboard context' },
     { tag: 'CHAT',    label: 'Resolve gap questions' },
     { tag: 'VISION',  label: 'Run Claude vision on uploads' },
-    { tag: 'BUILD',   label: 'Assemble Brand Guide JSON' },
+    { tag: 'BUILD',   label: 'Assemble brand guide' },
     { tag: 'WRITE',   label: 'Generate output templates' },
   ],
 };
@@ -1698,7 +1716,7 @@ function _termPath(url) {
 
 // ── Growth-engine terminal (scout-brief runs) ────────────────────────────────
 // Job board for the second onboarding pass (trigger: onboarding-chain) and for
-// manual Executive Daily Brief runs. One row per job; statuses driven by
+// manual Executive Brief runs. One row per job; statuses driven by
 // run.progress.stage emitted from runtime.js (scout → strategy → scribe).
 
 const GROWTH_TERMINAL_JOBS = [
@@ -1727,7 +1745,7 @@ function buildGrowthTerminalLog(run, dashboardState, latestRunStatus, client, co
   if (latestRunStatus === 'failed') {
     add('error', '[ERR]', 'brief generation hit an issue');
     if (isChain) {
-      add('dim', '', 'your dashboard is ready — retry from the Executive Daily Brief card');
+      add('dim', '', 'your dashboard is ready — retry from the Executive Brief card');
       add('dim', '', '─'.repeat(46));
       if (countdown > 0) {
         add('countdown', '▶', `launching dashboard in ${countdown}…`);
@@ -1735,7 +1753,7 @@ function buildGrowthTerminalLog(run, dashboardState, latestRunStatus, client, co
         add('countdown', '▶', 'launching…');
       }
     } else {
-      add('dim', '', 'retry from the Executive Daily Brief card');
+      add('dim', '', 'retry from the Executive Brief card');
     }
     return lines;
   }
@@ -1784,7 +1802,7 @@ function buildGrowthTerminalLog(run, dashboardState, latestRunStatus, client, co
 }
 
 function buildTerminalLog(run, dashboardState, latestRunStatus, client, countdown) {
-  // Scout-brief runs (onboarding chain or Executive Daily Brief card) render
+  // Scout-brief runs (onboarding chain or Executive Brief card) render
   // the growth-engine job board instead of the intake script.
   if (run?.pipelineType === 'scout-brief') {
     return buildGrowthTerminalLog(run, dashboardState, latestRunStatus, client, countdown);
@@ -2137,6 +2155,21 @@ function buildTerminalLines(run, dashboardState, latestRunStatus, client) {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+// Non-admin accounts: every tile is locked unless its card id is listed here.
+// Daily Briefs bucket is open except the pre-run preview ('brief') and the
+// Executive Brief ('marketing-brief'); named brief rows keep their own tier locks.
+const NON_ADMIN_UNLOCKED_CARD_IDS = new Set([
+  'past-briefs',
+  'submit-custom-brief',
+  'brief-marketing',
+  'brief-strategy',
+  'brief-creative',
+  'brief-performance',
+]);
+
+// Non-admin accounts: these nav buckets are fully locked (disabled, no hover).
+const NON_ADMIN_LOCKED_NAV_KEYS = new Set(['automation', 'services', 'leadgen']);
+
 // Per-bucket workflow steps. Each step's `id` is the first card in its group;
 // the segmented control above the grid lets users jump to that anchor.
 const CAP_STEPS = {
@@ -2196,7 +2229,38 @@ const CAP_BUCKET_COLOR = {
 // tier limits are wired to real plan data.
 const TIER_BRIEF_COOLDOWN_SECONDS = 300;
 
-const DashboardPage = () => {
+// Free accounts get one brief per month — the cooldown chip counts down
+// 30 days from the last brief run instead of the short paid-tier wait.
+const FREE_TIER_BRIEF_COOLDOWN_SECONDS = 30 * 24 * 60 * 60;
+
+// Compact unit display for the cooldown chip: '29d', '7h', '12m', '45s'.
+function formatBriefCooldown(seconds) {
+  if (seconds >= 86400) return { value: Math.ceil(seconds / 86400), unit: 'd' };
+  if (seconds >= 3600) return { value: Math.ceil(seconds / 3600), unit: 'h' };
+  if (seconds >= 60) return { value: Math.ceil(seconds / 60), unit: 'm' };
+  return { value: seconds, unit: 's' };
+}
+
+// Firestore timestamps reach the client in three shapes: a live Timestamp
+// (has toDate), a client-SDK plain object ({seconds}), or an admin-SDK
+// JSON-serialized object ({_seconds} — what /api/dashboard/bootstrap returns).
+// Returns a valid Date or null.
+function fsTimestampToDate(raw) {
+  if (!raw) return null;
+  try {
+    if (typeof raw.toDate === 'function') {
+      const d = raw.toDate();
+      return d && !isNaN(d.getTime()) ? d : null;
+    }
+    const secs = raw.seconds ?? raw._seconds;
+    const d = secs != null ? new Date(secs * 1000) : new Date(raw);
+    return d && !isNaN(d.getTime()) ? d : null;
+  } catch { return null; }
+}
+
+// entranceReady: route-level signal that the loading overlay has finished its
+// fade — the dashboard entrance timeline holds hidden until it flips true.
+const DashboardPage = ({ entranceReady = true }) => {
   const { user, userProfile, signOutUser, isAdmin } = useAuth();
   const [theme, setTheme] = useState('light');
   const [countdownHours, setCountdownHours] = useState(14);
@@ -2309,7 +2373,7 @@ const DashboardPage = () => {
   const openMarketCategoryCard = useCallback(() => {
     setActiveTileModal({
       title: 'Market Category',
-      description: 'Set the category the client operates in.',
+      description: 'Set the business category so recommendations are compared against the right market.',
       cardId: 'industry',
       isCapabilityCard: true,
       vizType: null,
@@ -2342,10 +2406,33 @@ const DashboardPage = () => {
     } finally {
       setMarketCategoryRunLoading(false);
     }
-  }, [brandSystemGetIdToken, openMarketCategoryCard, apiPath]);
-  const client = bootstrap.client;
+	  }, [brandSystemGetIdToken, openMarketCategoryCard, apiPath]);
+	  const client = bootstrap.client;
+	  const [mockupStudioDraft, setMockupStudioDraft] = useState({
+	    sourceUrl: '',
+	    viewportId: 'desktop',
+	    backdropId: 'home',
+	    templateId: 'spiral-in',
+	  });
 
-  const openLeadgenFlow = useCallback(async (step) => {
+	  useEffect(() => {
+	    const site = client?.websiteUrl || client?.website || '';
+	    if (!site) return;
+	    setMockupStudioDraft((prev) => (prev.sourceUrl ? prev : { ...prev, sourceUrl: site }));
+	  }, [client?.websiteUrl, client?.website]);
+
+	  const openMockupStudio = useCallback(({ autoVideo = false } = {}) => {
+	    const site = mockupStudioDraft.sourceUrl || client?.websiteUrl || client?.website || '';
+	    const params = new URLSearchParams();
+	    if (site) params.set('url', site);
+	    params.set('viewport', mockupStudioDraft.viewportId || 'desktop');
+	    params.set('backdrop', mockupStudioDraft.backdropId || 'home');
+	    params.set('template', mockupStudioDraft.templateId || 'spiral-in');
+	    if (autoVideo) params.set('autovideo', '1');
+	    window.open(`/dashboard/studio?${params.toString()}`, '_blank');
+	  }, [client?.websiteUrl, client?.website, mockupStudioDraft]);
+
+	  const openLeadgenFlow = useCallback(async (step) => {
     if (!user) return;
     setClientFlowError(null);
     setClientFlowSeeding(true);
@@ -2412,7 +2499,7 @@ const DashboardPage = () => {
 
   // Default to Data Visualization immediately so a slow/unavailable bootstrap
   // cannot leave the nav and card shell hidden.
-  const [activeCapabilityFilter, setActiveCapabilityFilter] = useState('growth'); // default bucket: Marketing Director
+  const [activeCapabilityFilter, setActiveCapabilityFilter] = useState('brief'); // default bucket: Daily Briefs
   const [activeStepIdx, setActiveStepIdx] = useState(0);
   const [capView, setCapView] = useState('list'); // 'grid' | 'list' — default to table/line-items view
   const [expandedListCards, setExpandedListCards] = useState(new Set());
@@ -2428,14 +2515,7 @@ const DashboardPage = () => {
   useEffect(() => { setActiveStepIdx(0); }, [activeCapabilityFilter]);
   const handleCapStepClick = useCallback((idx) => {
     setActiveStepIdx(idx);
-    const steps = CAP_STEPS[activeCapabilityFilter];
-    const anchorId = steps?.[idx]?.id;
-    if (!anchorId) return;
-    const el = typeof document !== 'undefined' ? document.getElementById('tile-' + anchorId) : null;
-    if (el && typeof el.scrollIntoView === 'function') {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }, [activeCapabilityFilter]);
+  }, []);
   const [chatDraft, setChatDraft] = useState('');
   const [modalChatMode, setModalChatMode] = useState('ai');
   const toggleMobileCard = (id) => setExpandedMobileCards((prev) => {
@@ -2445,6 +2525,16 @@ const DashboardPage = () => {
   });
   const capabilityGridRef = useRef(null);
   const dashboardVisibleRef = useRef(false);
+  // First bootstrap resolved — the card stagger waits for it so cards animate
+  // against real data. Stays true through later refetches (admin client
+  // switch, reseed) so the reveal never replays.
+  const [initialBootstrapDone, setInitialBootstrapDone] = useState(false);
+  // Entrance choreography handshake: the main timeline reveals the grid
+  // container (chrome + spinner) and flips gridShellRevealed; the card-stagger
+  // effect then waits for initialBootstrapDone before fading the spinner out
+  // and staggering cards in. cardsRevealed unmounts the spinner afterwards.
+  const [gridShellRevealed, setGridShellRevealed] = useState(false);
+  const [cardsRevealed, setCardsRevealed] = useState(false);
   const [pendingSignupProvision, setPendingSignupProvision] = useState(null);
   const [moduleRunLoading, setModuleRunLoading] = useState({});
   const [moduleToggleLoading, setModuleToggleLoading] = useState({});
@@ -2468,6 +2558,7 @@ const DashboardPage = () => {
   const [surveyResolved, setSurveyResolved] = useState(false);
   const [onboardingAnswersSeed, setOnboardingAnswersSeed] = useState(null);
   const [intakeModalDismissed, setIntakeModalDismissed] = useState(false);
+  const [bgRunToast, setBgRunToast] = useState(false);
   const modalMarqueeTrackRef = useRef(null);
   const modalMarqueeOffsetRef = useRef(0);
   const modalMarqueeAnimRef = useRef(null);
@@ -2485,8 +2576,6 @@ const DashboardPage = () => {
   const [reseedLoading, setReseedLoading] = useState(false);
   const [reseedError, setReseedError] = useState('');
   const [reseedSuccess, setReseedSuccess] = useState(false);
-  const [cancelLoading, setCancelLoading] = useState(false);
-  const [cancelError, setCancelError] = useState('');
 
   const applyBootstrapResponse = useCallback((data) => {
     if (cancelledRef.current) return;
@@ -2499,6 +2588,7 @@ const DashboardPage = () => {
   // and injected via iframe srcDoc. Keeps the brief's <style> isolated from
   // the dashboard's own styles.
   const [briefPreviewHtml, setBriefPreviewHtml] = useState('');
+  const [briefPreviewLoading, setBriefPreviewLoading] = useState(true);
   // Dedicated HTML preview for the Marketing Brief modal's BRIEF tab.
   // Always fetched with `?type=marketing` so it shows the marketing render
   // regardless of which pipeline produced the latest run.
@@ -2767,8 +2857,9 @@ const DashboardPage = () => {
     if (!user) return;
     const dash = bootstrap?.dashboardState;
     const runId = dash?.latestRunId || null;
-    if (!dash?.scribe?.brief && !dash?.marketingBrief) { setBriefPreviewHtml(''); return; }
+    if (!dash?.scribe?.brief && !dash?.marketingBrief) { setBriefPreviewHtml(''); setBriefPreviewLoading(false); return; }
     let cancelled = false;
+    setBriefPreviewLoading(true);
     (async () => {
       try {
         const token = await user.getIdToken();
@@ -2784,6 +2875,8 @@ const DashboardPage = () => {
         if (!cancelled) setBriefPreviewHtml(html);
       } catch {
         // non-fatal — tile falls back to placeholder label
+      } finally {
+        if (!cancelled) setBriefPreviewLoading(false);
       }
     })();
     return () => { cancelled = true; };
@@ -2800,7 +2893,10 @@ const DashboardPage = () => {
     (async () => {
       try {
         const token = await user.getIdToken();
-        const res = await fetch(apiPath('/api/dashboard/brief-preview?type=marketing'), {
+        // Free tier = signup flow: same content as the Executive Brief for
+        // now, but requested + labeled as the Onboarding Brief.
+        const isFreeTier = dash?.tier !== 'paid';
+        const res = await fetch(apiPath(`/api/dashboard/brief-preview?type=marketing${isFreeTier ? '&brief=onboarding' : ''}`), {
           headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
         });
@@ -3124,9 +3220,10 @@ const DashboardPage = () => {
     if (id === 'design-evaluation' && bootstrap?.dashboardState?.analyzerOutputs?.['design-evaluation']) { setModalTab('report'); return; }
     if (id === 'social-preview' && bootstrap?.dashboardState?.siteMeta) { setModalTab('report'); return; }
     if (id === 'industry') { setModalTab('report'); return; }
-    if (id === 'brand-system') { setModalTab('master-prompt'); return; }
-    if (id === 'local-weather') { setModalTab('config'); return; }
-    setModalTab(CUSTOM_DETAIL_CARD_IDS.has(id) ? 'solutions' : 'report');
+	    if (id === 'brand-system') { setModalTab('master-prompt'); return; }
+	    if (id === 'local-weather') { setModalTab('config'); return; }
+	    if (id === 'mockup-studio') { setModalTab('setup'); return; }
+	    setModalTab(CUSTOM_DETAIL_CARD_IDS.has(id) ? 'solutions' : 'report');
   }, [activeTileModal?.cardId, bootstrap?.dashboardState?.artifacts?.skillDocs]);
 
   useEffect(() => {
@@ -3780,6 +3877,32 @@ const DashboardPage = () => {
   const displayProfile = bootstrap.userProfile || userProfile;
   const currentRun = recentRuns[0] || null;
   const dashboardState = bootstrap.dashboardState;
+  const openCapabilityCard = useCallback((card) => {
+    if (!card) return;
+    if (card.id === 'brief' && briefPreviewHtml) {
+      setBriefFullScreen(true);
+      return;
+    }
+    if (card.category === 'brief' && BRIEF_TYPE_BY_CARD[card.id] && dashboardState?.marketingBrief) {
+      openNamedBriefPreview(BRIEF_TYPE_BY_CARD[card.id]);
+      return;
+    }
+    setActiveTileModal({
+      title: card.title,
+      description: card.description,
+      dynamicShortDescription: card.dynamicShortDescription || null,
+      rows: card.rows,
+      cardId: card.id,
+      placeholderLabel: card.placeholderLabel,
+      number: card.number,
+      label: card.label,
+      isCapabilityCard: true,
+      vizType: null,
+      recommendation: card.recommendation || null,
+      analyzer: card.analyzer || null,
+      readinessBadge: card.readinessBadge || null,
+    });
+  }, [briefPreviewHtml, dashboardState?.marketingBrief, openNamedBriefPreview]);
 
   // Brief entitlements — locked flags on the brief rows follow the tier map
   // in brief-sections.cjs (one source of truth with the API gate); admins
@@ -3939,18 +4062,36 @@ const DashboardPage = () => {
 
   const isRunActive = latestRunStatus === 'queued' || latestRunStatus === 'running';
 
+  // Last completed run — anchors the free-tier monthly brief cooldown.
+  const lastBriefRun = recentRuns.find((r) => r && r.status === 'succeeded') || null;
+  const lastBriefMs = (() => {
+    const raw = lastBriefRun?.completedAt || lastBriefRun?.createdAt || lastBriefRun?.updatedAt || null;
+    const d = fsTimestampToDate(raw);
+    return d ? d.getTime() : null;
+  })();
+
   // Brief cooldown timer — while a brief run is active the timer resets to the
   // tier's full wait and holds; once the run ends it counts down to 0.
+  // Free tier: 1 brief / 30 days, counted from the last succeeded run (real
+  // time, survives reloads). Paid: short placeholder countdown.
   useEffect(() => {
     if (isRunActive) {
-      setBriefCooldownSeconds(TIER_BRIEF_COOLDOWN_SECONDS);
+      setBriefCooldownSeconds(briefTier === 'free' ? FREE_TIER_BRIEF_COOLDOWN_SECONDS : TIER_BRIEF_COOLDOWN_SECONDS);
       return undefined;
+    }
+    if (briefTier === 'free') {
+      const compute = () => (lastBriefMs
+        ? Math.max(0, Math.round((lastBriefMs + FREE_TIER_BRIEF_COOLDOWN_SECONDS * 1000 - Date.now()) / 1000))
+        : 0);
+      setBriefCooldownSeconds(compute());
+      const id = setInterval(() => setBriefCooldownSeconds(compute()), 1000);
+      return () => clearInterval(id);
     }
     const id = setInterval(() => {
       setBriefCooldownSeconds((s) => (s > 0 ? s - 1 : s));
     }, 1000);
     return () => clearInterval(id);
-  }, [isRunActive]);
+  }, [isRunActive, briefTier, lastBriefMs]);
 
   const noWorkspaceState = !bootstrapLoading
     && !bootstrapError
@@ -4010,6 +4151,46 @@ const DashboardPage = () => {
     ))
   );
 
+  // ── Intake modal dismissal persistence + background-run toast ───────────────
+  // Closing the build terminal mid-run must survive a reload: persist the
+  // dismissal keyed to the active run so a reload drops straight to the
+  // dashboard (which keeps polling via the effect above), while a brand-new run
+  // still surfaces the modal. A toast confirms the build continues.
+  const intakeDismissKey = awaitingSignupProvision ? 'awaiting-signup' : (currentRun?.id || null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !intakeDismissKey) return;
+    if (window.sessionStorage.getItem(`intake-dismissed:${intakeDismissKey}`) === '1') {
+      setIntakeModalDismissed(true);
+    }
+  }, [intakeDismissKey]);
+
+  useEffect(() => {
+    if (!bgRunToast) return undefined;
+    const t = setTimeout(() => setBgRunToast(false), 6000);
+    return () => clearTimeout(t);
+  }, [bgRunToast]);
+
+  const dismissIntakeModal = () => {
+    const runningInBackground = isRunActive || awaitingSignupProvision;
+    if (intakeDismissKey && typeof window !== 'undefined') {
+      window.sessionStorage.setItem(`intake-dismissed:${intakeDismissKey}`, '1');
+    }
+    setIntakeModalDismissed(true);
+    if (runningInBackground) setBgRunToast(true);
+  };
+
+  // Re-open the build terminal from the background-run chip. Clears the
+  // persisted dismissal so showIntakeModal recomputes true (the restore effect
+  // keys on intakeDismissKey, which is unchanged, so it won't re-dismiss).
+  const reopenIntakeModal = () => {
+    if (intakeDismissKey && typeof window !== 'undefined') {
+      window.sessionStorage.removeItem(`intake-dismissed:${intakeDismissKey}`);
+    }
+    setBgRunToast(false);
+    setIntakeModalDismissed(false);
+  };
+
   useEffect(() => {
     const anyModalOpen = showIntakeModal || showTierModal || showClientEditModal || showDeleteAccountModal || briefFullScreen || auditFullScreen;
     if (!anyModalOpen) {
@@ -4020,13 +4201,23 @@ const DashboardPage = () => {
     return () => { document.body.style.overflow = ''; };
   }, [showIntakeModal, showTierModal, showClientEditModal, showDeleteAccountModal, briefFullScreen, auditFullScreen]);
 
+  // First bootstrap resolved — latches true and never resets so later
+  // refetches don't replay the entrance.
+  useEffect(() => {
+    if (!bootstrapLoading) setInitialBootstrapDone(true);
+  }, [bootstrapLoading]);
+
   // Page-load / processing-handoff intro.
-  // Three states this effect handles:
+  // Four states this effect handles:
   //   1. Initial mount with the intake modal showing → instantly hide dashboard
   //      (background-only with the modal on top).
-  //   2. Initial mount or transition into "ready" (modal closed) → animate the
-  //      dashboard in nav → hero → cards top-left to bottom-right.
-  //   3. Transition from a visible dashboard into processing (e.g. user clicks
+  //   2. Route overlay still up → hold the dashboard hidden so the timeline
+  //      never plays behind the loading card.
+  //   3. Overlay gone, modal closed → animate in: top strip → hero marquee +
+  //      meta → capability nav → then CTA row + grid container (chrome +
+  //      spinner). Cards are NOT staggered here — the dedicated effect below
+  //      waits for first bootstrap so they animate against real data.
+  //   4. Transition from a visible dashboard into processing (e.g. user clicks
   //      "Update & Rerun") → quick fade out so the modal can take over.
   // The three.js background is owned by the parent route and stays mounted, so
   // we never touch it here.
@@ -4035,43 +4226,73 @@ const DashboardPage = () => {
     const heroNum  = document.querySelector('#founders-hero-numeric-shell');
     const heroMeta = document.querySelector('#founders-hero-meta');
     const capNav   = document.querySelector('#capability-nav-col');
+    const ctaRow   = document.querySelector('#dashboard-source-cta-row');
     const capGrid  = capabilityGridRef.current;
     const cards    = capGrid ? gsap.utils.toArray('[data-capability-card]', capGrid) : [];
-    const gridBorderColor = capGrid ? getComputedStyle(capGrid).borderTopColor : null;
-    const sections = [strip, heroNum, heroMeta, capNav].filter(Boolean);
+    // capGrid fades as a whole container (border, chrome, spinner together);
+    // cards keep their own autoAlpha 0 so they stay hidden inside it until the
+    // card-stagger effect reveals them.
+    const sections = [strip, heroNum, heroMeta, capNav, ctaRow, capGrid].filter(Boolean);
 
     if (showIntakeModal) {
+      setGridShellRevealed(false);
+      setCardsRevealed(false);
       if (dashboardVisibleRef.current) {
         // Was visible — fade out so the modal can take over
         dashboardVisibleRef.current = false;
         const outTl = gsap.timeline();
         outTl.to([...sections, ...cards], { autoAlpha: 0, duration: 0.3, ease: 'power2.in' });
-        if (capGrid) outTl.to(capGrid, { borderColor: 'transparent', duration: 0.3, ease: 'power2.in' }, '<');
         return () => outTl.kill();
       }
       // Initial mount with modal already showing — hide instantly
       gsap.set(sections, { autoAlpha: 0 });
-      if (capGrid && gridBorderColor) gsap.set(capGrid, { borderColor: 'transparent' });
       if (cards.length) gsap.set(cards, { autoAlpha: 0 });
       return undefined;
     }
 
-    // Modal is closed — animate dashboard in (initial load OR after processing)
+    // Overlay still up — hold hidden until the route signals the fade is done.
+    if (!entranceReady) {
+      setGridShellRevealed(false);
+      gsap.set(sections, { autoAlpha: 0 });
+      if (cards.length) gsap.set(cards, { autoAlpha: 0 });
+      return undefined;
+    }
+
+    // Ready — animate dashboard in (initial load OR after processing)
     dashboardVisibleRef.current = true;
     gsap.set(sections, { autoAlpha: 0 });
-    if (capGrid && gridBorderColor) gsap.set(capGrid, { borderColor: 'transparent' });
     if (cards.length) gsap.set(cards, { autoAlpha: 0 });
 
-    const tl = gsap.timeline({ delay: 0.5 });
+    // Short delay only — the overlay fade-out is the lead-in now. CTA row and
+    // grid container land at 0.95s, after the hero marquee tween (0.28 + 0.65)
+    // has finished.
+    const tl = gsap.timeline({ delay: 0.15 });
     tl.to(strip,    { autoAlpha: 1, duration: 0.5, ease: 'power2.out' }, '<0.1')
       .to(heroNum,  { autoAlpha: 1, duration: 0.65, ease: 'power2.out' }, '0.28')
       .to(heroMeta, { autoAlpha: 1, duration: 0.55, ease: 'power2.out' }, '<0.12')
       .to(capNav,   { autoAlpha: 1, duration: 0.5, ease: 'power2.out' }, '0.55')
-      .to(capGrid,  { borderColor: gridBorderColor, duration: 0.25, ease: 'power2.out' }, '<')
-      .to(cards,    { autoAlpha: 1, duration: 0.42, ease: 'power1.out', stagger: 0.15 }, '<0.05');
+      .to(ctaRow,   { autoAlpha: 1, duration: 0.45, ease: 'power2.out' }, '0.95')
+      .to(capGrid,  { autoAlpha: 1, duration: 0.45, ease: 'power2.out' }, '<0.08')
+      // Handshake: the grid shell is on screen — the card-stagger effect can
+      // take over as soon as bootstrap data is in.
+      .call(() => setGridShellRevealed(true), null, '1.2');
 
     return () => tl.kill();
-  }, [showIntakeModal]);
+  }, [showIntakeModal, entranceReady]);
+
+  // Card reveal — runs once the grid shell is on screen AND the first
+  // bootstrap has resolved. No stagger: all cards display at once when ready.
+  useLayoutEffect(() => {
+    if (!gridShellRevealed || !initialBootstrapDone || showIntakeModal) return undefined;
+    const capGrid = capabilityGridRef.current;
+    if (!capGrid) return undefined;
+    const cards = gsap.utils.toArray('[data-capability-card]', capGrid);
+    const spinner = document.querySelector('#capability-grid-spinner');
+    if (spinner) gsap.set(spinner, { autoAlpha: 0 });
+    if (cards.length) gsap.set(cards, { autoAlpha: 1 });
+    setCardsRevealed(true);
+    return undefined;
+  }, [gridShellRevealed, initialBootstrapDone, showIntakeModal]);
 
   // Polling while a run is in-flight
   useEffect(() => {
@@ -4222,7 +4443,7 @@ const DashboardPage = () => {
       }
     }
     // Chained brief soft-fail: the intake already succeeded, so reveal the
-    // dashboard anyway — the Executive Daily Brief card carries the retry.
+    // dashboard anyway — the Executive Brief card carries the retry.
     if (latestRunStatus === 'failed' && wasActive && currentRunIsOnboardingChain && surveyResolved) {
       setCompletionCountdown(4);
     }
@@ -4528,28 +4749,6 @@ const DashboardPage = () => {
     }
   }, [user, client, reseedUrl, reseedLoading, doBootstrap, apiPath]);
 
-  const handleCancelRun = useCallback(async () => {
-    if (!user || cancelLoading) return;
-    setCancelLoading(true);
-    setCancelError('');
-    try {
-      const token = await user.getIdToken();
-      const res = await fetch(apiPath('/api/dashboard/cancel-intake'), {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || 'Cancel failed.');
-      trackPipelineCancelled();
-      setReseedSuccess(false);
-      doBootstrap();
-    } catch (err) {
-      setCancelError(err instanceof Error ? err.message : 'Cancel failed.');
-    } finally {
-      setCancelLoading(false);
-    }
-  }, [user, cancelLoading, doBootstrap, apiPath]);
-
 
   const handleModuleToggle = useCallback(async (cardId, enabled) => {
     if (!user || moduleToggleLoading[cardId]) return;
@@ -4829,7 +5028,7 @@ const DashboardPage = () => {
     if (latestRunStatus === 'failed' && currentRunIsOnboardingChain) {
       const tail = [...realEventLines];
       tail.push({ type: 'dim', prefix: '', text: '─'.repeat(46), cursor: false });
-      tail.push({ type: 'dim', prefix: '', text: 'your dashboard is ready — retry from the Executive Daily Brief card', cursor: false });
+      tail.push({ type: 'dim', prefix: '', text: 'your dashboard is ready — retry from the Executive Brief card', cursor: false });
       if (!surveyResolved) {
         tail.push({ type: 'active', prefix: '▶', text: 'complete the survey above to reveal your dashboard →', cursor: true });
       } else if (completionCountdown !== null && completionCountdown > 0) {
@@ -4939,12 +5138,12 @@ const DashboardPage = () => {
     ? String(resolvedCategory).replace(/-/g, '\n').toUpperCase()
     : 'RUN TO\nCLASSIFY';
   const categoryDescription = !hasCategoryData
-    ? 'We map your business into a clear category. Run it to auto-classify from Social Preview, Brand Snapshot and Scout data — or set it manually. Feeds competitor benchmarking and the Strategy Builder.'
+    ? 'Sets the business category so the dashboard compares you to the right peers and gives more useful recommendations.'
     : _mcSource === 'agent'
-      ? `Classified as "${resolvedCategory}"${_mcConfidence != null ? ` (${_mcConfidence}% confidence)` : ''} by analysing your pipeline${_mcRationale ? `: ${_mcRationale}` : _mcEvidence ? ` from ${_mcEvidence}.` : ' from Social Preview, Brand Snapshot and Scout data.'} Feeds competitor benchmarking and the Strategy Builder.`
+      ? `Category set to "${resolvedCategory}"${_mcConfidence != null ? ` with ${_mcConfidence}% confidence` : ''}. This helps the dashboard judge competitors, content, and search opportunities in the right context.`
       : _mcSource === 'user'
-        ? `Set to "${resolvedCategory}" manually. Re-run to re-classify from your pipeline data. Feeds competitor benchmarking and the Strategy Builder.`
-        : `Detected as "${resolvedCategory}" from your brand snapshot. Run to re-classify from Social Preview / Scout data, or open the card to edit. Feeds competitor benchmarking and the Strategy Builder.`;
+        ? `Category set to "${resolvedCategory}" by the team. Use this when you already know the market and want the dashboard to follow that direction.`
+        : `Category detected as "${resolvedCategory}". Review it if the business should be compared against a different market.`;
   const resolvedBusinessModel = brandOverview?.businessModel || '';
   const resolvedOpportunities = (strategy?.opportunityMap?.length ? strategy.opportunityMap : latestInsights.length ? latestInsights : []).slice(0, 4);
   const hasBrandToneData = Boolean(brandTone?.primary || brandTone?.secondary || brandTone?.writingStyle || brandTone?.tags?.length);
@@ -5092,11 +5291,11 @@ const DashboardPage = () => {
     if (seoCardState === 'queued') {
       return [
         { key: 'status', label: 'Status', value: 'Audit queued — results pending' },
-        { key: 'strategy', label: 'Strategy', value: 'Mobile · PageSpeed Insights' },
+        { key: 'strategy', label: 'Review', value: 'Mobile speed and search visibility' },
       ];
     }
     if (seoCardState === 'error') {
-      const errMsg = seoAudit?.error || 'PageSpeed audit failed.';
+      const errMsg = seoAudit?.error || 'Website speed check failed.';
       const rows = [
         { key: 'status', label: 'Status', value: 'Audit failed — retry available' },
         { key: 'target', label: 'Target', value: seoAudit?.websiteUrl || client?.websiteUrl || '—' },
@@ -5122,12 +5321,12 @@ const DashboardPage = () => {
       if (seoDiag?.blockedBy) rows.push({ key: 'blocked-by', label: 'Blocked by', value: seoDiag.blockedBy });
       rows.push({ key: 'error', label: 'Error', value: errMsg.length > 140 ? `${errMsg.slice(0, 137)}…` : errMsg });
       rows.push(
-        { key: 'strategy', label: 'Strategy', value: 'Mobile · PageSpeed Insights' },
+        { key: 'strategy', label: 'Review', value: 'Mobile speed and search visibility' },
       );
       return rows;
     }
     if (seoCardState === 'no-url') {
-      return buildWorkNeededRows('No website URL on file. Submit a URL to trigger the PageSpeed audit.');
+      return buildWorkNeededRows('No website URL on file. Submit a URL to run the website speed check.');
     }
     const {
       scores, coreWebVitals, labCoreWebVitals, opportunities,
@@ -5417,14 +5616,14 @@ const DashboardPage = () => {
     : seoAudit?.labCoreWebVitals?.lcp || null;
 
   const seoAuditDescription = (() => {
-    if (seoCardState === 'queued')  return 'PageSpeed Insights audit is queued — mobile scores and Core Web Vitals will appear here.';
+    if (seoCardState === 'queued')  return 'Website speed check is queued. Mobile speed and experience scores will appear here.';
     if (seoCardState === 'error')   return seoDiag?.failureReason
       ? `${seoDiag.failureReason}${seoProviderNote ? ` ${seoProviderNote}` : ''} Re-run to retry after the access issue is fixed.`
-      : 'PageSpeed audit could not complete. Press Re-run to retry — details below.';
-    if (seoCardState === 'no-url')  return buildUnavailableDescription('PageSpeed performance data');
+      : 'Website speed check could not complete. Press Re-run to retry. Details are below.';
+    if (seoCardState === 'no-url')  return buildUnavailableDescription('website speed data');
     if (seoCardState === 'partial') return seoDiag?.failureReason
       ? `Partial audit — ${seoDiag.failureReason}${seoProviderNote ? ` ${seoProviderNote}` : ''} Scores may be incomplete.`
-      : 'Partial audit — Lighthouse could not fully load the page. Scores may be incomplete. Re-run to retry.';
+      : 'Partial review - the page did not fully load for the speed check. Scores may be incomplete. Re-run to retry.';
     const { scores, opportunities, meta } = seoAudit;
     const parts = [];
     if (scores?.performance  != null) parts.push(`PERF ${scores.performance}`);
@@ -5508,8 +5707,8 @@ const DashboardPage = () => {
       description: brandOverview?.headline
         ? brandOverview.headline
         : hasMarketingBriefData
-          ? 'Founder-ready daily marketing brief generated from Scout, Scribe, and Guardian.'
-          : 'A structured breakdown of your business, positioning, and site. This becomes the baseline for all strategy and recommendations.',
+          ? 'A director-level daily readout that explains what changed, what matters, and what to do next.'
+          : 'Acts like an account director: summarizes the business, audience, offer, and website so every card starts from the same context.',
       placeholderLabel: hasBriefDocumentData ? 'BRIEF' : 'NO\nBRIEF',
       rows: hasIntakeData
         ? [
@@ -5538,7 +5737,7 @@ const DashboardPage = () => {
       number: 'SV',
       label: 'Q&A',
       title: 'Founder Q&A',
-      description: 'Across design, content, and systems. This survey helps me get the context I need upfront — so we skip the back-and-forth and get straight to the work that matters.',
+      description: 'Collects the basic context a director would ask for before assigning work: goals, blockers, assets, timeline, and what a win looks like.',
       placeholderLabel: 'ANSWER\nQUESTIONS',
       rows: (() => {
         const total = onboardingSummary?.total ?? 10;
@@ -5562,7 +5761,7 @@ const DashboardPage = () => {
       number: 'BM',
       label: 'MODEL',
       title: 'Business Model',
-      description: 'Based on your site, we identified your business model and positioning. This helps shape how content, SEO, and messaging should be structured.',
+      description: 'Explains how the business makes money and what it sells, so marketing, SEO, and offers can be aimed correctly.',
       placeholderLabel: 'REVIEW\nMODEL',
       rows: hasBusinessModelData
         ? [
@@ -5615,7 +5814,7 @@ const DashboardPage = () => {
       number: 'DQ',
       label: 'DATA QUALITY',
       title: 'Data Coverage',
-      description: 'A live read on how much data has been captured — across Brief, Market, Brain, Brand, and Web.',
+      description: 'Checks whether the dashboard has enough useful information to make confident recommendations.',
       ...(() => {
         // A field counts as captured only when it holds real data. Critically,
         // numeric 0 (e.g. an empty `?.length` for KB sources, KOL signals, etc.)
@@ -5690,10 +5889,10 @@ const DashboardPage = () => {
           row('bi-kb-sources',     'KB sources used',       brandSystemKnowledgeBaseSources?.length),
           row('bi-art-report',     'Brand asset report',    dashboardState?.artifacts?.skillDocs?.['brand-asset-gap']),
 
-          // ── NEWSLETTER ────────────────────────────────────────────────────
-          { key: 'sec-newsletter', isHeader: true, label: 'NEWSLETTER', cardId: 'newsletter', cardCategory: 'growth' },
-          row('nl-hero',           'Hero story',            dashboardState?.newsletter?.content?.hero_story),
-          row('nl-status',         'Run status',            moduleState?.['newsletter']?.status),
+          // NOTE: NEWSLETTER rows removed — the newsletter pipeline is not wired
+          // into any run path yet (runNewsletterPipeline has no caller, and
+          // 'newsletter' is not in MODULE_RUNNERS), so both rows read Missing
+          // forever and deflated the score. Restore when the module is wired.
 
           // ── SEO PERFORMANCE ───────────────────────────────────────────────
           { key: 'sec-psi', isHeader: true, label: 'SEO PERFORMANCE', cardId: 'seo-performance', cardCategory: 'website' },
@@ -5767,6 +5966,10 @@ const DashboardPage = () => {
           row('site-title',        'Page title',            siteMeta?.title),
           row('site-meta-desc',    'Meta description',      siteMeta?.description),
           row('site-h1',           'H1 heading',            homePage?.h1?.[0] || brandOverview?.headline),
+          // Rows below read dashboard_state.evidence.pages — written by the
+          // intake pipeline (normalize.js summarizeEvidencePages) and refreshed
+          // on recurring runs by the run-brief worker. Populates after the
+          // next pipeline run for existing clients.
           row('site-h2',           'H2 headings',           homePage?.h2?.length),
           row('site-body',         'Body paragraphs',       homePage?.bodyParagraphs?.length),
           row('site-cta',          'CTA texts',             homePage?.ctaTexts?.length),
@@ -5849,7 +6052,7 @@ const DashboardPage = () => {
       number: 'KB',
       label: 'COMPANY BRAIN',
       title: 'Company Brain',
-      description: 'Add your own content — documents, URLs, or notes — so every card generates output using your real context, not generic assumptions.',
+      description: 'Stores the documents, links, and notes the team should use before making recommendations.',
       placeholderLabel: 'UPLOAD\nINFORMATION',
       rows: [
         { key: 'kb-source', label: 'Sources', value: 'Text · URLs · documents' },
@@ -5869,7 +6072,7 @@ const DashboardPage = () => {
       number: 'BV',
       label: 'VOICE',
       title: 'Voice & Tone',
-      description: 'Your tone and messaging. Identifies unclear or inconsistent positioning.',
+      description: 'Reviews how the brand sounds and points out where the message feels unclear or inconsistent.',
       placeholderLabel: 'REVIEW\nVOICE',
       rows: hasBrandToneData
         ? [
@@ -5895,7 +6098,7 @@ const DashboardPage = () => {
         number: 'VD',
         label: 'VISUAL DNA',
         title: 'Visual DNA',
-        description: 'Upload reference photos of your products, spaces, or people. The system uses these to generate visuals that look like your brand — not stock photos.',
+        description: 'Collects real photos of products, spaces, or people so future visuals feel specific to the brand.',
         placeholderLabel: 'UPLOAD\nREFERENCES',
         rows: hasVisualDna
           ? [
@@ -5919,37 +6122,48 @@ const DashboardPage = () => {
         },
       };
     })(),
-    {
-      id: 'mockup-studio',
-      category: 'content',
-      number: 'MS',
-      label: 'MOCKUP STUDIO',
-      title: 'Mockup Studio',
-      description: 'Interactive 3D device mockup of your live site. Frame the shot, capture hi-res screenshots, and render promo scenes that feed the image pipeline.',
-      placeholderLabel: 'OPEN\nSTUDIO',
-      rows: [
-        { key: 'ms-devices', label: 'Devices', value: 'Desktop · Mobile · Tablet' },
-        { key: 'ms-capture', label: 'Capture', value: 'Hi-res up to 3x · full page' },
-        { key: 'ms-scenes',  label: 'Scenes',  value: '3D renders on studio backdrops' },
-        { key: 'ms-action',  label: 'Action',  value: 'Click OPEN to load your site in the 3D studio' },
-      ],
-      footerLeft: 'Live',
-      footerRight: 'STUDIO',
-      footerAction: {
-        label: 'OPEN',
-        onClick: () => {
-          const site = client?.websiteUrl || client?.website || '';
-          window.open(`/dashboard/studio${site ? `?url=${encodeURIComponent(site)}` : ''}`, '_blank');
+    (() => {
+      const studioCaptures = Array.isArray(dashboardState?.studioCaptures) ? dashboardState.studioCaptures : [];
+      const latestVideo = [...studioCaptures].reverse().find((item) => item?.type === 'studio_video');
+      return {
+        id: 'mockup-studio',
+        category: 'content',
+        number: 'MS',
+        label: 'MOCKUP STUDIO',
+        title: 'Mockup Studio',
+        description: 'Creates polished website screenshots and device scenes that can be used in reports, posts, and presentations.',
+        placeholderLabel: latestVideo ? 'VIDEO\nREADY' : 'OPEN\nSTUDIO',
+        rows: latestVideo
+          ? [
+              { key: 'ms-video',   label: 'Latest video', value: latestVideo.label || '3D mockup video' },
+              { key: 'ms-length',  label: 'Duration',     value: latestVideo.durationSeconds ? `${latestVideo.durationSeconds}s` : 'Saved' },
+              { key: 'ms-source',  label: 'Source',       value: latestVideo.sourceUrl || client?.websiteUrl || 'Stored' },
+              { key: 'ms-action',  label: 'Action',       value: 'Click RUN VIDEO to generate a fresh animated mockup' },
+            ]
+          : [
+              { key: 'ms-source',  label: 'Source',   value: mockupStudioDraft.sourceUrl || client?.websiteUrl || 'No website on file' },
+              { key: 'ms-device',  label: 'Device',   value: MOCKUP_STUDIO_VIEWPORTS.find((v) => v.id === mockupStudioDraft.viewportId)?.label || 'Desktop' },
+              { key: 'ms-camera',  label: 'Camera',   value: MOCKUP_STUDIO_TEMPLATES.find((t) => t.id === mockupStudioDraft.templateId)?.label || 'Spiral In' },
+              { key: 'ms-action',  label: 'Action',   value: 'Click Details to customize, or RUN VIDEO to start with these defaults' },
+            ],
+        footerLeft: latestVideo ? 'Video ready' : 'Ready',
+        footerRight: 'STUDIO',
+        readinessBadge: latestVideo ? { tone: 'ok', label: 'Passed' } : null,
+        footerAction: {
+          label: 'RUN VIDEO',
+          onClick: () => {
+            openMockupStudio({ autoVideo: true });
+          },
         },
-      },
-    },
+      };
+    })(),
     {
       id: 'style-guide',
       category: 'content',
       number: 'BS',
       label: 'BRAND SNAPSHOT',
       title: 'Visual Audit',
-      description: 'Your visual system—colors, typography, layout. Highlights inconsistency and missing structure.',
+      description: 'Reviews the brand visuals - colors, type, layout, and consistency - so future designs have a clear guide.',
       placeholderLabel: 'RUN\nVISUAL\nAUDIT',
       rows: (() => {
         // Design Evaluation verifications cross-check the mechanically-extracted
@@ -6060,7 +6274,7 @@ const DashboardPage = () => {
         number: 'BG',
         label: 'BRAND IDENTITY',
         title: 'Brand System',
-        description: 'Build a complete brand identity system from your pipeline data. Get creative specs ready to use across any channel or tool.',
+        description: 'Acts like a creative director: turns the brand evidence into clear visual rules for future design work.',
         placeholderLabel: 'GENERATE\nSYSTEM',
         rows: hasBsRun
           ? [
@@ -6100,7 +6314,7 @@ const DashboardPage = () => {
         number: 'PB',
         label: 'DESIGN BRIEF',
         title: 'Design Brief',
-        description: 'Reads your current website and turns it into a creative direction document — the foundation for your mockup and site preview.',
+        description: 'Reads the current site and turns it into a clear creative brief for the mockup and site preview.',
         placeholderLabel: 'BUILD\nBRIEF',
         rows: hasBrief
           ? [
@@ -6141,7 +6355,7 @@ const DashboardPage = () => {
         number: 'GM',
         label: 'GENERATE MOCKUP',
         title: 'Homepage Mockup',
-        description: 'Turns your brief into a visual homepage concept — see a creative direction before anything gets built.',
+        description: 'Turns the brief into a homepage concept so the direction can be reviewed before build work starts.',
         placeholderLabel: 'CREATE\nMOCKUP',
         rows: hasMockup
           ? [
@@ -6174,7 +6388,7 @@ const DashboardPage = () => {
       number: 'SE',
       label: 'SEO HEALTH',
       title: 'SEO + Performance Snapshot',
-      description: 'We ran a performance and SEO scan on your site. Load speed, metadata, and structure all impact visibility and conversion — this card shows where you stand.',
+      description: 'Acts like a website developer: checks speed, search basics, and page structure so you know what is helping or hurting visibility.',
       placeholderLabel: 'RUN\nAUDIT',
       rows: seoAuditRows,
       footerLeft: isSeoPartial ? 'Partial' : hasSeoAuditData ? 'Live' : isSeoQueued ? 'Queued' : isSeoError ? 'Error' : WORK_NEEDED_LABEL,
@@ -6188,7 +6402,7 @@ const DashboardPage = () => {
       number: 'SP',
       label: 'PERFORMANCE',
       title: 'Site Performance',
-      description: 'Load speed and technical issues impacting experience and rankings.',
+      description: 'Checks whether the site loads smoothly and flags issues that could frustrate visitors or reduce search visibility.',
       placeholderLabel: 'RUN\nPERFORMANCE',
       rows: seoAuditRows.slice(0, 6),
       footerLeft: hasSeoAuditData ? 'Live' : WORK_NEEDED_LABEL,
@@ -6200,7 +6414,7 @@ const DashboardPage = () => {
       number: 'SP',
       label: 'SOCIAL PREVIEW',
       title: 'Social Preview Check',
-      description: 'How your site appears when shared—title, description, and image. Missing previews reduce clicks and trust.',
+      description: 'Shows how the site looks when someone shares the link, including the title, description, and image.',
       placeholderLabel: 'CHECK\nPREVIEW',
       rows: (() => {
         const NP = 'Not provided';
@@ -6227,7 +6441,7 @@ const DashboardPage = () => {
       number: 'AR',
       label: 'AGENT READY',
       title: 'AI Agent Readiness',
-      description: 'We checked how easy it is for AI tools and search engines to understand your site. This shows what\'s blocking visibility and what to fix first.',
+      description: 'Checks whether search engines and AI tools can understand the site and points to the first visibility fixes.',
       placeholderLabel: 'RUN\nREADINESS',
       rows: agentReadinessRows,
       footerLeft: hasAgentReadinessData ? 'Live' : agentReadinessState === 'queued' ? 'Queued' : WORK_NEEDED_LABEL,
@@ -6241,7 +6455,7 @@ const DashboardPage = () => {
       number: 'DE',
       label: 'DESIGN EVAL',
       title: 'Design Evaluation',
-      description: 'We looked at your homepage and rated your visual design. See how your brand comes across to a first-time visitor — and what to tighten up.',
+      description: 'Reviews the homepage like a design director and explains what first-time visitors may notice or miss.',
       placeholderLabel: 'RUN\nEVALUATION',
       rows: (() => {
         const ev = analyzerOutputs?.['design-evaluation'] || null;
@@ -6269,7 +6483,7 @@ const DashboardPage = () => {
       number: 'MD',
       label: 'LAYOUT',
       title: 'Cross-Device Layouts',
-      description: 'Your site across desktop, tablet, and mobile. Identifies layout and usability issues.',
+      description: 'Captures desktop, tablet, and mobile views so layout issues are easy to spot.',
       placeholderLabel: 'CAPTURE\nDEVICES',
       rows: multiDevicePreviewSrc ? [
         { key: 'md-desktop', label: 'Desktop capture', value: deviceScreenshots.desktop ? 'Captured' : homepageScreenshotUrl ? 'Captured' : 'Missing' },
@@ -6287,7 +6501,7 @@ const DashboardPage = () => {
       number: 'CR',
       label: 'CONVERT',
       title: 'Conversion Readiness',
-      description: 'How effectively your site turns visitors into customers—CTA, layout, flow.',
+      description: 'Reviews whether the page clearly guides a visitor toward the next action.',
       placeholderLabel: 'CHECK\nCONVERSION',
       rows: buildWorkNeededRows('Conversion analysis requires page evidence with CTA and value proposition data.'),
       footerLeft: WORK_NEEDED_LABEL,
@@ -6303,7 +6517,7 @@ const DashboardPage = () => {
         number: 'GM',
         label: 'GENERATE MOCKUP',
         title: 'Homepage Mockup',
-        description: 'Turns your brief into a visual homepage concept — see a creative direction before anything gets built.',
+        description: 'Turns the brief into a homepage concept so the direction can be reviewed before build work starts.',
         placeholderLabel: 'CREATE\nMOCKUP',
         rows: hasMockup
           ? [
@@ -6339,7 +6553,7 @@ const DashboardPage = () => {
         number: 'GS',
         label: 'GENERATE SITE',
         title: 'Build & Deploy Site',
-        description: 'Builds and deploys a live homepage from your brief and mockup. Compare it side-by-side with your current site to see the improvement.',
+        description: 'Builds a live homepage preview from the brief and mockup so it can be compared with the current site.',
         placeholderLabel: 'BUILD\nSITE',
         rows: hasSite
           ? [
@@ -6382,7 +6596,7 @@ const DashboardPage = () => {
         number: 'CE',
         label: 'CREATE ESTIMATE',
         title: 'Publish Client Estimate',
-        description: 'Creates a client-facing estimate from the generated site, scope defaults, pricing inputs, and before/after readiness proof.',
+        description: 'Creates a clear client estimate from the generated site, scope, pricing notes, and before/after proof.',
         placeholderLabel: 'PUBLISH\nESTIMATE',
         rows: hasEstimate
           ? [
@@ -6417,7 +6631,7 @@ const DashboardPage = () => {
       number: 'MS',
       label: 'SIGNALS',
       title: 'Market Signals',
-      description: 'Trends, conversations, and demand signals relevant to your business.',
+      description: 'Finds trends and conversations that could affect what the business should say next.',
       placeholderLabel: marketSignalTrends.length ? 'SIGNALS' : 'VIEW\nSIGNALS',
       rows: marketSignalTrends.length
         ? marketSignalTrends.slice(0, 6).map((t, i) => ({
@@ -6425,7 +6639,7 @@ const DashboardPage = () => {
             label: String(t.relevance || 'trend').toUpperCase(),
             value: t.trend || t.detail || '',
           }))
-        : buildWorkNeededRows('Run the Executive Daily Brief to surface market trends.'),
+        : buildWorkNeededRows('Run the Executive Brief to surface market trends.'),
       footerLeft: marketSignalTrends.length ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
     },
@@ -6435,7 +6649,7 @@ const DashboardPage = () => {
       number: 'CS',
       label: 'COMPETITION',
       title: 'Competitor Snapshot',
-      description: 'How competitors position and communicate.',
+      description: 'Reviews how competitors talk about themselves so your positioning can stay sharper.',
       placeholderLabel: competitorIntelItems.length ? 'COMPETITORS' : 'VIEW\nCOMPETITORS',
       rows: competitorIntelItems.length
         ? competitorIntelItems.slice(0, 6).map((c, i) => ({
@@ -6443,7 +6657,7 @@ const DashboardPage = () => {
             label: c.competitor || 'Competitor',
             value: c.finding || '',
           }))
-        : buildWorkNeededRows('Run the Executive Daily Brief to surface competitor activity.'),
+        : buildWorkNeededRows('Run the Executive Brief to surface competitor activity.'),
       footerLeft: competitorIntelItems.length ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
     },
@@ -6453,7 +6667,7 @@ const DashboardPage = () => {
       number: 'LS',
       label: 'LOCAL',
       title: 'Local Signals',
-      description: 'Events, location-based demand, and local activity.',
+      description: 'Finds local events and timing signals that may create useful content or campaign moments.',
       placeholderLabel: 'VIEW\nLOCAL',
       rows: buildWorkNeededRows('No local-market data source is wired to this card yet — running a brief won’t populate it.'),
       footerLeft: WORK_NEEDED_LABEL,
@@ -6465,7 +6679,7 @@ const DashboardPage = () => {
       number: 'VS',
       label: 'VISIBILITY',
       title: 'Search & Social Visibility',
-      description: 'We checked where your business shows up across search and platforms. This shows what\'s indexed, what\'s visible, and where there\'s room to expand reach.',
+      description: 'Checks where the business is visible online and where reach can be expanded.',
       placeholderLabel: 'VIEW\nVISIBILITY',
       rows: buildWorkNeededRows('AI Visibility data has moved to the AI Agent Readiness card.'),
       footerLeft: WORK_NEEDED_LABEL,
@@ -6477,7 +6691,7 @@ const DashboardPage = () => {
       number: 'DP',
       label: 'TODAY',
       title: 'Day-of Post',
-      description: 'Today’s post from the rolling 30-day strategy — what to publish now, the angle, why today, and the priority finding behind it.',
+      description: 'Shows today\'s recommended post, why it matters, and what priority finding it supports.',
       placeholderLabel: strategy30?.today?.post ? 'TODAY' : 'VIEW\nPRIORITY',
       rows: (() => {
         // Day-of post from the rolled strategy, backed by the run's priority evidence.
@@ -6493,7 +6707,7 @@ const DashboardPage = () => {
             ...(top ? [{ key: 'dp-finding', label: 'Key finding', value: top.summary }] : []),
           ];
         }
-        if (!action && !top) return buildWorkNeededRows('Run the Executive Daily Brief to generate today’s post.');
+        if (!action && !top) return buildWorkNeededRows('Run the Executive Brief to generate today’s post.');
         return [
           { key: 'dp-priority', label: 'Priority action', value: action || '—' },
           ...(top ? [{ key: 'dp-finding', label: 'Key finding', value: top.summary }] : []),
@@ -6510,7 +6724,7 @@ const DashboardPage = () => {
       label: 'CUSTOM',
       title: 'Custom Post Strategy',
       locked: true,
-      description: 'Hands-on strategy tool — generate a custom day or week plan from the brief, Company Brain, and your own inputs. Overrides sit alongside the rolling 30-day strategy.',
+      description: 'Acts like a strategist: builds a custom day or week plan from the brief, company knowledge, and your inputs.',
       placeholderLabel: 'CUSTOM\nSTRATEGY',
       rows: [
         { key: 'sb-source', label: 'Source', value: hasMarketingBriefData ? 'Marketing Brief' : 'Needs Scout brief' },
@@ -6519,7 +6733,7 @@ const DashboardPage = () => {
           label: 'Knowledge Base',
           value: summarizeKnowledgeBaseSources(strategyBuilderKnowledgeBaseSources, 'Toggleable priority source'),
         },
-        { key: 'sb-angle', label: 'Angle', value: marketingBrief?.content?.content_angle || marketingBrief?.headline || resolvedContentAngle || 'Run the Executive Daily Brief first.' },
+        { key: 'sb-angle', label: 'Angle', value: marketingBrief?.content?.content_angle || marketingBrief?.headline || resolvedContentAngle || 'Run the Executive Brief first.' },
         { key: 'sb-platform', label: 'Platform', value: 'X / Twitter' },
         ...(strategy?.postStrategy?.formats?.length ? [{ key: 'sb-formats', label: 'Formats', value: strategy.postStrategy.formats.join(' · ') }] : []),
       ],
@@ -6533,7 +6747,7 @@ const DashboardPage = () => {
       number: '30',
       label: '30-DAY STRATEGY',
       title: '30-Day Strategy',
-      description: 'The rolling post plan. Auto-revised on every brief run from live signals, the Company Brain, and conversation uploads — your edits are kept and respected.',
+      description: 'Maintains a 30-day posting plan and updates it when new signals or notes change the direction.',
       placeholderLabel: strategy30?.days?.length ? 'PLAN' : 'RUN\nBRIEF',
       rows: strategy30?.days?.length
         ? [
@@ -6544,9 +6758,10 @@ const DashboardPage = () => {
             })),
             ...(strategy30.revisionNotes ? [{ key: 's30-notes', label: 'Last revision', value: strategy30.revisionNotes }] : []),
           ]
-        : buildWorkNeededRows('Run the Executive Daily Brief — the 30-day strategy is generated and revised on each run.'),
-      footerLeft: strategy30?.days?.length ? `${strategy30.days.length} days` : WORK_NEEDED_LABEL,
-      footerRight: 'EDITABLE',
+        : buildWorkNeededRows('Run the Executive Brief — the 30-day strategy is generated and revised on each run.'),
+      footerLeft: strategy30?.days?.length ? 'Live' : WORK_NEEDED_LABEL,
+      footerRight: strategy30?.days?.length ? `${strategy30.days.length} DAYS · EDITABLE` : 'EDITABLE',
+      readinessBadge: strategy30?.days?.length ? { tone: 'ok', label: 'Ready' } : null,
     },
     {
       id: 'trust-credibility',
@@ -6554,7 +6769,7 @@ const DashboardPage = () => {
       number: 'TC',
       label: 'TRUST',
       title: 'Trust & Credibility',
-      description: 'Proof signals like reviews, consistency, and authority. Missing trust reduces conversions.',
+      description: 'Checks trust signals like reviews, consistency, and authority so visitors have more reason to believe the offer.',
       placeholderLabel: 'VIEW\nTRUST',
       rows: buildWorkNeededRows('Trust signal analysis requires contact clues, about page, and schema markup data.'),
       footerLeft: WORK_NEEDED_LABEL,
@@ -6566,7 +6781,7 @@ const DashboardPage = () => {
       number: 'SO',
       label: 'SEARCH',
       title: 'Search Opportunities',
-      description: 'Keywords and topics with clear ranking potential.',
+      description: 'Finds search topics worth writing or building pages for.',
       placeholderLabel: 'VIEW\nKEYWORDS',
       rows: hasOpportunitiesData
         ? resolvedOpportunities.map((op, index) => ({
@@ -6584,7 +6799,7 @@ const DashboardPage = () => {
       number: 'PC',
       label: 'PLATFORMS',
       title: 'Platform Coverage',
-      description: 'Where your brand is active and where visibility is missing.',
+      description: 'Shows which platforms the brand uses and where important visibility may be missing.',
       placeholderLabel: 'REVIEW\nCOVERAGE',
       rows: buildWorkNeededRows('Platform analysis requires social link data from crawled pages.'),
       footerLeft: WORK_NEEDED_LABEL,
@@ -6596,7 +6811,7 @@ const DashboardPage = () => {
       number: 'CB',
       label: 'CREATIVE',
       title: 'Copy & Creative',
-      description: 'Your generated copy and creative output in one place — ready to review, refine, and publish.',
+      description: 'Keeps generated copy and creative in one review area before anything gets published.',
       placeholderLabel: 'REVIEW\nCREATIVE',
       rows: [
         { key: 'cb-copy', label: 'Copy', value: hasSocialGeneratedDraft ? socialGeneratedDraft : 'No generated X draft yet.' },
@@ -6614,7 +6829,7 @@ const DashboardPage = () => {
       number: 'DC',
       label: 'DRAFT',
       title: 'Ready-to-Post Drafts',
-      description: 'Ready-to-use posts tailored to your brand.',
+      description: 'Collects post drafts written for the brand so they can be reviewed and approved.',
       placeholderLabel: 'REVIEW\nDRAFTS',
       rows: hasDraftPostData
         ? [
@@ -6631,7 +6846,7 @@ const DashboardPage = () => {
       number: 'WE',
       label: 'WEATHER & EVENTS',
       title: 'Global Weather & Events',
-      description: 'Weather forecast added to your brief, plus event discovery — local by ZIP or industry by keyword. Timely context for posts and briefs.',
+      description: 'Adds weather and event context so posts and briefs can respond to real timing.',
       placeholderLabel: 'WEATHER\n+ EVENTS',
       rows: [
         { key: 'we-weather', label: 'Weather', value: marketingBriefConfig?.weather?.enabled ? ('On · ' + (marketingBriefConfig?.weather?.zip || '—')) : 'Off' },
@@ -6650,8 +6865,8 @@ const DashboardPage = () => {
       title: 'Newsletter Roll-up',
       locked: true,
       description: hasNewsletterData
-        ? 'Auto-generated newsletter from your latest intelligence brief.'
-        : 'Newsletter generation requires a completed Scout brief.',
+        ? 'Turns the latest brief into a newsletter draft for review.'
+        : 'Prepares a newsletter after the first research brief has been completed.',
       placeholderLabel: 'GENERATE\nNEWSLETTER',
       rows: hasNewsletterData
         ? [{ key: 'preview', label: 'Lead', value: newsletterHeroPreview + (newsletterHeroPreview.length >= 140 ? '…' : '') }]
@@ -6665,7 +6880,7 @@ const DashboardPage = () => {
       number: 'CI',
       label: 'CONVERSATION INTAKE',
       title: 'Conversation Intake',
-      description: 'Paste a team conversation dump (Discord thread or WhatsApp "export chat"). The intake analyst tags what matters — campaign, social, or brief — and folds it into your Executive Daily Brief.',
+      description: 'Lets you paste team conversations so useful ideas, decisions, and requests can be added to the brief.',
       placeholderLabel: 'PASTE\nCONVOS',
       rows: conversationIntake?.itemCount
         ? [
@@ -6686,7 +6901,7 @@ const DashboardPage = () => {
       number: 'SP',
       label: 'SEARCH PARAMETERS',
       title: 'Search Parameters',
-      description: 'Brand identity, exact-match identifiers, and category themes that drive the search plan. Generated mode auto-builds queries from these; Custom mode lets you write deliberate query clusters.',
+      description: 'Sets the brand name, category terms, and search phrases the research assistant should use.',
       placeholderLabel: 'SET\nBRAND',
       rows: marketingBriefConfig
         ? [
@@ -6719,7 +6934,7 @@ const DashboardPage = () => {
       number: 'SF',
       label: 'SCOUT FOCUS',
       title: 'Research Focus',
-      description: 'The research lens — what Scout should care about, how it reasons, and how fresh signals must be. Part of Scout Config; edits sync with the Daily Brief.',
+      description: 'Tells the research assistant what to care about, how recent the information should be, and what to ignore.',
       placeholderLabel: 'SET\nFOCUS',
       rows: marketingBriefConfig
         ? [
@@ -6737,7 +6952,7 @@ const DashboardPage = () => {
       number: 'WL',
       label: 'WATCHLIST',
       title: 'Watchlist & Competitors',
-      description: 'KOLs and handles Scout tracks every run, plus competitors injected into the search strategy and angle selection.',
+      description: 'Lists the people, brands, and competitors the research assistant should watch each run.',
       placeholderLabel: 'ADD\nHANDLES',
       rows: marketingBriefConfig
         ? [
@@ -6755,7 +6970,7 @@ const DashboardPage = () => {
       number: 'PS',
       label: 'WEB SEARCH + PLATFORMS',
       title: 'Web Search + Platforms',
-      description: 'Web search plus launch and startup directories that feed Scout and your daily brief. Web is a free default; the directories unlock with an upgrade.',
+      description: 'Chooses which web sources the research assistant checks before writing the brief.',
       placeholderLabel: 'WEB +\nPLATFORMS',
       rows: (() => {
         const sel = marketingBriefConfig?.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS;
@@ -6775,7 +6990,7 @@ const DashboardPage = () => {
       number: 'SS',
       label: 'SOCIAL MEDIA SIGNALS',
       title: 'Social Media Signals',
-      description: 'Social-platform signals — X and Reddit feed your brief today; Instagram, TikTok, YouTube, LinkedIn, and more unlock with an upgrade.',
+      description: 'Chooses which social platforms the research assistant checks for buyer language and content opportunities.',
       placeholderLabel: 'SOCIAL\nSIGNALS',
       rows: (() => {
         const sel = marketingBriefConfig?.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS;
@@ -6794,8 +7009,8 @@ const DashboardPage = () => {
       category: 'brief',
       number: 'DB',
       label: 'EXECUTIVE DAILY BRIEF',
-      title: 'Executive Daily Brief',
-      description: 'Morning snapshot of what matters. Pulls live signals from GA4, Search Console, Firebase, and Vercel to surface business health, active risks, and the 2–3 things worth your attention today.',
+      title: 'Executive Brief',
+      description: 'Acts like a managing director: gives a morning readout of what matters, what changed, and what deserves attention.',
       placeholderLabel: 'RUN\nDAILY\nBRIEF',
       rows: [
         { key: 'mb-status', label: 'Status', value: marketingBriefStatus },
@@ -6820,14 +7035,14 @@ const DashboardPage = () => {
       readinessBadge: hasDailyBriefData ? { tone: 'ok', label: 'Passed' } : null,
     },
     {
-      // Onboarding Brief — duplicated from the Executive Daily Brief. A distinct
+      // Onboarding Brief — duplicated from the Executive Brief. A distinct
       // iteration (will diverge from the executive brief); unlocked entry version.
       id: 'onboarding-brief',
       category: 'brief',
       number: 'OB',
       label: 'ONBOARDING BRIEF',
       title: 'Onboarding Brief',
-      description: 'A first-run onboarding brief — a tailored introduction to your dashboard intelligence. A distinct iteration from the Executive Daily Brief (this version will diverge).',
+      description: 'Creates the first overview of the dashboard findings so a new user knows what each area is starting from.',
       placeholderLabel: 'RUN\nONBOARDING\nBRIEF',
       rows: [
         { key: 'ob-status', label: 'Status', value: marketingBriefStatus },
@@ -6853,7 +7068,7 @@ const DashboardPage = () => {
       number: 'ED',
       label: 'EMAIL DIGEST',
       title: 'Email Digest',
-      description: 'View the daily digest email — executive summary, calendar agenda, and site analytics — and send it on demand.',
+      description: 'Lets an admin review and send the daily email summary with agenda and site notes.',
       placeholderLabel: 'MAIL',
       rows: [
         { key: 'ed-recipient', label: 'Recipient', value: 'Configured (DIGEST_EMAIL)' },
@@ -6870,7 +7085,7 @@ const DashboardPage = () => {
       number: 'ES',
       label: 'EMAIL SETTINGS',
       title: 'Email Settings',
-      description: 'Enable, format, and customize the LLM summary — tone, how many uploaded documents feed it, and extra instructions.',
+      description: 'Lets an admin choose how the email summary should sound and what information it should use.',
       placeholderLabel: 'CFG',
       rows: [
         { key: 'es-summary', label: 'LLM summary', value: 'Toggle on/off' },
@@ -6887,7 +7102,7 @@ const DashboardPage = () => {
       number: 'NC',
       label: 'NEW CLIENT',
       title: 'Create Client',
-      description: 'Provision a website-less client (survey-only / from-scratch / email-only template). Feed it via the brain + a brief after switching to it in the client dropdown.',
+      description: 'Creates a new client workspace when there is no website yet, then lets the team add notes and briefs manually.',
       placeholderLabel: 'NEW',
       rows: [
         { key: 'nc-type', label: 'Type', value: 'Website-less workspace' },
@@ -6906,8 +7121,8 @@ const DashboardPage = () => {
       locked: briefCardLocked('brief-marketing'),
       number: 'MD',
       label: 'MARKETING DIRECTOR',
-      title: 'Marketing Director',
-      description: 'Market signals, viral windows, watchlist activity, and competitor intel in one read — what shifted in your market and where to enter, sourced from web, X, and Reddit.',
+      title: 'Market Brief',
+      description: 'Acts like a marketing director: explains market shifts, competitor moves, and where the brand should enter the conversation.',
       placeholderLabel: briefCardLocked('brief-marketing') ? 'LOCK' : 'VIEW\nBRIEF',
       rows: [{ key: 'status', label: 'Status', value: briefCardLocked('brief-marketing') ? 'Coming soon' : 'Included in your plan — click to preview, Run to refresh signals.' }],
       footerLeft: briefCardLocked('brief-marketing') ? 'Locked' : 'Live',
@@ -6928,17 +7143,17 @@ const DashboardPage = () => {
       locked: briefCardLocked('brief-strategy'),
       number: 'SM',
       label: 'SOCIAL MEDIA MANAGER',
-      title: 'Social Media Manager',
-      description: 'The rolling 30-day post campaign, today\'s move, and the live post schedule — revised on every run from live signals and rolled up into the Executive Daily Brief.',
+      title: 'Strategy Brief',
+      description: 'Acts like a social media manager: keeps the 30-day plan, today\'s post, and schedule aligned to fresh signals.',
       placeholderLabel: briefCardLocked('brief-strategy') ? 'LOCK' : (strategy30?.days?.length ? 'STRATEGY' : 'RUN\nBRIEF'),
       rows: !briefCardLocked('brief-strategy') && strategy30?.days?.length
         ? [
             ...(strategy30.today?.post ? [{ key: 'bs-today', label: 'Today', value: strategy30.today.post }] : []),
             ...(strategy30.revisionNotes ? [{ key: 'bs-notes', label: 'Revision', value: strategy30.revisionNotes }] : []),
             { key: 'bs-span', label: 'Plan', value: `${strategy30.days.length} days · from ${strategy30.days[0]?.date || '—'}` },
-            { key: 'bs-rollup', label: 'Roll-up', value: 'Included in Executive Daily Brief' },
+            { key: 'bs-rollup', label: 'Roll-up', value: 'Included in Executive Brief' },
           ]
-        : [{ key: 'status', label: 'Status', value: briefCardLocked('brief-strategy') ? 'Coming soon' : 'Run the Executive Daily Brief to generate.' }],
+        : [{ key: 'status', label: 'Status', value: briefCardLocked('brief-strategy') ? 'Coming soon' : 'Run the Executive Brief to generate.' }],
       footerLeft: briefCardLocked('brief-strategy') ? 'Locked' : (strategy30?.days?.length ? 'Live' : 'Pending'),
       footerRight: isAdmin ? 'ADMIN' : '',
       // Scoped run — strategy roller + today's post, reusing stored market
@@ -6957,8 +7172,8 @@ const DashboardPage = () => {
       locked: briefCardLocked('brief-creative'),
       number: 'CD',
       label: 'CREATIVE DIRECTOR',
-      title: 'Creative Director',
-      description: 'Your creative system and today\'s content move — device rendering, share card, brand snapshot, and design evaluation, aligned to your brand system.',
+      title: 'Creative Brief',
+      description: 'Acts like a creative director: reviews the brand look, share preview, website visuals, and today\'s creative move.',
       placeholderLabel: briefCardLocked('brief-creative') ? 'LOCK' : 'VIEW\nBRIEF',
       rows: [{ key: 'status', label: 'Status', value: briefCardLocked('brief-creative') ? 'Coming soon' : 'Included in your plan — click to preview, Run to refresh.' }],
       footerLeft: briefCardLocked('brief-creative') ? 'Locked' : 'Live',
@@ -6977,8 +7192,8 @@ const DashboardPage = () => {
       locked: briefCardLocked('brief-performance'),
       number: 'WD',
       label: 'WEBSITE DEVELOPER',
-      title: 'Website Developer',
-      description: 'Site speed and conversion health — SEO + performance audit and AI agent readiness, refreshed on demand and rolled up into the Executive Daily Brief.',
+      title: 'Website Developer Brief',
+      description: 'Acts like a website developer: checks speed, SEO, conversion health, and AI visibility before recommending fixes.',
       placeholderLabel: briefCardLocked('brief-performance') ? 'LOCK' : 'VIEW\nBRIEF',
       rows: [{ key: 'status', label: 'Status', value: briefCardLocked('brief-performance') ? 'Coming soon' : 'Included in your plan — click to preview, Run to refresh.' }],
       footerLeft: briefCardLocked('brief-performance') ? 'Locked' : 'Live',
@@ -6997,7 +7212,7 @@ const DashboardPage = () => {
       number: 'BP',
       label: 'BRIEF PREVIEW',
       title: 'Brief Preview (Pre-run)',
-      description: 'The Agent Data Contract Scout returns, the run-cost estimate, and a Run Now button that populates the Executive Daily Brief. Part of Scout Config; edits sync with the Daily Brief.',
+      description: 'Previews what the research run will collect and lets you start the brief when the setup looks right.',
       placeholderLabel: 'PREVIEW\nBRIEF',
       rows: marketingBriefConfig
         ? [
@@ -7021,7 +7236,7 @@ const DashboardPage = () => {
       number: 'XP',
       label: 'POST',
       title: 'Schedule Posts',
-      description: 'Write, optimize, and post to X/Twitter directly from the dashboard. Content is checked against your brand voice before it goes out.',
+      description: 'Helps write, polish, schedule, and publish X/Twitter posts after they are checked against the brand voice.',
       placeholderLabel: 'SCHEDULE\nPOSTS',
       rows: [
         { key: 'smp-channel', label: 'Channel', value: 'X / Twitter' },
@@ -7041,7 +7256,7 @@ const DashboardPage = () => {
       number: 'SC',
       label: 'SUBMIT CUSTOM BRIEF',
       title: 'Submit Custom Brief',
-      description: 'Admin workspace for publishing a client-facing HTML brief and downloadable PDF into this client dashboard.',
+      description: 'Lets an admin publish a polished client brief and PDF into the selected dashboard.',
       placeholderLabel: 'HTML',
       rows: [
         { key: 'sc-client', label: 'Client', value: client?.companyName || client?.name || client?.dashboardTitle || bootstrap?.effectiveClientId || 'Selected client' },
@@ -7059,7 +7274,7 @@ const DashboardPage = () => {
       number: 'BD',
       label: 'BRIEF',
       title: 'Brief Document',
-      description: 'The latest Scout/Scribe brief rendered as a formatted founder document.',
+      description: 'Shows the latest research brief as a clean document a founder or client can read.',
       placeholderLabel: hasMarketingBriefData ? 'BRIEF' : 'NO\nBRIEF',
       rows: hasMarketingBriefData
         ? [
@@ -7079,7 +7294,7 @@ const DashboardPage = () => {
       number: 'CE',
       label: 'ENGINE',
       title: 'Content Engine',
-      description: 'Automated system for generating and distributing content.',
+      description: 'Acts like a content operations lead: turns approved angles and opportunities into publishable work.',
       placeholderLabel: 'RUN\nENGINE',
       rows: (() => {
         const engineRows = [];
@@ -7098,7 +7313,7 @@ const DashboardPage = () => {
       number: 'AO',
       label: 'AUTOMATE',
       title: 'Automation Opportunities',
-      description: 'Tasks that can be automated across marketing and operations.',
+      description: 'Finds repeatable marketing and operations tasks that could be handed to an automated workflow.',
       placeholderLabel: 'COMING\nSOON',
       rows: buildWorkNeededRows('Automation analysis is coming soon.'),
       footerLeft: 'Coming Soon',
@@ -7110,7 +7325,7 @@ const DashboardPage = () => {
       number: 'RI',
       label: 'INSIGHTS',
       title: 'Reporting & Insights',
-      description: 'Ongoing tracking of performance and growth.',
+      description: 'Tracks performance and growth signals so the team knows what is improving or slipping.',
       placeholderLabel: 'COMING\nSOON',
       rows: buildWorkNeededRows('Reporting and insights tracking is coming soon.'),
       footerLeft: 'Coming Soon',
@@ -7124,7 +7339,7 @@ const DashboardPage = () => {
       number: 'CH',
       label: 'CONTACT',
       title: 'Contact Your Human',
-      description: 'Direct communication to execute work.',
+      description: 'Opens a direct path to ask questions, clarify priorities, or move work forward with a person.',
       placeholderLabel: 'TALK\nTO HUMAN',
       rows: [{ key: 'cta', label: 'Action', value: 'Ask anything about your dashboard →' }],
       footerLeft: 'Available',
@@ -7136,7 +7351,7 @@ const DashboardPage = () => {
       number: 'FX',
       label: 'FIX',
       title: 'Fix This',
-      description: 'Request a fix for any issue surfaced in the dashboard.',
+      description: 'Turns a dashboard issue into a clear fix request for the right person to handle.',
       placeholderLabel: 'REQUEST\nFIX',
       rows: [{ key: 'cta', label: 'Action', value: 'Book a call to fix an issue →' }],
       footerLeft: 'Available',
@@ -7148,7 +7363,7 @@ const DashboardPage = () => {
       number: 'RM',
       label: 'RUN',
       title: 'Run My Marketing',
-      description: 'Full execution across content, SEO, and distribution.',
+      description: 'Hands content, SEO, and distribution work to a marketing operator who can run it for you.',
       placeholderLabel: 'START\nRETAINER',
       rows: [{ key: 'cta', label: 'Action', value: 'Book a strategy call →' }],
       footerLeft: 'Available',
@@ -7160,7 +7375,7 @@ const DashboardPage = () => {
       number: 'CW',
       label: 'CREATE',
       title: 'Creative Work',
-      description: 'Design, video, and brand asset creation.',
+      description: 'Requests creative help for design, video, and brand assets when the dashboard shows a need.',
       placeholderLabel: 'REQUEST\nCREATIVE',
       rows: [{ key: 'cta', label: 'Action', value: 'Book a creative session →' }],
       footerLeft: 'Available',
@@ -7172,7 +7387,7 @@ const DashboardPage = () => {
       number: 'BP',
       label: 'BUILD',
       title: 'Build a Page',
-      description: 'Landing pages and website builds focused on conversion.',
+      description: 'Requests a landing page or website build focused on helping visitors take action.',
       placeholderLabel: 'REQUEST\nPAGE',
       rows: [{ key: 'cta', label: 'Action', value: 'Book a build session →' }],
       footerLeft: 'Available',
@@ -7186,7 +7401,7 @@ const DashboardPage = () => {
       number: 'SV',
       label: 'VIDEO',
       title: 'Short-Form Video',
-      description: 'Vertical video edit up to 60 seconds. Includes cuts, captions, music, and brand framing—built for social performance and fast turnaround.',
+      description: 'Requests a short vertical video edit with cuts, captions, music, and brand framing.',
       placeholderLabel: 'REQUEST\nSHORT\nVIDEO',
       rows: [
         { key: 'scope', label: 'Scope', value: 'Up to 60s vertical edit' },
@@ -7202,7 +7417,7 @@ const DashboardPage = () => {
       number: 'LV',
       label: 'VIDEO',
       title: 'Long-Form Video',
-      description: 'Edited video up to 5 minutes with multi-cam support, color grading, and sound mix. Designed for product, storytelling, or campaign content.',
+      description: 'Requests a longer edited video for a product, story, or campaign.',
       placeholderLabel: 'REQUEST\nLONG\nVIDEO',
       rows: [
         { key: 'scope', label: 'Scope', value: 'Up to 5 min · multi-cam' },
@@ -7220,7 +7435,7 @@ const DashboardPage = () => {
       number: 'DG',
       label: 'DESIGN',
       title: 'Single Graphic',
-      description: 'One static asset for social, ads, or web. Designed on-brand and ready to publish immediately.',
+      description: 'Requests one polished graphic for social, ads, or the website.',
       placeholderLabel: 'REQUEST\nGRAPHIC',
       rows: [
         { key: 'scope', label: 'Scope', value: '1 static asset · any platform' },
@@ -7235,7 +7450,7 @@ const DashboardPage = () => {
       number: 'CK',
       label: 'DESIGN',
       title: 'Carousel Kit',
-      description: 'Multi-slide post with structured layout, copy, and flow. Built for engagement and clarity across platforms.',
+      description: 'Requests a multi-slide post with clear copy, layout, and story flow.',
       placeholderLabel: 'REQUEST\nCAROUSEL',
       rows: [
         { key: 'scope', label: 'Scope', value: 'Multi-slide · copy + layout' },
@@ -7252,7 +7467,7 @@ const DashboardPage = () => {
       number: 'SM',
       label: 'SOCIAL',
       title: 'Social Management',
-      description: 'Ongoing posting, scheduling, and light community interaction layered on top of automation. Keeps your presence active and consistent.',
+      description: 'Requests ongoing help with posting, scheduling, and light community replies.',
       placeholderLabel: 'START\nSOCIAL',
       rows: [
         { key: 'scope', label: 'Scope', value: 'Ongoing · posting + scheduling' },
@@ -7269,7 +7484,7 @@ const DashboardPage = () => {
       number: 'LB',
       label: 'BRAND',
       title: 'Logo & Brand Refresh',
-      description: 'Refined logo system including wordmark, icon, and platform-ready assets. Improves consistency and brand recognition.',
+      description: 'Requests a cleaner logo and brand asset set for consistent use across platforms.',
       placeholderLabel: 'REQUEST\nLOGO',
       rows: [
         { key: 'scope', label: 'Scope', value: 'Wordmark · icon · platform assets' },
@@ -7286,7 +7501,7 @@ const DashboardPage = () => {
       number: 'LP',
       label: 'BUILD',
       title: 'Landing Page Build',
-      description: 'Single-page site designed and built to convert. Includes copy, layout, and deployment.',
+      description: 'Requests a single-page site with copy, design, and launch support.',
       placeholderLabel: 'REQUEST\nLANDING',
       rows: [
         { key: 'scope', label: 'Scope', value: 'Single page · copy + design + deploy' },
@@ -7303,7 +7518,7 @@ const DashboardPage = () => {
       number: 'EC',
       label: 'EMAIL',
       title: 'Email Campaign',
-      description: 'One complete campaign with template, copy, and send setup. Ready to deploy and track performance.',
+      description: 'Requests one email campaign with copy, template, send setup, and tracking basics.',
       placeholderLabel: 'REQUEST\nEMAIL',
       rows: [
         { key: 'scope', label: 'Scope', value: '1 campaign · template + copy + send' },
@@ -7320,7 +7535,7 @@ const DashboardPage = () => {
       number: 'UI',
       label: 'UI',
       title: 'UI Screen Design',
-      description: 'One production-ready Figma screen with components, variants, and dev-ready structure.',
+      description: 'Requests one polished product screen that a developer can understand and build from.',
       placeholderLabel: 'REQUEST\nUI\nSCREEN',
       rows: [
         { key: 'scope', label: 'Scope', value: '1 Figma screen · components + variants' },
@@ -7335,7 +7550,7 @@ const DashboardPage = () => {
       number: 'UF',
       label: 'UI',
       title: 'UI Flow Design',
-      description: 'Multi-screen flow with shared components and prototype. Built as a scalable system with consistent design logic.',
+      description: 'Requests a multi-screen product flow with a consistent design system and clickable prototype.',
       placeholderLabel: 'REQUEST\nUI\nFLOW',
       rows: [
         { key: 'scope', label: 'Scope', value: 'Multi-screen · prototype + system' },
@@ -7934,7 +8149,7 @@ const DashboardPage = () => {
               boxShadow: '0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4), 0px 5px 10px rgba(0,0,0,0.1), 0px 15px 30px rgba(0,0,0,0.1), 0px 20px 40px rgba(0,0,0,0.15)',
             }}>
               <div id="dashboard-associate-brand-row" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', justifyContent: 'space-between' }}>
-                <img src="/img/sig.png" alt="" aria-hidden="true" style={{ width: '2.75rem', height: 'auto', display: 'block' }} />
+                <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', display: 'block' }} />
                 <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.44)', fontWeight: 700, fontFamily: '"Space Mono", monospace' }}>Client Access</span>
                 <Link href="/" id="dashboard-associate-back-btn" aria-label="Back to site" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '2.4rem', height: '2.4rem', borderRadius: '999px', background: 'rgba(255,255,255,0.34)', border: '1px solid rgba(42,36,32,0.12)', color: 'rgba(42,36,32,0.58)', textDecoration: 'none', fontSize: '1.05rem', fontFamily: '"Space Mono", monospace', lineHeight: 1 }}>✕</Link>
               </div>
@@ -8143,9 +8358,9 @@ const DashboardPage = () => {
                 type="button"
                 id="tier-trigger-btn"
                 className="meta-row-action-btn"
-                aria-label="View pricing tiers"
-                title="View pricing tiers"
-                onClick={() => { setShowTierModal(true); trackTierModalOpened(); }}
+                aria-label="Open payment options"
+                title="Open payment options"
+                onClick={() => setShowSubscribeModal(true)}
               >
                 <ArrowUpRight size={12} strokeWidth={1.75} aria-hidden="true" />
               </button>
@@ -8160,22 +8375,8 @@ const DashboardPage = () => {
               <div className="meta-row-source-body">
                 <div id="reseed-control-row">
                   <div id="dashboard-source-cta-row">
+                    {/* Grid view removed for now — line-items (list) is the only view. */}
                     <div className="cap-view-toggle cap-view-toggle--top" role="group" aria-label="Cards view toggle">
-                      <button
-                        type="button"
-                        title="Grid view"
-                        aria-label="Grid view"
-                        aria-pressed={capView === 'grid'}
-                        className={`cap-view-btn${capView === 'grid' ? ' is-active' : ''}`}
-                        onClick={() => setCapView('grid')}
-                      >
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                          <rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
-                          <rect x="9" y="1.5" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
-                          <rect x="1.5" y="9" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
-                          <rect x="9" y="9" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
-                        </svg>
-                      </button>
                       <button
                         type="button"
                         title="List view"
@@ -8243,7 +8444,7 @@ const DashboardPage = () => {
                     <button
                       type="button"
                       id="brief-cooldown-chip"
-                      title={`Brief cooldown — your tier allows another brief in ${briefCooldownSeconds}s — click to view the latest brief`}
+                      title={`Brief cooldown — your tier allows another brief in ${formatBriefCooldown(briefCooldownSeconds).value}${formatBriefCooldown(briefCooldownSeconds).unit} — click to view the latest brief`}
                       style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 2px', flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer' }}
                       onClick={() => {
                         // Latest ran brief — same path as clicking the 'brief' card:
@@ -8256,9 +8457,28 @@ const DashboardPage = () => {
                     >
                       <FileText size={18} strokeWidth={1.75} stroke="url(#coverage-grad)" aria-hidden="true" style={{ marginTop: 1 }} />
                       <span style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>
-                        {briefCooldownSeconds}<span style={{ fontSize: 13 }}>s</span>
+                        {formatBriefCooldown(briefCooldownSeconds).value}<span style={{ fontSize: 13 }}>{formatBriefCooldown(briefCooldownSeconds).unit}</span>
                       </span>
                     </button>
+                    {/* Background-run indicator — surfaces when the terminal modal
+                        is closed while an intake run is queued/processing. */}
+                    {isRunActive && currentRun?.pipelineType !== 'module-run' ? (
+                      <>
+                        <span className="cap-source-divider" aria-hidden="true" />
+                        <button
+                          type="button"
+                          id="run-active-indicator-chip"
+                          onClick={reopenIntakeModal}
+                          title={latestRunStatus === 'queued' ? 'Run queued — click to open the build terminal' : 'Run in progress — click to open the build terminal'}
+                          aria-label="Open build terminal"
+                        >
+                          <span id="run-active-indicator-dot" aria-hidden="true" />
+                          <span id="run-active-indicator-label">
+                            {latestRunStatus === 'queued' ? 'Queued' : 'Running'}
+                          </span>
+                        </button>
+                      </>
+                    ) : null}
                     <span className="cap-source-divider" aria-hidden="true" />
                     <Globe id="dashboard-source-cta-icon" size={15} strokeWidth={1.5} aria-hidden="true" />
                     <input
@@ -8290,29 +8510,6 @@ const DashboardPage = () => {
                     </button>
                   </div>
                 </div>
-                {/*
-                  This row is meaningful only for full-intake pipeline runs
-                  (re-seeding the website URL). When the user clicks Run on a
-                  card the brief_run has pipelineType: 'module-run' — the terminal
-                  UI shows the progress, and this intake-field row should stay
-                  hidden. Only surface for intake-type (non module-run) runs.
-                */}
-                {isRunActive && currentRun?.pipelineType !== 'module-run' ? (
-                  <div id="reseed-active-row">
-                    <span id="reseed-run-status-label">
-                      {latestRunStatus === 'queued' ? 'RUN IS QUEUED — WAITING FOR WORKER' : 'RUN IN PROGRESS — PROCESSING'}
-                    </span>
-                    <button
-                      id="reseed-cancel-btn"
-                      type="button"
-                      onClick={handleCancelRun}
-                      disabled={cancelLoading}
-                    >
-                      {cancelLoading ? 'CANCELLING...' : 'RESET & CHANGE WEBSITE'}
-                    </button>
-                  </div>
-                ) : null}
-                {cancelError ? <div id="reseed-error-msg">{cancelError}</div> : null}
                 {reseedError ? <div id="reseed-error-msg">{reseedError}</div> : null}
               </div>
             </div>
@@ -8338,6 +8535,14 @@ const DashboardPage = () => {
             </div>
           ) : null}
           <div id="capability-grid" ref={capabilityGridRef} style={activeCapabilityFilter === 'leadgen' ? { display: 'none' } : undefined}>
+            {/* Overlays the grid (chrome + hidden cards) while first bootstrap
+                resolves; the card-stagger effect fades it out, cardsRevealed
+                unmounts it. */}
+            {!cardsRevealed && (
+              <div id="capability-grid-spinner" role="status" aria-label="Loading dashboard cards">
+                <div className="brief-loader-spinner" aria-hidden="true" />
+              </div>
+            )}
             {(() => {
               // Ordered unlock chain for the onboarding section. Index 0 is
               // always unlocked; every card after it requires the previous
@@ -8345,29 +8550,29 @@ const DashboardPage = () => {
               // locked until they're added here.
               const CARD_UNLOCK_CHAIN = ['multi-device-view', 'design-evaluation', 'social-preview', 'style-guide', 'seo-performance'];
               const INACTIVE_CARD_DESCRIPTIONS = {
-                'design-evaluation':   'Run this to evaluate your site\'s design — we read a homepage screenshot with a custom design-critique skill, rate your visual system from our perspective, and return a DESIGN.md brief with change recommendations.',
-                'multi-device-view':   'Run this to capture your site on desktop, tablet, and mobile, composite a single device-frame mockup, and collect full-page screenshots per device.',
-                'social-preview':      'Run this to pull your site metadata, favicon, and share description, and generate a preview of exactly how your site appears when shared — plus a flag list for anything that is missing.',
-                'style-guide':         'Run this to extract colors, typography, and logo usage from the live site and render a compact style guide for the brand layer of your dashboard.',
-                'seo-performance':     'Run this to score your site in PageSpeed Insights and run a structured SEO scan — speed, metadata, and structural issues summarized in one view.',
-                'business-model':      'Run this to synthesize what your business does, who it serves, and how it makes money — drawn from site evidence, not guesswork.',
-                'industry':            'Run this to classify your industry and positioning so the dashboard can benchmark you against the right peers.',
-                'visibility-snapshot': 'Run this to probe how your site surfaces in AI search — citations, answers, and competitor coverage — in a single readout.',
-                'audit-summary':       'Run every card in Data Visualization to unlock a Brief with all the information — each module fills a section. Then this card aggregates the baseline checks into a single go / no-go foundation score.',
-                'priority-signal':     'Run this to pick the single highest-leverage action for your site right now, with the evidence behind it.',
-                'agent-readiness':     'Run this to probe robots.txt, sitemaps, llms.txt, structured data, and MCP endpoints — returns a readiness score, a list of what\'s blocking AI agents, and copy-paste fixes for each issue.',
+                'design-evaluation':   'Run this for a design director review of the homepage: what looks clear, what feels weak, and what should be tightened first.',
+                'multi-device-view':   'Run this to capture desktop, tablet, and mobile views so layout problems are easy to see.',
+                'social-preview':      'Run this to see how the site looks when someone shares the link and what preview pieces are missing.',
+                'style-guide':         'Run this to pull the site\'s colors, type, and logo direction into a simple brand reference.',
+                'seo-performance':     'Run this for a website developer review of speed, search basics, and page structure.',
+                'business-model':      'Run this to explain what the business sells, who it serves, and how it makes money.',
+                'industry':            'Run this to set the market category so recommendations compare the business to the right peers.',
+                'visibility-snapshot': 'Run this to see how visible the business is in search and AI answers.',
+                'audit-summary':       'Run the setup cards to build a reliable foundation. This card then shows whether enough context is ready for a strong brief.',
+                'priority-signal':     'Run this to choose the most important next action and why it should come first.',
+                'agent-readiness':     'Run this to check whether search engines and AI tools can understand the site and what should be fixed first.',
               };
               const LOCKED_CARD_DESCRIPTIONS = {
-                'design-evaluation':   'Evaluates your site\'s design by reading a homepage screenshot with a custom design-critique skill and rating your visual system from our perspective. Returns a DESIGN.md brief with change recommendations you can review or hand to a design agent.',
-                'multi-device-view':   'Captures your site on desktop, tablet, and mobile, composites them into a single device-frame mockup, and provides full-page screenshots you can browse per device.',
-                'social-preview':      'Reads your site metadata, favicon, and share description, and shows exactly how your site appears when shared on social platforms. Flags missing images, titles, and descriptions.',
-                'audit-summary':       'Run every card in Data Visualization to unlock a complete Brief — each module feeds a section. This card then aggregates pages fetched, metadata coverage, and analyzer warnings into a single go / no-go readout.',
-                'business-model':      'Synthesizes what your business actually does, who it serves, and how it makes money — written from site evidence, not guesswork.',
-                'seo-performance':     'Runs a PageSpeed Insights audit and a structured SEO scan, then summarizes speed, metadata, and structural issues that affect visibility and conversion.',
-                'industry':            'Classifies your industry and positioning so the dashboard can benchmark you against the right peers and apply the right content playbook.',
-                'visibility-snapshot': 'Probes how your site surfaces in AI search (LLM responses, citations, answers) and reports where you show up versus where competitors dominate.',
-                'style-guide':         'Extracts your visual identity from the live site — colors, typography, logo usage — and renders a compact style guide for the brand layer of your dashboard.',
-                'priority-signal':     'Picks the single highest-leverage action for your site right now, with the evidence behind it, so you know exactly what to work on next.',
+                'design-evaluation':   'Reviews the homepage like a design director and points out what should be improved first.',
+                'multi-device-view':   'Shows the site on desktop, tablet, and mobile so layout problems are easy to review.',
+                'social-preview':      'Shows how shared links appear and flags missing title, description, or image pieces.',
+                'audit-summary':       'Summarizes whether the dashboard has enough context to create a strong brief.',
+                'business-model':      'Explains what the business sells, who it serves, and how it makes money.',
+                'seo-performance':     'Reviews speed, search basics, and page structure from a website developer point of view.',
+                'industry':            'Sets the market category so the dashboard uses the right peer set and content playbook.',
+                'visibility-snapshot': 'Shows where the business is visible online and where competitors may be stronger.',
+                'style-guide':         'Turns the site\'s colors, type, and logo direction into a simple brand reference.',
+                'priority-signal':     'Picks the most important next action and explains why it should come first.',
               };
               const hasCardPassed = (cardId) => {
                 if (cardId === 'design-evaluation') {
@@ -8425,7 +8630,7 @@ const DashboardPage = () => {
                     return true;
                   }
                   // A card shows in its own category, plus any bucket listed in
-                  // extraCategories (cross-listing — e.g. Executive Daily Brief
+                  // extraCategories (cross-listing — e.g. Executive Brief
                   // appears in both Daily Briefs and Marketing Director).
                   return activeCapabilityFilter === card.category
                     || (Array.isArray(card.extraCategories) && card.extraCategories.includes(activeCapabilityFilter));
@@ -8497,7 +8702,7 @@ const DashboardPage = () => {
               // All client dashboard cards are now visible without legacy
               // modular-onboarding dimming; module buttons still control run state.
               const isDimmed = false;
-              const isLocked = card.locked || (activeCapabilityFilter === 'onboarding' && isCardLocked(card.id));
+              const isLocked = (!isAdmin && !NON_ADMIN_UNLOCKED_CARD_IDS.has(card.id)) || card.locked || (activeCapabilityFilter === 'onboarding' && isCardLocked(card.id));
               // Unlocked but not yet run (enabled/disabled without a succeeded status) —
               // we want no card-level hover effect, only direct button hover.
               // Leadgen flow cards aren't tracked in moduleState — drive the
@@ -8514,24 +8719,28 @@ const DashboardPage = () => {
                 id={card.domId || `tile-${card.id}`}
                 key={card.id}
                 onClick={(e) => {
-                  if (typeof window !== 'undefined' && window.matchMedia('(max-width: 520px)').matches) {
-                    const isCollapsed = !expandedMobileCards.has(card.id);
-                    if (isCollapsed) {
-                      // Any tap on a collapsed card expands it
+                  const clickedControl = e.target.closest('button, a, input, textarea, select, summary, details, [role="button"]');
+                  if (clickedControl) return;
+                  const isMobileCard = typeof window !== 'undefined' && window.matchMedia('(max-width: 520px)').matches;
+                  const isListRow = Boolean(e.currentTarget.closest('.cap-list-row-main'));
+                  if (isMobileCard) {
+                    if (e.target.closest('.tile-mobile-chevron')) {
                       toggleMobileCard(card.id);
-                    } else if (e.target.closest('.tile-number')) {
-                      // Only the header strip collapses an expanded card
-                      toggleMobileCard(card.id);
+                      return;
                     }
+                    if (isLocked) {
+                      setShowSubscribeModal(true);
+                      return;
+                    }
+                    if (isInactiveUnlocked || card.id === 'survey-status') {
+                      toggleMobileCard(card.id);
+                      return;
+                    }
+                    openCapabilityCard(card);
                     return;
                   }
-                  if (isLocked || isInactiveUnlocked || card.id === 'survey-status' || hasBothButtons) return;
-                  if (card.id === 'brief' && briefPreviewHtml) { setBriefFullScreen(true); return; }
-                  if (card.category === 'brief' && BRIEF_TYPE_BY_CARD[card.id] && dashboardState?.marketingBrief) {
-                    openNamedBriefPreview(BRIEF_TYPE_BY_CARD[card.id]);
-                    return;
-                  }
-                  setActiveTileModal({ title: card.title, description: card.description, dynamicShortDescription: card.dynamicShortDescription || null, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null, recommendation: card.recommendation || null, analyzer: card.analyzer || null, readinessBadge: card.readinessBadge || null });
+                  if (isLocked || isInactiveUnlocked || card.id === 'survey-status' || (hasBothButtons && !isListRow)) return;
+                  openCapabilityCard(card);
                 }}
               >
                 <div className="tile-number">
@@ -8571,6 +8780,10 @@ const DashboardPage = () => {
                       srcDoc={briefPreviewHtml}
                       sandbox="allow-same-origin"
                     />
+                  ) : card.id === 'brief' && briefPreviewLoading ? (
+                    <div className="tile-brief-preview-loading" role="status" aria-label="Loading brief">
+                      <div className="brief-loader-spinner" aria-hidden="true" />
+                    </div>
 	                  ) : card.id === 'visual-dna' ? (
 	                    <div id="visual-dna-card-preview">
 	                      <Images size={34} strokeWidth={1.55} aria-hidden="true" />
@@ -8750,9 +8963,8 @@ const DashboardPage = () => {
                       Generated {(() => {
                         try {
                           const raw = dashboardState?.updatedAt || dashboardState?.createdAt || dashboardState?.latestRunTimestamp;
-                          const ts = raw?.toDate?.() || (raw?.seconds ? new Date(raw.seconds * 1000) : raw);
-                          const d = ts ? new Date(ts) : null;
-                          if (!d || isNaN(d.getTime())) return '';
+                          const d = fsTimestampToDate(raw);
+                          if (!d) return '';
                           return d.toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) + ' EST';
                         } catch { return ''; }
                       })()}
@@ -9025,7 +9237,7 @@ const DashboardPage = () => {
                         onClick={(e) => {
                           e.stopPropagation();
                           if (isInactiveUnlocked) return;
-                          setActiveTileModal({ title: card.title, description: card.description, dynamicShortDescription: card.dynamicShortDescription || null, rows: card.rows, cardId: card.id, placeholderLabel: card.placeholderLabel, number: card.number, label: card.label, isCapabilityCard: true, vizType: null, recommendation: card.recommendation || null, analyzer: card.analyzer || null, readinessBadge: card.readinessBadge || null });
+                          openCapabilityCard(card);
                         }}
                       >
                           Details ↗
@@ -9049,7 +9261,7 @@ const DashboardPage = () => {
                 _groups[_cur].cards.push(card);
               });
             }
-            // Executive Daily Brief shows in MOST RECENT (rendered) AND in RUN BRIEFS (card).
+            // Executive Brief shows in MOST RECENT (rendered) AND in RUN BRIEFS (card).
             if (_bucketSteps && activeCapabilityFilter === 'brief' && _groups[1]) {
               const execCard = _filteredSorted.find((c) => c.id === 'marketing-brief');
               if (execCard && !_groups[1].cards.some((c) => c.id === 'marketing-brief')) {
@@ -9057,14 +9269,14 @@ const DashboardPage = () => {
               }
             }
 
-            // Daily Briefs tab uses a fixed layout (featured Recent card + lists),
-            // so the grid view is disabled and the list is forced.
-            const _forceList = activeCapabilityFilter === 'brief';
+            // Every bucket with workflow steps uses the tab system: one tab row,
+            // only the active tab's group rendered, stretched full width.
+            const _forceList = !!_bucketSteps;
             const _viewToggle = (
               <div className="cap-view-toggle" role="group" aria-label="View toggle">
                 <button
                   type="button"
-                  title={_forceList ? 'Grid view unavailable for Daily Briefs' : 'Grid view'}
+                  title={_forceList ? 'Grid view unavailable in tab layout' : 'Grid view'}
                   aria-label="Grid view"
                   aria-pressed={capView === 'grid' && !_forceList}
                   disabled={_forceList}
@@ -9122,7 +9334,7 @@ const DashboardPage = () => {
                         {/* Mobile-only section label — desktop uses the cap-step-seg--top column headers */}
                         {g.step && <div className="cap-list-col-label">{g.step.label}</div>}
                         <div className="cap-list-col-body">
-                          {_forceList && g.stepIdx === 2 ? (() => {
+                          {_forceList && g.step?.id === 'past-briefs' ? (() => {
                             if (pastBriefView) {
                               return (
                                 <div className="cap-brief-full">
@@ -9143,12 +9355,25 @@ const DashboardPage = () => {
                               const rid = run.runId || run.id;
                               const rawTs = run.completedAt || run.createdAt || run.updatedAt;
                               let when = "";
-                              try { const d = rawTs?.toDate?.() || (rawTs?.seconds ? new Date(rawTs.seconds * 1000) : (rawTs ? new Date(rawTs) : null)); when = d && !isNaN(d.getTime()) ? d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : ""; } catch {}
+                              const _d = fsTimestampToDate(rawTs);
+                              when = _d ? _d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : "";
+                              // Brief name mirrors the composition labels in
+                              // brief-sections.cjs: scoped runs carry run.scope;
+                              // unscoped scout-brief runs are the full Executive Brief.
+                              const briefName =
+                                run.scope === 'marketing-director' ? 'Market Brief'
+                                : run.scope === 'social-media-manager' ? 'Strategy Brief'
+                                : 'Executive Brief';
                               return (
                                 <button key={rid || i} type="button" className="cap-past-brief-row" onClick={() => openPastBrief(rid)}>
-                                  <span className="cap-past-brief-title">Daily Brief</span>
-                                  <span className="cap-past-brief-meta">{[when, run.status || "completed"].filter(Boolean).join(" · ")}</span>
-                                  <span className="cap-past-brief-view">View ↗</span>
+                                  <span className="cap-past-brief-title">
+                                    {briefName}
+                                    {when && <span className="cap-past-brief-title-ts">{when}</span>}
+                                  </span>
+                                  <span className="cap-past-brief-meta">{run.status || "completed"}</span>
+                                  <span className="cap-list-run cap-past-brief-view-btn" aria-hidden="true" title="View brief">
+                                    <Eye size={13} strokeWidth={1.9} />
+                                  </span>
                                 </button>
                               );
                             });
@@ -9157,16 +9382,22 @@ const DashboardPage = () => {
                             // auto-sized to its content), not the card. Falls back to the card
                             // (with its Run button) when no brief has been generated yet.
                             if (activeCapabilityFilter === 'brief' && card.id === 'marketing-brief' && g.stepIdx === 0) {
+                              // A brief exists in dashboard state but its HTML is still
+                              // fetching — hold a quiet loading shell instead of flashing
+                              // the card UI and flipping to the iframe a beat later.
+                              const briefExpected = Boolean(bootstrap?.dashboardState?.marketingBrief);
                               return (
-                                <div key={card.id} className="cap-brief-full">
+                                <div key={card.id} className="cap-brief-full" id="daily-brief-featured-shell">
                                   {marketingBriefPreviewHtml ? (
                                     <iframe
                                       key={marketingBrief?.generatedAtIso || 'recent-brief-full'}
                                       className="cap-brief-full-frame"
-                                      title="Executive Daily Brief"
+                                      title={briefTier === 'free' ? 'Onboarding Brief' : 'Executive Brief'}
                                       srcDoc={marketingBriefPreviewHtml}
                                       sandbox="allow-same-origin allow-scripts"
                                     />
+                                  ) : briefExpected ? (
+                                    null
                                   ) : (
                                     <div className="cap-list-featured">{_renderCard(card)}</div>
                                   )}
@@ -9174,7 +9405,12 @@ const DashboardPage = () => {
                               );
                             }
                             const isExpanded = expandedListCards.has(card.id);
-                            const isRowLocked = Boolean(card.locked || card.lockBadge);
+                            // Same gate as _renderCard's isLocked: non-admin accounts
+                            // only get allowlisted cards; everything else locks (the
+                            // tile already dimmed, but row controls live out here).
+                            const isRowLocked =
+                              (!isAdmin && !NON_ADMIN_UNLOCKED_CARD_IDS.has(card.id)) ||
+                              Boolean(card.locked || card.lockBadge);
                             const canRun = Boolean(card.moduleControls);
                             return (
                               <div key={card.id} className={`cap-list-row${isExpanded ? ' is-expanded' : ''}${isRowLocked ? ' cap-list-row--locked' : ''}`}>
@@ -9289,7 +9525,7 @@ const DashboardPage = () => {
               { key: 'leadgen',    label: 'Sales',                    sub: 'Prospect pipeline',        icon: Radar,                 color: '#ff3b30' },
               ...(isAdmin ? [{ key: 'admin', label: 'Admin', sub: 'Email & system', icon: Send, color: '#a855f7' }] : []),
             ].map(({ key, label, sub, icon: NavIcon, color }) => {
-              const isLocked = false;
+              const isLocked = !isAdmin && NON_ADMIN_LOCKED_NAV_KEYS.has(key);
               return (
               <button
                 key={key ?? 'all'}
@@ -9346,7 +9582,11 @@ const DashboardPage = () => {
                   </span>
                   <span className="capability-nav-btn-sub">{sub}</span>
                 </span>
-                {NavIcon ? (
+                {isLocked ? (
+                  <span className="capability-nav-btn-icon-wrap" style={{ color: 'rgba(42,36,32,0.55)' }}>
+                    <Lock size={18} strokeWidth={2} />
+                  </span>
+                ) : NavIcon ? (
                   <span className="capability-nav-btn-icon-wrap" style={{ color }}>
                     <NavIcon size={18} strokeWidth={2} />
                   </span>
@@ -9400,7 +9640,7 @@ const DashboardPage = () => {
               setActiveTileModal({
                 cardId: 'brand-system',
                 title: 'Brand System',
-                description: 'Build a complete brand identity system from your pipeline data. Get creative specs ready to use across any channel or tool.',
+                description: 'Acts like a creative director: turns the brand evidence into clear visual rules for future design work.',
                 rows: [],
                 placeholderLabel: 'PROMPT\nREADY',
                 number: 'BG',
@@ -9449,22 +9689,17 @@ const DashboardPage = () => {
 
             {/* Brand row — exact auth brandStyle */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', justifyContent: 'space-between' }}>
-              <img src="/img/sig.png" alt="" aria-hidden="true" style={{ width: '2.75rem', height: 'auto', display: 'block' }} />
+              <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', display: 'block' }} />
               <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.44)', fontWeight: 700, fontFamily: '"Space Mono", monospace' }}>
                 {activeModuleCard ? 'Updating Dashboard' : 'Client Access'}
               </span>
-              {/* Status orb — same shape as auth back button */}
-              <span
-                id="intake-modal-status-orb"
-                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '2.4rem', height: '2.4rem', borderRadius: '999px', background: 'rgba(255,255,255,0.34)', border: '1px solid rgba(42,36,32,0.12)' }}
-                aria-hidden="true"
-              >
-                <span style={{
-                  width: '0.46rem', height: '0.46rem', borderRadius: '999px',
-                  background: latestRunStatus === 'failed' ? '#D71921' : completionCountdown !== null ? '#4A9E5C' : (latestRunStatus === 'queued' || awaitingSignupProvision) ? '#D4A843' : '#4A9E5C',
-                  animation: (isRunActive || awaitingSignupProvision) ? 'status-pulse 1.4s ease-in-out infinite' : 'none',
-                }} />
-              </span>
+              {/* Close — matches the payment modal close button */}
+              <button
+                type="button"
+                id="intake-modal-close"
+                onClick={dismissIntakeModal}
+                aria-label="Close build terminal and return to dashboard"
+              >[ ✕ ]</button>
             </div>
 
             {/* Marquee — exact auth titleViewport/Track/titleStyle */}
@@ -9473,8 +9708,8 @@ const DashboardPage = () => {
                 {(['a', 'b']).map((k) => (
                   <span key={k} aria-hidden={k === 'b' ? 'true' : undefined} style={{ margin: 0, flexShrink: 0, color: '#2a2420', fontSize: 'clamp(2rem, 8.5vw, 7rem)', lineHeight: 1, letterSpacing: '-0.04em', fontFamily: '"Doto", "Space Mono", monospace', fontWeight: 700, whiteSpace: 'nowrap' }}>
                     {activeModuleCard
-                      ? `UPDATING ${activeModuleCard.label}\u00A0\u00A0\u00B7\u00A0\u00A0RUNNING MODULE\u00A0\u00A0\u00B7\u00A0\u00A0`
-                      : 'BUILDING YOUR DASHBOARD\u00A0\u00A0\u00B7\u00A0\u00A0PROCESSING WEBSITE\u00A0\u00A0\u00B7\u00A0\u00A0'}
+                      ? `UPDATING ${activeModuleCard.label}\u00A0\u00B7\u00A0RUNNING MODULE\u00A0\u00B7\u00A0`
+                      : 'BUILDING YOUR DASHBOARD\u00A0\u00B7\u00A0PROCESSING WEBSITE\u00A0\u00B7\u00A0'}
                   </span>
                 ))}
               </div>
@@ -9543,22 +9778,24 @@ const DashboardPage = () => {
                   || (currentRun?.sourceUrl ? (() => { try { return new URL(currentRun.sourceUrl).hostname.replace(/^www\./, ''); } catch { return currentRun.sourceUrl; } })() : null)
                   || '\u00A0'}
               </span>
-              <button
-                type="button"
-                id="intake-modal-footer-cancel"
-                onClick={() => setIntakeModalDismissed(true)}
-                aria-label="Close terminal and return to dashboard"
-              >[ cancel ]</button>
+              <span id="intake-modal-footer-note">Close anytime — your dashboard keeps building in the background.</span>
             </div>
 
           </div>
         </div>
       ) : null}
 
+      {bgRunToast ? (
+        <div id="bg-run-toast" role="status" aria-live="polite">
+          <span id="bg-run-toast-dot" />
+          <span>Build running in the background — your dashboard will refresh when it’s ready.</span>
+        </div>
+      ) : null}
+
 
       {/* ── Tile detail modal ── */}
       {/* Payments / subscribe modal — triggered by content lock icons */}
-      <SubscribeModal open={showSubscribeModal} onClose={() => setShowSubscribeModal(false)} />
+      <SubscribeModal open={showSubscribeModal} onClose={() => setShowSubscribeModal(false)} defaultEmail={user?.email || ''} />
       {/* Pricing modal */}
       {showTierModal && (
         <div id="tier-modal-overlay" onClick={() => setShowTierModal(false)}>
@@ -9640,7 +9877,7 @@ const DashboardPage = () => {
         >
           <div id="delete-account-modal" onClick={(e) => e.stopPropagation()}>
             <div id="delete-account-brand-row">
-              <img src="/img/sig.png" alt="" aria-hidden="true" id="delete-account-sig" />
+              <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" id="delete-account-sig" />
               <span id="delete-account-eyebrow">Delete Account</span>
               <button
                 type="button"
@@ -10845,7 +11082,7 @@ const DashboardPage = () => {
                     <div className="mu-tab-pane" style={{ padding: 18 }}>
                       <span className="mu-label">Paste today's team conversation</span>
                       <p style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--text-secondary)', margin: 0 }}>
-                        Discord thread, Slack copy-paste, or WhatsApp "Export chat". The intake analyst keeps only what's relevant to your campaign and positioning, tags each item, and feeds it into the Executive Daily Brief.
+                        Discord thread, Slack copy-paste, or WhatsApp "Export chat". The intake analyst keeps only what's relevant to your campaign and positioning, tags each item, and feeds it into the Executive Brief.
                       </p>
                       <textarea
                         id="conversation-intake-textarea"
@@ -11132,7 +11369,7 @@ const DashboardPage = () => {
                               <option value="per-handle">Per handle — one search each (most accurate)</option>
                               <option value="combined">Combined — one search for all handles (cheaper)</option>
                             </select>
-                            <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Watchlist handles are searched every run, separately from your other queries.</span>
+                            <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>These people or accounts are checked every time the brief is built.</span>
                           </label>
                           {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
                           <div className="mu-footer">
@@ -11149,7 +11386,7 @@ const DashboardPage = () => {
                           <label className="mu-field">
                             <span className="mu-label">Competitors</span>
                             <textarea className="mu-textarea" placeholder="Competitor names, one per line" value={marketingBriefConfig.competitors || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), competitors: e.target.value }))} rows={8} />
-                            <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Injected into the search strategy and final angle selection every run.</span>
+                            <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>These competitors help shape the research and final content angle.</span>
                           </label>
                           {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
                           <div className="mu-footer">
@@ -11170,7 +11407,7 @@ const DashboardPage = () => {
                   <div id="platform-search-panel" className="tile-detail-bento-cell">
                     <div className="mu-tab-pane" style={{ padding: 18 }}>
                     <p style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--text-secondary)', margin: 0 }}>
-                      <strong>Web</strong> search feeds Scout and your daily brief — toggle it on or off. Launch and startup directories are locked until their search layer ships; upgrade to unlock.
+                      <strong>Web</strong> search gives the brief current market context. Turn it on when you want fresh outside research included.
                     </p>
                     {marketingBriefConfig ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -11188,7 +11425,7 @@ const DashboardPage = () => {
                   <div id="social-signals-panel" className="tile-detail-bento-cell">
                     <div className="mu-tab-pane" style={{ padding: 18 }}>
                     <p style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--text-secondary)', margin: 0 }}>
-                      <strong>X</strong> and <strong>Reddit</strong> feed your daily brief today — toggle each on or off. The remaining social platforms are locked until the social search layer ships; upgrade to unlock.
+                      <strong>X</strong> and <strong>Reddit</strong> add live buyer language and conversation ideas to the brief. Turn each source on only when it is useful for this client.
                     </p>
                     {marketingBriefConfig ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -11201,7 +11438,7 @@ const DashboardPage = () => {
                   </div>
                 )}
 
-                {/* Brief Preview — Agent Data Contract + cost estimate + Run Now → populates the Executive Daily Brief */}
+                {/* Brief Preview — Agent Data Contract + cost estimate + Run Now → populates the Executive Brief */}
                 {activeTileModal.cardId === 'brief-preview' && (
                   <div id="brief-preview-panel" className="tile-detail-bento-cell">
                     <div className="mu-tab-pane" style={{ padding: 18 }}>
@@ -11210,7 +11447,7 @@ const DashboardPage = () => {
                       ) : (
                         <>
                           <label className="mu-field">
-                            <span className="mu-label">Agent Data Contract (JSON shape Scout returns)</span>
+                            <span className="mu-label">Research output format</span>
                             <textarea className="mu-textarea mu-code-textarea" value={marketingBriefConfig.agentDataTemplate || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), agentDataTemplate: e.target.value }))} rows={12} spellCheck={false} />
                           </label>
                           {(() => {
@@ -11283,7 +11520,7 @@ const DashboardPage = () => {
                             ))}
                           </div>
                         ) : (
-                          <p className="mu-notice">No strategy yet — run the Executive Daily Brief to generate the 30-day plan.</p>
+                          <p className="mu-notice">No strategy yet — run the Executive Brief to generate the 30-day plan.</p>
                         )}
                         {strategy30Error ? <p className="mu-notice mu-notice--danger">{strategy30Error}</p> : null}
                       </section>
@@ -11696,7 +11933,7 @@ const DashboardPage = () => {
                                   <span className="mu-index">01</span>
                                   <div>
                                     <h3>Scout Focus</h3>
-                                    <p>Sets the overall research lens before Scout builds the daily market brief.</p>
+                                    <p>Sets what the research assistant should pay attention to before it builds the daily brief.</p>
                                   </div>
                                 </div>
                                 <label className="mu-field">
@@ -11710,7 +11947,7 @@ const DashboardPage = () => {
                                   <span className="mu-index">02</span>
                                   <div>
                                     <h3>Source Platforms</h3>
-                                    <p>Controls where Scout should look for signals. Ready sources are safe defaults; available sources depend on the social search layer being configured.</p>
+                                    <p>Chooses where the research assistant should look for useful market and audience signals.</p>
                                   </div>
                                 </div>
                                 <div className="mb-config-platform-grid" role="group" aria-label="Scout source platforms">
@@ -11793,7 +12030,7 @@ const DashboardPage = () => {
 	                                  <span className="mu-index">03</span>
 	                                  <div>
 	                                    <h3>Search Plan</h3>
-	                                    <p>Generated mode uses Brand & Keywords for a balanced baseline. Custom mode is capped at {SEARCH_PLAN_CUSTOM_MAX} targeted query clusters.</p>
+	                                    <p>Generated mode creates a starter search plan. Custom mode lets you write the exact research searches yourself.</p>
 	                                  </div>
 	                                  <div className="mb-search-mode-actions">
 	                                    <button type="button" className={`mb-config-mini-btn${marketingBriefSearchStats.generatedMode ? ' is-active' : ''}`} onClick={clearMarketingBriefSearches}>Generated</button>
@@ -11846,7 +12083,7 @@ const DashboardPage = () => {
                                   <span className="mu-index">04</span>
                                   <div>
                                     <h3>Watchlists</h3>
-                                    <p>Named accounts and competitors are injected into the search strategy and final angle selection.</p>
+                                    <p>Named accounts and competitors tell the research assistant who to watch and compare against.</p>
                                   </div>
                                 </div>
                                 <div className="mu-field-grid">
@@ -11895,7 +12132,7 @@ const DashboardPage = () => {
                                       <span className="mu-index">$</span>
                                       <div>
                                         <h3>Run cost estimate</h3>
-                                        <p>Approximate cost per brief run. Updates live as you edit searches, platforms, watchlist, and mode. Estimate only (~{usd(SEARCH_RATE)}/search).</p>
+                                        <p>Approximate cost per brief run. Updates as you change sources, searches, and watchlist settings.</p>
                                       </div>
                                       <span className="mu-chip">{usd(total)} / run</span>
                                     </div>
@@ -11924,7 +12161,7 @@ const DashboardPage = () => {
                                   <span className="mu-index">05</span>
                                   <div>
                                     <h3>Advanced Scout Instructions</h3>
-                                    <p>Controls the judgment layer: what to prioritize, what to ignore, and how to separate live signals from background context.</p>
+                                    <p>Gives extra direction about what matters, what to ignore, and how the brief should judge new information.</p>
                                   </div>
                                 </div>
                                 <label className="mu-field">
@@ -11937,12 +12174,12 @@ const DashboardPage = () => {
                                 <div className="mu-section-head">
                                   <span className="mu-index">06</span>
                                   <div>
-                                    <h3>Agent Data Contract</h3>
-                                    <p>Defines the structured fields Scout should return for Scribe and Guardian. Edit only when the output shape needs to change.</p>
+                                    <h3>Research Output Format</h3>
+                                    <p>Defines what fields the research assistant should return. Most users should leave this alone.</p>
                                   </div>
                                 </div>
                                 <label className="mu-field">
-                                  <span className="mu-label">Expected structured output</span>
+                                  <span className="mu-label">Expected research output</span>
                                   <textarea className="mu-textarea mu-code-textarea" value={marketingBriefConfig.agentDataTemplate || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), agentDataTemplate: e.target.value }))} rows={12} spellCheck={false} />
                                 </label>
                               </section>
@@ -11951,12 +12188,12 @@ const DashboardPage = () => {
                                 <div className="mu-section-head">
                                   <span className="mu-index">07</span>
                                   <div>
-                                    <h3>Scribe Tone &amp; Constraints</h3>
-                                    <p>Controls how Scribe writes the founder brief: voice, posture, and the hard rules each output must respect.</p>
+                                    <h3>Brief Tone &amp; Rules</h3>
+                                    <p>Controls how the brief should sound and which writing rules it must follow.</p>
                                   </div>
                                 </div>
                                 <label className="mu-field">
-                                  <span className="mu-label">Scribe tone</span>
+                                  <span className="mu-label">Brief tone</span>
                                   <textarea
                                     id="mb-config-scribe-tone"
                                     className="mu-textarea"
@@ -11983,8 +12220,8 @@ const DashboardPage = () => {
                                 <div className="mu-section-head">
                                   <span className="mu-index">08</span>
                                   <div>
-                                    <h3>Guardian Rules</h3>
-                                    <p>Guides Guardian&apos;s QA pass: what the reviewer should know about the brand, and any words or phrases that should be flagged as off-brand or risky.</p>
+                                    <h3>Review Rules</h3>
+                                    <p>Guides the final review: what the reviewer should know about the brand and what wording should be flagged.</p>
                                   </div>
                                 </div>
                                 <label className="mu-field">
@@ -12227,7 +12464,7 @@ const DashboardPage = () => {
                       onOpenSocialPosting={() => {
                         setActiveTileModal({
                           title: 'Social Media Posting',
-                          description: 'Compose, optimize, schedule, and post to X/Twitter.',
+                          description: 'Write, polish, schedule, and publish X/Twitter posts after checking the brand voice.',
                           cardId: 'social-media-posting',
                           isCapabilityCard: true,
                           vizType: null,
@@ -12392,10 +12629,118 @@ const DashboardPage = () => {
                       )}
                     </div>
                   </div>
-                )}
+	                )}
 
-                {/* Shared REPORT / SOLUTIONS / PROBLEMS / DATA tabs for standard cards */}
-                {!CUSTOM_DETAIL_CARD_IDS.has(activeTileModal.cardId) ? (
+	                {/* Mockup Studio — setup + saved video assets */}
+	                {activeTileModal.cardId === 'mockup-studio' && (() => {
+	                  const studioCaptures = Array.isArray(dashboardState?.studioCaptures) ? dashboardState.studioCaptures : [];
+	                  const newest = [...studioCaptures].reverse();
+	                  const latestVideo = newest.find((item) => item?.type === 'studio_video');
+	                  const savedAssets = newest.filter((item) => ['studio_video', 'studio_scene', 'studio_capture'].includes(item?.type));
+	                  const updateDraft = (key, value) => setMockupStudioDraft((prev) => ({ ...prev, [key]: value }));
+	                  return (
+	                    <div
+	                      id="mockup-studio-modal-tabs-container"
+	                      className="tile-detail-bento-cell tile-detail-tabbed-container"
+	                    >
+	                      <div className="tile-detail-tabs">
+	                        <button type="button" className={`tile-detail-tab${modalTab === 'setup' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('setup')}>SETUP</button>
+	                        <button type="button" className={`tile-detail-tab${modalTab === 'assets' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('assets')}>SAVED ASSETS</button>
+	                      </div>
+	                      <div className="tile-detail-tab-content">
+	                        {modalTab === 'setup' && (
+	                          <div className="mu-tab-pane">
+	                            <section className="mu-section">
+	                              <div className="mu-section-head">
+	                                <span className="mu-index">MS</span>
+	                                <div>
+	                                  <h3>Mockup video setup</h3>
+	                                  <p>Choose the source site, device, backdrop, and default camera move before running the Studio video generator.</p>
+	                                </div>
+	                                <span className="mu-chip mu-chip--success">READY</span>
+	                              </div>
+	                              <div className="mu-field-grid">
+	                                <label className="mu-field">
+	                                  <span className="mu-label">Website URL</span>
+	                                  <input
+	                                    className="mu-input"
+	                                    value={mockupStudioDraft.sourceUrl}
+	                                    placeholder={client?.websiteUrl || 'https://example.com'}
+	                                    onChange={(e) => updateDraft('sourceUrl', e.target.value)}
+	                                  />
+	                                </label>
+	                                <label className="mu-field">
+	                                  <span className="mu-label">Device</span>
+	                                  <select className="mu-select" value={mockupStudioDraft.viewportId} onChange={(e) => updateDraft('viewportId', e.target.value)}>
+	                                    {MOCKUP_STUDIO_VIEWPORTS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+	                                  </select>
+	                                </label>
+	                                <label className="mu-field">
+	                                  <span className="mu-label">Backdrop</span>
+	                                  <select className="mu-select" value={mockupStudioDraft.backdropId} onChange={(e) => updateDraft('backdropId', e.target.value)}>
+	                                    {MOCKUP_STUDIO_BACKDROPS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+	                                  </select>
+	                                </label>
+	                                <label className="mu-field">
+	                                  <span className="mu-label">Camera move</span>
+	                                  <select className="mu-select" value={mockupStudioDraft.templateId} onChange={(e) => updateDraft('templateId', e.target.value)}>
+	                                    {MOCKUP_STUDIO_TEMPLATES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+	                                  </select>
+	                                </label>
+	                              </div>
+	                              <p className="mu-notice">
+	                                RUN VIDEO opens Mockup Studio with these settings and starts the browser recorder automatically.
+	                              </p>
+	                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+	                                <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 140 }} onClick={() => openMockupStudio({ autoVideo: true })}>
+	                                  <span>Run Video</span>
+	                                </button>
+	                                <button type="button" className="mu-btn-outline" onClick={() => openMockupStudio({ autoVideo: false })}>
+	                                  Open Studio
+	                                </button>
+	                                {latestVideo?.downloadUrl ? (
+	                                  <a className="mu-btn-outline mu-btn-outline--accent" href={latestVideo.downloadUrl} target="_blank" rel="noopener noreferrer">
+	                                    Open Latest Video
+	                                  </a>
+	                                ) : null}
+	                              </div>
+	                            </section>
+	                          </div>
+	                        )}
+	                        {modalTab === 'assets' && (
+	                          <div className="tile-detail-tab-pane">
+	                            {savedAssets.length ? savedAssets.map((asset) => {
+	                              const isVideo = asset.type === 'studio_video' || String(asset.contentType || '').startsWith('video/');
+	                              return (
+	                                <div key={asset.storagePath || asset.downloadUrl} className="mu-saved-card">
+	                                  <div className="mu-saved-head">
+	                                    <div>
+	                                      <span className="mu-saved-meta">{asset.type || 'studio_asset'} · {asset.capturedAt ? new Date(asset.capturedAt).toLocaleString() : 'Saved'}</span>
+	                                      <h4 className="mu-saved-title">{asset.label || asset.viewportLabel || asset.variant || 'Studio asset'}</h4>
+	                                    </div>
+	                                    {asset.downloadUrl ? (
+	                                      <a className="mu-btn-outline" href={asset.downloadUrl} target="_blank" rel="noopener noreferrer">Open ↗</a>
+	                                    ) : null}
+	                                  </div>
+	                                  {isVideo && asset.downloadUrl ? (
+	                                    <video src={asset.downloadUrl} controls muted playsInline preload="metadata" style={{ width: '100%', maxHeight: 260, borderRadius: 8, background: '#000' }} />
+	                                  ) : asset.downloadUrl ? (
+	                                    <img src={asset.downloadUrl} alt={asset.label || 'Studio asset'} style={{ width: '100%', maxHeight: 260, objectFit: 'cover', borderRadius: 8, background: '#000' }} />
+	                                  ) : null}
+	                                </div>
+	                              );
+	                            }) : (
+	                              <div className="mu-empty">No Studio assets yet. Use SETUP, then click Run Video.</div>
+	                            )}
+	                          </div>
+	                        )}
+	                      </div>
+	                    </div>
+	                  );
+	                })()}
+
+	                {/* Shared REPORT / SOLUTIONS / PROBLEMS / DATA tabs for standard cards */}
+	                {!CUSTOM_DETAIL_CARD_IDS.has(activeTileModal.cardId) ? (
                   <div
                     id={`${activeTileModal.cardId}-analyzer-findings`}
                     className="tile-detail-bento-cell tile-detail-tabbed-container"
@@ -12604,10 +12949,8 @@ const DashboardPage = () => {
                             const cms = moduleState?.[activeTileModal.cardId];
                             if (!cms) return null;
                             const fmtTs = (ts) => {
-                              try {
-                                const d = ts?.toDate?.() ?? (ts?.seconds ? new Date(ts.seconds * 1000) : null);
-                                return d ? d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : '—';
-                              } catch { return '—'; }
+                              const d = fsTimestampToDate(ts);
+                              return d ? d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : '—';
                             };
                             const diagRows = [
                               { key: 'mod-header',  isHeader: true, label: 'MODULE DIAGNOSTICS' },
@@ -12693,56 +13036,26 @@ const DashboardPage = () => {
                     <div className="tile-detail-tab-content">
                       <div id="adq-pane" className="tile-detail-tab-pane">
                         {(() => {
-                          const CARD_COLOR = {
-                            'marketing-brief':   '#0ea5e9',
-                            'strategy-builder':  '#8b5cf6',
-                            'newsletter':        '#ec4899',
-                            'knowledge-base':    '#f59e0b',
-                            'industry':          '#6366f1',
-                            'brand-voice':       '#f472b6',
-                            'brand-system':      '#f97316',
-                            'seo-performance':   '#8b5cf6',
-                            'style-guide':       '#06b6d4',
-                            'social-preview':    '#6366f1',
-                            'multi-device-view': '#0ea5e9',
-                            'agent-readiness':   '#a78bfa',
-                          };
-                          const CARD_ICONS = {
-                            'marketing-brief':   ChartColumnIncreasing,
-                            'strategy-builder':  Workflow,
-                            'newsletter':        MessageSquareMore,
-                            'knowledge-base':    Database,
-                            'industry':          Globe,
-                            'brand-voice':       Pencil,
-                            'brand-system':      Settings2,
-                            'seo-performance':   Search,
-                            'style-guide':       Images,
-                            'social-preview':    ArrowRightLeft,
-                            'multi-device-view': LaptopMinimalCheck,
-                            'agent-readiness':   BriefcaseBusiness,
-                          };
+                          // Subtitles keyed by section header label — every section
+                          // emitted by the audit-summary card rows must have an entry.
                           const SECTION_SUBTITLES = {
-                            'EXECUTIVE DAILY BRIEF': 'Market intel, KOL signals & publishing',
                             'STRATEGY BUILDER':      'Content angles, opportunity map & posts',
                             'COMPANY BRAIN':         'Knowledge powering all AI modules',
                             'MARKET CATEGORY':       'Industry classification & positioning',
                             'BRAND VOICE':           'Tone system, style & personality',
                             'BRAND IDENTITY':        'Master prompt, brand JSON & assets',
-                            'NEWSLETTER':            'Weekly AI-generated email content',
-                            'SEO PERFORMANCE':       'PageSpeed, Core Web Vitals & flags',
+                            'SEO PERFORMANCE':       'Speed, search basics & flags',
                             'STYLE GUIDE':           'Typography, color palette & motion',
                             'SOCIAL PREVIEW':        'Open Graph & share card image',
                             'MULTI-DEVICE VIEW':     'Screenshots & device mockups',
                             'AGENT READINESS':       'AI readiness & structured data audit',
                             'SITE EVIDENCE':         'Crawled pages, headings & nav',
-                            'ARTIFACTS':             'Reports, PDFs & skill documents',
-                            'MODULE STATUS':         'Run status for pipeline modules',
-                            'RUN HEALTH':            'Recent pipeline run diagnostics',
+                            'PLATFORM SEARCH':       'Launch & directory listening sources',
+                            'SOCIAL MEDIA SIGNALS':  'Social platform listening sources',
+                            'EXTERNAL SIGNALS':      'Weather, reviews & trend signals',
                           };
                           const CARD_BUCKET = {
-                            'marketing-brief':   'brief',
                             'strategy-builder':  'growth',
-                            'newsletter':        'growth',
                             'knowledge-base':    'knowledge',
                             'industry':          'knowledge',
                             'brand-voice':       'content',
@@ -12754,19 +13067,19 @@ const DashboardPage = () => {
                             'agent-readiness':   'website',
                           };
                           const BUCKET_META = {
-                            brief:    { label: 'Executive Daily Brief',  sub: 'Daily market intelligence & publishing', icon: ChartColumnIncreasing, color: '#2a2420' },
                             growth:   { label: 'Marketing Director',     sub: 'Strategy, signals & growth pipeline',   icon: Settings2,             color: '#10b981' },
                             knowledge:{ label: 'Knowledge Officer',      sub: 'Knowledge sources powering AI modules', icon: BrainIcon,             color: '#3b82f6' },
                             content:  { label: 'Creative Director',      sub: 'Brand voice, identity & systems',       icon: Workflow,              color: '#14b8a6' },
                             website:  { label: 'Website Developer',      sub: 'Speed, SEO & conversion metrics',       icon: LaptopMinimalCheck,    color: '#0ea5e9' },
                             _system:  { label: 'System',                 sub: 'Pipeline, artifacts & diagnostics',     icon: ClipboardList,         color: '#6b7280' },
                           };
-                          const BUCKET_ORDER = ['brief', 'growth', 'knowledge', 'content', 'website', '_system'];
+                          const BUCKET_ORDER = ['growth', 'knowledge', 'content', 'website', '_system'];
 
+                          // Provenance chip per field-row key. Keys not listed
+                          // default to AI (LLM synthesis / analyzer output).
+                          // Keep in sync with the audit-summary card rows above.
                           const FIELD_SOURCES = {
                             // SCOUT — social listening & search signals
-                            'db-kol': 'SCOUT', 'db-brand-mentions': 'SCOUT', 'db-competitor-intel': 'SCOUT',
-                            'db-viral': 'SCOUT', 'db-category-trends': 'SCOUT', 'db-escalations': 'SCOUT',
                             'plat-reddit': 'SCOUT', 'plat-producthunt': 'SCOUT', 'plat-betalist': 'SCOUT',
                             'plat-uneed': 'SCOUT', 'plat-trustmrr': 'SCOUT', 'plat-fazier': 'SCOUT',
                             'plat-openalt': 'SCOUT', 'plat-microlaunch': 'SCOUT', 'plat-peerlist': 'SCOUT',
@@ -12780,18 +13093,13 @@ const DashboardPage = () => {
                             'soc-mastodon': 'SCOUT', 'soc-discord': 'SCOUT', 'soc-twitch': 'SCOUT', 'soc-snapchat': 'SCOUT',
                             'ext-weather': 'SCOUT', 'ext-reviews': 'SCOUT', 'ext-google-trends': 'SCOUT',
                             // USER — manually configured inputs
-                            'db-scout-focus': 'USER', 'db-scout-instr': 'USER', 'db-searches': 'USER', 'db-platforms': 'USER',
                             'kb-global': 'USER', 'kb-brief': 'USER', 'kb-strategy': 'USER', 'kb-brand': 'USER', 'kb-market': 'USER',
-                            'bi-kb-sources': 'USER', 'site-url': 'USER', 'run-source-url': 'USER',
+                            'bi-kb-sources': 'USER', 'strat-kb-sources': 'USER', 'site-url': 'USER',
                             // PSI — PageSpeed Insights API
                             'psi-perf': 'PSI', 'psi-seo': 'PSI', 'psi-a11y': 'PSI', 'psi-bp': 'PSI',
                             'psi-lcp': 'PSI', 'psi-inp': 'PSI', 'psi-cls': 'PSI', 'psi-ttfb': 'PSI',
                             'psi-opps': 'PSI', 'psi-red-flags': 'PSI', 'psi-a11y-fail': 'PSI',
                             'psi-insights': 'PSI', 'psi-diagnostics': 'PSI', 'psi-3p': 'PSI',
-                            'psi-audit-status': 'PSI', 'psi-data': 'PSI', 'psi-fail-code': 'PSI',
-                            'psi-fail-reason': 'PSI', 'psi-final-url': 'PSI', 'psi-http-status': 'PSI',
-                            'psi-host-service': 'PSI', 'psi-host-provider': 'PSI', 'psi-blocked-by': 'PSI',
-                            'psi-redirects': 'PSI', 'psi-duration': 'PSI', 'psi-lh-version': 'PSI',
                             // CRAWL — site scrape / crawler
                             'meta-og-title': 'CRAWL', 'meta-og-desc': 'CRAWL', 'meta-og-image': 'CRAWL',
                             'meta-og-image-alt': 'CRAWL', 'meta-site-name': 'CRAWL', 'meta-og-type': 'CRAWL',
@@ -12802,20 +13110,7 @@ const DashboardPage = () => {
                             'site-h1': 'CRAWL', 'site-h2': 'CRAWL', 'site-body': 'CRAWL', 'site-cta': 'CRAWL',
                             'site-nav': 'CRAWL', 'site-social': 'CRAWL', 'site-contact': 'CRAWL',
                             // ARTIFACT — generated reports & files
-                            'bi-art-report': 'ARTIFACT', 'ds-art-report': 'ARTIFACT',
-                            'art-brief-html': 'ARTIFACT', 'art-brief-pdf': 'ARTIFACT',
-                            'art-skill-seo': 'ARTIFACT', 'art-skill-brand': 'ARTIFACT', 'art-skill-style': 'ARTIFACT',
-                            'art-skill-conv': 'ARTIFACT', 'art-skill-asset': 'ARTIFACT',
-                            // MODULE — pipeline / run state
-                            'nl-status': 'MODULE',
-                            'mod-marketing-brief': 'MODULE', 'mod-strategy-builder': 'MODULE', 'mod-knowledge-base': 'MODULE',
-                            'mod-industry': 'MODULE', 'mod-seo': 'MODULE', 'mod-style-guide': 'MODULE',
-                            'mod-social-preview': 'MODULE', 'mod-multi-device': 'MODULE', 'mod-agent-readiness': 'MODULE',
-                            'mod-brand-voice': 'MODULE', 'mod-brand-system': 'MODULE', 'mod-newsletter': 'MODULE',
-                            'mod-social-posting': 'MODULE',
-                            'run-status': 'MODULE', 'run-timestamp': 'MODULE', 'run-error': 'MODULE',
-                            'run-warnings': 'MODULE', 'run-psi-warnings': 'MODULE',
-                            'ai-synth-model': 'MODULE', 'ai-synth-cost': 'MODULE', 'ai-scribe-cost': 'MODULE', 'ai-skill-cost': 'MODULE',
+                            'bi-art-report': 'ARTIFACT', 'ds-art-report': 'ARTIFACT', 'art-mockup': 'ARTIFACT',
                           };
 
                           const sections = [];
@@ -12833,15 +13128,6 @@ const DashboardPage = () => {
                             buckets[key].push(section);
                           }
 
-                          const allAuditRows = sections.flatMap((s) => s.rows.filter((r) => r.isAuditRow && !r.isColumnHeader));
-                          const totalCaptured = allAuditRows.filter((r) => r._captured).length;
-                          const totalFields = allAuditRows.length;
-                          const runTs = currentRun?.updatedAt || dashboardState?.updatedAt;
-                          const runTsLabel = runTs
-                            ? new Date(runTs).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-                            : null;
-                          const SOURCE_TYPES = ['AI', 'SCOUT', 'CRAWL', 'PSI', 'USER', 'ARTIFACT', 'MODULE'];
-
                           const getTone = (ratio) => ratio === 1 ? 'healthy' : ratio >= 0.5 ? 'partial' : 'critical';
                           const getToneLabel = (ratio) => ratio === 1 ? 'COMPLETE' : ratio >= 0.5 ? 'PARTIAL' : 'REVIEW';
 
@@ -12850,7 +13136,6 @@ const DashboardPage = () => {
                             const capturedCount = auditRows.filter((r) => r._captured).length;
                             const total = auditRows.length;
                             const ratio = total > 0 ? capturedCount / total : 0;
-                            const pct = total > 0 ? Math.round(ratio * 100) : 0;
                             const tone = getTone(ratio);
                             const subtitle = SECTION_SUBTITLES[section.header.label] || '';
                             const openCard = section.header.cardId ? () => {
@@ -12882,7 +13167,7 @@ const DashboardPage = () => {
                                       <li key={r.key} className={`adq-fr${r._captured ? ' adq-fr--ok' : r.isUpgrade ? ' adq-fr--lock' : ' adq-fr--miss'}`}>
                                         <span className="adq-fr-indicator">
                                           {r.isUpgrade
-                                            ? <Lock size={9} strokeWidth={2} />
+                                            ? <Lock size={12} strokeWidth={1.8} />
                                             : <span className={`adq-fr-pip${r._captured ? ' adq-fr-pip--ok' : ' adq-fr-pip--miss'}`} />
                                           }
                                         </span>
@@ -12980,7 +13265,7 @@ const DashboardPage = () => {
                                   <span>Missing</span>
                                 </span>
                                 <span className="adq-legend-item">
-                                  <Lock size={9} strokeWidth={2} style={{ color: '#9ca3af', display: 'inline-flex' }} />
+                                  <Lock size={11} strokeWidth={1.8} style={{ color: '#9ca3af', display: 'inline-flex' }} />
                                   <span>Upgrade</span>
                                 </span>
                                 <span className="adq-legend-item adq-legend-item--right">
@@ -13520,6 +13805,10 @@ const dashboardCss = `
     --font-ui: "Space Grotesk", system-ui, sans-serif;
     --font-mono: "Space Mono", monospace;
     --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --dur-fast: 140ms;
+    --dur-base: 160ms;
+    --dur-spring: 220ms;
   }
   [data-dashboard-theme="dark"] {
     --page: #000000;
@@ -13615,6 +13904,7 @@ const dashboardCss = `
     color: rgba(42, 36, 32, 0.42);
     text-decoration: none;
     line-height: 1;
+    cursor: pointer;
   }
   #founders-login-link {
     display: inline-flex;
@@ -13632,6 +13922,7 @@ const dashboardCss = `
     line-height: 1;
     transform: scale(1);
     transition: background 0.45s ease, box-shadow 0.45s ease, transform 0.45s ease;
+    cursor: pointer;
   }
   #founders-login-link:hover {
     background: rgba(255,255,255,1);
@@ -13659,6 +13950,7 @@ const dashboardCss = `
     white-space: nowrap;
     transform: scale(1);
     transition: box-shadow 0.45s ease, transform 0.45s ease;
+    cursor: pointer;
   }
   #founders-chat-cta:hover {
     box-shadow: 0px 5px 10px rgba(0,0,0,0.067), 0px 15px 30px rgba(0,0,0,0.067), 0px 20px 40px rgba(0,0,0,0.1);
@@ -14280,7 +14572,7 @@ const dashboardCss = `
     transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
   .capability-nav-btn--locked {
-    opacity: 0.32;
+    opacity: 0.85;
     cursor: not-allowed;
     pointer-events: none;
   }
@@ -14343,13 +14635,29 @@ const dashboardCss = `
     line-height: 1.2;
   }
   #capability-grid {
+    position: relative;
     display: flex;
     flex-direction: column;
-    border: 1px solid rgba(42, 36, 32, 0.1);
+    border: 1px solid rgba(42,36,32,0.12);
     border-radius: 28px;
     overflow: hidden;
     isolation: isolate;
+    background: rgba(255,255,255,0.45);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4), 0 30px 90px rgba(42,36,32,0.12);
+  }
+  /* Loading overlay shown until first bootstrap resolves — covers the grid
+     chrome and hidden cards with the surface color so only the spinner reads. */
+  #capability-grid-spinner {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: var(--surface);
+  }
+  #capability-grid:has(#capability-grid-spinner) {
+    min-height: 280px;
   }
   .cap-step-group {
     display: flex;
@@ -14419,7 +14727,9 @@ const dashboardCss = `
     display: flex;
     gap: 0;
     padding: 0;
-    margin: 16px 16px 12px;
+    /* No horizontal margin — buttons span like grid columns so left-justified
+       labels align with the card indicator lights (16px card padding) */
+    margin: 16px 0 12px;
     border: 0;
     border-bottom: 1px solid var(--border);
     border-radius: 0;
@@ -14427,6 +14737,7 @@ const dashboardCss = `
     box-shadow: none;
   }
   .cap-step-seg > button {
+    position: relative;
     flex: 1;
     min-height: 44px;
     border: 0;
@@ -14434,20 +14745,22 @@ const dashboardCss = `
     border-radius: 0;
     background: transparent;
     color: var(--text-secondary);
-    /* Match capability-nav-btn-label font formatting */
-    font-family: var(--font-ui);
+    /* Dot-matrix display font (matches hero marquee) — needs heavy weight
+       to stay legible at tab size */
+    font-family: var(--font-display);
     font-size: clamp(0.8rem, 1.1vw, 0.875rem);
-    font-weight: 400;
+    font-weight: 700;
     line-height: 1.15;
     letter-spacing: -0.01em;
     text-transform: none;
     cursor: pointer;
     transition: color 0.2s ease;
-    padding: 0 12px;
+    padding: 0 16px;
     margin-bottom: -1px;
     display: inline-flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
+    text-align: left;
     gap: 14px;
     min-width: 0;
   }
@@ -14460,9 +14773,29 @@ const dashboardCss = `
     white-space: nowrap;
     min-width: 0;
   }
+  /* Gradient underline — animatable pseudo-element (border-image can't
+     transition). Grows from center + fades in on hover/active. */
+  .cap-step-seg > button::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2px;
+    background: linear-gradient(90deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+    transform: scaleX(0);
+    transform-origin: center;
+    opacity: 0;
+    transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease;
+    pointer-events: none;
+  }
   .cap-step-seg > button:hover {
     color: var(--text-display);
-    font-weight: 600;
+    font-weight: 900;
+  }
+  .cap-step-seg > button:hover::after {
+    transform: scaleX(1);
+    opacity: 1;
   }
   /* Vertical divider between tab selections */
   .cap-step-seg > button + button {
@@ -14470,26 +14803,33 @@ const dashboardCss = `
   }
   .cap-step-seg > button.is-active {
     color: var(--text-display);
-    font-weight: 600;
+    font-weight: 900;
     background: transparent;
     box-shadow: none;
     border-bottom: 2px solid transparent;
-    border-image: linear-gradient(90deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) 0 0 1 0;
   }
-  /* List view: full-width gradient bottom border under the whole header row */
+  .cap-step-seg > button.is-active::after {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+  /* List view: per-tab gradient underline with breaks between tabs */
   .cap-step-seg--top {
-    border-bottom: 2px solid transparent;
-    border-image: linear-gradient(90deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) 0 0 1 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .cap-step-seg--top > button::after {
+    left: 14px;
+    right: 14px;
+    transform: scaleX(1);
+    opacity: 1;
   }
   /* List view: static column headers — no hover, all at active weight, no per-tab underline */
   .cap-step-seg--top > button,
   .cap-step-seg--top > button:hover,
   .cap-step-seg--top > button.is-active {
     color: var(--text-display);
-    font-weight: 600;
+    font-weight: 900;
     cursor: default;
     border-bottom: 0;
-    border-image: none;
   }
   /* Daily Briefs tab system — real active / inactive tab states. */
   /* No full-width row border — only the active tab is underlined. */
@@ -14499,20 +14839,31 @@ const dashboardCss = `
   }
   .cap-step-seg--top.cap-step-seg--tabs > button {
     color: var(--text-secondary);
-    font-weight: 400;
+    font-weight: 700;
     cursor: pointer;
     border-bottom: 2px solid transparent;
-    border-image: none;
+  }
+  /* Re-hide the static --top underline for tabs — only hover/active show it */
+  .cap-step-seg--top.cap-step-seg--tabs > button::after {
+    content: '';
+    left: 0;
+    right: 0;
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  .cap-step-seg--top.cap-step-seg--tabs > button:hover::after,
+  .cap-step-seg--top.cap-step-seg--tabs > button.is-active::after {
+    transform: scaleX(1);
+    opacity: 1;
   }
   .cap-step-seg--top.cap-step-seg--tabs > button:hover {
     color: var(--text-display);
   }
   .cap-step-seg--top.cap-step-seg--tabs > button.is-active {
     color: var(--text-display);
-    font-weight: 600;
+    font-weight: 900;
     cursor: default;
     border-bottom: 2px solid transparent;
-    border-image: linear-gradient(90deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) 0 0 1 0;
   }
   /* Data coverage chip — brain strokes use the shared primary gradient */
   #dashboard-coverage-chip .coverage-brain { display: inline-flex; }
@@ -14556,15 +14907,20 @@ const dashboardCss = `
      (base .cap-step-seg rules) so switching views never shifts text. */
   .cap-list-columns {
     display: grid;
-    gap: 1px;
-    background: rgba(42, 36, 32, 0.08);
+    gap: 0;
+    background: transparent;
     margin: 0 16px 12px;
   }
   .cap-list-col {
     display: flex;
     flex-direction: column;
-    background: var(--surface);
+    background: transparent;
     min-width: 0;
+  }
+  /* Column dividers — replaces the old 1px-gap + tinted-background trick so
+     the glass grid background shows through transparent columns. */
+  .cap-list-col + .cap-list-col {
+    border-left: 1px solid rgba(42, 36, 32, 0.08);
   }
   /* Mobile-only section label inside each list column (shown ≤520px) */
   .cap-list-col-label {
@@ -14620,9 +14976,15 @@ const dashboardCss = `
     transition: background 0.15s ease;
   }
   .cap-past-brief-row:hover { background: rgba(0,0,0,0.03); }
-  .cap-past-brief-title { font-size: 0.875rem; font-weight: 500; flex-shrink: 0; }
+  .cap-past-brief-title { font-size: 0.875rem; font-weight: 500; flex-shrink: 0; display: inline-flex; align-items: baseline; gap: 8px; }
+  .cap-past-brief-title-ts { font-size: 0.68rem; font-weight: 400; color: var(--text-secondary); font-family: var(--font-mono); letter-spacing: 0.01em; }
   .cap-past-brief-meta { font-size: 0.78rem; color: var(--text-secondary); flex: 1; min-width: 0; }
-  .cap-past-brief-view { font-size: 0.72rem; color: var(--accent, #10b981); font-family: var(--font-mono); flex-shrink: 0; }
+  /* View affordance — span styled via .cap-list-run (row itself is the button). */
+  .cap-past-brief-row:hover .cap-past-brief-view-btn {
+    background: var(--text-display);
+    color: #ffffff;
+    border-color: var(--text-display);
+  }
   .cap-list-featured > .tile-intake-card,
   .cap-list-featured > .tile {
     height: auto;
@@ -15035,6 +15397,13 @@ const dashboardCss = `
     border-top-color: rgba(42, 36, 32, 0.5);
     border-radius: 50%;
     animation: briefSpin 0.8s linear infinite;
+  }
+  .tile-brief-preview-loading {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   #brief-embed-empty {
     flex: 1;
@@ -16395,16 +16764,18 @@ const dashboardCss = `
   .tile-detail-tabs {
     display: flex;
     flex-direction: row;
+    gap: 16px;
     border-bottom: 1px solid var(--border);
   }
   .tile-detail-tab {
+    position: relative;
     flex: 1;
     padding: 10px 8px;
     background: transparent;
     border: none;
-    font-family: var(--font-mono);
+    font-family: 'Doto', var(--font-mono);
     font-size: 10px;
-    font-weight: 400;
+    font-weight: 900;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-secondary);
@@ -16413,14 +16784,36 @@ const dashboardCss = `
     border-bottom: 2px solid transparent;
     margin-bottom: -1px;
   }
+  /* Gradient underline — animatable pseudo-element (border-image can't
+     transition). Grows from center + fades in on hover/active. */
+  .tile-detail-tab::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2px;
+    background: linear-gradient(90deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+    transform: scaleX(0);
+    transform-origin: center;
+    opacity: 0;
+    transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease;
+    pointer-events: none;
+  }
   .tile-detail-tab:hover {
     color: var(--text-display);
     background: rgba(255,255,255,0.35);
   }
+  .tile-detail-tab:hover::after {
+    transform: scaleX(1);
+    opacity: 1;
+  }
   .tile-detail-tab--active {
     color: var(--text-display);
-    border-bottom: 2px solid transparent;
-    border-image: linear-gradient(90deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) 0 0 1 0;
+  }
+  .tile-detail-tab--active::after {
+    transform: scaleX(1);
+    opacity: 1;
   }
   .tile-detail-tab-content {
     flex: 1;
@@ -16442,9 +16835,9 @@ const dashboardCss = `
     border-bottom: none;
     margin-bottom: 0;
   }
+  .tile-detail-tabs--sub .tile-detail-tab::after { content: none; }
   .tile-detail-tabs--sub .tile-detail-tab--active {
     background: white;
-    border-image: none;
     border-bottom: none;
     color: #2a2420;
     box-shadow: 0 1px 3px rgba(0,0,0,0.12);
@@ -18346,94 +18739,15 @@ const dashboardCss = `
     overflow: hidden;
     background: transparent;
   }
-  /* Provenance bar */
-  #adq-provenance {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 10px 16px 9px;
-    border-bottom: 1px solid rgba(42,36,32,0.1);
-    flex-shrink: 0;
-    background: rgba(255,255,255,0.55);
-    flex-wrap: wrap;
-  }
-  #adq-prov-left {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    flex-wrap: wrap;
-  }
-  .adq-prov-label {
-    font-family: var(--font-mono);
-    font-size: 8px;
-    font-weight: 700;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: rgba(42,36,32,0.45);
-  }
-  #adq-prov-ts {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 500;
-    color: rgba(42,36,32,0.65);
-  }
-  .adq-prov-sep {
-    color: rgba(42,36,32,0.2);
-    font-size: 11px;
-  }
-  #adq-prov-stat {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: rgba(42,36,32,0.55);
-  }
-  .adq-prov-num {
-    font-weight: 700;
-    color: #2a2420;
-  }
-  .adq-prov-of {
-    opacity: 0.45;
-  }
-  #adq-prov-sources {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    flex-wrap: wrap;
-  }
-  .adq-prov-chip {
-    font-family: var(--font-mono);
-    font-size: 8px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    padding: 2px 6px;
-    border-radius: 3px;
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    border: 1px solid transparent;
-  }
-  .adq-prov-chip-count {
-    opacity: 0.65;
-    font-weight: 500;
-  }
-  /* Source chip colors */
-  .adq-prov-chip--ai       { color: #6d28d9; background: rgba(109,40,217,0.07); border-color: rgba(109,40,217,0.18); }
-  .adq-prov-chip--scout    { color: #0369a1; background: rgba(3,105,161,0.07);  border-color: rgba(3,105,161,0.18); }
-  .adq-prov-chip--crawl    { color: #0f766e; background: rgba(15,118,110,0.07); border-color: rgba(15,118,110,0.18); }
-  .adq-prov-chip--psi      { color: #b45309; background: rgba(180,83,9,0.07);   border-color: rgba(180,83,9,0.18); }
-  .adq-prov-chip--user     { color: #374151; background: rgba(55,65,81,0.07);   border-color: rgba(55,65,81,0.18); }
-  .adq-prov-chip--artifact { color: #9333ea; background: rgba(147,51,234,0.07); border-color: rgba(147,51,234,0.18); }
-  .adq-prov-chip--module   { color: #0f766e; background: rgba(15,118,110,0.05); border-color: rgba(15,118,110,0.14); }
   /* Field row source tag */
   .adq-fr-src {
     font-family: var(--font-mono);
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    padding: 1px 4px;
-    border-radius: 2px;
+    padding: 3px 6px;
+    border-radius: 4px;
     flex-shrink: 0;
     white-space: nowrap;
     border: 1px solid transparent;
@@ -18503,31 +18817,6 @@ const dashboardCss = `
     gap: 8px;
     flex-shrink: 0;
   }
-  .adq-bucket-count-wrap {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: 7px;
-  }
-  .adq-bucket-count-label {
-    font-family: var(--font-mono);
-    font-size: 8px;
-    font-weight: 500;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: rgba(42,36,32,0.38);
-    white-space: nowrap;
-  }
-  .adq-bucket-count {
-    font-family: var(--font-mono);
-    font-size: 20px;
-    font-weight: 700;
-    letter-spacing: -0.03em;
-    color: #2a2420;
-    line-height: 1;
-    white-space: nowrap;
-  }
-  .adq-bucket-count-sep { opacity: 0.25; font-size: 16px; font-weight: 400; margin: 0 1px; }
   /* Bucket header ring — mirrors shell gauge ring style */
   .adq-bucket-ring-wrap {
     position: relative;
@@ -18591,7 +18880,7 @@ const dashboardCss = `
   }
   .adq-sc-name {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -18600,25 +18889,9 @@ const dashboardCss = `
   }
   .adq-sc-sub {
     font-family: var(--font-ui);
-    font-size: 11px;
-    color: rgba(42,36,32,0.5);
-    line-height: 1.35;
-  }
-  .adq-sc-pct {
-    font-family: var(--font-mono);
-    font-size: 22px;
-    font-weight: 700;
-    letter-spacing: -0.03em;
-    color: #2a2420;
-    line-height: 1;
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
-  .adq-sc-pct-unit {
     font-size: 12px;
-    font-weight: 600;
-    opacity: 0.45;
-    margin-left: 1px;
+    color: rgba(42,36,32,0.55);
+    line-height: 1.35;
   }
   .adq-sc-footer-row {
     display: flex;
@@ -18657,25 +18930,27 @@ const dashboardCss = `
     gap: 0;
     border-top: 1px solid rgba(42,36,32,0.07);
   }
+  /* Field rows — sized to match the dashboard card line-item rows
+     (.cap-list-row-main): same label scale, row height, and lock treatment. */
   .adq-fr {
     display: flex;
     align-items: center;
-    gap: 7px;
-    padding: 5px 0;
+    gap: 10px;
+    padding: 11px 0;
     border-bottom: 1px solid rgba(42,36,32,0.07);
-    min-height: 28px;
+    min-height: 44px;
   }
   .adq-fr:last-child { border-bottom: none; }
   .adq-fr-indicator {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 14px;
+    width: 16px;
     flex-shrink: 0;
   }
   .adq-fr-pip {
-    width: 6px;
-    height: 6px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
     flex-shrink: 0;
     display: block;
@@ -18684,26 +18959,27 @@ const dashboardCss = `
   .adq-fr-pip--miss { background: #dc2626; }
   .adq-fr-label {
     font-family: var(--font-ui);
-    font-size: 12px;
-    line-height: 1.3;
+    font-size: clamp(0.8rem, 1.1vw, 0.875rem);
+    letter-spacing: -0.01em;
+    line-height: 1.25;
     flex: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .adq-fr--ok  .adq-fr-label { color: #2a2420; }
+  .adq-fr--ok  .adq-fr-label { color: var(--text-display); }
   .adq-fr--miss .adq-fr-label { color: #b91c1c; font-weight: 500; }
   .adq-fr--lock .adq-fr-label { color: rgba(42,36,32,0.38); }
-  .adq-fr--lock .adq-fr-indicator { color: rgba(42,36,32,0.38); }
+  .adq-fr--lock .adq-fr-indicator { color: var(--text-secondary); }
   .adq-fr-badge {
     font-family: var(--font-mono);
-    font-size: 7.5px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    border-radius: 3px;
-    padding: 1px 5px;
+    border-radius: 4px;
+    padding: 3px 7px;
     flex-shrink: 0;
     white-space: nowrap;
   }
@@ -18719,20 +18995,25 @@ const dashboardCss = `
   }
   .adq-fr-upgrade {
     font-family: var(--font-mono);
-    font-size: 7.5px;
+    font-size: 9px;
+    font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: rgba(42,36,32,0.4);
-    background: none;
-    border: 1px solid rgba(42,36,32,0.18);
-    border-radius: 3px;
-    padding: 1px 5px;
+    color: var(--text-secondary);
+    background: rgba(255,255,255,0.6);
+    border: 1px solid rgba(42,36,32,0.12);
+    border-radius: 6px;
+    padding: 5px 9px;
     cursor: pointer;
     flex-shrink: 0;
-    transition: color 0.12s, border-color 0.12s;
-    line-height: 1.6;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    line-height: 1;
   }
-  .adq-fr-upgrade:hover { color: #2a2420; border-color: rgba(42,36,32,0.4); }
+  .adq-fr-upgrade:hover {
+    background: var(--text-display);
+    color: #ffffff;
+    border-color: var(--text-display);
+  }
   /* Footer */
   #adq-footer {
     display: flex;
@@ -18746,7 +19027,7 @@ const dashboardCss = `
   }
   .adq-footer-status {
     font-family: var(--font-mono);
-    font-size: 7.5px;
+    font-size: 9px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: rgba(42,36,32,0.38);
@@ -18768,32 +19049,6 @@ const dashboardCss = `
   @media (max-width: 520px) {
     #adq-shell, #adq-pane {
       overflow-x: hidden;
-    }
-    /* Provenance bar — stack left/right sections vertically */
-    #adq-provenance {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 8px;
-      padding: 8px 12px 7px;
-    }
-    #adq-prov-left {
-      gap: 5px;
-    }
-    .adq-prov-label {
-      font-size: 7px;
-    }
-    #adq-prov-ts {
-      font-size: 10px;
-    }
-    #adq-prov-stat {
-      font-size: 10px;
-    }
-    #adq-prov-sources {
-      gap: 3px;
-    }
-    .adq-prov-chip {
-      font-size: 7px;
-      padding: 1px 5px;
     }
     /* Bucket header — tighten up */
     .adq-bucket-hdr {
@@ -18817,16 +19072,6 @@ const dashboardCss = `
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    /* Count + label — hide the label text on small screens */
-    .adq-bucket-count-label {
-      display: none;
-    }
-    .adq-bucket-count {
-      font-size: 16px;
-    }
-    .adq-bucket-count-sep {
-      font-size: 12px;
-    }
     /* Section grid — full bleed, tighter */
     .adq-section-grid {
       padding: 0 8px 12px;
@@ -18840,25 +19085,28 @@ const dashboardCss = `
       font-size: 11px;
     }
     .adq-sc-sub {
-      font-size: 9.5px;
+      font-size: 11px;
     }
     /* Footer row — allow wrapping if needed */
     .adq-sc-footer-row {
       gap: 4px;
     }
-    /* Field rows — tighter */
-    .adq-field-rows {
-      gap: 5px;
+    /* Field rows — slightly tighter, still line-item scale */
+    .adq-fr {
+      min-height: 40px;
+      padding: 9px 0;
+      gap: 8px;
     }
     .adq-fr-label {
-      font-size: 11px;
+      font-size: 0.8rem;
     }
     .adq-fr-src {
-      font-size: 6.5px;
+      font-size: 8px;
+      padding: 2px 5px;
     }
     .adq-fr-badge {
-      font-size: 6.5px;
-      padding: 1px 4px;
+      font-size: 8px;
+      padding: 2px 6px;
     }
   }
   .tile-number {
@@ -19791,10 +20039,10 @@ const dashboardCss = `
       min-height: 0;
       padding: 8px 0 8px;
       text-align: left;
-      border-image: none;
       cursor: default;
       pointer-events: none;
     }
+    .cap-step-seg > button.is-active::after { content: none; }
     .cap-step-grid { grid-template-columns: 1fr; }
     /* List view: hide column-header tab row, stack columns vertically,
        show the per-section label above each column's rows. */
@@ -19802,6 +20050,8 @@ const dashboardCss = `
     /* Re-assert over the mobile-expanded .tile-foot{display:flex} rule above */
     .cap-list-row-main .tile-foot { display: contents; }
     .cap-list-columns { grid-template-columns: 1fr !important; }
+    /* Stacked columns: divider moves from left edge to top edge */
+    .cap-list-col + .cap-list-col { border-left: 0; border-top: 1px solid rgba(42, 36, 32, 0.08); }
     .cap-list-col-label {
       display: block;
       font-family: var(--font-ui);
@@ -19943,37 +20193,46 @@ const dashboardCss = `
     opacity: 0.75;
     margin-left: 0.1rem;
   }
-  #reseed-active-row {
-    display: flex;
+  /* Background-run indicator chip — lives in the source bar next to the
+     coverage/cooldown micro chips and shares their gradient treatment. */
+  #run-active-indicator-chip {
+    display: inline-flex;
     align-items: center;
-    gap: 16px;
-    flex-wrap: wrap;
-  }
-  #reseed-run-status-label {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--warning);
-  }
-  #reseed-cancel-btn {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    padding: 6px 14px;
-    background: transparent;
-    color: var(--text-secondary);
-    border: 1px solid var(--border-visible);
+    gap: 7px;
+    padding: 0 2px;
+    flex-shrink: 0;
+    background: none;
+    border: none;
     cursor: pointer;
-    white-space: nowrap;
-    transition: color 150ms, border-color 150ms;
+    font: inherit;
   }
-  #reseed-cancel-btn:hover:not(:disabled) {
-    color: var(--text-display);
-    border-color: var(--text-secondary);
+  #run-active-indicator-chip:hover #run-active-indicator-label {
+    opacity: 0.7;
   }
-  #reseed-cancel-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  #run-active-indicator-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+    animation: run-indicator-pulse 1.4s ease-in-out infinite;
+  }
+  #run-active-indicator-label {
+    font-family: 'Doto', var(--font-mono);
+    font-weight: 900;
+    font-size: 14px;
+    line-height: 1;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background-image: linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+  @keyframes run-indicator-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.45; transform: scale(0.8); }
+  }
   #reseed-error-msg {
     font-family: var(--font-mono);
     font-size: 11px;
@@ -20120,24 +20379,66 @@ const dashboardCss = `
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  #intake-modal-footer-cancel {
-    appearance: none;
-    background: transparent;
-    border: none;
-    padding: 0;
-    margin: 0;
-    font: inherit;
-    color: rgba(42, 36, 32, 0.5);
-    cursor: pointer;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    transition: color 0.15s ease;
-    flex-shrink: 0;
+  #intake-modal-footer-note {
+    color: rgba(42, 36, 32, 0.42);
+    letter-spacing: 0.08em;
+    text-transform: none;
+    text-align: right;
+    min-width: 0;
   }
-  #intake-modal-footer-cancel:hover,
-  #intake-modal-footer-cancel:focus-visible {
-    color: rgba(42, 36, 32, 0.95);
+  #intake-modal-close {
+    flex-shrink: 0;
+    justify-self: end;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(42, 36, 32, 0.15);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-family: var(--font-mono, 'Space Mono', monospace);
+    font-size: 12px;
+    cursor: pointer;
+    color: #2a2420;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  #intake-modal-close:hover,
+  #intake-modal-close:focus-visible {
+    background: #2a2420;
+    color: #fff;
     outline: none;
+  }
+  #bg-run-toast {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 9999;
+    max-width: 22rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.75rem 1rem;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.82);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.12);
+    font-family: "Space Mono", monospace;
+    font-size: 0.72rem;
+    line-height: 1.4;
+    letter-spacing: 0.02em;
+    color: rgba(42, 36, 32, 0.72);
+    animation: bg-run-toast-in 0.28s cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+  #bg-run-toast-dot {
+    flex-shrink: 0;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 999px;
+    background: #4A9E5C;
+    animation: status-pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes bg-run-toast-in {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
 
   /* Retry row — failed-state only */
@@ -21253,7 +21554,10 @@ const dashboardCss = `
   }
   #delete-account-sig {
     width: 2.75rem;
-    height: auto;
+    height: 2.75rem;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(255,255,255,0.35);
     display: block;
   }
   #delete-account-eyebrow {
@@ -21993,6 +22297,270 @@ const dashboardCss = `
     .mu-btn-outline { width: 100%; }
     .mu-cta-primary { width: 100%; }
   }
+
+  /* ── Interaction & animation states ─────────────────────────────────── */
+
+  /* Nav bar — signout + theme toggle */
+  #founders-signout {
+    transition: background var(--dur-base) ease, transform var(--dur-spring) var(--ease-spring), box-shadow var(--dur-base) ease;
+  }
+  #founders-signout:hover {
+    background: rgba(255,255,255,0.72);
+    box-shadow: 0 4px 14px rgba(42,36,32,0.09);
+    transform: translateY(-1px);
+  }
+  #founders-signout:active {
+    transform: translateY(0);
+    transition-duration: 80ms;
+  }
+  #theme-toggle button {
+    transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+  }
+  #theme-toggle button:hover:not(.is-active) {
+    background: rgba(42,36,32,0.08);
+    color: rgba(42,36,32,0.72);
+  }
+
+  /* List-view row hover — subtle bg tint on the whole row */
+  .cap-list-row-main {
+    transition: background var(--dur-base) ease;
+  }
+  .cap-list-row-main:hover {
+    background: rgba(42,36,32,0.028);
+  }
+
+  /* List-view run + caret buttons — add spring lift */
+  .cap-list-run,
+  .cap-list-caret {
+    transition: background var(--dur-base) ease, color var(--dur-base) ease, border-color var(--dur-base) ease, transform var(--dur-spring) var(--ease-spring);
+  }
+  .cap-list-run:hover:not(:disabled),
+  .cap-list-caret:hover {
+    transform: translateY(-1px);
+  }
+  .cap-list-run:active:not(:disabled),
+  .cap-list-caret:active {
+    transform: translateY(0);
+    transition-duration: 80ms;
+  }
+
+  /* Card-grid foot buttons — lift + transition */
+  .tile-foot-rerun-btn {
+    transition: background var(--dur-base) ease, border-color var(--dur-base) ease, color var(--dur-base) ease, transform var(--dur-spring) var(--ease-spring);
+  }
+  .tile-foot-rerun-btn:not(:disabled):hover {
+    transform: translateY(-1px);
+  }
+  .tile-foot-rerun-btn:not(:disabled):active {
+    transform: translateY(0);
+    transition-duration: 80ms;
+  }
+
+  .tile-view-details-btn:hover,
+  .tile:hover:not(:has(.tile-foot-rerun-btn:hover)) .tile-view-details-btn {
+    transform: translateY(-1px);
+  }
+  .tile-view-details-btn:active {
+    transform: translateY(0);
+    transition-duration: 80ms;
+  }
+
+  .tile-download-btn {
+    transition: background var(--dur-base) ease, color var(--dur-base) ease, transform var(--dur-spring) var(--ease-spring);
+  }
+  .tile-download-btn:hover {
+    transform: translateY(-1px);
+  }
+  .tile-download-btn:active {
+    transform: translateY(0);
+    transition-duration: 80ms;
+  }
+
+  .tile-open-modal-btn:hover,
+  .tile:hover .tile-open-modal-btn {
+    transform: translateY(-1px);
+  }
+  .tile-open-modal-btn:active {
+    transform: translateY(0);
+    transition-duration: 80ms;
+  }
+
+  /* Modal close button — add lift */
+  #tile-detail-modal-close {
+    transition: color var(--dur-base) ease, border-color var(--dur-base) ease, transform var(--dur-spring) var(--ease-spring);
+  }
+  #tile-detail-modal-close:hover {
+    transform: translateY(-1px);
+  }
+  #tile-detail-modal-close:active {
+    transform: translateY(0);
+    transition-duration: 80ms;
+  }
+
+  /* Tables inside tile cards and modals */
+  .tile-intake-table tbody tr {
+    transition: background var(--dur-base) ease;
+    cursor: pointer;
+  }
+  .tile-intake-table tbody tr:hover {
+    background: rgba(42,36,32,0.04);
+  }
+  .tile-intake-table td {
+    transition: color var(--dur-fast) ease;
+  }
+  .tile-intake-table tbody tr:hover td {
+    color: var(--text-display);
+  }
+
+  /* Audit rows in detail modal */
+  .tile-detail-audit-row:not(.tile-detail-audit-row--header) {
+    transition: background var(--dur-base) ease;
+    cursor: default;
+    border-radius: 4px;
+  }
+  .tile-detail-audit-row:not(.tile-detail-audit-row--header):hover {
+    background: rgba(42,36,32,0.03);
+  }
+
+  /* Stat rows in detail modal */
+  .tile-detail-stat-row {
+    transition: background var(--dur-base) ease;
+    border-radius: 4px;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+  .tile-detail-stat-row:hover {
+    background: rgba(42,36,32,0.03);
+  }
+
+  /* Audit upgrade button — add lift */
+  .tile-detail-audit-status.audit-upgrade {
+    transition: opacity var(--dur-base) ease, transform var(--dur-spring) var(--ease-spring);
+  }
+  .tile-detail-audit-status.audit-upgrade:hover {
+    transform: translateY(-1px);
+  }
+  .tile-detail-audit-status.audit-upgrade:active {
+    transform: translateY(0);
+    transition-duration: 80ms;
+  }
+
+  /* Custom brief cards */
+  .custom-brief-card {
+    transition: border-color var(--dur-base) ease, box-shadow var(--dur-base) ease, transform var(--dur-spring) var(--ease-spring);
+  }
+  .custom-brief-card:hover {
+    border-color: var(--border-visible);
+    box-shadow: 0 4px 16px rgba(42,36,32,0.08);
+    transform: translateY(-1px);
+  }
+
+  .custom-brief-open-btn {
+    transition: background var(--dur-base) ease, color var(--dur-base) ease, border-color var(--dur-base) ease, transform var(--dur-spring) var(--ease-spring);
+  }
+  .custom-brief-open-btn:hover {
+    transform: translateY(-1px);
+  }
+  .custom-brief-delete-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+  .custom-brief-vercel-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+
+  /* File drop hover */
+  .custom-brief-file-drop {
+    transition: border-color var(--dur-base) ease, background var(--dur-base) ease;
+  }
+  .custom-brief-file-drop:hover {
+    border-color: var(--border-visible);
+    background: rgba(255,255,255,0.06);
+  }
+
+  /* MB config platform toggle — add lift */
+  .mb-config-platform-toggle {
+    transition: background var(--dur-base) ease, border-color var(--dur-base) ease, color var(--dur-base) ease, transform var(--dur-spring) var(--ease-spring);
+  }
+  .mb-config-platform-toggle:hover {
+    transform: translateY(-1px);
+  }
+  .mb-config-platform-toggle:active {
+    transform: translateY(0);
+    transition-duration: 80ms;
+  }
+
+  /* Brief fullscreen buttons — add lift */
+  #brief-fullscreen-download,
+  #brief-fullscreen-close {
+    transition: background var(--dur-base) ease, color var(--dur-base) ease, border-color var(--dur-base) ease, transform var(--dur-spring) var(--ease-spring);
+  }
+  #brief-fullscreen-download:hover,
+  #brief-fullscreen-close:hover {
+    transform: translateY(-1px);
+  }
+  #brief-fullscreen-download:active,
+  #brief-fullscreen-close:active {
+    transform: translateY(0);
+    transition-duration: 80ms;
+  }
+
+  /* Brief embed button */
+  .brief-embed-btn {
+    transition: background var(--dur-base) ease, color var(--dur-base) ease, border-color var(--dur-base) ease, transform var(--dur-spring) var(--ease-spring);
+  }
+  .brief-embed-btn:hover {
+    transform: translateY(-1px);
+  }
+
+  /* MB config mini buttons */
+  .mb-config-mini-btn {
+    transition: background var(--dur-base) ease, color var(--dur-base) ease, border-color var(--dur-base) ease, transform var(--dur-spring) var(--ease-spring);
+  }
+  .mb-config-mini-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+  .mb-config-mini-btn:active:not(:disabled) {
+    transform: translateY(0);
+    transition-duration: 80ms;
+  }
+
+  /* Tile detail tabs — add bg tint on hover for inactive */
+  .tile-detail-tab {
+    transition: color var(--dur-base) ease, background var(--dur-fast) ease;
+  }
+
+  /* Sub-tab hover — pill style, no gradient underline */
+  .tile-detail-tabs--sub .tile-detail-tab:hover:not(.tile-detail-tab--active) {
+    background: rgba(255,255,255,0.55);
+  }
+
+  /* Module card action button (Enable/Run/Re-run/Retry) */
+  .tile-foot-action-btn {
+    transition: opacity var(--dur-fast) ease, color var(--dur-fast) ease, transform var(--dur-spring) var(--ease-spring);
+  }
+  .tile-foot-action-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+  .tile-foot-action-btn:active:not(:disabled) {
+    transform: translateY(0);
+    transition-duration: 80ms;
+  }
+
+  /* Capability nav button — spring on active press */
+  .capability-nav-btn {
+    transition: background var(--dur-base) var(--ease-spring), color var(--dur-base) ease, transform var(--dur-spring) var(--ease-spring);
+  }
+  .capability-nav-btn:active {
+    transform: scale(0.97);
+    transition-duration: 80ms;
+  }
+
+  /* Past brief rows already have bg hover — add transition */
+  .cap-past-brief-row {
+    transition: background var(--dur-base) ease;
+  }
 `;
+
+
 
 export default DashboardPage;

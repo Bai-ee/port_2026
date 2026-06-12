@@ -310,6 +310,11 @@ export async function POST(request) {
         ? r.warningCodes.map((code) => ({ type: 'warning', code, moduleId: r.cardId || null }))
         : [];
     });
+    // Per-module LLM costs (skill runs) roll up into the run's providerUsage
+    // so the ops dashboard prices Creative/Website brief runs accurately.
+    const stageCosts = results
+      .filter((r) => r?.runCostData)
+      .map((r) => ({ stage: r.cardId, ...r.runCostData }));
     const minimalResult = {
       pipelineType: 'module-run',
       pipelineRunId: runId,
@@ -320,7 +325,7 @@ export async function POST(request) {
       contentOpportunities: null,
       guardianFlags: null,
       providerName: null,
-      runCostData: null,
+      runCostData: stageCosts.length ? { stageCosts } : null,
     };
     await completeRun(runId, clientId, minimalResult);
   } else {

@@ -44,8 +44,8 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
     const updateMetrics = () => {
       const nav = document.querySelector('#founders-top-strip');
       const contentAnchor =
-        document.querySelector('#panel-hero-text-row') ??
-        document.querySelector('#content-section');
+        document.querySelector('#content-section') ??
+        document.querySelector('#panel-hero-text-row');
 
       if (!nav || !contentAnchor) {
         return;
@@ -66,8 +66,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       const gapHeight = Math.max(contentDocTop - navHeight, 180);
       const centeredTop = gapTop + Math.max((gapHeight - headlineHeight) / 2, 0);
 
-      const desktopRaise = useSimpleScrollViewport ? 0 : window.innerHeight * 0.05;
-      metrics.centeredTop = centeredTop - desktopRaise;
+      metrics.centeredTop = centeredTop;
       metrics.maxWidth = maxWidth;
       metrics.gapHeight = gapHeight;
     };
@@ -81,6 +80,10 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       el.style.top = `${metrics.centeredTop}px`;
       el.style.maxWidth = `${metrics.maxWidth}px`;
       el.style.setProperty('--hero-gap-height', `${metrics.gapHeight}px`);
+
+      // Hide subheadline when vertical space is too tight to avoid overlap with section 2
+      const sub = el.querySelector('#hero-subheadline');
+      if (sub) sub.style.display = metrics.gapHeight < 240 ? 'none' : '';
 
       if (useSimpleScrollViewport) {
         contentEl.style.transform = `translate3d(0, ${travelY * progress}px, 0)`;
@@ -127,8 +130,8 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
 
     const nav = document.querySelector('#founders-top-strip');
     const contentAnchor =
-      document.querySelector('#panel-hero-text-row') ??
-      document.querySelector('#content-section');
+      document.querySelector('#content-section') ??
+      document.querySelector('#panel-hero-text-row');
 
     if (nav) {
       resizeObserver?.observe(nav);
@@ -182,7 +185,6 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
         }}
       >
         <div ref={headlineContentRef}>
-          <p id="hero-headline-prehead" style={{ margin: '0 0 2.35rem', fontSize: 'clamp(1.4rem, 2.33vw, 1.63rem)', fontWeight: 300, letterSpacing: '-0.05em', lineHeight: 0.9, color: '#2a2420', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>Bryan Balli</p>
           <h1 style={{
             fontWeight: 700,
             fontFamily: "'Doto', 'Space Mono', monospace",
@@ -193,8 +195,20 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
             fontSize: 'clamp(1.25rem, min(13vw, calc(var(--hero-gap-height) / 5)), 7.83rem)',
             textTransform: 'none',
           }}>
-            DIGITAL<br />MEDIA<br />DEVELOPER
+            YOUR<br />HUMAN<br />IN THE<br />LOOP
           </h1>
+          <p id="hero-subheadline" style={{
+            margin: '1rem 0 0',
+            fontFamily: "'Space Grotesk', system-ui, sans-serif",
+            fontSize: 'clamp(1.4rem, 3.5vw, 2.45rem)',
+            lineHeight: 1.5,
+            color: textColor,
+            opacity: 0.85,
+            fontWeight: 300,
+            maxWidth: '42ch',
+          }}>
+            Assisted Digital Media
+          </p>
         </div>
       </div>
 

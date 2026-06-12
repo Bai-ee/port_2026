@@ -959,6 +959,7 @@ module.exports = {
   SCREENSHOT_VARIANTS,
   VIEWPORT_SCREENSHOT_VARIANTS,
   FULL_PAGE_SCREENSHOT_VARIANTS,
+  captureScreenshotBuffer,
   persistWebsiteScreenshotArtifact,
   persistBriefPdfArtifact,
   fetchBrowserlessContent,

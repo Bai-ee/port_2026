@@ -14,9 +14,9 @@ import gsap from 'gsap';
 import { useAuth } from '../../../AuthContext';
 
 const VIEWPORTS = {
-  desktop: { width: 1440, height: 900,  bezel: 30, depth: 46, corner: 26, screenCorner: 14, stand: true,  camZ: 2700, label: 'DESKTOP' },
-  mobile:  { width: 390,  height: 844,  bezel: 18, depth: 24, corner: 64, screenCorner: 48, stand: false, camZ: 1500, label: 'MOBILE' },
-  tablet:  { width: 768,  height: 1024, bezel: 24, depth: 28, corner: 48, screenCorner: 32, stand: false, camZ: 1900, label: 'TABLET' },
+  desktop: { width: 1440, height: 900,  bezel: 30, depth: 40, corner: 26, screenCorner: 14, camZ: 2700, label: 'DESKTOP' },
+  mobile:  { width: 390,  height: 844,  bezel: 18, depth: 24, corner: 64, screenCorner: 48, camZ: 1500, label: 'MOBILE' },
+  tablet:  { width: 768,  height: 1024, bezel: 24, depth: 26, corner: 48, screenCorner: 32, camZ: 1900, label: 'TABLET' },
 };
 
 const BACKDROPS = {
@@ -25,6 +25,88 @@ const BACKDROPS = {
   studio:   { bg: 0xe8e6e0, ground: 0xd8d5cc, label: 'STUDIO' },
   midnight: { bg: 0x050510, ground: 0x0a0a18, label: 'MIDNIGHT' },
   teal:     { bg: 0x0a2a28, ground: 0x0d3330, label: 'TEAL' },
+};
+
+// Whatever the user dials in becomes the default next visit.
+const SETTINGS_KEY = 'mockup-studio-defaults-v1';
+const loadSavedDefaults = () => {
+  if (typeof window === 'undefined') return {};
+  try { return JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || '{}') || {}; } catch { return {}; }
+};
+
+// ── Camera animation templates ───────────────────────────────────────────────
+// Each template is 8 authored poses:
+// [radiusFactor, azimuthDeg, elevationDeg, targetXFrac?, targetYFrac?, hold?]
+// Radius scales from the viewport's camZ and targets from its screen size, so
+// the same move reads correctly on desktop, mobile, and tablet. Small radius
+// factors (≤0.45) push past the screen edge — corner targets (±0.5..0.7) plus
+// a small radius zoom INTO a corner until it fills the frame. `hold` parks
+// the camera at that pose for that many travel-units before the next move
+// (implemented as a duplicate keyframe further down the track).
+const DEG = Math.PI / 180;
+const templatePose = (vp, [rF, az, el, txF = 0, tyF = 0]) => {
+  const r = vp.camZ * rF;
+  return {
+    px: r * Math.sin(az * DEG) * Math.cos(el * DEG),
+    py: r * Math.sin(el * DEG),
+    pz: r * Math.cos(az * DEG) * Math.cos(el * DEG),
+    tx: txF * vp.width * 0.5,
+    ty: tyF * vp.height * 0.5,
+    tz: 0,
+  };
+};
+
+const CAMERA_TEMPLATES = [
+  { id: 'hero-push', label: 'HERO PUSH-IN', theme: 'CINEMATIC', intensity: 'MEDIUM', seconds: 10,
+    keys: [[2.2, -16, 14], [1.4, -9, 8], [0.85, -4, 4], [0.34, -1, 1, 0, 0, 0.8], [0.34, 0, 0, 0, 0.15], [0.7, 3, 3], [1.4, 9, 8, 0, 0, 0.5], [2.0, 14, 12]] },
+  { id: 'orbit-reveal', label: 'ORBIT REVEAL', theme: 'SHOWCASE', intensity: 'BOLD', seconds: 10,
+    keys: [[1.5, -75, 8], [1.15, -40, 10], [0.4, -12, 4, -0.55, 0.35, 0.6], [1.2, 5, 9], [0.4, 18, 4, 0.55, -0.35, 0.6], [1.2, 45, 10], [1.5, 70, 8], [1.3, 40, 8]] },
+  { id: 'rise-settle', label: 'RISE & SETTLE', theme: 'CALM', intensity: 'SUBTLE', seconds: 10,
+    keys: [[1.6, 0, -18], [1.45, 1, -11], [1.3, 2, -5], [1.1, 2, 0], [0.85, 1, 3, 0, 0, 0.7], [0.7, 0, 4, 0, 0.1, 0.9], [0.95, 0, 5], [1.2, 0, 6]] },
+  { id: 'whip-arc', label: 'WHIP ARC', theme: 'ENERGETIC', intensity: 'BOLD', seconds: 6,
+    keys: [[1.4, -65, 5], [0.35, -25, 6, -0.6, 0.4, 0.3], [1.2, 10, 10], [0.3, 35, 4, 0.6, 0.4, 0.3], [1.3, 60, 5], [0.32, 20, -4, 0.5, -0.45, 0.3], [1.1, -15, 8], [0.5, -40, 4, -0.4, -0.3]] },
+  { id: 'slow-drift', label: 'SLOW DRIFT', theme: 'AMBIENT', intensity: 'SUBTLE', seconds: 15,
+    keys: [[1.6, -12, 6], [1.4, -8, 7], [1.15, -4, 8], [0.9, -1, 7, 0, 0.1, 0.8], [0.75, 2, 6, 0.1, 0, 1.0], [0.9, 5, 5], [1.2, 8, 5], [1.45, 10, 5]] },
+  { id: 'spiral-in', label: 'SPIRAL IN', theme: 'LAUNCH', intensity: 'BOLD', seconds: 10,
+    keys: [[2.3, -130, 26], [1.8, -90, 20], [1.35, -55, 15], [0.95, -28, 10], [0.6, -10, 5], [0.32, 0, 2, 0, 0, 1.0], [0.32, 4, 1, 0.2, 0.1], [0.8, 12, 4]] },
+  { id: 'top-drop', label: 'TOP DROP', theme: 'DRAMATIC', intensity: 'MEDIUM', seconds: 6,
+    keys: [[1.9, 0, 60], [1.5, -2, 45], [1.0, -3, 28], [0.5, -2, 12, -0.5, 0.5, 0.5], [0.3, 0, 4, -0.6, 0.6, 0.6], [0.7, 0, 4, 0, 0.2], [1.1, 0, 6, 0, 0, 0.4], [1.25, 0, 5]] },
+  { id: 'close-pan', label: 'CORNER TOUR', theme: 'DETAIL', intensity: 'BOLD', seconds: 15,
+    keys: [[0.32, -4, 3, -0.7, 0.55, 0.7], [0.3, -2, 2, -0.65, 0.5], [0.3, 0, 2, 0.65, 0.5, 0.7], [0.3, 2, 0, 0.7, 0.45], [0.3, 3, -2, 0.65, -0.5, 0.7], [0.3, 2, -2, -0.6, -0.5], [0.32, 0, -1, -0.7, -0.55, 0.7], [0.9, 0, 3]] },
+  { id: 'pull-reveal', label: 'PULL REVEAL', theme: 'LAUNCH', intensity: 'MEDIUM', seconds: 10,
+    keys: [[0.28, 0, 1, -0.6, 0.5, 0.8], [0.4, 2, 2, -0.3, 0.3], [0.6, 5, 3], [0.9, 8, 5], [1.3, 11, 8], [1.7, 14, 10], [2.1, 16, 11, 0, 0, 0.5], [2.3, 17, 12]] },
+  { id: 'low-hero', label: 'LOW HERO', theme: 'EPIC', intensity: 'BOLD', seconds: 10,
+    keys: [[1.6, -55, -24], [1.3, -30, -16], [0.45, -10, -8, -0.5, -0.4, 0.5], [1.2, 0, -10], [0.45, 12, -8, 0.5, -0.4, 0.5], [1.3, 30, -16], [1.6, 55, -24, 0, 0, 0.4], [1.4, 40, -20]] },
+  { id: 'breathe', label: 'BREATHE', theme: 'AMBIENT', intensity: 'SUBTLE', seconds: 15,
+    keys: [[1.5, 0, 5], [0.8, 1, 5, 0, 0, 0.6], [1.4, 0, 6], [0.7, -1, 6, 0, 0.1, 0.6], [1.45, -1, 5], [0.65, 0, 5, 0, 0, 0.6], [1.4, 0, 6], [1.5, 0, 5]] },
+  { id: 'showcase-loop', label: 'SHOWCASE LOOP', theme: 'AD SPOT', intensity: 'MEDIUM', seconds: 10,
+    keys: [[1.5, 0, 6], [1.25, 35, 12], [0.45, 15, 6, 0.3, 0.2, 0.5], [1.3, -20, 14], [0.4, 0, 3, 0, 0, 0.7], [1.3, -45, 10], [1.25, -25, 8], [1.5, 0, 6]] },
+];
+
+const buildTemplateKeyframes = (tpl, vpId) => {
+  const vp = VIEWPORTS[vpId] || VIEWPORTS.desktop;
+  const totalUnits = (tpl.keys.length - 1) + tpl.keys.reduce((sum, k) => sum + (k[5] || 0), 0);
+  const kf = [];
+  let unit = 0;
+  tpl.keys.forEach((k, i) => {
+    const pose = templatePose(vp, k);
+    kf.push({ id: `tpl-${tpl.id}-${i}a`, t: unit / totalUnits, ...pose });
+    if (k[5]) {
+      unit += k[5];
+      kf.push({ id: `tpl-${tpl.id}-${i}b`, t: unit / totalUnits, ...pose });
+    }
+    unit += 1;
+  });
+  return kf;
+};
+
+const getSupportedVideoMimeType = () => {
+  if (typeof MediaRecorder === 'undefined') return '';
+  return [
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
+    'video/webm',
+  ].find((type) => MediaRecorder.isTypeSupported(type)) || '';
 };
 
 const ui = {
@@ -51,37 +133,45 @@ export default function StudioPage() {
   // Mutable three.js world — built once, mutated by handlers.
   const worldRef = useRef(null);
 
+  // Settings persist to localStorage — the current setup is the next default.
+  const [saved] = useState(loadSavedDefaults);
+
   const [url, setUrl] = useState('');
   const [loadedUrl, setLoadedUrl] = useState('');
-  const [viewportId, setViewportId] = useState('desktop');
-  const [backdropId, setBackdropId] = useState('home');
+  const [viewportId, setViewportId] = useState(saved.viewportId in VIEWPORTS ? saved.viewportId : 'desktop');
+  const [backdropId, setBackdropId] = useState(saved.backdropId in BACKDROPS ? saved.backdropId : 'home');
   const [interactMode, setInteractMode] = useState(false);
   const [fullPage, setFullPage] = useState(false);
   // Gradient adjust — repaints the sky dome live for contrast control.
-  const [hue, setHue] = useState(0);
-  const [sat, setSat] = useState(1);
-  const [bright, setBright] = useState(1);
+  const [hue, setHue] = useState(saved.hue ?? 0);
+  const [sat, setSat] = useState(saved.sat ?? 1);
+  const [bright, setBright] = useState(saved.bright ?? 1);
   // Homepage particle-torus "loop" element, positioned behind the device.
-  const [loopCfg, setLoopCfg] = useState({ on: true, size: 1.6, x: 0, y: 0, z: -1400, opacity: 0.85 });
+  const [loopCfg, setLoopCfg] = useState({ on: true, size: 1.6, x: 0, y: 0, z: -1400, opacity: 1, ...(saved.loopCfg || {}) });
   // Camera keyframe timeline. Each key: { id, t: 0..1 position on the track,
   // camera pose }. Dragging a key left/right retimes the segments around it.
   const [keyframes, setKeyframes] = useState([]);
   const [playing, setPlaying] = useState(false);
-  const [totalSeconds, setTotalSeconds] = useState(6);
+  const [totalSeconds, setTotalSeconds] = useState(saved.totalSeconds || 6);
   const [scrubVal, setScrubVal] = useState(0);
   const [selectedKeyId, setSelectedKeyId] = useState(null);
-  const keyframesRef = useRef([]);
-  const playTweenRef = useRef(null);
-  const trackRef = useRef(null);
-  const dragRef = useRef(null); // { keyId } while dragging a marker, { scrub: true } while scrubbing
-  const [scale, setScale] = useState(2);
-  const [captures, setCaptures] = useState([]);
-  const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState('');
+  // Scene opens already loaded with the most extreme template so the first
+  // frame reads as a dramatic shot, not a flat front-on view.
+  const [templateId, setTemplateId] = useState('spiral-in');
+	  const keyframesRef = useRef([]);
+	  const playTweenRef = useRef(null);
+	  const trackRef = useRef(null);
+	  const dragRef = useRef(null); // { keyId } while dragging a marker, { scrub: true } while scrubbing
+	  const autoVideoRequestedRef = useRef(false);
+	  const [scale, setScale] = useState(saved.scale || 2);
+	  const [captures, setCaptures] = useState([]);
+	  const [busy, setBusy] = useState(false);
+	  const [status, setStatus] = useState('');
+	  const [worldReady, setWorldReady] = useState(false);
 
   // Latest UI state, readable from the async three.js builder without re-running it.
   const stateRef = useRef({});
-  stateRef.current = { loadedUrl, viewportId, backdropId, interactMode, hue, sat, bright, loopCfg };
+  stateRef.current = { loadedUrl, viewportId, backdropId, interactMode, hue, sat, bright, loopCfg, templateId };
 
   useEffect(() => { keyframesRef.current = keyframes; }, [keyframes]);
 
@@ -89,14 +179,32 @@ export default function StudioPage() {
     if (!loading && !user) router.replace('/');
   }, [user, loading, router]);
 
+  // Debounced save — current settings become the defaults for the next visit.
+  useEffect(() => {
+    const id = setTimeout(() => {
+      try {
+        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ viewportId, backdropId, hue, sat, bright, loopCfg, scale, totalSeconds }));
+      } catch { /* storage full/blocked is non-critical */ }
+    }, 250);
+    return () => clearTimeout(id);
+  }, [viewportId, backdropId, hue, sat, bright, loopCfg, scale, totalSeconds]);
+
   // Seed URL from ?url= query param; default to this app's own homepage —
   // same-origin always iframes (no X-Frame-Options block).
-  useEffect(() => {
-    const q = new URLSearchParams(window.location.search).get('url');
-    const seed = q || `${window.location.origin}/`;
-    setUrl(seed);
-    setLoadedUrl(seed);
-  }, []);
+	  useEffect(() => {
+	    const params = new URLSearchParams(window.location.search);
+	    const q = params.get('url');
+	    const qViewport = params.get('viewport');
+	    const qBackdrop = params.get('backdrop');
+	    const qTemplate = params.get('template');
+	    const seed = q || `${window.location.origin}/`;
+	    setUrl(seed);
+	    setLoadedUrl(seed);
+	    if (qViewport && VIEWPORTS[qViewport]) setViewportId(qViewport);
+	    if (qBackdrop && BACKDROPS[qBackdrop]) setBackdropId(qBackdrop);
+	    if (qTemplate && CAMERA_TEMPLATES.some((tpl) => tpl.id === qTemplate)) setTemplateId(qTemplate);
+	    autoVideoRequestedRef.current = params.get('autovideo') === '1';
+	  }, []);
 
   const authedFetch = useCallback(async (path, init = {}) => {
     const token = await user.getIdToken();
@@ -178,35 +286,6 @@ export default function StudioPage() {
       const sky = new THREE.Mesh(new THREE.SphereGeometry(14000, 48, 32), skyMaterial);
       scene.add(sky);
 
-      // Glassy floaters — physical transmission spheres drifting around the device.
-      const floaties = new THREE.Group();
-      const FLOATIE_TINTS = [0xc47c56, 0x66b8a4, 0xab94da, 0xd6bf7b, 0xffffff, 0x9adfd2];
-      const FLOATIE_SEEDS = [
-        { x: -1400, y: 500,  z: -900,  r: 220 }, { x: 1500,  y: -300, z: -1300, r: 300 },
-        { x: -900,  y: -650, z: 600,   r: 130 }, { x: 1100,  y: 750,  z: 400,   r: 110 },
-        { x: -2100, y: -150, z: -2200, r: 420 }, { x: 2300,  y: 350,  z: -2600, r: 480 },
-        { x: 300,   y: 1100, z: -1800, r: 170 }, { x: -500,  y: 150,  z: -3200, r: 260 },
-      ];
-      FLOATIE_SEEDS.forEach((s, i) => {
-        const orb = new THREE.Mesh(
-          new THREE.SphereGeometry(s.r, 48, 32),
-          new THREE.MeshPhysicalMaterial({
-            color: FLOATIE_TINTS[i % FLOATIE_TINTS.length],
-            transmission: 1,
-            thickness: s.r * 0.8,
-            roughness: 0.08,
-            ior: 1.4,
-            clearcoat: 1,
-            clearcoatRoughness: 0.1,
-            envMapIntensity: 1.2,
-          })
-        );
-        orb.position.set(s.x, s.y, s.z);
-        orb.userData = { baseY: s.y, amp: 40 + (i % 4) * 25, speed: 0.18 + (i % 5) * 0.07 };
-        floaties.add(orb);
-      });
-      scene.add(floaties);
-
       // Atmospheric dust — soft additive particles, very slow drift.
       const dustSprite = (() => {
         const c = document.createElement('canvas');
@@ -246,12 +325,12 @@ export default function StudioPage() {
       // Homepage "loop" — the 4D-torus particle ring from ox.jsx, rebuilt as a
       // lightweight Points cloud (same stereographic projection + HSL cycle).
       const LOOP_COUNT = 9000;
-      const LOOP_BASE = 2000; // world-units multiplier — ring radius ≈ 550 at size 1
+      const LOOP_BASE = 2600; // world-units multiplier — ring radius ≈ 715 at size 1
       const loopGeo = new THREE.BufferGeometry();
       loopGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(LOOP_COUNT * 3), 3));
       loopGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(LOOP_COUNT * 3), 3));
       const loopMat = new THREE.PointsMaterial({
-        size: 14,
+        size: 20,
         vertexColors: true,
         map: dustSprite,
         transparent: true,
@@ -314,18 +393,19 @@ export default function StudioPage() {
       controls.enableDamping = true;
       controls.dampingFactor = 0.08;
       controls.target.set(0, 0, 0);
-      controls.minDistance = 500;
+      controls.minDistance = 180; // below the tightest template zoom (0.28 × mobile camZ ≈ 420) so playback end doesn't snap the camera out
       controls.maxDistance = 8000;
 
       const world = {
         THREE, scene, camera, glRenderer, cssRenderer, controls,
         deviceGroup, iframe, iframeWrap, cssObject,
         screenPlane: null, screenMaterial: null, texture: null,
-        sky, skyMaterial, floaties, dust,
+        sky, skyMaterial, dust,
         updateLoop, applyLoop,
         stageW: w, stageH: h,
-      };
-      worldRef.current = world;
+	      };
+	      worldRef.current = world;
+	      setWorldReady(true);
 
       // Build (or rebuild) the device mockup for a viewport preset.
       // Paints the sky dome. 'home' redraws the homepage hero gradient
@@ -388,42 +468,80 @@ export default function StudioPage() {
         }
         if (world.cssObject) { scene.remove(world.cssObject); world.cssObject = null; }
 
-        // White ceramic/aluminum shell — clearcoat + env map for the
-        // photoreal studio-hardware look.
-        const shellMat = new THREE.MeshPhysicalMaterial({
-          color: 0xf5f5f7,
-          roughness: 0.32,
-          metalness: 0.08,
-          clearcoat: 0.9,
-          clearcoatRoughness: 0.22,
-          envMapIntensity: 1.1,
+        // Photoreal Apple-hardware look: brushed-aluminum body (titanium tint
+        // on mobile), edge-to-edge cover glass, per-device details below.
+        const alumMat = new THREE.MeshPhysicalMaterial({
+          color: vpId === 'mobile' ? 0x8e8a84 : 0xd6d8da,
+          metalness: 0.9,
+          roughness: vpId === 'mobile' ? 0.42 : 0.34,
+          envMapIntensity: 1.5,
         });
-        const bezelBox = new THREE.Mesh(
-          new RoundedBoxGeometry(W + B * 2, H + B * 2, D, 5, Math.min(corner, D / 2 - 1)),
-          shellMat
-        );
-        bezelBox.position.z = -D / 2 - 2;
-        deviceGroup.add(bezelBox);
-
-        // Dark glass face inset — frames the screen like real hardware.
-        const faceMat = new THREE.MeshPhysicalMaterial({
-          color: 0x0a0a0c,
-          roughness: 0.12,
-          metalness: 0.2,
+        const glassMat = new THREE.MeshPhysicalMaterial({
+          color: 0x050507,
+          roughness: 0.06,
+          metalness: 0.1,
           clearcoat: 1,
-          clearcoatRoughness: 0.06,
+          clearcoatRoughness: 0.03,
+          envMapIntensity: 1.2,
         });
-        const face = new THREE.Mesh(roundedRectGeometry(W + B, H + B, corner * 0.8), faceMat);
-        face.position.z = 0.5;
+        const lensMat = new THREE.MeshPhysicalMaterial({ color: 0x101418, roughness: 0.05, metalness: 0.4, clearcoat: 1 });
+
+        const body = new THREE.Mesh(
+          new RoundedBoxGeometry(W + B * 2, H + B * 2, D, 5, Math.min(corner, D / 2 - 1)),
+          alumMat
+        );
+        body.position.z = -D / 2 - 1;
+        deviceGroup.add(body);
+
+        const face = new THREE.Mesh(
+          roundedRectGeometry(W + B * 2 - 6, H + B * 2 - 6, Math.max(screenCorner, corner * 0.7)),
+          glassMat
+        );
+        face.position.z = 0.4;
         deviceGroup.add(face);
 
-        if (vp.stand) {
-          const neck = new THREE.Mesh(new RoundedBoxGeometry(110, 300, 32, 4, 14), shellMat);
-          neck.position.set(0, -(H / 2 + B + 120), -D - 20);
-          deviceGroup.add(neck);
-          const base = new THREE.Mesh(new THREE.CylinderGeometry(230, 250, 16, 64), shellMat);
-          base.position.set(0, -(H / 2 + B + 262), -D + 40);
-          deviceGroup.add(base);
+        if (vpId === 'desktop') {
+          // Studio-Display stand: tilted aluminum arm + flat rounded foot.
+          const arm = new THREE.Mesh(new RoundedBoxGeometry(150, 320, 20, 4, 9), alumMat);
+          arm.position.set(0, -(H / 2 + B + 130), -D - 24);
+          arm.rotation.x = -0.12;
+          deviceGroup.add(arm);
+          const foot = new THREE.Mesh(new RoundedBoxGeometry(360, 14, 250, 4, 7), alumMat);
+          foot.position.set(0, -(H / 2 + B + 280), -D + 60);
+          deviceGroup.add(foot);
+        }
+
+        if (vpId === 'mobile') {
+          // iPhone-style side buttons + rear camera plateau with three lenses.
+          const sideButton = (height, y, side) => {
+            const m = new THREE.Mesh(new RoundedBoxGeometry(10, height, D * 0.55, 2, 4), alumMat);
+            m.position.set(side * (W / 2 + B + 3), y, -D / 2);
+            deviceGroup.add(m);
+          };
+          sideButton(95, H * 0.16, 1);        // power
+          sideButton(34, H * 0.22 + 86, -1);  // action
+          sideButton(52, H * 0.22, -1);       // volume up
+          sideButton(52, H * 0.22 - 70, -1);  // volume down
+          const plateau = new THREE.Mesh(new RoundedBoxGeometry(170, 170, 10, 3, 26), alumMat);
+          plateau.position.set(-(W / 2 + B) + 105, (H / 2 + B) - 105, -D - 4);
+          deviceGroup.add(plateau);
+          [[-32, 32], [-32, -32], [36, 0]].forEach(([lx, ly]) => {
+            const lens = new THREE.Mesh(new THREE.CylinderGeometry(26, 26, 8, 32), lensMat);
+            lens.rotation.x = Math.PI / 2;
+            lens.position.set(-(W / 2 + B) + 105 + lx, (H / 2 + B) - 105 + ly, -D - 10);
+            deviceGroup.add(lens);
+          });
+        }
+
+        if (vpId === 'tablet') {
+          // iPad-style rear camera pod, single lens.
+          const camPod = new THREE.Mesh(new RoundedBoxGeometry(96, 96, 8, 3, 20), alumMat);
+          camPod.position.set(-(W / 2 + B) + 70, (H / 2 + B) - 70, -D - 3);
+          deviceGroup.add(camPod);
+          const lens = new THREE.Mesh(new THREE.CylinderGeometry(20, 20, 7, 32), lensMat);
+          lens.rotation.x = Math.PI / 2;
+          lens.position.set(-(W / 2 + B) + 70, (H / 2 + B) - 70, -D - 8);
+          deviceGroup.add(lens);
         }
 
         // Textured screen — rounded corners to match the live iframe.
@@ -458,6 +576,14 @@ export default function StudioPage() {
       if (init.loadedUrl) iframe.src = init.loadedUrl;
       world.applyBackdrop(init.backdropId, init);
       world.applyLoop(init.loopCfg);
+      // buildDevice parks the camera front-on; if a template is active, open on
+      // its first pose so the scene loads mid-shot instead of flat.
+      const initTpl = CAMERA_TEMPLATES.find((t) => t.id === init.templateId);
+      if (initTpl) {
+        const pose = templatePose(VIEWPORTS[init.viewportId || 'desktop'], initTpl.keys[0]);
+        camera.position.set(pose.px, pose.py, pose.pz);
+        controls.target.set(pose.tx, pose.ty, pose.tz);
+      }
       iframeWrap.style.pointerEvents = init.interactMode ? 'auto' : 'none';
       cssRenderer.domElement.style.pointerEvents = init.interactMode ? 'auto' : 'none';
 
@@ -475,10 +601,6 @@ export default function StudioPage() {
       const tick = () => {
         if (disposed) return;
         const t = clock.getElapsedTime();
-        floaties.children.forEach((orb, i) => {
-          orb.position.y = orb.userData.baseY + Math.sin(t * orb.userData.speed + i * 1.7) * orb.userData.amp;
-          orb.rotation.y = t * 0.05 * ((i % 2) ? 1 : -1);
-        });
         dust.rotation.y = t * 0.008;
         updateLoop(t);
         controls.update();
@@ -498,11 +620,12 @@ export default function StudioPage() {
       };
     })();
 
-    return () => {
-      disposed = true;
-      worldRef.current?.cleanup?.();
-      worldRef.current = null;
-    };
+	    return () => {
+	      disposed = true;
+	      setWorldReady(false);
+	      worldRef.current?.cleanup?.();
+	      worldRef.current = null;
+	    };
     // Built once per auth'd mount — viewport/backdrop/url changes mutate the world below.
   }, [user]);
 
@@ -570,6 +693,7 @@ export default function StudioPage() {
       return [...prev, { id, t: kt, px: p.x, py: p.y, pz: p.z, tx: t.x, ty: t.y, tz: t.z }];
     });
     setSelectedKeyId(id);
+    setTemplateId(''); // manual edit — stop re-syncing to the template on viewport change
     setStatus(`Keyframe set at ${(scrubVal * 100).toFixed(0)}% of the timeline.`);
   }, [scrubVal]);
 
@@ -577,7 +701,37 @@ export default function StudioPage() {
     if (!selectedKeyId) return;
     setKeyframes((prev) => prev.filter((k) => k.id !== selectedKeyId));
     setSelectedKeyId(null);
+    setTemplateId('');
   }, [selectedKeyId]);
+
+  // Apply a camera template: 8 keys spread evenly across the timeline, scaled
+  // to the active viewport. Re-applied automatically when the viewport
+  // changes so the same move works across desktop/mobile/tablet.
+  const applyTemplate = useCallback((tplId) => {
+    const tpl = CAMERA_TEMPLATES.find((t) => t.id === tplId);
+    if (!tpl) return;
+    playTweenRef.current?.kill();
+    playTweenRef.current = null;
+    setPlaying(false);
+    const w = worldRef.current;
+    if (w) w.controls.enabled = true;
+    // Timeline units: 1 per travel segment + each pose's hold.
+    const kf = buildTemplateKeyframes(tpl, viewportId);
+    setKeyframes(kf);
+    setSelectedKeyId(null);
+    setTotalSeconds(tpl.seconds);
+    setScrubVal(0);
+    if (w) {
+      w.camera.position.set(kf[0].px, kf[0].py, kf[0].pz);
+      w.controls.target.set(kf[0].tx, kf[0].ty, kf[0].tz);
+    }
+    const holdCount = tpl.keys.filter((k) => k[5]).length;
+    setStatus(`Template "${tpl.label}" loaded — ${tpl.keys.length} poses${holdCount ? ` (${holdCount} holds)` : ''} · ${tpl.theme} · ${tpl.intensity} · ${tpl.seconds}s.`);
+  }, [viewportId]);
+
+  useEffect(() => {
+    if (templateId) applyTemplate(templateId);
+  }, [templateId, applyTemplate]);
 
   const scrubTo = useCallback((u) => {
     if (playing) return;
@@ -663,7 +817,7 @@ export default function StudioPage() {
 
   // Server-side hi-res capture of the loaded URL. Returns the capture ref.
   const requestCapture = useCallback(async ({ wantFullPage }) => {
-    const target = (url || loadedUrl).trim();
+    const target = (loadedUrl || url).trim();
     if (!/^https?:\/\//i.test(target)) throw new Error('Enter a valid http(s) URL first.');
     const res = await authedFetch('/api/dashboard/studio-capture', {
       method: 'POST',
@@ -673,7 +827,7 @@ export default function StudioPage() {
     if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
     setCaptures((prev) => [data.capture, ...prev]);
     return data.capture;
-  }, [url, loadedUrl, viewportId, scale, authedFetch]);
+  }, [loadedUrl, url, viewportId, scale, authedFetch]);
 
   const captureHiRes = useCallback(async () => {
     if (busy) return;
@@ -754,6 +908,150 @@ export default function StudioPage() {
     }
   }, [busy, scale, viewportId, backdropId, requestCapture, loadScreenTexture, authedFetch]);
 
+  const createVideo = useCallback(async () => {
+    const w = worldRef.current;
+    if (!w || busy) return;
+    if (typeof MediaRecorder === 'undefined' || typeof w.glRenderer.domElement.captureStream !== 'function') {
+      setStatus('Video recording is not supported in this browser.');
+      return;
+    }
+
+    let stream = null;
+    let recorder = null;
+    let tween = null;
+    setBusy(true);
+    try {
+      playTweenRef.current?.kill();
+      playTweenRef.current = null;
+      const activeTemplate = CAMERA_TEMPLATES.find((t) => t.id === templateId)
+        || CAMERA_TEMPLATES.find((t) => t.id === 'spiral-in')
+        || CAMERA_TEMPLATES[0];
+      const shouldUseTemplate = Boolean(activeTemplate && (templateId || keyframesRef.current.length < 2));
+      const videoKeyframes = shouldUseTemplate
+        ? buildTemplateKeyframes(activeTemplate, viewportId)
+        : [...keyframesRef.current].sort((a, b) => a.t - b.t);
+      const videoSeconds = shouldUseTemplate ? activeTemplate.seconds : totalSeconds;
+      if (videoKeyframes.length < 2) throw new Error('Add at least two camera keys or choose a template.');
+
+      if (shouldUseTemplate) {
+        keyframesRef.current = videoKeyframes;
+        setKeyframes(videoKeyframes);
+        setTemplateId(activeTemplate.id);
+        setTotalSeconds(videoSeconds);
+      }
+
+      setStatus(`Creating video — capturing ${viewportId} screen @ ${scale}x…`);
+      let capture;
+      try {
+        capture = await requestCapture({ wantFullPage: false });
+      } catch (captureErr) {
+        const viewportNeedle = String(viewportId || '').toLowerCase();
+        const fallback = captures.find((item) => {
+          if (!item || item.type === 'studio_video' || !item.downloadUrl) return false;
+          const matchesViewport =
+            item.viewportId === viewportId ||
+            String(item.variant || '').toLowerCase().includes(viewportNeedle) ||
+            String(item.viewportLabel || '').toLowerCase().includes(viewportNeedle);
+          return matchesViewport;
+        }) || captures.find((item) => item?.type !== 'studio_video' && item?.downloadUrl);
+        if (!fallback) throw captureErr;
+        capture = fallback;
+        setStatus(`Live capture failed (${captureErr.message}). Reusing saved ${fallback.label || fallback.viewportLabel || 'Studio image'}…`);
+      }
+      setStatus('Texturing screen for video…');
+      await loadScreenTexture(capture);
+
+      const mimeType = getSupportedVideoMimeType();
+      if (!mimeType) throw new Error('No supported WebM encoder is available in this browser.');
+
+      const chunks = [];
+      stream = w.glRenderer.domElement.captureStream(30);
+      recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 2000000 });
+      const recordingDone = new Promise((resolve, reject) => {
+        recorder.ondataavailable = (event) => {
+          if (event.data?.size) chunks.push(event.data);
+        };
+        recorder.onerror = () => reject(recorder.error || new Error('Video recorder failed.'));
+        recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
+      });
+
+      w.iframeWrap.style.visibility = 'hidden';
+      w.controls.enabled = false;
+      setPlaying(true);
+      setScrubVal(0);
+      applyPath(0);
+      w.controls.update();
+      w.glRenderer.render(w.scene, w.camera);
+
+      recorder.start(250);
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+      setStatus(`Recording ${videoSeconds}s ${VIEWPORTS[viewportId].label} mockup video…`);
+      const proxy = { u: 0 };
+      await new Promise((resolve) => {
+        tween = gsap.to(proxy, {
+          u: 1,
+          duration: videoSeconds,
+          ease: 'none',
+          onUpdate: () => {
+            applyPath(proxy.u);
+            setScrubVal(proxy.u);
+            w.controls.update();
+            w.glRenderer.render(w.scene, w.camera);
+          },
+          onComplete: resolve,
+        });
+      });
+
+      if (recorder.state !== 'inactive') recorder.stop();
+      const blob = await recordingDone;
+      if (!blob.size) throw new Error('Recorder produced an empty video.');
+
+      setStatus(`Uploading video — ${(blob.size / 1024 / 1024).toFixed(1)}MB…`);
+      const label = `${VIEWPORTS[viewportId].label} video · ${activeTemplate?.label || 'CUSTOM'} · ${BACKDROPS[backdropId].label}`;
+      const token = await user.getIdToken();
+      const form = new FormData();
+      form.append('action', 'upload-video');
+      form.append('video', blob, `mockup-video-${viewportId}-${Date.now()}.webm`);
+      form.append('label', label);
+      form.append('viewportId', viewportId);
+      form.append('backdropId', backdropId);
+      form.append('templateId', activeTemplate?.id || '');
+      form.append('durationSeconds', String(videoSeconds));
+      form.append('sourceUrl', loadedUrl || url);
+      const res = await fetch('/api/dashboard/studio-capture', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      setCaptures((prev) => [data.capture, ...prev]);
+      setStatus('Video saved to pipeline and attached to Mockup Studio.');
+    } catch (err) {
+      setStatus(`Video failed: ${err.message}`);
+    } finally {
+      tween?.kill?.();
+      if (recorder && recorder.state !== 'inactive') recorder.stop();
+      stream?.getTracks?.().forEach((track) => track.stop());
+      if (worldRef.current) {
+        worldRef.current.iframeWrap.style.visibility = 'visible';
+        worldRef.current.controls.enabled = true;
+      }
+      setPlaying(false);
+      setBusy(false);
+    }
+  }, [busy, templateId, viewportId, totalSeconds, scale, backdropId, loadedUrl, url, captures, requestCapture, loadScreenTexture, applyPath, user]);
+
+  useEffect(() => {
+    if (!autoVideoRequestedRef.current || !worldReady || !loadedUrl || busy || !user) return undefined;
+    autoVideoRequestedRef.current = false;
+    const timeout = window.setTimeout(() => {
+      createVideo();
+    }, 900);
+    return () => window.clearTimeout(timeout);
+  }, [worldReady, loadedUrl, busy, user, createVideo]);
+
   if (loading || !user) return null;
 
   return (
@@ -791,6 +1089,7 @@ export default function StudioPage() {
 
         <button style={{ ...ui.btn(), opacity: busy ? 0.5 : 1 }} disabled={busy} onClick={captureHiRes}>CAPTURE HI-RES</button>
         <button style={{ ...ui.btn(true), opacity: busy ? 0.5 : 1 }} disabled={busy} onClick={renderScene}>RENDER SCENE</button>
+        <button style={{ ...ui.btn(true), opacity: busy ? 0.5 : 1 }} disabled={busy} onClick={createVideo}>CREATE VIDEO</button>
       </div>
 
       {/* Stage + captures rail */}
@@ -844,16 +1143,23 @@ export default function StudioPage() {
 
         <div id="studio-captures-panel" style={{ width: 196, borderLeft: '1px solid rgba(255,255,255,0.08)', overflowY: 'auto', padding: 8, display: 'flex', flexDirection: 'column', gap: 8, background: '#0e0e11' }}>
           <span style={ui.label}>CAPTURES · {captures.length}</span>
-          {captures.map((c, i) => (
-            <div key={c.storagePath || i} style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: 4, overflow: 'hidden' }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={c.downloadUrl} alt={c.viewportLabel || c.label || 'capture'} style={{ width: '100%', display: 'block', maxHeight: 120, objectFit: 'cover', background: '#000' }} />
-              <div style={{ padding: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ ...ui.label, color: '#a1a1aa' }}>{c.viewportLabel || c.label || c.variant}</span>
-                <a href={c.downloadUrl} target="_blank" rel="noreferrer" style={{ ...ui.btn(), padding: '3px 6px', fontSize: 9, textDecoration: 'none', alignSelf: 'flex-start' }}>OPEN</a>
+          {captures.map((c, i) => {
+            const isVideo = c.type === 'studio_video' || String(c.contentType || '').startsWith('video/');
+            return (
+              <div key={c.storagePath || i} style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: 4, overflow: 'hidden' }}>
+                {isVideo ? (
+                  <video src={c.downloadUrl} controls muted playsInline preload="metadata" style={{ width: '100%', display: 'block', maxHeight: 120, objectFit: 'cover', background: '#000' }} />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={c.downloadUrl} alt={c.viewportLabel || c.label || 'capture'} style={{ width: '100%', display: 'block', maxHeight: 120, objectFit: 'cover', background: '#000' }} />
+                )}
+                <div style={{ padding: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span style={{ ...ui.label, color: '#a1a1aa' }}>{c.viewportLabel || c.label || c.variant}</span>
+                  <a href={c.downloadUrl} target="_blank" rel="noreferrer" style={{ ...ui.btn(), padding: '3px 6px', fontSize: 9, textDecoration: 'none', alignSelf: 'flex-start' }}>OPEN</a>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           {!captures.length ? <span style={{ ...ui.label, color: '#52525b' }}>No captures yet.</span> : null}
         </div>
       </div>
@@ -871,6 +1177,18 @@ export default function StudioPage() {
         </button>
         <select value={totalSeconds} onChange={(e) => setTotalSeconds(Number(e.target.value))} style={{ ...ui.btn(), appearance: 'none' }} title="Total timeline duration">
           <option value={3}>3S</option><option value={6}>6S</option><option value={10}>10S</option><option value={15}>15S</option><option value={20}>20S</option>
+        </select>
+        <select
+          id="studio-camera-template-select"
+          value={templateId}
+          onChange={(e) => setTemplateId(e.target.value)}
+          style={{ ...ui.btn(!!templateId), appearance: 'none', maxWidth: 220 }}
+          title="Camera animation templates — 8 keyframes, scaled to the active device"
+        >
+          <option value="">TEMPLATE…</option>
+          {CAMERA_TEMPLATES.map((t) => (
+            <option key={t.id} value={t.id}>{`${t.label} · ${t.theme} · ${t.intensity}`}</option>
+          ))}
         </select>
 
         <div

@@ -13,7 +13,7 @@
 //   runCardSkills({ tier, sourcePayloads, warnings })
 //     → Promise<{ [cardId]: SkillOutput }>
 //
-//   buildSourcePayloads({ intake, styleGuide, siteMeta, evidence, pagespeed, scoutConfig, userContext })
+//   buildSourcePayloads({ intake, styleGuide, siteMeta, evidence, pagespeed, scoutConfig, userContext, homepageMockup })
 //     → { [sourceId]: any }
 
 const fs   = require('fs');
@@ -21,7 +21,7 @@ const path = require('path');
 
 const { getSkillPath }      = require('./_registry');
 const { validateSkillOutput } = require('./_output-contract');
-const { SOURCES_BY_ID }     = require('../source-inventory');
+const { SOURCE_INVENTORY, SOURCES_BY_ID } = require('../source-inventory');
 const { CARD_CONTRACT, getSkillIdsForCard } = require('../card-contract');
 const { aggregateCardSkills } = require('./_aggregator');
 
@@ -213,6 +213,7 @@ function buildSourcePayloads({
   userContext   = null,
   runtimeHealth = null,
   knowledgeBase = null,
+  homepageMockup = null,
 } = {}) {
   // Unwrap pagespeed SourceRecord — skill prompts cite `intel.pagespeed.scores.*`,
   // which lives under `.facts` in the SourceRecord envelope. When `pagespeed` is
@@ -221,6 +222,7 @@ function buildSourcePayloads({
   const pagespeedPayload = pagespeed?.facts ?? pagespeed ?? null;
 
   return {
+    ...Object.fromEntries(SOURCE_INVENTORY.map((source) => [source.id, null])),
     'site.html':                      evidence    || null,
     'site.meta':                      siteMeta    || null,
     'synth.intake':                   intake      || null,
@@ -237,6 +239,7 @@ function buildSourcePayloads({
     'scoutConfig.searchPlan':         scoutConfig?.searchPlan         || null,
     'scoutConfig.capabilitiesActive': scoutConfig?._meta?.capabilitiesActive || null,
     'userContext':                    userContext || null,
+    'image.homepageMockup':           homepageMockup || null,
   };
 }
 

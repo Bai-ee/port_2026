@@ -14,19 +14,19 @@ const SITE_URL =
 export const metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: 'Bryan Balli — Digital Media Developer & Creative Technologist Portfolio',
+    default: 'Bryan Balli — AI Design Engineer & Creative Technologist Portfolio',
     template: '%s · Bryan Balli',
   },
   description:
     'Bryan Balli leads a team across design and engineering as a Creative Technologist, with experience spanning agencies in Chicago, San Francisco, and remote teams. Ready to step into your process, see what\'s working, fix what\'s not, and build what\'s missing across design, content, and systems.',
   keywords: [
     'Bryan Balli',
-    'digital media developer',
+    'AI design engineer',
     'creative technologist',
-    'digital media consultant',
+    'AI consultant',
     'client dashboard',
     'design system extraction',
-    'SEO optimization',
+    'AI-assisted SEO',
     'generative engine optimization',
     'Next.js portfolio',
     'GSAP animation',
@@ -42,7 +42,7 @@ export const metadata = {
     locale: 'en_US',
     url: SITE_URL,
     siteName: 'Bryan Balli — Portfolio',
-    title: 'Bryan Balli — Digital Media Developer & Creative Technologist',
+    title: 'Bryan Balli — AI Design Engineer & Creative Technologist',
     description:
       'Bryan Balli leads a team across design and engineering as a Creative Technologist, with experience spanning agencies in Chicago, San Francisco, and remote teams. Ready to step into your process, see what\'s working, fix what\'s not, and build what\'s missing across design, content, and systems.',
     images: [
@@ -50,7 +50,7 @@ export const metadata = {
         url: '/img/og_meta.optimized.jpg',
         width: 1200,
         height: 630,
-        alt: 'Bryan Balli — Digital media developer and creative technologist portfolio share card',
+        alt: 'Bryan Balli — AI design engineer and creative technologist portfolio share card',
         type: 'image/jpeg',
       },
     ],
@@ -59,13 +59,13 @@ export const metadata = {
     card: 'summary_large_image',
     site: '@bai_ee',
     creator: '@bai_ee',
-    title: 'Bryan Balli — Digital Media Developer & Creative Technologist',
+    title: 'Bryan Balli — AI Design Engineer & Creative Technologist',
     description:
       'Bryan Balli leads a team across design and engineering as a Creative Technologist, with experience spanning agencies in Chicago, San Francisco, and remote teams. Ready to step into your process, see what\'s working, fix what\'s not, and build what\'s missing across design, content, and systems.',
     images: [
       {
         url: '/img/og_meta.optimized.jpg',
-        alt: 'Bryan Balli — Digital media developer and creative technologist portfolio share card',
+        alt: 'Bryan Balli — AI design engineer and creative technologist portfolio share card',
       },
     ],
   },

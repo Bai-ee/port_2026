@@ -5,6 +5,20 @@ import { createRequire } from 'module';
 export const maxDuration = 300;
 
 const require = createRequire(import.meta.url);
+
+/* Dev only: Next hot-reloads this ESM route, but Node's CJS require cache
+   keeps stale copies of the pipeline modules — edits to runtime.js,
+   strategy-roller, scribe, or the scout-intake modules don't take effect
+   until a server restart. Evict the stateless pipeline modules so each
+   route reload requires fresh copies. Stateful singletons (firebase-admin,
+   auth, run-lifecycle) stay cached on purpose. */
+if (process.env.NODE_ENV !== 'production') {
+  const STALE_CJS = /features[\\/](not-the-rug-brief|scout-intake)[\\/]/;
+  for (const key of Object.keys(require.cache)) {
+    if (STALE_CJS.test(key)) delete require.cache[key];
+  }
+}
+
 const _fb = require('../../../../api/_lib/firebase-admin.cjs');
 const {
   buildAuthRequestShim,
@@ -213,6 +227,11 @@ export async function POST(request) {
         moduleIds: moduleIdsToRun,
         onProgress,
       });
+      // Per-stage LLM costs for this run — module skill calls now, scout-config
+      // generation below. Rolled into providerUsage so ops pricing is accurate.
+      const runStageCosts = results
+        .filter((r) => r?.runCostData)
+        .map((r) => ({ stage: r.cardId, ...r.runCostData }));
       // Fresh results only — reused modules keep their stored state/timestamps.
       await updateModuleState(clientId, results, runId);
 
@@ -271,6 +290,9 @@ export async function POST(request) {
             force: claimedRun.trigger === 'reseed',
           });
           console.log(`[WORKER] scoutConfig ensured for ${clientId}`);
+          if (scoutConfigResult?.cost) {
+            runStageCosts.push({ stage: 'scout-config', ...scoutConfigResult.cost });
+          }
 
           // Flow the fresh audit into marketingBriefConfig (the card layer):
           // untouched groups refresh, user-touched groups merge-append.
@@ -283,6 +305,23 @@ export async function POST(request) {
         } catch (scoutErr) {
           console.warn(`[WORKER] scoutConfig generation non-fatal failure for ${clientId}: ${scoutErr?.message}`);
           await onProgress('search-terms', 'Search terms generation hit an issue — will refresh on next run.');
+        }
+
+        // Persist trimmed crawl evidence so Data Quality / Trust / Platform
+        // Coverage cards refresh on recurring runs, not just first intake.
+        if (evidence) {
+          try {
+            const { summarizeEvidencePages } = require('../../../../features/scout-intake/normalize');
+            const evidenceSummary = summarizeEvidencePages(evidence);
+            if (evidenceSummary) {
+              await _fb.adminDb.collection('dashboard_state').doc(clientId).set(
+                { evidence: evidenceSummary },
+                { merge: true }
+              );
+            }
+          } catch (evErr) {
+            console.warn(`[WORKER] evidence summary write non-fatal failure for ${clientId}: ${evErr?.message}`);
+          }
         }
 
         // Synthesize snapshot.brandOverview from site evidence (OG meta + page content).
@@ -335,7 +374,7 @@ export async function POST(request) {
         contentOpportunities: null,
         guardianFlags: null,
         providerName: null,
-        runCostData: null,
+        runCostData: runStageCosts.length ? { stageCosts: runStageCosts } : null,
         ...(anyOk ? {} : { error: results.map((r) => r.errorMessage).filter(Boolean).join('; '), failedStage: 'module' }),
       };
     } else if (pipelineType === 'free-tier-intake') {
@@ -492,6 +531,22 @@ export async function POST(request) {
 
   await completeRun(runId, clientId, pipelineResult);
   console.log(`[${new Date().toISOString()}] WORKER: run ${runId} succeeded for ${clientId}`);
+
+  // Step 10 — Per-brief cover summaries. A completed scout-brief run refreshes
+  // the data behind every named brief, so regenerate all covers. Deferred:
+  // reads dashboard_state AFTER completeRun's projection lands; failures only
+  // mean the cover falls back to the run headline.
+  if (pipelineType === 'scout-brief') {
+    after(async () => {
+      try {
+        const { generateBriefSummaries } = await import('../../../../features/scout-intake/brief-summary-runner.mjs');
+        await generateBriefSummaries({ clientId, runId });
+      } catch (err) {
+        console.warn(`[WORKER] brief summaries non-fatal failure for ${clientId}: ${err?.message}`);
+      }
+    });
+  }
+
   return json({
     ok: true,
     runId,

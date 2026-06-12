@@ -68,8 +68,8 @@ test('parseFrontMatter: parses seo-depth-audit.md without error', () => {
   const content  = fs.readFileSync(filePath, 'utf8');
   const { frontMatter: fm, body } = parseFrontMatter(content);
   assert.strictEqual(fm.id,      'seo-depth-audit');
-  assert.strictEqual(fm.version, 1);
-  assert.deepStrictEqual(fm.inputs, ['intel.pagespeed', 'site.meta', 'site.html']);
+  assert.strictEqual(fm.version, 2);
+  assert.deepStrictEqual(fm.inputs, ['intel.pagespeed', 'site.meta', 'site.html', 'knowledge-base']);
   assert.strictEqual(fm.output.tool, 'write_seo_depth_audit');
   assert.ok(body.length > 10, 'body should have content');
 });
@@ -84,7 +84,13 @@ test('buildSourcePayloads: maps known sources', () => {
   assert.strictEqual(payloads['scout.reddit'],    null);
 });
 
-test('buildSourcePayloads: all 14 source ids are present', () => {
+test('buildSourcePayloads: maps homepage mockup image source', () => {
+  const homepageMockup = { __image: true, url: 'https://example.com/mockup.png' };
+  const payloads = buildSourcePayloads({ homepageMockup });
+  assert.strictEqual(payloads['image.homepageMockup'], homepageMockup);
+});
+
+test('buildSourcePayloads: all source inventory ids are present', () => {
   const { SOURCE_INVENTORY } = require('../../source-inventory');
   const payloads = buildSourcePayloads({});
   for (const src of SOURCE_INVENTORY) {

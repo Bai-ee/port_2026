@@ -22,6 +22,40 @@ function arr(val) {
   return Array.isArray(val) ? val : [];
 }
 
+// ── Evidence summary ──────────────────────────────────────────────────────────
+
+/**
+ * Trim crawled site evidence to a Firestore-safe summary for dashboard_state.
+ * The dashboard (Data Quality, Trust, Platform Coverage cards) reads
+ * dashboard_state.evidence.pages[0].{h1,h2,bodyParagraphs,ctaTexts,navLabels,
+ * socialLinks,contactClues}. Raw HTML is never included.
+ *
+ * @param {object|null} evidence - fetchSiteEvidence() output
+ * @returns {object|null}
+ */
+function summarizeEvidencePages(evidence) {
+  if (!evidence || !Array.isArray(evidence.pages) || evidence.pages.length === 0) return null;
+  const cap = (list, max, charCap = 240) =>
+    arr(list).slice(0, max).map((s) => str(s).slice(0, charCap)).filter(Boolean);
+  return {
+    url: str(evidence.url) || null,
+    fetchedAt: str(evidence.fetchedAt) || null,
+    thin: Boolean(evidence.thin),
+    pages: evidence.pages.slice(0, 4).map((p) => ({
+      url: str(p?.url) || null,
+      type: str(p?.type) || null,
+      title: str(p?.title) || null,
+      h1: cap(p?.h1, 3),
+      h2: cap(p?.h2, 10),
+      navLabels: cap(p?.navLabels, 15, 60),
+      ctaTexts: cap(p?.ctaTexts, 10, 80),
+      bodyParagraphs: cap(p?.bodyParagraphs, 5),
+      socialLinks: cap(p?.socialLinks, 12),
+      contactClues: cap(p?.contactClues, 8),
+    })),
+  };
+}
+
 // ── Compat shims — maps new intake fields to run-lifecycle.cjs field names ────
 
 /**
@@ -94,6 +128,7 @@ function normalizeIntakeResult(
     briefHtml = null,
     scoutConfig = null,
     knowledgeBase = null,
+    evidence = null,
     tier = 'free',
   }
 ) {
@@ -192,6 +227,11 @@ function normalizeIntakeResult(
     // ── Brand graphics from homepage siteMeta (OG image, favicon, etc.) ────
     // Extracted by site-fetcher.js, passed through runner.js — never touches LLM.
     siteMeta: siteMeta || null,
+
+    // ── Crawled page evidence summary (trimmed, no raw HTML) ───────────────
+    // Persisted to dashboard_state.evidence so Data Quality / Trust /
+    // Platform Coverage cards can read headings, CTAs, nav, social links.
+    evidence: summarizeEvidencePages(evidence),
 
     // ── Cost + provider metadata ────────────────────────────────────────────
     providerName: 'anthropic',
@@ -345,4 +385,4 @@ const STYLE_GUIDE_MOCK = {
   },
 };
 
-module.exports = { normalizeIntakeResult, synthesizeStyleGuide, STYLE_GUIDE_MOCK };
+module.exports = { normalizeIntakeResult, synthesizeStyleGuide, summarizeEvidencePages, STYLE_GUIDE_MOCK };

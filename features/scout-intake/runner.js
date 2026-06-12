@@ -940,6 +940,7 @@ async function runIntakePipeline({ clientId, clientConfig = null, onProgress = n
       scribeResult,
       briefHtml,
       scoutConfig,
+      evidence,
       tier,
     });
   } catch (err) {

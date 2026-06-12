@@ -20,6 +20,7 @@ const STUDIO_VIEWPORTS = {
 };
 
 const MAX_SCENE_UPLOAD_BYTES = 8 * 1024 * 1024;
+const MAX_VIDEO_UPLOAD_BYTES = 40 * 1024 * 1024;
 const MAX_STORED_CAPTURES = 40;
 
 function makeReqShim(request) {
@@ -45,11 +46,13 @@ async function resolveContext(request) {
 
 async function appendCaptureRef(clientId, ref) {
   const docRef = fb.adminDb.collection('dashboard_state').doc(clientId);
-  try {
-    await docRef.update({ studioCaptures: fb.FieldValue.arrayUnion(ref) });
-  } catch {
-    await docRef.set({ studioCaptures: [ref] }, { merge: true });
-  }
+  await fb.adminDb.runTransaction(async (tx) => {
+    const snap = await tx.get(docRef);
+    const current = Array.isArray(snap.data()?.studioCaptures) ? snap.data().studioCaptures : [];
+    const deduped = current.filter((item) => item?.storagePath !== ref.storagePath);
+    const next = [...deduped, ref].slice(-MAX_STORED_CAPTURES);
+    tx.set(docRef, { studioCaptures: next }, { merge: true });
+  });
 }
 
 async function listCaptureRefs(clientId) {
@@ -62,6 +65,8 @@ async function listCaptureRefs(clientId) {
 //   → browserless hi-res screenshot, persisted as a studio_capture artifact.
 // POST { action: 'upload-scene', dataUrl, label }
 //   → persists a client-rendered 3D scene PNG as a studio_scene artifact.
+// POST multipart { action: 'upload-video', video, label, ...metadata }
+//   → persists a browser-recorded WebM/MP4 as a studio_video artifact.
 export async function POST(request) {
   let context;
   try {
@@ -71,9 +76,24 @@ export async function POST(request) {
   }
   const clientId = context.clientId;
 
-  let body;
-  try { body = await request.json(); } catch { return json({ error: 'Invalid JSON body.' }, 400); }
-  const action = body?.action || 'capture';
+  const requestContentType = request.headers.get('content-type') || '';
+  const isMultipart = requestContentType.includes('multipart/form-data');
+  let body = null;
+  let form = null;
+  try {
+    if (isMultipart) {
+      form = await request.formData();
+    } else {
+      body = await request.json();
+    }
+  } catch {
+    return json({ error: isMultipart ? 'Invalid form body.' : 'Invalid JSON body.' }, 400);
+  }
+  const field = (name, fallback = '') => {
+    if (form) return form.get(name) ?? fallback;
+    return body?.[name] ?? fallback;
+  };
+  const action = String(field('action', 'capture') || 'capture');
   const capturedAt = new Date().toISOString();
   const stamp = Date.now();
 
@@ -112,13 +132,71 @@ export async function POST(request) {
     }
   }
 
+  if (action === 'upload-video') {
+    if (!form) return json({ error: 'Video uploads must use multipart/form-data.' }, 400);
+    const file = form.get('video');
+    if (!file || typeof file.arrayBuffer !== 'function') return json({ error: 'Missing video file.' }, 400);
+    const rawType = String(file.type || 'video/webm').split(';')[0].toLowerCase();
+    const allowed = new Set(['video/webm', 'video/mp4', 'video/ogg']);
+    if (!allowed.has(rawType)) return json({ error: 'Video must be WebM, MP4, or Ogg.' }, 400);
+    const buffer = Buffer.from(await file.arrayBuffer());
+    if (!buffer.length) return json({ error: 'Empty video.' }, 400);
+    if (buffer.length > MAX_VIDEO_UPLOAD_BYTES) return json({ error: 'Video exceeds 40MB.' }, 413);
+
+    const ext = rawType === 'video/mp4' ? 'mp4' : rawType === 'video/ogg' ? 'ogv' : 'webm';
+    const durationSeconds = Math.max(0, Math.min(120, Number(field('durationSeconds', 0)) || 0));
+    const viewportId = STUDIO_VIEWPORTS[field('viewportId')] ? String(field('viewportId')) : 'desktop';
+    const backdropId = String(field('backdropId', '') || '').slice(0, 40);
+    const templateId = String(field('templateId', '') || '').slice(0, 80);
+    const sourceUrl = String(field('sourceUrl', '') || '').slice(0, 2048);
+
+    try {
+      const stored = await saveBufferArtifact({
+        storagePath: `clients/${clientId}/studio/video-${stamp}.${ext}`,
+        buffer,
+        contentType: rawType,
+        metadata: {
+          artifactType: 'studio_video',
+          clientId,
+          capturedAt,
+          viewportId,
+          backdropId,
+          templateId,
+          durationSeconds: String(durationSeconds),
+          sourceUrl,
+        },
+      });
+      const ref = {
+        type: 'studio_video',
+        variant: 'video',
+        label: String(field('label', '3D Mockup Video') || '3D Mockup Video').slice(0, 100),
+        viewportId,
+        backdropId,
+        templateId,
+        durationSeconds,
+        sourceUrl,
+        storageProvider: 'firebase-storage',
+        bucket: stored.bucket,
+        storagePath: stored.storagePath,
+        contentType: stored.contentType,
+        sizeBytes: stored.sizeBytes,
+        capturedAt,
+        downloadUrl: stored.downloadUrl,
+      };
+      await appendCaptureRef(clientId, ref);
+      return json({ ok: true, capture: ref });
+    } catch (err) {
+      return json({ error: `Video upload failed: ${err.message}` }, 500);
+    }
+  }
+
   // action === 'capture'
-  const url = String(body?.url || '').trim();
+  const url = String(field('url', '') || '').trim();
   if (!/^https?:\/\/\S+$/i.test(url)) return json({ error: 'A valid http(s) URL is required.' }, 400);
-  const viewportId = STUDIO_VIEWPORTS[body?.viewportId] ? body.viewportId : 'desktop';
+  const viewportId = STUDIO_VIEWPORTS[field('viewportId')] ? String(field('viewportId')) : 'desktop';
   const preset = STUDIO_VIEWPORTS[viewportId];
-  const scale = Math.min(3, Math.max(1, Number(body?.scale) || 2));
-  const fullPage = Boolean(body?.fullPage);
+  const scale = Math.min(3, Math.max(1, Number(field('scale')) || 2));
+  const fullPage = Boolean(field('fullPage'));
 
   const variant = {
     id: `studio-${viewportId}${fullPage ? '-full' : ''}`,
@@ -188,7 +266,15 @@ export async function GET(request) {
     }
     try {
       const [buffer] = await fb.adminStorage.bucket().file(storagePath).download();
-      const contentType = storagePath.endsWith('.png') ? 'image/png' : 'image/jpeg';
+      const contentType = storagePath.endsWith('.png')
+        ? 'image/png'
+        : storagePath.endsWith('.webm')
+          ? 'video/webm'
+          : storagePath.endsWith('.mp4')
+            ? 'video/mp4'
+            : storagePath.endsWith('.ogv')
+              ? 'video/ogg'
+              : 'image/jpeg';
       return new NextResponse(buffer, {
         status: 200,
         headers: { 'content-type': contentType, 'cache-control': 'private, max-age=300' },

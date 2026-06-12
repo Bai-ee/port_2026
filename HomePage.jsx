@@ -182,10 +182,11 @@ const HomePage = () => {
     const canvasWrapper = canvasWrapperRef.current;
     const nav          = document.querySelector('#founders-top-strip');
     const panelHeadline = document.querySelector('#panel-hero-headline');
+    const urlInputRow   = document.querySelector('#hero-url-input-row');
     const panelCta      = document.querySelector('#panel-hero-cta');
     const panelGrid     = document.querySelector('#stacked-grid-row');
     gsap.set([gradient, headline, canvasWrapper, nav].filter(Boolean), { autoAlpha: 0 });
-    gsap.set([panelHeadline, panelCta, panelGrid].filter(Boolean), { autoAlpha: 0 });
+    gsap.set([panelHeadline, urlInputRow, panelCta, panelGrid].filter(Boolean), { autoAlpha: 0 });
 
     const tl = gsap.timeline({ delay: 0.2 });
     tl.fromTo(
@@ -197,7 +198,8 @@ const HomePage = () => {
       .to(nav,           { autoAlpha: 1, duration: 1.2, ease: 'power2.out' }, '<0.2')
       .to(headline,      { autoAlpha: 1, duration: 1.05, ease: 'power2.out' }, '0.32')
       .to(panelHeadline, { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '0.58')
-      .to(panelCta,      { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '<0.15')
+      // URL input row + Meet CTA fade in together
+      .to([urlInputRow, panelCta].filter(Boolean), { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '<0.15')
       .to(panelGrid,     { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '<0.15');
 
     // Replays the hero's entrance when the user returns to the top after scrolling
@@ -307,7 +309,7 @@ const HomePage = () => {
     <>
     <HomepageAnalytics />
     {/* Header outside overflow-clip container so backdrop-filter composites against the viewport correctly */}
-    <Header logoRef={headerLogoRef} onOpenPage={setActivePageId} />
+    <Header logoRef={headerLogoRef} onOpenPage={setActivePageId} logoSrc="/img/circle_logo.png" />
     <div style={{ position: 'relative', width: '100vw', minHeight: '100dvh', background: 'transparent', overflowX: 'clip' }}>
       <style>{`
         @keyframes heroGradientDrift {
@@ -323,6 +325,7 @@ const HomePage = () => {
         #founders-top-strip,
         #hero-panel-top-left,
         #panel-hero-headline,
+        #hero-url-input-row,
         #panel-hero-cta {
           opacity: 0;
           visibility: hidden;
@@ -364,7 +367,7 @@ const HomePage = () => {
             margin: 0,
           }}
         >
-          Bryan Balli is a digital media developer and creative technologist based in Chicago. He builds client intelligence platforms, modular intake pipelines, and high-performance web experiences for founders, agencies, and growing teams — combining Next.js, Three.js, and GSAP to ship production-quality work. Agency background spans Publicis, Epsilon, Conversant, and Alliance Data. Clients include TikTok, HBO Max, and TST. Starting engagement scope: $3,500. Typical project timeline: 2–6 weeks.
+          Bryan Balli is an AI design engineer and creative technologist based in Chicago. He builds AI-assisted client intelligence platforms, modular intake pipelines, and high-performance web experiences for founders, agencies, and growing teams — combining Next.js, Three.js, and GSAP with the Claude API and OpenAI to ship production-quality work with intelligent automation built in. Agency background spans Publicis, Epsilon, Conversant, and Alliance Data. Clients include TikTok, HBO Max, and TST. Starting engagement scope: $3,500. Typical project timeline: 2–6 weeks.
         </h2>
       </section>
 

@@ -54,7 +54,9 @@ export default function DashboardRoute() {
           transition: 'opacity 0.35s ease',
           pointerEvents: showLoadingCard ? 'none' : 'auto',
         }}>
-          <DashboardPage />
+          {/* entranceReady: dashboard entrance timeline starts only after the
+              loading overlay's GSAP fade has fully completed */}
+          <DashboardPage entranceReady={!showLoadingCard} />
         </div>
       ) : null}
 

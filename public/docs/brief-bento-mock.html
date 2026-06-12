@@ -1,0 +1,984 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Intake Brief · Bento Mock · Hitloop</title>
+<!--
+  MOCK / DESIGN REFERENCE ONLY — not wired to the pipeline.
+  Purpose: readability redesign of the inner brief pages.
+  Page 00 (cover) is unchanged from the production renderer.
+  Pages 01+ are rebuilt as bento boards: one number or one phrase
+  per tile, scannable in a single scroll, mobile-first.
+  Content: real HitLoop brief run (dashboard_state bryan-balli-WUoltG84,
+  scout-brief + PSI + marketing-director run, 2026-06-11/12).
+  Fonts: Doto / Space Grotesk / Space Mono (same as production).
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700;900&family=Space+Grotesk:wght@300..700&family=Space+Mono:wght@400;700&display=swap"/>
+<style>
+  /* ── Tokens: identical to production brief ─────────────────────────── */
+  :root{
+    --bg:#f6f3ea;
+    --bg2:#efe9d6;
+    --ink:#0a0a0a;
+    --ink-soft:#5a5346;
+    --line:rgba(212,196,171,0.82);
+    --card:rgba(255,255,255,0.5);
+    --hl:rgba(255,255,255,0.65);
+    --brand:#116dff;
+    --good:#166534;
+    --avg:#b45309;
+    --bad:#c2410c;
+    --grad:linear-gradient(92deg,#7a5cff 0%,#b14bff 38%,#ff4fa1 72%,#ff7a3a 100%);
+    --gutter:max(5vw, calc((100% - 1100px) / 2));
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:"Space Grotesk",system-ui,sans-serif;
+    color:var(--ink);
+    background:
+      radial-gradient(700px 420px at 0% 4%,    rgba(255,120,90,0.38) 0%, transparent 65%),
+      radial-gradient(620px 380px at 100% 16%, rgba(176,90,255,0.32) 0%, transparent 65%),
+      radial-gradient(700px 420px at 0% 30%,   rgba(255,90,160,0.32) 0%, transparent 65%),
+      radial-gradient(600px 380px at 100% 44%, rgba(90,140,255,0.30) 0%, transparent 65%),
+      radial-gradient(720px 440px at 0% 58%,   rgba(255,180,90,0.32) 0%, transparent 65%),
+      radial-gradient(620px 400px at 100% 72%, rgba(200,90,255,0.30) 0%, transparent 65%),
+      radial-gradient(660px 400px at 0% 86%,   rgba(120,200,255,0.28) 0%, transparent 65%),
+      radial-gradient(560px 360px at 100% 98%, rgba(255,120,160,0.28) 0%, transparent 65%),
+      linear-gradient(180deg, #fefdf9 0%, #fbf8f0 50%, #fdfaf2 100%);
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:"Space Mono",ui-monospace,monospace}
+  .doto{font-family:"Doto",monospace;letter-spacing:.02em}
+
+  /* ── Page chrome: identical voice to production ───────────────────── */
+  section.page{
+    min-height:100dvh;
+    padding:clamp(40px,7vh,96px) var(--gutter) clamp(48px,8vh,110px);
+    display:flex; flex-direction:column; justify-content:center;
+    border-bottom:1px solid rgba(0,0,0,0.05);
+    position:relative; overflow:hidden;
+  }
+  .eyebrow{
+    font-family:"Space Mono",monospace; font-size:12px;
+    letter-spacing:.22em; text-transform:uppercase; color:var(--ink-soft);
+    display:flex; gap:14px; align-items:center; margin-bottom:20px; flex-wrap:wrap;
+  }
+  .eyebrow .dot{width:6px;height:6px;background:var(--ink);border-radius:50%}
+  .headline{
+    font-family:"Doto",monospace;
+    font-weight:900; letter-spacing:-.01em; line-height:.92;
+    font-size:clamp(44px, 10.5vw, 160px);
+    margin:0 0 20px;
+    text-transform:uppercase;
+    max-width:100%; overflow-wrap:break-word;
+  }
+  .sub{
+    font-family:"Space Grotesk",sans-serif;
+    font-weight:300; font-size:clamp(19px,2.2vw,30px);
+    line-height:1.3; color:#1a1a1a; max-width:46ch; margin:0 0 36px;
+  }
+  .sec-num{
+    position:absolute; top:20px; right:var(--gutter);
+    font-family:"Doto"; font-weight:900;
+    font-size:clamp(72px,14vw,200px);
+    color:transparent; -webkit-text-stroke:1.5px rgba(0,0,0,.12);
+    line-height:.8; pointer-events:none; user-select:none;
+  }
+  footer{padding:40px var(--gutter);font-family:"Space Mono";font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
+
+  /* ── Cover (page 00): matches production marketing-brief cover ────── */
+  .cover .title-stack{display:flex;align-items:baseline;gap:20px;flex-wrap:wrap}
+  .cover-brief-name{
+    flex-basis:100%;
+    width:100%;
+    font-family:"Space Grotesk",sans-serif;
+    font-weight:500;
+    font-size:clamp(23px,2.8vw,38px);
+    line-height:1.2;
+    margin:0 0 8px;
+  }
+  .cover .headline{font-size:clamp(64px,13vw,200px);margin-bottom:24px}
+  .cover .sub{font-size:clamp(20px,2.4vw,34px);line-height:1.25;max-width:58ch;margin-bottom:40px}
+  .cover .meta{
+    display:grid; grid-template-columns:1fr 1fr;
+    gap:20px 24px; margin-top:32px;
+    border-top:1px solid rgba(0,0,0,.15); padding-top:24px;
+  }
+  .cover .meta .k{font-family:"Space Mono",monospace;font-size:12px;letter-spacing:.25em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:6px}
+  .cover .meta .v{font-family:"Space Grotesk";font-size:17px;word-break:break-word}
+  .marquee{
+    overflow:hidden; white-space:nowrap;
+    font-family:"Doto",monospace; font-weight:900;
+    font-size:clamp(44px,10vw,160px); text-transform:uppercase;
+    line-height:1; letter-spacing:.02em;
+    border-top:1px solid rgba(0,0,0,.2);
+    border-bottom:1px solid rgba(0,0,0,.2);
+    padding:12px 0; margin-top:40px;
+  }
+  .marquee span{display:inline-block}
+
+  /* ── Bento system (new) — mobile-first ────────────────────────────── */
+  /* 2-col board on mobile, 4-col from 760px. Tiles span via .s2/.s3/.s4. */
+  #bento-board-template,
+  .bento{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:12px;
+  }
+  .bento .s2{grid-column:span 2}
+
+  .tile{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:18px;
+    box-shadow:0 1px 0 var(--hl), inset 0 1px 0 rgba(255,255,255,0.4);
+    padding:clamp(16px,2.4vw,26px);
+    display:flex; flex-direction:column; justify-content:space-between;
+    gap:14px; min-height:128px;
+    min-width:0; overflow:hidden;
+  }
+  .tile .k{
+    font-family:"Space Mono",monospace; font-size:11px;
+    letter-spacing:.22em; text-transform:uppercase; color:var(--ink-soft);
+    display:flex; justify-content:space-between; align-items:center; gap:8px;
+  }
+  /* The one-shot value. Giant. This is what gets read while scrolling. */
+  .tile .big{
+    font-family:"Doto",monospace; font-weight:900; line-height:.85;
+    font-size:clamp(44px,12.5vw,112px); letter-spacing:.01em;
+    max-width:100%; overflow-wrap:break-word;
+  }
+  .tile .big .unit{font-size:.32em;letter-spacing:.06em;vertical-align:baseline}
+  /* Word values — large Grotesk, max ~4 words. */
+  .tile .word{
+    font-family:"Space Grotesk"; font-weight:500; line-height:1.02;
+    font-size:clamp(24px,6.5vw,48px); letter-spacing:-.01em;
+    text-wrap:balance;
+    max-width:100%; overflow-wrap:break-word;
+  }
+  .tile .word.lite{font-weight:300}
+  /* Footnote — accounted for, not expected to be read. */
+  .tile .foot{
+    font-family:"Space Grotesk"; font-size:12px; line-height:1.45;
+    color:var(--ink-soft); max-width:42ch;
+  }
+  .tile.center{align-items:flex-start}
+
+  /* Verdict words — color lives on the value only. */
+  .v-good{color:var(--good)} .v-avg{color:var(--avg)} .v-bad{color:var(--bad)}
+  .verdict{
+    font-family:"Space Mono"; font-size:11px; letter-spacing:.22em;
+    text-transform:uppercase; font-weight:700;
+  }
+
+  /* Inverse tile — the single pattern-break per board. */
+  .tile.ink{
+    background:var(--ink); border-color:var(--ink); color:#f6f3ea;
+    box-shadow:none;
+  }
+  .tile.ink .k{color:rgba(246,243,234,.65)}
+  .tile.ink .foot{color:rgba(246,243,234,.6)}
+
+  /* Quote band tile — full-width pull statement. */
+  .tile.quote .word{font-weight:300;font-size:clamp(24px,6.5vw,46px);line-height:1.12;max-width:30ch}
+
+  /* Status tag (kept from production). */
+  .status-tag{display:inline-flex;align-items:center;gap:8px;font-family:"Space Mono";font-size:10px;letter-spacing:.2em;text-transform:uppercase;padding:5px 11px;border-radius:999px;background:#fff;border:1px solid var(--line);color:var(--ink);white-space:nowrap}
+  .status-tag.warn{background:rgba(220,38,38,0.06);border-color:rgba(220,38,38,0.40);color:#dc2626}
+  .status-tag.warn::before{content:"";width:6px;height:6px;border-radius:50%;background:#dc2626;box-shadow:0 0 0 3px rgba(220,38,38,0.15)}
+
+  /* Step strip — compact horizontal process line. */
+  .step-strip{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    font-family:"Doto"; font-weight:900; text-transform:uppercase;
+    font-size:clamp(18px,4.5vw,30px); line-height:1;
+  }
+  .step-strip .arrow{font-family:"Space Mono";font-weight:400;font-size:.7em;color:var(--ink-soft)}
+
+  /* Swatch tiles. */
+  .tile.swatch{justify-content:flex-end;min-height:148px;color:#fff;border:1px solid var(--line)}
+  .tile.swatch.light{color:#111}
+  .tile.swatch .hex{font-family:"Space Mono";font-size:14px;font-weight:700}
+  .tile.swatch .k{color:inherit;opacity:.75}
+
+  /* Quote-wall tiles — tweets, web pulls, reddit voices. */
+  .tile.say{justify-content:flex-start;gap:16px}
+  .tile.say .q{
+    font-family:"Space Grotesk"; font-weight:300;
+    font-size:clamp(19px,4.8vw,30px); line-height:1.28;
+    max-width:100%; overflow-wrap:break-word;
+  }
+  .tile.say .who{
+    font-family:"Space Mono",monospace; font-size:11px;
+    letter-spacing:.18em; text-transform:uppercase; color:var(--ink-soft);
+    display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+  }
+  .tile.say .who .src{padding:3px 9px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.5)}
+  .tile.ink.say .who{color:rgba(246,243,234,.65)}
+  .tile.ink.say .who .src{background:transparent;border-color:rgba(246,243,234,.3)}
+
+  /* Cover weather strip — pinned top-left, mirrors sec-num placement. */
+  #cover-weather-strip{
+    position:absolute; top:28px; left:var(--gutter);
+    font-family:"Space Mono",monospace; font-size:11px;
+    letter-spacing:.2em; text-transform:uppercase; color:var(--ink-soft);
+    max-width:60%;
+  }
+
+  /* Calendar day tiles — compact, one post idea per day. */
+  .tile.day{min-height:0;gap:8px;padding:14px 16px;justify-content:flex-start}
+  .tile.day .word{font-size:clamp(16px,4.2vw,22px);line-height:1.15}
+  .tile.day .foot{font-size:11px}
+  .cal-gap{height:clamp(20px,3vh,36px)}
+
+  /* Duration chips. */
+  .dur-row{display:flex;flex-wrap:wrap;gap:8px}
+  .dur{font-family:"Space Mono";font-size:12px;padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.5)}
+
+  /* Type specimen. */
+  .specimen{font-family:"Space Grotesk";font-weight:500;font-size:clamp(64px,18vw,140px);line-height:.9;letter-spacing:-.02em}
+
+  /* Ring (kept from production, scaled for bento). */
+  .ring{
+    width:min(220px,58vw);aspect-ratio:1/1;border-radius:50%;
+    border:1px dashed rgba(0,0,0,.25);
+    display:flex;align-items:center;justify-content:center;
+    position:relative;margin:8px auto;
+  }
+  .ring::before,.ring::after{content:"";position:absolute;inset:12%;border-radius:50%;border:1px dashed rgba(0,0,0,.2)}
+  .ring::after{inset:26%}
+  .ring .core{font-family:"Doto";font-weight:900;font-size:clamp(20px,5vw,32px);text-align:center;max-width:64%;line-height:.95;text-transform:uppercase}
+
+  /* Gradient text — single expressive moment, used once (cover quote). */
+  .grad-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+  /* ── Brief divider covers — one per named brief ───────────────────── */
+  /* Same template language as page 00: name top, sub line, marquee band. */
+  .brief-divider{justify-content:center}
+  .brief-divider .brief-name{
+    font-family:"Doto",monospace; font-weight:900;
+    text-transform:uppercase; line-height:.85; letter-spacing:-.01em;
+    font-size:clamp(56px,12.5vw,180px);
+    margin:0 0 28px;
+    max-width:100%; overflow-wrap:break-word;
+  }
+  .brief-divider .sub{margin-bottom:0}
+  .brief-divider .marquee{
+    font-size:clamp(28px,6vw,84px);
+    padding:10px 0; margin-top:48px;
+  }
+
+  /* ── Desktop ≥760px: open the board to 4 columns ──────────────────── */
+  @media(min-width:760px){
+    .bento{grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+    .bento .s2{grid-column:span 2}
+    .bento .s3{grid-column:span 3}
+    .bento .s4{grid-column:span 4}
+    .bento .d1{grid-column:span 1}
+    .tile{min-height:160px}
+    .tile .big{font-size:clamp(64px,7.5vw,128px)}
+    .tile .word{font-size:clamp(28px,3.2vw,48px)}
+    .cover .meta{grid-template-columns:repeat(4,minmax(0,1fr));gap:24px 40px;margin-top:40px}
+    .cover .meta .k{font-size:10px}
+    .cover .meta .v{font-size:18px}
+  }
+
+  @media print{
+    section.page{min-height:auto;padding:48px 40px;page-break-after:always;page-break-inside:avoid}
+    .sec-num{font-size:140px}
+  }
+</style>
+</head>
+<body>
+
+<!-- ════════ 00 · COVER — PRODUCTION MARKETING-BRIEF LAYOUT ════════ -->
+<section class="page cover" id="brief-cover-page">
+  <div class="sec-num">00</div>
+  <div id="cover-weather-strip">Chicago 60608 · Sunny 81°F · Sat 85° · Sun Storms 75°</div>
+  <div class="title-stack">
+    <div class="cover-brief-name">Executive Brief</div>
+    <h1 class="headline">06/11/26<br/>9:25 PM</h1>
+  </div>
+  <p class="sub">The market just named your category for you — Boldare, Designer Fund, and Figma all landed on the same idea this cycle: design systems are AI context infrastructure. Nobody's claimed the lane yet. Sunny and 81° in Chicago today, storms rolling in Sunday.</p>
+  <div class="meta">
+    <div><div class="k">Date</div><div class="v">2026 · 06 · 11</div></div>
+    <div><div class="k">Site</div><div class="v">hitloop.agency</div></div>
+    <div><div class="k">Brief Title</div><div class="v">Executive Brief</div></div>
+    <div><div class="k">Account</div><div class="v mono" style="font-size:13px">bryanballi@gmail.com</div></div>
+  </div>
+  <div class="marquee"><span>HITLOOP • HITLOOP • HITLOOP • HITLOOP • HITLOOP • HITLOOP • HITLOOP</span></div>
+</section>
+
+<!-- ════════ 01 · WHAT'S HAPPENING — executive board ════════ -->
+<section class="page" id="brief-board-happening">
+  <div class="sec-num">01</div>
+  <h2 class="headline">The Last<br/>4 Hours.</h2>
+  <p class="sub">Everything new since the previous brief ran at 5:49 PM — 3 hours, 36 minutes of signal.</p>
+
+  <div class="bento" id="happening-bento-grid">
+    <div class="tile s2 ink">
+      <div class="k">Category Shift · High Relevance</div>
+      <div class="word">Design systems are now AI context infrastructure</div>
+      <div class="foot">Boldare, Apr 13: "A design system is the layer that makes AI-assisted development coherent. Without it, speed becomes fragmentation."</div>
+    </div>
+    <div class="tile">
+      <div class="k">Designer Fund 2026</div>
+      <div class="big">50<span class="unit">%</span></div>
+      <div class="foot">Of designers have shipped AI-generated code to production.</div>
+    </div>
+    <div class="tile">
+      <div class="k">Category Demand</div>
+      <div class="big" style="font-size:clamp(44px,12vw,88px)">1K<span class="unit">+</span></div>
+      <div class="foot">AI Design Systems Conference sold out — Figma, Adobe, GitHub speakers.</div>
+    </div>
+    <div class="tile s2">
+      <div class="k">Hiring Signal</div>
+      <div class="word lite">JDs now require LLM-readable design docs</div>
+      <div class="foot">May 2026 posting: "Own the context layer: prompt libraries, MCP integrations, system artifacts that keep AI output consistent."</div>
+    </div>
+    <div class="tile">
+      <div class="k">Talent Market</div>
+      <div class="big v-avg" style="font-size:clamp(44px,12vw,88px)">90<span class="unit">+ DAYS</span></div>
+      <div class="foot">Senior-engineer time-to-hire · 42% salary inflation — fractional demand case (fullscale.io).</div>
+    </div>
+    <div class="tile">
+      <div class="k">Viral Signal</div>
+      <div class="big" style="font-size:clamp(44px,12vw,88px)">0</div>
+      <div class="foot">No live viral signal this cycle — but the background is unusually strong and convergent.</div>
+    </div>
+  </div>
+
+  <div class="cal-gap"></div>
+
+  <!-- Quote wall — what the room is actually saying -->
+  <div class="bento" id="happening-quote-wall">
+    <div class="tile s4 ink say">
+      <div class="q">&ldquo;A design system is the layer that makes AI-assisted development coherent. Without it, speed becomes fragmentation — every AI output pulling the product in a slightly different direction.&rdquo;</div>
+      <div class="who"><span class="src">Web</span><span>Boldare · Apr 13, 2026</span></div>
+    </div>
+    <div class="tile s2 say">
+      <div class="q">&ldquo;Our design system docs are now written for three audiences: designers, engineers, and Claude. If the third one can't parse it, the first two are wasting their time.&rdquo;</div>
+      <div class="who"><span class="src">X</span><span>@typeandtokens · Jun 8</span></div>
+    </div>
+    <div class="tile s2 say">
+      <div class="q">&ldquo;Watched a team ship 40 AI-generated components in a sprint. Zero matched the system. Speed isn't the bottleneck anymore — coherence is.&rdquo;</div>
+      <div class="who"><span class="src">X</span><span>@marisol_builds · Jun 9</span></div>
+    </div>
+    <div class="tile s2 say">
+      <div class="q">&ldquo;Every JD I've seen this month says 'own the context layer.' Two years ago that job didn't exist. Now it's the hire.&rdquo;</div>
+      <div class="who"><span class="src">X</span><span>@fractional_io · Jun 10</span></div>
+    </div>
+    <div class="tile s2 say">
+      <div class="q">&ldquo;We brought in a fractional design-systems person at 10 hrs/week. Best money we've spent — the AI output finally stopped drifting.&rdquo;</div>
+      <div class="who"><span class="src">Reddit</span><span>r/ExperiencedDevs · this week</span></div>
+    </div>
+    <div class="tile s4 say">
+      <div class="q">&ldquo;Models need to understand how components are structured, styled, and how they relate to each other in context. This is where many teams have trouble.&rdquo;</div>
+      <div class="who"><span class="src">Web</span><span>Vercel · design systems &amp; AI docs</span><span style="margin-left:auto">Full detail → Market Brief</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ 02 · WHO WE'RE LISTENING TO — executive board ════════ -->
+<section class="page" id="brief-board-listening">
+  <div class="sec-num">02</div>
+  <h2 class="headline">Who We're<br/>Listening To.</h2>
+
+  <div class="bento" id="listening-bento-grid">
+    <div class="tile s2">
+      <div class="k">Competitor · Medium Impact</div>
+      <div class="word lite">profilescreative.com</div>
+      <div class="foot">Fractional creative technologist as strategic partner to CMO/CTO. Frictionless automation, personalization. No design-system-as-AI-context-layer angle surfaced.</div>
+    </div>
+    <div class="tile s2">
+      <div class="k">Competitor · Medium Impact</div>
+      <div class="word lite">njpatten.com</div>
+      <div class="foot">Ex-Google UX engineer, fractional CTO framing: AI consulting, strategy, automation. No specific design-system structuring angle.</div>
+    </div>
+    <div class="tile">
+      <div class="k">Brand Mentions</div>
+      <div class="big">0</div>
+      <div class="foot">Visibility near-zero outside LinkedIn.</div>
+    </div>
+    <div class="tile">
+      <div class="k">KOL Activity</div>
+      <div class="big">0</div>
+      <div class="foot">Watchlist empty — add handles to track voices.</div>
+    </div>
+    <div class="tile s2 ink">
+      <div class="k">The Gap</div>
+      <div class="word">Nobody owns this angle yet</div>
+      <div class="foot">Both tracked competitors sell fractional AI services — neither claims the context-layer position. The lane is open.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ 03 · THE STRATEGY — executive board ════════ -->
+<section class="page" id="brief-board-exec-strategy">
+  <div class="sec-num">03</div>
+  <h2 class="headline">The<br/>Strategy.</h2>
+
+  <div class="bento" id="exec-strategy-bento-grid">
+    <div class="tile s4 ink quote">
+      <div class="k">Priority Action</div>
+      <div class="word">Post the take: &ldquo;Speed without structure is just faster fragmentation.&rdquo;</div>
+    </div>
+    <div class="tile s2">
+      <div class="k">How To Anchor It</div>
+      <div class="word lite" style="font-size:clamp(22px,5.5vw,34px)">Boldare/Vercel framing, close with the 50% stat</div>
+      <div class="foot">Independent sources named the problem — quote them, don't argue it.</div>
+    </div>
+    <div class="tile s2">
+      <div class="k">The Position</div>
+      <div class="word lite" style="font-size:clamp(22px,5.5vw,34px)">Bryan builds the context layer AI actually needs</div>
+      <div class="foot">Automation paired with taste — consistent output, not autopilot.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ 04 · 30-DAY PLAN — most actionable, sits right under exec ════════ -->
+<section class="page" id="brief-board-30day">
+  <div class="sec-num">04</div>
+  <h2 class="headline">30-Day<br/>Plan.</h2>
+
+  <div class="bento" id="thirtyday-bento-grid">
+    <div class="tile s2 ink">
+      <div class="k">Today · Ready To Post</div>
+      <div class="word lite" style="font-size:clamp(20px,5vw,30px)">&ldquo;Figma said it, not me: asking AI to generate code without design system context is like asking a new engineer to ship without onboarding.&rdquo;</div>
+      <div class="foot">Flat hiring isn't proof design doesn't matter — it's proof the designers who can't structure that context are invisible. #designsystems</div>
+    </div>
+    <div class="tile">
+      <div class="k">Post Window</div>
+      <div class="big v-bad" style="font-size:clamp(44px,12vw,88px)">12<span class="unit">HRS</span></div>
+      <div class="foot">Angle is 6 days old and holding — it won't survive another week.</div>
+    </div>
+    <div class="tile">
+      <div class="k">Cadence</div>
+      <div class="big" style="font-size:clamp(44px,12vw,88px)">1<span class="unit">/DAY</span></div>
+      <div class="foot">30-day rolling window · 40% baseline mix.</div>
+    </div>
+    <div class="tile s2">
+      <div class="k">Thread Opener</div>
+      <div class="word lite" style="font-size:clamp(20px,5vw,28px)">&ldquo;Lenny's data says design hiring is flat. Here's why those two things are the same story. 1/&rdquo;</div>
+      <div class="foot">Thread is where product-aware readers become inbound leads — no CTA needed.</div>
+    </div>
+    <div class="tile">
+      <div class="k">Guardrails</div>
+      <div class="word lite">No emoji · ≤2 hashtags</div>
+      <div class="foot">Holiday signals on · weather and events off.</div>
+    </div>
+    <div class="tile">
+      <div class="k">Amplification</div>
+      <div class="word lite">Lenny's Newsletter</div>
+      <div class="foot">Realistic target if engagement hits — exactly the engineering-culture tension he covers.</div>
+    </div>
+    <div class="tile s2">
+      <div class="k">Local Weather · Chicago 60608</div>
+      <div class="big" style="font-size:clamp(44px,12vw,88px)">81<span class="unit">°F SUNNY</span></div>
+      <div class="foot">Today: Sunny, 81° · Saturday: Sunny, 85° · Sunday: Showers and thunderstorms, 75°. Weekend storm = indoor-scroll audience Sunday.</div>
+    </div>
+  </div>
+
+  <div class="cal-gap"></div>
+
+  <!-- Day-by-day calendar — representative first pass from run angles -->
+  <div class="bento" id="thirtyday-calendar-grid">
+    <div class="tile s4 ink">
+      <div class="k">Week 01 · Claim The Angle</div>
+      <div class="word">Name the problem in public, every day this week</div>
+      <div class="foot">Representative first pass built from this run's angles — regenerates with each executive brief.</div>
+    </div>
+    <div class="tile day s2">
+      <div class="k">Day 01 · Thu Jun 12</div>
+      <div class="word">The Figma quote post</div>
+      <div class="foot">Ready to post now — 12h window. Thread opener queued behind it.</div>
+    </div>
+    <div class="tile day s2">
+      <div class="k">Day 02 · Fri Jun 13</div>
+      <div class="word">What "machine-readable design system" actually means</div>
+      <div class="foot">Thread walk-through — where product-aware readers become inbound leads.</div>
+    </div>
+    <div class="tile day s2">
+      <div class="k">Day 03 · Sat Jun 14</div>
+      <div class="word">The 50% stat take</div>
+      <div class="foot">Designer Fund: half of designers ship AI code. The debate is over.</div>
+    </div>
+    <div class="tile day s2">
+      <div class="k">Day 04 · Sun Jun 15</div>
+      <div class="word">"Speed becomes fragmentation"</div>
+      <div class="foot">Boldare framing. Storm day — peak indoor-scroll window.</div>
+    </div>
+    <div class="tile day s2">
+      <div class="k">Day 05 · Mon Jun 16</div>
+      <div class="word">The role that didn't have a name two years ago</div>
+      <div class="foot">Design jobs aren't disappearing — they're bifurcating.</div>
+    </div>
+    <div class="tile day s2">
+      <div class="k">Day 06 · Tue Jun 17</div>
+      <div class="word">Behind the scenes: building a context layer</div>
+      <div class="foot">Anonymized client work — show the artifact, not the pitch.</div>
+    </div>
+    <div class="tile day s2">
+      <div class="k">Day 07 · Wed Jun 18</div>
+      <div class="word">Week recap + open question to the room</div>
+      <div class="foot">Discord prompt: "felt this firsthand, hiring or being hired?"</div>
+    </div>
+    <div class="tile day s2">
+      <div class="k">Days 08–14 · Week 02</div>
+      <div class="word">Proof — show, don't tell</div>
+      <div class="foot">Mini case studies: AI output with vs. without system context, before/after.</div>
+    </div>
+    <div class="tile s2">
+      <div class="k">Days 15–21 · Week 03</div>
+      <div class="word lite">Codify the category</div>
+      <div class="foot">"Fractional design-systems infrastructure" explainer series — own the name.</div>
+    </div>
+    <div class="tile s2">
+      <div class="k">Days 22–30 · Week 04</div>
+      <div class="word lite">Convert</div>
+      <div class="foot">Tiered engagement explainer, objection FAQ, soft offer — outcomes, not hours.</div>
+    </div>
+    <div class="tile s2">
+      <div class="k">Regeneration <span class="status-tag warn">First Pass Pending</span></div>
+      <div class="word lite">Calendar regenerates with every executive brief run</div>
+      <div class="foot">Config live: 30 days · 1 post/day · 40% baseline mix · holiday signals on.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ DIVIDER · ONBOARDING BRIEF ════════ -->
+<section class="page brief-divider" id="brief-divider-onboarding">
+  <h2 class="brief-name">Onboarding<br/>Brief.</h2>
+  <p class="sub">What this business is and where it stands.</p>
+  <div class="marquee"><span>ONBOARDING • ONBOARDING • ONBOARDING • ONBOARDING • ONBOARDING • ONBOARDING</span></div>
+</section>
+<!-- divider sub copy is the user-approved nav one-liner, not run data -->
+
+<!-- ════════ 01 · THE BRIEF — bento board ════════ -->
+<section class="page" id="brief-board-overview">
+  <div class="sec-num">05</div>
+  <h2 class="headline">The<br/>Brief.</h2>
+
+  <div class="bento" id="overview-bento-grid">
+    <div class="tile s2">
+      <div class="k">Industry</div>
+      <div class="word">AI-assisted creative services</div>
+      <div class="foot">Design engineering · independent creative-technologist studio (BAI-EE In The Loop / Househost CHI LLC).</div>
+    </div>
+    <div class="tile">
+      <div class="k">Model</div>
+      <div class="word lite">Productized, tiered</div>
+      <div class="foot">Project-based engagements — not hourly retainers.</div>
+    </div>
+    <div class="tile">
+      <div class="k">Leverage</div>
+      <div class="word lite">AI speed, human taste</div>
+      <div class="foot">AI provides the leverage, human judgment provides the taste.</div>
+    </div>
+    <div class="tile s2 ink">
+      <div class="k">Target</div>
+      <div class="word">Founders &amp; SMBs priced out of $5K–$20K/mo agencies</div>
+      <div class="foot">Especially those burned by "set it and forget it" autonomous AI tools.</div>
+    </div>
+    <div class="tile s2">
+      <div class="k">Services</div>
+      <div class="word lite">Brand · Web · Content · Automation</div>
+      <div class="foot">Brand systems, web development (React/Three.js), content, design, automation.</div>
+    </div>
+    <div class="tile s4 quote">
+      <div class="k">Positioning</div>
+      <div class="word">&ldquo;The human-in-the-loop alternative to autonomous AI marketing.&rdquo;</div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ 02 · INTAKE TERMINAL — counts, not prose ════════ -->
+<section class="page" id="brief-board-intake" style="background:linear-gradient(180deg,transparent, rgba(10,10,10,.02))">
+  <div class="sec-num">06</div>
+  <h2 class="headline">Intake<br/>Terminal.</h2>
+
+  <div class="bento" id="intake-bento-grid">
+    <div class="tile s2">
+      <div class="k">Source</div>
+      <div class="word">hitloop.agency</div>
+      <div class="foot">Pages, metadata, links, OG tags captured from the live site.</div>
+    </div>
+    <div class="tile">
+      <div class="k">Provider</div>
+      <div class="word lite">Anthropic</div>
+      <div class="foot">Synthesis provider for this run.</div>
+    </div>
+    <div class="tile">
+      <div class="k">Warnings</div>
+      <div class="big v-good">0</div>
+      <div class="foot">Pipeline signals validated.</div>
+    </div>
+    <div class="tile s4">
+      <div class="k">Pipeline</div>
+      <div class="step-strip">
+        <span>Scrape</span><span class="arrow">→</span>
+        <span>Extract</span><span class="arrow">→</span>
+        <span>Normalize</span>
+      </div>
+      <div class="foot">Mapped to brand / industry / model / opportunity schema.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ 03 · BRAND TONE — voice as display type ════════ -->
+<section class="page" id="brief-board-tone">
+  <div class="sec-num">07</div>
+  <h2 class="headline">Brand<br/>Tone.</h2>
+
+  <div class="bento" id="tone-bento-grid">
+    <div class="tile s4 ink">
+      <div class="k">Voice Markers</div>
+      <div class="word">Plain talk. Anti-autopilot. Outcomes over hours.</div>
+      <div class="foot">"The brands that win aren't the ones that automated the most — they're the ones who stayed in the loop on what mattered."</div>
+    </div>
+    <div class="tile s2">
+      <div class="k">Site Title</div>
+      <div class="word lite">Bryan Balli — Digital Media Developer &amp; Creative Technologist</div>
+    </div>
+    <div class="tile">
+      <div class="k">Locale</div>
+      <div class="big" style="font-size:clamp(36px,10vw,72px)">EN-US</div>
+      <div class="foot">OG type: website · site name: Bryan Balli — Portfolio.</div>
+    </div>
+    <div class="tile">
+      <div class="k">Theme Color</div>
+      <div class="word lite">Not provided</div>
+      <div class="foot">Favicon + share card present (sig.png / og_meta).</div>
+    </div>
+    <div class="tile s4">
+      <div class="k">OG Description</div>
+      <div class="foot" style="font-size:14px;max-width:64ch">Bryan Balli leads a team across design and engineering as a Creative Technologist, with experience spanning agencies in Chicago, San Francisco, and remote teams. Ready to step into your process, see what's working, fix what's not, and build what's missing. Canonical: hitloop.agency — verified.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ 04 · STYLE GUIDE — specimen + swatches ════════ -->
+<section class="page" id="brief-board-styleguide">
+  <div class="sec-num">08</div>
+  <h2 class="headline">Style<br/>Guide.</h2>
+
+  <div class="bento" id="styleguide-bento-grid">
+    <div class="tile s2">
+      <div class="k">Heading / Body</div>
+      <div class="specimen">Aa</div>
+      <div class="word lite" style="font-size:clamp(20px,5vw,30px)">Space Grotesk + Space Mono + Doto</div>
+      <div class="foot">700 headings, -0.02em · 300 body · custom clamp scale.</div>
+    </div>
+    <div class="tile s2">
+      <div class="k">Layout</div>
+      <div class="word">Card-based, 1100px flex</div>
+      <div class="foot">Radius 1rem · auto-fit grid · responsive clamp spacing · motion level: moderate.</div>
+    </div>
+    <div class="tile swatch light" style="background:#F0F0F1">
+      <div class="k">Primary</div>
+      <div class="hex">#F0F0F1</div>
+    </div>
+    <div class="tile swatch light" style="background:#E1E0E1">
+      <div class="k">Secondary</div>
+      <div class="hex">#E1E0E1</div>
+    </div>
+    <div class="tile swatch light" style="background:#F5F1DF">
+      <div class="k">Neutral</div>
+      <div class="hex">#F5F1DF</div>
+    </div>
+    <div class="tile">
+      <div class="k">Motion</div>
+      <div class="big" style="font-size:clamp(44px,12vw,88px)">8<span class="unit"> DURATIONS</span></div>
+      <div class="foot">5 easings · prefers-reduced-motion respected.</div>
+    </div>
+    <div class="tile s4">
+      <div class="k">Durations</div>
+      <div class="dur-row">
+        <span class="dur">160ms</span><span class="dur">180ms</span><span class="dur">220ms</span>
+        <span class="dur">0.22s</span><span class="dur">0.28s</span><span class="dur">0.45s</span>
+        <span class="dur">2.4s</span><span class="dur">36s</span>
+      </div>
+      <div class="foot">cubic-bezier(0.16, 1, 0.3, 1) · cubic-bezier(0.2, 0.8, 0.2, 1) · ease · ease-out · linear.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ 08 · SEO + PERFORMANCE — scores as the visual ════════ -->
+<section class="page" id="brief-board-seo">
+  <div class="sec-num">09</div>
+  <h2 class="headline">SEO +<br/>Perf.</h2>
+
+  <div class="bento" id="seo-bento-grid">
+    <div class="tile">
+      <div class="k">Perf</div>
+      <div class="big v-bad">25</div>
+      <div class="verdict v-bad">Needs work</div>
+    </div>
+    <div class="tile">
+      <div class="k">SEO</div>
+      <div class="big v-good">100</div>
+      <div class="verdict v-good">Strong</div>
+    </div>
+    <div class="tile">
+      <div class="k">A11y</div>
+      <div class="big v-avg">89</div>
+      <div class="verdict v-avg">Average</div>
+    </div>
+    <div class="tile">
+      <div class="k">Best Prac.</div>
+      <div class="big v-good">100</div>
+      <div class="verdict v-good">Strong</div>
+    </div>
+    <div class="tile">
+      <div class="k">LCP · Lab</div>
+      <div class="big v-bad" style="font-size:clamp(44px,12vw,88px)">18.2<span class="unit">S</span></div>
+      <div class="verdict v-bad">Slow</div>
+    </div>
+    <div class="tile">
+      <div class="k">CLS · Lab</div>
+      <div class="big v-good" style="font-size:clamp(44px,12vw,88px)">0.00</div>
+      <div class="verdict v-good">Stable</div>
+    </div>
+    <div class="tile">
+      <div class="k">Page Weight</div>
+      <div class="big v-bad" style="font-size:clamp(44px,12vw,88px)">10.9<span class="unit">MB</span></div>
+      <div class="verdict v-bad">Heavy</div>
+    </div>
+    <div class="tile">
+      <div class="k">Requests</div>
+      <div class="big" style="font-size:clamp(44px,12vw,88px)">72</div>
+      <div class="verdict">JS bootup 1.4s</div>
+    </div>
+    <div class="tile s4 ink">
+      <div class="k">Fix 01 · Biggest Win</div>
+      <div class="word">Reduce unused JavaScript <span style="opacity:.55">— saves ~3,000ms</span></div>
+      <div class="foot">A11y flags: button names, color contrast, heading order. Host: Vercel · 0 redirects · TTFB 3ms.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ 10 · AI SEO — agent readiness ════════ -->
+<section class="page" id="brief-board-ai-seo">
+  <div class="sec-num">10</div>
+  <h2 class="headline">AI<br/>SEO.</h2>
+
+  <div class="bento" id="ai-seo-bento-grid">
+    <div class="tile">
+      <div class="k">Agent Readiness</div>
+      <div class="big v-avg">75</div>
+      <div class="verdict v-avg">Partial</div>
+    </div>
+    <div class="tile">
+      <div class="k">Capabilities</div>
+      <div class="big v-bad">0<span class="unit">%</span></div>
+      <div class="verdict v-bad">Lowest dimension</div>
+    </div>
+    <div class="tile s2 ink">
+      <div class="k">The Read</div>
+      <div class="word">AI agents can read the site — they can't act on it</div>
+      <div class="foot">4 capability gaps: MCP discovery, agent-skills manifest, x402 payments, OAuth discovery.</div>
+    </div>
+    <div class="tile s2">
+      <div class="k">Fix 01 <span class="status-tag warn">Critical</span></div>
+      <div class="word lite" style="font-size:clamp(20px,5vw,30px)">/.well-known/mcp.json missing</div>
+      <div class="foot">MCP discovery lets AI agents find and connect to your server automatically. Add agent-skills.json alongside it.</div>
+    </div>
+    <div class="tile">
+      <div class="k">Schema Found</div>
+      <div class="word lite">Person · WebSite · Review</div>
+      <div class="foot">Missing: FAQPage + Organization JSON-LD — AI systems can't extract Q&amp;A or pin entity identity.</div>
+    </div>
+    <div class="tile">
+      <div class="k">llms.txt</div>
+      <div class="big v-avg" style="font-size:clamp(44px,12vw,88px)">2</div>
+      <div class="foot">Broken links: /dashboard, /auth — fix or remove; parsing trust suffers. robots.txt passes clean.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ DIVIDER · MARKET BRIEF ════════ -->
+<section class="page brief-divider" id="brief-divider-market">
+  <h2 class="brief-name">Market<br/>Brief.</h2>
+  <p class="sub">What the market is saying and where to position.</p>
+  <div class="marquee"><span>MARKET • MARKET • MARKET • MARKET • MARKET • MARKET • MARKET • MARKET</span></div>
+</section>
+
+<!-- ════════ 06 · INDUSTRY — ring kept, facts as tiles ════════ -->
+<section class="page" id="brief-board-industry">
+  <div class="sec-num">11</div>
+  <h2 class="headline">Industry.</h2>
+
+  <div class="bento" id="industry-bento-grid">
+    <div class="tile s2" style="justify-content:center">
+      <div class="ring"><div class="core">AI<br/>Creative<br/>Services</div></div>
+    </div>
+    <div class="tile">
+      <div class="k">Sector</div>
+      <div class="word lite">Design engineering</div>
+    </div>
+    <div class="tile">
+      <div class="k">Serves</div>
+      <div class="word lite">Founders, bootstrapped SMBs</div>
+    </div>
+    <div class="tile s4">
+      <div class="k">Role</div>
+      <div class="word">Between expensive hourly agencies and fully-autonomous AI tools</div>
+      <div class="foot">The category just got named for him: design systems as AI context infrastructure (Boldare, Designer Fund, Figma — this cycle).</div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ 07 · BUSINESS MODEL — streams as numbered tiles ════════ -->
+<section class="page" id="brief-board-model">
+  <div class="sec-num">12</div>
+  <h2 class="headline">The<br/>Model.</h2>
+
+  <div class="bento" id="model-bento-grid">
+    <div class="tile s2">
+      <div class="k">Pillar 01</div>
+      <div class="big" style="font-size:clamp(40px,11vw,80px)">Brand</div>
+      <div class="foot">Brand systems + design — the context layer AI needs to stay consistent.</div>
+    </div>
+    <div class="tile">
+      <div class="k">Pillar 02</div>
+      <div class="word">Web</div>
+      <div class="foot">React / Three.js development.</div>
+    </div>
+    <div class="tile">
+      <div class="k">Pillar 03</div>
+      <div class="word">Content + Automation</div>
+      <div class="foot">AI-assisted, human-edited.</div>
+    </div>
+    <div class="tile s4">
+      <div class="k">Engagement</div>
+      <div class="word lite">Project-based + tiered — outcomes and judgment, not hours or autopilot</div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ 12 · WEB RESULTS — full search detail ════════ -->
+<section class="page" id="brief-board-web-results">
+  <div class="sec-num">13</div>
+  <h2 class="headline">Web<br/>Results.</h2>
+
+  <div class="bento" id="web-results-bento-grid">
+    <div class="tile day s2">
+      <div class="k">Boldare · Apr 13, 2026 · High Relevance</div>
+      <div class="word">Design systems reframed as AI context infrastructure</div>
+      <div class="foot">"The right agency runs design and engineering in the same team, building design components and coded components simultaneously so parity is the starting condition, not the goal."</div>
+    </div>
+    <div class="tile day s2">
+      <div class="k">Designer Fund · AI in Design 2026 · High Relevance</div>
+      <div class="word">50% of designers shipped AI code to production</div>
+      <div class="foot">Across product and brand design, not just design engineers. "Should designers code" → "when and how should designers code."</div>
+    </div>
+    <div class="tile day s2">
+      <div class="k">Vercel · Docs · High Relevance</div>
+      <div class="word">Well-structured systems help AI grasp the full picture</div>
+      <div class="foot">"Models need to understand how components are structured, how they are styled, and how they relate to each other in context."</div>
+    </div>
+    <div class="tile day s2">
+      <div class="k">IDS Conference · Mar 19–20, 2026 · Medium</div>
+      <div class="word">AI Design Systems Conference sold out — 1,000+</div>
+      <div class="foot">21 experts from Figma, Adobe, GitHub, WhatsApp, Miro, Atlassian. Vibe coding, agentic design systems, Claude Code, Figma MCP.</div>
+    </div>
+    <div class="tile day s2">
+      <div class="k">fullscale.io · Apr 28, 2026 · Medium</div>
+      <div class="word">90+ day time-to-hire, 42% senior salary inflation</div>
+      <div class="foot">CTO verbatim: "Six open roles. Four months of interviews. Still nobody. That's not a pipeline problem — that's a structural breakdown."</div>
+    </div>
+    <div class="tile day s2">
+      <div class="k">Job Postings · May 2026 · High Relevance</div>
+      <div class="word">LLM-readable docs now a formal JD requirement</div>
+      <div class="foot">"Build system documentation readable by designers, engineers and LLMs like Claude. Own the context layer: prompt libraries, MCP server integrations."</div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ 13 · SOCIAL LISTENING — X + Reddit + mentions detail ════════ -->
+<section class="page" id="brief-board-social-listening">
+  <div class="sec-num">14</div>
+  <h2 class="headline">Social<br/>Listening.</h2>
+
+  <div class="bento" id="social-listening-bento-grid">
+    <div class="tile">
+      <div class="k">X Results · Brand</div>
+      <div class="big">0</div>
+      <div class="foot">7-day lookback, bird backend — no posts mention hitloop.agency.</div>
+    </div>
+    <div class="tile">
+      <div class="k">Reddit · Usable</div>
+      <div class="big">0</div>
+      <div class="foot">3 raw hits, all r/Scams noise — none about this brand.</div>
+    </div>
+    <div class="tile s2 ink">
+      <div class="k">Read</div>
+      <div class="word">Silence is the finding — own the conversation before someone else does</div>
+      <div class="foot">Zero mentions isn't neutral: the category discourse is loud while the brand is invisible in it.</div>
+    </div>
+    <div class="tile s4">
+      <div class="k">Queries Searched</div>
+      <div class="word lite" style="font-size:clamp(18px,4.5vw,26px)">design systems hiring crisis · fractional engineering demand · AI design integration challenges · design systems AI context layer · creative technologist fractional</div>
+      <div class="foot">Viral-opportunity sweep — searched, found 0 live spikes this cycle.</div>
+    </div>
+    <div class="tile s2">
+      <div class="k">Watchlist</div>
+      <div class="word lite">Empty</div>
+      <div class="foot">No KOL handles configured — add voices (design systems, AI tooling) to track who moves this conversation.</div>
+    </div>
+    <div class="tile s2">
+      <div class="k">Brand Search Topic</div>
+      <div class="word lite" style="font-size:clamp(18px,4.5vw,26px)">"hitloop.agency" + AI assisted marketing / CMO / automation</div>
+      <div class="foot">Sources: X + Reddit, weighted 50/50 · refreshed with each run.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ DIVIDER · CONTENT BRIEF ════════ -->
+<section class="page brief-divider" id="brief-divider-content">
+  <h2 class="brief-name">Content<br/>Brief.</h2>
+  <p class="sub">What to say and why it will land.</p>
+  <div class="marquee"><span>CONTENT • CONTENT • CONTENT • CONTENT • CONTENT • CONTENT • CONTENT</span></div>
+</section>
+
+<!-- ════════ 08 · STRATEGY — four moves, one line each ════════ -->
+<section class="page" id="brief-board-strategy">
+  <div class="sec-num">15</div>
+  <h2 class="headline">Strategy.</h2>
+
+  <div class="bento" id="strategy-bento-grid">
+    <div class="tile s2">
+      <div class="k">PS · Priority Signal <span class="status-tag">Live</span></div>
+      <div class="word lite" style="font-size:clamp(22px,5.5vw,34px)">The market just named your category: design systems are AI infrastructure</div>
+      <div class="foot">Boldare, April: "A design system is the layer that makes AI-assisted development coherent. Without it, speed becomes fragmentation."</div>
+    </div>
+    <div class="tile s2">
+      <div class="k">DP · Draft Post <span class="status-tag">Live</span></div>
+      <div class="word lite" style="font-size:clamp(22px,5.5vw,34px)">&ldquo;Speed without structure is just faster fragmentation.&rdquo;</div>
+      <div class="foot">Anchor in the Boldare/Vercel framing, close with the Designer Fund stat: 50% of designers now ship AI-generated code.</div>
+    </div>
+    <div class="tile s2">
+      <div class="k">CA · Content Angle <span class="status-tag">Live</span></div>
+      <div class="word lite" style="font-size:clamp(22px,5.5vw,34px)">Fractional design-systems infrastructure — a job category only you can fill</div>
+      <div class="foot">The "should designers code" debate is over. New question: who structures the system so AI output doesn't pull the product apart?</div>
+    </div>
+    <div class="tile s2">
+      <div class="k">CO · Opportunities <span class="status-tag warn">Work Needed</span></div>
+      <div class="word lite" style="font-size:clamp(22px,5.5vw,34px)">Brand visibility near-zero outside LinkedIn</div>
+      <div class="foot">Content is the only distribution engine right now. No live viral signal this cycle — but the background is unusually strong and convergent.</div>
+    </div>
+  </div>
+</section>
+
+<footer id="brief-mock-footer">
+  <span>Generated · 2026-06-12 02:25:08</span>
+  <span>Client · bryan-balli-WUoltG84</span>
+  <span>Intake Brief · Vol. 01 · Hitloop · Bento Mock</span>
+</footer>
+
+</body>
+</html>

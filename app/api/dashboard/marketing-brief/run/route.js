@@ -279,6 +279,20 @@ export async function POST(request) {
     }
 
     await completeRun(runId, context.clientId, { ...result, pipelineType: 'scout-brief' });
+
+    // Per-brief cover summaries — scoped runs refresh only the briefs whose
+    // sections changed; a full inline run refreshes every cover. Deferred:
+    // reads dashboard_state AFTER completeRun's projection lands; non-fatal.
+    const summaryTypes = scope ? [scope, 'executive-daily'] : undefined;
+    after(async () => {
+      try {
+        const { generateBriefSummaries } = await import('../../../../../features/scout-intake/brief-summary-runner.mjs');
+        await generateBriefSummaries({ clientId: context.clientId, runId, briefTypes: summaryTypes });
+      } catch (err) {
+        console.warn(`[MARKETING-BRIEF] brief summaries non-fatal failure for ${context.clientId}: ${err?.message}`);
+      }
+    });
+
     return json({ ok: true, runId, status: 'succeeded' });
   } catch (err) {
     const pipelineErr = new Error(err.message || 'Marketing brief pipeline threw.');

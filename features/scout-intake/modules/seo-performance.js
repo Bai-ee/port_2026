@@ -77,6 +77,7 @@ async function runSeoPerformance({ clientId = null, websiteUrl, onProgress = nul
   let skillOutput = null;
   let skillDoc    = null;
   let aggregate   = null;
+  let skillCost   = null;
   try {
     await emit('skill', `Running ${SKILL_ID}…`);
     // Strip _rawHtml from evidence pages before feeding the skill — same
@@ -122,6 +123,7 @@ async function runSeoPerformance({ clientId = null, websiteUrl, onProgress = nul
 
     const card   = findCard(CARD_ID);
     const result = await runSkill(SKILL_ID, { card, sourcePayloads });
+    skillCost = result?.runCostData || null;
     if (result.ok) {
       skillOutput = result.output;
       aggregate   = aggregateCardSkills({ [SKILL_ID]: result.output });
@@ -148,6 +150,7 @@ async function runSeoPerformance({ clientId = null, websiteUrl, onProgress = nul
       errorMessage: 'PageSpeed audit produced no data and the AI SEO audit returned no findings.',
       warningCodes,
       artifacts: [],
+      runCostData: skillCost,
     };
   }
 
@@ -158,6 +161,7 @@ async function runSeoPerformance({ clientId = null, websiteUrl, onProgress = nul
     status: 'succeeded',
     warningCodes,
     artifacts: [],
+    runCostData: skillCost,
     result: {
       // Always pass the SourceRecord through when present, even if the PSI
       // fetch reported an error. The dashboard projection translator will
