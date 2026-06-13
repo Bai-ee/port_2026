@@ -901,7 +901,12 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     .cover--has-onboarding-mockup .sub,
     .cover--has-onboarding-mockup #brief-cover-exec-summary,
     .cover--has-onboarding-mockup .meta{max-width:48%}
-    .cover--has-onboarding-mockup #brief-cover-weather{max-width:100%;line-height:1.6}
+    /* Justify both lines so the weather block has flush left+right edges
+       (no ragged end) while staying within the left-half column. */
+    .cover--has-onboarding-mockup #brief-cover-weather{
+      max-width:100%;line-height:1.6;
+      text-align:justify;text-align-last:justify;
+    }
   }
   @media(max-width:759px){
     /* Mobile: let it sit static under the headline instead of overlapping. */
