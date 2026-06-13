@@ -878,7 +878,16 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   #brief-cover-exec-summary p{font-size:clamp(15px,1.45vw,18px);line-height:1.6;font-weight:400;margin:0 0 12px;max-width:72ch}
   #brief-cover-exec-summary p:last-child{margin-bottom:0}
   .cover .meta{margin-top:18px;padding-top:14px;gap:14px 32px}
-  .cover .marquee{margin-top:20px}
+  /* Brand band stretches edge-to-edge across the full width: justify spreads
+     the repeated name flush to both ends instead of clipping the overflow. */
+  .cover .marquee{
+    margin-top:20px;
+    white-space:normal;
+    text-align:justify;
+    text-align-last:justify;
+    overflow:hidden;
+  }
+  .cover .marquee span{display:inline}
   /* Onboarding brief — multi-device mockup pinned to the cover's top-right,
      small, occupying the right half; cover text narrows to the left. */
   /* Mockup fills the right side: spans from 53% to the right gutter, so it
@@ -937,7 +946,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
       <div><div class="k">Brief Title</div><div class="v">${esc(composition.label)}</div></div>
       <div><div class="k">Account</div><div class="v mono" style="font-size:13px">${esc(userEmail || '—')}</div></div>
     </div>
-    <div class="marquee"><span>${esc(brandUpper)} • ${esc(brandUpper)} • ${esc(brandUpper)} • ${esc(brandUpper)} • ${esc(brandUpper)}</span></div>
+    <div class="marquee">${Array(8).fill(`<span>${esc(brandUpper)}</span>`).join(' • ')}</div>
   </section>
 ${bodySections}
   <footer>
