@@ -158,9 +158,9 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   const generatedDt = new Date(generated);
   const when = generatedDt.toISOString().slice(0, 10);
   const tierLabel = tier === 'paid' ? 'Recurring · Paid' : 'One-time · Free';
-  // The cover h1 / priority pull use the run date+time as the oversized
-  // editorial mark — not the long headline text (which lives in .sub /
-  // stat-rows below). Two lines: MM/DD/YY, then time under it.
+  // The cover h1 uses the run date+time as the editorial mark — not the long
+  // headline text (which lives in .sub / stat-rows below). Two small lines
+  // under the brief name: MM/DD/YY, then the time beneath it.
   const mm = String(generatedDt.getMonth() + 1).padStart(2, '0');
   const dd = String(generatedDt.getDate()).padStart(2, '0');
   const yy = String(generatedDt.getFullYear()).slice(-2);
@@ -806,6 +806,10 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     ? `<div class="sub cover-jarvis-sub" id="brief-cover-exec-summary">${coverParas.map((p) => `<p>${esc(p)}</p>`).join('')}</div>`
     : `<p class="sub">${esc(coverParas[0] || headline)}</p>`;
 
+  // Onboarding brief only: render the multi-device mockup small in the
+  // cover's top-right; the cover text narrows to the left half (CSS).
+  const isOnboardingCoverMockup = resolveBriefType(briefType) === 'onboarding' && Boolean(mockupSrc);
+
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -845,8 +849,15 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   /* CTA is now fixed (out of flow) — restore the space it used to take above
      the headline so the cover sits where it did before. */
   .cover .title-stack{margin-top:56px}
-  /* Breathing room above the date/time stamp headline. */
-  .cover .headline{margin:20px 0 10px}
+  /* Date/time stamp headline — small, two lines (date over time), sitting
+     directly under the brief name. */
+  .cover .headline{
+    margin:14px 0 10px;
+    flex-basis:100%;
+    width:100%;
+    font-size:clamp(28px,5vw,56px);
+    line-height:1.08;
+  }
   /* Brief name — sits above the date headline inside the title stack;
      slightly heavier and larger than .sub (300 / clamp(20px,2.4vw,34px)).
      flex-basis:100% forces its own row in the flex title-stack. */
@@ -868,11 +879,40 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   #brief-cover-exec-summary p:last-child{margin-bottom:0}
   .cover .meta{margin-top:18px;padding-top:14px;gap:14px 32px}
   .cover .marquee{margin-top:20px}
+  /* Onboarding brief — multi-device mockup pinned to the cover's top-right,
+     small, occupying the right half; cover text narrows to the left. */
+  /* Mockup fills the right side: spans from 53% to the right gutter, so it
+     grows with the page while the cover copy (capped at 48%) never reaches
+     it — a clean ~5% gap regardless of --gutter. */
+  #onboarding-cover-mockup{
+    position:absolute;
+    top:clamp(56px,10vh,130px);
+    left:53%;
+    right:var(--gutter);
+    z-index:2;
+    pointer-events:none;
+  }
+  #onboarding-cover-mockup img{
+    display:block;width:100%;height:auto;
+    filter:drop-shadow(0 18px 40px rgba(0,0,0,.16));
+  }
+  @media(min-width:760px){
+    .cover--has-onboarding-mockup .title-stack,
+    .cover--has-onboarding-mockup .sub,
+    .cover--has-onboarding-mockup #brief-cover-exec-summary,
+    .cover--has-onboarding-mockup .meta{max-width:48%}
+    .cover--has-onboarding-mockup #brief-cover-weather{max-width:100%;line-height:1.6}
+  }
+  @media(max-width:759px){
+    /* Mobile: let it sit static under the headline instead of overlapping. */
+    #onboarding-cover-mockup{position:static;left:auto;width:100%;margin:16px 0 4px}
+  }
   </style>
 </head>
 <body>
-  <section class="page cover">
+  <section class="page cover${isOnboardingCoverMockup ? ' cover--has-onboarding-mockup' : ''}">
     <div class="sec-num">00</div>
+    ${isOnboardingCoverMockup ? `<div id="onboarding-cover-mockup" aria-hidden="true"><img src="${esc(mockupSrc)}" alt="" /></div>` : ''}
     <div class="title-stack">
       <div class="cap-brief-email-cta-row">
         <button type="button" id="brief-email-cta" class="cap-brief-email-cta">
