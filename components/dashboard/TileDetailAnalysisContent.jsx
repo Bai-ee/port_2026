@@ -113,15 +113,15 @@ export default function TileDetailAnalysisContent({
 
     if (activeTileModal.cardId === 'design-evaluation') {
       return (
-        <div className="tile-detail-tab-pane" id="design-eval-report-pane" style={{ display: 'flex', flexDirection: 'column', padding: 0, height: '100%' }}>
+        <div className="mu-tab-pane" id="design-eval-report-pane" style={{ padding: 0, height: '100%' }}>
           {analyzerOutputs?.['design-evaluation'] && (
-            <div id="design-eval-report-toolbar" style={{ display: 'flex', justifyContent: 'flex-end', padding: '6px 8px', flexShrink: 0 }}>
+            <div id="design-eval-report-toolbar" style={{ display: 'flex', justifyContent: 'flex-end', padding: '6px 8px' }}>
               <button
                 id="design-eval-report-download-btn"
                 type="button"
-                className="tile-solution-expert-cta"
+                className="mu-btn-outline"
+                style={{ minHeight: 32, padding: '0 12px', fontSize: 12 }}
                 onClick={() => downloadTextFile(designReportMd, 'DESIGN.md', 'text/markdown;charset=utf-8')}
-                style={{ cursor: 'pointer', border: 'none' }}
               >Download DESIGN.md ↓</button>
             </div>
           )}
@@ -139,7 +139,7 @@ export default function TileDetailAnalysisContent({
 
     if (reportHtml) {
       return (
-        <div className="tile-detail-tab-pane" id={`${activeTileModal.cardId}-report-pane`} style={{ padding: 0, height: '100%' }}>
+        <div className="mu-tab-pane" id={`${activeTileModal.cardId}-report-pane`} style={{ padding: 0, height: '100%' }}>
           <iframe
             key={`${activeTileModal.cardId}-report-${dashboardState?.latestRunId || 'static'}`}
             id={`${activeTileModal.cardId}-report-iframe`}
@@ -155,32 +155,20 @@ export default function TileDetailAnalysisContent({
 
   if (modalTab === 'solutions' && activeTileModal.cardId === 'design-evaluation') {
     return (
-      <div className="tile-detail-tab-pane">
-        <div id="design-evaluation-md-toolbar" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+      <div className="mu-tab-pane">
+        <div id="design-evaluation-md-toolbar" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
           <button
             id="design-evaluation-download-btn"
             type="button"
-            className="tile-solution-expert-cta"
+            className="mu-btn-outline"
+            style={{ minHeight: 32, padding: '0 12px', fontSize: 12 }}
             onClick={() => downloadTextFile(designSolutionsMd, 'DESIGN.md', 'text/markdown;charset=utf-8')}
-            style={{ cursor: 'pointer', border: 'none' }}
           >Download DESIGN.md ↓</button>
         </div>
         <pre
           id="design-evaluation-md-preview"
-          style={{
-            margin: 0,
-            padding: 12,
-            background: 'rgba(0,0,0,0.35)',
-            color: '#e8e6e1',
-            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-            fontSize: 12,
-            lineHeight: 1.5,
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-            borderRadius: 6,
-            maxHeight: '60vh',
-            overflow: 'auto',
-          }}
+          className="mu-code-block"
+          style={{ background: 'rgba(0,0,0,0.35)', color: '#e8e6e1', maxHeight: '60vh' }}
         >{designSolutionsMd}</pre>
       </div>
     );
@@ -190,13 +178,13 @@ export default function TileDetailAnalysisContent({
     const solutionsList = buildSolutionsList(activeTileModal.analyzer);
     if (!solutionsList.length) {
       return (
-        <div className="tile-detail-tab-pane">
-          <p className="tile-analyzer-solutions-empty">No matched solutions yet.</p>
+        <div className="mu-tab-pane">
+          <div className="mu-empty">No matched solutions yet.</div>
         </div>
       );
     }
     return (
-      <div className="tile-detail-tab-pane">
+      <div className="mu-tab-pane">
         <ol id={`${activeTileModal.cardId}-solutions-list`} className="tile-solutions-list">
           {solutionsList.map(({ key, source, severity, finding, solution, isGeneric }) => {
             const problemClean = String(solution.problem || '').replace(/\.+$/, '').trim();
@@ -218,7 +206,7 @@ export default function TileDetailAnalysisContent({
                   <section className="tile-solution-expert">
                     {solution.expertOffer.summary && <p className="tile-solution-expert-summary">{solution.expertOffer.summary}</p>}
                     {solution.expertOffer.cta?.href && (
-                      <a href={solution.expertOffer.cta.href} target="_blank" rel="noopener noreferrer" className="tile-solution-expert-cta">
+                      <a href={solution.expertOffer.cta.href} target="_blank" rel="noopener noreferrer" className="mu-btn-outline mu-btn-outline--accent">
                         {solution.expertOffer.cta.label || 'Book a call'} →
                       </a>
                     )}
@@ -246,7 +234,7 @@ export default function TileDetailAnalysisContent({
   }
 
   return (
-    <div className="tile-detail-tab-pane">
+    <div className="mu-tab-pane">
       {activeTileModal.analyzer?.readiness && (
         <div id={`${activeTileModal.cardId}-analyzer-readiness`} className={`tile-analyzer-readiness readiness-${activeTileModal.analyzer.readiness}`}>
           <span className="tile-analyzer-readiness-label">

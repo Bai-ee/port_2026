@@ -63,17 +63,12 @@ async function runSeoPerformance({ clientId = null, websiteUrl, onProgress = nul
 
   const pagespeedOk = pagespeedResult.ok && !pagespeedResult.skipped;
 
+  // PSI failure is NOT fatal: some sites (heavy WebGL/animation homepages)
+  // hang Lighthouse itself (PAGE_HUNG → HTTP 500). The seo-depth-audit skill
+  // below runs on fetched evidence and falls back to stored PSI, so the card
+  // can still produce findings — with the PSI gap named, never hidden.
   if (!pagespeedOk) {
-    const code = warningCodes[0] || 'seo_performance_no_data';
-    return {
-      ok: false,
-      cardId: CARD_ID,
-      status: 'failed',
-      errorCode: code,
-      errorMessage: 'PageSpeed audit produced no data.',
-      warningCodes,
-      artifacts: [],
-    };
+    await emit('analyze', 'PageSpeed unavailable for this site — continuing with AI SEO audit…', { ok: false });
   }
 
   // Step 3: run the seo-depth-audit skill — feed it real PSI + evidence so
@@ -82,6 +77,7 @@ async function runSeoPerformance({ clientId = null, websiteUrl, onProgress = nul
   let skillOutput = null;
   let skillDoc    = null;
   let aggregate   = null;
+  let skillCost   = null;
   try {
     await emit('skill', `Running ${SKILL_ID}…`);
     // Strip _rawHtml from evidence pages before feeding the skill — same
@@ -127,6 +123,7 @@ async function runSeoPerformance({ clientId = null, websiteUrl, onProgress = nul
 
     const card   = findCard(CARD_ID);
     const result = await runSkill(SKILL_ID, { card, sourcePayloads });
+    skillCost = result?.runCostData || null;
     if (result.ok) {
       skillOutput = result.output;
       aggregate   = aggregateCardSkills({ [SKILL_ID]: result.output });
@@ -141,6 +138,22 @@ async function runSeoPerformance({ clientId = null, websiteUrl, onProgress = nul
     await emit('skill', `${SKILL_ID} threw: ${err.message}`, { ok: false });
   }
 
+  // Fail only when BOTH sources came back empty — no PSI data and no skill
+  // findings means there is genuinely nothing to report.
+  if (!pagespeedOk && !skillOutput) {
+    const code = warningCodes[0] || 'seo_performance_no_data';
+    return {
+      ok: false,
+      cardId: CARD_ID,
+      status: 'failed',
+      errorCode: code,
+      errorMessage: 'PageSpeed audit produced no data and the AI SEO audit returned no findings.',
+      warningCodes,
+      artifacts: [],
+      runCostData: skillCost,
+    };
+  }
+
   await emit('normalize', 'Write SEO module…');
   return {
     ok: true,
@@ -148,6 +161,7 @@ async function runSeoPerformance({ clientId = null, websiteUrl, onProgress = nul
     status: 'succeeded',
     warningCodes,
     artifacts: [],
+    runCostData: skillCost,
     result: {
       // Always pass the SourceRecord through when present, even if the PSI
       // fetch reported an error. The dashboard projection translator will

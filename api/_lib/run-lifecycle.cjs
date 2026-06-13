@@ -141,35 +141,69 @@ function buildDashboardProjection(clientId, pipelineResult, runId) {
   const base = {
     clientId,
     status: 'active',
-    headline: scoutPriorityAction || null,
-    summaryCards,
-    latestInsights,
     latestRunId: runId,
     latestRunStatus: 'succeeded',
     updatedAt: fb.FieldValue.serverTimestamp(),
     provisioningState: null,
     errorState: null,
   };
+  // Only write content fields when the run actually produced them — an empty
+  // run must not wipe a content angle or insight from a richer prior run.
+  if (scoutPriorityAction) base.headline = scoutPriorityAction;
+  if (summaryCards.length > 0) base.summaryCards = summaryCards;
+  if (latestInsights.length > 0) base.latestInsights = latestInsights;
 
   if (pipelineResult.pipelineType === 'scout-brief') {
-    base.marketingBrief = {
-      status: 'generated',
-      headline: scoutPriorityAction || null,
-      scoutBrief: pipelineResult.brief ? {
-        timestamp: pipelineResult.brief.timestamp || null,
-        humanBrief: pipelineResult.brief.humanBrief || null,
-        delta: pipelineResult.brief.delta || null,
-        agentData: pipelineResult.brief.agentData || null,
-      } : null,
-      content: content || null,
-      contentOpportunities: contentOpportunities || [],
-      guardianFlags: pipelineResult.guardianFlags || null,
-      providerName: pipelineResult.providerName || null,
-      knowledgeBaseSources: Array.isArray(pipelineResult.knowledgeBase?.sources)
-        ? pipelineResult.knowledgeBase.sources
-        : [],
-      generatedAtIso: new Date().toISOString(),
-    };
+    // Rolling 30-day post strategy — only overwrite when the run produced one.
+    if (pipelineResult.strategy30) base.strategy30 = pipelineResult.strategy30;
+    const scope = pipelineResult.scope || null;
+    if (scope === 'marketing-director') {
+      // Scoped run: only fresh scout signals. Omit content/guardian keys so
+      // the recursive Firestore merge keeps the stored today's-post, guardian
+      // flags, and contentOpportunities from the last full run.
+      base.marketingBrief = {
+        status: 'generated',
+        scoutBrief: pipelineResult.brief ? {
+          timestamp: pipelineResult.brief.timestamp || null,
+          humanBrief: pipelineResult.brief.humanBrief || null,
+          delta: pipelineResult.brief.delta || null,
+          agentData: pipelineResult.brief.agentData || null,
+        } : {},
+        providerName: pipelineResult.providerName || null,
+        generatedAtIso: new Date().toISOString(),
+      };
+    } else if (scope === 'social-media-manager') {
+      // Scoped run: fresh strategy + today's post; the stored scout brief
+      // (market/competitor/local signals) stays untouched.
+      base.marketingBrief = {
+        status: 'generated',
+        headline: scoutPriorityAction || null,
+        content: content || null,
+        contentOpportunities: contentOpportunities || [],
+        guardianFlags: pipelineResult.guardianFlags || null,
+        providerName: pipelineResult.providerName || null,
+        generatedAtIso: new Date().toISOString(),
+      };
+    } else {
+      base.marketingBrief = {
+        status: 'generated',
+        headline: scoutPriorityAction || null,
+        scoutBrief: pipelineResult.brief ? {
+          timestamp: pipelineResult.brief.timestamp || null,
+          humanBrief: pipelineResult.brief.humanBrief || null,
+          delta: pipelineResult.brief.delta || null,
+          agentData: pipelineResult.brief.agentData || null,
+        } : null,
+        content: content || null,
+        contentOpportunities: contentOpportunities || [],
+        guardianFlags: pipelineResult.guardianFlags || null,
+        providerName: pipelineResult.providerName || null,
+        knowledgeBaseSources: Array.isArray(pipelineResult.knowledgeBase?.sources)
+          ? pipelineResult.knowledgeBase.sources
+          : [],
+        generatedAtIso: new Date().toISOString(),
+      };
+    }
     if (pipelineResult.knowledgeBase) {
       base.knowledgeBase = pipelineResult.knowledgeBase;
     }
@@ -222,10 +256,25 @@ function buildDashboardProjection(clientId, pipelineResult, runId) {
   if (pipelineResult.pipelineType === 'free-tier-intake') {
     if (pipelineResult.snapshot) base.snapshot = pipelineResult.snapshot;
     if (pipelineResult.signals) base.signals = pipelineResult.signals;
-    if (pipelineResult.strategy) base.strategy = pipelineResult.strategy;
+    // Only overwrite strategy when the new run produced meaningful content.
+    // An empty strategy object (no angles, no opportunities) should never
+    // blank out Posting Rules data from a prior richer run.
+    const newStrategy = pipelineResult.strategy;
+    const newStrategyHasContent = Boolean(
+      newStrategy &&
+      (
+        (Array.isArray(newStrategy.contentAngles) && newStrategy.contentAngles.some((a) => a?.angle)) ||
+        (Array.isArray(newStrategy.opportunityMap) && newStrategy.opportunityMap.length > 0) ||
+        newStrategy.postStrategy?.approach
+      )
+    );
+    if (newStrategyHasContent) base.strategy = newStrategy;
     if (pipelineResult.outputsPreview) base.outputsPreview = pipelineResult.outputsPreview;
     if (pipelineResult.systemPreview) base.systemPreview = pipelineResult.systemPreview;
     if (pipelineResult.siteMeta) base.siteMeta = pipelineResult.siteMeta;
+    // Trimmed crawl evidence (normalize.js summarizeEvidencePages) — feeds the
+    // Data Quality SITE EVIDENCE rows and Trust/Platform Coverage cards.
+    if (pipelineResult.evidence) base.evidence = pipelineResult.evidence;
     if (pipelineResult.analyzerOutputs) base.analyzerOutputs = pipelineResult.analyzerOutputs;
     // skillDocs — per-skill downloadable doc (html + markdown), surfaced on DATA tab.
     if (pipelineResult.skillDocs && Object.keys(pipelineResult.skillDocs).length > 0) {
@@ -336,12 +385,18 @@ async function completeRun(runId, clientId, pipelineResult) {
  * If attempts < MAX_ATTEMPTS, dashboard_state.errorState.retryPending = true so
  * Phase 5 admin UI can surface "retry available" without exposing the actual error.
  *
+ * Soft mode (details.soft = true): full error detail still lands in brief_runs,
+ * but dashboard_state keeps no errorState and the client doc is not downgraded.
+ * Used for chained follow-up runs (e.g. onboarding-chain scout-brief) whose
+ * failure must not error-screen a client whose primary run succeeded.
+ *
  * @param {string} runId
  * @param {string} clientId
  * @param {Error|object} error
  * @param {number} attempts - current attempt count (post-increment from claimRun)
  */
 async function failRun(runId, clientId, error, attempts, details = {}) {
+  const soft = details.soft === true;
   const runRef = fb.adminDb.collection('brief_runs').doc(runId);
   const clientRunRef = fb.adminDb.collection('clients').doc(clientId).collection('brief_runs').doc(runId);
   const dashboardStateRef = fb.adminDb.collection('dashboard_state').doc(clientId);
@@ -378,17 +433,21 @@ async function failRun(runId, clientId, error, attempts, details = {}) {
   };
 
   // Sanitized error for dashboard — no internal detail exposed to end users.
-  const dashboardUpdate = {
-    clientId,
-    latestRunId: runId,
-    latestRunStatus: 'failed',
-    updatedAt: now,
-    errorState: {
-      message: 'Initial setup encountered an issue. Our team has been notified.',
-      failedAt,
-      retryPending: !isExhausted,
-    },
-  };
+  // Soft fails leave latestRunId/latestRunStatus pointing at the succeeded
+  // primary run and never set errorState.
+  const dashboardUpdate = soft
+    ? { clientId, updatedAt: now }
+    : {
+        clientId,
+        latestRunId: runId,
+        latestRunStatus: 'failed',
+        updatedAt: now,
+        errorState: {
+          message: 'Initial setup encountered an issue. Our team has been notified.',
+          failedAt,
+          retryPending: !isExhausted,
+        },
+      };
 
   if (homepageScreenshot) {
     dashboardUpdate.artifacts = {
@@ -407,13 +466,15 @@ async function failRun(runId, clientId, error, attempts, details = {}) {
     };
   }
 
-  const clientUpdate = {
-    latestRunId: runId,
-    latestRunStatus: 'failed',
-    // Keep provisioning status unless fully exhausted — admin may retry
-    status: isExhausted ? 'error' : 'provisioning',
-    updatedAt: now,
-  };
+  const clientUpdate = soft
+    ? { updatedAt: now }
+    : {
+        latestRunId: runId,
+        latestRunStatus: 'failed',
+        // Keep provisioning status unless fully exhausted — admin may retry
+        status: isExhausted ? 'error' : 'provisioning',
+        updatedAt: now,
+      };
 
   await Promise.all([
     runRef.set(runUpdate, { merge: true }),
@@ -422,7 +483,11 @@ async function failRun(runId, clientId, error, attempts, details = {}) {
     clientRef.set(clientUpdate, { merge: true }),
     appendRunEvent(runId, clientId, {
       stage: 'error',
-      progressLabel: `Pipeline failed: ${error?.message || String(error)}`.slice(0, 500),
+      // Run events are client-readable — soft fails get a sanitized line,
+      // the raw error stays in brief_runs (admin only).
+      progressLabel: soft
+        ? 'Brief generation hit an issue — retry from the Executive Daily Brief card.'
+        : `Pipeline failed: ${error?.message || String(error)}`.slice(0, 500),
     }).catch(() => {}),
   ]);
 }
@@ -750,7 +815,11 @@ function projectScreenshotArtifacts(update, artifactRefs = []) {
   }
 }
 
-function projectModuleResult(update, result) {
+// snapshotPatch accumulates dot-notation field paths for snapshot.* writes.
+// These are written via ref.update() rather than ref.set(merge:true) to avoid
+// Firestore's top-level-only merge replacing the entire snapshot map and wiping
+// unrelated fields like snapshot.brandOverview.
+function projectModuleResult(update, result, snapshotPatch) {
   if (!result?.ok) return;
 
   if (result.cardId === 'multi-device-view') {
@@ -766,7 +835,7 @@ function projectModuleResult(update, result) {
   if (result.cardId === 'style-guide') {
     if (result.result?.styleGuide) {
       // Brand Snapshot card reads snapshot.visualIdentity.styleGuide.
-      deepSet(update, ['snapshot', 'visualIdentity', 'styleGuide'], result.result.styleGuide);
+      snapshotPatch['snapshot.visualIdentity.styleGuide'] = result.result.styleGuide;
     }
     return;
   }
@@ -774,7 +843,7 @@ function projectModuleResult(update, result) {
   if (result.cardId === 'design-evaluation') {
     if (result.result?.styleGuide) {
       // Keep the shared brand snapshot in sync so subsequent cards reuse it.
-      deepSet(update, ['snapshot', 'visualIdentity', 'styleGuide'], result.result.styleGuide);
+      snapshotPatch['snapshot.visualIdentity.styleGuide'] = result.result.styleGuide;
     }
     if (result.result?.analyzerOutput) {
       deepSet(update, ['analyzerOutputs', 'design-evaluation'], result.result.analyzerOutput);
@@ -845,9 +914,9 @@ function projectModuleResult(update, result) {
 /**
  * Persist per-card module results to dashboard_state/{clientId}.
  *
- * Uses dot-notation field paths with merge:true so only the updated cards
- * and the dashboard fields they own are written — prior module metadata
- * and unrelated card outputs are preserved.
+ * snapshot.* fields are written via ref.update() with dot-notation paths so
+ * Firestore only touches the specific leaf fields — not the whole snapshot map.
+ * All other fields use ref.set(merge:true) as before.
  *
  * @param {string}   clientId
  * @param {object[]} moduleResults  - array of card result objects from runModules()
@@ -858,6 +927,7 @@ async function updateModuleState(clientId, moduleResults, runId) {
 
   const now = fb.FieldValue.serverTimestamp();
   const update = { updatedAt: now };
+  const snapshotPatch = {};
 
   for (const r of moduleResults) {
     const cardId = r.cardId;
@@ -889,11 +959,15 @@ async function updateModuleState(clientId, moduleResults, runId) {
       deepSet(update, ['modules', cardId, 'lastErrorMessage'], r.errorMessage || null);
     }
 
-    projectModuleResult(update, r);
+    projectModuleResult(update, r, snapshotPatch);
   }
 
   const ref = fb.adminDb.collection('dashboard_state').doc(clientId);
   await ref.set(update, { merge: true });
+
+  if (Object.keys(snapshotPatch).length > 0) {
+    await ref.update(snapshotPatch);
+  }
 }
 
 module.exports = {

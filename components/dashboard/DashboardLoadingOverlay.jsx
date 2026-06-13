@@ -51,16 +51,16 @@ export default function DashboardLoadingOverlay({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '1rem' }}>
-          <img src="/img/sig.png" alt="" aria-hidden="true" style={{ width: '2.75rem', height: 'auto', display: 'block' }} />
+          <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', display: 'block' }} />
           <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.44)', fontWeight: 700, fontFamily: '"Space Mono", monospace' }}>
             Dashboard Access
           </span>
-          <span
+          <img
+            src="/img/circle_logo.png"
+            alt=""
             aria-hidden="true"
-            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '2.4rem', height: '2.4rem', borderRadius: '999px', background: 'rgba(255,255,255,0.34)', border: '1px solid rgba(42,36,32,0.12)' }}
-          >
-            <span style={{ width: '0.46rem', height: '0.46rem', borderRadius: '999px', background: '#4A9E5C' }} />
-          </span>
+            style={{ width: '2.4rem', height: '2.4rem', borderRadius: '50%', objectFit: 'cover', display: 'block' }}
+          />
         </div>
 
         <div style={{ width: '100%', overflow: 'hidden', margin: '0 0 0.7rem' }}>

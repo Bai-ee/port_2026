@@ -37,12 +37,20 @@ function formatBytes(value) {
   return `${(value / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+// Stage costs carry `estimatedUsd` (scout-brief stages) or `estimatedCostUsd`
+// (intake/skill stages) — read both, mirroring api/_lib/ops-overview.cjs.
+function stageCostUsd(stage) {
+  if (typeof stage?.estimatedCostUsd === 'number') return stage.estimatedCostUsd;
+  if (typeof stage?.estimatedUsd === 'number') return stage.estimatedUsd;
+  return 0;
+}
+
 function extractCost(run) {
   const usage = run?.providerUsage;
   if (!usage) return null;
   if (typeof usage.estimatedCostUsd === 'number') return usage.estimatedCostUsd;
   if (Array.isArray(usage.stageCosts)) {
-    return usage.stageCosts.reduce((sum, stage) => sum + (stage?.estimatedCostUsd || 0), 0);
+    return usage.stageCosts.reduce((sum, stage) => sum + stageCostUsd(stage), 0);
   }
   return null;
 }
@@ -133,6 +141,7 @@ export default function OpsOverviewPage({ initialData = null, initialError = '' 
   const latest = data?.latest || {};
   const latestClient = latest.clientRecord || null;
   const latestRun = latest.latestRun || null;
+  const lastBriefRun = data?.lastBriefRun || null;
 
   const clientMap = useMemo(
     () =>
@@ -174,6 +183,93 @@ export default function OpsOverviewPage({ initialData = null, initialError = '' 
       </header>
 
       <main id="ops-main">
+        <section id="last-brief-run-section">
+          <div className="section-head">Last Brief Run <div className="section-head-line" /></div>
+          <div className="card-shell" id="last-brief-run-shell">
+            {!lastBriefRun ? (
+              <div id="last-brief-run-empty">
+                <span className="eyebrow">{loading ? 'Loading…' : 'No brief runs recorded yet'}</span>
+              </div>
+            ) : (
+              <div id="last-brief-run-grid">
+                <div id="last-brief-run-identity">
+                  <div className="card-topline">
+                    <span>{lastBriefRun.pipelineType || 'run'}{lastBriefRun.scope ? ` · ${lastBriefRun.scope}` : ''}</span>
+                    <span className={badgeClass(lastBriefRun.status)}>{lastBriefRun.status}</span>
+                  </div>
+                  <h2 id="last-brief-run-name">{lastBriefRun.briefLabel || 'Brief Run'}</h2>
+                  <div id="last-brief-run-meta">
+                    <div className="hero-meta-item">
+                      <span className="label">Client</span>
+                      <span className="value">{lastBriefRun.clientName || '—'}</span>
+                    </div>
+                    <div className="hero-meta-item">
+                      <span className="label">Run ID</span>
+                      <span className="value">{lastBriefRun.runId ? lastBriefRun.runId.slice(0, 12) : '—'}</span>
+                    </div>
+                    <div className="hero-meta-item">
+                      <span className="label">Started</span>
+                      <span className="value">{fmtDate(lastBriefRun.startedAt)}</span>
+                    </div>
+                    <div className="hero-meta-item">
+                      <span className="label">Completed</span>
+                      <span className="value">{fmtDate(lastBriefRun.completedAt)}</span>
+                    </div>
+                  </div>
+                </div>
+                <div id="last-brief-run-cost-panel">
+                  <div className="stat-label">Run Cost</div>
+                  <div id="last-brief-run-cost-value">
+                    {lastBriefRun.totalCostUsd == null ? '—' : formatCurrency(lastBriefRun.totalCostUsd, 4)}
+                  </div>
+                  <div className="stat-sub">
+                    {lastBriefRun.totalCostUsd == null
+                      ? 'No cost payload stored for this run'
+                      : `${lastBriefRun.stageCosts.length} priced stage${lastBriefRun.stageCosts.length === 1 ? '' : 's'}`}
+                  </div>
+                  {lastBriefRun.stageCosts.length > 0 ? (
+                    <div id="last-brief-stage-rows">
+                      {lastBriefRun.stageCosts.map((stage, index) => {
+                        const tokens = (stage.inputTokens || 0) + (stage.outputTokens || 0);
+                        return (
+                          <div className="stage-cost-row" key={`${stage.stage}-${index}`}>
+                            <span className="stage-cost-name" title={stage.model || ''}>{stage.stage}</span>
+                            <span className="stage-cost-tokens">{tokens ? `${tokens.toLocaleString()} tok` : '—'}</span>
+                            <span className="stage-cost-val">{formatCurrency(stage.costUsd, 4)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                  <div id="last-brief-rollup-rows">
+                    {lastBriefRun.parentRunId ? (
+                      <>
+                        <div className="stage-cost-row rollup-row">
+                          <span className="stage-cost-name" title={`Intake run ${lastBriefRun.parentRunId}`}>+ intake run (chained)</span>
+                          <span className="stage-cost-tokens" />
+                          <span className="stage-cost-val">
+                            {lastBriefRun.parentRunCostUsd == null ? 'no cost stored' : formatCurrency(lastBriefRun.parentRunCostUsd, 4)}
+                          </span>
+                        </div>
+                        <div className="stage-cost-row rollup-row rollup-total">
+                          <span className="stage-cost-name">Onboarding chain total</span>
+                          <span className="stage-cost-tokens" />
+                          <span className="stage-cost-val">{formatCurrency(lastBriefRun.chainCostUsd, 4)}</span>
+                        </div>
+                      </>
+                    ) : null}
+                    <div className="stage-cost-row rollup-row rollup-total">
+                      <span className="stage-cost-name">{`${lastBriefRun.clientName || 'Client'} — total to date`}</span>
+                      <span className="stage-cost-tokens">{`runs ${formatCurrency(lastBriefRun.clientRunsCostUsd, 2)} · mods ${formatCurrency(lastBriefRun.clientModuleCostUsd, 2)}`}</span>
+                      <span className="stage-cost-val">{formatCurrency(lastBriefRun.clientTotalCostUsd, 4)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
         <section id="hero-summary">
           <div className="detail-card" id="hero-copy">
             <span className="eyebrow">Public technical surface</span>
@@ -330,10 +426,13 @@ export default function OpsOverviewPage({ initialData = null, initialError = '' 
                 data.costByClient.map((entry) => {
                   const max = data.costByClient[0]?.totalCostUsd || 1;
                   return (
-                    <div className="cost-row" key={entry.name}>
+                    <div className="cost-row" key={entry.clientId || entry.name}>
                       <div className="cost-name" title={entry.name}>{entry.name}</div>
                       <div className="cost-track"><div className="cost-fill" style={{ width: `${((entry.totalCostUsd || 0) / max * 100).toFixed(1)}%` }} /></div>
                       <div className="cost-val">{formatCurrency(entry.totalCostUsd, 4)}</div>
+                      <div className="cost-split">
+                        {`runs ${formatCurrency(entry.runsCostUsd ?? entry.totalCostUsd, 2)} · mods ${formatCurrency(entry.moduleCostUsd ?? 0, 2)}`}
+                      </div>
                     </div>
                   );
                 })
@@ -483,6 +582,7 @@ export default function OpsOverviewPage({ initialData = null, initialError = '' 
               <thead>
                 <tr>
                   <th>Client</th>
+                  <th>Brief</th>
                   <th>Status</th>
                   <th>Pipeline</th>
                   <th>Provider</th>
@@ -494,11 +594,12 @@ export default function OpsOverviewPage({ initialData = null, initialError = '' 
               </thead>
               <tbody>
                 {!runs.length ? (
-                  <tr className="empty-row"><td colSpan={8}>{loading ? 'Loading…' : 'No runs found'}</td></tr>
+                  <tr className="empty-row"><td colSpan={9}>{loading ? 'Loading…' : 'No runs found'}</td></tr>
                 ) : (
                   runs.slice(0, 80).map((run) => (
                     <tr key={run.id}>
                       <td className="cell-primary">{clientMap[run.clientId] || run.clientId || '—'}</td>
+                      <td className="cell-dim">{run.briefLabel || '—'}</td>
                       <td><span className={badgeClass(run.status)}>{run.status || 'unknown'}</span></td>
                       <td className="cell-dim">{run.pipelineType || 'free-tier-intake'}</td>
                       <td className="cell-dim">{run.providerUsage?.model || run.summary?.providerName || run.providerName || '—'}</td>
@@ -791,6 +892,106 @@ const opsOverviewCss = `
     backdrop-filter: blur(28px);
     -webkit-backdrop-filter: blur(28px);
     border-radius: 0.9rem;
+  }
+  #last-brief-run-shell {
+    padding: 1.1rem 1.2rem;
+  }
+  #last-brief-run-empty {
+    padding: 1rem 0;
+    text-align: center;
+  }
+  #last-brief-run-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.9fr);
+    gap: 1.2rem;
+  }
+  #last-brief-run-identity {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+  }
+  #last-brief-run-name {
+    font-size: clamp(1.5rem, 2.4vw, 2.3rem);
+    line-height: 0.98;
+    letter-spacing: -0.04em;
+  }
+  #last-brief-run-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem;
+  }
+  #last-brief-run-cost-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.9rem 1rem;
+    border-radius: 0.8rem;
+    background: var(--purple-bg);
+    border: 1px solid var(--purple-bdr);
+  }
+  #last-brief-run-cost-value {
+    font-family: var(--font-mono);
+    font-size: 34px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--purple);
+  }
+  #last-brief-stage-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin-top: 0.7rem;
+    padding-top: 0.7rem;
+    border-top: 1px solid var(--purple-bdr);
+  }
+  .stage-cost-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 90px 74px;
+    gap: 0.6rem;
+    align-items: baseline;
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .stage-cost-name {
+    color: var(--text2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .stage-cost-tokens {
+    text-align: right;
+    color: var(--text3);
+  }
+  .stage-cost-val {
+    text-align: right;
+    color: var(--purple);
+  }
+  #last-brief-rollup-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin-top: 0.7rem;
+    padding-top: 0.7rem;
+    border-top: 1px solid var(--purple-bdr);
+  }
+  #last-brief-rollup-rows .rollup-row {
+    grid-template-columns: minmax(0, 1fr) auto 74px;
+  }
+  #last-brief-rollup-rows .rollup-total .stage-cost-name,
+  #last-brief-rollup-rows .rollup-total .stage-cost-val {
+    font-weight: 700;
+    color: var(--text);
+  }
+  #last-brief-rollup-rows .rollup-total .stage-cost-val {
+    color: var(--purple);
+  }
+  .cost-split {
+    width: 150px;
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text3);
+    white-space: nowrap;
   }
   #hero-summary {
     display: grid;
@@ -1097,6 +1298,7 @@ const opsOverviewCss = `
   }
   @media (max-width: 960px) {
     #hero-summary { grid-template-columns: 1fr; }
+    #last-brief-run-grid { grid-template-columns: 1fr; }
   }
   @media (max-width: 760px) {
     #founders-top-strip-inner {
@@ -1117,7 +1319,8 @@ const opsOverviewCss = `
     #ops-main {
       padding-top: calc(92px + 2rem);
     }
-    #hero-meta {
+    #hero-meta,
+    #last-brief-run-meta {
       grid-template-columns: 1fr;
     }
   }
@@ -1132,7 +1335,8 @@ const opsOverviewCss = `
       flex-wrap: wrap;
     }
     .cost-name,
-    .cost-val {
+    .cost-val,
+    .cost-split {
       width: auto;
     }
   }

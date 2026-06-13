@@ -23,24 +23,47 @@ const { getClientConfig } = require('./clients');
 // profile page. See the SOURCE LINK RULE block in xscout.js for full per-
 // platform format rules.
 
+// Agent data contract v2.
+//
+// Key additions over v1:
+//   runMeta       — timestamp, freshness window, queryTrace (audit trail of what was searched)
+//   emptySections — machine-readable "Scout looked and found nothing" list; prevents Scribe
+//                   from inferring absence = "didn't look" and fabricating content
+//   signalType    — LIVE|BACKGROUND on each item; makes the routing tag machine-readable
+//                   instead of prose-only so Scribe can sort/route without guessing
+//   ageHours      — per-item recency; enables freshness-based ordering downstream
+//   url on escalations — ties each escalation to its source item
+
 const DEFAULT_AGENT_DATA_TEMPLATE = `{
-  "brandMentions": [{"source":"...","author":"...","content":"...","sentiment":"positive|neutral|negative","reach":"high|medium|low","url":"<post permalink — not profile or homepage>"}],
-  "competitorIntel": [{"competitor":"...","finding":"...","impact":"high|medium|low","url":"<post permalink — not profile or homepage>"}],
-  "categoryTrends": [{"trend":"...","relevance":"high|medium|low","detail":"...","url":"<post or article permalink, optional>"}],
+  "runMeta": {
+    "timestamp": "<ISO-8601>",
+    "freshnessWindowDays": 1,
+    "queryTrace": ["<exact query string used for each search>"]
+  },
+  "emptySections": ["<array of section names where Scout searched and found nothing, e.g. brandMentions>"],
+  "brandMentions": [{"source":"...","author":"...","content":"...","sentiment":"positive|neutral|negative","reach":"high|medium|low","signalType":"LIVE|BACKGROUND","ageHours":0,"url":"<post permalink — not profile or homepage>"}],
+  "competitorIntel": [{"competitor":"...","finding":"...","impact":"high|medium|low","signalType":"LIVE|BACKGROUND","ageHours":0,"url":"<post permalink — not profile or homepage>"}],
+  "categoryTrends": [{"trend":"...","relevance":"high|medium|low","detail":"...","ageHours":0,"url":"<post or article permalink, optional>"}],
   "contentOpportunities": {
     "found": true,
     "opportunities": [{"topic":"...","whyNow":"...","format":"...","priority":"high|medium|low","source":"...","url":"<post permalink — not profile or homepage>"}],
     "searchedFor": ["trigger 1","trigger 2"]
   },
-  "escalations": [{"level":"CRITICAL|IMPORTANT|QUIET","status":"NEW|CHANGED|ESCALATED|RESOLVED","summary":"..."}]
+  "escalations": [{"level":"CRITICAL|IMPORTANT|QUIET","status":"NEW|CHANGED|ESCALATED|RESOLVED","summary":"...","url":"<source permalink, optional>"}]
 }`;
 
 const MARKETING_BRIEF_AGENT_DATA_TEMPLATE = `{
-  "brandMentions": [{"source":"...","author":"...","content":"...","sentiment":"positive|neutral|negative","reach":"high|medium|low","url":"<post permalink — not profile or homepage>"}],
-  "competitorIntel": [{"competitor":"...","finding":"...","impact":"high|medium|low","url":"<post permalink — not profile or homepage>"}],
-  "categoryTrends": [{"trend":"...","relevance":"high|medium|low","detail":"...","url":"<post or article permalink, optional>"}],
-  "kolActivity": [{"name":"...","platform":"x","content":"...","followers":"...","sentiment":"...","url":"<post permalink — the specific tweet/comment, not the profile>","profileUrl":"<author profile URL, optional>"}],
-  "escalations": [{"level":"CRITICAL|IMPORTANT|QUIET","status":"NEW|CHANGED|ESCALATED|RESOLVED","summary":"..."}],
+  "runMeta": {
+    "timestamp": "<ISO-8601>",
+    "freshnessWindowDays": 1,
+    "queryTrace": ["<exact query string used for each search>"]
+  },
+  "emptySections": ["<array of section names where Scout searched and found nothing, e.g. brandMentions, kolActivity>"],
+  "brandMentions": [{"source":"...","author":"...","content":"...","sentiment":"positive|neutral|negative","reach":"high|medium|low","signalType":"LIVE|BACKGROUND","ageHours":0,"url":"<post permalink — not profile or homepage>"}],
+  "competitorIntel": [{"competitor":"...","finding":"...","impact":"high|medium|low","signalType":"LIVE|BACKGROUND","ageHours":0,"url":"<post permalink — not profile or homepage>"}],
+  "categoryTrends": [{"trend":"...","relevance":"high|medium|low","detail":"...","ageHours":0,"url":"<post or article permalink, optional>"}],
+  "kolActivity": [{"name":"...","platform":"x","content":"...","followers":"...","sentiment":"positive|neutral|negative","signalType":"LIVE|BACKGROUND","ageHours":0,"url":"<post permalink — the specific tweet/comment, not the profile>","profileUrl":"<author profile URL, optional>"}],
+  "escalations": [{"level":"CRITICAL|IMPORTANT|QUIET","status":"NEW|CHANGED|ESCALATED|RESOLVED","summary":"...","url":"<source permalink, optional>"}],
   "viralOpportunities": {
     "found": true,
     "opportunities": [{"conversation":"...","url":"<permalink of the specific conversation/thread to engage with>","injectionAngle":"...","authenticity":"high|medium|low","windowHours":0,"suggestedReply":"..."}],
@@ -161,7 +184,33 @@ function deriveCompanyName(hostname, clientId) {
     .join(' ');
 }
 
-function buildSearchPlan({ websiteUrl, ideaDescription, hostname, companyName, marketingBriefConfig = null, sourcePlatforms = DEFAULT_SOURCE_PLATFORMS }) {
+// Build dedicated searches for the watchlist (marketingBriefConfig.kols).
+// These ALWAYS run — even when custom searches exist — so the configured
+// accounts are actually queried by name (per-handle) or together (combined),
+// instead of being silently skipped. Each handle is its own search so its
+// results land in their own bucket and don't overwrite other queries.
+function buildKolSearches({ marketingBriefConfig, companyName }) {
+  const kols = Array.isArray(marketingBriefConfig?.kols)
+    ? marketingBriefConfig.kols.map((k) => String(k || '').trim()).filter((k) => k.replace(/^@+/, '').trim().length >= 2)
+    : [];
+  if (!kols.length) return [];
+  const brand = companyName || 'the brand';
+  const mode = marketingBriefConfig?.kolSearchMode === 'combined' ? 'combined' : 'per-handle';
+  if (mode === 'combined') {
+    return [{
+      label: 'WATCHLIST',
+      query: kols.join(' OR '),
+      goal: `Report recent activity from each watched account (${kols.join(', ')}). Note what each posted and flag anything worth a ${brand} narrative — even if not brand-specific.`,
+    }];
+  }
+  return kols.map((handle) => ({
+    label: `WATCHLIST ${handle}`,
+    query: handle,
+    goal: `Report ${handle}'s recent posts/activity. Attribute findings to ${handle} by name and flag anything worth a ${brand} narrative push, even if not brand-specific.`,
+  }));
+}
+
+function buildSearchPlan({ websiteUrl, ideaDescription, hostname, companyName, brandKeywords = [], categoryTerms = [], marketingBriefConfig = null, sourcePlatforms = DEFAULT_SOURCE_PLATFORMS, audienceSignals = [] }) {
   const configuredSearches = Array.isArray(marketingBriefConfig?.searches)
     ? marketingBriefConfig.searches
         .map((row, index) => ({
@@ -173,31 +222,55 @@ function buildSearchPlan({ websiteUrl, ideaDescription, hostname, companyName, m
     : [];
 
   const perPlatformRows = buildPerPlatformSearchRows({ companyName, ideaDescription, sourcePlatforms });
-  // De-dupe: don't append a platform row whose label collides with a
-  // user-saved row (case-insensitive match on label OR same query string).
+  const kolRows = buildKolSearches({ marketingBriefConfig, companyName });
+
+  // De-dupe: don't append a row whose label collides with an existing row
+  // (case-insensitive match on label OR same query string).
   const isDuplicate = (row, existing) => existing.some((e) =>
     e.label.toLowerCase() === row.label.toLowerCase() || e.query === row.query
   );
-  const novelPlatformRows = perPlatformRows.filter((row) => !isDuplicate(row, configuredSearches));
+  const appendNovel = (base, rows) => {
+    const out = [...base];
+    for (const row of rows) { if (!isDuplicate(row, out)) out.push(row); }
+    return out;
+  };
 
   if (configuredSearches.length > 0) {
-    return [...configuredSearches, ...novelPlatformRows];
+    // Watchlist searches run even alongside custom searches — they were
+    // previously skipped, which is why named handles never got queried.
+    return appendNovel(configuredSearches, [...kolRows, ...perPlatformRows]);
   }
 
-  const brandQuery = [`"${companyName}"`, hostname ? `"${hostname}"` : null, hostname ? `site:${hostname}` : null]
+  const brandTokens = Array.isArray(brandKeywords) && brandKeywords.length
+    ? brandKeywords.map((t) => (/\s/.test(t) && !/^".*"$/.test(t) ? `"${t}"` : t))
+    : [`"${companyName}"`, hostname ? `"${hostname}"` : null];
+  const brandQuery = [...brandTokens, hostname ? `site:${hostname}` : null]
     .filter(Boolean)
     .join(' OR ');
 
+  const categoryQuery = Array.isArray(categoryTerms) && categoryTerms.length
+    ? categoryTerms.slice(0, 4).join(' OR ')
+    : null;
   const ideaTerms = ideaDescription
     ? ideaDescription.split(/[\s,./]+/).filter((t) => t.length > 3).slice(0, 6).join(' OR ')
     : null;
 
-  const categoryQuery = ideaTerms || `${companyName} industry trends 2026`;
-  const opportunityQuery = ideaDescription
-    ? `best ${ideaDescription.split(/\s+/).slice(0, 4).join(' ')}`
-    : `${companyName} reviews OR ${hostname} competitors`;
+  const resolvedCategoryQuery = categoryQuery || ideaTerms || `${companyName} industry trends 2026`;
+  const opportunitySubject = Array.isArray(categoryTerms) && categoryTerms.length
+    ? categoryTerms[0]
+    : (ideaDescription ? ideaDescription.split(/\s+/).slice(0, 4).join(' ') : companyName);
+  // Prefer positioning-derived audience signal queries over generic "best X alternatives".
+  // Audience signals look for sub-layer conversations — where the target audience is
+  // discussing the pain point BEFORE they found this brand. Much higher signal quality.
+  const audienceQuery = Array.isArray(audienceSignals) && audienceSignals.length
+    ? audienceSignals.slice(0, 3).join(' OR ')
+    : null;
+  const opportunityQuery = audienceQuery
+    || ((categoryQuery || ideaDescription)
+      ? `best ${opportunitySubject} recommendations OR alternatives OR problems`
+      : `${companyName} reviews OR ${hostname} competitors`);
 
-  return [
+  const defaultPlan = [
     {
       label: 'BRAND',
       query: brandQuery,
@@ -205,16 +278,19 @@ function buildSearchPlan({ websiteUrl, ideaDescription, hostname, companyName, m
     },
     {
       label: 'CATEGORY',
-      query: categoryQuery,
+      query: resolvedCategoryQuery,
       goal: 'Capture broader category movement and external narratives the brand can react to.',
     },
     {
       label: 'CONTENT OPPORTUNITIES',
       query: opportunityQuery,
-      goal: 'Find live conversations and topics where the brand can contribute credibly.',
+      goal: audienceQuery
+        ? 'Find sub-layer conversations where the target audience is discussing their pain points — the communities and threads this brand is positioned to answer.'
+        : 'Find live conversations and topics where the brand can contribute credibly.',
     },
-    ...novelPlatformRows,
   ];
+
+  return appendNovel(defaultPlan, [...kolRows, ...perPlatformRows]);
 }
 
 // ─── Core builder ─────────────────────────────────────────────────────────────
@@ -232,10 +308,27 @@ function buildSearchPlan({ websiteUrl, ideaDescription, hostname, companyName, m
 function buildRuntimeConfigFromFirestore(clientId, clientConfig) {
   const sourceInputs = clientConfig?.sourceInputs || {};
   const marketingBriefConfig = clientConfig?.marketingBriefConfig || null;
+  const scoutConfig = clientConfig?.scoutConfig || null;
+  const positioningContext = scoutConfig?.positioningContext || null;
   const websiteUrl = String(sourceInputs.websiteUrl || '');
   const ideaDescription = String(sourceInputs.ideaDescription || '').trim();
   const hostname = extractHostname(websiteUrl);
-  const companyName = deriveCompanyName(hostname, clientId);
+  // Brand identity is canonical in scoutConfig (the audit store, kept in sync by
+  // the Brand & Keywords card save → scoutConfig mirror). Read scoutConfig first
+  // so a Run resolves the same brandKeywords / categoryTerms / clientName the
+  // audit and external scouts use; fall back to the card config, then to derived.
+  // These drive the BRAND search row, the X/last30days topic, and Reddit mentions.
+  const cleanList = (arr) => (Array.isArray(arr) ? arr.map((s) => String(s || '').trim()).filter(Boolean) : []);
+  const configuredBrandName = String(scoutConfig?.clientName || marketingBriefConfig?.brandName || '').trim();
+  const scoutBrandKeywords = cleanList(scoutConfig?.brandKeywords);
+  const configuredBrandKeywords = scoutBrandKeywords.length
+    ? scoutBrandKeywords
+    : cleanList(marketingBriefConfig?.brandKeywords);
+  const scoutCategoryTerms = cleanList(scoutConfig?.categoryTerms);
+  const configuredCategoryTerms = scoutCategoryTerms.length
+    ? scoutCategoryTerms
+    : cleanList(marketingBriefConfig?.categoryTerms);
+  const companyName = configuredBrandName || deriveCompanyName(hostname, clientId);
   const configuredKols = Array.isArray(marketingBriefConfig?.kols) ? marketingBriefConfig.kols.filter(Boolean) : [];
   const configuredCompetitors = Array.isArray(marketingBriefConfig?.competitors) ? marketingBriefConfig.competitors.filter(Boolean) : [];
   const configuredSourceFocus = String(marketingBriefConfig?.sourceFocus || '').trim();
@@ -264,34 +357,84 @@ function buildRuntimeConfigFromFirestore(clientId, clientConfig) {
     .filter((item) => item.length > 3)
     .slice(0, 12);
 
+  // Resolved category terms (card values, else split from the idea) — reused by
+  // the category row, last30days topic, and the Reddit opportunity fallback.
+  const resolvedCategoryTerms = configuredCategoryTerms.length
+    ? configuredCategoryTerms
+    : (ideaDescription
+      ? ideaDescription.split(/[,.\n]+/).map((t) => t.trim()).filter(Boolean).slice(0, 6)
+      : []);
+  // Clean X handle list for last30days --x-related (handles must NOT go in the topic).
+  const cleanXHandles = configuredKols
+    .map((h) => String(h || '').trim().replace(/^@+/, ''))
+    .filter((h) => h.length >= 2)
+    .slice(0, 6);
+  // A CLEAN last30days topic: brand + a few category terms only. Competitor URLs
+  // and @handles jammed into the topic malformed the X/Bird query and it failed.
+  const cleanLast30Topic = [companyName, ...resolvedCategoryTerms.slice(0, 3)]
+    .filter(Boolean).join(' ').slice(0, 120);
+
+  // Saved events (Events card) → upcomingEvents with computed daysOut.
+  // Past events are dropped; horizon capped at 60 days out.
+  const nowMs = Date.now();
+  const upcomingEvents = (Array.isArray(marketingBriefConfig?.events) ? marketingBriefConfig.events : [])
+    .map((e) => {
+      const dateMs = Date.parse(`${e?.date}T12:00:00`);
+      if (Number.isNaN(dateMs)) return null;
+      const daysOut = Math.round((dateMs - nowMs) / 86400000);
+      if (daysOut < 0 || daysOut > 60) return null;
+      return {
+        event: String(e.event || '').trim(),
+        date: e.date,
+        daysOut,
+        location: String(e.location || '').trim(),
+        url: String(e.url || '').trim(),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.daysOut - b.daysOut)
+    .slice(0, 12);
+
+  // Custom user-entered local signals (Events card free-form rows). Merged into
+  // the brief's Local Signals at hydration — never overwritten by Scout output.
+  const customLocalSignals = Array.isArray(marketingBriefConfig?.localSignals)
+    ? marketingBriefConfig.localSignals.map((s) => String(s || '').trim()).filter(Boolean).slice(0, 12)
+    : [];
+
   return {
     clientId,
     clientName: companyName,
     clientDescriptor: ideaDescription || `a business at ${websiteUrl || clientId}`,
     websiteUrl,
-    brandKeywords: [
-      companyName ? `"${companyName}"` : null,
-      hostname ? `"${hostname}"` : null,
-    ].filter(Boolean),
+    brandKeywords: configuredBrandKeywords.length
+      ? configuredBrandKeywords.map((t) => (/^".*"$/.test(t) ? t : `"${t}"`))
+      : [
+          companyName ? `"${companyName}"` : null,
+          hostname ? `"${hostname}"` : null,
+        ].filter(Boolean),
     competitors: configuredCompetitors,
-    categoryTerms: ideaDescription
-      ? ideaDescription.split(/[,.\n]+/).map((t) => t.trim()).filter(Boolean).slice(0, 6)
-      : [],
+    categoryTerms: resolvedCategoryTerms,
     kols: configuredKols,
-    upcomingEvents: [],
+    upcomingEvents,
+    customLocalSignals,
 
     scout: {
       freshnessDays,
-      sourceFocus: configuredSourceFocus || (ideaDescription
-        ? `Focus on "${ideaDescription}". Find market signals, competitor activity, content opportunities, and audience conversations relevant to ${websiteUrl || companyName}.`
-        : `Focus on brand signals, competitor activity, and content opportunities for ${websiteUrl || companyName}.`),
+      sourceFocus: configuredSourceFocus || (() => {
+        const posAudienceHint = positioningContext?.audienceSignals?.length
+          ? ` Prioritize conversations where the target audience discusses their pain points: ${positioningContext.audienceSignals.slice(0, 2).join('; ')}.`
+          : '';
+        return ideaDescription
+          ? `Focus on "${ideaDescription}". Find market signals, competitor activity, content opportunities, and audience conversations relevant to ${websiteUrl || companyName}.${posAudienceHint}`
+          : `Focus on brand signals, competitor activity, and content opportunities for ${websiteUrl || companyName}.${posAudienceHint}`;
+      })(),
       analysisInstructions: configuredScoutInstructions || (hasMarketingBriefConfig
         ? 'Prioritize live community momentum, current news, sentiment shifts, KOL windows, and moments where the brand can credibly enter the conversation.'
         : undefined),
       sourcePlatforms,
       enabledSourceLabels: enabledPlatformLabels,
       preferredSources: enabledPlatformLabels,
-      searchPlan: buildSearchPlan({ websiteUrl, ideaDescription, hostname, companyName, marketingBriefConfig, sourcePlatforms }),
+      searchPlan: buildSearchPlan({ websiteUrl, ideaDescription, hostname, companyName, brandKeywords: configuredBrandKeywords, categoryTerms: configuredCategoryTerms, marketingBriefConfig, sourcePlatforms, audienceSignals: positioningContext?.audienceSignals }),
       agentDataTemplate: configuredAgentDataTemplate || (hasMarketingBriefConfig ? MARKETING_BRIEF_AGENT_DATA_TEMPLATE : DEFAULT_AGENT_DATA_TEMPLATE),
     },
 
@@ -304,26 +447,50 @@ function buildRuntimeConfigFromFirestore(clientId, clientConfig) {
         ...configuredKols,
         ...configuredCompetitors,
       ].slice(0, 20),
-      viralTriggers,
+      // Merge custom search triggers with positioning-derived sub-layer triggers.
+      // Positioning triggers look for community conversations about the problem
+      // BEFORE someone found a solution — the most valuable search real-estate.
+      viralTriggers: [
+        ...viralTriggers,
+        ...(positioningContext?.viralTriggers || []),
+      ].filter((v, i, a) => a.indexOf(v) === i).slice(0, 12),
       exclusions: ['politics', 'lawsuit', 'hack', 'exploit', 'scam'],
     },
 
     last30days: sourcePlatforms.some((key) => ['x', 'reddit', 'instagram', 'youtube', 'tiktok', 'hackernews'].includes(key)) ? {
       enabled: true,
-      primaryTopic: [
-        companyName,
-        ideaDescription,
-        configuredCompetitors.join(' '),
-        configuredKols.join(' '),
-      ].filter(Boolean).join(' '),
+      primaryTopic: cleanLast30Topic || companyName,
       sources: sourcePlatforms
         .filter((key) => ['x', 'reddit', 'instagram', 'youtube', 'tiktok', 'hackernews'].includes(key))
         .join(','),
-      lookbackDays: freshnessDays,
+      // Social sources are sparse over 1 day — widen to at least a week.
+      lookbackDays: Math.max(7, freshnessDays),
+      xRelated: cleanXHandles.join(','),
       subreddits: sourcePlatforms.includes('reddit') ? 'all' : '',
       brandTerms: [companyName, hostname].filter(Boolean),
       competitorNames: configuredCompetitors,
     } : { enabled: false },
+
+    // Dedicated Reddit scout for the daily brief. Only emitted when the user
+    // toggled Reddit as a source platform. provider 'web-search' = credential-free
+    // site:reddit.com via search-engine indexing (DuckDuckGo) — no Reddit OAuth or
+    // API. Queries come from the Marketing Director's scoutConfig.reddit, falling
+    // back to brand keywords (mentions) and category + competitors (opportunities)
+    // so a sparse config still searches. Same shape the Test cards use.
+    reddit: sourcePlatforms.includes('reddit') ? (() => {
+      const sr = clientConfig?.scoutConfig?.reddit || {};
+      const toList = (v) => (Array.isArray(v) ? v.filter(Boolean) : []);
+      const mentions = toList(sr.mentionQueries);
+      const opps = toList(sr.opportunityQueries);
+      const brandFallback = [companyName, ...configuredBrandKeywords.map((t) => t.replace(/^["']|["']$/g, ''))].filter(Boolean).slice(0, 4);
+      const oppFallback = [...resolvedCategoryTerms, ...configuredCompetitors].filter(Boolean).slice(0, 4);
+      return {
+        provider:           'web-search',
+        subreddits:         toList(sr.subreddits),
+        mentionQueries:     mentions.length ? mentions : brandFallback,
+        opportunityQueries: opps.length ? opps : oppFallback,
+      };
+    })() : undefined,
 
     scribe: {
       role: hasMarketingBriefConfig ? 'founder brief content strategist' : 'content writer',

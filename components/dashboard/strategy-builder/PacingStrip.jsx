@@ -36,6 +36,7 @@ export default function PacingStrip({ anchors, now }) {
   return (
     <div
       id="strategy-builder-pacing-strip"
+      className="sb-pacing-strip"
       style={{
         display: 'flex',
         gap: 10,
@@ -49,6 +50,7 @@ export default function PacingStrip({ anchors, now }) {
         return (
           <div
             key={anchor.id}
+            className={`sb-pacing-card sb-pacing-card-${anchor.ramp === 'hard' ? 'hard' : 'soft'}`}
             style={{
               flex: '0 0 auto',
               padding: '8px 14px',

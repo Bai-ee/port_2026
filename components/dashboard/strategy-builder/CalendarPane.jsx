@@ -60,6 +60,7 @@ function PostRow({ item, onEdit, onRegen, regenBusy, editingId, editContent, onE
   return (
     <div
       id={`strategy-builder-post-row-${item.id}`}
+      className="sb-post-row"
       style={{
         padding: '8px 10px',
         background: 'var(--surface-raised)',
@@ -68,9 +69,9 @@ function PostRow({ item, onEdit, onRegen, regenBusy, editingId, editContent, onE
         marginBottom: 6,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: isEditing ? 8 : 0 }}>
+      <div className="sb-post-row-head" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: isEditing ? 8 : 0 }}>
         {/* Kind badge */}
-        <span style={{
+        <span className={`sb-kind-chip sb-kind-chip-${item.kind || 'baseline'}`} style={{
           fontSize: 9,
           fontFamily: 'monospace',
           letterSpacing: '0.08em',
@@ -156,7 +157,7 @@ function TodaySection({ today, onEditToday, onPush, pushState }) {
   const pushLabel = pushState === 'pushing' ? '…' : pushState === 'done' ? 'Queued ✓' : pushState === 'error' ? 'Failed' : '→ Queue';
 
   return (
-    <div id="strategy-builder-today-section" style={{
+    <div id="strategy-builder-today-section" className="sb-feature-panel" style={{
       marginBottom: 20,
       borderRadius: 8,
       border: '1px solid var(--accent, #e8d5b0)',
@@ -284,7 +285,7 @@ export default function CalendarPane({ plan, config, getIdToken, onPlanChange, o
 
   if (!plan) {
     return (
-      <div style={{ padding: '40px 0', textAlign: 'center' }}>
+      <div className="sb-empty-state">
         <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16, fontFamily: 'var(--font-ui)' }}>
           Generate a strategy in the Inputs tab.
         </div>
@@ -401,11 +402,11 @@ export default function CalendarPane({ plan, config, getIdToken, onPlanChange, o
   }
 
   return (
-    <div style={{ padding: '8px 0' }}>
+    <div className="sb-pane">
       {/* Today strategy — always shown at top when present */}
       {plan.today && (
         todayEditingId ? (
-          <div id="strategy-builder-today-edit-shell" style={{
+          <div id="strategy-builder-today-edit-shell" className="sb-feature-panel" style={{
             marginBottom: 20,
             borderRadius: 8,
             border: '1px solid var(--accent, #e8d5b0)',
@@ -449,7 +450,7 @@ export default function CalendarPane({ plan, config, getIdToken, onPlanChange, o
       <PacingStrip anchors={plan.anchors || []} now={now} />
 
       {/* View toggles — design-system segmented control */}
-      <div id="strategy-builder-view-toggles" className="sb-seg" style={{ marginBottom: 16, alignItems: 'center' }}>
+      <div id="strategy-builder-view-toggles" className="sb-seg sb-view-seg" style={{ marginBottom: 16, alignItems: 'center' }}>
         <button type="button" className={`sb-seg-btn${view === 'daily' ? ' is-active' : ''}`} onClick={() => setView('daily')}>DAILY</button>
         <button type="button" className={`sb-seg-btn${view === 'weekly' ? ' is-active' : ''}`} onClick={() => setView('weekly')}>WEEKLY</button>
         <button type="button" className={`sb-seg-btn${view === 'monthly' ? ' is-active' : ''}`} onClick={() => setView('monthly')}>30-DAY</button>

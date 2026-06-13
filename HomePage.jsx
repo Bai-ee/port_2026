@@ -13,7 +13,6 @@ import StackedSlidesSection from './StackedSlidesSection';
 // import FontSelector from './FontSelector';
 // import LoopControls from './LoopControls';
 import PortfolioModal from './PortfolioModal';
-import SceneSettingsPanel from './SceneSettingsPanel';
 import HomepageAnalytics from './components/HomepageAnalytics';
 
 const AppCanvas = dynamic(() => import('./ox.jsx'), { ssr: false });
@@ -118,7 +117,6 @@ const heroGradientStyle = {
 
 const HomePage = () => {
   const [params, setParams] = useState(HERO_PARAMS_START);
-  const [showSettings, setShowSettings] = useState(false);
 
   const [canvasBackground, setCanvasBackground] = useState('#ffffff');
   const [textColor, setTextColor] = useState('#000000');
@@ -184,10 +182,11 @@ const HomePage = () => {
     const canvasWrapper = canvasWrapperRef.current;
     const nav          = document.querySelector('#founders-top-strip');
     const panelHeadline = document.querySelector('#panel-hero-headline');
+    const urlInputRow   = document.querySelector('#hero-url-input-row');
     const panelCta      = document.querySelector('#panel-hero-cta');
     const panelGrid     = document.querySelector('#stacked-grid-row');
     gsap.set([gradient, headline, canvasWrapper, nav].filter(Boolean), { autoAlpha: 0 });
-    gsap.set([panelHeadline, panelCta, panelGrid].filter(Boolean), { autoAlpha: 0 });
+    gsap.set([panelHeadline, urlInputRow, panelCta, panelGrid].filter(Boolean), { autoAlpha: 0 });
 
     const tl = gsap.timeline({ delay: 0.2 });
     tl.fromTo(
@@ -199,7 +198,8 @@ const HomePage = () => {
       .to(nav,           { autoAlpha: 1, duration: 1.2, ease: 'power2.out' }, '<0.2')
       .to(headline,      { autoAlpha: 1, duration: 1.05, ease: 'power2.out' }, '0.32')
       .to(panelHeadline, { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '0.58')
-      .to(panelCta,      { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '<0.15')
+      // URL input row + Meet CTA fade in together
+      .to([urlInputRow, panelCta].filter(Boolean), { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '<0.15')
       .to(panelGrid,     { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '<0.15');
 
     // Replays the hero's entrance when the user returns to the top after scrolling
@@ -305,42 +305,11 @@ const HomePage = () => {
     };
   }, []);
 
-  useEffect(() => {
-    const handler = () => setShowSettings((v) => !v);
-    window.addEventListener('openSceneSettings', handler);
-    return () => window.removeEventListener('openSceneSettings', handler);
-  }, []);
-
-  // Stable callbacks so SceneSettingsPanel never re-renders due to prop identity changes
-  const handleParamsChange = useCallback((next) => {
-    // Resolve against user's base settings so slider spreads never lock in mid-scroll values.
-    const resolved = typeof next === 'function' ? next(userParamsRef.current) : next;
-    userParamsRef.current = resolved;
-    // At rest (top): show full user settings so panel changes are visible immediately.
-    // During scroll: use the normalized scroll base so the canvas doesn't jump direction.
-    const p = heroProgressRef.current;
-    paramsRef.current = p > 0
-      ? interpolateHeroParams(getScrollBase(resolved), HERO_PARAMS_END, p)
-      : resolved;
-    setParams(resolved);
-  }, []);
-
-  const handleCloseSettings = useCallback(() => setShowSettings(false), []);
-
   return (
     <>
     <HomepageAnalytics />
     {/* Header outside overflow-clip container so backdrop-filter composites against the viewport correctly */}
-    <Header logoRef={headerLogoRef} onOpenPage={setActivePageId} />
-    {showSettings && (
-      <SceneSettingsPanel
-        initialParams={userParamsRef.current}
-        liveParamsRef={paramsRef}
-        onParamsChange={handleParamsChange}
-        defaultParams={HERO_PARAMS_START}
-        onClose={handleCloseSettings}
-      />
-    )}
+    <Header logoRef={headerLogoRef} onOpenPage={setActivePageId} logoSrc="/img/circle_logo.png" />
     <div style={{ position: 'relative', width: '100vw', minHeight: '100dvh', background: 'transparent', overflowX: 'clip' }}>
       <style>{`
         @keyframes heroGradientDrift {
@@ -356,6 +325,7 @@ const HomePage = () => {
         #founders-top-strip,
         #hero-panel-top-left,
         #panel-hero-headline,
+        #hero-url-input-row,
         #panel-hero-cta {
           opacity: 0;
           visibility: hidden;
@@ -397,7 +367,7 @@ const HomePage = () => {
             margin: 0,
           }}
         >
-          Bryan Balli is a digital media developer and creative technologist based in Chicago. He builds client intelligence platforms, modular intake pipelines, and high-performance web experiences for founders, agencies, and growing teams — combining Next.js, Three.js, and GSAP to ship production-quality work. Agency background spans Publicis, Epsilon, Conversant, and Alliance Data. Clients include TikTok, HBO Max, and TST. Starting engagement scope: $3,500. Typical project timeline: 2–6 weeks.
+          Bryan Balli is an AI design engineer and creative technologist based in Chicago. He builds AI-assisted client intelligence platforms, modular intake pipelines, and high-performance web experiences for founders, agencies, and growing teams — combining Next.js, Three.js, and GSAP with the Claude API and OpenAI to ship production-quality work with intelligent automation built in. Agency background spans Publicis, Epsilon, Conversant, and Alliance Data. Clients include TikTok, HBO Max, and TST. Starting engagement scope: $3,500. Typical project timeline: 2–6 weeks.
         </h2>
       </section>
 

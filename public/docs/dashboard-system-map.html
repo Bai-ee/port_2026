@@ -1,0 +1,207 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Dashboard System Map — flow</title>
+<style>
+ @import url('https://fonts.googleapis.com/css2?family=Doto:wght@400;700;900&family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+ :root{--bg:#fbf8f0;--ink:#12100c;--soft:#5a5346;--light:#8a8070;--line:#d9cfb9;--card:#fffdf7;--mono:'Space Mono',monospace;--body:'Space Grotesk',system-ui,sans-serif;--disp:'Doto','Space Mono',monospace;}
+ *{box-sizing:border-box;} body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);-webkit-font-smoothing:antialiased;}
+ .wrap{max-width:1260px;margin:0 auto;padding:46px 22px 90px;}
+ .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--light);margin:0 0 10px;}
+ h1{font-family:var(--disp);font-weight:900;font-size:clamp(38px,6vw,66px);line-height:.85;letter-spacing:-.03em;text-transform:uppercase;margin:0 0 14px;}
+ .lede{font-size:15px;line-height:1.6;color:var(--soft);max-width:720px;margin:0 0 6px;}
+ .meta{font-family:var(--mono);font-size:11px;color:var(--light);}
+ .roles{display:flex;gap:15px;flex-wrap:wrap;margin:20px 0 4px;font-family:var(--mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--soft);}
+ .roles span{display:inline-flex;align-items:center;gap:6px;} .dot{width:10px;height:10px;border-radius:50%;border:1.4px solid;display:inline-block;}
+ .canvas{margin-top:18px;overflow:auto;border:1px solid var(--line);border-radius:16px;background:var(--card);} svg{display:block;min-width:1190px;}
+ h2{font-family:var(--disp);font-weight:900;font-size:26px;text-transform:uppercase;margin:50px 0 10px;}
+ .cut{background:var(--card);border:1px solid var(--line);border-left:3px solid #a8392a;border-radius:10px;padding:12px 15px;margin:10px 0;font-size:13px;line-height:1.55;color:var(--soft);} .cut b{color:var(--ink);}
+ .foot{margin-top:46px;font-family:var(--mono);font-size:10px;color:var(--light);border-top:1px solid var(--line);padding-top:14px;}
+</style></head><body><div class="wrap">
+ <p class="eyebrow">HitLoop · Dashboard architecture</p>
+ <h1>System Map<br>Card Flow</h1>
+ <p class="lede">Every card is a node; arrows show data flowing card → card, left→right in analysis order. Bold arrows = inputs feeding an engine / chained outputs; faint arrows = an engine fanning out to its many display cards.</p>
+ <p class="meta">v4 · generated · scripts/gen-system-map.cjs · 77 cards + 4 engine hubs</p>
+ <div class="roles">
+   <span><span class="dot" style="background:#eaf1fe;border-color:#2563eb"></span>Input</span>
+   <span><span class="dot" style="background:#efe9db;border-color:#7c3aed"></span>Engine</span>
+   <span><span class="dot" style="background:#ecf4ec;border-color:#2f6b3d"></span>Output</span>
+   <span><span class="dot" style="background:#f8efe8;border-color:#b8542e"></span>Action</span>
+   <span><span class="dot" style="background:#f6f0e2;border-color:#8a6a1f"></span>Meta</span>
+   <span><span class="dot" style="background:#f1f0ee;border-color:#b9b3a7"></span>Upsell</span>
+ </div>
+ <div class="canvas"><svg viewBox="0 0 1190 1002" width="1190" height="1002" xmlns="http://www.w3.org/2000/svg">
+<defs>
+ <marker id="as" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#8a8070"/></marker>
+ <marker id="al" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#c9bfa8"/></marker>
+</defs>
+<style>
+ .stage{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.16em;text-transform:uppercase;fill:#b9ad96;}
+ .hdr{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;fill:#a89e8a;}
+ .pt{font-family:'Space Mono',monospace;font-size:9.5px;}
+ .es{fill:none;stroke:#9a8f79;stroke-width:1.3;}
+ .el{fill:none;stroke:#d4c9b1;stroke-width:1.1;}
+</style>
+<text class="stage" x="26" y="30">INTAKE</text>
+<text class="stage" x="150" y="30">CONTEXT</text>
+<text class="stage" x="320" y="30">INPUTS</text>
+<text class="stage" x="560" y="30">ENGINES</text>
+<text class="stage" x="770" y="30">OUTPUTS</text>
+<text class="stage" x="1035" y="30">ACTIONS</text>
+<path class="el" d="M99 70.5 C133 70.5 286 60.5 320 60.5" marker-end="url(#al)"/>
+<path class="el" d="M99 70.5 C133 70.5 116 114.5 150 114.5" marker-end="url(#al)"/>
+<path class="el" d="M99 70.5 C133 70.5 116 141.5 150 141.5" marker-end="url(#al)"/>
+<path class="el" d="M99 70.5 C133 70.5 286 396.5 320 396.5" marker-end="url(#al)"/>
+<path class="el" d="M99 70.5 C133 70.5 286 423.5 320 423.5" marker-end="url(#al)"/>
+<path class="el" d="M99 70.5 C133 70.5 286 450.5 320 450.5" marker-end="url(#al)"/>
+<path class="el" d="M99 70.5 C133 70.5 526 626 560 626" marker-end="url(#al)"/>
+<path class="es" d="M399 396.5 C433 396.5 286 477.5 320 477.5" marker-end="url(#as)"/>
+<path class="es" d="M388 423.5 C422 423.5 286 477.5 320 477.5" marker-end="url(#as)"/>
+<path class="es" d="M420 60.5 C454 60.5 286 141.5 320 141.5" marker-end="url(#as)"/>
+<path class="es" d="M420 60.5 C454 60.5 526 263 560 263" marker-end="url(#as)"/>
+<path class="es" d="M383 87.5 C417 87.5 526 263 560 263" marker-end="url(#as)"/>
+<path class="es" d="M393 114.5 C427 114.5 526 263 560 263" marker-end="url(#as)"/>
+<path class="es" d="M393 141.5 C427 141.5 526 263 560 263" marker-end="url(#as)"/>
+<path class="es" d="M409 168.5 C443 168.5 526 263 560 263" marker-end="url(#as)"/>
+<path class="es" d="M415 195.5 C449 195.5 526 263 560 263" marker-end="url(#as)"/>
+<path class="es" d="M409 222.5 C443 222.5 526 263 560 263" marker-end="url(#as)"/>
+<path class="es" d="M404 249.5 C438 249.5 526 263 560 263" marker-end="url(#as)"/>
+<path class="es" d="M436 276.5 C470 276.5 526 263 560 263" marker-end="url(#as)"/>
+<path class="es" d="M425 303.5 C459 303.5 526 263 560 263" marker-end="url(#as)"/>
+<path class="es" d="M404 330.5 C438 330.5 526 263 560 263" marker-end="url(#as)"/>
+<path class="es" d="M234 60.5 C268 60.5 526 263 560 263" marker-end="url(#as)"/>
+<path class="es" d="M223 87.5 C257 87.5 526 263 560 263" marker-end="url(#as)"/>
+<path class="es" d="M239 114.5 C273 114.5 526 263 560 263" marker-end="url(#as)"/>
+<path class="el" d="M649 263 C683 263 736 60.5 770 60.5" marker-end="url(#al)"/>
+<path class="el" d="M649 263 C683 263 736 87.5 770 87.5" marker-end="url(#al)"/>
+<path class="el" d="M649 263 C683 263 736 114.5 770 114.5" marker-end="url(#al)"/>
+<path class="el" d="M649 263 C683 263 736 141.5 770 141.5" marker-end="url(#al)"/>
+<path class="el" d="M649 263 C683 263 736 195.5 770 195.5" marker-end="url(#al)"/>
+<path class="el" d="M649 263 C683 263 736 222.5 770 222.5" marker-end="url(#al)"/>
+<path class="el" d="M649 263 C683 263 736 249.5 770 249.5" marker-end="url(#al)"/>
+<path class="el" d="M649 263 C683 263 736 276.5 770 276.5" marker-end="url(#al)"/>
+<path class="el" d="M649 263 C683 263 736 303.5 770 303.5" marker-end="url(#al)"/>
+<path class="el" d="M649 263 C683 263 736 330.5 770 330.5" marker-end="url(#al)"/>
+<path class="el" d="M649 263 C683 263 736 357.5 770 357.5" marker-end="url(#al)"/>
+<path class="el" d="M649 263 C683 263 736 384.5 770 384.5" marker-end="url(#al)"/>
+<path class="el" d="M649 263 C683 263 736 411.5 770 411.5" marker-end="url(#al)"/>
+<path class="el" d="M649 263 C683 263 736 438.5 770 438.5" marker-end="url(#al)"/>
+<path class="el" d="M649 263 C683 263 736 465.5 770 465.5" marker-end="url(#al)"/>
+<path class="es" d="M649 263 C683 263 736 168.5 770 168.5" marker-end="url(#as)"/>
+<path class="es" d="M865 168.5 C899 168.5 736 330.5 770 330.5" marker-end="url(#as)"/>
+<path class="es" d="M865 168.5 C899 168.5 736 141.5 770 141.5" marker-end="url(#as)"/>
+<path class="es" d="M896 60.5 C930 60.5 1001 178.5 1035 178.5" marker-end="url(#as)"/>
+<path class="es" d="M409 357.5 C443 357.5 1001 178.5 1035 178.5" marker-end="url(#as)"/>
+<path class="el" d="M896 60.5 C930 60.5 1001 151.5 1035 151.5" marker-end="url(#al)"/>
+<path class="el" d="M649 263 C683 263 526 812.5 560 812.5" marker-end="url(#al)"/>
+<path class="es" d="M399 396.5 C433 396.5 526 812.5 560 812.5" marker-end="url(#as)"/>
+<path class="es" d="M399 477.5 C433 477.5 526 812.5 560 812.5" marker-end="url(#as)"/>
+<path class="el" d="M234 60.5 C268 60.5 526 812.5 560 812.5" marker-end="url(#al)"/>
+<path class="es" d="M655 812.5 C689 812.5 736 786.5 770 786.5" marker-end="url(#as)"/>
+<path class="es" d="M891 786.5 C925 786.5 1001 70.5 1035 70.5" marker-end="url(#as)"/>
+<path class="es" d="M388 423.5 C422 423.5 736 840.5 770 840.5" marker-end="url(#as)"/>
+<path class="es" d="M388 423.5 C422 423.5 736 867.5 770 867.5" marker-end="url(#as)"/>
+<path class="es" d="M399 477.5 C433 477.5 736 813.5 770 813.5" marker-end="url(#as)"/>
+<path class="el" d="M633 626 C667 626 736 504.5 770 504.5" marker-end="url(#al)"/>
+<path class="el" d="M633 626 C667 626 736 531.5 770 531.5" marker-end="url(#al)"/>
+<path class="el" d="M633 626 C667 626 736 558.5 770 558.5" marker-end="url(#al)"/>
+<path class="el" d="M633 626 C667 626 736 585.5 770 585.5" marker-end="url(#al)"/>
+<path class="el" d="M633 626 C667 626 736 612.5 770 612.5" marker-end="url(#al)"/>
+<path class="el" d="M633 626 C667 626 736 639.5 770 639.5" marker-end="url(#al)"/>
+<path class="el" d="M633 626 C667 626 736 666.5 770 666.5" marker-end="url(#al)"/>
+<path class="el" d="M633 626 C667 626 736 693.5 770 693.5" marker-end="url(#al)"/>
+<path class="el" d="M633 626 C667 626 736 720.5 770 720.5" marker-end="url(#al)"/>
+<path class="el" d="M633 626 C667 626 736 747.5 770 747.5" marker-end="url(#al)"/>
+<path class="el" d="M399 477.5 C433 477.5 526 841.5 560 841.5" marker-end="url(#al)"/>
+<path class="el" d="M388 423.5 C422 423.5 526 841.5 560 841.5" marker-end="url(#al)"/>
+<path class="es" d="M628 841.5 C662 841.5 1001 97.5 1035 97.5" marker-end="url(#as)"/>
+<path class="es" d="M1151 97.5 C1185 97.5 1001 124.5 1035 124.5" marker-end="url(#as)"/>
+<g><rect x="26" y="60" width="73" height="21" rx="10.5" fill="#efe9db" stroke="#7c3aed" stroke-width="1.1"/><circle cx="36" cy="70.5" r="2.6" fill="#7c3aed"/><text class="pt" x="44" y="73.7" fill="#5b21b6">Site Intake</text></g>
+<g><rect x="150" y="50" width="84" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="160" cy="60.5" r="2.6" fill="#2563eb"/><text class="pt" x="168" y="63.7" fill="#1e40af">Company Brain</text></g>
+<g><rect x="150" y="77" width="73" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="160" cy="87.5" r="2.6" fill="#2563eb"/><text class="pt" x="168" y="90.7" fill="#1e40af">Founder Q&amp;A</text></g>
+<g><rect x="150" y="104" width="89" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="160" cy="114.5" r="2.6" fill="#2563eb"/><text class="pt" x="168" y="117.7" fill="#1e40af">Business Model</text></g>
+<g><rect x="150" y="131" width="95" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="160" cy="141.5" r="2.6" fill="#2563eb"/><text class="pt" x="168" y="144.7" fill="#1e40af">Market Category</text></g>
+<g><rect x="150" y="158" width="84" height="21" rx="10.5" fill="#f6f0e2" stroke="#8a6a1f" stroke-width="1.1"/><circle cx="160" cy="168.5" r="2.6" fill="#8a6a1f"/><text class="pt" x="168" y="171.7" fill="#8a6a1f">Data Coverage</text></g>
+<g><rect x="320" y="50" width="100" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="330" cy="60.5" r="2.6" fill="#2563eb"/><text class="pt" x="338" y="63.7" fill="#1e40af">Brand &amp; Keywords</text></g>
+<g><rect x="320" y="77" width="63" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="330" cy="87.5" r="2.6" fill="#2563eb"/><text class="pt" x="338" y="90.7" fill="#1e40af">Watchlist</text></g>
+<g><rect x="320" y="104" width="73" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="330" cy="114.5" r="2.6" fill="#2563eb"/><text class="pt" x="338" y="117.7" fill="#1e40af">Competitors</text></g>
+<g><rect x="320" y="131" width="73" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="330" cy="141.5" r="2.6" fill="#2563eb"/><text class="pt" x="338" y="144.7" fill="#1e40af">Search Plan</text></g>
+<g><rect x="320" y="158" width="89" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="330" cy="168.5" r="2.6" fill="#2563eb"/><text class="pt" x="338" y="171.7" fill="#1e40af">Research Focus</text></g>
+<g><rect x="320" y="185" width="95" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="330" cy="195.5" r="2.6" fill="#2563eb"/><text class="pt" x="338" y="198.7" fill="#1e40af">Web + Platforms</text></g>
+<g><rect x="320" y="212" width="89" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="330" cy="222.5" r="2.6" fill="#2563eb"/><text class="pt" x="338" y="225.7" fill="#1e40af">Social Signals</text></g>
+<g><rect x="320" y="239" width="84" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="330" cy="249.5" r="2.6" fill="#2563eb"/><text class="pt" x="338" y="252.7" fill="#1e40af">Local Weather</text></g>
+<g><rect x="320" y="266" width="116" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="330" cy="276.5" r="2.6" fill="#2563eb"/><text class="pt" x="338" y="279.7" fill="#1e40af">Conversation Intake</text></g>
+<g><rect x="320" y="293" width="105" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="330" cy="303.5" r="2.6" fill="#2563eb"/><text class="pt" x="338" y="306.7" fill="#1e40af">Platform Coverage</text></g>
+<g><rect x="320" y="320" width="84" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="330" cy="330.5" r="2.6" fill="#2563eb"/><text class="pt" x="338" y="333.7" fill="#1e40af">Brief Preview</text></g>
+<g><rect x="320" y="347" width="89" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="330" cy="357.5" r="2.6" fill="#2563eb"/><text class="pt" x="338" y="360.7" fill="#1e40af">Email Settings</text></g>
+<g><rect x="320" y="386" width="79" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="330" cy="396.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="338" y="399.7" fill="#2f6b3d">Voice &amp; Tone</text></g>
+<g><rect x="320" y="413" width="68" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="330" cy="423.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="338" y="426.7" fill="#2f6b3d">Visual DNA</text></g>
+<g><rect x="320" y="440" width="79" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="330" cy="450.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="338" y="453.7" fill="#2f6b3d">Visual Audit</text></g>
+<g><rect x="320" y="467" width="79" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="330" cy="477.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="338" y="480.7" fill="#2f6b3d">Brand System</text></g>
+<g><rect x="560" y="252.5" width="89" height="21" rx="10.5" fill="#efe9db" stroke="#7c3aed" stroke-width="1.1"/><circle cx="570" cy="263" r="2.6" fill="#7c3aed"/><text class="pt" x="578" y="266.2" fill="#5b21b6">Brief Pipeline</text></g>
+<g><rect x="560" y="615.5" width="73" height="21" rx="10.5" fill="#efe9db" stroke="#7c3aed" stroke-width="1.1"/><circle cx="570" cy="626" r="2.6" fill="#7c3aed"/><text class="pt" x="578" y="629.2" fill="#5b21b6">SEO / Audit</text></g>
+<g><rect x="560" y="802" width="95" height="21" rx="10.5" fill="#efe9db" stroke="#7c3aed" stroke-width="1.1"/><circle cx="570" cy="812.5" r="2.6" fill="#7c3aed"/><text class="pt" x="578" y="815.7" fill="#5b21b6">Copy &amp; Creative</text></g>
+<g><rect x="560" y="831" width="68" height="21" rx="10.5" fill="#efe9db" stroke="#7c3aed" stroke-width="1.1"/><circle cx="570" cy="841.5" r="2.6" fill="#7c3aed"/><text class="pt" x="578" y="844.7" fill="#5b21b6">Site Build</text></g>
+<g><rect x="770" y="50" width="126" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="60.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="63.7" fill="#2f6b3d">Executive Daily Brief</text></g>
+<g><rect x="770" y="77" width="100" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="87.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="90.7" fill="#2f6b3d">Competitor Brief</text></g>
+<g><rect x="770" y="104" width="95" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="114.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="117.7" fill="#2f6b3d">Marketing Brief</text></g>
+<g><rect x="770" y="131" width="132" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="141.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="144.7" fill="#2f6b3d">Strategy Brief (admin)</text></g>
+<g><rect x="770" y="158" width="95" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="168.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="171.7" fill="#2f6b3d">30-Day Strategy</text></g>
+<g><rect x="770" y="185" width="89" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="195.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="198.7" fill="#2f6b3d">Creative Brief</text></g>
+<g><rect x="770" y="212" width="105" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="222.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="225.7" fill="#2f6b3d">Performance Brief</text></g>
+<g><rect x="770" y="239" width="89" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="249.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="252.7" fill="#2f6b3d">Market Signals</text></g>
+<g><rect x="770" y="266" width="116" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="276.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="279.7" fill="#2f6b3d">Competitor Snapshot</text></g>
+<g><rect x="770" y="293" width="84" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="303.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="306.7" fill="#2f6b3d">Local Signals</text></g>
+<g><rect x="770" y="320" width="73" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="330.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="333.7" fill="#2f6b3d">Day-of Post</text></g>
+<g><rect x="770" y="347" width="169" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="357.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="360.7" fill="#2f6b3d">Custom Post Strategy (locked)</text></g>
+<g><rect x="770" y="374" width="79" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="384.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="387.7" fill="#2f6b3d">Content Gaps</text></g>
+<g><rect x="770" y="401" width="110" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="411.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="414.7" fill="#2f6b3d">Newsletter Roll-up</text></g>
+<g><rect x="770" y="428" width="79" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="438.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="441.7" fill="#2f6b3d">Client Brief</text></g>
+<g><rect x="770" y="455" width="89" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="465.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="468.7" fill="#2f6b3d">Brief Document</text></g>
+<g><rect x="770" y="494" width="105" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="504.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="507.7" fill="#2f6b3d">SEO + Performance</text></g>
+<g><rect x="770" y="521" width="100" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="531.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="534.7" fill="#2f6b3d">Site Performance</text></g>
+<g><rect x="770" y="548" width="153" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="558.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="561.7" fill="#2f6b3d">Search &amp; Social Visibility</text></g>
+<g><rect x="770" y="575" width="121" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="585.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="588.7" fill="#2f6b3d">Search Opportunities</text></g>
+<g><rect x="770" y="602" width="116" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="612.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="615.7" fill="#2f6b3d">Trust &amp; Credibility</text></g>
+<g><rect x="770" y="629" width="110" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="639.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="642.7" fill="#2f6b3d">AI Agent Readiness</text></g>
+<g><rect x="770" y="656" width="89" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="666.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="669.7" fill="#2f6b3d">Social Preview</text></g>
+<g><rect x="770" y="683" width="105" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="693.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="696.7" fill="#2f6b3d">Design Evaluation</text></g>
+<g><rect x="770" y="710" width="121" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="720.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="723.7" fill="#2f6b3d">Cross-Device Layouts</text></g>
+<g><rect x="770" y="737" width="121" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="747.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="750.7" fill="#2f6b3d">Conversion Readiness</text></g>
+<g><rect x="770" y="776" width="121" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="786.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="789.7" fill="#2f6b3d">Ready-to-Post Drafts</text></g>
+<g><rect x="770" y="803" width="79" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="813.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="816.7" fill="#2f6b3d">Design Brief</text></g>
+<g><rect x="770" y="830" width="153" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="840.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="843.7" fill="#2f6b3d">Homepage Mockup (creative)</text></g>
+<g><rect x="770" y="857" width="126" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="867.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="870.7" fill="#2f6b3d">Homepage Mockup (web)</text></g>
+<g><rect x="1035" y="60" width="89" height="21" rx="10.5" fill="#f8efe8" stroke="#b8542e" stroke-width="1.1"/><circle cx="1045" cy="70.5" r="2.6" fill="#b8542e"/><text class="pt" x="1053" y="73.7" fill="#9a3f1e">Schedule Posts</text></g>
+<g><rect x="1035" y="87" width="116" height="21" rx="10.5" fill="#f8efe8" stroke="#b8542e" stroke-width="1.1"/><circle cx="1045" cy="97.5" r="2.6" fill="#b8542e"/><text class="pt" x="1053" y="100.7" fill="#9a3f1e">Build &amp; Deploy Site</text></g>
+<g><rect x="1035" y="114" width="100" height="21" rx="10.5" fill="#f8efe8" stroke="#b8542e" stroke-width="1.1"/><circle cx="1045" cy="124.5" r="2.6" fill="#b8542e"/><text class="pt" x="1053" y="127.7" fill="#9a3f1e">Publish Estimate</text></g>
+<g><rect x="1035" y="141" width="116" height="21" rx="10.5" fill="#f8efe8" stroke="#b8542e" stroke-width="1.1"/><circle cx="1045" cy="151.5" r="2.6" fill="#b8542e"/><text class="pt" x="1053" y="154.7" fill="#9a3f1e">Submit Custom Brief</text></g>
+<g><rect x="1035" y="168" width="79" height="21" rx="10.5" fill="#f8efe8" stroke="#b8542e" stroke-width="1.1"/><circle cx="1045" cy="178.5" r="2.6" fill="#b8542e"/><text class="pt" x="1053" y="181.7" fill="#9a3f1e">Email Digest</text></g>
+<g><rect x="1035" y="195" width="84" height="21" rx="10.5" fill="#f8efe8" stroke="#b8542e" stroke-width="1.1"/><circle cx="1045" cy="205.5" r="2.6" fill="#b8542e"/><text class="pt" x="1053" y="208.7" fill="#9a3f1e">Create Client</text></g>
+<g><rect x="1035" y="222" width="79" height="21" rx="10.5" fill="#f8efe8" stroke="#b8542e" stroke-width="1.1"/><circle cx="1045" cy="232.5" r="2.6" fill="#b8542e"/><text class="pt" x="1053" y="235.7" fill="#9a3f1e">Local Events</text></g>
+<text class="hdr" x="26" y="912">OFF THE DATA SPINE — services + automation (no pipeline edges)</text>
+<g><rect x="26" y="934" width="89" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="36" cy="944.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="44" y="947.7" fill="#7a7567">Content Engine</text></g>
+<g><rect x="122" y="934" width="142" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="132" cy="944.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="140" y="947.7" fill="#7a7567">Automation Opportunities</text></g>
+<g><rect x="271" y="934" width="121" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="281" cy="944.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="289" y="947.7" fill="#7a7567">Reporting &amp; Insights</text></g>
+<g><rect x="399" y="934" width="110" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="409" cy="944.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="417" y="947.7" fill="#7a7567">Contact Your Human</text></g>
+<g><rect x="516" y="934" width="57" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="526" cy="944.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="534" y="947.7" fill="#7a7567">Fix This</text></g>
+<g><rect x="580" y="934" width="100" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="590" cy="944.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="598" y="947.7" fill="#7a7567">Run My Marketing</text></g>
+<g><rect x="687" y="934" width="84" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="697" cy="944.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="705" y="947.7" fill="#7a7567">Creative Work</text></g>
+<g><rect x="778" y="934" width="79" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="788" cy="944.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="796" y="947.7" fill="#7a7567">Build a Page</text></g>
+<g><rect x="864" y="934" width="100" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="874" cy="944.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="882" y="947.7" fill="#7a7567">Short-Form Video</text></g>
+<g><rect x="971" y="934" width="95" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="981" cy="944.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="989" y="947.7" fill="#7a7567">Long-Form Video</text></g>
+<g><rect x="1073" y="934" width="89" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="1083" cy="944.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="1091" y="947.7" fill="#7a7567">Single Graphic</text></g>
+<g><rect x="26" y="961" width="79" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="36" cy="971.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="44" y="974.7" fill="#7a7567">Carousel Kit</text></g>
+<g><rect x="112" y="961" width="105" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="122" cy="971.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="130" y="974.7" fill="#7a7567">Social Management</text></g>
+<g><rect x="224" y="961" width="121" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="234" cy="971.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="242" y="974.7" fill="#7a7567">Logo &amp; Brand Refresh</text></g>
+<g><rect x="352" y="961" width="110" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="362" cy="971.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="370" y="974.7" fill="#7a7567">Landing Page Build</text></g>
+<g><rect x="469" y="961" width="89" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="479" cy="971.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="487" y="974.7" fill="#7a7567">Email Campaign</text></g>
+<g><rect x="565" y="961" width="100" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="575" cy="971.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="583" y="974.7" fill="#7a7567">UI Screen Design</text></g>
+<g><rect x="672" y="961" width="89" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="682" cy="971.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="690" y="974.7" fill="#7a7567">UI Flow Design</text></g>
+</svg></div>
+ <h2>What's maybe not necessary</h2>
+ <div class="cut"><b>Brief proliferation:</b> Brief Pipeline fans out to 16 cards incl. 5 sliced briefs + 2 onboarding docs that duplicate existing cards (Competitor Brief≈Competitor Snapshot, Strategy Brief≈Next-Post Strategy…). Collapse to 1 brief + tabs.</div>
+ <div class="cut"><b>Source-config sprawl:</b> Search Plan · Web+Platforms · Social Signals · Platform Coverage all feed the engine with the same source list. Merge.</div>
+ <div class="cut"><b>Dup Homepage Mockup</b> (creative + web) and <b>two performance cards</b> (SEO+Performance / Site Performance).</div>
+ <div class="cut"><b>Off-spine</b> Services (15) + Automation (3) have no pipeline edges — confirm Automation is live vs upsell placeholder.</div>
+ <p class="foot">Generated · node scripts/gen-system-map.cjs · companion: brand-keywords-flow.html</p>
+</div></body></html>

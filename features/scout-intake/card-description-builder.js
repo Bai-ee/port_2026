@@ -323,7 +323,7 @@ function pickConfirmedSeoGap(metrics, issues) {
   const confirmed = [];
   if (metrics.metaDescriptionPresent === false) confirmed.push('a missing meta description');
   if (metrics.schemaTypesCount === 0) confirmed.push('no structured data');
-  if (metrics.llmsTxtFound === false) confirmed.push('no llms.txt');
+  if (metrics.llmsTxtFound === false) confirmed.push('no AI summary file');
   if (metrics.canonicalPresent === false) confirmed.push('no canonical URL');
   if (confirmed.length > 0) return confirmed.slice(0, 2).join(' and ');
 
@@ -413,9 +413,9 @@ function buildAiVisibilitySignal(metrics) {
       id: 'ai-bots-blocked',
       type: 'issue',
       readiness: highValueBots.length >= 2 ? 'critical' : 'partial',
-      finding: 'Some high-value AI crawlers are blocked in robots.txt.',
-      impact: `${bots} ${highValueBots.length === 1 ? 'is' : 'are'} currently blocked, which can limit how often your pages are fetched or cited by AI assistants.`,
-      action: 'Open access for the blocked AI crawlers, then re-run the audit.',
+      finding: 'Some important AI tools are blocked from reading the site in robots.txt.',
+      impact: `${bots} ${highValueBots.length === 1 ? 'is' : 'are'} currently blocked, which can limit how often your pages are found or cited by AI assistants.`,
+      action: 'Allow the blocked AI tools to read the site, then re-run the audit.',
     };
   }
 
@@ -425,8 +425,8 @@ function buildAiVisibilitySignal(metrics) {
       type: 'issue',
       readiness: aiVisibilityScore < 60 ? 'critical' : 'partial',
       finding: 'AI discovery signals are incomplete.',
-      impact: 'No llms.txt file was found, so AI assistants have no canonical machine-readable summary of the site to reference.',
-      action: 'Publish an llms.txt file, then re-run the audit.',
+      impact: 'No AI summary file (llms.txt) was found, so assistants have less clear guidance about what the site offers.',
+      action: 'Publish an AI-friendly site summary, then re-run the audit.',
     };
   }
 
@@ -436,8 +436,8 @@ function buildAiVisibilitySignal(metrics) {
       type: 'issue',
       readiness: 'partial',
       finding: 'No structured data was detected.',
-      impact: 'AI systems have very little machine-readable context about the business, which makes the site harder to interpret and cite accurately.',
-      action: 'Add organization and page-level schema, then re-run the audit.',
+      impact: 'AI systems have very little clear business context, which makes the site harder to interpret and cite accurately.',
+      action: 'Add clearer business and page details for search tools, then re-run the audit.',
     };
   }
 
@@ -447,8 +447,8 @@ function buildAiVisibilitySignal(metrics) {
       type: 'issue',
       readiness: 'partial',
       finding: 'Structured data is present, but key business context is still thin.',
-      impact: 'Some schema is already in place, but it is not yet giving AI systems enough machine-readable detail about the business and page types.',
-      action: 'Expand the schema coverage, then re-run the audit.',
+      impact: 'Some structured details are already in place, but they do not give AI systems enough context about the business and page types.',
+      action: 'Expand the business and page details for search tools, then re-run the audit.',
     };
   }
 
@@ -480,7 +480,7 @@ function buildAiVisibilitySignal(metrics) {
       type: 'strength',
       readiness: 'healthy',
       finding: 'AI discovery signals are in a good place.',
-      impact: `The site already has llms.txt and structured data in place, with an AI visibility score of ${aiVisibilityScore}/100.`,
+      impact: `The site already has AI-friendly summary details and structured business context in place, with an AI visibility score of ${aiVisibilityScore}/100.`,
       action: 'Keep the AI foundation in place while you work on the next performance or content improvement.',
     };
   }
@@ -544,7 +544,7 @@ function selectSeoPerformanceSignal({ issues, strengths, metrics }) {
     return {
       id:      metrics.failureCode || 'seo-audit-error',
       type:    'audit-state',
-      finding: metrics.failureReason || 'PageSpeed audit could not complete.',
+      finding: metrics.failureReason || 'Website speed check could not complete.',
       impact:  'This run could not capture reliable performance measurements.',
       action:  'Fix the access issue and re-run the audit.',
     };
@@ -554,8 +554,8 @@ function selectSeoPerformanceSignal({ issues, strengths, metrics }) {
     return {
       id:      metrics.failureCode || 'seo-audit-partial',
       type:    'audit-state',
-      finding: metrics.failureReason || 'PageSpeed returned only partial audit data.',
-      impact:  'Scores and Core Web Vitals may be incomplete on this run.',
+      finding: metrics.failureReason || 'Website speed check returned only partial data.',
+      impact:  'Speed and experience scores may be incomplete on this run.',
       action:  'Re-run the audit after the site is fully reachable.',
     };
   }
@@ -570,7 +570,7 @@ function selectSeoPerformanceSignal({ issues, strengths, metrics }) {
       impact:  confirmedGap
         ? `We can still confirm ${confirmedGap}, but Lighthouse is grading the gateway path, so performance numbers are directional rather than a pure read of your branded domain.`
         : 'We can still audit the page, but Lighthouse is grading the gateway path, so performance numbers are directional rather than a pure read of your branded domain.',
-      action:  'Point a stable canonical domain at the final served page, test the final URL directly, and then fix the confirmed discovery gaps.',
+      action:  'Point a stable main domain at the final page, test the final URL directly, and then fix the confirmed visibility gaps.',
     };
   }
 
@@ -583,7 +583,7 @@ function selectSeoPerformanceSignal({ issues, strengths, metrics }) {
       impact:  confirmedGap
         ? `We can still confirm ${confirmedGap}, but search and performance tools are judging the destination URL instead of the branded address visitors type.`
         : 'Search and performance tools are judging the destination URL instead of the branded address visitors type.',
-      action:  'Audit the resolved URL directly, reduce avoidable redirects, and make the final destination explicit with a canonical URL.',
+      action:  'Audit the resolved URL directly, reduce avoidable redirects, and make the preferred page address clear.',
     };
   }
 
@@ -614,7 +614,7 @@ function selectSeoPerformanceSignal({ issues, strengths, metrics }) {
       type,
       readiness: type === 'gap' ? 'partial' : 'partial',
       finding: normalizeSeoIssueFinding(warning),
-      impact:  normalizeSeoIssueImpact(warning) || 'Fixing this will improve crawlability and ranking signals.',
+      impact:  normalizeSeoIssueImpact(warning) || 'Fixing this will make the page easier for search tools to read and rank.',
       action:  type === 'gap' ? null : normalizeSeoIssueAction(warning),
     };
   }
@@ -676,8 +676,8 @@ function selectSocialPreviewSignal({ issues, strengths, metrics }) {
       type:    'issue',
       readiness: 'partial',
       finding: `Social preview ${what} is missing.`,
-      impact:  `Platforms will substitute generic or scraped text instead of your branded copy, and only ${presentCount}/${totalSignals} key share signals are in place for a reliable share preview.`,
-      action:  'Add the missing Open Graph meta tags.',
+      impact:  `Platforms will substitute generic text instead of your branded copy, and only ${presentCount}/${totalSignals} key share signals are in place for a reliable preview.`,
+      action:  'Add the missing share preview details.',
     };
   }
 
@@ -722,9 +722,9 @@ function selectSocialPreviewSignal({ issues, strengths, metrics }) {
       id: 'social-branding-thin',
       type: 'issue',
       readiness: 'partial',
-      finding: 'Core social preview tags are in place, but the branded preview surface is still thin.',
+      finding: 'The basic share preview is in place, but the branded preview surface is still thin.',
       impact: `The main share card should render, but missing ${missing} leaves less control over how the brand is presented across platforms and devices.`,
-      action: 'Fill the remaining social metadata so the preview is fully branded.',
+      action: 'Fill the remaining share preview details so the preview is fully branded.',
     };
   }
 
@@ -735,7 +735,7 @@ function selectSocialPreviewSignal({ issues, strengths, metrics }) {
     type:    'strength',
     readiness: 'healthy',
     finding: (typeof top === 'string' ? top : null) || 'Social preview coverage is complete.',
-    impact:  `All ${totalSignals} key share signals are present, and ${secondaryPresentCount}/${secondaryTotal} secondary brand signals were captured, so shared links should render with branded copy and imagery instead of scraped fallbacks.`,
+    impact:  `All ${totalSignals} key share signals are present, and ${secondaryPresentCount}/${secondaryTotal} secondary brand signals were captured, so shared links should render with branded copy and imagery instead of generic fallbacks.`,
     action:  null,
   };
 }

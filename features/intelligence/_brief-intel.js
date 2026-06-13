@@ -7,6 +7,7 @@
 // `dashboard_state/{clientId}.marketingBrief`.
 
 const fb = require('../../api/_lib/firebase-admin.cjs');
+const { getClientWeather } = require('./_weather.js');
 
 function arr(v) {
   return Array.isArray(v) ? v : [];
@@ -69,7 +70,37 @@ async function getBriefIntelligence(clientId) {
     })),
     content: marketingBrief?.content || {},
     readyToPublish: marketingBrief?.guardianFlags?.readyToPublish ?? null,
+    _agentData: agentData, // raw, for per-handle watchlist matching (stripped before return)
   };
+}
+
+function normHandle(s) {
+  return String(s || '').toLowerCase().replace(/^@/, '').trim();
+}
+
+/**
+ * Match each configured watchlist account (kols) to its activity in this run's
+ * agentData. Returns one entry per handle — name-for-name — with the activity
+ * found (or found:false when the account was quiet this run).
+ */
+function buildWatchlist(kols, agentData) {
+  const handles = arr(kols).map((k) => String(k || '').trim()).filter(Boolean);
+  if (!handles.length) return [];
+  const kolActivity = arr(agentData?.kolActivity);
+  const mentions = arr(agentData?.brandMentions);
+  return handles.map((handle) => {
+    const h = normHandle(handle);
+    const activity = [];
+    for (const k of kolActivity) {
+      const hay = `${normHandle(k.name)} ${String(k.content || '').toLowerCase()} ${String(k.url || '').toLowerCase()}`;
+      if (h && hay.includes(h)) activity.push({ text: k.content || k.summary || '', url: k.url || '', platform: k.platform || 'x' });
+    }
+    for (const m of mentions) {
+      const hay = `${normHandle(m.author)} ${String(m.content || '').toLowerCase()} ${String(m.url || '').toLowerCase()}`;
+      if (h && hay.includes(h)) activity.push({ text: m.content || '', url: m.url || '', platform: '' });
+    }
+    return { handle, found: activity.length > 0, activity: activity.slice(0, 4) };
+  });
 }
 
 /** Compact, model-readable text block of the brief intelligence for the LLM. */
@@ -94,6 +125,17 @@ function briefIntelToText(intel) {
     lines.push('Narratives to get into:');
     intel.narratives.forEach((n) => lines.push(`- ${n.trend}${n.detail ? ` — ${n.detail}` : ''}`));
   }
+  if (arr(intel.watchlist).length) {
+    lines.push('Watchlist accounts (report each by name):');
+    intel.watchlist.forEach((w) => {
+      lines.push(w.found
+        ? `- ${w.handle}: ${w.activity.map((a) => a.text).filter(Boolean).join(' | ').slice(0, 300)}`
+        : `- ${w.handle}: no activity surfaced this run`);
+    });
+  }
+  if (intel.weather?.today) {
+    lines.push(`Local weather (${intel.weather.place}): today ${intel.weather.today.short}, ${intel.weather.today.temp}°${intel.weather.today.unit}. 3-day — ${intel.weather.threeDayLine}`);
+  }
   return lines.join('\n');
 }
 
@@ -103,13 +145,27 @@ async function getBriefForClient(clientId) {
   const intel = await getBriefIntelligence(clientId);
   if (!intel) return null;
   let clientName = clientId;
+  let kols = [];
   try {
     const snap = await fb.adminDb.collection('clients').doc(clientId).get();
     if (snap.exists) clientName = snap.data()?.companyName || clientId;
   } catch {
     /* fall back to clientId */
   }
+  try {
+    const cfg = await fb.adminDb.collection('client_configs').doc(clientId).get();
+    kols = arr(cfg.data()?.marketingBriefConfig?.kols);
+  } catch {
+    /* no config — empty watchlist */
+  }
+  intel.watchlist = buildWatchlist(kols, intel._agentData);
+  delete intel._agentData;
+  try {
+    intel.weather = await getClientWeather(clientId);
+  } catch {
+    intel.weather = null;
+  }
   return { clientId, clientName, intel };
 }
 
-module.exports = { getBriefIntelligence, briefIntelToText, getBriefForClient };
+module.exports = { getBriefIntelligence, briefIntelToText, getBriefForClient, buildWatchlist };

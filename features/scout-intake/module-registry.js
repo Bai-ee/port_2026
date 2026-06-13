@@ -19,6 +19,7 @@ const REGISTRY = {
     tech: ['html-fetch', 'meta-parser'],
     cacheOnSuccess: true,
     retryOnFailure: true,
+    foundational: true,
   },
   'seo-performance': {
     cardId: 'seo-performance',
@@ -28,6 +29,7 @@ const REGISTRY = {
     tech: ['pagespeed-insights', 'anthropic'],
     cacheOnSuccess: true,
     retryOnFailure: true,
+    foundational: true,
   },
   'agent-readiness': {
     cardId: 'agent-readiness',
@@ -37,6 +39,7 @@ const REGISTRY = {
     tech: ['agent-ready-checks', 'anthropic', 'ai-seo-audit'],
     cacheOnSuccess: true,
     retryOnFailure: true,
+    foundational: true,
   },
   'style-guide': {
     cardId: 'style-guide',
@@ -46,6 +49,17 @@ const REGISTRY = {
     tech: ['html-fetch', 'css-parser', 'anthropic'],
     cacheOnSuccess: true,
     retryOnFailure: true,
+    foundational: true,
+  },
+  'design-evaluation': {
+    cardId: 'design-evaluation',
+    label: 'Design Evaluation',
+    category: 'onboarding',
+    dependencies: ['site-fetch', 'screenshots', 'design-system-extractor', 'style-guide-synthesizer'],
+    tech: ['html-fetch', 'css-parser', 'anthropic', 'firebase-storage'],
+    cacheOnSuccess: true,
+    retryOnFailure: true,
+    foundational: true,
   },
 };
 
@@ -73,7 +87,6 @@ function getDefaultModuleConfig() {
   for (const [cardId, def] of Object.entries(REGISTRY)) {
     config[cardId] = {
       enabled: Boolean(def.foundational),
-      autoRunOnSignup: Boolean(def.foundational),
     };
   }
   return config;

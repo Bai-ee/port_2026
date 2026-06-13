@@ -6,6 +6,7 @@ import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { createSharedParticleGalleryRenderer } from './sharedParticleGalleryRenderer';
 import { BrainIcon } from './components/ui/brain';
+import SubscribeModal from './components/payments/SubscribeModal';
 import {
   Bot,
   BriefcaseBusiness,
@@ -129,7 +130,7 @@ const slides = [
     bg: '#f5f1df',
     fg: '#2a2420',
     layout: 'grid',
-    headlineText: 'Your Human in the Loop',
+    headlineText: 'Digital Media Consultant',
     supportText: 'Meet with Bryan',
     gridItems: Array(17).fill(null).map((_, i) => ({ id: i })),
     serviceItems: [
@@ -190,7 +191,12 @@ const PORTFOLIO_IMAGES = [
 ];
 
 const CMO_TABLE_ROWS = [
-  { task: 'Dashboard',               value: 'Onboarding' },
+  { task: 'Onboarding Brief',       value: 'Evaluate your site and idea' },
+  { task: 'Daily Executive Brief',  value: 'Constant signal tracking across your Directors' },
+  { task: 'Marketing Director',     value: 'Clarity across digital + 30 days of dynamic content', sub: true },
+  { task: 'Creative Director',      value: 'Own your look across web and socials', sub: true },
+  { task: 'Social Media Director',  value: 'Dynamic direction on content and growth', sub: true },
+  { task: 'Website Director',       value: 'Track activity drivers and monitor website health', sub: true },
 ];
 
 const AUTOMATION_CAPABILITIES = [
@@ -362,7 +368,7 @@ const AUTOMATION_CAPABILITIES = [
     tablePreview: true,
     previewVideo: '/vid/dashboard.mov',
     title: "Onboard now, save time later.",
-    body: 'Onboard now to save time later.',
+    body: 'Onboard now to access your Brief and Dashboard.',
   },
 ];
 
@@ -430,6 +436,19 @@ function isValidHomepageUrl(raw) {
   }
 }
 
+// Classify the hero input: a website URL/domain, an email address, or a free-text
+// brand name / idea. Lets a user without a website spin up a dashboard from an
+// email or a name/idea instead.
+function classifyHomepageInput(raw) {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return { kind: 'empty', value: '' };
+  if (/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(trimmed)) return { kind: 'email', value: trimmed.toLowerCase() };
+  const looksUrl = /^https?:\/\//i.test(trimmed) || (!/\s/.test(trimmed) && /\.[a-z]{2,}$/i.test(trimmed));
+  if (looksUrl && isValidHomepageUrl(trimmed)) return { kind: 'url', value: normalizeHomepageUrl(trimmed) };
+  if (trimmed.length >= 2) return { kind: 'idea', value: trimmed };
+  return { kind: 'empty', value: '' };
+}
+
 const StackedSlidesSection = () => {
   const wrapperRef = useRef(null);
   const servicesViewportRef = useRef(null);
@@ -451,6 +470,7 @@ const StackedSlidesSection = () => {
   const [particleParams, setParticleParams] = useState(PARTICLE_DEFAULTS);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeMobileCapability, setActiveMobileCapability] = useState(null);
+  const [subscribeOpen, setSubscribeOpen] = useState(false);
   const CMO_PLACEHOLDER_URL = 'yourwebsite.com';
   const [homepageUrl, setHomepageUrl] = useState('');
   const [urlIsValid, setUrlIsValid] = useState(false);
@@ -480,13 +500,17 @@ const StackedSlidesSection = () => {
   const handleHomepageUrlChange = (e) => {
     const val = e.target.value;
     setHomepageUrl(val);
-    setUrlIsValid(isValidHomepageUrl(val));
+    // Valid when the input is a website OR a substantive name/idea.
+    setUrlIsValid(classifyHomepageInput(val).kind !== 'empty');
   };
 
   const handleCreateDashboard = () => {
-    if (!urlIsValid || homepageUrl === CMO_PLACEHOLDER_URL) return;
-    const normalized = normalizeHomepageUrl(homepageUrl);
-    const params = new URLSearchParams({ flow: 'homepage-create', url: normalized });
+    const input = classifyHomepageInput(homepageUrl);
+    if (input.kind === 'empty' || homepageUrl === CMO_PLACEHOLDER_URL) return;
+    const params = new URLSearchParams({
+      flow: 'homepage-create',
+      ...(input.kind === 'url' ? { url: input.value } : input.kind === 'email' ? { email: input.value } : { idea: input.value }),
+    });
     router.push(`/login?${params.toString()}`);
   };
 
@@ -823,16 +847,16 @@ const StackedSlidesSection = () => {
             <p style="margin:0 0 0.7rem;font-size:0.6rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:rgba(42,36,32,0.4);font-family:'Space Mono',monospace;">Your Business, Mapped</p>
             <table style="width:100%;border-collapse:collapse;font-size:0.78rem;flex:1;">
               <thead><tr style="border-bottom:1.5px solid rgba(42,36,32,0.15);">
-                <th style="text-align:left;padding:0.3rem 0.4rem;font-weight:600;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;">Access</th>
+                <th style="text-align:left;padding:0.3rem 0.4rem;font-weight:900;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;font-family:'Doto','Space Mono',monospace;">Access</th>
                 <th style="width:1.2rem;"></th>
               </tr></thead>
               <tbody>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Cross-Device Mockups</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;"><polyline points="20 6 9 17 4 12"></polyline></svg></td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Social Preview Check</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;"><polyline points="20 6 9 17 4 12"></polyline></svg></td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Brand Snapshot</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;"><polyline points="20 6 9 17 4 12"></polyline></svg></td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">SEO + AI Visibility</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;"><polyline points="20 6 9 17 4 12"></polyline></svg></td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Client Brief</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;"><polyline points="20 6 9 17 4 12"></polyline></svg></td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Brand brief</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;"><polyline points="20 6 9 17 4 12"></polyline></svg></td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Onboarding Brief</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;"><polyline points="20 6 9 17 4 12"></polyline></svg></td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Executive Brief</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;color:rgba(42,36,32,0.45);"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Market Brief</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;color:rgba(42,36,32,0.45);"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Creative Brief</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;color:rgba(42,36,32,0.45);"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Strategy Brief</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;color:rgba(42,36,32,0.45);"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Website Developer Brief</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;color:rgba(42,36,32,0.45);"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></td></tr>
               </tbody>
             </table>
           </div>`;
@@ -1329,10 +1353,23 @@ const StackedSlidesSection = () => {
             width: 100%;
           }
           #cmo-dashboard-table td {
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            max-width: 0;
+            overflow: visible;
+            white-space: normal;
+            max-width: none;
+          }
+          /* Stack: brief name + icon on top row, value collapses underneath */
+          #cmo-dashboard-table tbody tr {
+            display: grid;
+            grid-template-columns: 1fr auto;
+          }
+          #cmo-dashboard-table tbody td:nth-child(1) { grid-column: 1; grid-row: 1; }
+          #cmo-dashboard-table tbody td:nth-child(3) { grid-column: 2; grid-row: 1; }
+          #cmo-dashboard-table tbody td:nth-child(2) {
+            grid-column: 1 / -1;
+            grid-row: 2;
+            text-align: left !important;
+            padding-top: 0 !important;
+            font-size: 0.78rem;
           }
           .cmo-url-input-mobile .cmo-table-submit-label { display: none; }
           .cmo-url-input-mobile .cta-pill-btn {
@@ -1438,7 +1475,7 @@ const StackedSlidesSection = () => {
           display: flex; align-items: center; justify-content: space-between;
           gap: 0.75rem; margin-bottom: 0.8rem;
         }
-        #cmo-auth-sig { width: 2.75rem; height: auto; display: block; }
+        #cmo-auth-sig { width: 2.75rem; height: 2.75rem; border-radius: 50%; object-fit: cover; border: 2px solid rgba(255,255,255,0.35); display: block; }
         #cmo-auth-eyebrow {
           font-family: 'Space Mono', monospace; font-size: 0.82rem;
           letter-spacing: 0.14em; text-transform: uppercase;
@@ -1453,62 +1490,7 @@ const StackedSlidesSection = () => {
           transition: background 160ms ease, color 160ms ease;
         }
         #cmo-auth-back-btn:hover { background: rgba(255,255,255,0.6); color: #2a2420; }
-        #cmo-auth-copy {
-          display: flex; align-items: flex-start; justify-content: center;
-          gap: 0; margin: 0.6rem 0 0; width: 100%;
-          border-radius: 0.85rem;
-          padding: 0.9rem 0.75rem; box-sizing: border-box;
-          position: relative; isolation: isolate;
-          box-shadow:
-            0px 6px 14px rgba(0,0,0,0.06),
-            0px 18px 36px rgba(0,0,0,0.06),
-            0px 28px 56px rgba(0,0,0,0.09),
-            inset 0 1px 0 rgba(255,255,255,0.55);
-        }
-        #cmo-auth-copy::before {
-          content: '';
-          position: absolute;
-          inset: 0;
-          border-radius: 0.85rem;
-          padding: 1px;
-          background: linear-gradient(180deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
-          -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-          -webkit-mask-composite: xor;
-          mask-composite: exclude;
-          pointer-events: none;
-          opacity: 0.65;
-        }
-        .cmo-step-item {
-          display: flex; flex-direction: column; align-items: center;
-          gap: 0.45rem; flex: 1; position: relative; min-width: 0;
-        }
-        .cmo-step-track { display: flex; flex-direction: row; align-items: center; width: 100%; height: 1.5rem; }
-        .cmo-step-line { flex: 1; height: 1.5px; width: auto; background: rgba(42,36,32,0.15); }
-        .cmo-step-line-hidden { background: transparent; }
-        .cmo-step-dot {
-          flex-shrink: 0; width: 1.5rem; height: 1.5rem; border-radius: 50%;
-          display: flex; align-items: center; justify-content: center;
-          font-family: 'Space Mono', monospace; font-size: 0.6rem; font-weight: 700;
-          transition: all 160ms ease;
-        }
-        .cmo-step-dot-active { background: #2a2420; color: #fff; box-shadow: 0 0 0 3px rgba(42,36,32,0.12); }
-        .cmo-step-dot-inactive { background: transparent; border: 1.5px solid rgba(42,36,32,0.2); color: rgba(42,36,32,0.35); }
-        .cmo-step-labels { display: flex; flex-direction: column; align-items: center; gap: 0.1rem; padding: 0 0.25rem; }
-        .cmo-step-name {
-          font-family: 'Space Grotesk', system-ui, sans-serif;
-          font-size: clamp(0.85rem,1.2vw,1rem); letter-spacing: 0;
-          text-align: center; white-space: normal;
-        }
-        .cmo-step-name-active  { color: #2a2420; font-weight: 700; }
-        .cmo-step-name-inactive { color: rgba(42,36,32,0.38); font-weight: 500; }
         @media (max-width: 600px) {
-          #cmo-auth-copy { flex-direction: column; align-items: stretch; gap: 0; padding: 0.5rem 0.75rem; }
-          .cmo-step-item { flex-direction: row; align-items: center; gap: 0.6rem; flex: unset; }
-          .cmo-step-track { flex-direction: column; align-items: center; width: 1.5rem; flex-shrink: 0; height: 2rem; }
-          .cmo-step-line { flex: 1; width: 1.5px; height: auto; }
-          .cmo-step-labels { align-items: flex-start; padding: 0; }
-          .cmo-step-name { text-align: left; white-space: nowrap; font-size: 0.9rem; }
-          .cmo-step-name br { display: none; }
           .cmo-submit-label { display: none; }
           #cmo-url-pill-submit {
             width: 2.6rem; height: 2.6rem;
@@ -1531,9 +1513,9 @@ const StackedSlidesSection = () => {
         #cmo-modal-marquee .cmo-marquee-item {
           font-family: 'Doto', 'Space Mono', monospace; font-size: clamp(2rem,8vw,5rem);
           font-weight: 700; letter-spacing: -0.02em; line-height: 1.05;
-          color: rgba(42,36,32,0.82); white-space: nowrap; padding-right: 2rem;
+          color: rgba(42,36,32,0.82); white-space: nowrap; padding-right: 0.5rem;
         }
-        #cmo-modal-marquee .cmo-marquee-dot { font-family: 'Doto', monospace; color: rgba(42,36,32,0.35); }
+        #cmo-modal-marquee .cmo-marquee-dot { font-family: 'Doto', monospace; color: rgba(42,36,32,0.35); padding: 0 0.3rem; }
         @media (prefers-reduced-motion: reduce) { #cmo-modal-marquee .cmo-marquee-track { animation: none; } }
         @media (max-width: 640px) {
           #cmo-modal-marquee { margin: 0; padding: 0; }
@@ -1586,16 +1568,27 @@ const StackedSlidesSection = () => {
           color: #2a2420; box-shadow: 0 1px 4px rgba(42,36,32,0.1), inset 0 1px 0 rgba(255,255,255,0.6);
           opacity: 0.65; cursor: default;
         }
-        #cmo-no-site-link {
-          display: block; text-align: center; margin-top: 0.65rem;
+        #cmo-modal-footer-row {
+          display: flex; justify-content: space-between; align-items: center;
+          gap: 1rem; margin-top: 0.65rem; width: 100%;
+        }
+        #cmo-url-warning {
+          font-family: 'Space Mono', monospace; font-size: 0.72rem;
+          color: rgba(180,35,24,0.7); letter-spacing: 0.03em;
+        }
+        #cmo-signin-link {
           font-family: 'Space Mono', monospace; font-size: 0.72rem;
           color: rgba(42,36,32,0.45); text-decoration: underline;
           text-underline-offset: 3px; letter-spacing: 0.03em;
-          transition: color 160ms ease;
+          transition: color 160ms ease; white-space: nowrap;
         }
-        #cmo-no-site-link:hover { color: rgba(42,36,32,0.75); }
-        #cmo-url-input-row button:disabled::before,
-        #cmo-url-input-row .cta-pill-inactive::before { display: none; }
+        #cmo-signin-link:hover { color: rgba(42,36,32,0.75); }
+        /* No animated comet border on buttons inside the website input pills */
+        #hero-url-input-row .cta-pill-btn::before,
+        #cmo-url-input-row .cta-pill-btn::before,
+        #footer-url-input-row .cta-pill-btn::before,
+        .cmo-url-input-mobile .cta-pill-btn::before { display: none; }
+        /* Footer nav links inactive until their pages ship — LinkedIn/X stay live (matches main) */
         #inline-footer-seo-nav a,
         #inline-footer-bottom a {
           pointer-events: none;
@@ -1632,38 +1625,191 @@ const StackedSlidesSection = () => {
                 {slide.layout === 'grid' ? (
                   <div id="panel-grid-layout" style={{ ...gridLayoutStyle, paddingBottom: 'clamp(5.75rem, 1.5vw, 1.4rem)' }}>
                     <div id="panel-hero-intro-centering" style={{ ...textCenteringStyle, marginTop: 'clamp(1.5rem, 3vw, 3rem)', marginBottom: 'clamp(1.5rem, 3vw, 3rem)' }}>
-                      <div id="panel-hero-text-row" style={textRowStyle}>
-                        <div id="panel-hero-headline-col" style={textColumnStyle}>
-                          <h2 id="panel-hero-headline" style={{ ...headingStyle, fontSize: 'clamp(1.4rem, 3.5vw, 2.45rem)', fontWeight: 300, textAlign: 'left', margin: 0, whiteSpace: 'nowrap', visibility: 'hidden' }}>{slide.headlineText}</h2>
+                      <div id="panel-hero-text-row" style={{ ...textRowStyle, display: 'flex', alignItems: 'center', gap: 'clamp(0.5rem, 1.5vw, 1rem)', width: '100%' }}>
+                        <div id="hero-url-input-row" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 1, minWidth: 0, height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
+                          <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
+                          <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website or big idea" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
+                          <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}>Onboard in 30 Seconds<span style={ctaIconStyle}>↗</span></button>
                         </div>
-                        <div style={textColumnRightStyle}>
-                          <a
-                            id="panel-hero-cta"
-                            href="https://calendly.com/bballi/30min"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="cta-pill-btn"
-                            style={{ ...heroCtaStyle, cursor: 'pointer', border: 'none', textDecoration: 'none' }}
-                          >
-                            <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
-                            Meet with Bryan
-                            <span style={ctaIconStyle}>↗</span>
-                          </a>
+                        <a
+                          id="panel-hero-cta"
+                          href="https://calendly.com/bballi/30min"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="cta-pill-btn"
+                          style={{ ...heroCtaStyle, cursor: 'pointer', border: 'none', textDecoration: 'none', flexShrink: 0, height: '3.25rem', boxSizing: 'border-box', alignSelf: 'center' }}
+                        >
+                          <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
+                          Meet with A Human
+                          <span style={ctaIconStyle}>↗</span>
+                        </a>
+                      </div>
+                    </div>
+                    <div data-capability-header style={{ ...capabilitySectionHeaderStyle, maxWidth: 'none', marginBottom: 0 }}>
+                      <div id="testimonials-marquee-shell" style={{ width: '100%', overflow: 'hidden', margin: 'calc(clamp(24px, 5vw, 75px) - clamp(1.5rem, 3vw, 3rem)) 0 clamp(24px, 5vw, 75px)', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', animation: 'agentMarquee 28s linear infinite' }}>
+                          {[0, 1].map((i) => (
+                            <div key={i} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
+                              {['HELLO', '•', 'HELLO', '•'].map((w, j) => (
+                                <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
+                              ))}
+                            </div>
+                          ))}
                         </div>
                       </div>
                     </div>
-                    <section data-capability-grid style={capabilitySectionStyle}>
-                      <div data-capability-header style={{ ...capabilitySectionHeaderStyle, maxWidth: 'none' }}>
-                        <div id="testimonials-marquee-shell" style={{ width: '100%', overflow: 'hidden', margin: 'clamp(24px, 5vw, 75px) 0', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', animation: 'agentMarquee 28s linear infinite' }}>
-                            {[0, 1].map((i) => (
-                              <div key={i} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
-                                {['HELLO', '•', 'HELLO', '•'].map((w, j) => (
-                                  <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
+                    <section id="onboarding-table-section" data-capability-grid style={capabilitySectionStyle}>
+                      <div id="onboarding-table-grid" style={{ ...capabilityGridStyle, marginTop: 0 }}>
+                        {AUTOMATION_CAPABILITIES.filter((item) => item.tablePreview).map((item, index) => {
+                          const Icon = AUTOMATION_ICON_COMPONENTS[item.icon];
+                          const isMobileCapabilityOpen = isTouchScrollDevice() && activeMobileCapability === item.title;
+                          return (
+                            <React.Fragment key={item.title}>
+                            {item.tablePreview ? (
+                              <div
+                                id="dashboard-stack-shell"
+                                style={{ position: 'relative', gridColumn: '1 / -1', paddingTop: '70px', zIndex: isMobileCapabilityOpen ? 6 : 1 }}
+                              >
+                                {[
+                                  { ref: peekCard1Ref, id: 'dash-peek-card-1', left: '0%',  rotate: '-3.2deg', objPos: 'center center', label: '', img: '/img/interactive_ss_1.webp', height: '200px', topOffset: '0', bg: 'rgb(116,253,232)' },
+                                  { ref: peekCard2Ref, id: 'dash-peek-card-2', left: '33%', rotate: '1.2deg',  objPos: 'center center', label: '', img: '/img/interactive_ss_2.webp', height: '168px', topOffset: '0' },
+                                  { ref: peekCard3Ref, id: 'dash-peek-card-3', left: '66%', rotate: '-1.4deg', objPos: 'center center', label: '', img: '/img/interactive_ss_3.webp', height: '190px', topOffset: '0', bg: '#000000' },
+                                ].map(({ ref: cardRef, id, left, rotate, objPos, label, img, height, topOffset, bg }, i) => (
+                                  <div
+                                    key={id}
+                                    ref={cardRef}
+                                    data-peek-card
+                                    className="dash-peek-card"
+                                    id={id}
+                                    onMouseEnter={() => gsap.to(cardRef.current, { y: -46, duration: 0.38, ease: 'power2.out' })}
+                                    onMouseLeave={() => gsap.to(cardRef.current, { y: 0,   duration: 0.48, ease: 'power2.inOut' })}
+                                    style={{
+                                      position: 'absolute',
+                                      top: topOffset,
+                                      left,
+                                      width: 'clamp(180px, 33%, 400px)',
+                                      height,
+                                      zIndex: i + 1,
+                                      borderRadius: '10px',
+                                      border: '1px solid rgba(200,200,200,0.85)',
+                                      background: bg || '#fcfaf4',
+                                      overflow: 'hidden',
+                                      cursor: 'pointer',
+                                      willChange: 'transform',
+                                      boxSizing: 'border-box',
+                                      transform: `rotate(${rotate})`,
+                                      boxShadow: '0 6px 20px rgba(0,0,0,0.09), 0 1px 0 rgba(255,255,255,0.85)',
+                                    }}
+                                  >
+                                    <img src={img} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', objectPosition: objPos, display: 'block', pointerEvents: 'none', userSelect: 'none' }} />
+                                  </div>
                                 ))}
+                                <article
+                                  data-capability-card
+                                  id="cmo-dashboard-card"
+                                  style={{ ...capabilityCardTablePreviewStyle, position: 'relative', zIndex: 10 }}
+                                  onClick={() => {
+                                    if (!isTouchScrollDevice()) return;
+                                    setActiveMobileCapability((current) => (current === item.title ? null : item.title));
+                                  }}
+                                >
+                                  <div data-hover-placeholder aria-hidden="true" style={{ display: 'none' }} />
+                                  {isMobileCapabilityOpen ? (
+                                    <div style={mobileCapabilityPreviewStyle} aria-hidden="true">
+                                      <div style={{ width: '100%', height: '100%', background: '#f5f1df', borderRadius: '0.75rem', padding: '1rem', boxSizing: 'border-box', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+                                        <p style={{ margin: '0 0 0.6rem', fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.4)', fontFamily: "'Space Mono', monospace" }}>Your Business, Mapped</p>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem', fontFamily: "'Space Grotesk', system-ui, sans-serif", flex: 1 }}>
+                                          <thead><tr style={{ borderBottom: '1px solid rgba(42,36,32,0.15)' }}><th style={{ textAlign: 'left', padding: '0.28rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.45)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Access</th><th style={{ width: '1.2rem' }} /></tr></thead>
+                                          <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: row.sub ? '0.38rem 0.4rem 0.38rem 1.4rem' : '0.38rem 0.4rem', color: '#2a2420', fontWeight: 500 }}>{row.sub ? `\u2022 ${row.task}` : row.task}</td><td style={{ padding: '0.38rem 0.2rem', textAlign: 'center' }}>{row.task === 'Onboarding Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? null : <span className="cmo-arrow" role="button" tabIndex={0} aria-label="Unlock with subscription" style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setSubscribeOpen(true); }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setSubscribeOpen(true); } }}><Lock size={12} /></span>}</td></tr>))}</tbody>
+                                        </table>
+                                      </div>
+                                    </div>
+                                  ) : null}
+                                  <div style={capabilityContentStyle}>
+                                    <h2 style={{ ...capabilityCardTitleStyle, fontSize: 'clamp(2rem, 5vw, 12.4rem)', lineHeight: 0.9, marginBottom: '0.5rem', paddingTop: '20px', textAlign: 'center' }}>Lets Get Started.</h2>
+                                    {item.body && <p style={{ ...capabilityCardBodyStyle, maxWidth: 'none', textAlign: 'center' }}>{item.body}</p>}
+                                    <div id="cmo-url-input-row" className="cmo-url-input-desktop" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.85rem', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
+                                      <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
+                                      <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website or big idea" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
+                                      <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}>Get Your Dashboard<span style={ctaIconStyle}>↗</span></button>
+                                    </div>
+                                    <div className="cmo-table-inner" style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
+                                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
+                                        <colgroup><col /><col /><col style={{ width: '1.5rem' }} /></colgroup>
+                                        <thead><tr><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Access</th><th style={{ textAlign: 'right', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>What you get</th><th aria-hidden="true" /></tr></thead>
+                                        <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: row.sub ? '0.32rem 0.4rem 0.32rem 1.4rem' : '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.sub ? `\u2022 ${row.task}` : row.task}</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400, whiteSpace: 'nowrap' }}>{row.value}</td><td style={{ padding: '0.32rem 0.2rem', textAlign: 'center', verticalAlign: 'middle' }}>{row.task === 'Onboarding Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? null : <span className="cmo-arrow" role="button" tabIndex={0} aria-label="Unlock with subscription" style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setSubscribeOpen(true); }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setSubscribeOpen(true); } }}><Lock size={12} /></span>}</td></tr>))}</tbody>
+                                      </table>
+                                    <blockquote id="cmo-quote-desktop" style={{ margin: 'clamp(1rem, 2vw, 1.5rem) 0 0', padding: 'clamp(0.75rem, 1.5vw, 1rem) clamp(1rem, 2vw, 1.5rem)', borderLeft: '3px solid rgba(42,36,32,0.15)', fontSize: 'clamp(1rem, 1.5vw, 1.35rem)', lineHeight: 1.55, color: 'rgba(42,36,32,0.72)', fontStyle: 'italic', fontFamily: "'Space Grotesk', system-ui, sans-serif", boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
+                                      <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: '3.25rem', height: '3.25rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', flexShrink: 0, display: 'block' }} />
+                                      <span>&ldquo;We curate and personalize agentic systems so you don&rsquo;t have to manage the thinking. Stepping in as the human in the loop when needed.&rdquo;</span>
+                                    </blockquote>
+                                    <cite className="cmo-quote-attribution" style={{ display: 'block', textAlign: 'right', marginTop: '0.5rem', fontStyle: 'normal', fontFamily: "'Space Mono', monospace", fontSize: '0.66rem', letterSpacing: '0.08em', color: 'rgba(42,36,32,0.45)' }}>HITLOOP.AGENCY</cite>
+                                    </div>
+                                  </div>
+                                  <div id="cmo-dashboard-table" className="cmo-table-outer" style={{ gridColumn: '1 / -1', marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
+                                    <div className="cmo-url-input-mobile" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
+                                      <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
+                                      <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website or big idea" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
+                                      <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="cmo-table-submit-label">Get Your Dashboard</span><span className="cmo-table-submit-arrow" style={ctaIconStyle}>↗</span></button>
+                                    </div>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
+                                      <thead><tr><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Access</th><th style={{ textAlign: 'right', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>What you get</th><th style={{ width: '1.5rem' }} /></tr></thead>
+                                      <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: row.sub ? '0.32rem 0.4rem 0.32rem 1.4rem' : '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500 }}>{row.sub ? `\u2022 ${row.task}` : row.task}</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td><td style={{ padding: '0.32rem 0.2rem', textAlign: 'center' }}>{row.task === 'Onboarding Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? null : <span className="cmo-arrow" role="button" tabIndex={0} aria-label="Unlock with subscription" style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setSubscribeOpen(true); }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setSubscribeOpen(true); } }}><Lock size={12} /></span>}</td></tr>))}</tbody>
+                                    </table>
+                                    <blockquote id="cmo-quote-mobile" style={{ margin: 'clamp(1rem, 2vw, 1.5rem) 0 0', padding: 'clamp(0.75rem, 1.5vw, 1rem) clamp(1rem, 2vw, 1.5rem)', borderLeft: '3px solid rgba(42,36,32,0.15)', fontSize: 'clamp(1rem, 1.5vw, 1.35rem)', lineHeight: 1.55, color: 'rgba(42,36,32,0.72)', fontStyle: 'italic', fontFamily: "'Space Grotesk', system-ui, sans-serif", boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
+                                      <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: '3.25rem', height: '3.25rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', flexShrink: 0, display: 'block' }} />
+                                      <span>&ldquo;We curate and personalize agentic systems so you don&rsquo;t have to manage the thinking. Stepping in as the human in the loop when needed.&rdquo;</span>
+                                    </blockquote>
+                                    <cite className="cmo-quote-attribution" style={{ display: 'block', textAlign: 'right', marginTop: '0.5rem', fontStyle: 'normal', fontFamily: "'Space Mono', monospace", fontSize: '0.66rem', letterSpacing: '0.08em', color: 'rgba(42,36,32,0.45)' }}>HITLOOP.AGENCY</cite>
+                                    <a id="cmo-no-website-hint" href="/login?flow=homepage-create" style={cmoNoWebsiteLinkStyle}>Don't Have a Website?</a>
+                                  </div>
+                                </article>
                               </div>
-                            ))}
-                          </div>
+                            ) : (
+                              <article
+                                data-capability-card
+                                style={{ ...capabilityCardStyle, zIndex: isMobileCapabilityOpen ? 6 : 1 }}
+                                onClick={() => {
+                                  if (!isTouchScrollDevice()) return;
+                                  setActiveMobileCapability((current) => (current === item.title ? null : item.title));
+                                }}
+                              >
+                                {isMobileCapabilityOpen ? (
+                                  <div style={mobileCapabilityPreviewStyle} aria-hidden="true">
+                                    {item.previewVideo ? (
+                                      <video src={item.previewVideo} autoPlay muted loop playsInline style={mobileCapabilityPreviewImageStyle} />
+                                    ) : (
+                                      <img src={item.previewImage} alt="" style={mobileCapabilityPreviewImageStyle} />
+                                    )}
+                                  </div>
+                                ) : null}
+                                <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 'clamp(0.8rem, 1.5vw, 1rem)' }}>
+                                  <div style={capabilityContentStyle}>
+                                    <h4 style={capabilityCardTitleStyle}>{item.title}</h4>
+                                    {item.body && <p style={capabilityCardBodyStyle}>{item.body}</p>}
+                                  </div>
+                                  <div style={{ ...capabilityBadgeStyle, color: item.badgeColor, flexShrink: 0 }}>
+                                    {Icon ? <Icon size={20} strokeWidth={2.1} /> : item.badge}
+                                  </div>
+                                </div>
+                              </article>
+                            )}
+                            {item.tablePreview && null}
+                            </React.Fragment>
+                          );
+                        })}
+                      </div>
+                    </section>
+                    <section data-capability-grid style={capabilitySectionStyle}>
+                      <div id="iship-marquee-shell" style={{ width: '100%', overflow: 'hidden', margin: 'clamp(24px, 5vw, 75px) 0', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', animation: 'agentMarquee 28s linear infinite' }}>
+                          {[0, 1].map((i) => (
+                            <div key={i} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
+                              {['WE SHIP', '•', 'WE SHIP', '•'].map((w, j) => (
+                                <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
+                              ))}
+                            </div>
+                          ))}
                         </div>
                       </div>
                       <div id="testimonials-section" style={{ ...testimonialsShellStyle, marginTop: 0, paddingTop: 0, borderTop: 'none' }}>
@@ -1697,53 +1843,6 @@ const StackedSlidesSection = () => {
                           ))}
                         </div>
                       </div>
-                      <div id="iship-marquee-shell" style={{ width: '100%', overflow: 'hidden', margin: 'calc(clamp(24px, 5vw, 75px) + clamp(1rem, 2vw, 1.5rem)) 0', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', animation: 'agentMarquee 28s linear infinite' }}>
-                          {[0, 1].map((i) => (
-                            <div key={i} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
-                              {['I SHIP', '•', 'I SHIP', '•'].map((w, j) => (
-                                <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
-                              ))}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      <div id="capability-cards-grid" style={capabilityGridStyle}>
-                        {AUTOMATION_CAPABILITIES.filter((item) => !item.tablePreview).map((item) => {
-                          const Icon = AUTOMATION_ICON_COMPONENTS[item.icon];
-                          const isMobileCapabilityOpen = isTouchScrollDevice() && activeMobileCapability === item.title;
-                          return (
-                            <article
-                              key={item.title}
-                              data-capability-card
-                              style={{ ...capabilityCardStyle, zIndex: isMobileCapabilityOpen ? 6 : 1 }}
-                              onClick={() => {
-                                if (!isTouchScrollDevice()) return;
-                                setActiveMobileCapability((current) => (current === item.title ? null : item.title));
-                              }}
-                            >
-                              {isMobileCapabilityOpen ? (
-                                <div style={mobileCapabilityPreviewStyle} aria-hidden="true">
-                                  {item.previewVideo ? (
-                                    <video src={item.previewVideo} autoPlay muted loop playsInline style={mobileCapabilityPreviewImageStyle} />
-                                  ) : (
-                                    <img src={item.previewImage} alt="" style={mobileCapabilityPreviewImageStyle} />
-                                  )}
-                                </div>
-                              ) : null}
-                              <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 'clamp(0.8rem, 1.5vw, 1rem)' }}>
-                                <div style={capabilityContentStyle}>
-                                  <h4 style={capabilityCardTitleStyle}>{item.title}</h4>
-                                  {item.body && <p style={capabilityCardBodyStyle}>{item.body}</p>}
-                                </div>
-                                <div style={{ ...capabilityBadgeStyle, color: item.badgeColor, flexShrink: 0 }}>
-                                  {Icon ? <Icon size={20} strokeWidth={2.1} /> : item.badge}
-                                </div>
-                              </div>
-                            </article>
-                          );
-                        })}
-                      </div>
                     </section>
                   </div>
                 ) : null}
@@ -1763,137 +1862,40 @@ const StackedSlidesSection = () => {
         <div style={contentStyle}>
           <div data-stack-inner style={innerStyle}>
             <div id="panel-capabilities-layout" style={gridLayoutStyle}>
-              <section data-capability-grid style={capabilitySectionStyle}>
-                <div id="capability-cards-grid" style={capabilityGridStyle}>
-                  {AUTOMATION_CAPABILITIES.filter((item) => item.tablePreview).map((item, index) => {
+              <section id="capability-cards-section" data-capability-grid style={capabilitySectionStyle}>
+                <div id="capability-cards-grid" style={{ ...capabilityGridStyle, marginTop: '5.75rem' }}>
+                  {AUTOMATION_CAPABILITIES.filter((item) => !item.tablePreview).map((item) => {
                     const Icon = AUTOMATION_ICON_COMPONENTS[item.icon];
                     const isMobileCapabilityOpen = isTouchScrollDevice() && activeMobileCapability === item.title;
                     return (
-                      <React.Fragment key={item.title}>
-                      {item.tablePreview ? (
-                        <div
-                          id="dashboard-stack-shell"
-                          style={{ position: 'relative', gridColumn: '1 / -1', paddingTop: '70px', marginTop: 'clamp(2rem, 5vw, 4rem)', zIndex: isMobileCapabilityOpen ? 6 : 1 }}
-                        >
-                          {[
-                            { ref: peekCard1Ref, id: 'dash-peek-card-1', left: '0%',  rotate: '-3.2deg', objPos: 'center center', label: '', img: '/img/interactive_ss_1.webp', height: '200px', topOffset: '0', bg: 'rgb(116,253,232)' },
-                            { ref: peekCard2Ref, id: 'dash-peek-card-2', left: '33%', rotate: '1.2deg',  objPos: 'center center', label: '', img: '/img/interactive_ss_2.webp', height: '168px', topOffset: '0' },
-                            { ref: peekCard3Ref, id: 'dash-peek-card-3', left: '66%', rotate: '-1.4deg', objPos: 'center center', label: '', img: '/img/interactive_ss_3.webp', height: '190px', topOffset: '0', bg: '#000000' },
-                          ].map(({ ref: cardRef, id, left, rotate, objPos, label, img, height, topOffset, bg }, i) => (
-                            <div
-                              key={id}
-                              ref={cardRef}
-                              data-peek-card
-                              className="dash-peek-card"
-                              id={id}
-                              onMouseEnter={() => gsap.to(cardRef.current, { y: -46, duration: 0.38, ease: 'power2.out' })}
-                              onMouseLeave={() => gsap.to(cardRef.current, { y: 0,   duration: 0.48, ease: 'power2.inOut' })}
-                              style={{
-                                position: 'absolute',
-                                top: topOffset,
-                                left,
-                                width: 'clamp(180px, 33%, 400px)',
-                                height,
-                                zIndex: i + 1,
-                                borderRadius: '10px',
-                                border: '1px solid rgba(200,200,200,0.85)',
-                                background: bg || '#fcfaf4',
-                                overflow: 'hidden',
-                                cursor: 'pointer',
-                                willChange: 'transform',
-                                boxSizing: 'border-box',
-                                transform: `rotate(${rotate})`,
-                                boxShadow: '0 6px 20px rgba(0,0,0,0.09), 0 1px 0 rgba(255,255,255,0.85)',
-                              }}
-                            >
-                              <img src={img} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', objectPosition: objPos, display: 'block', pointerEvents: 'none', userSelect: 'none' }} />
-                            </div>
-                          ))}
-                          <article
-                            data-capability-card
-                            id="cmo-dashboard-card"
-                            style={{ ...capabilityCardTablePreviewStyle, position: 'relative', zIndex: 10 }}
-                            onClick={() => {
-                              if (!isTouchScrollDevice()) return;
-                              setActiveMobileCapability((current) => (current === item.title ? null : item.title));
-                            }}
-                          >
-                            <div data-hover-placeholder aria-hidden="true" style={{ display: 'none' }} />
-                            {isMobileCapabilityOpen ? (
-                              <div style={mobileCapabilityPreviewStyle} aria-hidden="true">
-                                <div style={{ width: '100%', height: '100%', background: '#f5f1df', borderRadius: '0.75rem', padding: '1rem', boxSizing: 'border-box', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-                                  <p style={{ margin: '0 0 0.6rem', fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.4)', fontFamily: "'Space Mono', monospace" }}>Your Business, Mapped</p>
-                                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem', fontFamily: "'Space Grotesk', system-ui, sans-serif", flex: 1 }}>
-                                    <thead><tr style={{ borderBottom: '1px solid rgba(42,36,32,0.15)' }}><th style={{ textAlign: 'left', padding: '0.28rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.45)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Access</th><th style={{ width: '1.2rem' }} /></tr></thead>
-                                    <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.38rem 0.4rem', color: '#2a2420', fontWeight: 500 }}>{row.task}</td><td style={{ padding: '0.38rem 0.2rem', textAlign: 'center' }}>{row.task === 'Dashboard' || row.task === 'Cross-Device Mockups' || row.task === 'Social Preview Check' || row.task === 'Brand Snapshot' || row.task === 'SEO + AI Visibility' || row.task === 'Client Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : <span className="cmo-arrow"><Lock size={12} /></span>}</td></tr>))}</tbody>
-                                  </table>
-                                </div>
-                              </div>
-                            ) : null}
-                            <div style={capabilityContentStyle}>
-                              <h2 style={{ ...capabilityCardTitleStyle, fontSize: 'clamp(2rem, 5vw, 12.4rem)', lineHeight: 0.9, marginBottom: '0.5rem', paddingTop: '20px', textAlign: 'center' }}>Lets Get Started...</h2>
-                              {item.body && <p style={{ ...capabilityCardBodyStyle, maxWidth: 'none', textAlign: 'center' }}>{item.body}</p>}
-                              <div id="cmo-url-input-row" className="cmo-url-input-desktop" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.85rem', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1, pointerEvents: 'none', userSelect: 'none', opacity: 0.7 }}>
-                                <Lock size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: 'rgba(42,36,32,0.4)' }} />
-                                <input readOnly placeholder="Enter your website" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.55)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0, cursor: 'default' }} />
-                                <button disabled className="cta-pill-inactive" style={{ ...ctaStyle, border: 'none', flexShrink: 0, background: 'rgba(255,255,255,0.72)', color: '#2a2420', boxShadow: 'none', opacity: 0.65, cursor: 'default', padding: '0.75rem 0.75rem' }}>Enter Website</button>
-                                <span className="cta-pill-btn cta-pill-inactive" style={{ ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem', opacity: 0.45, cursor: 'default' }}>Don't Have A Website?</span>
-                              </div>
-                              <div className="cmo-table-inner" style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
-                                <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
-                                  <colgroup><col style={{ width: 'calc(50% - 0.75rem)' }} /><col style={{ width: '1.5rem' }} /><col style={{ width: 'calc(50% - 0.75rem)' }} /></colgroup>
-                                  <thead><tr><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Access</th><th /><th style={{ textAlign: 'right', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Automations</th></tr></thead>
-                                  <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.task}</td><td style={{ padding: '0.32rem 0.2rem', textAlign: 'center', verticalAlign: 'middle' }}>{row.task === 'Dashboard' || row.task === 'Cross-Device Mockups' || row.task === 'Social Preview Check' || row.task === 'Brand Snapshot' || row.task === 'SEO + AI Visibility' || row.task === 'Client Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : <span className="cmo-arrow"><Lock size={12} /></span>}</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.value}</td></tr>))}</tbody>
-                                </table>
-                              <blockquote style={{ margin: 'clamp(1rem, 2vw, 1.5rem) 0 0', padding: 'clamp(0.75rem, 1.5vw, 1rem) clamp(1rem, 2vw, 1.5rem)', borderLeft: '3px solid rgba(42,36,32,0.15)', fontSize: 'clamp(1rem, 1.5vw, 1.35rem)', lineHeight: 1.55, color: 'rgba(42,36,32,0.72)', fontStyle: 'italic', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>"Get all the high-impact deliverables needed to launch digital products and integrate automation into daily operations."</blockquote>
-                              </div>
-                            </div>
-                            <div id="cmo-dashboard-table" className="cmo-table-outer" style={{ gridColumn: '1 / -1', marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
-                              <div className="cmo-url-input-mobile" style={{ alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1, pointerEvents: 'none', userSelect: 'none', opacity: 0.7 }}>
-                                <Lock size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: 'rgba(42,36,32,0.4)' }} />
-                                <input readOnly placeholder="Enter your website" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.55)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0, cursor: 'default' }} />
-                                <button disabled className="cta-pill-inactive" style={{ ...ctaStyle, border: 'none', flexShrink: 0, background: 'rgba(255,255,255,0.72)', color: '#2a2420', boxShadow: 'none', opacity: 0.65, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="cmo-table-submit-label">Enter Website</span></button>
-                              </div>
-                              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
-                                <thead><tr><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Access</th><th style={{ width: '1.5rem' }} /><th style={{ textAlign: 'right', padding: '0.25rem 0.4rem', fontWeight: 600, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Automations</th></tr></thead>
-                                <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500 }}>{row.task}</td><td style={{ padding: '0.32rem 0.2rem', textAlign: 'center' }}>{row.task === 'Dashboard' || row.task === 'Cross-Device Mockups' || row.task === 'Social Preview Check' || row.task === 'Brand Snapshot' || row.task === 'SEO + AI Visibility' || row.task === 'Client Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : <span className="cmo-arrow"><Lock size={12} /></span>}</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
-                              </table>
-                              <blockquote style={{ margin: 'clamp(1rem, 2vw, 1.5rem) 0 0', padding: 'clamp(0.75rem, 1.5vw, 1rem) clamp(1rem, 2vw, 1.5rem)', borderLeft: '3px solid rgba(42,36,32,0.15)', fontSize: 'clamp(1rem, 1.5vw, 1.35rem)', lineHeight: 1.55, color: 'rgba(42,36,32,0.72)', fontStyle: 'italic', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>"Get all the high-impact deliverables needed to launch digital products and integrate automation into daily operations."</blockquote>
-                              <a id="cmo-no-website-hint" href="/login?flow=homepage-create" style={cmoNoWebsiteLinkStyle}>No Website</a>
-                            </div>
-                          </article>
-                        </div>
-                      ) : (
-                        <article
-                          data-capability-card
-                          style={{ ...capabilityCardStyle, zIndex: isMobileCapabilityOpen ? 6 : 1 }}
-                          onClick={() => {
-                            if (!isTouchScrollDevice()) return;
-                            setActiveMobileCapability((current) => (current === item.title ? null : item.title));
-                          }}
-                        >
-                          {isMobileCapabilityOpen ? (
-                            <div style={mobileCapabilityPreviewStyle} aria-hidden="true">
-                              {item.previewVideo ? (
-                                <video src={item.previewVideo} autoPlay muted loop playsInline style={mobileCapabilityPreviewImageStyle} />
-                              ) : (
-                                <img src={item.previewImage} alt="" style={mobileCapabilityPreviewImageStyle} />
-                              )}
-                            </div>
-                          ) : null}
-                          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 'clamp(0.8rem, 1.5vw, 1rem)' }}>
-                            <div style={capabilityContentStyle}>
-                              <h4 style={capabilityCardTitleStyle}>{item.title}</h4>
-                              {item.body && <p style={capabilityCardBodyStyle}>{item.body}</p>}
-                            </div>
-                            <div style={{ ...capabilityBadgeStyle, color: item.badgeColor, flexShrink: 0 }}>
-                              {Icon ? <Icon size={20} strokeWidth={2.1} /> : item.badge}
-                            </div>
+                      <article
+                        key={item.title}
+                        data-capability-card
+                        style={{ ...capabilityCardStyle, zIndex: isMobileCapabilityOpen ? 6 : 1 }}
+                        onClick={() => {
+                          if (!isTouchScrollDevice()) return;
+                          setActiveMobileCapability((current) => (current === item.title ? null : item.title));
+                        }}
+                      >
+                        {isMobileCapabilityOpen ? (
+                          <div style={mobileCapabilityPreviewStyle} aria-hidden="true">
+                            {item.previewVideo ? (
+                              <video src={item.previewVideo} autoPlay muted loop playsInline style={mobileCapabilityPreviewImageStyle} />
+                            ) : (
+                              <img src={item.previewImage} alt="" style={mobileCapabilityPreviewImageStyle} />
+                            )}
                           </div>
-                        </article>
-                      )}
-                      {item.tablePreview && null}
-                      </React.Fragment>
+                        ) : null}
+                        <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 'clamp(0.8rem, 1.5vw, 1rem)' }}>
+                          <div style={capabilityContentStyle}>
+                            <h4 style={capabilityCardTitleStyle}>{item.title}</h4>
+                            {item.body && <p style={capabilityCardBodyStyle}>{item.body}</p>}
+                          </div>
+                          <div style={{ ...capabilityBadgeStyle, color: item.badgeColor, flexShrink: 0 }}>
+                            {Icon ? <Icon size={20} strokeWidth={2.1} /> : item.badge}
+                          </div>
+                        </div>
+                      </article>
                     );
                   })}
                 </div>
@@ -1917,19 +1919,24 @@ const StackedSlidesSection = () => {
                       <img src="/img/sig.png" alt="Bryan Balli signature" style={inlineFooterSignatureStyle} />
 
                       <p style={{ ...supportTextStyle, marginTop: 'clamp(0.75rem, 1.5vw, 1.25rem)', textAlign: 'left' }}>
-                        <strong>Bryan Balli</strong> leads a team across design and engineering as a Creative Technologist, with experience spanning agencies in Chicago, San Francisco, and remote international teams. I'm ready to step into your process, see what's working, fix what's not, and build what's missing across design, content, and systems.
+                        Partner with an experienced Media Developer to leverage LLMs and automate your Brands Design, Development, Marketing and Operations.
                       </p>
-                      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: 'clamp(1.25rem, 2.5vw, 2rem)', marginBottom: 'clamp(1.25rem, 2.5vw, 2rem)' }}>
+                      <div id="footer-cta-input-row" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'clamp(0.5rem, 1.5vw, 1rem)', width: '100%', marginTop: 'clamp(1.25rem, 2.5vw, 2rem)', marginBottom: 'clamp(1.25rem, 2.5vw, 2rem)' }}>
+                        <div id="footer-url-input-row" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 1, minWidth: 'min(100%, 18rem)', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
+                          <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
+                          <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website or big idea" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
+                          <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}>Onboard in 30 Seconds<span style={ctaIconStyle}>↗</span></button>
+                        </div>
                         <a
                           id="footer-contact-cta"
                           href="https://calendly.com/bballi/30min"
                           target="_blank"
                           rel="noopener noreferrer"
                           className="cta-pill-btn"
-                          style={{ ...heroCtaStyle, alignSelf: 'center', textDecoration: 'none', border: 'none', cursor: 'pointer' }}
+                          style={{ ...heroCtaStyle, textDecoration: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}
                         >
                           <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
-                          Meet with Bryan
+                          Meet with A Human
                           <span style={ctaIconStyle}>↗</span>
                         </a>
                       </div>
@@ -2069,7 +2076,7 @@ const StackedSlidesSection = () => {
         >
           <div id="cmo-auth-card" onClick={(e) => e.stopPropagation()}>
             <div id="cmo-auth-brand-row">
-              <img id="cmo-auth-sig" src="/img/sig.png" alt="" aria-hidden="true" />
+              <img id="cmo-auth-sig" src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" />
               <span id="cmo-auth-eyebrow">ONBOARDING</span>
               <button type="button" id="cmo-auth-back-btn" onClick={() => setShowCmoModal(false)} aria-label="Close">✕</button>
             </div>
@@ -2085,61 +2092,6 @@ const StackedSlidesSection = () => {
               </div>
             </div>
 
-            <div id="cmo-auth-copy">
-              <div className="cmo-step-item">
-                <div className="cmo-step-track">
-                  <div className="cmo-step-line cmo-step-line-hidden" />
-                  <div className={`cmo-step-dot ${urlIsValid && homepageUrl !== CMO_PLACEHOLDER_URL ? 'cmo-step-dot-inactive' : 'cmo-step-dot-active'}`}>01</div>
-                  <div className="cmo-step-line" />
-                </div>
-                <div className="cmo-step-labels">
-                  <span className={`cmo-step-name ${urlIsValid && homepageUrl !== CMO_PLACEHOLDER_URL ? 'cmo-step-name-inactive' : 'cmo-step-name-active'}`}>Add your website</span>
-                </div>
-              </div>
-              <div className="cmo-step-item">
-                <div className="cmo-step-track">
-                  <div className="cmo-step-line" />
-                  <div className={`cmo-step-dot ${urlIsValid && homepageUrl !== CMO_PLACEHOLDER_URL ? 'cmo-step-dot-active' : 'cmo-step-dot-inactive'}`}>02</div>
-                  <div className="cmo-step-line" />
-                </div>
-                <div className="cmo-step-labels">
-                  <span className={`cmo-step-name ${urlIsValid && homepageUrl !== CMO_PLACEHOLDER_URL ? 'cmo-step-name-active' : 'cmo-step-name-inactive'}`}>Click on Get <br />Dashboard</span>
-                </div>
-              </div>
-              <div className="cmo-step-item">
-                <div className="cmo-step-track">
-                  <div className="cmo-step-line" />
-                  <div className="cmo-step-dot cmo-step-dot-inactive">03</div>
-                  <div className="cmo-step-line cmo-step-line-hidden" />
-                </div>
-                <div className="cmo-step-labels">
-                  <span className="cmo-step-name cmo-step-name-inactive">Accesss Onboarding Tools</span>
-                </div>
-              </div>
-            </div>
-
-            <div id="cmo-modal-table-wrap">
-              <table id="cmo-modal-table">
-                <thead>
-                  <tr>
-                    <th style={{ textAlign: 'left' }} />
-                    <th style={{ width: '1.75rem' }} />
-                    <th style={{ textAlign: 'right' }} />
-                  </tr>
-                </thead>
-                <tbody>
-                  {CMO_TABLE_ROWS
-                    .filter((row) => ['Cross-Device Mockups', 'Social Preview Check', 'Brand Snapshot', 'SEO + AI Visibility', 'Client Brief'].includes(row.task))
-                    .map((row) => (
-                      <tr key={row.task}>
-                        <td className="cmo-td-task">{row.task}</td>
-                        <td className="cmo-td-mark"><Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /></td>
-                        <td className="cmo-td-value">{row.value}</td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
 
             <form
               id="cmo-url-pill"
@@ -2152,6 +2104,7 @@ const StackedSlidesSection = () => {
                 id="cmo-modal-url-input"
                 value={homepageUrl}
                 onChange={handleHomepageUrlChange}
+                placeholder="Enter your website or big idea"
               />
               <button
                 type="submit"
@@ -2164,11 +2117,15 @@ const StackedSlidesSection = () => {
               </button>
             </form>
 
-            <a id="cmo-no-site-link" href="/login?flow=homepage-create">Don't Have Website</a>
+            <div id="cmo-modal-footer-row">
+              <span id="cmo-url-warning">* Your website can&rsquo;t be changed later</span>
+              <a id="cmo-signin-link" href="/login">Already have an account? SIGN IN</a>
+            </div>
           </div>
         </div>
       )}
 
+      <SubscribeModal open={subscribeOpen} onClose={() => setSubscribeOpen(false)} />
     </section>
   );
 };

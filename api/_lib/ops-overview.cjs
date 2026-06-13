@@ -18,14 +18,66 @@ function serializeDoc(doc) {
   return serializeValue({ id: doc.id, ...doc.data() });
 }
 
+// Stage cost entries come from two writers with different field names:
+// scout-brief stages (optimizer.js computeStageCost) write `estimatedUsd`,
+// intake/skill stages (_llm-client extractUsage) write `estimatedCostUsd`.
+function stageCostUsd(stage) {
+  if (typeof stage?.estimatedCostUsd === 'number') return stage.estimatedCostUsd;
+  if (typeof stage?.estimatedUsd === 'number') return stage.estimatedUsd;
+  return 0;
+}
+
 function extractCost(run) {
   const usage = run?.providerUsage;
   if (!usage) return null;
   if (typeof usage.estimatedCostUsd === 'number') return usage.estimatedCostUsd;
   if (Array.isArray(usage.stageCosts)) {
-    return usage.stageCosts.reduce((sum, stage) => sum + (stage?.estimatedCostUsd || 0), 0);
+    return usage.stageCosts.reduce((sum, stage) => sum + stageCostUsd(stage), 0);
   }
   return null;
+}
+
+// Brief naming mirrors features/scout-intake/brief-sections.cjs so the ops
+// surface labels runs the same way the dashboard nav does.
+const { BRIEF_COMPOSITIONS, BRIEF_PRODUCERS } = require('../../features/scout-intake/brief-sections.cjs');
+
+function sameIdSet(a, b) {
+  if (a.length !== b.length) return false;
+  const sortedA = [...a].sort();
+  const sortedB = [...b].sort();
+  return sortedA.every((id, i) => id === sortedB[i]);
+}
+
+function briefLabelForRun(run) {
+  if (!run) return null;
+  const scope = run.scope || null;
+  if (scope && BRIEF_COMPOSITIONS[scope]) return BRIEF_COMPOSITIONS[scope].label;
+  if (run.pipelineType === 'module-run') {
+    const ids = Array.isArray(run.moduleIds) ? run.moduleIds : [];
+    for (const [briefKey, producer] of Object.entries(BRIEF_PRODUCERS)) {
+      if (sameIdSet(ids, producer.modules || [])) {
+        return BRIEF_COMPOSITIONS[briefKey]?.label || briefKey;
+      }
+    }
+    return `Module Run${ids.length ? ` — ${ids.join(', ')}` : ''}`;
+  }
+  if (run.pipelineType === 'free-tier-intake') return 'Website Intake Audit';
+  if (run.pipelineType === 'scout-brief') return BRIEF_COMPOSITIONS['executive-daily']?.label || 'Executive Daily Brief';
+  return 'Brief Run';
+}
+
+// Normalized per-stage cost rows for UI display, tolerant of both writer shapes.
+function normalizedStageCosts(run) {
+  const stages = run?.providerUsage?.stageCosts;
+  if (!Array.isArray(stages)) return [];
+  return stages.map((stage) => ({
+    stage: stage?.stage || 'unknown',
+    model: stage?.model || null,
+    provider: stage?.provider || null,
+    inputTokens: Number(stage?.inputTokens) || 0,
+    outputTokens: Number(stage?.outputTokens) || 0,
+    costUsd: stageCostUsd(stage),
+  }));
 }
 
 function toIsoSortValue(value) {
@@ -291,9 +343,11 @@ async function buildOpsOverview() {
     ])
   );
 
-  const sortedRuns = [...runs].sort(
-    (a, b) => toIsoSortValue(b.createdAt || b.startedAt || b.updatedAt) - toIsoSortValue(a.createdAt || a.startedAt || a.updatedAt)
-  );
+  const sortedRuns = [...runs]
+    .sort(
+      (a, b) => toIsoSortValue(b.createdAt || b.startedAt || b.updatedAt) - toIsoSortValue(a.createdAt || a.startedAt || a.updatedAt)
+    )
+    .map((run) => ({ ...run, briefLabel: briefLabelForRun(run) }));
   const sortedClients = [...clients].sort(
     (a, b) => toIsoSortValue(b.createdAt || b.updatedAt) - toIsoSortValue(a.createdAt || a.updatedAt)
   );
@@ -312,13 +366,37 @@ async function buildOpsOverview() {
   const totalCostUsd = pricedRuns.reduce((sum, entry) => sum + entry.cost, 0);
   const lastRunCostUsd = extractCost(latestRun);
 
-  const costByClientMap = {};
-  pricedRuns.forEach((entry) => {
-    const label = clientNameById[entry.clientId] || entry.clientId || 'Unknown';
-    costByClientMap[label] = (costByClientMap[label] || 0) + entry.cost;
+  // Per-client spend combines both cost sources: brief_runs providerUsage
+  // (pipeline stages) + usage_events (module/provider calls logged outside a
+  // run, e.g. brand-system, leadgen). Together they are the client's true
+  // cost to date — what onboarding + every rerun actually spent.
+  const round4 = (n) => Math.round((Number(n) || 0) * 10000) / 10000;
+  const moduleCostByClientId = {};
+  usageEvents.forEach((event) => {
+    if (!event.clientId) return;
+    moduleCostByClientId[event.clientId] =
+      (moduleCostByClientId[event.clientId] || 0) + (Number(event.estimatedCostUsd) || 0);
   });
-  const costByClient = Object.entries(costByClientMap)
-    .map(([name, totalCostUsd]) => ({ name, totalCostUsd }))
+  const runsCostByClientId = {};
+  pricedRuns.forEach((entry) => {
+    const key = entry.clientId || 'unknown';
+    runsCostByClientId[key] = (runsCostByClientId[key] || 0) + entry.cost;
+  });
+  const costClientIds = Array.from(
+    new Set([...Object.keys(runsCostByClientId), ...Object.keys(moduleCostByClientId)])
+  );
+  const costByClient = costClientIds
+    .map((id) => {
+      const runsCostUsd = round4(runsCostByClientId[id] || 0);
+      const moduleCostUsd = round4(moduleCostByClientId[id] || 0);
+      return {
+        clientId: id,
+        name: clientNameById[id] || id || 'Unknown',
+        runsCostUsd,
+        moduleCostUsd,
+        totalCostUsd: round4(runsCostUsd + moduleCostUsd),
+      };
+    })
     .sort((a, b) => b.totalCostUsd - a.totalCostUsd);
 
   const statusCounts = sortedRuns.reduce((acc, run) => {
@@ -391,6 +469,46 @@ async function buildOpsOverview() {
     },
     costByClient,
     moduleUsage,
+    // Hero payload for the "last brief run" section — the latest run with its
+    // resolved brief name and a normalized per-stage cost breakdown.
+    lastBriefRun: latestRun
+      ? (() => {
+          const runCost = extractCost(latestRun);
+          // Onboarding chain: a chained scout-brief carries parentRunId
+          // pointing at the intake run that preceded it. Chain cost = both
+          // runs together — the real "what did onboarding cost" number.
+          const parentRun = latestRun.parentRunId
+            ? sortedRuns.find((run) => run.id === latestRun.parentRunId) || null
+            : null;
+          const parentRunCostUsd = parentRun ? extractCost(parentRun) : null;
+          const chainCostUsd =
+            parentRun && (typeof runCost === 'number' || typeof parentRunCostUsd === 'number')
+              ? round4((runCost || 0) + (parentRunCostUsd || 0))
+              : null;
+          const clientRunsCostUsd = round4(runsCostByClientId[latestRun.clientId] || 0);
+          const clientModuleCostUsd = round4(moduleCostByClientId[latestRun.clientId] || 0);
+          return {
+            runId: latestRun.id,
+            clientId: latestRun.clientId || null,
+            clientName: clientNameById[latestRun.clientId] || latestRun.clientId || null,
+            briefLabel: briefLabelForRun(latestRun),
+            status: latestRun.status || 'unknown',
+            trigger: latestRun.trigger || null,
+            scope: latestRun.scope || null,
+            pipelineType: latestRun.pipelineType || null,
+            startedAt: latestRun.startedAt || latestRun.createdAt || null,
+            completedAt: latestRun.completedAt || null,
+            totalCostUsd: runCost,
+            stageCosts: normalizedStageCosts(latestRun),
+            parentRunId: latestRun.parentRunId || null,
+            parentRunCostUsd,
+            chainCostUsd,
+            clientRunsCostUsd,
+            clientModuleCostUsd,
+            clientTotalCostUsd: round4(clientRunsCostUsd + clientModuleCostUsd),
+          };
+        })()
+      : null,
     techStack: buildTechStack(hasSeoAudit, hasBrowserlessRequests),
     dataInventory: summarizeCollectionPresence(latestClientConfig, latestDashboardState, latestRun, latestBrowserlessRequest),
     latest: {

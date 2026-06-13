@@ -202,34 +202,32 @@ export default function KnowledgeBaseCard({ getIdToken }) {
       }}
     >
       <div id="kb-summary-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
-        <div className="tile-detail-stat-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 3 }}>
-          <span className="tile-detail-stat-label">Items</span>
-          <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 18 }}>{itemCount}</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '10px 12px', border: '1px solid rgba(42,36,32,0.1)', borderRadius: 8, background: 'rgba(255,255,255,0.6)' }}>
+          <span className="mu-label">Items</span>
+          <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 600 }}>{itemCount}</span>
         </div>
-        <div className="tile-detail-stat-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 3 }}>
-          <span className="tile-detail-stat-label">Remaining</span>
-          <span style={{ color: approachingLimit ? '#ffcf70' : 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 18 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '10px 12px', border: '1px solid rgba(42,36,32,0.1)', borderRadius: 8, background: 'rgba(255,255,255,0.6)' }}>
+          <span className="mu-label">Remaining</span>
+          <span style={{ color: approachingLimit ? '#e67e22' : 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 600 }}>
             {limits.remaining ?? 0}
           </span>
         </div>
-        <div className="tile-detail-stat-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 3 }}>
-          <span className="tile-detail-stat-label">Retrieval</span>
-          <span style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '10px 12px', border: '1px solid rgba(42,36,32,0.1)', borderRadius: 8, background: 'rgba(255,255,255,0.6)' }}>
+          <span className="mu-label">Retrieval</span>
+          <span style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
             OpenAI
           </span>
         </div>
       </div>
 
       {error && (
-        <div id="kb-error-banner" className="brand-snapshot-error" style={{ margin: 0 }}>
-          {error}
-        </div>
+        <p id="kb-error-banner" className="mu-notice mu-notice--danger">{error}</p>
       )}
 
       {approachingLimit && (
-        <div id="kb-limit-warning" className="sb-notice" style={{ margin: 0 }}>
+        <p id="kb-limit-warning" className="mu-notice">
           Knowledge Base is approaching the {limits.maxItems || 100}-item v1 limit.
-        </div>
+        </p>
       )}
 
       <div id="kb-tab-bar" className="tile-detail-tabs">
@@ -249,8 +247,8 @@ export default function KnowledgeBaseCard({ getIdToken }) {
       <div id="kb-workspace">
         <section id="kb-add-section" className="kb-panel">
           <div className="kb-panel-head">
-            <span className="sb-label">Add Knowledge</span>
-            <span className="sb-hint">{activeTab === 'upload' ? 'Documents are extracted, chunked, and embedded.' : activeTab === 'url' ? 'Imports readable page text from one URL.' : 'Paste client-owned context directly.'}</span>
+            <span className="mu-label">Add Knowledge</span>
+            <span style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{activeTab === 'upload' ? 'Documents are extracted, chunked, and embedded.' : activeTab === 'url' ? 'Imports readable page text from one URL.' : 'Paste client-owned context directly.'}</span>
           </div>
           <AddItemPanel mode={activeTab} busy={busy} onSubmit={handleSubmit} />
         </section>
@@ -258,10 +256,10 @@ export default function KnowledgeBaseCard({ getIdToken }) {
         <section id="kb-list-section" className="kb-panel">
           <div className="kb-panel-head-row">
             <div className="kb-panel-head">
-              <span className="sb-label">Uploaded Items</span>
-              <span className="sb-hint">{itemCount} saved · delete removes chunks and stored files.</span>
+              <span className="mu-label">Uploaded Items</span>
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{itemCount} saved · delete removes chunks and stored files.</span>
             </div>
-            <button type="button" className="sb-link-btn" onClick={loadItems} disabled={loading || busy}>
+            <button type="button" className="mu-btn-outline" style={{ minHeight: 30, padding: '0 10px', fontSize: 11 }} onClick={loadItems} disabled={loading || busy}>
               Refresh
             </button>
           </div>
@@ -272,8 +270,8 @@ export default function KnowledgeBaseCard({ getIdToken }) {
       <form id="kb-chat-panel" className="kb-panel" onSubmit={handleChat}>
         <div className="kb-panel-head-row">
           <div className="kb-panel-head">
-            <span className="sb-label">Ask Brain</span>
-            <span className="sb-hint">Answers use retrieved chunks and cite the source list below.</span>
+            <span className="mu-label">Ask Brain</span>
+            <span style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>Answers use retrieved chunks and cite the source list below.</span>
           </div>
           <span className="kb-model-chip">Haiku</span>
         </div>
@@ -284,20 +282,21 @@ export default function KnowledgeBaseCard({ getIdToken }) {
             value={chatQuestion}
             onChange={(event) => setChatQuestion(event.target.value)}
             placeholder="Ask a question about the uploaded knowledge"
-            className="sb-input"
+            className="mu-input"
           />
           <button
             id="kb-chat-submit"
             type="submit"
             disabled={!chatQuestion.trim() || chatBusy}
-            className="tile-foot-rerun-btn"
+            className="mu-btn-update"
+            style={{ minHeight: 46, padding: '0 18px', fontSize: 13 }}
           >
             {chatBusy ? 'Thinking...' : 'Ask'}
           </button>
         </div>
         {chatAnswer && (
           <div id="kb-chat-answer">
-            <span className="sb-label">Answer</span>
+            <span className="mu-label">Answer</span>
             <p>{chatAnswer}</p>
             {chatSources.length > 0 && (
               <div className="kb-citation-row">
@@ -311,23 +310,23 @@ export default function KnowledgeBaseCard({ getIdToken }) {
       </form>
 
       <form id="kb-search-panel" onSubmit={handleSearch} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <span className="sb-label">Semantic Search</span>
-        <div style={{ display: 'flex', gap: 6 }}>
+        <span className="mu-label">Semantic Search</span>
+        <div style={{ display: 'flex', gap: 8 }}>
           <input
             id="kb-search-input"
             type="search"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             placeholder="Search client knowledge"
-            className="sb-input"
+            className="mu-input"
             style={{ flex: 1 }}
           />
           <button
             id="kb-search-submit"
             type="submit"
             disabled={!searchQuery.trim() || searching}
-            className="tile-foot-rerun-btn"
-            style={{ flex: '0 0 auto' }}
+            className="mu-btn-update"
+            style={{ flex: '0 0 auto', minHeight: 46, padding: '0 18px', fontSize: 13 }}
           >
             {searching ? 'Searching...' : 'Search'}
           </button>

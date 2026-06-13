@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Brand Identity → Search Pipeline — Full Flow</title>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#121722; --panel2:#161d2b; --ink:#e6edf3; --muted:#8b97a8;
+    --line:#28324a; --signup:#e0a0c0; --seed:#c08af0; --brand:#6ea8fe; --inject:#f0a45f;
+    --query:#7ee0a6; --warn:#ffd166; --test:#7ed0e0; --run:#7ee0a6; --mirror:#f0a45f;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:32px}
+  h1{font-size:21px;margin:0 0 4px}
+  .sub{color:var(--muted);margin:0 0 22px;font-size:13px;max-width:980px}
+  .legend{display:flex;gap:15px;flex-wrap:wrap;margin-bottom:28px;font-size:12px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .dot{width:10px;height:10px;border-radius:2px;display:inline-block}
+  .wrap{max-width:1140px;margin:auto}
+
+  .node{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:13px 15px;position:relative}
+  .node h3{margin:0 0 5px;font-size:13.5px}
+  .node .file{font-family:var(--mono);font-size:10.5px;color:var(--brand);text-decoration:none;display:block;margin-bottom:3px}
+  .node p{margin:6px 0 0;color:var(--muted);font-size:12px}
+  .signup{border-left:3px solid var(--signup)}
+  .seed{border-left:3px solid var(--seed)}
+  .brand{border-left:3px solid var(--brand)}
+  .inject{border-left:3px solid var(--inject)}
+  .query{border-left:3px solid var(--query)}
+  .test{border-left:3px solid var(--test)}
+  .store{border:1px solid var(--seed);background:linear-gradient(180deg,#19132a,#141022)}
+
+  .badge{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.04em;padding:2px 7px;border-radius:5px;margin-bottom:7px}
+  .badge.s1{background:rgba(224,160,192,.16);color:var(--signup)}
+  .badge.audit{background:rgba(192,138,240,.15);color:var(--seed)}
+  .badge.runb{background:rgba(126,224,166,.15);color:var(--run)}
+  .badge.testb{background:rgba(126,208,224,.15);color:var(--test)}
+
+  .vline{width:2px;background:var(--line);height:22px;margin:0 auto}
+  .arrow-lbl{text-align:center;color:var(--muted);font-size:11px;padding:4px 0}
+  .arrow-lbl b{color:var(--ink)}
+
+  .fork{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:6px;position:relative}
+  .fork::before{content:"";position:absolute;top:-22px;left:25%;right:25%;height:2px;background:var(--line)}
+  .fork::after{content:"";position:absolute;top:-22px;left:50%;width:2px;height:22px;background:var(--line);transform:translateX(-1px)}
+  .branch{position:relative}
+  .branch::before{content:"";position:absolute;top:-22px;left:50%;width:2px;height:22px;background:var(--line)}
+  .col{display:flex;flex-direction:column;gap:0}
+
+  pre{margin:9px 0 0;background:#0a0d13;border:1px solid var(--line);border-radius:8px;padding:10px 12px;
+      overflow-x:auto;font-family:var(--mono);font-size:11.5px;color:var(--ink)}
+  .k{color:var(--brand)} .s{color:var(--query)} .c{color:var(--muted)} .o{color:var(--inject)} .w{color:var(--warn)} .p{color:var(--seed)}
+
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .chip{background:#1a2233;border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:11px;font-family:var(--mono)}
+  .chip b{color:var(--inject);font-weight:600}
+  .chip.a{border-color:rgba(192,138,240,.5)} .chip.a b{color:var(--seed)}
+
+  .mirror-row{display:flex;align-items:center;gap:12px;margin:14px 0}
+  .mirror-box{flex:1;background:var(--panel2);border:1px dashed var(--mirror);border-radius:9px;padding:11px 13px}
+  .mirror-box h4{margin:0 0 4px;font-size:12.5px;color:var(--mirror)}
+  .mirror-box p{margin:0;color:var(--muted);font-size:11.5px}
+  .mirror-arrow{font-family:var(--mono);color:var(--mirror);font-size:13px;font-weight:700;white-space:nowrap}
+
+  .stage{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:10px 13px}
+  .stage .sn{font-family:var(--mono);font-size:10.5px;color:var(--query);font-weight:700}
+  .stage h4{margin:3px 0 4px;font-size:12.5px}
+  .stage p{margin:0;color:var(--muted);font-size:11.5px}
+  .stage .file{font-family:var(--mono);font-size:10px;color:var(--brand)}
+
+  table{border-collapse:collapse;width:100%;margin-top:8px;font-size:12px}
+  th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+  th{background:var(--panel2);color:var(--muted);font-weight:600;font-size:11px;letter-spacing:.03em}
+  td .y{color:var(--run)} td .n{color:#e0707f} td .h{color:var(--test)} td code{color:var(--seed)}
+  .sec-title{font-size:13px;color:var(--muted);margin:36px 0 12px;letter-spacing:.04em;text-transform:uppercase;border-top:1px solid var(--line);padding-top:18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Brand Identity → Search Pipeline — Full Flow</h1>
+  <p class="sub">Signup crawls the site and writes the canonical <b>brand identity</b> into <code>scoutConfig</code> (store A). Cards seed from it, stay editable, and every run reads it back. Card edits mirror B→A on save; runs read A-first — so the audit, Scout Test, external scouts, and the Brief Run all resolve to one identity. File:line refs are real.</p>
+
+  <div class="legend">
+    <span><i class="dot" style="background:var(--signup)"></i> signup / provisioning</span>
+    <span><i class="dot" style="background:var(--seed)"></i> store A · scoutConfig</span>
+    <span><i class="dot" style="background:var(--brand)"></i> store B · card config</span>
+    <span><i class="dot" style="background:var(--mirror)"></i> mirror / sync</span>
+    <span><i class="dot" style="background:var(--query)"></i> query / pipeline</span>
+    <span><i class="dot" style="background:var(--test)"></i> test path</span>
+  </div>
+
+  <!-- 1 SIGNUP -->
+  <div class="node signup">
+    <span class="badge s1">STEP 1 · SIGNUP</span>
+    <h3>User signs up with a website URL</h3>
+    <a class="file">api/_lib/client-provisioning.cjs:216, 181</a>
+    <p>provisionClientForUser → queues a <code>brief_run</code> (<code>trigger:'signup'</code>, <code>pipelineType:'free-tier-intake'</code>). <b>No URL → no crawl</b>, cards start on defaults.</p>
+  </div>
+  <div class="vline"></div>
+  <div class="arrow-lbl">async — worker picks up the queued run · <b>two separate lanes</b></div>
+
+  <!-- 2 AUDIT — two lanes -->
+  <div class="node seed">
+    <span class="badge audit">STEP 2 · SITE AUDIT — runs all cards at once</span>
+    <h3>Worker → <code>runModules</code> fan-out (parallel)</h3>
+    <a class="file">worker/run-brief/route.js:126 → runner.js:1010,1018 (Promise.all)</a>
+    <p>The <b>foundational + autoRunOnSignup</b> cards (module-registry.js:70) run concurrently — this is the "insert website, run everything" step:</p>
+    <div class="chips">
+      <span class="chip"><b>multi-device-view</b></span>
+      <span class="chip"><b>social-preview</b></span>
+      <span class="chip"><b>seo-performance</b></span>
+      <span class="chip"><b>agent-readiness</b></span>
+      <span class="chip"><b>style-guide</b> (Brand Snapshot)</span>
+      <span class="chip"><b>design-evaluation</b></span>
+    </div>
+    <p style="margin-top:9px">Each card writes its own module result/artifacts → rendered as audit cards on the dashboard.</p>
+  </div>
+
+  <div class="vline"></div>
+  <div class="arrow-lbl" style="color:var(--warn)">⚠ separate lane — NOT triggered by the module fan-out above</div>
+
+  <div class="node seed" style="border-left-color:var(--warn)">
+    <span class="badge audit" style="background:rgba(255,209,102,.14);color:var(--warn)">STEP 2b · BRAND IDENTITY → scoutConfig (store A)</span>
+    <h3><code>ensureScoutConfig</code> infers the brand identity from crawl evidence</h3>
+    <a class="file">runner.js:605 (runIntakePipeline) · or scout-config-regenerate:89 (manual)</a>
+    <div class="chips">
+      <span class="chip a"><b>clientName</b></span>
+      <span class="chip a"><b>brandKeywords[]</b> (quoted)</span>
+      <span class="chip a"><b>categoryTerms[]</b></span>
+      <span class="chip a"><b>competitors[]</b></span>
+      <span class="chip a"><b>reddit{subreddits,mentionQueries…}</b></span>
+      <span class="chip a"><b>industry</b></span>
+    </div>
+    <p style="margin-top:9px;color:var(--warn)">GAP: the modular signup path (runModules) does NOT call ensureScoutConfig. So store A is populated by the legacy intake path or a manual regenerate — not by the audit fan-out. Until then, the Brand &amp; Keywords card seeds from defaults.</p>
+  </div>
+  <div class="vline"></div>
+  <div class="arrow-lbl">dashboard hydrates the cards</div>
+
+  <!-- 3 SEED CARDS -->
+  <div class="node brand">
+    <span class="badge audit" style="background:rgba(110,168,254,.14);color:var(--brand)">STEP 3 · SEED CARDS</span>
+    <h3>Cards populate — store B (<code>marketingBriefConfig</code>)</h3>
+    <a class="file">DashboardPage.jsx:268-322 (buildDefaultMarketingBriefConfig)</a>
+<pre><span class="c">// brand-identity cards seed from the audit (store A)</span>
+brandKeywords = scoutConfig.<span class="p">brandKeywords</span>.map(stripQuotes)  <span class="c">// :274</span>
+categoryTerms = scoutConfig.<span class="p">categoryTerms</span>                   <span class="c">// :277</span>
+brandName     = scoutConfig.<span class="p">clientName</span>                      <span class="c">// :280</span>
+<span class="c">// operational cards seed from DEFAULTS, not the crawl:</span>
+kols=''  competitors=''  weather=off  searches=[5 default rows]</pre>
+    <p>Brand-identity cards = audit-derived. Operational cards (KOLs, weather, custom searches) = sensible defaults the user fills in.</p>
+  </div>
+  <div class="vline"></div>
+  <div class="arrow-lbl">STEP 4 · user reviews &amp; edits any card → <b>Save</b></div>
+
+  <!-- 4 SAVE + MIRROR -->
+  <div class="node inject">
+    <span class="badge" style="background:rgba(240,164,95,.15);color:var(--mirror)">STEP 4 · SAVE → MIRROR B→A</span>
+    <h3>Card save writes B, then mirrors brand identity back into A</h3>
+    <a class="file">app/api/dashboard/marketing-brief/config/route.js:130-200</a>
+    <div class="mirror-row">
+      <div class="mirror-box" style="border-style:solid;border-color:var(--brand)">
+        <h4>Store B · marketingBriefConfig</h4>
+        <p>brandName, brandKeywords, categoryTerms, kols, competitors, searches[], sourceFocus, scribeTone, platforms, weather…</p>
+      </div>
+      <div class="mirror-arrow">── mirror ──▶</div>
+      <div class="mirror-box">
+        <h4>Store A · scoutConfig</h4>
+        <p>clientName ← brandName · brandKeywords (re-quoted) · categoryTerms · reddit.mentionQueries ← keywords. Gated: only if a scoutConfig already exists. <code>merge:true</code> preserves subreddits/industry.</p>
+      </div>
+    </div>
+    <p>This keeps the audit store current so the external-scout path (which reads A) sees card edits instead of stale crawl values.</p>
+  </div>
+  <div class="vline"></div>
+  <div class="arrow-lbl">STEP 5 · run something — config resolved fresh, <b>A-first</b></div>
+
+  <!-- CONFIG RESOLUTION -->
+  <div class="node store">
+    <h3>Runtime config resolution — single source of truth</h3>
+    <a class="file">features/not-the-rug-brief/config-loader.js:270-286</a>
+<pre><span class="c">// 3 brand-identity fields: scoutConfig (A) wins, card (B) fallback, then derived</span>
+clientName    = <span class="p">scoutConfig.clientName</span>    || B.brandName    || derive
+brandKeywords = <span class="p">scoutConfig.brandKeywords</span> || B.brandKeywords
+categoryTerms = <span class="p">scoutConfig.categoryTerms</span> || B.categoryTerms
+<span class="c">// all other fields read from B only:</span>
+kols, competitors, searches[], sourceFocus, scribeTone, platforms = <span class="k">B</span></pre>
+  </div>
+
+  <!-- FORK: 3 consumers -->
+  <div class="vline"></div>
+  <div class="fork">
+
+    <!-- LEFT: TEST -->
+    <div class="branch"><div class="col">
+      <div class="node test">
+        <span class="badge testb">SCOUT TEST · "Test" button</span>
+        <h3>One platform · raw hits · no synthesis</h3>
+        <a class="file">scout-test.js:105 → /api/dashboard/scout-test/route.js</a>
+        <p>Same config resolver (so reads A-first). Runs ONE platform's query, returns raw results to the card. No trim, no brief.</p>
+<pre>reddit: encode(<span class="s">`site:reddit.com ${term}`</span>)   <span class="c">// serp:57</span>
+term = mentionQueries || [name, ...brandKeywords] <span class="c">// :135</span></pre>
+      </div>
+    </div></div>
+
+    <!-- RIGHT: BRIEF RUN -->
+    <div class="branch"><div class="col">
+      <div class="node query">
+        <span class="badge runb">MARKETING BRIEF RUN · "Run" button</span>
+        <h3>Full pipeline → published brief</h3>
+        <a class="file">DashboardPage.jsx:2813 → marketing-brief/run/route.js:45 → config-loader.js:270</a>
+      </div>
+      <div class="vline"></div>
+
+      <div class="node inject">
+        <h3>buildSearchPlan() — query strings assembled</h3>
+        <a class="file">config-loader.js:190-256</a>
+        <p>Custom <code>searches[]</code> win if present; else 3 default rows. Watchlist + per-platform rows appended.</p>
+<pre><span class="k">brandQuery</span> = brandKeywords.map(quoteIfSpaces)
+  .concat(<span class="s">`site:${hostname}`</span>).join(<span class="s">' OR '</span>)  <span class="c">// :221-226</span></pre>
+        <div class="chips">
+          <span class="chip a"><b>brandKeywords</b>→BRAND</span>
+          <span class="chip a"><b>categoryTerms</b>→CATEGORY</span>
+          <span class="chip"><b>kols</b>→WATCHLIST</span>
+          <span class="chip"><b>platforms</b>→site: rows</span>
+        </div>
+      </div>
+      <div class="vline"></div>
+
+      <div class="node query">
+        <h3>Actual search parameter emitted</h3>
+        <a class="file">xscout.js:405, 411</a>
+<pre><span class="o">SEARCH 1 — BRAND:</span> <span class="s">"MyCo" OR "kw" OR site:myco.com</span>
+<span class="o">SEARCH 2 — CATEGORY:</span> <span class="s">myco industry trends 2026</span>
+<span class="o">SEARCH 4 — WATCHLIST @h1:</span> <span class="s">@h1</span>
+<span class="o">SEARCH 5 — REDDIT:</span> <span class="s">site:reddit.com MyCo</span></pre>
+      </div>
+      <div class="vline"></div>
+      <div class="arrow-lbl">↓ post-search pipeline (real-time, per run)</div>
+
+      <div class="col" style="gap:12px;margin-top:4px">
+        <div class="stage"><span class="sn">STAGE 0 · parallel</span>
+          <h4>Supplemental fetches <span class="file">xscout.js:681</span></h4>
+          <p>weather (NWS), reviews, Instagram, Reddit API, last30days — canonical context so searches aren't wasted on owned data.</p></div>
+        <div class="stage"><span class="sn">STAGE 1 · Sonnet + web_search</span>
+          <h4>Execute N searches <span class="file">xscout.js:820,830</span></h4>
+          <p><code>max_uses = searchPlan.length</code>. Returns raw results per SEARCH row.</p></div>
+        <div class="stage"><span class="sn">STAGE 2 · Haiku</span>
+          <h4>Trim → compactContext <span class="file">xscout.js:842</span></h4>
+          <p>Strips raw hits to ~5K tokens of signal.</p></div>
+        <div class="stage"><span class="sn">STAGE 3 · Sonnet</span>
+          <h4>Synthesize brief + agentData <span class="file">xscout.js:851 (:440)</span></h4>
+          <p>Labels [LIVE]/[BACKGROUND], fills agentData JSON. sourceFocus / scribeTone / guardian shape this stage (read, not searched). Retry if JSON missing (:882).</p></div>
+        <div class="stage"><span class="sn">STAGE 4 · merge + persist</span>
+          <h4>hydrateAgentData → save run <span class="file">xscout.js:893</span></h4>
+          <p>Merges Stage-0 signals back, persists to <code>brief_runs</code> → dashboard + email digest.</p></div>
+      </div>
+    </div></div>
+
+  </div><!-- /fork -->
+
+  <!-- PRECEDENCE -->
+  <div class="sec-title">Precedence — which store wins, per field</div>
+  <table>
+    <tr><th>Field</th><th>Resolved at run</th><th>How card edits reach it</th></tr>
+    <tr><td><code>clientName</code> / <code>brandKeywords</code> / <code>categoryTerms</code></td><td><span class="y">A first</span> → B → derived</td><td>card save mirrors B→A, so A == edit</td></tr>
+    <tr><td>kols, competitors, searches[], sourceFocus, scribeTone, platforms, weather</td><td>B only</td><td>read straight from B (the card)</td></tr>
+  </table>
+
+  <!-- COMPARISON -->
+  <div class="sec-title">The four flows · differences &amp; the shared identity</div>
+  <table>
+    <tr><th>Aspect</th><th>Audit (signup)</th><th>Scout Test</th><th>External Scouts</th><th>Brief Run</th></tr>
+    <tr><td>Role</td><td>Generates identity</td><td>Validate one platform</td><td>Cached source signals</td><td>Produces the brief</td></tr>
+    <tr><td>Trigger</td><td>Signup (queued)</td><td>"Test" button</td><td>Brief / scout run</td><td>"Run" button</td></tr>
+    <tr><td>Reads</td><td class="h">— writes A</td><td>A-first (resolver)</td><td>A (<code>scoutConfig</code>)</td><td>A-first (resolver)</td></tr>
+    <tr><td>Searches</td><td><span class="n">none</span></td><td>1 platform</td><td>reddit/reviews/weather</td><td>N (full plan)</td></tr>
+    <tr><td>LLM synthesis</td><td><span class="n">no</span></td><td><span class="n">no</span></td><td><span class="n">no</span></td><td><span class="y">yes · 3 stages</span></td></tr>
+    <tr><td>Output</td><td>scoutConfig → seeds cards</td><td>raw hits in card</td><td>cached externalSignals</td><td>persisted brief</td></tr>
+    <tr><td>Shared</td><td colspan="4">All four resolve the SAME brand identity — <code>brandKeywords</code> / <code>categoryTerms</code> / <code>clientName</code> — canonical in <code>scoutConfig</code> (A), seeded by the audit, kept current by the card-save mirror.</td></tr>
+  </table>
+</div>
+</body>
+</html>

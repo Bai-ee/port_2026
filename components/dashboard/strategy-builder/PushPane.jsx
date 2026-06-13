@@ -47,7 +47,7 @@ export default function PushPane({ plan, getIdToken, onPush, onOpenSocialPosting
 
   if (!plan) {
     return (
-      <div style={{ padding: '40px 0', textAlign: 'center', fontSize: 13, fontFamily: 'var(--font-ui)', color: 'var(--text-secondary)' }}>
+      <div className="sb-empty-state">
         No plan generated yet. Go to the Inputs tab to generate a strategy.
       </div>
     );
@@ -78,10 +78,11 @@ export default function PushPane({ plan, getIdToken, onPush, onOpenSocialPosting
   }
 
   return (
-    <div style={{ padding: '8px 0' }}>
+    <div className="sb-pane">
       {/* Summary */}
       <div
         id="strategy-builder-push-summary"
+        className="sb-summary-panel"
         style={{
           padding: '14px 16px',
           background: 'var(--surface-raised)',

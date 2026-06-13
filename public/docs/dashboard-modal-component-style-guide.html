@@ -1,0 +1,2580 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dashboard Modal Component Style Guide</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Doto:wght@700;900&family=Space+Grotesk:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --page: #f7f7f6;
+      --ink: #2a2420;
+      --ink-soft: rgba(42,36,32,0.72);
+      --ink-muted: rgba(42,36,32,0.52);
+      --line: rgba(42,36,32,0.12);
+      --line-soft: rgba(42,36,32,0.14);
+      --surface: rgba(255,255,255,0.62);
+      --surface-strong: rgba(255,255,255,0.78);
+      --surface-soft: rgba(255,255,255,0.88);
+      --success: #285f3b;
+      --warning: #67533d;
+      --danger: #9f1f17;
+      --accent-a: hsl(185,100%,45%);
+      --accent-b: hsl(262,100%,55%);
+      --accent-c: hsl(314,100%,50%);
+      --radius: 8px;
+      --cell-radius: 16px;
+      --font-ui: "Space Grotesk", system-ui, sans-serif;
+      --font-mono: "Space Mono", ui-monospace, monospace;
+      --font-display: "Doto", "Space Mono", monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 12% 8%, rgba(255,255,255,0.9), transparent 28rem),
+        radial-gradient(circle at 88% 0%, rgba(0,173,181,0.08), transparent 24rem),
+        linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%);
+      color: var(--ink);
+      font-family: var(--font-ui);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page {
+      width: min(1280px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 24px 0 48px;
+    }
+
+    .guide-hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 20px;
+      align-items: end;
+      margin-bottom: 24px;
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: var(--cell-radius);
+      background: rgba(255,255,255,0.42);
+      box-shadow: 0 1px 0 rgba(255,255,255,0.7), inset 0 1px 0 rgba(255,255,255,0.35);
+      backdrop-filter: blur(22px);
+    }
+
+    .eyebrow,
+    .label,
+    .chip,
+    .tab,
+    .btn,
+    th {
+      font-family: var(--font-mono);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow {
+      display: block;
+      margin-bottom: 10px;
+      color: var(--ink-muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: var(--font-display);
+      font-size: clamp(2.5rem, 6.5vw, 5.75rem);
+      line-height: 0.88;
+      letter-spacing: 0;
+      color: var(--ink);
+    }
+
+    .hero-copy {
+      max-width: 720px;
+      margin: 18px 0 0;
+      color: var(--ink-soft);
+      font-size: 16px;
+      line-height: 1.55;
+    }
+
+    .status-stack {
+      min-width: 220px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .status-line {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--line-soft);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--ink-soft);
+    }
+
+    .component-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(340px, 0.48fr);
+      gap: 16px;
+      align-items: start;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: var(--cell-radius);
+      background: var(--surface);
+      box-shadow: 0 1px 0 rgba(255,255,255,0.7), inset 0 1px 0 rgba(255,255,255,0.35);
+      backdrop-filter: blur(22px);
+      overflow: hidden;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .panel-title {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.2;
+      letter-spacing: 0;
+      color: var(--ink);
+    }
+
+    .panel-body {
+      display: grid;
+      gap: 16px;
+      padding: 16px;
+    }
+
+    .section {
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface-strong);
+      box-shadow: 0 1px 0 rgba(255,255,255,0.72), inset 0 1px 0 rgba(255,255,255,0.35);
+    }
+
+    .section-head {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: start;
+    }
+
+    .index {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 28px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: rgba(255,255,255,0.5);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--ink-soft);
+    }
+
+    .section h3 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.25;
+      color: var(--ink);
+    }
+
+    .section p {
+      margin: 5px 0 0;
+      color: var(--ink-soft);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    .label {
+      display: block;
+      color: var(--ink-soft);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .hint {
+      color: var(--ink-muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .tabs {
+      display: flex;
+      min-height: 48px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,0.28);
+    }
+
+    .tab {
+      flex: 1;
+      border: 0;
+      border-bottom: 2px solid transparent;
+      background: transparent;
+      color: var(--ink-soft);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 700;
+      transition: color var(--dur-base) ease, background var(--dur-fast) ease;
+    }
+
+    .tab:hover:not(.is-active) {
+      color: var(--ink);
+      background: rgba(255,255,255,0.38);
+    }
+
+    .tab.is-active {
+      color: var(--ink);
+      border-image: linear-gradient(90deg, var(--accent-a), var(--accent-b), var(--accent-c)) 0 0 1 0;
+    }
+
+    .button-row,
+    .control-row,
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+    }
+
+    /* ── Interaction tokens ─────────────────────────────────────────── */
+    :root {
+      --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+      --dur-fast: 140ms;
+      --dur-base: 160ms;
+      --dur-spring: 220ms;
+    }
+
+    @property --cta-angle {
+      syntax: "<angle>";
+      initial-value: 0deg;
+      inherits: false;
+    }
+
+    @keyframes cta-border-spin {
+      to { --cta-angle: 360deg; }
+    }
+
+    .btn {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 38px;
+      padding: 0 15px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.52);
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1;
+      text-decoration: none;
+      cursor: pointer;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.5);
+      transition:
+        background var(--dur-base) ease,
+        box-shadow var(--dur-base) ease,
+        border-color var(--dur-base) ease,
+        transform var(--dur-spring) var(--ease-spring),
+        color var(--dur-fast) ease;
+    }
+
+    .btn:hover:not(:disabled) {
+      background: rgba(255,255,255,0.82);
+      border-color: rgba(42,36,32,0.18);
+      box-shadow: 0 4px 14px rgba(42,36,32,0.08), inset 0 1px 0 rgba(255,255,255,0.5);
+      transform: translateY(-1px);
+    }
+
+    .btn:active:not(:disabled) {
+      transform: translateY(0px);
+      transition-duration: 80ms;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.5);
+    }
+
+    .cta-pill-btn {
+      isolation: isolate;
+      gap: 0.5rem;
+      min-height: 2.75rem;
+      padding: 0.5rem 0.75rem;
+      border: none;
+      color: #fff;
+      font-family: var(--font-ui);
+      font-size: clamp(0.8rem, 1.1vw, 0.875rem);
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      text-transform: none;
+      overflow: hidden;
+      background:
+        linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%),
+        linear-gradient(135deg, var(--accent-a) 0%, var(--accent-b) 52%, var(--accent-c) 100%);
+      box-shadow:
+        0 0 14px 3px rgba(0,200,228,0.22),
+        0 2px 8px rgba(0,0,0,0.2),
+        inset 0 1px 0 rgba(255,255,255,0.28),
+        inset 0 -1px 0 rgba(0,0,0,0.1);
+    }
+
+    .cta-pill-btn::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      padding: 2px;
+      background: conic-gradient(
+        from var(--cta-angle),
+        transparent 0deg,
+        transparent 180deg,
+        hsla(185, 100%, 58%, 0.12) 200deg,
+        hsla(200, 100%, 62%, 0.35) 225deg,
+        hsla(225, 100%, 64%, 0.6) 250deg,
+        hsla(250, 100%, 66%, 0.78) 275deg,
+        hsla(275, 100%, 66%, 0.88) 300deg,
+        hsla(300, 100%, 68%, 0.94) 322deg,
+        hsla(320, 80%, 80%, 0.97) 338deg,
+        rgba(255, 255, 255, 1) 350deg,
+        transparent 358deg
+      );
+      -webkit-mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+      mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      animation: cta-border-spin 2.4s linear infinite;
+      pointer-events: none;
+    }
+
+    .cta-pill-btn::after {
+      display: none;
+    }
+
+    .cta-pill-btn:hover {
+      background:
+        linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%),
+        linear-gradient(135deg, var(--accent-a) 0%, var(--accent-b) 52%, var(--accent-c) 100%);
+      box-shadow:
+        0 0 28px 6px rgba(0,200,228,0.36),
+        0 4px 14px rgba(0,0,0,0.26),
+        inset 0 1px 0 rgba(255,255,255,0.28),
+        inset 0 -1px 0 rgba(0,0,0,0.1);
+      transform: translateY(-1px);
+    }
+
+    .cta-pill-btn:active {
+      transform: translateY(0px);
+      transition-duration: 80ms;
+    }
+
+    .cta-pill-btn > * {
+      position: relative;
+      z-index: 1;
+    }
+
+    .cta-text {
+      position: relative;
+      z-index: 1;
+    }
+
+    .cta-avatar {
+      width: 1.55rem;
+      height: 1.55rem;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid rgba(255,255,255,0.35);
+      flex-shrink: 0;
+      display: block;
+    }
+
+    .cta-icon {
+      position: relative;
+      z-index: 1;
+      font-size: 0.7rem;
+      opacity: 0.75;
+      margin-left: 0.1rem;
+    }
+
+    .cta-contact {
+      min-height: 48px;
+      padding: 0 22px;
+      gap: 8px;
+      font-size: 18px;
+      font-weight: 700;
+      box-shadow:
+        0 0 18px 4px rgba(0,200,228,0.18),
+        0 8px 18px rgba(42,36,32,0.12),
+        inset 0 1px 0 rgba(255,255,255,0.28);
+    }
+
+    .cta-primary-wide {
+      width: 100%;
+      min-height: 52px;
+      padding: 0 24px;
+      font-size: 16px;
+      justify-self: stretch;
+    }
+
+    .gradient-pill {
+      gap: 0.5rem;
+      min-height: 2.75rem;
+      padding: 0.5rem 0.75rem;
+      border: 0;
+      color: #fff;
+      font-family: var(--font-ui);
+      font-size: clamp(0.8rem, 1.1vw, 0.875rem);
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      text-transform: none;
+      background:
+        linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%),
+        linear-gradient(135deg, var(--accent-a) 0%, var(--accent-b) 52%, var(--accent-c) 100%);
+      box-shadow:
+        0 0 16px 3px rgba(0,200,228,0.18),
+        0 8px 18px rgba(42,36,32,0.12),
+        inset 0 1px 0 rgba(255,255,255,0.28);
+    }
+
+    .btn-outline {
+      min-height: 34px;
+      border: 1.5px solid #111;
+      border-radius: 7px;
+      background: #fff;
+      color: #111;
+      padding: 0 18px;
+      font: 400 14px/1 var(--font-mono);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      box-shadow: none;
+    }
+
+    .btn-outline:hover {
+      background: #f7f7f7;
+      border-color: #222;
+      transform: translateY(-1px);
+    }
+
+    .btn-nav {
+      min-height: 48px;
+      padding: 0 22px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.68);
+      border-color: rgba(42,36,32,0.12);
+      color: var(--ink);
+      font: 700 18px/1 var(--font-ui);
+      letter-spacing: 0;
+      text-transform: none;
+    }
+
+    .btn-nav:hover {
+      background: rgba(255,255,255,0.94);
+      border-color: rgba(42,36,32,0.22);
+    }
+
+    .btn-dark:hover {
+      background: rgba(42,36,32,0.82);
+      box-shadow: 0 4px 14px rgba(42,36,32,0.2), inset 0 1px 0 rgba(255,255,255,0.1);
+    }
+
+    .btn-danger:hover {
+      background: rgba(159,31,23,0.06);
+      border-color: rgba(159,31,23,0.4);
+    }
+
+    .btn-icon:hover { transform: scale(1.14); }
+
+    .btn-icon-cta:hover {
+      box-shadow:
+        0 0 28px 8px rgba(0,200,228,0.38),
+        0 4px 14px rgba(0,0,0,0.28),
+        inset 0 1px 0 rgba(255,255,255,0.28),
+        inset 0 -1px 0 rgba(0,0,0,0.1);
+      transform: scale(1.08);
+    }
+
+    .source-control {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      min-height: 64px;
+      padding: 8px 10px 8px 18px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.68);
+      box-shadow:
+        0 1px 0 rgba(255,255,255,0.8),
+        inset 0 1px 0 rgba(255,255,255,0.6),
+        0 10px 26px rgba(42,36,32,0.08);
+      transition:
+        border-color var(--dur-base) ease,
+        box-shadow var(--dur-base) ease;
+    }
+
+    .source-control:hover {
+      border-color: rgba(42,36,32,0.22);
+      box-shadow:
+        0 1px 0 rgba(255,255,255,0.8),
+        inset 0 1px 0 rgba(255,255,255,0.6),
+        0 14px 34px rgba(42,36,32,0.12);
+    }
+
+    .source-value {
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      gap: 12px;
+      color: rgba(42,36,32,0.68);
+      font: 400 20px/1 var(--font-ui);
+    }
+
+    .source-icon {
+      width: 22px;
+      height: 22px;
+      flex: 0 0 auto;
+      color: rgba(42,36,32,0.5);
+    }
+
+    .btn-update {
+      isolation: isolate;
+      overflow: hidden;
+      min-height: 46px;
+      padding: 0 20px;
+      border: none;
+      border-radius: 999px;
+      background: #fff;
+      color: var(--ink);
+      font: 700 16px/1 var(--font-ui);
+      letter-spacing: 0;
+      text-transform: none;
+      box-shadow: 0 8px 18px rgba(42,36,32,0.1), inset 0 1px 0 rgba(255,255,255,0.86);
+      transition:
+        box-shadow var(--dur-base) ease,
+        transform var(--dur-spring) var(--ease-spring);
+    }
+
+    .btn-update:hover {
+      box-shadow: 0 12px 28px rgba(42,36,32,0.16), inset 0 1px 0 rgba(255,255,255,0.86);
+      transform: translateY(-1px);
+    }
+
+    .btn-update:active {
+      transform: translateY(0px);
+      transition-duration: 80ms;
+    }
+
+    .btn-update::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      padding: 2px;
+      background: conic-gradient(
+        from var(--cta-angle),
+        transparent 0deg,
+        transparent 180deg,
+        hsla(185, 100%, 58%, 0.12) 200deg,
+        hsla(200, 100%, 62%, 0.35) 225deg,
+        hsla(225, 100%, 64%, 0.6) 250deg,
+        hsla(250, 100%, 66%, 0.78) 275deg,
+        hsla(275, 100%, 66%, 0.88) 300deg,
+        hsla(300, 100%, 68%, 0.94) 322deg,
+        hsla(320, 80%, 80%, 0.97) 338deg,
+        rgba(255, 255, 255, 1) 350deg,
+        transparent 358deg
+      );
+      -webkit-mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+      mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      animation: cta-border-spin 2.4s linear infinite;
+      pointer-events: none;
+    }
+
+    .btn-update > * {
+      position: relative;
+      z-index: 1;
+    }
+
+    .btn-update .cta-icon {
+      margin-left: 8px;
+      font-size: 14px;
+      opacity: 0.68;
+    }
+
+    .nav-sample {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,0.45);
+    }
+
+    .home-icon {
+      width: 28px;
+      height: 28px;
+      color: rgba(42,36,32,0.42);
+    }
+
+    .footer-action-bar {
+      display: grid;
+      grid-template-columns: minmax(140px, 1fr) auto auto;
+      gap: 12px;
+      align-items: center;
+      padding: 10px 0;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      color: rgba(42,36,32,0.72);
+      font: 400 14px/1 var(--font-mono);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .status-dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 999px;
+      background: #ff1d25;
+      box-shadow: 0 0 12px 4px rgba(255,29,37,0.42);
+    }
+
+    .btn-dark {
+      background: var(--ink);
+      border-color: var(--ink);
+      color: #ffffff;
+    }
+
+    .btn-icon {
+      width: 38px;
+      min-width: 38px;
+      padding: 0;
+    }
+
+    .btn-icon-cta {
+      width: 52px;
+      min-width: 52px;
+      min-height: 52px;
+      padding: 0;
+      border: none;
+      color: #fff;
+      font-size: 22px;
+      line-height: 1;
+      overflow: hidden;
+      isolation: isolate;
+      background:
+        linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%),
+        linear-gradient(135deg, var(--accent-a) 0%, var(--accent-b) 52%, var(--accent-c) 100%);
+      box-shadow:
+        0 0 14px 3px rgba(0,200,228,0.22),
+        0 2px 8px rgba(0,0,0,0.2),
+        inset 0 1px 0 rgba(255,255,255,0.28),
+        inset 0 -1px 0 rgba(0,0,0,0.1);
+    }
+
+    .btn-icon-cta::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      padding: 2px;
+      background: conic-gradient(
+        from var(--cta-angle),
+        transparent 0deg,
+        transparent 180deg,
+        hsla(185, 100%, 58%, 0.12) 200deg,
+        hsla(200, 100%, 62%, 0.35) 225deg,
+        hsla(225, 100%, 64%, 0.6) 250deg,
+        hsla(250, 100%, 66%, 0.78) 275deg,
+        hsla(275, 100%, 66%, 0.88) 300deg,
+        hsla(300, 100%, 68%, 0.94) 322deg,
+        hsla(320, 80%, 80%, 0.97) 338deg,
+        rgba(255, 255, 255, 1) 350deg,
+        transparent 358deg
+      );
+      -webkit-mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+      mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      animation: cta-border-spin 2.4s linear infinite;
+      pointer-events: none;
+    }
+
+    .btn-danger {
+      color: var(--danger);
+      border-color: rgba(159,31,23,0.24);
+    }
+
+    .btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.52;
+    }
+
+    .field-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .field-grid > .btn {
+      align-self: end;
+      min-height: 54px;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      min-height: 54px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,0.96);
+      color: var(--ink);
+      padding: 12px 16px;
+      font: 16px/1.45 var(--font-mono);
+      outline: none;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.55);
+    }
+
+    textarea {
+      min-height: 132px;
+      resize: vertical;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      border-color: rgba(42,36,32,0.36);
+      box-shadow: 0 0 0 3px rgba(42,36,32,0.08), inset 0 1px 0 rgba(255,255,255,0.65);
+    }
+
+    .segmented {
+      display: flex;
+      gap: 0;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.96);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.45);
+    }
+
+    .segmented button {
+      flex: 1;
+      min-height: 44px;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--ink-soft);
+      font: 700 13px/1 var(--font-mono);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background var(--dur-base) ease, color var(--dur-fast) ease;
+    }
+
+    .segmented button:hover:not(.is-active) {
+      background: rgba(42,36,32,0.06);
+      color: var(--ink);
+    }
+
+    .segmented .is-active {
+      background: var(--ink);
+      color: #ffffff;
+      box-shadow: 0 3px 10px rgba(42,36,32,0.14), inset 0 1px 0 rgba(255,255,255,0.16);
+    }
+
+    .toggle-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .toggle-card {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 12px;
+      min-height: 86px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,0.96);
+      text-align: left;
+      cursor: pointer;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.45);
+      transition:
+        background var(--dur-base) ease,
+        border-color var(--dur-base) ease,
+        box-shadow var(--dur-base) ease,
+        transform var(--dur-spring) var(--ease-spring);
+    }
+
+    .toggle-card:hover {
+      background: rgba(255,255,255,1);
+      border-color: rgba(42,36,32,0.22);
+      box-shadow: 0 3px 12px rgba(42,36,32,0.07), inset 0 1px 0 rgba(255,255,255,0.45);
+      transform: translateY(-1px);
+    }
+
+    .toggle-card:active {
+      transform: translateY(0px);
+      transition-duration: 80ms;
+    }
+
+    .toggle-card.is-on {
+      background: var(--surface-strong);
+      border-color: rgba(42,36,32,0.22);
+      box-shadow: 0 2px 8px rgba(42,36,32,0.06), inset 0 1px 0 rgba(255,255,255,0.45);
+    }
+
+    .check {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      border: 1px solid rgba(42,36,32,0.18);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.55);
+      color: var(--ink);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .is-on .check {
+      background: var(--ink);
+      border-color: var(--ink);
+      color: #ffffff;
+    }
+
+    .toggle-title {
+      display: block;
+      color: var(--ink);
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1.3;
+    }
+
+    .toggle-desc {
+      display: block;
+      margin-top: 5px;
+      color: var(--ink-muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .range-wrap {
+      display: grid;
+      gap: 7px;
+    }
+
+    input[type="range"] {
+      min-height: 32px;
+      padding: 0;
+      accent-color: var(--ink);
+      background: transparent;
+      border: 0;
+      box-shadow: none;
+    }
+
+    .range-scale {
+      display: flex;
+      justify-content: space-between;
+      color: var(--ink-muted);
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 30px;
+      padding: 4px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.5);
+      color: var(--ink-soft);
+      font-size: 12px;
+      transition: color var(--dur-fast) ease, border-color var(--dur-fast) ease, background var(--dur-fast) ease;
+    }
+
+    button.chip, a.chip, .chip[role="button"] {
+      cursor: pointer;
+    }
+
+    button.chip:hover, a.chip:hover, .chip[role="button"]:hover {
+      background: rgba(42,36,32,0.07);
+      border-color: rgba(42,36,32,0.28);
+      color: var(--ink);
+    }
+
+    .chip-success {
+      color: var(--success);
+      border-color: rgba(40,95,59,0.3);
+      background: rgba(40,95,59,0.08);
+    }
+
+    button.chip-success:hover, .chip-success[role="button"]:hover {
+      background: rgba(40,95,59,0.16);
+      border-color: rgba(40,95,59,0.5);
+    }
+
+    .chip-warning {
+      color: var(--warning);
+      border-color: rgba(103,83,61,0.24);
+      background: rgba(185,167,141,0.14);
+    }
+
+    button.chip-warning:hover, .chip-warning[role="button"]:hover {
+      background: rgba(185,167,141,0.26);
+      border-color: rgba(103,83,61,0.44);
+    }
+
+    .chip-danger {
+      color: var(--danger);
+      border-color: rgba(159,31,23,0.24);
+      background: rgba(159,31,23,0.06);
+    }
+
+    button.chip-danger:hover, .chip-danger[role="button"]:hover {
+      background: rgba(159,31,23,0.12);
+      border-color: rgba(159,31,23,0.44);
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface-strong);
+    }
+
+    .data-table th,
+    .data-table td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line-soft);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .data-table th {
+      color: var(--ink-muted);
+      font-size: 11px;
+      font-weight: 700;
+      background: rgba(255,255,255,0.36);
+    }
+
+    .data-table td {
+      color: var(--ink-soft);
+      font-size: 14px;
+      line-height: 1.45;
+      transition: color var(--dur-fast) ease;
+    }
+
+    .data-table tbody tr {
+      cursor: pointer;
+      transition: background var(--dur-base) ease;
+    }
+
+    .data-table tbody tr:hover {
+      background: rgba(42,36,32,0.03);
+    }
+
+    .data-table tbody tr:hover td {
+      color: var(--ink);
+    }
+
+    .data-table tbody tr.is-selected {
+      background: rgba(42,36,32,0.05);
+    }
+
+    .data-table tbody tr.is-selected td {
+      color: var(--ink);
+    }
+
+    .data-table tr:last-child td { border-bottom: 0; }
+
+    .stat-list {
+      display: grid;
+    }
+
+    .stat-row {
+      display: grid;
+      grid-template-columns: minmax(180px, 0.45fr) minmax(0, 1fr);
+      gap: 14px;
+      padding: 8px 4px;
+      border-bottom: 1px solid var(--line-soft);
+      border-radius: 4px;
+      cursor: default;
+      transition: background var(--dur-base) ease;
+    }
+
+    .stat-row:hover { background: rgba(42,36,32,0.02); }
+
+    .stat-row:last-child { border-bottom: 0; }
+
+    .stat-label {
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .stat-value {
+      color: var(--ink-soft);
+      font-size: 13px;
+      line-height: 1.5;
+      text-align: right;
+    }
+
+    .list-card {
+      display: grid;
+      gap: 8px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface-strong);
+      transition:
+        border-color var(--dur-base) ease,
+        box-shadow var(--dur-base) ease,
+        transform var(--dur-spring) var(--ease-spring);
+    }
+
+    .list-card:hover {
+      border-color: rgba(42,36,32,0.2);
+      box-shadow: 0 4px 16px rgba(42,36,32,0.07);
+      transform: translateY(-1px);
+    }
+
+    .list-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .list-title {
+      flex: 1;
+      color: var(--ink);
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.35;
+    }
+
+    .list-body {
+      color: var(--ink-soft);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .artifact {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface-soft);
+    }
+
+    .artifact-toolbar {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,0.36);
+    }
+
+    .code {
+      margin: 0;
+      min-height: 150px;
+      padding: 12px 14px;
+      color: var(--ink);
+      font: 12px/1.6 var(--font-mono);
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-x: auto;
+    }
+
+    .empty {
+      display: grid;
+      place-items: center;
+      min-height: 180px;
+      padding: 28px 16px;
+      border: 1px dashed var(--line);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,0.36);
+      text-align: center;
+      color: var(--ink-soft);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .metric-card {
+      display: grid;
+      gap: 5px;
+      min-height: 72px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,0.78);
+      cursor: pointer;
+      transition:
+        border-color var(--dur-base) ease,
+        box-shadow var(--dur-base) ease,
+        transform var(--dur-spring) var(--ease-spring);
+    }
+
+    .metric-card:hover {
+      border-color: rgba(42,36,32,0.22);
+      box-shadow: 0 6px 20px rgba(42,36,32,0.09);
+      transform: translateY(-2px);
+    }
+
+    .metric-value {
+      color: var(--ink);
+      font: 700 22px/1 var(--font-display);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .metric-label {
+      color: var(--ink-muted);
+      font: 700 10px/1.2 var(--font-mono);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,0.44);
+    }
+
+    .preview-surface {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,0.86);
+    }
+
+    .preview-media {
+      display: grid;
+      place-items: center;
+      min-height: 190px;
+      padding: 18px;
+      color: var(--ink-muted);
+      font: 700 12px/1.4 var(--font-mono);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      text-align: center;
+      background:
+        linear-gradient(135deg, rgba(0,173,181,0.08), rgba(122,77,255,0.08)),
+        rgba(255,255,255,0.9);
+    }
+
+    .external-preview {
+      display: grid;
+      justify-items: center;
+      gap: 10px;
+      padding: 24px 16px;
+      text-align: center;
+    }
+
+    .url-chip {
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 6px 10px;
+      color: var(--ink-muted);
+      font: 11px/1.2 var(--font-mono);
+      background: rgba(42,36,32,0.03);
+    }
+
+    .file-drop {
+      display: grid;
+      place-items: center;
+      min-height: 112px;
+      padding: 16px;
+      border: 1px dashed rgba(42,36,32,0.22);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,0.62);
+      text-align: center;
+      cursor: pointer;
+      transition:
+        border-color var(--dur-base) ease,
+        background var(--dur-base) ease;
+    }
+
+    .file-drop:hover {
+      border-color: rgba(42,36,32,0.44);
+      background: rgba(255,255,255,0.88);
+    }
+
+    .file-drop.is-dragging {
+      border-color: var(--accent-a);
+      background: rgba(0,173,181,0.06);
+    }
+
+    .file-drop strong {
+      color: var(--ink);
+      font-size: 14px;
+    }
+
+    .file-drop span {
+      display: block;
+      margin-top: 4px;
+      color: var(--ink-muted);
+      font: 11px/1.4 var(--font-mono);
+    }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,0.72);
+      color: var(--ink);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition:
+        background var(--dur-fast) ease,
+        border-color var(--dur-fast) ease;
+    }
+
+    .checkbox-row:hover {
+      background: rgba(255,255,255,0.94);
+      border-color: rgba(42,36,32,0.2);
+    }
+
+    .checkbox-row input {
+      width: 18px;
+      min-height: 18px;
+      accent-color: var(--ink);
+    }
+
+    .notice {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 8px 12px;
+      color: var(--ink-soft);
+      background: rgba(255,255,255,0.72);
+      font-size: 13px;
+      line-height: 1.45;
+      transition: opacity var(--dur-base) ease;
+    }
+
+    .notice-success {
+      border-color: rgba(40,95,59,0.22);
+      background: rgba(40,95,59,0.06);
+      color: var(--success);
+    }
+
+    .notice-danger {
+      border-color: rgba(159,31,23,0.22);
+      background: rgba(159,31,23,0.05);
+      color: var(--danger);
+    }
+
+    .result-card,
+    .queue-card,
+    .saved-card,
+    .post-card {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,0.76);
+      transition:
+        border-color var(--dur-base) ease,
+        box-shadow var(--dur-base) ease,
+        transform var(--dur-spring) var(--ease-spring);
+    }
+
+    .result-card:hover,
+    .queue-card:hover,
+    .saved-card:hover,
+    .post-card:hover {
+      border-color: rgba(42,36,32,0.2);
+      box-shadow: 0 4px 16px rgba(42,36,32,0.08);
+      transform: translateY(-2px);
+    }
+
+    .result-card:hover .distance-pill {
+      border-color: rgba(42,36,32,0.28);
+      color: var(--ink);
+    }
+
+    .result-head,
+    .queue-head,
+    .saved-head,
+    .post-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .result-title,
+    .queue-title,
+    .saved-title,
+    .post-title {
+      margin: 0;
+      color: var(--ink);
+      font-size: 15px;
+      line-height: 1.3;
+      font-weight: 700;
+    }
+
+    .result-meta,
+    .queue-meta,
+    .saved-meta,
+    .post-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      color: var(--ink-muted);
+      font: 10px/1.4 var(--font-mono);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .result-body,
+    .queue-body,
+    .saved-body,
+    .post-body {
+      margin: 0;
+      color: var(--ink-soft);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    mark {
+      border-radius: 3px;
+      background: rgba(40,95,59,0.14);
+      color: var(--ink);
+      padding: 0 2px;
+    }
+
+    .distance-pill {
+      flex: 0 0 auto;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px 8px;
+      color: var(--ink-muted);
+      font: 10px/1 var(--font-mono);
+    }
+
+    .composer-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(220px, 0.8fr);
+      gap: 12px;
+    }
+
+    .char-count {
+      color: var(--ink-muted);
+      font: 11px/1 var(--font-mono);
+    }
+
+    .char-count.is-over {
+      color: var(--danger);
+    }
+
+    .diagnostic-list {
+      display: grid;
+      gap: 6px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(42,36,32,0.03);
+    }
+
+    .diagnostic-list span {
+      color: var(--ink-muted);
+      font: 11px/1.45 var(--font-mono);
+    }
+
+    .pacing-strip {
+      display: grid;
+      gap: 6px;
+    }
+
+    .pacing-bar {
+      position: relative;
+      height: 8px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(42,36,32,0.06);
+    }
+
+    .pacing-bar span {
+      display: block;
+      width: 54%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--accent-a), var(--accent-b), var(--accent-c));
+    }
+
+    .inventory-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 90px 100px;
+      gap: 10px;
+      align-items: center;
+      padding: 8px 4px;
+      border-bottom: 1px solid var(--line-soft);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background var(--dur-base) ease;
+    }
+
+    .inventory-row:last-child {
+      border-bottom: 0;
+    }
+
+    .inventory-row:hover {
+      background: rgba(42,36,32,0.03);
+    }
+
+    .inventory-row strong,
+    .inventory-row span {
+      min-width: 0;
+      color: var(--ink-soft);
+      font-size: 13px;
+    }
+
+    .inventory-row strong {
+      color: var(--ink);
+    }
+
+    .modal-demo {
+      display: grid;
+      grid-template-columns: 38% minmax(0, 1fr);
+      gap: 14px;
+    }
+
+    .visual-cell {
+      min-height: 380px;
+      padding: 16px;
+    }
+
+    .preview-box {
+      aspect-ratio: 3 / 2;
+      border-radius: 14px;
+      background:
+        linear-gradient(135deg, rgba(0,173,181,0.18), rgba(122,77,255,0.14)),
+        var(--surface-soft);
+      border: 1px solid var(--line);
+      display: grid;
+      place-items: center;
+      font-family: var(--font-display);
+      font-size: 42px;
+      color: var(--ink);
+    }
+
+    .visual-copy {
+      margin-top: 14px;
+    }
+
+    .visual-copy h2 {
+      margin: 0 0 10px;
+      font-size: 22px;
+      line-height: 1.1;
+    }
+
+    .visual-copy p {
+      margin: 0;
+      color: var(--ink-soft);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    .sticky-note {
+      position: sticky;
+      top: 20px;
+    }
+
+    /* ── Section L — interaction block primitives ─────────────────────── */
+
+    .interaction-block {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+      border: 1px solid var(--line-soft);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,0.44);
+    }
+
+    .interaction-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding-top: 6px;
+      border-top: 1px solid var(--line-soft);
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--ink-muted);
+      font: 10px/1.3 var(--font-mono);
+      letter-spacing: 0.06em;
+    }
+
+    .legend-dot {
+      flex-shrink: 0;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: rgba(42,36,32,0.22);
+    }
+
+    .legend-dot--spring { background: var(--accent-b); }
+    .legend-dot--accent { background: linear-gradient(90deg, var(--accent-a), var(--accent-c)); }
+    .legend-dot--dark   { background: var(--ink); }
+    .legend-dot--snap   { background: rgba(42,36,32,0.55); }
+    .legend-dot--star   { background: #f59e0b; }
+    .legend-dot--focus  { background: rgba(42,36,32,0.36); }
+    .legend-dot--danger { background: var(--danger); }
+
+    /* Star button */
+    .star-btn {
+      background: none;
+      border: none;
+      padding: 6px;
+      font-size: 22px;
+      line-height: 1;
+      color: rgba(42,36,32,0.22);
+      cursor: pointer;
+      border-radius: 6px;
+      transition:
+        color var(--dur-base) ease,
+        transform var(--dur-spring) var(--ease-spring);
+    }
+
+    .star-btn:hover { color: #f59e0b; transform: scale(1.25); }
+    .star-btn.is-on  { color: #f59e0b; }
+    .star-btn.is-on:hover { color: #d97706; }
+
+    /* Action link */
+    .action-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--ink-soft);
+      text-decoration: none;
+      font: 700 13px/1 var(--font-mono);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      transition:
+        color var(--dur-fast) ease,
+        transform var(--dur-spring) var(--ease-spring);
+    }
+
+    .action-link:hover {
+      color: var(--ink);
+      transform: translate(2px, -2px);
+    }
+
+    /* Input error state */
+    .input-error {
+      border-color: rgba(159,31,23,0.44) !important;
+      box-shadow: 0 0 0 3px rgba(159,31,23,0.1), inset 0 1px 0 rgba(255,255,255,0.55) !important;
+    }
+
+    /* Easing reference table */
+    .easing-grid {
+      display: grid;
+      gap: 0;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .easing-row {
+      display: grid;
+      grid-template-columns: 120px minmax(200px, auto) minmax(0,1fr);
+      gap: 0;
+      align-items: center;
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--line-soft);
+      transition: background var(--dur-fast) ease;
+    }
+
+    .easing-row:last-child { border-bottom: 0; }
+    .easing-row:hover { background: rgba(42,36,32,0.03); }
+
+    .easing-name {
+      color: var(--accent-b);
+      font: 700 11px/1.3 var(--font-mono);
+      letter-spacing: 0.08em;
+    }
+
+    .easing-value {
+      color: var(--ink);
+      font: 700 11px/1.3 var(--font-mono);
+      letter-spacing: 0.04em;
+    }
+
+    .easing-use {
+      color: var(--ink-muted);
+      font: 11px/1.45 var(--font-mono);
+    }
+
+    @media (max-width: 920px) {
+      .guide-hero,
+      .component-grid,
+      .modal-demo,
+      .field-grid,
+      .metric-grid,
+      .composer-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .toggle-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .sticky-note { position: static; }
+      .status-stack { min-width: 0; }
+      .stat-row { grid-template-columns: 1fr; gap: 5px; }
+      .stat-value { text-align: left; }
+      .source-control,
+      .footer-action-bar { grid-template-columns: 1fr; border-radius: 20px; }
+      .source-value { font-size: 18px; }
+      .inventory-row { grid-template-columns: 1fr; gap: 4px; }
+      .btn-update,
+      .btn-outline,
+      .btn-nav,
+      .cta-contact { width: 100%; }
+    }
+
+    @media (max-width: 580px) {
+      .toggle-grid { grid-template-columns: 1fr; }
+      .easing-row { grid-template-columns: 1fr; gap: 3px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="guide-hero">
+      <div>
+        <span class="eyebrow">Client Dashboard / Modal Components</span>
+        <h1>UI KIT</h1>
+        <p class="hero-copy">
+          One normalized component language for dashboard card modals. Tweak this page first,
+          then apply the approved primitives to each card tab.
+        </p>
+      </div>
+      <div class="status-stack" aria-label="Design rules">
+        <div class="status-line"><span>Primary CTA</span><strong>One per screen</strong></div>
+        <div class="status-line"><span>Radius</span><strong>8px panels</strong></div>
+        <div class="status-line"><span>Typography</span><strong>Readable first</strong></div>
+        <div class="status-line"><span>Surface</span><strong>White glass</strong></div>
+      </div>
+    </header>
+
+    <section class="modal-demo">
+      <aside class="panel visual-cell">
+        <div class="preview-box">SB</div>
+        <div class="visual-copy">
+          <span class="eyebrow">Card Modal Shell</span>
+          <h2>Strategy Builder</h2>
+          <p>
+            Left side keeps the visual and summary. Right side holds the tab system.
+            Nested content uses the same card, table, toggle, and action primitives.
+          </p>
+        </div>
+      </aside>
+
+      <section class="panel">
+        <div class="tabs">
+          <button class="tab is-active" type="button">Inputs</button>
+          <button class="tab" type="button">Calendar</button>
+          <button class="tab" type="button">Push</button>
+        </div>
+        <div class="panel-body">
+          <div class="source-control" aria-label="Source URL action">
+            <div class="source-value">
+              <svg class="source-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M2 12h20"></path>
+                <path d="M12 2a15.3 15.3 0 0 1 0 20"></path>
+                <path d="M12 2a15.3 15.3 0 0 0 0 20"></path>
+              </svg>
+              <span>https://fast.poker/</span>
+            </div>
+            <button class="btn btn-update" type="button">Update &amp; Rerun <span class="cta-icon">↗</span></button>
+          </div>
+
+          <section class="section">
+            <div class="section-head">
+              <span class="index">01</span>
+              <div>
+                <h3>Data Sources</h3>
+                <p>Toggle which card data feeds the strategy. Each row can open the source card.</p>
+              </div>
+              <span class="chip chip-success">Ready</span>
+            </div>
+            <div class="toggle-grid">
+              <button class="toggle-card is-on" type="button">
+                <span class="check">✓</span>
+                <span>
+                  <span class="toggle-title">Marketing Brief</span>
+                  <span class="toggle-desc">Primary campaign direction and offer context.</span>
+                </span>
+              </button>
+              <button class="toggle-card is-on" type="button">
+                <span class="check">✓</span>
+                <span>
+                  <span class="toggle-title">Knowledge Base</span>
+                  <span class="toggle-desc">Client-owned source truth and internal proof.</span>
+                </span>
+              </button>
+              <button class="toggle-card" type="button">
+                <span class="check"></span>
+                <span>
+                  <span class="toggle-title">SEO Performance</span>
+                  <span class="toggle-desc">Use when visibility data is ready.</span>
+                </span>
+              </button>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <span class="index">02</span>
+              <div>
+                <h3>Campaign Setup</h3>
+                <p>Form controls for objective, CTA, timing, rules, and post cadence.</p>
+              </div>
+            </div>
+            <div class="field-grid">
+              <label class="field">
+                <span class="label">Primary Objective</span>
+                <select>
+                  <option>Bookings and reservations</option>
+                  <option>Awareness and reach</option>
+                  <option>Promotions and sales</option>
+                </select>
+              </label>
+              <label class="field">
+                <span class="label">CTA Text</span>
+                <input value="Book a table" />
+              </label>
+              <label class="field">
+                <span class="label">Posting Time</span>
+                <input type="time" value="18:30" />
+              </label>
+              <label class="field">
+                <span class="label">Emoji Policy</span>
+                <div class="segmented">
+                  <button type="button">None</button>
+                  <button type="button" class="is-active">Sparing</button>
+                  <button type="button">Liberal</button>
+                </div>
+              </label>
+            </div>
+            <label class="field">
+              <span class="label">Guardrails</span>
+              <textarea>21+ only. Avoid guaranteed-win language. Keep tone founder-ready and concise.</textarea>
+            </label>
+          </section>
+
+          <button class="btn cta-pill-btn cta-primary-wide" type="button">
+            <span class="cta-text">Generate Strategy</span>
+            <span class="cta-icon">↗</span>
+          </button>
+        </div>
+      </section>
+    </section>
+
+    <div class="component-grid" style="margin-top:16px;">
+      <section class="panel">
+        <div class="panel-head">
+          <h2 class="panel-title">Components</h2>
+          <span class="chip">All required primitives</span>
+        </div>
+        <div class="panel-body">
+          <section class="section">
+            <div class="section-head">
+              <span class="index">A</span>
+              <div>
+                <h3>Buttons</h3>
+                <p>Only one animated primary action should be visible in a modal tab.</p>
+              </div>
+            </div>
+            <div class="button-row">
+              <a class="btn gradient-pill" href="https://calendly.com/bballi/30min">
+                <img class="cta-avatar" src="/img/profile2_400x400.png?v=1774582808" alt="" />
+                <span class="cta-text">Meet with Bryan</span>
+                <span class="cta-icon">↗</span>
+              </a>
+              <button class="btn btn-outline" type="button">Run Now</button>
+              <button class="btn btn-outline" type="button">Details <span class="cta-icon">↗</span></button>
+              <button class="btn btn-dark" type="button">Save</button>
+              <button class="btn btn-icon-cta" type="button" aria-label="Refresh">↻</button>
+              <button class="btn btn-danger" type="button">Delete</button>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <span class="index">B</span>
+              <div>
+                <h3>Website Button References</h3>
+                <p>These mirror the homepage/nav/card controls: source pill, nav pills, and card footer actions.</p>
+              </div>
+            </div>
+            <div class="source-control" aria-label="Source URL action reference">
+              <div class="source-value">
+                <svg class="source-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <path d="M2 12h20"></path>
+                  <path d="M12 2a15.3 15.3 0 0 1 0 20"></path>
+                  <path d="M12 2a15.3 15.3 0 0 0 0 20"></path>
+                </svg>
+                <span>https://fast.poker/</span>
+              </div>
+              <button class="btn btn-update" type="button">Update &amp; Rerun <span class="cta-icon">↗</span></button>
+            </div>
+            <div class="nav-sample">
+              <svg class="home-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m3 11 9-8 9 8"></path>
+                <path d="M5 10v10h5v-6h4v6h5V10"></path>
+              </svg>
+              <button class="btn btn-nav" type="button">Logout</button>
+              <button class="btn gradient-pill cta-contact" type="button">Contact <span class="cta-icon">↗</span></button>
+            </div>
+            <div class="footer-action-bar">
+              <span class="status-badge"><span class="status-dot"></span>Growth</span>
+              <button class="btn btn-outline" type="button">Run Now</button>
+              <button class="btn btn-outline" type="button">Details <span class="cta-icon">↗</span></button>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <span class="index">C</span>
+              <div>
+                <h3>Segmented Controls And Sliders</h3>
+                <p>Use segmented controls for mutually exclusive modes, sliders for numeric tuning.</p>
+              </div>
+            </div>
+            <div class="segmented">
+              <button type="button">Daily</button>
+              <button type="button">Weekly</button>
+              <button type="button" class="is-active">30-Day</button>
+            </div>
+            <div class="range-wrap">
+              <span class="label">Posts Per Day - 3</span>
+              <input type="range" min="1" max="5" value="3" />
+              <div class="range-scale"><span>1</span><span>5</span></div>
+            </div>
+            <div class="range-wrap">
+              <span class="label">Baseline Mix - 40%</span>
+              <input type="range" min="10" max="60" value="40" />
+              <div class="range-scale"><span>10%</span><span>60%</span></div>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <span class="index">D</span>
+              <div>
+                <h3>Tables</h3>
+                <p>PUSH tab table language: readable row height, restrained dividers, white glass surface.</p>
+              </div>
+            </div>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Module</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                  <th>Owner</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Marketing Brief</td>
+                  <td><span class="chip chip-success">Ready</span></td>
+                  <td>Feeds strategy prompts</td>
+                  <td>System</td>
+                </tr>
+                <tr>
+                  <td>Knowledge Base</td>
+                  <td><span class="chip chip-warning">Partial</span></td>
+                  <td>Add proof sources</td>
+                  <td>Client</td>
+                </tr>
+                <tr>
+                  <td>Social Queue</td>
+                  <td><span class="chip">Idle</span></td>
+                  <td>Push generated posts</td>
+                  <td>Operator</td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <span class="index">E</span>
+              <div>
+                <h3>Lists And Post Rows</h3>
+                <p>Calendar items, search results, source rows, queue rows, and recommendation cards.</p>
+              </div>
+            </div>
+            <article class="list-card">
+              <div class="list-head">
+                <span class="chip">Base</span>
+                <span class="list-title">Post a founder-ready value angle at 6:30 PM.</span>
+                <button class="btn" type="button">Regen</button>
+              </div>
+              <div class="list-body">Focus the copy on the offer, proof, and a single CTA. Keep it under 280 characters.</div>
+            </article>
+            <article class="list-card">
+              <div class="list-head">
+                <span class="chip chip-warning">Event</span>
+                <span class="list-title">Use local event timing to create urgency.</span>
+                <button class="btn" type="button">Edit</button>
+              </div>
+              <div class="list-body">This card pattern should handle queued posts, findings, sources, and generated suggestions.</div>
+            </article>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <span class="index">F</span>
+              <div>
+                <h3>Artifact And Preview Panes</h3>
+                <p>Device screenshots, mockups, brief documents, PDFs, iframes, email/newsletter previews, and external deployment links.</p>
+              </div>
+            </div>
+            <div class="preview-surface">
+              <div class="toolbar">
+                <button class="btn btn-outline" type="button">Download</button>
+                <button class="btn btn-outline" type="button">Open <span class="cta-icon">↗</span></button>
+              </div>
+              <div class="preview-media">Image / iframe / report preview</div>
+            </div>
+            <div class="external-preview preview-surface">
+              <span class="eyebrow">Preview Deployed</span>
+              <button class="btn btn-dark" type="button">Open Preview <span class="cta-icon">↗</span></button>
+              <span class="url-chip">https://preview.example.com/client/site</span>
+              <p class="hint">Use when a deployment blocks iframe embedding or the user must inspect a live URL.</p>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <span class="index">G</span>
+              <div>
+                <h3>Config, Uploads, And Action Bars</h3>
+                <p>Marketing Brief config, estimates, custom briefs, Knowledge Base ingest, scout slices, toggles, file drops, checkboxes, and save bars.</p>
+              </div>
+            </div>
+            <label class="field">
+              <span class="label">Code / HTML / JSON Textarea</span>
+              <textarea spellcheck="false">&lt;section&gt;Paste generated HTML, JSON, prompt text, or config here.&lt;/section&gt;</textarea>
+            </label>
+            <label class="file-drop">
+              <strong>Select File</strong>
+              <span>PDF, DOCX, TXT, Markdown, CSV, JSON, HTML, XML, YAML, RTF, logs · 10 MB max</span>
+            </label>
+            <label class="checkbox-row">
+              <input type="checkbox" checked />
+              <span>Public URL enabled</span>
+            </label>
+            <div class="footer-action-bar">
+              <span class="hint">Saved config is used by the next run.</span>
+              <button class="btn btn-update" type="button">Save Config <span class="cta-icon">↗</span></button>
+              <button class="btn btn-outline" type="button">Cancel</button>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <span class="index">H</span>
+              <div>
+                <h3>Search, Citations, And Knowledge Results</h3>
+                <p>Knowledge Base search/chat, source chunks, semantic distance, highlights, citation chips, and source links.</p>
+              </div>
+            </div>
+            <div class="field-grid">
+              <label class="field">
+                <span class="label">Semantic Search</span>
+                <input type="search" value="reservation proof and founder story" />
+              </label>
+              <button class="btn btn-update" type="button">Search <span class="cta-icon">↗</span></button>
+            </div>
+            <article class="result-card">
+              <div class="result-head">
+                <div>
+                  <span class="result-meta"><span>[1] semantic match</span><span>PDF</span><span>Chunk 4</span></span>
+                  <h4 class="result-title">Knowledge excerpt title</h4>
+                </div>
+                <span class="distance-pill">0.183</span>
+              </div>
+              <p class="result-body">This excerpt contains <mark>matched terms</mark> and summarizes why the source should influence the generated card output.</p>
+              <div class="chip-row">
+                <span class="chip">Citation [1]</span>
+                <span class="chip chip-success">Ready</span>
+                <button class="btn btn-outline" type="button">Open Source</button>
+              </div>
+            </article>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <span class="index">I</span>
+              <div>
+                <h3>Composer, Queue, And Diagnostics</h3>
+                <p>Social posting composer, 280-character counter, optimize/post/schedule buttons, credentials diagnostics, agents, and queue cards.</p>
+              </div>
+            </div>
+            <div class="composer-grid">
+              <div class="preview-surface" style="padding:12px; display:grid; gap:8px;">
+                <div class="result-head">
+                  <span class="label">Composer</span>
+                  <span class="char-count">146/280</span>
+                </div>
+                <textarea>Draft social post content with offer, proof, and one CTA.</textarea>
+                <div class="button-row">
+                  <button class="btn btn-outline" type="button">Optimize</button>
+                  <button class="btn btn-outline" type="button">Save Draft</button>
+                  <button class="btn btn-update" type="button">Post Now <span class="cta-icon">↗</span></button>
+                </div>
+              </div>
+              <div style="display:grid; gap:8px;">
+                <div class="diagnostic-list">
+                  <strong class="stat-label">Diagnostics</strong>
+                  <span>OAuth read check passed</span>
+                  <span>X API v2 check passed</span>
+                  <span>Token env configured</span>
+                </div>
+                <article class="queue-card">
+                  <div class="queue-head">
+                    <h4 class="queue-title">scheduled</h4>
+                    <span class="queue-meta">Jun 5 · 6:30 PM</span>
+                  </div>
+                  <p class="queue-body">Queued post content preview. Failed queue cards use the same layout with a danger notice.</p>
+                </article>
+              </div>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <span class="index">J</span>
+              <div>
+                <h3>Calendar, Pacing, And Post Editing</h3>
+                <p>Strategy Builder calendar rows, today panels, signal chips, platform hints, inline editing, regeneration, export, and schedule-all states.</p>
+              </div>
+            </div>
+            <div class="pacing-strip">
+              <div class="result-head">
+                <span class="label">30-Day Pace</span>
+                <span class="char-count">42 / 90 posts</span>
+              </div>
+              <div class="pacing-bar"><span></span></div>
+            </div>
+            <article class="post-card">
+              <div class="post-head">
+                <div>
+                  <span class="post-meta"><span>EVT</span><span>X</span><span>Local signal</span></span>
+                  <h4 class="post-title">Post row with inline edit state</h4>
+                </div>
+                <button class="btn btn-outline" type="button">Regen</button>
+              </div>
+              <p class="post-body">Use this for daily/weekly/monthly plan rows, Today posts, and queue-ready generated content.</p>
+              <div class="button-row">
+                <button class="btn btn-outline" type="button">Edit</button>
+                <button class="btn btn-update" type="button">Queue <span class="cta-icon">↗</span></button>
+              </div>
+            </article>
+          </section>
+
+          <section class="section" id="section-interaction-states">
+            <div class="section-head">
+              <span class="index">L</span>
+              <div>
+                <h3>Interaction &amp; Animation States</h3>
+                <p>Every interactive primitive has a defined rest → hover → active → disabled arc. Hover any item below to see its live state.</p>
+              </div>
+              <span class="chip chip-success">Live</span>
+            </div>
+
+            <!-- L1 — Button states -->
+            <div class="interaction-block">
+              <span class="label">Buttons — rest / hover / active / disabled</span>
+              <div class="button-row" style="flex-wrap:wrap;">
+                <button class="btn" type="button">Ghost</button>
+                <button class="btn btn-outline" type="button">Outline</button>
+                <button class="btn btn-dark" type="button">Dark</button>
+                <button class="btn btn-danger" type="button">Danger</button>
+                <button class="btn btn-update" type="button">Update <span class="cta-icon">↗</span></button>
+                <button class="btn cta-pill-btn" type="button"><span class="cta-text">Primary CTA</span><span class="cta-icon">↗</span></button>
+                <button class="btn btn-icon" type="button" aria-label="icon">✦</button>
+                <button class="btn btn-icon-cta" type="button" aria-label="refresh">↻</button>
+                <button class="btn" type="button" disabled>Disabled</button>
+              </div>
+              <div class="interaction-legend">
+                <span class="legend-item"><span class="legend-dot"></span>translateY(-1px) lift on hover</span>
+                <span class="legend-item"><span class="legend-dot legend-dot--spring"></span>spring easing on lift: cubic-bezier(0.34, 1.56, 0.64, 1)</span>
+                <span class="legend-item"><span class="legend-dot legend-dot--snap"></span>snap back on :active — 80ms</span>
+              </div>
+            </div>
+
+            <!-- L2 — Tab states -->
+            <div class="interaction-block">
+              <span class="label">Tabs — inactive / hover / active</span>
+              <div class="tabs" style="border-radius:var(--radius); overflow:hidden; border:1px solid var(--line);">
+                <button class="tab is-active" type="button">Active</button>
+                <button class="tab" type="button">Hover me</button>
+                <button class="tab" type="button">Inactive</button>
+              </div>
+              <div class="interaction-legend">
+                <span class="legend-item"><span class="legend-dot"></span>color ink-soft → ink on hover (160ms)</span>
+                <span class="legend-item"><span class="legend-dot legend-dot--accent"></span>active: gradient underline accent-a → accent-b → accent-c</span>
+              </div>
+            </div>
+
+            <!-- L3 — Segmented control states -->
+            <div class="interaction-block">
+              <span class="label">Segmented Control — inactive / hover / active</span>
+              <div class="segmented">
+                <button type="button" class="is-active">Active</button>
+                <button type="button">Hover me</button>
+                <button type="button">Option C</button>
+              </div>
+              <div class="interaction-legend">
+                <span class="legend-item"><span class="legend-dot"></span>hover: rgba(42,36,32,0.06) fill + ink color (160ms)</span>
+                <span class="legend-item"><span class="legend-dot legend-dot--dark"></span>active: ink background + white text</span>
+              </div>
+            </div>
+
+            <!-- L4 — Toggle card states -->
+            <div class="interaction-block">
+              <span class="label">Toggle Cards — off / hover / on (click to toggle)</span>
+              <div class="toggle-grid">
+                <button class="toggle-card" type="button" id="demo-toggle-a">
+                  <span class="check"></span>
+                  <span><span class="toggle-title">Off State</span><span class="toggle-desc">Click to activate. Hover lifts card.</span></span>
+                </button>
+                <button class="toggle-card is-on" type="button" id="demo-toggle-b">
+                  <span class="check">✓</span>
+                  <span><span class="toggle-title">On State</span><span class="toggle-desc">Active. Border + check filled.</span></span>
+                </button>
+              </div>
+              <div class="interaction-legend">
+                <span class="legend-item"><span class="legend-dot"></span>hover: translateY(-1px) + shadow lift (220ms spring)</span>
+                <span class="legend-item"><span class="legend-dot legend-dot--dark"></span>is-on: check filled ink, border rgba(0.22)</span>
+              </div>
+            </div>
+
+            <!-- L5 — Table row states -->
+            <div class="interaction-block">
+              <span class="label">Table Rows — rest / hover / selected (click to select)</span>
+              <table class="data-table">
+                <thead><tr><th>Module</th><th>Status</th><th>Action</th><th>Owner</th></tr></thead>
+                <tbody id="demo-table-body">
+                  <tr><td>Marketing Brief</td><td><span class="chip chip-success">Ready</span></td><td>Hover this row</td><td>System</td></tr>
+                  <tr><td>Knowledge Base</td><td><span class="chip chip-warning">Partial</span></td><td>Click to select</td><td>Client</td></tr>
+                  <tr class="is-selected"><td>Social Queue</td><td><span class="chip">Idle</span></td><td>Selected state</td><td>Operator</td></tr>
+                </tbody>
+              </table>
+              <div class="interaction-legend">
+                <span class="legend-item"><span class="legend-dot"></span>hover: rgba(42,36,32,0.03) row tint + ink color (160ms)</span>
+                <span class="legend-item"><span class="legend-dot legend-dot--dark"></span>selected: rgba(42,36,32,0.05) persistent</span>
+              </div>
+            </div>
+
+            <!-- L6 — Card hover states -->
+            <div class="interaction-block">
+              <span class="label">Cards — rest / hover (translateY + shadow)</span>
+              <div style="display:grid; gap:8px;">
+                <article class="list-card" style="cursor:pointer;">
+                  <div class="list-head">
+                    <span class="chip">Base</span>
+                    <span class="list-title">List card — hover lifts</span>
+                  </div>
+                  <div class="list-body">border-color shift + translateY(-1px) + box-shadow deepens</div>
+                </article>
+                <article class="result-card" style="cursor:pointer;">
+                  <div class="result-head">
+                    <div>
+                      <span class="result-meta"><span>[1] result card</span></span>
+                      <h4 class="result-title">Result card — hover lifts + distance pill reacts</h4>
+                    </div>
+                    <span class="distance-pill">0.183</span>
+                  </div>
+                  <p class="result-body">translateY(-2px) + shadow + distance pill border activates on parent hover</p>
+                </article>
+                <article class="saved-card" style="cursor:pointer;">
+                  <div class="saved-head">
+                    <div>
+                      <span class="saved-meta"><span>saved card</span></span>
+                      <h4 class="saved-title">Saved card — hover lifts</h4>
+                    </div>
+                    <button class="btn btn-outline" type="button">Open ↗</button>
+                  </div>
+                  <p class="saved-body">Same pattern as result-card.</p>
+                </article>
+              </div>
+              <div class="interaction-legend">
+                <span class="legend-item"><span class="legend-dot"></span>all cards: 220ms spring translateY + shadow deepens</span>
+              </div>
+            </div>
+
+            <!-- L7 — Metric card hover -->
+            <div class="interaction-block">
+              <span class="label">Metric Cards — hover</span>
+              <div class="metric-grid">
+                <div class="metric-card"><span class="metric-value">142</span><span class="metric-label">Posts queued</span></div>
+                <div class="metric-card"><span class="metric-value">98%</span><span class="metric-label">Coverage</span></div>
+                <div class="metric-card"><span class="metric-value">06</span><span class="metric-label">Days active</span></div>
+              </div>
+              <div class="interaction-legend">
+                <span class="legend-item"><span class="legend-dot"></span>hover: translateY(-2px) + shadow + border tightens</span>
+              </div>
+            </div>
+
+            <!-- L8 — Chips interactive hover -->
+            <div class="interaction-block">
+              <span class="label">Chips — interactive hover (semantic color shifts)</span>
+              <div class="chip-row">
+                <button class="chip" type="button">Default</button>
+                <button class="chip chip-success" type="button">Ready</button>
+                <button class="chip chip-warning" type="button">Partial</button>
+                <button class="chip chip-danger" type="button">Failed</button>
+              </div>
+              <div class="interaction-legend">
+                <span class="legend-item"><span class="legend-dot"></span>each chip darkens its own semantic color on hover (140ms)</span>
+              </div>
+            </div>
+
+            <!-- L9 — Icon actions (star, link, action) -->
+            <div class="interaction-block">
+              <span class="label">Icon Actions — star toggle / diagonal link / action button</span>
+              <div class="button-row">
+                <button class="star-btn" id="demo-star" type="button" aria-label="Star" title="Star (click to toggle)">★</button>
+                <a class="action-link" href="#" onclick="return false;">Open source ↗</a>
+                <button class="btn btn-icon" type="button" style="font-size:16px;" aria-label="copy">⧉</button>
+                <button class="btn btn-icon" type="button" style="font-size:16px;" aria-label="delete">✕</button>
+              </div>
+              <div class="interaction-legend">
+                <span class="legend-item"><span class="legend-dot legend-dot--star"></span>star: scale(1.25) + amber color (200ms spring)</span>
+                <span class="legend-item"><span class="legend-dot"></span>action link: translate(2px, -2px) diagonal (220ms spring)</span>
+                <span class="legend-item"><span class="legend-dot"></span>icon btn: scale(1.14) (220ms spring)</span>
+              </div>
+            </div>
+
+            <!-- L10 — Input states -->
+            <div class="interaction-block">
+              <span class="label">Inputs — rest / focus / error</span>
+              <div class="field-grid">
+                <label class="field">
+                  <span class="label">Default (click to focus)</span>
+                  <input type="text" placeholder="Click to see focus ring" />
+                </label>
+                <label class="field">
+                  <span class="label">Error state</span>
+                  <input type="text" value="Invalid entry" class="input-error" />
+                </label>
+                <label class="field">
+                  <span class="label">Disabled</span>
+                  <input type="text" value="Disabled field" disabled />
+                </label>
+                <label class="field">
+                  <span class="label">Filled</span>
+                  <input type="text" value="Filled value" />
+                </label>
+              </div>
+              <div class="interaction-legend">
+                <span class="legend-item"><span class="legend-dot legend-dot--focus"></span>focus: border rgba(0.36) + 3px shadow ring</span>
+                <span class="legend-item"><span class="legend-dot legend-dot--danger"></span>error: border danger + danger shadow ring</span>
+              </div>
+            </div>
+
+            <!-- L11 — File drop states -->
+            <div class="interaction-block">
+              <span class="label">File Drop — rest / hover / dragging</span>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <label class="file-drop">
+                  <strong>Hover me</strong>
+                  <span>border tightens, background brightens</span>
+                </label>
+                <label class="file-drop is-dragging">
+                  <strong>Drag active state</strong>
+                  <span>accent-a border + tinted background</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- L12 — Checkbox row -->
+            <div class="interaction-block">
+              <span class="label">Checkbox Row — rest / hover</span>
+              <label class="checkbox-row">
+                <input type="checkbox" checked />
+                <span>Public URL enabled — hover for background lift</span>
+              </label>
+              <label class="checkbox-row">
+                <input type="checkbox" />
+                <span>Unchecked row</span>
+              </label>
+            </div>
+
+            <!-- L13 — Source control -->
+            <div class="interaction-block">
+              <span class="label">Source Control — rest / hover</span>
+              <div class="source-control">
+                <div class="source-value">
+                  <svg class="source-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle><path d="M2 12h20"></path><path d="M12 2a15.3 15.3 0 0 1 0 20"></path><path d="M12 2a15.3 15.3 0 0 0 0 20"></path>
+                  </svg>
+                  <span>https://fast.poker/</span>
+                </div>
+                <button class="btn btn-update" type="button">Update &amp; Rerun <span class="cta-icon">↗</span></button>
+              </div>
+              <div class="interaction-legend">
+                <span class="legend-item"><span class="legend-dot"></span>hover: border tightens + shadow deepens (160ms)</span>
+              </div>
+            </div>
+
+            <!-- L14 — Inventory rows -->
+            <div class="interaction-block">
+              <span class="label">Inventory Rows — rest / hover</span>
+              <div class="preview-surface" style="padding:0 12px;">
+                <div class="inventory-row"><strong>Desktop screenshot</strong><span>Tier 1</span><span><span class="chip chip-success">Captured</span></span></div>
+                <div class="inventory-row"><strong>Competitor signal</strong><span>Tier 2</span><span><span class="chip chip-warning">Partial</span></span></div>
+                <div class="inventory-row"><strong>SEO snapshot</strong><span>Tier 1</span><span><span class="chip">Idle</span></span></div>
+              </div>
+              <div class="interaction-legend">
+                <span class="legend-item"><span class="legend-dot"></span>hover: rgba(42,36,32,0.03) row tint (160ms)</span>
+              </div>
+            </div>
+
+            <!-- L15 — Timing + easing reference -->
+            <div class="interaction-block">
+              <span class="label">Timing &amp; Easing Reference</span>
+              <div class="easing-grid">
+                <div class="easing-row">
+                  <span class="easing-name">--dur-fast</span>
+                  <span class="easing-value">140ms</span>
+                  <span class="easing-use">chip color, tab color, checkbox border</span>
+                </div>
+                <div class="easing-row">
+                  <span class="easing-name">--dur-base</span>
+                  <span class="easing-value">160ms ease</span>
+                  <span class="easing-use">button bg, card border, table row, source control</span>
+                </div>
+                <div class="easing-row">
+                  <span class="easing-name">--dur-spring</span>
+                  <span class="easing-value">220ms cubic-bezier(0.34, 1.56, 0.64, 1)</span>
+                  <span class="easing-use">translateY lifts, scale(1.25) icons, card hover</span>
+                </div>
+                <div class="easing-row">
+                  <span class="easing-name">active snap</span>
+                  <span class="easing-value">80ms ease</span>
+                  <span class="easing-use">:active on all buttons — instant press feel</span>
+                </div>
+                <div class="easing-row">
+                  <span class="easing-name">cta-border-spin</span>
+                  <span class="easing-value">2.4s linear infinite</span>
+                  <span class="easing-use">spinning conic gradient on CTA pill + btn-update + btn-icon-cta</span>
+                </div>
+              </div>
+            </div>
+
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <span class="index">K</span>
+              <div>
+                <h3>Saved Cards, Inventory Rows, And Notices</h3>
+                <p>Custom briefs, saved artifacts, event results, source platform buckets, audit inventory, success/error banners, and stateful card actions.</p>
+              </div>
+            </div>
+            <article class="saved-card">
+              <div class="saved-head">
+                <div>
+                  <span class="saved-meta"><span>PUBLIC BRIEF</span><span>Client Brain · 12 chunks</span></span>
+                  <h4 class="saved-title">Saved generated artifact</h4>
+                </div>
+                <button class="btn btn-outline" type="button">Open <span class="cta-icon">↗</span></button>
+              </div>
+              <p class="saved-body">Use for saved briefs, event results, source platform result buckets, deploy records, and artifact cards.</p>
+            </article>
+            <div class="preview-surface" style="padding:0 12px;">
+              <div class="inventory-row">
+                <strong>Desktop screenshot</strong>
+                <span>Tier 1</span>
+                <span><span class="chip chip-success">Captured</span></span>
+              </div>
+              <div class="inventory-row">
+                <strong>Competitor signal</strong>
+                <span>Tier 2</span>
+                <span><span class="chip chip-warning">Partial</span></span>
+              </div>
+            </div>
+            <div class="notice notice-success">Success notice: generated, saved, scheduled, imported, or deployed.</div>
+            <div class="notice notice-danger">Error notice: failed API action, missing credentials, validation issue, or blocked embed.</div>
+          </section>
+        </div>
+      </section>
+
+      <aside class="panel sticky-note">
+        <div class="panel-head">
+          <h2 class="panel-title">Data + States</h2>
+          <span class="chip chip-success">Guide</span>
+        </div>
+        <div class="panel-body">
+          <section class="section">
+            <h3>Stat Rows</h3>
+            <div class="stat-list">
+              <div class="stat-row">
+                <span class="stat-label">Total posts</span>
+                <span class="stat-value">90 scheduled drafts</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">Date range</span>
+                <span class="stat-value">Jun 5, 2026 to Jul 5, 2026</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">Knowledge Base</span>
+                <span class="stat-value">Available for offer, proof, and FAQ context</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="section">
+            <h3>Chips</h3>
+            <div class="chip-row">
+              <span class="chip chip-success">Ready</span>
+              <span class="chip chip-warning">Partial</span>
+              <span class="chip chip-danger">Failed</span>
+              <span class="chip">Idle</span>
+            </div>
+          </section>
+
+          <section class="section">
+            <h3>Artifact Pane</h3>
+            <div class="artifact">
+              <div class="artifact-toolbar">
+                <button class="btn" type="button">Copy</button>
+                <button class="btn" type="button">Download</button>
+              </div>
+              <pre class="code">{
+  "component": "artifact-pane",
+  "uses": ["prompt", "json", "markdown", "report"],
+  "surface": "white-glass"
+}</pre>
+            </div>
+          </section>
+
+          <section class="section">
+            <h3>Empty State</h3>
+            <div class="empty">
+              <div>
+                <span class="eyebrow">No Plan Yet</span>
+                Generate a strategy in the Inputs tab, then return here to review calendar and push actions.
+              </div>
+            </div>
+          </section>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <script>
+    /* Segmented controls */
+    document.querySelectorAll(".segmented button").forEach(function(button) {
+      button.addEventListener("click", function() {
+        button.parentElement.querySelectorAll("button").forEach(function(item) {
+          item.classList.remove("is-active");
+        });
+        button.classList.add("is-active");
+      });
+    });
+
+    /* Toggle cards */
+    document.querySelectorAll(".toggle-card").forEach(function(card) {
+      card.addEventListener("click", function() {
+        card.classList.toggle("is-on");
+        var check = card.querySelector(".check");
+        if (check) check.textContent = card.classList.contains("is-on") ? "✓" : "";
+      });
+    });
+
+    /* Table row selection (Section L demo) */
+    var tableBody = document.getElementById("demo-table-body");
+    if (tableBody) {
+      tableBody.querySelectorAll("tr").forEach(function(row) {
+        row.addEventListener("click", function() {
+          tableBody.querySelectorAll("tr").forEach(function(r) { r.classList.remove("is-selected"); });
+          row.classList.add("is-selected");
+        });
+      });
+    }
+
+    /* Star toggle (Section L demo) */
+    var star = document.getElementById("demo-star");
+    if (star) {
+      star.addEventListener("click", function() {
+        star.classList.toggle("is-on");
+      });
+    }
+  </script>
+</body>
+</html>

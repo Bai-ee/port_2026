@@ -47,11 +47,29 @@ async function deletePriorBrief(clientId) {
  * @param {object|null} [options.clientConfig] - Firestore client_configs doc.
  *                                               Pass null to use the static registry (local dev).
  * @param {boolean}     [options.fresh]        - Delete prior brief before running Scout.
+ * @param {function}    [options.onProgress]   - async (stage, label) telemetry callback.
+ *                                               Stages: scout, strategy, scribe.
+ * @param {Array|null}  [options.moduleBriefs] - per-module website-audit mini-briefs
+ *                                               from the intake run (dashboard_state.moduleBriefs.items).
+ * @param {string|null} [options.scope]        - run a slice for an individual agent brief:
+ *                                               null/'full' → Scout → news → strategy → Scribe (default);
+ *                                               'marketing-director' → Scout + news only (today's post,
+ *                                               guardian, and 30-day campaign keep stored values);
+ *                                               'social-media-manager' → strategy + Scribe only, reusing
+ *                                               the stored scout brief (priorScoutBrief required).
+ * @param {object|null} [options.priorScoutBrief] - stored marketingBrief.scoutBrief, required for
+ *                                               the 'social-media-manager' scope.
  * @returns {Promise<object>} Normalized pipeline result (see shape below).
  */
-async function runClientPipeline({ clientId, clientConfig = null, fresh = false }) {
+async function runClientPipeline({ clientId, clientConfig = null, fresh = false, onProgress = null, moduleBriefs = null, scope = null, priorScoutBrief = null }) {
   const pipelineRunId = randomUUID();
   const startedAt = new Date().toISOString();
+
+  // Telemetry only — a progress write failure must never block the pipeline.
+  const emitProgress = async (stage, label) => {
+    if (typeof onProgress !== 'function') return;
+    try { await onProgress(stage, label); } catch { /* non-fatal */ }
+  };
 
   console.log(`[${startedAt}] RUNTIME: starting pipeline ${pipelineRunId} for ${clientId}`);
 
@@ -80,6 +98,55 @@ async function runClientPipeline({ clientId, clientConfig = null, fresh = false 
     console.warn(`[${new Date().toISOString()}] RUNTIME: knowledge base context skipped — ${err.message}`);
   }
 
+  // ── 1b. Conversation intake context ─────────────────────────────────────────
+  // The Marketing Director's pasted team-conversation dump is parsed into tagged
+  // items and stored on the same client_configs doc, so it arrives via the
+  // clientConfig param — no extra Firestore read. Mirror knowledgeBaseContext:
+  // attach a prompt-ready block onto config for Scribe to fold in.
+  try {
+    const intakeItems = Array.isArray(clientConfig?.conversationIntake?.items)
+      ? clientConfig.conversationIntake.items
+      : [];
+    if (intakeItems.length) {
+      const block = intakeItems
+        .slice(0, 20)
+        .map((item, i) => {
+          const type = String(item?.type || 'brief').toUpperCase();
+          const summary = String(item?.summary || '').trim();
+          const relevance = String(item?.relevance || '').trim();
+          const quote = String(item?.sourceQuote || '').trim();
+          return `${i + 1}. [${type}] ${summary}${relevance ? ` — ${relevance}` : ''}${quote ? ` (heard: "${quote}")` : ''}`;
+        })
+        .join('\n');
+      config.conversationContext = {
+        available: true,
+        block,
+        itemCount: intakeItems.length,
+        digestedAtIso: clientConfig.conversationIntake?.digestedAtIso || null,
+      };
+      console.log(`[${new Date().toISOString()}] RUNTIME: conversation intake context loaded — ${intakeItems.length} item(s)`);
+    }
+  } catch (err) {
+    console.warn(`[${new Date().toISOString()}] RUNTIME: conversation intake context skipped — ${err.message}`);
+  }
+
+  // ── 1c. Website audit context ────────────────────────────────────────────────
+  // Per-module mini-briefs from the intake run (SEO/perf, agent readiness,
+  // device rendering, social metadata, design). Folded into Scribe so the
+  // executive brief speaks to the client's own site, not just market signals.
+  try {
+    if (Array.isArray(moduleBriefs) && moduleBriefs.length) {
+      const { buildWebsiteAuditPromptBlock } = require('../scout-intake/module-brief-builder');
+      const block = buildWebsiteAuditPromptBlock(moduleBriefs);
+      if (block) {
+        config.websiteAuditContext = { available: true, block, moduleCount: moduleBriefs.length };
+        console.log(`[${new Date().toISOString()}] RUNTIME: website audit context loaded — ${moduleBriefs.length} module brief(s)`);
+      }
+    }
+  } catch (err) {
+    console.warn(`[${new Date().toISOString()}] RUNTIME: website audit context skipped — ${err.message}`);
+  }
+
   // ── 2. Initialize provider from config ─────────────────────────────────────
   const provider = initProvider(config.providerConfig || { defaultProvider: 'anthropic' });
   console.log(`[${new Date().toISOString()}] RUNTIME: provider — ${provider.providerName}`);
@@ -90,7 +157,42 @@ async function runClientPipeline({ clientId, clientConfig = null, fresh = false 
   }
 
   // ── 4. Scout ─────────────────────────────────────────────────────────────────
-  const brief = await runXScout(config);
+  // 'social-media-manager' scope reuses the stored scout brief instead of a
+  // fresh search sweep — the strategy roller and Scribe only need signals as
+  // context, and the Marketing Director sections keep their stored values.
+  let brief;
+  if (scope === 'social-media-manager') {
+    if (!priorScoutBrief?.agentData) {
+      return {
+        pipelineRunId,
+        clientId,
+        status: 'failed',
+        failedStage: 'scout',
+        error: 'No stored scout brief to reuse — run the Executive Daily Brief (or Marketing Director) first.',
+        startedAt,
+        completedAt: new Date().toISOString(),
+        providerName: provider.providerName,
+        brief: null,
+        content: null,
+        guardianFlags: null,
+        runCostData: { stageCosts: [] },
+        artifactRefs: [],
+      };
+    }
+    await emitProgress('scout', 'Reusing stored market signals (scoped run)…');
+    brief = {
+      status: 'ok',
+      timestamp: priorScoutBrief.timestamp || null,
+      humanBrief: priorScoutBrief.humanBrief || null,
+      delta: priorScoutBrief.delta || null,
+      agentData: priorScoutBrief.agentData,
+      stageCosts: [],
+      scoutReused: true,
+    };
+  } else {
+    await emitProgress('scout', 'Scanning web + X + reddit for market signals…');
+    brief = await runXScout(config);
+  }
 
   if (brief.status === 'error') {
     const completedAt = new Date().toISOString();
@@ -114,7 +216,76 @@ async function runClientPipeline({ clientId, clientConfig = null, fresh = false 
     };
   }
 
+  // ── 4b. News monitor (Phase 1, Tier A) ───────────────────────────────────────
+  // Augment Scout's brandMentions with broad news coverage from GDELT (free).
+  // Best-effort: failures never block the brief. Skipped when the scout brief
+  // was reused — no fresh signals to augment.
+  try {
+    if (brief.scoutReused) throw new Error('scout brief reused — skipping news fetch');
+    const { fetchBrandNews } = require('./news-monitor');
+    const newsItems = await fetchBrandNews({
+      brandName: config.clientName,
+      brandKeywords: config.brandKeywords,
+      lookbackDays: config.scout?.freshnessDays || 1,
+    });
+    if (newsItems.length) {
+      brief.agentData = brief.agentData || {};
+      const existing = Array.isArray(brief.agentData.brandMentions) ? brief.agentData.brandMentions : [];
+      const seen = new Set(existing.map((m) => String(m?.url || '').trim()).filter(Boolean));
+      const fresh = newsItems.filter((m) => m.url && !seen.has(m.url)).slice(0, 20);
+      brief.agentData.brandMentions = [...existing, ...fresh];
+      console.log(`[${new Date().toISOString()}] RUNTIME: news monitor added ${fresh.length} brand mention(s) from GDELT`);
+    }
+  } catch (err) {
+    console.warn(`[${new Date().toISOString()}] RUNTIME: news monitor skipped — ${err.message}`);
+  }
+
+  // ── 4d. Marketing Director scope — fresh signals are the whole job. Today's
+  // post, guardian flags, and the 30-day campaign keep their stored values
+  // (the projection merges only the keys this result carries). ───────────────
+  if (scope === 'marketing-director') {
+    const completedAtScoped = new Date().toISOString();
+    console.log(`[${completedAtScoped}] RUNTIME: pipeline ${pipelineRunId} completed (scope=marketing-director, scout only)`);
+    return {
+      pipelineRunId,
+      clientId,
+      status: 'succeeded',
+      scope,
+      startedAt,
+      completedAt: completedAtScoped,
+      providerName: provider.providerName,
+      brief,
+      strategy30: null,
+      content: null,
+      contentOpportunities: null,
+      guardianFlags: null,
+      scoutPriorityAction: null,
+      knowledgeBase: null,
+      runCostData: { stageCosts: brief.stageCosts || [] },
+      artifactRefs: [
+        { type: 'brief_json', path: path.join(DATA_DIR, 'briefs', clientId, 'latest.json') },
+      ],
+    };
+  }
+
+  // ── 4c. Strategy roller — revise the rolling 30-day post strategy ────────────
+  // Uses yesterday's plan (memory) + today's signals; Scribe receives the result
+  // as context so the strategy rolls up into the Executive Daily Brief.
+  let strategy30 = null;
+  await emitProgress('strategy', 'Building 30-day social media campaign…');
+  try {
+    const { rollStrategy, buildScribeBlock } = require('./strategy-roller');
+    strategy30 = await rollStrategy({ clientId, config, brief, provider });
+    if (strategy30) {
+      config.strategy30Block = buildScribeBlock(strategy30);
+      console.log(`[${new Date().toISOString()}] RUNTIME: strategy roller — ${strategy30.days.length} day(s), notes: ${strategy30.revisionNotes.slice(0, 80)}`);
+    }
+  } catch (err) {
+    console.warn(`[${new Date().toISOString()}] RUNTIME: strategy roller skipped — ${err.message}`);
+  }
+
   // ── 5. Scribe — brief passed directly, no filesystem coupling ───────────────
+  await emitProgress('scribe', "Drafting today's post + composing executive brief…");
   const scribeOutput = await runScribe(clientId, config, brief);
   const completedAt = new Date().toISOString();
 
@@ -156,10 +327,12 @@ async function runClientPipeline({ clientId, clientConfig = null, fresh = false 
     pipelineRunId,
     clientId,
     status: 'succeeded',
+    scope: scope || null,
     startedAt,
     completedAt,
     providerName: provider.providerName,
     brief,
+    strategy30,
     content: scribeOutput.content,
     contentOpportunities: scribeOutput.contentOpportunities,
     guardianFlags: scribeOutput.guardianFlags,

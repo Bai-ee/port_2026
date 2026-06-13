@@ -179,7 +179,7 @@ export default function InputsPane({ bootstrap, config, onConfigChange, onGenera
   const canGenerate = !busy && !!config.vertical;
 
   return (
-    <div style={{ padding: '18px 0' }}>
+    <div className="sb-pane">
 
       {/* Data sources — toggle which generated card data feeds the strategy */}
       <div id="strategy-builder-data-sources" className="sb-section">
@@ -188,7 +188,7 @@ export default function InputsPane({ bootstrap, config, onConfigChange, onGenera
           Toggle which card data feeds the strategy. Open a card to generate or
           improve its data.
         </span>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+        <div className="sb-list-stack">
           {DATA_SOURCES.map((src) => {
             const on = isSourceOn(src.key);
             const r = src.readiness(ds);
@@ -196,7 +196,7 @@ export default function InputsPane({ bootstrap, config, onConfigChange, onGenera
               <div
                 key={src.key}
                 id={`strategy-builder-source-row-${src.key}`}
-                className={`mb-config-platform-toggle${on ? ' is-on' : ''}`}
+                className={`mb-config-platform-toggle sb-data-source-row${on ? ' is-on' : ''}`}
                 style={{ gridTemplateColumns: '22px 1fr auto', alignItems: 'center', minHeight: 0, cursor: 'default' }}
               >
                 <button
@@ -272,7 +272,7 @@ export default function InputsPane({ bootstrap, config, onConfigChange, onGenera
           and compliance — set what applies, leave the rest blank.
         </span>
 
-        <div style={{ marginTop: 6 }}>
+        <div className="sb-field-stack">
           <span className="sb-label" style={{ display: 'block', marginBottom: 4 }}>Primary objective</span>
           <select
             value={campaign.objective || ''}
@@ -285,7 +285,7 @@ export default function InputsPane({ bootstrap, config, onConfigChange, onGenera
           </select>
         </div>
 
-        <div style={{ marginTop: 12 }}>
+        <div className="sb-field-stack">
           <span className="sb-label" style={{ display: 'block', marginBottom: 4 }}>Primary call-to-action</span>
           <input
             type="text"
@@ -306,7 +306,7 @@ export default function InputsPane({ bootstrap, config, onConfigChange, onGenera
           />
         </div>
 
-        <div style={{ marginTop: 12 }}>
+        <div className="sb-field-stack">
           <span className="sb-label" style={{ display: 'block', marginBottom: 4 }}>
             Preferred posting time <span style={{ color: 'var(--text-disabled)' }}>(client local)</span>
           </span>
@@ -330,7 +330,7 @@ export default function InputsPane({ bootstrap, config, onConfigChange, onGenera
           </div>
         </div>
 
-        <div style={{ marginTop: 12 }}>
+        <div className="sb-field-stack">
           <span className="sb-label" style={{ display: 'block', marginBottom: 4 }}>Emoji policy</span>
           <div className="sb-seg">
             {['none', 'sparing', 'liberal'].map((p) => (
@@ -346,7 +346,7 @@ export default function InputsPane({ bootstrap, config, onConfigChange, onGenera
           </div>
         </div>
 
-        <div style={{ marginTop: 12 }}>
+        <div className="sb-field-stack">
           <span className="sb-label" style={{ display: 'block', marginBottom: 4 }}>
             Max hashtags / post — <span style={{ color: 'var(--text-primary)' }}>{Number.isFinite(campaign.maxHashtags) ? campaign.maxHashtags : 2}</span>
           </span>
@@ -359,7 +359,7 @@ export default function InputsPane({ bootstrap, config, onConfigChange, onGenera
           <div className="sb-range-scale"><span>0</span><span>5</span></div>
         </div>
 
-        <div style={{ marginTop: 12 }}>
+        <div className="sb-field-stack">
           <span className="sb-label" style={{ display: 'block', marginBottom: 4 }}>
             Content guardrails <span style={{ color: 'var(--text-disabled)' }}>(hard constraints)</span>
           </span>
@@ -374,12 +374,12 @@ export default function InputsPane({ bootstrap, config, onConfigChange, onGenera
           />
         </div>
 
-        <div style={{ marginTop: 12 }}>
+        <div className="sb-field-stack">
           <span className="sb-label" style={{ display: 'block', marginBottom: 4 }}>Active promotions</span>
           {promotions.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 6 }}>
+            <div className="sb-list-stack">
               {promotions.map((p) => (
-                <div key={p.id} className="tile-detail-stat-row" style={{ alignItems: 'center' }}>
+                <div key={p.id} className="tile-detail-stat-row sb-inline-row" style={{ alignItems: 'center' }}>
                   <span className="tile-detail-stat-label" style={{ flex: 1 }}>{p.label}</span>
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-secondary)' }}>
                     ends {p.endDate}
@@ -396,7 +396,7 @@ export default function InputsPane({ bootstrap, config, onConfigChange, onGenera
               ))}
             </div>
           )}
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div className="sb-control-row">
             <input
               type="text"
               value={newPromoLabel}
@@ -418,7 +418,7 @@ export default function InputsPane({ bootstrap, config, onConfigChange, onGenera
               type="button"
               onClick={addPromotion}
               disabled={!newPromoLabel.trim() || !newPromoDate}
-              className="tile-foot-rerun-btn"
+              className="tile-foot-rerun-btn sb-small-action"
               style={{ flex: '0 0 auto' }}
             >
               Add
@@ -440,9 +440,9 @@ export default function InputsPane({ bootstrap, config, onConfigChange, onGenera
           </span>
 
           {events.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, margin: '4px 0' }}>
+            <div className="sb-list-stack">
               {events.map((e) => (
-                <div key={e.id} className="tile-detail-stat-row" style={{ alignItems: 'center' }}>
+                <div key={e.id} className="tile-detail-stat-row sb-inline-row" style={{ alignItems: 'center' }}>
                   <span className="tile-detail-stat-label" style={{ flex: 1 }}>{e.name}</span>
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-secondary)' }}>
                     {e.date}
@@ -460,7 +460,7 @@ export default function InputsPane({ bootstrap, config, onConfigChange, onGenera
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div className="sb-control-row">
             <input
               type="text"
               value={newEventName}
@@ -481,7 +481,7 @@ export default function InputsPane({ bootstrap, config, onConfigChange, onGenera
               type="button"
               onClick={addEvent}
               disabled={!newEventName.trim() || !newEventDate}
-              className="tile-foot-rerun-btn"
+              className="tile-foot-rerun-btn sb-small-action"
               style={{ flex: '0 0 auto' }}
             >
               Add
@@ -494,7 +494,7 @@ export default function InputsPane({ bootstrap, config, onConfigChange, onGenera
       <div id="strategy-builder-cadence-sliders" className="sb-section">
         <span className="sb-label">Cadence</span>
 
-        <div style={{ marginTop: 4 }}>
+        <div className="sb-field-stack">
           <span className="sb-label" style={{ display: 'block', marginBottom: 6 }}>Campaign Length</span>
           <div className="sb-seg">
             {[7, 14, 30].map((d) => (
@@ -510,7 +510,7 @@ export default function InputsPane({ bootstrap, config, onConfigChange, onGenera
           </div>
         </div>
 
-        <div style={{ marginTop: 14 }}>
+        <div className="sb-field-stack">
           <span className="sb-label" style={{ display: 'block', marginBottom: 4 }}>
             Posts / Day — <span style={{ color: 'var(--text-primary)' }}>{config.postsPerDay}</span>
           </span>
@@ -523,7 +523,7 @@ export default function InputsPane({ bootstrap, config, onConfigChange, onGenera
           <div className="sb-range-scale"><span>1</span><span>5</span></div>
         </div>
 
-        <div style={{ marginTop: 14 }}>
+        <div className="sb-field-stack">
           <span className="sb-label" style={{ display: 'block', marginBottom: 4 }}>
             Baseline Mix — <span style={{ color: 'var(--text-primary)' }}>{config.baselineMixPct}%</span>
           </span>
@@ -536,7 +536,7 @@ export default function InputsPane({ bootstrap, config, onConfigChange, onGenera
           <div className="sb-range-scale"><span>10%</span><span>60%</span></div>
         </div>
 
-        <div style={{ marginTop: 14 }}>
+        <div className="sb-field-stack">
           <span className="sb-label" style={{ display: 'block', marginBottom: 4 }}>
             Ramp Aggressiveness — <span style={{ color: 'var(--text-primary)' }}>{config.rampAggressiveness}</span>
           </span>

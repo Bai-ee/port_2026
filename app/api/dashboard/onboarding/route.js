@@ -6,6 +6,7 @@ const fb = require('../../../../api/_lib/firebase-admin.cjs');
 const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../../api/_lib/client-provisioning.cjs');
 const { getStep, validateAnswer } = require('../../../../onboarding/questions.config.cjs');
+const { applyQAToSnapshot } = require('../../../../features/scout-intake/qa-synthesizer');
 
 function makeReqShim(request) {
   return {
@@ -115,6 +116,9 @@ export async function POST(request) {
       { merge: true }
     );
 
+    // Fire-and-forget: synthesize Q&A answers into brandOverview gap-fill
+    applyQAToSnapshot(clientId).catch(() => {});
+
     return NextResponse.json({ ok: true, clientId, stepId });
   }
 
@@ -172,6 +176,9 @@ export async function POST(request) {
       },
       { merge: true }
     );
+
+    // Fire-and-forget: full Q&A now complete — run gap-fill synthesis
+    applyQAToSnapshot(clientId).catch(() => {});
 
     return NextResponse.json({ ok: true, clientId, completed: true });
   }

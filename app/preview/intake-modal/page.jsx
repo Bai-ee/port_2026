@@ -118,7 +118,7 @@ export default function IntakeModalPreviewPage() {
           margin-bottom: 1rem;
           justify-content: space-between;
         }
-        #preview-brand-row img { width: 2.75rem; height: auto; display: block; }
+        #preview-brand-row img { width: 2.75rem; height: 2.75rem; border-radius: 50%; object-fit: cover; border: 2px solid rgba(255,255,255,0.35); display: block; }
         #preview-brand-eyebrow {
           font-size: 0.82rem;
           letter-spacing: 0.14em;
@@ -477,7 +477,7 @@ export default function IntakeModalPreviewPage() {
 
           {/* Brand row */}
           <div id="preview-brand-row">
-            <img src="/img/sig.png" alt="" aria-hidden="true" />
+            <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" />
             <span id="preview-brand-eyebrow">Dashboard Creation In Progress</span>
             <span id="preview-status-orb" aria-hidden="true">
               <span id="preview-status-dot" />

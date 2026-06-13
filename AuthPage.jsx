@@ -88,10 +88,19 @@ const AuthPageInner = () => {
     onboardingInitRef.current = true;
     const flow = searchParams.get('flow');
     const urlParam = searchParams.get('url');
+    const ideaParam = searchParams.get('idea');
+    const emailParam = searchParams.get('email');
     if (flow === 'homepage-create') {
       setIsHomepageCreate(true);
       setMode('create');
-      if (urlParam) setForm((current) => ({ ...current, websiteUrl: urlParam }));
+      if (urlParam || ideaParam || emailParam) {
+        setForm((current) => ({
+          ...current,
+          ...(urlParam ? { websiteUrl: urlParam } : {}),
+          ...(ideaParam ? { ideaDescription: ideaParam } : {}),
+          ...(emailParam ? { email: emailParam } : {}),
+        }));
+      }
     }
   }, [searchParams]);
 
@@ -113,6 +122,11 @@ const AuthPageInner = () => {
 
     if (!form.password) {
       throw new Error('Password is required.');
+    }
+
+    // A dashboard needs something to analyze — a website OR a brand name / idea.
+    if (!form.websiteUrl.trim() && !form.ideaDescription.trim()) {
+      throw new Error('Enter a website, or a brand name / idea, to create your dashboard.');
     }
   };
 
@@ -202,9 +216,6 @@ const AuthPageInner = () => {
             transform: translate3d(-50%, 0, 0);
           }
         }
-        #auth-tab-indicator {
-          transition: left 220ms cubic-bezier(0.25, 0.1, 0.25, 1);
-        }
         #auth-submit-btn:disabled,
         #auth-google-btn:disabled {
           opacity: 0.25;
@@ -288,7 +299,7 @@ const AuthPageInner = () => {
 
       <div id="auth-card" style={{ ...cardStyle, maxWidth: mode === 'create' ? 'min(75vw, 56rem)' : '30rem' }}>
         <div id="auth-brand-row" style={brandStyle}>
-          <img src="/img/sig.png" alt="" aria-hidden="true" style={sigStyle} />
+          <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={sigStyle} />
           <span style={eyebrowStyle}>Client Access</span>
           <Link href="/" id="auth-back-btn" style={backBtnStyle} aria-label="Back to site">✕</Link>
         </div>
@@ -310,15 +321,31 @@ const AuthPageInner = () => {
               </div>
             ) : null}
 
-            {/* Captured website — read-only, locked */}
-            <div id="auth-captured-url" style={capturedUrlStyle}>
-              <Globe size={14} strokeWidth={1.5} style={{ flexShrink: 0, color: 'rgba(42,36,32,0.45)' }} aria-hidden="true" />
-              <span id="auth-captured-url-text" style={capturedUrlTextStyle}>{form.websiteUrl}</span>
-              <span style={capturedUrlBadgeStyle}>
-                <Lock size={10} strokeWidth={2} aria-hidden="true" />
-                CAPTURED
-              </span>
-            </div>
+            {form.websiteUrl ? (
+              /* Captured website — read-only, locked */
+              <div id="auth-captured-url" style={capturedUrlStyle}>
+                <Globe size={14} strokeWidth={1.5} style={{ flexShrink: 0, color: 'rgba(42,36,32,0.45)' }} aria-hidden="true" />
+                <span id="auth-captured-url-text" style={capturedUrlTextStyle}>{form.websiteUrl}</span>
+                <span style={capturedUrlBadgeStyle}>
+                  <Lock size={10} strokeWidth={2} aria-hidden="true" />
+                  CAPTURED
+                </span>
+              </div>
+            ) : (
+              /* No website — capture a brand name / idea instead (editable) */
+              <label id="auth-captured-idea" style={labelStyle}>
+                <span style={labelTextStyle}>Brand name or idea</span>
+                <textarea
+                  id="auth-form-idea"
+                  name="ideaDescription"
+                  value={form.ideaDescription}
+                  onChange={handleChange}
+                  style={textareaStyle}
+                  placeholder="Your brand name, or describe your project / idea"
+                  rows={2}
+                />
+              </label>
+            )}
 
             <form id="auth-form" style={formStyle} onSubmit={handleSubmit}>
               <button
@@ -389,33 +416,6 @@ const AuthPageInner = () => {
                 Firebase is not configured yet. Add the `NEXT_PUBLIC_FIREBASE_*` variables to `.env.local` before signing in.
               </div>
             ) : null}
-
-            {/* Wanda Tab Bar */}
-            <div id="auth-mode-tab-bar" style={tabBarStyle}>
-              <div
-                id="auth-tab-indicator"
-                style={{
-                  ...tabIndicatorStyle,
-                  left: mode === 'signin' ? '4px' : 'calc(50%)',
-                }}
-              />
-              <button
-                id="auth-tab-signin"
-                type="button"
-                style={{ ...tabButtonStyle, color: mode === 'signin' ? '#f5f1df' : '#2a2420' }}
-                onClick={() => setMode('signin')}
-              >
-                Sign In
-              </button>
-              <button
-                id="auth-tab-create"
-                type="button"
-                style={{ ...tabButtonStyle, color: mode === 'create' ? '#f5f1df' : '#2a2420' }}
-                onClick={() => setMode('create')}
-              >
-                Sign Up
-              </button>
-            </div>
 
             <form id="auth-form" style={formStyle} onSubmit={handleSubmit}>
               <button
@@ -613,7 +613,10 @@ const brandStyle = {
 
 const sigStyle = {
   width: '2.75rem',
-  height: 'auto',
+  height: '2.75rem',
+  borderRadius: '50%',
+  objectFit: 'cover',
+  border: '2px solid rgba(255,255,255,0.35)',
   display: 'block',
 };
 
@@ -676,48 +679,6 @@ const warningStyle = {
 };
 
 // ── Wanda Tab Bar ─────────────────────────────────────────────────────────────
-
-const tabBarStyle = {
-  position: 'relative',
-  display: 'grid',
-  gridTemplateColumns: '1fr 1fr',
-  border: '1px solid rgba(42, 36, 32, 0.12)',
-  borderRadius: '999px',
-  padding: '4px',
-  height: '44px',
-  marginTop: '1.4rem',
-  background: 'rgba(255,255,255,0.34)',
-  boxSizing: 'border-box',
-};
-
-const tabIndicatorStyle = {
-  position: 'absolute',
-  top: '4px',
-  bottom: '4px',
-  width: 'calc(50% - 4px)',
-  borderRadius: '999px',
-  background: '#2a2420',
-  pointerEvents: 'none',
-  zIndex: 0,
-};
-
-const tabButtonStyle = {
-  position: 'relative',
-  zIndex: 1,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  background: 'none',
-  border: 'none',
-  cursor: 'pointer',
-  fontFamily: '"Space Mono", monospace',
-  fontSize: '0.72rem',
-  letterSpacing: '0.05em',
-  textTransform: 'uppercase',
-  fontWeight: 700,
-  padding: 0,
-  transition: 'color 220ms cubic-bezier(0.25, 0.1, 0.25, 1)',
-};
 
 // ── Form ──────────────────────────────────────────────────────────────────────
 

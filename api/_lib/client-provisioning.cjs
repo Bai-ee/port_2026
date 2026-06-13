@@ -974,12 +974,15 @@ async function reseedIntakeForClient({ clientId, uid, websiteUrl }) {
       { merge: true }
     ),
 
-    // Reset dashboard_state — clear intake fields, set provisioning
+    // Reset dashboard_state — clear intake fields, set provisioning.
+    // snapshot is intentionally NOT cleared: it holds user-edited brandOverview
+    // (source:'user'). The worker's mergeBrandOverview reconciles stale crawl
+    // data on the next run — nulling it here destroys user content before the
+    // merge can ever see it.
     fb.adminDb.collection('dashboard_state').doc(clientId).set(
       {
         clientId,
         status: 'provisioning',
-        snapshot: null,
         signals: null,
         strategy: null,
         outputsPreview: null,

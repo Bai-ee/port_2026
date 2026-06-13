@@ -131,29 +131,32 @@ export default function MarketCategoryPanel({ bootstrap, getIdToken, onSaved }) 
   }
 
   return (
-    <div id="market-category-panel" style={{ display: 'flex', flexDirection: 'column' }}>
+    <div id="market-category-panel" className="mu-tab-pane" style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
 
-      {/* RUN — agent classifies the category from pipeline data */}
-      <div id="market-category-run" className="sb-section">
-        <span className="sb-label">Auto-classify</span>
-        <span className="sb-hint">
+      {/* RUN */}
+      <div id="market-category-run" className="mu-section">
+        <div className="mu-section-head">
+          <div className="mu-index">01</div>
+          <h3>Auto-classify</h3>
+        </div>
+        <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 10px' }}>
           Runs an agent over your pipeline data — Social Preview / Open Graph,
           Brand Snapshot, Scout Brief, site meta — to determine the market
           category. If there isn't enough data yet, set it manually below.
-        </span>
+        </p>
         <button
           type="button"
           id="market-category-run-btn"
           onClick={runAnalysis}
           disabled={running}
-          className="sb-cta"
-          style={{ marginTop: 6 }}
+          className="mu-cta-primary"
+          style={{ alignSelf: 'flex-start', minHeight: 42, padding: '0 20px', fontSize: 13 }}
         >
-          {running ? (<><span className="sb-spinner" />Analyzing…</>) : 'Run analysis'}
+          {running ? 'Analyzing…' : 'Run analysis'}
         </button>
 
         {agentInfo && (agentInfo.rationale || (agentInfo.evidence || []).length) ? (
-          <div style={{ marginTop: 4 }}>
+          <div style={{ marginTop: 10 }}>
             {Number.isFinite(agentInfo.confidence) && (
               <div className="tile-detail-stat-row">
                 <span className="tile-detail-stat-label">Confidence</span>
@@ -187,92 +190,103 @@ export default function MarketCategoryPanel({ bootstrap, getIdToken, onSaved }) 
         ) : null}
       </div>
 
-      {/* Status — design-system stat table */}
-      <div id="market-category-detected" className="sb-section">
-        <span className="sb-label">Category</span>
-        <div style={{ marginTop: 4 }}>
-          <div className="tile-detail-stat-row">
-            <span className="tile-detail-stat-label">Auto-detected</span>
-            <span className="tile-detail-stat-value">{detected || 'Not yet classified'}</span>
-          </div>
-          <div className="tile-detail-stat-row">
-            <span className="tile-detail-stat-label">In use</span>
-            <span className="tile-detail-stat-value">{effectiveDisplay || '—'}</span>
-          </div>
-          <div className="tile-detail-stat-row">
-            <span className="tile-detail-stat-label">Source</span>
-            <span className="tile-detail-stat-value">{sourceDisplay}</span>
-          </div>
+      {/* Status */}
+      <div id="market-category-detected" className="mu-section">
+        <div className="mu-section-head">
+          <div className="mu-index">02</div>
+          <h3>Category</h3>
         </div>
-        <span className="sb-hint">
+        <div className="tile-detail-stat-row">
+          <span className="tile-detail-stat-label">Auto-detected</span>
+          <span className="tile-detail-stat-value">{detected || 'Not yet classified'}</span>
+        </div>
+        <div className="tile-detail-stat-row">
+          <span className="tile-detail-stat-label">In use</span>
+          <span className="tile-detail-stat-value">{effectiveDisplay || '—'}</span>
+        </div>
+        <div className="tile-detail-stat-row">
+          <span className="tile-detail-stat-label">Source</span>
+          <span className="tile-detail-stat-value">{sourceDisplay}</span>
+        </div>
+        <p style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5, margin: '8px 0 0' }}>
           Detected from your pipeline. A user-set value overrides it and drives
           competitor benchmarking and the Strategy Builder.
-        </span>
+        </p>
       </div>
 
       {/* Editor */}
-      <div id="market-category-editor" className="sb-section">
-        <span className="sb-label">Set / change category</span>
+      <div id="market-category-editor" className="mu-section">
+        <div className="mu-section-head">
+          <div className="mu-index">03</div>
+          <h3>Set / change category</h3>
+        </div>
 
-        <div className="sb-seg" style={{ marginTop: 4 }}>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
           <button
             type="button"
             onClick={() => setMode('list')}
-            className={`sb-seg-btn${mode === 'list' ? ' is-active' : ''}`}
+            className={`mu-btn-outline${mode === 'list' ? ' mu-btn-outline--active' : ''}`}
+            style={{ minHeight: 36, padding: '0 14px', fontSize: 12 }}
           >
             From list
           </button>
           <button
             type="button"
             onClick={() => setMode('custom')}
-            className={`sb-seg-btn${mode === 'custom' ? ' is-active' : ''}`}
+            className={`mu-btn-outline${mode === 'custom' ? ' mu-btn-outline--active' : ''}`}
+            style={{ minHeight: 36, padding: '0 14px', fontSize: 12 }}
           >
             Custom
           </button>
         </div>
 
         {mode === 'list' ? (
-          <select
-            value={selected}
-            onChange={(e) => setSelected(e.target.value)}
-            className="sb-select"
-          >
-            <option value="">— select category —</option>
-            {CANONICAL_VERTICALS.map((v) => (
-              <option key={v} value={v}>{v}</option>
-            ))}
-          </select>
+          <div className="mu-field">
+            <select
+              value={selected}
+              onChange={(e) => setSelected(e.target.value)}
+              className="mu-select"
+            >
+              <option value="">— select category —</option>
+              {CANONICAL_VERTICALS.map((v) => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
+          </div>
         ) : (
-          <input
-            type="text"
-            value={customText}
-            onChange={(e) => setCustomText(e.target.value)}
-            placeholder="e.g. gambling, e-games, boutique-winery"
-            maxLength={100}
-            className="sb-input"
-          />
+          <div className="mu-field">
+            <input
+              type="text"
+              value={customText}
+              onChange={(e) => setCustomText(e.target.value)}
+              placeholder="e.g. gambling, e-games, boutique-winery"
+              maxLength={100}
+              className="mu-input"
+            />
+          </div>
         )}
 
+        {notice && (
+          <p className={`mu-notice${notice.kind === 'error' ? ' mu-notice--danger' : ' mu-notice--success'}`}>
+            {notice.text}
+          </p>
+        )}
+
+        <p style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5, margin: '4px 0 0' }}>
+          This category pre-fills the Strategy Builder vertical (where it can be
+          overridden per strategy).
+        </p>
+      </div>
+
+      <div className="mu-footer">
         <button
           type="button"
           onClick={save}
           disabled={busy || !dirty}
-          className="sb-cta"
-          style={{ marginTop: 4 }}
+          className="mu-cta-primary"
         >
-          {busy ? (<><span className="sb-spinner" />Saving…</>) : 'Save category'}
+          {busy ? 'Saving…' : 'Save category'}
         </button>
-
-        {notice && (
-          <div className={`sb-notice ${notice.kind === 'error' ? 'sb-notice--error' : 'sb-notice--ok'}`}>
-            {notice.text}
-          </div>
-        )}
-
-        <span className="sb-hint">
-          This category pre-fills the Strategy Builder vertical (where it can be
-          overridden per strategy).
-        </span>
       </div>
     </div>
   );
