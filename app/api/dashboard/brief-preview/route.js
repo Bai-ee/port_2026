@@ -870,12 +870,13 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     line-height:1.2;
     margin:0 0 8px;
   }
-  /* Breathing room above the cover summary (single-line and JARVIS). */
-  .cover .sub{margin:28px 0 16px}
+  /* Cover summary — spans the full page width, justified so it stretches
+     flush to both edges. */
+  .cover .sub{margin:28px 0 16px;width:100%;max-width:100%;text-align:justify}
   /* JARVIS-mode executive summary — multi-paragraph, body scale (the giant
      .sub treatment is for one-line headlines only). */
-  #brief-cover-exec-summary{margin:28px 0 16px}
-  #brief-cover-exec-summary p{font-size:clamp(15px,1.45vw,18px);line-height:1.6;font-weight:400;margin:0 0 12px;max-width:72ch}
+  #brief-cover-exec-summary{margin:28px 0 16px;width:100%;max-width:100%}
+  #brief-cover-exec-summary p{font-size:clamp(15px,1.45vw,18px);line-height:1.6;font-weight:400;margin:0 0 12px;max-width:100%;text-align:justify}
   #brief-cover-exec-summary p:last-child{margin-bottom:0}
   .cover .meta{margin-top:18px;padding-top:14px;gap:14px 32px}
   /* Brand band stretches edge-to-edge across the full width: justify spreads
@@ -906,9 +907,9 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     filter:drop-shadow(0 18px 40px rgba(0,0,0,.16));
   }
   @media(min-width:760px){
+    /* Title block + meta stay in the left half beside the mockup; the summary
+       paragraph below drops the cap and spans the full page width. */
     .cover--has-onboarding-mockup .title-stack,
-    .cover--has-onboarding-mockup .sub,
-    .cover--has-onboarding-mockup #brief-cover-exec-summary,
     .cover--has-onboarding-mockup .meta{max-width:48%}
     /* Justify both lines so the weather block has flush left+right edges
        (no ragged end) while staying within the left-half column. */
