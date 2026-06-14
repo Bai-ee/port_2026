@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Executive Brief · Standup Mock · Hitloop</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700;900&family=Space+Grotesk:wght@300..700&family=Space+Mono:wght@400;700&display=swap"/>
+  <style>
+  /* ── Real brief stylesheet (features/scout-intake/brief-css.cjs) ── */
+  :root{
+    --bg:#f6f3ea;--bg2:#efe9d6;--ink:#0a0a0a;--ink-soft:#5a5346;
+    --line:rgba(212,196,171,0.82);--card:rgba(255,255,255,0.5);--hl:rgba(255,255,255,0.65);
+    --brand:#116dff;--grad:linear-gradient(92deg,#7a5cff 0%,#b14bff 38%,#ff4fa1 72%,#ff7a3a 100%);
+    --gutter:max(8vw, calc((100% - 1100px) / 2));
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:"Space Grotesk",system-ui,sans-serif;color:var(--ink);
+    background:
+      radial-gradient(700px 420px at 0% 4%,rgba(255,120,90,0.38) 0%,transparent 65%),
+      radial-gradient(620px 380px at 100% 16%,rgba(176,90,255,0.32) 0%,transparent 65%),
+      radial-gradient(700px 420px at 0% 30%,rgba(255,90,160,0.32) 0%,transparent 65%),
+      radial-gradient(600px 380px at 100% 44%,rgba(90,140,255,0.30) 0%,transparent 65%),
+      radial-gradient(720px 440px at 0% 58%,rgba(255,180,90,0.32) 0%,transparent 65%),
+      radial-gradient(620px 400px at 100% 72%,rgba(200,90,255,0.30) 0%,transparent 65%),
+      radial-gradient(660px 400px at 0% 86%,rgba(120,200,255,0.28) 0%,transparent 65%),
+      radial-gradient(560px 360px at 100% 98%,rgba(255,120,160,0.28) 0%,transparent 65%),
+      linear-gradient(180deg,#fefdf9 0%,#fbf8f0 50%,#fdfaf2 100%);
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:"Space Mono",ui-monospace,monospace}
+  section.page{
+    min-height:100vh;padding:clamp(48px,9vh,120px) var(--gutter) clamp(64px,10vh,140px);
+    display:flex;flex-direction:column;justify-content:center;
+    border-bottom:1px solid rgba(0,0,0,0.05);position:relative;overflow:hidden;
+  }
+  .headline{font-family:"Doto",monospace;font-weight:900;letter-spacing:-.01em;line-height:.92;font-size:clamp(64px,13vw,200px);margin:0 0 24px;text-transform:uppercase;}
+  .sub{font-family:"Space Grotesk",sans-serif;font-weight:300;font-size:clamp(20px,2.4vw,34px);line-height:1.25;color:#1a1a1a;max-width:58ch;margin:0 0 40px;}
+  .cover .title-stack{display:flex;align-items:baseline;gap:20px;flex-wrap:wrap}
+  .cover .meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px 40px;margin-top:40px;border-top:1px solid rgba(0,0,0,.15);padding-top:24px;}
+  .cover .meta .k{font-family:"Space Mono",monospace;font-size:10px;letter-spacing:.25em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:6px}
+  .cover .meta .v{font-family:"Space Grotesk";font-size:18px;word-break:break-word}
+  .marquee{overflow:hidden;white-space:nowrap;font-family:"Doto",monospace;font-weight:900;font-size:clamp(44px,10vw,160px);text-transform:uppercase;line-height:1;letter-spacing:.02em;border-top:1px solid rgba(0,0,0,.2);border-bottom:1px solid rgba(0,0,0,.2);padding:12px 0;margin-top:40px;}
+  .marquee span{display:inline-block}
+  footer{padding:40px var(--gutter);font-family:"Space Mono";font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
+  .sec-num{position:absolute;top:24px;right:var(--gutter);font-family:"Doto";font-weight:900;font-size:clamp(80px,14vw,220px);color:transparent;-webkit-text-stroke:1.5px rgba(0,0,0,.12);line-height:.8;pointer-events:none;user-select:none;}
+  .kick{font-family:"Space Mono";font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:6px}
+  /* Bento */
+  .bento{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .bento .s2{grid-column:span 2}
+  .bento .tile{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:0 1px 0 var(--hl),inset 0 1px 0 rgba(255,255,255,0.4);padding:clamp(16px,2.4vw,26px);display:flex;flex-direction:column;justify-content:space-between;gap:14px;min-height:128px;min-width:0;overflow:hidden;}
+  .bento .tile .k{font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-soft);display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;}
+  .bento .tile .big{font-family:"Doto",monospace;font-weight:900;line-height:.85;font-size:clamp(44px,12.5vw,112px);letter-spacing:.01em;max-width:100%;overflow-wrap:break-word;}
+  .bento .tile .big .unit{font-size:.32em;letter-spacing:.06em;vertical-align:baseline}
+  .bento .tile .word{font-family:"Space Grotesk";font-weight:500;line-height:1.02;font-size:clamp(24px,6.5vw,48px);letter-spacing:-.01em;text-wrap:balance;max-width:100%;overflow-wrap:break-word;}
+  .bento .tile .word.lite{font-weight:300}
+  .bento .tile .foot{font-family:"Space Grotesk";font-size:12px;line-height:1.45;color:var(--ink-soft);max-width:42ch;}
+  .bento .tile.ink{background:var(--ink);border-color:var(--ink);color:#f6f3ea;box-shadow:none}
+  .bento .tile.ink .k{color:rgba(246,243,234,.65)}
+  .bento .tile.ink .foot{color:rgba(246,243,234,.6)}
+  .bento .tile.say{justify-content:flex-start;gap:16px}
+  .bento .tile.say .q{font-family:"Space Grotesk";font-weight:300;font-size:clamp(19px,4.8vw,30px);line-height:1.28;max-width:100%;overflow-wrap:break-word;}
+  .bento .tile.say .who{font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  .bento .tile.say .who .src{padding:3px 9px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.5)}
+  .bento .tile.ink.say .who{color:rgba(246,243,234,.65)}
+  .bento .tile.ink.say .who .src{background:transparent;border-color:rgba(246,243,234,.3)}
+  .pending{outline:1px dashed rgba(0,0,0,.18);outline-offset:-1px}
+  @media(min-width:760px){
+    .bento{grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+    .bento .s2{grid-column:span 2}.bento .s3{grid-column:span 3}.bento .s4{grid-column:span 4}
+    .bento .tile{min-height:160px}
+    .bento .tile .big{font-size:clamp(64px,7.5vw,128px)}
+    .bento .tile .word{font-size:clamp(28px,3.2vw,48px)}
+  }
+  /* Cover-specific (inline in route.js) */
+  .cap-brief-email-cta-row{position:fixed;top:40px;left:var(--gutter);z-index:50;display:flex;margin:0}
+  .cap-brief-email-cta{position:relative;display:inline-flex;align-items:center;gap:.5rem;padding:.5rem .75rem;border:none;border-radius:999px;cursor:pointer;line-height:1;font-family:"Space Grotesk",sans-serif;font-weight:700;letter-spacing:.01em;font-size:clamp(13px,1.4vw,15px);color:#fff;white-space:nowrap;background:linear-gradient(175deg,rgba(255,255,255,.18) 0%,rgba(255,255,255,0) 52%),linear-gradient(135deg,hsl(185,100%,45%) 0%,hsl(262,100%,55%) 52%,hsl(314,100%,50%) 100%);box-shadow:0 2px 8px rgba(0,0,0,.2),inset 0 1px 0 rgba(255,255,255,.28),inset 0 -1px 0 rgba(0,0,0,.1);}
+  .cap-brief-email-cta .dot{width:1.75rem;height:1.75rem;border-radius:50%;background:linear-gradient(135deg,#fff,#cfe);border:2px solid rgba(255,255,255,.35);flex-shrink:0}
+  .cap-brief-email-cta .arrow{font-size:.7rem;opacity:.75;margin-left:.1rem}
+  .cover .title-stack{margin-top:56px}
+  .cover .headline{margin:14px 0 10px;flex-basis:100%;width:100%;font-size:clamp(28px,5vw,56px);line-height:1.08;}
+  .cover-brief-name{flex-basis:100%;width:100%;font-family:"Space Grotesk",sans-serif;font-weight:500;font-size:clamp(23px,2.8vw,38px);}
+  #brief-cover-weather{flex-basis:100%;width:100%;font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft);margin:0 0 14px;}
+  #brief-cover-exec-summary{margin:28px 0 16px;width:100%;max-width:100%}
+  #brief-cover-exec-summary p{font-size:clamp(15px,1.45vw,18px);line-height:1.6;font-weight:400;margin:0 0 12px;max-width:100%;text-align:justify}
+  #brief-cover-exec-summary p:last-child{margin-bottom:0}
+  .cover .meta{margin-top:18px;padding-top:14px;gap:14px 32px}
+  </style>
+</head>
+<body>
+  <!-- Pinned email CTA (real brief has it fixed top-left) -->
+  <div class="cap-brief-email-cta-row">
+    <button type="button" class="cap-brief-email-cta"><span class="dot"></span>SEND TO MY EMAIL<span class="arrow">↗</span></button>
+  </div>
+
+  <!-- ── COVER — conversational "team standup welcome" ── -->
+  <section class="page cover">
+    <div class="sec-num">00</div>
+    <div class="title-stack">
+      <div id="brief-cover-weather">Chicago · Partly cloudy 71°F · Sun 73° · Mon 68°</div>
+      <div class="cover-brief-name">Executive Brief</div>
+      <h1 class="headline">06/14/26<br/>9:42&nbsp;AM</h1>
+    </div>
+    <div class="sub" id="brief-cover-exec-summary">
+      <p>Morning — good to have you in, grab a seat. Quick lay of the land before the team goes deep: the big shift today is Ruggable leaning hard into "machine-washable" again, and it's pulling category search up about 12% — that's a lane you can take with your hand-knotted angle. Your KOL @maximalist.den dropped a rug-layering reel that's already at 40k views and tagged the category, not you, so there's an opening. Your last post landed fine but quietly; the suggested post below answers the layering conversation directly and is ready to go. Calendar's light after 1pm. If you do one thing today, it's ship that post while the layering thread is hot — the rest can keep.</p>
+    </div>
+    <div class="meta">
+      <div><div class="k">Date</div><div class="v">2026 · 06 · 14</div></div>
+      <div><div class="k">Site</div><div class="v">nottherug.com</div></div>
+      <div><div class="k">Brief Title</div><div class="v">Executive Brief</div></div>
+      <div><div class="k">Account</div><div class="v mono" style="font-size:13px">founder@nottherug.com</div></div>
+    </div>
+    <div class="marquee"><span>NOT THE RUG • NOT THE RUG • NOT THE RUG • NOT THE RUG • NOT THE RUG</span></div>
+  </section>
+
+  <!-- ── THE STANDUP — bento board (new) ── -->
+  <section class="page">
+    <div class="sec-num">DS</div>
+    <div class="kick">Your Team</div>
+    <h2 class="headline">The<br/>Standup.</h2>
+    <p class="sub">Before the directors go deep — here's the room at a glance.</p>
+    <div class="bento">
+
+      <!-- Weather -->
+      <div class="tile s2">
+        <div class="k">Weather · Chicago</div>
+        <div class="big">71<span class="unit">°F</span></div>
+        <div class="foot">Partly cloudy. Sun 73° · Mon 68° · light wind off the lake.</div>
+      </div>
+
+      <!-- Today's calendar (CONNECTED state) -->
+      <div class="tile s2">
+        <div class="k">Today's Calendar</div>
+        <div class="word">3 meetings</div>
+        <div class="foot">9:30 Team standup · 1:00 Supplier call (Jaipur) · 4:00 Photo shoot review</div>
+      </div>
+
+      <!-- Events -->
+      <div class="tile s2">
+        <div class="k">Happening Now</div>
+        <div class="word">Chicago Design Week</div>
+        <div class="foot">Runs through Sunday — local design press actively covering home + interiors.</div>
+      </div>
+
+      <!-- Competitor 1 -->
+      <div class="tile say s2">
+        <div class="q">&ldquo;Every rug, machine washable. Spill-proof living starts here.&rdquo;</div>
+        <div class="who"><span class="src">Competitor</span><span>Ruggable</span><a href="#" style="color:inherit;text-decoration:underline;text-underline-offset:3px">↗ View</a></div>
+      </div>
+
+      <!-- Competitor 2 -->
+      <div class="tile say s2">
+        <div class="q">&ldquo;New Marrakech collection — hand-tufted, limited run. Link in bio.&rdquo;</div>
+        <div class="who"><span class="src">Competitor</span><span>Lulu &amp; Georgia</span><a href="#" style="color:inherit;text-decoration:underline;text-underline-offset:3px">↗ View</a></div>
+      </div>
+
+      <!-- KOL 1 -->
+      <div class="tile say s2">
+        <div class="q">&ldquo;Layering a flatweave over a jute base is the move this fall. Here's how I'd do it.&rdquo;</div>
+        <div class="who"><span class="src">X</span><span>@maximalist.den</span><a href="#" style="color:inherit;text-decoration:underline;text-underline-offset:3px">↗ View</a></div>
+      </div>
+
+      <!-- KOL 2 -->
+      <div class="tile say s2">
+        <div class="q">&ldquo;Hand-knotted vs machine-made — you can feel the difference in 5 seconds.&rdquo;</div>
+        <div class="who"><span class="src">Instagram</span><span>@slowhome.edit</span><a href="#" style="color:inherit;text-decoration:underline;text-underline-offset:3px">↗ View</a></div>
+      </div>
+
+      <!-- My last post -->
+      <div class="tile say s2">
+        <div class="q">&ldquo;A rug should outlive the trend that sold it to you. That's the whole brief.&rdquo;</div>
+        <div class="who"><span class="src">You · Posted</span><span>Your last post</span></div>
+      </div>
+
+      <!-- Suggested post — full-width climax -->
+      <div class="tile say ink s4">
+        <div class="q">&ldquo;Everyone's talking layering this week. Here's the unpopular take: start with the knot, not the stack. A hand-knotted base reads as intentional — the layer is the accent, not the apology. 🧵&rdquo;</div>
+        <div class="who"><span class="src">Suggested · Today</span><span>Ready when you are</span></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── A director section, for context (unchanged) ── -->
+  <section class="page">
+    <div class="sec-num">01</div>
+    <div class="kick">Marketing Director</div>
+    <h2 class="headline">The Last<br/>18 Hours.</h2>
+    <p class="sub">Everything new since the previous brief ran Jun 13, 3:30 PM.</p>
+    <div class="bento">
+      <div class="tile ink s2">
+        <div class="k">Category Shift · high relevance</div>
+        <div class="word">Machine-washable resurges</div>
+        <div class="foot">Ruggable's relaunch pushed category search +12% w/w. Your durability story is the counter-position.</div>
+      </div>
+      <div class="tile s2">
+        <div class="k">Market Trend</div>
+        <div class="word lite">Rug layering</div>
+        <div class="foot">Steady rise across X and Pinterest — three KOLs posted layering content this week.</div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Generated · 2026-06-14 09:42:00</span>
+    <span>Client · not-the-rug</span>
+    <span>Executive Brief · Vol. 01 · Not The Rug</span>
+  </footer>
+</body>
+</html>
