@@ -932,9 +932,10 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   .cover .sub{margin:28px 0 16px;width:100%;max-width:100%;text-align:justify}
   /* JARVIS-mode executive summary — multi-paragraph, body scale (the giant
      .sub treatment is for one-line headlines only). */
-  #brief-cover-exec-summary{margin:28px 0 16px;width:100%;max-width:100%}
-  #brief-cover-exec-summary p{font-size:clamp(15px,1.45vw,18px);line-height:1.6;font-weight:400;margin:0 0 12px;max-width:100%;text-align:justify}
-  #brief-cover-exec-summary p:last-child{margin-bottom:0}
+  #brief-cover-exec-summary{margin:28px 0 16px;width:100%;max-width:66ch}
+  #brief-cover-exec-summary p{font-size:clamp(15px,1.5vw,19px);line-height:1.55;font-weight:400;margin:0 0 22px;max-width:100%;text-align:left;padding-left:16px;border-left:2px solid rgba(0,0,0,.16)}
+  #brief-cover-exec-summary p:first-child{border-left:0;padding-left:0;font-weight:500;font-size:clamp(17px,1.7vw,22px)}
+  #brief-cover-exec-summary p:last-child{margin-bottom:0;font-weight:600;border-left-color:var(--ink)}
   .cover .meta{margin-top:18px;padding-top:14px;gap:14px 32px}
   /* Brand band stretches edge-to-edge across the full width: justify spreads
      the repeated name flush to both ends instead of clipping the overflow. */
