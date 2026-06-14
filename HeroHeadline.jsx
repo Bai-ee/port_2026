@@ -1,10 +1,27 @@
-import React, { useLayoutEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import gsap from 'gsap';
 
 gsap.registerPlugin(ScrollTrigger);
 
 const SIMPLE_SCROLL_MEDIA_QUERY = '(max-width: 680px) and (pointer: coarse)';
+
+// Lines the subheadline cycles through. Add/remove freely — any length works.
+const SUBHEADLINE_PHRASES = [
+  'Assisted Digital Media',
+  'Media Development',
+  'Digital Media Consulting',
+  'Brand Development',
+  'Social Media',
+  'Product Development',
+  'Web Design & Development',
+  'Agentic Automation',
+  'Creative Technology',
+];
+
+const SCRAMBLE_CHARS = '!<>-_\\/[]{}—=+*^?#________';
+const HOLD_MS = 1600;     // time a fully-revealed phrase stays on screen
+const SCRAMBLE_MS = 600;  // time spent scrambling into the next phrase
 
 const glass = {
   backdropFilter: 'blur(18px)',
@@ -23,6 +40,72 @@ const glass = {
 const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
   const topLeftRef = useRef(null);
   const headlineContentRef = useRef(null);
+  const scrambleTextRef = useRef(null);
+
+  // Scramble-cycle the subheadline through SUBHEADLINE_PHRASES.
+  useEffect(() => {
+    const node = scrambleTextRef.current;
+    if (!node) return;
+
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (prefersReducedMotion) {
+      node.textContent = SUBHEADLINE_PHRASES[0];
+      return;
+    }
+
+    let index = 0;
+    let rafId = 0;
+    let holdTimer = 0;
+
+    const scrambleTo = (next) => {
+      const prev = node.textContent || '';
+      const length = Math.max(prev.length, next.length);
+      const start = performance.now();
+
+      const frame = (now) => {
+        const progress = Math.min((now - start) / SCRAMBLE_MS, 1);
+        let out = '';
+        for (let i = 0; i < length; i += 1) {
+          // Each char locks into place at a staggered point in the timeline.
+          const lockPoint = (i / length) * 0.7;
+          if (progress >= lockPoint + 0.3 || progress >= 1) {
+            out += next[i] ?? '';
+          } else if (progress >= lockPoint) {
+            out += SCRAMBLE_CHARS[(Math.random() * SCRAMBLE_CHARS.length) | 0];
+          } else {
+            out += prev[i] ?? SCRAMBLE_CHARS[(Math.random() * SCRAMBLE_CHARS.length) | 0];
+          }
+        }
+        node.textContent = out;
+
+        if (progress < 1) {
+          rafId = requestAnimationFrame(frame);
+        } else {
+          node.textContent = next;
+          holdTimer = window.setTimeout(advance, HOLD_MS);
+        }
+      };
+
+      rafId = requestAnimationFrame(frame);
+    };
+
+    const advance = () => {
+      index = (index + 1) % SUBHEADLINE_PHRASES.length;
+      scrambleTo(SUBHEADLINE_PHRASES[index]);
+    };
+
+    node.textContent = SUBHEADLINE_PHRASES[0];
+    holdTimer = window.setTimeout(advance, HOLD_MS);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(holdTimer);
+    };
+  }, []);
 
   useLayoutEffect(() => {
     const el = topLeftRef.current;
@@ -207,7 +290,17 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
             fontWeight: 300,
             maxWidth: '42ch',
           }}>
-            Assisted Digital Media
+            <span
+              id="hero-subheadline-scramble"
+              ref={scrambleTextRef}
+              style={{
+                display: 'inline-block',
+                fontVariantLigatures: 'none',
+                whiteSpace: 'pre',
+              }}
+            >
+              Assisted Digital Media
+            </span>
           </p>
         </div>
       </div>

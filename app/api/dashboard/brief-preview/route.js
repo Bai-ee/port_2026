@@ -141,7 +141,7 @@ function hostnameOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return String(url); }
 }
 
-function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [], weather = null, moduleBriefs = [], auditMockupUrl = null, company = null, researchConfig = null, strategyData = null, signalsCore = [], socialQueue = [], briefType = DEFAULT_BRIEF_TYPE, coverSummary = null, previousRunAt = null }) {
+function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [], weather = null, moduleBriefs = [], auditMockupUrl = null, company = null, researchConfig = null, strategyData = null, signalsCore = [], socialQueue = [], briefType = DEFAULT_BRIEF_TYPE, coverSummary = null, previousRunAt = null, displayLabel = null }) {
   const content = marketingBrief?.content || {};
   const agentData = marketingBrief?.scoutBrief?.agentData || {};
   const opportunities = agentData?.viralOpportunities?.opportunities || marketingBrief?.contentOpportunities || [];
@@ -790,6 +790,9 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     'post-schedule': postScheduleSection,
   };
   const composition = getComposition(briefType);
+  // Display label: caller may override (Onboarding vs Executive by run sequence);
+  // named agent briefs fall back to the composition label.
+  const briefLabel = displayLabel || composition.label;
   const bodySections = composition.sections.map((id) => sectionHtmlById[id] || '').join('\n');
 
   // Cover sub: the per-brief AI cover paragraph (briefSummaries) when present,
@@ -806,16 +809,18 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     ? `<div class="sub cover-jarvis-sub" id="brief-cover-exec-summary">${coverParas.map((p) => `<p>${esc(p)}</p>`).join('')}</div>`
     : `<p class="sub">${esc(coverParas[0] || headline)}</p>`;
 
-  // Onboarding brief only: render the multi-device mockup small in the
-  // cover's top-right; the cover text narrows to the left half (CSS).
-  const isOnboardingCoverMockup = resolveBriefType(briefType) === 'onboarding' && Boolean(mockupSrc);
+  // Executive + Onboarding briefs: render the multi-device mockup small in the
+  // cover's top-right; the cover text narrows to the left half (CSS). DOM id
+  // stays #onboarding-cover-mockup (introduced there first) — kept stable.
+  const _mockupBriefType = resolveBriefType(briefType);
+  const isCoverMockup = (_mockupBriefType === 'onboarding' || _mockupBriefType === 'executive-daily') && Boolean(mockupSrc);
 
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Marketing Brief · Vol. 01${headline ? ` · ${esc(headline)}` : ''}</title>
+  <title>${esc(briefLabel)} · Vol. 01${clientName ? ` · ${esc(clientName)}` : ''}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700;900&family=Space+Grotesk:wght@300..700&family=Space+Mono:wght@400;700&display=swap"/>
@@ -879,16 +884,17 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   #brief-cover-exec-summary p{font-size:clamp(15px,1.45vw,18px);line-height:1.6;font-weight:400;margin:0 0 12px;max-width:100%;text-align:justify}
   #brief-cover-exec-summary p:last-child{margin-bottom:0}
   .cover .meta{margin-top:18px;padding-top:14px;gap:14px 32px}
-  /* Brand band stretches edge-to-edge across the full width: justify spreads
-     the repeated name flush to both ends instead of clipping the overflow. */
+  /* Brand band — one line, letters spread edge-to-edge across the full width
+     (flex space-between), never wrapping or clipping. */
   .cover .marquee{
     margin-top:20px;
-    white-space:normal;
-    text-align:justify;
-    text-align-last:justify;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    white-space:nowrap;
     overflow:hidden;
   }
-  .cover .marquee span{display:inline}
+  .cover .marquee span{display:inline-block;flex:0 0 auto}
   /* Onboarding brief — multi-device mockup pinned to the cover's top-right,
      small, occupying the right half; cover text narrows to the left. */
   /* Mockup fills the right side: spans from 53% to the right gutter, so it
@@ -907,10 +913,9 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     filter:drop-shadow(0 18px 40px rgba(0,0,0,.16));
   }
   @media(min-width:760px){
-    /* Title block + meta stay in the left half beside the mockup; the summary
-       paragraph below drops the cap and spans the full page width. */
-    .cover--has-onboarding-mockup .title-stack,
-    .cover--has-onboarding-mockup .meta{max-width:48%}
+    /* Only the title block stays in the left half beside the mockup; the
+       summary and meta row below it span the full page width. */
+    .cover--has-onboarding-mockup .title-stack{max-width:48%}
     /* Justify both lines so the weather block has flush left+right edges
        (no ragged end) while staying within the left-half column. */
     .cover--has-onboarding-mockup #brief-cover-weather{
@@ -925,9 +930,9 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   </style>
 </head>
 <body>
-  <section class="page cover${isOnboardingCoverMockup ? ' cover--has-onboarding-mockup' : ''}">
+  <section class="page cover${isCoverMockup ? ' cover--has-onboarding-mockup' : ''}">
     <div class="sec-num">00</div>
-    ${isOnboardingCoverMockup ? `<div id="onboarding-cover-mockup" aria-hidden="true"><img src="${esc(mockupSrc)}" alt="" /></div>` : ''}
+    ${isCoverMockup ? `<div id="onboarding-cover-mockup" aria-hidden="true"><img src="${esc(mockupSrc)}" alt="" /></div>` : ''}
     <div class="title-stack">
       <div class="cap-brief-email-cta-row">
         <button type="button" id="brief-email-cta" class="cap-brief-email-cta">
@@ -937,17 +942,17 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
         </button>
       </div>
       ${weather?.today ? `<div id="brief-cover-weather">${esc(`${weather.place || 'Local'} · ${weather.today.short} ${weather.today.temp}°${weather.today.unit}`)}${weather.days?.length > 1 ? esc(' · ' + weather.days.slice(1, 3).map((d) => `${d.name.slice(0, 3)} ${d.short.split(/\s+/).slice(0, 2).join(' ')} ${d.temp}°`).join(' · ')) : ''}</div>` : ''}
-      <div class="cover-brief-name">${esc(composition.label)}</div>
+      <div class="cover-brief-name">${esc(briefLabel)}</div>
       <h1 class="headline">${headlineDateLines}</h1>
     </div>
     ${coverSubHtml}
     <div class="meta">
       <div><div class="k">Date</div><div class="v">${esc(dateLine)}</div></div>
       <div><div class="k">Site</div><div class="v">${esc(hostnameOf(websiteUrl) || '—')}</div></div>
-      <div><div class="k">Brief Title</div><div class="v">${esc(composition.label)}</div></div>
+      <div><div class="k">Brief Title</div><div class="v">${esc(briefLabel)}</div></div>
       <div><div class="k">Account</div><div class="v mono" style="font-size:13px">${esc(userEmail || '—')}</div></div>
     </div>
-    <div class="marquee">${Array(8).fill(`<span>${esc(brandUpper)}</span>`).join(' • ')}</div>
+    <div class="marquee">${brandUpper.split('').map((ch) => `<span>${ch === ' ' ? '&nbsp;' : esc(ch)}</span>`).join('')}</div>
   </section>
 ${bodySections}
   <footer>
@@ -1088,6 +1093,15 @@ async function handleGet(request) {
   // to the default executive-daily composition.
   const briefTypeParam = request.nextUrl?.searchParams?.get('brief') || null;
   const briefType = briefTypeParam || DEFAULT_BRIEF_TYPE;
+  // Onboarding vs Executive label is by run sequence, not composition: the
+  // client's first scout-brief is the Onboarding Brief, all later ones are
+  // Executive. Only overrides the label for the default/main brief — named
+  // agent briefs (Market/Creative/Strategy/Website) keep their own labels.
+  const renderedRunId = dash?.modules?.['marketing-brief']?.lastRunId || dash?.latestRunId || null;
+  const onboardingRunId = bootstrap?.onboardingRunId || null;
+  const isMainBrief = ['executive-daily', 'onboarding'].includes(resolveBriefType(briefType)) && !briefTypeParam;
+  const isOnboardingRun = isMainBrief && (!onboardingRunId || renderedRunId === onboardingRunId);
+  const mainBriefLabel = isOnboardingRun ? 'Onboarding Brief' : 'Executive Brief';
   // Tier gate — named briefs follow BRIEF_TIER_ACCESS; admins bypass. The
   // admins lookup only runs when the tier alone would deny, so the common
   // path costs no extra read.
@@ -1125,8 +1139,15 @@ async function handleGet(request) {
     // Per-brief cover paragraph (dashboard_state.briefSummaries, written by
     // brief-summary-runner after each scout-brief run). Falls back to the
     // run-level headline inside the renderer when absent.
-    coverSummary: dash.briefSummaries?.[resolveBriefType(briefType)]?.summary || null,
+    // Cover paragraph follows the same onboarding/executive split as the label:
+    // the first brief shows the welcoming onboarding summary, later briefs the
+    // JARVIS executive summary.
+    coverSummary: dash.briefSummaries?.[
+      isMainBrief ? (isOnboardingRun ? 'onboarding' : 'executive-daily') : resolveBriefType(briefType)
+    ]?.summary || null,
     previousRunAt,
+    // Override the cover/title label for the main brief by run sequence.
+    displayLabel: isMainBrief ? mainBriefLabel : null,
   });
 
   if (preferMarketingBrief) {

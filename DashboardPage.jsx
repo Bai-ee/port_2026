@@ -14,12 +14,15 @@ import {
   ChevronDown,
   ClipboardList,
   Database,
+  Download,
   FileText,
   House,
+  Mail,
   ChartColumnIncreasing,
   LaptopMinimalCheck,
   Lock,
   MessageSquareMore,
+  Paperclip,
   Pencil,
   Search,
   Send,
@@ -2165,10 +2168,14 @@ const NON_ADMIN_UNLOCKED_CARD_IDS = new Set([
   'brief-strategy',
   'brief-creative',
   'brief-performance',
+  // Knowledge Officer lead cards — browsable/runnable without admin.
+  'audit-summary',
+  'multi-device-view',
 ]);
 
-// Non-admin accounts: these nav buckets are fully locked (disabled, no hover).
-const NON_ADMIN_LOCKED_NAV_KEYS = new Set(['automation', 'services', 'leadgen']);
+// Non-admin accounts can browse every nav bucket for descriptions. Individual
+// run/unlock actions stay gated at the card level.
+const NON_ADMIN_LOCKED_NAV_KEYS = new Set([]);
 
 // Per-bucket workflow steps. Each step's `id` is the first card in its group;
 // the segmented control above the grid lets users jump to that anchor.
@@ -2187,6 +2194,7 @@ const CAP_STEPS = {
     { id: 'priority-signal', label: "WHAT'S OUR STRATEGY", Icon: Speech },
   ],
   knowledge: [
+    { id: 'knowledge-overview', label: 'OVERVIEW', Icon: Eye },
     { id: 'survey-status', label: 'ONBOARD YOUR COMPANY', Icon: ClipboardList },
     { id: 'audit-summary', label: 'AUDIT YOUR KNOWLEDGE', Icon: Database },
   ],
@@ -2258,9 +2266,188 @@ function fsTimestampToDate(raw) {
   } catch { return null; }
 }
 
+const GLASS_TOOLTIP_SELECTOR = [
+  '[data-tooltip]',
+  '[title]',
+  '[aria-label]',
+  'button',
+  'a[href]',
+  'input',
+  'select',
+  'textarea',
+  '[role="button"]',
+  '[role="tab"]',
+  '[role="menuitem"]',
+  '[role="group"]',
+  'iframe',
+].join(',');
+
+function cleanTooltipText(value) {
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getElementTooltipText(el) {
+  if (!el || el.getAttribute('aria-hidden') === 'true') return '';
+
+  // The brief and other embedded previews render in iframes whose content is
+  // self-evident; a hover tooltip echoing "… preview" adds nothing. Keep the
+  // iframe's title attribute for accessibility but never surface it as a tooltip.
+  if (el.tagName?.toLowerCase() === 'iframe') return '';
+
+  const direct = cleanTooltipText(el.getAttribute('data-tooltip') || el.getAttribute('data-tooltip-content'));
+  if (direct) return direct;
+
+  const title = cleanTooltipText(el.getAttribute('title') || el.dataset?.glassTooltipNativeTitle);
+  if (title) return title;
+
+  const aria = cleanTooltipText(el.getAttribute('aria-label'));
+  if (aria) return aria;
+
+  const tag = el.tagName?.toLowerCase();
+  if (tag === 'input' || tag === 'textarea') {
+    const placeholder = cleanTooltipText(el.getAttribute('placeholder'));
+    if (placeholder) return `Enter ${placeholder}`;
+    const labelText = cleanTooltipText(el.closest('label')?.innerText);
+    return labelText ? `Edit ${labelText}` : 'Edit this field';
+  }
+  if (tag === 'select') {
+    const labelText = cleanTooltipText(el.closest('label')?.innerText);
+    return labelText ? `Choose ${labelText}` : 'Choose an option';
+  }
+
+  // If the control already shows its own visible label, a tooltip that repeats
+  // that label is noise (e.g. a "Login" button with a "Login" tooltip). Only
+  // surface tooltips when an explicit source above adds information the label
+  // does not already convey.
+  const text = cleanTooltipText(el.innerText || el.textContent);
+  if (text) return '';
+
+  // Icon-only / empty controls have no visible label, so a minimal hint helps.
+  if (tag === 'a') return 'Open link';
+  if (tag === 'button' || el.getAttribute('role') === 'button') return 'Use this control';
+  if (el.getAttribute('role') === 'tab') return 'Switch view';
+  return '';
+}
+
+function GlassTooltipLayer() {
+  const activeElementRef = useRef(null);
+  const hideTimerRef = useRef(null);
+  const [tooltip, setTooltip] = useState({ visible: false, text: '', left: 0, top: 0, placement: 'top' });
+
+  const restoreNativeTitle = useCallback((el) => {
+    if (!el?.dataset?.glassTooltipNativeTitle) return;
+    el.setAttribute('title', el.dataset.glassTooltipNativeTitle);
+    delete el.dataset.glassTooltipNativeTitle;
+  }, []);
+
+  const hideTooltip = useCallback(() => {
+    if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
+    const active = activeElementRef.current;
+    activeElementRef.current = null;
+    restoreNativeTitle(active);
+    setTooltip((prev) => ({ ...prev, visible: false }));
+  }, [restoreNativeTitle]);
+
+  const showTooltipFor = useCallback((el) => {
+    if (!el || el.closest('[data-tooltip-disabled="true"]')) return;
+    const text = getElementTooltipText(el);
+    if (!text) return;
+
+    if (activeElementRef.current && activeElementRef.current !== el) {
+      restoreNativeTitle(activeElementRef.current);
+    }
+    activeElementRef.current = el;
+
+    const nativeTitle = el.getAttribute('title');
+    if (nativeTitle) {
+      el.dataset.glassTooltipNativeTitle = nativeTitle;
+      el.removeAttribute('title');
+    }
+
+    const rect = el.getBoundingClientRect();
+    const placement = rect.top < 72 ? 'bottom' : 'top';
+    const centerX = rect.left + rect.width / 2;
+    const rawTop = placement === 'top' ? rect.top - 12 : rect.bottom + 12;
+    const left = Math.min(Math.max(centerX, 24), window.innerWidth - 24);
+    const top = placement === 'top' ? Math.max(rawTop, 12) : Math.min(rawTop, window.innerHeight - 12);
+    setTooltip({ visible: true, text, left, top, placement });
+  }, [restoreNativeTitle]);
+
+  useEffect(() => {
+    const findTooltipTarget = (target) => {
+      const el = target instanceof Element ? target.closest(GLASS_TOOLTIP_SELECTOR) : null;
+      if (!el || el.closest('[aria-hidden="true"]')) return null;
+      return el;
+    };
+
+    const handlePointerOver = (event) => {
+      const el = findTooltipTarget(event.target);
+      if (!el) return;
+      if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
+      showTooltipFor(el);
+    };
+
+    const handlePointerOut = (event) => {
+      const active = activeElementRef.current;
+      if (!active) return;
+      const next = event.relatedTarget instanceof Node ? event.relatedTarget : null;
+      if (next && active.contains(next)) return;
+      hideTimerRef.current = window.setTimeout(hideTooltip, 80);
+    };
+
+    const handleFocusIn = (event) => {
+      const el = findTooltipTarget(event.target);
+      if (el) showTooltipFor(el);
+    };
+
+    const handleFocusOut = () => hideTooltip();
+    const handleScroll = () => hideTooltip();
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') hideTooltip();
+    };
+
+    document.addEventListener('pointerover', handlePointerOver, true);
+    document.addEventListener('pointerout', handlePointerOut, true);
+    document.addEventListener('focusin', handleFocusIn, true);
+    document.addEventListener('focusout', handleFocusOut, true);
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', handleScroll);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('pointerover', handlePointerOver, true);
+      document.removeEventListener('pointerout', handlePointerOut, true);
+      document.removeEventListener('focusin', handleFocusIn, true);
+      document.removeEventListener('focusout', handleFocusOut, true);
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleScroll);
+      document.removeEventListener('keydown', handleKeyDown);
+      if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
+      restoreNativeTitle(activeElementRef.current);
+    };
+  }, [hideTooltip, restoreNativeTitle, showTooltipFor]);
+
+  return (
+    <div
+      id="glass-tooltip"
+      role="tooltip"
+      data-visible={tooltip.visible ? 'true' : 'false'}
+      data-placement={tooltip.placement}
+      style={{
+        left: tooltip.left,
+        top: tooltip.top,
+      }}
+    >
+      {tooltip.text}
+    </div>
+  );
+}
+
 // entranceReady: route-level signal that the loading overlay has finished its
 // fade — the dashboard entrance timeline holds hidden until it flips true.
-const DashboardPage = ({ entranceReady = true }) => {
+const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) => {
   const { user, userProfile, signOutUser, isAdmin } = useAuth();
   const [theme, setTheme] = useState('light');
   const [countdownHours, setCountdownHours] = useState(14);
@@ -2268,6 +2455,12 @@ const DashboardPage = ({ entranceReady = true }) => {
   const [showTierModal, setShowTierModal] = useState(false);
   // Payments/subscribe modal — opened by the content lock icons.
   const [showSubscribeModal, setShowSubscribeModal] = useState(false);
+  // Pay-per-run paywall — every on-demand brief run opens this ($5/run) and
+  // the run is kicked off only after payment succeeds. { briefKey, briefCardId, briefName }
+  const [runPaywall, setRunPaywall] = useState(null);
+  // Free-tier cooldown modal — opened by the countdown time in the source bar.
+  // Shows time left + reschedule picker, with subscribe / run-once options.
+  const [showCooldownModal, setShowCooldownModal] = useState(false);
 
   // The brief renders in a sandboxed iframe; its in-cover "Send to my email"
   // CTA can't call React directly, so it postMessages the parent. Open the
@@ -2322,6 +2515,32 @@ const DashboardPage = ({ entranceReady = true }) => {
     if (!user) return Promise.reject(new Error('No authenticated user.'));
     return user.getIdToken();
   }, [user, impersonateId]);
+
+  // ── Company Brain quick-attach (paperclip + drag-and-drop on the card shell) ──
+  const companyBrainFileInputRef = useRef(null);
+  const [companyBrainUpload, setCompanyBrainUpload] = useState({ busy: false, dragOver: false, msg: '', tone: '' });
+  const uploadToCompanyBrain = useCallback(async (file) => {
+    if (!file) return;
+    setCompanyBrainUpload({ busy: true, dragOver: false, msg: `Uploading ${file.name}…`, tone: '' });
+    try {
+      const token = await brandSystemGetIdToken();
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('title', file.name);
+      const res = await fetch(apiPath('/api/dashboard/knowledge-base/upload'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      setCompanyBrainUpload({ busy: false, dragOver: false, msg: `Added “${file.name}” to the Company Brain.`, tone: 'ok' });
+    } catch (err) {
+      setCompanyBrainUpload({ busy: false, dragOver: false, msg: err?.message || 'Upload failed.', tone: 'err' });
+    } finally {
+      setTimeout(() => setCompanyBrainUpload((p) => (p.busy ? p : { busy: false, dragOver: false, msg: '', tone: '' })), 3500);
+    }
+  }, [apiPath, brandSystemGetIdToken]);
 
   useEffect(() => {
     if (!user || !isAdmin) {
@@ -2593,6 +2812,9 @@ const DashboardPage = ({ entranceReady = true }) => {
   // Always fetched with `?type=marketing` so it shows the marketing render
   // regardless of which pipeline produced the latest run.
   const [marketingBriefPreviewHtml, setMarketingBriefPreviewHtml] = useState('');
+  const [marketingBriefPreviewLoading, setMarketingBriefPreviewLoading] = useState(false);
+  const [marketingBriefPreviewSettled, setMarketingBriefPreviewSettled] = useState(false);
+  const [marketingBriefPreviewError, setMarketingBriefPreviewError] = useState('');
   // PAST BRIEFS tab — fetch + view a specific past brief run by runId.
   const [pastBriefView, setPastBriefView] = useState(null); // { runId, html } | { runId, loading: true }
   const openPastBrief = useCallback(async (runId) => {
@@ -2849,6 +3071,9 @@ const DashboardPage = ({ entranceReady = true }) => {
     }
   }, [user, estimateBriefDraft, apiPath, client]);
 
+  const briefPreviewFetchKey = `${bootstrap?.effectiveClientId || ''}:${bootstrap?.dashboardState?.latestRunId || ''}`;
+  const marketingBriefPreviewFetchKey = `${bootstrap?.effectiveClientId || ''}:${bootstrap?.dashboardState?.marketingBrief?.generatedAtIso || ''}`;
+
   // Fetch the brief HTML for the Brief tile's miniature preview. Re-fetches
   // whenever latestRunId changes so the tile always shows the newest render.
   // Cache-busted with the runId + `cache: 'no-store'` to defeat both browser
@@ -2860,6 +3085,7 @@ const DashboardPage = ({ entranceReady = true }) => {
     if (!dash?.scribe?.brief && !dash?.marketingBrief) { setBriefPreviewHtml(''); setBriefPreviewLoading(false); return; }
     let cancelled = false;
     setBriefPreviewLoading(true);
+    setBriefPreviewHtml('');
     (async () => {
       try {
         const token = await user.getIdToken();
@@ -2880,7 +3106,7 @@ const DashboardPage = ({ entranceReady = true }) => {
       }
     })();
     return () => { cancelled = true; };
-  }, [user, apiPath, bootstrap?.dashboardState?.latestRunId, bootstrap?.dashboardState?.scribe?.brief?.headline, bootstrap?.dashboardState?.marketingBrief?.generatedAtIso]);
+  }, [user, apiPath, briefPreviewFetchKey, bootstrap?.dashboardState?.scribe?.brief?.headline, bootstrap?.dashboardState?.marketingBrief?.generatedAtIso]);
 
   // Always fetch the Marketing Brief render (?type=marketing) for the
   // Marketing Brief modal's BRIEF tab. Independent of the main brief preview
@@ -2888,27 +3114,60 @@ const DashboardPage = ({ entranceReady = true }) => {
   useEffect(() => {
     if (!user) return;
     const dash = bootstrap?.dashboardState;
-    if (!dash?.marketingBrief) { setMarketingBriefPreviewHtml(''); return; }
+    if (!dash?.marketingBrief) {
+      setMarketingBriefPreviewHtml('');
+      setMarketingBriefPreviewLoading(false);
+      setMarketingBriefPreviewSettled(true);
+      setMarketingBriefPreviewError('');
+      return;
+    }
     let cancelled = false;
+    setMarketingBriefPreviewHtml('');
+    setMarketingBriefPreviewLoading(true);
+    setMarketingBriefPreviewSettled(false);
+    setMarketingBriefPreviewError('');
     (async () => {
       try {
         const token = await user.getIdToken();
-        // Free tier = signup flow: same content as the Executive Brief for
-        // now, but requested + labeled as the Onboarding Brief.
-        const isFreeTier = dash?.tier !== 'paid';
-        const res = await fetch(apiPath(`/api/dashboard/brief-preview?type=marketing${isFreeTier ? '&brief=onboarding' : ''}`), {
+        // The featured Daily Brief slot always renders the recurring Executive
+        // Brief. The Onboarding Brief is a distinct signup-moment artifact
+        // requested in the onboarding flow — NOT here, and never keyed off tier
+        // (admins/owners are non-paid but are not onboarding).
+        const res = await fetch(apiPath('/api/dashboard/brief-preview?type=marketing'), {
           headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
         });
-        if (!res.ok) return;
+        if (!res.ok) throw new Error(`Brief preview failed with HTTP ${res.status}.`);
         const html = await res.text();
         if (!cancelled) setMarketingBriefPreviewHtml(html);
-      } catch {
-        // non-fatal — tab falls back to placeholder
+      } catch (err) {
+        if (!cancelled) {
+          setMarketingBriefPreviewError(err instanceof Error ? err.message : 'Brief preview fetch failed.');
+        }
+        // non-fatal — tab falls back to an empty state
+      } finally {
+        if (!cancelled) {
+          setMarketingBriefPreviewLoading(false);
+          setMarketingBriefPreviewSettled(true);
+        }
       }
     })();
     return () => { cancelled = true; };
-  }, [user, apiPath, bootstrap?.dashboardState?.marketingBrief?.generatedAtIso, bootstrap?.dashboardState?.modules?.['marketing-brief']?.lastRunId]);
+  }, [user, apiPath, marketingBriefPreviewFetchKey, bootstrap?.dashboardState?.modules?.['marketing-brief']?.lastRunId]);
+
+  useEffect(() => {
+    if (typeof onInitialContentReady !== 'function') return;
+    if (bootstrapLoading) return;
+    const dash = bootstrap?.dashboardState;
+    const initialBriefExpected = Boolean(dash?.marketingBrief);
+    if (initialBriefExpected && !marketingBriefPreviewSettled) return;
+    onInitialContentReady();
+  }, [
+    onInitialContentReady,
+    bootstrapLoading,
+    bootstrap?.dashboardState?.marketingBrief,
+    marketingBriefPreviewSettled,
+  ]);
 
   // Named-brief preview — fetch a composition render (?brief=<key>) on demand
   // and show it in the brief fullscreen overlay. Keys map to compositions in
@@ -3237,7 +3496,7 @@ const DashboardPage = ({ entranceReady = true }) => {
 
   useEffect(() => {
     if (!activeTileModal) return;
-    trackTileOpened(activeTileModal.cardId || activeTileModal.number, activeTileModal.label || activeTileModal.title);
+    trackTileOpened(activeTileModal.sourceCardId || activeTileModal.cardId || activeTileModal.number, activeTileModal.label || activeTileModal.title);
   }, [activeTileModal]);
 
   useEffect(() => {
@@ -3823,6 +4082,12 @@ const DashboardPage = ({ entranceReady = true }) => {
     setIntakeModalDismissed(true);
     setBootstrapLoading(true);
     setBootstrapError('');
+    setBriefPreviewHtml('');
+    setBriefPreviewLoading(true);
+    setMarketingBriefPreviewHtml('');
+    setMarketingBriefPreviewLoading(true);
+    setMarketingBriefPreviewSettled(false);
+    setMarketingBriefPreviewError('');
   }, []);
 
   const handleDeleteClient = useCallback(async () => {
@@ -3874,16 +4139,21 @@ const DashboardPage = ({ entranceReady = true }) => {
   }, [client?.clientId, client?.id, isImpersonating]);
 
   const recentRuns = bootstrap.recentRuns || [];
+  // The client's first scout-brief run is the Onboarding Brief; later ones are
+  // Executive Briefs. Server derives this in the bootstrap payload.
+  const onboardingRunId = bootstrap.onboardingRunId || null;
   const displayProfile = bootstrap.userProfile || userProfile;
   const currentRun = recentRuns[0] || null;
   const dashboardState = bootstrap.dashboardState;
-  const openCapabilityCard = useCallback((card) => {
+  const openCapabilityCard = useCallback((card, options = {}) => {
     if (!card) return;
-    if (card.id === 'brief' && briefPreviewHtml) {
+    const forceModal = Boolean(options.forceModal);
+    const modalCardId = forceModal ? `${card.id}__description` : card.id;
+    if (!forceModal && card.id === 'brief' && briefPreviewHtml) {
       setBriefFullScreen(true);
       return;
     }
-    if (card.category === 'brief' && BRIEF_TYPE_BY_CARD[card.id] && dashboardState?.marketingBrief) {
+    if (!forceModal && card.category === 'brief' && BRIEF_TYPE_BY_CARD[card.id] && dashboardState?.marketingBrief) {
       openNamedBriefPreview(BRIEF_TYPE_BY_CARD[card.id]);
       return;
     }
@@ -3892,7 +4162,9 @@ const DashboardPage = ({ entranceReady = true }) => {
       description: card.description,
       dynamicShortDescription: card.dynamicShortDescription || null,
       rows: card.rows,
-      cardId: card.id,
+      cardId: modalCardId,
+      sourceCardId: card.id,
+      descriptionOnly: forceModal,
       placeholderLabel: card.placeholderLabel,
       number: card.number,
       label: card.label,
@@ -4859,6 +5131,12 @@ const DashboardPage = ({ entranceReady = true }) => {
       setModuleRunLoading((prev) => ({ ...prev, [briefCardId]: false }));
     }
   }, [user, moduleRunLoading, doBootstrap, apiPath]);
+
+  // Every on-demand run goes through the $5 paywall first; runBriefProducers
+  // fires from the modal's onRunPaid once payment clears.
+  const openRunPaywall = useCallback((briefKey, briefCardId, briefName) => {
+    setRunPaywall({ briefKey, briefCardId, briefName });
+  }, []);
 
   const terminalLines = useMemo(
     () => buildTerminalLines(currentRun, dashboardState, latestRunStatus, client),
@@ -6411,10 +6689,20 @@ const DashboardPage = ({ entranceReady = true }) => {
     {
       id: 'social-preview',
       category: 'website',
+      // Cross-listed into Knowledge Officer (Social Media Share card), second slot.
+      extraCategories: ['knowledge'],
       number: 'SP',
       label: 'SOCIAL PREVIEW',
       title: 'Social Preview Check',
-      description: 'Shows how the site looks when someone shares the link, including the title, description, and image.',
+      // Knowledge Overview leads with what's in place, then flags gaps. Tracks
+      // siteMeta so the copy stays truthful once the theme color is added.
+      description: activeCapabilityFilter === 'knowledge'
+        ? (siteMeta
+            ? (siteMeta.themeColor
+                ? 'Everything is in place — your page title, share description, and mobile theme color are all set, so the share preview renders cleanly.'
+                : 'Everything is in place — your page title and share description are set. One thing to update: your mobile theme color is missing and should be added so the share preview renders cleanly.')
+            : 'No share preview captured yet. Run a capture to check your page title, share description, and image.')
+        : 'Shows how the site looks when someone shares the link, including the title, description, and image.',
       placeholderLabel: 'CHECK\nPREVIEW',
       rows: (() => {
         const NP = 'Not provided';
@@ -6480,10 +6768,24 @@ const DashboardPage = ({ entranceReady = true }) => {
     {
       id: 'multi-device-view',
       category: 'website',
+      // Cross-listed into Knowledge Officer so the full-screen device mocks sit
+      // second, right after Data Quality.
+      extraCategories: ['knowledge'],
       number: 'MD',
       label: 'LAYOUT',
-      title: 'Cross-Device Layouts',
-      description: 'Captures desktop, tablet, and mobile views so layout issues are easy to spot.',
+      // Knowledge Overview surfaces this card under a friendlier name; Website
+      // bucket keeps the technical "Cross-Device Layouts" label.
+      title: activeCapabilityFilter === 'knowledge' ? 'How Your Looking' : 'Cross-Device Layouts',
+      // In Knowledge Overview the copy tracks capture status: PASSED (mockup
+      // generated), PARTIAL (some device views), or FAILED (no captures).
+      // Outside Knowledge, keep the technical capture summary.
+      description: activeCapabilityFilter === 'knowledge'
+        ? (intakeMockupSrc
+            ? 'Full homepage captures are available across desktop, tablet, and mobile for a quick visual review. Use Details to confirm the content is up to date and looking good on each screen.'
+            : multiDevicePreviewSrc
+              ? 'Partial homepage captures are available. Some device views were captured successfully, but the full review may be incomplete. Use Details to review what’s available and confirm the visible content is up to date.'
+              : 'Homepage capture could not be completed. Use Details to review the issue, then try running the capture again to generate the desktop, tablet, and mobile views.')
+        : 'Captures desktop, tablet, and mobile views so layout issues are easy to spot.',
       placeholderLabel: 'CAPTURE\nDEVICES',
       rows: multiDevicePreviewSrc ? [
         { key: 'md-desktop', label: 'Desktop capture', value: deviceScreenshots.desktop ? 'Captured' : homepageScreenshotUrl ? 'Captured' : 'Missing' },
@@ -6688,6 +6990,8 @@ const DashboardPage = ({ entranceReady = true }) => {
     {
       id: 'priority-signal',
       category: 'growth',
+      // Cross-listed into Knowledge Officer so Day-of Post sits in that grid too.
+      extraCategories: ['knowledge'],
       number: 'DP',
       label: 'TODAY',
       title: 'Day-of Post',
@@ -7182,7 +7486,7 @@ const DashboardPage = ({ entranceReady = true }) => {
         footerAction: {
           label: moduleRunLoading['brief-creative'] ? '…' : 'Run Brief',
           loading: Boolean(moduleRunLoading['brief-creative']),
-          onClick: () => runBriefProducers('creative-director', 'brief-creative'),
+          onClick: () => openRunPaywall('creative-director', 'brief-creative', 'Creative Brief'),
         },
       }),
     },
@@ -7202,7 +7506,7 @@ const DashboardPage = ({ entranceReady = true }) => {
         footerAction: {
           label: moduleRunLoading['brief-performance'] ? '…' : 'Run Brief',
           loading: Boolean(moduleRunLoading['brief-performance']),
-          onClick: () => runBriefProducers('website-developer', 'brief-performance'),
+          onClick: () => openRunPaywall('website-developer', 'brief-performance', 'Website Developer Brief'),
         },
       }),
     },
@@ -8061,6 +8365,7 @@ const DashboardPage = ({ entranceReady = true }) => {
   return (
     <div data-dashboard-theme={theme} style={shellStyle}>
       <style>{dashboardCss}</style>
+      <GlassTooltipLayer />
       <header id="founders-top-strip">
         <div id="founders-top-strip-inner">
           <Link href="/" id="founders-brand" aria-label="Back to homepage">
@@ -8441,25 +8746,39 @@ const DashboardPage = ({ entranceReady = true }) => {
                       );
                     })()}
                     <span className="cap-source-divider" aria-hidden="true" />
-                    <button
-                      type="button"
-                      id="brief-cooldown-chip"
-                      title={`Brief cooldown — your tier allows another brief in ${formatBriefCooldown(briefCooldownSeconds).value}${formatBriefCooldown(briefCooldownSeconds).unit} — click to view the latest brief`}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 2px', flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer' }}
-                      onClick={() => {
-                        // Latest ran brief — same path as clicking the 'brief' card:
-                        // full-screen render when the HTML is loaded, card modal otherwise.
-                        if (briefPreviewHtml) { setBriefFullScreen(true); return; }
-                        const briefCard = intakeCapabilityCards.find((c) => c.id === 'brief');
-                        if (!briefCard) return;
-                        setActiveTileModal({ title: briefCard.title, description: briefCard.description, dynamicShortDescription: briefCard.dynamicShortDescription || null, rows: briefCard.rows, cardId: briefCard.id, placeholderLabel: briefCard.placeholderLabel, number: briefCard.number, label: briefCard.label, isCapabilityCard: true, vizType: null, recommendation: briefCard.recommendation || null, analyzer: briefCard.analyzer || null, readinessBadge: briefCard.readinessBadge || null });
-                      }}
-                    >
-                      <FileText size={18} strokeWidth={1.75} stroke="url(#coverage-grad)" aria-hidden="true" style={{ marginTop: 1 }} />
-                      <span style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>
-                        {formatBriefCooldown(briefCooldownSeconds).value}<span style={{ fontSize: 13 }}>{formatBriefCooldown(briefCooldownSeconds).unit}</span>
-                      </span>
-                    </button>
+                    {/* Two affordances share the chip: the icon opens the latest
+                        brief; the countdown time opens the cooldown / payment modal. */}
+                    <span id="brief-cooldown-chip" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 2px', flexShrink: 0 }}>
+                      <button
+                        type="button"
+                        id="brief-cooldown-icon-btn"
+                        title="View the latest brief"
+                        aria-label="View the latest brief"
+                        style={{ display: 'inline-flex', alignItems: 'center', padding: 0, background: 'none', border: 'none', cursor: 'pointer' }}
+                        onClick={() => {
+                          // Latest ran brief — same path as clicking the 'brief' card:
+                          // full-screen render when the HTML is loaded, card modal otherwise.
+                          if (briefPreviewHtml) { setBriefFullScreen(true); return; }
+                          const briefCard = intakeCapabilityCards.find((c) => c.id === 'brief');
+                          if (!briefCard) return;
+                          setActiveTileModal({ title: briefCard.title, description: briefCard.description, dynamicShortDescription: briefCard.dynamicShortDescription || null, rows: briefCard.rows, cardId: briefCard.id, placeholderLabel: briefCard.placeholderLabel, number: briefCard.number, label: briefCard.label, isCapabilityCard: true, vizType: null, recommendation: briefCard.recommendation || null, analyzer: briefCard.analyzer || null, readinessBadge: briefCard.readinessBadge || null });
+                        }}
+                      >
+                        <FileText size={18} strokeWidth={1.75} stroke="url(#coverage-grad)" aria-hidden="true" style={{ marginTop: 1 }} />
+                      </button>
+                      <button
+                        type="button"
+                        id="brief-cooldown-time-btn"
+                        title={`Next free brief runs in ${formatBriefCooldown(briefCooldownSeconds).value}${formatBriefCooldown(briefCooldownSeconds).unit}`}
+                        aria-label="Brief cooldown options"
+                        style={{ display: 'inline-flex', alignItems: 'center', padding: 0, background: 'none', border: 'none', cursor: 'pointer' }}
+                        onClick={() => setShowCooldownModal(true)}
+                      >
+                        <span style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>
+                          {formatBriefCooldown(briefCooldownSeconds).value}<span style={{ fontSize: 13 }}>{formatBriefCooldown(briefCooldownSeconds).unit}</span>
+                        </span>
+                      </button>
+                    </span>
                     {/* Background-run indicator — surfaces when the terminal modal
                         is closed while an intake run is queued/processing. */}
                     {isRunActive && currentRun?.pipelineType !== 'module-run' ? (
@@ -8517,9 +8836,8 @@ const DashboardPage = ({ entranceReady = true }) => {
 
         {/* ── Capability section ── */}
         <section id="capability-section">
-          {bootstrapError ? <div className="db-alert">{bootstrapError}</div> : null}
-          {/* Error banner removed — errors surface in the terminal + survey
-              chat thread. Never show a top-level alert that shifts layout. */}
+          {/* Bootstrap errors surface as a fixed toast (see #db-alert-toast),
+              never as an inline element that shifts the section layout. */}
 
           {/* ── Capability section shell ── */}
           {/* Hold render until the initial capability filter is resolved so the
@@ -8638,8 +8956,9 @@ const DashboardPage = ({ entranceReady = true }) => {
                 .sort((a, b) => {
                   if (activeCapabilityFilter === 'onboarding') return chainSortKey(a.id) - chainSortKey(b.id);
                   if (activeCapabilityFilter === 'knowledge') {
-                    // Knowledge Officer: intake first, audit (coverage) last.
-                    const order = ['survey-status', 'knowledge-base', 'business-model', 'industry', 'audit-summary'];
+                    // Knowledge Officer: Cross-Device Layouts, Data Coverage,
+                    // Company Brain, Day-of Post lead; Market Category stays last.
+                    const order = ['multi-device-view', 'social-preview', 'audit-summary', 'knowledge-base', 'priority-signal', 'survey-status', 'business-model', 'industry'];
                     const ai = order.indexOf(a.id); const bi = order.indexOf(b.id);
                     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
                   }
@@ -8711,13 +9030,25 @@ const DashboardPage = ({ entranceReady = true }) => {
                 ? (!isLocked && !card.readinessBadge)
                 : (!isLocked && Boolean(card.moduleControls)
                    && !(_mStatus === 'succeeded' || _mStatus === 'running' || _mStatus === 'queued'));
+              const readableDescription = isLocked
+                ? (LOCKED_CARD_DESCRIPTIONS[card.id] || card.description || 'This card will unlock after the previous steps are complete.')
+                : isInactiveUnlocked
+                  ? (INACTIVE_CARD_DESCRIPTIONS[card.id] || card.description || 'Run this module to populate this card.')
+                  : (card.dynamicShortDescription || card.scribeShort || card.description);
+              // Company Brain accepts a quick document drop / paperclip attach
+              // directly on the card shell (no need to open the modal).
+              const isCompanyBrain = card.id === 'knowledge-base' && !isLocked;
               return (
               <article
                 data-capability-card
+                data-tooltip-disabled="true"
                 data-flip-id={`cap-${card.id}`}
-                className={`tile tile-intake-card${hasIntakeData ? ' tile-ready' : ''}${card.wide ? ' tile-intake-card--wide' : ''}${hasBothButtons && !isLocked ? ' tile-intake-card--btns-only' : ''}${isDimmed && !isLocked ? ' tile-intake-card--dimmed' : ''}${isLocked ? ' tile-intake-card--locked' : ''}${isInactiveUnlocked || card.id === 'survey-status' ? ' tile-intake-card--inactive' : ''}${expandedMobileCards.has(card.id) ? ' tile-intake-card--mobile-expanded' : ''}`}
+                className={`tile tile-intake-card${hasIntakeData ? ' tile-ready' : ''}${card.wide ? ' tile-intake-card--wide' : ''}${hasBothButtons && !isLocked ? ' tile-intake-card--btns-only' : ''}${isDimmed && !isLocked ? ' tile-intake-card--dimmed' : ''}${isLocked ? ' tile-intake-card--locked' : ''}${isInactiveUnlocked || card.id === 'survey-status' ? ' tile-intake-card--inactive' : ''}${expandedMobileCards.has(card.id) ? ' tile-intake-card--mobile-expanded' : ''}${isCompanyBrain ? ' tile-intake-card--brain' : ''}${isCompanyBrain && companyBrainUpload.dragOver ? ' tile-intake-card--dropping' : ''}`}
                 id={card.domId || `tile-${card.id}`}
                 key={card.id}
+                onDragOver={isCompanyBrain ? (e) => { e.preventDefault(); e.stopPropagation(); if (!companyBrainUpload.dragOver) setCompanyBrainUpload((p) => ({ ...p, dragOver: true })); } : undefined}
+                onDragLeave={isCompanyBrain ? (e) => { if (e.currentTarget.contains(e.relatedTarget)) return; setCompanyBrainUpload((p) => ({ ...p, dragOver: false })); } : undefined}
+                onDrop={isCompanyBrain ? (e) => { e.preventDefault(); e.stopPropagation(); const f = e.dataTransfer?.files?.[0]; if (f) uploadToCompanyBrain(f); } : undefined}
                 onClick={(e) => {
                   const clickedControl = e.target.closest('button, a, input, textarea, select, summary, details, [role="button"]');
                   if (clickedControl) return;
@@ -8729,7 +9060,7 @@ const DashboardPage = ({ entranceReady = true }) => {
                       return;
                     }
                     if (isLocked) {
-                      setShowSubscribeModal(true);
+                      toggleMobileCard(card.id);
                       return;
                     }
                     if (isInactiveUnlocked || card.id === 'survey-status') {
@@ -8739,12 +9070,28 @@ const DashboardPage = ({ entranceReady = true }) => {
                     openCapabilityCard(card);
                     return;
                   }
-                  if (isLocked || isInactiveUnlocked || card.id === 'survey-status' || (hasBothButtons && !isListRow)) return;
+                  if (isLocked || isInactiveUnlocked || card.id === 'survey-status') {
+                    openCapabilityCard({ ...card, description: readableDescription }, { forceModal: true });
+                    return;
+                  }
+                  if (hasBothButtons && !isListRow) return;
                   openCapabilityCard(card);
                 }}
               >
                 <div className="tile-number">
                   <span className="tile-header-label">{card.title}</span>
+                  {isCompanyBrain && (
+                    <button
+                      type="button"
+                      className="tile-brain-clip-btn"
+                      title="Attach a document to the Company Brain"
+                      aria-label="Attach a document to the Company Brain"
+                      disabled={companyBrainUpload.busy}
+                      onClick={(e) => { e.stopPropagation(); companyBrainFileInputRef.current?.click(); }}
+                    >
+                      <Paperclip size={13} strokeWidth={1.9} />
+                    </button>
+                  )}
                   <span className="cap-list-action-icon" aria-hidden="true">
                     {CARD_ACTION_EDIT.has(card.id) ? <Pencil size={13} strokeWidth={1.9} /> : <Eye size={13} strokeWidth={1.9} />}
                   </span>
@@ -8752,14 +9099,38 @@ const DashboardPage = ({ entranceReady = true }) => {
                     <svg viewBox="0 0 12 12"><polyline points="2,4 6,8 10,4" /></svg>
                   </span>
                 </div>
+                {isCompanyBrain && (
+                  <input
+                    ref={companyBrainFileInputRef}
+                    type="file"
+                    accept=".pdf,.doc,.docx,.txt,.md,.markdown,.csv,.html,.htm,.rtf"
+                    style={{ display: 'none' }}
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadToCompanyBrain(f); e.target.value = ''; }}
+                  />
+                )}
+                {isCompanyBrain && (companyBrainUpload.dragOver || companyBrainUpload.busy || companyBrainUpload.msg) && (
+                  <div className={`tile-brain-dropzone${companyBrainUpload.tone === 'ok' ? ' tile-brain-dropzone--ok' : ''}${companyBrainUpload.tone === 'err' ? ' tile-brain-dropzone--err' : ''}`} aria-live="polite">
+                    <Paperclip size={16} strokeWidth={1.8} aria-hidden="true" />
+                    <span>{companyBrainUpload.busy ? companyBrainUpload.msg : companyBrainUpload.msg || 'Drop a document to add it to the Company Brain'}</span>
+                  </div>
+                )}
                 {isLocked ? (
                   <div
                     className={`tile-intake-placeholder tile-intake-placeholder-${card.id} tile-intake-placeholder--locked`}
-                    aria-label="Locked card — subscribe to unlock"
+                    aria-label={`View what ${card.title || 'this card'} does`}
                     role="button"
                     tabIndex={0}
                     style={{ cursor: 'pointer' }}
-                    onClick={(e) => { e.stopPropagation(); setShowSubscribeModal(true); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openCapabilityCard({ ...card, description: readableDescription }, { forceModal: true });
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter' && e.key !== ' ') return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      openCapabilityCard({ ...card, description: readableDescription }, { forceModal: true });
+                    }}
                   >
                     <span className="tile-intake-lock-overlay">
                       <Lock size={56} strokeWidth={1.25} className="tile-intake-lock-icon" aria-hidden="true" />
@@ -8951,6 +9322,18 @@ const DashboardPage = ({ entranceReady = true }) => {
                       srcDoc={marketingBriefPreviewHtml}
                       sandbox="allow-same-origin"
                     />
+                  ) : card.id === 'knowledge-base' ? (
+                    <div className="tile-brain-empty">
+                      <span className="tile-empty-label">{card.title}</span>
+                      <button
+                        type="button"
+                        className="tile-brain-attach-hint"
+                        onClick={(e) => { e.stopPropagation(); companyBrainFileInputRef.current?.click(); }}
+                      >
+                        <Paperclip size={14} strokeWidth={1.9} aria-hidden="true" />
+                        <span>Drag a document here, or click to attach</span>
+                      </button>
+                    </div>
                   ) : (
                     <span className="tile-empty-label">{card.title || card.placeholderLabel}</span>
                   )}
@@ -8986,9 +9369,9 @@ const DashboardPage = ({ entranceReady = true }) => {
                     )}
                     {' '}
                     {isLocked
-                      ? (LOCKED_CARD_DESCRIPTIONS[card.id] || card.description || 'This card will unlock after the previous steps are complete.')
+                      ? readableDescription
                       : isInactiveUnlocked
-                        ? (INACTIVE_CARD_DESCRIPTIONS[card.id] || 'Run this module to populate this card.')
+                        ? readableDescription
                         : (card.dynamicShortDescription || card.scribeShort || card.description)}
                   </p>
                 </div>
@@ -9096,7 +9479,7 @@ const DashboardPage = ({ entranceReady = true }) => {
                       );
                     })()}
                   </span>
-                  <span className="tile-foot-right-group">
+                  <span className="tile-foot-right-group" data-tooltip-disabled="true">
                     {card.id === 'brief' && briefPdfUrl && (
                       <a
                         href={briefPdfUrl}
@@ -9227,22 +9610,20 @@ const DashboardPage = ({ entranceReady = true }) => {
                         </button>
                       );
                     })()}
-                    {!isLocked && (
-                      <button
-                        type="button"
-                        className={`tile-view-details-btn${isInactiveUnlocked ? ' tile-view-details-btn--disabled' : ''}`}
-                        disabled={isInactiveUnlocked}
-                        aria-disabled={isInactiveUnlocked}
-                        title={isInactiveUnlocked ? 'Run this module first to enable Details.' : undefined}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (isInactiveUnlocked) return;
-                          openCapabilityCard(card);
-                        }}
-                      >
-                          Details ↗
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      className="tile-view-details-btn"
+                      title={isLocked || isInactiveUnlocked ? 'View what this card does' : undefined}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openCapabilityCard(
+                          isLocked || isInactiveUnlocked ? { ...card, description: readableDescription } : card,
+                          { forceModal: isLocked || isInactiveUnlocked },
+                        );
+                      }}
+                    >
+                        Details ↗
+                    </button>
                   </span>
                 </div>
               </article>
@@ -9250,16 +9631,31 @@ const DashboardPage = ({ entranceReady = true }) => {
             };
 
             const _bucketSteps = CAP_STEPS[activeCapabilityFilter] || null;
-            const _groups = _bucketSteps
-              ? _bucketSteps.map((step, i) => ({ step, stepIdx: i, cards: [] }))
-              : [{ step: null, stepIdx: -1, cards: _filteredSorted }];
-            if (_bucketSteps) {
-              let _cur = 0;
-              _filteredSorted.forEach((card) => {
-                const idx = _bucketSteps.findIndex((s) => s.id === card.id);
-                if (idx !== -1) _cur = idx;
-                _groups[_cur].cards.push(card);
-              });
+            let _groups;
+            if (activeCapabilityFilter === 'knowledge' && _bucketSteps) {
+              // Knowledge Officer is a 3-tab system:
+              //   Tab 1 OVERVIEW — all cards in the full card-grid (full visuals).
+              //   Tab 2 ONBOARD  — original onboarding cards, line-item only.
+              //   Tab 3 AUDIT    — Data Coverage, line-item only.
+              const _onboardIds = ['survey-status', 'knowledge-base', 'business-model', 'industry'];
+              const _auditIds = ['audit-summary'];
+              _groups = [
+                { step: _bucketSteps[0], stepIdx: 0, cards: _filteredSorted, renderMode: 'grid' },
+                { step: _bucketSteps[1], stepIdx: 1, cards: _filteredSorted.filter((c) => _onboardIds.includes(c.id)) },
+                { step: _bucketSteps[2], stepIdx: 2, cards: _filteredSorted.filter((c) => _auditIds.includes(c.id)) },
+              ];
+            } else {
+              _groups = _bucketSteps
+                ? _bucketSteps.map((step, i) => ({ step, stepIdx: i, cards: [] }))
+                : [{ step: null, stepIdx: -1, cards: _filteredSorted }];
+              if (_bucketSteps) {
+                let _cur = 0;
+                _filteredSorted.forEach((card) => {
+                  const idx = _bucketSteps.findIndex((s) => s.id === card.id);
+                  if (idx !== -1) _cur = idx;
+                  _groups[_cur].cards.push(card);
+                });
+              }
             }
             // Executive Brief shows in MOST RECENT (rendered) AND in RUN BRIEFS (card).
             if (_bucketSteps && activeCapabilityFilter === 'brief' && _groups[1]) {
@@ -9334,7 +9730,9 @@ const DashboardPage = ({ entranceReady = true }) => {
                         {/* Mobile-only section label — desktop uses the cap-step-seg--top column headers */}
                         {g.step && <div className="cap-list-col-label">{g.step.label}</div>}
                         <div className="cap-list-col-body">
-                          {_forceList && g.step?.id === 'past-briefs' ? (() => {
+                          {g.renderMode === 'grid' ? (
+                            <div className="cap-step-grid">{g.cards.map(_renderCard)}</div>
+                          ) : _forceList && g.step?.id === 'past-briefs' ? (() => {
                             if (pastBriefView) {
                               return (
                                 <div className="cap-brief-full">
@@ -9359,20 +9757,44 @@ const DashboardPage = ({ entranceReady = true }) => {
                               when = _d ? _d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : "";
                               // Brief name mirrors the composition labels in
                               // brief-sections.cjs: scoped runs carry run.scope;
-                              // unscoped scout-brief runs are the full Executive Brief.
+                              // the client's first unscoped scout-brief is the
+                              // Onboarding Brief, every later one is Executive.
                               const briefName =
                                 run.scope === 'marketing-director' ? 'Market Brief'
                                 : run.scope === 'social-media-manager' ? 'Strategy Brief'
+                                : rid === onboardingRunId ? 'Onboarding Brief'
                                 : 'Executive Brief';
                               return (
-                                <button key={rid || i} type="button" className="cap-past-brief-row" onClick={() => openPastBrief(rid)}>
+                                <button
+                                  key={rid || i}
+                                  type="button"
+                                  className="cap-past-brief-row cap-past-brief-row--locked"
+                                  aria-label={`${briefName} — subscribe to view, email, or download`}
+                                  title="Subscribe to unlock brief actions"
+                                  onClick={() => setShowSubscribeModal(true)}
+                                >
                                   <span className="cap-past-brief-title">
                                     {briefName}
                                     {when && <span className="cap-past-brief-title-ts">{when}</span>}
                                   </span>
                                   <span className="cap-past-brief-meta">{run.status || "completed"}</span>
-                                  <span className="cap-list-run cap-past-brief-view-btn" aria-hidden="true" title="View brief">
-                                    <Eye size={13} strokeWidth={1.9} />
+                                  <span className="cap-past-brief-actions" aria-hidden="true">
+                                    <span className="cap-list-run cap-past-brief-action" title="View brief">
+                                      <span className="cap-list-action-label">View</span>
+                                      <Eye size={13} strokeWidth={1.9} />
+                                      <Lock className="cap-past-brief-lock" aria-hidden="true" />
+                                    </span>
+                                    <span className="cap-list-run cap-past-brief-action" title="Email brief">
+                                      <span className="cap-list-action-label">Email</span>
+                                      <Mail size={13} strokeWidth={1.9} />
+                                      <ArrowUpRight className="cap-past-brief-action-sub" size={9} strokeWidth={2.4} aria-hidden="true" />
+                                      <Lock className="cap-past-brief-lock" aria-hidden="true" />
+                                    </span>
+                                    <span className="cap-list-run cap-past-brief-action" title="Download PDF">
+                                      <span className="cap-list-action-label">PDF</span>
+                                      <Download size={13} strokeWidth={1.9} />
+                                      <Lock className="cap-past-brief-lock" aria-hidden="true" />
+                                    </span>
                                   </span>
                                 </button>
                               );
@@ -9386,18 +9808,25 @@ const DashboardPage = ({ entranceReady = true }) => {
                               // fetching — hold a quiet loading shell instead of flashing
                               // the card UI and flipping to the iframe a beat later.
                               const briefExpected = Boolean(bootstrap?.dashboardState?.marketingBrief);
+                              const briefRenderPending = briefExpected && (marketingBriefPreviewLoading || !marketingBriefPreviewSettled);
                               return (
                                 <div key={card.id} className="cap-brief-full" id="daily-brief-featured-shell">
                                   {marketingBriefPreviewHtml ? (
                                     <iframe
                                       key={marketingBrief?.generatedAtIso || 'recent-brief-full'}
                                       className="cap-brief-full-frame"
-                                      title={briefTier === 'free' ? 'Onboarding Brief' : 'Executive Brief'}
+                                      title={(dashboardState?.modules?.['marketing-brief']?.lastRunId || dashboardState?.latestRunId) === onboardingRunId ? 'Onboarding Brief' : 'Executive Brief'}
                                       srcDoc={marketingBriefPreviewHtml}
                                       sandbox="allow-same-origin allow-scripts"
                                     />
+                                  ) : briefRenderPending ? (
+                                    <div className="cap-brief-full-loading" role="status" aria-label="Loading daily brief">
+                                      <div className="brief-loader-spinner" aria-hidden="true" />
+                                    </div>
                                   ) : briefExpected ? (
-                                    null
+                                    <div className="cap-brief-full-empty">
+                                      {marketingBriefPreviewError || 'Brief render unavailable. Run the brief again to refresh the document.'}
+                                    </div>
                                   ) : (
                                     <div className="cap-list-featured">{_renderCard(card)}</div>
                                   )}
@@ -9410,41 +9839,66 @@ const DashboardPage = ({ entranceReady = true }) => {
                             // tile already dimmed, but row controls live out here).
                             const isRowLocked =
                               (!isAdmin && !NON_ADMIN_UNLOCKED_CARD_IDS.has(card.id)) ||
-                              Boolean(card.locked || card.lockBadge);
+                              Boolean(card.locked || card.lockBadge) ||
+                              (activeCapabilityFilter === 'onboarding' && isCardLocked(card.id));
+                            const rowModuleStatus = moduleState?.[card.id]?.status ?? 'inactive';
+                            const isRowInactiveUnlocked = card.leadgenStep
+                              ? (!isRowLocked && !card.readinessBadge)
+                              : (!isRowLocked && Boolean(card.moduleControls)
+                                 && !(rowModuleStatus === 'succeeded' || rowModuleStatus === 'running' || rowModuleStatus === 'queued'));
+                            const rowReadableDescription = isRowLocked
+                              ? (LOCKED_CARD_DESCRIPTIONS[card.id] || card.description || 'This card will unlock after the previous steps are complete.')
+                              : isRowInactiveUnlocked
+                                ? (INACTIVE_CARD_DESCRIPTIONS[card.id] || card.description || 'Run this module to populate this card.')
+                                : (card.dynamicShortDescription || card.scribeShort || card.description || '');
+                            const rowRunLabel = card.leadgenStep
+                              ? (card.readinessBadge?.tone === 'ok' ? 'Re-run' : 'Run')
+                              : rowModuleStatus === 'succeeded'
+                                ? 'Re-run'
+                                : rowModuleStatus === 'failed'
+                                  ? 'Retry'
+                                  : 'Run';
                             const canRun = Boolean(card.moduleControls);
                             return (
                               <div key={card.id} className={`cap-list-row${isExpanded ? ' is-expanded' : ''}${isRowLocked ? ' cap-list-row--locked' : ''}`}>
                                 <div className="cap-list-row-main">
                                   {_renderCard(card)}
                                   {isRowLocked && (
-                                    <button type="button" className="cap-list-lock-btn" aria-label="Locked — subscribe to unlock" onClick={(e) => { e.stopPropagation(); setShowSubscribeModal(true); }}><Lock size={12} strokeWidth={1.8} className="cap-list-lock-icon" aria-hidden="true" /></button>
+                                    <button type="button" className="cap-list-lock-btn" data-tooltip-disabled="true" aria-label="Unlock this card" onClick={(e) => { e.stopPropagation(); setShowSubscribeModal(true); }}>
+                                      <span className="cap-list-action-label">Unlock</span>
+                                      <Lock size={13} strokeWidth={1.8} className="cap-list-lock-icon" aria-hidden="true" />
+                                    </button>
                                   )}
-                                  {canRun && (
+                                  {canRun && !isRowLocked && (
                                     <button
                                       type="button"
                                       className="cap-list-run"
-                                      aria-label="Run module"
-                                      title="Run"
+                                      data-tooltip-disabled="true"
+                                      aria-label={`${rowRunLabel} module`}
+                                      title={rowRunLabel}
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         e.currentTarget.closest('.cap-list-row-main')?.querySelector('.tile-foot-rerun-btn')?.click();
                                       }}
                                     >
+                                      <span className="cap-list-action-label">{rowRunLabel}</span>
                                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                                         <path d="M21 12a9 9 0 1 1-2.64-6.36" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                                         <polyline points="21 3 21 8 16 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
                                       </svg>
                                     </button>
                                   )}
-                                  {activeCapabilityFilter === 'brief' && !['brief-preview', 'submit-custom-brief'].includes(card.id) && (
+                                  {activeCapabilityFilter === 'brief' && !isRowLocked && !['brief-preview', 'submit-custom-brief'].includes(card.id) && (
                                     <button
                                       type="button"
                                       className="cap-list-run"
+                                      data-tooltip-disabled="true"
                                       aria-label={isRowLocked ? 'Locked brief' : 'Run brief'}
                                       title={isRowLocked ? 'Locked — subscribe to unlock' : 'Run brief'}
                                       disabled={isRowLocked || !card.footerAction}
                                       onClick={(e) => { e.stopPropagation(); if (!isRowLocked && card.footerAction?.onClick) card.footerAction.onClick(e); }}
                                     >
+                                      <span className="cap-list-action-label">Run</span>
                                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                                         <path d="M21 12a9 9 0 1 1-2.64-6.36" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                                         <polyline points="21 3 21 8 16 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
@@ -9455,9 +9909,11 @@ const DashboardPage = ({ entranceReady = true }) => {
                                     type="button"
                                     className="cap-list-caret"
                                     aria-expanded={isExpanded}
-                                    aria-label={isExpanded ? 'Hide preview' : 'Show preview'}
+                                    aria-label={isExpanded ? 'Hide card description' : 'Show card description'}
+                                    title={isExpanded ? 'Hide card description' : 'Show card description'}
                                     onClick={(e) => { e.stopPropagation(); toggleListCard(card.id); }}
                                   >
+                                    <span className="cap-list-action-label">Details</span>
                                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }}>
                                       <polyline points="3,5 7,9 11,5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
                                     </svg>
@@ -9469,7 +9925,7 @@ const DashboardPage = ({ entranceReady = true }) => {
                                       <span className="cap-list-status-label">Status</span>
                                       <span className="cap-list-status-value">{card.footerLeft || 'Pending'}</span>
                                     </div>
-                                    <div className="cap-list-desc">{card.description || ''}</div>
+                                    <div className="cap-list-desc">{rowReadableDescription}</div>
                                   </div>
                                 )}
                               </div>
@@ -9689,7 +10145,7 @@ const DashboardPage = ({ entranceReady = true }) => {
 
             {/* Brand row — exact auth brandStyle */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', justifyContent: 'space-between' }}>
-              <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', display: 'block' }} />
+              <img src="/img/circle_logo.png" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', display: 'block' }} />
               <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.44)', fontWeight: 700, fontFamily: '"Space Mono", monospace' }}>
                 {activeModuleCard ? 'Updating Dashboard' : 'Client Access'}
               </span>
@@ -9792,10 +10248,40 @@ const DashboardPage = ({ entranceReady = true }) => {
         </div>
       ) : null}
 
+      {bootstrapError ? (
+        <div id="db-alert-toast" role="alert" aria-live="assertive">
+          <span id="db-alert-toast-dot" />
+          <span>{bootstrapError}</span>
+          <button type="button" id="db-alert-toast-close" aria-label="Dismiss" onClick={() => setBootstrapError('')}>✕</button>
+        </div>
+      ) : null}
+
 
       {/* ── Tile detail modal ── */}
       {/* Payments / subscribe modal — triggered by content lock icons */}
       <SubscribeModal open={showSubscribeModal} onClose={() => setShowSubscribeModal(false)} defaultEmail={user?.email || ''} />
+      <SubscribeModal
+        open={Boolean(runPaywall)}
+        onClose={() => setRunPaywall(null)}
+        defaultEmail={user?.email || ''}
+        mode="run"
+        runBriefName={runPaywall?.briefName || ''}
+        runBriefKey={runPaywall?.briefKey || ''}
+        onRunPaid={() => {
+          if (runPaywall) runBriefProducers(runPaywall.briefKey, runPaywall.briefCardId);
+        }}
+      />
+      {/* Free-tier cooldown modal — opened by the countdown time in the source
+          bar. Frames time-left + reschedule, defaults to the Run-Once tab, and
+          a paid one-off run kicks the executive brief (delivered + on dashboard). */}
+      <SubscribeModal
+        open={showCooldownModal}
+        onClose={() => setShowCooldownModal(false)}
+        defaultEmail={user?.email || ''}
+        mode="run"
+        cooldown={{ remainingSeconds: briefCooldownSeconds, lastBriefMs }}
+        onRunPaid={() => { try { runMarketingBrief(); } catch {} }}
+      />
       {/* Pricing modal */}
       {showTierModal && (
         <div id="tier-modal-overlay" onClick={() => setShowTierModal(false)}>
@@ -10252,6 +10738,10 @@ const DashboardPage = ({ entranceReady = true }) => {
                       srcDoc={marketingBriefPreviewHtml}
                       sandbox="allow-same-origin"
                     />
+                  ) : (activeTileModal.cardId === 'marketing-brief' || activeTileModal.cardId === 'marketing-brief-doc') && (marketingBriefPreviewLoading || !marketingBriefPreviewSettled) ? (
+                    <div className="tile-brief-preview-loading" role="status" aria-label="Loading brief">
+                      <div className="brief-loader-spinner" aria-hidden="true" />
+                    </div>
                   ) : activeTileModal.isCapabilityCard ? (
                     <span className="tile-empty-label">{activeTileModal.placeholderLabel}</span>
                   ) : (
@@ -12366,8 +12856,12 @@ const DashboardPage = ({ entranceReady = true }) => {
                               sandbox="allow-same-origin"
                               style={{ flex: 1, width: '100%', minHeight: '70vh', border: 'none', background: '#fff', borderRadius: '8px' }}
                             />
+                          ) : marketingBriefPreviewLoading || !marketingBriefPreviewSettled ? (
+                            <div className="cap-brief-full-loading" role="status" aria-label="Loading marketing brief">
+                              <div className="brief-loader-spinner" aria-hidden="true" />
+                            </div>
                           ) : (
-                            <div className="mu-empty">Run the Marketing Brief card to generate the designed founder brief.</div>
+                            <div className="mu-empty">{marketingBriefPreviewError || 'Run the Marketing Brief card to generate the designed founder brief.'}</div>
                           )}
                         </div>
                       )}
@@ -12411,8 +12905,12 @@ const DashboardPage = ({ entranceReady = true }) => {
                             sandbox="allow-same-origin"
                             style={{ flex: 1, width: '100%', minHeight: '70vh', border: 'none', background: '#fff', borderRadius: '8px' }}
                           />
+                        ) : marketingBriefPreviewLoading || !marketingBriefPreviewSettled ? (
+                          <div className="cap-brief-full-loading" role="status" aria-label="Loading brief document">
+                            <div className="brief-loader-spinner" aria-hidden="true" />
+                          </div>
                         ) : (
-                          <div className="mu-empty">Run the Marketing Brief agent to generate the document.</div>
+                          <div className="mu-empty">{marketingBriefPreviewError || 'Run the Marketing Brief agent to generate the document.'}</div>
                         )}
                       </div>
                     </div>
@@ -12739,8 +13237,33 @@ const DashboardPage = ({ entranceReady = true }) => {
 	                  );
 	                })()}
 
+	                {activeTileModal.descriptionOnly ? (
+                  <div
+                    id={`${activeTileModal.sourceCardId || activeTileModal.cardId}-description-only`}
+                    className="tile-detail-bento-cell tile-detail-description-only"
+                  >
+                    <div className="tile-detail-row-section-head">WHAT THIS CARD DOES</div>
+                    <p className="tile-detail-description-only-copy">
+                      {activeTileModal.description}
+                    </p>
+                    {activeTileModal.rows?.length ? (
+                      <div id="tile-detail-bento-rows">
+                        {activeTileModal.rows.slice(0, 4).map((row) => (
+                          row.isHeader ? <div key={row.key} className="tile-detail-row-section-head">{row.label}</div>
+                          : (
+                            <div key={row.key} className={`tile-detail-stat-row${row.isFailing ? ' tile-detail-stat-row--flag' : ''}`}>
+                              <span className="tile-detail-stat-label">{row.label}</span>
+                              <span className="tile-detail-stat-value">{row.value}</span>
+                            </div>
+                          )
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
 	                {/* Shared REPORT / SOLUTIONS / PROBLEMS / DATA tabs for standard cards */}
-	                {!CUSTOM_DETAIL_CARD_IDS.has(activeTileModal.cardId) ? (
+	                {!activeTileModal.descriptionOnly && !CUSTOM_DETAIL_CARD_IDS.has(activeTileModal.cardId) ? (
                   <div
                     id={`${activeTileModal.cardId}-analyzer-findings`}
                     className="tile-detail-bento-cell tile-detail-tabbed-container"
@@ -14622,10 +15145,6 @@ const dashboardCss = `
     color: var(--text-display);
     line-height: 1.15;
   }
-  .capability-nav-btn:hover .capability-nav-btn-label,
-  .capability-nav-btn--active .capability-nav-btn-label {
-    font-weight: 600;
-  }
   .capability-nav-btn-label-short { display: none; }
   .capability-nav-btn-sub {
     font-family: var(--font-mono);
@@ -14745,11 +15264,10 @@ const dashboardCss = `
     border-radius: 0;
     background: transparent;
     color: var(--text-secondary);
-    /* Dot-matrix display font (matches hero marquee) — needs heavy weight
-       to stay legible at tab size */
-    font-family: var(--font-display);
-    font-size: clamp(0.8rem, 1.1vw, 0.875rem);
-    font-weight: 700;
+    /* Match the capability nav label font for legibility + prominence */
+    font-family: var(--font-ui);
+    font-size: clamp(0.875rem, 1.15vw, 0.95rem);
+    font-weight: 600;
     line-height: 1.15;
     letter-spacing: -0.01em;
     text-transform: none;
@@ -14791,7 +15309,7 @@ const dashboardCss = `
   }
   .cap-step-seg > button:hover {
     color: var(--text-display);
-    font-weight: 900;
+    font-weight: 700;
   }
   .cap-step-seg > button:hover::after {
     transform: scaleX(1);
@@ -14803,7 +15321,7 @@ const dashboardCss = `
   }
   .cap-step-seg > button.is-active {
     color: var(--text-display);
-    font-weight: 900;
+    font-weight: 700;
     background: transparent;
     box-shadow: none;
     border-bottom: 2px solid transparent;
@@ -14959,6 +15477,28 @@ const dashboardCss = `
     display: block;
     overflow: auto;
   }
+  .cap-brief-full-loading,
+  .cap-brief-full-empty {
+    width: 100%;
+    min-height: 480px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    box-sizing: border-box;
+  }
+  .cap-brief-full-empty {
+    padding: 24px;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
   /* PAST BRIEFS — chronological run rows. */
   .cap-past-brief-row {
     display: flex;
@@ -14979,11 +15519,40 @@ const dashboardCss = `
   .cap-past-brief-title { font-size: 0.875rem; font-weight: 500; flex-shrink: 0; display: inline-flex; align-items: baseline; gap: 8px; }
   .cap-past-brief-title-ts { font-size: 0.68rem; font-weight: 400; color: var(--text-secondary); font-family: var(--font-mono); letter-spacing: 0.01em; }
   .cap-past-brief-meta { font-size: 0.78rem; color: var(--text-secondary); flex: 1; min-width: 0; }
-  /* View affordance — span styled via .cap-list-run (row itself is the button). */
-  .cap-past-brief-row:hover .cap-past-brief-view-btn {
+  /* Action chips (View / Email / PDF). Row itself is the button — chips are
+     decorative affordances styled via .cap-list-run. All locked for now. */
+  .cap-past-brief-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .cap-past-brief-action {
+    position: relative;
+    opacity: 0.55;
+    transition: opacity 0.15s ease;
+  }
+  .cap-past-brief-row:hover .cap-past-brief-action {
+    opacity: 0.85;
+  }
+  /* Email's up-and-out arrow — sits tight beside the mail glyph. */
+  .cap-past-brief-action .cap-past-brief-action-sub {
+    width: 8px;
+    height: 8px;
+    margin-left: -3px;
+    opacity: 0.7;
+  }
+  /* Lock pip — small corner badge marking each action as gated. */
+  .cap-past-brief-action .cap-past-brief-lock {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: 12px;
+    height: 12px;
+    padding: 2px;
+    border-radius: 50%;
     background: var(--text-display);
     color: #ffffff;
-    border-color: var(--text-display);
   }
   .cap-list-featured > .tile-intake-card,
   .cap-list-featured > .tile {
@@ -15103,35 +15672,62 @@ const dashboardCss = `
   .cap-list-row-main > .tile-intake-card:hover .tile-header-label::after {
     color: var(--text-display);
   }
-  /* Run + caret toggle — matching circular buttons on the right */
+  /* Row actions — match the standard outlined button style. */
   .cap-list-run:disabled { opacity: 0.32; cursor: not-allowed; }
   .cap-list-run,
-  .cap-list-caret {
+  .cap-list-caret,
+  .cap-list-lock-btn {
     flex-shrink: 0;
-    width: 28px;
-    height: 28px;
-    border-radius: 8px;
-    border: 1px solid rgba(42,36,32,0.12);
-    background: rgba(255,255,255,0.6);
-    color: var(--text-secondary);
+    min-width: 72px;
+    min-height: 28px;
+    border-radius: 4px;
+    border: 1px solid rgba(42, 36, 32, 0.38);
+    background: transparent;
+    color: #2a2420;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 0;
+    gap: 5px;
+    padding: 0 11px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    line-height: 1;
+    text-transform: uppercase;
+    white-space: nowrap;
     transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
   }
+  .cap-list-caret {
+    min-width: 86px;
+  }
+  .cap-list-action-label {
+    display: inline-block;
+  }
+  /* Icons sit at text scale — match the card pill's lightweight glyphs. */
+  .cap-list-run svg,
+  .cap-list-caret svg,
+  .cap-list-lock-btn svg,
+  .cap-list-lock-icon {
+    width: 11px;
+    height: 11px;
+  }
   .cap-list-run:hover,
-  .cap-list-caret:hover {
+  .cap-list-caret:hover,
+  .cap-list-lock-btn:hover {
     background: var(--text-display);
     color: #ffffff;
     border-color: var(--text-display);
   }
-  /* Locked list row — dim interactive controls, show lock icon at full opacity */
-  .cap-list-row--locked .cap-list-run,
-  .cap-list-row--locked .cap-list-caret {
+  /* Locked list row — run stays unavailable, but description dropdown remains accessible. */
+  .cap-list-row--locked .cap-list-run {
     opacity: 0.28;
     pointer-events: none;
+  }
+  .cap-list-row--locked .cap-list-caret {
+    opacity: 1;
+    pointer-events: auto;
   }
   .cap-list-row--locked .tile-header-label::after {
     opacity: 0.28;
@@ -15139,23 +15735,7 @@ const dashboardCss = `
   .cap-list-lock-icon {
     flex-shrink: 0;
     align-self: center;
-    color: var(--text-secondary);
-    margin-left: 1px;
   }
-  /* Lock icon button — opens the payments modal; no button chrome. */
-  .cap-list-lock-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    align-self: center;
-    background: none;
-    border: 0;
-    padding: 2px;
-    margin: 0;
-    cursor: pointer;
-  }
-  .cap-list-lock-btn:hover .cap-list-lock-icon { color: var(--text-display); }
   /* Preview reveal — compact vertical block under the row */
   .cap-list-row-preview {
     padding: 4px 16px 14px;
@@ -16144,6 +16724,86 @@ const dashboardCss = `
   .tile-download-btn:hover {
     background: #000;
     color: #fff;
+  }
+  /* ── Company Brain quick-attach (paperclip + drag-drop) ─────────────────── */
+  .tile-intake-card--brain { position: relative; }
+  .tile-brain-clip-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    margin-left: 6px;
+    padding: 0;
+    border: 1px solid rgba(42, 36, 32, 0.18);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.6);
+    color: rgba(42, 36, 32, 0.55);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  }
+  .tile-brain-clip-btn:hover {
+    color: var(--text-primary);
+    border-color: rgba(42, 36, 32, 0.4);
+    background: #fff;
+  }
+  .tile-brain-clip-btn:disabled { opacity: 0.5; cursor: default; }
+  .tile-intake-card--dropping {
+    outline: 2px dashed rgba(59, 130, 246, 0.65);
+    outline-offset: -6px;
+  }
+  .tile-brain-dropzone {
+    position: absolute;
+    inset: 0;
+    z-index: 6;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px;
+    text-align: center;
+    border-radius: inherit;
+    background: rgba(248, 247, 244, 0.94);
+    backdrop-filter: blur(2px);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.45;
+    letter-spacing: 0.03em;
+    color: var(--text-primary);
+    pointer-events: none;
+  }
+  .tile-brain-dropzone--ok { color: #15803d; }
+  .tile-brain-dropzone--err { color: #b91c1c; }
+  .tile-brain-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    width: 100%;
+    height: 100%;
+  }
+  .tile-brain-attach-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 12px;
+    border: 1px dashed rgba(42, 36, 32, 0.35);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.55);
+    color: rgba(42, 36, 32, 0.7);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  }
+  .tile-brain-attach-hint:hover {
+    color: var(--text-primary);
+    border-color: rgba(42, 36, 32, 0.55);
+    background: #fff;
   }
   .tile:has(.tile-download-btn:hover) .tile-open-modal-btn {
     background: none;
@@ -18683,6 +19343,24 @@ const dashboardCss = `
     flex: 1;
     min-height: 0;
   }
+  .tile-detail-description-only {
+    padding: 20px;
+    overflow-y: auto;
+  }
+  .tile-detail-description-only .tile-detail-row-section-head {
+    min-width: 0;
+  }
+  .tile-detail-description-only-copy {
+    margin: 10px 0 14px;
+    color: var(--text-primary);
+    font-family: var(--font-ui);
+    font-size: 0.96rem;
+    line-height: 1.65;
+  }
+  .tile-detail-description-only #tile-detail-bento-rows {
+    padding: 0;
+    overflow: visible;
+  }
   .tile-detail-stat-row--flag .tile-detail-stat-label {
     border-left: 2px solid #d05;
     padding-left: 6px;
@@ -19797,23 +20475,23 @@ const dashboardCss = `
   }
   .dq-gauge-score {
     font-family: 'Doto', var(--font-mono) !important;
-    font-size: clamp(36px, 19cqi, 86px) !important;
+    font-size: clamp(28px, 10cqi, 48px) !important;
     font-weight: 900 !important;
     letter-spacing: -0.03em !important;
   }
   .dq-gauge-viz #ar-dim-row {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     justify-content: center;
-    gap: clamp(2px, 0.8cqi, 5px);
+    gap: clamp(1px, 0.6cqi, 4px);
   }
   .dq-gauge-viz .ar-dim-cell {
-    flex: 0 1 calc(14.28% - 3px);
-    min-width: clamp(28px, 10cqi, 48px);
-    padding: clamp(3px, 1cqi, 6px) clamp(2px, 0.6cqi, 5px);
+    flex: 1 1 0;
+    min-width: 0;
+    padding: clamp(2px, 0.8cqi, 6px) clamp(1px, 0.4cqi, 4px);
   }
   .dq-gauge-viz .ar-dim-cell .seo-ring-svg {
-    width: clamp(24px, 11cqi, 40px);
-    height: clamp(24px, 11cqi, 40px);
+    width: clamp(20px, 9cqi, 40px);
+    height: clamp(20px, 9cqi, 40px);
   }
   .dq-gauge-viz .ar-ring-val {
     font-family: var(--font-mono) !important;
@@ -20063,6 +20741,34 @@ const dashboardCss = `
       margin: 12px 16px 4px;
       padding: 8px 0 8px;
       border-bottom: 1px solid var(--border);
+    }
+  }
+  @media (max-width: 380px) {
+    .cap-list-row-main {
+      gap: 6px;
+      padding-right: 8px;
+    }
+    .cap-list-row-main > .tile-intake-card {
+      padding-left: 12px;
+    }
+    .cap-list-run,
+    .cap-list-caret,
+    .cap-list-lock-btn {
+      width: 28px;
+      min-width: 28px;
+      min-height: 28px;
+      padding: 0;
+      gap: 0;
+    }
+    .cap-list-action-label {
+      display: none;
+    }
+    /* Email's up-and-out arrow drops on mobile — icon-only chips stay clean. */
+    .cap-past-brief-action .cap-past-brief-action-sub {
+      display: none;
+    }
+    .cap-past-brief-actions {
+      gap: 5px;
     }
   }
   /* Chevron hidden above mobile breakpoint */
@@ -20439,6 +21145,116 @@ const dashboardCss = `
   @keyframes bg-run-toast-in {
     from { opacity: 0; transform: translateY(-8px); }
     to   { opacity: 1; transform: translateY(0); }
+  }
+  #db-alert-toast {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 9999;
+    max-width: 24rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    padding: 0.75rem 1rem;
+    border-radius: 10px;
+    background: rgba(255, 250, 248, 0.92);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(215, 25, 33, 0.32);
+    box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.12);
+    font-family: "Space Mono", monospace;
+    font-size: 0.72rem;
+    line-height: 1.4;
+    letter-spacing: 0.02em;
+    color: rgba(150, 22, 28, 0.92);
+    animation: bg-run-toast-in 0.28s cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+  #db-alert-toast-dot {
+    flex-shrink: 0;
+    margin-top: 0.35rem;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 999px;
+    background: #d71921;
+  }
+  #db-alert-toast-close {
+    flex-shrink: 0;
+    margin-left: 0.25rem;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.7rem;
+    color: rgba(150, 22, 28, 0.6);
+    line-height: 1.4;
+  }
+  #db-alert-toast-close:hover { color: rgba(150, 22, 28, 0.95); }
+
+  #glass-tooltip {
+    position: fixed;
+    z-index: 10050;
+    max-width: min(20rem, calc(100vw - 2rem));
+    padding: 0.62rem 0.78rem;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.84);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.52);
+    box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.12);
+    color: rgba(42, 36, 32, 0.76);
+    font-family: "Space Mono", monospace;
+    font-size: 0.68rem;
+    line-height: 1.38;
+    letter-spacing: 0.02em;
+    text-align: center;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transform: translate(-50%, -4px);
+    transition: opacity 0.14s ease, transform 0.14s ease, visibility 0.14s ease;
+  }
+  #glass-tooltip[data-visible="true"] {
+    opacity: 1;
+    visibility: visible;
+  }
+  #glass-tooltip[data-placement="top"] {
+    transform: translate(-50%, -100%);
+  }
+  #glass-tooltip[data-placement="bottom"] {
+    transform: translate(-50%, 0);
+  }
+  #glass-tooltip::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    width: 8px;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.84);
+    border: 1px solid rgba(255, 255, 255, 0.52);
+    transform: translateX(-50%) rotate(45deg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+  #glass-tooltip[data-placement="top"]::after {
+    bottom: -5px;
+    border-left: 0;
+    border-top: 0;
+  }
+  #glass-tooltip[data-placement="bottom"]::after {
+    top: -5px;
+    border-right: 0;
+    border-bottom: 0;
+  }
+  @media (max-width: 640px), (pointer: coarse) {
+    #glass-tooltip {
+      display: none;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #glass-tooltip {
+      transition: none;
+    }
   }
 
   /* Retry row — failed-state only */
@@ -22331,15 +23147,18 @@ const dashboardCss = `
 
   /* List-view run + caret buttons — add spring lift */
   .cap-list-run,
-  .cap-list-caret {
+  .cap-list-caret,
+  .cap-list-lock-btn {
     transition: background var(--dur-base) ease, color var(--dur-base) ease, border-color var(--dur-base) ease, transform var(--dur-spring) var(--ease-spring);
   }
   .cap-list-run:hover:not(:disabled),
-  .cap-list-caret:hover {
+  .cap-list-caret:hover,
+  .cap-list-lock-btn:hover {
     transform: translateY(-1px);
   }
   .cap-list-run:active:not(:disabled),
-  .cap-list-caret:active {
+  .cap-list-caret:active,
+  .cap-list-lock-btn:active {
     transform: translateY(0);
     transition-duration: 80ms;
   }

@@ -22,6 +22,7 @@ const MAX_TOKENS = 1024;
 const MAX_TOKENS_EXEC = 2048; // JARVIS-mode exec brief runs 200-400 words
 const MAX_EVIDENCE_CHARS = 6000;
 const MAX_SCOUT_NARRATIVE_CHARS = 4000; // full narrative fed to the exec brief
+const MAX_DELTA_CHARS = 2500; // day-over-day "what changed" fed to the exec brief
 
 const { callAnthropic, extractAnthropicUsage } = require('./_anthropic-client');
 const { getComposition, resolveBriefType } = require('./brief-sections.cjs');
@@ -273,10 +274,14 @@ function toneFor(briefType) {
 function buildExecSystemPrompt() {
   return `You are an executive assistant to a founder. You have full context across market signals, product state, brand, technical systems, and visibility.
 
-Your job is not to summarize data. Your job is to interpret what matters and hand it over as a short stack of line items the founder can scan in ten seconds.
+Your job is not to summarize data. It is to tell the founder WHAT IS NEW TODAY and what to do about it — a short stack of line items they can scan in ten seconds.
+
+THIS IS A DAILY BRIEF — TODAY'S NEWS, NOT A PROFILE
+The founder already knows what their company is. NEVER explain their business, positioning, mission, target audience, or value proposition back to them. That is not news — it is wallpaper they wrote themselves.
+Surface only what MOVED since yesterday: a new market development they can join the conversation on, a competitor's move, a fresh trend or story breaking now, a sales or performance change, a number that went up or down, a window that just opened. If nothing external moved, lead with a real performance or pipeline change instead. Every line must be something the founder did NOT already know this morning.
 
 OUTPUT GOAL
-A vertical stack of 5-8 standalone lines. Each line is ONE complete thought — a fact, a read, or the move. The founder scans down the stack and knows exactly what's happening and what to do.
+A vertical stack of 5-8 standalone lines. Each line is ONE complete thought — a new development, a read on it, or the move.
 
 TONE
 Calm, direct, and aware. JARVIS energy: an assistant who already processed everything and is reading you the result. No hype, no filler, no marketing language. No greeting — no "good morning", no "here's what matters". The first line IS the news.
@@ -291,9 +296,20 @@ LINE RULES
 - Conclusions, not observations: "Your site is invisible outside LinkedIn", not "visibility appears limited".
 - Blunt about what's broken. The founder pays for candor.
 
+WHAT TO SURFACE (in priority order)
+1. A conversation breaking right now that you have a real place in — name it, say why you fit.
+2. A competitor or peer move worth reacting to.
+3. A sales, traffic, ranking, or performance change — a number that shifted.
+4. A timely opportunity or window that opened today.
+
+WHAT TO NEVER SURFACE
+- Who the company is, what it sells, who it serves, why it's different. Forbidden.
+- Generic industry stats with no action ("84% of developers use AI") unless there is a specific move tied to it today.
+- Anything that was equally true last week. If it's not NEW, cut it.
+
 STRUCTURE (MANDATORY — never label the parts)
-1. Line 1: the single most important thing that changed. The headline of the day.
-2. Lines 2-4: what it means for you, who's moving, what's broken. One per line. Order by weight.
+1. Line 1: the single most important NEW thing today. The headline.
+2. Lines 2-4: what it means for you, who's moving, what changed in your numbers. One per line, ordered by weight.
 3. Second-to-last line: "The move: ..." — ONE directive, executable today, one sentence.
 4. Last line: exactly "Everything else can wait."
 
@@ -301,13 +317,13 @@ ONE ACTION ONLY
 Exactly one "The move:" line. If multiple actions compete, pick the highest leverage and discard the rest.
 
 COMPRESSION
-Target 50-110 words total. Scan every domain in the data, then surface only the lines that change a decision today. Fewer lines beats more lines.
+Target 50-110 words total. Scan every domain in the data, then surface only the lines that are NEW and change a decision today. Fewer lines beats more lines.
 
 HARD RULES
 Each line on its own line, separated by a single newline. No bullets, no dashes, no numbering, no headers, no markdown. No two lines making the same point.
 
 FAILURE MODES (AVOID)
-Paragraphs. Greetings. Listing signals without a read. Lines that lean on each other. Multiple actions. Report voice.
+Explaining the company back to the founder. Repeating yesterday's framing. Generic stats with no move attached. Paragraphs. Greetings. Multiple actions. Report voice.
 
 QUALITY BAR
 Read the stack aloud — it should sound like an assistant talking, each line landing on its own. If any line needs the line above it to make sense, it fails.`;
@@ -387,6 +403,13 @@ async function summarizeBriefCover(briefType, data = {}, { clientName = '', webs
   const scoutNarrative = isExec
     ? clip(data.marketingBrief?.scoutBrief?.humanBrief, MAX_SCOUT_NARRATIVE_CHARS)
     : '';
+  // Day-over-day delta — Scout's own [NEW]/[ESCALATED]/[IMPORTANT] tagging of
+  // what is fresher than the previous brief. This is the spine of the exec
+  // brief's "what's new today" requirement; feed it first, ahead of the
+  // full narrative and the section evidence.
+  const deltaText = isExec
+    ? clip(data.marketingBrief?.scoutBrief?.delta, MAX_DELTA_CHARS)
+    : '';
   const request = isExec
     ? {
         model: EXEC_MODEL,
@@ -399,7 +422,10 @@ async function summarizeBriefCover(briefType, data = {}, { clientName = '', webs
             role: 'user',
             content: [
               `Today's data${clientName ? ` for ${clientName}` : ''}${websiteUrl ? ` (${websiteUrl})` : ''}. You are speaking TO this founder — address them only as "you", never by name. Sections listed under NO DATA produced nothing this run — treat them as missing inputs, never invent findings for them.`,
-              ...(scoutNarrative ? ['', '## FULL SCOUT NARRATIVE', scoutNarrative] : []),
+              ...(deltaText
+                ? ['', '## WHAT CHANGED SINCE THE LAST BRIEF (build the brief from this — these are the NEW items, tagged by Scout)', deltaText]
+                : []),
+              ...(scoutNarrative ? ['', '## FULL SCOUT NARRATIVE (background context — do NOT restate established facts from here)', scoutNarrative] : []),
               '',
               evidenceText,
             ].join('\n'),

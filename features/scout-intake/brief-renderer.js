@@ -173,8 +173,11 @@ const CSS = `
   .rule{height:1px;background:rgba(0,0,0,.1);margin:28px 0}
 
   .cover .title-stack{display:flex;align-items:baseline;gap:20px;flex-wrap:wrap}
+  .cover .cover-stamp{margin-top:16px;line-height:1.35}
+  .cover .cover-stamp-date{font-family:"Space Mono",monospace;font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink)}
+  .cover .cover-stamp-time{font-family:"Space Mono",monospace;font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft)}
   .cover .meta{
-    display:grid; grid-template-columns:repeat(4,minmax(0,1fr));
+    display:grid; grid-template-columns:repeat(3,minmax(0,1fr));
     gap:24px 40px; margin-top:40px;
     border-top:1px solid rgba(0,0,0,.15); padding-top:24px;
   }
@@ -321,22 +324,31 @@ function renderHeadline(text) {
   return lines.map(esc).join('<br/>');
 }
 
-function sectionCover({ brief, websiteUrl, when, tier, clientId, userEmail }) {
+function sectionCover({ brief, websiteUrl, generatedAt, tier, clientId, userEmail }) {
   const brand = brief?.headline
     ? String(brief.headline).split(/[—:·]/)[0].trim()
     : hostnameOf(websiteUrl).split('.')[0];
   const sub = brief?.summary || '';
   const tierLabel = tier === 'paid' ? 'Recurring · Paid' : 'One-time · Free';
-  const dateLine = when.replace(/-/g, ' · ');
+  const stamp = new Date(generatedAt || Date.now());
+  const dateLine = stamp.toISOString().slice(0, 10).replace(/-/g, ' · ');
+  let hours = stamp.getUTCHours();
+  const minutes = String(stamp.getUTCMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12 || 12;
+  const timeLine = `${hours}:${minutes} ${ampm} UTC`;
   return `
     <section class="page cover">
       <div class="sec-num">00</div>
       <div class="title-stack">
         <h1 class="headline">${renderHeadline(brand || 'Intake Brief')}</h1>
       </div>
+      <div class="cover-stamp">
+        <div class="cover-stamp-date">${esc(dateLine)}</div>
+        <div class="cover-stamp-time">${esc(timeLine)}</div>
+      </div>
       ${sub ? `<p class="sub">${esc(sub)}</p>` : ''}
       <div class="meta">
-        <div><div class="k">Date</div><div class="v">${esc(dateLine)}</div></div>
         <div><div class="k">Site</div><div class="v">${esc(hostnameOf(websiteUrl) || '—')}</div></div>
         <div><div class="k">Tier</div><div class="v">${esc(tierLabel)}</div></div>
         <div><div class="k">Account</div><div class="v mono" style="font-size:13px">${esc(userEmail || '—')}</div></div>
@@ -789,14 +801,13 @@ function renderBriefHtml(input = {}) {
 
   if (!brief) throw new Error('renderBriefHtml: brief is required');
 
-  const when = new Date(generatedAt || Date.now()).toISOString().slice(0, 10);
   const ctx = {
     brief, scribeCards, snapshot, signals, strategy, outputsPreview, siteMeta,
     styleGuide, pagespeed, psiSummary, userContext, runMeta,
   };
 
   const sections = [
-    sectionCover({ brief, websiteUrl, when, tier, clientId, userEmail }),
+    sectionCover({ brief, websiteUrl, generatedAt, tier, clientId, userEmail }),
     sectionBrief({ ctx }),
     sectionIntakeTerminal({ ctx }),
     sectionBrandTone({ ctx }),

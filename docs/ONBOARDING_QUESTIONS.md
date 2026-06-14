@@ -7,8 +7,10 @@ Edit this file when you want to change a question, option label, order, or wheth
 ## Rules
 
 - Every step is individually skippable. There is also a global skip-all.
-- Steps may be single-select, multi-select, text, or a generated summary card.
-- `influencesAnalysis: true` marks steps whose answers feed the answer-dependent pipeline stages (synthesize). Changing this flag changes what the analysis waits on — confirm before flipping.
+- Steps may be single-select, multi-select, text, a generated summary card, or a **search seed** (`tags`, `pairs`, `composite`).
+- `influencesAnalysis: true` marks steps whose answers feed the positioning LLM (qa-synthesizer → brandOverview). Changing this flag changes what the analysis waits on — confirm before flipping.
+- `isSeed: true` marks **search seeds** — verbatim entities collected raw by `features/scout-intake/seed-extractor.js` into `snapshot.searchSeeds` (no LLM rewrite). Seeds carry `seedKey` (the field name in `searchSeeds`) and are `influencesAnalysis: false` on purpose — they are query inputs, not positioning signal. Seeds can be answered/edited at any time.
+- Seed selectTypes: `tags` = string list (add `itemFormat: 'handle'` to coerce/require @handles); `pairs` = list of `{name, handle}` (add `requireHandle: true`); `composite` = object of `subfields` (each `{key, label, type}`, where `type: 'zip'` enforces a 5-digit/ZIP+4 format).
 - The `id` field is stable. Renaming an `id` is a breaking change (stored answers key off it).
 - `value` strings on option items are stable for the same reason.
 - Copy (`eyebrow`, `title`, `helper`, option `label`) is free to edit.
@@ -111,7 +113,79 @@ Edit this file when you want to change a question, option label, order, or wheth
   - `better_performance` — Something that performs better
   - `fully_managed` — Something fully managed for me
 
-### 8. Timeline
+### 8. Market category — *seed*
+
+- `id`: `marketCategory`
+- `eyebrow`: `MARKET`
+- `title`: `What category are you in? One line.`
+- `selectType`: `text`
+- `maxLength`: `120`
+- `isSeed`: `true` → `searchSeeds.marketCategory`
+- `influencesAnalysis`: `false`
+
+### 9. Brand keywords — *seed*
+
+- `id`: `brandKeywords`
+- `eyebrow`: `KEYWORDS`
+- `title`: `Words people Google to find you.`
+- `selectType`: `tags`
+- `maxItems`: `15`
+- `isSeed`: `true` → `searchSeeds.brandKeywords` (string[])
+- `influencesAnalysis`: `false`
+
+### 10. Location — *seed*
+
+- `id`: `location`
+- `eyebrow`: `LOCATION`
+- `title`: `Primary area you serve.`
+- `selectType`: `composite`
+- `subfields`: `zip` (type `zip`), `city` (type `text`)
+- `isSeed`: `true` → `searchSeeds.location` ({ zip, city })
+- `influencesAnalysis`: `false`
+
+### 11. Competitors — *seed*
+
+- `id`: `competitors`
+- `eyebrow`: `COMPETITORS`
+- `title`: `Who do you compete with?`
+- `selectType`: `pairs` (`{name, handle}`)
+- `maxItems`: `8`
+- `requireHandle`: `true`
+- `isSeed`: `true` → `searchSeeds.competitors`
+- `influencesAnalysis`: `false`
+
+### 12. Influencers — *seed*
+
+- `id`: `influencers`
+- `eyebrow`: `VOICES`
+- `title`: `Accounts that shape your space.`
+- `selectType`: `tags`
+- `itemFormat`: `handle`
+- `maxItems`: `15`
+- `isSeed`: `true` → `searchSeeds.influencers` (@handles)
+- `influencesAnalysis`: `false`
+
+### 13. Events — *seed*
+
+- `id`: `events`
+- `eyebrow`: `EVENTS`
+- `title`: `Events or expos your customers attend.`
+- `selectType`: `tags`
+- `maxItems`: `12`
+- `isSeed`: `true` → `searchSeeds.events`
+- `influencesAnalysis`: `false`
+
+### 14. Customer phrases — *seed*
+
+- `id`: `customerPhrases`
+- `eyebrow`: `CUSTOMER WORDS`
+- `title`: `How customers describe the problem, in their words.`
+- `selectType`: `tags`
+- `maxItems`: `12`
+- `isSeed`: `true` → `searchSeeds.customerPhrases`
+- `influencesAnalysis`: `false`
+
+### 15. Timeline
 
 - `id`: `timeline`
 - `eyebrow`: `TIMELINE`
@@ -124,7 +198,7 @@ Edit this file when you want to change a question, option label, order, or wheth
   - `exploring` — Just exploring
   - `not_sure` — Not sure yet
 
-### 9. Budget
+### 16. Budget
 
 - `id`: `budget`
 - `eyebrow`: `BUDGET`
@@ -138,7 +212,7 @@ Edit this file when you want to change a question, option label, order, or wheth
   - `15k_plus` — $15k+
   - `not_sure` — Not sure yet
 
-### 10. Handoff summary
+### 17. Handoff summary
 
 - `id`: `summary`
 - `kind`: `summary`

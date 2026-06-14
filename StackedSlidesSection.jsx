@@ -191,13 +191,29 @@ const PORTFOLIO_IMAGES = [
 ];
 
 const CMO_TABLE_ROWS = [
-  { task: 'Onboarding Brief',       value: 'Evaluate your site and idea' },
-  { task: 'Daily Executive Brief',  value: 'Constant signal tracking across your Directors' },
-  { task: 'Marketing Director',     value: 'Clarity across digital + 30 days of dynamic content', sub: true },
-  { task: 'Creative Director',      value: 'Own your look across web and socials', sub: true },
-  { task: 'Social Media Director',  value: 'Dynamic direction on content and growth', sub: true },
-  { task: 'Website Director',       value: 'Track activity drivers and monitor website health', sub: true },
+  { task: 'Onboarding Brief',       value: 'A focused review of your site, offer, or idea with clear opportunities to improve positioning, presentation, and next steps.' },
+  { task: 'Daily Executive Brief',  value: 'A daily snapshot of what matters across your brand, website and socials.' },
+  { task: 'Market Director',        value: 'Track signals, competitors, narrative shifts, and how to act on them.', sub: true },
+  { task: 'Creative Director',      value: 'Maintain a consistent look and feel across site, socials, and content.', sub: true },
+  { task: 'Social Media Director',  value: 'Plan, generate, and guide posts with timing, direction, and campaigns.', sub: true },
+  { task: 'Website Director',       value: "Visually confirm your website's health across multiple devices, elevate AI readiness and SEO.", sub: true },
 ];
+
+const isSubFirst = (arr, i) => arr[i].sub && (i === 0 || !arr[i - 1].sub);
+const isSubLast = (arr, i) => arr[i].sub && (i === arr.length - 1 || !arr[i + 1].sub);
+
+// Connector for Director sub rows — lives in the icon column so the trunk sits
+// directly under the Daily Executive Brief lock and flows up into it, with
+// rounded branch elbows reaching toward each Director label (aggregation read).
+const BriefConnector = ({ first, last }) => (
+  <span className={`cmo-conn${first ? ' cmo-conn--first' : ''}${last ? ' cmo-conn--last' : ''}`} aria-hidden="true">
+    {first ? (
+      <svg className="cmo-conn-arrow" width="11" height="7" viewBox="0 0 11 7" fill="none">
+        <path d="M1 6 L5.5 1 L10 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ) : null}
+  </span>
+);
 
 const AUTOMATION_CAPABILITIES = [
   {
@@ -1386,23 +1402,54 @@ const StackedSlidesSection = () => {
         }
         .cmo-table-inner { display: none; }
         .cmo-table-outer { display: block; }
+        /* Director sub-row connector — lives in the icon column so the trunk
+           sits under the Daily Executive Brief lock and flows up into it, with
+           rounded branch elbows reaching toward each Director label. */
+        .cmo-conn {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          color: rgba(42, 36, 32, 0.38);
+        }
+        /* Trunk — solid, overlaps row borders top + bottom so it reads as one
+           unbroken line through every sub row. */
+        .cmo-conn::before {
+          content: '';
+          position: absolute;
+          left: calc(50% - 0.75px);
+          top: -1px;
+          bottom: -1px;
+          width: 1.5px;
+          background: #a39e93;
+        }
+        .cmo-conn--first::before { top: -0.62rem; }      /* climb up into the lock */
+        .cmo-conn--last::before { bottom: calc(50% + 11px); }  /* stop at the top of the last curve — smooth bend, no tail */
+        /* Branch elbow — clean quarter-round off the trunk reaching the label. */
+        .cmo-conn::after {
+          content: '';
+          position: absolute;
+          left: calc(50% - 0.75px);
+          top: calc(50% - 12px);
+          width: calc(50% + 0.55rem);
+          height: 12px;
+          border-left: 1.5px solid #a39e93;
+          border-bottom: 1.5px solid #a39e93;
+          border-bottom-left-radius: 12px;
+        }
+        .cmo-conn-arrow {
+          position: absolute;
+          left: 50%;
+          transform: translateX(-50%);
+          top: -0.95rem;
+          color: #a39e93;
+        }
         .cmo-arrow {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          width: 1.5rem;
-          height: 1.5rem;
-          border-radius: 999px;
-          background: rgba(42, 36, 32, 0.06);
-          color: rgba(42, 36, 32, 0.45);
+          color: rgba(42, 36, 32, 0.75);
           font-size: 0.7rem;
           cursor: default;
-          transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
-        }
-        .cmo-arrow:hover {
-          background: rgba(42, 36, 32, 0.14);
-          color: rgba(42, 36, 32, 0.75);
-          transform: scale(1.12);
         }
         .cmo-url-input-desktop { display: none !important; }
         .cmo-url-input-mobile { display: flex; }
@@ -1719,14 +1766,14 @@ const StackedSlidesSection = () => {
                                       <div style={{ width: '100%', height: '100%', background: '#f5f1df', borderRadius: '0.75rem', padding: '1rem', boxSizing: 'border-box', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
                                         <p style={{ margin: '0 0 0.6rem', fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.4)', fontFamily: "'Space Mono', monospace" }}>Your Business, Mapped</p>
                                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem', fontFamily: "'Space Grotesk', system-ui, sans-serif", flex: 1 }}>
-                                          <thead><tr style={{ borderBottom: '1px solid rgba(42,36,32,0.15)' }}><th style={{ textAlign: 'left', padding: '0.28rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.45)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Access</th><th style={{ width: '1.2rem' }} /></tr></thead>
-                                          <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: row.sub ? '0.38rem 0.4rem 0.38rem 1.4rem' : '0.38rem 0.4rem', color: '#2a2420', fontWeight: 500 }}>{row.sub ? `\u2022 ${row.task}` : row.task}</td><td style={{ padding: '0.38rem 0.2rem', textAlign: 'center' }}>{row.task === 'Onboarding Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? null : <span className="cmo-arrow" role="button" tabIndex={0} aria-label="Unlock with subscription" style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setSubscribeOpen(true); }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setSubscribeOpen(true); } }}><Lock size={12} /></span>}</td></tr>))}</tbody>
+                                          <thead><tr style={{ borderBottom: '1px solid rgba(42,36,32,0.15)' }}><th style={{ width: '1.2rem' }} /><th style={{ textAlign: 'left', padding: '0.28rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.45)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Access</th></tr></thead>
+                                          <tbody>{CMO_TABLE_ROWS.map((row, ri, arr) => (<tr key={row.task} style={{ borderBottom: (row.task === 'Daily Executive Brief' || (row.sub && !isSubLast(arr, ri))) ? 'none' : '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.38rem 0.2rem', textAlign: 'center', position: 'relative' }}>{row.task === 'Onboarding Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? <BriefConnector first={isSubFirst(arr, ri)} last={isSubLast(arr, ri)} /> : <span className="cmo-arrow" aria-hidden="true"><Lock size={12} /></span>}</td><td style={{ padding: row.sub ? '0.38rem 0.4rem 0.38rem 0.9rem' : '0.38rem 0.4rem', color: row.sub ? 'rgba(42,36,32,0.55)' : '#2a2420', fontWeight: row.sub ? 400 : 500 }}>{row.task}</td></tr>))}</tbody>
                                         </table>
                                       </div>
                                     </div>
                                   ) : null}
                                   <div style={capabilityContentStyle}>
-                                    <h2 style={{ ...capabilityCardTitleStyle, fontSize: 'clamp(2rem, 5vw, 12.4rem)', lineHeight: 0.9, marginBottom: '0.5rem', paddingTop: '20px', textAlign: 'center' }}>Lets Get Started.</h2>
+                                    <h2 style={{ ...capabilityCardTitleStyle, fontSize: 'clamp(1.6rem, 3.5vw, 5rem)', lineHeight: 0.9, marginBottom: '0.5rem', paddingTop: '20px', textAlign: 'center' }}>Lets Get Started.</h2>
                                     {item.body && <p style={{ ...capabilityCardBodyStyle, maxWidth: 'none', textAlign: 'center' }}>{item.body}</p>}
                                     <div id="cmo-url-input-row" className="cmo-url-input-desktop" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.85rem', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                                       <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
@@ -1735,13 +1782,13 @@ const StackedSlidesSection = () => {
                                     </div>
                                     <div className="cmo-table-inner" style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
                                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
-                                        <colgroup><col /><col /><col style={{ width: '1.5rem' }} /></colgroup>
-                                        <thead><tr><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Access</th><th style={{ textAlign: 'right', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>What you get</th><th aria-hidden="true" /></tr></thead>
-                                        <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: row.sub ? '0.32rem 0.4rem 0.32rem 1.4rem' : '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.sub ? `\u2022 ${row.task}` : row.task}</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400, whiteSpace: 'nowrap' }}>{row.value}</td><td style={{ padding: '0.32rem 0.2rem', textAlign: 'center', verticalAlign: 'middle' }}>{row.task === 'Onboarding Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? null : <span className="cmo-arrow" role="button" tabIndex={0} aria-label="Unlock with subscription" style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setSubscribeOpen(true); }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setSubscribeOpen(true); } }}><Lock size={12} /></span>}</td></tr>))}</tbody>
+                                        <colgroup><col style={{ width: '2rem' }} /><col style={{ width: '26%' }} /><col /></colgroup>
+                                        <thead><tr><th aria-hidden="true" /><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Access</th><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>What you get</th></tr></thead>
+                                        <tbody>{CMO_TABLE_ROWS.map((row, ri, arr) => (<tr key={row.task} style={{ borderBottom: (row.task === 'Daily Executive Brief' || (row.sub && !isSubLast(arr, ri))) ? 'none' : '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.7rem 0.2rem', textAlign: 'center', verticalAlign: 'middle', position: 'relative' }}>{row.task === 'Onboarding Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? <BriefConnector first={isSubFirst(arr, ri)} last={isSubLast(arr, ri)} /> : <span className="cmo-arrow" aria-hidden="true"><Lock size={12} /></span>}</td><td style={{ padding: row.sub ? '0.7rem 0.4rem 0.7rem 1.1rem' : '0.7rem 0.4rem', color: row.sub ? 'rgba(42,36,32,0.55)' : 'rgba(42,36,32,0.75)', fontWeight: row.sub ? 400 : 500 }}>{row.task}</td><td style={{ padding: '0.7rem 0.4rem 0.7rem 0.6rem', textAlign: 'left', color: row.sub ? 'rgba(42,36,32,0.48)' : 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
                                       </table>
-                                    <blockquote id="cmo-quote-desktop" style={{ margin: 'clamp(1rem, 2vw, 1.5rem) 0 0', padding: 'clamp(0.75rem, 1.5vw, 1rem) clamp(1rem, 2vw, 1.5rem)', borderLeft: '3px solid rgba(42,36,32,0.15)', fontSize: 'clamp(1rem, 1.5vw, 1.35rem)', lineHeight: 1.55, color: 'rgba(42,36,32,0.72)', fontStyle: 'italic', fontFamily: "'Space Grotesk', system-ui, sans-serif", boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
+                                    <blockquote id="cmo-quote-desktop" style={{ margin: 'clamp(1rem, 2vw, 1.5rem) 0 0', padding: 'clamp(0.75rem, 1.5vw, 1rem) 0', fontSize: 'clamp(1rem, 1.5vw, 1.35rem)', lineHeight: 1.55, color: 'rgba(42,36,32,0.72)', fontStyle: 'italic', fontFamily: "'Space Grotesk', system-ui, sans-serif", boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
                                       <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: '3.25rem', height: '3.25rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', flexShrink: 0, display: 'block' }} />
-                                      <span>&ldquo;We curate and personalize agentic systems so you don&rsquo;t have to manage the thinking. Stepping in as the human in the loop when needed.&rdquo;</span>
+                                      <span>&ldquo;Our job is to curate the strongest AI solutions so you don&rsquo;t have to.&rdquo;</span>
                                     </blockquote>
                                     <cite className="cmo-quote-attribution" style={{ display: 'block', textAlign: 'right', marginTop: '0.5rem', fontStyle: 'normal', fontFamily: "'Space Mono', monospace", fontSize: '0.66rem', letterSpacing: '0.08em', color: 'rgba(42,36,32,0.45)' }}>HITLOOP.AGENCY</cite>
                                     </div>
@@ -1753,12 +1800,13 @@ const StackedSlidesSection = () => {
                                       <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="cmo-table-submit-label">Get Your Dashboard</span><span className="cmo-table-submit-arrow" style={ctaIconStyle}>↗</span></button>
                                     </div>
                                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
-                                      <thead><tr><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Access</th><th style={{ textAlign: 'right', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>What you get</th><th style={{ width: '1.5rem' }} /></tr></thead>
-                                      <tbody>{CMO_TABLE_ROWS.map((row) => (<tr key={row.task} style={{ borderBottom: '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: row.sub ? '0.32rem 0.4rem 0.32rem 1.4rem' : '0.32rem 0.4rem', color: 'rgba(42,36,32,0.75)', fontWeight: 500 }}>{row.sub ? `\u2022 ${row.task}` : row.task}</td><td style={{ padding: '0.32rem 0.4rem', textAlign: 'right', color: 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td><td style={{ padding: '0.32rem 0.2rem', textAlign: 'center' }}>{row.task === 'Onboarding Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? null : <span className="cmo-arrow" role="button" tabIndex={0} aria-label="Unlock with subscription" style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setSubscribeOpen(true); }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setSubscribeOpen(true); } }}><Lock size={12} /></span>}</td></tr>))}</tbody>
+                                    <colgroup><col style={{ width: '2rem' }} /><col style={{ width: '26%' }} /><col /></colgroup>
+                                      <thead><tr><th style={{ width: '1.5rem' }} /><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Access</th><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>What you get</th></tr></thead>
+                                      <tbody>{CMO_TABLE_ROWS.map((row, ri, arr) => (<tr key={row.task} style={{ borderBottom: (row.task === 'Daily Executive Brief' || (row.sub && !isSubLast(arr, ri))) ? 'none' : '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.7rem 0.2rem', textAlign: 'center', position: 'relative' }}>{row.task === 'Onboarding Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? <BriefConnector first={isSubFirst(arr, ri)} last={isSubLast(arr, ri)} /> : <span className="cmo-arrow" aria-hidden="true"><Lock size={12} /></span>}</td><td style={{ padding: row.sub ? '0.7rem 0.4rem 0.7rem 1.1rem' : '0.7rem 0.4rem', color: row.sub ? 'rgba(42,36,32,0.55)' : 'rgba(42,36,32,0.75)', fontWeight: row.sub ? 400 : 500 }}>{row.task}</td><td style={{ padding: '0.7rem 0.4rem 0.7rem 0.6rem', textAlign: 'left', color: row.sub ? 'rgba(42,36,32,0.48)' : 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
                                     </table>
-                                    <blockquote id="cmo-quote-mobile" style={{ margin: 'clamp(1rem, 2vw, 1.5rem) 0 0', padding: 'clamp(0.75rem, 1.5vw, 1rem) clamp(1rem, 2vw, 1.5rem)', borderLeft: '3px solid rgba(42,36,32,0.15)', fontSize: 'clamp(1rem, 1.5vw, 1.35rem)', lineHeight: 1.55, color: 'rgba(42,36,32,0.72)', fontStyle: 'italic', fontFamily: "'Space Grotesk', system-ui, sans-serif", boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
+                                    <blockquote id="cmo-quote-mobile" style={{ margin: 'clamp(1rem, 2vw, 1.5rem) 0 0', padding: 'clamp(0.75rem, 1.5vw, 1rem) 0', fontSize: 'clamp(1rem, 1.5vw, 1.35rem)', lineHeight: 1.55, color: 'rgba(42,36,32,0.72)', fontStyle: 'italic', fontFamily: "'Space Grotesk', system-ui, sans-serif", boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
                                       <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: '3.25rem', height: '3.25rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', flexShrink: 0, display: 'block' }} />
-                                      <span>&ldquo;We curate and personalize agentic systems so you don&rsquo;t have to manage the thinking. Stepping in as the human in the loop when needed.&rdquo;</span>
+                                      <span>&ldquo;Our job is to curate the strongest AI solutions so you don&rsquo;t have to.&rdquo;</span>
                                     </blockquote>
                                     <cite className="cmo-quote-attribution" style={{ display: 'block', textAlign: 'right', marginTop: '0.5rem', fontStyle: 'normal', fontFamily: "'Space Mono', monospace", fontSize: '0.66rem', letterSpacing: '0.08em', color: 'rgba(42,36,32,0.45)' }}>HITLOOP.AGENCY</cite>
                                     <a id="cmo-no-website-hint" href="/login?flow=homepage-create" style={cmoNoWebsiteLinkStyle}>Don't Have a Website?</a>
@@ -2118,8 +2166,8 @@ const StackedSlidesSection = () => {
             </form>
 
             <div id="cmo-modal-footer-row">
-              <span id="cmo-url-warning">* Your website can&rsquo;t be changed later</span>
-              <a id="cmo-signin-link" href="/login">Already have an account? SIGN IN</a>
+              <span id="cmo-url-warning">* Can&rsquo;t change later</span>
+              <a id="cmo-signin-link" href="/login">SIGN IN</a>
             </div>
           </div>
         </div>

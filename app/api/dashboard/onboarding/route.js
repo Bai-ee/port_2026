@@ -7,6 +7,7 @@ const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../../api/_lib/client-provisioning.cjs');
 const { getStep, validateAnswer } = require('../../../../onboarding/questions.config.cjs');
 const { applyQAToSnapshot } = require('../../../../features/scout-intake/qa-synthesizer');
+const { applySeedsToSnapshot } = require('../../../../features/scout-intake/seed-extractor');
 
 function makeReqShim(request) {
   return {
@@ -116,8 +117,10 @@ export async function POST(request) {
       { merge: true }
     );
 
-    // Fire-and-forget: synthesize Q&A answers into brandOverview gap-fill
+    // Fire-and-forget: synthesize Q&A answers into brandOverview gap-fill,
+    // and collect verbatim search seeds into snapshot.searchSeeds.
     applyQAToSnapshot(clientId).catch(() => {});
+    applySeedsToSnapshot(clientId).catch(() => {});
 
     return NextResponse.json({ ok: true, clientId, stepId });
   }
@@ -177,8 +180,9 @@ export async function POST(request) {
       { merge: true }
     );
 
-    // Fire-and-forget: full Q&A now complete — run gap-fill synthesis
+    // Fire-and-forget: full Q&A now complete — run gap-fill synthesis + seeds
     applyQAToSnapshot(clientId).catch(() => {});
+    applySeedsToSnapshot(clientId).catch(() => {});
 
     return NextResponse.json({ ok: true, clientId, completed: true });
   }

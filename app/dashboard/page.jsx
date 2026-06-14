@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import gsap from 'gsap';
@@ -16,8 +16,12 @@ export default function DashboardRoute() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const [showLoadingCard, setShowLoadingCard] = useState(true);
+  const [dashboardContentReady, setDashboardContentReady] = useState(false);
   const [bgReady, setBgReady] = useState(false);
   const loadingOverlayRef = useRef(null);
+  const handleDashboardContentReady = useCallback(() => {
+    setDashboardContentReady(true);
+  }, []);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -29,9 +33,10 @@ export default function DashboardRoute() {
   //   1. auth has resolved         (loading === false)
   //   2. the user is present       (!!user)
   //   3. the three.js canvas has rendered its first frame (bgReady)
+  //   4. dashboard bootstrap + initial brief render have settled
   // The three.js background stays mounted in the parent tree, so no canvas swap.
   useEffect(() => {
-    if (loading || !user || !bgReady) return;
+    if (loading || !user || !bgReady || !dashboardContentReady) return;
     if (!loadingOverlayRef.current) return;
     const tween = gsap.to(loadingOverlayRef.current, {
       autoAlpha: 0,
@@ -40,7 +45,12 @@ export default function DashboardRoute() {
       onComplete: () => setShowLoadingCard(false),
     });
     return () => tween.kill();
-  }, [loading, user, bgReady]);
+  }, [loading, user, bgReady, dashboardContentReady]);
+
+  useEffect(() => {
+    setDashboardContentReady(false);
+    setShowLoadingCard(true);
+  }, [user?.uid]);
 
   const dashboardReady = !loading && !!user;
 
@@ -56,12 +66,15 @@ export default function DashboardRoute() {
         }}>
           {/* entranceReady: dashboard entrance timeline starts only after the
               loading overlay's GSAP fade has fully completed */}
-          <DashboardPage entranceReady={!showLoadingCard} />
+          <DashboardPage
+            entranceReady={!showLoadingCard}
+            onInitialContentReady={handleDashboardContentReady}
+          />
         </div>
       ) : null}
 
       <DashboardLoadingOverlay
-        dashboardReady={dashboardReady}
+        dashboardReady={dashboardReady && dashboardContentReady}
         loadingOverlayRef={loadingOverlayRef}
         showLoadingCard={showLoadingCard}
       />

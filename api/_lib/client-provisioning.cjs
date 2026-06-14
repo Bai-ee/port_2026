@@ -293,6 +293,7 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
     normalizedHost: normalized?.hostname || '',
     status: 'provisioning',
     onboardingStatus: normalized ? 'brief_queued' : 'intake_received',
+    entryMode: normalized ? 'website' : 'no_website',
     pipelineType: 'free-tier-intake',
     activeModules: [],
     activeAddOns: [],
@@ -325,6 +326,10 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
 
   const clientConfigPayload = {
     clientId,
+    // entryMode drives conversation branching at runtime (see
+    // features/scout-intake/conversation-router.js). Mirrors clients.entryMode;
+    // kept on the config doc so the pipeline receives it without a second read.
+    entryMode: normalized ? 'website' : 'no_website',
     sourceInputs: {
       websiteUrl: normalized?.websiteUrl || '',
       ideaDescription: trimmedIdeaDescription,
@@ -626,14 +631,28 @@ async function getDashboardBootstrap(input) {
     };
   }
 
-  const [clientSnapshot, runsSnapshot, dashboardStateSnapshot, clientConfigSnapshot] = await Promise.all([
+  const [clientSnapshot, runsSnapshot, dashboardStateSnapshot, clientConfigSnapshot, earliestRunsSnapshot] = await Promise.all([
     fb.adminDb.collection('clients').doc(clientId).get(),
     fb.adminDb.collection('clients').doc(clientId).collection('brief_runs').orderBy('createdAt', 'desc').limit(8).get(),
     fb.adminDb.collection('dashboard_state').doc(clientId).get(),
     fb.adminDb.collection('client_configs').doc(clientId).get(),
+    // Earliest runs (asc) — used to identify the client's FIRST brief, which is
+    // labeled the Onboarding Brief everywhere; later briefs are Executive.
+    // Scanned in JS (single-field createdAt index) to avoid a composite index.
+    fb.adminDb.collection('clients').doc(clientId).collection('brief_runs').orderBy('createdAt', 'asc').limit(50).get(),
   ]);
 
   const clientData = clientSnapshot.exists ? clientSnapshot.data() : null;
+
+  // The Onboarding Brief is the client's chronologically-first *surfaced* brief
+  // — the earliest scout-brief run (the type the brief view + past-briefs list
+  // render). Every scout-brief after it is an Executive Brief. Derived at read
+  // time so existing clients and new signups label consistently, no migration.
+  // (free-tier-intake is signup processing, not a viewable brief, so excluded.)
+  const onboardingRunId = (() => {
+    const first = earliestRunsSnapshot.docs.find((d) => d.data()?.pipelineType === 'scout-brief');
+    return first ? first.id : null;
+  })();
 
   // Read intelligence namespace — non-fatal if absent or fails
   let intelligence = null;
@@ -704,6 +723,7 @@ async function getDashboardBootstrap(input) {
     client:         clientData,
     dashboardState,
     recentRuns:     runsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+    onboardingRunId,
     intelligence,
     moduleConfig,
     moduleState,
@@ -946,6 +966,7 @@ async function reseedIntakeForClient({ clientId, uid, websiteUrl }) {
         websiteUrl: normalized.websiteUrl,
         normalizedOrigin: normalized.origin,
         normalizedHost: normalized.hostname,
+        entryMode: 'website',
         latestRunId: runId,
         latestRunStatus: 'queued',
         status: 'provisioning',
@@ -963,6 +984,7 @@ async function reseedIntakeForClient({ clientId, uid, websiteUrl }) {
     // user can refine answers for this build. Prior answers stay as seed.
     fb.adminDb.collection('client_configs').doc(clientId).set(
       {
+        entryMode: 'website',
         sourceInputs: { websiteUrl: normalized.websiteUrl },
         onboardingAnswers: {
           completedAt: null,

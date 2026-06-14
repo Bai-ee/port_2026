@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
+import { useAuth } from '../../AuthContext';
 
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '';
 const stripePromise = publishableKey ? loadStripe(publishableKey) : null;
@@ -23,7 +24,7 @@ const stripeAppearance = {
   },
 };
 
-const PaymentStep = ({ onSuccess }) => {
+const PaymentStep = ({ onSuccess, ctaLabel = 'Subscribe · $5/mo', returnUrl }) => {
   const stripe = useStripe();
   const elements = useElements();
   const [submitting, setSubmitting] = useState(false);
@@ -39,7 +40,7 @@ const PaymentStep = ({ onSuccess }) => {
 
     const result = await stripe.confirmPayment({
       elements,
-      confirmParams: { return_url: `${window.location.origin}/?subscribed=1` },
+      confirmParams: { return_url: returnUrl || `${window.location.origin}/?subscribed=1` },
       redirect: 'if_required',
     });
 
@@ -58,7 +59,7 @@ const PaymentStep = ({ onSuccess }) => {
       {error ? <p style={errorTextStyle}>{error}</p> : null}
       <div id="subscribe-payment-cta-row" style={ctaRowStyle}>
         <button type="submit" className="cta-pill-btn" style={primaryButtonStyle} disabled={submitting}>
-          {submitting ? 'Processing…' : 'Subscribe · $5/mo'}
+          {submitting ? 'Processing…' : ctaLabel}
         </button>
         <button id="subscribe-meet-human-btn" type="button" style={meetHumanButtonStyle}>
           Meet with Human
@@ -140,7 +141,51 @@ const SUBSCRIPTION_TIERS = [
 
 const DEFAULT_TIER_INDEX = 0; // Weekly — $5/month
 
-const SubscribeModal = ({ open, onClose, defaultEmail = '' }) => {
+// One-time on-demand run price (display only — the server is the source of
+// truth for the actual charge in /api/payments/create-payment-intent).
+// Reasoning: the top tier is $99/mo for up to 3 briefs/day (~90/mo → ~$1.10
+// per brief at max usage). $5 sits ~4.5× above that floor so a single run
+// never undercuts subscribing, while staying impulse-friendly.
+const RUN_PRICE_LABEL = '$5';
+
+// Free tier = one brief every 30 days. The cooldown context reuses this to
+// frame the countdown and clamp the reschedule picker.
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+const pad2 = (n) => String(n).padStart(2, '0');
+
+// Local datetime → the value/min format a <input type="datetime-local"> wants.
+const toLocalInputValue = (ms) => {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+};
+
+// Human countdown for the cooldown panel: '29d 14h', '6h 12m', 'Available now'.
+const formatRemainingLong = (seconds) => {
+  const s = Math.max(0, Math.floor(seconds || 0));
+  if (s <= 0) return 'Available now';
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m`;
+  return `${s}s`;
+};
+
+const SubscribeModal = ({
+  open,
+  onClose,
+  defaultEmail = '',
+  mode = 'subscribe',
+  runBriefName = '',
+  runBriefKey = '',
+  onRunPaid,
+  // When set ({ remainingSeconds, lastBriefMs }) the modal opens in the
+  // free-tier cooldown context: countdown + reschedule picker above the
+  // Subscribe / Run-Once tabs. Opens on the Run-Once tab by default.
+  cooldown = null,
+}) => {
   const [step, setStep] = useState('email');
   const [email, setEmail] = useState(defaultEmail);
   const [clientSecret, setClientSecret] = useState('');
@@ -148,7 +193,36 @@ const SubscribeModal = ({ open, onClose, defaultEmail = '' }) => {
   const [error, setError] = useState('');
   const [cryptoNotice, setCryptoNotice] = useState('');
   const [tierIndex, setTierIndex] = useState(DEFAULT_TIER_INDEX);
+  const [activeTab, setActiveTab] = useState(mode === 'run' || cooldown ? 'run' : 'subscribe');
+  const [scheduleAt, setScheduleAt] = useState('');
   const carouselRef = useRef(null);
+  // Latest cooldown read without retriggering the open-reset effect every tick
+  // (the parent re-renders this object each second as the countdown ticks).
+  const cooldownRef = useRef(cooldown);
+  cooldownRef.current = cooldown;
+  const { user } = useAuth();
+  const isSignedIn = Boolean(user);
+  const isRunTab = activeTab === 'run';
+  const isCooldown = Boolean(cooldown);
+
+  // Unlock moment = 30 days after the last brief (or now + remaining as a
+  // fallback). Anchors both the picker's min and its default value.
+  const remainingSeconds = cooldown?.remainingSeconds || 0;
+  const unlockMs = isCooldown
+    ? (cooldown.lastBriefMs ? cooldown.lastBriefMs + THIRTY_DAYS_MS : Date.now() + remainingSeconds * 1000)
+    : 0;
+  const unlockInputValue = unlockMs ? toLocalInputValue(unlockMs) : '';
+
+  // Free briefs stay 30 days apart — the picker can delay the next run, never
+  // pull it earlier than the unlock moment.
+  const handleScheduleChange = (event) => {
+    const next = event.target.value;
+    if (unlockInputValue && next && next < unlockInputValue) {
+      setScheduleAt(unlockInputValue);
+      return;
+    }
+    setScheduleAt(next);
+  };
 
   useEffect(() => {
     if (!open) {
@@ -171,12 +245,20 @@ const SubscribeModal = ({ open, onClose, defaultEmail = '' }) => {
       setLoading(false);
       setCryptoNotice('');
       setTierIndex(DEFAULT_TIER_INDEX);
-    } else if (defaultEmail) {
-      setEmail(defaultEmail);
+    } else {
+      const cd = cooldownRef.current;
+      setActiveTab(mode === 'run' || cd ? 'run' : 'subscribe');
+      if (defaultEmail) setEmail(defaultEmail);
+      if (cd) {
+        const unlock = cd.lastBriefMs
+          ? cd.lastBriefMs + THIRTY_DAYS_MS
+          : Date.now() + (cd.remainingSeconds || 0) * 1000;
+        setScheduleAt(toLocalInputValue(unlock));
+      }
     }
-  }, [open, defaultEmail]);
+  }, [open, defaultEmail, mode]);
 
-  // Land on the default tier (Weekly, $5/month) when the modal opens.
+  // Land on the default tier (Weekly) when the modal opens.
   useEffect(() => {
     if (!open) return;
     const el = carouselRef.current;
@@ -233,8 +315,35 @@ const SubscribeModal = ({ open, onClose, defaultEmail = '' }) => {
     }
   };
 
+  // One-time on-demand brief run — single PaymentIntent, no subscription.
+  const startOneTimeRun = async (event) => {
+    event.preventDefault();
+    if (loading) {
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/payments/create-payment-intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, briefKey: runBriefKey, briefName: runBriefName }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.clientSecret) {
+        throw new Error(data.error || 'Could not start the run.');
+      }
+      setClientSecret(data.clientSecret);
+      setStep('payment');
+    } catch (err) {
+      setError(err.message || 'Something went wrong. Try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div id="subscribe-modal-overlay" style={overlayStyle} onClick={onClose}>
+    <div id="subscribe-modal-overlay" data-tooltip-disabled="true" style={overlayStyle} onClick={onClose}>
       <div
         id="subscribe-modal-shell"
         role="dialog"
@@ -267,11 +376,62 @@ const SubscribeModal = ({ open, onClose, defaultEmail = '' }) => {
                 aria-hidden={k === 'b' ? 'true' : undefined}
                 style={marqueeTitleStyle}
               >
-                {'MONTHLY SUBSCRIPTION · '}
+                {isCooldown ? 'NEXT FREE BRIEF · ' : isRunTab ? 'ONE-TIME BRIEF RUN · ' : 'MONTHLY SUBSCRIPTION · '}
               </span>
             ))}
           </div>
         </div>
+
+        {/* Free-tier cooldown context: time left + a reschedule picker that
+            can delay (never shorten) the next free brief. Display-only for
+            now — persistence lands with the scheduling worker. */}
+        {isCooldown && step === 'email' ? (
+          <div id="subscribe-cooldown-panel" style={cooldownPanelStyle}>
+            <span style={cooldownEyebrowStyle}>Free tier · 1 brief / 30 days</span>
+            <div style={cooldownCountRowStyle}>
+              <span style={cooldownCountStyle}>{formatRemainingLong(remainingSeconds)}</span>
+              <span style={cooldownCountSubStyle}>until your next free brief</span>
+            </div>
+            <label style={cooldownFieldLabelStyle} htmlFor="subscribe-cooldown-schedule">
+              Schedule your next free brief
+            </label>
+            <input
+              id="subscribe-cooldown-schedule"
+              type="datetime-local"
+              value={scheduleAt}
+              min={unlockInputValue}
+              onChange={handleScheduleChange}
+              style={cooldownInputStyle}
+            />
+            <p style={cooldownHelpStyle}>
+              Free briefs stay 30 days apart — you can delay your next run, not shorten the wait.
+            </p>
+          </div>
+        ) : null}
+
+        {/* Tab switch — subscribers vs single on-demand run. Layout-neutral row. */}
+        {step === 'email' ? (
+          <div id="subscribe-tab-row" role="tablist" aria-label="Payment type" style={tabRowStyle}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={!isRunTab}
+              className={`subscribe-tab${!isRunTab ? ' subscribe-tab--active' : ''}`}
+              onClick={() => setActiveTab('subscribe')}
+            >
+              Subscribe
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={isRunTab}
+              className={`subscribe-tab${isRunTab ? ' subscribe-tab--active' : ''}`}
+              onClick={() => setActiveTab('run')}
+            >
+              Run Once
+            </button>
+          </div>
+        ) : null}
 
         <div id="subscribe-modal-body" style={bodyStyle}>
           {!stripePromise ? (
@@ -279,7 +439,20 @@ const SubscribeModal = ({ open, onClose, defaultEmail = '' }) => {
               Payments are not configured yet (missing publishable key).
             </p>
           ) : step === 'email' ? (
-            <form onSubmit={startSubscription} style={formStackStyle}>
+            <form onSubmit={isRunTab ? startOneTimeRun : startSubscription} style={formStackStyle}>
+              {isRunTab ? (
+                <div id="subscribe-run-panel" style={runPanelStyle}>
+                  <span style={runPriceStyle}>
+                    {RUN_PRICE_LABEL}
+                    <span style={runPriceUnitStyle}>/run</span>
+                  </span>
+                  <p style={runCopyStyle}>
+                    {runBriefName
+                      ? `Run "${runBriefName}" once — sent to your email. No subscription.`
+                      : 'A single brief, sent to your email. No subscription.'}
+                  </p>
+                </div>
+              ) : (
               <div id="subscribe-tier-carousel-panel" style={productSummaryStyle}>
                 <button
                   type="button"
@@ -339,6 +512,7 @@ const SubscribeModal = ({ open, onClose, defaultEmail = '' }) => {
                   ))}
                 </div>
               </div>
+              )}
               <input
                 type="email"
                 required
@@ -354,9 +528,12 @@ const SubscribeModal = ({ open, onClose, defaultEmail = '' }) => {
                 </button>
                 <div id="subscribe-below-cta-row" style={belowCtaRowStyle}>
                   <StripeBadge />
-                  <a id="subscribe-signin-link" href="/login" style={signInLinkStyle}>
-                    Sign In
-                  </a>
+                  {/* Existing-user sign-in link — hidden once already signed in. */}
+                  {!isSignedIn ? (
+                    <a id="subscribe-signin-link" href="/login" style={signInLinkStyle}>
+                      Sign In
+                    </a>
+                  ) : null}
                 </div>
               </div>
             </form>
@@ -392,13 +569,23 @@ const SubscribeModal = ({ open, onClose, defaultEmail = '' }) => {
             </div>
           ) : step === 'payment' && clientSecret ? (
             <Elements stripe={stripePromise} options={{ clientSecret, appearance: stripeAppearance }}>
-              <PaymentStep onSuccess={() => setStep('success')} />
+              <PaymentStep
+                ctaLabel={isRunTab ? `Pay ${RUN_PRICE_LABEL} · Run Brief` : 'Subscribe · $5/mo'}
+                onSuccess={() => {
+                  if (isRunTab) {
+                    try { onRunPaid?.({ briefKey: runBriefKey, briefName: runBriefName }); } catch {}
+                  }
+                  setStep('success');
+                }}
+              />
             </Elements>
           ) : (
             <div style={formStackStyle}>
-              <h3 style={successTitleStyle}>You&rsquo;re in.</h3>
+              <h3 style={successTitleStyle}>{isRunTab ? 'Run started.' : 'You’re in.'}</h3>
               <p style={summaryStyle}>
-                Subscription active for {email}. A receipt is on its way to your inbox.
+                {isRunTab
+                  ? `Payment received for ${email}. ${runBriefName ? `"${runBriefName}" is` : 'Your brief is'} on the way — a receipt is in your inbox.`
+                  : `Subscription active for ${email}. A receipt is on its way to your inbox.`}
               </p>
               <button type="button" className="cta-pill-btn" style={primaryButtonStyle} onClick={onClose}>
                 Done
@@ -478,6 +665,9 @@ const subscribeModalCss = `
     scrollbar-width: none;
     margin: 0 1.75rem;
   }
+  .subscribe-tier-carousel::-webkit-scrollbar {
+    display: none;
+  }
   .subscribe-tier-nav {
     position: absolute;
     top: 50%;
@@ -508,9 +698,6 @@ const subscribeModalCss = `
   }
   #subscribe-tier-prev { left: 0.6rem; }
   #subscribe-tier-next { right: 0.6rem; }
-  .subscribe-tier-carousel::-webkit-scrollbar {
-    display: none;
-  }
   /* Two rows: price on top, description under it. */
   .subscribe-tier-slide {
     flex: 0 0 100%;
@@ -535,6 +722,25 @@ const subscribeModalCss = `
   }
   .subscribe-tier-dot--active {
     background: #2a2420;
+  }
+  .subscribe-tab {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 0.55rem 0.75rem;
+    border-radius: 999px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(42, 36, 32, 0.5);
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+  .subscribe-tab--active {
+    background: #ffffff;
+    color: #2a2420;
+    box-shadow: 0 1px 3px rgba(42, 36, 32, 0.12);
   }
 `;
 
@@ -678,8 +884,7 @@ const productCopyStyle = {
 };
 
 // Same size as the original single-product $5 — keeps the price-to-copy
-// ratio. Long ranges (e.g. $99–$199) step down one notch so they still fit
-// beside the copy column.
+// ratio. Long ranges (e.g. $99–$199) step down one notch so they still fit.
 const productPriceStyle = {
   fontSize: 'clamp(3.2rem, 12vw, 4.4rem)',
   fontWeight: 900,
@@ -719,6 +924,44 @@ const tierDotsRowStyle = {
   justifyContent: 'center',
   gap: '0.5rem',
   paddingTop: '0.65rem',
+};
+
+// Compact Run-Once panel — price + one-line copy side by side, no scrolling.
+const runPanelStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.9rem',
+  padding: '0.85rem 1rem',
+  borderRadius: '1rem',
+  border: '1px solid rgba(42, 36, 32, 0.12)',
+  background:
+    'radial-gradient(60% 60% at 10% 15%, rgba(102, 184, 164, 0.12), transparent 60%), radial-gradient(50% 50% at 82% 72%, rgba(171, 148, 218, 0.14), transparent 65%), rgba(255,255,255,0.45)',
+  boxShadow: '0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4)',
+};
+
+const runPriceStyle = {
+  flexShrink: 0,
+  fontSize: 'clamp(2rem, 7vw, 2.6rem)',
+  fontWeight: 900,
+  letterSpacing: '-0.02em',
+  lineHeight: 1,
+  color: '#2a2420',
+  fontFamily: "'Doto', 'Space Mono', monospace",
+  whiteSpace: 'nowrap',
+};
+
+const runPriceUnitStyle = {
+  fontSize: '0.85rem',
+  fontWeight: 700,
+  color: 'rgba(42, 36, 32, 0.6)',
+};
+
+const runCopyStyle = {
+  margin: 0,
+  fontSize: '0.82rem',
+  lineHeight: 1.4,
+  color: 'rgba(42, 36, 32, 0.65)',
+  textAlign: 'left',
 };
 
 const ctaRowStyle = {
@@ -767,6 +1010,89 @@ const stripeBadgeStyle = {
   gap: '0.35rem',
   fontSize: '0.75rem',
   color: 'rgba(42, 36, 32, 0.45)',
+};
+
+// Segmented Subscribe / Run-Once switch — sits in the card gutter, matching
+// the header/marquee side padding so it doesn't widen the modal.
+const tabRowStyle = {
+  display: 'flex',
+  gap: '0.35rem',
+  margin: '1rem clamp(1.25rem, 5vw, 2rem) 0',
+  padding: '0.3rem',
+  borderRadius: '999px',
+  background: 'rgba(42, 36, 32, 0.06)',
+};
+
+// Cooldown panel — same pastel-radial surface as the tier summary card, sat
+// in the card gutter so it lines up with the marquee and tab row.
+const cooldownPanelStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.55rem',
+  margin: '1rem clamp(1.25rem, 5vw, 2rem) 0',
+  padding: '1rem 1.1rem 1.1rem',
+  borderRadius: '1rem',
+  border: '1px solid rgba(42, 36, 32, 0.12)',
+  background:
+    'radial-gradient(60% 60% at 10% 15%, rgba(102, 184, 164, 0.12), transparent 60%), radial-gradient(50% 50% at 82% 72%, rgba(171, 148, 218, 0.14), transparent 65%), rgba(255,255,255,0.45)',
+  boxShadow: '0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4)',
+};
+
+const cooldownEyebrowStyle = {
+  fontSize: '0.72rem',
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  color: 'rgba(42, 36, 32, 0.55)',
+  fontFamily: '"Space Mono", monospace',
+};
+
+const cooldownCountRowStyle = {
+  display: 'flex',
+  alignItems: 'baseline',
+  gap: '0.6rem',
+  flexWrap: 'wrap',
+};
+
+const cooldownCountStyle = {
+  fontFamily: "'Doto', 'Space Mono', monospace",
+  fontWeight: 900,
+  fontSize: 'clamp(2rem, 8vw, 2.8rem)',
+  lineHeight: 1,
+  letterSpacing: '-0.02em',
+  color: '#2a2420',
+};
+
+const cooldownCountSubStyle = {
+  fontSize: '0.8rem',
+  color: 'rgba(42, 36, 32, 0.6)',
+};
+
+const cooldownFieldLabelStyle = {
+  marginTop: '0.2rem',
+  fontSize: '0.72rem',
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  color: 'rgba(42, 36, 32, 0.55)',
+  fontFamily: '"Space Mono", monospace',
+};
+
+const cooldownInputStyle = {
+  width: '100%',
+  boxSizing: 'border-box',
+  borderRadius: '0.75rem',
+  border: '1px solid rgba(42, 36, 32, 0.12)',
+  background: 'rgba(255,255,255,0.6)',
+  color: '#2a2420',
+  padding: '0.7rem 0.85rem',
+  fontSize: '0.9rem',
+  fontFamily: '"Space Mono", monospace',
+};
+
+const cooldownHelpStyle = {
+  margin: 0,
+  fontSize: '0.78rem',
+  lineHeight: 1.5,
+  color: 'rgba(42, 36, 32, 0.6)',
 };
 
 // Stripe badge left / existing-user sign-in right, under the CTA.
