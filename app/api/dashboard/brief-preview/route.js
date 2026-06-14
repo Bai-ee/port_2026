@@ -141,7 +141,7 @@ function hostnameOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return String(url); }
 }
 
-function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [], weather = null, moduleBriefs = [], auditMockupUrl = null, company = null, researchConfig = null, strategyData = null, signalsCore = [], socialQueue = [], briefType = DEFAULT_BRIEF_TYPE, coverSummary = null, previousRunAt = null }) {
+function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [], weather = null, moduleBriefs = [], auditMockupUrl = null, company = null, researchConfig = null, strategyData = null, signalsCore = [], socialQueue = [], briefType = DEFAULT_BRIEF_TYPE, coverSummary = null, previousRunAt = null, agenda = null }) {
   const content = marketingBrief?.content || {};
   const agentData = marketingBrief?.scoutBrief?.agentData || {};
   const opportunities = agentData?.viralOpportunities?.opportunities || marketingBrief?.contentOpportunities || [];
@@ -767,6 +767,61 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     </div>
   </section>`;
 
+  // ── Daily Standup — the bento board that opens the executive/onboarding
+  // brief, after the welcome and before the individual director sections. Sets
+  // the room at a glance: weather, today's calendar, and live events scene-set
+  // the day; then the two competitor posts, two KOL posts, your last post, and
+  // today's suggested post. Calendar + events have no feed wired in yet — they
+  // render a graceful placeholder and light up once `agenda` / events are
+  // plumbed into the data bag. ──
+  const standupAgenda = Array.isArray(agenda?.events) ? agenda.events : []; // calendar — plumbed later
+  const standupEvents = []; // local/global events — plumbed later
+  const compStandup = compactList(competitors, (item) => ({
+    q: clip(item.finding || item.impact || '', 220),
+    who: item.competitor || 'Competitor',
+    url: item.url || '',
+  }), 2).filter((t) => t.q);
+  const kolStandup = compactList(kols, (item) => ({
+    q: clip(item.content || item.summary || '', 220),
+    who: item.name || item.author || 'KOL',
+    url: item.url || '',
+    platform: item.platform || 'X',
+  }), 2).filter((t) => t.q);
+  const myLastPost = recentPosted[0] ? clip(postText(recentPosted[0]), 220) : '';
+  const standupTiles = [
+    weather?.today
+      ? bTile({ span: 's2', label: `Weather · ${weather.today.name || 'Today'}`, big: `${weather.today.temp}°`, unit: String(weather.today.unit || ''), word: clip(weather.today.short, 40), foot: weather.threeDayLine || '' })
+      : bTile({ span: 's2', label: 'Weather', word: 'Not pulled this run', lite: true, foot: 'Local forecast appears here once weather is configured.' }),
+    standupAgenda.length
+      ? bTile({ span: 's2', label: "Today's Calendar", word: `${standupAgenda.length} meeting${standupAgenda.length === 1 ? '' : 's'}`, foot: standupAgenda.slice(0, 3).map((e) => `${e.timeLabel || ''} ${e.summary || ''}`.trim()).filter(Boolean).join(' · ') })
+      : bTile({ span: 's2', label: "Today's Calendar", word: 'Nothing on the calendar', lite: true, foot: 'Calendar sync is coming soon.' }),
+    standupEvents.length
+      ? bTile({ span: 's2', label: 'Happening Now', word: clip(standupEvents[0].title || standupEvents[0].name, 60), foot: firstSentenceOf(standupEvents[0].detail || standupEvents[0].summary || '', 160) })
+      : bTile({ span: 's2', label: 'Happening Now', word: 'No events flagged', lite: true, foot: 'Local and global event signals are coming soon.' }),
+  ];
+  compStandup.forEach((t) => standupTiles.push(bQuote({ span: 's2', src: 'Competitor', q: t.q, who: clip(t.who, 50), url: t.url })));
+  kolStandup.forEach((t) => standupTiles.push(bQuote({ span: 's2', src: t.platform, q: t.q, who: clip(t.who, 50), url: t.url })));
+  standupTiles.push(
+    myLastPost
+      ? bQuote({ span: 's2', src: 'You · Posted', q: myLastPost, who: 'Your last post' })
+      : bTile({ span: 's2', label: 'Your Last Post', word: 'Nothing posted yet', lite: true, foot: 'Publish from the Schedule Posts card to see it here.' })
+  );
+  standupTiles.push(
+    xPost
+      ? bQuote({ span: 's4', ink: true, src: 'Suggested · Today', q: clip(xPost, 280), who: 'Ready when you are' })
+      : bTile({ span: 's4', cls: 'ink', label: 'Suggested Post', word: 'No draft yet', lite: true, foot: "Today's Move generates one once Scout has run." })
+  );
+  const dailyStandupSection = `
+  <section class="page">
+    <div class="sec-num">DS</div>
+    ${kicker('Your Team')}
+    <h2 class="headline">The<br/>Standup.</h2>
+    <p class="sub">Before the directors go deep — here's the room at a glance.</p>
+    <div class="bento">
+      ${standupTiles.join('')}
+    </div>
+  </section>`;
+
   // ── Assembly — section id → rendered HTML, ordered by the named brief's
   // composition (features/scout-intake/brief-sections.cjs). Conditional
   // sections that rendered '' (no data) stay '' — same as before. ──
@@ -793,17 +848,19 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   const bodySections = composition.sections.map((id) => sectionHtmlById[id] || '').join('\n');
 
   // Cover sub: the per-brief AI cover paragraph (briefSummaries) when present,
-  // else the run headline. The executive JARVIS brief is multi-paragraph —
-  // render each paragraph and let .cover-jarvis-sub size it down to body scale.
-  // Strip the salutation ("Good morning/night. Here's what matters.") — the
-  // cover reads conversational, not greeted.
-  const coverParas = String(coverSummary || '')
+  // else the run headline. The executive/onboarding cover is the team-standup
+  // welcome — keep its greeting and render it at body scale via
+  // .cover-jarvis-sub. Other briefs strip stray salutations and show a single
+  // headline-scale line.
+  const isNarrativeCover = ['executive-daily', 'onboarding'].includes(resolveBriefType(briefType));
+  const stripGreeting = (s) => s
     .replace(/^good\s+(morning|afternoon|evening|night)[.!,]*\s*/i, '')
-    .replace(/^here'?s what matters[.!:]*\s*/i, '')
+    .replace(/^here'?s what matters[.!:]*\s*/i, '');
+  const coverParas = String(isNarrativeCover ? (coverSummary || '') : stripGreeting(String(coverSummary || '')))
     .split(/\n+/).map((s) => s.trim()).filter(Boolean)
     .map((p, i) => (i === 0 && p ? p.charAt(0).toUpperCase() + p.slice(1) : p));
-  const coverSubHtml = coverParas.length > 1
-    ? `<div class="sub cover-jarvis-sub" id="brief-cover-exec-summary">${coverParas.map((p) => `<p>${esc(p)}</p>`).join('')}</div>`
+  const coverSubHtml = (isNarrativeCover || coverParas.length > 1)
+    ? `<div class="sub cover-jarvis-sub" id="brief-cover-exec-summary">${(coverParas.length ? coverParas : [headline]).map((p) => `<p>${esc(p)}</p>`).join('')}</div>`
     : `<p class="sub">${esc(coverParas[0] || headline)}</p>`;
 
   // Onboarding brief only: render the multi-device mockup small in the
@@ -949,6 +1006,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     </div>
     <div class="marquee">${Array(8).fill(`<span>${esc(brandUpper)}</span>`).join(' • ')}</div>
   </section>
+${isNarrativeCover ? dailyStandupSection : ''}
 ${bodySections}
   <footer>
     <span>Generated · ${esc(new Date(generated).toISOString().slice(0, 19).replace('T', ' '))}</span>
@@ -1127,6 +1185,9 @@ async function handleGet(request) {
     // run-level headline inside the renderer when absent.
     coverSummary: dash.briefSummaries?.[resolveBriefType(briefType)]?.summary || null,
     previousRunAt,
+    // Calendar feed for the Standup board — null until agenda plumbing lands;
+    // the section renders a graceful placeholder in the meantime.
+    agenda: dash.agenda || null,
   });
 
   if (preferMarketingBrief) {
