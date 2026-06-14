@@ -1079,6 +1079,18 @@ async function handleGet(request) {
   let weather = null;
   try { weather = await getClientWeather(clientId); } catch { /* no weather */ }
 
+  // Today's agenda for the Standup board — the user's own Google Calendar when
+  // they've connected it (api/_lib/google-calendar.cjs). Falls back to any
+  // agenda already on dashboard_state, then to the section's empty state.
+  let agenda = dash.agenda || null;
+  try {
+    const gcal = require('../../../../api/_lib/google-calendar.cjs');
+    if (gcal.isConfigured()) {
+      const live = await gcal.fetchTodayAgenda(decoded.uid);
+      if (live && Array.isArray(live.events)) agenda = live;
+    }
+  } catch { /* keep fallback agenda */ }
+
   // Optional run-level detail (warnings, cost) from the latest brief_run.
   let runCostData = null;
   let runWarnings = 0;
@@ -1185,9 +1197,10 @@ async function handleGet(request) {
     // run-level headline inside the renderer when absent.
     coverSummary: dash.briefSummaries?.[resolveBriefType(briefType)]?.summary || null,
     previousRunAt,
-    // Calendar feed for the Standup board — null until agenda plumbing lands;
-    // the section renders a graceful placeholder in the meantime.
-    agenda: dash.agenda || null,
+    // Calendar feed for the Standup board — the user's connected Google
+    // Calendar (or null), resolved above. The section renders a graceful
+    // placeholder when absent.
+    agenda,
   });
 
   if (preferMarketingBrief) {

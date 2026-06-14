@@ -2635,6 +2635,40 @@ const DashboardPage = ({ entranceReady = true }) => {
     }
   }, [user, client, apiPath]);
   useEffect(() => { loadLocalWeather(); }, [loadLocalWeather]);
+  // Google Calendar connection (Knowledge Officer card) — per-user OAuth so the
+  // Executive Brief's Standup board can open with today's meetings.
+  const [calendarStatus, setCalendarStatus] = useState({ connected: false, configured: true });
+  const [calendarBusy, setCalendarBusy] = useState(false);
+  const loadCalendarStatus = useCallback(async () => {
+    if (!user) return;
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(apiPath('/api/integrations/google/status'), { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+      const data = await res.json().catch(() => ({}));
+      setCalendarStatus(res.ok ? data : { connected: false });
+    } catch { setCalendarStatus({ connected: false }); }
+  }, [user, apiPath]);
+  useEffect(() => { loadCalendarStatus(); }, [loadCalendarStatus]);
+  const connectGoogleCalendar = useCallback(async () => {
+    if (!user) return;
+    setCalendarBusy(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(apiPath('/api/integrations/google/connect'), { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.url) { window.location.href = data.url; return; }
+    } catch { /* fall through to reset */ }
+    setCalendarBusy(false);
+  }, [user, apiPath]);
+  const disconnectGoogleCalendar = useCallback(async () => {
+    if (!user) return;
+    setCalendarBusy(true);
+    try {
+      const token = await user.getIdToken();
+      await fetch(apiPath('/api/integrations/google/disconnect'), { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+      await loadCalendarStatus();
+    } catch { /* ignore */ } finally { setCalendarBusy(false); }
+  }, [user, apiPath, loadCalendarStatus]);
   // Conversation Intake — paste a team conversation dump; parser tags items the brief reads.
   const [conversationIntakeText, setConversationIntakeText] = useState('');
   const [conversationIntake, setConversationIntake] = useState(null);
@@ -5771,6 +5805,30 @@ const DashboardPage = ({ entranceReady = true }) => {
         : buildWorkNeededRows('No pricing, packaging, or service structure was clear in fetched pages.'),
       footerLeft: hasBusinessModelData ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
+    },
+    {
+      id: 'google-calendar',
+      category: 'knowledge',
+      number: 'CAL',
+      label: 'CALENDAR',
+      title: 'Google Calendar',
+      description: "Connect your Google Calendar so the daily Executive Brief opens with today's meetings in the Standup board.",
+      placeholderLabel: 'CONNECT\nCALENDAR',
+      rows: calendarStatus?.configured === false
+        ? buildWorkNeededRows('Calendar connect is not enabled on this environment yet.')
+        : calendarStatus?.connected
+          ? [
+              { key: 'cal-status', label: 'Status', value: 'Connected' },
+              { key: 'cal-account', label: 'Account', value: calendarStatus.email || 'Google account' },
+            ]
+          : buildWorkNeededRows('Not connected — link your Google Calendar to add meetings to the brief.'),
+      footerLeft: calendarStatus?.connected ? 'Live' : WORK_NEEDED_LABEL,
+      footerRight: calendarStatus?.connected ? 'DISCONNECT' : 'CONNECT',
+      footerAction: calendarStatus?.configured === false ? undefined : {
+        label: calendarBusy ? '…' : calendarStatus?.connected ? 'Disconnect' : 'Connect',
+        loading: calendarBusy,
+        onClick: calendarStatus?.connected ? disconnectGoogleCalendar : connectGoogleCalendar,
+      },
     },
     {
       id: 'industry',

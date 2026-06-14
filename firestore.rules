@@ -73,5 +73,12 @@ service cloud.firestore {
       allow read:  if request.auth != null;
       allow write: if false;
     }
+
+    // Per-user third-party integration secrets (Google Calendar refresh tokens,
+    // etc.). Server-owned via the admin SDK only — never client-readable. The
+    // explicit deny documents intent; default-deny would cover it regardless.
+    match /user_integrations/{userId} {
+      allow read, write: if false;
+    }
   }
 }
