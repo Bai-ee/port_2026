@@ -52,25 +52,26 @@ service cloud.firestore {
 
     // Lead Gen pipeline — two doc populations live here:
     //   1. Operator-owned prospect docs (any placeId not starting with "client:")
-    //      — readable by any authed user (operator dashboard renders these).
+    //      — server-only via Admin SDK; normal client users cannot read these.
     //   2. Per-client synthetic docs (placeId == "client:{clientId}") seeded by
     //      /api/leadgen/seed-client-prospect — readable/updatable only by the
     //      user bound to that clientId.
-    // All writes ultimately go through the admin SDK in /api/leadgen/* routes,
-    // which bypass these rules — but client-side onSnapshot reads use them.
+    // All writes go through the Admin SDK in /api/leadgen/* routes which bypass
+    // these rules. Client-side onSnapshot reads for the dashboard use these rules.
     match /leadgen_prospects/{placeId} {
       allow read: if request.auth != null
-                  && (!placeId.matches('client:.*')
-                      || resource.data.clientId == callerClientId());
+                  && placeId.matches('client:.*')
+                  && resource.data.clientId == callerClientId();
       allow update: if request.auth != null
-                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['starred', 'generation'])
-                    && (!placeId.matches('client:.*')
-                        || resource.data.clientId == callerClientId());
+                    && placeId.matches('client:.*')
+                    && resource.data.clientId == callerClientId()
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['starred', 'generation']);
       allow create, delete: if false;
     }
 
+    // leadgen_configs is operator/admin-only — all access via Admin SDK server-side.
     match /leadgen_configs/{configId} {
-      allow read:  if request.auth != null;
+      allow read:  if false;
       allow write: if false;
     }
   }

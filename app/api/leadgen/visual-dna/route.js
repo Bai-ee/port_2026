@@ -6,7 +6,7 @@ export const maxDuration = 120;
 
 const require = createRequire(import.meta.url);
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
-const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
+const { verifyAdminRequest } = require('../../../../api/_lib/auth.cjs');
 const { saveBufferArtifact } = require('../../../../api/_lib/storage-artifacts.cjs');
 const { logUsage, computeAnthropicCost } = require('../../../../api/_lib/usage-logger.cjs');
 const { analyzeVisualDnaSubject, VISION_MODEL } = require('../../../../features/scout-intake/modules/visual-dna-vision.js');
@@ -61,7 +61,7 @@ function mergeSubject(subjects, nextSubject) {
 }
 
 export async function GET(request) {
-  try { await verifyRequestUser(makeReqShim(request)); }
+  try { await verifyAdminRequest(makeReqShim(request)); }
   catch { return jerror('Unauthorized.', 401); }
 
   const url = new URL(request.url);
@@ -78,7 +78,7 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
-  try { await verifyRequestUser(makeReqShim(request)); }
+  try { await verifyAdminRequest(makeReqShim(request)); }
   catch { return jerror('Unauthorized.', 401); }
 
   let body;

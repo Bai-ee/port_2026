@@ -9,7 +9,7 @@ export const maxDuration = 120;
 
 const require = createRequire(import.meta.url);
 const fb                      = require('../../../../api/_lib/firebase-admin.cjs');
-const { verifyRequestUser }   = require('../../../../api/_lib/auth.cjs');
+const { verifyAdminRequest }   = require('../../../../api/_lib/auth.cjs');
 const { saveBufferArtifact }  = require('../../../../api/_lib/storage-artifacts.cjs');
 const { logUsage, computeImageCost } = require('../../../../api/_lib/usage-logger.cjs');
 
@@ -255,7 +255,7 @@ function makeReqShim(request) {
 //   body: { placeId: string }
 //   → streams NDJSON: prompt → image cascade (Nano Banana → gpt-image-1 → Imagen 4) → storage upload
 export async function POST(request) {
-  try { await verifyRequestUser(makeReqShim(request)); }
+  try { await verifyAdminRequest(makeReqShim(request)); }
   catch { return new Response(JSON.stringify({ type: 'error', message: 'Unauthorized.' }) + '\n', { status: 401, headers: { 'Content-Type': 'application/x-ndjson' } }); }
 
   let body;

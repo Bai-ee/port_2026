@@ -9,7 +9,7 @@ export const maxDuration = 300;
 
 const require = createRequire(import.meta.url);
 const fb                    = require('../../../../api/_lib/firebase-admin.cjs');
-const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
+const { verifyAdminRequest } = require('../../../../api/_lib/auth.cjs');
 
 import { scrapeClientContent }              from '../../../../features/leadgen/content-scraper.js';
 import { makeClientSlug, ensureClientDir, downloadAssets, fetchGbpPhotos, listDownloadedAssets } from '../../../../features/leadgen/asset-manager.js';
@@ -44,7 +44,7 @@ function normalizeUrl(raw) {
 //   → runs the full site generation pipeline for one prospect
 export async function POST(request) {
   try {
-    await verifyRequestUser(makeReqShim(request));
+    await verifyAdminRequest(makeReqShim(request));
   } catch {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
   }

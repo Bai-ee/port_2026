@@ -8,7 +8,7 @@ export const maxDuration = 180;
 
 const require = createRequire(import.meta.url);
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
-const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
+const { verifyAdminRequest } = require('../../../../api/_lib/auth.cjs');
 const { persistBriefPdfArtifact } = require('../../../../api/_lib/browserless.cjs');
 
 function makeReqShim(request) {
@@ -37,7 +37,7 @@ function safeFilePart(value, fallback = 'estimate') {
 export async function POST(request) {
   let decoded;
   try {
-    decoded = await verifyRequestUser(makeReqShim(request));
+    decoded = await verifyAdminRequest(makeReqShim(request));
   } catch {
     return new Response(JSON.stringify({ type: 'error', message: 'Unauthorized.' }) + '\n', {
       status: 401,

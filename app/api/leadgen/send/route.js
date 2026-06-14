@@ -6,14 +6,14 @@ export const maxDuration = 60;
 
 const require = createRequire(import.meta.url);
 const fb                      = require('../../../../api/_lib/firebase-admin.cjs');
-const { verifyRequestUser }   = require('../../../../api/_lib/auth.cjs');
+const { verifyAdminRequest }   = require('../../../../api/_lib/auth.cjs');
 
 function makeReqShim(request) {
   return { headers: { authorization: request.headers.get('authorization'), Authorization: request.headers.get('authorization') } };
 }
 
 export async function POST(request) {
-  try { await verifyRequestUser(makeReqShim(request)); }
+  try { await verifyAdminRequest(makeReqShim(request)); }
   catch { return Response.json({ error: 'Unauthorized.' }, { status: 401 }); }
 
   let body;

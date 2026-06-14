@@ -7,7 +7,7 @@ export const maxDuration = 120;
 
 const require = createRequire(import.meta.url);
 const fb                    = require('../../../../api/_lib/firebase-admin.cjs');
-const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
+const { verifyAdminRequest } = require('../../../../api/_lib/auth.cjs');
 
 import { scrapeClientContent } from '../../../../features/leadgen/content-scraper.js';
 import { generateDesignMd }    from '../../../../features/leadgen/design-md-generator.js';
@@ -43,7 +43,7 @@ function resolveProspectClientId(placeId, prospect) {
 //   body: { placeId: string }
 //   → streams NDJSON: scrape + DESIGN.MD generation
 export async function POST(request) {
-  try { await verifyRequestUser(makeReqShim(request)); }
+  try { await verifyAdminRequest(makeReqShim(request)); }
   catch { return new Response(JSON.stringify({ type: 'error', message: 'Unauthorized.' }) + '\n', { status: 401, headers: { 'Content-Type': 'application/x-ndjson' } }); }
 
   let body;

@@ -1,4 +1,8 @@
 import Stripe from 'stripe';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+const { checkRateLimit, getClientIp } = require('../../../../api/_lib/rate-limit.cjs');
 
 export const runtime = 'nodejs';
 
@@ -23,6 +27,17 @@ function getStripe() {
 }
 
 export async function POST(request) {
+  // Rate limit: 10 attempts per IP per hour
+  const ip = getClientIp(request);
+  const rl = await checkRateLimit({
+    key: `anon:${ip}:create-subscription`,
+    limit: 10,
+    windowSeconds: 3600,
+  });
+  if (!rl.allowed) {
+    return json({ error: 'Too many requests. Try again later.' }, 429);
+  }
+
   let body;
   try {
     body = await request.json();
@@ -43,17 +58,48 @@ export async function POST(request) {
   try {
     const stripe = getStripe();
 
+    // Reuse existing customer to avoid unbounded customer creation
     const existing = await stripe.customers.list({ email, limit: 1 });
-    const customer = existing.data[0] || (await stripe.customers.create({ email }));
+    const customer = existing.data[0] || (await stripe.customers.create(
+      { email },
+      { idempotencyKey: `customer-create:${email}:${Math.floor(Date.now() / 3_600_000)}` }
+    ));
 
-    const subscription = await stripe.subscriptions.create({
+    // Dedupe: find any existing incomplete subscription for this customer
+    const existingSubs = await stripe.subscriptions.list({
       customer: customer.id,
-      items: [{ price: priceId }],
-      payment_behavior: 'default_incomplete',
-      payment_settings: { save_default_payment_method: 'on_subscription' },
-      expand: ['latest_invoice.payment_intent'],
-      metadata: { source: 'portfolio-subscribe-modal' },
+      status: 'incomplete',
+      limit: 5,
     });
+    const dupeSub = existingSubs.data.find(
+      s => s.items?.data?.[0]?.price?.id === priceId
+    );
+    if (dupeSub) {
+      const clientSecret = dupeSub?.latest_invoice?.payment_intent?.client_secret;
+      if (clientSecret) {
+        return json({ subscriptionId: dupeSub.id, clientSecret });
+      }
+      // Incomplete sub without client_secret — retrieve expanded
+      const expanded = await stripe.subscriptions.retrieve(dupeSub.id, {
+        expand: ['latest_invoice.payment_intent'],
+      });
+      const cs = expanded?.latest_invoice?.payment_intent?.client_secret;
+      if (cs) return json({ subscriptionId: expanded.id, clientSecret: cs });
+    }
+
+    const subscription = await stripe.subscriptions.create(
+      {
+        customer: customer.id,
+        items: [{ price: priceId }],
+        payment_behavior: 'default_incomplete',
+        payment_settings: { save_default_payment_method: 'on_subscription' },
+        expand: ['latest_invoice.payment_intent'],
+        metadata: { source: 'portfolio-subscribe-modal' },
+      },
+      {
+        idempotencyKey: `sub-create:${email}:${priceId}:${Math.floor(Date.now() / 3_600_000)}`,
+      }
+    );
 
     const clientSecret = subscription?.latest_invoice?.payment_intent?.client_secret;
     if (!clientSecret) {

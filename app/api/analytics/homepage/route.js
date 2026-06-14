@@ -4,6 +4,7 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
 const { logError } = require('../../../../api/_lib/observability.cjs');
+const { checkRateLimit, getClientIp } = require('../../../../api/_lib/rate-limit.cjs');
 
 const ALLOWED_EVENTS = new Set([
   'homepage_nav_click',
@@ -49,6 +50,17 @@ function sanitizeParams(params = {}) {
 }
 
 export async function POST(request) {
+  // Rate limit: 200 analytics events per IP per hour
+  const ip = getClientIp(request);
+  const rl = await checkRateLimit({
+    key: `anon:${ip}:analytics-homepage`,
+    limit: 200,
+    windowSeconds: 3600,
+  });
+  if (!rl.allowed) {
+    return NextResponse.json({ ok: false }, { status: 429 });
+  }
+
   try {
     const body = await request.json().catch(() => ({}));
     const eventName = text(body.eventName, 60);

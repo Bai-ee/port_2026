@@ -5,7 +5,7 @@ export const maxDuration = 30;
 
 const require = createRequire(import.meta.url);
 const fb                    = require('../../../../api/_lib/firebase-admin.cjs');
-const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
+const { verifyAdminRequest } = require('../../../../api/_lib/auth.cjs');
 
 function makeReqShim(request) {
   return {
@@ -21,7 +21,7 @@ const SCORING_DOC   = ['leadgen_configs', 'scoring'];
 
 async function authedUid(request) {
   try {
-    const decoded = await verifyRequestUser(makeReqShim(request));
+    const decoded = await verifyAdminRequest(makeReqShim(request));
     return decoded?.uid || null;
   } catch {
     return null;

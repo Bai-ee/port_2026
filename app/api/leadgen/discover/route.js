@@ -8,7 +8,7 @@ export const maxDuration = 120;
 
 const require = createRequire(import.meta.url);
 const fb                    = require('../../../../api/_lib/firebase-admin.cjs');
-const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
+const { verifyAdminRequest } = require('../../../../api/_lib/auth.cjs');
 const { logUsage, computeFlatCost } = require('../../../../api/_lib/usage-logger.cjs');
 
 import { discoverFromCampaign } from '../../../../features/leadgen/prospector.js';
@@ -63,7 +63,7 @@ export async function POST(request) {
   // Auth
   let decoded;
   try {
-    decoded = await verifyRequestUser(makeReqShim(request));
+    decoded = await verifyAdminRequest(makeReqShim(request));
   } catch {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
   }

@@ -6,7 +6,7 @@ export const maxDuration = 60;
 
 const require = createRequire(import.meta.url);
 const fb                    = require('../../../../api/_lib/firebase-admin.cjs');
-const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
+const { verifyAdminRequest } = require('../../../../api/_lib/auth.cjs');
 
 const { runMultiDeviceView }        = require('../../../../features/scout-intake/modules/multi-device-view');
 const { runSeoPerformance }         = require('../../../../features/scout-intake/modules/seo-performance');
@@ -103,7 +103,7 @@ const RUNNERS = {
 //   → streams NDJSON progress lines then final result, persists to Firestore
 export async function POST(request) {
   try {
-    await verifyRequestUser(makeReqShim(request));
+    await verifyAdminRequest(makeReqShim(request));
   } catch {
     return new Response(JSON.stringify({ type: 'error', message: 'Unauthorized.' }) + '\n', {
       status: 401,

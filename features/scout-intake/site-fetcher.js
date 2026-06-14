@@ -1,5 +1,7 @@
 'use strict';
 
+const { validateUrl: _ssrfValidate } = require('../../api/_lib/safe-fetch.cjs');
+
 // site-fetcher.js — Lightweight website evidence extractor
 //
 // Strategy:
@@ -427,6 +429,19 @@ async function fetchSiteEvidence(websiteUrl, { onPageFetched } = {}) {
   const fetchedAt = new Date().toISOString();
   const pages = [];
   const warnings = [];
+
+  // SSRF guard: reject private/internal URLs before fetching
+  try {
+    await _ssrfValidate(websiteUrl);
+  } catch {
+    return {
+      url: websiteUrl,
+      fetchedAt,
+      pages: [],
+      warnings: ['URL not allowed.'],
+      thin: true,
+    };
+  }
 
   // Step 1 — Homepage
   const homepageFetch = await fetchPage(websiteUrl);

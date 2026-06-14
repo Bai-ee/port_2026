@@ -1,4 +1,8 @@
 import * as cheerio from 'cheerio';
+import { createRequire } from 'module';
+
+const _require = createRequire(import.meta.url);
+const { validateUrl: _ssrfValidate } = _require('../../api/_lib/safe-fetch.cjs');
 
 const FETCH_TIMEOUT_MS = 15000;
 const MAX_HTML_CHARS = 1_500_000;
@@ -25,6 +29,16 @@ export function normalizeKnowledgeUrl(rawUrl) {
 
 export async function fetchUrlHtml(url) {
   const normalizedUrl = normalizeKnowledgeUrl(url);
+
+  // SSRF guard: reject private/internal URLs
+  try {
+    await _ssrfValidate(normalizedUrl);
+  } catch (ssrfErr) {
+    const err = new Error('URL not allowed.');
+    err.status = 400;
+    throw err;
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 

@@ -35,6 +35,22 @@ async function upsertSubscription(subscription, email) {
   await fb.adminDb.collection('subscriptions').doc(subscription.id).set(doc, { merge: true });
 }
 
+/**
+ * Mark an event as processed. Returns true if the event was new (safe to process),
+ * false if it was already seen (replay — skip).
+ */
+async function markEventProcessed(eventId) {
+  const fb = require('../../../../api/_lib/firebase-admin.cjs');
+  const ref = fb.adminDb.collection('_stripe_events').doc(eventId);
+
+  return fb.adminDb.runTransaction(async (tx) => {
+    const doc = await tx.get(ref);
+    if (doc.exists) return false; // already processed
+    tx.set(ref, { processedAt: new Date().toISOString() });
+    return true;
+  });
+}
+
 export async function POST(request) {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!webhookSecret) {
@@ -50,6 +66,12 @@ export async function POST(request) {
   } catch (err) {
     console.error('[payments/webhook] signature verification failed:', err?.message);
     return new Response(JSON.stringify({ error: 'Invalid signature.' }), { status: 400 });
+  }
+
+  // Idempotency: skip replayed events
+  const isNew = await markEventProcessed(event.id);
+  if (!isNew) {
+    return new Response(JSON.stringify({ received: true, replayed: true }), { status: 200 });
   }
 
   try {

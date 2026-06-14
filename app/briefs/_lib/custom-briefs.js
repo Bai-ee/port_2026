@@ -140,7 +140,7 @@ export async function resolvePublicBrief(clientKey, briefKey) {
   if (!snapshot?.exists) return null;
 
   const brief = snapshot.data() || {};
-  if (brief.public === false) return null;
+  if (brief.public !== true) return null;
 
   const clientSnapshot = await fb.adminDb.collection('clients').doc(clientId).get();
   return {

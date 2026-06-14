@@ -360,7 +360,7 @@ function serializeBriefDoc({ doc, data, clientId, client, origin }) {
     hideOgSubhead: data.hideOgSubhead === true,
     sourcePath: data.sourcePath || '',
     sourceHash: data.sourceHash || '',
-    public: data.public !== false,
+    public: data.public === true,
     publicClientSlug,
     publicPath,
     publicUrl: `${origin}${publicPath}`,
@@ -452,7 +452,7 @@ export async function POST(request) {
     const ogLabel = String(body.ogLabel || 'BRYAN BALLI').trim().slice(0, 80) || 'BRYAN BALLI';
     const hideOgSubhead = body.hideOgSubhead === true;
     const pdfFileName = titlePdfFileName(title);
-    const isPublic = body.public !== false;
+    const isPublic = body.public === true;
     const publicClientSlug = publicClientSlugFor(bootstrap?.client || null, clientId, body.publicClientSlug);
     const publicPath = `/briefs/${publicClientSlug}/${publicBriefSlug}`;
     const publicUrl = `${request.nextUrl.origin}${publicPath}`;

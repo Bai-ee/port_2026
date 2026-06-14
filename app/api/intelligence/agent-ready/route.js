@@ -7,6 +7,8 @@ export const maxDuration = 30;
 
 const require = createRequire(import.meta.url);
 const { runAgentReady } = require('../../../../features/scout-intake/agent-ready/index');
+const { checkRateLimit, getClientIp } = require('../../../../api/_lib/rate-limit.cjs');
+const { validateUrl } = require('../../../../api/_lib/safe-fetch.cjs');
 
 function json(body, status = 200) {
   return NextResponse.json(body, {
@@ -28,6 +30,17 @@ function json(body, status = 200) {
  * Response: { ok, score, dimensions, verdict, checks, findings, highlights }
  */
 export async function POST(request) {
+  // Rate limit: 20 scans per IP per hour (each scan makes ~11 external calls)
+  const ip = getClientIp(request);
+  const rl = await checkRateLimit({
+    key: `anon:${ip}:agent-ready`,
+    limit: 20,
+    windowSeconds: 3600,
+  });
+  if (!rl.allowed) {
+    return json({ error: 'Too many requests. Try again later.' }, 429);
+  }
+
   let url;
   try {
     const body = await request.json();
@@ -45,6 +58,13 @@ export async function POST(request) {
     new URL(websiteUrl);
   } catch {
     return json({ error: 'Invalid URL.' }, 400);
+  }
+
+  // SSRF guard: reject private/internal URLs before probing
+  try {
+    await validateUrl(websiteUrl);
+  } catch {
+    return json({ error: 'URL not allowed.' }, 400);
   }
 
   let result;

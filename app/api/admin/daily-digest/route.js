@@ -88,7 +88,13 @@ function hasValidSecret(request) {
 /** Vercel cron sends a special header we can verify */
 function hasValidCronSecret(request) {
   const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) return true; // if not configured, allow (dev mode)
+  if (!cronSecret) {
+    // Fail closed in production — missing CRON_SECRET must not authorize cron execution.
+    if (process.env.VERCEL_ENV === 'production' || process.env.NODE_ENV === 'production') {
+      return false;
+    }
+    return true; // allow in dev/preview for convenience
+  }
   const provided = getHeaderValue(request.headers, 'authorization');
   return safeSecretEquals(provided, `Bearer ${cronSecret}`);
 }
