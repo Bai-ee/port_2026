@@ -5,7 +5,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: ['playwright', 'pdf-parse', 'mammoth'],
+  serverExternalPackages: ['playwright', 'pdf-parse', 'mammoth', 'firebase-admin'],
   outputFileTracingIncludes: {
     '*': [
       // App logic loaded at runtime via createRequire() from outside the app/ tree.
