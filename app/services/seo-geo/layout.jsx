@@ -72,14 +72,14 @@ export const metadata = {
     'AI Overviews optimization',
     'ChatGPT citation optimization',
     'Perplexity SEO',
-    'Bryan Balli SEO',
+    'HIT Agency SEO',
     'Lighthouse audit',
     'structured data JSON-LD',
     'E-E-A-T',
   ],
   alternates: { canonical: '/services/seo-geo' },
   openGraph: {
-    title: 'SEO & GEO — Bryan Balli',
+    title: 'SEO & GEO — HIT Agency',
     description:
       'AI-assisted SEO audits, generative engine optimization, and performance baselines — built for visibility in both traditional search and AI-powered answers.',
     url: '/services/seo-geo',

@@ -42,9 +42,9 @@ const websiteSchema = {
   '@type': 'WebSite',
   '@id': `${SITE_URL}#website`,
   url: SITE_URL,
-  name: 'Bryan Balli — Portfolio',
+  name: 'HIT Agency',
   description:
-    'Portfolio, case studies, and the Bballi modular AI-assisted client intelligence platform.',
+    'HIT Agency — AI-powered design and engineering studio. Client dashboards, intelligent intake pipelines, and high-performance web experiences led by Bryan Balli.',
   publisher: { '@id': `${SITE_URL}#bryan-balli` },
   inLanguage: 'en-US',
 };

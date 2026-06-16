@@ -1,7 +1,7 @@
 const howToSchema = {
   '@context': 'https://schema.org',
   '@type': 'HowTo',
-  name: 'The Process · Bryan Balli',
+  name: 'The Process · HIT Agency',
   description:
     'A phased, approval-gated process built for speed, clarity, and zero scope drift.',
   step: [
@@ -37,7 +37,7 @@ export const metadata = {
   description:
     'A phased, approval-gated process built for speed, clarity, and zero scope drift. Every step is visible. Every decision is explained.',
   keywords: [
-    'Bryan Balli process',
+    'HIT Agency process',
     'AI design engineer workflow',
     'phased development process',
     'design handoff',
@@ -45,7 +45,7 @@ export const metadata = {
   ],
   alternates: { canonical: '/process' },
   openGraph: {
-    title: 'Process · Bryan Balli',
+    title: 'Process · HIT Agency',
     description: 'Phased, approval-gated — from discovery through handoff.',
     url: '/process',
     type: 'website',

@@ -2,7 +2,7 @@
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
-const { validateUrl } = require('../../../api/_lib/safe-fetch.cjs');
+const { readResponseText, safeFetch, validateUrl } = require('../../../api/_lib/safe-fetch.cjs');
 
 describe('validateUrl — SSRF protection', () => {
   const blocked = [
@@ -38,5 +38,46 @@ describe('validateUrl — SSRF protection', () => {
 
   test('rejects non-https/http schemes', async () => {
     await assert.rejects(() => validateUrl('javascript://evil'), /SSRF_BLOCKED/);
+  });
+});
+
+describe('safeFetch — redirect and body-size protection', () => {
+  const originalFetch = global.fetch;
+
+  test('blocks redirects to private/internal URLs', async (t) => {
+    t.after(() => {
+      global.fetch = originalFetch;
+    });
+
+    global.fetch = async () => new Response('', {
+      status: 302,
+      headers: { location: 'http://127.0.0.1/admin' },
+    });
+
+    await assert.rejects(
+      () => safeFetch('http://93.184.216.34/start'),
+      /SSRF_BLOCKED/
+    );
+  });
+
+  test('readResponseText rejects oversized bodies without content-length', async () => {
+    const response = new Response('abcdef', {
+      status: 200,
+      headers: { 'content-type': 'text/plain' },
+    });
+
+    await assert.rejects(
+      () => readResponseText(response, 4),
+      /response too large/
+    );
+  });
+
+  test('readResponseText returns body within limit', async () => {
+    const response = new Response('safe body', {
+      status: 200,
+      headers: { 'content-type': 'text/plain' },
+    });
+
+    assert.equal(await readResponseText(response, 100), 'safe body');
   });
 });

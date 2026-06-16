@@ -6,8 +6,36 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientId;
     }
 
+    function safeUserWritableKeys() {
+      return [
+        'uid',
+        'email',
+        'displayName',
+        'photoURL',
+        'lastLoginAt',
+        'updatedAt',
+        'createdAt',
+        'dashboardTitle',
+        'dashboardDescription'
+      ];
+    }
+
+    function validOwnUserProfile(userId) {
+      return request.auth != null
+             && request.auth.uid == userId
+             && request.resource.data.uid == userId
+             && request.resource.data.email == request.auth.token.email;
+    }
+
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow create: if validOwnUserProfile(userId)
+                    && request.resource.data.keys().hasOnly(safeUserWritableKeys());
+      allow update: if validOwnUserProfile(userId)
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(safeUserWritableKeys())
+                    && request.resource.data.clientId == resource.data.clientId
+                    && request.resource.data.role == resource.data.role;
+      allow delete: if false;
     }
 
     match /clients/{clientId} {

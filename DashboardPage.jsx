@@ -50,6 +50,7 @@ import { deriveFindings } from './features/scout-intake/derived-findings.mjs';
 import ModuleCardControls from './components/dashboard/ModuleCardControls';
 import SubscribeModal from './components/payments/SubscribeModal';
 import { AdminEmailDigestView, AdminEmailSettingsView, AdminCreateClientView } from './components/AdminEmailModals';
+import SiteFooter from './SiteFooter';
 
 const LeadGenDashboard = dynamic(() => import('./components/dashboard/LeadGenDashboard'), {
   loading: () => null,
@@ -2732,6 +2733,14 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   const [expandedMobileCards, setExpandedMobileCards] = useState(new Set());
   // Reset step on bucket change; jump to a step's anchor card on click.
   useEffect(() => { setActiveStepIdx(0); }, [activeCapabilityFilter]);
+
+  // Force list view on mobile — grid cards don't scale well below 900px
+  useEffect(() => {
+    const enforce = () => { if (window.innerWidth < 900) setCapView('list'); };
+    enforce();
+    window.addEventListener('resize', enforce);
+    return () => window.removeEventListener('resize', enforce);
+  }, []);
   const handleCapStepClick = useCallback((idx) => {
     setActiveStepIdx(idx);
   }, []);
@@ -5208,6 +5217,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       brief:             ['ai',     '[BRIEF]'],
       normalize:         ['build',  '[BUILD]'],
       'design-evaluation': ['ai',   '[DSN]'],
+      'agent-ready':     ['ai',     '[AGENT]'],
+      'ai-seo':          ['ai',     '[AISEO]'],
+      skill:             ['ai',     '[SKILL]'],
       progress:          ['ok',     '✓'],
       error:             ['error',  '✗'],
     };
@@ -8798,35 +8810,37 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         </button>
                       </>
                     ) : null}
-                    <span className="cap-source-divider" aria-hidden="true" />
-                    <Globe id="dashboard-source-cta-icon" size={15} strokeWidth={1.5} aria-hidden="true" />
-                    <input
-                      id="reseed-url-input"
-                      type="url"
-                      value={reseedUrl}
-                      onChange={(e) => { setReseedUrl(e.target.value); setReseedError(''); setReseedSuccess(false); }}
-                      placeholder="yourbusiness.com"
-                      disabled={reseedLoading || isRunActive}
-                      spellCheck={false}
-                    />
-                    <button
-                      id="reseed-run-btn"
-                      className="cta-pill-btn"
-                      type="button"
-                      onClick={handleReseed}
-                      disabled={reseedLoading || isRunActive || !reseedUrl.trim()}
-                    >
-                      <span className="reseed-run-btn-label-desktop">
-                        {reseedLoading ? 'Queueing...' :
-                         latestRunStatus === 'queued' ? 'Intake Queued' :
-                         latestRunStatus === 'running' ? 'Intake Running' :
-                         client ? 'Update & Rerun' : 'Create Dashboard'}
-                      </span>
-                      <span className="reseed-run-btn-label-mobile">
-                        {reseedLoading ? 'Queueing...' : 'Rerun'}
-                      </span>
-                      <span id="reseed-run-btn-icon">↗</span>
-                    </button>
+                    <span id="reseed-url-group" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      <span className="cap-source-divider" aria-hidden="true" />
+                      <Globe id="dashboard-source-cta-icon" size={15} strokeWidth={1.5} aria-hidden="true" />
+                      <input
+                        id="reseed-url-input"
+                        type="url"
+                        value={reseedUrl}
+                        onChange={(e) => { setReseedUrl(e.target.value); setReseedError(''); setReseedSuccess(false); }}
+                        placeholder="yourbusiness.com"
+                        disabled={reseedLoading || isRunActive}
+                        spellCheck={false}
+                      />
+                      <button
+                        id="reseed-run-btn"
+                        className="cta-pill-btn"
+                        type="button"
+                        onClick={handleReseed}
+                        disabled={reseedLoading || isRunActive || !reseedUrl.trim()}
+                      >
+                        <span className="reseed-run-btn-label-desktop">
+                          {reseedLoading ? 'Queueing...' :
+                           latestRunStatus === 'queued' ? 'Intake Queued' :
+                           latestRunStatus === 'running' ? 'Intake Running' :
+                           client ? 'Update & Rerun' : 'Create Dashboard'}
+                        </span>
+                        <span className="reseed-run-btn-label-mobile">
+                          {reseedLoading ? 'Queueing...' : 'Rerun'}
+                        </span>
+                        <span id="reseed-run-btn-icon">↗</span>
+                      </button>
+                    </span>
                   </div>
                 </div>
                 {reseedError ? <div id="reseed-error-msg">{reseedError}</div> : null}
@@ -9054,7 +9068,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   if (clickedControl) return;
                   const isMobileCard = typeof window !== 'undefined' && window.matchMedia('(max-width: 520px)').matches;
                   const isListRow = Boolean(e.currentTarget.closest('.cap-list-row-main'));
-                  if (isMobileCard) {
+                  if (isMobileCard && !isListRow) {
                     if (e.target.closest('.tile-mobile-chevron')) {
                       toggleMobileCard(card.id);
                       return;
@@ -10057,6 +10071,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         </>
         )}
 
+        <SiteFooter />
       </main>
 
       {/* ── Leadgen flow panel (per-client cards: Prepare Brief, etc.) ── */}
@@ -10164,8 +10179,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 {(['a', 'b']).map((k) => (
                   <span key={k} aria-hidden={k === 'b' ? 'true' : undefined} style={{ margin: 0, flexShrink: 0, color: '#2a2420', fontSize: 'clamp(2rem, 8.5vw, 7rem)', lineHeight: 1, letterSpacing: '-0.04em', fontFamily: '"Doto", "Space Mono", monospace', fontWeight: 700, whiteSpace: 'nowrap' }}>
                     {activeModuleCard
-                      ? `UPDATING ${activeModuleCard.label}\u00A0\u00B7\u00A0RUNNING MODULE\u00A0\u00B7\u00A0`
-                      : 'BUILDING YOUR DASHBOARD\u00A0\u00B7\u00A0PROCESSING WEBSITE\u00A0\u00B7\u00A0'}
+                      ? `UPDATING ${activeModuleCard.label} \u00B7 RUNNING MODULE \u00B7 `
+                      : 'BUILDING YOUR DASHBOARD \u00B7 PROCESSING WEBSITE \u00B7 '}
                   </span>
                 ))}
               </div>
@@ -20583,8 +20598,9 @@ const dashboardCss = `
     #dashboard-source-cta-row { width: 100%; }
     #capability-section { padding-top: 0; }
     #capability-section-shell { grid-template-columns: 1fr; }
-    #capability-nav-col { order: -1; position: static; flex-direction: row; flex-wrap: wrap; gap: 6px; z-index: 10; }
-    .capability-nav-btn { flex: 1 1 auto; min-width: 0; padding: 10px 16px; border-radius: 999px; flex-direction: row; align-items: center; justify-content: center; gap: 0; width: auto; background: rgba(255, 255, 255, 1); }
+    #capability-nav-col { order: -1; position: static; flex-direction: row; flex-wrap: nowrap; overflow-x: auto; overflow-y: visible; -webkit-overflow-scrolling: touch; scrollbar-width: none; gap: 6px; z-index: 10; padding-bottom: 2px; }
+    #capability-nav-col::-webkit-scrollbar { display: none; }
+    .capability-nav-btn { flex: 0 0 auto; min-width: 0; padding: 10px 16px; border-radius: 999px; flex-direction: row; align-items: center; justify-content: center; gap: 0; width: auto; background: rgba(255, 255, 255, 1); }
     .capability-nav-btn:hover { background: rgba(255, 255, 255, 1); box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.067), 0px 15px 30px rgba(0, 0, 0, 0.067), 0px 20px 40px rgba(0, 0, 0, 0.1); }
     .capability-nav-btn::before { border-radius: 999px; }
     .capability-nav-btn--active::before {
@@ -20722,9 +20738,34 @@ const dashboardCss = `
     }
     .cap-step-seg > button.is-active::after { content: none; }
     .cap-step-grid { grid-template-columns: 1fr; }
-    /* List view: hide column-header tab row, stack columns vertically,
-       show the per-section label above each column's rows. */
-    .cap-step-seg--top { display: none; }
+    /* List view: hide column-header tab row (non-interactive headers),
+       stack columns vertically, show per-section label above each column.
+       Exception: --tabs buckets keep their strip visible and interactive. */
+    .cap-step-seg--top:not(.cap-step-seg--tabs) { display: none; }
+    /* Tab strip on mobile — horizontal scroll, all tabs visible */
+    .cap-step-seg--top.cap-step-seg--tabs {
+      display: flex;
+      overflow-x: auto;
+      overflow-y: visible;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      flex-wrap: nowrap;
+      margin: 0 0 8px;
+      border-bottom: 1px solid rgba(42,36,32,0.1);
+    }
+    .cap-step-seg--top.cap-step-seg--tabs::-webkit-scrollbar { display: none; }
+    .cap-step-seg--top.cap-step-seg--tabs > button {
+      display: inline-flex;
+      flex: 0 0 auto;
+      pointer-events: auto;
+      cursor: pointer;
+      min-height: 44px;
+      font-size: 0.78rem;
+      padding: 0 12px;
+    }
+    .cap-step-seg--top.cap-step-seg--tabs > button.is-active { cursor: default; }
+    .cap-step-seg--top.cap-step-seg--tabs > button::after { content: ''; }
+    .cap-step-seg--top.cap-step-seg--tabs > button.is-active::after { content: ''; }
     /* Re-assert over the mobile-expanded .tile-foot{display:flex} rule above */
     .cap-list-row-main .tile-foot { display: contents; }
     .cap-list-columns { grid-template-columns: 1fr !important; }
@@ -20776,26 +20817,29 @@ const dashboardCss = `
     .tile-mobile-chevron { display: none; }
   }
   @media (max-width: 620px) {
-    #founders-shell { padding-top: 96px; }
+    #founders-shell { padding-top: 80px; }
     #founders-top-strip-inner {
-      gap: 12px;
+      gap: 8px;
       padding: 0 12px;
+      min-height: 60px;
+      flex-wrap: nowrap;
     }
-    #founders-top-actions { gap: 0.5rem; }
+    #founders-top-actions { gap: 0.35rem; margin-left: auto; }
     #founders-linkedin { font-size: 0.72rem; }
-    #founders-login-link { padding: 0.4rem 0.6rem; font-size: 0.55rem; }
-    #founders-chat-cta { padding: 0.4rem 0.6rem; font-size: 0.55rem; gap: 0.25rem; }
+    #founders-login-link { padding: 0.35rem 0.6rem; font-size: 0.75rem; }
+    #founders-chat-cta { padding: 0.35rem 0.6rem; font-size: 0.75rem; gap: 0.25rem; }
     .founders-chat-label-full  { display: none; }
     .founders-chat-label-short { display: inline; }
     #capability-section { padding-top: 0; }
-    .reseed-run-btn-label-desktop { display: none; }
-    .reseed-run-btn-label-mobile { display: inline; }
-    #reseed-run-btn-icon { display: none; }
+    #reseed-url-group { display: none !important; }
     #founders-hero-meta { width: 100%; max-width: 100%; overflow: hidden; }
     .meta-row { overflow: hidden; }
     #client-meta-row { overflow: visible; }
     .meta-row .value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-    #dashboard-source-cta-row { max-width: 100%; box-sizing: border-box; }
+    #dashboard-source-cta-row { max-width: 100%; box-sizing: border-box; justify-content: space-between; background: transparent; border: none; box-shadow: none; padding: 4px 0; }
+    .cap-view-toggle--top { display: none; }
+    .cap-view-toggle--top + .cap-source-divider { display: none; }
+    #dashboard-source-band { margin-bottom: 0; }
     #reseed-run-btn { min-width: 0; }
   }
 
@@ -20962,6 +21006,19 @@ const dashboardCss = `
       justify-content: center;
       line-height: 1;
     }
+    #run-active-indicator-label { display: none; }
+    #run-active-indicator-dot {
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+      background: conic-gradient(hsl(185,100%,45%) 0%, hsl(262,100%,55%) 40%, hsl(314,100%,50%) 75%, hsl(185,100%,45%) 100%);
+      animation: run-indicator-spin 0.9s linear infinite;
+      -webkit-mask: radial-gradient(circle, transparent 58%, black 59%);
+      mask: radial-gradient(circle, transparent 58%, black 59%);
+    }
+    @keyframes run-indicator-spin {
+      to { transform: rotate(360deg); }
+    }
   }
 
   /* ── Intake build modal ── */
@@ -21018,15 +21075,17 @@ const dashboardCss = `
   /* Log line */
   .term-line {
     display: grid;
-    grid-template-columns: 3.6rem 1fr;
+    grid-template-columns: 4.2rem 1fr;
     gap: 0.5em;
     font-family: "Space Mono", monospace;
     font-size: 0.68rem;
     line-height: 1.65;
     align-items: baseline;
   }
-  .term-pfx { text-align: right; white-space: nowrap; font-size: 0.64rem; letter-spacing: 0.02em; }
-  .term-msg { word-break: break-word; }
+  /* overflow guard: a long prefix clips inside its column instead of spilling
+     over the message text (e.g. an unmapped stage → [LONG-STAGE-NAME]). */
+  .term-pfx { text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; font-size: 0.64rem; letter-spacing: 0.02em; }
+  .term-msg { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* One Dark palette — tuned for legibility on #1a1a1a background */
   .term-system .term-pfx, .term-system .term-msg { color: #6b7280; }
   .term-dim    .term-pfx, .term-dim    .term-msg { color: #6b7280; }
@@ -21369,7 +21428,7 @@ const dashboardCss = `
   }
   #intake-modal-card[data-with-survey="true"] #intake-modal-body {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1.65fr);
     gap: 1rem;
     align-items: stretch;
     height: 360px;

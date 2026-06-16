@@ -1,7 +1,7 @@
 const itemListSchema = {
   '@context': 'https://schema.org',
   '@type': 'ItemList',
-  name: 'Case Studies · Bryan Balli',
+  name: 'Case Studies · HIT Agency',
   description:
     'Process documentation, results, and the decisions behind them — from intake through delivery.',
   itemListElement: [
@@ -34,7 +34,7 @@ export const metadata = {
   description:
     'Process documentation, results, and the decisions behind them — from intake through delivery.',
   keywords: [
-    'Bryan Balli case studies',
+    'HIT Agency case studies',
     'AI design engineer case study',
     'GEO audit case study',
     'Three.js case study',
@@ -42,7 +42,7 @@ export const metadata = {
   ],
   alternates: { canonical: '/case-studies' },
   openGraph: {
-    title: 'Case Studies · Bryan Balli',
+    title: 'Case Studies · HIT Agency',
     description: 'Process documentation, results, and the decisions behind each project.',
     url: '/case-studies',
     type: 'website',

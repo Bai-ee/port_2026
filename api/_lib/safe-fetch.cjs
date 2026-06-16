@@ -114,6 +114,44 @@ async function validateUrl(rawUrl) {
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 
+async function readResponseText(response, maxBytes = DEFAULT_MAX_BYTES) {
+  const contentLength = parseInt(response.headers.get('content-length') || '0', 10);
+  if (contentLength > maxBytes) {
+    throw new Error(`SSRF_BLOCKED: response too large (${contentLength} bytes, max ${maxBytes})`);
+  }
+
+  if (!response.body || typeof response.body.getReader !== 'function') {
+    const text = await response.text();
+    if (Buffer.byteLength(text, 'utf8') > maxBytes) {
+      throw new Error(`SSRF_BLOCKED: response too large (max ${maxBytes} bytes)`);
+    }
+    return text;
+  }
+
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      try { await reader.cancel(); } catch { /* ignore */ }
+      throw new Error(`SSRF_BLOCKED: response too large (max ${maxBytes} bytes)`);
+    }
+    chunks.push(value);
+  }
+
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(merged);
+}
+
 /**
  * SSRF-safe fetch. Validates the URL (and each redirect target) before fetching.
  *
@@ -166,7 +204,8 @@ async function safeFetch(url, { timeoutMs = DEFAULT_TIMEOUT_MS, maxBytes = DEFAU
     hops++;
   }
 
-  // Enforce max response size
+  // Fast-fail when the server declares an oversized body. Callers should use
+  // readResponseText() to enforce the same cap for chunked/unknown-length bodies.
   const contentLength = parseInt(response.headers.get('content-length') || '0', 10);
   if (contentLength > maxBytes) {
     throw new Error(`SSRF_BLOCKED: response too large (${contentLength} bytes, max ${maxBytes})`);
@@ -175,4 +214,4 @@ async function safeFetch(url, { timeoutMs = DEFAULT_TIMEOUT_MS, maxBytes = DEFAU
   return response;
 }
 
-module.exports = { safeFetch, validateUrl };
+module.exports = { readResponseText, safeFetch, validateUrl };

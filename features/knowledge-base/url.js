@@ -2,10 +2,11 @@ import * as cheerio from 'cheerio';
 import { createRequire } from 'module';
 
 const _require = createRequire(import.meta.url);
-const { validateUrl: _ssrfValidate } = _require('../../api/_lib/safe-fetch.cjs');
+const { readResponseText, safeFetch } = _require('../../api/_lib/safe-fetch.cjs');
 
 const FETCH_TIMEOUT_MS = 15000;
 const MAX_HTML_CHARS = 1_500_000;
+const MAX_HTML_BYTES = 2 * 1024 * 1024;
 
 export function normalizeKnowledgeUrl(rawUrl) {
   let parsed;
@@ -30,24 +31,15 @@ export function normalizeKnowledgeUrl(rawUrl) {
 export async function fetchUrlHtml(url) {
   const normalizedUrl = normalizeKnowledgeUrl(url);
 
-  // SSRF guard: reject private/internal URLs
   try {
-    await _ssrfValidate(normalizedUrl);
-  } catch (ssrfErr) {
-    const err = new Error('URL not allowed.');
-    err.status = 400;
-    throw err;
-  }
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-
-  try {
-    const res = await fetch(normalizedUrl, {
-      signal: controller.signal,
-      headers: {
-        accept: 'text/html,application/xhtml+xml',
-        'user-agent': 'BballiPortfolioKnowledgeBase/1.0',
+    const res = await safeFetch(normalizedUrl, {
+      timeoutMs: FETCH_TIMEOUT_MS,
+      maxBytes: MAX_HTML_BYTES,
+      fetchOptions: {
+        headers: {
+          accept: 'text/html,application/xhtml+xml',
+          'user-agent': 'BballiPortfolioKnowledgeBase/1.0',
+        },
       },
     });
 
@@ -64,17 +56,20 @@ export async function fetchUrlHtml(url) {
       throw err;
     }
 
-    const html = await res.text();
+    const html = await readResponseText(res, MAX_HTML_BYTES);
     return { url: normalizedUrl, html: html.slice(0, MAX_HTML_CHARS) };
   } catch (err) {
+    if (err.message?.startsWith('SSRF_BLOCKED')) {
+      const ssrfErr = new Error('URL not allowed.');
+      ssrfErr.status = 400;
+      throw ssrfErr;
+    }
     if (err.name === 'AbortError') {
       const abortErr = new Error('URL fetch timed out.');
       abortErr.status = 408;
       throw abortErr;
     }
     throw err;
-  } finally {
-    clearTimeout(timer);
   }
 }
 

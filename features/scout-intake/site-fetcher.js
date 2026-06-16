@@ -1,6 +1,6 @@
 'use strict';
 
-const { validateUrl: _ssrfValidate } = require('../../api/_lib/safe-fetch.cjs');
+const { readResponseText, safeFetch, validateUrl: _ssrfValidate } = require('../../api/_lib/safe-fetch.cjs');
 
 // site-fetcher.js — Lightweight website evidence extractor
 //
@@ -17,6 +17,7 @@ const { validateUrl: _ssrfValidate } = require('../../api/_lib/safe-fetch.cjs');
 // thin=true is set when extracted content is very sparse (JS SPA or parked domain).
 
 const FETCH_TIMEOUT_MS = 8000;
+const MAX_HTML_BYTES = 2 * 1024 * 1024;
 const MAX_ADDITIONAL_PAGES = 3;
 const MAX_H2 = 10;
 const MAX_CTA = 6;
@@ -349,36 +350,31 @@ function discoverAdditionalPages(html, baseUrl) {
 // ── Fetch ─────────────────────────────────────────────────────────────────────
 
 async function fetchPage(url, timeoutMs = FETCH_TIMEOUT_MS) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
   try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      redirect: 'follow',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; BrandintelBot/1.0)',
-        Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
+    const res = await safeFetch(url, {
+      timeoutMs,
+      maxBytes: MAX_HTML_BYTES,
+      fetchOptions: {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; BrandintelBot/1.0)',
+          Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
       },
     });
 
     if (!res.ok) {
-      clearTimeout(timer);
       return { ok: false, status: res.status, html: null, reason: `HTTP ${res.status}` };
     }
 
     const contentType = res.headers.get('content-type') || '';
     if (!contentType.includes('text/html') && !contentType.includes('text/plain')) {
-      clearTimeout(timer);
       return { ok: false, status: res.status, html: null, reason: 'non-html response' };
     }
 
-    const html = await res.text();
-    clearTimeout(timer);
+    const html = await readResponseText(res, MAX_HTML_BYTES);
     return { ok: true, status: res.status, html };
   } catch (err) {
-    clearTimeout(timer);
     const reason = err.name === 'AbortError' ? 'timeout' : (err.message || 'fetch error');
     return { ok: false, status: 0, html: null, reason };
   }

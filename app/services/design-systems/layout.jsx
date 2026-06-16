@@ -33,12 +33,12 @@ export const metadata = {
     'Storybook documentation',
     'CSS custom properties',
     'Radix UI',
-    'Bryan Balli design systems',
+    'HIT Agency design systems',
     'design-to-code pipeline',
   ],
   alternates: { canonical: '/services/design-systems' },
   openGraph: {
-    title: 'Design Systems — Bryan Balli',
+    title: 'Design Systems — HIT Agency',
     description:
       'Component libraries, token architecture, and design-to-code pipelines that give teams a single source of truth and a faster path to ship.',
     url: '/services/design-systems',

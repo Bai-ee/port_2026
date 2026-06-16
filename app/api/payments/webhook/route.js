@@ -35,20 +35,55 @@ async function upsertSubscription(subscription, email) {
   await fb.adminDb.collection('subscriptions').doc(subscription.id).set(doc, { merge: true });
 }
 
-/**
- * Mark an event as processed. Returns true if the event was new (safe to process),
- * false if it was already seen (replay — skip).
- */
-async function markEventProcessed(eventId) {
+const PROCESSING_STALE_MS = 10 * 60 * 1000;
+
+async function claimEventForProcessing(eventId) {
   const fb = require('../../../../api/_lib/firebase-admin.cjs');
   const ref = fb.adminDb.collection('_stripe_events').doc(eventId);
 
   return fb.adminDb.runTransaction(async (tx) => {
     const doc = await tx.get(ref);
-    if (doc.exists) return false; // already processed
-    tx.set(ref, { processedAt: new Date().toISOString() });
-    return true;
+    const now = new Date();
+
+    if (doc.exists) {
+      const data = doc.data() || {};
+      if (data.status === 'processed') {
+        return { shouldProcess: false, reason: 'processed' };
+      }
+
+      const startedAt = data.processingStartedAt ? Date.parse(data.processingStartedAt) : 0;
+      if (data.status === 'processing' && Number.isFinite(startedAt) && now.getTime() - startedAt < PROCESSING_STALE_MS) {
+        return { shouldProcess: false, reason: 'in_progress' };
+      }
+    }
+
+    tx.set(ref, {
+      status: 'processing',
+      processingStartedAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      attempts: fb.FieldValue.increment(1),
+    }, { merge: true });
+    return { shouldProcess: true, reason: 'claimed' };
   });
+}
+
+async function markEventProcessed(eventId) {
+  const fb = require('../../../../api/_lib/firebase-admin.cjs');
+  await fb.adminDb.collection('_stripe_events').doc(eventId).set({
+    status: 'processed',
+    processedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    lastError: null,
+  }, { merge: true });
+}
+
+async function markEventFailed(eventId, err) {
+  const fb = require('../../../../api/_lib/firebase-admin.cjs');
+  await fb.adminDb.collection('_stripe_events').doc(eventId).set({
+    status: 'failed',
+    lastError: String(err?.message || err || 'Handler failed.').slice(0, 1000),
+    updatedAt: new Date().toISOString(),
+  }, { merge: true });
 }
 
 export async function POST(request) {
@@ -68,10 +103,9 @@ export async function POST(request) {
     return new Response(JSON.stringify({ error: 'Invalid signature.' }), { status: 400 });
   }
 
-  // Idempotency: skip replayed events
-  const isNew = await markEventProcessed(event.id);
-  if (!isNew) {
-    return new Response(JSON.stringify({ received: true, replayed: true }), { status: 200 });
+  const claim = await claimEventForProcessing(event.id);
+  if (!claim.shouldProcess) {
+    return new Response(JSON.stringify({ received: true, replayed: true, reason: claim.reason }), { status: 200 });
   }
 
   try {
@@ -97,8 +131,10 @@ export async function POST(request) {
     }
   } catch (err) {
     console.error('[payments/webhook]', event.type, err?.message || err);
+    await markEventFailed(event.id, err);
     return new Response(JSON.stringify({ error: 'Handler failed.' }), { status: 500 });
   }
 
+  await markEventProcessed(event.id);
   return new Response(JSON.stringify({ received: true }), { status: 200 });
 }

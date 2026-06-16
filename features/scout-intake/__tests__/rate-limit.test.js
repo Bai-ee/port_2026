@@ -7,6 +7,19 @@ const assert = require('node:assert/strict');
 const { getClientIp } = require('../../../api/_lib/rate-limit.cjs');
 
 describe('getClientIp', () => {
+  test('prefers Vercel forwarded header over generic forwarded-for', () => {
+    const req = {
+      headers: {
+        get: (h) => {
+          if (h === 'x-vercel-forwarded-for') return '8.8.8.8';
+          if (h === 'x-forwarded-for') return '1.2.3.4, 5.6.7.8';
+          return null;
+        },
+      },
+    };
+    assert.equal(getClientIp(req), '8.8.8.8');
+  });
+
   test('extracts first IP from x-forwarded-for', () => {
     const req = { headers: { get: (h) => h === 'x-forwarded-for' ? '1.2.3.4, 5.6.7.8' : null } };
     assert.equal(getClientIp(req), '1.2.3.4');

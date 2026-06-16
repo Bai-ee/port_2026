@@ -45,7 +45,7 @@ export const metadata = {
   ],
   alternates: { canonical: '/about' },
   openGraph: {
-    title: 'About · Bryan Balli',
+    title: 'About · HIT Agency',
     description:
       'Creative technologist with a decade of experience spanning design strategy and front-end engineering.',
     url: '/about',

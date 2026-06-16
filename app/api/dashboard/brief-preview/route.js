@@ -926,6 +926,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   @media(max-width:759px){
     /* Mobile: let it sit static under the headline instead of overlapping. */
     #onboarding-cover-mockup{position:static;left:auto;width:100%;margin:16px 0 4px}
+    .cap-brief-email-cta-row{left:0;right:0;justify-content:center;}
   }
   </style>
 </head>

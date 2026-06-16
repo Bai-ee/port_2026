@@ -1,7 +1,7 @@
 const itemListSchema = {
   '@context': 'https://schema.org',
   '@type': 'ItemList',
-  name: 'Featured Work · Bryan Balli',
+  name: 'Featured Work · HIT Agency',
   description:
     'Selected projects spanning AI-assisted platforms, interactive web experiences, design systems, and client intelligence dashboards.',
   itemListElement: [
@@ -41,7 +41,7 @@ export const metadata = {
   description:
     'Selected projects spanning AI-assisted platforms, interactive web experiences, design systems, and client intelligence dashboards.',
   keywords: [
-    'Bryan Balli portfolio',
+    'HIT Agency portfolio',
     'AI design engineer work',
     'Three.js projects',
     'design systems',
@@ -50,7 +50,7 @@ export const metadata = {
   ],
   alternates: { canonical: '/work' },
   openGraph: {
-    title: 'Featured Work · Bryan Balli',
+    title: 'Featured Work · HIT Agency',
     description:
       'AI platforms, Three.js experiences, design systems, and SEO intelligence — selected work.',
     url: '/work',

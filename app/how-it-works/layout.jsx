@@ -1,7 +1,7 @@
 const howToSchema = {
   '@context': 'https://schema.org',
   '@type': 'HowTo',
-  name: 'How Bryan Balli Works',
+  name: 'How HIT Agency Works',
   description:
     'From first contact to shipped product — a phased process designed to stay lean, move fast, and keep every decision reviewable.',
   step: [
@@ -32,11 +32,11 @@ export const metadata = {
     'phased development',
     'intake pipeline',
     'design system process',
-    'Bryan Balli how it works',
+    'HIT Agency how it works',
   ],
   alternates: { canonical: '/how-it-works' },
   openGraph: {
-    title: 'How It Works · Bryan Balli',
+    title: 'How It Works · HIT Agency',
     description:
       'A phased process from intake brief through build and handoff — lean, fast, and fully reviewable.',
     url: '/how-it-works',

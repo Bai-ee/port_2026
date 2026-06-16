@@ -11,9 +11,10 @@ const COLLECTION = '_rate_limits';
  * @param {string} opts.key       - Unique rate-limit key (e.g. "anon:1.2.3.4:create-payment-intent")
  * @param {number} opts.limit     - Max requests per window
  * @param {number} opts.windowSeconds - Window duration in seconds
+ * @param {boolean} [opts.failOpen=false] - Allow requests if the limiter store fails
  * @returns {{ allowed: boolean, remaining: number }}
  */
-async function checkRateLimit({ key, limit, windowSeconds }) {
+async function checkRateLimit({ key, limit, windowSeconds, failOpen = false }) {
   const now = Date.now();
   const windowMs = windowSeconds * 1000;
   const safeKey = key.replace(/[^a-zA-Z0-9:@._-]/g, '_').slice(0, 200);
@@ -44,9 +45,11 @@ async function checkRateLimit({ key, limit, windowSeconds }) {
       return { allowed: true, remaining: limit - next };
     });
   } catch (err) {
-    // Fail open on Firestore errors — log and allow
-    console.error('[rate-limit] Firestore error, failing open:', err?.message || err);
-    return { allowed: true, remaining: limit };
+    console.error(
+      `[rate-limit] Firestore error, failing ${failOpen ? 'open' : 'closed'}:`,
+      err?.message || err
+    );
+    return { allowed: Boolean(failOpen), remaining: failOpen ? limit : 0, error: 'rate_limit_unavailable' };
   }
 }
 
@@ -54,6 +57,11 @@ async function checkRateLimit({ key, limit, windowSeconds }) {
  * Extract the real client IP from Vercel/proxy headers.
  */
 function getClientIp(request) {
+  const vercel = typeof request.headers?.get === 'function'
+    ? request.headers.get('x-vercel-forwarded-for')
+    : (request.headers?.['x-vercel-forwarded-for'] || null);
+  if (vercel) return String(vercel).split(',')[0].trim();
+
   const fwd = typeof request.headers?.get === 'function'
     ? request.headers.get('x-forwarded-for')
     : (request.headers?.['x-forwarded-for'] || null);

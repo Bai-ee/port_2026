@@ -1,19 +1,22 @@
 'use strict';
 
+const { readResponseText, safeFetch } = require('../../../api/_lib/safe-fetch.cjs');
+
 const TIMEOUT_MS = 5000;
+const MAX_BODY_BYTES = 512 * 1024;
 
 async function fetchProbe(url, opts = {}) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(url, { signal: controller.signal, redirect: 'follow', ...opts });
-    clearTimeout(timer);
-    const body = await res.text().catch(() => '');
+    const res = await safeFetch(url, {
+      timeoutMs: TIMEOUT_MS,
+      maxBytes: MAX_BODY_BYTES,
+      fetchOptions: opts,
+    });
+    const body = await readResponseText(res, MAX_BODY_BYTES).catch(() => '');
     const headers = {};
     res.headers.forEach((v, k) => { headers[k.toLowerCase()] = v; });
     return { ok: res.ok, status: res.status, headers, body, error: null };
   } catch (err) {
-    clearTimeout(timer);
     return { ok: false, status: 0, headers: {}, body: '', error: err.message };
   }
 }

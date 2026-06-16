@@ -31,13 +31,13 @@ export const metadata = {
     'client intelligence dashboard',
     'brand intake pipeline',
     'AI-assisted workflows',
-    'Bryan Balli',
+    'HIT Agency',
     'applied AI web development',
     'modular intake pipeline',
   ],
   alternates: { canonical: '/services/ai-design-consulting' },
   openGraph: {
-    title: 'AI Design Consulting — Bryan Balli',
+    title: 'AI Design Consulting — HIT Agency',
     description:
       'AI-assisted workflows, client intelligence pipelines, and production-quality web systems — from brand intake to deployed dashboard.',
     url: '/services/ai-design-consulting',

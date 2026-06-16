@@ -49,27 +49,25 @@ const Header = ({ logoRef, onOpenPage, logoSrc = '/img/sig.png' }) => {
             <img src={logoSrc} alt={isSignatureLogo ? 'Bryan Balli signature' : 'Bryan Balli logo'} width={isSignatureLogo ? 276 : 663} height={isSignatureLogo ? 208 : 552} loading="eager" decoding="async" style={{ mixBlendMode: 'darken' }} />
           </a>
 
-          <button
-            id="nav-scroll-top"
-            type="button"
-            aria-label="Scroll to top"
-            style={{ marginLeft: 'auto' }}
-            onClick={() => {
-              const arrow = document.getElementById('nav-scroll-top-arrow');
-              if (arrow && arrow.style.display !== 'none') {
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }
-            }}
-          >
-            <span id="nav-scroll-top-arrow" style={{ display: 'none', lineHeight: 0 }}>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <line x1="8" y1="13" x2="8" y2="3" />
-                <polyline points="4,7 8,3 12,7" />
-              </svg>
-            </span>
-          </button>
-
           <div id="founders-top-actions">
+            <button
+              id="nav-scroll-top"
+              type="button"
+              aria-label="Scroll to top"
+              onClick={() => {
+                const arrow = document.getElementById('nav-scroll-top-arrow');
+                if (arrow && arrow.style.display !== 'none') {
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+              }}
+            >
+              <span id="nav-scroll-top-arrow" style={{ display: 'none', lineHeight: 0 }}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <line x1="8" y1="13" x2="8" y2="3" />
+                  <polyline points="4,7 8,3 12,7" />
+                </svg>
+              </span>
+            </button>
             <button
               type="button"
               id="founders-chat-cta"

@@ -1,207 +1,250 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/>
+this isnt <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Dashboard System Map — flow</title>
+<title>Dashboard System Map — all cards, all agents</title>
 <style>
- @import url('https://fonts.googleapis.com/css2?family=Doto:wght@400;700;900&family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
- :root{--bg:#fbf8f0;--ink:#12100c;--soft:#5a5346;--light:#8a8070;--line:#d9cfb9;--card:#fffdf7;--mono:'Space Mono',monospace;--body:'Space Grotesk',system-ui,sans-serif;--disp:'Doto','Space Mono',monospace;}
- *{box-sizing:border-box;} body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);-webkit-font-smoothing:antialiased;}
- .wrap{max-width:1260px;margin:0 auto;padding:46px 22px 90px;}
- .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--light);margin:0 0 10px;}
- h1{font-family:var(--disp);font-weight:900;font-size:clamp(38px,6vw,66px);line-height:.85;letter-spacing:-.03em;text-transform:uppercase;margin:0 0 14px;}
- .lede{font-size:15px;line-height:1.6;color:var(--soft);max-width:720px;margin:0 0 6px;}
- .meta{font-family:var(--mono);font-size:11px;color:var(--light);}
- .roles{display:flex;gap:15px;flex-wrap:wrap;margin:20px 0 4px;font-family:var(--mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--soft);}
- .roles span{display:inline-flex;align-items:center;gap:6px;} .dot{width:10px;height:10px;border-radius:50%;border:1.4px solid;display:inline-block;}
- .canvas{margin-top:18px;overflow:auto;border:1px solid var(--line);border-radius:16px;background:var(--card);} svg{display:block;min-width:1190px;}
- h2{font-family:var(--disp);font-weight:900;font-size:26px;text-transform:uppercase;margin:50px 0 10px;}
- .cut{background:var(--card);border:1px solid var(--line);border-left:3px solid #a8392a;border-radius:10px;padding:12px 15px;margin:10px 0;font-size:13px;line-height:1.55;color:var(--soft);} .cut b{color:var(--ink);}
- .foot{margin-top:46px;font-family:var(--mono);font-size:10px;color:var(--light);border-top:1px solid var(--line);padding-top:14px;}
-</style></head><body><div class="wrap">
- <p class="eyebrow">HitLoop · Dashboard architecture</p>
- <h1>System Map<br>Card Flow</h1>
- <p class="lede">Every card is a node; arrows show data flowing card → card, left→right in analysis order. Bold arrows = inputs feeding an engine / chained outputs; faint arrows = an engine fanning out to its many display cards.</p>
- <p class="meta">v4 · generated · scripts/gen-system-map.cjs · 77 cards + 4 engine hubs</p>
- <div class="roles">
-   <span><span class="dot" style="background:#eaf1fe;border-color:#2563eb"></span>Input</span>
-   <span><span class="dot" style="background:#efe9db;border-color:#7c3aed"></span>Engine</span>
-   <span><span class="dot" style="background:#ecf4ec;border-color:#2f6b3d"></span>Output</span>
-   <span><span class="dot" style="background:#f8efe8;border-color:#b8542e"></span>Action</span>
-   <span><span class="dot" style="background:#f6f0e2;border-color:#8a6a1f"></span>Meta</span>
-   <span><span class="dot" style="background:#f1f0ee;border-color:#b9b3a7"></span>Upsell</span>
- </div>
- <div class="canvas"><svg viewBox="0 0 1190 1002" width="1190" height="1002" xmlns="http://www.w3.org/2000/svg">
-<defs>
- <marker id="as" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#8a8070"/></marker>
- <marker id="al" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#c9bfa8"/></marker>
-</defs>
-<style>
- .stage{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.16em;text-transform:uppercase;fill:#b9ad96;}
- .hdr{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;fill:#a89e8a;}
- .pt{font-family:'Space Mono',monospace;font-size:9.5px;}
- .es{fill:none;stroke:#9a8f79;stroke-width:1.3;}
- .el{fill:none;stroke:#d4c9b1;stroke-width:1.1;}
+  @import url('https://fonts.googleapis.com/css2?family=Doto:wght@400;700;900&family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+  :root{--bg:#fbf8f0;--ink:#12100c;--soft:#5a5346;--light:#8a8070;--line:#d9cfb9;--card:#fffdf7;
+    --grad:linear-gradient(135deg,hsl(185,100%,45%),hsl(262,100%,55%) 52%,hsl(314,100%,50%));
+    --r-in:#2563eb;--r-eng:#7c3aed;--r-out:#2f6b3d;--r-act:#b8542e;--r-up:#a8392a;--r-meta:#8a6a1f;
+    --mono:'Space Mono',monospace;--body:'Space Grotesk',system-ui,sans-serif;--disp:'Doto','Space Mono',monospace;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1180px;margin:0 auto;padding:48px 22px 100px;}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--light);margin:0 0 10px;}
+  h1{font-family:var(--disp);font-weight:900;font-size:clamp(38px,6vw,68px);line-height:.85;letter-spacing:-.03em;text-transform:uppercase;margin:0 0 16px;}
+  .lede{font-size:15px;line-height:1.6;color:var(--soft);max-width:680px;margin:0 0 6px;}
+  .meta{font-family:var(--mono);font-size:11px;color:var(--light);}
+  h2{font-family:var(--disp);font-weight:900;font-size:26px;text-transform:uppercase;margin:54px 0 8px;}
+  h2 .c{font-family:var(--mono);font-size:12px;color:var(--light);margin-left:10px;}
+  .sub{font-size:13px;color:var(--soft);margin:0 0 16px;max-width:720px;}
+
+  .roles{display:flex;gap:16px;flex-wrap:wrap;margin:22px 0 4px;font-family:var(--mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--soft);}
+  .roles span{display:inline-flex;align-items:center;gap:6px;}
+  .dot{width:10px;height:10px;border-radius:3px;display:inline-block;}
+  .d-in{background:var(--r-in);}.d-eng{background:var(--r-eng);}.d-out{background:var(--r-out);}
+  .d-act{background:var(--r-act);}.d-up{background:var(--r-up);}.d-meta{background:var(--r-meta);}
+
+  .canvas{margin-top:24px;overflow-x:auto;border:1px solid var(--line);border-radius:16px;background:var(--card);}
+  svg{display:block;min-width:1120px;}
+  .nt{font-family:var(--disp);font-weight:700;font-size:12px;text-transform:uppercase;fill:var(--ink);}
+  .nk{font-family:var(--mono);font-size:8px;letter-spacing:.1em;text-transform:uppercase;fill:var(--light);}
+  .nf{font-family:var(--mono);font-size:8.5px;fill:var(--soft);}
+  .nbox{fill:var(--card);stroke:var(--line);stroke-width:1.2;}
+  .nbox-eng{fill:#efe9db;stroke:#cbbfa6;}
+  .edge{fill:none;stroke:#a89e8a;stroke-width:1.5;}
+  .edge-d{fill:none;stroke:#bdb39d;stroke-width:1.4;stroke-dasharray:4 4;}
+  .stage{font-family:var(--mono);font-size:9px;letter-spacing:.16em;text-transform:uppercase;fill:#b9ad96;}
+
+  table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:6px;}
+  th,td{text-align:left;padding:8px 12px;font-size:12.5px;border-bottom:1px dashed rgba(18,16,12,.1);vertical-align:top;}
+  th{font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--light);}
+  td.k{font-family:var(--mono);font-size:11px;}
+  td.mono{font-family:var(--mono);font-size:10.5px;color:var(--soft);}
+  tr:last-child td{border-bottom:none;}
+  .tag{font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:4px;color:#fff;white-space:nowrap;}
+  .t-in{background:var(--r-in);}.t-eng{background:var(--r-eng);}.t-out{background:var(--r-out);}
+  .t-act{background:var(--r-act);}.t-up{background:var(--r-up);}.t-meta{background:var(--r-meta);}
+  .flag{color:var(--r-up);font-weight:700;}
+
+  .cut{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--r-up);border-radius:10px;padding:12px 15px;margin:10px 0;font-size:13px;line-height:1.55;color:var(--soft);}
+  .cut b{color:var(--ink);}
+  .foot{margin-top:54px;font-family:var(--mono);font-size:10px;color:var(--light);border-top:1px solid var(--line);padding-top:14px;}
 </style>
-<text class="stage" x="26" y="30">INTAKE</text>
-<text class="stage" x="150" y="30">CONTEXT</text>
-<text class="stage" x="320" y="30">INPUTS</text>
-<text class="stage" x="560" y="30">ENGINES</text>
-<text class="stage" x="770" y="30">OUTPUTS</text>
-<text class="stage" x="1035" y="30">ACTIONS</text>
-<path class="el" d="M99 70.5 C133 70.5 286 60.5 320 60.5" marker-end="url(#al)"/>
-<path class="el" d="M99 70.5 C133 70.5 116 114.5 150 114.5" marker-end="url(#al)"/>
-<path class="el" d="M99 70.5 C133 70.5 116 141.5 150 141.5" marker-end="url(#al)"/>
-<path class="el" d="M99 70.5 C133 70.5 286 396.5 320 396.5" marker-end="url(#al)"/>
-<path class="el" d="M99 70.5 C133 70.5 286 423.5 320 423.5" marker-end="url(#al)"/>
-<path class="el" d="M99 70.5 C133 70.5 286 450.5 320 450.5" marker-end="url(#al)"/>
-<path class="el" d="M99 70.5 C133 70.5 526 626 560 626" marker-end="url(#al)"/>
-<path class="es" d="M399 396.5 C433 396.5 286 477.5 320 477.5" marker-end="url(#as)"/>
-<path class="es" d="M388 423.5 C422 423.5 286 477.5 320 477.5" marker-end="url(#as)"/>
-<path class="es" d="M420 60.5 C454 60.5 286 141.5 320 141.5" marker-end="url(#as)"/>
-<path class="es" d="M420 60.5 C454 60.5 526 263 560 263" marker-end="url(#as)"/>
-<path class="es" d="M383 87.5 C417 87.5 526 263 560 263" marker-end="url(#as)"/>
-<path class="es" d="M393 114.5 C427 114.5 526 263 560 263" marker-end="url(#as)"/>
-<path class="es" d="M393 141.5 C427 141.5 526 263 560 263" marker-end="url(#as)"/>
-<path class="es" d="M409 168.5 C443 168.5 526 263 560 263" marker-end="url(#as)"/>
-<path class="es" d="M415 195.5 C449 195.5 526 263 560 263" marker-end="url(#as)"/>
-<path class="es" d="M409 222.5 C443 222.5 526 263 560 263" marker-end="url(#as)"/>
-<path class="es" d="M404 249.5 C438 249.5 526 263 560 263" marker-end="url(#as)"/>
-<path class="es" d="M436 276.5 C470 276.5 526 263 560 263" marker-end="url(#as)"/>
-<path class="es" d="M425 303.5 C459 303.5 526 263 560 263" marker-end="url(#as)"/>
-<path class="es" d="M404 330.5 C438 330.5 526 263 560 263" marker-end="url(#as)"/>
-<path class="es" d="M234 60.5 C268 60.5 526 263 560 263" marker-end="url(#as)"/>
-<path class="es" d="M223 87.5 C257 87.5 526 263 560 263" marker-end="url(#as)"/>
-<path class="es" d="M239 114.5 C273 114.5 526 263 560 263" marker-end="url(#as)"/>
-<path class="el" d="M649 263 C683 263 736 60.5 770 60.5" marker-end="url(#al)"/>
-<path class="el" d="M649 263 C683 263 736 87.5 770 87.5" marker-end="url(#al)"/>
-<path class="el" d="M649 263 C683 263 736 114.5 770 114.5" marker-end="url(#al)"/>
-<path class="el" d="M649 263 C683 263 736 141.5 770 141.5" marker-end="url(#al)"/>
-<path class="el" d="M649 263 C683 263 736 195.5 770 195.5" marker-end="url(#al)"/>
-<path class="el" d="M649 263 C683 263 736 222.5 770 222.5" marker-end="url(#al)"/>
-<path class="el" d="M649 263 C683 263 736 249.5 770 249.5" marker-end="url(#al)"/>
-<path class="el" d="M649 263 C683 263 736 276.5 770 276.5" marker-end="url(#al)"/>
-<path class="el" d="M649 263 C683 263 736 303.5 770 303.5" marker-end="url(#al)"/>
-<path class="el" d="M649 263 C683 263 736 330.5 770 330.5" marker-end="url(#al)"/>
-<path class="el" d="M649 263 C683 263 736 357.5 770 357.5" marker-end="url(#al)"/>
-<path class="el" d="M649 263 C683 263 736 384.5 770 384.5" marker-end="url(#al)"/>
-<path class="el" d="M649 263 C683 263 736 411.5 770 411.5" marker-end="url(#al)"/>
-<path class="el" d="M649 263 C683 263 736 438.5 770 438.5" marker-end="url(#al)"/>
-<path class="el" d="M649 263 C683 263 736 465.5 770 465.5" marker-end="url(#al)"/>
-<path class="es" d="M649 263 C683 263 736 168.5 770 168.5" marker-end="url(#as)"/>
-<path class="es" d="M865 168.5 C899 168.5 736 330.5 770 330.5" marker-end="url(#as)"/>
-<path class="es" d="M865 168.5 C899 168.5 736 141.5 770 141.5" marker-end="url(#as)"/>
-<path class="es" d="M896 60.5 C930 60.5 1001 178.5 1035 178.5" marker-end="url(#as)"/>
-<path class="es" d="M409 357.5 C443 357.5 1001 178.5 1035 178.5" marker-end="url(#as)"/>
-<path class="el" d="M896 60.5 C930 60.5 1001 151.5 1035 151.5" marker-end="url(#al)"/>
-<path class="el" d="M649 263 C683 263 526 812.5 560 812.5" marker-end="url(#al)"/>
-<path class="es" d="M399 396.5 C433 396.5 526 812.5 560 812.5" marker-end="url(#as)"/>
-<path class="es" d="M399 477.5 C433 477.5 526 812.5 560 812.5" marker-end="url(#as)"/>
-<path class="el" d="M234 60.5 C268 60.5 526 812.5 560 812.5" marker-end="url(#al)"/>
-<path class="es" d="M655 812.5 C689 812.5 736 786.5 770 786.5" marker-end="url(#as)"/>
-<path class="es" d="M891 786.5 C925 786.5 1001 70.5 1035 70.5" marker-end="url(#as)"/>
-<path class="es" d="M388 423.5 C422 423.5 736 840.5 770 840.5" marker-end="url(#as)"/>
-<path class="es" d="M388 423.5 C422 423.5 736 867.5 770 867.5" marker-end="url(#as)"/>
-<path class="es" d="M399 477.5 C433 477.5 736 813.5 770 813.5" marker-end="url(#as)"/>
-<path class="el" d="M633 626 C667 626 736 504.5 770 504.5" marker-end="url(#al)"/>
-<path class="el" d="M633 626 C667 626 736 531.5 770 531.5" marker-end="url(#al)"/>
-<path class="el" d="M633 626 C667 626 736 558.5 770 558.5" marker-end="url(#al)"/>
-<path class="el" d="M633 626 C667 626 736 585.5 770 585.5" marker-end="url(#al)"/>
-<path class="el" d="M633 626 C667 626 736 612.5 770 612.5" marker-end="url(#al)"/>
-<path class="el" d="M633 626 C667 626 736 639.5 770 639.5" marker-end="url(#al)"/>
-<path class="el" d="M633 626 C667 626 736 666.5 770 666.5" marker-end="url(#al)"/>
-<path class="el" d="M633 626 C667 626 736 693.5 770 693.5" marker-end="url(#al)"/>
-<path class="el" d="M633 626 C667 626 736 720.5 770 720.5" marker-end="url(#al)"/>
-<path class="el" d="M633 626 C667 626 736 747.5 770 747.5" marker-end="url(#al)"/>
-<path class="el" d="M399 477.5 C433 477.5 526 841.5 560 841.5" marker-end="url(#al)"/>
-<path class="el" d="M388 423.5 C422 423.5 526 841.5 560 841.5" marker-end="url(#al)"/>
-<path class="es" d="M628 841.5 C662 841.5 1001 97.5 1035 97.5" marker-end="url(#as)"/>
-<path class="es" d="M1151 97.5 C1185 97.5 1001 124.5 1035 124.5" marker-end="url(#as)"/>
-<g><rect x="26" y="60" width="73" height="21" rx="10.5" fill="#efe9db" stroke="#7c3aed" stroke-width="1.1"/><circle cx="36" cy="70.5" r="2.6" fill="#7c3aed"/><text class="pt" x="44" y="73.7" fill="#5b21b6">Site Intake</text></g>
-<g><rect x="150" y="50" width="84" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="160" cy="60.5" r="2.6" fill="#2563eb"/><text class="pt" x="168" y="63.7" fill="#1e40af">Company Brain</text></g>
-<g><rect x="150" y="77" width="73" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="160" cy="87.5" r="2.6" fill="#2563eb"/><text class="pt" x="168" y="90.7" fill="#1e40af">Founder Q&amp;A</text></g>
-<g><rect x="150" y="104" width="89" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="160" cy="114.5" r="2.6" fill="#2563eb"/><text class="pt" x="168" y="117.7" fill="#1e40af">Business Model</text></g>
-<g><rect x="150" y="131" width="95" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="160" cy="141.5" r="2.6" fill="#2563eb"/><text class="pt" x="168" y="144.7" fill="#1e40af">Market Category</text></g>
-<g><rect x="150" y="158" width="84" height="21" rx="10.5" fill="#f6f0e2" stroke="#8a6a1f" stroke-width="1.1"/><circle cx="160" cy="168.5" r="2.6" fill="#8a6a1f"/><text class="pt" x="168" y="171.7" fill="#8a6a1f">Data Coverage</text></g>
-<g><rect x="320" y="50" width="100" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="330" cy="60.5" r="2.6" fill="#2563eb"/><text class="pt" x="338" y="63.7" fill="#1e40af">Brand &amp; Keywords</text></g>
-<g><rect x="320" y="77" width="63" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="330" cy="87.5" r="2.6" fill="#2563eb"/><text class="pt" x="338" y="90.7" fill="#1e40af">Watchlist</text></g>
-<g><rect x="320" y="104" width="73" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="330" cy="114.5" r="2.6" fill="#2563eb"/><text class="pt" x="338" y="117.7" fill="#1e40af">Competitors</text></g>
-<g><rect x="320" y="131" width="73" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="330" cy="141.5" r="2.6" fill="#2563eb"/><text class="pt" x="338" y="144.7" fill="#1e40af">Search Plan</text></g>
-<g><rect x="320" y="158" width="89" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="330" cy="168.5" r="2.6" fill="#2563eb"/><text class="pt" x="338" y="171.7" fill="#1e40af">Research Focus</text></g>
-<g><rect x="320" y="185" width="95" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="330" cy="195.5" r="2.6" fill="#2563eb"/><text class="pt" x="338" y="198.7" fill="#1e40af">Web + Platforms</text></g>
-<g><rect x="320" y="212" width="89" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="330" cy="222.5" r="2.6" fill="#2563eb"/><text class="pt" x="338" y="225.7" fill="#1e40af">Social Signals</text></g>
-<g><rect x="320" y="239" width="84" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="330" cy="249.5" r="2.6" fill="#2563eb"/><text class="pt" x="338" y="252.7" fill="#1e40af">Local Weather</text></g>
-<g><rect x="320" y="266" width="116" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="330" cy="276.5" r="2.6" fill="#2563eb"/><text class="pt" x="338" y="279.7" fill="#1e40af">Conversation Intake</text></g>
-<g><rect x="320" y="293" width="105" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="330" cy="303.5" r="2.6" fill="#2563eb"/><text class="pt" x="338" y="306.7" fill="#1e40af">Platform Coverage</text></g>
-<g><rect x="320" y="320" width="84" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="330" cy="330.5" r="2.6" fill="#2563eb"/><text class="pt" x="338" y="333.7" fill="#1e40af">Brief Preview</text></g>
-<g><rect x="320" y="347" width="89" height="21" rx="10.5" fill="#eaf1fe" stroke="#2563eb" stroke-width="1.1"/><circle cx="330" cy="357.5" r="2.6" fill="#2563eb"/><text class="pt" x="338" y="360.7" fill="#1e40af">Email Settings</text></g>
-<g><rect x="320" y="386" width="79" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="330" cy="396.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="338" y="399.7" fill="#2f6b3d">Voice &amp; Tone</text></g>
-<g><rect x="320" y="413" width="68" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="330" cy="423.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="338" y="426.7" fill="#2f6b3d">Visual DNA</text></g>
-<g><rect x="320" y="440" width="79" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="330" cy="450.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="338" y="453.7" fill="#2f6b3d">Visual Audit</text></g>
-<g><rect x="320" y="467" width="79" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="330" cy="477.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="338" y="480.7" fill="#2f6b3d">Brand System</text></g>
-<g><rect x="560" y="252.5" width="89" height="21" rx="10.5" fill="#efe9db" stroke="#7c3aed" stroke-width="1.1"/><circle cx="570" cy="263" r="2.6" fill="#7c3aed"/><text class="pt" x="578" y="266.2" fill="#5b21b6">Brief Pipeline</text></g>
-<g><rect x="560" y="615.5" width="73" height="21" rx="10.5" fill="#efe9db" stroke="#7c3aed" stroke-width="1.1"/><circle cx="570" cy="626" r="2.6" fill="#7c3aed"/><text class="pt" x="578" y="629.2" fill="#5b21b6">SEO / Audit</text></g>
-<g><rect x="560" y="802" width="95" height="21" rx="10.5" fill="#efe9db" stroke="#7c3aed" stroke-width="1.1"/><circle cx="570" cy="812.5" r="2.6" fill="#7c3aed"/><text class="pt" x="578" y="815.7" fill="#5b21b6">Copy &amp; Creative</text></g>
-<g><rect x="560" y="831" width="68" height="21" rx="10.5" fill="#efe9db" stroke="#7c3aed" stroke-width="1.1"/><circle cx="570" cy="841.5" r="2.6" fill="#7c3aed"/><text class="pt" x="578" y="844.7" fill="#5b21b6">Site Build</text></g>
-<g><rect x="770" y="50" width="126" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="60.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="63.7" fill="#2f6b3d">Executive Daily Brief</text></g>
-<g><rect x="770" y="77" width="100" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="87.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="90.7" fill="#2f6b3d">Competitor Brief</text></g>
-<g><rect x="770" y="104" width="95" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="114.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="117.7" fill="#2f6b3d">Marketing Brief</text></g>
-<g><rect x="770" y="131" width="132" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="141.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="144.7" fill="#2f6b3d">Strategy Brief (admin)</text></g>
-<g><rect x="770" y="158" width="95" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="168.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="171.7" fill="#2f6b3d">30-Day Strategy</text></g>
-<g><rect x="770" y="185" width="89" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="195.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="198.7" fill="#2f6b3d">Creative Brief</text></g>
-<g><rect x="770" y="212" width="105" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="222.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="225.7" fill="#2f6b3d">Performance Brief</text></g>
-<g><rect x="770" y="239" width="89" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="249.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="252.7" fill="#2f6b3d">Market Signals</text></g>
-<g><rect x="770" y="266" width="116" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="276.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="279.7" fill="#2f6b3d">Competitor Snapshot</text></g>
-<g><rect x="770" y="293" width="84" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="303.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="306.7" fill="#2f6b3d">Local Signals</text></g>
-<g><rect x="770" y="320" width="73" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="330.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="333.7" fill="#2f6b3d">Day-of Post</text></g>
-<g><rect x="770" y="347" width="169" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="357.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="360.7" fill="#2f6b3d">Custom Post Strategy (locked)</text></g>
-<g><rect x="770" y="374" width="79" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="384.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="387.7" fill="#2f6b3d">Content Gaps</text></g>
-<g><rect x="770" y="401" width="110" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="411.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="414.7" fill="#2f6b3d">Newsletter Roll-up</text></g>
-<g><rect x="770" y="428" width="79" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="438.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="441.7" fill="#2f6b3d">Client Brief</text></g>
-<g><rect x="770" y="455" width="89" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="465.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="468.7" fill="#2f6b3d">Brief Document</text></g>
-<g><rect x="770" y="494" width="105" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="504.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="507.7" fill="#2f6b3d">SEO + Performance</text></g>
-<g><rect x="770" y="521" width="100" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="531.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="534.7" fill="#2f6b3d">Site Performance</text></g>
-<g><rect x="770" y="548" width="153" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="558.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="561.7" fill="#2f6b3d">Search &amp; Social Visibility</text></g>
-<g><rect x="770" y="575" width="121" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="585.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="588.7" fill="#2f6b3d">Search Opportunities</text></g>
-<g><rect x="770" y="602" width="116" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="612.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="615.7" fill="#2f6b3d">Trust &amp; Credibility</text></g>
-<g><rect x="770" y="629" width="110" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="639.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="642.7" fill="#2f6b3d">AI Agent Readiness</text></g>
-<g><rect x="770" y="656" width="89" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="666.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="669.7" fill="#2f6b3d">Social Preview</text></g>
-<g><rect x="770" y="683" width="105" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="693.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="696.7" fill="#2f6b3d">Design Evaluation</text></g>
-<g><rect x="770" y="710" width="121" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="720.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="723.7" fill="#2f6b3d">Cross-Device Layouts</text></g>
-<g><rect x="770" y="737" width="121" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="747.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="750.7" fill="#2f6b3d">Conversion Readiness</text></g>
-<g><rect x="770" y="776" width="121" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="786.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="789.7" fill="#2f6b3d">Ready-to-Post Drafts</text></g>
-<g><rect x="770" y="803" width="79" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="813.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="816.7" fill="#2f6b3d">Design Brief</text></g>
-<g><rect x="770" y="830" width="153" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="840.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="843.7" fill="#2f6b3d">Homepage Mockup (creative)</text></g>
-<g><rect x="770" y="857" width="126" height="21" rx="10.5" fill="#ecf4ec" stroke="#2f6b3d" stroke-width="1.1"/><circle cx="780" cy="867.5" r="2.6" fill="#2f6b3d"/><text class="pt" x="788" y="870.7" fill="#2f6b3d">Homepage Mockup (web)</text></g>
-<g><rect x="1035" y="60" width="89" height="21" rx="10.5" fill="#f8efe8" stroke="#b8542e" stroke-width="1.1"/><circle cx="1045" cy="70.5" r="2.6" fill="#b8542e"/><text class="pt" x="1053" y="73.7" fill="#9a3f1e">Schedule Posts</text></g>
-<g><rect x="1035" y="87" width="116" height="21" rx="10.5" fill="#f8efe8" stroke="#b8542e" stroke-width="1.1"/><circle cx="1045" cy="97.5" r="2.6" fill="#b8542e"/><text class="pt" x="1053" y="100.7" fill="#9a3f1e">Build &amp; Deploy Site</text></g>
-<g><rect x="1035" y="114" width="100" height="21" rx="10.5" fill="#f8efe8" stroke="#b8542e" stroke-width="1.1"/><circle cx="1045" cy="124.5" r="2.6" fill="#b8542e"/><text class="pt" x="1053" y="127.7" fill="#9a3f1e">Publish Estimate</text></g>
-<g><rect x="1035" y="141" width="116" height="21" rx="10.5" fill="#f8efe8" stroke="#b8542e" stroke-width="1.1"/><circle cx="1045" cy="151.5" r="2.6" fill="#b8542e"/><text class="pt" x="1053" y="154.7" fill="#9a3f1e">Submit Custom Brief</text></g>
-<g><rect x="1035" y="168" width="79" height="21" rx="10.5" fill="#f8efe8" stroke="#b8542e" stroke-width="1.1"/><circle cx="1045" cy="178.5" r="2.6" fill="#b8542e"/><text class="pt" x="1053" y="181.7" fill="#9a3f1e">Email Digest</text></g>
-<g><rect x="1035" y="195" width="84" height="21" rx="10.5" fill="#f8efe8" stroke="#b8542e" stroke-width="1.1"/><circle cx="1045" cy="205.5" r="2.6" fill="#b8542e"/><text class="pt" x="1053" y="208.7" fill="#9a3f1e">Create Client</text></g>
-<g><rect x="1035" y="222" width="79" height="21" rx="10.5" fill="#f8efe8" stroke="#b8542e" stroke-width="1.1"/><circle cx="1045" cy="232.5" r="2.6" fill="#b8542e"/><text class="pt" x="1053" y="235.7" fill="#9a3f1e">Local Events</text></g>
-<text class="hdr" x="26" y="912">OFF THE DATA SPINE — services + automation (no pipeline edges)</text>
-<g><rect x="26" y="934" width="89" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="36" cy="944.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="44" y="947.7" fill="#7a7567">Content Engine</text></g>
-<g><rect x="122" y="934" width="142" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="132" cy="944.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="140" y="947.7" fill="#7a7567">Automation Opportunities</text></g>
-<g><rect x="271" y="934" width="121" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="281" cy="944.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="289" y="947.7" fill="#7a7567">Reporting &amp; Insights</text></g>
-<g><rect x="399" y="934" width="110" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="409" cy="944.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="417" y="947.7" fill="#7a7567">Contact Your Human</text></g>
-<g><rect x="516" y="934" width="57" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="526" cy="944.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="534" y="947.7" fill="#7a7567">Fix This</text></g>
-<g><rect x="580" y="934" width="100" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="590" cy="944.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="598" y="947.7" fill="#7a7567">Run My Marketing</text></g>
-<g><rect x="687" y="934" width="84" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="697" cy="944.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="705" y="947.7" fill="#7a7567">Creative Work</text></g>
-<g><rect x="778" y="934" width="79" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="788" cy="944.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="796" y="947.7" fill="#7a7567">Build a Page</text></g>
-<g><rect x="864" y="934" width="100" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="874" cy="944.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="882" y="947.7" fill="#7a7567">Short-Form Video</text></g>
-<g><rect x="971" y="934" width="95" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="981" cy="944.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="989" y="947.7" fill="#7a7567">Long-Form Video</text></g>
-<g><rect x="1073" y="934" width="89" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="1083" cy="944.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="1091" y="947.7" fill="#7a7567">Single Graphic</text></g>
-<g><rect x="26" y="961" width="79" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="36" cy="971.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="44" y="974.7" fill="#7a7567">Carousel Kit</text></g>
-<g><rect x="112" y="961" width="105" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="122" cy="971.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="130" y="974.7" fill="#7a7567">Social Management</text></g>
-<g><rect x="224" y="961" width="121" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="234" cy="971.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="242" y="974.7" fill="#7a7567">Logo &amp; Brand Refresh</text></g>
-<g><rect x="352" y="961" width="110" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="362" cy="971.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="370" y="974.7" fill="#7a7567">Landing Page Build</text></g>
-<g><rect x="469" y="961" width="89" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="479" cy="971.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="487" y="974.7" fill="#7a7567">Email Campaign</text></g>
-<g><rect x="565" y="961" width="100" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="575" cy="971.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="583" y="974.7" fill="#7a7567">UI Screen Design</text></g>
-<g><rect x="672" y="961" width="89" height="21" rx="10.5" fill="#f1f0ee" stroke="#b9b3a7" stroke-width="1.1"/><circle cx="682" cy="971.5" r="2.6" fill="#b9b3a7"/><text class="pt" x="690" y="974.7" fill="#7a7567">UI Flow Design</text></g>
-</svg></div>
- <h2>What's maybe not necessary</h2>
- <div class="cut"><b>Brief proliferation:</b> Brief Pipeline fans out to 16 cards incl. 5 sliced briefs + 2 onboarding docs that duplicate existing cards (Competitor Brief≈Competitor Snapshot, Strategy Brief≈Next-Post Strategy…). Collapse to 1 brief + tabs.</div>
- <div class="cut"><b>Source-config sprawl:</b> Search Plan · Web+Platforms · Social Signals · Platform Coverage all feed the engine with the same source list. Merge.</div>
- <div class="cut"><b>Dup Homepage Mockup</b> (creative + web) and <b>two performance cards</b> (SEO+Performance / Site Performance).</div>
- <div class="cut"><b>Off-spine</b> Services (15) + Automation (3) have no pipeline edges — confirm Automation is live vs upsell placeholder.</div>
- <p class="foot">Generated · node scripts/gen-system-map.cjs · companion: brand-keywords-flow.html</p>
-</div></body></html>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">HitLoop · Dashboard architecture</p>
+  <h1>Dashboard<br>System Map</h1>
+  <p class="lede">All <b>77 cards across 10 agents</b>, by data role and what they consume / feed. The diagram shows the shared pipelines (the spine); the tables place every card on it. Flags mark likely overlap / cut candidates.</p>
+  <p class="meta">v1 · code-traced inventory (intakeCapabilityCards) · roles inferred from card defs + pipeline tracing</p>
+
+  <div class="roles">
+    <span><span class="dot d-in"></span> Input / config</span>
+    <span><span class="dot d-eng"></span> Engine / pipeline</span>
+    <span><span class="dot d-out"></span> Output / display</span>
+    <span><span class="dot d-act"></span> Action / publish</span>
+    <span><span class="dot d-meta"></span> Meta / coverage</span>
+    <span><span class="dot d-up"></span> Upsell / service CTA</span>
+  </div>
+
+  <!-- ───────────── SPINE DIAGRAM ───────────── -->
+  <div class="canvas">
+  <svg viewBox="0 0 1120 560" width="1120" height="560" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#a89e8a"/></marker>
+      <linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="hsl(185,100%,45%)"/><stop offset="52%" stop-color="hsl(262,100%,55%)"/><stop offset="100%" stop-color="hsl(314,100%,50%)"/></linearGradient>
+    </defs>
+
+    <text class="stage" x="30" y="24">INTAKE</text>
+    <text class="stage" x="250" y="24">KNOWLEDGE LAYER (context for everything)</text>
+    <text class="stage" x="560" y="24">ENGINES</text>
+    <text class="stage" x="880" y="24">OUTPUT AGENTS</text>
+
+    <!-- edges -->
+    <path class="edge" d="M170 110 C220 110 220 150 250 158" marker-end="url(#a)"/>
+    <path class="edge" d="M170 120 C220 120 220 250 250 262" marker-end="url(#a)"/>
+    <path class="edge" d="M170 130 C220 130 220 360 250 366" marker-end="url(#a)"/>
+    <!-- knowledge -> engines -->
+    <path class="edge" d="M470 200 C520 200 525 235 560 250" marker-end="url(#a)"/>
+    <path class="edge" d="M470 270 C520 270 525 270 560 270" marker-end="url(#a)"/>
+    <path class="edge" d="M470 340 C520 340 525 300 560 290" marker-end="url(#a)"/>
+    <!-- engines -> outputs -->
+    <path class="edge" d="M770 150 C820 150 835 110 870 120" marker-end="url(#a)"/>
+    <path class="edge" d="M770 270 C820 270 835 230 870 235" marker-end="url(#a)"/>
+    <path class="edge" d="M770 400 C820 400 835 350 870 350" marker-end="url(#a)"/>
+    <path class="edge-d" d="M770 410 C830 460 840 470 870 470"/>
+
+    <!-- intake -->
+    <g><rect x="30" y="92" width="140" height="56" rx="10" fill="none" stroke="url(#g)" stroke-width="2"/>
+      <text class="nk" x="100" y="110" text-anchor="middle">sign-up · crawl</text>
+      <text class="nt" x="100" y="126" text-anchor="middle">Site Intake</text>
+      <text class="nf" x="100" y="140" text-anchor="middle">evidence · scoutConfig · snapshot</text></g>
+
+    <!-- knowledge layer -->
+    <g><rect class="nbox" x="250" y="150" width="220" height="50" rx="10"/>
+      <text class="nk" x="360" y="168" text-anchor="middle">Knowledge Officer</text>
+      <text class="nt" x="360" y="184" text-anchor="middle">Company Brain · Biz Model · Industry · Founder Q&amp;A</text></g>
+    <g><rect class="nbox" x="250" y="248" width="220" height="46" rx="10"/>
+      <text class="nk" x="360" y="266" text-anchor="middle">Creative Director (brand truth)</text>
+      <text class="nt" x="360" y="282" text-anchor="middle">Voice · Visual DNA · Brand System</text></g>
+    <g><rect class="nbox" x="250" y="342" width="220" height="46" rx="10"/>
+      <text class="nk" x="360" y="360" text-anchor="middle">Marketing Director (inputs)</text>
+      <text class="nt" x="360" y="376" text-anchor="middle">Brand&amp;Keywords · sources · watchlist</text></g>
+
+    <!-- engines -->
+    <g><rect class="nbox-eng" x="560" y="128" width="210" height="48" rx="10"/>
+      <text class="nk" x="665" y="146" text-anchor="middle">xscout + news → scribe</text>
+      <text class="nt" x="665" y="162" text-anchor="middle">Brief Pipeline</text></g>
+    <g><rect class="nbox-eng" x="560" y="246" width="210" height="48" rx="10"/>
+      <text class="nk" x="665" y="264" text-anchor="middle">audit · psi · ai-readiness</text>
+      <text class="nt" x="665" y="280" text-anchor="middle">Website / SEO Pipeline</text></g>
+    <g><rect class="nbox-eng" x="560" y="378" width="210" height="48" rx="10"/>
+      <text class="nk" x="665" y="396" text-anchor="middle">voice + brief → copy</text>
+      <text class="nt" x="665" y="412" text-anchor="middle">Creative Pipeline</text></g>
+
+    <!-- output agents -->
+    <g><rect class="nbox" x="870" y="100" width="220" height="46" rx="10"/>
+      <text class="nk" x="980" y="118" text-anchor="middle">Daily Briefs + Marketing Director</text>
+      <text class="nt" x="980" y="134" text-anchor="middle">Signals · Brief · Strategy · Newsletter</text></g>
+    <g><rect class="nbox" x="870" y="214" width="220" height="46" rx="10"/>
+      <text class="nk" x="980" y="232" text-anchor="middle">Website Developer</text>
+      <text class="nt" x="980" y="248" text-anchor="middle">SEO · Visibility · Build/Deploy</text></g>
+    <g><rect class="nbox" x="870" y="328" width="220" height="46" rx="10"/>
+      <text class="nk" x="980" y="346" text-anchor="middle">Social / Creative Director</text>
+      <text class="nt" x="980" y="362" text-anchor="middle">Drafts · Schedule · Mockups</text></g>
+    <g><rect class="nbox" x="870" y="450" width="220" height="46" rx="10" stroke-dasharray="4 4"/>
+      <text class="nk" x="980" y="468" text-anchor="middle">off the data spine</text>
+      <text class="nt" x="980" y="484" text-anchor="middle">Services · Automation · Admin</text></g>
+  </svg>
+  </div>
+
+  <!-- ───────────── PER-AGENT TABLES ───────────── -->
+
+  <h2>Marketing Director <span class="c">growth · 19</span></h2>
+  <p class="sub">The listening + strategy hub. Inputs feed the Brief Pipeline; outputs render its result.</p>
+  <table><thead><tr><th>Card</th><th>Role</th><th>Consumes</th><th>Feeds</th></tr></thead><tbody>
+    <tr><td class="k">Brand &amp; Keywords</td><td><span class="tag t-in">input</span></td><td class="mono">scoutConfig seed</td><td class="mono">Search Plan · News · Scout</td></tr>
+    <tr><td class="k">Watchlist</td><td><span class="tag t-in">input</span></td><td class="mono">handles</td><td class="mono">Scout (kolActivity)</td></tr>
+    <tr><td class="k">Competitors</td><td><span class="tag t-in">input</span></td><td class="mono">brand names</td><td class="mono">Scout (competitorIntel)</td></tr>
+    <tr><td class="k">Search Plan</td><td><span class="tag t-in">input</span></td><td class="mono">Brand&amp;Keywords</td><td class="mono">Scout queries</td></tr>
+    <tr><td class="k">Research Focus</td><td><span class="tag t-in">input</span></td><td class="mono">user instructions</td><td class="mono">Scout prompt</td></tr>
+    <tr><td class="k">Web Search + Platforms <span class="flag">⚑</span></td><td><span class="tag t-in">input</span></td><td class="mono">platform toggles</td><td class="mono">Scout sources · overlaps Social Signals</td></tr>
+    <tr><td class="k">Social Media Signals <span class="flag">⚑</span></td><td><span class="tag t-in">input</span></td><td class="mono">platform toggles</td><td class="mono">overlaps Platforms / Platform Coverage</td></tr>
+    <tr><td class="k">Local Weather</td><td><span class="tag t-in">input</span></td><td class="mono">ZIP</td><td class="mono">Brief (weather block)</td></tr>
+    <tr><td class="k">Local Events</td><td><span class="tag t-act">tool</span></td><td class="mono">ZIP / keywords</td><td class="mono">on-demand event search</td></tr>
+    <tr><td class="k">Conversation Intake</td><td><span class="tag t-in">input</span></td><td class="mono">pasted chat</td><td class="mono">Scribe (context)</td></tr>
+    <tr><td class="k">Brief Preview (Pre-run)</td><td><span class="tag t-eng">engine</span></td><td class="mono">full config</td><td class="mono">runs the brief</td></tr>
+    <tr><td class="k">Market Signals</td><td><span class="tag t-out">output</span></td><td class="mono">categoryTrends · brandMentions</td><td class="mono">—</td></tr>
+    <tr><td class="k">Competitor Snapshot <span class="flag">⚑</span></td><td><span class="tag t-out">output</span></td><td class="mono">competitorIntel</td><td class="mono">— dup of Competitor Brief</td></tr>
+    <tr><td class="k">Local Signals</td><td><span class="tag t-out">output</span></td><td class="mono">location signals</td><td class="mono">—</td></tr>
+    <tr><td class="k">Priority Action</td><td><span class="tag t-out">output</span></td><td class="mono">scout priority</td><td class="mono">—</td></tr>
+    <tr><td class="k">Next-Post Strategy <span class="flag">⚑</span></td><td><span class="tag t-out">output</span></td><td class="mono">brief</td><td class="mono">— overlaps Posting Rules / Content Gaps</td></tr>
+    <tr><td class="k">Content Gaps <span class="flag">⚑</span></td><td><span class="tag t-out">output</span></td><td class="mono">brief</td><td class="mono">— overlaps Strategy</td></tr>
+    <tr><td class="k">Posting Rules <span class="flag">⚑</span></td><td><span class="tag t-out">output</span></td><td class="mono">brief</td><td class="mono">— overlaps Strategy</td></tr>
+    <tr><td class="k">Newsletter Roll-up</td><td><span class="tag t-out">output</span></td><td class="mono">brief</td><td class="mono">—</td></tr>
+  </tbody></table>
+
+  <h2>Daily Briefs <span class="c">brief · 7</span></h2>
+  <p class="sub">Brief proliferation — one engine, many sliced views. Strong consolidation candidate.</p>
+  <table><thead><tr><th>Card</th><th>Role</th><th>Consumes</th><th>Feeds</th></tr></thead><tbody>
+    <tr><td class="k">Executive Daily Brief</td><td><span class="tag t-out">output</span></td><td class="mono">full agentData</td><td class="mono">email digest + dashboard</td></tr>
+    <tr><td class="k">Competitor Brief <span class="flag">⚑</span></td><td><span class="tag t-out">output</span></td><td class="mono">slice of brief</td><td class="mono">— dup of Competitor Snapshot</td></tr>
+    <tr><td class="k">Marketing Brief <span class="flag">⚑</span></td><td><span class="tag t-out">output</span></td><td class="mono">slice of brief</td><td class="mono">— overlaps Exec Brief</td></tr>
+    <tr><td class="k">Strategy Brief <span class="flag">⚑</span></td><td><span class="tag t-out">output</span></td><td class="mono">slice of brief</td><td class="mono">— overlaps Strategy Builder</td></tr>
+    <tr><td class="k">Creative Brief <span class="flag">⚑</span></td><td><span class="tag t-out">output</span></td><td class="mono">slice of brief</td><td class="mono">— overlaps Design Brief</td></tr>
+    <tr><td class="k">Performance Brief <span class="flag">⚑</span></td><td><span class="tag t-out">output</span></td><td class="mono">slice of brief</td><td class="mono">— overlaps SEO/Perf cards</td></tr>
+    <tr><td class="k">Submit Custom Brief</td><td><span class="tag t-act">action</span></td><td class="mono">admin HTML/PDF</td><td class="mono">publishes client brief</td></tr>
+  </tbody></table>
+
+  <h2>Knowledge Officer <span class="c">knowledge · 5</span></h2>
+  <p class="sub">The context layer. Feeds the brief, creative, and website engines as ground truth.</p>
+  <table><thead><tr><th>Card</th><th>Role</th><th>Consumes</th><th>Feeds</th></tr></thead><tbody>
+    <tr><td class="k">Company Brain</td><td><span class="tag t-in">input</span></td><td class="mono">uploaded docs/URLs</td><td class="mono">all engines (RAG context)</td></tr>
+    <tr><td class="k">Founder Q&amp;A</td><td><span class="tag t-in">input</span></td><td class="mono">onboarding answers</td><td class="mono">brief + creative</td></tr>
+    <tr><td class="k">Business Model</td><td><span class="tag t-out">output</span></td><td class="mono">intake evidence</td><td class="mono">brief context</td></tr>
+    <tr><td class="k">Market Category</td><td><span class="tag t-out">output</span></td><td class="mono">intake evidence</td><td class="mono">brief / benchmarking</td></tr>
+    <tr><td class="k">Data Coverage</td><td><span class="tag t-meta">meta</span></td><td class="mono">all cards' captured fields</td><td class="mono">coverage gauge (toolbar chip)</td></tr>
+  </tbody></table>
+
+  <h2>Creative Director <span class="c">content · 6</span></h2>
+  <table><thead><tr><th>Card</th><th>Role</th><th>Consumes</th><th>Feeds</th></tr></thead><tbody>
+    <tr><td class="k">Voice &amp; Tone</td><td><span class="tag t-out">output</span></td><td class="mono">intake</td><td class="mono">Creative Pipeline · Scribe</td></tr>
+    <tr><td class="k">Visual DNA</td><td><span class="tag t-out">output</span></td><td class="mono">intake</td><td class="mono">mockups / creative</td></tr>
+    <tr><td class="k">Visual Audit</td><td><span class="tag t-out">output</span></td><td class="mono">site styles</td><td class="mono">Brand System</td></tr>
+    <tr><td class="k">Brand System</td><td><span class="tag t-out">output</span></td><td class="mono">voice + visual</td><td class="mono">creative + site</td></tr>
+    <tr><td class="k">Design Brief <span class="flag">⚑</span></td><td><span class="tag t-out">output</span></td><td class="mono">prospect data</td><td class="mono">— overlaps Creative Brief</td></tr>
+    <tr><td class="k">Homepage Mockup <span class="flag">⚑</span></td><td><span class="tag t-out">output</span></td><td class="mono">visual DNA</td><td class="mono">— DUP of Website's Homepage Mockup</td></tr>
+  </tbody></table>
+
+  <h2>Social Media Manager <span class="c">social · 4</span></h2>
+  <table><thead><tr><th>Card</th><th>Role</th><th>Consumes</th><th>Feeds</th></tr></thead><tbody>
+    <tr><td class="k">Platform Coverage <span class="flag">⚑</span></td><td><span class="tag t-in">input</span></td><td class="mono">platform toggles</td><td class="mono">— overlaps Platforms / Social Signals</td></tr>
+    <tr><td class="k">Copy &amp; Creative</td><td><span class="tag t-act">tool</span></td><td class="mono">brief + voice</td><td class="mono">generates drafts</td></tr>
+    <tr><td class="k">Ready-to-Post Drafts</td><td><span class="tag t-out">output</span></td><td class="mono">Scribe content</td><td class="mono">Schedule Posts</td></tr>
+    <tr><td class="k">Schedule Posts</td><td><span class="tag t-act">action</span></td><td class="mono">drafts</td><td class="mono">posts to X</td></tr>
+  </tbody></table>
+
+  <h2>Website Developer <span class="c">website · 13</span></h2>
+  <p class="sub">Own SEO/audit pipeline. Several near-duplicate performance/visibility cards.</p>
+  <table><thead><tr><th>Card</th><th>Role</th><th>Consumes</th><th>Feeds</th></tr></thead><tbody>
+    <tr><td class="k">SEO + Performance Snapshot <span class="flag">⚑</span></td><td><span class="tag t-out">output</span></td><td class="mono">PSI + SEO scan</td><td class="mono">— overlaps Site Performance</td></tr>
+    <tr><td class="k">Site Performance <span class="flag">⚑</span></td><td><span class="tag t-out">output</span></td><td class="mono">PSI</td><td class="mono">— overlaps SEO+Perf</td></tr>
+    <tr><td class="k">Search &amp; Social Visibility</td><td><span class="tag t-out">output</span></td><td class="mono">AI/search probe</td><td class="mono">—</td></tr>
+    <tr><td class="k">Search Opportunities</td><td><span class="tag t-out">output</span></td><td class="mono">SEO scan</td><td class="mono">—</td></tr>
+    <tr><td class="k">Trust &amp; Credibility</td><td><span class="tag t-out">output</span></td><td class="mono">site signals</td><td class="mono">—</td></tr>
+    <tr><td class="k">AI Agent Readiness</td><td><span class="tag t-out">output</span></td><td class="mono">crawl/markup</td><td class="mono">—</td></tr>
+    <tr><td class="k">Social Preview Check</td><td><span class="tag t-out">output</span></td><td class="mono">OG meta</td><td class="mono">—</td></tr>
+    <tr><td class="k">Design Evaluation</td><td><span class="tag t-out">output</span></td><td class="mono">screenshot</td><td class="mono">—</td></tr>
+    <tr><td class="k">Cross-Device Layouts</td><td><span class="tag t-out">output</span></td><td class="mono">screenshots</td><td class="mono">—</td></tr>
+    <tr><td class="k">Conversion Readiness</td><td><span class="tag t-out">output</span></td><td class="mono">page analysis</td><td class="mono">—</td></tr>
+    <tr><td class="k">Homepage Mockup <span class="flag">⚑</span></td><td><span class="tag t-out">output</span></td><td class="mono">visual DNA</td><td class="mono">— DUP across content+website</td></tr>
+    <tr><td class="k">Build &amp; Deploy Site</td><td><span class="tag t-act">action</span></td><td class="mono">generated site</td><td class="mono">Vercel deploy</td></tr>
+    <tr><td class="k">Publish Client Estimate</td><td><span class="tag t-act">action</span></td><td class="mono">scope + pricing</td><td class="mono">client-facing estimate</td></tr>
+  </tbody></table>
+
+  <h2>Off the data spine <span class="c">services 15 · automation 3 · admin 3 · onboarding 2</span></h2>
+  <p class="sub">These don't consume the analysis pipeline. Services = hire-a-human CTAs; Automation = upsell tiles; Admin = internal tools; Onboarding = legacy brief docs.</p>
+  <table><thead><tr><th>Group</th><th>Role</th><th>Cards</th></tr></thead><tbody>
+    <tr><td class="k">Services (15)</td><td><span class="tag t-up">upsell</span></td><td class="mono">Contact · Fix This · Run My Marketing · Creative Work · Build a Page · Short/Long-Form Video · Single Graphic · Carousel Kit · Social Management · Logo Refresh · Landing Page · Email Campaign · UI Screen/Flow Design</td></tr>
+    <tr><td class="k">Automation (3) <span class="flag">⚑</span></td><td><span class="tag t-up">upsell</span></td><td class="mono">Content Engine · Automation Opportunities · Reporting &amp; Insights — verify these are live vs placeholder</td></tr>
+    <tr><td class="k">Admin (3)</td><td><span class="tag t-act">action</span></td><td class="mono">Email Digest · Email Settings · Create Client</td></tr>
+    <tr><td class="k">Onboarding (2) <span class="flag">⚑</span></td><td><span class="tag t-out">output</span></td><td class="mono">Client Brief · Brief Document — likely legacy duplicates of Daily Briefs</td></tr>
+  </tbody></table>
+
+  <!-- ───────────── CUT CANDIDATES ───────────── -->
+  <h2>What's maybe not necessary</h2>
+  <div class="cut"><b>1 · Brief proliferation (highest impact).</b> Executive Daily Brief + 5 sliced briefs (Competitor/Marketing/Strategy/Creative/Performance) + 2 onboarding brief docs = <b>8 brief surfaces from one engine</b>. Each slice duplicates an existing card (Competitor Brief ≈ Competitor Snapshot; Strategy Brief ≈ Strategy Builder; Creative Brief ≈ Design Brief; Performance Brief ≈ SEO cards). Collapse to <b>1 Executive Brief + tabs</b>.</div>
+  <div class="cut"><b>2 · Platform/source config sprawl.</b> Search Plan, Web Search + Platforms, Social Media Signals (growth) + Platform Coverage (social) all configure the same source list. Collapse to <b>one Source Platforms card</b>.</div>
+  <div class="cut"><b>3 · Duplicate "Homepage Mockup."</b> Exists in both Creative Director (<code>client-mockup-creative</code>) and Website Developer (<code>client-mockup</code>). Keep one.</div>
+  <div class="cut"><b>4 · Two performance cards.</b> SEO + Performance Snapshot vs Site Performance — same PSI data. Merge.</div>
+  <div class="cut"><b>5 · Strategy output overlap.</b> Next-Post Strategy, Content Gaps, Posting Rules all render brief-derived strategy. Consider one "Strategy" card with sections.</div>
+  <div class="cut"><b>6 · Verify Automation tiles.</b> Content Engine / Automation Opportunities / Reporting &amp; Insights — confirm they're wired to data vs upsell placeholders; if placeholder, gate behind a tier instead of occupying card slots.</div>
+  <div class="cut"><b>Net:</b> ~77 cards could likely become ~50 without losing capability — mostly by collapsing brief slices and source-config duplicates into tabbed cards.</div>
+
+  <p class="foot">Working map — verify role/edge guesses against code before cutting. Path: public/docs/dashboard-system-map.html · companion: brand-keywords-flow.html</p>
+</div>
+</body>
+</html>

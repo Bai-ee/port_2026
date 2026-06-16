@@ -191,12 +191,12 @@ const PORTFOLIO_IMAGES = [
 ];
 
 const CMO_TABLE_ROWS = [
-  { task: 'Onboarding Brief',       value: 'A focused review of your site, offer, or idea with clear opportunities to improve positioning, presentation, and next steps.' },
-  { task: 'Daily Executive Brief',  value: 'A daily snapshot of what matters across your brand, website and socials.' },
-  { task: 'Market Director',        value: 'Track signals, competitors, narrative shifts, and how to act on them.', sub: true },
-  { task: 'Creative Director',      value: 'Maintain a consistent look and feel across site, socials, and content.', sub: true },
-  { task: 'Social Media Director',  value: 'Plan, generate, and guide posts with timing, direction, and campaigns.', sub: true },
-  { task: 'Website Director',       value: "Visually confirm your website's health across multiple devices, elevate AI readiness and SEO.", sub: true },
+  { task: 'Onboarding Brief',       value: 'A review of your digital footprint that replaces onboarding calls with clear baseline knowledge we can improve on.' },
+  { task: 'Daily Stand Up Email',   value: 'A snapshot of what matters across your brand, website and socials. Monitored and enhanced by a Human in the Loop.' },
+  { task: 'Marketing',              value: 'Track signals, competitors, narrative shifts, and how to act on them.', sub: true },
+  { task: 'Creative',               value: 'Maintain a consistent look and feel across site, socials, and content.', sub: true },
+  { task: 'Social Media',           value: 'Plan, generate, and guide posts with timing, direction, and campaigns.', sub: true },
+  { task: 'Web',                    value: "Visually confirm your website's health, elevate AI readiness and SEO.", sub: true },
 ];
 
 const isSubFirst = (arr, i) => arr[i].sub && (i === 0 || !arr[i - 1].sub);
@@ -1350,10 +1350,25 @@ const StackedSlidesSection = () => {
             align-self: center !important;
             padding: 0.5rem 3.75rem !important;
           }
+          #cmo-card-onboard-body { display: none; }
+          #onboarding-table-section { border-top: none !important; }
+          #footer-contact-cta {
+            width: 100% !important;
+            justify-content: center !important;
+            box-sizing: border-box !important;
+          }
+          #cmo-dashboard-table { border-top: none !important; padding-top: 0 !important; }
           /* ── Onboarding card / table overflow fix ── */
           #dashboard-stack-shell {
-            overflow: hidden;
+            overflow: visible;
+            padding-top: 35px !important;
           }
+          /* Cards static-lifted on mobile — no interaction needed */
+          #dash-peek-card-1 { transform: translateY(-46px) rotate(-3.2deg) !important; }
+          #dash-peek-card-2 { transform: translateY(-46px) rotate(1.2deg) !important; }
+          #dash-peek-card-3 { transform: translateY(-46px) rotate(-1.4deg) !important; }
+          #cmo-dashboard-card { margin-top: -40px !important; }
+          #onboarding-table-section { margin-top: 2.5rem !important; }
           [data-peek-card] {
             width: 33% !important;
             min-width: 0 !important;
@@ -1364,31 +1379,69 @@ const StackedSlidesSection = () => {
             max-width: 100% !important;
             box-sizing: border-box !important;
           }
-          #cmo-dashboard-table table {
-            table-layout: fixed;
-            width: 100%;
+          /* Kill table layout engine on mobile so flex/block can take over */
+          #cmo-dashboard-table table,
+          #cmo-dashboard-table thead,
+          #cmo-dashboard-table tbody {
+            display: block !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
           }
-          #cmo-dashboard-table td {
-            overflow: visible;
-            white-space: normal;
-            max-width: none;
+          #cmo-dashboard-table thead th:nth-child(1),
+          #cmo-dashboard-table thead th:nth-child(3) { display: none !important; }
+          #cmo-dashboard-table thead th:nth-child(2) {
+            display: block !important;
+            width: 100% !important;
+            text-align: center !important;
           }
-          /* Stack: brief name + icon on top row, value collapses underneath */
+          /* Grid layout: icon col spans name+description rows so trunk is unbroken */
           #cmo-dashboard-table tbody tr {
-            display: grid;
-            grid-template-columns: 1fr auto;
+            display: grid !important;
+            grid-template-columns: 2rem 1fr !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
           }
-          #cmo-dashboard-table tbody td:nth-child(1) { grid-column: 1; grid-row: 1; }
-          #cmo-dashboard-table tbody td:nth-child(3) { grid-column: 2; grid-row: 1; }
+          #cmo-dashboard-table tbody td { display: block !important; }
+          #cmo-dashboard-table tbody td:nth-child(1) {
+            grid-column: 1 !important;
+            grid-row: 1 / 3 !important;
+            position: relative !important;
+            padding: 1.1rem 0.2rem !important;
+          }
           #cmo-dashboard-table tbody td:nth-child(2) {
-            grid-column: 1 / -1;
-            grid-row: 2;
-            text-align: left !important;
-            padding-top: 0 !important;
-            font-size: 0.78rem;
+            grid-column: 2 !important;
+            grid-row: 1 !important;
+            min-width: 0 !important;
+            padding-top: 1.1rem !important;
+            padding-bottom: 0.35rem !important;
+            font-weight: 700 !important;
+            color: #2a2420 !important;
           }
+          #cmo-dashboard-table tbody td:nth-child(3) {
+            grid-column: 2 !important;
+            grid-row: 2 !important;
+            box-sizing: border-box !important;
+            padding: 0 0.4rem 1.1rem 0.4rem !important;
+            font-size: 0.78rem !important;
+            line-height: 1.5 !important;
+            color: rgba(42,36,32,0.6) !important;
+          }
+          /* Sub-row descriptions: clear the connector elbow arm (extends ~0.55rem into col 2) */
+          #cmo-dashboard-table tbody tr[data-sub] td:nth-child(3) {
+            padding-left: 1.1rem !important;
+          }
+          #cmo-dashboard-table .cmo-conn--last::before { bottom: calc(50% + 11px) !important; }
           .cmo-url-input-mobile .cmo-table-submit-label { display: none; }
           .cmo-url-input-mobile .cta-pill-btn {
+            width: 2.6rem;
+            height: 2.6rem;
+            padding: 0;
+            gap: 0;
+            justify-content: center;
+            flex-shrink: 0;
+          }
+          #footer-url-input-row .footer-submit-label { display: none; }
+          #footer-url-input-row .cta-pill-btn {
             width: 2.6rem;
             height: 2.6rem;
             padding: 0;
@@ -1402,6 +1455,7 @@ const StackedSlidesSection = () => {
         }
         .cmo-table-inner { display: none; }
         .cmo-table-outer { display: block; }
+        #onboarding-table-section { border-top: none !important; }
         /* Director sub-row connector — lives in the icon column so the trunk
            sits under the Daily Executive Brief lock and flows up into it, with
            rounded branch elbows reaching toward each Director label. */
@@ -1501,11 +1555,11 @@ const StackedSlidesSection = () => {
           #cmo-modal-overlay { align-items: center; justify-content: center; padding: 16px; min-height: 100dvh; }
           .testimonials-port-img { aspect-ratio: 16 / 10 !important; }
           #dashboard-stack-shell { padding-top: 44px !important; }
-          .dash-peek-card { width: clamp(90px, 33%, 160px) !important; max-height: 120px !important; }
+          .dash-peek-card { width: calc(100% / 3) !important; max-height: 120px !important; }
           .dash-peek-card img { height: calc(100% - 24px) !important; }
-          #dash-peek-card-1 { left: 0% !important; }
-          #dash-peek-card-2 { left: 33% !important; }
-          #dash-peek-card-3 { left: 66% !important; }
+          #dash-peek-card-1 { left: 66.667% !important; }
+          #dash-peek-card-2 { left: 33.333% !important; }
+          #dash-peek-card-3 { left: 0% !important; }
         }
         #cmo-auth-card {
           position: relative; width: 100%; max-width: 44rem;
@@ -1652,6 +1706,10 @@ const StackedSlidesSection = () => {
         @media (max-width: 767px), (prefers-reduced-motion: reduce) {
           #cmo-modal-overlay, #cmo-auth-card { animation: none; }
         }
+        @media (max-width: 480px) {
+          #hero-url-input-row { display: none !important; }
+          #panel-hero-text-row { justify-content: center; }
+        }
       `}</style>
       <div id="stacked-slides-wrapper" ref={wrapperRef} style={wrapperStyle}>
         {slides.map((slide, index) => (
@@ -1718,9 +1776,9 @@ const StackedSlidesSection = () => {
                                 style={{ position: 'relative', gridColumn: '1 / -1', paddingTop: '70px', zIndex: isMobileCapabilityOpen ? 6 : 1 }}
                               >
                                 {[
-                                  { ref: peekCard1Ref, id: 'dash-peek-card-1', left: '0%',  rotate: '-3.2deg', objPos: 'center center', label: '', img: '/img/interactive_ss_1.webp', height: '200px', topOffset: '0', bg: 'rgb(116,253,232)' },
-                                  { ref: peekCard2Ref, id: 'dash-peek-card-2', left: '33%', rotate: '1.2deg',  objPos: 'center center', label: '', img: '/img/interactive_ss_2.webp', height: '168px', topOffset: '0' },
-                                  { ref: peekCard3Ref, id: 'dash-peek-card-3', left: '66%', rotate: '-1.4deg', objPos: 'center center', label: '', img: '/img/interactive_ss_3.webp', height: '190px', topOffset: '0', bg: '#000000' },
+                                  { ref: peekCard3Ref, id: 'dash-peek-card-3', left: '0%',  rotate: '-1.4deg', objPos: 'top center', label: '', img: '/img/ss3.png', height: '190px', topOffset: '0', bg: '#fcfaf4' },
+                                  { ref: peekCard2Ref, id: 'dash-peek-card-2', left: '33%', rotate: '1.2deg',  objPos: 'top center', label: '', img: '/img/ss2.png', height: '168px', topOffset: '0', bg: '#fcfaf4' },
+                                  { ref: peekCard1Ref, id: 'dash-peek-card-1', left: '66%', rotate: '-3.2deg', objPos: 'top center', label: '', img: '/img/ss1.png', height: '200px', topOffset: '0', bg: '#fcfaf4' },
                                 ].map(({ ref: cardRef, id, left, rotate, objPos, label, img, height, topOffset, bg }, i) => (
                                   <div
                                     key={id}
@@ -1728,8 +1786,8 @@ const StackedSlidesSection = () => {
                                     data-peek-card
                                     className="dash-peek-card"
                                     id={id}
-                                    onMouseEnter={() => gsap.to(cardRef.current, { y: -46, duration: 0.38, ease: 'power2.out' })}
-                                    onMouseLeave={() => gsap.to(cardRef.current, { y: 0,   duration: 0.48, ease: 'power2.inOut' })}
+                                    onMouseEnter={() => { if (isTouchScrollDevice()) return; gsap.to(cardRef.current, { y: -46, duration: 0.38, ease: 'power2.out' }); }}
+                                    onMouseLeave={() => { if (isTouchScrollDevice()) return; gsap.to(cardRef.current, { y: 0,   duration: 0.48, ease: 'power2.inOut' }); }}
                                     style={{
                                       position: 'absolute',
                                       top: topOffset,
@@ -1767,14 +1825,14 @@ const StackedSlidesSection = () => {
                                         <p style={{ margin: '0 0 0.6rem', fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.4)', fontFamily: "'Space Mono', monospace" }}>Your Business, Mapped</p>
                                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem', fontFamily: "'Space Grotesk', system-ui, sans-serif", flex: 1 }}>
                                           <thead><tr style={{ borderBottom: '1px solid rgba(42,36,32,0.15)' }}><th style={{ width: '1.2rem' }} /><th style={{ textAlign: 'left', padding: '0.28rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.45)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Access</th></tr></thead>
-                                          <tbody>{CMO_TABLE_ROWS.map((row, ri, arr) => (<tr key={row.task} style={{ borderBottom: (row.task === 'Daily Executive Brief' || (row.sub && !isSubLast(arr, ri))) ? 'none' : '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.38rem 0.2rem', textAlign: 'center', position: 'relative' }}>{row.task === 'Onboarding Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? <BriefConnector first={isSubFirst(arr, ri)} last={isSubLast(arr, ri)} /> : <span className="cmo-arrow" aria-hidden="true"><Lock size={12} /></span>}</td><td style={{ padding: row.sub ? '0.38rem 0.4rem 0.38rem 0.9rem' : '0.38rem 0.4rem', color: row.sub ? 'rgba(42,36,32,0.55)' : '#2a2420', fontWeight: row.sub ? 400 : 500 }}>{row.task}</td></tr>))}</tbody>
+                                          <tbody>{CMO_TABLE_ROWS.map((row, ri, arr) => (<tr key={row.task} style={{ borderBottom: (row.task === 'Daily Stand Up Email' || (row.sub && !isSubLast(arr, ri))) ? 'none' : '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.38rem 0.2rem', textAlign: 'center', position: 'relative' }}>{row.task === 'Onboarding Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? <BriefConnector first={isSubFirst(arr, ri)} last={isSubLast(arr, ri)} /> : <span className="cmo-arrow" aria-hidden="true"><Lock size={12} /></span>}</td><td style={{ padding: row.sub ? '0.38rem 0.4rem 0.38rem 0.9rem' : '0.38rem 0.4rem', color: row.sub ? 'rgba(42,36,32,0.55)' : '#2a2420', fontWeight: row.sub ? 400 : 500 }}>{row.task}</td></tr>))}</tbody>
                                         </table>
                                       </div>
                                     </div>
                                   ) : null}
                                   <div style={capabilityContentStyle}>
                                     <h2 style={{ ...capabilityCardTitleStyle, fontSize: 'clamp(1.6rem, 3.5vw, 5rem)', lineHeight: 0.9, marginBottom: '0.5rem', paddingTop: '20px', textAlign: 'center' }}>Lets Get Started.</h2>
-                                    {item.body && <p style={{ ...capabilityCardBodyStyle, maxWidth: 'none', textAlign: 'center' }}>{item.body}</p>}
+                                    {item.body && <p id="cmo-card-onboard-body" style={{ ...capabilityCardBodyStyle, maxWidth: 'none', textAlign: 'center' }}>{item.body}</p>}
                                     <div id="cmo-url-input-row" className="cmo-url-input-desktop" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.85rem', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                                       <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
                                       <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website or big idea" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
@@ -1784,32 +1842,31 @@ const StackedSlidesSection = () => {
                                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
                                         <colgroup><col style={{ width: '2rem' }} /><col style={{ width: '26%' }} /><col /></colgroup>
                                         <thead><tr><th aria-hidden="true" /><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Access</th><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>What you get</th></tr></thead>
-                                        <tbody>{CMO_TABLE_ROWS.map((row, ri, arr) => (<tr key={row.task} style={{ borderBottom: (row.task === 'Daily Executive Brief' || (row.sub && !isSubLast(arr, ri))) ? 'none' : '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.7rem 0.2rem', textAlign: 'center', verticalAlign: 'middle', position: 'relative' }}>{row.task === 'Onboarding Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? <BriefConnector first={isSubFirst(arr, ri)} last={isSubLast(arr, ri)} /> : <span className="cmo-arrow" aria-hidden="true"><Lock size={12} /></span>}</td><td style={{ padding: row.sub ? '0.7rem 0.4rem 0.7rem 1.1rem' : '0.7rem 0.4rem', color: row.sub ? 'rgba(42,36,32,0.55)' : 'rgba(42,36,32,0.75)', fontWeight: row.sub ? 400 : 500 }}>{row.task}</td><td style={{ padding: '0.7rem 0.4rem 0.7rem 0.6rem', textAlign: 'left', color: row.sub ? 'rgba(42,36,32,0.48)' : 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
+                                        <tbody>{CMO_TABLE_ROWS.map((row, ri, arr) => (<tr key={row.task} style={{ borderBottom: (row.task === 'Daily Stand Up Email' || (row.sub && !isSubLast(arr, ri))) ? 'none' : '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.7rem 0.2rem', textAlign: 'center', verticalAlign: 'middle', position: 'relative' }}>{row.task === 'Onboarding Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? <BriefConnector first={isSubFirst(arr, ri)} last={isSubLast(arr, ri)} /> : <span className="cmo-arrow" aria-hidden="true"><Lock size={12} /></span>}</td><td style={{ padding: row.sub ? '0.7rem 0.4rem 0.7rem 1.1rem' : '0.7rem 0.4rem', color: row.sub ? 'rgba(42,36,32,0.55)' : 'rgba(42,36,32,0.75)', fontWeight: row.sub ? 400 : 500 }}>{row.task}</td><td style={{ padding: '0.7rem 0.4rem 0.7rem 0.6rem', textAlign: 'left', color: row.sub ? 'rgba(42,36,32,0.48)' : 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
                                       </table>
                                     <blockquote id="cmo-quote-desktop" style={{ margin: 'clamp(1rem, 2vw, 1.5rem) 0 0', padding: 'clamp(0.75rem, 1.5vw, 1rem) 0', fontSize: 'clamp(1rem, 1.5vw, 1.35rem)', lineHeight: 1.55, color: 'rgba(42,36,32,0.72)', fontStyle: 'italic', fontFamily: "'Space Grotesk', system-ui, sans-serif", boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
                                       <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: '3.25rem', height: '3.25rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', flexShrink: 0, display: 'block' }} />
-                                      <span>&ldquo;Our job is to curate the strongest AI solutions so you don&rsquo;t have to.&rdquo;</span>
+                                      <span>Curating the strongest AI solutions so you don&rsquo;t have to. With direct support by qualified Humans in the Loop on Demand.</span>
                                     </blockquote>
-                                    <cite className="cmo-quote-attribution" style={{ display: 'block', textAlign: 'right', marginTop: '0.5rem', fontStyle: 'normal', fontFamily: "'Space Mono', monospace", fontSize: '0.66rem', letterSpacing: '0.08em', color: 'rgba(42,36,32,0.45)' }}>HITLOOP.AGENCY</cite>
+                                    <cite className="cmo-quote-attribution" style={{ display: 'block', textAlign: 'center', marginTop: '0.5rem', fontStyle: 'normal', fontFamily: "'Space Mono', monospace", fontSize: '0.66rem', letterSpacing: '0.08em', color: 'rgba(42,36,32,0.45)' }}>HITLOOP.AGENCY</cite>
                                     </div>
                                   </div>
                                   <div id="cmo-dashboard-table" className="cmo-table-outer" style={{ gridColumn: '1 / -1', marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
                                     <div className="cmo-url-input-mobile" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                                       <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
-                                      <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website or big idea" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
+                                      <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter website or idea" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
                                       <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="cmo-table-submit-label">Get Your Dashboard</span><span className="cmo-table-submit-arrow" style={ctaIconStyle}>↗</span></button>
                                     </div>
                                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
                                     <colgroup><col style={{ width: '2rem' }} /><col style={{ width: '26%' }} /><col /></colgroup>
-                                      <thead><tr><th style={{ width: '1.5rem' }} /><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Access</th><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>What you get</th></tr></thead>
-                                      <tbody>{CMO_TABLE_ROWS.map((row, ri, arr) => (<tr key={row.task} style={{ borderBottom: (row.task === 'Daily Executive Brief' || (row.sub && !isSubLast(arr, ri))) ? 'none' : '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.7rem 0.2rem', textAlign: 'center', position: 'relative' }}>{row.task === 'Onboarding Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? <BriefConnector first={isSubFirst(arr, ri)} last={isSubLast(arr, ri)} /> : <span className="cmo-arrow" aria-hidden="true"><Lock size={12} /></span>}</td><td style={{ padding: row.sub ? '0.7rem 0.4rem 0.7rem 1.1rem' : '0.7rem 0.4rem', color: row.sub ? 'rgba(42,36,32,0.55)' : 'rgba(42,36,32,0.75)', fontWeight: row.sub ? 400 : 500 }}>{row.task}</td><td style={{ padding: '0.7rem 0.4rem 0.7rem 0.6rem', textAlign: 'left', color: row.sub ? 'rgba(42,36,32,0.48)' : 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
+                                      <thead><tr><th style={{ width: '1.5rem' }} /><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Get</th><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>What you get</th></tr></thead>
+                                      <tbody>{CMO_TABLE_ROWS.map((row, ri, arr) => (<tr key={row.task} data-sub={row.sub || undefined} data-sublast={isSubLast(arr, ri) || undefined} style={{ borderBottom: (row.task === 'Daily Stand Up Email' || (row.sub && !isSubLast(arr, ri))) ? 'none' : '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.7rem 0.2rem', textAlign: 'center', position: 'relative' }}>{row.task === 'Onboarding Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? <BriefConnector first={isSubFirst(arr, ri)} last={isSubLast(arr, ri)} /> : <span className="cmo-arrow" aria-hidden="true"><Lock size={12} /></span>}</td><td style={{ padding: row.sub ? '0.7rem 0.4rem 0.7rem 1.1rem' : '0.7rem 0.4rem', color: row.sub ? 'rgba(42,36,32,0.55)' : 'rgba(42,36,32,0.75)', fontWeight: row.sub ? 400 : 500 }}>{row.task}</td><td style={{ padding: '0.7rem 0.4rem 0.7rem 0.6rem', textAlign: 'left', color: row.sub ? 'rgba(42,36,32,0.48)' : 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
                                     </table>
                                     <blockquote id="cmo-quote-mobile" style={{ margin: 'clamp(1rem, 2vw, 1.5rem) 0 0', padding: 'clamp(0.75rem, 1.5vw, 1rem) 0', fontSize: 'clamp(1rem, 1.5vw, 1.35rem)', lineHeight: 1.55, color: 'rgba(42,36,32,0.72)', fontStyle: 'italic', fontFamily: "'Space Grotesk', system-ui, sans-serif", boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
                                       <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: '3.25rem', height: '3.25rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', flexShrink: 0, display: 'block' }} />
-                                      <span>&ldquo;Our job is to curate the strongest AI solutions so you don&rsquo;t have to.&rdquo;</span>
+                                      <span>Curating the strongest AI solutions so you don&rsquo;t have to. With direct support by qualified Humans in the Loop on Demand.</span>
                                     </blockquote>
-                                    <cite className="cmo-quote-attribution" style={{ display: 'block', textAlign: 'right', marginTop: '0.5rem', fontStyle: 'normal', fontFamily: "'Space Mono', monospace", fontSize: '0.66rem', letterSpacing: '0.08em', color: 'rgba(42,36,32,0.45)' }}>HITLOOP.AGENCY</cite>
-                                    <a id="cmo-no-website-hint" href="/login?flow=homepage-create" style={cmoNoWebsiteLinkStyle}>Don't Have a Website?</a>
+                                    <cite className="cmo-quote-attribution" style={{ display: 'block', textAlign: 'center', marginTop: '0.5rem', fontStyle: 'normal', fontFamily: "'Space Mono', monospace", fontSize: '0.66rem', letterSpacing: '0.08em', color: 'rgba(42,36,32,0.45)' }}>HITLOOP.AGENCY</cite>
                                   </div>
                                 </article>
                               </div>
@@ -1966,14 +2023,11 @@ const StackedSlidesSection = () => {
                       </div>
                       <img src="/img/sig.png" alt="Bryan Balli signature" style={inlineFooterSignatureStyle} />
 
-                      <p style={{ ...supportTextStyle, marginTop: 'clamp(0.75rem, 1.5vw, 1.25rem)', textAlign: 'left' }}>
-                        Partner with an experienced Media Developer to leverage LLMs and automate your Brands Design, Development, Marketing and Operations.
-                      </p>
-                      <div id="footer-cta-input-row" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'clamp(0.5rem, 1.5vw, 1rem)', width: '100%', marginTop: 'clamp(1.25rem, 2.5vw, 2rem)', marginBottom: 'clamp(1.25rem, 2.5vw, 2rem)' }}>
+                      <div id="footer-cta-input-row" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'clamp(0.5rem, 1.5vw, 1rem)', width: '100%', marginTop: 'clamp(1.25rem, 2.5vw, 2rem)', marginBottom: 0 }}>
                         <div id="footer-url-input-row" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 1, minWidth: 'min(100%, 18rem)', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                           <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
                           <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website or big idea" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
-                          <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}>Onboard in 30 Seconds<span style={ctaIconStyle}>↗</span></button>
+                          <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="footer-submit-label">Onboard in 30 Seconds</span><span style={ctaIconStyle}>↗</span></button>
                         </div>
                         <a
                           id="footer-contact-cta"
@@ -1988,6 +2042,10 @@ const StackedSlidesSection = () => {
                           <span style={ctaIconStyle}>↗</span>
                         </a>
                       </div>
+                      <p style={{ ...supportTextStyle, marginTop: 'clamp(1rem, 2vw, 1.5rem)', marginBottom: 'clamp(0.75rem, 1.5vw, 1.25rem)', textAlign: 'left' }}>
+                        Partner with <strong>BRYAN BALLI</strong>, an experienced Media Developer leveraging LLMs, capable of automating your Brands operations, Design, Development and Marketing.<br /><br />Humans in the Loop (HITLOOP) offers various automations leveraging agentic solutions that follow established processes, to elevate and automate Creative Services.
+                      </p>
+                      <p id="footer-previously-at" style={{ margin: '0.5rem 0 0.35rem', textAlign: 'center', fontSize: '0.7rem', letterSpacing: '0.06em', color: 'rgba(42,36,32,0.32)', fontFamily: "'Space Mono', monospace" }}>previously at…</p>
                       <a id="agency-marquee-shell" ref={marqueeShellRef} href="https://www.linkedin.com/in/bryanballi/" target="_blank" rel="noopener noreferrer" style={{ ...agencyMarqueeShellStyle, cursor: 'pointer', textDecoration: 'none', display: 'block' }}>
                         <div ref={marqueeTrackRef} style={agencyMarqueeTrackStyle}>
                           <div ref={marqueeSetRef} style={agencyMarqueeSetStyle}>

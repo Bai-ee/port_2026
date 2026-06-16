@@ -14,12 +14,15 @@ const SITE_URL =
 export const metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: 'Bryan Balli — AI Design Engineer & Creative Technologist Portfolio',
-    template: '%s · Bryan Balli',
+    default: 'HIT Agency — AI Design & Engineering Studio',
+    template: '%s · HIT Agency',
   },
   description:
-    'Bryan Balli leads a team across design and engineering as a Creative Technologist, with experience spanning agencies in Chicago, San Francisco, and remote teams. Ready to step into your process, see what\'s working, fix what\'s not, and build what\'s missing across design, content, and systems.',
+    'HIT Agency (Human in the Loop) is an AI-powered design and engineering studio led by Bryan Balli. We build AI-assisted client dashboards, intelligent intake pipelines, and high-performance web experiences for founders and growth brands.',
   keywords: [
+    'HIT Agency',
+    'Human in the Loop Agency',
+    'hitloop.agency',
     'Bryan Balli',
     'AI design engineer',
     'creative technologist',
@@ -28,12 +31,12 @@ export const metadata = {
     'design system extraction',
     'AI-assisted SEO',
     'generative engine optimization',
-    'Next.js portfolio',
+    'Next.js',
     'GSAP animation',
   ],
   authors: [{ name: 'Bryan Balli', url: SITE_URL }],
-  creator: 'Bryan Balli',
-  publisher: 'Bryan Balli',
+  creator: 'HIT Agency',
+  publisher: 'HIT Agency',
   alternates: {
     canonical: '/',
   },
@@ -41,16 +44,16 @@ export const metadata = {
     type: 'website',
     locale: 'en_US',
     url: SITE_URL,
-    siteName: 'Bryan Balli — Portfolio',
-    title: 'Bryan Balli — AI Design Engineer & Creative Technologist',
+    siteName: 'HIT Agency',
+    title: 'HIT Agency — AI Design & Engineering Studio',
     description:
-      'Bryan Balli leads a team across design and engineering as a Creative Technologist, with experience spanning agencies in Chicago, San Francisco, and remote teams. Ready to step into your process, see what\'s working, fix what\'s not, and build what\'s missing across design, content, and systems.',
+      'HIT Agency (Human in the Loop) is an AI-powered design and engineering studio led by Bryan Balli. We build AI-assisted client dashboards, intelligent intake pipelines, and high-performance web experiences for founders and growth brands.',
     images: [
       {
         url: '/img/og_meta.optimized.jpg',
         width: 1200,
         height: 630,
-        alt: 'Bryan Balli — AI design engineer and creative technologist portfolio share card',
+        alt: 'HIT Agency — AI-powered design and engineering studio led by Bryan Balli',
         type: 'image/jpeg',
       },
     ],
@@ -59,13 +62,13 @@ export const metadata = {
     card: 'summary_large_image',
     site: '@bai_ee',
     creator: '@bai_ee',
-    title: 'Bryan Balli — AI Design Engineer & Creative Technologist',
+    title: 'HIT Agency — AI Design & Engineering Studio',
     description:
-      'Bryan Balli leads a team across design and engineering as a Creative Technologist, with experience spanning agencies in Chicago, San Francisco, and remote teams. Ready to step into your process, see what\'s working, fix what\'s not, and build what\'s missing across design, content, and systems.',
+      'HIT Agency (Human in the Loop) is an AI-powered design and engineering studio led by Bryan Balli. We build AI-assisted client dashboards, intelligent intake pipelines, and high-performance web experiences.',
     images: [
       {
         url: '/img/og_meta.optimized.jpg',
-        alt: 'Bryan Balli — AI design engineer and creative technologist portfolio share card',
+        alt: 'HIT Agency — AI-powered design and engineering studio led by Bryan Balli',
       },
     ],
   },

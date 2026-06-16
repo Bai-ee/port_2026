@@ -31,14 +31,14 @@ export const metadata = {
     'brand snapshot',
     'visual identity',
     'Figma design system',
-    'Bryan Balli branding',
+    'HIT Agency branding',
     'token-based design system',
     'typography scale',
     'color palette accessibility',
   ],
   alternates: { canonical: '/services/brand-identity' },
   openGraph: {
-    title: 'Brand Identity — Bryan Balli',
+    title: 'Brand Identity — HIT Agency',
     description:
       'Design system extraction, brand snapshot analysis, and visual identity work — translating brand direction into production-ready systems.',
     url: '/services/brand-identity',

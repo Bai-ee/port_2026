@@ -30,7 +30,7 @@ export const metadata = {
     'React developer',
     'GSAP animation',
     'Three.js developer',
-    'web development Bryan Balli',
+    'web development HIT Agency',
     'Tailwind CSS',
     'Firebase',
     'Vercel deployment',
@@ -38,7 +38,7 @@ export const metadata = {
   ],
   alternates: { canonical: '/services/web-development' },
   openGraph: {
-    title: 'Web Development — Bryan Balli',
+    title: 'Web Development — HIT Agency',
     description:
       'High-performance web builds using Next.js, React, GSAP, and Three.js — shipped with design precision and production-grade engineering.',
     url: '/services/web-development',
