@@ -56,6 +56,11 @@ const nextConfig = {
       './onboarding/**/*',
       // Full firebase-admin dependency closure (see helper above).
       ...firebaseAdminClosure,
+      // Next server runtime that webpack keeps external (not bundled) and the
+      // function loads at runtime; ~5MB, vs tracing all of next/dist (~124MB).
+      './node_modules/next/dist/compiled/next-server/*.runtime.prod.js',
+      './node_modules/next/dist/server/**/*.external.js',
+      './node_modules/next/dist/shared/lib/**/*.js',
     ],
   },
   outputFileTracingExcludes: {
