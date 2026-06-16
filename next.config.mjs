@@ -12,7 +12,7 @@ const nextConfig = {
       './node_modules/next/dist/lib/**/*.js',
       './node_modules/next/dist/server/**/*.js',
       './node_modules/next/dist/shared/lib/**/*.js',
-      './node_modules/next/dist/compiled/ws/**/*',
+      './node_modules/next/dist/compiled/**/*',
     ],
   },
   outputFileTracingExcludes: {
