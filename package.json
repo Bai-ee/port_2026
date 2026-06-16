@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev --webpack",
-    "build": "next build --webpack",
+    "build": "next build",
     "start": "next start",
     "test": "node --test 'features/**/__tests__/**/*.test.{js,mjs}' 'ai-seo-audit/src/__tests__/**/*.test.{js,mjs}'",
     "scout:brief": "node ./features/not-the-rug-brief/run.js --client not-the-rug",

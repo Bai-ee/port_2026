@@ -1,48 +1,7 @@
 import { fileURLToPath } from 'url';
 import path from 'path';
-import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-// Compute firebase-admin's full on-disk dependency closure. firebase-admin is a
-// serverExternalPackage, so Turbopack relies on file-tracing to ship its deps —
-// but packages with conditional `exports` maps (jose, uuid, *-proxy-agent, grpc-js)
-// only get their package.json traced, causing "Cannot find module" at runtime on
-// Vercel. Including the whole closure makes those deps ship regardless of tracing.
-function firebaseAdminTraceIncludes() {
-  const resolvePkgDir = (name, fromDir) => {
-    let dir = fromDir;
-    while (true) {
-      const cand = path.join(dir, 'node_modules', name);
-      if (fs.existsSync(path.join(cand, 'package.json'))) return cand;
-      const parent = path.dirname(dir);
-      if (parent === dir) return null;
-      dir = parent;
-    }
-  };
-  const seen = new Set();
-  const queue = [{ name: 'firebase-admin', from: __dirname }];
-  while (queue.length) {
-    const { name, from } = queue.shift();
-    const dir = resolvePkgDir(name, from);
-    if (!dir || seen.has(dir)) continue;
-    seen.add(dir);
-    let pj;
-    try {
-      pj = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
-    } catch {
-      continue;
-    }
-    const deps = { ...(pj.dependencies || {}), ...(pj.optionalDependencies || {}) };
-    for (const d of Object.keys(deps)) queue.push({ name: d, from: dir });
-  }
-  // @types/* are type-only and never loaded at runtime — skip to save bundle size.
-  return [...seen]
-    .filter((d) => !path.relative(__dirname, d).includes('node_modules/@types/'))
-    .map((d) => './' + path.relative(__dirname, d) + '/**/*');
-}
-
-const firebaseAdminClosure = firebaseAdminTraceIncludes();
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -54,17 +13,24 @@ const nextConfig = {
       './api/**/*',
       './features/**/*',
       './onboarding/**/*',
-      // Full firebase-admin dependency closure (see helper above).
-      ...firebaseAdminClosure,
-      // Next server runtime kept external by webpack and required by the Vercel
-      // function adapter at runtime (setup-node-env -> node-environment,
-      // require-hook, etc.). These .js total ~6MB; the bulk of next/dist
-      // (~124MB) is the compiled/ build-tools dir, which is NOT needed at runtime.
-      './node_modules/next/dist/compiled/next-server/*.runtime.prod.js',
-      './node_modules/next/dist/server/**/*.js',
-      './node_modules/next/dist/shared/**/*.js',
+      // firebase-admin deps with conditional `exports` maps that the tracer
+      // only records package.json for -> "Cannot find module" at runtime.
+      './node_modules/jose/**/*',
+      './node_modules/uuid/**/*',
+      './node_modules/gaxios/node_modules/uuid/**/*',
+      './node_modules/teeny-request/node_modules/uuid/**/*',
+      './node_modules/google-gax/node_modules/uuid/**/*',
+      // Next runtime (Turbopack keeps these external to the route bundle).
+      './node_modules/next/dist/client/**/*.js',
+      './node_modules/next/dist/build/**/*.js',
       './node_modules/next/dist/lib/**/*.js',
-      './node_modules/next/dist/build/adapter/**/*.js',
+      './node_modules/next/dist/server/**/*.js',
+      './node_modules/next/dist/shared/lib/**/*.js',
+      './node_modules/next/dist/compiled/**/*',
+      './node_modules/@swc/helpers/**/*',
+      './node_modules/react/**/*',
+      './node_modules/react-dom/**/*',
+      './node_modules/scheduler/**/*',
     ],
   },
   outputFileTracingExcludes: {
