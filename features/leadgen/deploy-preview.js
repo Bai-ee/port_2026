@@ -5,11 +5,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { readdir }                   from 'fs/promises';
 import path                          from 'path';
-import { subdir as clientSubdir }    from './client-folder.js';
-
-const CLIENTS_ROOT = process.env.VERCEL
-  ? '/tmp/clients'
-  : path.join(process.cwd(), 'clients');
+import { clientRoot, subdir as clientSubdir } from './client-folder.js';
 
 const VERCEL_API   = 'https://api.vercel.com';
 const DEPLOY_TIMEOUT = 120_000; // 2 min wait for deployment to become ready
@@ -61,7 +57,7 @@ export async function deployPreview(slug) {
   const token = process.env.VERCEL_API_TOKEN;
   if (!token) throw new Error('VERCEL_API_TOKEN not set');
 
-  const slugDir = path.join(CLIENTS_ROOT, slug);
+  const slugDir = clientRoot(slug);
   if (!existsSync(slugDir)) throw new Error(`Client dir not found: ${slugDir}`);
 
   const rawFiles = await collectFiles(slugDir, slugDir);

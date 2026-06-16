@@ -8,10 +8,6 @@ import { existsSync }       from 'fs';
 import path                 from 'path';
 import { ensureClientFolder, assetsDir as clientAssetsDir, clientRoot } from './client-folder.js';
 
-// On Vercel, only /tmp is writable; local dev uses cwd/clients.
-const CLIENTS_ROOT  = process.env.VERCEL
-  ? '/tmp/clients'
-  : path.join(process.cwd(), 'clients');
 const FETCH_TIMEOUT = 12_000;
 const MIN_BYTES     = 2_000;   // skip tiny icons / spacers
 const MAX_BYTES     = 5_000_000; // don't download files > 5MB
@@ -286,7 +282,7 @@ export async function downloadAssetsToBuffers(manifest) {
 // ─── ASSET MANIFEST FROM DISK ────────────────────────────────────────────────
 
 export async function listDownloadedAssets(slug) {
-  const assetsDir = path.join(CLIENTS_ROOT, slug, 'assets');
+  const assetsDir = clientAssetsDir(slug);
   try {
     const { readdir } = await import('fs/promises');
     const files = await readdir(assetsDir);

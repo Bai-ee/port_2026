@@ -8,6 +8,9 @@ function isAuthorized(request) {
   const auth = request.headers.get('authorization') || '';
   const cronSecret = process.env.CRON_SECRET || process.env.SOCIAL_POSTING_CRON_SECRET || '';
   if (cronSecret && auth === `Bearer ${cronSecret}`) return true;
+  if (process.env.VERCEL_ENV === 'production' || process.env.NODE_ENV === 'production') {
+    return false;
+  }
   return request.headers.get('x-vercel-cron') === '1';
 }
 

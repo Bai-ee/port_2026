@@ -60,6 +60,8 @@ function normalizeOrigin(value) {
 function deploymentPublicOrigin(request) {
   return normalizeOrigin(
     process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ||
     process.env.PUBLIC_APP_URL ||
     process.env.APP_URL
   ) || request.nextUrl.origin;

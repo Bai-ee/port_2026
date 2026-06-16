@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const maxDuration = 300;
+
 const require = createRequire(import.meta.url);
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
 const { getHeaderValue, safeSecretEquals, buildAuthRequestShim, verifyAdminRequest } = require('../../../../api/_lib/auth.cjs');
@@ -15,8 +19,8 @@ const DIGEST_TO = process.env.DIGEST_EMAIL || 'bryanballi@gmail.com';
 const DIGEST_FROM = process.env.DIGEST_FROM || 'HitLoop Daily <digest@hitloop.agency>';
 const WORKER_SECRET = process.env.WORKER_SECRET;
 const VERCEL_TOKEN = process.env.VERCEL_API_TOKEN;
-const VERCEL_PROJECT_ID = 'prj_h2AHIKHmJu7eV1DdmiTra2WFmPv6';
-const VERCEL_TEAM_ID = 'team_xmgNCNc6fHyZZinuszh8B6ZB';
+const VERCEL_PROJECT_ID = process.env.VERCEL_PROJECT_ID || 'prj_h2AHIKHmJu7eV1DdmiTra2WFmPv6';
+const VERCEL_TEAM_ID = process.env.VERCEL_TEAM_ID || 'team_xmgNCNc6fHyZZinuszh8B6ZB';
 const GA4_PROPERTY_ID = process.env.GA4_PROPERTY_ID || '532567174';
 const RUN_STATUS_BUCKETS = ['queued', 'running', 'succeeded', 'failed', 'cancelled', 'provisioning'];
 const DIGEST_EVENT_NAMES = [
@@ -97,6 +101,13 @@ function hasValidCronSecret(request) {
   }
   const provided = getHeaderValue(request.headers, 'authorization');
   return safeSecretEquals(provided, `Bearer ${cronSecret}`);
+}
+
+export function HEAD(request) {
+  if (!hasValidSecret(request) && !hasValidCronSecret(request)) {
+    return new NextResponse(null, { status: 401, headers: { 'cache-control': 'no-store' } });
+  }
+  return new NextResponse(null, { status: 204, headers: { 'cache-control': 'no-store' } });
 }
 
 // ── Data collectors ─────────────────────────────────────────────────────────

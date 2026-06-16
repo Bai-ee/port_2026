@@ -6,13 +6,12 @@
 import { createRequire } from 'module';
 import { readFileSync, writeFileSync, copyFileSync, existsSync, mkdirSync } from 'fs';
 import path from 'path';
-import { subdir as clientSubdir } from './client-folder.js';
+import { clientRoot, subdir as clientSubdir } from './client-folder.js';
 import { buildSiteFrame, normalizeGeneratedBody, validateFramedHtml, validateGeneratedBody } from './site-frame.js';
 
 const require = createRequire(import.meta.url);
 const { callAnthropic } = require('../scout-intake/_anthropic-client.js');
 
-const CLIENTS_ROOT  = process.env.VERCEL ? '/tmp/clients' : path.join(process.cwd(), 'clients');
 const SHARED_DIR    = path.join(process.cwd(), 'clients/_shared');
 const MODEL         = 'claude-sonnet-4-6';
 const MAX_TOKENS    = 16000;
@@ -93,7 +92,7 @@ Generate the body markup now. Return only the inner <body> content.`;
 // ─── PUBLIC API ───────────────────────────────────────────────────────────────
 
 export async function generateSite(slug) {
-  const slugDir       = path.join(CLIENTS_ROOT, slug);
+  const slugDir       = clientRoot(slug);
   const briefDir      = clientSubdir(slug, 'brief');
   const scrapedDir    = clientSubdir(slug, 'scraped');
   const generationDir = clientSubdir(slug, 'generation');

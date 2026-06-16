@@ -19,10 +19,6 @@ import { deployPreview }                    from '../../../../features/leadgen/d
 import { runReadinessComparison, formatComparison } from '../../../../features/leadgen/readiness-comparison.js';
 import { syncClientFolder, subdir }         from '../../../../features/leadgen/client-folder.js';
 
-const CLIENTS_ROOT = process.env.VERCEL
-  ? '/tmp/clients'
-  : path.join(process.cwd(), 'clients');
-
 function makeReqShim(request) {
   return {
     headers: {

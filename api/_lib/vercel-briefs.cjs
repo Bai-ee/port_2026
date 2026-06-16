@@ -14,11 +14,11 @@ function esc(value) {
 }
 
 function getVercelConfig() {
-  const token = String(process.env.VERCEL_AUTH_TOKEN || '').trim();
+  const token = String(process.env.VERCEL_AUTH_TOKEN || process.env.VERCEL_API_TOKEN || '').trim();
   if (!token) {
     return {
       enabled: false,
-      reason: 'VERCEL_AUTH_TOKEN is not configured.',
+      reason: 'VERCEL_AUTH_TOKEN / VERCEL_API_TOKEN is not configured.',
     };
   }
 

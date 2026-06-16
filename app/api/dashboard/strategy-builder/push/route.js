@@ -21,6 +21,16 @@ function json(body, status = 200) {
   return NextResponse.json(body, { status, headers: { 'cache-control': 'no-store' } });
 }
 
+function deploymentOrigin() {
+  const host =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ||
+    process.env.VERCEL_URL ||
+    '';
+  if (!host) return 'http://localhost:3000';
+  return /^https?:\/\//i.test(host) ? host.replace(/\/+$/, '') : `https://${host}`;
+}
+
 async function resolveContext(request) {
   const decoded = await verifyRequestUser(makeReqShim(request));
   const context = await getEffectiveClientContext({ uid: decoded.uid, email: decoded.email, request });
@@ -61,9 +71,7 @@ export async function POST(request) {
   const authHeader = request.headers.get('authorization') || '';
 
   // Base URL for internal API calls
-  const base = process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : 'http://localhost:3000';
+  const base = deploymentOrigin();
 
   const scheduled = [];
   const failed = [];
