@@ -34,9 +34,14 @@ clients/*/
 .tmp-device-mockup/
 input/
 output/
+print-screenshots/
+docs/storyboards/
 
 # Original unoptimized reel (use reel.optimized.mp4 for production)
 public/vid/reel.mp4
 
 # Unoptimized screenshot masters (served as .webp; keep masters local only)
 public/img/interactive_ss_*.png
+public/img/port/*.png
+public/img/fast_poker_BW*.png
+public/img/og_meta.png
