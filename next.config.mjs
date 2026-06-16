@@ -13,6 +13,9 @@ const nextConfig = {
       './api/**/*',
       './features/**/*',
       './onboarding/**/*',
+      // jose uses conditional exports the tracer can't follow; firebase-admin
+      // auth requires it at runtime, so include the package explicitly.
+      './node_modules/jose/**/*',
       './node_modules/next/dist/client/**/*.js',
       './node_modules/next/dist/build/**/*.js',
       './node_modules/next/dist/lib/**/*.js',
