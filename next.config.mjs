@@ -13,6 +13,7 @@ const nextConfig = {
       './node_modules/next/dist/server/**/*.js',
       './node_modules/next/dist/shared/lib/**/*.js',
       './node_modules/next/dist/compiled/**/*',
+      './node_modules/@swc/helpers/**/*',
     ],
   },
   outputFileTracingExcludes: {
