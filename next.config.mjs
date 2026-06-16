@@ -8,6 +8,11 @@ const nextConfig = {
   serverExternalPackages: ['playwright', 'pdf-parse', 'mammoth'],
   outputFileTracingIncludes: {
     '*': [
+      // App logic loaded at runtime via createRequire() from outside the app/ tree.
+      // Turbopack does not trace these external CJS/JS modules, so include them explicitly.
+      './api/**/*',
+      './features/**/*',
+      './onboarding/**/*',
       './node_modules/next/dist/client/**/*.js',
       './node_modules/next/dist/build/**/*.js',
       './node_modules/next/dist/lib/**/*.js',
