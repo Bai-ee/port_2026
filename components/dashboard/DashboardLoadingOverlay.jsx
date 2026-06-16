@@ -81,7 +81,7 @@ export default function DashboardLoadingOverlay({
                   whiteSpace: 'nowrap',
                 }}
               >
-                {'LOADING YOUR DASHBOARD\u00A0\u00A0\u00B7\u00A0\u00A0'}
+                {'LOADING YOUR DASHBOARD\u00A0\u00B7\u00A0'}
               </span>
             ))}
           </div>

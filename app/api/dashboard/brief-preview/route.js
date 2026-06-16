@@ -927,6 +927,11 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     /* Mobile: let it sit static under the headline instead of overlapping. */
     #onboarding-cover-mockup{position:static;left:auto;width:100%;margin:16px 0 4px}
     .cap-brief-email-cta-row{left:0;right:0;justify-content:center;}
+    .cover .title-stack{margin-top:0}
+  }
+  @media(max-width:480px){
+    /* Small phones: push mockup down to clear the fixed CTA button. */
+    #onboarding-cover-mockup{margin-top:46px}
   }
   </style>
 </head>

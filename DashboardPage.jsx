@@ -8791,11 +8791,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         </span>
                       </button>
                     </span>
-                    {/* Background-run indicator — surfaces when the terminal modal
-                        is closed while an intake run is queued/processing. */}
-                    {isRunActive && currentRun?.pipelineType !== 'module-run' ? (
-                      <>
-                        <span className="cap-source-divider" aria-hidden="true" />
+                    {/* Background-run indicator — always rendered; spins when active, placeholder ring when idle */}
+                    <>
+                      <span className="cap-source-divider" aria-hidden="true" />
+                      {isRunActive && currentRun?.pipelineType !== 'module-run' ? (
                         <button
                           type="button"
                           id="run-active-indicator-chip"
@@ -8808,9 +8807,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                             {latestRunStatus === 'queued' ? 'Queued' : 'Running'}
                           </span>
                         </button>
-                      </>
-                    ) : null}
-                    <span id="reseed-url-group" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      ) : (
+                        <span id="run-idle-indicator-dot" aria-hidden="true" />
+                      )}
+                    </>
+                    <span id="reseed-url-group" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
                       <span className="cap-source-divider" aria-hidden="true" />
                       <Globe id="dashboard-source-cta-icon" size={15} strokeWidth={1.5} aria-hidden="true" />
                       <input
@@ -10002,6 +10003,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 type="button"
                 id={`capability-nav-btn-${key ?? 'all'}`}
                 className={`capability-nav-btn${activeCapabilityFilter === key ? ' capability-nav-btn--active' : ''}${isLocked ? ' capability-nav-btn--locked' : ''}`}
+                title={label}
                 disabled={isLocked}
                 onClick={() => {
                   if (key === activeCapabilityFilter) return;
@@ -20597,10 +20599,11 @@ const dashboardCss = `
     #founders-top-strip-inner { padding: 0 24px; }
     #dashboard-source-cta-row { width: 100%; }
     #capability-section { padding-top: 0; }
-    #capability-section-shell { grid-template-columns: 1fr; }
-    #capability-nav-col { order: -1; position: static; flex-direction: row; flex-wrap: nowrap; overflow-x: auto; overflow-y: visible; -webkit-overflow-scrolling: touch; scrollbar-width: none; gap: 6px; z-index: 10; padding-bottom: 2px; }
-    #capability-nav-col::-webkit-scrollbar { display: none; }
-    .capability-nav-btn { flex: 0 0 auto; min-width: 0; padding: 10px 16px; border-radius: 999px; flex-direction: row; align-items: center; justify-content: center; gap: 0; width: auto; background: rgba(255, 255, 255, 1); }
+    #capability-section-shell { grid-template-columns: 1fr; gap: 8px; }
+    #dashboard-source-cta-row { box-shadow: 0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4) !important; }
+    #capability-nav-col { order: -1; position: static; flex-direction: row; flex-wrap: nowrap; overflow-x: visible; overflow-y: visible; gap: 0; justify-content: space-between; z-index: 10; padding-top: 8px; padding-bottom: 8px; }
+    #dashboard-source-band { margin-bottom: 0; }
+    .capability-nav-btn { flex: 1 1 0; width: clamp(34px, 8vw, 52px); height: clamp(34px, 8vw, 52px); max-width: clamp(34px, 8vw, 52px); min-width: 0; padding: 0; border-radius: 50%; flex-direction: row; align-items: center; justify-content: center; gap: 0; background: rgba(255, 255, 255, 1); }
     .capability-nav-btn:hover { background: rgba(255, 255, 255, 1); box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.067), 0px 15px 30px rgba(0, 0, 0, 0.067), 0px 20px 40px rgba(0, 0, 0, 0.1); }
     .capability-nav-btn::before { border-radius: 999px; }
     .capability-nav-btn--active::before {
@@ -20616,11 +20619,15 @@ const dashboardCss = `
       opacity: 1;
     }
     .capability-nav-btn-sub { display: none; }
-    .capability-nav-btn-label { font-family: var(--font-mono); font-size: 11px; font-weight: 400; letter-spacing: 0.08em; text-transform: uppercase; }
+    .capability-nav-btn-label { display: none; }
     .capability-nav-btn-label-full { display: none; }
-    .capability-nav-btn-label-short { display: inline; }
-    .capability-nav-btn-content { flex-direction: row; align-items: center; gap: 0; }
-    .capability-nav-btn-icon-wrap { display: none; }
+    .capability-nav-btn-label-short { display: none; }
+    .capability-nav-btn-content { display: none; }
+    .capability-nav-btn-icon-wrap { display: inline-flex; align-items: center; justify-content: center; width: auto; height: auto; margin-left: 0; }
+    .capability-nav-btn-icon-wrap svg { width: clamp(14px, 3.5vw, 20px); height: clamp(14px, 3.5vw, 20px); }
+    #capability-nav-btn-services,
+    #capability-nav-btn-leadgen,
+    #capability-nav-btn-admin { display: none !important; }
     #capability-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .tile-solution-actions { flex-direction: column; align-items: stretch; gap: 10px; }
     .tile { aspect-ratio: auto; min-height: 230px; grid-template-areas: "num" "head" "desc" "viz" "foot"; grid-template-columns: 1fr; row-gap: 14px; }
@@ -20750,39 +20757,34 @@ const dashboardCss = `
       -webkit-overflow-scrolling: touch;
       scrollbar-width: none;
       flex-wrap: nowrap;
-      margin: 0 0 8px;
+      margin: 0;
       border-bottom: 1px solid rgba(42,36,32,0.1);
     }
     .cap-step-seg--top.cap-step-seg--tabs::-webkit-scrollbar { display: none; }
     .cap-step-seg--top.cap-step-seg--tabs > button {
       display: inline-flex;
-      flex: 0 0 auto;
+      flex: 1;
+      min-width: 0;
       pointer-events: auto;
       cursor: pointer;
       min-height: 44px;
       font-size: 0.78rem;
       padding: 0 12px;
+      justify-content: center;
     }
     .cap-step-seg--top.cap-step-seg--tabs > button.is-active { cursor: default; }
     .cap-step-seg--top.cap-step-seg--tabs > button::after { content: ''; }
     .cap-step-seg--top.cap-step-seg--tabs > button.is-active::after { content: ''; }
     /* Re-assert over the mobile-expanded .tile-foot{display:flex} rule above */
     .cap-list-row-main .tile-foot { display: contents; }
-    .cap-list-columns { grid-template-columns: 1fr !important; }
+    .cap-list-columns { grid-template-columns: 1fr !important; margin-left: 0; margin-right: 0; }
     /* Stacked columns: divider moves from left edge to top edge */
     .cap-list-col + .cap-list-col { border-left: 0; border-top: 1px solid rgba(42, 36, 32, 0.08); }
-    .cap-list-col-label {
-      display: block;
-      font-family: var(--font-ui);
-      font-size: clamp(0.8rem, 1.1vw, 0.875rem);
-      font-weight: 600;
-      letter-spacing: -0.01em;
-      color: var(--text-display);
-      line-height: 1.15;
-      margin: 12px 16px 4px;
-      padding: 8px 0 8px;
-      border-bottom: 1px solid var(--border);
-    }
+    .cap-list-col-label { display: none; }
+  }
+  @media (max-width: 430px) {
+    .cap-step-seg--top.cap-step-seg--tabs > button .cap-step-text { display: none; }
+    .cap-step-seg--top.cap-step-seg--tabs > button { gap: 0; padding: 0 8px; }
   }
   @media (max-width: 380px) {
     .cap-list-row-main {
@@ -20812,12 +20814,38 @@ const dashboardCss = `
       gap: 5px;
     }
   }
+  /* Past brief rows: vertical layout on mobile so title, timestamp, and actions
+     all fit without overflow. Row 1 = name + timestamp (stacked). Row 2 = status + chips. */
+  @media (max-width: 520px) {
+    .cap-past-brief-row {
+      flex-wrap: wrap;
+      gap: 4px 0;
+      padding: 12px 10px;
+      align-items: center;
+    }
+    .cap-past-brief-title {
+      width: 100%;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 1px;
+      margin-bottom: 2px;
+    }
+    .cap-past-brief-meta {
+      flex: 1;
+      align-self: center;
+    }
+    .cap-past-brief-actions {
+      flex-shrink: 0;
+      align-self: center;
+    }
+  }
   /* Chevron hidden above mobile breakpoint */
   @media (min-width: 521px) {
     .tile-mobile-chevron { display: none; }
   }
   @media (max-width: 620px) {
-    #founders-shell { padding-top: 80px; }
+    #founders-shell { padding-top: 60px; }
+    #founders-hero-shell { gap: 16px; }
     #founders-top-strip-inner {
       gap: 8px;
       padding: 0 12px;
@@ -20833,10 +20861,14 @@ const dashboardCss = `
     #capability-section { padding-top: 0; }
     #reseed-url-group { display: none !important; }
     #founders-hero-meta { width: 100%; max-width: 100%; overflow: hidden; }
-    .meta-row { overflow: hidden; }
+    .meta-row { overflow: hidden; padding-top: 8px; padding-bottom: 8px; }
     #client-meta-row { overflow: visible; }
     .meta-row .value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-    #dashboard-source-cta-row { max-width: 100%; box-sizing: border-box; justify-content: space-between; background: transparent; border: none; box-shadow: none; padding: 4px 0; }
+    #dashboard-source-band { margin-top: 0 !important; margin-bottom: 0 !important; }
+    .meta-row-source { padding-top: 8px !important; padding-bottom: 8px !important; }
+    #dashboard-source-cta-row { max-width: 100%; box-sizing: border-box; justify-content: space-between; gap: clamp(10px, 3vw, 20px); padding: 4px clamp(12px, 4vw, 24px); }
+    #run-idle-indicator-dot { width: 18px; height: 18px; flex-shrink: 0; background: conic-gradient(rgba(42,36,32,0.15) 0%, rgba(42,36,32,0.08) 100%); -webkit-mask: radial-gradient(circle, transparent 58%, black 59%); mask: radial-gradient(circle, transparent 58%, black 59%); border-radius: 50%; display: inline-block !important; }
+    #run-active-indicator-label { display: none; }
     .cap-view-toggle--top { display: none; }
     .cap-view-toggle--top + .cap-source-divider { display: none; }
     #dashboard-source-band { margin-bottom: 0; }
@@ -20847,7 +20879,7 @@ const dashboardCss = `
   #dashboard-source-band {
     width: 100%;
     box-sizing: border-box;
-    margin: 0 0 18px;
+    margin: 0;
   }
   /* Vertical divider between the view toggle and the globe/URL group */
   .cap-source-divider {
@@ -20908,6 +20940,7 @@ const dashboardCss = `
     justify-content: center;
     gap: 0.5rem;
     flex-shrink: 0;
+    margin-left: auto;
     min-width: 6.75rem;
     padding: 0.5rem 0.75rem;
     font-size: clamp(0.8rem, 1.1vw, 0.875rem);
@@ -20945,6 +20978,7 @@ const dashboardCss = `
   }
   /* Background-run indicator chip — lives in the source bar next to the
      coverage/cooldown micro chips and shares their gradient treatment. */
+  #run-idle-indicator-dot { display: none; }
   #run-active-indicator-chip {
     display: inline-flex;
     align-items: center;

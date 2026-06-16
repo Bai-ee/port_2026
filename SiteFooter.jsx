@@ -234,44 +234,19 @@ export default function SiteFooter() {
               style={{ ...ctaStyle, textDecoration: 'none', border: 'none' }}
             >
               <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
-              Meet with A Human
+              Meet With Your Human
               <span style={ctaIconStyle}>↗</span>
             </a>
           </div>
 
           {/* Body text */}
           <p id="site-footer-support-text">
-            Partner with <strong>BRYAN BALLI</strong>, an experienced Media Developer leveraging
-            LLMs, capable of automating your Brands operations, Design, Development and
-            Marketing.<br /><br />Humans in the Loop (HITLOOP) offers various automations
-            leveraging agentic solutions that follow established processes, to elevate and automate
-            Creative Services.
+            Hit Loop automates the daily work behind keeping your business visible, organized, and
+            moving forward. It monitors what matters, tracks opportunities, supports content, and
+            helps reduce the mental load of managing every detail yourself. When something needs a
+            custom touch, strategic input, or direct support, your Human in the Loop is always
+            available.
           </p>
-
-          {/* Previously at + agency logos */}
-          <p id="site-footer-previously-at">previously at…</p>
-          <a
-            id="site-footer-agency-shell"
-            href="https://www.linkedin.com/in/bryanballi/"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <div id="site-footer-agency-track">
-              {[0, 1].map((i) => (
-                <div key={i} aria-hidden={i > 0 ? 'true' : undefined} className="sf-agency-set">
-                  {agencyLogos.map((logo) => (
-                    <img
-                      key={`${i}-${logo.alt}`}
-                      src={logo.src}
-                      alt={i === 0 ? logo.alt : ''}
-                      className="sf-agency-logo"
-                      style={logo.scale ? { height: `${22 * logo.scale}px` } : undefined}
-                    />
-                  ))}
-                </div>
-              ))}
-            </div>
-          </a>
 
         </div>
 
