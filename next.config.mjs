@@ -9,7 +9,6 @@ const nextConfig = {
   outputFileTracingExcludes: {
     '*': [
       './.claude/**/*',
-      './.next/**/*',
       './.venv/**/*',
       './dist/**/*',
       './docs/storyboards/**/*',
