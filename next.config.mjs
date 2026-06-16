@@ -8,8 +8,10 @@ const nextConfig = {
   serverExternalPackages: ['playwright', 'pdf-parse', 'mammoth'],
   outputFileTracingIncludes: {
     '*': [
-      './node_modules/next/dist/server/node-environment*.js',
-      './node_modules/next/dist/server/node-environment-extensions/**/*.js',
+      './node_modules/next/dist/client/lib/**/*.js',
+      './node_modules/next/dist/lib/**/*.js',
+      './node_modules/next/dist/server/**/*.js',
+      './node_modules/next/dist/shared/lib/**/*.js',
       './node_modules/next/dist/compiled/ws/**/*',
     ],
   },
