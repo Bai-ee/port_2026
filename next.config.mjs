@@ -9,6 +9,7 @@ const nextConfig = {
   outputFileTracingIncludes: {
     '*': [
       './node_modules/next/dist/client/**/*.js',
+      './node_modules/next/dist/build/**/*.js',
       './node_modules/next/dist/lib/**/*.js',
       './node_modules/next/dist/server/**/*.js',
       './node_modules/next/dist/shared/lib/**/*.js',
