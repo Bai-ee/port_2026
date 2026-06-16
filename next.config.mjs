@@ -1,7 +1,48 @@
 import { fileURLToPath } from 'url';
 import path from 'path';
+import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Compute firebase-admin's full on-disk dependency closure. firebase-admin is a
+// serverExternalPackage, so Turbopack relies on file-tracing to ship its deps —
+// but packages with conditional `exports` maps (jose, uuid, *-proxy-agent, grpc-js)
+// only get their package.json traced, causing "Cannot find module" at runtime on
+// Vercel. Including the whole closure makes those deps ship regardless of tracing.
+function firebaseAdminTraceIncludes() {
+  const resolvePkgDir = (name, fromDir) => {
+    let dir = fromDir;
+    while (true) {
+      const cand = path.join(dir, 'node_modules', name);
+      if (fs.existsSync(path.join(cand, 'package.json'))) return cand;
+      const parent = path.dirname(dir);
+      if (parent === dir) return null;
+      dir = parent;
+    }
+  };
+  const seen = new Set();
+  const queue = [{ name: 'firebase-admin', from: __dirname }];
+  while (queue.length) {
+    const { name, from } = queue.shift();
+    const dir = resolvePkgDir(name, from);
+    if (!dir || seen.has(dir)) continue;
+    seen.add(dir);
+    let pj;
+    try {
+      pj = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
+    } catch {
+      continue;
+    }
+    const deps = { ...(pj.dependencies || {}), ...(pj.optionalDependencies || {}) };
+    for (const d of Object.keys(deps)) queue.push({ name: d, from: dir });
+  }
+  // @types/* are type-only and never loaded at runtime — skip to save bundle size.
+  return [...seen]
+    .filter((d) => !path.relative(__dirname, d).includes('node_modules/@types/'))
+    .map((d) => './' + path.relative(__dirname, d) + '/**/*');
+}
+
+const firebaseAdminClosure = firebaseAdminTraceIncludes();
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -13,9 +54,8 @@ const nextConfig = {
       './api/**/*',
       './features/**/*',
       './onboarding/**/*',
-      // jose uses conditional exports the tracer can't follow; firebase-admin
-      // auth requires it at runtime, so include the package explicitly.
-      './node_modules/jose/**/*',
+      // Full firebase-admin dependency closure (see helper above).
+      ...firebaseAdminClosure,
       './node_modules/next/dist/client/**/*.js',
       './node_modules/next/dist/build/**/*.js',
       './node_modules/next/dist/lib/**/*.js',
@@ -30,6 +70,13 @@ const nextConfig = {
   },
   outputFileTracingExcludes: {
     '*': [
+      // Type defs and source maps are never loaded at runtime — trim from bundles.
+      './node_modules/**/*.d.ts',
+      './node_modules/**/*.d.mts',
+      './node_modules/**/*.d.cts',
+      './node_modules/**/*.js.map',
+      './node_modules/**/*.mjs.map',
+      './node_modules/**/*.cjs.map',
       './.claude/**/*',
       './.venv/**/*',
       './dist/**/*',
