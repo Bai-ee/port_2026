@@ -1,7 +1,45 @@
 import { fileURLToPath } from 'url';
 import path from 'path';
+import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// next/dist/compiled must be force-included for the Vercel function adapter, but
+// the wildcard pulls ~107MB and bloats every function past Vercel's route-merge
+// budget (-> exceeded_serverless_functions_per_deployment). Include every runtime
+// compiled subdir, but (a) take only the *.runtime.prod.js bundles from
+// next-server (3.6MB vs 57MB of dev/experimental variants) and (b) skip
+// build-time-only tooling. Saves ~80MB/function. Excludes can't do this because
+// outputFileTracingIncludes wins over outputFileTracingExcludes.
+function compiledRuntimeIncludes() {
+  const compiledRel = 'node_modules/next/dist/compiled';
+  const compiledDir = path.join(__dirname, compiledRel);
+  const buildOnly = new Set([
+    'webpack', 'babel', '@babel', 'babel-packages', 'terser', 'postcss-preset-env',
+    'cssnano-simple', 'schema-utils', 'schema-utils2', 'schema-utils3', 'acorn',
+    'browserslist', 'watchpack', 'jest-worker', 'next-devtools',
+    'react-dom-experimental', 'react-server-dom-webpack-experimental',
+    'react-server-dom-turbopack-experimental', 'react-experimental',
+    'scheduler-experimental',
+  ]);
+  const out = [`./${compiledRel}/next-server/**/*.runtime.prod.js`];
+  for (const name of fs.readdirSync(compiledDir)) {
+    if (name === 'next-server' || buildOnly.has(name)) continue;
+    const full = path.join(compiledDir, name);
+    if (!fs.statSync(full).isDirectory()) {
+      out.push(`./${compiledRel}/${name}`);
+    } else if (name.startsWith('@')) {
+      for (const sub of fs.readdirSync(full)) {
+        out.push(`./${compiledRel}/${name}/${sub}/**/*`);
+      }
+    } else {
+      out.push(`./${compiledRel}/${name}/**/*`);
+    }
+  }
+  return out;
+}
+
+const compiledIncludes = compiledRuntimeIncludes();
 
 // firebase-admin is a serverExternalPackage, so Turbopack relies on file-tracing
 // to ship its transitive deps — but it under-traces packages with conditional
@@ -52,7 +90,8 @@ const nextConfig = {
       './node_modules/next/dist/lib/**/*.js',
       './node_modules/next/dist/server/**/*.js',
       './node_modules/next/dist/shared/lib/**/*.js',
-      './node_modules/next/dist/compiled/**/*',
+      // Runtime compiled subdirs only (see compiledRuntimeIncludes above).
+      ...compiledIncludes,
       './node_modules/@swc/helpers/**/*',
       './node_modules/react/**/*',
       './node_modules/react-dom/**/*',
