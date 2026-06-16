@@ -56,11 +56,15 @@ const nextConfig = {
       './onboarding/**/*',
       // Full firebase-admin dependency closure (see helper above).
       ...firebaseAdminClosure,
-      // Next server runtime that webpack keeps external (not bundled) and the
-      // function loads at runtime; ~5MB, vs tracing all of next/dist (~124MB).
+      // Next server runtime kept external by webpack and required by the Vercel
+      // function adapter at runtime (setup-node-env -> node-environment,
+      // require-hook, etc.). These .js total ~6MB; the bulk of next/dist
+      // (~124MB) is the compiled/ build-tools dir, which is NOT needed at runtime.
       './node_modules/next/dist/compiled/next-server/*.runtime.prod.js',
-      './node_modules/next/dist/server/**/*.external.js',
-      './node_modules/next/dist/shared/lib/**/*.js',
+      './node_modules/next/dist/server/**/*.js',
+      './node_modules/next/dist/shared/**/*.js',
+      './node_modules/next/dist/lib/**/*.js',
+      './node_modules/next/dist/build/adapter/**/*.js',
     ],
   },
   outputFileTracingExcludes: {
