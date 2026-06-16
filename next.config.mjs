@@ -14,6 +14,9 @@ const nextConfig = {
       './node_modules/next/dist/shared/lib/**/*.js',
       './node_modules/next/dist/compiled/**/*',
       './node_modules/@swc/helpers/**/*',
+      './node_modules/react/**/*',
+      './node_modules/react-dom/**/*',
+      './node_modules/scheduler/**/*',
     ],
   },
   outputFileTracingExcludes: {
