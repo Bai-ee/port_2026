@@ -50,22 +50,12 @@ const nextConfig = {
   outputFileTracingIncludes: {
     '*': [
       // App logic loaded at runtime via createRequire() from outside the app/ tree.
-      // Turbopack does not trace these external CJS/JS modules, so include them explicitly.
+      // The tracer does not follow these external CJS/JS modules, so include them explicitly.
       './api/**/*',
       './features/**/*',
       './onboarding/**/*',
       // Full firebase-admin dependency closure (see helper above).
       ...firebaseAdminClosure,
-      './node_modules/next/dist/client/**/*.js',
-      './node_modules/next/dist/build/**/*.js',
-      './node_modules/next/dist/lib/**/*.js',
-      './node_modules/next/dist/server/**/*.js',
-      './node_modules/next/dist/shared/lib/**/*.js',
-      './node_modules/next/dist/compiled/**/*',
-      './node_modules/@swc/helpers/**/*',
-      './node_modules/react/**/*',
-      './node_modules/react-dom/**/*',
-      './node_modules/scheduler/**/*',
     ],
   },
   outputFileTracingExcludes: {
