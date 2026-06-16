@@ -3,6 +3,37 @@ import path from 'path';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// firebase-admin is a serverExternalPackage, so Turbopack relies on file-tracing
+// to ship its transitive deps — but it under-traces packages with conditional
+// `exports` / "main"-entry resolution, recording only their package.json. Those
+// then fail at runtime on Vercel with "Cannot find module". This is the set of
+// firebase-admin closure packages whose runtime code the tracer misses (~8MB).
+// Regenerate by diffing the firebase-admin dependency closure against a route's
+// .next/server/.../route.js.nft.json for packages that have .js on disk but no
+// .js traced. (jose + uuid copies are part of this set.)
+const firebaseAdminTraceDeps = [
+  'jose',
+  'uuid',
+  'gaxios/node_modules/uuid',
+  'teeny-request/node_modules/uuid',
+  'google-gax/node_modules/uuid',
+  '@firebase/component', '@firebase/database', '@firebase/database-compat',
+  '@firebase/logger', '@firebase/util', '@js-sdsl/ordered-map', '@nodable/entities',
+  '@tootallnate/once', 'abort-controller', 'agent-base', 'ansi-regex', 'ansi-styles',
+  'anynum', 'asynckit', 'call-bind-apply-helpers', 'cliui', 'color-convert',
+  'color-name', 'combined-stream', 'data-uri-to-buffer', 'delayed-stream',
+  'dunder-proto', 'emoji-regex', 'es-define-property', 'es-errors', 'es-object-atoms',
+  'es-set-tostringtag', 'escalade', 'event-target-shim', 'farmhash-modern',
+  'fast-xml-builder', 'form-data', 'function-bind', 'get-caller-file', 'get-intrinsic',
+  'get-proto', 'gopd', 'has-symbols', 'has-tostringtag', 'hasown', 'html-entities',
+  'http-parser-js', 'http-proxy-agent', 'http-proxy-agent/node_modules/agent-base',
+  'https-proxy-agent', 'is-fullwidth-code-point', 'math-intrinsics', 'mime-db',
+  'mime-types', 'path-expression-matcher', 'require-directory', 'string-width',
+  'strip-ansi', 'strnum', 'tslib', 'web-streams-polyfill', 'websocket-driver',
+  'websocket-extensions', 'wrap-ansi', 'xml-naming', 'y18n', 'yargs', 'yargs-parser',
+  'teeny-request/node_modules/agent-base', 'teeny-request/node_modules/https-proxy-agent',
+].map((p) => `./node_modules/${p}/**/*`);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   serverExternalPackages: ['playwright', 'pdf-parse', 'mammoth', 'firebase-admin'],
@@ -13,13 +44,8 @@ const nextConfig = {
       './api/**/*',
       './features/**/*',
       './onboarding/**/*',
-      // firebase-admin deps with conditional `exports` maps that the tracer
-      // only records package.json for -> "Cannot find module" at runtime.
-      './node_modules/jose/**/*',
-      './node_modules/uuid/**/*',
-      './node_modules/gaxios/node_modules/uuid/**/*',
-      './node_modules/teeny-request/node_modules/uuid/**/*',
-      './node_modules/google-gax/node_modules/uuid/**/*',
+      // firebase-admin transitive deps the tracer under-includes (see above).
+      ...firebaseAdminTraceDeps,
       // Next runtime (Turbopack keeps these external to the route bundle).
       './node_modules/next/dist/client/**/*.js',
       './node_modules/next/dist/build/**/*.js',
