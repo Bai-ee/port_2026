@@ -8,15 +8,16 @@ const SIMPLE_SCROLL_MEDIA_QUERY = '(max-width: 680px) and (pointer: coarse)';
 
 // Lines the subheadline cycles through. Add/remove freely — any length works.
 const SUBHEADLINE_PHRASES = [
-  'Assisted Digital Media',
-  'Media Development',
-  'Digital Media Consulting',
-  'Brand Development',
-  'Social Media',
-  'Product Development',
-  'Web Design & Development',
-  'Agentic Automation',
-  'Creative Technology',
+  'Brand Identity & Design',
+  'Websites & Landing Pages',
+  'Social Media & Content',
+  'Video & Motion',
+  'SEO & Content Strategy',
+  'Email & Newsletter Systems',
+  'Daily Briefs',
+  'AI Automation & Workflows',
+  'Blockchain Products & Payments',
+  'Browser Based Gaming',
 ];
 
 const SCRAMBLE_CHARS = '!<>-_\\/[]{}—=+*^?#________';

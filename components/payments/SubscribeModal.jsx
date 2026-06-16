@@ -409,8 +409,8 @@ const SubscribeModal = ({
           </div>
         ) : null}
 
-        {/* Tab switch — subscribers vs single on-demand run. Layout-neutral row. */}
-        {step === 'email' ? (
+        {/* Tab switch — only shown when opened from Run Briefs tab. */}
+        {step === 'email' && mode === 'run' ? (
           <div id="subscribe-tab-row" role="tablist" aria-label="Payment type" style={tabRowStyle}>
             <button
               type="button"
@@ -652,6 +652,7 @@ const subscribeModalCss = `
     font-size: 12px;
     cursor: pointer;
     color: #2a2420;
+    white-space: nowrap;
   }
   #subscribe-modal-close:hover {
     background: #2a2420;

@@ -4662,7 +4662,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     const nav = document.getElementById('capability-nav-col');
     const section = document.getElementById('capability-section-shell');
     if (!nav || !section) return undefined;
-    if (window.innerWidth <= 900 && isModularOnboardingClient) return undefined;
+    if (window.innerWidth <= 900) return undefined;
     const st = ScrollTrigger.create({
       trigger: nav,
       start: 'top top+=72',
@@ -8468,16 +8468,16 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               <div id="dashboard-associate-brand-row" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', justifyContent: 'space-between' }}>
                 <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', display: 'block' }} />
                 <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.44)', fontWeight: 700, fontFamily: '"Space Mono", monospace' }}>Client Access</span>
-                <Link href="/" id="dashboard-associate-back-btn" aria-label="Back to site" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '2.4rem', height: '2.4rem', borderRadius: '999px', background: 'rgba(255,255,255,0.34)', border: '1px solid rgba(42,36,32,0.12)', color: 'rgba(42,36,32,0.58)', textDecoration: 'none', fontSize: '1.05rem', fontFamily: '"Space Mono", monospace', lineHeight: 1 }}>✕</Link>
+                <Link href="/" id="dashboard-associate-back-btn" aria-label="Back to site" data-tooltip-disabled="true" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '2.4rem', height: '2.4rem', borderRadius: '999px', background: 'rgba(255,255,255,0.34)', border: '1px solid rgba(42,36,32,0.12)', color: 'rgba(42,36,32,0.58)', textDecoration: 'none', fontSize: '1.05rem', fontFamily: '"Space Mono", monospace', lineHeight: 1 }}>✕</Link>
               </div>
 
               <div id="dashboard-associate-marquee-viewport" style={{ width: '100%', overflow: 'hidden', margin: '0 0 0.7rem' }}>
                 <div ref={noWorkspaceMarqueeTrackRef} style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform' }}>
                   <span style={{ margin: 0, flexShrink: 0, color: '#2a2420', fontSize: 'clamp(2rem, 8.5vw, 7rem)', lineHeight: 1, letterSpacing: '-0.04em', fontFamily: '"Doto", "Space Mono", monospace', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                    LINK YOUR DASHBOARD&nbsp;&nbsp;·&nbsp;&nbsp;ASSOCIATE WEBSITE&nbsp;&nbsp;·&nbsp;&nbsp;
+                    LINK YOUR DASHBOARD&nbsp;·&nbsp;ASSOCIATE WEBSITE&nbsp;·&nbsp;
                   </span>
                   <span aria-hidden="true" style={{ margin: 0, flexShrink: 0, color: '#2a2420', fontSize: 'clamp(2rem, 8.5vw, 7rem)', lineHeight: 1, letterSpacing: '-0.04em', fontFamily: '"Doto", "Space Mono", monospace', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                    LINK YOUR DASHBOARD&nbsp;&nbsp;·&nbsp;&nbsp;ASSOCIATE WEBSITE&nbsp;&nbsp;·&nbsp;&nbsp;
+                    LINK YOUR DASHBOARD&nbsp;·&nbsp;ASSOCIATE WEBSITE&nbsp;·&nbsp;
                   </span>
                 </div>
               </div>
@@ -20681,16 +20681,7 @@ const dashboardCss = `
       font-weight: 600;
     }
     .tile-mobile-chevron {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 22px;
-      height: 22px;
-      border-radius: 50%;
-      background: var(--border);
-      flex-shrink: 0;
-      margin-left: auto;
-      transition: background 0.18s ease, transform 0.22s ease;
+      display: none;
     }
     .tile-mobile-chevron svg {
       width: 11px;
@@ -20710,20 +20701,8 @@ const dashboardCss = `
     .tile-intake-card--mobile-expanded .tile-mobile-chevron svg {
       transform: rotate(180deg);
     }
-    /* Collapsed: hide everything below tile-number */
-    .tile-intake-card .tile-intake-placeholder,
-    .tile-intake-card .tile-intake-body,
-    .tile-intake-card .tile-foot {
-      display: none;
-    }
-    /* Expanded: restore all sections */
-    .tile-intake-card--mobile-expanded .tile-intake-placeholder,
-    .tile-intake-card--mobile-expanded .tile-intake-placeholder--locked,
-    .tile-intake-card--mobile-expanded .tile-intake-body,
-    .tile-intake-card--mobile-expanded .tile-foot {
-      display: flex;
-    }
-    .tile-intake-card--mobile-expanded .tile-intake-body {
+    /* Cards always show full content on mobile — no collapse by default */
+    .tile-intake-card .tile-intake-body {
       flex-direction: column;
     }
 

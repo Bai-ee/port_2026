@@ -188,7 +188,8 @@ async function generateWebsiteMockupArtifact({
     const templateBuffer = await loadTemplateBuffer();
     const buffer = await sharp(templateBuffer)
       .composite(composites)
-      .png()
+      .resize(1000, null, { fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 82 })
       .toBuffer();
 
     const storagePath = path.posix.join(
@@ -197,13 +198,13 @@ async function generateWebsiteMockupArtifact({
       'brief-runs',
       runId,
       'artifacts',
-      'homepage-device-mockup.png'
+      'homepage-device-mockup.webp'
     );
 
     const stored = await saveBufferArtifact({
       storagePath,
       buffer,
-      contentType: 'image/png',
+      contentType: 'image/webp',
       metadata: {
         artifactType: 'website_homepage_device_mockup',
         clientId,
