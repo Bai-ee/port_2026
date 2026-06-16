@@ -6,6 +6,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   serverExternalPackages: ['playwright', 'pdf-parse', 'mammoth'],
+  outputFileTracingIncludes: {
+    '*': [
+      './node_modules/next/dist/server/node-environment*.js',
+      './node_modules/next/dist/server/node-environment-extensions/**/*.js',
+      './node_modules/next/dist/compiled/ws/**/*',
+    ],
+  },
   outputFileTracingExcludes: {
     '*': [
       './.claude/**/*',
