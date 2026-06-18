@@ -296,7 +296,11 @@ function sharedBuildOptions({ nodePaths, tsconfig }) {
       '.woff2': 'dataurl',
     },
     minify: false,
-    define: { 'process.env.NODE_ENV': '"development"' },
+    // 'process.env' catches all bare process.env.* refs (e.g. Stripe's
+    // NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) that esbuild would otherwise leave
+    // as-is, crashing the browser where process is undefined.
+    // esbuild applies most-specific match first, so NODE_ENV still wins.
+    define: { 'process.env.NODE_ENV': '"development"', 'process.env': '{}' },
   };
 }
 
