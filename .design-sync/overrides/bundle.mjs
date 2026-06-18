@@ -315,7 +315,7 @@ export async function bundleToIife({ entry, globalName, nodePaths, out, tsconfig
       entryPoints: [entry],
       format: 'iife',
       globalName,
-      footer: { js: `window.${globalName}=${globalName}.__dsMainNs?Object.assign({},${globalName},${globalName}.__dsMainNs,{__dsMainNs:undefined}):${globalName};` },
+      footer: { js: `window.${globalName}=${globalName}.__dsMainNs?Object.assign({},${globalName},${globalName}.__dsMainNs,{__dsMainNs:undefined}):${globalName};(function(){if(typeof document!=='undefined'){document.addEventListener('error',function(e){var t=e.target;if(t&&t.tagName==='IMG'){t.style.visibility='hidden';t.style.minHeight='0';}},true);}})();` },
       outfile: bundleJs,
       logLevel: 'warning',
       define: { ...shared.define, ...IIFE_IMPORT_META_DEFINE },
