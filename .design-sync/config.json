@@ -10,6 +10,29 @@
   "libOverrides": {
     "bundle.mjs": "shim Next.js (link/navigation/dynamic/script/image) and Firebase (auth/firestore/app) so portfolio app components bundle without framework context"
   },
+  "overrides": {
+    "Header":               { "cardMode": "single", "primaryStory": "Default" },
+    "HeroFooter":           { "cardMode": "single", "primaryStory": "Default" },
+    "FontSelector":         { "cardMode": "single", "primaryStory": "Default" },
+    "ColorPalette":         { "cardMode": "single", "primaryStory": "Default" },
+    "ControlPanel":         { "cardMode": "single", "primaryStory": "Default" },
+    "TextOverlay":          { "cardMode": "single", "primaryStory": "Default" },
+    "LoopControls":         { "cardMode": "single", "primaryStory": "Default" },
+    "ReelPlayer":           { "cardMode": "single", "primaryStory": "Default" },
+    "StackedSlidesSection": { "cardMode": "single", "primaryStory": "Default" },
+    "HorizontalTextSection":{ "cardMode": "single", "primaryStory": "Default" },
+    "BrandSystemBuildModal":{ "cardMode": "single", "primaryStory": "Default" },
+    "BriefEditorModal":     { "cardMode": "single", "primaryStory": "Default" },
+    "CampaignBuilderModal": { "cardMode": "single", "primaryStory": "Default" },
+    "QuickRunModal":        { "cardMode": "single", "primaryStory": "Default" },
+    "SendPreviewModal":     { "cardMode": "single", "primaryStory": "Default" },
+    "SettingsModal":        { "cardMode": "single", "primaryStory": "Default" },
+    "VisualDnaModal":       { "cardMode": "single", "primaryStory": "Default" },
+    "PortfolioModal":       { "cardMode": "single", "primaryStory": "Default" },
+    "SubscribeModal":       { "cardMode": "single", "primaryStory": "Default" },
+    "MockupPromptEditorModal":{ "cardMode": "single", "primaryStory": "Default" },
+    "SitePromptEditorModal":{ "cardMode": "single", "primaryStory": "Default" }
+  },
   "componentSrcMap": {
     "Header": "Header.jsx",
     "HeroHeadline": "HeroHeadline.jsx",
