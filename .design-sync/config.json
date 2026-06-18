@@ -4,7 +4,7 @@
   "globalName": "BballiPortfolio",
   "shape": "package",
   "tsconfig": "./jsconfig.json",
-  "cssEntry": "./colors.css",
+  "cssEntry": "./.design-sync/ds-styles.css",
   "buildCmd": "node .ds-sync/package-build.mjs --config .design-sync/config.json --node-modules ./node_modules --entry .design-sync/ds-entry.jsx --out ./ds-bundle",
   "readmeHeader": ".design-sync/conventions.md",
   "libOverrides": {
