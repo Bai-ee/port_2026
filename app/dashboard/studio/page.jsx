@@ -8,7 +8,7 @@
 // the screen with it, renders the scene at export scale, then restores the
 // live iframe. CAPTURE HI-RES alone just feeds flat shots to the pipeline.
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import gsap from 'gsap';
 import { SlidersHorizontal, Clapperboard, Images, ChevronRight, ArrowUpRight, Monitor, Download, RefreshCw, Play, Square, RotateCcw, Orbit, MousePointer2, Smartphone, Tablet, RectangleHorizontal, RectangleVertical, Palette, Save } from 'lucide-react';
@@ -28,6 +28,18 @@ const BACKDROPS = {
   midnight: { bg: 0x050510, ground: 0x0a0a18, label: 'MIDNIGHT' },
   teal:     { bg: 0x0a2a28, ground: 0x0d3330, label: 'TEAL' },
 };
+
+// Launch-safe backgrounds are the modes the Cloud Run renderer can faithfully
+// reproduce. Image upload + blurred-site modes remain implemented below for
+// later development, but are hidden because the render recipe cannot carry them
+// through to production video output yet.
+const BACKGROUND_MODES = [
+  { id: 'env', label: 'Scene', launch: true },
+  { id: 'color', label: 'Color', launch: true },
+  { id: 'image', label: 'Image', launch: false },
+  { id: 'site', label: 'Site', launch: false },
+];
+const LAUNCH_BACKGROUND_MODE_IDS = BACKGROUND_MODES.filter((mode) => mode.launch).map((mode) => mode.id);
 
 // Whatever the user dials in becomes the default next visit.
 const SETTINGS_KEY = 'mockup-studio-defaults-v1';
@@ -372,8 +384,26 @@ const OUTPUT_FORMATS = [
 ];
 
 export default function StudioPage() {
-  const { user, userProfile, loading } = useAuth();
+  const authState = useAuth();
   const router = useRouter();
+  const [smokeMode, setSmokeMode] = useState(false);
+  const isDev = process.env.NODE_ENV === 'development';
+
+  useEffect(() => {
+    if (!isDev || typeof window === 'undefined') return;
+    setSmokeMode(new URLSearchParams(window.location.search).get('smoke') === '1');
+  }, [isDev]);
+
+  const smokeUser = useMemo(() => ({
+    uid: 'studio-smoke-user',
+    email: 'studio-smoke@local.test',
+    getIdToken: async () => 'studio-smoke-token',
+  }), []);
+  const user = smokeMode ? smokeUser : authState.user;
+  const userProfile = smokeMode
+    ? { websiteUrl: 'https://hitloop.agency', dashboardTitle: 'Studio Smoke Test' }
+    : authState.userProfile;
+  const loading = smokeMode ? false : authState.loading;
 
   // Right-nav width — the canvas/board fills the viewport area to the LEFT of it.
   const RAIL_W = 336;
@@ -391,7 +421,7 @@ export default function StudioPage() {
   const [customTemplates, setCustomTemplates] = useState(loadCustomTemplates);
   const [backdropId, setBackdropId] = useState(saved.backdropId in BACKDROPS ? saved.backdropId : 'home');
   // Immersive background: mode + per-mode source.
-  const [bgMode, setBgMode] = useState(saved.bgMode || 'env'); // 'color' | 'image' | 'site' | 'env'
+  const [bgMode, setBgMode] = useState(LAUNCH_BACKGROUND_MODE_IDS.includes(saved.bgMode) ? saved.bgMode : 'env'); // 'color' | 'image' | 'site' | 'env'
   const [bgColor, setBgColor] = useState(saved.bgColor || '#11141a');
   const [envPreset, setEnvPreset] = useState(saved.envPreset || 'studio');
   const [bgImageEl, setBgImageEl] = useState(null);
@@ -484,7 +514,7 @@ export default function StudioPage() {
   useEffect(() => { keyframesRef.current = keyframes; }, [keyframes]);
 
   useEffect(() => {
-    if (!loading && !user) router.replace('/');
+    if (!loading && !user) router.replace('/login?redirect=/dashboard/studio');
   }, [user, loading, router]);
 
   // Debounced save — current settings become the defaults for the next visit.
@@ -680,20 +710,22 @@ export default function StudioPage() {
     // When rendering the timeline, honor its duration (the inline Duration field).
     const seconds = cameraTrack ? totalSeconds : dirSeconds;
 
+    // Always read live-stage state from stateRef at render time — never stale.
+    const live = stateRef.current;
     const recipe = {
       url: target,
       preset: dirPreset,
       ...(cameraTrack ? { cameraTrack } : {}),
       output: { seconds, fps: dirFps, width: w, height: h, siteSpeed: dirSiteSpeed },
-      device: { viewport: viewportId, backdrop: backdropId, loop: loopCfg.on },
+      device: { viewport: live.viewportId, backdrop: live.backdropId, loop: live.loopCfg.on },
       capture: { warmupMs: 400 },
       environment: {
-        mode: bgMode === 'env' ? 'preset' : bgMode,
-        preset: envPreset,
-        color: bgColor,
-        hue,
-        saturation: sat,
-        brightness: bright,
+        mode: live.bgMode === 'env' ? 'preset' : (live.bgMode === 'color' ? 'color' : 'gradient'),
+        preset: live.envPreset,
+        color: live.bgColor,
+        hue: live.hue,
+        saturation: live.sat,
+        brightness: live.bright,
         reflections: true,
       },
       scroll,
@@ -710,6 +742,7 @@ export default function StudioPage() {
     setRenderLog([
       { prefix: '$', text: `mockup video · ${host}`, type: 'dim', cursor: false },
       { prefix: '→', text: `Target: ${target}`, type: 'dim', cursor: false },
+      { prefix: '→', text: `Background: ${recipe.environment.mode}${recipe.environment.preset ? ' / ' + recipe.environment.preset : ''}`, type: 'dim', cursor: false },
       { prefix: '', text: '─'.repeat(42), type: 'dim', cursor: false },
     ]);
     const stages = [
@@ -1277,6 +1310,13 @@ export default function StudioPage() {
         const dv = templatePose(vp, DEFAULT_VIEW);
         controls.target.set(dv.tx, dv.ty, dv.tz);
         camera.position.set(dv.px, dv.py, dv.pz);
+        // Force OrbitControls to sync its internal spherical state to the new
+        // camera position. Without this, damping causes the camera to drift back
+        // to wherever it was before the viewport switch.
+        const _wasDamping = controls.enableDamping;
+        controls.enableDamping = false;
+        controls.update();
+        controls.enableDamping = _wasDamping;
       };
 
       // Apply UI state that may have been set before this async build finished.
@@ -1973,7 +2013,47 @@ export default function StudioPage() {
     return () => window.clearTimeout(timeout);
   }, [worldReady, loadedUrl, busy, dirRendering, user, generateCloudVideo]);
 
-  if (loading || !user) return null;
+  if (loading || !user) {
+    const loginHref = '/login?redirect=/dashboard/studio';
+    return (
+      <main style={{
+        minHeight: '100dvh',
+        display: 'grid',
+        placeItems: 'center',
+        padding: 24,
+        background: GLASS.bg,
+        color: GLASS.ink,
+        fontFamily: GLASS.sans,
+      }}>
+        <section style={{
+          width: 'min(100%, 420px)',
+          display: 'grid',
+          gap: 16,
+          textAlign: 'center',
+          ...GLASS.surface,
+          borderRadius: 12,
+          padding: 24,
+        }}>
+          <span style={{ ...ui.label, color: GLASS.inkMute }}>
+            Mockup Studio
+          </span>
+          <h1 style={{ margin: 0, fontSize: 24, lineHeight: 1.15, letterSpacing: 0 }}>
+            {loading ? 'Opening Studio' : 'Sign in to open Studio'}
+          </h1>
+          <p style={{ margin: 0, color: GLASS.inkSoft, fontSize: 14, lineHeight: 1.55 }}>
+            {loading
+              ? 'Checking your workspace access.'
+              : 'Video renders are attached to your client workspace, so Studio requires a signed-in account.'}
+          </p>
+          {!loading ? (
+            <a href={loginHref} style={{ ...ui.navCta, textDecoration: 'none', margin: '0 auto' }}>
+              Sign in
+            </a>
+          ) : null}
+        </section>
+      </main>
+    );
+  }
 
   // Exportable artboard — the live 3D canvas IS the exported frame (WYSIWYG), so its
   // box matches the selected output format's aspect ratio. It's sized in pure CSS
@@ -2132,9 +2212,10 @@ export default function StudioPage() {
                       style={{
                         width: 46, height: 46, borderRadius: '50%',
                         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        border: '1px solid transparent',
-                        background: b.active ? GLASS.ink : 'linear-gradient(#fff,#fff) padding-box, ' + GLASS.accent + ' border-box',
-                        color: b.active ? '#fff' : GLASS.ink,
+                        // Active → gradient hairline border; inactive → plain grey/glass.
+                        border: '1px solid ' + (b.active ? 'transparent' : GLASS.hair),
+                        background: b.active ? 'linear-gradient(#fff,#fff) padding-box, ' + GLASS.accent + ' border-box' : 'rgba(255,255,255,0.6)',
+                        color: GLASS.ink,
                         boxShadow: '0 1px 4px rgba(42,36,32,0.1)',
                         cursor: b.disabled ? 'default' : 'pointer',
                         opacity: b.disabled ? 0.4 : 1,
@@ -2154,7 +2235,7 @@ export default function StudioPage() {
                     (shifted up by the label height the other groups carry below their icons) */}
                 <div id="studio-undercanvas-actions" style={{ display: 'flex', alignSelf: 'flex-start', alignItems: 'center', gap: 8, height: 46 }}>
                   <button
-                    style={{ ...ui.navBtn(), width: 'auto', border: '1px solid transparent', background: 'linear-gradient(#fff,#fff) padding-box, ' + GLASS.accent + ' border-box', opacity: keyframes.length < 2 ? 0.5 : 1 }}
+                    style={{ ...ui.navBtn(), width: 'auto', opacity: keyframes.length < 2 ? 0.5 : 1 }}
                     disabled={keyframes.length < 2}
                     onClick={saveAsTemplate}
                   >
@@ -2363,6 +2444,13 @@ export default function StudioPage() {
               .studio-cta-full, .studio-cta-short { display: none; }
               .studio-cta-icon { display: inline-flex; }
               .studio-ctrl-label { display: none; }
+              /* Render + Save → icon-only circles (1:1), matching the player
+                 controls — not stretched pills. Overrides the inline width:auto
+                 + navBtn/navCta padding & 999px radius. */
+              #studio-undercanvas-actions > button {
+                width: 46px !important; min-width: 46px !important; height: 46px !important;
+                padding: 0 !important; border-radius: 50% !important; flex-shrink: 0;
+              }
               #studio-under-canvas-controls { overflow-y: auto; -webkit-overflow-scrolling: touch; }
               /* Device sizes: bare icons (no card box/border/white bg, tighter) so
                  landscape/square/reel sit close together. Active = icon color only.
@@ -2420,7 +2508,7 @@ export default function StudioPage() {
           >
             {/* Mode selector */}
             <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-              {[['env', 'Scene'], ['color', 'Color'], ['image', 'Image'], ['site', 'Site']].map(([m, label]) => (
+              {BACKGROUND_MODES.filter((mode) => mode.launch).map(({ id: m, label }) => (
                 <button
                   key={m}
                   style={{ ...ui.btn(bgMode === m), height: 30, padding: '0 12px', fontSize: 10 }}

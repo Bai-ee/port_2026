@@ -119,7 +119,7 @@ export function normalizeRecipe(raw = {}) {
       backdrop: String(r.device?.backdrop || 'home').slice(0, 20),
       loop: r.device?.loop !== false,
     },
-    capture: { warmupMs: clamp(r.capture?.warmupMs, 0, 5000, 400) },
+    capture: { warmupMs: clamp(r.capture?.warmupMs, 0, 5000, 1000) },
     environment: normEnvironment(r.environment),
     scroll,
     cameraTrack,

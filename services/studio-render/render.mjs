@@ -108,6 +108,7 @@ function probeExpression(scroll) {
 export async function renderVideo(rawRecipe = {}) {
   const recipe = normalizeRecipe(rawRecipe);
   if (!isValidUrl(recipe.url)) throw new Error('valid http(s) url required');
+  console.log(`[env] mode=${recipe.environment.mode} preset=${recipe.environment.preset} hue=${recipe.environment.hue} sat=${recipe.environment.saturation} bright=${recipe.environment.brightness}`);
   const { seconds, width, height } = recipe.output;
   const captureMs = Math.round(seconds * 1000 + 600);
   const userDataDir = `/tmp/studio-render-${process.pid}-${Date.now()}`;

@@ -25,7 +25,7 @@ export default function DashboardRoute() {
 
   useEffect(() => {
     if (!loading && !user) {
-      router.replace('/');
+      router.replace('/login?redirect=/dashboard');
     }
   }, [user, loading, router]);
 
@@ -53,6 +53,73 @@ export default function DashboardRoute() {
   }, [user?.uid]);
 
   const dashboardReady = !loading && !!user;
+
+  if (loading || !user) {
+    return (
+      <main style={{
+        minHeight: '100dvh',
+        display: 'grid',
+        placeItems: 'center',
+        padding: 24,
+        background: 'linear-gradient(180deg,#fefdf9 0%,#fbf8f0 60%,#fdfaf2 100%)',
+        color: '#1a1a1a',
+        fontFamily: '"Space Grotesk", system-ui, -apple-system, sans-serif',
+      }}>
+        <section style={{
+          width: 'min(100%, 420px)',
+          display: 'grid',
+          gap: 16,
+          textAlign: 'center',
+          background: 'rgba(255,255,255,0.72)',
+          border: '1px solid #E4E4E4',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.6)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          borderRadius: 12,
+          padding: 24,
+        }}>
+          <span style={{ fontSize: 9, fontFamily: '"Space Mono", ui-monospace, monospace', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#8a8a8a', fontWeight: 700 }}>
+            Dashboard
+          </span>
+          <h1 style={{ margin: 0, fontSize: 24, lineHeight: 1.15, letterSpacing: 0 }}>
+            {loading ? 'Opening Dashboard' : 'Sign in to open Dashboard'}
+          </h1>
+          <p style={{ margin: 0, color: '#444', fontSize: 14, lineHeight: 1.55 }}>
+            {loading
+              ? 'Checking your workspace access.'
+              : 'Client data and brief history live behind account access.'}
+          </p>
+          {!loading ? (
+            <a
+              href="/login?redirect=/dashboard"
+              style={{
+                height: 40,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 7,
+                background: 'linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 999,
+                padding: '0 18px',
+                fontSize: 13,
+                fontFamily: '"Space Grotesk", system-ui, -apple-system, sans-serif',
+                fontWeight: 700,
+                letterSpacing: '0.01em',
+                lineHeight: 1,
+                textDecoration: 'none',
+                margin: '0 auto',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1)',
+              }}
+            >
+              Sign in
+            </a>
+          ) : null}
+        </section>
+      </main>
+    );
+  }
 
   return (
     <div style={{ minHeight: '100dvh', position: 'relative', overflow: 'hidden' }}>

@@ -62,13 +62,14 @@ export function buildSceneHtml(recipe, {
       const envMode=ENV?.mode||'gradient';
       const grade=(h,s,b)=>[h?'hue-rotate('+h+'deg)':'',s!=null&&s!==1?'saturate('+s+')':'',b!=null&&b!==1?'brightness('+b+')':''].filter(Boolean).join(' ')||'none';
       const PHOTO_PRESETS=['airport-terminal','desk','loft'];
+      window.__envDiag={loaded:false,err:null};
       if(envMode==='preset'&&PHOTO_PRESETS.includes(ENV?.preset)){
         x.filter=grade(ENV?.hue,ENV?.saturation,ENV?.brightness);
         try{
-          const img=await new Promise((res,rej)=>{const im=new Image();im.crossOrigin='anonymous';im.onload=()=>res(im);im.onerror=()=>rej(new Error('env img load failed'));im.src='/env/'+ENV.preset+'.webp';});
-          x.drawImage(img,0,0,2048,1024);
-        }catch(_){
-          x.fillStyle='#e8eaec'; x.fillRect(0,0,2048,1024);
+          const img=await new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=(e)=>rej(new Error('env img load failed: '+e?.type));im.src='/env/'+ENV.preset+'.webp';});
+          x.drawImage(img,0,0,2048,1024); window.__envDiag.loaded=true;
+        }catch(err_){
+          window.__envDiag.err=String(err_?.message||err_); x.fillStyle='#e8eaec'; x.fillRect(0,0,2048,1024);
         }
       } else if(envMode==='preset'){
         const ENV_STOPS={'studio':[['#f4f3f0',0],['#e2dfd9',0.6],['#cfccc5',1]],'sunset':[['#241433',0],['#7a3b2e',0.5],['#e8a25a',0.82],['#f6d8a4',1]]};
@@ -116,11 +117,15 @@ export function buildSceneHtml(recipe, {
 
     const data = await fetch('/frames').then(r=>r.json());
     const liveImgs=[]; for(const u of (data.live||[])){ const im=new Image(); im.src=u; try{await im.decode(); liveImgs.push(im);}catch{} }
+    const LIVE_FRAME_START_RATIO = 0.15;
+    const liveFrameStart = liveImgs.length > 1
+      ? Math.min(liveImgs.length - 1, Math.max(0, Math.floor(liveImgs.length * LIVE_FRAME_START_RATIO)))
+      : 0;
     const screenCanvas=document.createElement('canvas'); screenCanvas.width=VP.width; screenCanvas.height=VP.height;
     const sctx=screenCanvas.getContext('2d'); sctx.fillStyle='#fff'; sctx.fillRect(0,0,VP.width,VP.height);
     const screenTex=new THREE.CanvasTexture(screenCanvas); screenTex.colorSpace=THREE.SRGBColorSpace; screenTex.anisotropy=glRenderer.capabilities.getMaxAnisotropy(); screenTex.generateMipmaps=false; screenTex.minFilter=THREE.LinearFilter;
     const drawScreen=(img)=>{ if(!img)return; sctx.fillStyle='#fff'; sctx.fillRect(0,0,VP.width,VP.height); sctx.drawImage(img,0,0,VP.width,VP.height); screenTex.needsUpdate=true; };
-    drawScreen(liveImgs[0]);
+    drawScreen(liveImgs[liveFrameStart] || liveImgs[0]);
 
     const roundedRect=(W,H,r)=>{ const hw=W/2,hh=H/2,s=new THREE.Shape();
       s.moveTo(-hw+r,-hh);s.lineTo(hw-r,-hh);s.quadraticCurveTo(hw,-hh,hw,-hh+r);s.lineTo(hw,hh-r);s.quadraticCurveTo(hw,hh,hw-r,hh);s.lineTo(-hw+r,hh);s.quadraticCurveTo(-hw,hh,-hw,hh-r);s.lineTo(-hw,-hh+r);s.quadraticCurveTo(-hw,-hh,-hw+r,-hh);
@@ -166,7 +171,11 @@ export function buildSceneHtml(recipe, {
       for(let f=0; f<total; f++){
         const camU=f/(total-1);
         const sceneTime=f/FPS;
-        if(liveImgs.length){ const idx=Math.floor((f/(total-1))*(liveImgs.length-1)*SITE_SPEED)%liveImgs.length; drawScreen(liveImgs[idx]); }
+        if(liveImgs.length){
+          const playableCount=Math.max(1, liveImgs.length - liveFrameStart);
+          const idx=liveFrameStart + (Math.floor((f/(total-1))*Math.max(0, playableCount-1)*SITE_SPEED)%playableCount);
+          drawScreen(liveImgs[idx]);
+        }
         dust.rotation.y=sceneTime*0.008; updateLoop(sceneTime);
         applyPath(camU,camera,target); camera.lookAt(target);
         glRenderer.render(scene,camera);
@@ -180,7 +189,7 @@ export function buildSceneHtml(recipe, {
       const bytes=useWebm?new Uint8Array(finalBuf):new Uint8Array(muxer.target.buffer);
       await fetch('/upload',{method:'POST',headers:{'content-type':'application/octet-stream'},body:bytes});
       const chosenCodec=useWebm?'vp09.00.10.08':avcChosen.codec;
-      window.__RESULT={ frames:total, liveImgs:liveImgs.length, msPerFrame:Math.round(renderMs/total), sizeKB:Math.round(bytes.length/1024), codec:chosenCodec, container:useWebm?'webm':'mp4' };
+      window.__RESULT={ frames:total, liveImgs:liveImgs.length, liveFrameStart, msPerFrame:Math.round(renderMs/total), sizeKB:Math.round(bytes.length/1024), codec:chosenCodec, container:useWebm?'webm':'mp4', envMode:ENV?.mode, envPreset:ENV?.preset, envImgLoaded:window.__envDiag?.loaded, envImgErr:window.__envDiag?.err };
       window.__DONE=true;
     }
   } catch(e){ window.__ERR=String(e&&e.stack||e); window.__DONE=true; }

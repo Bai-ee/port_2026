@@ -1169,6 +1169,34 @@ const MOCKUP_STUDIO_TEMPLATES = [
   { id: 'close-pan', label: 'Corner Tour' },
   { id: 'slow-drift', label: 'Slow Drift' },
 ];
+// Real-world environment presets — same set the full Studio offers. Drives the
+// rendered background + reflections. airport-terminal/desk/loft are photo scenes;
+// studio/sunset are gradients (see services/studio-render/recipe.mjs ALLOWED_ENV_PRESETS).
+const MOCKUP_STUDIO_ENVIRONMENTS = [
+  { id: 'loft', label: 'Loft' },
+  { id: 'airport-terminal', label: 'Airport' },
+  { id: 'desk', label: 'Desk' },
+  { id: 'studio', label: 'Studio' },
+  { id: 'sunset', label: 'Sunset' },
+];
+// The Studio's rich 8-keyframe camera templates don't exist server-side; the
+// render service only knows these 3 CAMERA_PRESETS (recipe.mjs). Map each modal
+// template to the closest server preset so the chosen move is honored.
+const MOCKUP_STUDIO_CAMERA_PRESET_MAP = {
+  'spiral-in': 'push-in-hold',
+  'hero-push': 'push-in-hold',
+  'orbit-reveal': 'orbit-reveal',
+  'showcase-loop': 'orbit-reveal',
+  'close-pan': 'push-rotate-flat',
+  'slow-drift': 'push-rotate-flat',
+};
+// Output dimensions per device so a tablet/phone isn't squished into a wide
+// landscape frame (the "skew"). Desktop stays 16:10; tablet portrait; mobile reel.
+const MOCKUP_STUDIO_OUTPUT_BY_DEVICE = {
+  desktop: { width: 1920, height: 1200 },
+  tablet: { width: 1200, height: 1600 },
+  mobile: { width: 1080, height: 1920 },
+};
 const CUSTOM_DETAIL_CARD_IDS = new Set([
   'multi-device-view',
   'brief',
@@ -2633,9 +2661,15 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    viewportId: 'desktop',
 	    backdropId: 'home',
 	    templateId: 'spiral-in',
+	    environmentId: 'loft',
 	  });
 	  const [mockupStudioRenderLoading, setMockupStudioRenderLoading] = useState(false);
 	  const [mockupStudioRenderError, setMockupStudioRenderError] = useState('');
+	  // Tracks the last website auto-filled from the effective client so the draft
+	  // URL follows a client switch (operator → impersonated client) UNTIL the user
+	  // manually edits the field. Without this the draft locks onto the first site
+	  // seen (often the operator's own), rendering the wrong site for a client.
+	  const autoFilledStudioUrlRef = useRef('');
 	  // Ad-hoc process terminal — reuses the REAL intake-modal terminal + modal UX
 	  // for one-off actions (e.g. Studio render) that aren't part of the run
 	  // pipeline. Card/brief runs already drive that modal via the bootstrap path;
@@ -2646,7 +2680,14 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	  useEffect(() => {
 	    const site = client?.websiteUrl || client?.website || '';
 	    if (!site) return;
-	    setMockupStudioDraft((prev) => (prev.sourceUrl ? prev : { ...prev, sourceUrl: site }));
+	    setMockupStudioDraft((prev) => {
+	      // Follow the effective client's site unless the user hand-edited the field
+	      // (sourceUrl differs from what we last auto-filled). Empty also follows.
+	      const userEdited = prev.sourceUrl && prev.sourceUrl !== autoFilledStudioUrlRef.current;
+	      if (userEdited) return prev;
+	      autoFilledStudioUrlRef.current = site;
+	      return prev.sourceUrl === site ? prev : { ...prev, sourceUrl: site };
+	    });
 	  }, [client?.websiteUrl, client?.website]);
 
 	  const openMockupStudio = useCallback(({ autoVideo = false, director = false } = {}) => {
@@ -2742,14 +2783,19 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	        ],
 	        task: async () => {
 	          const token = await user.getIdToken();
+	          const viewport = mockupStudioDraft.viewportId || 'desktop';
+	          const dims = MOCKUP_STUDIO_OUTPUT_BY_DEVICE[viewport] || MOCKUP_STUDIO_OUTPUT_BY_DEVICE.desktop;
+	          const cameraPreset = MOCKUP_STUDIO_CAMERA_PRESET_MAP[mockupStudioDraft.templateId] || 'push-rotate-flat';
+	          const envId = mockupStudioDraft.environmentId || 'loft';
 	          const res = await fetch(apiPath('/api/dashboard/studio-render'), {
 	            method: 'POST',
 	            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
 	            body: JSON.stringify({
 	              url: site,
-	              preset: 'push-rotate-flat',
-	              output: { seconds: 6, fps: 30, width: 1920, height: 1200 },
-	              device: { viewport: mockupStudioDraft.viewportId || 'desktop', backdrop: mockupStudioDraft.backdropId || 'home', loop: true },
+	              preset: cameraPreset,
+	              output: { seconds: 6, fps: 30, width: dims.width, height: dims.height },
+	              device: { viewport, backdrop: mockupStudioDraft.backdropId || 'home', loop: true },
+	              environment: { mode: 'preset', preset: envId, reflections: true },
 	            }),
 	          });
 	          const data = await res.json().catch(() => ({}));
@@ -13468,7 +13514,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                </div>
 	                                <span className="mu-chip mu-chip--success">READY</span>
 	                              </div>
-	                              <div className="mu-field-grid" data-tooltip-disabled="true">
+	                              <div id="mu-studio-settings" data-tooltip-disabled="true" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
 	                                <label className="mu-field">
 	                                  <span className="mu-label">Website URL</span>
 	                                  <input
@@ -13491,35 +13537,30 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                  </select>
 	                                </label>
 	                                <label className="mu-field">
+	                                  <span className="mu-label">Environment</span>
+	                                  <select className="mu-select" value={mockupStudioDraft.environmentId} onChange={(e) => updateDraft('environmentId', e.target.value)}>
+	                                    {MOCKUP_STUDIO_ENVIRONMENTS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+	                                  </select>
+	                                </label>
+	                                <label className="mu-field">
 	                                  <span className="mu-label">Camera move</span>
 	                                  <select className="mu-select" value={mockupStudioDraft.templateId} onChange={(e) => updateDraft('templateId', e.target.value)}>
 	                                    {MOCKUP_STUDIO_TEMPLATES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
 	                                  </select>
 	                                </label>
 	                              </div>
-	                              <p className="mu-notice">
-	                                RUN VIDEO starts the Cloud GPU renderer and saves the finished WebM to Studio assets.
-	                              </p>
 	                              {mockupStudioRenderError ? (
 	                                <p className="mu-notice mu-notice--danger" style={{ marginTop: 0 }}>
 	                                  {mockupStudioRenderError}
 	                                </p>
 	                              ) : null}
-	                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-	                                <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 140 }} onClick={runMockupStudioVideo} disabled={mockupStudioRenderLoading}>
+	                              <div style={{ display: 'flex', gap: 10 }}>
+	                                <button type="button" className="mu-cta-primary" style={{ flex: 1 }} onClick={runMockupStudioVideo} disabled={mockupStudioRenderLoading}>
 	                                  <span>{mockupStudioRenderLoading ? 'Rendering…' : 'Run Video'}</span>
 	                                </button>
-	                                <button type="button" className="mu-btn-outline" onClick={() => openMockupStudio({ autoVideo: false })}>
+	                                <button type="button" className="mu-btn-outline" style={{ flex: 1, minHeight: 52, borderRadius: 999, border: '1px solid transparent', background: 'linear-gradient(#fff,#fff) padding-box, linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box' }} onClick={() => openMockupStudio({ autoVideo: false })}>
 	                                  Open Studio
 	                                </button>
-	                                <button type="button" className="mu-btn-outline mu-btn-outline--accent" onClick={() => openMockupStudio({ director: true })}>
-	                                  Direct (Custom)
-	                                </button>
-	                                {latestVideo?.downloadUrl ? (
-	                                  <a className="mu-btn-outline mu-btn-outline--accent" href={latestVideo.downloadUrl} target="_blank" rel="noopener noreferrer">
-	                                    Open Latest Video
-	                                  </a>
-	                                ) : null}
 	                              </div>
 	                            </section>
 	                          </div>
@@ -23064,6 +23105,9 @@ const dashboardCss = `
     border-color: rgba(42,36,32,0.36);
     box-shadow: 0 0 0 3px rgba(42,36,32,0.08), inset 0 1px 0 rgba(255,255,255,0.65);
   }
+  /* Mockup Studio modal — pill dropdowns to match the Studio rail controls. */
+  #mu-studio-settings .mu-input,
+  #mu-studio-settings .mu-select { border-radius: 999px; min-height: 46px; }
   .mu-textarea {
     width: 100%;
     min-height: 120px;
