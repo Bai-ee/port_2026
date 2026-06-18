@@ -45,3 +45,10 @@ public/img/interactive_ss_*.png
 public/img/port/*.png
 public/img/fast_poker_BW*.png
 public/img/og_meta.png
+
+# Design sync — generated output and converter tooling (local only)
+.ds-sync/
+ds-bundle/
+.design-sync/.cache/
+.design-sync/learnings/
+.design-sync/node_modules
