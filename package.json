@@ -12,7 +12,8 @@
     "scout:weather": "node ./features/not-the-rug-brief/weather.js --client not-the-rug",
     "scout:reviews": "node ./features/not-the-rug-brief/reviews.js --client not-the-rug",
     "scout:instagram": "node ./features/not-the-rug-brief/instagram.js --client not-the-rug",
-    "scout:reddit": "node ./features/not-the-rug-brief/reddit.js --client not-the-rug"
+    "scout:reddit": "node ./features/not-the-rug-brief/reddit.js --client not-the-rug",
+    "review:x-algo": "node scripts/review-x-algo.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

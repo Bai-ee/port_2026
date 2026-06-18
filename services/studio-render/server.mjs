@@ -89,7 +89,8 @@ server = createServer(async (req, res) => {
     const t0 = Date.now();
     try {
       const { buffer, info } = await renderVideo(recipe); // normalizeRecipe clamps inside
-      sendRender(res, 200, buffer, { 'content-type': 'video/mp4', 'x-render-ms': String(Date.now() - t0), 'x-render-info': JSON.stringify(info) });
+      const videoContentType = info.container === 'webm' ? 'video/webm' : 'video/mp4';
+      sendRender(res, 200, buffer, { 'content-type': videoContentType, 'x-render-ms': String(Date.now() - t0), 'x-render-info': JSON.stringify(info) });
       console.log(`[render] ok ${recipe.url} ${Date.now() - t0}ms ${JSON.stringify(info)}`);
     } catch (err) {
       sendRender(res, 500, JSON.stringify({ error: String(err.message || err) }), { 'content-type': 'application/json' });

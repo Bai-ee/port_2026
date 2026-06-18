@@ -43,6 +43,12 @@ const loadCustomTemplates = () => {
   if (typeof window === 'undefined') return [];
   try { return JSON.parse(window.localStorage.getItem(CUSTOM_TEMPLATES_KEY) || '[]') || []; } catch { return []; }
 };
+const LAST_CUSTOM_TEMPLATE_KEY = 'mockup-studio-last-custom-v1';
+const loadLastCustomTemplateId = () => {
+  if (typeof window === 'undefined') return null;
+  try { return window.localStorage.getItem(LAST_CUSTOM_TEMPLATE_KEY) || null; } catch { return null; }
+};
+const initialCustomTemplateId = loadLastCustomTemplateId();
 
 // ── Camera animation templates ───────────────────────────────────────────────
 // Each template is 8 authored poses:
@@ -73,6 +79,8 @@ const templatePose = (vp, [rF, az, el, txF = 0, tyF = 0]) => {
 const DEFAULT_VIEW = [0.72, -26, 6];
 
 const CAMERA_TEMPLATES = [
+  { id: 'home-feature', label: 'HOME PAGE FEATURE', theme: 'HERO', intensity: 'MEDIUM', seconds: 10,
+    keys: [[1.85, -22, 12], [1.45, -15, 9], [1.05, -9, 6], [0.68, -4, 3], [0.48, -1, 2, 0, 0.08, 0.9], [0.52, 2, 2, 0, 0.05], [0.78, 8, 5, 0, 0, 0.5], [1.3, 14, 9]] },
   { id: 'hero-push', label: 'HERO PUSH-IN', theme: 'CINEMATIC', intensity: 'MEDIUM', seconds: 10,
     keys: [[2.2, -16, 14], [1.4, -9, 8], [0.85, -4, 4], [0.34, -1, 1, 0, 0, 0.8], [0.34, 0, 0, 0, 0.15], [0.7, 3, 3], [1.4, 9, 8, 0, 0, 0.5], [2.0, 14, 12]] },
   { id: 'orbit-reveal', label: 'ORBIT REVEAL', theme: 'SHOWCASE', intensity: 'BOLD', seconds: 10,
@@ -405,7 +413,7 @@ export default function StudioPage() {
   // Scene opens with a camera template already loaded so the timeline isn't empty
   // on start and the first frame reads as a dramatic shot, not a flat front-on view.
   // The mount effect below (and the world-init) apply this id's keyframes.
-  const [templateId, setTemplateId] = useState('hero-push');
+  const [templateId, setTemplateId] = useState(initialCustomTemplateId ? '' : 'home-feature');
 	  const keyframesRef = useRef([]);
 	  const playTweenRef = useRef(null);
 	  const trackRef = useRef(null);
@@ -508,28 +516,37 @@ export default function StudioPage() {
 	  }, []);
 
   // Source the site from the account's established website (no manual input).
-  // Priority: ?url param (handled on mount) → userProfile.websiteUrl → the
-  // client's established website from /api/dashboard/bootstrap (the same
-  // authoritative source the dashboard uses) → this app's own homepage as a
-  // last resort. The bootstrap step matters because userProfile.websiteUrl can
-  // be empty even when the client record has a website — without it the studio
-  // would render its own app origin and the GPU service returns "no frames".
+  // Priority: ?url param (handled on mount) → the EFFECTIVE client's website
+  // from /api/dashboard/bootstrap (impersonation-aware) → userProfile.websiteUrl
+  // (the signed-in operator's own site) → this app's own homepage, but ONLY for
+  // the operator's own dashboard. Bootstrap must win over userProfile: userProfile
+  // is the operator's profile, so an admin opening the studio for another client
+  // would otherwise preview their OWN site (e.g. hitloop) instead of the client's.
   useEffect(() => {
     if (loadedUrl || !user) return undefined;
     const normalize = (s) => (/^https?:\/\//i.test(s) ? s : `https://${s}`);
-    const profileSite = (userProfile?.websiteUrl || '').trim();
-    if (profileSite) { setLoadedUrl(normalize(profileSite)); return undefined; }
     let cancelled = false;
     (async () => {
+      let site = '';
+      let impersonating = false;
       try {
         const token = await user.getIdToken();
         const res = await fetch('/api/dashboard/bootstrap', { headers: { Authorization: `Bearer ${token}` } });
         const data = await res.json().catch(() => ({}));
-        const site = (data?.client?.websiteUrl || data?.dashboardState?.websiteUrl || data?.websiteUrl || '').trim();
-        if (cancelled) return;
-        if (site) { setLoadedUrl(normalize(site)); return; }
-      } catch { /* fall through to the app-origin preview */ }
-      if (!cancelled && typeof window !== 'undefined') setLoadedUrl(`${window.location.origin}/`);
+        site = (data?.client?.websiteUrl || data?.dashboardState?.websiteUrl || '').trim();
+        impersonating = Boolean(data?.impersonating);
+      } catch { /* bootstrap unreachable — fall back to operator profile below */ }
+      if (cancelled) return;
+      if (!site) site = (userProfile?.websiteUrl || '').trim();
+      if (site) { setLoadedUrl(normalize(site)); return; }
+      // No website on the effective client. Only fall back to this app's own
+      // origin for the operator's OWN dashboard — never while viewing another
+      // client, where rendering the app origin (hitloop) would be misleading.
+      if (!impersonating && typeof window !== 'undefined') {
+        setLoadedUrl(`${window.location.origin}/`);
+      } else {
+        setStatus('This client has no website set. Add one in the dashboard, or open the studio with ?url=<site>.');
+      }
     })();
     return () => { cancelled = true; };
   }, [user, userProfile, loadedUrl]);
@@ -1075,9 +1092,12 @@ export default function StudioPage() {
       const PHOTO_ENV_PRESETS = ['airport-terminal', 'desk', 'loft'];
       world.applyEnvPreset = async (id, adjust = {}) => {
         const p = ENV_PRESETS[id] || ENV_PRESETS.studio;
-        showRoom(true);
-        world.floorMat.color.set(p.floor); world.floorMat.roughness = p.floorR; world.floorMat.needsUpdate = true;
-        world.wallMat.color.set(p.wall); world.wallMat.needsUpdate = true;
+        const isPhoto = PHOTO_ENV_PRESETS.includes(id);
+        showRoom(!isPhoto);
+        if (!isPhoto) {
+          world.floorMat.color.set(p.floor); world.floorMat.roughness = p.floorR; world.floorMat.needsUpdate = true;
+          world.wallMat.color.set(p.wall); world.wallMat.needsUpdate = true;
+        }
         world.key.color.set(p.key); world.key.intensity = p.keyI;
         world.ambient.intensity = p.amb;
         const c = document.createElement('canvas'); c.width = 2048; c.height = 1024;
@@ -1414,8 +1434,8 @@ export default function StudioPage() {
   }, [viewportId]);
 
   useEffect(() => {
-    if (templateId) applyTemplate(templateId);
-  }, [templateId, applyTemplate]);
+    if (worldReady && templateId) applyTemplate(templateId);
+  }, [worldReady, templateId, applyTemplate]);
 
   // Load a user-saved template — applies its exact keyframes + duration directly.
   const applyCustomTemplate = useCallback((id) => {
@@ -1434,7 +1454,16 @@ export default function StudioPage() {
     const k0 = tpl.keyframes?.[0];
     if (w && k0) { w.camera.position.set(k0.px, k0.py, k0.pz); w.controls.target.set(k0.tx, k0.ty, k0.tz); }
     setStatus(`Loaded saved template "${tpl.label}".`);
+    try { window.localStorage.setItem(LAST_CUSTOM_TEMPLATE_KEY, id); } catch {}
   }, [customTemplates, totalSeconds]);
+
+  // Auto-apply the last-used custom template once after world is ready.
+  const didAutoCustomRef = useRef(false);
+  useEffect(() => {
+    if (!worldReady || didAutoCustomRef.current || !initialCustomTemplateId) return;
+    didAutoCustomRef.current = true;
+    applyCustomTemplate(initialCustomTemplateId);
+  }, [worldReady, applyCustomTemplate]);
 
   // Save the current timeline as a reusable template (persisted locally).
   const saveAsTemplate = useCallback(() => {
@@ -2021,11 +2050,12 @@ export default function StudioPage() {
               }}
             >
               <div id="studio-stage-shell" ref={stageRef} style={{ position: 'absolute', inset: 0, overflow: 'visible' }} />
-              {/* Export size chip */}
+              {/* Export size chip — hidden on mobile (collides with the corner logo). */}
               <div style={{
                 position: 'absolute', top: -40, left: 10, zIndex: 6, pointerEvents: 'none',
                 ...ui.label, color: '#fff', background: 'rgba(0,0,0,0.5)',
                 padding: '4px 10px', borderRadius: 999, backdropFilter: 'blur(6px)',
+                display: isNarrow ? 'none' : 'block',
               }}>Output · {oW}×{oH}</div>
               {/* Camera mode toggle — Orbit ⇄ Interact; sits left of refresh */}
               <button

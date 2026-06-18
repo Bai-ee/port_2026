@@ -311,6 +311,18 @@ export async function POST(request) {
     now,
   };
 
+  // Build xGrowth context from Marketing Brief signals
+  try {
+    const { inferXObjective, getActiveProfileId } = await import('../../../../../features/x-growth/index.js');
+    ctx.xGrowth = {
+      algorithmProfileVersion: getActiveProfileId(),
+      ...inferXObjective(ctx),
+    };
+  } catch (err) {
+    console.error('[strategy-builder/generate] xGrowth inference error:', err.message);
+    ctx.xGrowth = null;
+  }
+
   // Two-phase build: today strategy from brief signals, then week calendar seeded by it.
   let todayStrategy = null;
   let plan;
@@ -325,6 +337,33 @@ export async function POST(request) {
     plan = await buildStrategy(ctx, todayStrategy);
   } catch (err) {
     return json({ error: `Strategy generation failed: ${err.message}` }, 500);
+  }
+
+  // Score every item server-side and merge xStrategy
+  try {
+    const { scoreXPost } = await import('../../../../../features/x-growth/index.js');
+    const profileVersion = ctx.xGrowth?.algorithmProfileVersion || null;
+    plan.items = plan.items.map((item) => {
+      const scored = scoreXPost(item.content || '', {
+        postTypeHint: item.xStrategy?.postType || null,
+        mediaType: item.mediaType || 'none',
+        objective: ctx.xGrowth?.objective,
+      });
+      return {
+        ...item,
+        xStrategy: {
+          // LLM-written fields (postType, targetAction, hypothesis) take priority;
+          // server always provides numeric scores and profile version.
+          postType: item.xStrategy?.postType || scored.postType,
+          targetAction: item.xStrategy?.targetAction || scored.targetAction,
+          hypothesis: item.xStrategy?.hypothesis || scored.hypothesis,
+          ...scored,
+          algorithmProfileVersion: profileVersion,
+        },
+      };
+    });
+  } catch (err) {
+    console.error('[strategy-builder/generate] xStrategy scoring error:', err.message);
   }
 
   // Attach today strategy to the plan before saving

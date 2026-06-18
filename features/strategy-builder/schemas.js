@@ -145,6 +145,18 @@
  */
 
 /**
+ * @typedef {Object} XStrategy
+ * @property {string} algorithmProfileVersion  — e.g. 'x-2026-05-15'
+ * @property {number} xGrowthScore             — 0..1 composite score
+ * @property {string} targetAction             — primary Phoenix action to optimise for
+ * @property {string} postType                 — authority|reply-loop|proof-loop|kol-adjacent|case-study|offer|asset|conversation-starter
+ * @property {{ replyPotential: number, repostPotential: number, profileClickPotential: number, topicAuthority: number, dwellPotential: number, negativeFeedbackRisk: number, linkRisk: number }} scores
+ * @property {Array<{ type: string, message: string }>} warnings
+ * @property {Array<{ priority: string, action: string, reason: string }>} recommendations
+ * @property {string} hypothesis               — one-sentence rationale from scoring
+ */
+
+/**
  * @typedef {Object} PostItem
  * @property {string} id
  * @property {string} scheduledAt    — ISO datetime
@@ -160,6 +172,7 @@
  * @property {string|null} [anchorId]
  * @property {string} rationale
  * @property {number} confidence     — 0..1
+ * @property {XStrategy} [xStrategy] — X algorithm scoring and growth metadata
  */
 
 /**

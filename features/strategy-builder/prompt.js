@@ -97,6 +97,17 @@ export function buildTodayPrompt(ctx) {
     ? `CLIENT KNOWLEDGE BASE — MASTER SOURCE OF TRUTH\n${cap(knowledgeBase.block, 2800)}`
     : '';
 
+  const xGrowth = ctx.xGrowth || null;
+  const xGrowthBlock = xGrowth
+    ? `X GROWTH OBJECTIVE (algorithm-profile: ${xGrowth.algorithmProfileVersion || 'unknown'})
+- Objective: ${xGrowth.objective}
+- Reason: ${xGrowth.reason}
+- Preferred post types: ${(xGrowth.postTypeMix || []).join(', ')}
+- Post every item for X first. Default platform_hint = "x".
+- Every post must include xStrategy with: postType (one of: authority, reply-loop, proof-loop, kol-adjacent, case-study, offer, asset, conversation-starter), targetAction, hypothesis.
+- Avoid engagement bait. Avoid injecting generic hashtags. External links only when objective is leads-or-calls.`
+    : '';
+
   const todaySchema = `{
   "date": "${today}",
   "strategy_intent": "one sentence — what is today's focus and why, tied to a specific brief signal",
@@ -105,10 +116,15 @@ export function buildTodayPrompt(ctx) {
     {
       "id": "today-1",
       "content": "post text <=280 chars",
-      "platform_hint": "x|instagram|linkedin|tiktok",
+      "platform_hint": "x",
       "signal_used": "which brief signal drove this post",
       "mediaHint": "optional visual direction",
-      "rationale": "one sentence"
+      "rationale": "one sentence",
+      "xStrategy": {
+        "postType": "authority|reply-loop|proof-loop|kol-adjacent|case-study|offer|asset|conversation-starter",
+        "targetAction": "reply|repost|profile_click|follow_author|click|dwell",
+        "hypothesis": "one sentence on why this post type fits the objective"
+      }
     }
   ]
 }`;
@@ -117,11 +133,14 @@ export function buildTodayPrompt(ctx) {
 
 Generate today's strategy for ${cap(client?.name)} (${cap(client?.vertical)}) using ONLY the signals below from the Marketing Brief.
 Every post must trace directly to a specific signal — no invented angles, no generic content.
+X is the default platform. Every post targets X/Twitter first unless a signal is clearly better suited elsewhere.
 
 MARKETING BRIEF SIGNALS
 ${intelLines.join('\n') || 'none'}
 
 ${knowledgeBaseBlock || 'CLIENT KNOWLEDGE BASE: none'}
+
+${xGrowthBlock || ''}
 
 BRAND
 - Voice: ${cap(brand?.voice)}
@@ -137,6 +156,8 @@ RULES
 3. Each post content <=280 chars.
 4. signal_used must name the exact signal (e.g. "KOL: @handle", "Viral: conversation title").
 5. strategy_intent ties the day's theme to one dominant brief signal.
+6. Every post must have xStrategy with postType, targetAction, and hypothesis.
+7. No generic hashtags (#AI, #Tech, etc.) unless they appear in the Knowledge Base or brief context.
 
 TODAY SCHEMA:
 ${todaySchema}`;
@@ -145,7 +166,7 @@ ${todaySchema}`;
 }
 
 export function buildPrompt(ctx, todayStrategy = null) {
-  const { client, brand, brief, intelligence, media, seo, knowledgeBase, cardFindings, campaign, signals, config, now } = ctx;
+  const { client, brand, brief, intelligence, media, seo, knowledgeBase, cardFindings, campaign, signals, config, now, xGrowth } = ctx;
 
   const loc = client?.location || {};
   const clientBlock = [
@@ -270,11 +291,23 @@ export function buildPrompt(ctx, todayStrategy = null) {
     promoItems.length ? `- Active promotions (time-bound): ${jc(promoItems)}` : '',
   ].filter(Boolean).join('\n');
 
+  const xGrowthBlock = xGrowth
+    ? `X GROWTH OBJECTIVE (algorithm-profile: ${xGrowth.algorithmProfileVersion || 'unknown'})
+- Objective: ${xGrowth.objective}
+- Reason: ${xGrowth.reason}
+- Preferred post types: ${(xGrowth.postTypeMix || []).join(', ')}
+- X is the default and primary platform. Set platform_hint="x" on all items unless a specific signal demands otherwise.
+- Favor post types: authority, reply-loop, proof-loop, kol-adjacent, case-study, offer, asset, conversation-starter.
+- Avoid generic engagement bait ("like this", "rt if"). No injected generic hashtags.
+- External links only when objective is leads-or-calls. Otherwise prefer link in first reply or profile link.
+- Every item must include xStrategy: postType, targetAction, hypothesis.`
+    : '';
+
   const postPlanSchema = `{
   "campaignId": "string",
   "generatedAt": "ISO string",
   "anchors": [{ "id": "string", "name": "string", "date": "ISO", "vertical": "string", "leadDays": number, "ramp": "soft|hard" }],
-  "items": [{ "id": "string", "scheduledAt": "ISO", "content": "string (<=280)", "hashtags": ["string"], "mediaHint": "string", "kind": "baseline|ramp|event|closure|special", "anchorId": "string|null", "rationale": "string", "confidence": number }]
+  "items": [{ "id": "string", "scheduledAt": "ISO", "content": "string (<=280)", "hashtags": ["string"], "mediaHint": "string", "kind": "baseline|ramp|event|closure|special", "anchorId": "string|null", "rationale": "string", "confidence": number, "xStrategy": { "postType": "string", "targetAction": "string", "hypothesis": "string" } }]
 }`;
 
   const todayBlock = todayStrategy
@@ -289,6 +322,7 @@ ${(todayStrategy.posts || []).map((p, i) => `  ${i + 1}. [${p.platform_hint || '
   const content = `SYSTEM
 You are a senior social strategist generating a ${config?.days || 30}-day post calendar for a single client.
 You must return a single JSON object matching the PostPlan schema exactly. No prose, no markdown.
+X/Twitter is the primary platform. Default every item to platform_hint="x" unless the signal is clearly better elsewhere.
 
 CLIENT
 ${clientBlock}
@@ -302,7 +336,7 @@ ${briefBlock}
 INTELLIGENCE (generated pipeline findings — mine these for hooks; never fabricate)
 ${intelBlock || 'none'}
 
-${todayBlock}MEDIA DIRECTION (use to set item.mediaHint; do not invent assets)
+${xGrowthBlock ? xGrowthBlock + '\n\n' : ''}${todayBlock}MEDIA DIRECTION (use to set item.mediaHint; do not invent assets)
 ${mediaBlock || 'none'}
 
 SEO CONTEXT (topic gaps worth posting about)
@@ -352,6 +386,8 @@ RULES
 14. Bias post intent and CTAs toward the CAMPAIGN objective. Weave the primary CTA (and link, if given) into a meaningful share of posts — not every post, but every ramp/event/promotion post.
 15. If a posting window is set, every item.scheduledAt time-of-day must fall within it, expressed in the client's timezone. If none set, use sensible business-hours times.
 16. Treat each CAMPAIGN active promotion as a time-bound push: build a short ramp toward its endDate using kind='special' with anchorId=null (promotions are not holiday anchors). Never promote a promotion after its endDate.
+17. Every item must include xStrategy: { postType, targetAction, hypothesis }. postType must be one of: authority, reply-loop, proof-loop, kol-adjacent, case-study, offer, asset, conversation-starter. targetAction must be one of: reply, repost, quote, click, profile_click, video_view, photo_expand, dwell, follow_author. hypothesis is one sentence explaining the X algorithm rationale for this post type.
+18. No generic hashtags (#AI, #Tech, #CreativeTech, #BuildInPublic) unless they come from the client Knowledge Base, brief, or a specific signal. Omit hashtags entirely when in doubt.
 
 VALIDATION
 Re-read your output. If any rule is violated, regenerate before responding.

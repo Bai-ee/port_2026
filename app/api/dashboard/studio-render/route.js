@@ -153,12 +153,14 @@ export async function POST(request) {
   const stamp = Date.now();
   const renderMs = response.headers.get('x-render-ms') || '';
   const renderInfo = response.headers.get('x-render-info') || '';
+  const videoContentType = response.headers.get('content-type') || 'video/mp4';
+  const videoExt = videoContentType === 'video/webm' ? 'webm' : 'mp4';
 
   try {
     const stored = await saveBufferArtifact({
-      storagePath: `clients/${clientId}/studio/video-cloud-${stamp}.mp4`,
+      storagePath: `clients/${clientId}/studio/video-cloud-${stamp}.${videoExt}`,
       buffer,
-      contentType: 'video/mp4',
+      contentType: videoContentType,
       metadata: {
         artifactType: 'studio_video',
         renderProvider: 'cloud-run-gpu',

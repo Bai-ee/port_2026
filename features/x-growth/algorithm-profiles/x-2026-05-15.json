@@ -1,0 +1,76 @@
+{
+  "id": "x-2026-05-15",
+  "reviewedAt": "2026-06-18",
+  "sources": [
+    "https://github.com/xai-org/x-algorithm",
+    "https://github.com/xai-org/x-algorithm/blob/main/README.md",
+    "https://github.com/xai-org/x-algorithm/blob/main/phoenix/README.md"
+  ],
+  "note": "Weights below are community-derived estimates from reverse-engineering published architecture docs and public engagement studies. X does not publish exact numeric weights. Treat all numeric values as hypotheses, not facts.",
+  "predictedActions": {
+    "positive": [
+      { "id": "reply",         "description": "User replies to the post" },
+      { "id": "repost",        "description": "User reposts/retweets" },
+      { "id": "quote",         "description": "User quote-tweets" },
+      { "id": "click",         "description": "User clicks a link in the post" },
+      { "id": "profile_click", "description": "User clicks author profile" },
+      { "id": "video_view",    "description": "User watches attached video" },
+      { "id": "photo_expand",  "description": "User expands attached image" },
+      { "id": "dwell",         "description": "User spends time reading (dwell time)" },
+      { "id": "follow_author", "description": "User follows the author after seeing post" },
+      { "id": "favorite",      "description": "User likes the post" },
+      { "id": "share",         "description": "User shares externally" }
+    ],
+    "negative": [
+      { "id": "not_interested", "description": "User marks as not interested" },
+      { "id": "mute_author",    "description": "User mutes the author" },
+      { "id": "block_author",   "description": "User blocks the author" },
+      { "id": "report",         "description": "User reports the post" }
+    ]
+  },
+  "assumptions": {
+    "linkRisk": {
+      "confidence": "medium",
+      "hypothesis": "Posts with external links are distributed less aggressively in For You feed. X prefers native content.",
+      "suggestedWorkaround": "Put link in first reply, or use 'link in bio' approach."
+    },
+    "replyBoost": {
+      "confidence": "high",
+      "hypothesis": "Questions and direct conversation invitations meaningfully raise P(reply), which is a high-weight positive signal."
+    },
+    "mediaBoost": {
+      "confidence": "high",
+      "hypothesis": "Native video (MP4) and images increase P(video_view) and P(photo_expand) signals, boosting overall score."
+    },
+    "engagementBaitPenalty": {
+      "confidence": "high",
+      "hypothesis": "Explicit engagement-bait phrases ('like if', 'rt if', 'drop a like') trigger P(not_interested) and are likely filtered pre-rank."
+    },
+    "hardSellPenalty": {
+      "confidence": "medium",
+      "hypothesis": "'Buy now', 'limited time', 'act now' patterns correlate with high P(not_interested) and P(mute_author)."
+    },
+    "dwellLengthCorrelation": {
+      "confidence": "low",
+      "hypothesis": "Longer, substantive posts may increase dwell time, but very long posts risk lower completion rate. Optimal range unclear."
+    },
+    "authorDiversityAttenuation": {
+      "confidence": "high",
+      "hypothesis": "Phoenix Scorer penalizes repeated same-author exposure in a single feed session. Cadence matters more than volume."
+    },
+    "topicConsistency": {
+      "confidence": "medium",
+      "hypothesis": "Consistent topical posting helps the candidate retrieval tower (Two-Tower Model) surface posts to relevant audiences."
+    }
+  },
+  "postTypeScoringHints": {
+    "authority":             { "primaryAction": "profile_click", "secondaryAction": "follow_author" },
+    "reply-loop":            { "primaryAction": "reply",         "secondaryAction": "quote" },
+    "proof-loop":            { "primaryAction": "repost",        "secondaryAction": "quote" },
+    "kol-adjacent":          { "primaryAction": "reply",         "secondaryAction": "repost" },
+    "case-study":            { "primaryAction": "repost",        "secondaryAction": "profile_click" },
+    "offer":                 { "primaryAction": "click",         "secondaryAction": "profile_click" },
+    "asset":                 { "primaryAction": "photo_expand",  "secondaryAction": "repost" },
+    "conversation-starter":  { "primaryAction": "reply",         "secondaryAction": "quote" }
+  }
+}

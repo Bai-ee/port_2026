@@ -7,6 +7,7 @@ const require = createRequire(import.meta.url);
 const { createAnthropicClient } = require('../not-the-rug-brief/anthropic-client.js');
 
 import { buildPrompt, buildTodayPrompt } from './prompt.js';
+import { isValidPostType, isValidTargetAction } from '../x-growth/post-types.js';
 
 const MODEL = 'claude-sonnet-4-6';
 // A 30-day plan is ~30+ items each with content + rationale; 4096 truncated
@@ -52,6 +53,21 @@ function validatePlan(plan, ctx) {
 
     if (['ramp', 'event'].includes(item.kind) && item.anchorId && !anchorIds.has(item.anchorId)) {
       return `Item ${item.id} references unknown anchorId '${item.anchorId}'.`;
+    }
+
+    // Soft-validate xStrategy if present — don't fail generation; server scoring will fill gaps.
+    if (item.xStrategy) {
+      const xs = item.xStrategy;
+      if (xs.postType && !isValidPostType(xs.postType)) {
+        console.warn(`[build-strategy] Item ${item.id} xStrategy.postType '${xs.postType}' is not a known type — server scoring will override.`);
+      }
+      if (xs.targetAction && !isValidTargetAction(xs.targetAction)) {
+        console.warn(`[build-strategy] Item ${item.id} xStrategy.targetAction '${xs.targetAction}' is not a known action — server scoring will override.`);
+      }
+      const scoresOk = !xs.scores || Object.values(xs.scores).every((v) => typeof v !== 'number' || (v >= 0 && v <= 1));
+      if (!scoresOk) {
+        console.warn(`[build-strategy] Item ${item.id} xStrategy.scores contain out-of-range values — server scoring will override.`);
+      }
     }
   }
 

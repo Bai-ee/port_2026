@@ -49,6 +49,7 @@ ENV PORT=8080
 WORKDIR /app
 COPY package.json ./
 COPY server.mjs render.mjs scene.mjs recipe.mjs ./
+COPY assets/ ./assets/
 
 EXPOSE 8080
 CMD ["node", "server.mjs"]

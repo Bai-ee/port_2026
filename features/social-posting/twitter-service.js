@@ -1,15 +1,27 @@
-import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { config as loadDotenv } from 'dotenv';
 import { TwitterApi } from 'twitter-api-v2';
+import { scoreXPost } from '../x-growth/index.js';
+
+const require = createRequire(import.meta.url);
+const fb = require('../../api/_lib/firebase-admin.cjs');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
-const DATA_DIR = path.join(REPO_ROOT, 'data');
-const QUEUE_FILE = path.join(DATA_DIR, 'social-posting-queue.json');
 const PORTFOLIO_ENV = path.join(REPO_ROOT, '.env.local');
 const SOURCE_BOT_ENV = path.resolve(REPO_ROOT, '..', 'agent_master_repo', 'creative-tech-dj-twitter-bot', '.env');
+
+// Social posts live in a top-level Firestore collection (one doc per post)
+// rather than a local JSON file — the file is ephemeral on Vercel serverless,
+// so scheduled posts written by one invocation were invisible to the cron in
+// the next. clientId is a field so per-client reads and the cross-client due
+// sweep are both single queries.
+const POSTS_COLLECTION = 'social_posts';
+function postsCol() {
+  return fb.adminDb.collection(POSTS_COLLECTION);
+}
 
 let envLoaded = false;
 let twitterClient = null;
@@ -215,47 +227,46 @@ export async function diagnoseTwitterAccess() {
   }
 }
 
-async function ensureQueueFile() {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-  try {
-    await fs.access(QUEUE_FILE);
-  } catch {
-    await fs.writeFile(QUEUE_FILE, JSON.stringify({ posts: [] }, null, 2));
-  }
-}
-
 export async function readSocialQueue(clientId) {
-  await ensureQueueFile();
-  const raw = await fs.readFile(QUEUE_FILE, 'utf8');
-  const parsed = JSON.parse(raw || '{"posts":[]}');
-  const posts = Array.isArray(parsed.posts) ? parsed.posts : [];
-  return posts.filter((post) => post.clientId === clientId);
+  const snap = await postsCol()
+    .where('clientId', '==', clientId)
+    .orderBy('createdAt', 'desc')
+    .get();
+  return snap.docs.map((doc) => doc.data());
 }
 
-async function writeSocialQueueForClient(clientId, updater) {
-  await ensureQueueFile();
-  const raw = await fs.readFile(QUEUE_FILE, 'utf8');
-  const parsed = JSON.parse(raw || '{"posts":[]}');
-  const posts = Array.isArray(parsed.posts) ? parsed.posts : [];
-  const clientPosts = posts.filter((post) => post.clientId === clientId);
-  const otherPosts = posts.filter((post) => post.clientId !== clientId);
-  const nextClientPosts = await updater(clientPosts);
-  const next = {
-    posts: [...otherPosts, ...nextClientPosts].sort((a, b) => {
-      const aTime = new Date(a.createdAt || a.scheduledAt || 0).getTime();
-      const bTime = new Date(b.createdAt || b.scheduledAt || 0).getTime();
-      return bTime - aTime;
-    }),
-  };
-  await fs.writeFile(QUEUE_FILE, JSON.stringify(next, null, 2));
-  return nextClientPosts;
+// Read a single post by id, scoped to its owning client. Null if missing/foreign.
+async function getPost(clientId, postId) {
+  if (!postId) return null;
+  const snap = await postsCol().doc(postId).get();
+  if (!snap.exists) return null;
+  const data = snap.data();
+  if (clientId && data.clientId !== clientId) return null;
+  return data;
 }
 
-async function readAllPosts() {
-  await ensureQueueFile();
-  const raw = await fs.readFile(QUEUE_FILE, 'utf8');
-  const parsed = JSON.parse(raw || '{"posts":[]}');
-  return Array.isArray(parsed.posts) ? parsed.posts : [];
+// Persist a full post doc (id is the Firestore doc id).
+async function savePost(post) {
+  await postsCol().doc(post.id).set(post);
+  return post;
+}
+
+// Merge a partial update onto an existing post doc.
+async function patchPost(postId, patch) {
+  await postsCol().doc(postId).set(patch, { merge: true });
+}
+
+// Due posts = scheduled/queued/failed whose time has arrived. The status filter
+// runs in memory so the query needs only a scheduledAt range (+ clientId when
+// scoped), keeping the index requirements minimal. Null scheduledAt (drafts)
+// are a different Firestore type than the ISO-string bound and are excluded.
+const DUE_STATUSES = new Set(['scheduled', 'queued', 'failed']);
+async function readDuePosts(clientId = null) {
+  const nowIso = new Date().toISOString();
+  let q = postsCol().where('scheduledAt', '<=', nowIso);
+  if (clientId) q = q.where('clientId', '==', clientId);
+  const snap = await q.get();
+  return snap.docs.map((doc) => doc.data()).filter((post) => DUE_STATUSES.has(post.status));
 }
 
 function makeId() {
@@ -290,17 +301,24 @@ export function normalizePostText(content) {
 
 export function runPostingAgents(content, context = {}) {
   const base = normalizePostText(content);
+
+  // Strip existing hashtags before optimising (re-added from strategy only)
   const withoutTags = base.replace(/\s+#\w+/g, '').trim();
+
+  // Use strategy hashtags when provided; KB terms as secondary source.
+  // Never inject generic off-brand fallback tags (#CreativeTech, #AI, etc.).
+  const strategyTags = Array.isArray(context.strategyHashtags)
+    ? context.strategyHashtags.filter(Boolean)
+    : [];
   const kbTerms = Array.isArray(context.knowledgeBaseContext?.chunks)
     ? context.knowledgeBaseContext.chunks.flatMap((chunk) => chunk.matchedTerms || [])
     : [];
   const kbTags = kbTerms
     .filter((term) => /^[a-z0-9][a-z0-9-]{2,18}$/i.test(term))
-    .slice(0, 3)
+    .slice(0, 2)
     .map((term) => `#${term.replace(/[^a-z0-9]/gi, '')}`);
-  const suggestedTags = kbTags.length ? kbTags : ['#CreativeTech', '#AI', '#BuildInPublic'];
   const currentTags = base.match(/#\w+/g) || [];
-  const tags = Array.from(new Set([...currentTags, ...suggestedTags])).slice(0, 3);
+  const tags = Array.from(new Set([...currentTags, ...strategyTags, ...kbTags])).slice(0, 3);
 
   let optimized = withoutTags || base;
   if (optimized.length > 230) optimized = `${optimized.slice(0, 227).trim()}...`;
@@ -308,8 +326,19 @@ export function runPostingAgents(content, context = {}) {
     optimized = `${optimized} ${tags.join(' ')}`.trim();
   }
 
+  let xScoring = null;
+  try {
+    xScoring = scoreXPost(optimized, {
+      mediaType: context.mediaType || 'none',
+      objective: context.xGrowthObjective,
+    });
+  } catch {
+    // Non-fatal — scoring is advisory
+  }
+
   return {
     optimized,
+    xScoring,
     agents: {
       contentCreator: {
         status: 'complete',
@@ -326,6 +355,11 @@ export function runPostingAgents(content, context = {}) {
         note: optimized.length <= 240
           ? 'Kept short enough for replies and quote reposts.'
           : 'Trimmed toward the 280-character limit.',
+        ...(xScoring ? {
+          xGrowthScore: xScoring.xGrowthScore,
+          targetAction: xScoring.targetAction,
+          postType: xScoring.postType,
+        } : {}),
       },
       knowledgeBaseVerifier: context.knowledgeBaseContext?.available
         ? {
@@ -497,6 +531,10 @@ export async function createSocialPost(clientId, payload) {
     updatedAt: now,
     postedAt: null,
     agents: payload.agents || null,
+    // X growth metadata — stored for future performance correlation.
+    xStrategy: payload.xStrategy || null,
+    algorithmProfileVersion: payload.algorithmProfileVersion || null,
+    performance: null,
     // Optional paired asset (rendered Studio video / image). null = text-only.
     mediaUrl: media.mediaUrl,
     mediaType: media.mediaType,
@@ -505,7 +543,7 @@ export async function createSocialPost(clientId, payload) {
     mediaJobId: media.mediaJobId,
   };
 
-  await writeSocialQueueForClient(clientId, (posts) => [post, ...posts]);
+  await savePost(post);
   return post;
 }
 
@@ -522,7 +560,7 @@ export async function postNow(clientId, payload) {
       postedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    await writeSocialQueueForClient(clientId, (posts) => posts.map((post) => (post.id === draft.id ? updated : post)));
+    await savePost(updated);
     return updated;
   } catch (error) {
     const failed = {
@@ -533,7 +571,7 @@ export async function postNow(clientId, payload) {
       twitterError: error.twitterError || null,
       updatedAt: new Date().toISOString(),
     };
-    await writeSocialQueueForClient(clientId, (posts) => posts.map((post) => (post.id === draft.id ? failed : post)));
+    await savePost(failed);
     throw error;
   }
 }
@@ -568,79 +606,70 @@ export async function attachMediaToPost(clientId, postId, payload) {
     err.status = 400;
     throw err;
   }
-  let updated = null;
-  await writeSocialQueueForClient(clientId, (posts) => posts.map((post) => {
-    if (post.id !== postId) return post;
-    const agents = post.agents && typeof post.agents === 'object' ? { ...post.agents } : {};
-    agents.mediaGenerator = {
-      status: 'complete',
-      note: `Attached ${media.mediaType || 'media'} from Mockup Studio.`,
-      mediaUrl: media.mediaUrl,
-      jobId: media.mediaJobId || null,
-    };
-    updated = {
-      ...post,
-      ...media,
-      agents,
-      updatedAt: new Date().toISOString(),
-    };
-    return updated;
-  }));
-  if (!updated) {
+  const post = await getPost(clientId, postId);
+  if (!post) {
     const err = new Error('Post not found.');
     err.status = 404;
     throw err;
   }
+  const agents = post.agents && typeof post.agents === 'object' ? { ...post.agents } : {};
+  agents.mediaGenerator = {
+    status: 'complete',
+    note: `Attached ${media.mediaType || 'media'} from Mockup Studio.`,
+    mediaUrl: media.mediaUrl,
+    jobId: media.mediaJobId || null,
+  };
+  const updated = {
+    ...post,
+    ...media,
+    agents,
+    updatedAt: new Date().toISOString(),
+  };
+  await savePost(updated);
   return updated;
 }
 
-export async function processDuePosts(clientId) {
-  const due = (await readSocialQueue(clientId)).filter((post) => (
-    ['scheduled', 'queued', 'failed'].includes(post.status)
-    && post.scheduledAt
-    && new Date(post.scheduledAt).getTime() <= Date.now()
-  ));
+// Post one due row and write the result back. Never throws — the due sweep must
+// keep going past a single failure.
+async function postAndRecord(post) {
+  try {
+    const result = await postToTwitter(post.content, postMedia(post));
+    const updated = {
+      ...post,
+      status: 'posted',
+      twitterId: result.twitterId,
+      postedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      error: null,
+    };
+    await savePost(updated);
+    return { ok: true, updated };
+  } catch (error) {
+    const updated = {
+      ...post,
+      status: 'failed',
+      error: error.message || 'Failed to post.',
+      updatedAt: new Date().toISOString(),
+    };
+    await savePost(updated);
+    return { ok: false, updated };
+  }
+}
+
+async function runDueSweep(due) {
   const posted = [];
   const failed = [];
-
   for (const post of due) {
-    try {
-      const result = await postToTwitter(post.content, postMedia(post));
-      const updated = {
-        ...post,
-        status: 'posted',
-        twitterId: result.twitterId,
-        postedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        error: null,
-      };
-      posted.push(updated);
-      await writeSocialQueueForClient(clientId, (posts) => posts.map((row) => (row.id === post.id ? updated : row)));
-    } catch (error) {
-      const updated = {
-        ...post,
-        status: 'failed',
-        error: error.message || 'Failed to post.',
-        updatedAt: new Date().toISOString(),
-      };
-      failed.push(updated);
-      await writeSocialQueueForClient(clientId, (posts) => posts.map((row) => (row.id === post.id ? updated : row)));
-    }
+    const { ok, updated } = await postAndRecord(post);
+    (ok ? posted : failed).push(updated);
   }
-
   return { posted, failed };
 }
 
+export async function processDuePosts(clientId) {
+  return runDueSweep(await readDuePosts(clientId));
+}
+
 export async function processDuePostsForAllClients() {
-  const posts = await readAllPosts();
-  const clientIds = Array.from(new Set(posts.map((post) => post.clientId).filter(Boolean)));
-  const result = { posted: [], failed: [] };
-
-  for (const clientId of clientIds) {
-    const clientResult = await processDuePosts(clientId);
-    result.posted.push(...clientResult.posted);
-    result.failed.push(...clientResult.failed);
-  }
-
-  return result;
+  return runDueSweep(await readDuePosts(null));
 }

@@ -92,6 +92,7 @@ export async function POST(request) {
   }
 
   function agentsFor(item) {
+    const xStrategy = item.xStrategy || null;
     return {
       contentCreator: {
         status: 'complete',
@@ -104,6 +105,11 @@ export async function POST(request) {
       engagementOptimizer: {
         status: 'complete',
         note: item.rationale ? String(item.rationale).slice(0, 160) : '',
+        ...(xStrategy ? {
+          xGrowthScore: xStrategy.xGrowthScore ?? null,
+          targetAction: xStrategy.targetAction ?? null,
+          postType: xStrategy.postType ?? null,
+        } : {}),
       },
       mediaGenerator: item.mediaUrl
         ? {
@@ -134,6 +140,9 @@ export async function POST(request) {
           scheduledAt: item.scheduledAt,
           source: `strategy-builder:${plan.campaignId}`,
           agents: agentsFor(item),
+          // X growth metadata — stored on the post for later performance tracking.
+          xStrategy: item.xStrategy || null,
+          algorithmProfileVersion: item.xStrategy?.algorithmProfileVersion || null,
           // Pass any paired Studio asset through to the queued post (null = text-only).
           mediaUrl: item.mediaUrl || null,
           mediaType: item.mediaType || null,

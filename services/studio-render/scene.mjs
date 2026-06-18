@@ -14,6 +14,7 @@ const VIEWPORTS = {
 export function buildSceneHtml(recipe, {
   threeVersion = '0.160.0',
   mp4MuxerVersion = '5.1.5',
+  webmMuxerVersion = '2.1.2',
   bitrate = 16_000_000,
 } = {}) {
   const o = recipe.output;
@@ -63,8 +64,12 @@ export function buildSceneHtml(recipe, {
       const PHOTO_PRESETS=['airport-terminal','desk','loft'];
       if(envMode==='preset'&&PHOTO_PRESETS.includes(ENV?.preset)){
         x.filter=grade(ENV?.hue,ENV?.saturation,ENV?.brightness);
-        const img=await new Promise((res,rej)=>{const im=new Image();im.crossOrigin='anonymous';im.onload=()=>res(im);im.onerror=()=>rej(new Error('env img load failed: '+ENV?.preset));im.src='/env/'+ENV.preset+'.webp';});
-        x.drawImage(img,0,0,2048,1024);
+        try{
+          const img=await new Promise((res,rej)=>{const im=new Image();im.crossOrigin='anonymous';im.onload=()=>res(im);im.onerror=()=>rej(new Error('env img load failed'));im.src='/env/'+ENV.preset+'.webp';});
+          x.drawImage(img,0,0,2048,1024);
+        }catch(_){
+          x.fillStyle='#e8eaec'; x.fillRect(0,0,2048,1024);
+        }
       } else if(envMode==='preset'){
         const ENV_STOPS={'studio':[['#f4f3f0',0],['#e2dfd9',0.6],['#cfccc5',1]],'sunset':[['#241433',0],['#7a3b2e',0.5],['#e8a25a',0.82],['#f6d8a4',1]]};
         const stops=ENV_STOPS[ENV?.preset]||ENV_STOPS['studio'];
@@ -135,16 +140,27 @@ export function buildSceneHtml(recipe, {
 
     applyPath(0,camera,target); camera.lookAt(target);
 
-    // H.264 (avc) so the output is a real MP4 that X will accept. Try High,
-    // then Main, then Baseline profile. mp4-muxer needs the avcC description,
-    // which Chrome emits when the encoder is configured with avc format 'avc'.
-    const cfg=[{codec:'avc1.640028',mux:'avc'},{codec:'avc1.4d0028',mux:'avc'},{codec:'avc1.42001f',mux:'avc'}];
-    let chosen=null; for(const c of cfg){ const s=await VideoEncoder.isConfigSupported({codec:c.codec,width:CANVAS_W,height:CANVAS_H,bitrate:${bitrate},framerate:FPS,avc:{format:'avc'}}); if(s.supported){chosen=c;break;} }
-    if(!chosen){ window.__ERR='no H.264 encoder'; window.__DONE=true; }
+    // Try H.264 (MP4) first; fall back to VP9 (WebM) for GPU environments without H.264 encoder.
+    const h264cfgs=[{codec:'avc1.640028',mux:'avc'},{codec:'avc1.4d0028',mux:'avc'},{codec:'avc1.42001f',mux:'avc'}];
+    let avcChosen=null; for(const c of h264cfgs){ const s=await VideoEncoder.isConfigSupported({codec:c.codec,width:CANVAS_W,height:CANVAS_H,bitrate:${bitrate},framerate:FPS,avc:{format:'avc'}}); if(s.supported){avcChosen=c;break;} }
+    let vp9ok=false; if(!avcChosen){ const s=await VideoEncoder.isConfigSupported({codec:'vp09.00.10.08',width:CANVAS_W,height:CANVAS_H,bitrate:${bitrate},framerate:FPS}); vp9ok=!!s.supported; }
+    if(!avcChosen&&!vp9ok){ window.__ERR='no supported video encoder (tried H.264 + VP9)'; window.__DONE=true; }
     else {
-      const muxer=new Muxer({target:new ArrayBufferTarget(),fastStart:'in-memory',video:{codec:chosen.mux,width:CANVAS_W,height:CANVAS_H}});
-      const encoder=new VideoEncoder({output:(ch,m)=>muxer.addVideoChunk(ch,m),error:e=>{window.__ERR='enc:'+e.message;}});
-      encoder.configure({codec:chosen.codec,width:CANVAS_W,height:CANVAS_H,bitrate:${bitrate},framerate:FPS,avc:{format:'avc'},latencyMode:'quality'});
+      const useWebm=!avcChosen;
+      let muxer,encoder;
+      if(!useWebm){
+        muxer=new Muxer({target:new ArrayBufferTarget(),fastStart:'in-memory',video:{codec:avcChosen.mux,width:CANVAS_W,height:CANVAS_H}});
+        encoder=new VideoEncoder({output:(ch,m)=>muxer.addVideoChunk(ch,m),error:e=>{window.__ERR='enc:'+e.message;}});
+        encoder.configure({codec:avcChosen.codec,width:CANVAS_W,height:CANVAS_H,bitrate:${bitrate},framerate:FPS,avc:{format:'avc'},latencyMode:'quality'});
+      } else {
+        // webm-muxer v2.x API: target is the string 'buffer'; finalize() returns the ArrayBuffer.
+        const _wm=await import('https://esm.sh/webm-muxer@${webmMuxerVersion}/es2022/webm-muxer.mjs');
+        const WMuxer=_wm.default?.default||_wm.default||_wm.Muxer;
+        if(typeof WMuxer!=='function'){throw new Error('webm-muxer Muxer not found: '+typeof WMuxer);}
+        muxer=new WMuxer({target:'buffer',firstTimestampBehavior:'offset',video:{codec:'V_VP9',width:CANVAS_W,height:CANVAS_H,frameRate:FPS}});
+        encoder=new VideoEncoder({output:(ch,m)=>muxer.addVideoChunk(ch,m),error:e=>{window.__ERR='enc:'+e.message;}});
+        encoder.configure({codec:'vp09.00.10.08',width:CANVAS_W,height:CANVAS_H,bitrate:${bitrate},framerate:FPS,latencyMode:'quality'});
+      }
       const total=Math.max(2,Math.round(FPS*SECONDS)), durUs=Math.round(1e6/FPS);
       const t0=performance.now();
       for(let f=0; f<total; f++){
@@ -159,10 +175,12 @@ export function buildSceneHtml(recipe, {
         if(f%6===0) await new Promise(r=>setTimeout(r,0));
       }
       const renderMs=performance.now()-t0;
-      await encoder.flush(); muxer.finalize();
-      const bytes=new Uint8Array(muxer.target.buffer);
+      await encoder.flush();
+      const finalBuf=muxer.finalize(); // v2: returns ArrayBuffer; mp4-muxer: returns undefined (uses target.buffer)
+      const bytes=useWebm?new Uint8Array(finalBuf):new Uint8Array(muxer.target.buffer);
       await fetch('/upload',{method:'POST',headers:{'content-type':'application/octet-stream'},body:bytes});
-      window.__RESULT={ frames:total, liveImgs:liveImgs.length, msPerFrame:Math.round(renderMs/total), sizeKB:Math.round(bytes.length/1024), codec:chosen.codec };
+      const chosenCodec=useWebm?'vp09.00.10.08':avcChosen.codec;
+      window.__RESULT={ frames:total, liveImgs:liveImgs.length, msPerFrame:Math.round(renderMs/total), sizeKB:Math.round(bytes.length/1024), codec:chosenCodec, container:useWebm?'webm':'mp4' };
       window.__DONE=true;
     }
   } catch(e){ window.__ERR=String(e&&e.stack||e); window.__DONE=true; }
