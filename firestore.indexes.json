@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "render_jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clientId", "order": "ASCENDING" },
+        { "fieldPath": "createdAtTs", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "brief_runs",
       "queryScope": "COLLECTION",
       "fields": [

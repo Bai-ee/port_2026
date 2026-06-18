@@ -105,10 +105,17 @@ export async function POST(request) {
         status: 'complete',
         note: item.rationale ? String(item.rationale).slice(0, 160) : '',
       },
-      mediaGenerator: {
-        status: item.mediaHint ? 'queued' : 'skipped',
-        note: item.mediaHint ? String(item.mediaHint).slice(0, 160) : '',
-      },
+      mediaGenerator: item.mediaUrl
+        ? {
+            status: 'complete',
+            note: `Attached ${item.mediaType || 'media'} from Mockup Studio.`,
+            mediaUrl: item.mediaUrl,
+            jobId: item.mediaJobId || null,
+          }
+        : {
+            status: item.mediaHint ? 'queued' : 'skipped',
+            note: item.mediaHint ? String(item.mediaHint).slice(0, 160) : '',
+          },
     };
   }
 
@@ -127,6 +134,12 @@ export async function POST(request) {
           scheduledAt: item.scheduledAt,
           source: `strategy-builder:${plan.campaignId}`,
           agents: agentsFor(item),
+          // Pass any paired Studio asset through to the queued post (null = text-only).
+          mediaUrl: item.mediaUrl || null,
+          mediaType: item.mediaType || null,
+          mediaStoragePath: item.mediaStoragePath || null,
+          mediaContentType: item.mediaContentType || null,
+          mediaJobId: item.mediaJobId || null,
         }),
       });
 

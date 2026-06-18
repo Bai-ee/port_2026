@@ -1,0 +1,14 @@
+{
+  "name": "studio-render",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "GPU headless render service for Mockup Studio videos (Creative Director).",
+  "scripts": {
+    "start": "node server.mjs",
+    "render:local": "node render-cli.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

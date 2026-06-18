@@ -1614,7 +1614,7 @@ const StackedSlidesSection = () => {
         #cmo-modal-marquee .cmo-marquee-item {
           font-family: 'Doto', 'Space Mono', monospace; font-size: clamp(2rem,8vw,5rem);
           font-weight: 700; letter-spacing: -0.02em; line-height: 1.05;
-          color: rgba(42,36,32,0.82); white-space: nowrap; padding-right: 0.5rem;
+          color: rgba(42,36,32,0.82); white-space: nowrap;
         }
         #cmo-modal-marquee .cmo-marquee-dot { font-family: 'Doto', monospace; color: rgba(42,36,32,0.35); padding: 0 0.3rem; }
         @media (prefers-reduced-motion: reduce) { #cmo-modal-marquee .cmo-marquee-track { animation: none; } }

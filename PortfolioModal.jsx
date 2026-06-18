@@ -193,6 +193,18 @@ const PortfolioModal = ({ activePageId, onClose, onOpenPage }) => {
   }, [activePageId]);
   const bodyRef = useRef(null);
   const [subscribeOpen, setSubscribeOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) {
+      return undefined;
+    }
+    const mq = window.matchMedia('(max-width: 768px)');
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
 
   useEffect(() => {
     if (!page) {
@@ -225,8 +237,16 @@ const PortfolioModal = ({ activePageId, onClose, onOpenPage }) => {
 
   return (
     <>
-    <div style={overlayStyle} onClick={onClose}>
-      <div style={{ ...modalStyle, ...glassPanelStyle }} onClick={(event) => event.stopPropagation()}>
+    <div
+      id="portfolio-card-modal-overlay"
+      style={{ ...overlayStyle, ...(isMobile ? mobileOverlayStyle : null) }}
+      onClick={onClose}
+    >
+      <div
+        id="portfolio-card-modal-shell"
+        style={{ ...modalStyle, ...glassPanelStyle, ...(isMobile ? mobileModalStyle : null) }}
+        onClick={(event) => event.stopPropagation()}
+      >
         <div style={modalTopStyle}>
           <div>
             <span style={modalEyebrowStyle}>{page.eyebrow}</span>
@@ -252,7 +272,7 @@ const PortfolioModal = ({ activePageId, onClose, onOpenPage }) => {
             </button>
           ))}
         </div>
-        <div ref={bodyRef} style={modalBodyStyle}>
+        <div ref={bodyRef} style={{ ...modalBodyStyle, ...(isMobile ? mobileBodyStyle : null) }}>
           {renderPageBody(page.id, { onSubscribe: () => setSubscribeOpen(true) })}
         </div>
       </div>
@@ -282,6 +302,24 @@ const modalStyle = {
   display: 'flex',
   flexDirection: 'column',
   overflow: 'hidden',
+};
+
+const mobileOverlayStyle = {
+  padding: 0,
+  alignItems: 'stretch',
+  justifyContent: 'stretch',
+};
+
+const mobileModalStyle = {
+  width: '100%',
+  height: '100dvh',
+  maxHeight: '100dvh',
+  borderRadius: 0,
+};
+
+const mobileBodyStyle = {
+  flex: 1,
+  minHeight: 0,
 };
 
 const modalTopStyle = {

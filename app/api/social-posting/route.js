@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 import {
+  attachMediaToPost,
   createSocialPost,
   diagnoseTwitterAccess,
   getTwitterCredentialStatus,
@@ -115,6 +116,11 @@ export async function POST(request) {
     if (action === 'schedule') {
       const agents = body.agents || runPostingAgents(body.content, agentContext).agents;
       const post = await schedulePost(context.clientId, { ...body, agents });
+      return json({ ok: true, post });
+    }
+
+    if (action === 'attach-media') {
+      const post = await attachMediaToPost(context.clientId, body.postId, body);
       return json({ ok: true, post });
     }
 

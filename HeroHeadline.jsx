@@ -249,6 +249,12 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
 
   return (
     <>
+      <style>{`
+        @media (max-width: 620px) {
+          #hero-subheadline { font-size: clamp(1rem, 4vw, 1.25rem) !important; }
+          #hero-subheadline-scramble { white-space: normal; word-break: break-word; }
+        }
+      `}</style>
       {/* Top-left — Headline */}
       <div
         id="hero-panel-top-left"

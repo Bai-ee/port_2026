@@ -93,7 +93,7 @@ function linkify(text) {
     if (validatePostUrl(url)) {
       out += `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(url)}</a>`;
     } else {
-      out += `<span style="color:var(--ink-soft);text-decoration:line-through;text-decoration-color:rgba(0,0,0,.2)" title="Not a post permalink — no direct source to share">${esc(url)}</span>`;
+      out += `<span style="color:var(--ink-soft);text-decoration:line-through;text-decoration-color:rgba(0,0,0,.2)">${esc(url)}</span>`;
     }
     if (trailing) out += esc(trailing[0]);
     last = m.index + raw.length;
@@ -1108,6 +1108,47 @@ async function handleGet(request) {
   const isMainBrief = ['executive-daily', 'onboarding'].includes(resolveBriefType(briefType)) && !briefTypeParam;
   const isOnboardingRun = isMainBrief && (!onboardingRunId || renderedRunId === onboardingRunId);
   const mainBriefLabel = isOnboardingRun ? 'Onboarding Brief' : 'Executive Brief';
+
+  // ── Per-run brief archiving + ?runId= resolution ──────────────────────────
+  // The brief CONTENT only lives in dashboard_state (latest run, overwritten
+  // each run). To make Past Briefs open the brief that was actually clicked:
+  //   1. Archive the current (latest) brief onto its run doc on every render
+  //      (cache-on-read) so future opens have the content.
+  //   2. When ?runId= names an older run, render its archived snapshot instead
+  //      of the latest.
+  const requestedRunId = request.nextUrl?.searchParams?.get('runId') || null;
+  // The run that actually OWNS dash.marketingBrief is the latest *succeeded*
+  // scout-brief. modules['marketing-brief'].lastRunId / latestRunId can point at
+  // a FAILED or module run — archiving onto those mis-attributes the content
+  // (a failed run would then "open" showing the latest brief).
+  let ownerRunId = renderedRunId;
+  try {
+    const sbSnap = await fb.adminDb.collection('clients').doc(clientId).collection('brief_runs')
+      .orderBy('createdAt', 'desc').limit(10).get();
+    const owner = sbSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      .find((r) => r.pipelineType === 'scout-brief' && r.status === 'succeeded');
+    if (owner) ownerRunId = owner.id;
+  } catch { /* keep renderedRunId */ }
+  let effectiveMarketingBrief = marketingBrief;
+  let effectiveScribe = dash.scribe || null;
+  let effectiveGeneratedAt = marketingBrief?.generatedAtIso || null;
+  if (ownerRunId && marketingBrief) {
+    // Fire-and-forget archive of the latest brief onto its owning run doc.
+    fb.adminDb.collection('clients').doc(clientId).collection('brief_runs').doc(ownerRunId)
+      .set({ briefSnapshot: { marketingBrief, scribe: dash.scribe || null, generatedAt: marketingBrief.generatedAtIso || null, archivedAt: new Date().toISOString() } }, { merge: true })
+      .catch(() => { /* non-fatal: snapshot too large or transient */ });
+  }
+  if (requestedRunId && requestedRunId !== ownerRunId) {
+    try {
+      const reqSnap = (await fb.adminDb.collection('clients').doc(clientId).collection('brief_runs').doc(requestedRunId).get()).data()?.briefSnapshot || null;
+      if (reqSnap?.marketingBrief) {
+        effectiveMarketingBrief = reqSnap.marketingBrief;
+        effectiveScribe = reqSnap.scribe || effectiveScribe;
+        effectiveGeneratedAt = reqSnap.generatedAt || effectiveGeneratedAt;
+      }
+      // else: no archived snapshot (older run) — falls back to the latest brief.
+    } catch { /* fall back to latest */ }
+  }
   // Tier gate — named briefs follow BRIEF_TIER_ACCESS; admins bypass. The
   // admins lookup only runs when the tier alone would deny, so the common
   // path costs no extra read.
@@ -1131,13 +1172,13 @@ async function handleGet(request) {
   // Surface render failures with the real message — a bare 500 from a
   // template crash is undiagnosable from the dashboard overlay.
   const renderMarketing = () => renderMarketingBriefHtml({
-    marketingBrief,
+    marketingBrief: effectiveMarketingBrief,
     watchlistKols,
     weather,
     ...cardRollup,
     clientName: bootstrap?.client?.companyName || dash.clientName || clientId,
     websiteUrl: bootstrap?.client?.websiteUrl || null,
-    generatedAt: marketingBrief?.generatedAtIso || null,
+    generatedAt: effectiveGeneratedAt,
     clientId,
     userEmail: bootstrap?.userProfile?.email || decoded?.email || null,
     tier: dash.tier || 'free',
@@ -1165,8 +1206,8 @@ async function handleGet(request) {
     }
   }
 
-  const scribe = dash.scribe || null;
-  if ((!scribe || !scribe.brief) && marketingBrief) {
+  const scribe = effectiveScribe;
+  if ((!scribe || !scribe.brief) && effectiveMarketingBrief) {
     try {
       return htmlResponse(renderMarketing());
     } catch (err) {

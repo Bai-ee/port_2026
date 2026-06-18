@@ -2201,8 +2201,8 @@ const CAP_STEPS = {
   ],
   content: [
     { id: 'visual-dna', label: 'INTAKE YOUR REFERENCES', Icon: Images },
-    { id: 'brand-voice', label: 'DEFINE YOUR BRAND SYSTEM', Icon: Settings2 },
-    { id: 'client-brief', label: 'PRODUCE YOUR ASSETS', Icon: Send },
+    { id: 'brand-voice', label: 'CREATIVE DIRECTOR', Icon: Settings2 },
+    { id: 'client-brief', label: 'DESIGNER', Icon: Send },
   ],
   website: [
     { id: 'seo-performance', label: 'AUDIT YOUR EXISTING SITE', Icon: Search },
@@ -2634,6 +2634,14 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    backdropId: 'home',
 	    templateId: 'spiral-in',
 	  });
+	  const [mockupStudioRenderLoading, setMockupStudioRenderLoading] = useState(false);
+	  const [mockupStudioRenderError, setMockupStudioRenderError] = useState('');
+	  // Ad-hoc process terminal — reuses the REAL intake-modal terminal + modal UX
+	  // for one-off actions (e.g. Studio render) that aren't part of the run
+	  // pipeline. Card/brief runs already drive that modal via the bootstrap path;
+	  // this lets non-pipeline actions show the identical terminal.
+	  const [adhocTerminal, setAdhocTerminal] = useState(null); // { open, status:'running'|'done'|'error', title, brand, host, lines:[], videoUrl }
+	  const adhocTimerRef = useRef(null);
 
 	  useEffect(() => {
 	    const site = client?.websiteUrl || client?.website || '';
@@ -2641,7 +2649,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    setMockupStudioDraft((prev) => (prev.sourceUrl ? prev : { ...prev, sourceUrl: site }));
 	  }, [client?.websiteUrl, client?.website]);
 
-	  const openMockupStudio = useCallback(({ autoVideo = false } = {}) => {
+	  const openMockupStudio = useCallback(({ autoVideo = false, director = false } = {}) => {
 	    const site = mockupStudioDraft.sourceUrl || client?.websiteUrl || client?.website || '';
 	    const params = new URLSearchParams();
 	    if (site) params.set('url', site);
@@ -2649,8 +2657,121 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    params.set('backdrop', mockupStudioDraft.backdropId || 'home');
 	    params.set('template', mockupStudioDraft.templateId || 'spiral-in');
 	    if (autoVideo) params.set('autovideo', '1');
+	    if (director) params.set('director', '1');
 	    window.open(`/dashboard/studio?${params.toString()}`, '_blank');
 	  }, [client?.websiteUrl, client?.website, mockupStudioDraft]);
+
+	  const closeAdhocTerminal = useCallback(() => {
+	    if (adhocTimerRef.current) { clearInterval(adhocTimerRef.current); adhocTimerRef.current = null; }
+	    setAdhocTerminal(null);
+	  }, []);
+
+	  // Reusable: run a one-off async action while showing the SAME terminal/modal
+	  // UX the cards use. `stages` are cosmetic lines streamed while `task()` runs;
+	  // settles to ✓ on success or ✗ on error. `task` may resolve { doneText, videoUrl }.
+	  const settleActiveLine = (lines, type, prefix) => {
+	    for (let i = lines.length - 1; i >= 0; i -= 1) { if (lines[i].cursor) { lines[i] = { ...lines[i], type, prefix, cursor: false }; break; } }
+	    return lines;
+	  };
+	  const runWithTerminal = useCallback(async ({ title, brand, host, stages, task }) => {
+	    if (adhocTimerRef.current) clearInterval(adhocTimerRef.current);
+	    setAdhocTerminal({
+	      open: true, status: 'running', title, brand, host, videoUrl: null,
+	      lines: [
+	        { type: 'system', prefix: '$', text: host ? `${(brand || 'run').toLowerCase()} · ${host}` : (brand || 'run') },
+	        { type: 'dim', prefix: '', text: '─'.repeat(42) },
+	        { type: 'active', prefix: stages[0].pfx, text: stages[0].text, cursor: true },
+	      ],
+	    });
+	    let i = 0;
+	    adhocTimerRef.current = setInterval(() => {
+	      if (i >= stages.length - 1) return; // hold on the last stage until task resolves
+	      i += 1;
+	      const s = stages[i];
+	      setAdhocTerminal((t) => {
+	        if (!t || t.status !== 'running') return t;
+	        const lines = settleActiveLine(t.lines.slice(), 'ok', '✓');
+	        lines.push({ type: 'active', prefix: s.pfx, text: s.text, cursor: true });
+	        return { ...t, lines };
+	      });
+	    }, 3500);
+	    try {
+	      const result = await task();
+	      if (adhocTimerRef.current) { clearInterval(adhocTimerRef.current); adhocTimerRef.current = null; }
+	      setAdhocTerminal((t) => {
+	        if (!t) return t;
+	        const lines = settleActiveLine(t.lines.slice(), 'ok', '✓');
+	        lines.push({ type: 'ok', prefix: '✓', text: result?.doneText || 'done' });
+	        return { ...t, status: 'done', videoUrl: result?.videoUrl || null, lines };
+	      });
+	      return result;
+	    } catch (err) {
+	      if (adhocTimerRef.current) { clearInterval(adhocTimerRef.current); adhocTimerRef.current = null; }
+	      const msg = err?.message || 'failed';
+	      setAdhocTerminal((t) => {
+	        if (!t) return t;
+	        const lines = settleActiveLine(t.lines.slice(), 'error', '✗');
+	        lines.push({ type: 'error', prefix: '[ERR]', text: msg });
+	        return { ...t, status: 'error', lines };
+	      });
+	      throw err;
+	    }
+	  }, []);
+
+	  const runMockupStudioVideo = useCallback(async () => {
+	    if (!user || mockupStudioRenderLoading) return;
+	    const site = (mockupStudioDraft.sourceUrl || client?.websiteUrl || client?.website || '').trim();
+	    if (!/^https?:\/\/\S+$/i.test(site)) {
+	      setMockupStudioRenderError('Enter a valid http(s) website URL.');
+	      return;
+	    }
+	    let host = site; try { host = new URL(site).hostname.replace(/^www\./, ''); } catch {}
+	    setMockupStudioRenderLoading(true);
+	    setMockupStudioRenderError('');
+	    try {
+	      await runWithTerminal({
+	        title: 'RENDERING MOCKUP VIDEO',
+	        brand: 'Mockup video',
+	        host,
+	        stages: [
+	          { pfx: '[QUEUE]',  text: 'dispatching to GPU render service…' },
+	          { pfx: '[FETCH]',  text: 'loading live site & capturing frames…' },
+	          { pfx: '[GPU]',    text: 'rendering 3D device scene on GPU…' },
+	          { pfx: '[ENCODE]', text: 'encoding WebM video…' },
+	          { pfx: '[SAVE]',   text: 'saving to your assets…' },
+	        ],
+	        task: async () => {
+	          const token = await user.getIdToken();
+	          const res = await fetch(apiPath('/api/dashboard/studio-render'), {
+	            method: 'POST',
+	            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+	            body: JSON.stringify({
+	              url: site,
+	              preset: 'push-rotate-flat',
+	              output: { seconds: 6, fps: 30, width: 1920, height: 1200 },
+	              device: { viewport: mockupStudioDraft.viewportId || 'desktop', backdrop: mockupStudioDraft.backdropId || 'home', loop: true },
+	            }),
+	          });
+	          const data = await res.json().catch(() => ({}));
+	          if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+	          if (data?.capture) {
+	            setBootstrap((prev) => {
+	              const dash = prev?.dashboardState || {};
+	              const current = Array.isArray(dash.studioCaptures) ? dash.studioCaptures : [];
+	              const deduped = current.filter((item) => item?.storagePath !== data.capture.storagePath);
+	              return { ...prev, dashboardState: { ...dash, studioCaptures: [...deduped, data.capture].slice(-40) } };
+	            });
+	            setModalTab('assets');
+	          }
+	          return { doneText: 'video ready — saved to assets', videoUrl: data?.capture?.downloadUrl || null };
+	        },
+	      });
+	    } catch (err) {
+	      setMockupStudioRenderError(err?.message || 'Studio render failed.');
+	    } finally {
+	      setMockupStudioRenderLoading(false);
+	    }
+	  }, [user, mockupStudioRenderLoading, mockupStudioDraft, client?.websiteUrl, client?.website, apiPath, runWithTerminal]);
 
 	  const openLeadgenFlow = useCallback(async (step) => {
     if (!user) return;
@@ -2787,6 +2908,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   const [onboardingAnswersSeed, setOnboardingAnswersSeed] = useState(null);
   const [intakeModalDismissed, setIntakeModalDismissed] = useState(false);
   const [bgRunToast, setBgRunToast] = useState(false);
+  // Failure toast — surfaces a dismissible error when a module run fails, so the
+  // user is told even if they closed the streaming terminal before it errored.
+  const [runErrorToast, setRunErrorToast] = useState('');
+  const failedToastRunRef = useRef(null);
   const modalMarqueeTrackRef = useRef(null);
   const modalMarqueeOffsetRef = useRef(0);
   const modalMarqueeAnimRef = useRef(null);
@@ -2800,6 +2925,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   const heroMarqueeCopyRef = useRef(null);
   const [heroMarqueeCopies, setHeroMarqueeCopies] = useState(2);
   const autoProvisionRecoveryAttemptedRef = useRef(false);
+  // Tracks whether the stale-data warning has already been shown for the current
+  // stale episode, so background polls don't re-raise it every cycle.
+  const staleWarnedRef = useRef(false);
   const [reseedUrl, setReseedUrl] = useState('');
   const [reseedLoading, setReseedLoading] = useState(false);
   const [reseedError, setReseedError] = useState('');
@@ -2808,7 +2936,20 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   const applyBootstrapResponse = useCallback((data) => {
     if (cancelledRef.current) return;
     setBootstrap(data);
-    setBootstrapError(data?._bootstrapWarning || '');
+    // _bootstrapWarning means we're showing cached/last-loaded state (a poll
+    // timed out or live data was briefly unavailable). Surface it once per stale
+    // episode instead of re-asserting it on every 2s poll — otherwise the toast
+    // sticks and respams during background refreshes. A clean response clears it.
+    const warning = data?._bootstrapWarning || '';
+    if (warning) {
+      if (!staleWarnedRef.current) {
+        staleWarnedRef.current = true;
+        setBootstrapError(warning);
+      }
+    } else {
+      staleWarnedRef.current = false;
+      setBootstrapError('');
+    }
   }, []);
 
   const [intakeMockupSrc, setIntakeMockupSrc] = useState(null);
@@ -2829,16 +2970,24 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   const openPastBrief = useCallback(async (runId) => {
     if (!user || !runId) return;
     setPastBriefView({ runId, loading: true });
+    // The brief-preview route re-renders the full brief server-side (incl.
+    // external weather/social calls), so guard against it hanging — without a
+    // timeout the UI sits on "Loading brief…" forever.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30000);
     try {
       const token = await user.getIdToken();
       const res = await fetch(apiPath(`/api/dashboard/brief-preview?runId=${encodeURIComponent(runId)}`), {
         headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
+        signal: controller.signal,
       });
       const html = res.ok ? await res.text() : '';
-      setPastBriefView({ runId, html });
-    } catch {
-      setPastBriefView({ runId, html: '' });
+      setPastBriefView({ runId, html, error: res.ok ? null : `Brief failed to load (HTTP ${res.status}).` });
+    } catch (err) {
+      setPastBriefView({ runId, html: '', error: err?.name === 'AbortError' ? 'Brief load timed out after 30s.' : (err?.message || 'Brief load failed.') });
+    } finally {
+      clearTimeout(timer);
     }
   }, [user, apiPath]);
   // HTML preview for the newsletter tile — fetched from /api/dashboard/newsletter-preview
@@ -4182,6 +4331,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       recommendation: card.recommendation || null,
       analyzer: card.analyzer || null,
       readinessBadge: card.readinessBadge || null,
+      // Carried so the detail modal can expose the same Run action as the tile
+      // footer — running from the modal opens the streaming terminal overlay.
+      moduleControls: card.moduleControls || null,
+      leadgenStep: card.leadgenStep || null,
     });
   }, [briefPreviewHtml, dashboardState?.marketingBrief, openNamedBriefPreview]);
 
@@ -4432,6 +4585,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     ))
   );
 
+  // Ad-hoc terminal mode: a one-off action drives the same modal when no pipeline
+  // run is active. When active, the modal shows ad-hoc lines/title instead.
+  const adhocActive = !showIntakeModal && Boolean(adhocTerminal?.open);
+  const adhocRunning = adhocActive && adhocTerminal?.status === 'running';
+
   // ── Intake modal dismissal persistence + background-run toast ───────────────
   // Closing the build terminal mid-run must survive a reload: persist the
   // dismissal keyed to the active run so a reload drops straight to the
@@ -4451,6 +4609,43 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     const t = setTimeout(() => setBgRunToast(false), 6000);
     return () => clearTimeout(t);
   }, [bgRunToast]);
+
+  // Auto-dismiss the failure toast after 8s (slightly longer than bgRunToast so
+  // an error has more dwell time than a status confirmation).
+  useEffect(() => {
+    if (!runErrorToast) return undefined;
+    const t = setTimeout(() => setRunErrorToast(''), 8000);
+    return () => clearTimeout(t);
+  }, [runErrorToast]);
+
+  // Auto-dismiss the transient "showing last loaded state" warning after 7s.
+  // Hard load failures (no cache) keep their message until reload/dismiss.
+  useEffect(() => {
+    if (!bootstrapError) return undefined;
+    if (!/last loaded dashboard state/i.test(bootstrapError)) return undefined;
+    const t = setTimeout(() => setBootstrapError(''), 7000);
+    return () => clearTimeout(t);
+  }, [bootstrapError]);
+
+  // Surface a toast when a module run fails server-side. Keyed per runId so it
+  // fires once per failed run, even if the user already closed the terminal.
+  // Guarded against firing for a stale failed run on page load: seeds the ref
+  // with whatever run is already failed at mount so only a fresh transition
+  // into 'failed' during this session toasts.
+  const errorToastSeededRef = useRef(false);
+  useEffect(() => {
+    const rid = currentRun?.runId || currentRun?.id || null;
+    if (!errorToastSeededRef.current) {
+      errorToastSeededRef.current = true;
+      if (latestRunStatus === 'failed' && rid) failedToastRunRef.current = rid;
+      return;
+    }
+    if (latestRunStatus !== 'failed') return;
+    if (currentRun?.pipelineType !== 'module-run') return;
+    if (!rid || failedToastRunRef.current === rid) return;
+    failedToastRunRef.current = rid;
+    setRunErrorToast(dashboardState?.errorState?.message || 'Module run failed — please try again.');
+  }, [latestRunStatus, currentRun?.pipelineType, currentRun?.runId, currentRun?.id, dashboardState?.errorState?.message]);
 
   const dismissIntakeModal = () => {
     const runningInBackground = isRunActive || awaitingSignupProvision;
@@ -4842,7 +5037,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     if (terminalOutputRef.current) {
       terminalOutputRef.current.scrollTop = terminalOutputRef.current.scrollHeight;
     }
-  }, [showIntakeModal, completionCountdown, revealedLineCount]);
+  }, [showIntakeModal, completionCountdown, revealedLineCount, adhocTerminal]);
 
   // Marquee rAF for modal — exact same implementation as AuthPage
   useEffect(() => {
@@ -5101,8 +5296,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Module run failed.');
       doBootstrap();
-    } catch {
-      // non-fatal
+    } catch (err) {
+      // Surface the failure: the streaming terminal shows it inline, but the
+      // user may have closed it — the toast guarantees they're told.
+      setRunErrorToast(err?.message || 'Module run failed — please try again.');
     } finally {
       if (pollHandle) clearInterval(pollHandle);
       setModuleRunLoading((prev) => ({ ...prev, [cardId]: false }));
@@ -6440,10 +6637,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         footerRight: 'STUDIO',
         readinessBadge: latestVideo ? { tone: 'ok', label: 'Passed' } : null,
         footerAction: {
-          label: 'RUN VIDEO',
-          onClick: () => {
-            openMockupStudio({ autoVideo: true });
-          },
+          label: mockupStudioRenderLoading ? '…' : 'RUN VIDEO',
+          loading: mockupStudioRenderLoading,
+          onClick: runMockupStudioVideo,
         },
       };
     })(),
@@ -7429,6 +7625,29 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       footerLeft: 'Ready',
       footerRight: 'ADMIN',
       readinessBadge: { tone: 'ok', label: 'Ready' },
+    }, {
+      // Studio Render GPU service status — powers Mockup Studio "RUN VIDEO".
+      // Static facts (measured/configured); not a live ping, since hitting the
+      // service cold-starts the GPU instance (~1-min billing minimum).
+      id: 'gpu-render-service',
+      category: 'admin',
+      number: 'GPU',
+      label: 'STUDIO RENDER GPU',
+      title: 'GPU Render Service',
+      description: 'Cloud Run GPU service that renders the live-site mockup videos. Status, performance, and per-render cost for the Mockup Studio pipeline.',
+      placeholderLabel: 'GPU',
+      rows: [
+        { key: 'gpu-host',    label: 'Host',        value: 'Google Cloud Run · NVIDIA L4' },
+        { key: 'gpu-renderer',label: 'Renderer',    value: 'ANGLE · NVIDIA Vulkan (real GPU)' },
+        { key: 'gpu-perf',    label: 'Performance', value: '~9 ms/frame · ~21s warm, ~60–90s cold start' },
+        { key: 'gpu-output',  label: 'Output',      value: '1920×1200 VP9 WebM · 2–10s clips' },
+        { key: 'gpu-cost',    label: 'Cost',        value: '~$0.01–0.02 / video · $0 idle (scale-to-zero)' },
+        { key: 'gpu-caps',    label: 'Cost caps',   value: 'max 1 instance · 1 render at a time · exit-after-render' },
+        { key: 'gpu-scaling', label: 'Scaling',     value: 'min 0 / max 1 · cold start each render' },
+      ],
+      footerLeft: 'Live',
+      footerRight: 'ADMIN',
+      readinessBadge: { tone: 'ok', label: 'Live' },
     }] : []),
 
     {
@@ -8378,7 +8597,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     <div data-dashboard-theme={theme} style={shellStyle}>
       <style>{dashboardCss}</style>
       <GlassTooltipLayer />
-      <header id="founders-top-strip">
+      <header id="founders-top-strip" data-tooltip-disabled="true">
         <div id="founders-top-strip-inner">
           <Link href="/" id="founders-brand" aria-label="Back to homepage">
             <img src="/img/circle_logo.png" alt="" aria-hidden="true" />
@@ -8551,7 +8770,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         {/* ── Hero ── */}
         <section id="founders-hero-shell">
           <div id="founders-hero-numeric-shell">
-            <div id="founders-hero-numeric" aria-label="Dashboard headline">
+            <div id="founders-hero-numeric" aria-label="Dashboard headline" data-tooltip-disabled="true">
               <div id="founders-hero-marquee-shell" ref={heroMarqueeShellRef}>
                 <div id="founders-hero-marquee-track" ref={heroMarqueeTrackRef}>
                   {Array.from({ length: heroMarqueeCopies }).map((_, index) => (
@@ -8569,7 +8788,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             </div>
           </div>
 
-          <div id="founders-hero-meta">
+          <div id="founders-hero-meta" data-tooltip-disabled="true">
             <div className="meta-row" id="client-meta-row">
               <span className="label">CLIENT</span>
               <span className="value">{client?.companyName || 'UNASSIGNED'}</span>
@@ -8794,7 +9013,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     {/* Background-run indicator — always rendered; spins when active, placeholder ring when idle */}
                     <>
                       <span className="cap-source-divider" aria-hidden="true" />
-                      {isRunActive && currentRun?.pipelineType !== 'module-run' ? (
+                      {(isRunActive || moduleRunInFlight) ? (
                         <button
                           type="button"
                           id="run-active-indicator-chip"
@@ -9583,8 +9802,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       // regardless of the enabled flag — the onClick forwards autoEnable=true
                       // so the server flips the flag before dispatching.
                       const leadgenPrereqMissing = card.leadgenStep && /^Needs\b/i.test(String(card.footerLeft || ''));
+                      // A succeeded module is always re-runnable from the tile (mIsRerun),
+                      // matching the detail-modal Run button — so the visible "Re-run"
+                      // label is never a dead/disabled control.
                       const interactive =
-                        !mBusy && (mIsInactive || (mEnabled && (mIsRetry || tierAllowsRerun)) || cardNotPassed);
+                        !mBusy && (mIsInactive || mIsRerun || (mEnabled && (mIsRetry || tierAllowsRerun)) || cardNotPassed);
                       let label = mLoading ? '…' : mIsRetry ? 'Retry' : mIsRerun ? 'Re-run' : mIsInactive ? 'RUN' : 'Run';
                       // Leadgen cards aren't tracked in moduleState — derive label from readinessBadge.
                       if (card.leadgenStep && !mLoading) {
@@ -9628,7 +9850,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     <button
                       type="button"
                       className="tile-view-details-btn"
-                      title={isLocked || isInactiveUnlocked ? 'View what this card does' : undefined}
                       onClick={(e) => {
                         e.stopPropagation();
                         openCapabilityCard(
@@ -9757,13 +9978,17 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                   ) : pastBriefView.html ? (
                                     <iframe className="cap-brief-full-frame" title="Past brief" srcDoc={pastBriefView.html} sandbox="allow-same-origin" />
                                   ) : (
-                                    <p className="mu-notice">Could not load this brief.</p>
+                                    <p className="mu-notice mu-notice--danger">{pastBriefView.error || 'Could not load this brief.'}</p>
                                   )}
                                 </div>
                               );
                             }
-                            const pastBriefs = (recentRuns || []).filter((r) => r && r.pipelineType === "scout-brief");
-                            if (!pastBriefs.length) return <div style={{ padding: 16, color: "var(--text-secondary)", fontSize: 13 }}>No briefs have been run yet.</div>;
+                            // Only SUCCEEDED scout-brief runs are viewable briefs.
+                            // Failed/running runs have no rendered content — listing
+                            // them with a VIEW button opened the latest brief instead
+                            // (confusing). Failed runs surface in the run history, not here.
+                            const pastBriefs = (recentRuns || []).filter((r) => r && r.pipelineType === "scout-brief" && r.status === "succeeded");
+                            if (!pastBriefs.length) return <div style={{ padding: 16, color: "var(--text-secondary)", fontSize: 13 }}>No completed briefs yet. Run a brief from the Run Briefs tab.</div>;
                             return pastBriefs.map((run, i) => {
                               const rid = run.runId || run.id;
                               const rawTs = run.completedAt || run.createdAt || run.updatedAt;
@@ -9780,38 +10005,30 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                 : rid === onboardingRunId ? 'Onboarding Brief'
                                 : 'Executive Brief';
                               return (
-                                <button
+                                <div
                                   key={rid || i}
-                                  type="button"
-                                  className="cap-past-brief-row cap-past-brief-row--locked"
-                                  aria-label={`${briefName} — subscribe to view, email, or download`}
-                                  title="Subscribe to unlock brief actions"
-                                  onClick={() => setShowSubscribeModal(true)}
+                                  className="cap-past-brief-row"
+                                  data-tooltip-disabled="true"
                                 >
-                                  <span className="cap-past-brief-title">
-                                    {briefName}
+                                  <span className="cap-past-brief-title-group">
+                                    <span className="cap-past-brief-title">{briefName}</span>
                                     {when && <span className="cap-past-brief-title-ts">{when}</span>}
                                   </span>
-                                  <span className="cap-past-brief-meta">{run.status || "completed"}</span>
-                                  <span className="cap-past-brief-actions" aria-hidden="true">
-                                    <span className="cap-list-run cap-past-brief-action" title="View brief">
+                                  <span className="cap-past-brief-actions">
+                                    <button type="button" className="cap-list-run cap-past-brief-action cap-past-brief-action--active" onClick={() => openPastBrief(rid)}>
                                       <span className="cap-list-action-label">View</span>
-                                      <Eye size={13} strokeWidth={1.9} />
-                                      <Lock className="cap-past-brief-lock" aria-hidden="true" />
-                                    </span>
-                                    <span className="cap-list-run cap-past-brief-action" title="Email brief">
+                                      <Eye size={11} strokeWidth={1.9} />
+                                    </button>
+                                    <span className="cap-list-run cap-past-brief-action cap-past-brief-action--locked" aria-disabled="true">
                                       <span className="cap-list-action-label">Email</span>
-                                      <Mail size={13} strokeWidth={1.9} />
-                                      <ArrowUpRight className="cap-past-brief-action-sub" size={9} strokeWidth={2.4} aria-hidden="true" />
-                                      <Lock className="cap-past-brief-lock" aria-hidden="true" />
+                                      <Mail size={11} strokeWidth={1.9} />
                                     </span>
-                                    <span className="cap-list-run cap-past-brief-action" title="Download PDF">
+                                    <span className="cap-list-run cap-past-brief-action cap-past-brief-action--locked" aria-disabled="true">
                                       <span className="cap-list-action-label">PDF</span>
-                                      <Download size={13} strokeWidth={1.9} />
-                                      <Lock className="cap-past-brief-lock" aria-hidden="true" />
+                                      <Download size={11} strokeWidth={1.9} />
                                     </span>
                                   </span>
-                                </button>
+                                </div>
                               );
                             });
                           })() : g.cards.map((card) => {
@@ -9875,7 +10092,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                   : 'Run';
                             const canRun = Boolean(card.moduleControls);
                             return (
-                              <div key={card.id} className={`cap-list-row${isExpanded ? ' is-expanded' : ''}${isRowLocked ? ' cap-list-row--locked' : ''}`}>
+                              <div key={card.id} data-tooltip-disabled="true" className={`cap-list-row${isExpanded ? ' is-expanded' : ''}${isRowLocked ? ' cap-list-row--locked' : ''}`}>
                                 <div className="cap-list-row-main">
                                   {_renderCard(card)}
                                   {isRowLocked && (
@@ -9890,7 +10107,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                       className="cap-list-run"
                                       data-tooltip-disabled="true"
                                       aria-label={`${rowRunLabel} module`}
-                                      title={rowRunLabel}
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         e.currentTarget.closest('.cap-list-row-main')?.querySelector('.tile-foot-rerun-btn')?.click();
@@ -9909,7 +10125,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                       className="cap-list-run"
                                       data-tooltip-disabled="true"
                                       aria-label={isRowLocked ? 'Locked brief' : 'Run brief'}
-                                      title={isRowLocked ? 'Locked — subscribe to unlock' : 'Run brief'}
                                       disabled={isRowLocked || !card.footerAction}
                                       onClick={(e) => { e.stopPropagation(); if (!isRowLocked && card.footerAction?.onClick) card.footerAction.onClick(e); }}
                                     >
@@ -9925,7 +10140,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                     className="cap-list-caret"
                                     aria-expanded={isExpanded}
                                     aria-label={isExpanded ? 'Hide card description' : 'Show card description'}
-                                    title={isExpanded ? 'Hide card description' : 'Show card description'}
                                     onClick={(e) => { e.stopPropagation(); toggleListCard(card.id); }}
                                   >
                                     <span className="cap-list-action-label">Details</span>
@@ -9982,13 +10196,13 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           </div>{/* end capability-grid-col */}
 
           {/* Right — filter nav */}
-          <div id="capability-nav-col">
+          <div id="capability-nav-col" data-tooltip-disabled="true">
             {[
               // { key: 'onboarding', label: 'Data Visualization',      sub: 'Capture & inspect',       icon: ClipboardList,         color: '#7b5fff' },
               { key: 'brief',      label: 'Daily Briefs',            sub: 'Your full report',         icon: ChartColumnIncreasing, color: '#2a2420' },
               { key: 'knowledge',  label: 'Knowledge Officer',       sub: 'Custom data & context',    icon: BrainIcon,             color: '#3b82f6' },
               { key: 'growth',     label: 'Marketing Director',      sub: 'SEO, signals & growth',    icon: Settings2,             color: '#10b981' },
-              { key: 'content',    label: 'Creative Director',        sub: 'Posts & platforms',        icon: Workflow,               color: '#14b8a6' },
+              { key: 'content',    label: 'Design Team',              sub: 'Posts & platforms',        icon: Workflow,               color: '#14b8a6' },
               { key: 'social',     label: 'Social Media Manager',     sub: 'Schedule & publish',       icon: CalendarDays,          color: '#6366f1' },
               { key: 'website',    label: 'Website Developer',        sub: 'Speed & conversion',       icon: LaptopMinimalCheck,    color: '#0ea5e9' },
               { key: 'automation', label: 'Automation & Systems',    sub: 'Scale & automate',         icon: Database,              color: '#6366f1' },
@@ -10003,7 +10217,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 type="button"
                 id={`capability-nav-btn-${key ?? 'all'}`}
                 className={`capability-nav-btn${activeCapabilityFilter === key ? ' capability-nav-btn--active' : ''}${isLocked ? ' capability-nav-btn--locked' : ''}`}
-                title={label}
                 disabled={isLocked}
                 onClick={() => {
                   if (key === activeCapabilityFilter) return;
@@ -10135,14 +10348,23 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         />
       ) : null}
 
-      {showIntakeModal ? (
-        <div id="intake-modal-overlay" role="dialog" aria-modal="true" aria-label="Dashboard build in progress">
+      {(showIntakeModal || adhocTerminal?.open) ? (
+        <div
+          id="intake-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Dashboard build in progress"
+          /* Ad-hoc terminal (e.g. Studio render) launches from inside the tile
+             detail modal (z 900), so lift the overlay above it; normal runs keep
+             the CSS default (200). */
+          style={adhocTerminal?.open && !showIntakeModal ? { zIndex: 1000 } : undefined}
+        >
 
           {/* Card: auth cardStyle. Survey is always rendered — 2-col layout
               always active so the terminal never sits alone. */}
           <div
             id="intake-modal-card"
-            data-with-survey={activeRunIsIntake ? 'true' : 'false'}
+            data-with-survey={!adhocActive && activeRunIsIntake ? 'true' : 'false'}
             style={{
               position: 'relative',
               zIndex: 2,
@@ -10164,14 +10386,15 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', justifyContent: 'space-between' }}>
               <img src="/img/circle_logo.png" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', display: 'block' }} />
               <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.44)', fontWeight: 700, fontFamily: '"Space Mono", monospace' }}>
-                {activeModuleCard ? 'Updating Dashboard' : 'Client Access'}
+                {adhocActive ? (adhocTerminal.brand || 'Working') : activeModuleCard ? 'Updating Dashboard' : 'Client Access'}
               </span>
               {/* Close — matches the payment modal close button */}
               <button
                 type="button"
                 id="intake-modal-close"
-                onClick={dismissIntakeModal}
+                onClick={adhocActive ? () => { if (!adhocRunning) closeAdhocTerminal(); } : dismissIntakeModal}
                 aria-label="Close build terminal and return to dashboard"
+                style={adhocRunning ? { opacity: 0.5 } : undefined}
               >[ ✕ ]</button>
             </div>
 
@@ -10180,7 +10403,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               <div ref={modalMarqueeTrackRef} style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform' }}>
                 {(['a', 'b']).map((k) => (
                   <span key={k} aria-hidden={k === 'b' ? 'true' : undefined} style={{ margin: 0, flexShrink: 0, color: '#2a2420', fontSize: 'clamp(2rem, 8.5vw, 7rem)', lineHeight: 1, letterSpacing: '-0.04em', fontFamily: '"Doto", "Space Mono", monospace', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                    {activeModuleCard
+                    {adhocActive
+                      ? `${adhocTerminal.title || 'WORKING'} \u00B7 `
+                      : activeModuleCard
                       ? `UPDATING ${activeModuleCard.label} \u00B7 RUNNING MODULE \u00B7 `
                       : 'BUILDING YOUR DASHBOARD \u00B7 PROCESSING WEBSITE \u00B7 '}
                   </span>
@@ -10195,10 +10420,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   <span className="term-win-dot term-win-dot-close" />
                   <span className="term-win-dot term-win-dot-min" />
                   <span className="term-win-dot term-win-dot-max" />
-                  <span id="intake-modal-terminal-title">build.process</span>
+                  <span id="intake-modal-terminal-title">{adhocActive ? 'render.process' : 'build.process'}</span>
                 </div>
                 <div id="intake-modal-terminal-embed" ref={terminalOutputRef}>
-                  {displayedTerminalLines.map((line, i) => (
+                  {(adhocActive ? adhocTerminal.lines : displayedTerminalLines).map((line, i) => (
                     <div key={`tl-${i}`} className={`term-line term-${line.type}`}>
                       <span className="term-pfx">{line.prefix}</span>
                       <span className="term-msg">{line.text}</span>
@@ -10208,7 +10433,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 </div>
               </div>
 
-              {activeRunIsIntake && <div id="intake-modal-survey-col" data-resolved={surveyResolved ? 'true' : 'false'}>
+              {!adhocActive && activeRunIsIntake && <div id="intake-modal-survey-col" data-resolved={surveyResolved ? 'true' : 'false'}>
                 <OnboardingChatModal
                   steps={ONBOARDING_ENTRY_STEPS}
                   initialAnswers={onboardingAnswersSeed || {}}
@@ -10244,14 +10469,22 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             {/* Footer */}
             <div id="intake-modal-footer">
               <span id="intake-modal-footer-host">
-                {client?.normalizedHost
+                {adhocActive ? (adhocTerminal.host || ' ') : client?.normalizedHost
                   || (awaitingSignupProvision && pendingSignupProvision?.websiteUrl
                     ? (() => { try { return new URL(/^https?:\/\//i.test(pendingSignupProvision.websiteUrl) ? pendingSignupProvision.websiteUrl : `https://${pendingSignupProvision.websiteUrl}`).hostname.replace(/^www\./, ''); } catch { return pendingSignupProvision.websiteUrl; } })()
                     : null)
                   || (currentRun?.sourceUrl ? (() => { try { return new URL(currentRun.sourceUrl).hostname.replace(/^www\./, ''); } catch { return currentRun.sourceUrl; } })() : null)
                   || '\u00A0'}
               </span>
-              <span id="intake-modal-footer-note">Close anytime — your dashboard keeps building in the background.</span>
+              {adhocActive && adhocTerminal.status === 'done' && adhocTerminal.videoUrl ? (
+                <a id="intake-modal-footer-action" href={adhocTerminal.videoUrl} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 'auto', textDecoration: 'underline', color: '#2a2420', fontFamily: '"Space Mono", monospace', fontSize: '0.72rem' }}>Open Video ↗</a>
+              ) : (
+                <span id="intake-modal-footer-note">
+                  {adhocActive
+                    ? (adhocTerminal.status === 'error' ? 'Render failed — close and try again.' : 'Rendering on GPU — saves to your assets.')
+                    : 'Close anytime — your dashboard keeps building in the background.'}
+                </span>
+              )}
             </div>
 
           </div>
@@ -10270,6 +10503,14 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           <span id="db-alert-toast-dot" />
           <span>{bootstrapError}</span>
           <button type="button" id="db-alert-toast-close" aria-label="Dismiss" onClick={() => setBootstrapError('')}>✕</button>
+        </div>
+      ) : null}
+
+      {runErrorToast ? (
+        <div id="run-error-toast" role="alert" aria-live="assertive">
+          <span id="run-error-toast-dot" />
+          <span>{runErrorToast}</span>
+          <button type="button" id="run-error-toast-close" aria-label="Dismiss" onClick={() => setRunErrorToast('')}>✕</button>
         </div>
       ) : null}
 
@@ -10780,6 +11021,59 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       ? activeTileModal.dynamicShortDescription
                       : activeTileModal.description}
                   </p>
+                  {/* Run action — parity with the tile footer Run button. Closing
+                      the modal lets the streaming terminal overlay surface, which
+                      shows the per-stage breakdown for this module run. */}
+                  {activeTileModal.moduleControls && activeTileModal.sourceCardId && !activeTileModal.leadgenStep ? (() => {
+                    const cardId = activeTileModal.sourceCardId;
+                    const mStatus = moduleState?.[cardId]?.status ?? 'inactive';
+                    const mEnabled = moduleConfig ? (moduleConfig[cardId]?.enabled ?? false) : true;
+                    const mLoading = moduleRunLoading[cardId] || moduleToggleLoading[cardId] || false;
+                    const mBusy = mStatus === 'running' || mStatus === 'queued';
+                    // multi-device-view: pick the cheapest retry path based on which
+                    // artifact is missing (mirrors the tile footer logic).
+                    let retryOptions = null;
+                    let mdArtifactsMissing = false;
+                    if (cardId === 'multi-device-view') {
+                      const hasMockup = Boolean(dashboardState?.artifacts?.homepageDeviceMockup?.downloadUrl);
+                      const fp = dashboardState?.artifacts?.fullPageScreenshots || {};
+                      const hasFullPages = Boolean(
+                        fp['desktop-full']?.downloadUrl || fp['tablet-full']?.downloadUrl || fp['mobile-full']?.downloadUrl
+                      );
+                      const hs = dashboardState?.artifacts?.homepageScreenshots || {};
+                      const hasViewportScreenshots = Boolean(
+                        hs.desktop?.downloadUrl || hs.tablet?.downloadUrl || hs.mobile?.downloadUrl
+                      );
+                      mdArtifactsMissing = !hasMockup || !hasFullPages;
+                      if (!hasMockup && hasViewportScreenshots) retryOptions = { skipScreenshots: true };
+                      else if (hasMockup && !hasFullPages) retryOptions = { fullPagesOnly: true };
+                    }
+                    const label = mLoading
+                      ? '…'
+                      : mBusy
+                        ? 'Running…'
+                        : (mStatus === 'succeeded' && !mdArtifactsMissing)
+                          ? 'Re-run'
+                          : 'Run';
+                    return (
+                      <button
+                        type="button"
+                        id={`tile-detail-${cardId}-run-btn`}
+                        className="tile-foot-rerun-btn"
+                        style={{ marginTop: 12 }}
+                        disabled={mLoading || mBusy}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Close the detail modal first so the terminal overlay
+                          // (gated on moduleRunInFlight) is visible immediately.
+                          setActiveTileModal(null);
+                          handleModuleRun(cardId, true, retryOptions, !mEnabled);
+                        }}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })() : null}
                 </div>
 
               </div>
@@ -13174,7 +13468,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                </div>
 	                                <span className="mu-chip mu-chip--success">READY</span>
 	                              </div>
-	                              <div className="mu-field-grid">
+	                              <div className="mu-field-grid" data-tooltip-disabled="true">
 	                                <label className="mu-field">
 	                                  <span className="mu-label">Website URL</span>
 	                                  <input
@@ -13204,14 +13498,22 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                </label>
 	                              </div>
 	                              <p className="mu-notice">
-	                                RUN VIDEO opens Mockup Studio with these settings and starts the browser recorder automatically.
+	                                RUN VIDEO starts the Cloud GPU renderer and saves the finished WebM to Studio assets.
 	                              </p>
+	                              {mockupStudioRenderError ? (
+	                                <p className="mu-notice mu-notice--danger" style={{ marginTop: 0 }}>
+	                                  {mockupStudioRenderError}
+	                                </p>
+	                              ) : null}
 	                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-	                                <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 140 }} onClick={() => openMockupStudio({ autoVideo: true })}>
-	                                  <span>Run Video</span>
+	                                <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 140 }} onClick={runMockupStudioVideo} disabled={mockupStudioRenderLoading}>
+	                                  <span>{mockupStudioRenderLoading ? 'Rendering…' : 'Run Video'}</span>
 	                                </button>
 	                                <button type="button" className="mu-btn-outline" onClick={() => openMockupStudio({ autoVideo: false })}>
 	                                  Open Studio
+	                                </button>
+	                                <button type="button" className="mu-btn-outline mu-btn-outline--accent" onClick={() => openMockupStudio({ director: true })}>
+	                                  Direct (Custom)
 	                                </button>
 	                                {latestVideo?.downloadUrl ? (
 	                                  <a className="mu-btn-outline mu-btn-outline--accent" href={latestVideo.downloadUrl} target="_blank" rel="noopener noreferrer">
@@ -13609,7 +13911,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                           const BUCKET_META = {
                             growth:   { label: 'Marketing Director',     sub: 'Strategy, signals & growth pipeline',   icon: Settings2,             color: '#10b981' },
                             knowledge:{ label: 'Knowledge Officer',      sub: 'Knowledge sources powering AI modules', icon: BrainIcon,             color: '#3b82f6' },
-                            content:  { label: 'Creative Director',      sub: 'Brand voice, identity & systems',       icon: Workflow,              color: '#14b8a6' },
+                            content:  { label: 'Design Team',            sub: 'Brand voice, identity & systems',       icon: Workflow,              color: '#14b8a6' },
                             website:  { label: 'Website Developer',      sub: 'Speed, SEO & conversion metrics',       icon: LaptopMinimalCheck,    color: '#0ea5e9' },
                             _system:  { label: 'System',                 sub: 'Pipeline, artifacts & diagnostics',     icon: ClipboardList,         color: '#6b7280' },
                           };
@@ -15526,50 +15828,50 @@ const dashboardCss = `
     border: 0;
     border-bottom: 1px solid var(--border);
     background: transparent;
-    cursor: pointer;
     text-align: left;
     font-family: var(--font-ui);
     color: var(--text-display);
-    transition: background 0.15s ease;
   }
-  .cap-past-brief-row:hover { background: rgba(0,0,0,0.03); }
-  .cap-past-brief-title { font-size: 0.875rem; font-weight: 500; flex-shrink: 0; display: inline-flex; align-items: baseline; gap: 8px; }
-  .cap-past-brief-title-ts { font-size: 0.68rem; font-weight: 400; color: var(--text-secondary); font-family: var(--font-mono); letter-spacing: 0.01em; }
-  .cap-past-brief-meta { font-size: 0.78rem; color: var(--text-secondary); flex: 1; min-width: 0; }
-  /* Action chips (View / Email / PDF). Row itself is the button — chips are
-     decorative affordances styled via .cap-list-run. All locked for now. */
+  .cap-past-brief-title-group {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .cap-past-brief-title {
+    display: block;
+    font-family: var(--font-ui);
+    font-size: clamp(0.8rem, 1.1vw, 0.875rem);
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    text-transform: none;
+    color: var(--text-display);
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cap-past-brief-title-ts {
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 400;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    letter-spacing: 0.01em;
+  }
   .cap-past-brief-actions {
     display: inline-flex;
     align-items: center;
     gap: 6px;
     flex-shrink: 0;
   }
-  .cap-past-brief-action {
-    position: relative;
-    opacity: 0.55;
-    transition: opacity 0.15s ease;
-  }
-  .cap-past-brief-row:hover .cap-past-brief-action {
-    opacity: 0.85;
-  }
-  /* Email's up-and-out arrow — sits tight beside the mail glyph. */
-  .cap-past-brief-action .cap-past-brief-action-sub {
-    width: 8px;
-    height: 8px;
-    margin-left: -3px;
-    opacity: 0.7;
-  }
-  /* Lock pip — small corner badge marking each action as gated. */
-  .cap-past-brief-action .cap-past-brief-lock {
-    position: absolute;
-    top: -5px;
-    right: -5px;
-    width: 12px;
-    height: 12px;
-    padding: 2px;
-    border-radius: 50%;
-    background: var(--text-display);
-    color: #ffffff;
+  .cap-past-brief-action { opacity: 0.55; }
+  .cap-past-brief-action--active { opacity: 1; cursor: pointer; }
+  .cap-past-brief-action--locked {
+    opacity: 0.28;
+    pointer-events: none;
+    cursor: default;
   }
   .cap-list-featured > .tile-intake-card,
   .cap-list-featured > .tile {
@@ -15685,6 +15987,22 @@ const dashboardCss = `
   .cap-list-row-main > .tile-intake-card:hover .cap-list-action-icon { color: var(--text-display); }
   .cap-list-row-main > .tile-intake-card {
     cursor: pointer;
+  }
+  /* Grid capability cards open a modal on body click (onClick handler on the
+     <article data-capability-card>), so the whole card is interactive and must
+     show the pointer. --btns-only cards set the body to pointer-events:none and
+     let the Run/Details buttons take clicks (those buttons carry their own
+     cursor), so this rule is moot there — no conflict. */
+  .tile.tile-intake-card[data-capability-card] {
+    cursor: pointer;
+  }
+  /* In grid view, --btns-only sets the article to pointer-events:none and lets
+     the RUN/Details buttons take clicks. List view hides those buttons, so the
+     article must take row-body clicks itself — re-enable it here, otherwise
+     every moduleControls card (Cross-Device Layouts, SEO Snapshot, etc.) has a
+     dead row and only no-control cards like Site Performance open. */
+  .cap-list-row-main > .tile-intake-card.tile-intake-card--btns-only {
+    pointer-events: auto;
   }
   .cap-list-row-main > .tile-intake-card:hover .tile-header-label::after {
     color: var(--text-display);
@@ -20648,6 +20966,11 @@ const dashboardCss = `
       max-height: none;
       overflow: hidden;
     }
+    .tile-intake-placeholder-brief { border-radius: 0; border: none; box-shadow: none; }
+    .tile-brief-preview-wrap { border-radius: 0; }
+    .tile-brief-preview-wrap iframe { border-radius: 0; }
+    .cap-brief-full { margin: 0 -24px; width: calc(100% + 48px); }
+    .cap-brief-full-frame { border-radius: 0; border-left: none; border-right: none; height: calc(100dvh - 180px); min-height: 0; }
     .tile-intake-placeholder-audit-summary { flex: none; min-height: 220px; }
     /* Keep the full copy at a readable size — no line-clamp, no hidden
        source/timestamp line. */
@@ -20756,7 +21079,7 @@ const dashboardCss = `
     .cap-step-seg--top.cap-step-seg--tabs > button.is-active::after { content: ''; }
     /* Re-assert over the mobile-expanded .tile-foot{display:flex} rule above */
     .cap-list-row-main .tile-foot { display: contents; }
-    .cap-list-columns { grid-template-columns: 1fr !important; margin-left: 0; margin-right: 0; }
+    .cap-list-columns { grid-template-columns: 1fr !important; margin-left: 0; margin-right: 0; margin-bottom: 0; }
     /* Stacked columns: divider moves from left edge to top edge */
     .cap-list-col + .cap-list-col { border-left: 0; border-top: 1px solid rgba(42, 36, 32, 0.08); }
     .cap-list-col-label { display: none; }
@@ -20793,27 +21116,34 @@ const dashboardCss = `
       gap: 5px;
     }
   }
-  /* Past brief rows: vertical layout on mobile so title, timestamp, and actions
-     all fit without overflow. Row 1 = name + timestamp (stacked). Row 2 = status + chips. */
-  @media (max-width: 520px) {
+  /* Past brief rows: two-row layout on mobile.
+     Row 1 = brief name (full width). Row 2 = timestamp + status + action chips (single line). */
+  @media (max-width: 768px) {
     .cap-past-brief-row {
       flex-wrap: wrap;
-      gap: 4px 0;
+      gap: 4px 8px;
       padding: 12px 10px;
       align-items: center;
     }
     .cap-past-brief-title {
-      width: 100%;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 1px;
-      margin-bottom: 2px;
+      flex: 0 0 100%;
+      font-family: var(--font-ui);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: var(--text-primary);
+      margin-bottom: 0;
+    }
+    .cap-past-brief-title-ts {
+      flex: 1 1 auto;
+      min-width: 0;
     }
     .cap-past-brief-meta {
-      flex: 1;
+      flex: 0 0 auto;
       align-self: center;
     }
     .cap-past-brief-actions {
+      flex: 0 0 auto;
       flex-shrink: 0;
       align-self: center;
     }
@@ -20982,7 +21312,7 @@ const dashboardCss = `
   #run-active-indicator-label {
     font-family: 'Doto', var(--font-mono);
     font-weight: 900;
-    font-size: 14px;
+    font-size: 22px;
     line-height: 1;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -21218,7 +21548,8 @@ const dashboardCss = `
     from { opacity: 0; transform: translateY(-8px); }
     to   { opacity: 1; transform: translateY(0); }
   }
-  #db-alert-toast {
+  #db-alert-toast,
+  #run-error-toast {
     position: fixed;
     top: 1rem;
     right: 1rem;
@@ -21241,7 +21572,8 @@ const dashboardCss = `
     color: rgba(150, 22, 28, 0.92);
     animation: bg-run-toast-in 0.28s cubic-bezier(0.25, 0.1, 0.25, 1);
   }
-  #db-alert-toast-dot {
+  #db-alert-toast-dot,
+  #run-error-toast-dot {
     flex-shrink: 0;
     margin-top: 0.35rem;
     width: 0.5rem;
@@ -21249,7 +21581,8 @@ const dashboardCss = `
     border-radius: 999px;
     background: #d71921;
   }
-  #db-alert-toast-close {
+  #db-alert-toast-close,
+  #run-error-toast-close {
     flex-shrink: 0;
     margin-left: 0.25rem;
     background: none;
@@ -21261,7 +21594,10 @@ const dashboardCss = `
     color: rgba(150, 22, 28, 0.6);
     line-height: 1.4;
   }
-  #db-alert-toast-close:hover { color: rgba(150, 22, 28, 0.95); }
+  #db-alert-toast-close:hover,
+  #run-error-toast-close:hover { color: rgba(150, 22, 28, 0.95); }
+  /* Offset the run-error toast so it never fully overlaps a bootstrap-error toast. */
+  #run-error-toast { top: 4.5rem; }
 
   #glass-tooltip {
     position: fixed;

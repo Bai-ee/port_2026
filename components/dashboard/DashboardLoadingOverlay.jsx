@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { internalPageGlassCardStyle } from '../../pageSurfaceSystem';
 
 export default function DashboardLoadingOverlay({
@@ -5,6 +6,19 @@ export default function DashboardLoadingOverlay({
   loadingOverlayRef,
   showLoadingCard,
 }) {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) {
+      return undefined;
+    }
+    const mq = window.matchMedia('(max-width: 768px)');
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+
   if (!showLoadingCard) return null;
 
   return (
@@ -66,29 +80,32 @@ export default function DashboardLoadingOverlay({
         <div style={{ width: '100%', overflow: 'hidden', margin: '0 0 0.7rem' }}>
           <div className="loading-marquee-track">
             {['a', 'b'].map((k) => (
-              <span
-                key={k}
-                aria-hidden={k === 'b' ? 'true' : undefined}
-                style={{
-                  margin: 0,
-                  flexShrink: 0,
-                  color: '#2a2420',
-                  fontSize: 'clamp(2rem, 8.5vw, 7rem)',
-                  lineHeight: 1,
-                  letterSpacing: '-0.04em',
-                  fontFamily: '"Doto", "Space Mono", monospace',
-                  fontWeight: 700,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {'LOADING YOUR DASHBOARD\u00A0\u00B7\u00A0'}
-              </span>
+              <div key={k} aria-hidden={k === 'b' ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
+                {['LOADING YOUR DASHBOARD', '\u2022'].map((w, j) => (
+                  <span
+                    key={j}
+                    style={{
+                      margin: 0,
+                      flexShrink: 0,
+                      color: '#2a2420',
+                      fontSize: 'clamp(2rem, 8.5vw, 7rem)',
+                      lineHeight: 1,
+                      letterSpacing: '-0.04em',
+                      fontFamily: '"Doto", "Space Mono", monospace',
+                      fontWeight: 700,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {w}
+                  </span>
+                ))}
+              </div>
             ))}
           </div>
         </div>
 
         <p style={{ margin: 0, color: 'rgba(42,36,32,0.66)', lineHeight: 1.6, fontFamily: '"Space Grotesk", system-ui, sans-serif', textAlign: 'center' }}>
-          Loading the latest dashboard state.
+          {isMobile ? 'Loading Dashboard' : 'Loading the latest dashboard state.'}
         </p>
       </div>
     </div>

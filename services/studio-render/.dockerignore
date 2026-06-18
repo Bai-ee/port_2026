@@ -1,0 +1,10 @@
+*.webm
+*.mp4
+*.jpg
+*.png
+render-cli.mjs
+deploy-cloud-run.sh
+README.md
+*.original.md
+.DS_Store
+node_modules

@@ -159,13 +159,14 @@ export default function SiteFooter() {
         #site-footer-nav {
           display: flex;
           flex-wrap: wrap;
+          justify-content: center;
           gap: clamp(2rem,5vw,4rem);
           padding: clamp(2rem,4vw,3rem) 0;
           border-top: 1px solid rgba(42,36,32,0.1);
           margin-top: 50px;
           list-style: none;
         }
-        .sf-nav-col { display: flex; flex-direction: column; gap: 0.7rem; }
+        .sf-nav-col { display: flex; flex-direction: column; align-items: center; gap: 0.7rem; text-align: center; }
         .sf-nav-heading {
           font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em;
           text-transform: uppercase; color: rgba(42,36,32,0.35); margin-bottom: 0.2rem;
@@ -181,10 +182,11 @@ export default function SiteFooter() {
         #site-footer-bottom a[href*="linkedin"],
         #site-footer-bottom a[href*="x.com"] { pointer-events: auto; cursor: pointer; }
         #site-footer-bottom {
-          display: flex; justify-content: space-between; align-items: center;
+          display: flex; flex-direction: column; justify-content: center; align-items: center;
           flex-wrap: wrap; gap: 0.75rem;
           padding-top: clamp(1rem,2vw,1.5rem);
           border-top: 1px solid rgba(42,36,32,0.1);
+          text-align: center;
         }
         #site-footer-copyright { font-size: 0.78rem; color: rgba(42,36,32,0.35); }
         #site-footer-social-links { display: flex; gap: 1.5rem; }

@@ -302,6 +302,17 @@ async function captureScreenshotBufferOnce({ clientId, runId, targetUrl, variant
           waitUntil: attempt === 1 ? 'domcontentloaded' : 'load',
           timeout: effectiveGotoTimeoutMs,
         },
+        // Wait for web fonts to finish loading before capture. 'domcontentloaded'
+        // fires before custom @font-face files download, so without this the page
+        // paints in a fallback font and the snapshot grabs the wrong typeface
+        // (e.g. vivaacid.com). document.fonts.ready resolves once all faces are
+        // loaded/applied. bestAttempt:true above keeps a timeout here non-fatal —
+        // a slow/blocked font still yields a screenshot after the timeout.
+        waitForFunction: {
+          fn: 'async()=>{try{await document.fonts.ready;return true}catch{return true}}',
+          timeout: effectiveGotoTimeoutMs,
+        },
+        // Extra paint buffer after fonts resolve, for JS-heavy late layout.
         waitForTimeout: config.postLoadWaitMs,
         options: {
           fullPage: Boolean(variant?.fullPage),

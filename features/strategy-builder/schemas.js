@@ -150,7 +150,12 @@
  * @property {string} scheduledAt    — ISO datetime
  * @property {string} content        — <= 280 chars
  * @property {string[]} [hashtags]
- * @property {string} [mediaHint]
+ * @property {string} [mediaHint]      — text direction for an asset (pre-render)
+ * @property {string} [mediaUrl]       — fetchable URL of a paired rendered asset (post-render)
+ * @property {string} [mediaType]      — 'video' | 'image'
+ * @property {string} [mediaStoragePath] — Firebase Storage path of the asset
+ * @property {string} [mediaContentType] — e.g. 'video/mp4'
+ * @property {string} [mediaJobId]     — originating render_jobs/{jobId}
  * @property {'baseline'|'ramp'|'event'|'closure'|'special'} kind
  * @property {string|null} [anchorId]
  * @property {string} rationale

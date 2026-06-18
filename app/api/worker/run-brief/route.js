@@ -442,16 +442,16 @@ export async function POST(request) {
     });
   }
 
-  // Step 9 — Brief chain: a signup intake ('signup') or a manual executive
-  // brief refresh ('brief-refresh') hands off to a scout-brief run, so every
-  // executive brief is composed from a fresh A→B pass: modules (screenshots,
-  // SEO, agent readiness, design) → search terms → campaign → brief.
-  // Reseed/rerun module triggers never chain. Queue failure is non-fatal:
-  // the intake already succeeded and the brief stays manual.
+  // Step 9 — Brief chain: a signup intake ('signup'), a manual executive brief
+  // refresh ('brief-refresh'), or a website re-run ('reseed') hands off to a
+  // scout-brief run, so every executive brief is composed from a fresh A→B
+  // pass: modules (screenshots, SEO, agent readiness, design) → search terms
+  // → campaign → brief. Rerun module triggers never chain. Queue failure is
+  // non-fatal: the intake already succeeded and the brief stays manual.
   // Queued BEFORE completeRun so no bootstrap poll can observe the intake
   // as succeeded without the chained run + queued module mark in place
   // (the worker self-trigger below is after()-deferred regardless).
-  if (pipelineType === 'free-tier-intake' && (claimedRun.trigger === 'signup' || claimedRun.trigger === 'brief-refresh')) {
+  if (pipelineType === 'free-tier-intake' && (claimedRun.trigger === 'signup' || claimedRun.trigger === 'brief-refresh' || claimedRun.trigger === 'reseed')) {
     const chainSourceUrl =
       clientConfig?.sourceInputs?.websiteUrl || clientConfig?.websiteUrl || null;
     if (chainSourceUrl) {

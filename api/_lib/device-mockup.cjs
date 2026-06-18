@@ -186,8 +186,17 @@ async function generateWebsiteMockupArtifact({
     );
 
     const templateBuffer = await loadTemplateBuffer();
-    const buffer = await sharp(templateBuffer)
+    // Two passes, intentionally. sharp applies .composite() overlays AFTER
+    // .resize() within a single pipeline regardless of call order — so chaining
+    // composite+resize shrinks the template first, then pastes the fixed-pixel
+    // SCREEN_BOXES patches (sized for the full-res template) onto the smaller
+    // base, overflowing the device screens. Composite at native template res,
+    // THEN downscale the composited result for the file-size optimization.
+    const composited = await sharp(templateBuffer)
       .composite(composites)
+      .png()
+      .toBuffer();
+    const buffer = await sharp(composited)
       .resize(1000, null, { fit: 'inside', withoutEnlargement: true })
       .webp({ quality: 82 })
       .toBuffer();

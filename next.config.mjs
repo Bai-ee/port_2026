@@ -74,6 +74,8 @@ const firebaseAdminTraceDeps = [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Dev-only Next.js indicator badge — move from default bottom-left to bottom-right.
+  devIndicators: { position: 'bottom-right' },
   serverExternalPackages: ['playwright', 'pdf-parse', 'mammoth', 'firebase-admin'],
   outputFileTracingIncludes: {
     '*': [

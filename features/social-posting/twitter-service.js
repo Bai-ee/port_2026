@@ -262,6 +262,28 @@ function makeId() {
   return `social_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// Extract the optional media pairing off a post payload. A post carries at most
+// one attached asset (a rendered Studio video, or an image). mediaUrl is the
+// fetchable source used to upload to X at post time; mediaStoragePath/jobId let
+// the dashboard trace the asset back to its render job.
+function extractMedia(payload = {}) {
+  const mediaUrl = payload.mediaUrl ? String(payload.mediaUrl).slice(0, 2000) : null;
+  if (!mediaUrl) {
+    return { mediaUrl: null, mediaType: null, mediaStoragePath: null, mediaContentType: null, mediaJobId: null };
+  }
+  const contentType = payload.mediaContentType ? String(payload.mediaContentType).slice(0, 80) : null;
+  const inferredType = contentType
+    ? (contentType.startsWith('video/') ? 'video' : contentType.startsWith('image/') ? 'image' : null)
+    : null;
+  return {
+    mediaUrl,
+    mediaType: payload.mediaType ? String(payload.mediaType).slice(0, 20) : (inferredType || 'video'),
+    mediaStoragePath: payload.mediaStoragePath ? String(payload.mediaStoragePath).slice(0, 500) : null,
+    mediaContentType: contentType,
+    mediaJobId: payload.mediaJobId ? String(payload.mediaJobId).slice(0, 120) : null,
+  };
+}
+
 export function normalizePostText(content) {
   return String(content || '').replace(/\s+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 }
@@ -355,7 +377,53 @@ function mapTwitterError(error) {
   return out;
 }
 
-export async function postToTwitter(content) {
+// X accepts MP4 for video and PNG/JPG/GIF/WEBP for images. WebM (the Studio
+// render output) is NOT accepted — it must be transcoded to MP4 first (Phase B).
+const X_VIDEO_TYPES = new Set(['video/mp4']);
+const X_IMAGE_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']);
+
+// Fetch a paired asset and upload it to X, returning a media_id. Uses
+// twitter-api-v2's uploadMedia, which performs chunked INIT/APPEND/FINALIZE and
+// waits for X-side video processing on its own.
+async function uploadPostMedia(media) {
+  const mediaUrl = media?.mediaUrl ? String(media.mediaUrl) : null;
+  if (!mediaUrl) return null;
+
+  let mimeType = media?.mediaContentType ? String(media.mediaContentType).toLowerCase() : '';
+  const isVideoHint = (media?.mediaType === 'video') || mimeType.startsWith('video/');
+
+  // Guard the known format gap: WebM cannot be posted to X.
+  if (mimeType === 'video/webm' || (!mimeType && isVideoHint && /\.webm(\?|$)/i.test(mediaUrl))) {
+    const err = new Error('Attached video is WebM, which X does not accept. Transcode to MP4 (H.264/AAC) before posting.');
+    err.status = 422;
+    err.code = 'media-format-unsupported';
+    throw err;
+  }
+
+  const res = await fetch(mediaUrl);
+  if (!res.ok) {
+    const err = new Error(`Could not fetch attached media (HTTP ${res.status}).`);
+    err.status = 502;
+    throw err;
+  }
+  if (!mimeType) mimeType = String(res.headers.get('content-type') || '').toLowerCase().split(';')[0];
+  const buffer = Buffer.from(await res.arrayBuffer());
+
+  const isVideo = X_VIDEO_TYPES.has(mimeType);
+  const isImage = X_IMAGE_TYPES.has(mimeType);
+  if (!isVideo && !isImage) {
+    const err = new Error(`Attached media type "${mimeType || 'unknown'}" is not supported by X.`);
+    err.status = 422;
+    err.code = 'media-format-unsupported';
+    throw err;
+  }
+
+  // target: 'tweet' yields a media_id usable in a standard post.
+  const mediaId = await getTwitterClient().v1.uploadMedia(buffer, { mimeType, target: 'tweet' });
+  return mediaId || null;
+}
+
+export async function postToTwitter(content, media = null) {
   const text = normalizePostText(content);
   if (!text) {
     const err = new Error('Post content is required.');
@@ -368,17 +436,35 @@ export async function postToTwitter(content) {
     throw err;
   }
 
+  // Upload any paired asset first so we can attach its media_id to the tweet.
+  let mediaId = null;
+  if (media?.mediaUrl) {
+    mediaId = await uploadPostMedia(media);
+  }
+
   try {
     // Match the known-working source bot direct-post path: send the v2 Tweet
     // payload object explicitly instead of relying on the string overload.
-    const response = await getTwitterClient().v2.tweet({ text });
-    return { twitterId: response?.data?.id || null, response, apiVersion: 'v2' };
+    const payload = mediaId ? { text, media: { media_ids: [mediaId] } } : { text };
+    const response = await getTwitterClient().v2.tweet(payload);
+    return { twitterId: response?.data?.id || null, response, apiVersion: 'v2', mediaId };
   } catch (error) {
-    if (error?.code === 403 && error?.data?.reason === 'client-not-enrolled') {
+    // v1.1 fallback is text-only; a media post that fails v2 cannot downgrade.
+    if (!mediaId && error?.code === 403 && error?.data?.reason === 'client-not-enrolled') {
       return postViaV1Fallback(text, error);
     }
     throw mapTwitterError(error);
   }
+}
+
+// Pull the media descriptor off a stored post (null when text-only).
+function postMedia(post) {
+  if (!post?.mediaUrl) return null;
+  return {
+    mediaUrl: post.mediaUrl,
+    mediaType: post.mediaType || null,
+    mediaContentType: post.mediaContentType || null,
+  };
 }
 
 export async function createSocialPost(clientId, payload) {
@@ -396,6 +482,7 @@ export async function createSocialPost(clientId, payload) {
   }
 
   const status = payload.status || 'draft';
+  const media = extractMedia(payload);
   const post = {
     id: makeId(),
     clientId,
@@ -410,6 +497,12 @@ export async function createSocialPost(clientId, payload) {
     updatedAt: now,
     postedAt: null,
     agents: payload.agents || null,
+    // Optional paired asset (rendered Studio video / image). null = text-only.
+    mediaUrl: media.mediaUrl,
+    mediaType: media.mediaType,
+    mediaStoragePath: media.mediaStoragePath,
+    mediaContentType: media.mediaContentType,
+    mediaJobId: media.mediaJobId,
   };
 
   await writeSocialQueueForClient(clientId, (posts) => [post, ...posts]);
@@ -419,7 +512,7 @@ export async function createSocialPost(clientId, payload) {
 export async function postNow(clientId, payload) {
   const draft = await createSocialPost(clientId, { ...payload, status: 'posting' });
   try {
-    const result = await postToTwitter(draft.content);
+    const result = await postToTwitter(draft.content, postMedia(draft));
     const updated = {
       ...draft,
       status: 'posted',
@@ -459,6 +552,48 @@ export async function schedulePost(clientId, payload) {
   });
 }
 
+// Pair a rendered asset (Studio video / image) onto an existing post. Used when
+// a render finishes after the post draft already exists — e.g. a post is queued
+// for a render, the video lands, then gets attached here. Also flips the
+// mediaGenerator agent to a completed state for the card UI.
+export async function attachMediaToPost(clientId, postId, payload) {
+  if (!postId) {
+    const err = new Error('postId is required to attach media.');
+    err.status = 400;
+    throw err;
+  }
+  const media = extractMedia(payload);
+  if (!media.mediaUrl) {
+    const err = new Error('A mediaUrl is required to attach media.');
+    err.status = 400;
+    throw err;
+  }
+  let updated = null;
+  await writeSocialQueueForClient(clientId, (posts) => posts.map((post) => {
+    if (post.id !== postId) return post;
+    const agents = post.agents && typeof post.agents === 'object' ? { ...post.agents } : {};
+    agents.mediaGenerator = {
+      status: 'complete',
+      note: `Attached ${media.mediaType || 'media'} from Mockup Studio.`,
+      mediaUrl: media.mediaUrl,
+      jobId: media.mediaJobId || null,
+    };
+    updated = {
+      ...post,
+      ...media,
+      agents,
+      updatedAt: new Date().toISOString(),
+    };
+    return updated;
+  }));
+  if (!updated) {
+    const err = new Error('Post not found.');
+    err.status = 404;
+    throw err;
+  }
+  return updated;
+}
+
 export async function processDuePosts(clientId) {
   const due = (await readSocialQueue(clientId)).filter((post) => (
     ['scheduled', 'queued', 'failed'].includes(post.status)
@@ -470,7 +605,7 @@ export async function processDuePosts(clientId) {
 
   for (const post of due) {
     try {
-      const result = await postToTwitter(post.content);
+      const result = await postToTwitter(post.content, postMedia(post));
       const updated = {
         ...post,
         status: 'posted',

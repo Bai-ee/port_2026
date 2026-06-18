@@ -29,10 +29,20 @@ export async function GET(request) {
   try {
     let bootstrap = await getDashboardBootstrap({ uid: decoded.uid, email: decoded.email, request });
 
-    // Auto-create sample brief for admin if missing
+    // Auto-create a sample brief ONLY for the admin's OWN empty dashboard — never
+    // while impersonating another client (effectiveClientId would be theirs), and
+    // never when a real brief already exists (marketingBrief or scribe). Without
+    // these guards the seeder wrote a fake "Admin Dashboard" brief into whatever
+    // client the admin was viewing, clobbering real client data.
     const isAdmin = decoded.email === 'bryanballi@gmail.com';
-    if (isAdmin && bootstrap?.dashboardState && !bootstrap.dashboardState.scribe?.brief) {
-      const clientId = bootstrap.effectiveClientId || bootstrap.userProfile?.clientId;
+    if (
+      isAdmin
+      && !bootstrap?.impersonating
+      && bootstrap?.dashboardState
+      && !bootstrap.dashboardState.scribe?.brief
+      && !bootstrap.dashboardState.marketingBrief
+    ) {
+      const clientId = bootstrap.ownClientId || bootstrap.userProfile?.clientId;
       if (clientId) {
         const now = new Date().toISOString();
         const sampleBrief = {
