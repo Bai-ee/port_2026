@@ -570,6 +570,21 @@ export async function POST(request) {
     }
   }
 
+  // Narrow Creative Brief: generate the onboarding (Creative Brief) summary
+  // INLINE (awaited) before the run completes, so the cover paragraph is present
+  // the moment the brief becomes viewable — not a deferred after() that lands
+  // after the dashboard already rendered the brief (which then falls back to the
+  // run headline). Evidence is available: moduleBriefs are written above and the
+  // brand overview persists from the onboarding run.
+  if (claimedRun.trigger === 'creative-brief') {
+    try {
+      const { generateBriefSummaries } = await import('../../../../features/scout-intake/brief-summary-runner.mjs');
+      await generateBriefSummaries({ clientId, runId, briefTypes: ['onboarding'] });
+    } catch (err) {
+      console.warn(`[WORKER] creative-brief summary non-fatal failure for ${clientId}: ${err?.message}`);
+    }
+  }
+
   await completeRun(runId, clientId, pipelineResult);
   console.log(`[${new Date().toISOString()}] WORKER: run ${runId} succeeded for ${clientId}`);
 
@@ -577,14 +592,11 @@ export async function POST(request) {
   // the data behind every named brief, so regenerate all covers. Deferred:
   // reads dashboard_state AFTER completeRun's projection lands; failures only
   // mean the cover falls back to the run headline.
-  // scout-brief refreshes every cover; the narrow Creative Brief run regenerates
-  // only the onboarding (Creative Brief) summary.
-  if (pipelineType === 'scout-brief' || claimedRun.trigger === 'creative-brief') {
-    const summaryBriefTypes = claimedRun.trigger === 'creative-brief' ? ['onboarding'] : undefined;
+  if (pipelineType === 'scout-brief') {
     after(async () => {
       try {
         const { generateBriefSummaries } = await import('../../../../features/scout-intake/brief-summary-runner.mjs');
-        await generateBriefSummaries({ clientId, runId, ...(summaryBriefTypes ? { briefTypes: summaryBriefTypes } : {}) });
+        await generateBriefSummaries({ clientId, runId });
       } catch (err) {
         console.warn(`[WORKER] brief summaries non-fatal failure for ${clientId}: ${err?.message}`);
       }

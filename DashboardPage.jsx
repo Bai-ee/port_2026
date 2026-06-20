@@ -16203,6 +16203,15 @@ const dashboardCss = `
     text-overflow: clip;
     display: block;
   }
+  /* List rows: the row title is the .tile-heading (h3) — in the compact list view
+     it should read smaller + lighter than the full card heading (weight 700). */
+  .cap-list-row-main .tile-heading {
+    font-size: clamp(0.8rem, 1.1vw, 0.875rem);
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+    color: var(--text-display);
+  }
   /* List rows: hide footer buttons — the .cap-list-run circle delegates to the
      hidden RUN/Re-run button; row click opens modal */
   .cap-list-row-main .tile-foot-rerun-btn,
@@ -21164,6 +21173,8 @@ const dashboardCss = `
     #dashboard-source-cta-row { width: 100%; }
     #capability-section { padding-top: 0; }
     #capability-section-shell { grid-template-columns: 1fr; gap: 8px; }
+    /* DELIVERABLES drops from 3-across to 2-across at this breakpoint. */
+    .cap-bucket-deliverables .cap-step-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     #dashboard-source-cta-row { box-shadow: 0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4) !important; }
     #capability-nav-col { order: -1; position: static; flex-direction: row; flex-wrap: nowrap; overflow-x: visible; overflow-y: visible; gap: 0; justify-content: space-between; z-index: 10; padding-top: 8px; padding-bottom: 8px; }
     #dashboard-source-band { margin-bottom: 0; }
