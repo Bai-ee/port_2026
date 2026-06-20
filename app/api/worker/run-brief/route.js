@@ -179,10 +179,17 @@ export async function POST(request) {
       // Modular client — run only enabled modules instead of the full legacy pipeline.
       // moduleConfig presence is the signal that this is a post-Phase-A provisioned client.
       const { runModules } = getIntakePipeline();
-      const websiteUrl =
+      const { FALLBACK_BRIEF_SITE } = require('../../../../api/_lib/brief-fallback.cjs');
+      // ownSiteUrl = the client's real site (null for website-less signups).
+      // assetSiteUrl = the site visual assets render from — own site, else the
+      // run's fallback site (hitloop.agency templated). Brand/scout synthesis is
+      // gated on ownSiteUrl so fallback content never pollutes brand data.
+      const ownSiteUrl =
         clientConfig?.sourceInputs?.websiteUrl ||
         clientConfig?.websiteUrl ||
         null;
+      const assetSiteUrl = ownSiteUrl || claimedRun.sourceUrl || FALLBACK_BRIEF_SITE;
+      const websiteUrl = assetSiteUrl;
 
       const enabledModuleIds = Object.entries(clientConfig.moduleConfig)
         .filter(([, cfg]) => cfg?.enabled === true)
@@ -270,8 +277,10 @@ export async function POST(request) {
         console.warn(`[WORKER] moduleBriefs build non-fatal failure for ${clientId}: ${mbErr?.message}`);
       }
 
-      // Generate brand identity + snapshot.brandOverview after modules complete (non-fatal)
-      if (websiteUrl) {
+      // Generate brand identity + snapshot.brandOverview after modules complete
+      // (non-fatal). Gated on the client's OWN site — website-less signups skip
+      // this so the templated fallback site never seeds their brand data.
+      if (ownSiteUrl) {
         let evidence = null;
         let scoutConfigResult = null;
         try {
@@ -343,6 +352,31 @@ export async function POST(request) {
           } catch (boErr) {
             console.warn(`[WORKER] brandOverview synthesis non-fatal failure for ${clientId}: ${boErr?.message}`);
           }
+        }
+      }
+
+      // Studio motion mockup — render one cloud GPU video on onboarding so the
+      // Creative Brief embeds it (brief-preview reads dash.studioCaptures). Runs
+      // on first-run triggers only (signup/reseed); non-fatal and bounded so a
+      // slow or unconfigured render never fails the intake. Routine
+      // brief-refreshes skip it to avoid re-rendering the video every run.
+      if (websiteUrl && (claimedRun.trigger === 'signup' || claimedRun.trigger === 'reseed')) {
+        try {
+          const { renderAndStoreStudioVideo, buildLockedStudioRecipe } = require('../../../../api/_lib/studio-render-core.cjs');
+          await onProgress('studio-video', 'Rendering your motion mockup…');
+          const studioResult = await renderAndStoreStudioVideo({
+            clientId,
+            recipe: buildLockedStudioRecipe(websiteUrl),
+          });
+          if (studioResult.ok) {
+            console.log(`[WORKER] studio video rendered for ${clientId} — ${studioResult.capture?.storagePath}`);
+            await onProgress('studio-video', 'Motion mockup ready.');
+          } else {
+            console.warn(`[WORKER] studio video non-fatal failure for ${clientId}: ${studioResult.error}`);
+            await onProgress('studio-video', 'Motion mockup will retry on a later run.');
+          }
+        } catch (studioErr) {
+          console.warn(`[WORKER] studio video render threw (non-fatal) for ${clientId}: ${studioErr?.message}`);
         }
       }
 

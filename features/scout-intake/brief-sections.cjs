@@ -77,6 +77,42 @@ const BRIEF_SECTIONS = {
     agentLabel: 'Creative Director',
     card: 'style-guide',
   },
+  // Creative Brief (signup/first-run) asset sections. These render the proven
+  // launch assets only — the device mockup, full-page screenshots, and the
+  // studio motion mockup. The AI summary rides on the cover paragraph, so it
+  // is not a body section here.
+  'creative-mockup': {
+    title: 'Across Devices.',
+    kicker: 'Creative Director',
+    secNum: 'CM',
+    agent: 'content',
+    agentLabel: 'Creative Director',
+    card: 'multi-device-view',
+  },
+  'creative-screens': {
+    title: 'Full Page.',
+    kicker: 'Creative Director',
+    secNum: 'CS',
+    agent: 'content',
+    agentLabel: 'Creative Director',
+    card: 'multi-device-view',
+  },
+  'creative-social': {
+    title: 'Social Preview.',
+    kicker: 'Creative Director',
+    secNum: 'CP',
+    agent: 'content',
+    agentLabel: 'Creative Director',
+    card: 'social-preview',
+  },
+  'creative-studio': {
+    title: 'In Motion.',
+    kicker: 'Creative Director',
+    secNum: 'CV',
+    agent: 'content',
+    agentLabel: 'Creative Director',
+    card: 'mockup-studio',
+  },
   'search-parameters': {
     title: 'Search Parameters.',
     kicker: 'Knowledge Officer',
@@ -185,19 +221,21 @@ const BRIEF_COMPOSITIONS = {
     label: 'Executive Brief',
     sections: EXECUTIVE_SECTIONS,
   },
-  // The signup brief. Same content as the Executive Brief for now, but it is
-  // its own brief type — labeled and tracked as Onboarding everywhere
-  // (cover title, briefSummaries.onboarding, tier gate, analytics).
+  // The signup brief — the launch "Creative Brief". Renders only the proven
+  // render assets (device mockup, full-page screenshots, studio motion mockup);
+  // the AI summary rides on the cover. Distinct from the executive daily brief,
+  // which keeps the full EXECUTIVE_SECTIONS roll-up. Internal key stays
+  // 'onboarding' (render-time selection + briefSummaries.onboarding key it on).
   'onboarding': {
-    label: 'Onboarding Brief',
-    sections: EXECUTIVE_SECTIONS,
+    label: 'Creative Brief',
+    sections: ['creative-mockup', 'creative-screens', 'creative-social', 'creative-studio'],
   },
   'marketing-director': {
     label: 'Market Brief',
     sections: ['scout-found', 'market-signals', 'local-signals', 'viral-windows', 'watchlist', 'competitor-snapshot', 'local-weather'],
   },
   'creative-director': {
-    label: 'Creative Brief',
+    label: 'Creative Director Brief',
     sections: ['creative-system', 'todays-move'],
   },
   'social-media-manager': {

@@ -178,7 +178,7 @@ async function getEffectiveClientContext({ uid, email, request, requestedClientI
 }
 
 
-async function queueInitialBriefRun({ clientId, uid, websiteUrl }) {
+async function queueInitialBriefRun({ clientId, uid, websiteUrl, usesFallbackSite = false }) {
   const runRef = fb.adminDb.collection('brief_runs').doc();
   const now = fb.FieldValue.serverTimestamp();
 
@@ -200,7 +200,11 @@ async function queueInitialBriefRun({ clientId, uid, websiteUrl }) {
     artifactRefs: [],
     providerUsage: null,
     moduleSnapshot: null,
+    // sourceUrl drives asset generation (mockup/screenshots/studio). For
+    // website-less signups this is the templated fallback site; usesFallbackSite
+    // tells the worker to skip brand/scout synthesis from it.
     sourceUrl: websiteUrl,
+    usesFallbackSite,
     createdAt: now,
     updatedAt: now,
   };
@@ -408,12 +412,19 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
     console.warn('[provisionClientForUser] non-fatal: failed to update adminDashboards', adminWriteErr?.message);
   }
 
+  // Always queue the first Creative Brief run. With a website we render the
+  // client's own site; without one we fall back to the templated site so a
+  // website-less signup still gets a brief (assets are templated; brand data
+  // is not synthesized from the fallback — see worker usesFallbackSite gate).
+  const { FALLBACK_BRIEF_SITE } = require('./brief-fallback.cjs');
+  const usesFallbackSite = !normalized?.websiteUrl;
   let run = null;
-  if (normalized?.websiteUrl) {
+  {
     run = await queueInitialBriefRun({
       clientId,
       uid,
-      websiteUrl: normalized.websiteUrl,
+      websiteUrl: normalized?.websiteUrl || FALLBACK_BRIEF_SITE,
+      usesFallbackSite,
     });
 
     await Promise.all([

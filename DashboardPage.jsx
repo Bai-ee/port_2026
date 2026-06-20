@@ -2200,11 +2200,24 @@ const NON_ADMIN_UNLOCKED_CARD_IDS = new Set([
   // Knowledge Officer lead cards — browsable/runnable without admin.
   'audit-summary',
   'multi-device-view',
+  // DELIVERABLES bucket — the launch deliverable cards, open to new subscribers.
+  'onboarding-brief',
+  'social-preview',
+  'mockup-studio',
 ]);
 
-// Non-admin accounts can browse every nav bucket for descriptions. Individual
-// run/unlock actions stay gated at the card level.
-const NON_ADMIN_LOCKED_NAV_KEYS = new Set([]);
+// Launch onboarding gate: non-admins get only STAND UP (brief) and DELIVERABLES.
+// Every OTHER nav bucket is HIDDEN for them (admins still see all). Within
+// STAND UP only the active-brief tab (idx 0) is open — the Creative Brief shows
+// there; the other brief tabs lock. DELIVERABLES opens its cards tab. Admins
+// bypass all of it.
+const NON_ADMIN_LOCKED_NAV_KEYS = new Set(['knowledge', 'growth', 'content', 'social', 'website', 'automation', 'services', 'leadgen']);
+const NON_ADMIN_UNLOCKED_STEPS = { brief: new Set([0]), deliverables: new Set([0]) };
+function isCapStepLocked(bucket, idx, isAdmin) {
+  if (isAdmin) return false;
+  const allowed = NON_ADMIN_UNLOCKED_STEPS[bucket];
+  return allowed ? !allowed.has(idx) : false;
+}
 
 // Per-bucket workflow steps. Each step's `id` is the first card in its group;
 // the segmented control above the grid lets users jump to that anchor.
@@ -2226,6 +2239,11 @@ const CAP_STEPS = {
     { id: 'knowledge-overview', label: 'OVERVIEW', Icon: Eye },
     { id: 'survey-status', label: 'ONBOARD YOUR COMPANY', Icon: ClipboardList },
     { id: 'audit-summary', label: 'AUDIT YOUR KNOWLEDGE', Icon: Database },
+  ],
+  // DELIVERABLES bucket — the launch deliverable package. One tab grouping the
+  // Creative Brief, Multi-Device Mockup, Social Preview, and Studio cards.
+  deliverables: [
+    { id: 'onboarding-brief', label: 'DELIVERABLES', Icon: Eye },
   ],
   content: [
     { id: 'visual-dna', label: 'INTAKE YOUR REFERENCES', Icon: Images },
@@ -2251,6 +2269,7 @@ const CAP_STEPS = {
 // read as part of the same system.
 const CAP_BUCKET_COLOR = {
   brief: '#2a2420',
+  deliverables: '#14b8a6',
   knowledge: '#3b82f6',
   growth: '#10b981',
   content: '#14b8a6',
@@ -2886,9 +2905,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 
   // Default to Data Visualization immediately so a slow/unavailable bootstrap
   // cannot leave the nav and card shell hidden.
-  const [activeCapabilityFilter, setActiveCapabilityFilter] = useState('brief'); // default bucket: Daily Briefs
+  const [activeCapabilityFilter, setActiveCapabilityFilter] = useState('brief'); // default bucket: STAND UP (onboarding gate)
   const [activeStepIdx, setActiveStepIdx] = useState(0);
-  const [capView, setCapView] = useState('list'); // 'grid' | 'list' — default to table/line-items view
+  const [capView, setCapView] = useState('grid'); // 'grid' | 'list' — default to card (grid) view
   const [expandedListCards, setExpandedListCards] = useState(new Set());
   const toggleListCard = useCallback((id) => {
     setExpandedListCards((prev) => {
@@ -4452,6 +4471,15 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     deviceScreenshots.tablet ||
     deviceScreenshots.mobile ||
     null;
+  // Latest studio motion mockup video — feeds the Mockup Studio card's tile
+  // face (always shows the last render) and is also embedded in the brief.
+  const latestStudioVideoUrl = (() => {
+    const caps = Array.isArray(dashboardState?.studioCaptures) ? dashboardState.studioCaptures : [];
+    for (let i = caps.length - 1; i >= 0; i -= 1) {
+      if (caps[i]?.type === 'studio_video' && caps[i]?.downloadUrl) return caps[i].downloadUrl;
+    }
+    return null;
+  })();
   const clientStatus = dashboardState?.status || client?.status || null;
   // Prefer the live run status from brief_runs (polled every 4s) over the cached
   // dashboardState.latestRunStatus — the cached value is written as 'queued' at
@@ -6661,6 +6689,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       return {
         id: 'mockup-studio',
         category: 'content',
+        // Cross-listed into the DELIVERABLES bucket as the studio motion mockup.
+        extraCategories: ['deliverables'],
         number: 'MS',
         label: 'MOCKUP STUDIO',
         title: 'Mockup Studio',
@@ -6943,8 +6973,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     {
       id: 'social-preview',
       category: 'website',
-      // Cross-listed into Knowledge Officer (Social Media Share card), second slot.
-      extraCategories: ['knowledge'],
+      // Cross-listed into Knowledge Officer (Social Media Share card), second slot,
+      // and into the DELIVERABLES bucket as a first-deliverable asset.
+      extraCategories: ['knowledge', 'deliverables'],
       number: 'SP',
       label: 'SOCIAL PREVIEW',
       title: 'Social Preview Check',
@@ -7023,8 +7054,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       id: 'multi-device-view',
       category: 'website',
       // Cross-listed into Knowledge Officer so the full-screen device mocks sit
-      // second, right after Data Quality.
-      extraCategories: ['knowledge'],
+      // second, right after Data Quality, and into the DELIVERABLES bucket as a
+      // first-deliverable asset.
+      extraCategories: ['knowledge', 'deliverables'],
       number: 'MD',
       label: 'LAYOUT',
       // Knowledge Overview surfaces this card under a friendlier name; Website
@@ -7593,15 +7625,20 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       readinessBadge: hasDailyBriefData ? { tone: 'ok', label: 'Passed' } : null,
     },
     {
-      // Onboarding Brief — duplicated from the Executive Brief. A distinct
-      // iteration (will diverge from the executive brief); unlocked entry version.
+      // Creative Brief — the signup/first-run deliverable. Packages the proven
+      // render assets (device mockup, full-page screenshots, studio motion
+      // mockup) plus an AI summary. id stays 'onboarding-brief' (internal key;
+      // render-time selection + briefSummaries.onboarding still key on it).
       id: 'onboarding-brief',
       category: 'brief',
-      number: 'OB',
-      label: 'ONBOARDING BRIEF',
-      title: 'Onboarding Brief',
-      description: 'Creates the first overview of the dashboard findings so a new user knows what each area is starting from.',
-      placeholderLabel: 'RUN\nONBOARDING\nBRIEF',
+      // Lead card of the DELIVERABLES bucket; also lives in STAND UP (brief) as
+      // the active Creative Brief.
+      extraCategories: ['deliverables'],
+      number: 'CB',
+      label: 'CREATIVE BRIEF',
+      title: 'Creative Brief',
+      description: 'Packages your first creative deliverable — device mockup, full-page screenshots, a motion mockup, and an AI summary of what the site is starting from.',
+      placeholderLabel: 'RUN\nCREATIVE\nBRIEF',
       rows: [
         { key: 'ob-status', label: 'Status', value: marketingBriefStatus },
         { key: 'ob-focus', label: 'Scout focus', value: marketingBriefConfig?.sourceFocus || 'Not configured' },
@@ -8957,8 +8994,23 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               <div className="meta-row-source-body">
                 <div id="reseed-control-row">
                   <div id="dashboard-source-cta-row">
-                    {/* Grid view removed for now — line-items (list) is the only view. */}
+                    {/* Cards (grid) ↔ line-items (list) view selector. */}
                     <div className="cap-view-toggle cap-view-toggle--top" role="group" aria-label="Cards view toggle">
+                      <button
+                        type="button"
+                        title="Card view"
+                        aria-label="Card view"
+                        aria-pressed={capView === 'grid'}
+                        className={`cap-view-btn${capView === 'grid' ? ' is-active' : ''}`}
+                        onClick={() => setCapView('grid')}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                          <rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+                          <rect x="9" y="1.5" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+                          <rect x="1.5" y="9" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+                          <rect x="9" y="9" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+                        </svg>
+                      </button>
                       <button
                         type="button"
                         title="List view"
@@ -9239,6 +9291,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     // Knowledge Officer: Cross-Device Layouts, Data Coverage,
                     // Company Brain, Day-of Post lead; Market Category stays last.
                     const order = ['multi-device-view', 'social-preview', 'audit-summary', 'knowledge-base', 'priority-signal', 'survey-status', 'business-model', 'industry'];
+                    const ai = order.indexOf(a.id); const bi = order.indexOf(b.id);
+                    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+                  }
+                  if (activeCapabilityFilter === 'deliverables') {
+                    // DELIVERABLES: Creative Brief → mockup → social → studio.
+                    const order = ['onboarding-brief', 'multi-device-view', 'social-preview', 'mockup-studio'];
                     const ai = order.indexOf(a.id); const bi = order.indexOf(b.id);
                     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
                   }
@@ -9614,6 +9672,30 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         <span>Drag a document here, or click to attach</span>
                       </button>
                     </div>
+                  ) : card.id === 'onboarding-brief' && briefPreviewHtml ? (
+                    // Creative Brief card always shows the rendered Creative Brief.
+                    <iframe
+                      key={dashboardState?.latestRunId || 'creative-brief-preview'}
+                      className="tile-brief-preview"
+                      title="Creative Brief preview"
+                      srcDoc={briefPreviewHtml}
+                      sandbox="allow-same-origin"
+                    />
+                  ) : card.id === 'onboarding-brief' && briefPreviewLoading ? (
+                    <div className="tile-brief-preview-loading" role="status" aria-label="Loading Creative Brief">
+                      <div className="brief-loader-spinner" aria-hidden="true" />
+                    </div>
+                  ) : card.id === 'mockup-studio' && latestStudioVideoUrl ? (
+                    // Mockup Studio card always shows the last rendered video.
+                    <video
+                      key={latestStudioVideoUrl}
+                      className="tile-studio-video"
+                      src={latestStudioVideoUrl}
+                      autoPlay
+                      muted
+                      loop
+                      playsInline
+                    />
                   ) : (
                     <span className="tile-empty-label">{card.title || card.placeholderLabel}</span>
                   )}
@@ -9947,6 +10029,13 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               }
             }
 
+            // DELIVERABLES honors the Cards/line-items selector: capView 'grid'
+            // renders the tab's cards as tiles (card view), 'list' as line-item
+            // rows. Default is the card (grid) view.
+            if (_bucketSteps && activeCapabilityFilter === 'deliverables' && capView === 'grid') {
+              _groups.forEach((g) => { g.renderMode = 'grid'; });
+            }
+
             // Every bucket with workflow steps uses the tab system: one tab row,
             // only the active tab's group rendered, stretched full width.
             const _forceList = !!_bucketSteps;
@@ -9992,19 +10081,25 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               return (
                 <React.Fragment>
                   <div className={`segmented cap-step-seg cap-step-seg--top${_forceList ? ' cap-step-seg--tabs' : ''}`} role="tablist" aria-label="Workflow steps">
-                    {_bucketSteps.map((s, i) => (
+                    {_bucketSteps.map((s, i) => {
+                      const _stepLocked = isCapStepLocked(activeCapabilityFilter, i, isAdmin);
+                      return (
                       <button
                         key={s.id}
                         type="button"
                         role="tab"
                         aria-selected={i === activeStepIdx}
-                        className={i === activeStepIdx ? 'is-active' : ''}
-                        onClick={() => handleCapStepClick(i)}
+                        disabled={_stepLocked}
+                        className={`${i === activeStepIdx ? 'is-active' : ''}${_stepLocked ? ' cap-step--locked' : ''}`}
+                        onClick={() => { if (_stepLocked) return; handleCapStepClick(i); }}
                       >
-                        {s.Icon && <s.Icon className="cap-step-icon" size={18} strokeWidth={2} aria-hidden="true" style={{ color: CAP_BUCKET_COLOR[activeCapabilityFilter] || 'currentColor' }} />}
+                        {_stepLocked
+                          ? <Lock className="cap-step-icon" size={16} strokeWidth={2} aria-hidden="true" />
+                          : (s.Icon && <s.Icon className="cap-step-icon" size={18} strokeWidth={2} aria-hidden="true" style={{ color: CAP_BUCKET_COLOR[activeCapabilityFilter] || 'currentColor' }} />)}
                         <span className="cap-step-text">{s.label}</span>
                       </button>
-                    ))}
+                      );
+                    })}
                   </div>
                   <div className="cap-list-columns" style={{ gridTemplateColumns: `repeat(${_visibleGroups.length}, minmax(0, 1fr))` }}>
                     {_visibleGroups.map((g, gi) => (
@@ -10082,19 +10177,23 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                             // auto-sized to its content), not the card. Falls back to the card
                             // (with its Run button) when no brief has been generated yet.
                             if (activeCapabilityFilter === 'brief' && card.id === 'marketing-brief' && g.stepIdx === 0) {
-                              // A brief exists in dashboard state but its HTML is still
-                              // fetching — hold a quiet loading shell instead of flashing
-                              // the card UI and flipping to the iframe a beat later.
-                              const briefExpected = Boolean(bootstrap?.dashboardState?.marketingBrief);
-                              const briefRenderPending = briefExpected && (marketingBriefPreviewLoading || !marketingBriefPreviewSettled);
+                              // Most Recent Brief — the run-sequence-aware main render
+                              // (briefPreviewHtml) so a just-run Creative Brief (first run)
+                              // lands here; later runs show the Executive brief. Falls back
+                              // to the marketing render, then the card. A brief exists in
+                              // state but its HTML is still fetching → hold a quiet loading
+                              // shell instead of flashing the card UI.
+                              const recentBriefHtml = briefPreviewHtml || marketingBriefPreviewHtml;
+                              const briefExpected = Boolean(bootstrap?.dashboardState?.marketingBrief || bootstrap?.dashboardState?.scribe?.brief);
+                              const briefRenderPending = briefExpected && !recentBriefHtml && (briefPreviewLoading || marketingBriefPreviewLoading || !marketingBriefPreviewSettled);
                               return (
                                 <div key={card.id} className="cap-brief-full" id="daily-brief-featured-shell">
-                                  {marketingBriefPreviewHtml ? (
+                                  {recentBriefHtml ? (
                                     <iframe
-                                      key={marketingBrief?.generatedAtIso || 'recent-brief-full'}
+                                      key={dashboardState?.latestRunId || marketingBrief?.generatedAtIso || 'recent-brief-full'}
                                       className="cap-brief-full-frame"
-                                      title={(dashboardState?.modules?.['marketing-brief']?.lastRunId || dashboardState?.latestRunId) === onboardingRunId ? 'Onboarding Brief' : 'Executive Brief'}
-                                      srcDoc={marketingBriefPreviewHtml}
+                                      title={(dashboardState?.modules?.['marketing-brief']?.lastRunId || dashboardState?.latestRunId) === onboardingRunId ? 'Creative Brief' : 'Executive Brief'}
+                                      srcDoc={recentBriefHtml}
                                       sandbox="allow-same-origin allow-scripts"
                                     />
                                   ) : briefRenderPending ? (
@@ -10219,19 +10318,25 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               <div key={g.step ? g.step.id : `group-${gi}`} className="cap-step-group" data-step-idx={g.stepIdx}>
                 {_bucketSteps && (
                   <div className="segmented cap-step-seg" role="tablist" aria-label="Workflow steps">
-                    {_bucketSteps.map((s, i) => (
+                    {_bucketSteps.map((s, i) => {
+                      const _stepLocked = isCapStepLocked(activeCapabilityFilter, i, isAdmin);
+                      return (
                       <button
                         key={s.id}
                         type="button"
                         role="tab"
                         aria-selected={i === g.stepIdx}
-                        className={i === g.stepIdx ? 'is-active' : ''}
-                        onClick={() => handleCapStepClick(i)}
+                        disabled={_stepLocked}
+                        className={`${i === g.stepIdx ? 'is-active' : ''}${_stepLocked ? ' cap-step--locked' : ''}`}
+                        onClick={() => { if (_stepLocked) return; handleCapStepClick(i); }}
                       >
-                        {s.Icon && <s.Icon className="cap-step-icon" size={18} strokeWidth={2} aria-hidden="true" style={{ color: CAP_BUCKET_COLOR[activeCapabilityFilter] || 'currentColor' }} />}
+                        {_stepLocked
+                          ? <Lock className="cap-step-icon" size={16} strokeWidth={2} aria-hidden="true" />
+                          : (s.Icon && <s.Icon className="cap-step-icon" size={18} strokeWidth={2} aria-hidden="true" style={{ color: CAP_BUCKET_COLOR[activeCapabilityFilter] || 'currentColor' }} />)}
                         <span className="cap-step-text">{s.label}</span>
                       </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
                 <div className="cap-step-grid">{g.cards.map(_renderCard)}</div>
@@ -10245,17 +10350,23 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           <div id="capability-nav-col" data-tooltip-disabled="true">
             {[
               // { key: 'onboarding', label: 'Data Visualization',      sub: 'Capture & inspect',       icon: ClipboardList,         color: '#7b5fff' },
-              { key: 'brief',      label: 'Daily Briefs',            sub: 'Your full report',         icon: ChartColumnIncreasing, color: '#2a2420' },
+              { key: 'deliverables', label: 'Deliverables',          sub: 'Your creative package',    icon: Images,                 color: '#14b8a6' },
+              { key: 'brief',      label: 'Daily Stand Up',          sub: 'Your active brief',        icon: ChartColumnIncreasing, color: '#2a2420' },
               { key: 'knowledge',  label: 'Knowledge Officer',       sub: 'Custom data & context',    icon: BrainIcon,             color: '#3b82f6' },
               { key: 'growth',     label: 'Marketing Director',      sub: 'SEO, signals & growth',    icon: Settings2,             color: '#10b981' },
-              { key: 'content',    label: 'Design Team',              sub: 'Posts & platforms',        icon: Workflow,               color: '#14b8a6' },
+              { key: 'content',    label: 'Creative Team',            sub: 'Design production',        icon: Workflow,               color: '#14b8a6' },
               { key: 'social',     label: 'Social Media Manager',     sub: 'Schedule & publish',       icon: CalendarDays,          color: '#6366f1' },
               { key: 'website',    label: 'Website Developer',        sub: 'Speed & conversion',       icon: LaptopMinimalCheck,    color: '#0ea5e9' },
+              { key: 'leadgen',    label: 'Sales Team',               sub: 'Prospect pipeline',        icon: Radar,                 color: '#ff3b30' },
               { key: 'automation', label: 'Automation & Systems',    sub: 'Scale & automate',         icon: Database,              color: '#6366f1' },
-              { key: 'services',   label: 'Work With Me',            sub: 'Get it done',              icon: MessageSquareMore,     color: '#ec4899' },
-              { key: 'leadgen',    label: 'Sales',                    sub: 'Prospect pipeline',        icon: Radar,                 color: '#ff3b30' },
+              // 'Work With Me' (services) hidden from the nav.
+              // { key: 'services',   label: 'Work With Me',            sub: 'Get it done',              icon: MessageSquareMore,     color: '#ec4899' },
               ...(isAdmin ? [{ key: 'admin', label: 'Admin', sub: 'Email & system', icon: Send, color: '#a855f7' }] : []),
-            ].map(({ key, label, sub, icon: NavIcon, color }) => {
+            ]
+              // Non-admins see only their unlocked buckets (STAND UP, DELIVERABLES);
+              // the rest are HIDDEN, not shown locked. Admins see everything.
+              .filter(({ key }) => isAdmin || !NON_ADMIN_LOCKED_NAV_KEYS.has(key))
+              .map(({ key, label, sub, icon: NavIcon, color }) => {
               const isLocked = !isAdmin && NON_ADMIN_LOCKED_NAV_KEYS.has(key);
               return (
               <button
@@ -16675,6 +16786,15 @@ const dashboardCss = `
     height: 100%;
     object-fit: cover;
     object-position: center;
+  }
+  /* Mockup Studio card tile face — the last-run video, cover-filled. */
+  .tile-studio-video {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    pointer-events: none;
   }
   .tile-intake-mockup-wrap,
   .tile-brief-preview-wrap {

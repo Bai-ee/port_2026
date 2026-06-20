@@ -83,6 +83,33 @@ const SECTION_EVIDENCE = {
     return moduleLines(data, 'creative');
   },
 
+  // Creative Brief (onboarding) sections. The visual deliverables carry no text
+  // to summarize, so these evidence builders ground the cover paragraph in the
+  // client's business foundation and what the audit found about the site. The
+  // upsell framing comes from the onboarding tone, not from section data.
+  'creative-mockup'(data) {
+    const bo = data.company?.brandOverview || {};
+    const tone = data.company?.brandTone || {};
+    return [
+      line('Summary', bo.summary, 280),
+      line('Positioning', bo.positioning),
+      line('Industry', bo.industry, 80),
+      line('Business model', bo.businessModel, 80),
+      line('Target audience', bo.targetAudience),
+      line('Brand tone', [tone.primary, tone.secondary].filter(Boolean).join(' + '), 80),
+      ...moduleLines(data, 'creative').slice(0, 2),
+    ].filter(Boolean);
+  },
+  'creative-screens'(data) {
+    return moduleLines(data, 'performance').slice(0, 2);
+  },
+  'creative-social'(data) {
+    return arr(data.moduleBriefs)
+      .filter((b) => b.moduleId === 'social-preview' && b.status !== 'failed' && b.status !== 'missing')
+      .map((b) => line(b.title || 'Social preview', b.summaryLine, 200))
+      .filter(Boolean);
+  },
+
   'search-parameters'(data) {
     const rc = data.researchConfig || {};
     return [
@@ -252,7 +279,7 @@ function toneFor(briefType) {
   const TONES = {
     // 'executive-daily' is NOT here — it runs JARVIS mode (buildExecSystemPrompt).
     'onboarding':
-      'Warm, welcoming first-meeting voice. Open with exactly "Hello, thanks for signing up!" then continue conversationally with what you can already tell about their business ("I can tell..."). You just researched their company and you are excited to show them what you found. Speak directly as "you/your", plain language, no jargon, end with one encouraging next step.',
+      'Warm, confident handoff voice for the Creative Brief — the first creative baseline you built from their onboarding. Open with exactly "Hello, thanks for signing up!" then, in plain conversational language, do four things in order: (1) show you organized their inputs — their site/business context and onboarding answers; (2) hand over what is inside — a cross-device view of their site, a polished device mockup, a social share preview, and a short motion/video mockup; (3) make clear the value is a working baseline for how the brand looks, shares, and reads across screens, not just the visuals; (4) open the door to the highest-leverage next step — a stronger landing page, a clearer brand system, a social/launch content package, or a managed creative & growth engagement. Speak directly as "you/your", genuinely useful and not salesy, no jargon. If you do not have their own website yet, frame the package as a sample based on what they told you — never claim to have analyzed a site you did not see. End with one encouraging next step.',
     'marketing-director':
       'Sharp market-intelligence voice. Lead with the single biggest signal and why it matters right now; name names (competitors, accounts, trends).',
     'creative-director':

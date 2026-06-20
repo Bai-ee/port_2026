@@ -141,7 +141,7 @@ function hostnameOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return String(url); }
 }
 
-function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [], weather = null, moduleBriefs = [], auditMockupUrl = null, company = null, researchConfig = null, strategyData = null, signalsCore = [], socialQueue = [], briefType = DEFAULT_BRIEF_TYPE, coverSummary = null, previousRunAt = null, displayLabel = null }) {
+function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [], weather = null, moduleBriefs = [], auditMockupUrl = null, studioVideoUrl = null, socialPreviewImageUrl = null, company = null, researchConfig = null, strategyData = null, signalsCore = [], socialQueue = [], briefType = DEFAULT_BRIEF_TYPE, coverSummary = null, previousRunAt = null, displayLabel = null }) {
   const content = marketingBrief?.content || {};
   const agentData = marketingBrief?.scoutBrief?.agentData || {};
   const opportunities = agentData?.viralOpportunities?.opportunities || marketingBrief?.contentOpportunities || [];
@@ -160,16 +160,15 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   const tierLabel = tier === 'paid' ? 'Recurring · Paid' : 'One-time · Free';
   // The cover h1 uses the run date+time as the editorial mark — not the long
   // headline text (which lives in .sub / stat-rows below). Two small lines
-  // under the brief name: MM/DD/YY, then the time beneath it.
-  const mm = String(generatedDt.getMonth() + 1).padStart(2, '0');
-  const dd = String(generatedDt.getDate()).padStart(2, '0');
-  const yy = String(generatedDt.getFullYear()).slice(-2);
+  // under the brief name: MM/DD/YY, then the time beneath it. Pin to EST so the
+  // date/time read the same regardless of server timezone (Vercel runs UTC).
+  const BRIEF_TZ = 'America/New_York';
   const headlineDateLines = [
-    `${mm}/${dd}/${yy}`,
-    generatedDt.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit' }),
+    generatedDt.toLocaleDateString('en-US', { timeZone: BRIEF_TZ, month: '2-digit', day: '2-digit', year: '2-digit' }),
+    `${generatedDt.toLocaleString('en-US', { timeZone: BRIEF_TZ, hour: 'numeric', minute: '2-digit' })} EST`,
   ].map(esc).join('<br/>');
   const runTimestamp = generatedDt.toLocaleString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
+    timeZone: BRIEF_TZ, month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
   });
   const dateLine = when.replace(/-/g, ' · ');
   const brandUpper = String(clientName || 'BRIEF').toUpperCase();
@@ -650,6 +649,40 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     </div>
   </section>` : '';
 
+  // ── Creative Brief (signup/first-run) asset sections ──────────────────
+  // The launch deliverable shows only the proven render assets — homepage
+  // device mockup, full-page screenshots, and the studio motion mockup. The
+  // AI summary rides on the cover paragraph (coverSubHtml). Each section
+  // renders '' when its asset is absent so the brief degrades gracefully.
+  const creativeMockupSection = mockupSrc ? `
+  <section class="page">
+    <div class="sec-num">CM</div>
+    ${kicker('Creative Director')}
+    <h2 class="headline">Across<br/>Devices.</h2>
+    <div class="card" style="padding:0;overflow:hidden"><img src="${esc(mockupSrc)}" alt="Homepage rendered across devices" style="display:block;width:100%;height:auto"/></div>
+  </section>` : '';
+  const creativeScreensSection = screenshotStrip ? `
+  <section class="page">
+    <div class="sec-num">CS</div>
+    ${kicker('Creative Director')}
+    <h2 class="headline">Full<br/>Page.</h2>
+    ${screenshotStrip}
+  </section>` : '';
+  const creativeSocialSection = socialPreviewImageUrl ? `
+  <section class="page">
+    <div class="sec-num">CP</div>
+    ${kicker('Creative Director')}
+    <h2 class="headline">Social<br/>Preview.</h2>
+    <div class="card" style="padding:0;overflow:hidden"><img src="${esc(socialPreviewImageUrl)}" alt="Social share preview card" style="display:block;width:100%;height:auto"/></div>
+  </section>` : '';
+  const creativeStudioSection = studioVideoUrl ? `
+  <section class="page">
+    <div class="sec-num">CV</div>
+    ${kicker('Creative Director')}
+    <h2 class="headline">In<br/>Motion.</h2>
+    <div class="card" style="padding:0;overflow:hidden"><video src="${esc(studioVideoUrl)}" autoplay muted loop playsinline style="display:block;width:100%;height:auto"></video></div>
+  </section>` : '';
+
   // Watchlist — every configured account, name-for-name, with this run's activity.
   const watchlist = buildWatchlist(watchlistKols, agentData);
   const watchlistSection = watchlist.length ? `
@@ -778,6 +811,10 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     'company-foundation': companyBriefSection,
     'site-performance': performanceBriefSection,
     'creative-system': creativeBriefSection,
+    'creative-mockup': creativeMockupSection,
+    'creative-screens': creativeScreensSection,
+    'creative-social': creativeSocialSection,
+    'creative-studio': creativeStudioSection,
     'search-parameters': researchBriefSection,
     'local-weather': weatherSection,
     'market-signals': marketSignalsSection,
@@ -812,8 +849,11 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   // Executive + Onboarding briefs: render the multi-device mockup small in the
   // cover's top-right; the cover text narrows to the left half (CSS). DOM id
   // stays #onboarding-cover-mockup (introduced there first) — kept stable.
+  // Executive brief shows the mockup small in the cover top-right. The Creative
+  // Brief ('onboarding') no longer does — the mockup is a dedicated body
+  // section there (creative-mockup), so keep it off the cover to avoid a dup.
   const _mockupBriefType = resolveBriefType(briefType);
-  const isCoverMockup = (_mockupBriefType === 'onboarding' || _mockupBriefType === 'executive-daily') && Boolean(mockupSrc);
+  const isCoverMockup = (_mockupBriefType === 'executive-daily') && Boolean(mockupSrc);
 
   return `<!doctype html>
 <html lang="en">
@@ -1077,9 +1117,20 @@ async function handleGet(request) {
         completedAt: onboardingAnswers.completedAt || null,
       }
     : null;
+  // Latest studio motion mockup (user-recorded/cloud-rendered from the Studio
+  // card). Most-recent capture wins; absent on most first runs (the section
+  // renders '' then). Feeds the Creative Brief 'creative-studio' section.
+  const studioVideoUrl = (() => {
+    const caps = Array.isArray(dash.studioCaptures) ? dash.studioCaptures : [];
+    const vids = caps.filter((c) => c && c.type === 'studio_video' && c.downloadUrl);
+    return vids.length ? vids[vids.length - 1].downloadUrl : null;
+  })();
   const cardRollup = {
     moduleBriefs: dash.moduleBriefs?.items || [],
     auditMockupUrl: dash.artifacts?.homepageDeviceMockup?.downloadUrl || null,
+    studioVideoUrl,
+    // Social share preview (OG image) — feeds the Creative Brief social section.
+    socialPreviewImageUrl: dash.siteMeta?.ogImage || null,
     company: {
       brandOverview: dash.snapshot?.brandOverview || null,
       brandTone: dash.snapshot?.brandTone || null,
@@ -1107,7 +1158,7 @@ async function handleGet(request) {
   const onboardingRunId = bootstrap?.onboardingRunId || null;
   const isMainBrief = ['executive-daily', 'onboarding'].includes(resolveBriefType(briefType)) && !briefTypeParam;
   const isOnboardingRun = isMainBrief && (!onboardingRunId || renderedRunId === onboardingRunId);
-  const mainBriefLabel = isOnboardingRun ? 'Onboarding Brief' : 'Executive Brief';
+  const mainBriefLabel = isOnboardingRun ? 'Creative Brief' : 'Executive Brief';
 
   // ── Per-run brief archiving + ?runId= resolution ──────────────────────────
   // The brief CONTENT only lives in dashboard_state (latest run, overwritten
@@ -1182,7 +1233,10 @@ async function handleGet(request) {
     clientId,
     userEmail: bootstrap?.userProfile?.email || decoded?.email || null,
     tier: dash.tier || 'free',
-    briefType,
+    // First/main brief by run sequence renders the Creative Brief composition
+    // ('onboarding' = 3 asset sections); later main briefs keep executive-daily.
+    // Named briefs (?brief=) pass through unchanged.
+    briefType: (isMainBrief && isOnboardingRun) ? 'onboarding' : briefType,
     // Per-brief cover paragraph (dashboard_state.briefSummaries, written by
     // brief-summary-runner after each scout-brief run). Falls back to the
     // run-level headline inside the renderer when absent.
@@ -1264,3 +1318,6 @@ async function handleGet(request) {
 
   return htmlResponse(html);
 }
+
+// Exported for offline rendering scripts (e.g. scripts/render-creative-brief.mjs).
+export { renderMarketingBriefHtml };
