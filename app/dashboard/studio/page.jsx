@@ -2013,7 +2013,10 @@ export default function StudioPage() {
     return () => window.clearTimeout(timeout);
   }, [worldReady, loadedUrl, busy, dirRendering, user, generateCloudVideo]);
 
-  if (loading || !user) {
+  // While auth resolves, render nothing — no "Opening Studio" gate flash before
+  // the Studio mounts. Only block once fully resolved AND signed out.
+  if (loading) return null;
+  if (!user) {
     const loginHref = '/login?redirect=/dashboard/studio';
     return (
       <main style={{
@@ -2038,18 +2041,14 @@ export default function StudioPage() {
             Mockup Studio
           </span>
           <h1 style={{ margin: 0, fontSize: 24, lineHeight: 1.15, letterSpacing: 0 }}>
-            {loading ? 'Opening Studio' : 'Sign in to open Studio'}
+            Sign in to open Studio
           </h1>
           <p style={{ margin: 0, color: GLASS.inkSoft, fontSize: 14, lineHeight: 1.55 }}>
-            {loading
-              ? 'Checking your workspace access.'
-              : 'Video renders are attached to your client workspace, so Studio requires a signed-in account.'}
+            Video renders are attached to your client workspace, so Studio requires a signed-in account.
           </p>
-          {!loading ? (
-            <a href={loginHref} style={{ ...ui.navCta, textDecoration: 'none', margin: '0 auto' }}>
-              Sign in
-            </a>
-          ) : null}
+          <a href={loginHref} style={{ ...ui.navCta, textDecoration: 'none', margin: '0 auto' }}>
+            Sign in
+          </a>
         </section>
       </main>
     );

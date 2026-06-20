@@ -2204,15 +2204,14 @@ const NON_ADMIN_UNLOCKED_CARD_IDS = new Set([
   'onboarding-brief',
   'social-preview',
   'mockup-studio',
+  'style-guide',
 ]);
 
-// Launch onboarding gate: non-admins get only STAND UP (brief) and DELIVERABLES.
-// Every OTHER nav bucket is HIDDEN for them (admins still see all). Within
-// STAND UP only the active-brief tab (idx 0) is open — the Creative Brief shows
-// there; the other brief tabs lock. DELIVERABLES opens its cards tab. Admins
-// bypass all of it.
-const NON_ADMIN_LOCKED_NAV_KEYS = new Set(['knowledge', 'growth', 'content', 'social', 'website', 'automation', 'services', 'leadgen']);
-const NON_ADMIN_UNLOCKED_STEPS = { brief: new Set([0]), deliverables: new Set([0]) };
+// Launch onboarding gate: non-admins get only DELIVERABLES. Every other nav
+// bucket (incl. Daily Stand Up) is VISIBLE but disabled with a lock. Within
+// DELIVERABLES the cards tab (idx 0) is open. Admins bypass all of it.
+const NON_ADMIN_LOCKED_NAV_KEYS = new Set(['brief', 'knowledge', 'growth', 'content', 'social', 'website', 'automation', 'services', 'leadgen']);
+const NON_ADMIN_UNLOCKED_STEPS = { deliverables: new Set([0]) };
 function isCapStepLocked(bucket, idx, isAdmin) {
   if (isAdmin) return false;
   const allowed = NON_ADMIN_UNLOCKED_STEPS[bucket];
@@ -2905,7 +2904,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 
   // Default to Data Visualization immediately so a slow/unavailable bootstrap
   // cannot leave the nav and card shell hidden.
-  const [activeCapabilityFilter, setActiveCapabilityFilter] = useState('brief'); // default bucket: STAND UP (onboarding gate)
+  const [activeCapabilityFilter, setActiveCapabilityFilter] = useState('deliverables'); // default bucket: DELIVERABLES (onboarding gate)
   const [activeStepIdx, setActiveStepIdx] = useState(0);
   const [capView, setCapView] = useState('grid'); // 'grid' | 'list' — default to card (grid) view
   const [expandedListCards, setExpandedListCards] = useState(new Set());
@@ -2961,6 +2960,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // finishes and the brief HTML has loaded, the brief opens full-screen so a
   // new onboard lands on the deliverable instead of the bare card grid.
   const chainBriefRevealPendingRef = useRef(false);
+  // One-shot guard: the Creative Brief auto-opens full-screen + lands the user on
+  // the DELIVERABLES bucket the first time its HTML is ready, then stays closed so
+  // the user can navigate freely. Reopened on demand by clicking the brief card.
+  const autoOpenedBriefRef = useRef(false);
   const runWasActiveRef = useRef(false);
   const prevRunIdRef = useRef(null);
   const terminalOutputRef = useRef(null);
@@ -4372,7 +4375,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     if (!card) return;
     const forceModal = Boolean(options.forceModal);
     const modalCardId = forceModal ? `${card.id}__description` : card.id;
-    if (!forceModal && card.id === 'brief' && briefPreviewHtml) {
+    // Creative Brief cards (STAND UP 'brief' + DELIVERABLES 'onboarding-brief')
+    // open the full-screen brief view — only on this explicit card click; the
+    // dashboard no longer auto-opens it on load.
+    if (!forceModal && (card.id === 'brief' || card.id === 'onboarding-brief') && briefPreviewHtml) {
       setBriefFullScreen(true);
       return;
     }
@@ -5024,14 +5030,16 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     }
   }, [surveyResolved, latestRunStatus, completionCountdown, activeRunIsIntake, onboardingChainPending, currentRunIsOnboardingChain]);
 
-  // Land the new onboard on the deliverable: once the chain-success countdown
-  // has finished and the rendered brief HTML is in, open it full-screen.
+  // Land the new onboard on the DELIVERABLES bucket once the chain-success
+  // countdown finishes and the brief HTML is in. The brief is NEVER auto-opened
+  // full-screen — it only opens on an explicit Creative Brief card click.
   useEffect(() => {
     if (!chainBriefRevealPendingRef.current) return;
     if (completionCountdown !== null) return;
-    if (!briefPreviewHtml) return; // graceful: no render → user lands on the grid
+    if (!briefPreviewHtml) return;
     chainBriefRevealPendingRef.current = false;
-    setBriefFullScreen(true);
+    autoOpenedBriefRef.current = true;
+    setActiveCapabilityFilter('deliverables');
   }, [completionCountdown, briefPreviewHtml]);
 
   // When a new brief_run starts (run ID changes from a prior non-null value),
@@ -6372,6 +6380,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     {
       id: 'audit-summary',
       category: 'knowledge',
+      // Also surfaced in the DELIVERABLES bucket as Data Coverage.
+      extraCategories: ['deliverables'],
       number: 'DQ',
       label: 'DATA QUALITY',
       title: 'Data Coverage',
@@ -6722,6 +6732,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     {
       id: 'style-guide',
       category: 'content',
+      // Also surfaced in the DELIVERABLES bucket as the Style Guide / Visual Audit.
+      extraCategories: ['deliverables'],
       number: 'BS',
       label: 'BRAND SNAPSHOT',
       title: 'Visual Audit',
@@ -9175,7 +9187,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           {/* Hold render until the initial capability filter is resolved so the
               nav pills + grid don't flash 'brief' before correcting to
               'onboarding' for modular clients. */}
-          <div id="capability-section-shell" className={capView === 'list' ? 'cap-view-list' : ''} style={{ visibility: activeCapabilityFilter ? 'visible' : 'hidden' }}>
+          <div id="capability-section-shell" className={`${capView === 'list' ? 'cap-view-list' : ''}${activeCapabilityFilter ? ` cap-bucket-${activeCapabilityFilter}` : ''}`.trim()} style={{ visibility: activeCapabilityFilter ? 'visible' : 'hidden' }}>
 
           {/* Left — grid */}
           <div id="capability-grid-col">
@@ -9295,8 +9307,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
                   }
                   if (activeCapabilityFilter === 'deliverables') {
-                    // DELIVERABLES: Creative Brief → mockup → social → studio.
-                    const order = ['onboarding-brief', 'multi-device-view', 'social-preview', 'mockup-studio'];
+                    // DELIVERABLES: Creative Brief → cross-device → studio → social → data coverage → style guide.
+                    const order = ['onboarding-brief', 'multi-device-view', 'mockup-studio', 'social-preview', 'audit-summary', 'style-guide'];
                     const ai = order.indexOf(a.id); const bi = order.indexOf(b.id);
                     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
                   }
@@ -9869,6 +9881,22 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                           UNLOCK
                         </button>
                       );
+                      // Non-admins can view deliverables but not run them: every
+                      // action button reads "Re-run" with a lock on the right and
+                      // is fully inert (no hover, no click).
+                      if (!isAdmin) return (
+                        <button
+                          type="button"
+                          id={`tile-${card.id}-rerun-btn`}
+                          className="tile-foot-rerun-btn tile-foot-rerun-btn--locked"
+                          disabled
+                          aria-disabled="true"
+                          tabIndex={-1}
+                          style={{ pointerEvents: 'none' }}
+                        >
+                          Re-run <Lock size={12} strokeWidth={2} aria-hidden="true" style={{ marginLeft: 4, verticalAlign: 'middle' }} />
+                        </button>
+                      );
                       if (card.id === 'survey-status') return null;
                       if (!card.moduleControls) {
                         if (!card.footerAction) return null;
@@ -9977,8 +10005,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     })()}
                     <button
                       type="button"
-                      className="tile-view-details-btn"
-                      onClick={(e) => {
+                      className={`tile-view-details-btn${!isAdmin ? ' tile-view-details-btn--locked' : ''}`}
+                      disabled={!isAdmin}
+                      aria-disabled={!isAdmin || undefined}
+                      tabIndex={!isAdmin ? -1 : undefined}
+                      style={!isAdmin ? { pointerEvents: 'none' } : undefined}
+                      onClick={!isAdmin ? undefined : (e) => {
                         e.stopPropagation();
                         openCapabilityCard(
                           isLocked || isInactiveUnlocked ? { ...card, description: readableDescription } : card,
@@ -9986,7 +10018,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         );
                       }}
                     >
-                        Details ↗
+                        Details ↗{!isAdmin && <Lock size={11} strokeWidth={2} aria-hidden="true" style={{ marginLeft: 4, verticalAlign: 'middle' }} />}
                     </button>
                   </span>
                 </div>
@@ -10197,7 +10229,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                       sandbox="allow-same-origin allow-scripts"
                                     />
                                   ) : briefRenderPending ? (
-                                    <div className="cap-brief-full-loading" role="status" aria-label="Loading daily brief">
+                                    <div className="cap-brief-full-loading" role="status" aria-label="Loading daily brief" data-tooltip-disabled="true">
                                       <div className="brief-loader-spinner" aria-hidden="true" />
                                     </div>
                                   ) : briefExpected ? (
@@ -10363,9 +10395,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               // { key: 'services',   label: 'Work With Me',            sub: 'Get it done',              icon: MessageSquareMore,     color: '#ec4899' },
               ...(isAdmin ? [{ key: 'admin', label: 'Admin', sub: 'Email & system', icon: Send, color: '#a855f7' }] : []),
             ]
-              // Non-admins see only their unlocked buckets (STAND UP, DELIVERABLES);
-              // the rest are HIDDEN, not shown locked. Admins see everything.
-              .filter(({ key }) => isAdmin || !NON_ADMIN_LOCKED_NAV_KEYS.has(key))
+              // Non-admins SEE every bucket but locked ones are disabled (not
+              // clickable), shown with a lock on the right. Admins have full access.
               .map(({ key, label, sub, icon: NavIcon, color }) => {
               const isLocked = !isAdmin && NON_ADMIN_LOCKED_NAV_KEYS.has(key);
               return (
@@ -15662,6 +15693,10 @@ const dashboardCss = `
     grid-auto-rows: auto;
     gap: 1px;
     background: rgba(42, 36, 32, 0.1);
+  }
+  /* DELIVERABLES bucket — 3 cards across instead of 2. */
+  .cap-bucket-deliverables .cap-step-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .cap-step-group:not(:has(.cap-step-seg)) .cap-step-grid {
     background: transparent;

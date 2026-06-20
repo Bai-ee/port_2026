@@ -627,6 +627,13 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     </div>` : '';
   const mockupSrc = deviceBrief?.mockupUrl || auditItems.find((b) => b.mockupUrl)?.mockupUrl || auditMockupUrl || null;
 
+  // Both the Executive and Creative Brief ('onboarding') show the device mockup
+  // small in the cover top-right. When it rides the cover, the Creative Brief's
+  // dedicated body mockup section is suppressed so it isn't shown twice (the
+  // section stays in the composition for summary evidence).
+  const _mockupBriefTypeEarly = resolveBriefType(briefType);
+  const isCoverMockup = (_mockupBriefTypeEarly === 'executive-daily' || _mockupBriefTypeEarly === 'onboarding') && Boolean(mockupSrc);
+
   const performanceBriefSection = perfItems.length ? `
   <section class="page">
     <div class="sec-num">PB</div>
@@ -654,7 +661,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   // device mockup, full-page screenshots, and the studio motion mockup. The
   // AI summary rides on the cover paragraph (coverSubHtml). Each section
   // renders '' when its asset is absent so the brief degrades gracefully.
-  const creativeMockupSection = mockupSrc ? `
+  const creativeMockupSection = (mockupSrc && !isCoverMockup) ? `
   <section class="page">
     <div class="sec-num">CM</div>
     ${kicker('Creative Director')}
@@ -846,14 +853,10 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     ? `<div class="sub cover-jarvis-sub" id="brief-cover-exec-summary">${coverParas.map((p) => `<p>${esc(p)}</p>`).join('')}</div>`
     : `<p class="sub">${esc(coverParas[0] || headline)}</p>`;
 
-  // Executive + Onboarding briefs: render the multi-device mockup small in the
-  // cover's top-right; the cover text narrows to the left half (CSS). DOM id
-  // stays #onboarding-cover-mockup (introduced there first) — kept stable.
-  // Executive brief shows the mockup small in the cover top-right. The Creative
-  // Brief ('onboarding') no longer does — the mockup is a dedicated body
-  // section there (creative-mockup), so keep it off the cover to avoid a dup.
-  const _mockupBriefType = resolveBriefType(briefType);
-  const isCoverMockup = (_mockupBriefType === 'executive-daily') && Boolean(mockupSrc);
+  // Executive + Creative ('onboarding') briefs render the multi-device mockup
+  // small in the cover's top-right; the cover text narrows to the left half
+  // (CSS). DOM id stays #onboarding-cover-mockup. isCoverMockup is computed
+  // near mockupSrc above (it also gates the redundant body mockup section).
 
   return `<!doctype html>
 <html lang="en">
