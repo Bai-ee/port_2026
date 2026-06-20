@@ -3790,6 +3790,36 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     }
   }, [user, marketingBriefRunning, saveMarketingBriefConfig, apiPath, doBootstrap]);
 
+  // Creative Brief = the NARROW onboarding run: only the deliverable assets +
+  // the onboarding summary (no SEO/agent-readiness/design-eval, no scout-brief
+  // market-intel chain). Hits the dedicated creative-brief endpoint.
+  const runCreativeBrief = useCallback(async () => {
+    if (!user || marketingBriefRunning) return;
+    setMarketingBriefRunning(true);
+    setMarketingBriefError('');
+    setIntakeModalDismissed(false);
+    let pollHandle = null;
+    const kickBootstrap = () => { try { doBootstrap(); } catch {} };
+    setTimeout(kickBootstrap, 400);
+    pollHandle = setInterval(kickBootstrap, 2000);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(apiPath('/api/dashboard/creative-brief/run'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Creative brief run failed.');
+      doBootstrap();
+    } catch (err) {
+      setMarketingBriefError(err instanceof Error ? err.message : 'Creative brief run failed.');
+    } finally {
+      if (pollHandle) clearInterval(pollHandle);
+      setMarketingBriefRunning(false);
+    }
+  }, [user, marketingBriefRunning, apiPath, doBootstrap]);
+
   const digestConversation = useCallback(async () => {
     if (!user || conversationIntakeRunning) return;
     const rawText = conversationIntakeText.trim();
@@ -7663,7 +7693,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       footerAction: {
         label: marketingBriefRunning ? '…' : hasMarketingBriefData ? 'Re-run' : 'Run Brief',
         loading: marketingBriefRunning || marketingBriefSaving,
-        onClick: runMarketingBrief,
+        onClick: runCreativeBrief,
       },
       readinessBadge: hasDailyBriefData ? { tone: 'ok', label: 'Passed' } : null,
     },
@@ -8657,6 +8687,26 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               : 'Next step ready',
         };
       }
+      if (card.id === 'mockup-studio') {
+        // A rendered studio video means the card succeeded — show Passed
+        // regardless of any analyzer signal.
+        const hasStudioVideo = Array.isArray(dashboardState?.studioCaptures)
+          && dashboardState.studioCaptures.some((c) => c?.type === 'studio_video' && c?.downloadUrl);
+        if (hasStudioVideo) return { tone: 'ok', label: 'Passed' };
+      }
+      if (card.id === 'onboarding-brief') {
+        // Creative Brief is Active/Passed once all its required deliverables have
+        // returned data: device mockup, full-page screenshots, motion (studio)
+        // video, and the AI summary.
+        const cbMockup = Boolean(dashboardState?.artifacts?.homepageDeviceMockup?.downloadUrl);
+        const cbFp = dashboardState?.artifacts?.fullPageScreenshots || {};
+        const cbScreens = Boolean(cbFp['desktop-full']?.downloadUrl || cbFp['tablet-full']?.downloadUrl || cbFp['mobile-full']?.downloadUrl)
+          || Boolean(dashboardState?.artifacts?.homepageScreenshots?.desktop?.downloadUrl);
+        const cbVideo = Array.isArray(dashboardState?.studioCaptures)
+          && dashboardState.studioCaptures.some((c) => c?.type === 'studio_video' && c?.downloadUrl);
+        const cbSummary = Boolean(dashboardState?.briefSummaries?.onboarding?.summary);
+        if (cbMockup && cbScreens && cbVideo && cbSummary) return { tone: 'ok', label: 'Passed' };
+      }
       if (!analyzer?.readiness) return null;
       return {
         tone: analyzer.readiness,
@@ -9429,7 +9479,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 }}
               >
                 <div className="tile-number">
-                  <span className="tile-header-label">{card.title}</span>
+                  <h3 className="tile-heading tile-intake-heading">{card.title}</h3>
                   {isCompanyBrain && (
                     <button
                       type="button"
@@ -9714,7 +9764,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 </div>
                 )}
                 <div className="tile-intake-body">
-                  <h3 className="tile-heading tile-intake-heading">{card.title}</h3>
                   {card.category !== 'services' && (
                     <span className="tile-intake-source-line">
                       Generated {(() => {
@@ -9847,7 +9896,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       }
                       return (
                         <>
-                          <span className={`power-dot lamp${!['Live', 'Feeding brief'].includes(card.footerLeft) ? ' power-dot-needs-work' : ''}`} />
+                          <span className={`power-dot lamp${!['Live', 'Feeding brief', 'Video ready'].includes(card.footerLeft) ? ' power-dot-needs-work' : ''}`} />
                           {card.footerRight}
                         </>
                       );
@@ -14872,7 +14921,8 @@ const dashboardCss = `
     z-index: 1;
     max-width: 1440px;
     margin: 0 auto;
-    padding: 116px 48px 96px;
+    /* padding-top matches the fixed nav height (#founders-top-strip min-height 64px). */
+    padding: 64px 48px 96px;
     background-image:
       linear-gradient(180deg, rgba(245, 241, 223, 0.08), rgba(245, 241, 223, 0.04)),
       radial-gradient(circle, var(--dot-grid-color) 0.8px, transparent 0.8px);
@@ -21109,7 +21159,7 @@ const dashboardCss = `
     #founders-hero-shell { grid-template-columns: 1fr; gap: 32px; }
   }
   @media (max-width: 900px) {
-    #founders-shell { padding: 104px 24px 64px; }
+    #founders-shell { padding: 64px 24px 64px; } /* padding-top = nav height (64px) */
     #founders-top-strip-inner { padding: 0 24px; }
     #dashboard-source-cta-row { width: 100%; }
     #capability-section { padding-top: 0; }

@@ -207,7 +207,13 @@ export async function POST(request) {
 
       let moduleIdsToRun = enabledModuleIds;
       let reusedResults = [];
-      if (claimedRun.trigger === 'brief-refresh') {
+      if (claimedRun.trigger === 'creative-brief') {
+        // Narrow Creative Brief run — only the deliverable asset modules. No
+        // SEO / agent-readiness / design-eval, no brand/scout synthesis, and no
+        // scout-brief chain. The studio video renders and the onboarding summary
+        // is regenerated below.
+        moduleIdsToRun = ['multi-device-view', 'social-preview'];
+      } else if (claimedRun.trigger === 'brief-refresh') {
         let storedModules = {};
         try {
           const dashSnap = await _fb.adminDb.collection('dashboard_state').doc(clientId).get();
@@ -279,8 +285,9 @@ export async function POST(request) {
 
       // Generate brand identity + snapshot.brandOverview after modules complete
       // (non-fatal). Gated on the client's OWN site — website-less signups skip
-      // this so the templated fallback site never seeds their brand data.
-      if (ownSiteUrl) {
+      // this so the templated fallback site never seeds their brand data. The
+      // narrow Creative Brief run also skips it (it reuses existing brand data).
+      if (ownSiteUrl && claimedRun.trigger !== 'creative-brief') {
         let evidence = null;
         let scoutConfigResult = null;
         try {
@@ -360,7 +367,7 @@ export async function POST(request) {
       // on first-run triggers only (signup/reseed); non-fatal and bounded so a
       // slow or unconfigured render never fails the intake. Routine
       // brief-refreshes skip it to avoid re-rendering the video every run.
-      if (websiteUrl && (claimedRun.trigger === 'signup' || claimedRun.trigger === 'reseed')) {
+      if (websiteUrl && (claimedRun.trigger === 'signup' || claimedRun.trigger === 'reseed' || claimedRun.trigger === 'creative-brief')) {
         try {
           const { renderAndStoreStudioVideo, buildLockedStudioRecipe } = require('../../../../api/_lib/studio-render-core.cjs');
           await onProgress('studio-video', 'Rendering your motion mockup…');
@@ -570,11 +577,14 @@ export async function POST(request) {
   // the data behind every named brief, so regenerate all covers. Deferred:
   // reads dashboard_state AFTER completeRun's projection lands; failures only
   // mean the cover falls back to the run headline.
-  if (pipelineType === 'scout-brief') {
+  // scout-brief refreshes every cover; the narrow Creative Brief run regenerates
+  // only the onboarding (Creative Brief) summary.
+  if (pipelineType === 'scout-brief' || claimedRun.trigger === 'creative-brief') {
+    const summaryBriefTypes = claimedRun.trigger === 'creative-brief' ? ['onboarding'] : undefined;
     after(async () => {
       try {
         const { generateBriefSummaries } = await import('../../../../features/scout-intake/brief-summary-runner.mjs');
-        await generateBriefSummaries({ clientId, runId });
+        await generateBriefSummaries({ clientId, runId, ...(summaryBriefTypes ? { briefTypes: summaryBriefTypes } : {}) });
       } catch (err) {
         console.warn(`[WORKER] brief summaries non-fatal failure for ${clientId}: ${err?.message}`);
       }
