@@ -632,6 +632,9 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   // dedicated body mockup section is suppressed so it isn't shown twice (the
   // section stays in the composition for summary evidence).
   const _mockupBriefTypeEarly = resolveBriefType(briefType);
+  // Both Executive and Creative ('onboarding') keep the device mockup in the
+  // cover's top-right corner. The Creative Brief ALSO leads with a hero asset +
+  // inline evidence inside the story.
   const isCoverMockup = (_mockupBriefTypeEarly === 'executive-daily' || _mockupBriefTypeEarly === 'onboarding') && Boolean(mockupSrc);
 
   const performanceBriefSection = perfItems.length ? `
@@ -656,39 +659,15 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     </div>
   </section>` : '';
 
-  // ── Creative Brief (signup/first-run) asset sections ──────────────────
-  // The launch deliverable shows only the proven render assets — homepage
-  // device mockup, full-page screenshots, and the studio motion mockup. The
-  // AI summary rides on the cover paragraph (coverSubHtml). Each section
-  // renders '' when its asset is absent so the brief degrades gracefully.
-  const creativeMockupSection = (mockupSrc && !isCoverMockup) ? `
-  <section class="page">
-    <div class="sec-num">CM</div>
-    ${kicker('Creative Director')}
-    <h2 class="headline">Across<br/>Devices.</h2>
-    <div class="card" style="padding:0;overflow:hidden"><img src="${esc(mockupSrc)}" alt="Homepage rendered across devices" style="display:block;width:100%;height:auto"/></div>
-  </section>` : '';
-  const creativeScreensSection = screenshotStrip ? `
-  <section class="page">
-    <div class="sec-num">CS</div>
-    ${kicker('Creative Director')}
-    <h2 class="headline">Full<br/>Page.</h2>
-    ${screenshotStrip}
-  </section>` : '';
-  const creativeSocialSection = socialPreviewImageUrl ? `
-  <section class="page">
-    <div class="sec-num">CP</div>
-    ${kicker('Creative Director')}
-    <h2 class="headline">Social<br/>Preview.</h2>
-    <div class="card" style="padding:0;overflow:hidden"><img src="${esc(socialPreviewImageUrl)}" alt="Social share preview card" style="display:block;width:100%;height:auto"/></div>
-  </section>` : '';
-  const creativeStudioSection = studioVideoUrl ? `
-  <section class="page">
-    <div class="sec-num">CV</div>
-    ${kicker('Creative Director')}
-    <h2 class="headline">In<br/>Motion.</h2>
-    <div class="card" style="padding:0;overflow:hidden"><video src="${esc(studioVideoUrl)}" autoplay muted loop playsinline style="display:block;width:100%;height:auto"></video></div>
-  </section>` : '';
+  // ── Creative Brief assets ─────────────────────────────────────────────
+  // The render assets (device mockup, full-page screenshots, social preview,
+  // studio video) are no longer standalone bottom pages — they're used as a
+  // HERO at the top and inline evidence/hooks INSIDE the story (built in
+  // buildCreativeBrief below). So the composition sections render nothing.
+  const creativeMockupSection = '';
+  const creativeScreensSection = '';
+  const creativeSocialSection = '';
+  const creativeStudioSection = '';
 
   // Watchlist — every configured account, name-for-name, with this run's activity.
   const watchlist = buildWatchlist(watchlistKols, agentData);
@@ -849,7 +828,152 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     .replace(/^here'?s what matters[.!:]*\s*/i, '')
     .split(/\n+/).map((s) => s.trim()).filter(Boolean)
     .map((p, i) => (i === 0 && p ? p.charAt(0).toUpperCase() + p.slice(1) : p));
-  const coverSubHtml = coverParas.length > 1
+
+  // Creative Brief ('onboarding'): the summary is a labeled, structured website
+  // analysis (Objective / Audience / Core Message / Creative Direction /
+  // Deliverables / Success / Decision Needed). Render it as styled sections —
+  // eyebrow label + body paragraph(s) or bullet list — with varying type scale
+  // and smooth vertical rhythm, instead of flat paragraphs.
+  const CB_LABELS = ['Headline', 'What This Site Is', "What's Missing", 'Biggest Risk', 'The Opportunity', 'Decision'];
+  const renderCreativeBriefSummary = (textRaw) => {
+    const sections = [];
+    let cur = null;
+    // No dashes anywhere: em/en dashes become commas; leading bullet markers
+    // are stripped (rendered as tiles/tags, never as "- ").
+    const noDash = (s) => String(s).replace(/\s*[—–]\s*/g, ', ').replace(/\s+,/g, ',').replace(/,\s*,/g, ',').trim();
+    for (const raw of String(textRaw || '').split('\n')) {
+      const t = raw.trim();
+      if (!t) continue;
+      const low = t.toLowerCase().replace(/^[-•*\s]+/, '');
+      const matched = CB_LABELS.find((L) => low === `${L.toLowerCase()}:` || low === L.toLowerCase() || low.startsWith(`${L.toLowerCase()}:`));
+      if (matched) {
+        cur = { label: matched, paras: [], bullets: [] };
+        sections.push(cur);
+        const after = noDash(t.slice(t.indexOf(':') + 1).trim());
+        if (after && after !== ':') cur.paras.push(after);
+        continue;
+      }
+      if (!cur) { cur = { label: '', paras: [], bullets: [] }; sections.push(cur); }
+      if (/^[-•*]\s+/.test(t)) cur.bullets.push(noDash(t.replace(/^[-•*]\s+/, '')));
+      else cur.paras.push(noDash(t));
+    }
+    if (!sections.length || !sections.some((s) => s.label)) return null;
+    const byLabel = (L) => sections.find((s) => s.label === L);
+    const subFrom = (paras) => paras.map((p) => `<p class="sub">${esc(p)}</p>`).join('');
+    const tilesFrom = (items, opts = {}) => items.length
+      ? `<div class="bento">${items.map((t) => bTile({ span: 's2', word: t, lite: true, ...opts })).join('')}</div>`
+      : '';
+    let n = 0;
+    const page = (title, inner) => {
+      const num = String((n += 1)).padStart(2, '0');
+      return `
+  <section class="page cb-page">
+    <div class="sec-num">${num}</div>
+    <div class="cb-deco" aria-hidden="true"></div>
+    <div class="cb-pg-eyebrow"><span class="dot"></span><span>Creative Brief</span><span class="idx">${num}</span></div>
+    <h2 class="headline">${title}</h2>
+    <div class="rule"></div>
+    ${inner}
+  </section>`;
+    };
+    const pages = [];
+    // Per-section content components — each page gets a distinct visual form.
+    const longParas = (s) => s.paras.filter((p) => p.length > 64);
+    const shortParas = (s) => s.paras.filter((p) => p.length <= 64);
+    const pull = (text) => `<p class="pull">${esc(text)}</p>`;
+    const flowNodes = (items) => `<div class="flow">${items.map((it, i) => `<div class="node"><div class="n">${String(i + 1).padStart(2, '0')}</div><div class="t">${esc(it.t)}</div>${it.p ? `<p>${esc(it.p)}</p>` : ''}</div>`).join('')}</div>`;
+    const gapList = (items) => `<div class="cb-gaps">${items.map((g, i) => `<div class="cb-gap"><span class="cb-gap-n">${String(i + 1).padStart(2, '0')}</span><span class="cb-gap-t">${esc(g)}</span></div>`).join('')}</div>`;
+    const metaTiles = (items) => `<div class="meta-grid">${items.map((t) => `<div class="meta-tile"><div class="v">${esc(t)}</div></div>`).join('')}</div>`;
+    const tagRow = (items) => items.length ? `<div class="cb-tags">${items.map((t) => `<span class="cb-tag">${esc(t)}</span>`).join('')}</div>` : '';
+    // Assets as inline evidence with a clear Download + Contact CTA on each, so
+    // every deliverable connects to "get the file" and "talk to a human".
+    const ok = (u) => u && /^https?:\/\/\S+$/i.test(u);
+    const CONTACT_URL = 'https://calendly.com/bballi/30min';
+    const ctaRow = (url) => `<div class="cb-cta-row">${ok(url) ? `<a class="cb-cta cb-cta--dl" href="${esc(url)}" download target="_blank" rel="noopener noreferrer">Download</a>` : ''}<a class="cb-cta cb-cta--contact" href="${CONTACT_URL}" target="_blank" rel="noopener noreferrer">Book a Call</a></div>`;
+    const evImg = (url, alt) => ok(url) ? `<figure class="cb-evidence"><img src="${esc(url)}" alt="${esc(alt)}"/><figcaption>${ctaRow(url)}</figcaption></figure>` : '';
+    const evVideo = (url) => ok(url) ? `<figure class="cb-evidence cb-evidence--video"><video src="${esc(url)}" autoplay muted loop playsinline></video><figcaption>${ctaRow(url)}</figcaption></figure>` : '';
+    const bookCall = `<div class="cb-cta-row cb-cta-row--lg"><a class="cb-cta cb-cta--solid" href="${CONTACT_URL}" target="_blank" rel="noopener noreferrer">Book a Call</a></div>`;
+    // Deliverables row — every asset side by side, full viewport width, each
+    // with Download + Book a Call; stacks to one column on mobile.
+    const deliverableAssets = [
+      { url: studioVideoUrl, type: 'video', name: 'Video Post' },
+      { url: mockupSrc, type: 'img', name: 'Device Mockup' },
+      { url: shots && shots.desktop, type: 'img', name: 'Desktop' },
+      { url: shots && shots.tablet, type: 'img', name: 'Tablet' },
+      { url: shots && shots.mobile, type: 'img', name: 'Mobile' },
+      { url: socialPreviewImageUrl, type: 'img', name: 'Social Preview' },
+    ].filter((a) => ok(a.url));
+    const deliverablesRow = deliverableAssets.length
+      ? `<div class="cb-deliverables-row">${deliverableAssets.map((a) => `<div class="cb-deliverable-card"><div class="cb-deliverable-media">${a.type === 'video' ? `<video src="${esc(a.url)}" autoplay muted loop playsinline></video>` : `<img src="${esc(a.url)}" alt="${esc(a.name)}"/>`}</div><div class="cb-deliverable-name">${esc(a.name)}</div>${ctaRow(a.url)}</div>`).join('')}</div>`
+      : '';
+
+    // LEAD WITH THE SYSTEM — capabilities as a numbered flow + contact CTA.
+    pages.push(page('The<br/>System.', `${pull('Hit Loop manages your creative operations, automating the daily work that keeps you visible, accessible, and consistent across platforms.')}
+      ${flowNodes([
+        { t: 'Fix', p: 'What to fix on your site and content.' },
+        { t: 'Watch', p: 'What competitors are pushing right now.' },
+        { t: 'Move', p: "What's moving across your category." },
+      ])}
+      <div class="rule"></div>
+      <p class="sub">The system tracks everything. A human makes sure it's actually right for you.</p>
+      ${bookCall}`));
+
+    // Key Insight — the verdict.
+    const hero = byLabel('Headline');
+    if (hero && hero.paras.length) {
+      pages.push(page('Key<br/>Insight.', `<div class="bento">${bTile({ span: 's4', cls: 'ink', word: hero.paras.join(' ') })}</div>`));
+    }
+
+    // Deliverables — every asset side by side, full width (see it up front).
+    if (deliverablesRow) {
+      pages.push(page('Deliverables.', deliverablesRow));
+    }
+
+    // What This Site Is — a big pull-quote statement.
+    const wtis = byLabel('What This Site Is');
+    if (wtis && wtis.paras.length) {
+      pages.push(page('What This<br/>Site Is.', `${wtis.paras.map((p) => pull(p)).join('')}`));
+    }
+
+    // What's Missing — a big-numbered gap list.
+    const miss = byLabel("What's Missing");
+    if (miss) {
+      pages.push(page("What's<br/>Missing.", `${gapList([...shortParas(miss), ...miss.bullets])}${subFrom(longParas(miss))}`));
+    }
+
+    // Biggest Risk — alert block + effect tags.
+    const risk = byLabel('Biggest Risk');
+    if (risk) {
+      pages.push(page('Biggest<br/>Risk.', `<div class="cb-alert">${subFrom(longParas(risk))}</div>${tagRow(risk.bullets)}`));
+    }
+
+    // The Opportunity — strengths grid + the upside line.
+    const opp = byLabel('The Opportunity');
+    if (opp) {
+      pages.push(page('The<br/>Opportunity.', `${metaTiles([...shortParas(opp), ...opp.bullets])}${subFrom(longParas(opp))}`));
+    }
+
+    // The Decision — binary question as a pull, stakes as tags, contact CTA.
+    const dec = byLabel('Decision');
+    if (dec && dec.paras.length) {
+      const [q, ...rest] = dec.paras;
+      pages.push(page('The<br/>Decision.', `${pull(q)}${subFrom(rest.filter((p) => p.length > 0))}${tagRow(dec.bullets)}${bookCall}`));
+    }
+
+    // Cover — the device mockup sits in the top-right corner (isCoverMockup);
+    // no video on the cover. Just the lede here.
+    const coverHtml = `<div class="sub" id="brief-cover-exec-summary">
+      <p class="cb-cover-lede">This is a live read on your business: how your site, content, and presence land across screens, social, and real-world use.</p>
+    </div>`;
+    return { coverHtml, pages: pages.join('\n') };
+  };
+  const _creativeBrief = resolveBriefType(briefType) === 'onboarding'
+    ? renderCreativeBriefSummary(coverSummary)
+    : null;
+
+  const coverSubHtml = _creativeBrief
+    ? _creativeBrief.coverHtml
+    : coverParas.length > 1
     ? `<div class="sub cover-jarvis-sub" id="brief-cover-exec-summary">${coverParas.map((p) => `<p>${esc(p)}</p>`).join('')}</div>`
     : `<p class="sub">${esc(coverParas[0] || headline)}</p>`;
 
@@ -926,6 +1050,94 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   #brief-cover-exec-summary{margin:28px 0 16px;width:100%;max-width:100%}
   #brief-cover-exec-summary p{font-size:clamp(15px,1.45vw,18px);line-height:1.6;font-weight:400;margin:0 0 12px;max-width:100%;text-align:justify}
   #brief-cover-exec-summary p:last-child{margin-bottom:0}
+  /* Creative Brief — BIG TYPE, minimal chrome. No boxes, no borders: pure type
+     hierarchy on the canvas with vast spacing between sections (Nothing:
+     subtract, type does the work, confidence through emptiness). Monochrome,
+     installed ink/gray. The one moment is the oversized verdict. */
+  .cb-flow{display:flex;flex-direction:column;gap:clamp(44px,7vw,88px);width:100%;max-width:100%}
+  .cb-lede{font-family:"Space Grotesk",sans-serif;font-size:clamp(17px,1.7vw,21px);line-height:1.5;font-weight:300;color:var(--ink-soft);margin:0;max-width:60ch;text-wrap:pretty}
+  /* Cover hero — lead with the strongest asset (video/mockup). */
+  .cb-hero{margin:10px 0 6px;max-width:820px}
+  .cb-hero .cb-evidence{margin:0}
+  .cb-hero-cap{font-family:"Space Grotesk",sans-serif;font-weight:500;font-size:clamp(22px,2.6vw,34px);line-height:1.1;letter-spacing:-.01em;margin:18px 0 0;color:var(--ink)}
+  .cb-cover-lede{font-family:"Space Grotesk",sans-serif;font-weight:300;font-size:clamp(18px,1.9vw,24px);line-height:1.4;color:var(--ink-soft);margin:22px 0 0;max-width:60ch}
+  /* Inline evidence — a medium asset thumbnail inside the story + CTAs. */
+  .cb-evidence{margin:28px 0 0;max-width:460px}
+  .cb-evidence--video{max-width:540px}
+  .cb-evidence img,.cb-evidence video{display:block;width:100%;height:auto;border-radius:14px;border:1px solid var(--line);box-shadow:0 14px 38px rgba(0,0,0,.16)}
+  .cb-evidence figcaption{margin-top:14px}
+  /* CTAs — clear Download (solid ink) + Book a Call (outline), used throughout. */
+  .cb-cta-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+  .cb-cta-row--lg{margin-top:30px}
+  .cb-cta{display:inline-flex;align-items:center;font-family:"Space Mono",monospace;font-size:12px;letter-spacing:.14em;text-transform:uppercase;text-decoration:none;padding:13px 24px;border-radius:999px;border:1px solid var(--ink);background:transparent;color:var(--ink)}
+  .cb-cta--dl,.cb-cta--solid{background:var(--ink);color:#f6f3ea}
+  .cb-cta:hover{opacity:.86}
+  /* Full-bleed bento tiles (Key Insight ink verdict) span the row at EVERY
+     width — the base brief CSS only defines .s4 above 760px, so below it the
+     tile collapsed to half. */
+  .cb-page .bento .s3,.cb-page .bento .s4{grid-column:1 / -1}
+  /* Deliverables row — assets side by side, full width, stack on mobile. */
+  .cb-deliverables-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;width:100%}
+  .cb-deliverable-card{display:flex;flex-direction:column;gap:12px;min-width:0}
+  .cb-deliverable-media img,.cb-deliverable-media video{display:block;width:100%;height:auto;border-radius:12px;border:1px solid var(--line);box-shadow:0 10px 28px rgba(0,0,0,.14)}
+  .cb-deliverable-name{font-family:"Space Grotesk",sans-serif;font-weight:500;font-size:clamp(15px,1.4vw,18px);color:var(--ink)}
+  .cb-deliverable-card .cb-cta{padding:10px 16px;font-size:11px}
+  @media(max-width:760px){.cb-deliverables-row{grid-template-columns:1fr}}
+  /* Decorative motifs — dot strips, corner brackets, dotted eyebrow + index. */
+  .cb-page::before{content:'';position:absolute;top:16px;left:var(--gutter);width:24px;height:24px;border-left:2px solid rgba(10,10,10,.22);border-top:2px solid rgba(10,10,10,.22);pointer-events:none}
+  .cb-page::after{content:'';position:absolute;left:var(--gutter);bottom:26px;width:140px;height:11px;background-image:radial-gradient(rgba(10,10,10,.18) 1.3px,transparent 1.6px);background-size:14px 11px;pointer-events:none}
+  .cb-deco{height:10px;width:128px;margin:0 0 22px;background-image:radial-gradient(rgba(10,10,10,.26) 1.4px, transparent 1.7px);background-size:13px 10px}
+  .cb-pg-eyebrow{display:flex;align-items:center;gap:14px;font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:18px}
+  .cb-pg-eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--ink);flex-shrink:0}
+  .cb-pg-eyebrow .idx{margin-left:auto;color:rgba(10,10,10,.35)}
+  .cb-page .rule{height:1px;background:rgba(0,0,0,.12);margin:22px 0 26px;max-width:520px}
+  /* What's Missing — big-numbered gap list. */
+  .cb-gaps{display:flex;flex-direction:column;gap:0;max-width:660px}
+  .cb-gap{display:flex;align-items:baseline;gap:22px;padding:18px 0;border-bottom:1px dashed rgba(0,0,0,.16)}
+  .cb-gap-n{font-family:"Doto",monospace;font-weight:900;font-size:clamp(26px,3.6vw,44px);color:transparent;-webkit-text-stroke:1.4px rgba(0,0,0,.24);line-height:.8;flex-shrink:0}
+  .cb-gap-t{font-family:"Space Grotesk",sans-serif;font-weight:500;font-size:clamp(19px,2.2vw,28px);line-height:1.18;letter-spacing:-.01em}
+  /* Biggest Risk — alert block + effect tags. */
+  .cb-alert{border-left:5px solid var(--ink);padding:4px 0 4px 26px;max-width:640px}
+  .cb-alert .sub{margin:0}
+  .cb-tags{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+  .cb-tag{font-family:"Space Mono",monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;padding:10px 16px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink)}
+  /* ── Pushed 30% harder — bigger type + bolder decoration (scoped to Creative
+     Brief pages so the executive brief is untouched). ── */
+  .cb-page .headline{font-size:clamp(82px,17vw,272px);line-height:.84}
+  .cb-page .sec-num{font-size:clamp(130px,22vw,340px);-webkit-text-stroke-width:2px;top:16px}
+  .cb-page .sub{font-size:clamp(22px,2.9vw,40px);line-height:1.22}
+  .cb-page .pull{font-size:clamp(34px,4.4vw,60px);border-left-width:6px;padding-left:30px;max-width:22ch;line-height:1.08}
+  .cb-page .bento .tile.ink .word{font-size:clamp(34px,4.8vw,62px);line-height:1.04}
+  .cb-page .flow .node{padding:28px}
+  .cb-page .flow .node .t{font-size:clamp(32px,3.8vw,46px)}
+  .cb-page .meta-grid .meta-tile{padding:22px}
+  .cb-page .meta-grid .meta-tile .v{font-size:clamp(18px,2.1vw,27px);font-weight:500}
+  .cb-deco{width:188px;height:14px;background-size:18px 14px}
+  .cb-gap-n{font-size:clamp(38px,5.2vw,68px);-webkit-text-stroke-width:1.6px}
+  .cb-gap-t{font-size:clamp(22px,2.7vw,36px)}
+  .cb-alert{border-left-width:7px;padding-left:34px}
+  .cb-tag{font-size:13px;padding:12px 20px;letter-spacing:.1em}
+  /* Download buttons for deliverable assets. */
+  .cb-dl-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+  .cb-dl{display:inline-flex;align-items:center;gap:6px;font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink);text-decoration:none;padding:9px 16px;border:1px solid var(--line);border-radius:999px;background:var(--card)}
+  .cb-dl:hover{background:var(--ink);color:#f6f3ea;border-color:var(--ink)}
+  #onboarding-cover-mockup .cb-dl{margin-top:10px}
+  .cb-verdict{font-family:"Space Grotesk",sans-serif;font-size:clamp(32px,6vw,72px);line-height:1.02;font-weight:500;letter-spacing:-.025em;color:var(--ink);margin:0;max-width:18ch;text-wrap:balance}
+  .cb-sec{display:flex;flex-direction:column;gap:14px;max-width:60ch}
+  .cb-eyebrow{font-family:"Space Mono",monospace;font-size:12px;letter-spacing:.26em;text-transform:uppercase;color:var(--ink-soft)}
+  .cb-text{font-family:"Space Grotesk",sans-serif;font-size:clamp(18px,2vw,26px);line-height:1.42;font-weight:300;color:var(--ink);margin:0;text-wrap:pretty}
+  .cb-decision{font-family:"Space Grotesk",sans-serif;font-size:clamp(28px,4vw,52px);line-height:1.06;font-weight:500;letter-spacing:-.02em;color:var(--ink);margin:0;max-width:20ch;text-wrap:balance}
+  .cb-points{margin:6px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px}
+  .cb-points li{position:relative;padding-left:22px;font-family:"Space Grotesk",sans-serif;font-size:clamp(16px,1.6vw,19px);line-height:1.45;font-weight:300;color:var(--ink)}
+  .cb-points li::before{content:'';position:absolute;left:0;top:0.62em;width:7px;height:7px;border-radius:50%;background:var(--ink)}
+  .cb-proof{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 44px}
+  .cb-proof-item{display:flex;flex-direction:column;gap:3px}
+  .cb-proof-name{font-family:"Space Grotesk",sans-serif;font-size:clamp(17px,1.7vw,22px);font-weight:500;color:var(--ink);letter-spacing:-.01em}
+  .cb-proof-desc{font-family:"Space Grotesk",sans-serif;font-size:clamp(14px,1.3vw,16px);line-height:1.45;font-weight:300;color:var(--ink-soft)}
+  .cb-closer{font-family:"Space Mono",monospace;font-size:13px;line-height:1.6;letter-spacing:.02em;color:var(--ink-soft);margin:0;max-width:52ch}
+  @media(max-width:760px){
+    .cb-proof{grid-template-columns:1fr;gap:18px}
+  }
   .cover .meta{margin-top:18px;padding-top:14px;gap:14px 32px}
   /* Brand band — one line, letters spread edge-to-edge across the full width
      (flex space-between), never wrapping or clipping. */
@@ -981,7 +1193,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
 <body>
   <section class="page cover${isCoverMockup ? ' cover--has-onboarding-mockup' : ''}">
     <div class="sec-num">00</div>
-    ${isCoverMockup ? `<div id="onboarding-cover-mockup" aria-hidden="true"><img src="${esc(mockupSrc)}" alt="" /></div>` : ''}
+    ${isCoverMockup ? `<div id="onboarding-cover-mockup" aria-hidden="true"><img src="${esc(mockupSrc)}" alt="Homepage device mockup" /></div>` : ''}
     <div class="title-stack">
       <div class="cap-brief-email-cta-row">
         <button type="button" id="brief-email-cta" class="cap-brief-email-cta">
@@ -1003,6 +1215,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     </div>
     <div class="marquee">${brandUpper.split('').map((ch) => `<span>${ch === ' ' ? '&nbsp;' : esc(ch)}</span>`).join('')}</div>
   </section>
+${_creativeBrief ? _creativeBrief.pages : ''}
 ${bodySections}
   <footer>
     <span>Generated · ${esc(new Date(generated).toISOString().slice(0, 19).replace('T', ' '))}</span>

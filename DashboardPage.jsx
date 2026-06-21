@@ -2919,13 +2919,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // Reset step on bucket change; jump to a step's anchor card on click.
   useEffect(() => { setActiveStepIdx(0); }, [activeCapabilityFilter]);
 
-  // Force list view on mobile — grid cards don't scale well below 900px
-  useEffect(() => {
-    const enforce = () => { if (window.innerWidth < 900) setCapView('list'); };
-    enforce();
-    window.addEventListener('resize', enforce);
-    return () => window.removeEventListener('resize', enforce);
-  }, []);
+  // Mobile shows CARDS (grid), not line items — capView stays at its default
+  // ('grid') on small screens; the user can still toggle to list via the
+  // top selector (kept visible on mobile).
   const handleCapStepClick = useCallback((idx) => {
     setActiveStepIdx(idx);
   }, []);
@@ -10110,11 +10106,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               }
             }
 
-            // DELIVERABLES honors the Cards/line-items selector: capView 'grid'
-            // renders the tab's cards as tiles (card view), 'list' as line-item
-            // rows. Default is the card (grid) view.
-            if (_bucketSteps && activeCapabilityFilter === 'deliverables' && capView === 'grid') {
-              _groups.forEach((g) => { g.renderMode = 'grid'; });
+            // Every bucket honors the Cards/line-items selector: capView 'grid'
+            // renders the active tab's cards as tiles (card view), 'list' as
+            // line-item rows. Skip past-briefs — it's a rendered-document list,
+            // not a card grid, so it stays in its list form.
+            if (_bucketSteps && capView === 'grid') {
+              _groups.forEach((g) => { if (g.step?.id !== 'past-briefs') g.renderMode = 'grid'; });
             }
 
             // Every bucket with workflow steps uses the tab system: one tab row,
@@ -15748,6 +15745,31 @@ const dashboardCss = `
   .cap-bucket-deliverables .cap-step-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+  /* DELIVERABLES is a single-tab bucket: show a clear "DELIVERABLES" section
+     title (eyebrow) above the cards on every breakpoint instead of the bare
+     one-tab segmented strip. */
+  .cap-bucket-deliverables .cap-step-seg--top { display: none; }
+  .cap-bucket-deliverables .cap-list-col-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: "Space Mono", ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-display);
+    padding: 8px 2px 12px;
+    margin: 0 0 4px;
+  }
+  .cap-bucket-deliverables .cap-list-col-label::before {
+    content: '';
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #14b8a6;
+    flex-shrink: 0;
+  }
   .cap-step-group:not(:has(.cap-step-seg)) .cap-step-grid {
     background: transparent;
   }
@@ -21176,7 +21198,8 @@ const dashboardCss = `
     /* DELIVERABLES drops from 3-across to 2-across at this breakpoint. */
     .cap-bucket-deliverables .cap-step-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     #dashboard-source-cta-row { box-shadow: 0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4) !important; }
-    #capability-nav-col { order: -1; position: static; flex-direction: row; flex-wrap: nowrap; overflow-x: visible; overflow-y: visible; gap: 0; justify-content: space-between; z-index: 10; padding-top: 8px; padding-bottom: 8px; }
+    /* No navigation on mobile — hide the bucket nav entirely. */
+    #capability-nav-col { display: none; }
     #dashboard-source-band { margin-bottom: 0; }
     .capability-nav-btn { flex: 1 1 0; width: clamp(34px, 8vw, 52px); height: clamp(34px, 8vw, 52px); max-width: clamp(34px, 8vw, 52px); min-width: 0; padding: 0; border-radius: 50%; flex-direction: row; align-items: center; justify-content: center; gap: 0; background: rgba(255, 255, 255, 1); }
     .capability-nav-btn:hover { background: rgba(255, 255, 255, 1); box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.067), 0px 15px 30px rgba(0, 0, 0, 0.067), 0px 20px 40px rgba(0, 0, 0, 0.1); }
@@ -21411,6 +21434,8 @@ const dashboardCss = `
   }
   @media (max-width: 620px) {
     #founders-shell { padding-top: 60px; }
+    /* Phones: DELIVERABLES stacks to a single card per row (was 2-across). */
+    .cap-bucket-deliverables .cap-step-grid { grid-template-columns: 1fr; }
     #founders-hero-shell { gap: 16px; }
     #founders-top-strip-inner {
       gap: 8px;
@@ -21435,8 +21460,7 @@ const dashboardCss = `
     #dashboard-source-cta-row { max-width: 100%; box-sizing: border-box; justify-content: space-between; gap: clamp(10px, 3vw, 20px); padding: 4px clamp(12px, 4vw, 24px); }
     #run-idle-indicator-dot { width: 18px; height: 18px; flex-shrink: 0; background: conic-gradient(rgba(42,36,32,0.15) 0%, rgba(42,36,32,0.08) 100%); -webkit-mask: radial-gradient(circle, transparent 58%, black 59%); mask: radial-gradient(circle, transparent 58%, black 59%); border-radius: 50%; display: inline-block !important; }
     #run-active-indicator-label { display: none; }
-    .cap-view-toggle--top { display: none; }
-    .cap-view-toggle--top + .cap-source-divider { display: none; }
+    /* Card/line-item selector stays visible on mobile (was hidden). */
     #dashboard-source-band { margin-bottom: 0; }
     #reseed-run-btn { min-width: 0; }
   }

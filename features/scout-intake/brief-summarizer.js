@@ -90,7 +90,13 @@ const SECTION_EVIDENCE = {
   'creative-mockup'(data) {
     const bo = data.company?.brandOverview || {};
     const tone = data.company?.brandTone || {};
+    const sm = data.siteMeta || {};
     return [
+      // Direct website signals first (page title / meta / theme) so the
+      // website-only extractor can ground its inferences in real evidence.
+      line('Page title', sm.title || sm.ogTitle, 160),
+      line('Meta description', sm.description || sm.ogDescription, 240),
+      line('Theme color', sm.themeColor || sm.theme_color, 40),
       line('Summary', bo.summary, 280),
       line('Positioning', bo.positioning),
       line('Industry', bo.industry, 80),
@@ -373,6 +379,66 @@ const EXEC_SUMMARY_TOOL = {
   },
 };
 
+// ── Creative Brief — website-only extractor ───────────────────────────────────
+//
+// The Creative Brief ('onboarding') is generated ONLY from website-derived
+// evidence and returned in a fixed, decision-useful labeled format. No invented
+// business goals, KPIs, or internal decisions.
+
+function buildCreativeBriefSystemPrompt() {
+  return `You are generating a website-only Creative Brief, written as a punchy, scannable SALES PITCH a founder reads in seconds. Keep the analytical depth, but lead with clarity and an emotional hook — the goal is "I understand my situation instantly," not "here is an analysis."
+
+This is a direct read of what the website communicates. Not a guess. Not strategy invention.
+
+RULES
+- Use only observable website evidence.
+- Do not invent goals, KPIs, or internal decisions.
+- If something cannot be inferred, state: Not directly inferable from website.
+- Be specific when signals are strong; name the exact signal or number (CTA, H1, OG tags, performance score).
+- Call out weak, unclear, or inconsistent signals directly — do not soften it.
+- Punchy and concrete over soft and complete. Short sentences. No filler.
+- Sections listed under NO DATA produced nothing this run — treat them as missing inputs, never invent findings for them.
+
+USE ONLY THESE INPUTS
+Page titles, meta descriptions; H1/H2 and body copy; navigation labels and structure; CTA text and conversion paths; page types and layout; contact/trust signals; social links and metadata; OG tags and share previews; screenshots and device captures; visual system, color, typography; motion/video cues; performance or technical signals if provided.
+
+REQUIRED BEHAVIOR
+- Identify the business type if clear (SaaS, local, ecommerce, agency, studio, creator, lead-gen, etc.).
+- Call out weak or mixed messaging and inconsistent or underdeveloped visual systems.
+- Call out a mismatch between audience and offer if present.
+- INTERNAL RULE: if the site is weak, say it clearly in Headline or Biggest Risk.
+
+OUTPUT FORMAT — plain text, no markdown headers, no asterisks. Each label on its own line, followed by its content. Use "- " dash bullets exactly where indicated:
+Headline:
+[ONE punchy line the founder reads first: the site's core strength, then its key limitation. Pattern: "<strength>, but <the gap or risk>." Specific and direct.]
+What This Site Is:
+[1-2 short sentences — what the site is and what it's built for.]
+What's Missing:
+[2-4 very short lines, each on its own line (e.g. "No growth loop."), then one short sentence of context.]
+Biggest Risk:
+[1 sentence naming the single biggest risk and the signal/number behind it, then 2-3 "- " dash bullets of what it directly reduces.]
+The Opportunity:
+[2-3 "- " dash bullets of existing strengths (name the signals/numbers), then one sentence on what this could become with the right moves.]
+Decision:
+[A direct binary question the founder must answer (e.g. "Are you building a passion project or a permanent institution?"), then 2-4 "- " dash bullets of what that decision determines.]`;
+}
+
+const CREATIVE_BRIEF_TOOL = {
+  name: 'write_brief_summary',
+  description: 'Write the website-only Creative Brief in the required labeled format.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      summary: {
+        type: 'string',
+        description:
+          'The full website-only Creative Brief as a punchy sales pitch in the exact labeled format (Headline, What This Site Is, What\'s Missing, Biggest Risk, The Opportunity, Decision). Plain text, each label on its own line, dash bullets where specified. No markdown headers, no asterisks.',
+      },
+    },
+    required: ['summary'],
+  },
+};
+
 // ── LLM call ──────────────────────────────────────────────────────────────────
 
 const SUMMARY_TOOL = {
@@ -424,8 +490,10 @@ async function summarizeBriefCover(briefType, data = {}, { clientName = '', webs
   }
 
   // Executive daily runs JARVIS mode: full assistant-voice brief under its
-  // own system prompt. Every other brief stays a short toned cover paragraph.
+  // own system prompt. The Creative Brief ('onboarding') runs the website-only
+  // extractor. Every other brief stays a short toned cover paragraph.
   const isExec = resolved === 'executive-daily';
+  const isCreative = resolved === 'onboarding';
   // The compact evidence clips the scout narrative to one line — the exec
   // brief synthesizes from the full text, so feed it separately.
   const scoutNarrative = isExec
@@ -460,6 +528,24 @@ async function summarizeBriefCover(briefType, data = {}, { clientName = '', webs
           },
         ],
       }
+    : isCreative
+    ? {
+        model: EXEC_MODEL,
+        max_tokens: MAX_TOKENS_EXEC,
+        system: buildCreativeBriefSystemPrompt(),
+        tools: [CREATIVE_BRIEF_TOOL],
+        tool_choice: { type: 'tool', name: 'write_brief_summary' },
+        messages: [
+          {
+            role: 'user',
+            content: [
+              `WEBSITE EVIDENCE BUNDLE${clientName ? ` for ${clientName}` : ''}${websiteUrl ? ` (${websiteUrl})` : ''}. Produce the website-only Creative Brief using ONLY this evidence.`,
+              '',
+              evidenceText,
+            ].join('\n'),
+          },
+        ],
+      }
     : {
         model: SUMMARY_MODEL,
         max_tokens: MAX_TOKENS,
@@ -477,7 +563,7 @@ async function summarizeBriefCover(briefType, data = {}, { clientName = '', webs
     return { ok: false, summary: null, runCostData: null, error: err.message };
   }
 
-  const runCostData = extractAnthropicUsage(response, { model: isExec ? EXEC_MODEL : SUMMARY_MODEL });
+  const runCostData = extractAnthropicUsage(response, { model: (isExec || isCreative) ? EXEC_MODEL : SUMMARY_MODEL });
   const summary = extractToolInput(response);
 
   if (!summary) {

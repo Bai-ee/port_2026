@@ -84,6 +84,7 @@ export async function generateBriefSummaries({ clientId, runId, briefTypes = ALL
     signalsCore: Array.isArray(dash.signals?.core) ? dash.signals.core : [],
     socialQueue,
     moduleBriefs: dash.moduleBriefs?.items || [],
+    siteMeta: dash.siteMeta || null,
     watchlistKols: Array.isArray(clientConfig?.marketingBriefConfig?.kols)
       ? clientConfig.marketingBriefConfig.kols
       : [],
