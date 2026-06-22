@@ -297,7 +297,7 @@ const AuthPageInner = () => {
       `}</style>
       <div id="auth-gradient-overlay" style={gradientStyle} />
 
-      <div id="auth-card" style={{ ...cardStyle, maxWidth: mode === 'create' ? 'min(75vw, 56rem)' : '30rem' }}>
+      <div id="auth-card" style={{ ...cardStyle, maxWidth: '30rem' }}>
         <div id="auth-brand-row" style={brandStyle}>
           <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={sigStyle} />
           <span style={eyebrowStyle}>Client Access</span>

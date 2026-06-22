@@ -103,7 +103,7 @@ export default function BrandSystemBuildModal({ open, onClose, getIdToken, onCom
                 fontFamily: '"Doto", "Space Mono", monospace',
                 fontWeight: 700,
               }}>
-                {'BRAND SYSTEM  ·  BUILD  ·  '}
+                {'BRAND SYSTEM · BUILD · '}
               </span>
             ))}
           </div>

@@ -2205,6 +2205,8 @@ const NON_ADMIN_UNLOCKED_CARD_IDS = new Set([
   'social-preview',
   'mockup-studio',
   'style-guide',
+  'cross-device-images',
+  'post-me',
 ]);
 
 // Launch onboarding gate: non-admins get only DELIVERABLES. Every other nav
@@ -2217,6 +2219,12 @@ function isCapStepLocked(bucket, idx, isAdmin) {
   const allowed = NON_ADMIN_UNLOCKED_STEPS[bucket];
   return allowed ? !allowed.has(idx) : false;
 }
+
+// Launch: the run terminal shows ONLY the build/render terminal — no Founder
+// Q&A chat. Hides the survey column and forces the terminal-only modal layout
+// for every card run (deliverables + website signup intake). Flip to false to
+// bring the chat back.
+const HIDE_INTAKE_CHAT = true;
 
 // Per-bucket workflow steps. Each step's `id` is the first card in its group;
 // the segmented control above the grid lets users jump to that anchor.
@@ -2242,7 +2250,7 @@ const CAP_STEPS = {
   // DELIVERABLES bucket — the launch deliverable package. One tab grouping the
   // Creative Brief, Multi-Device Mockup, Social Preview, and Studio cards.
   deliverables: [
-    { id: 'onboarding-brief', label: 'DELIVERABLES', Icon: Eye },
+    { id: 'onboarding-brief', label: 'DELIVERABLES' },
   ],
   content: [
     { id: 'visual-dna', label: 'INTAKE YOUR REFERENCES', Icon: Images },
@@ -2546,6 +2554,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   }, [activeTileModal?.cardId]);
   const [briefFullScreen, setBriefFullScreen] = useState(false);
   const [auditFullScreen, setAuditFullScreen] = useState(false);
+  // Deliverables-bucket asset viewer — full-screen image/video view + download,
+  // the same overlay pattern as the Creative Brief. Payload built on each card
+  // (see deliverableAsset) and opened from openCapabilityCard.
+  const [deliverableView, setDeliverableView] = useState(null);
   const [modalTab, setModalTab] = useState('solutions');
   const [brandSystemBuildOpen, setBrandSystemBuildOpen] = useState(false);
   const [visualDnaProspect, setVisualDnaProspect] = useState(null);
@@ -2683,6 +2695,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	  });
 	  const [mockupStudioRenderLoading, setMockupStudioRenderLoading] = useState(false);
 	  const [mockupStudioRenderError, setMockupStudioRenderError] = useState('');
+	  const [postMeLoading, setPostMeLoading] = useState(false);
+	  const [postMeResult, setPostMeResult] = useState(null); // null | { ok, twitterId, error }
 	  // Tracks the last website auto-filled from the effective client so the draft
 	  // URL follows a client switch (operator → impersonated client) UNTIL the user
 	  // manually edits the field. Without this the draft locks onto the first site
@@ -2837,6 +2851,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    }
 	  }, [user, mockupStudioRenderLoading, mockupStudioDraft, client?.websiteUrl, client?.website, apiPath, runWithTerminal]);
 
+
 	  const openLeadgenFlow = useCallback(async (step) => {
     if (!user) return;
     setClientFlowError(null);
@@ -2907,7 +2922,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   const [activeCapabilityFilter, setActiveCapabilityFilter] = useState('deliverables'); // default bucket: DELIVERABLES (onboarding gate)
   const [activeStepIdx, setActiveStepIdx] = useState(0);
   const [capView, setCapView] = useState('grid'); // 'grid' | 'list' — default to card (grid) view
+  const [dlAllBusy, setDlAllBusy] = useState(false); // DELIVERABLES "Download All" zip in progress
   const [expandedListCards, setExpandedListCards] = useState(new Set());
+  // Card-shell download menu — { items, x, y } when a card's download button with
+  // >1 asset is open; null when closed. Rendered fixed at root so the card's
+  // overflow:hidden never clips it.
+  const [downloadMenu, setDownloadMenu] = useState(null);
   const toggleListCard = useCallback((id) => {
     setExpandedListCards((prev) => {
       const next = new Set(prev);
@@ -2968,7 +2988,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   const prevStatusForRevealRef = useRef(null);
   const [completionCountdown, setCompletionCountdown] = useState(null);
   const [revealedLineCount, setRevealedLineCount] = useState(null);
-  const [surveyResolved, setSurveyResolved] = useState(false);
+  // Survey QA UI is hidden for new signups (HIDE_INTAKE_CHAT). With no survey to
+  // complete, the reveal gate must default to resolved so the dashboard opens
+  // automatically once the terminal + creative brief finish.
+  const [surveyResolved, setSurveyResolved] = useState(HIDE_INTAKE_CHAT);
   const [onboardingAnswersSeed, setOnboardingAnswersSeed] = useState(null);
   const [intakeModalDismissed, setIntakeModalDismissed] = useState(false);
   const [bgRunToast, setBgRunToast] = useState(false);
@@ -3022,6 +3045,39 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // the dashboard's own styles.
   const [briefPreviewHtml, setBriefPreviewHtml] = useState('');
   const [briefPreviewLoading, setBriefPreviewLoading] = useState(true);
+  // Creative Brief card auto-scroll tease — once the preview iframe loads, slowly
+  // scroll its (same-origin, scriptless) document from the cover to the bottom to
+  // hint at the contents, then rest at the end. Non-interactive; pointer-events
+  // stay off the iframe. Re-arms whenever the iframe remounts (new run → new key).
+  const briefTeaseRef = useRef({ raf: 0, timer: 0 });
+  const startBriefTease = useCallback((iframe) => {
+    const state = briefTeaseRef.current;
+    cancelAnimationFrame(state.raf);
+    clearTimeout(state.timer);
+    let win, doc;
+    try { win = iframe?.contentWindow; doc = iframe?.contentDocument; } catch { return; }
+    if (!win || !doc) return;
+    // Respect reduced-motion — no auto-scroll; the cover stays put.
+    if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    const START_DELAY_MS = 1400;   // let the cover read first
+    const PX_PER_SEC = 60;         // content-space speed (iframe is scaled 0.25 → ~15px/s on screen)
+    state.timer = setTimeout(() => {
+      let last = null;
+      const step = (ts) => {
+        if (last == null) last = ts;
+        const dt = (ts - last) / 1000; last = ts;
+        const max = Math.max(0, (doc.documentElement?.scrollHeight || doc.body?.scrollHeight || 0) - win.innerHeight);
+        const next = Math.min(max, (win.scrollY || 0) + PX_PER_SEC * dt);
+        win.scrollTo(0, next);
+        if (next < max - 0.5) state.raf = requestAnimationFrame(step);  // else: rest at bottom
+      };
+      state.raf = requestAnimationFrame(step);
+    }, START_DELAY_MS);
+  }, []);
+  useEffect(() => () => {
+    cancelAnimationFrame(briefTeaseRef.current.raf);
+    clearTimeout(briefTeaseRef.current.timer);
+  }, []);
   // Dedicated HTML preview for the Marketing Brief modal's BRIEF tab.
   // Always fetched with `?type=marketing` so it shows the marketing render
   // regardless of which pipeline produced the latest run.
@@ -3304,7 +3360,16 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     if (!user) return;
     const dash = bootstrap?.dashboardState;
     const runId = dash?.latestRunId || null;
-    if (!dash?.scribe?.brief && !dash?.marketingBrief) { setBriefPreviewHtml(''); setBriefPreviewLoading(false); return; }
+    // The preview exists when there's a daily/exec brief (scribe/marketing) OR a
+    // Creative Brief (onboarding). The onboarding run ships only the deliverable
+    // assets + cover summary — no scout/marketing data — so gate on those too,
+    // otherwise the Creative Brief card shell + click-to-open never get the HTML.
+    const hasCreativeBrief = Boolean(
+      dash?.briefSummaries?.onboarding
+      || dash?.artifacts?.homepageDeviceMockup?.downloadUrl
+      || (Array.isArray(dash?.studioCaptures) && dash.studioCaptures.length)
+    );
+    if (!dash?.scribe?.brief && !dash?.marketingBrief && !hasCreativeBrief) { setBriefPreviewHtml(''); setBriefPreviewLoading(false); return; }
     let cancelled = false;
     setBriefPreviewLoading(true);
     setBriefPreviewHtml('');
@@ -3328,7 +3393,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       }
     })();
     return () => { cancelled = true; };
-  }, [user, apiPath, briefPreviewFetchKey, bootstrap?.dashboardState?.scribe?.brief?.headline, bootstrap?.dashboardState?.marketingBrief?.generatedAtIso]);
+  }, [user, apiPath, briefPreviewFetchKey, bootstrap?.dashboardState?.scribe?.brief?.headline, bootstrap?.dashboardState?.marketingBrief?.generatedAtIso, bootstrap?.dashboardState?.briefSummaries?.onboarding?.generatedAtIso, bootstrap?.dashboardState?.latestRunId]);
 
   // Always fetch the Marketing Brief render (?type=marketing) for the
   // Marketing Brief modal's BRIEF tab. Independent of the main brief preview
@@ -4412,6 +4477,23 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       openNamedBriefPreview(BRIEF_TYPE_BY_CARD[card.id]);
       return;
     }
+    // Post Me card — clicking fires the real POST TO X handler (API route with
+    // media upload). Falls back to intent URL only if handler not yet available.
+    if (!forceModal && card.id === 'post-me') {
+      if (card.footerAction?.onClick) { card.footerAction.onClick(); }
+      else if (card.xIntentUrl) { window.open(card.xIntentUrl, '_blank', 'noopener'); }
+      return;
+    }
+    // Deliverables-bucket cards (Video Post, Social Preview, Device Mockups,
+    // Full-Page Screenshots) open the shared full-screen asset viewer — same
+    // pattern as the Creative Brief, available to clients and admins alike.
+    if (!forceModal && card.deliverableAsset) {
+      setDeliverableView(card.deliverableAsset);
+      return;
+    }
+    // Non-admins never open the tile detail modal — brief/deliverable views
+    // above already returned; everything past here is the generic card modal.
+    if (!isAdmin) return;
     setActiveTileModal({
       title: card.title,
       description: card.description,
@@ -4433,7 +4515,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       moduleControls: card.moduleControls || null,
       leadgenStep: card.leadgenStep || null,
     });
-  }, [briefPreviewHtml, dashboardState?.marketingBrief, openNamedBriefPreview]);
+  }, [briefPreviewHtml, dashboardState?.marketingBrief, openNamedBriefPreview, isAdmin]);
 
   // Brief entitlements — locked flags on the brief rows follow the tier map
   // in brief-sections.cjs (one source of truth with the API gate); admins
@@ -4505,13 +4587,85 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     null;
   // Latest studio motion mockup video — feeds the Mockup Studio card's tile
   // face (always shows the last render) and is also embedded in the brief.
-  const latestStudioVideoUrl = (() => {
+  // Latest studio video — keep both the URL and its real contentType. The render
+  // pipeline emits WebM by default, which X rejects; the type must travel with
+  // the URL so the post handler can decide whether the asset is X-postable.
+  const latestStudioVideo = (() => {
     const caps = Array.isArray(dashboardState?.studioCaptures) ? dashboardState.studioCaptures : [];
     for (let i = caps.length - 1; i >= 0; i -= 1) {
-      if (caps[i]?.type === 'studio_video' && caps[i]?.downloadUrl) return caps[i].downloadUrl;
+      if (caps[i]?.type === 'studio_video' && caps[i]?.downloadUrl) {
+        return { url: caps[i].downloadUrl, contentType: caps[i].contentType || null };
+      }
     }
     return null;
   })();
+  const latestStudioVideoUrl = latestStudioVideo?.url || null;
+  // X accepts MP4 video only (not WebM/OGG). Used to gate the video path in Post Me.
+  const latestStudioVideoIsXReady = (() => {
+    const ct = (latestStudioVideo?.contentType || '').toLowerCase();
+    if (ct) return ct === 'video/mp4';
+    // No stored type — infer from the URL extension.
+    return /\.mp4(\?|$)/i.test(latestStudioVideoUrl || '');
+  })();
+	  // Build the suggested X caption from brand/brief data. Shared by the handler
+	  // and the tile mockup so the preview matches what actually gets posted.
+	  const buildPostMeCaption = useCallback(() => {
+	    const biz = client?.businessName || '';
+	    const tag = dashboardState?.snapshot?.brandOverview?.summary
+	      || dashboardState?.snapshot?.brandOverview?.positioning
+	      || dashboardState?.snapshot?.brandOverview?.headline || '';
+	    const url = client?.websiteUrl || client?.website || '';
+	    const base = (biz && tag) ? `${biz} — ${tag.slice(0, 100)}` : (biz ? `Check out ${biz}` : (tag.slice(0, 140) || 'Check out our new site.'));
+	    const tail = url ? `\n\n${url}` : '';
+	    return (base + tail).slice(0, 280);
+	  }, [client, dashboardState]);
+
+	  const handlePostMeToX = useCallback(async () => {
+	    if (!user || postMeLoading) return;
+	    // Open a placeholder tab synchronously inside the click gesture so the
+	    // browser won't block it; we redirect it to the live tweet after the async
+	    // post resolves (or close it on failure).
+	    let pendingTab = null;
+	    try { pendingTab = window.open('about:blank', '_blank'); } catch { pendingTab = null; }
+	    setPostMeLoading(true);
+	    setPostMeResult(null);
+	    try {
+	      const token = await user.getIdToken();
+	      const body = { action: 'post-now', content: buildPostMeCaption(), source: 'post-me' };
+	      // Prefer the video ONLY when it's MP4 (X rejects WebM/OGG). Otherwise fall
+	      // back to the OG image so the post still ships with media attached.
+	      if (latestStudioVideoUrl && latestStudioVideoIsXReady) {
+	        body.mediaUrl = latestStudioVideoUrl;
+	        body.mediaType = 'video';
+	        body.mediaContentType = latestStudioVideo?.contentType || 'video/mp4';
+	      } else if (dashboardState?.siteMeta?.ogImage) {
+	        body.mediaUrl = dashboardState.siteMeta.ogImage;
+	        body.mediaType = 'image';
+	        // Let the server detect the real image type from response headers.
+	      }
+	      const res = await fetch('/api/social-posting', {
+	        method: 'POST',
+	        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+	        body: JSON.stringify(body),
+	      });
+	      const data = await res.json().catch(() => ({}));
+	      if (!res.ok || !data.ok) {
+	        if (pendingTab) { try { pendingTab.close(); } catch {} }
+	        setPostMeResult({ ok: false, error: data.hint || data.error || 'Post failed. Check X API credentials.' });
+	      } else {
+	        const twitterId = data.post?.twitterId || null;
+	        const tweetUrl = twitterId ? `https://x.com/i/web/status/${twitterId}` : 'https://x.com';
+	        if (pendingTab) { try { pendingTab.location = tweetUrl; } catch {} }
+	        setPostMeResult({ ok: true, twitterId });
+	      }
+	    } catch (err) {
+	      if (pendingTab) { try { pendingTab.close(); } catch {} }
+	      setPostMeResult({ ok: false, error: err.message || 'Post failed.' });
+	    } finally {
+	      setPostMeLoading(false);
+	    }
+	  }, [user, postMeLoading, buildPostMeCaption, dashboardState, latestStudioVideoUrl]);
+
   const clientStatus = dashboardState?.status || client?.status || null;
   // Prefer the live run status from brief_runs (polled every 4s) over the cached
   // dashboardState.latestRunStatus — the cached value is written as 'queued' at
@@ -4535,6 +4689,42 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   const brandOverview = snapshot?.brandOverview || null;
   const brandTone = snapshot?.brandTone || null;
   const siteMeta = dashboardState?.siteMeta || null;
+  // Shared by the deliverableAsset payloads below to build safe download names.
+  const safeAssetName = (s) => String(s || 'asset').replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 80);
+  const deliverableBizName = safeAssetName(client?.businessName || 'asset');
+  // Data-aware Social Preview copy: maps the captured share-meta state to one of
+  // six scenarios (title / description / image core, favicon + theme color as the
+  // partial signal). Returns null when nothing is captured yet. Shared by the
+  // card.description AND the tile's dynamicShortDescription so they never diverge.
+  const socialPreviewScenario = (sm) => {
+    if (!sm) return null;
+    const hasTitle = Boolean(sm.title);
+    const hasDesc = Boolean(sm.description);
+    const hasImage = Boolean(sm.ogImage);
+    const hasFavicon = Boolean(sm.favicon);
+    const hasTheme = Boolean(sm.themeColor);
+    if (!hasTitle) return 'Your share preview isn’t rendering correctly — key elements are missing.'; // CRITICAL
+    if (!hasDesc && !hasImage) return 'Your share preview image and other key elements are missing, but your title and favicon have been set.'; // MISSING MULTIPLE
+    if (hasDesc && !hasImage) return 'Your preview image is missing, but your title and description have been set.'; // MISSING IMAGE
+    if (!hasDesc && hasImage) return 'Your share description is missing, but your title, favicon, and image have been set.'; // MISSING DESCRIPTION
+    if (hasFavicon && hasTheme) return 'Your share preview is fully set — title, description, and image all render cleanly.'; // ALL GOOD
+    return 'Your core share elements are set; a few secondary details still need updating.'; // PARTIAL
+  };
+  // Mirrors socialPreviewScenario: data-aware copy reflecting which device
+  // captures are present vs missing. Returns null when nothing is captured so
+  // the card falls back to its intro copy.
+  const crossDeviceScenario = (ds) => {
+    if (!ds) return null;
+    const hasDesktop = Boolean(ds.desktop);
+    const hasTablet = Boolean(ds.tablet);
+    const hasMobile = Boolean(ds.mobile);
+    if (!hasDesktop && !hasTablet && !hasMobile) return null; // NO DATA → fallback
+    if (!hasDesktop) return 'Your full-screen set isn’t rendering correctly — the desktop capture is missing.'; // CRITICAL
+    if (!hasTablet && !hasMobile) return 'Your tablet and mobile captures are missing, but your desktop full-screen has been set.'; // MISSING MULTIPLE
+    if (hasTablet && !hasMobile) return 'Your mobile capture is missing, but your desktop and tablet full-screens have been set.'; // MISSING MOBILE
+    if (!hasTablet && hasMobile) return 'Your tablet capture is missing, but your desktop and mobile full-screens have been set.'; // MISSING TABLET
+    return 'Your full-screen set is complete — desktop, tablet, and mobile all capture cleanly.'; // ALL GOOD
+  };
   const evidencePages = dashboardState?.evidence?.pages || [];
   const visualIdentity  = snapshot?.visualIdentity || null;
   const styleGuideData  = visualIdentity?.styleGuide ?? null;
@@ -4774,14 +4964,14 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   };
 
   useEffect(() => {
-    const anyModalOpen = showIntakeModal || showTierModal || showClientEditModal || showDeleteAccountModal || briefFullScreen || auditFullScreen;
+    const anyModalOpen = showIntakeModal || showTierModal || showClientEditModal || showDeleteAccountModal || briefFullScreen || auditFullScreen || Boolean(deliverableView);
     if (!anyModalOpen) {
       document.body.style.overflow = '';
       return undefined;
     }
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = ''; };
-  }, [showIntakeModal, showTierModal, showClientEditModal, showDeleteAccountModal, briefFullScreen, auditFullScreen]);
+  }, [showIntakeModal, showTierModal, showClientEditModal, showDeleteAccountModal, briefFullScreen, auditFullScreen, deliverableView]);
 
   // First bootstrap resolved — latches true and never resets so later
   // refetches don't replay the entrance.
@@ -5074,7 +5264,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   useEffect(() => {
     const currentRunId = client?.latestRunId || null;
     if (prevRunIdRef.current !== null && currentRunId && currentRunId !== prevRunIdRef.current) {
-      setSurveyResolved(false);
+      if (!HIDE_INTAKE_CHAT) setSurveyResolved(false);
       postSurveyRevealFiredRef.current = false;
     }
     if (currentRunId) prevRunIdRef.current = currentRunId;
@@ -5248,8 +5438,54 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 
   const handleSignOut = useCallback(() => {
     trackSignOut();
+    // Mark this as a deliberate logout so the dashboard auth gate sends the user
+    // to the homepage instead of the sign-in screen (direct unauth visits still
+    // route to /login).
+    try { sessionStorage.setItem('intentionalLogout', '1'); } catch {}
     signOutUser();
   }, [signOutUser]);
+
+  // DELIVERABLES "Download All": bundle every available mp4 + image deliverable
+  // into a single zip. The assets are Firebase Storage URLs with no CORS, so the
+  // browser cannot fetch them directly — the zip is built server-side and
+  // streamed back (the route fetches server-to-server, which is not CORS-bound).
+  const handleDownloadAllDeliverables = useCallback(async () => {
+    if (dlAllBusy) return;
+    const safe = (s) => String(s || 'asset').replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 80);
+    const base = safe(client?.businessName || 'deliverables');
+    const assets = [
+      { url: latestStudioVideoUrl, name: `${base}-video-post.mp4` },
+      { url: homepageDeviceMockupUrl, name: `${base}-device-mockup.png` },
+      { url: deviceScreenshots.desktop, name: `${base}-desktop-full.png` },
+      { url: deviceScreenshots.tablet, name: `${base}-tablet-full.png` },
+      { url: deviceScreenshots.mobile, name: `${base}-mobile-full.png` },
+      { url: siteMeta?.ogImage, name: `${base}-social-preview.png` },
+    ].filter((a) => a.url);
+    if (!assets.length || !user) return;
+    setDlAllBusy(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/dashboard/deliverables-zip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ assets, zipName: `${base}-deliverables` }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url; link.download = `${base}-deliverables.zip`;
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    } catch (err) {
+      console.error('Download all deliverables failed', err);
+    } finally {
+      setDlAllBusy(false);
+    }
+  }, [dlAllBusy, user, client, latestStudioVideoUrl, homepageDeviceMockupUrl, deviceScreenshots, siteMeta]);
 
   const handleUpdateClientName = useCallback(async () => {
     if (!user || clientEditLoading) return;
@@ -5779,6 +6015,16 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   const knowledgeBaseSourceSummary = summarizeKnowledgeBaseSources(globalKnowledgeBaseSources, "Available as this client's brain");
   const hasMarketingBriefData = Boolean(marketingBrief?.content || dashboardState?.headline || latestInsights.length > 0);
   const hasDailyBriefData = hasMarketingBriefData || hasCustomBriefs;
+  // Creative Brief (onboarding) deliverable readiness — independent of the daily
+  // brief, which is deferred on signup. Drives the onboarding-brief card rows +
+  // footer so the card reflects its OWN deliverables, not scout/daily fields.
+  const _cbFp = dashboardState?.artifacts?.fullPageScreenshots || {};
+  const cbMockupReady = Boolean(dashboardState?.artifacts?.homepageDeviceMockup?.downloadUrl);
+  const cbScreensReady = Boolean(_cbFp['desktop-full']?.downloadUrl || _cbFp['tablet-full']?.downloadUrl || _cbFp['mobile-full']?.downloadUrl || dashboardState?.artifacts?.homepageScreenshots?.desktop?.downloadUrl);
+  const cbSocialReady = Boolean(dashboardState?.siteMeta?.ogImage);
+  const cbVideoReady = Array.isArray(dashboardState?.studioCaptures) && dashboardState.studioCaptures.some((c) => c?.type === 'studio_video' && c?.downloadUrl);
+  const cbSummaryReady = Boolean(dashboardState?.briefSummaries?.onboarding?.summary);
+  const creativeBriefReady = cbMockupReady && cbScreensReady && cbVideoReady && cbSummaryReady;
   const hasBriefDocumentData = Boolean(hasIntakeData || hasDailyBriefData);
   const marketingBriefStatus = moduleState?.['marketing-brief']?.status || (hasMarketingBriefData ? 'succeeded' : 'idle');
   const marketingBriefPreview = marketingBrief?.headline || dashboardState?.headline || latestCustomBrief?.title || 'Scout, Scribe, and Guardian are ready to build the daily founder brief.';
@@ -6406,8 +6652,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     {
       id: 'audit-summary',
       category: 'knowledge',
-      // Also surfaced in the DELIVERABLES bucket as Data Coverage.
-      extraCategories: ['deliverables'],
       number: 'DQ',
       label: 'DATA QUALITY',
       title: 'Data Coverage',
@@ -6727,10 +6971,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         category: 'content',
         // Cross-listed into the DELIVERABLES bucket as the studio motion mockup.
         extraCategories: ['deliverables'],
-        number: 'MS',
-        label: 'MOCKUP STUDIO',
-        title: 'Mockup Studio',
-        description: 'Creates polished website screenshots and device scenes that can be used in reports, posts, and presentations.',
+        number: activeCapabilityFilter === 'deliverables' ? 'VP' : 'MS',
+        label: activeCapabilityFilter === 'deliverables' ? 'VIDEO POST' : 'MOCKUP STUDIO',
+        title: activeCapabilityFilter === 'deliverables' ? 'Video Promo' : 'Mockup Studio',
+        description: activeCapabilityFilter === 'deliverables'
+          ? 'Turns your site into social-ready motion, shows how your brand moves and creates content ready to share beyond your site.'
+          : 'Polished device mockups showing how your site presents in real-world use. Download ready-to-use visuals for decks, posts, or presentations.',
         placeholderLabel: latestVideo ? 'VIDEO\nREADY' : 'OPEN\nSTUDIO',
         rows: latestVideo
           ? [
@@ -6746,8 +6992,13 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               { key: 'ms-action',  label: 'Action',   value: 'Click Details to customize, or RUN VIDEO to start with these defaults' },
             ],
         footerLeft: latestVideo ? 'Video ready' : 'Ready',
-        footerRight: 'STUDIO',
+        footerRight: 'ACTIVE',
         readinessBadge: latestVideo ? { tone: 'ok', label: 'Passed' } : null,
+        deliverableAsset: latestStudioVideoUrl ? {
+          title: 'Video Post',
+          kind: 'video',
+          items: [{ src: latestStudioVideoUrl, filename: `${deliverableBizName}-studio.mp4` }],
+        } : null,
         footerAction: {
           label: mockupStudioRenderLoading ? '…' : 'RUN VIDEO',
           loading: mockupStudioRenderLoading,
@@ -6758,8 +7009,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     {
       id: 'style-guide',
       category: 'content',
-      // Also surfaced in the DELIVERABLES bucket as the Style Guide / Visual Audit.
-      extraCategories: ['deliverables'],
       number: 'BS',
       label: 'BRAND SNAPSHOT',
       title: 'Visual Audit',
@@ -7016,16 +7265,17 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       extraCategories: ['knowledge', 'deliverables'],
       number: 'SP',
       label: 'SOCIAL PREVIEW',
-      title: 'Social Preview Check',
-      // Knowledge Overview leads with what's in place, then flags gaps. Tracks
-      // siteMeta so the copy stays truthful once the theme color is added.
-      description: activeCapabilityFilter === 'knowledge'
-        ? (siteMeta
-            ? (siteMeta.themeColor
-                ? 'Everything is in place — your page title, share description, and mobile theme color are all set, so the share preview renders cleanly.'
-                : 'Everything is in place — your page title and share description are set. One thing to update: your mobile theme color is missing and should be added so the share preview renders cleanly.')
-            : 'No share preview captured yet. Run a capture to check your page title, share description, and image.')
-        : 'Shows how the site looks when someone shares the link, including the title, description, and image.',
+      title: activeCapabilityFilter === 'deliverables' ? 'Social Preview' : 'Social Preview Check',
+      // Data-aware copy: once a capture exists, the description reflects which
+      // share-preview elements are present vs missing (title / description /
+      // image, with favicon + theme color as the secondary "partial" signal).
+      // Before any capture, falls back to the per-bucket intro copy.
+      description: socialPreviewScenario(siteMeta)
+        || (activeCapabilityFilter === 'knowledge'
+          ? 'No share preview captured yet. Run a capture to check your page title, share description, and image.'
+          : activeCapabilityFilter === 'deliverables'
+            ? 'Shows how your brand appears when shared, fixes how your links render and improves how your content spreads across platforms.'
+            : 'See how your site appears when shared across platforms. Download preview images and identify what needs updating for clean, clickable links.'),
       placeholderLabel: 'CHECK\nPREVIEW',
       rows: (() => {
         const NP = 'Not provided';
@@ -7044,6 +7294,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       })(),
       footerLeft: siteMeta ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
+      deliverableAsset: siteMeta?.ogImage ? {
+        title: 'Social Preview',
+        kind: 'image',
+        items: [{ src: siteMeta.ogImage, label: 'Social preview image', filename: `${deliverableBizName}-social-preview.png` }],
+      } : null,
       moduleControls: { tech: ['html-fetch', 'meta-parser'] },
     },
     {
@@ -7096,10 +7351,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       // first-deliverable asset.
       extraCategories: ['knowledge', 'deliverables'],
       number: 'MD',
-      label: 'LAYOUT',
+      label: activeCapabilityFilter === 'deliverables' ? 'MULTI-DEVICE VIEW' : 'LAYOUT',
       // Knowledge Overview surfaces this card under a friendlier name; Website
       // bucket keeps the technical "Cross-Device Layouts" label.
-      title: activeCapabilityFilter === 'knowledge' ? 'How Your Looking' : 'Cross-Device Layouts',
+      title: activeCapabilityFilter === 'knowledge' ? 'How Your Looking' : activeCapabilityFilter === 'deliverables' ? 'Multi-Device Mock' : 'Cross-Device Layouts',
       // In Knowledge Overview the copy tracks capture status: PASSED (mockup
       // generated), PARTIAL (some device views), or FAILED (no captures).
       // Outside Knowledge, keep the technical capture summary.
@@ -7109,7 +7364,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             : multiDevicePreviewSrc
               ? 'Partial homepage captures are available. Some device views were captured successfully, but the full review may be incomplete. Use Details to review what’s available and confirm the visible content is up to date.'
               : 'Homepage capture could not be completed. Use Details to review the issue, then try running the capture again to generate the desktop, tablet, and mobile views.')
-        : 'Captures desktop, tablet, and mobile views so layout issues are easy to spot.',
+        : activeCapabilityFilter === 'deliverables'
+          ? 'Review your site across desktop, tablet, and mobile. Catch layout, content, and performance issues before they affect users. This ensures your experience holds up everywhere it\'s seen.'
+          : 'Full-page screenshots across desktop, tablet, and mobile. Download complete captures to review layout, content, and consistency across screens.',
       placeholderLabel: 'CAPTURE\nDEVICES',
       rows: multiDevicePreviewSrc ? [
         { key: 'md-desktop', label: 'Desktop capture', value: deviceScreenshots.desktop ? 'Captured' : homepageScreenshotUrl ? 'Captured' : 'Missing' },
@@ -7119,8 +7376,115 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       ] : buildWorkNeededRows('Device view requires a completed homepage screenshot capture.'),
       footerLeft: intakeMockupSrc ? 'Live' : multiDevicePreviewSrc ? 'Partial' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
+      deliverableAsset: multiDevicePreviewSrc ? {
+        title: 'Multi-Device Mock',
+        kind: 'image',
+        items: [
+          // Hero = the same image the tile shows (generated mockup, else the
+          // device-mockup PNG, else the homepage screenshot fallback).
+          { src: intakeMockupSrc || homepageDeviceMockupUrl || homepageScreenshotUrl || multiDevicePreviewSrc, label: 'Device mockup', filename: `${deliverableBizName}-device-mockup.png` },
+          deviceScreenshots.desktop && { src: deviceScreenshots.desktop, label: 'Desktop — full page', filename: `${deliverableBizName}-desktop-full.png` },
+          deviceScreenshots.tablet && { src: deviceScreenshots.tablet, label: 'Tablet — full page', filename: `${deliverableBizName}-tablet-full.png` },
+          deviceScreenshots.mobile && { src: deviceScreenshots.mobile, label: 'Mobile — full page', filename: `${deliverableBizName}-mobile-full.png` },
+        ].filter(Boolean),
+      } : null,
       moduleControls: { tech: ['browserless', 'firebase-storage', 'python-mockup'] },
     },
+    (() => {
+      const cdHas = Boolean(deviceScreenshots.desktop || deviceScreenshots.tablet || deviceScreenshots.mobile);
+      const cdAll = Boolean(deviceScreenshots.desktop && deviceScreenshots.tablet && deviceScreenshots.mobile);
+      return {
+        id: 'cross-device-images',
+        // DELIVERABLES-only card: the three full-page captures staged together.
+        category: 'deliverables',
+        number: 'FS',
+        label: 'FULL PAGE',
+        title: 'Full Page Images',
+        description: crossDeviceScenario(deviceScreenshots)
+          || 'Full-page captures of your site on desktop, tablet, and mobile, staged together as one shareable visual. Use the download arrow to save all three.',
+        placeholderLabel: 'CAPTURE\nDEVICES',
+        rows: cdHas ? [
+          { key: 'cd-desktop', label: 'Desktop full-page', value: deviceScreenshots.desktop ? 'Ready' : 'Missing' },
+          { key: 'cd-tablet',  label: 'Tablet full-page',  value: deviceScreenshots.tablet ? 'Ready' : 'Missing' },
+          { key: 'cd-mobile',  label: 'Mobile full-page',  value: deviceScreenshots.mobile ? 'Ready' : 'Missing' },
+        ] : buildWorkNeededRows('Full-page images require a completed homepage screenshot capture.'),
+        // 'Live' keeps the footer status dot green (it's in the green list);
+        // partial/none fall to the needs-work treatment — matching the badge below.
+        footerLeft: cdAll ? 'Live' : cdHas ? 'Partial' : WORK_NEEDED_LABEL,
+        footerRight: 'ACTIVE',
+        deliverableAsset: cdHas ? {
+          title: 'Full Page Images',
+          kind: 'image',
+          items: [
+            deviceScreenshots.desktop && { src: deviceScreenshots.desktop, label: 'Desktop — full page', filename: `${deliverableBizName}-desktop-full.png` },
+            deviceScreenshots.tablet && { src: deviceScreenshots.tablet, label: 'Tablet — full page', filename: `${deliverableBizName}-tablet-full.png` },
+            deviceScreenshots.mobile && { src: deviceScreenshots.mobile, label: 'Mobile — full page', filename: `${deliverableBizName}-mobile-full.png` },
+          ].filter(Boolean),
+        } : null,
+      };
+    })(),
+    (() => {
+      // POST ME card — suggested X post (video + static) built from brief/brand data.
+      const bizName  = client?.businessName || brandOverview?.headline || 'My Business';
+      const siteUrl  = client?.websiteUrl   || client?.website || '';
+      const tagline  = brandOverview?.summary || brandOverview?.positioning || brandOverview?.headline || '';
+      const cleanUrl = siteUrl.replace(/^https?:\/\/(?:www\.)?/, '').replace(/\/$/, '');
+      const videoCopy = (() => {
+        const base = tagline ? `${bizName} — ${tagline.slice(0, 100)}` : `Check out ${bizName}`;
+        const tail = siteUrl ? `\n\n${siteUrl}` : '';
+        return (base + tail).slice(0, 280);
+      })();
+      const staticCopy = (() => {
+        const base = tagline ? tagline.slice(0, 140) : `${bizName} is live.`;
+        const tail = siteUrl ? `\n\n${siteUrl}` : '';
+        return (base + tail).slice(0, 280);
+      })();
+      const xVideoIntent  = `https://x.com/intent/post?text=${encodeURIComponent(videoCopy)}`;
+      const xStaticIntent = `https://x.com/intent/post?text=${encodeURIComponent(staticCopy)}`;
+      const hasVideoAsset  = Boolean(latestStudioVideoUrl);
+      // X only accepts MP4 video. A WebM render still shows in the mockup, but the
+      // actual post attaches the OG image instead — the copy/rows reflect that.
+      const videoPostable  = hasVideoAsset && latestStudioVideoIsXReady;
+      const hasStaticAsset = Boolean(siteMeta?.ogImage || multiDevicePreviewSrc);
+      const activeIntent   = hasVideoAsset ? xVideoIntent : xStaticIntent;
+      return {
+        id: 'post-me',
+        category: 'deliverables',
+        number: 'PM',
+        label: 'POST ME',
+        title: 'Post Me',
+        description: videoPostable
+          ? "Your video is ready to post. Tap POST TO X to publish it with a caption pulled from your brand brief."
+          : hasVideoAsset
+            ? "Your video render is WebM, which X can't accept yet — tapping POST TO X publishes your site preview image instead, with the suggested caption."
+            : hasStaticAsset
+              ? "Your site preview is ready to share. Tap POST TO X to publish it with a suggested caption."
+              : "Once your Video Promo or Social Preview is ready, you'll get a suggested post to share on X.",
+        placeholderLabel: 'POST\nTO X',
+        rows: [
+          { key: 'pm-type', label: 'Post type',      value: videoPostable ? 'Video post' : hasStaticAsset ? 'Image post' : hasVideoAsset ? 'Video (WebM — needs MP4)' : 'Pending assets' },
+          { key: 'pm-biz',  label: 'Business',       value: bizName },
+          { key: 'pm-site', label: 'Link',           value: cleanUrl || 'Not set' },
+          { key: 'pm-copy', label: 'Suggested post', value: videoCopy.slice(0, 80) + (videoCopy.length > 80 ? '…' : '') },
+        ],
+        footerLeft: hasVideoAsset ? 'Live' : hasStaticAsset ? 'Ready' : 'Pending',
+        footerRight: 'ACTIVE',
+        readinessBadge: postMeResult?.ok
+          ? { tone: 'ok', label: 'Posted!' }
+          : postMeResult?.error
+            ? { tone: 'warn', label: 'Failed' }
+            : (hasVideoAsset || hasStaticAsset) ? { tone: 'ok', label: 'Ready' } : null,
+        xIntentUrl:       activeIntent,
+        xVideoIntentUrl:  xVideoIntent,
+        xStaticIntentUrl: xStaticIntent,
+        // Always render the action — posts text-only when no media is attached.
+        footerAction: {
+          label: postMeLoading ? 'Posting…' : postMeResult?.ok ? '✓ Posted' : 'POST TO X',
+          loading: postMeLoading,
+          onClick: handlePostMeToX,
+        },
+      };
+    })(),
     {
       id: 'website-landing',
       category: 'website',
@@ -7672,26 +8036,28 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       // Lead card of the DELIVERABLES bucket; also lives in STAND UP (brief) as
       // the active Creative Brief.
       extraCategories: ['deliverables'],
-      number: 'CB',
+      number: activeCapabilityFilter === 'deliverables' ? 'OB' : 'CB',
       label: 'CREATIVE BRIEF',
       title: 'Creative Brief',
-      description: 'Packages your first creative deliverable — device mockup, full-page screenshots, a motion mockup, and an AI summary of what the site is starting from.',
+      description: activeCapabilityFilter === 'deliverables'
+        ? 'Establishes a baseline for creative, reduces time spent onboarding and creates a clear starting point for custom work.'
+        : 'Your site translated into a clear, visual read of your message, presentation, and next moves. Download a shareable summary with key insights and direction.',
       placeholderLabel: 'RUN\nCREATIVE\nBRIEF',
       rows: [
-        { key: 'ob-status', label: 'Status', value: marketingBriefStatus },
-        { key: 'ob-focus', label: 'Scout focus', value: marketingBriefConfig?.sourceFocus || 'Not configured' },
-        { key: 'ob-instructions', label: 'Instructions', value: marketingBriefConfig?.scoutInstructions ? 'Custom' : 'Default' },
-        { key: 'ob-sources', label: 'Sources', value: (marketingBriefConfig?.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS).join(' · ') },
-        { key: 'ob-preview', label: 'Latest signal', value: marketingBriefPreview },
+        { key: 'ob-summary', label: 'Brief summary', value: cbSummaryReady ? 'Ready' : 'Pending' },
+        { key: 'ob-mockup', label: 'Device mockup', value: cbMockupReady ? 'Ready' : 'Pending' },
+        { key: 'ob-screens', label: 'Cross-device views', value: cbScreensReady ? 'Ready' : 'Pending' },
+        { key: 'ob-social', label: 'Social preview', value: cbSocialReady ? 'Ready' : 'Pending' },
+        { key: 'ob-video', label: 'Video post', value: cbVideoReady ? 'Ready' : 'Pending' },
       ],
-      footerLeft: hasDailyBriefData ? 'Live' : 'Configure Scout',
+      footerLeft: creativeBriefReady ? 'Ready' : marketingBriefRunning ? 'Building…' : 'Run to build',
       footerRight: 'REVIEWED',
       footerAction: {
-        label: marketingBriefRunning ? '…' : hasMarketingBriefData ? 'Re-run' : 'Run Brief',
+        label: marketingBriefRunning ? '…' : creativeBriefReady ? 'Re-run' : 'Run Brief',
         loading: marketingBriefRunning || marketingBriefSaving,
         onClick: runCreativeBrief,
       },
-      readinessBadge: hasDailyBriefData ? { tone: 'ok', label: 'Passed' } : null,
+      readinessBadge: creativeBriefReady ? { tone: 'ok', label: 'Passed' } : null,
     },
 
     // ── ADMIN · EMAIL ─────────────────────────────────────────────────────────
@@ -8484,6 +8850,13 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       }
       const moduleDesc = buildModuleStateDescription(card.id, moduleCardState, moduleContext);
       if (moduleDesc) dynamicShortDescription = moduleDesc;
+      // Social Preview: once a capture exists, override the generic module-state
+      // copy with the data-aware scenario (missing image / description / etc.) so
+      // the tile matches card.description. No capture yet → keep the module copy.
+      if (card.id === 'social-preview') {
+        const sp = socialPreviewScenario(siteMeta);
+        if (sp) dynamicShortDescription = sp;
+      }
 
       // Design Evaluation: once the analyzer has findings, replace the generic
       // module-state copy with a results-focused summary that points the user
@@ -8646,6 +9019,15 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         }
         return { tone: 'partial', label: 'Partial' };
       }
+      if (card.id === 'cross-device-images') {
+        // Mirror multi-device-view: badge matches the footer dot — all three
+        // captures → green Passed, some → Partial, none → Capture failed.
+        const cdAny = Boolean(deviceScreenshots.desktop || deviceScreenshots.tablet || deviceScreenshots.mobile);
+        const cdEvery = Boolean(deviceScreenshots.desktop && deviceScreenshots.tablet && deviceScreenshots.mobile);
+        if (cdEvery) return { tone: 'ok', label: 'Passed' };
+        if (cdAny) return { tone: 'partial', label: 'Partial' };
+        return { tone: 'critical', label: 'Capture failed' };
+      }
       if (card.id === 'style-guide') {
         // After a modular run, derive pass state from the actual style-guide
         // data presence. Fall back to analyzer signal when no data yet.
@@ -8738,6 +9120,39 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     <div data-dashboard-theme={theme} style={shellStyle}>
       <style>{dashboardCss}</style>
       <GlassTooltipLayer />
+      {downloadMenu && (
+        <div className="card-dl-menu-overlay" onClick={() => setDownloadMenu(null)}>
+          <div
+            className="card-dl-menu"
+            style={{ left: downloadMenu.x, top: downloadMenu.y }}
+            onClick={(e) => e.stopPropagation()}
+            role="menu"
+            aria-label="Download assets"
+          >
+            {downloadMenu.items.map((it) => (
+              <a
+                key={it.label}
+                href={it.href}
+                download={it.filename}
+                className="card-dl-menu-item"
+                role="menuitem"
+                onClick={(e) => {
+                  e.preventDefault();
+                  const a = document.createElement('a');
+                  fetch(it.href, { mode: 'cors' })
+                    .then((r) => { if (!r.ok) throw new Error(); return r.blob(); })
+                    .then((b) => { const u = URL.createObjectURL(b); a.href = u; a.download = it.filename || 'download'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000); })
+                    .catch(() => window.open(it.href, '_blank', 'noopener'));
+                  setDownloadMenu(null);
+                }}
+              >
+                <Download size={14} strokeWidth={2} aria-hidden="true" />
+                <span>{it.label}</span>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
       <header id="founders-top-strip" data-tooltip-disabled="true">
         <div id="founders-top-strip-inner">
           <Link href="/" id="founders-brand" aria-label="Back to homepage">
@@ -9084,6 +9499,40 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         </svg>
                       </button>
                     </div>
+                    {(() => {
+                      // "DL ALL" — downloads every available deliverable as a zip
+                      // (handleDownloadAllDeliverables). Styled like the brain /
+                      // cooldown chips (gradient Doto text + icon, no button chrome),
+                      // sits left of the brain coverage chip. Shown only when assets exist.
+                      const hasDeliverableAssets = Boolean(
+                        latestStudioVideoUrl || homepageDeviceMockupUrl
+                        || deviceScreenshots.desktop || deviceScreenshots.tablet || deviceScreenshots.mobile
+                        || siteMeta?.ogImage
+                      );
+                      if (!hasDeliverableAssets) return null;
+                      return (
+                        <>
+                          <span className="cap-source-divider" aria-hidden="true" />
+                          <button
+                            type="button"
+                            id="dashboard-dl-all-chip"
+                            title="Download all deliverable assets as a zip"
+                            aria-label="Download all deliverable assets as a zip"
+                            onClick={handleDownloadAllDeliverables}
+                            disabled={dlAllBusy}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 2px', flexShrink: 0, background: 'none', border: 'none', cursor: dlAllBusy ? 'default' : 'pointer' }}
+                          >
+                            {dlAllBusy ? (
+                              <span aria-hidden="true" style={{ width: 16, height: 16, borderRadius: '50%', background: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)', animation: 'run-indicator-pulse 1.4s ease-in-out infinite', flexShrink: 0 }} />
+                            ) : (
+                              <Download size={22} strokeWidth={2} stroke="url(#coverage-grad)" aria-hidden="true" style={{ marginTop: 1 }} />
+                            )}
+                            <span className="dl-all-text dl-all-text--full" style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>DL ALL ASSETS</span>
+                            <span className="dl-all-text dl-all-text--short" style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>DL</span>
+                          </button>
+                        </>
+                      );
+                    })()}
                     <span className="cap-source-divider" aria-hidden="true" />
                     {(() => {
                       // Data Coverage micro-readout — mirrors the audit-summary
@@ -9095,15 +9544,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       // the value text (background-clip), and the meter (SVG url).
                       const GRAD = 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)';
                       return (
-                        <button
-                          type="button"
+                        <span
                           id="dashboard-coverage-chip"
-                          title={`Data coverage — ${captured}/${total} fields captured (${pct}%) — click to view`}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 2px', flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer' }}
-                          onClick={() => {
-                            if (!auditCard) return;
-                            setActiveTileModal({ title: auditCard.title, description: auditCard.description, dynamicShortDescription: auditCard.dynamicShortDescription || null, rows: auditCard.rows, cardId: auditCard.id, placeholderLabel: auditCard.placeholderLabel, number: auditCard.number, label: auditCard.label, isCapabilityCard: true, vizType: null, recommendation: auditCard.recommendation || null, analyzer: auditCard.analyzer || null, readinessBadge: auditCard.readinessBadge || null });
-                          }}
+                          title="Data coverage and quality"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 2px', flexShrink: 0, background: 'none', border: 'none', cursor: 'default' }}
                         >
                           {/* Shared gradient def for the brain + meter strokes */}
                           <svg width="0" height="0" aria-hidden="true" style={{ position: 'absolute' }}>
@@ -9125,11 +9569,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                           <span style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: GRAD, WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>
                             {pct}<span style={{ fontSize: 13 }}>%</span>
                           </span>
-                          <svg width="28" height="16" viewBox="0 0 36 21" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+                          <svg className="coverage-gauge" width="28" height="16" viewBox="0 0 36 21" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
                             <path d="M3 18 A15 15 0 0 1 33 18" stroke="rgba(42,36,32,0.14)" strokeWidth="3.4" strokeLinecap="round" />
                             <path d="M3 18 A15 15 0 0 1 33 18" stroke="url(#coverage-grad)" strokeWidth="3.4" strokeLinecap="round" strokeDasharray={SEMI} strokeDashoffset={SEMI - (SEMI * pct) / 100} />
                           </svg>
-                        </button>
+                        </span>
                       );
                     })()}
                     <span className="cap-source-divider" aria-hidden="true" />
@@ -9186,6 +9630,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         <span id="run-idle-indicator-dot" aria-hidden="true" />
                       )}
                     </>
+                    {isAdmin ? (
                     <span id="reseed-url-group" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
                       <span className="cap-source-divider" aria-hidden="true" />
                       <Globe id="dashboard-source-cta-icon" size={15} strokeWidth={1.5} aria-hidden="true" />
@@ -9217,6 +9662,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         <span id="reseed-run-btn-icon">↗</span>
                       </button>
                     </span>
+                    ) : null}
                   </div>
                 </div>
                 {reseedError ? <div id="reseed-error-msg">{reseedError}</div> : null}
@@ -9353,8 +9799,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
                   }
                   if (activeCapabilityFilter === 'deliverables') {
-                    // DELIVERABLES: Creative Brief → cross-device → studio → social → data coverage → style guide.
-                    const order = ['onboarding-brief', 'multi-device-view', 'mockup-studio', 'social-preview', 'audit-summary', 'style-guide'];
+                    // DELIVERABLES: Creative Brief → studio (Video Promo) → multi-device → social → data coverage → style guide → full-page images (last).
+                    const order = ['onboarding-brief', 'mockup-studio', 'multi-device-view', 'social-preview', 'audit-summary', 'style-guide', 'cross-device-images'];
                     const ai = order.indexOf(a.id); const bi = order.indexOf(b.id);
                     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
                   }
@@ -9410,7 +9856,79 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   return 0;
                 });
 
+              // Downloadable assets per card, drawn from the artifact URLs resolved
+              // above. Returns [{ label, href, filename }] (nulls filtered) — the
+              // card-shell download button shows when this is non-empty.
+              const getCardDownloads = (card) => {
+                const out = [];
+                const add = (label, href, filename) => { if (href) out.push({ label, href, filename }); };
+                const safe = (s) => String(s || 'download').replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 80);
+                switch (card.id) {
+                  case 'brief':
+                  case 'marketing-brief':
+                  case 'onboarding-brief':
+                  case 'creative-brief':
+                  case 'client-brief':
+                    add('Brief (PDF)', briefPdfUrl, `${safe(client?.businessName || 'creative')}-brief.pdf`);
+                    break;
+                  case 'mockup-studio':
+                    add('Motion mockup (MP4)', latestStudioVideoUrl, `${safe(client?.businessName || 'mockup')}-studio.mp4`);
+                    break;
+                  case 'multi-device-view':
+                    add('Device mockup (PNG)', homepageDeviceMockupUrl, `${safe(client?.businessName)}-device-mockup.png`);
+                    add('Full page — desktop', deviceScreenshots.desktop, `${safe(client?.businessName)}-desktop-full.png`);
+                    add('Full page — tablet', deviceScreenshots.tablet, `${safe(client?.businessName)}-tablet-full.png`);
+                    add('Full page — mobile', deviceScreenshots.mobile, `${safe(client?.businessName)}-mobile-full.png`);
+                    break;
+                  case 'cross-device-images':
+                    add('Full page — desktop', deviceScreenshots.desktop, `${safe(client?.businessName)}-desktop-full.png`);
+                    add('Full page — tablet', deviceScreenshots.tablet, `${safe(client?.businessName)}-tablet-full.png`);
+                    add('Full page — mobile', deviceScreenshots.mobile, `${safe(client?.businessName)}-mobile-full.png`);
+                    break;
+                  case 'social-preview':
+                    add('Social preview image', siteMeta?.ogImage, `${safe(client?.businessName)}-social-preview.png`);
+                    break;
+                  default:
+                    break;
+                }
+                return out;
+              };
+
+              // Fetch the asset and save it locally (real "Save", not a tab open).
+              // Cross-origin hosts that block CORS fall back to opening the URL.
+              const triggerDownload = async (href, filename) => {
+                try {
+                  const res = await fetch(href, { mode: 'cors' });
+                  if (!res.ok) throw new Error(String(res.status));
+                  const blob = await res.blob();
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url; a.download = filename || 'download';
+                  document.body.appendChild(a); a.click(); a.remove();
+                  setTimeout(() => URL.revokeObjectURL(url), 4000);
+                } catch {
+                  window.open(href, '_blank', 'noopener');
+                }
+              };
+
+              // Click handler for a card's download button: one asset → download it;
+              // many → open the fixed-position menu anchored under the button.
+              const onCardDownloadClick = (e, items, bulk = false) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!items.length) return;
+                if (items.length === 1) { triggerDownload(items[0].href, items[0].filename); return; }
+                // bulk: save every asset at once (no pick-menu) — used by the
+                // cross-device card whose arrow grabs all three full-page images.
+                if (bulk) { items.forEach((it) => triggerDownload(it.href, it.filename)); return; }
+                const r = e.currentTarget.getBoundingClientRect();
+                setDownloadMenu((prev) => (prev && prev.anchorId === e.currentTarget.id
+                  ? null
+                  : { items, x: Math.min(r.right, window.innerWidth - 12), y: r.bottom + 6, anchorId: e.currentTarget.id }));
+              };
+
               const _renderCard = (card) => {
+              const _cardDownloads = getCardDownloads(card);
               const _mEnabled = moduleConfig ? (moduleConfig[card.id]?.enabled ?? false) : true;
               const _mStatus = moduleState?.[card.id]?.status ?? 'inactive';
               const hasBothButtons = Boolean(card.moduleControls) && !(!_mEnabled && _mStatus === 'inactive');
@@ -9448,6 +9966,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 onClick={(e) => {
                   const clickedControl = e.target.closest('button, a, input, textarea, select, summary, details, [role="button"]');
                   if (clickedControl) return;
+                  // Company Brain card never opens the run modal — paperclip / drag-drop only.
+                  if (isCompanyBrain) {
+                    if (e.target.closest('.tile-mobile-chevron')) toggleMobileCard(card.id);
+                    return;
+                  }
                   const isMobileCard = typeof window !== 'undefined' && window.matchMedia('(max-width: 520px)').matches;
                   const isListRow = Boolean(e.currentTarget.closest('.cap-list-row-main'));
                   if (isMobileCard && !isListRow) {
@@ -9539,6 +10062,19 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     ? { background: `linear-gradient(135deg, ${sgDisplayData.colors.primary.hex}, ${sgDisplayData.colors.secondary?.hex || sgDisplayData.colors.neutral?.hex || '#ddd'})` }
                     : undefined}
                 >
+                  {_cardDownloads.length > 0 && (
+                    <button
+                      type="button"
+                      id={`card-dl-${card.id}`}
+                      className="card-dl-btn"
+                      data-tooltip-disabled="true"
+                      aria-label={card.id === 'cross-device-images' ? 'Download all three images' : _cardDownloads.length === 1 ? `Download ${_cardDownloads[0].label}` : 'Download assets'}
+                      title={card.id === 'cross-device-images' ? 'Download all three images' : _cardDownloads.length === 1 ? `Download ${_cardDownloads[0].label}` : 'Download assets'}
+                      onClick={(e) => onCardDownloadClick(e, _cardDownloads, card.id === 'cross-device-images')}
+                    >
+                      <Download size={16} strokeWidth={2.2} aria-hidden="true" />
+                    </button>
+                  )}
                   {card.id === 'brief' && briefPreviewHtml ? (
                     <iframe
                       key={dashboardState?.latestRunId || 'brief-preview'}
@@ -9629,6 +10165,28 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         );
                       })()}
                     </div>
+                  ) : card.id === 'cross-device-images' ? (
+                    (deviceScreenshots.desktop || deviceScreenshots.tablet || deviceScreenshots.mobile) ? (
+                      <div className="cross-device-trio" id="cross-device-trio-shell">
+                        {deviceScreenshots.desktop && (
+                          <span className="cross-device-frame cross-device-frame--desktop">
+                            <img className="cross-device-img" src={deviceScreenshots.desktop} alt="Desktop full-page capture" loading="lazy" />
+                          </span>
+                        )}
+                        {deviceScreenshots.tablet && (
+                          <span className="cross-device-frame cross-device-frame--tablet">
+                            <img className="cross-device-img" src={deviceScreenshots.tablet} alt="Tablet full-page capture" loading="lazy" />
+                          </span>
+                        )}
+                        {deviceScreenshots.mobile && (
+                          <span className="cross-device-frame cross-device-frame--mobile">
+                            <img className="cross-device-img" src={deviceScreenshots.mobile} alt="Mobile full-page capture" loading="lazy" />
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="tile-empty-label">{"CAPTURE\nDEVICES"}</span>
+                    )
                   ) : card.id === 'multi-device-view' && multiDevicePreviewSrc ? (
                     <span className="tile-intake-mockup-wrap">
                       <img
@@ -9732,12 +10290,14 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     </div>
                   ) : card.id === 'onboarding-brief' && briefPreviewHtml ? (
                     // Creative Brief card always shows the rendered Creative Brief.
+                    // onLoad kicks off a slow auto-scroll tease that rests at the bottom.
                     <iframe
                       key={dashboardState?.latestRunId || 'creative-brief-preview'}
                       className="tile-brief-preview"
                       title="Creative Brief preview"
                       srcDoc={briefPreviewHtml}
                       sandbox="allow-same-origin"
+                      onLoad={(e) => startBriefTease(e.currentTarget)}
                     />
                   ) : card.id === 'onboarding-brief' && briefPreviewLoading ? (
                     <div className="tile-brief-preview-loading" role="status" aria-label="Loading Creative Brief">
@@ -9754,6 +10314,140 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       loop
                       playsInline
                     />
+                  ) : card.id === 'post-me' ? (
+                    // Framed X screenshot mockup — device frame + X top-nav + post card.
+                    // Media renders as a STATIC (paused) video first-frame or OG image.
+                    (() => {
+                      const pmBiz    = client?.businessName || brandOverview?.headline || 'Your Business';
+                      const pmHandle = '@' + (client?.businessName || 'yourbrand').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 15);
+                      const pmCopy   = brandOverview?.summary || brandOverview?.positioning || brandOverview?.headline || 'Check out our new site.';
+                      const pmClean  = (client?.websiteUrl || client?.website || '').replace(/^https?:\/\/(?:www\.)?/, '').replace(/\/$/, '');
+                      const pmImg    = siteMeta?.ogImage || multiDevicePreviewSrc || null;
+                      const pmHasMedia = Boolean(latestStudioVideoUrl || pmImg);
+                      return (
+                        <div id="post-me-tile-mockup" style={{
+                          width: '100%', height: '100%', display: 'flex', alignItems: 'stretch',
+                          justifyContent: 'center', padding: 6, boxSizing: 'border-box',
+                          background: 'radial-gradient(circle at 50% 0%, #15202b 0%, #0a0a0a 70%)',
+                        }}>
+                          {/* Device frame */}
+                          <div style={{
+                            width: '100%', maxWidth: 240, display: 'flex', flexDirection: 'column',
+                            background: '#000', borderRadius: 14, overflow: 'hidden',
+                            border: '1px solid rgba(255,255,255,0.14)',
+                            boxShadow: '0 8px 24px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.04)',
+                          }}>
+                            {/* X top nav — centered logo, hairline underline */}
+                            <div style={{
+                              flexShrink: 0, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              borderBottom: '1px solid rgba(255,255,255,0.1)', position: 'relative',
+                            }}>
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
+                                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.742l7.722-8.831L1.534 2.25H8.08l4.259 5.631zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                              </svg>
+                            </div>
+                            {/* Post body */}
+                            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 10px 0' }}>
+                              {/* Author row */}
+                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, flexShrink: 0 }}>
+                                <div style={{
+                                  width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
+                                  background: 'linear-gradient(135deg, #1d9bf0 0%, #0a7ab8 100%)',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  fontSize: 13, fontWeight: 800, color: '#fff', fontFamily: 'sans-serif',
+                                }}>{pmBiz.charAt(0).toUpperCase()}</div>
+                                <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                                    <span style={{ fontSize: 10, fontWeight: 700, color: '#e7e9ea', fontFamily: 'sans-serif', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 110 }}>
+                                      {pmBiz.slice(0, 24)}
+                                    </span>
+                                    {/* verified check */}
+                                    <svg width="12" height="12" viewBox="0 0 22 22" fill="#1d9bf0" style={{ flexShrink: 0 }}>
+                                      <path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.469-.445-1.053-.751-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.469-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.22.878 1.69.47.444 1.055.75 1.69.88.635.13 1.294.08 1.902-.144.27.586.7 1.084 1.24 1.44.54.354 1.167.55 1.813.566.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.239 1.266.296 1.903.164.636-.132 1.22-.447 1.68-.907.46-.46.776-1.044.908-1.681s.075-1.299-.165-1.903c.586-.274 1.084-.705 1.439-1.246.354-.54.551-1.17.569-1.816zM9.662 14.85l-3.429-3.428 1.293-1.302 2.072 2.072 4.4-4.794 1.347 1.246z"/>
+                                    </svg>
+                                    <span style={{ fontSize: 9, color: '#71767b', fontFamily: 'sans-serif', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                      {pmHandle} · now
+                                    </span>
+                                  </div>
+                                </div>
+                                <div style={{ flexShrink: 0, background: '#eff3f4', color: '#0f1419', borderRadius: 20, padding: '3px 9px', fontSize: 9, fontWeight: 700, fontFamily: 'sans-serif' }}>
+                                  Follow
+                                </div>
+                              </div>
+                              {/* Post text */}
+                              <p style={{
+                                margin: 0, fontSize: 10, lineHeight: 1.4, color: '#e7e9ea', fontFamily: 'sans-serif', flexShrink: 0,
+                                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                              }}>
+                                {pmCopy.slice(0, 110)}{pmCopy.length > 110 ? '…' : ''}
+                                {pmClean && <span style={{ color: '#1d9bf0' }}> {pmClean}</span>}
+                              </p>
+                              {/* Media card */}
+                              {pmHasMedia && (
+                                <div style={{ flex: 1, minHeight: 0, borderRadius: 14, overflow: 'hidden', position: 'relative', border: '1px solid rgba(255,255,255,0.12)' }}>
+                                  {latestStudioVideoUrl ? (
+                                    <video
+                                      src={latestStudioVideoUrl}
+                                      poster={pmImg || undefined}
+                                      muted playsInline preload="metadata"
+                                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }}
+                                    />
+                                  ) : (
+                                    <img src={pmImg} alt={pmBiz} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                                  )}
+                                  {latestStudioVideoUrl && (
+                                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                                      <div style={{
+                                        width: 34, height: 34, borderRadius: '50%', background: 'rgba(0,0,0,0.6)',
+                                        border: '2px solid rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                      }}>
+                                        <svg width="12" height="12" viewBox="0 0 12 12" fill="white"><path d="M3 2l7 4-7 4V2z"/></svg>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                            {/* Action / status row */}
+                            <div style={{
+                              flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12,
+                              padding: '6px 12px 8px', minHeight: 24,
+                            }}>
+                              {postMeResult?.ok ? (
+                                <span style={{ fontSize: 9, color: '#4ade80', fontFamily: 'sans-serif', fontWeight: 600 }}>
+                                  ✓ Posted to X
+                                  {postMeResult.twitterId && (
+                                    <a href={`https://x.com/i/web/status/${postMeResult.twitterId}`}
+                                      target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
+                                      style={{ marginLeft: 5, color: '#1d9bf0', textDecoration: 'underline' }}>View ↗</a>
+                                  )}
+                                </span>
+                              ) : postMeResult?.error ? (
+                                <span style={{ fontSize: 8, color: '#f87171', fontFamily: 'sans-serif', lineHeight: 1.3 }}>
+                                  {postMeResult.error.slice(0, 80)}
+                                </span>
+                              ) : postMeLoading ? (
+                                <span style={{ fontSize: 9, color: '#71767b', fontFamily: 'sans-serif' }}>Uploading &amp; posting…</span>
+                              ) : (
+                                [{path: 'M1.751 10c0-4.42 3.584-8 8.005-8h.366a8.001 8.001 0 0 1 7.97 9.58l.001.02 1.024 1.024a1.07 1.07 0 0 1-.953 1.763L16.5 22.5l-2.836-2.837c-.33.1-.67.187-1.014.256A8 8 0 0 1 2.1 11.39 8 8 0 0 1 1.75 10Z', label: '4'},
+                                 {path: 'M4.5 3.88l4.432 4.14-1.364 1.46L5.5 7.55V16c0 1.1.896 2 2 2H13v2H7.5a4 4 0 0 1-4-4V7.55L1.432 9.48.068 8.02 4.5 3.88zM16.5 6h-6V4h6a4 4 0 0 1 4 4v8.45l2.068-1.93 1.364 1.46-4.432 4.14-4.432-4.14 1.364-1.46 2.068 1.93V8c0-1.1-.896-2-2-2z', label: '1'},
+                                 {path: 'M16.697 5.5c-1.222-.06-2.679.51-3.89 2.16l-.805 1.09-.806-1.09C9.984 6.01 8.526 5.44 7.304 5.5c-1.243.07-2.349.78-2.91 1.91-.552 1.12-.633 2.78.479 4.82 1.074 1.97 3.257 4.27 7.129 6.61 3.87-2.34 6.052-4.64 7.126-6.61 1.111-2.04 1.03-3.7.477-4.82-.561-1.13-1.666-1.84-2.908-1.91z', label: '12'},
+                                 {path: 'M8.75 21V3h2v18h-2zM13 21V8.5h2V21h-2zM4.5 21V13h2v8h-2zM17.5 21V11.5h2V21h-2z', label: '89'},
+                                ].map(({ path, label }) => (
+                                  <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 3, color: '#71767b' }}>
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d={path}/></svg>
+                                    <span style={{ fontSize: 9, fontFamily: 'sans-serif' }}>{label}</span>
+                                  </span>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()
+                  ) : card.id === 'social-preview' ? (
+                    // No share image captured — the absence IS the finding.
+                    <span className="tile-empty-label">{"SOCIAL\nPREVIEW\nMISSING"}</span>
                   ) : (
                     <span className="tile-empty-label">{card.title || card.placeholderLabel}</span>
                   )}
@@ -10158,7 +10852,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               const _visibleGroups = _forceList ? [_groups[activeStepIdx]].filter(Boolean) : _groups;
               return (
                 <React.Fragment>
-                  <div className={`segmented cap-step-seg cap-step-seg--top${_forceList ? ' cap-step-seg--tabs' : ''}`} role="tablist" aria-label="Workflow steps">
+                  <div className={`segmented cap-step-seg cap-step-seg--top${_forceList ? ' cap-step-seg--tabs' : ''}`} role="tablist" aria-label="Workflow steps" data-tooltip-disabled="true">
                     {_bucketSteps.map((s, i) => {
                       const _stepLocked = isCapStepLocked(activeCapabilityFilter, i, isAdmin);
                       return (
@@ -10174,7 +10868,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         {_stepLocked
                           ? <Lock className="cap-step-icon" size={16} strokeWidth={2} aria-hidden="true" />
                           : (s.Icon && <s.Icon className="cap-step-icon" size={18} strokeWidth={2} aria-hidden="true" style={{ color: CAP_BUCKET_COLOR[activeCapabilityFilter] || 'currentColor' }} />)}
-                        <span className="cap-step-text">{s.label}</span>
+                        <span className="cap-step-text">{activeCapabilityFilter === 'deliverables' ? '' : s.label}</span>
                       </button>
                       );
                     })}
@@ -10183,7 +10877,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     {_visibleGroups.map((g, gi) => (
                       <div key={g.step ? g.step.id : `group-${gi}`} className="cap-list-col" data-step-idx={g.stepIdx}>
                         {/* Mobile-only section label — desktop uses the cap-step-seg--top column headers */}
-                        {g.step && <div className="cap-list-col-label">{g.step.label}</div>}
+                        {g.step && activeCapabilityFilter !== 'deliverables' && <div className="cap-list-col-label">{g.step.label}</div>}
                         <div className="cap-list-col-body">
                           {g.renderMode === 'grid' ? (
                             <div className="cap-step-grid">{g.cards.map(_renderCard)}</div>
@@ -10411,7 +11105,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         {_stepLocked
                           ? <Lock className="cap-step-icon" size={16} strokeWidth={2} aria-hidden="true" />
                           : (s.Icon && <s.Icon className="cap-step-icon" size={18} strokeWidth={2} aria-hidden="true" style={{ color: CAP_BUCKET_COLOR[activeCapabilityFilter] || 'currentColor' }} />)}
-                        <span className="cap-step-text">{s.label}</span>
+                        <span className="cap-step-text">{activeCapabilityFilter === 'deliverables' ? '' : s.label}</span>
                       </button>
                       );
                     })}
@@ -10425,10 +11119,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           </div>{/* end capability-grid-col */}
 
           {/* Right — filter nav */}
-          <div id="capability-nav-col" data-tooltip-disabled="true">
+          {/* Non-admins are onboarding-gated: every bucket but Deliverables is
+              locked, so the whole nav is read-only — strip its hover/active FX. */}
+          <div id="capability-nav-col" className={!isAdmin ? 'capability-nav-col--static' : undefined} data-tooltip-disabled="true">
             {[
               // { key: 'onboarding', label: 'Data Visualization',      sub: 'Capture & inspect',       icon: ClipboardList,         color: '#7b5fff' },
-              { key: 'deliverables', label: 'Deliverables',          sub: 'Your creative package',    icon: Images,                 color: '#14b8a6' },
+              { key: 'deliverables', label: 'Deliverables',          sub: 'What you walk away with',   icon: Images,                 color: '#14b8a6' },
               { key: 'brief',      label: 'Daily Stand Up',          sub: 'Your active brief',        icon: ChartColumnIncreasing, color: '#2a2420' },
               { key: 'knowledge',  label: 'Knowledge Officer',       sub: 'Custom data & context',    icon: BrainIcon,             color: '#3b82f6' },
               { key: 'growth',     label: 'Marketing Director',      sub: 'SEO, signals & growth',    icon: Settings2,             color: '#10b981' },
@@ -10445,12 +11141,18 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               // clickable), shown with a lock on the right. Admins have full access.
               .map(({ key, label, sub, icon: NavIcon, color }) => {
               const isLocked = !isAdmin && NON_ADMIN_LOCKED_NAV_KEYS.has(key);
+              // Non-admins are onboarding-gated: Deliverables is the only active
+              // nav state. Pin it active and never let another bucket light up,
+              // even if a card click shifts activeCapabilityFilter.
+              const isNavActive = isAdmin
+                ? activeCapabilityFilter === key
+                : key === 'deliverables';
               return (
               <button
                 key={key ?? 'all'}
                 type="button"
                 id={`capability-nav-btn-${key ?? 'all'}`}
-                className={`capability-nav-btn${activeCapabilityFilter === key ? ' capability-nav-btn--active' : ''}${isLocked ? ' capability-nav-btn--locked' : ''}`}
+                className={`capability-nav-btn${isNavActive ? ' capability-nav-btn--active' : ''}${isLocked ? ' capability-nav-btn--locked' : ''}`}
                 disabled={isLocked}
                 onClick={() => {
                   if (key === activeCapabilityFilter) return;
@@ -10598,12 +11300,14 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               always active so the terminal never sits alone. */}
           <div
             id="intake-modal-card"
-            data-with-survey={!adhocActive && activeRunIsIntake ? 'true' : 'false'}
+            data-with-survey={!HIDE_INTAKE_CHAT && !adhocActive && activeRunIsIntake ? 'true' : 'false'}
             style={{
               position: 'relative',
               zIndex: 2,
               width: '100%',
-              maxWidth: '52rem',
+              // Full width only when the survey column sits beside the terminal.
+              // With chat hidden it's a lone terminal — halve the card so it reads compact.
+              maxWidth: (!HIDE_INTAKE_CHAT && !adhocActive && activeRunIsIntake) ? '52rem' : '28rem',
               padding: 'clamp(1.25rem, 5vw, 2rem)',
               borderRadius: '10px',
               boxSizing: 'border-box',
@@ -10618,7 +11322,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 
             {/* Brand row — exact auth brandStyle */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', justifyContent: 'space-between' }}>
-              <img src="/img/circle_logo.png" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', display: 'block' }} />
+              <img src="/img/circle_logo.png" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', objectFit: 'contain', border: '2px solid rgba(255,255,255,0.35)', display: 'block' }} />
               <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.44)', fontWeight: 700, fontFamily: '"Space Mono", monospace' }}>
                 {adhocActive ? (adhocTerminal.brand || 'Working') : activeModuleCard ? 'Updating Dashboard' : 'Client Access'}
               </span>
@@ -10628,6 +11332,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 id="intake-modal-close"
                 onClick={adhocActive ? () => { if (!adhocRunning) closeAdhocTerminal(); } : dismissIntakeModal}
                 aria-label="Close build terminal and return to dashboard"
+                data-tooltip-disabled="true"
                 style={adhocRunning ? { opacity: 0.5 } : undefined}
               >[ ✕ ]</button>
             </div>
@@ -10667,7 +11372,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 </div>
               </div>
 
-              {!adhocActive && activeRunIsIntake && <div id="intake-modal-survey-col" data-resolved={surveyResolved ? 'true' : 'false'}>
+              {!HIDE_INTAKE_CHAT && !adhocActive && activeRunIsIntake && <div id="intake-modal-survey-col" data-resolved={surveyResolved ? 'true' : 'false'}>
                 <OnboardingChatModal
                   steps={ONBOARDING_ENTRY_STEPS}
                   initialAnswers={onboardingAnswersSeed || {}}
@@ -10716,7 +11421,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 <span id="intake-modal-footer-note">
                   {adhocActive
                     ? (adhocTerminal.status === 'error' ? 'Render failed — close and try again.' : 'Rendering on GPU — saves to your assets.')
-                    : 'Close anytime — your dashboard keeps building in the background.'}
+                    : (
+                      <>
+                        <span className="footer-note-full">You can close and come back anytime</span>
+                        <span className="footer-note-mobile">You can close</span>
+                      </>
+                    )}
                 </span>
               )}
             </div>
@@ -11064,6 +11774,60 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 {namedBriefView.error || 'Assembling brief…'}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Deliverables asset viewer — full-screen image/video + download, the
+          same overlay shell as the Creative Brief (#brief-fullscreen-*). */}
+      {deliverableView && (
+        <div id="brief-fullscreen-overlay" onClick={() => setDeliverableView(null)}>
+          <div id="brief-fullscreen-container" className="deliverable-view-container" onClick={(e) => e.stopPropagation()}>
+            <div id="brief-fullscreen-actions">
+              {deliverableView.items.length === 1 && (
+                <a
+                  id="brief-fullscreen-download"
+                  href={deliverableView.items[0].src}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download={deliverableView.items[0].filename}
+                >↓ Download</a>
+              )}
+              <button
+                type="button"
+                id="brief-fullscreen-close"
+                onClick={() => setDeliverableView(null)}
+              >[ ✕ ]</button>
+            </div>
+            <div className="deliverable-view-body">
+              {deliverableView.kind === 'video' ? (
+                <video
+                  className="deliverable-view-video"
+                  src={deliverableView.items[0].src}
+                  controls
+                  autoPlay
+                  loop
+                  playsInline
+                />
+              ) : (
+                deliverableView.items.map((it, i) => (
+                  <figure className="deliverable-view-figure" key={it.src || i}>
+                    <img className="deliverable-view-img" src={it.src} alt={it.label || deliverableView.title} />
+                    <figcaption className="deliverable-view-cap">
+                      <span>{it.label}</span>
+                      <a
+                        className="deliverable-view-dl"
+                        href={it.src}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        download={it.filename}
+                        onClick={(e) => e.stopPropagation()}
+                      >↓ Download</a>
+                    </figcaption>
+                  </figure>
+                ))
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -14916,7 +15680,7 @@ const dashboardCss = `
   #founders-shell {
     position: relative;
     z-index: 1;
-    max-width: 1440px;
+    max-width: 1700px;
     margin: 0 auto;
     /* padding-top matches the fixed nav height (#founders-top-strip min-height 64px). */
     padding: 64px 48px 96px;
@@ -14944,7 +15708,7 @@ const dashboardCss = `
     gap: 24px;
     min-height: 64px;
     width: 100%;
-    max-width: 1440px;
+    max-width: 1700px;
     margin: 0 auto;
     padding: 0 48px;
     flex-wrap: nowrap;
@@ -15512,6 +16276,25 @@ const dashboardCss = `
     min-width: 0;
     border-radius: 28px;
   }
+  #ready-to-use-bridge-panel {
+    border-top: 1px solid rgba(20, 184, 166, 0.22);
+    margin-top: 18px;
+    padding: 16px 22px 4px;
+    text-align: center;
+  }
+  .ready-to-use-bridge-lead {
+    margin: 0 0 6px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #2a2420;
+  }
+  .ready-to-use-bridge-body {
+    margin: 0 auto;
+    max-width: 620px;
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: #6b6660;
+  }
   #capability-nav-col {
     display: flex;
     flex-direction: column;
@@ -15554,7 +16337,7 @@ const dashboardCss = `
     opacity: 0.85;
     transition: opacity 0.45s ease;
   }
-  .capability-nav-btn:hover {
+  .capability-nav-btn:not(.capability-nav-btn--locked):hover {
     background: rgba(255, 255, 255, 1);
     box-shadow:
       0px 6px 14px rgba(0,0,0,0.06),
@@ -15567,15 +16350,15 @@ const dashboardCss = `
       box-shadow 0.32s cubic-bezier(0.16, 1, 0.3, 1),
       transform 0.38s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
-  .capability-nav-btn:hover::before {
+  .capability-nav-btn:not(.capability-nav-btn--locked):hover::before {
     background: linear-gradient(180deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
     opacity: 1;
   }
-  .capability-nav-btn:hover .capability-nav-btn-content {
+  .capability-nav-btn:not(.capability-nav-btn--locked):hover .capability-nav-btn-content {
     transform: translateX(5px);
     transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
-  .capability-nav-btn:hover .capability-nav-btn-icon-wrap {
+  .capability-nav-btn:not(.capability-nav-btn--locked):hover .capability-nav-btn-icon-wrap {
     transform: scale(1.12);
     transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
@@ -15663,6 +16446,50 @@ const dashboardCss = `
     transform: translateX(0);
     transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) 0s;
   }
+  /* Read-only nav (non-admin onboarding gate): cancel every hover/press/active
+     motion + gradient highlight so the whole right nav reads as static. Selectors
+     carry the #id + class so they outrank the #capability-nav-col:hover rules. */
+  #capability-nav-col.capability-nav-col--static .capability-nav-btn:not(.capability-nav-btn--active),
+  #capability-nav-col.capability-nav-col--static .capability-nav-btn:not(.capability-nav-btn--active):hover,
+  #capability-nav-col.capability-nav-col--static .capability-nav-btn:not(.capability-nav-btn--active):active {
+    background: rgba(255, 255, 255, 0.35);
+    box-shadow: 0px 0px 0px rgba(0,0,0,0), inset 0 1px 0 rgba(255,255,255,0.22);
+    transform: scale(1) translateY(0);
+    cursor: default;
+  }
+  #capability-nav-col.capability-nav-col--static .capability-nav-btn:not(.capability-nav-btn--active)::before,
+  #capability-nav-col.capability-nav-col--static .capability-nav-btn:not(.capability-nav-btn--active):hover::before {
+    background: linear-gradient(180deg, rgba(228,228,228,0.9), transparent 62%);
+    opacity: 0.85;
+  }
+  /* Non-admin: the pinned Deliverables item stays fully active — keep its white
+     surface, elevation, and gradient border even while a sibling nav item is
+     hovered (no hover-off dimming). Outranks the #capability-nav-col:hover dim. */
+  #capability-nav-col.capability-nav-col--static .capability-nav-btn--active,
+  #capability-nav-col.capability-nav-col--static:hover .capability-nav-btn--active,
+  #capability-nav-col.capability-nav-col--static:hover .capability-nav-btn--active:hover {
+    background: rgba(255, 255, 255, 1);
+    box-shadow:
+      0px 6px 14px rgba(0,0,0,0.06),
+      0px 18px 36px rgba(0,0,0,0.06),
+      0px 28px 56px rgba(0,0,0,0.09),
+      inset 0 1px 0 rgba(255,255,255,0.55);
+    transform: scale(1) translateY(0);
+    cursor: default;
+  }
+  #capability-nav-col.capability-nav-col--static .capability-nav-btn--active::before,
+  #capability-nav-col.capability-nav-col--static:hover .capability-nav-btn--active::before {
+    background: linear-gradient(180deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+    opacity: 1;
+  }
+  #capability-nav-col.capability-nav-col--static .capability-nav-btn-content,
+  #capability-nav-col.capability-nav-col--static .capability-nav-btn:hover .capability-nav-btn-content,
+  #capability-nav-col.capability-nav-col--static .capability-nav-btn:active .capability-nav-btn-content {
+    transform: none;
+  }
+  #capability-nav-col.capability-nav-col--static .capability-nav-btn:hover .capability-nav-btn-icon-wrap {
+    transform: none;
+  }
   .capability-nav-btn-icon-wrap {
     display: flex;
     align-items: center;
@@ -15741,34 +16568,29 @@ const dashboardCss = `
     gap: 1px;
     background: rgba(42, 36, 32, 0.1);
   }
-  /* DELIVERABLES bucket — 3 cards across instead of 2. */
+  /* DELIVERABLES bucket — 2x2 grid by default (never 3); 4-across only on ultra-wide. */
   .cap-bucket-deliverables .cap-step-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  /* DELIVERABLES is a single-tab bucket: show a clear "DELIVERABLES" section
-     title (eyebrow) above the cards on every breakpoint instead of the bare
-     one-tab segmented strip. */
-  .cap-bucket-deliverables .cap-step-seg--top { display: none; }
-  .cap-bucket-deliverables .cap-list-col-label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-family: "Space Mono", ui-monospace, monospace;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--text-display);
-    padding: 8px 2px 12px;
-    margin: 0 0 4px;
-  }
-  .cap-bucket-deliverables .cap-list-col-label::before {
-    content: '';
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: #14b8a6;
-    flex-shrink: 0;
+  /* DELIVERABLES is a single-tab bucket. Show its one "DELIVERABLES" tab on
+     every breakpoint, styled like the mobile tab (centered label, full-width
+     bottom border + active gradient underline). The separate eyebrow label is
+     dropped so only one "DELIVERABLES" shows on desktop AND mobile. */
+  .cap-bucket-deliverables .cap-list-col-label { display: none; }
+  /* Desktop: match the mobile tab look (mobile keeps its own rules untouched). */
+  @media (min-width: 901px) {
+    .cap-bucket-deliverables .cap-step-seg--top.cap-step-seg--tabs {
+      display: flex;
+      margin: 16px 0 12px;
+      border-bottom: 1px solid rgba(42, 36, 32, 0.1);
+    }
+    .cap-bucket-deliverables .cap-step-seg--top.cap-step-seg--tabs > button {
+      flex: 1;
+      justify-content: center;
+      text-align: center;
+      font-size: 0.78rem;
+      padding: 0 12px;
+    }
   }
   .cap-step-group:not(:has(.cap-step-seg)) .cap-step-grid {
     background: transparent;
@@ -16412,6 +17234,61 @@ const dashboardCss = `
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.45);
     overflow: hidden;
   }
+  /* Card-shell download button — top-right of every card's image shell (card +
+     list views). Glass disc; opens a fixed menu when a card has >1 asset. */
+  .card-dl-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 6;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255,255,255,0.6);
+    background: rgba(20, 18, 16, 0.55);
+    color: #fff;
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.22);
+    transition: background 0.16s ease, transform 0.16s ease;
+  }
+  .card-dl-btn:hover { background: rgba(20, 18, 16, 0.8); transform: translateY(-1px); }
+  .cap-list-row-main .card-dl-btn { width: 26px; height: 26px; top: 5px; right: 5px; }
+  .card-dl-menu-overlay { position: fixed; inset: 0; z-index: 10060; }
+  .card-dl-menu {
+    position: fixed;
+    transform: translateX(-100%);
+    min-width: 12rem;
+    max-width: min(18rem, calc(100vw - 2rem));
+    padding: 6px;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255,255,255,0.6);
+    box-shadow: 0 8px 18px rgba(0,0,0,0.14), 0 18px 40px rgba(0,0,0,0.16);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .card-dl-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-family: var(--font-ui);
+    font-size: 0.8rem;
+    color: var(--text-display);
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .card-dl-menu-item:hover { background: rgba(42, 36, 32, 0.08); }
+  .card-dl-menu-item svg { color: var(--text-secondary); flex-shrink: 0; }
 	  .tile-intake-placeholder-style-guide {
 	    align-items: stretch;
 	    justify-content: stretch;
@@ -16419,6 +17296,40 @@ const dashboardCss = `
 	    font-family: 'Doto', var(--font-mono);
 	    font-size: clamp(14px, 1.4vw, 20px);
 	  }
+	  /* Cross-Device Images deliverable — three full-page captures fanned out at
+	     slight angles to fill the tile face as one composed visual. */
+	  .tile-intake-placeholder-cross-device-images {
+	    padding: 0;
+	    background:
+	      radial-gradient(circle at 22% 26%, rgba(93, 201, 184, 0.22), transparent 38%),
+	      radial-gradient(circle at 78% 72%, rgba(156, 129, 225, 0.22), transparent 40%),
+	      linear-gradient(135deg, rgba(255,255,255,0.78), rgba(255,255,255,0.30));
+	  }
+	  .cross-device-trio {
+	    position: absolute;
+	    inset: 0;
+	    display: flex;
+	    gap: 0;
+	    overflow: hidden;
+	  }
+	  .cross-device-frame {
+	    position: relative;
+	    flex: 1 1 0;
+	    min-width: 0;
+	    height: 100%;
+	    overflow: hidden;
+	  }
+	  .cross-device-img {
+	    width: 100%;
+	    height: 100%;
+	    object-fit: cover;
+	    display: block;
+	  }
+	  /* Each frame reveals a different slice of the full-page capture so the trio
+	     reads as the whole site: desktop=top, tablet=middle, mobile=bottom. */
+	  .cross-device-frame--desktop .cross-device-img { object-position: center top; }
+	  .cross-device-frame--tablet .cross-device-img { object-position: center 50%; }
+	  .cross-device-frame--mobile .cross-device-img { object-position: center bottom; }
 	  .tile-intake-placeholder-visual-dna {
 	    background:
 	      radial-gradient(circle at 24% 24%, rgba(245, 158, 11, 0.26), transparent 32%),
@@ -16646,6 +17557,54 @@ const dashboardCss = `
     height: 100%;
     border: none;
     background: #fff;
+  }
+  .deliverable-view-body {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    background: #f5f3ef;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    padding: 56px 24px 32px;
+  }
+  .deliverable-view-video {
+    max-width: 100%;
+    max-height: calc(90vh - 88px);
+    border-radius: 8px;
+    background: #000;
+  }
+  .deliverable-view-figure {
+    margin: 0;
+    width: 100%;
+    max-width: 1100px;
+  }
+  .deliverable-view-img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+  }
+  .deliverable-view-cap {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 10px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: #2a2420;
+  }
+  .deliverable-view-dl {
+    color: #2a2420;
+    text-decoration: none;
+    border-bottom: 1px solid rgba(42, 36, 32, 0.3);
+    white-space: nowrap;
+  }
+  .deliverable-view-dl:hover {
+    border-bottom-color: #2a2420;
   }
   .tile-brief-preview {
     position: absolute;
@@ -20447,6 +21406,11 @@ const dashboardCss = `
     height: 6px;
     display: inline-block;
     flex-shrink: 0;
+    /* Live/active green — single source of truth so every ACTIVE dot reads
+       bright + glowing, matching the inline succeeded status. Red/dim states
+       below still win via !important. */
+    background: #22c55e;
+    box-shadow: 0 0 5px 2px rgba(34,197,94,0.45);
   }
   .tile-foot-status {
     display: inline-flex;
@@ -21186,8 +22150,14 @@ const dashboardCss = `
   @media (min-width: 1400px) {
     #capability-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   }
+  /* DELIVERABLES goes 4-across only on ultra-wide where the cards have room. */
+  @media (min-width: 1600px) {
+    .cap-bucket-deliverables .cap-step-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
   @media (max-width: 1200px) {
     #founders-hero-shell { grid-template-columns: 1fr; gap: 32px; }
+    /* DELIVERABLES breaks from 4-across to 2x2 on medium and smaller. */
+    .cap-bucket-deliverables .cap-step-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   @media (max-width: 900px) {
     #founders-shell { padding: 64px 24px 64px; } /* padding-top = nav height (64px) */
@@ -21195,7 +22165,7 @@ const dashboardCss = `
     #dashboard-source-cta-row { width: 100%; }
     #capability-section { padding-top: 0; }
     #capability-section-shell { grid-template-columns: 1fr; gap: 8px; }
-    /* DELIVERABLES drops from 3-across to 2-across at this breakpoint. */
+    /* DELIVERABLES drops from 4-across to 2-across at this breakpoint (never 3). */
     .cap-bucket-deliverables .cap-step-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     #dashboard-source-cta-row { box-shadow: 0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4) !important; }
     /* No navigation on mobile — hide the bucket nav entirely. */
@@ -21510,6 +22480,16 @@ const dashboardCss = `
     flex-shrink: 0;
     color: rgba(42,36,32,0.45);
   }
+  /* DL ALL chip label — full text on desktop, short on the narrow source bar. */
+  #dashboard-dl-all-chip .dl-all-text--short { display: none; }
+  @media (max-width: 620px) {
+    #dashboard-dl-all-chip .dl-all-text--full { display: none; }
+    #dashboard-dl-all-chip .dl-all-text--short { display: inline; }
+    /* Strip the chips down to icon + first value: drop the brain gauge and the
+       brief cooldown digit; the brief icon stays. */
+    #dashboard-coverage-chip .coverage-gauge { display: none; }
+    #brief-cooldown-time-btn { display: none; }
+  }
   #reseed-url-input {
     flex: 1;
     min-width: 0;
@@ -21770,10 +22750,16 @@ const dashboardCss = `
   }
   #intake-modal-footer-note {
     color: rgba(42, 36, 32, 0.42);
-    letter-spacing: 0.08em;
+    font-size: 0.55rem;
+    letter-spacing: 0.06em;
     text-transform: none;
     text-align: right;
     min-width: 0;
+  }
+  #intake-modal-footer-note .footer-note-mobile { display: none; }
+  @media (max-width: 480px) {
+    #intake-modal-footer-note .footer-note-full { display: none; }
+    #intake-modal-footer-note .footer-note-mobile { display: inline; }
   }
   #intake-modal-close {
     flex-shrink: 0;

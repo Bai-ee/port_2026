@@ -263,7 +263,7 @@ export default function LeadgenModulePanel({
 
   const statusDotColor = phase === 'failed' ? '#D71921' : phase === 'done' ? '#4A9E5C' : '#D4A843';
   const statusPulse    = phase === 'running' ? 'status-pulse 1.4s ease-in-out infinite' : 'none';
-  const marqueeText    = `${(moduleLabel || moduleId || '').toUpperCase()}  ·  ANALYSIS  ·  `;
+  const marqueeText    = `${(moduleLabel || moduleId || '').toUpperCase()} · ANALYSIS · `;
   const onlineDotColor = phase === 'done' ? '#4A9E5C' : phase === 'failed' ? '#D71921' : '#D4A843';
 
   return (

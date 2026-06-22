@@ -141,7 +141,7 @@ function hostnameOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return String(url); }
 }
 
-function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [], weather = null, moduleBriefs = [], auditMockupUrl = null, studioVideoUrl = null, socialPreviewImageUrl = null, company = null, researchConfig = null, strategyData = null, signalsCore = [], socialQueue = [], briefType = DEFAULT_BRIEF_TYPE, coverSummary = null, previousRunAt = null, displayLabel = null }) {
+function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [], weather = null, moduleBriefs = [], auditMockupUrl = null, studioVideoUrl = null, socialPreviewImageUrl = null, fullPageScreenshots = null, company = null, researchConfig = null, strategyData = null, signalsCore = [], socialQueue = [], briefType = DEFAULT_BRIEF_TYPE, coverSummary = null, previousRunAt = null, displayLabel = null }) {
   const content = marketingBrief?.content || {};
   const agentData = marketingBrief?.scoutBrief?.agentData || {};
   const opportunities = agentData?.viralOpportunities?.opportunities || marketingBrief?.contentOpportunities || [];
@@ -618,6 +618,10 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
 
   const deviceBrief = auditItems.find((b) => b.moduleId === 'multi-device-view');
   const shots = deviceBrief?.screenshots || {};
+  // Full-page captures (the same ones the Cross-Device Layouts card uses) — the
+  // deliverables prefer these over the viewport-only homepage shots.
+  const fullPages = fullPageScreenshots || {};
+  const fullShot = (device) => fullPages[`${device}-full`]?.downloadUrl || (shots && shots[device]) || null;
   const shotKeys = ['desktop', 'tablet', 'mobile'].filter((k) => shots[k]);
   const screenshotStrip = shotKeys.length ? `
     <div class="card" style="padding:10px;margin-bottom:14px">
@@ -864,10 +868,10 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
       ? `<div class="bento">${items.map((t) => bTile({ span: 's2', word: t, lite: true, ...opts })).join('')}</div>`
       : '';
     let n = 0;
-    const page = (title, inner) => {
+    const page = (title, inner, secId) => {
       const num = String((n += 1)).padStart(2, '0');
       return `
-  <section class="page cb-page">
+  <section class="page cb-page"${secId ? ` id="${secId}"` : ''}>
     <div class="sec-num">${num}</div>
     <div class="cb-deco" aria-hidden="true"></div>
     <div class="cb-pg-eyebrow"><span class="dot"></span><span>Creative Brief</span><span class="idx">${num}</span></div>
@@ -895,20 +899,36 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     const bookCall = `<div class="cb-cta-row cb-cta-row--lg"><a class="cb-cta cb-cta--solid" href="${CONTACT_URL}" target="_blank" rel="noopener noreferrer">Book a Call</a></div>`;
     // Deliverables row — every asset side by side, full viewport width, each
     // with Download + Book a Call; stacks to one column on mobile.
+    // Each asset carries a stable anchor slug so the cover "What you get" links
+    // jump straight to the matching deliverable cell.
     const deliverableAssets = [
-      { url: studioVideoUrl, type: 'video', name: 'Video Post' },
-      { url: mockupSrc, type: 'img', name: 'Device Mockup' },
-      { url: shots && shots.desktop, type: 'img', name: 'Desktop' },
-      { url: shots && shots.tablet, type: 'img', name: 'Tablet' },
-      { url: shots && shots.mobile, type: 'img', name: 'Mobile' },
-      { url: socialPreviewImageUrl, type: 'img', name: 'Social Preview' },
-    ].filter((a) => ok(a.url));
+      { url: studioVideoUrl, type: 'video', name: 'Video Post', slug: 'cb-d-video', desc: 'Your site turned into a social-ready video — see how your brand reads in motion and download content ready to share.' },
+      { url: mockupSrc, type: 'img', name: 'Device Mockup', slug: 'cb-d-mockup', desc: 'Your homepage in a polished real-world device frame, ready for decks, posts, and presentations.' },
+      { url: fullShot('desktop'), type: 'img', name: 'Desktop View', slug: 'cb-d-desktop', desc: 'Full desktop capture — review layout, content, and hierarchy at full width.' },
+      { url: fullShot('tablet'), type: 'img', name: 'Tablet View', slug: 'cb-d-tablet', desc: 'Tablet capture — confirm the experience holds up at mid-size.' },
+      { url: fullShot('mobile'), type: 'img', name: 'Mobile View', slug: 'cb-d-mobile', desc: 'Mobile capture — catch layout and content issues on the screen most people use.' },
+      // Social Preview always shows: when the site has no og:image the cell
+      // renders an empty bordered placeholder (no broken <img>) — the absence IS
+      // the finding, so the deliverable still surfaces the gap.
+      { url: socialPreviewImageUrl, type: 'img', name: 'Social Preview', slug: 'cb-d-social', keepIfEmpty: true, emptyLabel: 'No share image set', desc: 'How your brand appears when shared across platforms — and what to fix for clean, clickable links.' },
+    ].filter((a) => ok(a.url) || a.keepIfEmpty);
+    const deliverableMedia = (a) => {
+      if (!ok(a.url)) return `<div class="cb-deliverable-media--empty">${esc(a.emptyLabel || 'Not available yet')}</div>`;
+      return a.type === 'video'
+        ? `<video src="${esc(a.url)}" autoplay muted loop playsinline></video>`
+        : `<img src="${esc(a.url)}" alt="${esc(a.name)}"/>`;
+    };
     const deliverablesRow = deliverableAssets.length
-      ? `<div class="cb-deliverables-row">${deliverableAssets.map((a) => `<div class="cb-deliverable-card"><div class="cb-deliverable-media">${a.type === 'video' ? `<video src="${esc(a.url)}" autoplay muted loop playsinline></video>` : `<img src="${esc(a.url)}" alt="${esc(a.name)}"/>`}</div><div class="cb-deliverable-name">${esc(a.name)}</div>${ctaRow(a.url)}</div>`).join('')}</div>`
+      ? `<div class="cb-deliverables-grid">${deliverableAssets.map((a, i) => `<div class="cb-deliverable" id="${a.slug}"><div class="cb-deliverable-idx">D${String(i + 1).padStart(2, '0')}</div><div class="cb-deliverable-media">${deliverableMedia(a)}</div><div class="cb-deliverable-name">${esc(a.name)}</div><p class="cb-deliverable-desc">${esc(a.desc)}</p>${ctaRow(a.url)}</div>`).join('')}</div>`
       : '';
 
-    // LEAD WITH THE SYSTEM — capabilities as a numbered flow + contact CTA.
-    pages.push(page('The<br/>System.', `${pull('Hit Loop manages your creative operations, automating the daily work that keeps you visible, accessible, and consistent across platforms.')}
+    // LEAD WITH DELIVERABLES — bordered asset grid up front (what they walk away with).
+    if (deliverablesRow) {
+      pages.push(page('Deliverables.', deliverablesRow, 'cb-deliverables'));
+    }
+
+    // "YOU'RE IN" — welcome + capabilities as a numbered flow + CTA.
+    pages.push(page("You're<br/>In.", `${pull('Hit Loop manages your creative operations, automating the daily work that keeps you visible, accessible, and consistent across platforms.')}
       ${flowNodes([
         { t: 'Fix', p: 'What to fix on your site and content.' },
         { t: 'Watch', p: 'What competitors are pushing right now.' },
@@ -916,54 +936,72 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
       ])}
       <div class="rule"></div>
       <p class="sub">The system tracks everything. A human makes sure it's actually right for you.</p>
-      ${bookCall}`));
+      ${bookCall}`, 'cb-system'));
 
     // Key Insight — the verdict.
     const hero = byLabel('Headline');
     if (hero && hero.paras.length) {
-      pages.push(page('Key<br/>Insight.', `<div class="bento">${bTile({ span: 's4', cls: 'ink', word: hero.paras.join(' ') })}</div>`));
-    }
-
-    // Deliverables — every asset side by side, full width (see it up front).
-    if (deliverablesRow) {
-      pages.push(page('Deliverables.', deliverablesRow));
+      pages.push(page('Key<br/>Insight.', `<div class="bento">${bTile({ span: 's4', cls: 'ink', word: hero.paras.join(' ') })}</div>`, 'cb-insight'));
     }
 
     // What This Site Is — a big pull-quote statement.
     const wtis = byLabel('What This Site Is');
     if (wtis && wtis.paras.length) {
-      pages.push(page('What This<br/>Site Is.', `${wtis.paras.map((p) => pull(p)).join('')}`));
+      pages.push(page('What This<br/>Site Is.', `${wtis.paras.map((p) => pull(p)).join('')}`, 'cb-what-this-site-is'));
     }
 
     // What's Missing — a big-numbered gap list.
     const miss = byLabel("What's Missing");
     if (miss) {
-      pages.push(page("What's<br/>Missing.", `${gapList([...shortParas(miss), ...miss.bullets])}${subFrom(longParas(miss))}`));
+      pages.push(page("What's<br/>Missing.", `${gapList([...shortParas(miss), ...miss.bullets])}${subFrom(longParas(miss))}`, 'cb-whats-missing'));
     }
 
     // Biggest Risk — alert block + effect tags.
     const risk = byLabel('Biggest Risk');
     if (risk) {
-      pages.push(page('Biggest<br/>Risk.', `<div class="cb-alert">${subFrom(longParas(risk))}</div>${tagRow(risk.bullets)}`));
+      pages.push(page('Biggest<br/>Risk.', `<div class="cb-alert">${subFrom(longParas(risk))}</div>${tagRow(risk.bullets)}`, 'cb-biggest-risk'));
     }
 
     // The Opportunity — strengths grid + the upside line.
     const opp = byLabel('The Opportunity');
     if (opp) {
-      pages.push(page('The<br/>Opportunity.', `${metaTiles([...shortParas(opp), ...opp.bullets])}${subFrom(longParas(opp))}`));
+      pages.push(page('The<br/>Opportunity.', `${metaTiles([...shortParas(opp), ...opp.bullets])}${subFrom(longParas(opp))}`, 'cb-opportunity'));
     }
 
     // The Decision — binary question as a pull, stakes as tags, contact CTA.
     const dec = byLabel('Decision');
     if (dec && dec.paras.length) {
       const [q, ...rest] = dec.paras;
-      pages.push(page('The<br/>Decision.', `${pull(q)}${subFrom(rest.filter((p) => p.length > 0))}${tagRow(dec.bullets)}${bookCall}`));
+      pages.push(page('The<br/>Decision.', `${pull(q)}${subFrom(rest.filter((p) => p.length > 0))}${tagRow(dec.bullets)}${bookCall}`, 'cb-decision'));
     }
 
     // Cover — the device mockup sits in the top-right corner (isCoverMockup);
-    // no video on the cover. Just the lede here.
+    // no video on the cover. Just the lede + the "What you get" rows (plain,
+    // non-linked, each with a thumbnail of the matching deliverable).
+    const pkgItems = [
+      { label: 'Cross-device views of your site', thumb: mockupSrc, thumbType: 'img' },
+      { label: 'Social preview validation', thumb: socialPreviewImageUrl, thumbType: 'img' },
+      { label: 'A shareable video of your brand', thumb: studioVideoUrl, thumbType: 'video' },
+    ];
+    const pkgThumb = (a) => ok(a.thumb)
+      ? (a.thumbType === 'video'
+          ? `<span class="cb-package-thumb"><video src="${esc(a.thumb)}" autoplay muted loop playsinline></video></span>`
+          : `<span class="cb-package-thumb"><img src="${esc(a.thumb)}" alt="" /></span>`)
+      : '<span class="cb-package-thumb cb-package-thumb--empty"></span>';
     const coverHtml = `<div class="sub" id="brief-cover-exec-summary">
-      <p class="cb-cover-lede">This is a live read on your business: how your site, content, and presence land across screens, social, and real-world use.</p>
+      <p class="cb-cover-lede">This Creative Brief audits your current digital presence, outlining how your site, content, and brand are presented across screens, social platforms, and real-world use.</p>
+      <p class="cb-cover-lede">It establishes a baseline for onboarding, reducing time spent gathering context and creating a clear starting point for more tailored, hands-on creative work when you're ready.</p>
+      <p class="cb-cover-lede">When you're ready to go further, reach out to your human directly — we'll turn this baseline into tailored, hands-on creative work, together.</p>
+    </div>
+    <div class="cb-handoff" id="brief-cover-handoff">
+      <div class="cb-handoff-sig"><img class="cb-cover-sig" src="/img/sig.png" alt="Signature" /></div>
+      <div class="cb-package" id="brief-cover-package">
+        <div class="cb-package-label">What you get</div>
+        <ul class="cb-package-list">
+          ${pkgItems.map((a) => `<li>${pkgThumb(a)}<span class="cb-package-text">${a.label}</span></li>`).join('')}
+        </ul>
+        <p class="cb-package-foot">Everything you need to understand, review, and use immediately.</p>
+      </div>
     </div>`;
     return { coverHtml, pages: pages.join('\n') };
   };
@@ -1076,13 +1114,41 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
      width — the base brief CSS only defines .s4 above 760px, so below it the
      tile collapsed to half. */
   .cb-page .bento .s3,.cb-page .bento .s4{grid-column:1 / -1}
-  /* Deliverables row — assets side by side, full width, stack on mobile. */
-  .cb-deliverables-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;width:100%}
-  .cb-deliverable-card{display:flex;flex-direction:column;gap:12px;min-width:0}
-  .cb-deliverable-media img,.cb-deliverable-media video{display:block;width:100%;height:auto;border-radius:12px;border:1px solid var(--line);box-shadow:0 10px 28px rgba(0,0,0,.14)}
-  .cb-deliverable-name{font-family:"Space Grotesk",sans-serif;font-weight:500;font-size:clamp(15px,1.4vw,18px);color:var(--ink)}
-  .cb-deliverable-card .cb-cta{padding:10px 16px;font-size:11px}
-  @media(max-width:760px){.cb-deliverables-row{grid-template-columns:1fr}}
+  /* Deliverables — bordered grid (Nothing: structure is ornament). Connected
+     hairline cells, no fill, no shadows, no radius — matches the document's
+     other grids. Each cell: index → media → name → description → CTAs. */
+  .cb-deliverables-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:0;border:1px solid var(--line);border-width:1px 0 0 1px;width:100%}
+  .cb-deliverable{display:flex;flex-direction:column;gap:14px;min-width:0;background:transparent;border:1px solid var(--line);border-width:0 1px 1px 0;padding:clamp(20px,2.4vw,34px)}
+  .cb-deliverable-idx{font-family:"Space Mono",monospace;font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--ink-soft)}
+  .cb-deliverable-media{margin:0}
+  .cb-deliverable-media img,.cb-deliverable-media video{display:block;width:100%;height:auto;border:1px solid var(--line)}
+  .cb-deliverable-media--empty{display:flex;align-items:center;justify-content:center;text-align:center;min-height:150px;padding:18px;border:1px dashed var(--line);font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft)}
+  .cb-deliverable-name{font-family:"Space Grotesk",sans-serif;font-weight:500;font-size:clamp(20px,2vw,28px);letter-spacing:-.01em;line-height:1.05;color:var(--ink)}
+  .cb-deliverable-desc{font-family:"Space Grotesk",sans-serif;font-weight:300;font-size:clamp(14px,1.4vw,17px);line-height:1.5;color:var(--ink-soft);margin:0}
+  .cb-deliverable .cb-cta-row{margin-top:auto;padding-top:4px}
+  .cb-deliverable .cb-cta{padding:10px 18px;font-size:11px}
+  @media(max-width:760px){.cb-deliverables-grid{grid-template-columns:1fr}}
+  /* Cover handoff — Nothing container: one bordered box, sig on the left,
+     "what you get" on the right, split by a single hairline divider. */
+  .cb-handoff{display:grid;grid-template-columns:1fr auto;align-items:center;gap:0;border:1px solid var(--ink);padding:0;margin:30px 0 0;width:100%;max-width:100%}
+  .cb-handoff-sig{order:2;display:flex;align-items:center;justify-content:center;padding:clamp(20px,2.6vw,32px);border-left:1px solid var(--ink)}
+  .cb-cover-sig{display:block;height:auto;width:clamp(120px,13vw,168px);opacity:.9}
+  .cb-package{order:1;padding:clamp(20px,2.4vw,30px);min-width:0}
+  .cb-package-label{font-family:"Space Mono",monospace;font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:6px}
+  .cb-package-list{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+  .cb-package-list li{display:flex;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid var(--line);font-family:"Space Grotesk",sans-serif;font-weight:400;font-size:clamp(15px,1.5vw,19px);line-height:1.3;color:var(--ink)}
+  .cb-package-thumb{flex-shrink:0;width:64px;height:46px;border:1px solid var(--line);overflow:hidden;display:block;background:var(--card)}
+  .cb-package-thumb img,.cb-package-thumb video{width:100%;height:100%;object-fit:cover;display:block}
+  .cb-package-thumb--empty{background:var(--card)}
+  .cb-package-text{flex:1;min-width:0}
+  .cb-package-foot{font-family:"Space Grotesk",sans-serif;font-weight:300;font-size:clamp(13px,1.3vw,15px);line-height:1.5;color:var(--ink-soft);margin:14px 0 0}
+  /* Mobile — stack: line items first, signature underneath, divider becomes a
+     horizontal rule between them. */
+  @media(max-width:600px){
+    .cb-handoff{grid-template-columns:1fr}
+    .cb-handoff-sig{order:2;border-left:0;border-top:1px solid var(--ink);justify-content:flex-start}
+    .cb-package{order:1}
+  }
   /* Decorative motifs — dot strips, corner brackets, dotted eyebrow + index. */
   .cb-page::before{content:'';position:absolute;top:16px;left:var(--gutter);width:24px;height:24px;border-left:2px solid rgba(10,10,10,.22);border-top:2px solid rgba(10,10,10,.22);pointer-events:none}
   .cb-page::after{content:'';position:absolute;left:var(--gutter);bottom:26px;width:140px;height:11px;background-image:radial-gradient(rgba(10,10,10,.18) 1.3px,transparent 1.6px);background-size:14px 11px;pointer-events:none}
@@ -1100,18 +1166,31 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   .cb-alert{border-left:5px solid var(--ink);padding:4px 0 4px 26px;max-width:640px}
   .cb-alert .sub{margin:0}
   .cb-tags{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
-  .cb-tag{font-family:"Space Mono",monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;padding:10px 16px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink)}
+  .cb-tag{font-family:"Space Mono",monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;padding:10px 16px;border:1px solid var(--line);border-radius:0;background:transparent;color:var(--ink)}
   /* ── Pushed 30% harder — bigger type + bolder decoration (scoped to Creative
      Brief pages so the executive brief is untouched). ── */
-  .cb-page .headline{font-size:clamp(82px,17vw,272px);line-height:.84}
+  /* Doto is monospace, so long single-word lines ("Deliverables.",
+     "Opportunity.") run off-screen at a large max. Clamp so the longest token
+     fits the ~1100px content column and narrow screens; break only as a last
+     resort rather than overflow the page. */
+  .cb-page .headline{font-size:clamp(40px,10vw,132px);line-height:.88;overflow-wrap:break-word;hyphens:auto}
   .cb-page .sec-num{font-size:clamp(130px,22vw,340px);-webkit-text-stroke-width:2px;top:16px}
   .cb-page .sub{font-size:clamp(22px,2.9vw,40px);line-height:1.22}
   .cb-page .pull{font-size:clamp(34px,4.4vw,60px);border-left-width:6px;padding-left:30px;max-width:22ch;line-height:1.08}
   .cb-page .bento .tile.ink .word{font-size:clamp(34px,4.8vw,62px);line-height:1.04}
-  .cb-page .flow .node{padding:28px}
+  /* You're In flow — connected hairline grid, straight edges, no fill (matches
+     the deliverables grid for document-wide consistency). */
+  .cb-page .flow{gap:0;border:1px solid var(--line);border-width:1px 0 0 1px}
+  .cb-page .flow .node{padding:28px;border:1px solid var(--line);border-width:0 1px 1px 0;border-radius:0;background:transparent}
   .cb-page .flow .node .t{font-size:clamp(32px,3.8vw,46px)}
-  .cb-page .meta-grid .meta-tile{padding:22px}
-  .cb-page .meta-grid .meta-tile .v{font-size:clamp(18px,2.1vw,27px);font-weight:500}
+  /* The Opportunity grid — connected hairline cells, straight edges, no fill
+     (matches the deliverables + flow grids). */
+  .cb-page .meta-grid{gap:0;border:1px solid var(--line);border-width:1px 0 0 1px;margin-top:8px}
+  .cb-page .meta-grid .meta-tile{padding:22px;background:transparent;border:1px solid var(--line);border-width:0 1px 1px 0;border-radius:0}
+  .cb-page .meta-grid .meta-tile .v{font-size:clamp(18px,2.1vw,27px);font-weight:500;line-height:1.25}
+  /* The trailing upside line drops to a readable body size with clear space
+     above so it never collides with the grid (the giant .sub is for headlines). */
+  #cb-opportunity .sub{font-size:clamp(17px,1.9vw,24px);line-height:1.5;font-weight:300;margin:36px 0 0;max-width:62ch}
   .cb-deco{width:188px;height:14px;background-size:18px 14px}
   .cb-gap-n{font-size:clamp(38px,5.2vw,68px);-webkit-text-stroke-width:1.6px}
   .cb-gap-t{font-size:clamp(22px,2.7vw,36px)}
@@ -1198,7 +1277,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
       <div class="cap-brief-email-cta-row">
         <button type="button" id="brief-email-cta" class="cap-brief-email-cta">
           <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" />
-          SEND TO MY EMAIL
+          MEET WITH YOUR HUMAN
           <span class="arrow" aria-hidden="true">↗</span>
         </button>
       </div>
@@ -1347,6 +1426,9 @@ async function handleGet(request) {
     studioVideoUrl,
     // Social share preview (OG image) — feeds the Creative Brief social section.
     socialPreviewImageUrl: dash.siteMeta?.ogImage || null,
+    // Full-page captures (same source as the Cross-Device Layouts card) so the
+    // deliverables show full-page shots, not just the viewport homepage.
+    fullPageScreenshots: dash.artifacts?.fullPageScreenshots || null,
     company: {
       brandOverview: dash.snapshot?.brandOverview || null,
       brandTone: dash.snapshot?.brandTone || null,
@@ -1372,8 +1454,22 @@ async function handleGet(request) {
   // agent briefs (Market/Creative/Strategy/Website) keep their own labels.
   const renderedRunId = dash?.modules?.['marketing-brief']?.lastRunId || dash?.latestRunId || null;
   const onboardingRunId = bootstrap?.onboardingRunId || null;
+  // A creative-brief run (the narrow Creative Brief) ALWAYS renders the Creative
+  // Brief format, even for existing clients re-running it — otherwise the
+  // run-sequence check below falls back to the Executive layout.
+  let renderedRunTrigger = null;
+  try {
+    if (renderedRunId) {
+      const rrSnap = await fb.adminDb.collection('clients').doc(clientId).collection('brief_runs').doc(renderedRunId).get();
+      renderedRunTrigger = rrSnap.exists ? (rrSnap.data()?.trigger || null) : null;
+    }
+  } catch { /* non-fatal — fall back to run-sequence detection */ }
+  // A creative-brief OR signup run renders the Creative Brief format: signup now
+  // ships only the Creative Brief deliverables (no scout/scribe data), so its
+  // main brief is always the onboarding composition.
+  const isCreativeBriefRun = renderedRunTrigger === 'creative-brief' || renderedRunTrigger === 'signup';
   const isMainBrief = ['executive-daily', 'onboarding'].includes(resolveBriefType(briefType)) && !briefTypeParam;
-  const isOnboardingRun = isMainBrief && (!onboardingRunId || renderedRunId === onboardingRunId);
+  const isOnboardingRun = isMainBrief && (isCreativeBriefRun || !onboardingRunId || renderedRunId === onboardingRunId);
   const mainBriefLabel = isOnboardingRun ? 'Creative Brief' : 'Executive Brief';
 
   // ── Per-run brief archiving + ?runId= resolution ──────────────────────────
@@ -1482,6 +1578,18 @@ async function handleGet(request) {
       return htmlResponse(renderMarketing());
     } catch (err) {
       console.error('[brief-preview] marketing render failed:', err);
+      return errorPage(500, `Brief render failed: ${err?.message || 'unknown error'}`);
+    }
+  }
+
+  // Creative Brief (onboarding) main brief: a signup / creative-brief run ships
+  // only the asset deliverables + cover summary with NO scribe or marketing
+  // data. Render the onboarding composition directly instead of 404ing.
+  if (isMainBrief && isOnboardingRun) {
+    try {
+      return htmlResponse(renderMarketing());
+    } catch (err) {
+      console.error('[brief-preview] onboarding render failed:', err);
       return errorPage(500, `Brief render failed: ${err?.message || 'unknown error'}`);
     }
   }

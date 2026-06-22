@@ -207,11 +207,13 @@ export async function POST(request) {
 
       let moduleIdsToRun = enabledModuleIds;
       let reusedResults = [];
-      if (claimedRun.trigger === 'creative-brief') {
+      if (claimedRun.trigger === 'creative-brief' || claimedRun.trigger === 'signup') {
         // Narrow Creative Brief run — only the deliverable asset modules. No
         // SEO / agent-readiness / design-eval, no brand/scout synthesis, and no
         // scout-brief chain. The studio video renders and the onboarding summary
-        // is regenerated below.
+        // is regenerated below. Signup uses this same minimal scope: a new client
+        // only needs the Creative Brief deliverables; the heavier audit modules,
+        // brand/scout synthesis, and the Daily Brief defer to a later run.
         moduleIdsToRun = ['multi-device-view', 'social-preview'];
       } else if (claimedRun.trigger === 'brief-refresh') {
         let storedModules = {};
@@ -286,8 +288,10 @@ export async function POST(request) {
       // Generate brand identity + snapshot.brandOverview after modules complete
       // (non-fatal). Gated on the client's OWN site — website-less signups skip
       // this so the templated fallback site never seeds their brand data. The
-      // narrow Creative Brief run also skips it (it reuses existing brand data).
-      if (ownSiteUrl && claimedRun.trigger !== 'creative-brief') {
+      // narrow Creative Brief run AND signup also skip it: the Creative Brief is
+      // the only deliverable on first run, so brand/scout synthesis (which feeds
+      // the Daily Brief) defers to the first brief-refresh/reseed.
+      if (ownSiteUrl && claimedRun.trigger !== 'creative-brief' && claimedRun.trigger !== 'signup') {
         let evidence = null;
         let scoutConfigResult = null;
         try {
@@ -369,11 +373,12 @@ export async function POST(request) {
       // brief-refreshes skip it to avoid re-rendering the video every run.
       if (websiteUrl && (claimedRun.trigger === 'signup' || claimedRun.trigger === 'reseed' || claimedRun.trigger === 'creative-brief')) {
         try {
-          const { renderAndStoreStudioVideo, buildLockedStudioRecipe } = require('../../../../api/_lib/studio-render-core.cjs');
+          const { renderAndStoreStudioVideo } = require('../../../../api/_lib/studio-render-core.cjs');
+          const { getSignupVideoRecipe } = require('../../../../api/_lib/signup-video-recipe.cjs');
           await onProgress('studio-video', 'Rendering your motion mockup…');
           const studioResult = await renderAndStoreStudioVideo({
             clientId,
-            recipe: buildLockedStudioRecipe(websiteUrl),
+            recipe: await getSignupVideoRecipe(websiteUrl),
           });
           if (studioResult.ok) {
             console.log(`[WORKER] studio video rendered for ${clientId} — ${studioResult.capture?.storagePath}`);
@@ -483,16 +488,19 @@ export async function POST(request) {
     });
   }
 
-  // Step 9 — Brief chain: a signup intake ('signup'), a manual executive brief
-  // refresh ('brief-refresh'), or a website re-run ('reseed') hands off to a
-  // scout-brief run, so every executive brief is composed from a fresh A→B
-  // pass: modules (screenshots, SEO, agent readiness, design) → search terms
-  // → campaign → brief. Rerun module triggers never chain. Queue failure is
+  // Step 9 — Brief chain: a manual executive brief refresh ('brief-refresh') or
+  // a website re-run ('reseed') hands off to a scout-brief run, so the executive
+  // brief is composed from a fresh A→B pass: modules (screenshots, SEO, agent
+  // readiness, design) → search terms → campaign → brief. Rerun module triggers
+  // never chain. Signup does NOT chain: a new client only needs the Creative
+  // Brief deliverables (mockups, studio video, onboarding summary), not the slow
+  // scout market-intel scan that builds the Daily Brief — that defers to the
+  // first brief-refresh/reseed (or a later daily run). Queue failure is
   // non-fatal: the intake already succeeded and the brief stays manual.
   // Queued BEFORE completeRun so no bootstrap poll can observe the intake
   // as succeeded without the chained run + queued module mark in place
   // (the worker self-trigger below is after()-deferred regardless).
-  if (pipelineType === 'free-tier-intake' && (claimedRun.trigger === 'signup' || claimedRun.trigger === 'brief-refresh' || claimedRun.trigger === 'reseed')) {
+  if (pipelineType === 'free-tier-intake' && (claimedRun.trigger === 'brief-refresh' || claimedRun.trigger === 'reseed')) {
     const chainSourceUrl =
       clientConfig?.sourceInputs?.websiteUrl || clientConfig?.websiteUrl || null;
     if (chainSourceUrl) {
@@ -575,8 +583,10 @@ export async function POST(request) {
   // the moment the brief becomes viewable — not a deferred after() that lands
   // after the dashboard already rendered the brief (which then falls back to the
   // run headline). Evidence is available: moduleBriefs are written above and the
-  // brand overview persists from the onboarding run.
-  if (claimedRun.trigger === 'creative-brief') {
+  // brand overview persists from the onboarding run. Signup runs this inline too
+  // now that it no longer chains the scout-brief (whose deferred pass previously
+  // generated this summary).
+  if (claimedRun.trigger === 'creative-brief' || claimedRun.trigger === 'signup') {
     try {
       const { generateBriefSummaries } = await import('../../../../features/scout-intake/brief-summary-runner.mjs');
       await generateBriefSummaries({ clientId, runId, briefTypes: ['onboarding'] });

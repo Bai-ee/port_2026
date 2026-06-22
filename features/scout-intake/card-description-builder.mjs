@@ -1174,7 +1174,7 @@ const MODULE_STATE_DESCRIPTIONS = {
     succeeded: (_err, ctx = {}) => {
       const { hasMockup, hasFullPages } = ctx;
       if (hasMockup && hasFullPages) {
-        return 'The multi-device mockup was generated successfully and full-page captures are available for desktop, tablet, and mobile. Open Details on this card to browse every device end to end, not just the homepage. Open the next module to continue building your profile.';
+        return 'The multi-device mockup was generated successfully and full-page captures are available for desktop, tablet, and mobile.';
       }
       if (hasMockup && !hasFullPages) {
         return 'The multi-device mockup was generated, but full-page screenshots are missing. The homepage view is accurate — Retry to capture the full pages for each device, or open the next module to continue building your profile.';

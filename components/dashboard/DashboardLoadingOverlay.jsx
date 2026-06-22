@@ -73,7 +73,7 @@ export default function DashboardLoadingOverlay({
             src="/img/circle_logo.png"
             alt=""
             aria-hidden="true"
-            style={{ width: '2.4rem', height: '2.4rem', borderRadius: '50%', objectFit: 'cover', display: 'block' }}
+            style={{ width: '2.4rem', height: '2.4rem', borderRadius: '50%', objectFit: 'contain', display: 'block' }}
           />
         </div>
 

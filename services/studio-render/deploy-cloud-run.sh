@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Always build from this script's own dir so `--source .` packages the
+# studio-render Dockerfile, never the repo-root Next.js app. Deploying from the
+# repo root made Cloud Run buildpacks ship `next start` to the render service.
+cd "$(dirname "$0")"
+
 SERVICE_NAME="${SERVICE_NAME:-studio-render}"
 REGION="${REGION:-us-central1}"
 MAX_INSTANCES="${MAX_INSTANCES:-1}"
@@ -25,6 +30,7 @@ gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudb
 gcloud run deploy "${SERVICE_NAME}" \
   --quiet \
   --source . \
+  --clear-base-image \
   --region "${REGION}" \
   --gpu 1 \
   --gpu-type nvidia-l4 \

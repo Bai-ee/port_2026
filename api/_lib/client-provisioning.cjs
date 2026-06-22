@@ -179,12 +179,17 @@ async function getEffectiveClientContext({ uid, email, request, requestedClientI
 
 
 async function queueInitialBriefRun({ clientId, uid, websiteUrl, usesFallbackSite = false }) {
-  const runRef = fb.adminDb.collection('brief_runs').doc();
+  // Deterministic id + atomic create: a duplicate or concurrent signup POST
+  // (double-submit, retry, React strict-mode re-mount) must NOT queue a second
+  // initial run. .create() rejects with ALREADY_EXISTS if the doc is already
+  // there, so only the first caller queues the run + triggers the worker.
+  const runId = `${clientId}-signup`;
+  const runRef = fb.adminDb.collection('brief_runs').doc(runId);
   const now = fb.FieldValue.serverTimestamp();
 
   const payload = {
-    runId: runRef.id,
-    id: runRef.id,
+    runId,
+    id: runId,
     clientId,
     requestedByUid: uid,
     trigger: 'signup',
@@ -209,12 +214,21 @@ async function queueInitialBriefRun({ clientId, uid, websiteUrl, usesFallbackSit
     updatedAt: now,
   };
 
-  await Promise.all([
-    runRef.set(payload),
-    fb.adminDb.collection('clients').doc(clientId).collection('brief_runs').doc(runRef.id).set(payload),
-  ]);
+  try {
+    await runRef.create(payload);
+  } catch (err) {
+    // ALREADY_EXISTS (gRPC code 6): another concurrent provision already queued
+    // the initial run. Return it without re-creating or re-triggering.
+    if (err?.code === 6 || /already exists/i.test(err?.message || '')) {
+      const existing = (await runRef.get()).data() || payload;
+      return { ...existing, created: false };
+    }
+    throw err;
+  }
 
-  return payload;
+  await fb.adminDb.collection('clients').doc(clientId).collection('brief_runs').doc(runId).set(payload);
+
+  return { ...payload, created: true };
 }
 
 async function provisionClientForUser({ uid, email, displayName, companyName, websiteUrl, ideaDescription }) {
@@ -455,6 +469,9 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
       latestRunStatus: run?.status || null,
     },
     initialRun: run,
+    // Only the caller that actually created the run should trigger the worker —
+    // a concurrent duplicate gets created:false and skips the trigger.
+    initialRunCreated: run?.created !== false,
     alreadyProvisioned: false,
   };
 }
@@ -1050,4 +1067,5 @@ module.exports = {
   provisionClientForUser,
   createWebsitelessClient,
   reseedIntakeForClient,
+  loadAdminAccess,
 };

@@ -828,7 +828,13 @@ function projectModuleResult(update, result, snapshotPatch) {
   }
 
   if (result.cardId === 'social-preview' && result.result?.siteMeta) {
-    deepSet(update, ['siteMeta'], result.result.siteMeta);
+    const siteMeta = result.result.siteMeta;
+    deepSet(update, ['siteMeta'], siteMeta);
+    deepSet(update, ['onboard', 'socialPreview'], {
+      status: result.status || 'succeeded',
+      siteMeta,
+      warnings: result.warningCodes || [],
+    });
     return;
   }
 

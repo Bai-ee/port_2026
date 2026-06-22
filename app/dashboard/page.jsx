@@ -7,6 +7,7 @@ import gsap from 'gsap';
 import { useAuth } from '../../AuthContext';
 import InternalPageBackground from '../../InternalPageBackground';
 import DashboardLoadingOverlay from '../../components/dashboard/DashboardLoadingOverlay';
+import WebsiteUrlGate from '../../components/dashboard/WebsiteUrlGate';
 
 const DashboardPage = dynamic(() => import('../../DashboardPage'), {
   loading: () => null,
@@ -18,6 +19,9 @@ export default function DashboardRoute() {
   const [showLoadingCard, setShowLoadingCard] = useState(true);
   const [dashboardContentReady, setDashboardContentReady] = useState(false);
   const [bgReady, setBgReady] = useState(false);
+  // provisionStatus: 'checking' (gate decision pending) | 'gate' (no dashboard,
+  // prompt for website URL) | 'ready' (has dashboard / admin → mount dashboard)
+  const [provisionStatus, setProvisionStatus] = useState('checking');
   const loadingOverlayRef = useRef(null);
   const handleDashboardContentReady = useCallback(() => {
     setDashboardContentReady(true);
@@ -25,7 +29,13 @@ export default function DashboardRoute() {
 
   useEffect(() => {
     if (!loading && !user) {
-      router.replace('/login?redirect=/dashboard');
+      // Deliberate logout → homepage. Direct unauthenticated visit → sign-in.
+      let intentionalLogout = false;
+      try {
+        intentionalLogout = sessionStorage.getItem('intentionalLogout') === '1';
+        if (intentionalLogout) sessionStorage.removeItem('intentionalLogout');
+      } catch {}
+      router.replace(intentionalLogout ? '/' : '/login?redirect=/dashboard');
     }
   }, [user, loading, router]);
 
@@ -50,7 +60,36 @@ export default function DashboardRoute() {
   useEffect(() => {
     setDashboardContentReady(false);
     setShowLoadingCard(true);
+    setProvisionStatus('checking');
   }, [user?.uid]);
+
+  // Before processing the dashboard, confirm the user has an assigned dashboard.
+  // If not (and they are not an admin), gate on the website-URL prompt.
+  useEffect(() => {
+    if (loading || !user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch('/api/dashboard/provision-status', {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        });
+        const data = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        // On error, fail open to the dashboard rather than trapping the user.
+        const needsGate = res.ok && !data.hasDashboard && !data.isAdmin;
+        setProvisionStatus(needsGate ? 'gate' : 'ready');
+      } catch {
+        if (!cancelled) setProvisionStatus('ready');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user, loading]);
+
+  const handleProvisioned = useCallback(() => {
+    setProvisionStatus('ready');
+  }, []);
 
   const dashboardReady = !loading && !!user;
 
@@ -120,11 +159,16 @@ export default function DashboardRoute() {
     );
   }
 
+  // No assigned dashboard → prompt for a website URL before any processing.
+  if (provisionStatus === 'gate') {
+    return <WebsiteUrlGate user={user} onProvisioned={handleProvisioned} />;
+  }
+
   return (
     <div style={{ minHeight: '100dvh', position: 'relative', overflow: 'hidden' }}>
       <InternalPageBackground onReady={() => setBgReady(true)} />
 
-      {dashboardReady ? (
+      {dashboardReady && provisionStatus === 'ready' ? (
         <div style={{
           opacity: showLoadingCard ? 0 : 1,
           transition: 'opacity 0.35s ease',

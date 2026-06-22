@@ -404,6 +404,7 @@ export default function StudioPage() {
     ? { websiteUrl: 'https://hitloop.agency', dashboardTitle: 'Studio Smoke Test' }
     : authState.userProfile;
   const loading = smokeMode ? false : authState.loading;
+  const isAdmin = !smokeMode && Boolean(authState.isAdmin);
 
   // Right-nav width — the canvas/board fills the viewport area to the LEFT of it.
   const RAIL_W = 336;
@@ -487,6 +488,10 @@ export default function StudioPage() {
   const [dirSections, setDirSections] = useState([]);
   const [dirMapping, setDirMapping] = useState(false);
   const [dirRendering, setDirRendering] = useState(false);
+  // Admin: "Set as new-signup default" — saves the current recipe as the template
+  // every new signup's onboarding video renders from. Meta reflects what's live.
+  const [savingSignupDefault, setSavingSignupDefault] = useState(false);
+  const [signupDefaultMeta, setSignupDefaultMeta] = useState(null); // { source, updatedAt, updatedBy }
 
   // Panel disclosure state — collapsed is the default footprint.
   const [sizeOpen, setSizeOpen] = useState(false);
@@ -658,25 +663,10 @@ export default function StudioPage() {
   // which returns a real WebM). Drives the render console with the modal's staged
   // terminal lines + a success/fail toast, and falls back to the in-browser
   // capture only if the cloud service looks unavailable.
-  const generateCloudVideo = useCallback(async () => {
-    if (dirRendering || busy) return;
-    const target = (loadedUrl || '').trim();
-    if (!/^https?:\/\/\S+$/i.test(target)) {
-      setStatus('Load a valid http(s) URL first.');
-      setRenderToast({ type: 'error', text: 'No client website loaded yet — can’t render.' });
-      return;
-    }
-    // Guard the common "no frames captured" failure: if the studio fell back to
-    // its own app origin (client website not loaded), the GPU service renders a
-    // blank/login page and returns zero frames. Refuse with a clear message
-    // instead of a cryptic render error.
-    try {
-      if (new URL(target).origin === window.location.origin) {
-        setStatus('No client website loaded — render aborted.');
-        setRenderToast({ type: 'error', text: 'Studio isn’t pointed at the client site (it’s on this app). Open it from the dashboard or set the client website, then render.' });
-        return;
-      }
-    } catch { /* unparseable URL already excluded above */ }
+  // Build the render recipe from the current studio + Director state for `url`.
+  // Shared by the cloud render path and the admin "Set as new-signup default"
+  // save, so both serialize the exact same shot.
+  const buildCurrentRecipe = useCallback((url) => {
     const fmt = OUTPUT_FORMATS.find((f) => f.id === formatId) || OUTPUT_FORMATS[0];
     const w = fmt.w, h = fmt.h;
     const scroll = dirScrollMode === 'none' ? null
@@ -710,10 +700,10 @@ export default function StudioPage() {
     // When rendering the timeline, honor its duration (the inline Duration field).
     const seconds = cameraTrack ? totalSeconds : dirSeconds;
 
-    // Always read live-stage state from stateRef at render time — never stale.
+    // Always read live-stage state from stateRef at build time — never stale.
     const live = stateRef.current;
-    const recipe = {
-      url: target,
+    return {
+      url,
       preset: dirPreset,
       ...(cameraTrack ? { cameraTrack } : {}),
       output: { seconds, fps: dirFps, width: w, height: h, siteSpeed: dirSiteSpeed },
@@ -730,6 +720,28 @@ export default function StudioPage() {
       },
       scroll,
     };
+  }, [formatId, dirScrollMode, dirSelector, dirText, dirPercent, viewportId, totalSeconds, dirSeconds, dirPreset, dirFps, dirSiteSpeed]);
+
+  const generateCloudVideo = useCallback(async () => {
+    if (dirRendering || busy) return;
+    const target = (loadedUrl || '').trim();
+    if (!/^https?:\/\/\S+$/i.test(target)) {
+      setStatus('Load a valid http(s) URL first.');
+      setRenderToast({ type: 'error', text: 'No client website loaded yet — can’t render.' });
+      return;
+    }
+    // Guard the common "no frames captured" failure: if the studio fell back to
+    // its own app origin (client website not loaded), the GPU service renders a
+    // blank/login page and returns zero frames. Refuse with a clear message
+    // instead of a cryptic render error.
+    try {
+      if (new URL(target).origin === window.location.origin) {
+        setStatus('No client website loaded — render aborted.');
+        setRenderToast({ type: 'error', text: 'Studio isn’t pointed at the client site (it’s on this app). Open it from the dashboard or set the client website, then render.' });
+        return;
+      }
+    } catch { /* unparseable URL already excluded above */ }
+    const recipe = buildCurrentRecipe(target);
 
     let host = target; try { host = new URL(target).hostname.replace(/^www\./, ''); } catch {}
     setRenderHost(host);
@@ -785,7 +797,47 @@ export default function StudioPage() {
     } finally {
       setDirRendering(false);
     }
-  }, [dirRendering, busy, loadedUrl, formatId, dirScrollMode, dirSelector, dirText, dirPercent, dirPreset, dirSeconds, totalSeconds, dirFps, dirSiteSpeed, viewportId, backdropId, loopCfg, bgMode, envPreset, bgColor, hue, sat, bright, authedFetch, beginRenderConsole, advanceConsole, finishRenderConsole]);
+  }, [dirRendering, busy, loadedUrl, buildCurrentRecipe, authedFetch, beginRenderConsole, advanceConsole, finishRenderConsole]);
+
+  // Admin: persist the current recipe as the new-signup video template. url is
+  // stripped server-side (injected per signup), so we can save without a loaded
+  // site. Mirrors the same recipe that Generate would render.
+  const saveSignupDefault = useCallback(async () => {
+    if (!isAdmin || savingSignupDefault) return;
+    setSavingSignupDefault(true);
+    try {
+      const recipe = buildCurrentRecipe(loadedUrl || '');
+      delete recipe.url;
+      const res = await authedFetch('/api/dashboard/studio-default-recipe', { method: 'PUT', body: JSON.stringify({ recipe }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `Save failed (HTTP ${res.status})`);
+      setSignupDefaultMeta({ source: data.source, updatedAt: data.updatedAt, updatedBy: data.updatedBy });
+      setRenderToast({ type: 'success', text: 'Saved as the new-signup video default.' });
+      setStatus('New-signup video template updated.');
+    } catch (err) {
+      setRenderToast({ type: 'error', text: err?.message || 'Could not save the signup default.' });
+    } finally {
+      setSavingSignupDefault(false);
+    }
+  }, [isAdmin, savingSignupDefault, buildCurrentRecipe, loadedUrl, authedFetch]);
+
+  // Load the live signup-default template when an admin opens the Director, so the
+  // indicator shows whether a custom template is set and when.
+  useEffect(() => {
+    if (!directorOpen || !isAdmin) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await authedFetch('/api/dashboard/studio-default-recipe', { method: 'GET' });
+        const data = await res.json().catch(() => ({}));
+        if (!cancelled && res.ok) {
+          setSignupDefaultMeta({ source: data.source, updatedAt: data.updatedAt, updatedBy: data.updatedBy });
+          if (data.recipe?.preset) setDirPreset(data.recipe.preset);
+        }
+      } catch { /* indicator is best-effort */ }
+    })();
+    return () => { cancelled = true; };
+  }, [directorOpen, isAdmin, authedFetch]);
 
   // ── Three.js world ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -2693,6 +2745,27 @@ export default function StudioPage() {
               {dirRendering ? 'Rendering…' : 'Generate · Cloud GPU'}
             </button>
             <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>Renders the live site loading + animating inside the device on a real GPU. Needs the render host configured.</span>
+
+            {isAdmin && (
+              <div id="studio-signup-default-shell" style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid ' + GLASS.hair, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={ui.label}>NEW-SIGNUP DEFAULT</span>
+                <button
+                  style={{ ...ui.btn(), width: '100%', opacity: savingSignupDefault ? 0.5 : 1 }}
+                  disabled={savingSignupDefault}
+                  onClick={saveSignupDefault}
+                  title="Save the current recipe as the video template every new signup renders from"
+                >
+                  {savingSignupDefault ? 'Saving…' : 'Set as new-signup default'}
+                </button>
+                <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.4, color: GLASS.inkMute }}>
+                  {signupDefaultMeta
+                    ? (signupDefaultMeta.source === 'custom'
+                        ? `Current: custom template${signupDefaultMeta.updatedAt ? ' · ' + new Date(signupDefaultMeta.updatedAt).toLocaleDateString() : ''}`
+                        : 'Current: built-in default')
+                    : 'Applies this shot to every new signup’s onboarding video.'}
+                </span>
+              </div>
+            )}
           </RailCard>
 
           {/* EXPORT — capture/render controls merged with the timeline (duration + template). */}

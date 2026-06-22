@@ -60,7 +60,7 @@ export async function POST(request) {
   // run permanently queued. `after()` keeps the invocation alive long enough to hand
   // the queued run off to the worker route.
   const runId = result.initialRun?.runId;
-  if (runId && !result.alreadyProvisioned) {
+  if (runId && !result.alreadyProvisioned && result.initialRunCreated) {
     const proto = request.headers.get('x-forwarded-proto') || 'http';
     const host = request.headers.get('host') || 'localhost:3000';
     const workerUrl = `${proto}://${host}/api/worker/run-brief`;

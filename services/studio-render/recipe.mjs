@@ -45,6 +45,13 @@ const clamp = (v, lo, hi, d) => { const n = Number(v); return Number.isFinite(n)
 
 const ALLOWED_ENV_PRESETS = ['airport-terminal', 'desk', 'studio', 'loft', 'sunset'];
 
+// Default site motion when a recipe specifies no scroll: hold at the top long
+// enough for the hero/intro animation to settle (startAt), then smooth-scroll to
+// the page bottom over the remainder of the clip. Hidden default — applies to
+// every render path (templates, signup auto-render, CLI) unless a recipe sets its
+// own scroll. percent:100 → document bottom (see render.mjs probe).
+const DEFAULT_SCROLL_TO_END = { target: { percent: 100 }, startAt: 0.25, arriveAt: 1 };
+
 function normEnvironment(e) {
   if (!e) return { mode: 'gradient', preset: 'studio', color: '#11141a', blur: 0, hue: 0, saturation: 1, brightness: 1, reflections: true };
   const mode = ['preset', 'color', 'site', 'gradient'].includes(e.mode) ? e.mode : 'gradient';
@@ -87,6 +94,18 @@ function normScroll(s) {
   };
 }
 
+function normCapture(c = {}) {
+  return {
+    // Minimum delay after navigation. Kept for backwards compatibility with
+    // existing recipes; dynamic readiness below decides whether to wait longer.
+    warmupMs: clamp(c.warmupMs, 0, 5000, 1000),
+    waitForReady: c.waitForReady !== false,
+    maxReadyWaitMs: clamp(c.maxReadyWaitMs, 0, 20000, 12000),
+    pollMs: clamp(c.pollMs, 100, 2000, 400),
+    settleStuckPage: c.settleStuckPage !== false,
+  };
+}
+
 /**
  * Normalize + validate a raw recipe into a complete, clamped recipe the render
  * core can execute. Applies a camera preset if `preset` is given and no explicit
@@ -103,7 +122,7 @@ export function normalizeRecipe(raw = {}) {
     .map((k) => ({ t: clamp(k.t, 0, 1, 0), pose: normPose(k.pose) }))
     .sort((a, b) => a.t - b.t);
 
-  const scroll = normScroll(r.scroll ?? (preset && preset.scroll) ?? null);
+  const scroll = normScroll(r.scroll ?? (preset && preset.scroll) ?? DEFAULT_SCROLL_TO_END);
 
   return {
     url: String(r.url || '').trim(),
@@ -119,7 +138,7 @@ export function normalizeRecipe(raw = {}) {
       backdrop: String(r.device?.backdrop || 'home').slice(0, 20),
       loop: r.device?.loop !== false,
     },
-    capture: { warmupMs: clamp(r.capture?.warmupMs, 0, 5000, 1000) },
+    capture: normCapture(r.capture),
     environment: normEnvironment(r.environment),
     scroll,
     cameraTrack,

@@ -5,6 +5,19 @@ const { runSiteMeta } = require('./shared/site-meta');
 
 const CARD_ID = 'social-preview';
 
+function normalizeSiteMeta(siteMeta) {
+  if (!siteMeta || typeof siteMeta !== 'object') return siteMeta || null;
+  const title = siteMeta.title || siteMeta.ogTitle || null;
+  const description = siteMeta.description || siteMeta.ogDescription || null;
+  return {
+    ...siteMeta,
+    title,
+    description,
+    ogTitle: siteMeta.ogTitle || title,
+    ogDescription: siteMeta.ogDescription || description,
+  };
+}
+
 async function runSocialPreview({ websiteUrl, onProgress = null }) {
   const warningCodes = [];
   const emit = async (stage, label, extra = {}) => {
@@ -37,14 +50,15 @@ async function runSocialPreview({ websiteUrl, onProgress = null }) {
   }
 
   await emit('normalize', 'Write preview module…');
+  const siteMeta = normalizeSiteMeta(metaResult.siteMeta);
   return {
     ok: true,
     cardId: CARD_ID,
     status: 'succeeded',
     warningCodes,
     artifacts: [],
-    result: { siteMeta: metaResult.siteMeta },
+    result: { siteMeta },
   };
 }
 
-module.exports = { runSocialPreview };
+module.exports = { runSocialPreview, normalizeSiteMeta };

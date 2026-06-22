@@ -29,6 +29,7 @@ const CHROME_FLAGS = process.env.CHROME_FLAGS
   ? process.env.CHROME_FLAGS.split(',').map(s => s.trim()).filter(Boolean)
   : DEFAULT_FLAGS;
 const USE_XVFB = /^(1|true|yes)$/i.test(process.env.USE_XVFB || '');
+const DEVTOOLS_TIMEOUT_MS = 45000;
 
 function minimalCdpClient(url) {
   const ws = new WebSocket(url);
@@ -81,6 +82,61 @@ async function stopChrome(chrome, userDataDir) {
   removeUserDataDir(userDataDir);
 }
 
+function spawnChrome(userDataDir, chromeEnv) {
+  const chrome = spawn(CHROME_PATH, [
+    '--headless=new', '--enable-gpu', '--ignore-gpu-blocklist', ...CHROME_FLAGS,
+    '--hide-scrollbars', '--mute-audio', '--window-size=1440,900',
+    '--remote-debugging-port=0', `--user-data-dir=${userDataDir}`, 'about:blank',
+  ], { stdio: ['ignore', 'ignore', 'pipe'], env: chromeEnv });
+  chrome.stderr.on('data', d => { const text = String(d).trim(); if (text) console.warn(`[chrome] ${text}`); });
+  return chrome;
+}
+
+function waitForDevToolsEndpoint(chrome) {
+  return new Promise((resolve, reject) => {
+    let buf = '';
+    let settled = false;
+    const cleanup = () => {
+      clearTimeout(to);
+      chrome.stderr.off('data', onData);
+      chrome.off('exit', onExit);
+    };
+    const done = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      fn(value);
+    };
+    const to = setTimeout(() => done(reject, new Error(`no DevTools endpoint after ${DEVTOOLS_TIMEOUT_MS}ms`)), DEVTOOLS_TIMEOUT_MS);
+    const onData = (d) => {
+      buf += d;
+      const m = /DevTools listening on (ws:\/\/\S+)/.exec(buf);
+      if (m) done(resolve, m[1]);
+    };
+    const onExit = (code, signal) => done(reject, new Error(`chrome exited ${code ?? signal ?? 'unknown'}`));
+    chrome.stderr.on('data', onData);
+    chrome.on('exit', onExit);
+  });
+}
+
+async function launchChromeAndWait(chromeEnv, userDataDirBase) {
+  let lastErr = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const userDataDir = `${userDataDirBase}-${attempt}`;
+    const chrome = spawnChrome(userDataDir, chromeEnv);
+    try {
+      console.warn(`[chrome] waiting for DevTools endpoint, timeout=${DEVTOOLS_TIMEOUT_MS}ms attempt=${attempt}`);
+      const wsUrl = await waitForDevToolsEndpoint(chrome);
+      return { chrome, userDataDir, wsUrl };
+    } catch (err) {
+      lastErr = err;
+      console.warn(`[chrome] launch attempt ${attempt} failed: ${err.message}`);
+      await stopChrome(chrome, userDataDir);
+    }
+  }
+  throw lastErr || new Error('chrome launch failed');
+}
+
 // In-page probe: physically scroll the recipe's target element to center and
 // return the scrollY that does it — resolves pinned/stacked layouts where an
 // element's document offset != its reveal scroll position. Falls back to a
@@ -102,6 +158,231 @@ function probeExpression(scroll) {
   })()`;
 }
 
+function captureReadinessExpression() {
+  return `(()=>{
+    const now=performance.now();
+    const vw=Math.max(1,innerWidth||0), vh=Math.max(1,innerHeight||0);
+    const de=document.scrollingElement||document.documentElement;
+    const body=document.body;
+    const readyState=document.readyState;
+    const norm=s=>(s||'').replace(/\\s+/g,' ').trim();
+    const intersects=r=>r&&r.width>0&&r.height>0&&r.bottom>0&&r.right>0&&r.top<vh*0.96&&r.left<vw;
+    const area=r=>Math.max(0,Math.min(r.right,vw)-Math.max(r.left,0))*Math.max(0,Math.min(r.bottom,vh)-Math.max(r.top,0));
+    const styleVisible=(el)=>{
+      for(let n=el;n&&n.nodeType===1;n=n.parentElement){
+        const cs=getComputedStyle(n);
+        if(cs.display==='none'||cs.visibility==='hidden'||Number(cs.opacity||1)<0.05)return false;
+        if(n===body||n===document.documentElement)break;
+      }
+      return true;
+    };
+    const visible=(el)=>{
+      const r=el.getBoundingClientRect();
+      if(!intersects(r))return null;
+      const cs=getComputedStyle(el);
+      if(!styleVisible(el))return null;
+      const a=area(r);
+      return a>24?{r,cs,a}:null;
+    };
+    let textChars=0, textBlocks=0, headingVisible=false, belowChromeText=0;
+    const walker=document.createTreeWalker(body||document.documentElement,NodeFilter.SHOW_TEXT,{
+      acceptNode(node){
+        const txt=norm(node.nodeValue);
+        if(txt.length<16)return NodeFilter.FILTER_REJECT;
+        const el=node.parentElement;
+        if(!el||el.closest('script,style,noscript,template,svg,nav'))return NodeFilter.FILTER_REJECT;
+        if(!styleVisible(el))return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    for(let node=walker.nextNode(),i=0;node&&i<900;node=walker.nextNode(),i++){
+      const el=node.parentElement;
+      const range=document.createRange();
+      range.selectNodeContents(node);
+      const rects=Array.from(range.getClientRects()).filter(intersects);
+      range.detach();
+      if(!rects.length)continue;
+      const painted=rects.reduce((sum,r)=>sum+area(r),0);
+      if(painted<24)continue;
+      const txt=norm(node.nodeValue);
+      const clipped=Math.min(txt.length,160);
+      textChars+=clipped; textBlocks+=1;
+      const heading=el.closest('h1,h2,h3,[role="heading"]');
+      if(heading&&rects.some(r=>r.bottom>70))headingVisible=true;
+      if(rects.some(r=>r.bottom>120))belowChromeText+=clipped;
+      if(textChars>420)break;
+    }
+    let loadedImages=0, largeMedia=0, canvasOrVideo=0, bgVisuals=0;
+    for(const el of Array.from(document.querySelectorAll('img,video,canvas,svg,picture')).slice(0,500)){
+      const v=visible(el); if(!v||v.a<9000)continue;
+      const tag=el.tagName.toLowerCase();
+      if(tag==='img'){
+        if(el.complete&&el.naturalWidth>=220&&el.naturalHeight>=120){loadedImages+=1;largeMedia+=1;}
+      }else if(tag==='video'){
+        if(el.readyState>=1||v.a>50000){canvasOrVideo+=1;largeMedia+=1;}
+      }else if(tag==='canvas'||tag==='svg'){
+        canvasOrVideo+=1; largeMedia+=1;
+      }else if(tag==='picture'){
+        const img=el.querySelector('img');
+        if(img&&img.complete&&img.naturalWidth>=220&&img.naturalHeight>=120){loadedImages+=1;largeMedia+=1;}
+      }
+      if(largeMedia>=3)break;
+    }
+    const isNonBlankColor=(color)=>{
+      const m=String(color||'').match(/rgba?\\(([^)]+)\\)/i);
+      if(!m)return false;
+      const parts=m[1].split(',').map(p=>Number(String(p).trim()));
+      const [r,g,b,a=1]=parts;
+      if(a===0)return false;
+      return !(r>=245&&g>=245&&b>=245);
+    };
+    const bgImageReady=(bg)=>{
+      const urls=Array.from(String(bg||'').matchAll(/url\\([\"']?([^\"')]+)[\"']?\\)/g)).map(m=>{try{return new URL(m[1],location.href).href;}catch{return m[1];}});
+      if(!urls.length)return Boolean(bg&&bg!=='none');
+      const entries=performance.getEntriesByType('resource')||[];
+      return urls.some(u=>entries.some(e=>e.name===u&&e.responseEnd>0)||Array.from(document.images).some(img=>img.currentSrc===u&&img.complete));
+    };
+    for(const el of Array.from(document.querySelectorAll('main,section,article,header,div')).slice(0,1200)){
+      const v=visible(el); if(!v||v.a<45000)continue;
+      const bg=v.cs.backgroundImage||'';
+      const bgColor=v.cs.backgroundColor||'';
+      const cls=String(el.className||'').toLowerCase();
+      const id=String(el.id||'').toLowerCase();
+      const hasBgImage=Boolean(bg&&bg!=='none');
+      const hasReadyBgImage=hasBgImage&&bgImageReady(bg);
+      if(hasReadyBgImage){bgVisuals+=1;}
+      if((cls.includes('hero')||id.includes('hero'))&&(hasReadyBgImage||isNonBlankColor(bgColor)&&v.a>120000))bgVisuals+=1;
+      if(bgVisuals>=3)break;
+    }
+    const allText=norm(body?.innerText||'').toLowerCase();
+    const onlyLoading=/^(loading|loading\\.|loading\\.\\.\\.|please wait|just a moment|one moment)$/i.test(allText);
+    const hasDocumentSize=Boolean(body)&&de.scrollHeight>Math.min(240,vh*0.6);
+    const meaningfulText=headingVisible||belowChromeText>=90||textChars>=160;
+    const strongVisual=largeMedia>0||canvasOrVideo>0;
+    const meaningfulVisual=strongVisual||bgVisuals>0&&(meaningfulText||now>2500);
+    const ready=hasDocumentSize&&(readyState==='interactive'||readyState==='complete')&&!onlyLoading&&(meaningfulText||meaningfulVisual);
+    let reason='waiting-for-visible-content';
+    if(ready)reason=meaningfulText&&meaningfulVisual?'text-and-visual-ready':meaningfulText?'text-ready':'visual-ready';
+    else if(!hasDocumentSize)reason='document-too-small';
+    else if(onlyLoading)reason='loading-screen-visible';
+    else if(readyState==='loading')reason='document-loading';
+    return {ready,reason,readyState,now,textChars,textBlocks,belowChromeText,headingVisible,loadedImages,largeMedia,canvasOrVideo,bgVisuals,viewport:{width:vw,height:vh},scrollHeight:de.scrollHeight};
+  })()`;
+}
+
+function settleStuckPageExpression() {
+  return `(async()=>{
+    const changed={loadersHidden:0,lazyImages:0,forcedVisible:0,events:0};
+    const hideSelectors=[
+      '.tp-loader','.rs-loader','.rev_slider_wrapper .tp-loader',
+      '.swiper-lazy-preloader','.elementor-loading','.preloader',
+      '[class*="loading-spinner"]','[class*="lazy-preloader"]'
+    ];
+    for(const el of document.querySelectorAll(hideSelectors.join(','))){
+      el.style.setProperty('display','none','important');
+      el.style.setProperty('visibility','hidden','important');
+      el.style.setProperty('opacity','0','important');
+      changed.loadersHidden++;
+    }
+    for(const img of document.querySelectorAll('img')){
+      const lazy=img.getAttribute('data-lazyload')||img.getAttribute('data-lazy-src')||img.getAttribute('data-src')||img.getAttribute('data-orig-src');
+      if(lazy&&!img.currentSrc){ img.src=lazy; changed.lazyImages++; }
+      img.loading='eager';
+      img.decoding='sync';
+    }
+    const showSelectors=[
+      '.rev_slider','.rev_slider_wrapper','.tp-revslider-mainul','.tp-revslider-slidesli',
+      '.tp-caption','.tp-parallax-wrap','.tp-loop-wrap','.tp-mask-wrap',
+      '.rev-slidebg','.tp-bgimg','.rs-background-video-layer'
+    ];
+    for(const el of document.querySelectorAll(showSelectors.join(','))){
+      el.style.setProperty('visibility','visible','important');
+      el.style.setProperty('opacity','1','important');
+      if(el.classList.contains('tp-revslider-slidesli')||el.classList.contains('rev_slider')){
+        el.style.setProperty('display','block','important');
+      }
+      changed.forcedVisible++;
+    }
+    const fire=(target,name)=>{try{target.dispatchEvent(new Event(name));changed.events++;}catch{}};
+    fire(document,'DOMContentLoaded');
+    fire(window,'load');
+    fire(window,'resize');
+    fire(window,'scroll');
+    try {
+      if(window.jQuery){
+        window.jQuery(window).trigger('load').trigger('resize').trigger('scroll');
+        window.jQuery(document).trigger('ready');
+        changed.events+=4;
+      }
+    } catch {}
+    try {
+      for(const key of Object.keys(window)){
+        const v=window[key];
+        if(/^revapi/i.test(key)&&v&&typeof v.revredraw==='function'){ v.revredraw(); changed.events++; }
+      }
+    } catch {}
+    try { window.scrollBy(0,1); window.scrollTo(0,0); changed.events+=2; } catch {}
+    await new Promise(r=>setTimeout(r,900));
+    return changed;
+  })()`;
+}
+
+async function waitForCaptureReady(cdp, sessionId, capture) {
+  if (capture.waitForReady === false || capture.maxReadyWaitMs <= 0) {
+    return { ready: true, skipped: true, waitedMs: 0, reason: 'readiness-disabled' };
+  }
+
+  const start = Date.now();
+  let last = null;
+  while (Date.now() - start <= capture.maxReadyWaitMs) {
+    try {
+      const res = await cdp.send('Runtime.evaluate', {
+        expression: captureReadinessExpression(),
+        returnByValue: true,
+      }, sessionId);
+      last = res.result?.value || null;
+      if (last?.ready) {
+        return { ...last, waitedMs: Date.now() - start, timedOut: false };
+      }
+    } catch (err) {
+      last = { ready: false, reason: 'readiness-probe-error', error: err.message };
+    }
+    await sleep(capture.pollMs);
+  }
+  return { ...(last || {}), ready: false, waitedMs: Date.now() - start, timedOut: true };
+}
+
+function shouldSettleStuckPage(readiness) {
+  if (!readiness || readiness.skipped) return false;
+  if (readiness.timedOut || readiness.ready === false) return true;
+  const noPaintedMedia = !readiness.loadedImages && !readiness.largeMedia && !readiness.canvasOrVideo;
+  return Boolean(noPaintedMedia && readiness.bgVisuals && readiness.textChars && readiness.now > 1500);
+}
+
+async function settleStuckPage(cdp, sessionId, capture, readiness) {
+  if (capture.settleStuckPage === false || !shouldSettleStuckPage(readiness)) {
+    return { readiness, settle: null };
+  }
+  let settle = null;
+  try {
+    await cdp.send('Page.stopLoading', {}, sessionId).catch(() => {});
+    await sleep(350);
+    const res = await cdp.send('Runtime.evaluate', {
+      expression: settleStuckPageExpression(),
+      awaitPromise: true,
+      returnByValue: true,
+    }, sessionId);
+    settle = res.result?.value || null;
+  } catch (err) {
+    settle = { error: err.message };
+  }
+  const after = await waitForCaptureReady(cdp, sessionId, {
+    ...capture,
+    maxReadyWaitMs: Math.min(3500, Math.max(1000, capture.maxReadyWaitMs || 0)),
+  });
+  return { readiness: { ...after, beforeSettle: readiness, settle }, settle };
+}
+
 /**
  * Render one mockup video from a recipe (see recipe.mjs). Returns { buffer, info }.
  */
@@ -111,7 +392,7 @@ export async function renderVideo(rawRecipe = {}) {
   console.log(`[env] mode=${recipe.environment.mode} preset=${recipe.environment.preset} hue=${recipe.environment.hue} sat=${recipe.environment.saturation} bright=${recipe.environment.brightness}`);
   const { seconds, width, height } = recipe.output;
   const captureMs = Math.round(seconds * 1000 + 600);
-  const userDataDir = `/tmp/studio-render-${process.pid}-${Date.now()}`;
+  const userDataDirBase = `/tmp/studio-render-${process.pid}-${Date.now()}`;
 
   let xvfb = null;
   const chromeEnv = { ...process.env };
@@ -123,20 +404,12 @@ export async function renderVideo(rawRecipe = {}) {
     await sleep(500);
   }
 
-  const chrome = spawn(CHROME_PATH, [
-    '--headless=new', '--enable-gpu', '--ignore-gpu-blocklist', ...CHROME_FLAGS,
-    '--hide-scrollbars', '--mute-audio', '--window-size=1440,900',
-    '--remote-debugging-port=0', `--user-data-dir=${userDataDir}`, 'about:blank',
-  ], { stdio: ['ignore', 'ignore', 'pipe'], env: chromeEnv });
-  chrome.stderr.on('data', d => { const text = String(d).trim(); if (text) console.warn(`[chrome] ${text}`); });
-
-  let server, cdp;
+  let server, cdp, chrome, userDataDir;
   try {
-    const wsUrl = await new Promise((resolve, reject) => {
-      let buf = ''; const to = setTimeout(() => reject(new Error('no DevTools endpoint')), 20000);
-      chrome.stderr.on('data', d => { buf += d; const m = /DevTools listening on (ws:\/\/\S+)/.exec(buf); if (m) { clearTimeout(to); resolve(m[1]); } });
-      chrome.on('exit', c => { clearTimeout(to); reject(new Error('chrome exited ' + c)); });
-    });
+    const launched = await launchChromeAndWait(chromeEnv, userDataDirBase);
+    chrome = launched.chrome;
+    userDataDir = launched.userDataDir;
+    const wsUrl = launched.wsUrl;
 
     cdp = minimalCdpClient(wsUrl);
     await cdp.ready;
@@ -150,6 +423,9 @@ export async function renderVideo(rawRecipe = {}) {
     await cdp.send('Runtime.enable', {}, sessionId);
     await cdp.send('Page.navigate', { url: recipe.url }, sessionId);
     await sleep(recipe.capture.warmupMs);
+    let readiness = await waitForCaptureReady(cdp, sessionId, recipe.capture);
+    ({ readiness } = await settleStuckPage(cdp, sessionId, recipe.capture, readiness));
+    console.warn(`[ready] ${readiness.ready ? 'ready' : 'timeout'} after ${recipe.capture.warmupMs + (readiness.waitedMs || 0)}ms (${readiness.reason || 'unknown'})`);
 
     // GPU ground-truth: what backs WebGL in the page Chrome just loaded?
     // SwiftShader/llvmpipe => software (WebGL hero renders blank). ANGLE (NVIDIA …)
@@ -216,7 +492,7 @@ export async function renderVideo(rawRecipe = {}) {
 
     const buffer = await Promise.race([uploaded, sleep(15000).then(() => { throw new Error('upload timeout'); })]);
     const info = JSON.parse((await cdp.send('Runtime.evaluate', { expression: 'JSON.stringify(window.__RESULT)', returnByValue: true }, sessionId)).result.value || '{}');
-    return { buffer, info: { ...info, liveCaptured: live.length, glRenderer, scroll: scrollInfo, viewport: recipe.device.viewport, seconds, fps: recipe.output.fps } };
+    return { buffer, info: { ...info, liveCaptured: live.length, glRenderer, scroll: scrollInfo, readiness, viewport: recipe.device.viewport, seconds, fps: recipe.output.fps } };
   } finally {
     try { cdp?.close(); } catch {}
     try { server?.close(); } catch {}

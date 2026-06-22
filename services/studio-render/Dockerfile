@@ -10,8 +10,11 @@ FROM node:22-bookworm-slim
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Chromium + the fonts/libs headless Chrome needs to render real pages.
+# ffmpeg transcodes the VP9/WebM the headless Chromium produces (it has no
+# proprietary H.264 encoder) into H.264/MP4 — the only video format X accepts.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       chromium \
+      ffmpeg \
       fonts-liberation fonts-noto-color-emoji fonts-noto-cjk \
       libnss3 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libasound2 \
       libegl1 libgles2 libgl1 libglvnd0 libvulkan1 vulkan-tools \
