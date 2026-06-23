@@ -17,6 +17,7 @@ const renderJobs = require('./studio-render-jobs.cjs');
 const MAX_VIDEO_BYTES = 40 * 1024 * 1024;
 const MAX_STORED_CAPTURES = 40;
 const RENDER_TIMEOUT_MS = 150000;
+const RENDER_RETRY_DELAYS_MS = [8000, 20000];
 
 function clamp(value, min, max, fallback) {
   const n = Number(value);
@@ -44,6 +45,22 @@ async function fetchWithTimeout(url, options, timeoutMs) {
   }
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableRenderFailure(status, message) {
+  const text = String(message || '').toLowerCase();
+  return (
+    status === 429 ||
+    status === 503 ||
+    text.includes('rate exceeded') ||
+    text.includes('no available instance') ||
+    text.includes('busy') ||
+    text.includes('shutting down')
+  );
+}
+
 // The locked launch recipe — the ONE proven config (X/Twitter format, black
 // background, desktop mockup). buildLockedStudioRecipe(url) returns a recipe
 // matching services/studio-render/recipe.mjs; the render service clamps it.
@@ -62,7 +79,7 @@ function buildLockedStudioRecipe(url) {
 // studioCaptures ref. Returns { ok, status, error?, capture?, jobId }.
 // Never throws for expected failures (config missing, render error, storage
 // error) — only unexpected programmer errors propagate.
-async function renderAndStoreStudioVideo({ clientId, recipe, postId = null }) {
+async function renderAndStoreStudioVideo({ clientId, recipe, postId = null, jobId: existingJobId = null, createJob = true }) {
   const renderUrl = String(process.env.STUDIO_RENDER_URL || '').replace(/\/+$/, '');
   const renderSecret = String(process.env.STUDIO_RENDER_SECRET || '');
   if (!renderUrl || !renderSecret) {
@@ -83,37 +100,62 @@ async function renderAndStoreStudioVideo({ clientId, recipe, postId = null }) {
   const environmentPreset = String(recipe?.environment?.preset || '').slice(0, 40);
   const environmentBlur = String(recipe?.environment?.blur ?? '');
 
-  // Durable job record so this render is queue-able + pollable.
-  let jobId = null;
-  try {
-    ({ jobId } = await renderJobs.createRenderJob({ clientId, recipe, postId }));
-    await renderJobs.markRenderJobRendering(jobId);
-  } catch {
-    jobId = null; // job tracking is best-effort — never block a render on it.
+  // Durable job record so this render is queue-able + pollable. Queue workers
+  // pass an existing claimed jobId; legacy direct callers may still create one.
+  let jobId = existingJobId || null;
+  if (!jobId && createJob !== false) {
+    try {
+      ({ jobId } = await renderJobs.createRenderJob({ clientId, recipe, postId }));
+      await renderJobs.markRenderJobRendering(jobId);
+    } catch {
+      jobId = null; // job tracking is best-effort — never block a render on it.
+    }
   }
 
   let response;
-  try {
-    response = await fetchWithTimeout(`${renderUrl}/render`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-render-secret': renderSecret },
-      body: JSON.stringify(recipe),
-    }, RENDER_TIMEOUT_MS);
-  } catch (err) {
-    const message = err?.name === 'AbortError'
-      ? 'Studio render timed out before Cloud Run returned a video.'
-      : `Studio render request failed: ${err?.message || err}`;
-    await renderJobs.failRenderJob(jobId, { message });
-    return { ok: false, status: 502, error: message, jobId };
-  }
+  let lastFailure = null;
+  for (let attempt = 0; attempt <= RENDER_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      response = await fetchWithTimeout(`${renderUrl}/render`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-render-secret': renderSecret },
+        body: JSON.stringify(recipe),
+      }, RENDER_TIMEOUT_MS);
+    } catch (err) {
+      const message = err?.name === 'AbortError'
+        ? 'Studio render timed out before Cloud Run returned a video.'
+        : `Studio render request failed: ${err?.message || err}`;
+      lastFailure = { status: 502, message };
+      if (attempt < RENDER_RETRY_DELAYS_MS.length) {
+        await sleep(RENDER_RETRY_DELAYS_MS[attempt]);
+        continue;
+      }
+      await renderJobs.failRenderJob(jobId, { message });
+      return { ok: false, status: 502, error: message, jobId };
+    }
 
-  if (!response.ok) {
+    if (response.ok) break;
+
     const text = await response.text().catch(() => '');
     let detail = text.slice(0, 500);
     try { detail = JSON.parse(text)?.error || detail; } catch {}
     const message = detail || `Studio render failed with HTTP ${response.status}.`;
+    const status = response.status === 429 ? 429 : 502;
+    lastFailure = { status, message };
+
+    if (attempt < RENDER_RETRY_DELAYS_MS.length && isRetryableRenderFailure(response.status, message)) {
+      await sleep(RENDER_RETRY_DELAYS_MS[attempt]);
+      continue;
+    }
+
     await renderJobs.failRenderJob(jobId, { message });
-    return { ok: false, status: response.status === 429 ? 429 : 502, error: message, jobId };
+    return { ok: false, status, error: message, jobId };
+  }
+
+  if (!response?.ok) {
+    const message = lastFailure?.message || 'Studio render failed before returning a video.';
+    await renderJobs.failRenderJob(jobId, { message });
+    return { ok: false, status: lastFailure?.status || 502, error: message, jobId };
   }
 
   const buffer = Buffer.from(await response.arrayBuffer());
@@ -191,4 +233,5 @@ module.exports = {
   renderAndStoreStudioVideo,
   buildLockedStudioRecipe,
   appendCaptureRef,
+  isRetryableRenderFailure,
 };

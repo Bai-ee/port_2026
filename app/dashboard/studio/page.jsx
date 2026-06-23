@@ -776,9 +776,30 @@ export default function StudioPage() {
       const res = await authedFetch('/api/dashboard/studio-render', { method: 'POST', body: JSON.stringify(recipe) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      let capture = data?.capture || null;
+      if (!capture && data?.jobId) {
+        advanceConsole('QUEUE', `Queued as ${data.jobId}; waiting for GPU worker…`);
+        for (let attempt = 0; attempt < 120; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+          const jobRes = await authedFetch(`/api/dashboard/studio-render?jobId=${encodeURIComponent(data.jobId)}`);
+          const jobData = await jobRes.json().catch(() => ({}));
+          if (!jobRes.ok) throw new Error(jobData?.error || `Render job poll failed (${jobRes.status})`);
+          const job = jobData?.job || null;
+          if (job?.status === 'done' && job.capture) {
+            capture = job.capture;
+            break;
+          }
+          if (job?.status === 'failed') {
+            throw new Error(job.error || 'Studio render failed.');
+          }
+        }
+      }
+      if (!capture) {
+        throw new Error('Studio render is still queued; it will appear in assets when the worker finishes.');
+      }
       clearInterval(timer);
-      setCaptures((prev) => [data.capture, ...prev]);
-      setRenderVideoUrl(data?.capture?.downloadUrl || null);
+      setCaptures((prev) => [capture, ...prev]);
+      setRenderVideoUrl(capture?.downloadUrl || null);
       setStatus('Cloud render saved to captures.');
       finishRenderConsole(true, 'Video ready — saved to captures.');
     } catch (err) {

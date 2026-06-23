@@ -19,13 +19,18 @@
 //   error         sanitized error string on failure
 //   createdAt / updatedAt / startedAt / completedAt   ISO strings + server timestamp
 //
-// Status tracking only — the render itself still runs inline in the route. The
-// job doc is what makes the render queue-able and pollable.
+// The render worker claims queued docs with a single active lease so Cloud Run's
+// one-GPU service is fed serially instead of receiving competing requests.
 
 const { randomUUID } = require('crypto');
 const fb = require('./firebase-admin.cjs');
 
 const COLLECTION = 'render_jobs';
+const LOCK_COLLECTION = 'render_queue_locks';
+const STUDIO_LOCK_DOC = 'studio_render';
+const LEASE_TIMEOUT_MS = 8 * 60 * 1000;
+const MAX_ATTEMPTS = 5;
+const BACKOFF_MS = [30_000, 90_000, 3 * 60_000, 8 * 60_000, 15 * 60_000];
 
 function trimRecipeSummary(recipe = {}) {
   return {
@@ -55,27 +60,152 @@ async function createRenderJob({ clientId, recipe, postId = null }) {
     clientId,
     status: 'queued',
     recipe: trimRecipeSummary(recipe),
+    recipeFull: recipe || null,
     postId: postId || null,
     capture: null,
     error: null,
+    attempts: 0,
+    workerLease: null,
+    nextAttemptAt: null,
     createdAt: now,
     updatedAt: now,
     createdAtTs: fb.FieldValue.serverTimestamp(),
+    nextAttemptAtTs: fb.FieldValue.serverTimestamp(),
     startedAt: null,
     completedAt: null,
   });
   return { jobId };
 }
 
-/** Mark a job as actively rendering. Non-fatal: never throws to the caller. */
-async function markRenderJobRendering(jobId) {
+async function markRenderJobRendering(jobId, lease = null) {
   if (!jobId) return;
   const now = new Date().toISOString();
   await fb.adminDb.collection(COLLECTION).doc(jobId).set({
     status: 'rendering',
-    startedAt: now,
+    workerLease: lease,
+    startedAt: lease?.leasedAt || now,
     updatedAt: now,
   }, { merge: true }).catch(() => {});
+}
+
+function isLeaseActive(job, nowMs = Date.now()) {
+  if (!job || job.status !== 'rendering') return false;
+  const expires = Date.parse(job.workerLease?.leaseExpiresAt || '');
+  return Number.isFinite(expires) && expires > nowMs;
+}
+
+function isQueueLeaseActive(lock, nowMs = Date.now()) {
+  const expires = Date.parse(lock?.leaseExpiresAt || '');
+  return Number.isFinite(expires) && expires > nowMs;
+}
+
+function nextBackoffMs(attempts) {
+  const index = Math.max(0, Math.min(BACKOFF_MS.length - 1, Number(attempts || 1) - 1));
+  return BACKOFF_MS[index];
+}
+
+function studioLockRef() {
+  return fb.adminDb.collection(LOCK_COLLECTION).doc(STUDIO_LOCK_DOC);
+}
+
+async function clearStudioQueueLease(jobId) {
+  if (!jobId) return;
+  await fb.adminDb.runTransaction(async (tx) => {
+    const ref = studioLockRef();
+    const snap = await tx.get(ref);
+    if (!snap.exists) return;
+    const lock = snap.data();
+    if (lock?.jobId !== jobId) return;
+    tx.set(ref, {
+      jobId: null,
+      workerId: null,
+      leaseExpiresAt: null,
+      releasedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+  }).catch(() => {});
+}
+
+/**
+ * Claim the oldest runnable queued job if the singleton render lease is open.
+ * Query ordering is intentionally simple to avoid requiring a new composite
+ * index; candidates are sorted in memory after a small bounded read.
+ */
+async function claimNextRenderJob({ workerId = null } = {}) {
+  const nowMs = Date.now();
+
+  const candidatesSnap = await fb.adminDb
+    .collection(COLLECTION)
+    .where('status', '==', 'queued')
+    .limit(50)
+    .get();
+
+  const runnable = candidatesSnap.docs
+    .map((doc) => ({ ref: doc.ref, id: doc.id, data: doc.data() }))
+    .filter(({ data }) => {
+      const attempts = Number(data.attempts || 0);
+      if (attempts >= MAX_ATTEMPTS) return false;
+      const next = data.nextAttemptAtTs?.toMillis
+        ? data.nextAttemptAtTs.toMillis()
+        : (data.nextAttemptAt ? Date.parse(data.nextAttemptAt) : 0);
+      return !Number.isFinite(next) || next <= nowMs;
+    })
+    .sort((a, b) => String(a.data.createdAt || '').localeCompare(String(b.data.createdAt || '')));
+
+  if (!runnable.length) return null;
+
+  const selected = runnable[0];
+  const lease = {
+    workerId: workerId || `studio-worker-${nowMs}`,
+    leasedAt: new Date(nowMs).toISOString(),
+    leaseExpiresAt: new Date(nowMs + LEASE_TIMEOUT_MS).toISOString(),
+  };
+
+  let claimed = null;
+  await fb.adminDb.runTransaction(async (tx) => {
+    const lockRef = studioLockRef();
+    const [jobSnap, lockSnap, renderingSnap] = await Promise.all([
+      tx.get(selected.ref),
+      tx.get(lockRef),
+      tx.get(
+        fb.adminDb
+          .collection(COLLECTION)
+          .where('status', '==', 'rendering')
+          .limit(20)
+      ),
+    ]);
+    if (lockSnap.exists && isQueueLeaseActive(lockSnap.data(), nowMs)) return;
+    if (!jobSnap.exists) return;
+    if (renderingSnap.docs.some((doc) => doc.id !== selected.id && isLeaseActive(doc.data(), nowMs))) return;
+
+    const job = jobSnap.data();
+    if (job.status !== 'queued') return;
+    const attempts = Number(job.attempts || 0);
+    if (attempts >= MAX_ATTEMPTS) return;
+    const next = job.nextAttemptAtTs?.toMillis
+      ? job.nextAttemptAtTs.toMillis()
+      : (job.nextAttemptAt ? Date.parse(job.nextAttemptAt) : 0);
+    if (Number.isFinite(next) && next > nowMs) return;
+
+    tx.set(selected.ref, {
+      status: 'rendering',
+      attempts: fb.FieldValue.increment(1),
+      workerLease: lease,
+      startedAt: job.startedAt || lease.leasedAt,
+      updatedAt: lease.leasedAt,
+      error: null,
+    }, { merge: true });
+    tx.set(lockRef, {
+      jobId: selected.id,
+      workerId: lease.workerId,
+      leasedAt: lease.leasedAt,
+      leaseExpiresAt: lease.leaseExpiresAt,
+      updatedAt: lease.leasedAt,
+    }, { merge: true });
+    claimed = { id: selected.id, ...job, status: 'rendering', attempts: attempts + 1, workerLease: lease };
+  });
+
+  return claimed;
 }
 
 /**
@@ -90,9 +220,11 @@ async function completeRenderJob(jobId, capture) {
     status: 'done',
     capture: capture || null,
     error: null,
+    workerLease: null,
     completedAt: now,
     updatedAt: now,
   }, { merge: true }).catch(() => {});
+  await clearStudioQueueLease(jobId);
 }
 
 /** Mark a job as failed with a sanitized message. */
@@ -102,9 +234,36 @@ async function failRenderJob(jobId, error) {
   await fb.adminDb.collection(COLLECTION).doc(jobId).set({
     status: 'failed',
     error: String(error?.message || error || 'Render failed.').slice(0, 500),
+    workerLease: null,
     completedAt: now,
     updatedAt: now,
   }, { merge: true }).catch(() => {});
+  await clearStudioQueueLease(jobId);
+}
+
+async function requeueRenderJob(jobId, error = null) {
+  if (!jobId) return;
+  const snap = await fb.adminDb.collection(COLLECTION).doc(jobId).get();
+  if (!snap.exists) return;
+  const job = snap.data();
+  const attempts = Number(job.attempts || 0);
+  const now = new Date();
+  if (attempts >= MAX_ATTEMPTS) {
+    await failRenderJob(jobId, error || 'Render failed after retry budget was exhausted.');
+    return { requeued: false, exhausted: true, nextAttemptAt: null };
+  }
+  const nextAt = new Date(now.getTime() + nextBackoffMs(attempts));
+  await fb.adminDb.collection(COLLECTION).doc(jobId).set({
+    status: 'queued',
+    error: String(error?.message || error || 'Render will retry.').slice(0, 500),
+    workerLease: null,
+    nextAttemptAt: nextAt.toISOString(),
+    nextAttemptAtTs: nextAt,
+    completedAt: null,
+    updatedAt: now.toISOString(),
+  }, { merge: true });
+  await clearStudioQueueLease(jobId);
+  return { requeued: true, exhausted: false, nextAttemptAt: nextAt.toISOString() };
 }
 
 /** Pair (or re-pair) a job with a social post id. */
@@ -140,10 +299,13 @@ async function listRenderJobs(clientId, limit = 20) {
 
 module.exports = {
   createRenderJob,
+  claimNextRenderJob,
   markRenderJobRendering,
   completeRenderJob,
   failRenderJob,
+  requeueRenderJob,
   linkRenderJobToPost,
   getRenderJob,
   listRenderJobs,
+  MAX_ATTEMPTS,
 };

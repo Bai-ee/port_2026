@@ -1,11 +1,10 @@
-import { NextResponse } from 'next/server';
+import { after, NextResponse } from 'next/server';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../../api/_lib/client-provisioning.cjs');
 const renderJobs = require('../../../../api/_lib/studio-render-jobs.cjs');
-const { renderAndStoreStudioVideo } = require('../../../../api/_lib/studio-render-core.cjs');
 
 export const maxDuration = 180;
 
@@ -20,6 +19,27 @@ function makeReqShim(request) {
 
 function json(body, status = 200) {
   return NextResponse.json(body, { status, headers: { 'cache-control': 'no-store' } });
+}
+
+function triggerRenderWorker(request) {
+  const proto = request.headers.get('x-forwarded-proto') || 'http';
+  const host = request.headers.get('host') || 'localhost:3000';
+  const workerUrl = `${proto}://${host}/api/worker/render-studio`;
+  after(async () => {
+    try {
+      await fetch(workerUrl, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-worker-secret': process.env.WORKER_SECRET || '',
+        },
+        body: JSON.stringify({ source: 'dashboard-studio-render' }),
+        cache: 'no-store',
+      });
+    } catch (err) {
+      console.warn(`[studio-render] worker trigger failed: ${err?.message}`);
+    }
+  });
 }
 
 async function resolveContext(request) {
@@ -46,18 +66,15 @@ export async function POST(request) {
   }
 
   // The request body IS the render recipe (services/studio-render/recipe.mjs
-  // shape). All render + storage + studioCaptures logic lives in the shared
-  // core so the worker pipeline produces identical refs.
-  const result = await renderAndStoreStudioVideo({
+  // shape). It is queued, then the single-lease worker drains render_jobs
+  // serially so multiple clients cannot stampede the one-GPU Cloud Run service.
+  const { jobId } = await renderJobs.createRenderJob({
     clientId: context.clientId,
     recipe: body,
     postId: body?.postId ? String(body.postId).slice(0, 120) : null,
   });
-
-  if (!result.ok) {
-    return json({ error: result.error, jobId: result.jobId }, result.status || 502);
-  }
-  return json({ ok: true, capture: result.capture, jobId: result.jobId });
+  triggerRenderWorker(request);
+  return json({ ok: true, queued: true, jobId }, 202);
 }
 
 // Poll a single render job (?jobId=) or list recent jobs for the client.

@@ -77,6 +77,31 @@ function json(body, status = 200) {
   });
 }
 
+function triggerStudioRenderWorker(request) {
+  const proto = request.headers.get('x-forwarded-proto') || 'http';
+  const host = request.headers.get('host') || 'localhost:3000';
+  const workerUrl = `${proto}://${host}/api/worker/render-studio`;
+  after(async () => {
+    try {
+      const response = await fetch(workerUrl, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-worker-secret': process.env.WORKER_SECRET || '',
+        },
+        body: JSON.stringify({ source: 'run-brief-studio-video' }),
+        cache: 'no-store',
+      });
+      if (!response.ok) {
+        const detail = await response.text().catch(() => '');
+        console.warn(`[WORKER] studio render worker trigger failed: ${response.status} ${detail.trim()}`);
+      }
+    } catch (err) {
+      console.warn(`[WORKER] studio render worker trigger threw: ${err?.message}`);
+    }
+  });
+}
+
 async function authorizeRequest(request) {
   if (hasValidWorkerSecret(buildAuthRequestShim(request))) return;
   await verifyAdminRequest(buildAuthRequestShim(request));
@@ -373,22 +398,18 @@ export async function POST(request) {
       // brief-refreshes skip it to avoid re-rendering the video every run.
       if (websiteUrl && (claimedRun.trigger === 'signup' || claimedRun.trigger === 'reseed' || claimedRun.trigger === 'creative-brief')) {
         try {
-          const { renderAndStoreStudioVideo } = require('../../../../api/_lib/studio-render-core.cjs');
+          const renderJobs = require('../../../../api/_lib/studio-render-jobs.cjs');
           const { getSignupVideoRecipe } = require('../../../../api/_lib/signup-video-recipe.cjs');
-          await onProgress('studio-video', 'Rendering your motion mockup…');
-          const studioResult = await renderAndStoreStudioVideo({
+          await onProgress('studio-video', 'Queueing your motion mockup…');
+          const { jobId } = await renderJobs.createRenderJob({
             clientId,
             recipe: await getSignupVideoRecipe(websiteUrl),
           });
-          if (studioResult.ok) {
-            console.log(`[WORKER] studio video rendered for ${clientId} — ${studioResult.capture?.storagePath}`);
-            await onProgress('studio-video', 'Motion mockup ready.');
-          } else {
-            console.warn(`[WORKER] studio video non-fatal failure for ${clientId}: ${studioResult.error}`);
-            await onProgress('studio-video', 'Motion mockup will retry on a later run.');
-          }
+          triggerStudioRenderWorker(request);
+          console.log(`[WORKER] studio video queued for ${clientId} — ${jobId}`);
+          await onProgress('studio-video', 'Motion mockup queued.');
         } catch (studioErr) {
-          console.warn(`[WORKER] studio video render threw (non-fatal) for ${clientId}: ${studioErr?.message}`);
+          console.warn(`[WORKER] studio video queue threw (non-fatal) for ${clientId}: ${studioErr?.message}`);
         }
       }
 
