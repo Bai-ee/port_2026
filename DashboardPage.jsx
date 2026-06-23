@@ -4582,17 +4582,18 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       openNamedBriefPreview(BRIEF_TYPE_BY_CARD[card.id]);
       return;
     }
-    // Post Me card — clicking fires the real POST TO X handler (API route with
-    // media upload). Falls back to intent URL only if handler not yet available.
+    // Post Me card — the shell itself is NOT clickable. All actions live on the
+    // explicit controls inside (POST TO X footer, corner icons), so a stray click
+    // on the preview does nothing.
     if (!forceModal && card.id === 'post-me') {
-      if (card.footerAction?.onClick) { card.footerAction.onClick(); }
-      else if (card.xIntentUrl) { window.open(card.xIntentUrl, '_blank', 'noopener'); }
       return;
     }
     // Deliverables-bucket cards (Video Post, Social Preview, Device Mockups,
-    // Full-Page Screenshots) open the shared full-screen asset viewer — same
-    // pattern as the Creative Brief, available to clients and admins alike.
-    if (!forceModal && card.deliverableAsset) {
+    // Full-Page Screenshots) open the shared full-screen asset viewer for
+    // CLIENTS — same pattern as the Creative Brief. Admins fall through to the
+    // richer tile-detail modal below (e.g. Studio auto-run settings, past
+    // renders, Open Studio), which clients don't get.
+    if (!forceModal && !isAdmin && card.deliverableAsset) {
       setDeliverableView(card.deliverableAsset);
       return;
     }
@@ -4706,16 +4707,20 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   const clientStudioSourceKey = normalizeStudioSourceKey(clientStudioSourceUrl);
   const latestStudioVideo = (() => {
     const caps = Array.isArray(dashboardState?.studioCaptures) ? dashboardState.studioCaptures : [];
+    let newestAny = null;
     for (let i = caps.length - 1; i >= 0; i -= 1) {
-      if (
-        caps[i]?.type === 'studio_video' &&
-        caps[i]?.downloadUrl &&
-        (!clientStudioSourceKey || normalizeStudioSourceKey(caps[i].sourceUrl) === clientStudioSourceKey)
-      ) {
-        return { url: caps[i].downloadUrl, contentType: caps[i].contentType || null };
+      const c = caps[i];
+      if (c?.type !== 'studio_video' || !c?.downloadUrl) continue;
+      if (!clientStudioSourceKey || normalizeStudioSourceKey(c.sourceUrl) === clientStudioSourceKey) {
+        return { url: c.downloadUrl, contentType: c.contentType || null };
       }
+      if (!newestAny) newestAny = { url: c.downloadUrl, contentType: c.contentType || null };
     }
-    return null;
+    // Admin renders arbitrary sites straight from the card, so always surface the
+    // last render even when its source URL doesn't match the client's saved site.
+    // Client-facing views stay strict so a non-matching video never shows as the
+    // client's deliverable (preserves the fallback-URL guard).
+    return isAdmin ? newestAny : null;
   })();
   const latestStudioVideoUrl = latestStudioVideo?.url || null;
   // X accepts MP4 video only (not WebM/OGG). Used to gate the video path in Post Me.
@@ -5654,6 +5659,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     if (dlAllBusy) return;
     const safe = (s) => String(s || 'asset').replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 80);
     const base = safe(client?.businessName || 'deliverables');
+    // Zip filename includes website host + date so saved bundles are self-identifying.
+    const host = safe(getClientHostname(client));
+    const dateStamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const zipBase = [host || base, dateStamp].filter(Boolean).join('-');
     const assets = [
       { url: latestStudioVideoUrl, name: `${base}-video-post.mp4` },
       { url: homepageDeviceMockupUrl, name: `${base}-device-mockup.png` },
@@ -5669,7 +5678,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       const res = await fetch('/api/dashboard/deliverables-zip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ assets, zipName: `${base}-deliverables` }),
+        body: JSON.stringify({ assets, zipName: zipBase }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -5678,7 +5687,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = url; link.download = `${base}-deliverables.zip`;
+      link.href = url; link.download = `${zipBase}.zip`;
       document.body.appendChild(link); link.click(); link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 4000);
     } catch (err) {
@@ -7166,11 +7175,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     })(),
     (() => {
       const studioCaptures = Array.isArray(dashboardState?.studioCaptures) ? dashboardState.studioCaptures : [];
-      const latestVideo = [...studioCaptures].reverse().find((item) => {
-        if (item?.type !== 'studio_video') return false;
-        if (!clientStudioSourceKey) return true;
-        return normalizeStudioSourceKey(item.sourceUrl) === clientStudioSourceKey;
-      });
+      const studioVids = [...studioCaptures].reverse().filter((item) => item?.type === 'studio_video');
+      // Prefer the client-site match; for admin fall back to the newest render of
+      // any site so the card always shows the last rendered video (client views
+      // stay strict — see latestStudioVideo above).
+      const latestVideo = studioVids.find((item) => !clientStudioSourceKey || normalizeStudioSourceKey(item.sourceUrl) === clientStudioSourceKey)
+        || (isAdmin ? studioVids[0] : undefined);
       // In-flight render marker (set by the run-brief worker on enqueue, cleared
       // on success in studio-render-core). Drives a "Rendering…" state for the
       // ~13-25s gap between the onboarding run finishing and the async video
@@ -7676,27 +7686,15 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         number: 'PM',
         label: 'POST ME',
         title: 'Post Me',
-        description: videoPostable
-          ? "Your video is ready to post. Tap POST TO X to publish it with a caption pulled from your brand brief."
-          : hasVideoAsset
-            ? "Your video render is WebM, which X can't accept yet — tapping POST TO X publishes your site preview image instead, with the suggested caption."
-            : hasStaticAsset
-              ? "Your site preview is ready to share. Tap POST TO X to publish it with a suggested caption."
-              : "Once your Video Promo or Social Preview is ready, you'll get a suggested post to share on X.",
+        // Description = the actual post copy that will be shared.
+        description: buildPostMeCaption(),
         placeholderLabel: 'POST\nTO X',
         rows: [
-          { key: 'pm-type', label: 'Post type',      value: videoPostable ? 'Video post' : hasStaticAsset ? 'Image post' : hasVideoAsset ? 'Video (WebM — needs MP4)' : 'Pending assets' },
-          { key: 'pm-biz',  label: 'Business',       value: bizName },
-          { key: 'pm-site', label: 'Link',           value: cleanUrl || 'Not set' },
           { key: 'pm-copy', label: 'Suggested post', value: videoCopy.slice(0, 80) + (videoCopy.length > 80 ? '…' : '') },
         ],
-        footerLeft: hasVideoAsset ? 'Live' : hasStaticAsset ? 'Ready' : 'Pending',
+        footerLeft: 'Live',
         footerRight: 'ACTIVE',
-        readinessBadge: postMeResult?.ok
-          ? { tone: 'ok', label: 'Posted!' }
-          : postMeResult?.error
-            ? { tone: 'warn', label: 'Failed' }
-            : (hasVideoAsset || hasStaticAsset) ? { tone: 'ok', label: 'Ready' } : null,
+        readinessBadge: { tone: 'ok', label: 'Passed' },
         xIntentUrl:       activeIntent,
         xVideoIntentUrl:  xVideoIntent,
         xStaticIntentUrl: xStaticIntent,
@@ -8223,10 +8221,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       id: 'marketing-brief',
       category: 'brief',
       number: 'DB',
-      label: 'EXECUTIVE DAILY BRIEF',
-      title: 'Executive Brief',
-      description: 'Acts like a managing director: gives a morning readout of what matters, what changed, and what deserves attention.',
-      placeholderLabel: 'RUN\nDAILY\nBRIEF',
+      label: 'DAILY STAND UP',
+      title: 'Daily Stand Up',
+      description: 'Continue with Daily Briefs from a team guided by a Human, bringing your digital strategy into one accessible email/dashboard.',
+      placeholderLabel: 'RUN\nDAILY\nSTAND UP',
       rows: [
         { key: 'mb-status', label: 'Status', value: marketingBriefStatus },
         { key: 'mb-custom-briefs', label: 'Custom briefs', value: customBriefsLoading ? 'Loading' : hasCustomBriefs ? `${customBriefCount} imported` : 'None imported' },
@@ -10535,62 +10533,61 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       playsInline
                     />
                   ) : card.id === 'post-me' ? (
-                    // Full-bleed X post preview — fills the whole tile face and
-                    // mirrors a real X timeline post. Media is a STATIC frame.
+                    // Clean, authentic X post that fills the fixed shell. Just the
+                    // X UI — header, caption, the creative at true 16:10, engagement.
+                    // The one extra affordance is a subtle Regenerate icon (top-right).
                     (() => {
                       const pmBiz    = client?.businessName || brandOverview?.headline || 'Your Business';
                       const pmHandle = '@' + (client?.businessName || 'yourbrand').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 15);
                       const pmCopy   = buildPostMeCaption();
                       const pmUrl    = client?.websiteUrl || client?.website || '';
                       const pmClean  = pmUrl.replace(/^https?:\/\/(?:www\.)?/, '').replace(/\/$/, '');
-                      // Body = caption minus any trailing URL; the host renders as a blue link.
                       const pmBody   = pmCopy.replace(pmUrl, '').replace(pmClean, '').replace(/\s+$/, '').trim();
                       const pmImg    = siteMeta?.ogImage || multiDevicePreviewSrc || null;
                       const pmHasVideo = Boolean(latestStudioVideoUrl);
                       const pmHasMedia = Boolean(latestStudioVideoUrl || pmImg);
+                      // Avatar = the HITLoop profile image used in the app's modals.
+                      const pmAvatar = '/img/profile2_400x400.png?v=1774582808';
                       const stop = (e) => { e.stopPropagation(); };
+                      const statusMsg = postMeLoading ? 'Posting…'
+                        : postMeResult?.ok ? (postMeResult.note || 'Posted to X')
+                        : postMeResult?.error ? postMeResult.error : null;
                       return (
                         <div id="post-me-tile-mockup" style={{
                           position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
                           background: '#000', color: '#e7e9ea',
                           fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
-                          overflow: 'hidden', textAlign: 'left',
+                          overflow: 'hidden', textAlign: 'left', cursor: 'default',
                         }}>
-                          {/* Top bar: X logo + Generate-copy control */}
-                          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 14px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.742l7.722-8.831L1.534 2.25H8.08l4.259 5.631zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-                            <button type="button" onClick={(e) => { stop(e); generatePostMeCopy(); }} disabled={postMeCopyLoading}
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(29,155,240,0.12)', border: '1px solid rgba(29,155,240,0.5)', color: '#1d9bf0', borderRadius: 20, padding: '4px 11px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={postMeCopyLoading ? { animation: 'sb-spin 0.8s linear infinite' } : undefined}>
-                                <path d="M21 12a9 9 0 1 1-2.64-6.36" /><polyline points="21 3 21 8 16 8" />
-                              </svg>
-                              {postMeCopyLoading ? 'Writing…' : postMeCopy ? 'Regenerate' : 'Generate copy'}
-                            </button>
-                          </div>
-                          {/* Post body */}
-                          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: '9px 14px 0' }}>
-                            {/* Author row */}
-                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9, flexShrink: 0 }}>
-                              <div style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0, background: 'linear-gradient(135deg,#1d9bf0,#0a7ab8)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, color: '#fff' }}>{pmBiz.charAt(0).toUpperCase()}</div>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                  <span style={{ fontSize: 15, fontWeight: 700, color: '#e7e9ea', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '60%' }}>{pmBiz}</span>
-                                  <svg width="16" height="16" viewBox="0 0 22 22" fill="#1d9bf0" style={{ flexShrink: 0 }}><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.469-.445-1.053-.751-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.469-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.22.878 1.69.47.444 1.055.75 1.69.88.635.13 1.294.08 1.902-.144.27.586.7 1.084 1.24 1.44.54.354 1.167.55 1.813.566.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.239 1.266.296 1.903.164.636-.132 1.22-.447 1.68-.907.46-.46.776-1.044.908-1.681s.075-1.299-.165-1.903c.586-.274 1.084-.705 1.439-1.246.354-.54.551-1.17.569-1.816zM9.662 14.85l-3.429-3.428 1.293-1.302 2.072 2.072 4.4-4.794 1.347 1.246z"/></svg>
-                                  <span style={{ fontSize: 14, color: '#71767b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pmHandle} · now</span>
-                                </div>
-                              </div>
-                              <div style={{ flexShrink: 0, background: '#eff3f4', color: '#0f1419', borderRadius: 20, padding: '5px 14px', fontSize: 13, fontWeight: 700 }}>Follow</div>
+                          {/* Header — avatar, name, handle, X logo */}
+                          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 9, padding: '11px 14px 6px' }}>
+                            <img src={pmAvatar} alt={pmBiz}
+                              style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0, objectFit: 'cover', background: '#15202b', border: '1px solid rgba(255,255,255,0.12)', display: 'block' }} />
+                            <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden' }}>
+                              <span style={{ fontSize: 14, fontWeight: 700, color: '#e7e9ea', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '52%' }}>{pmBiz}</span>
+                              <svg width="15" height="15" viewBox="0 0 22 22" fill="#1d9bf0" style={{ flexShrink: 0 }}><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.469-.445-1.053-.751-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.469-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.22.878 1.69.47.444 1.055.75 1.69.88.635.13 1.294.08 1.902-.144.27.586.7 1.084 1.24 1.44.54.354 1.167.55 1.813.566.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.239 1.266.296 1.903.164.636-.132 1.22-.447 1.68-.907.46-.46.776-1.044.908-1.681s.075-1.299-.165-1.903c.586-.274 1.084-.705 1.439-1.246.354-.54.551-1.17.569-1.816zM9.662 14.85l-3.429-3.428 1.293-1.302 2.072 2.072 4.4-4.794 1.347 1.246z"/></svg>
+                              <span style={{ fontSize: 13, color: '#71767b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pmHandle}</span>
                             </div>
-                            {/* Caption */}
-                            <p style={{ margin: '6px 0 0', fontSize: 13, lineHeight: 1.38, color: '#e7e9ea', whiteSpace: 'pre-wrap', flexShrink: 0, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                              {pmBody}{pmClean && <span style={{ color: '#1d9bf0' }}>{' '}{pmClean}</span>}
-                            </p>
-                            {/* Media — sizes to the leftover height and holds the
-                                video's true 16:10 ratio, so it shrinks to fit the
-                                fixed shell without cropping (centered, gutters ok). */}
-                            {pmHasMedia && (
-                              <div style={{ flex: 1, minHeight: 0, marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              <div style={{ height: '100%', aspectRatio: '16 / 10', maxWidth: '100%', borderRadius: 14, overflow: 'hidden', position: 'relative', border: '1px solid rgba(255,255,255,0.14)' }}>
+                            {/* In-flow controls — reserve their own space so nothing collides. */}
+                            <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <button type="button" title="Auto-post via X API" onClick={(e) => { stop(e); handlePostMeToX(); }} disabled={postMeLoading}
+                                style={{ width: 26, height: 26, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.16)', color: '#e7e9ea', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}>
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
+                              </button>
+                              <button type="button" title="Generate new copy" onClick={(e) => { stop(e); generatePostMeCopy(); }} disabled={postMeCopyLoading}
+                                style={{ width: 26, height: 26, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.16)', color: '#e7e9ea', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}>
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={postMeCopyLoading ? { animation: 'sb-spin 0.8s linear infinite' } : undefined}><path d="M21 12a9 9 0 1 1-2.64-6.36" /><polyline points="21 3 21 8 16 8" /></svg>
+                              </button>
+                            </div>
+                          </div>
+                          {/* Caption */}
+                          <p style={{ flexShrink: 0, margin: 0, padding: '0 14px', fontSize: 13, lineHeight: 1.4, color: '#e7e9ea', whiteSpace: 'pre-wrap', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                            {pmBody}{pmClean && <span style={{ color: '#1d9bf0' }}>{' '}{pmClean}</span>}
+                          </p>
+                          {/* Creative — the focus. Holds true 16:10, shrinks to fit. */}
+                          <div style={{ flex: 1, minHeight: 0, padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {pmHasMedia ? (
+                              <div style={{ height: '100%', aspectRatio: '16 / 10', maxWidth: '100%', borderRadius: 14, overflow: 'hidden', position: 'relative', border: '1px solid rgba(255,255,255,0.12)' }}>
                                 {pmHasVideo ? (
                                   <video src={latestStudioVideoUrl} poster={pmImg || undefined} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
                                 ) : (
@@ -10598,41 +10595,34 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                 )}
                                 {pmHasVideo && (
                                   <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-                                    <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(0,0,0,0.55)', border: '2px solid rgba(255,255,255,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                      <svg width="16" height="16" viewBox="0 0 12 12" fill="white"><path d="M3 2l7 4-7 4V2z"/></svg>
+                                    <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(0,0,0,0.5)', border: '2px solid rgba(255,255,255,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                      <svg width="15" height="15" viewBox="0 0 12 12" fill="white"><path d="M3 2l7 4-7 4V2z"/></svg>
                                     </div>
                                   </div>
                                 )}
-                                <span style={{ position: 'absolute', bottom: 8, left: 10, fontSize: 11, fontWeight: 600, background: 'rgba(0,0,0,0.7)', color: '#fff', borderRadius: 4, padding: '2px 7px' }}>{pmHasVideo ? 'VIDEO' : 'IMAGE'}</span>
                               </div>
-                              </div>
+                            ) : (
+                              <span style={{ fontSize: 12, color: '#71767b' }}>Your creative will appear here</span>
                             )}
                           </div>
-                          {/* Engagement bar */}
-                          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 18px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                          {/* Engagement bar — thin, muted */}
+                          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 18px 11px' }}>
                             {[{path:'M1.751 10c0-4.42 3.584-8 8.005-8h.366a8.001 8.001 0 0 1 7.97 9.58l.001.02 1.024 1.024a1.07 1.07 0 0 1-.953 1.763L16.5 22.5l-2.836-2.837c-.33.1-.67.187-1.014.256A8 8 0 0 1 2.1 11.39 8 8 0 0 1 1.75 10Z',label:'4'},
                               {path:'M4.5 3.88l4.432 4.14-1.364 1.46L5.5 7.55V16c0 1.1.896 2 2 2H13v2H7.5a4 4 0 0 1-4-4V7.55L1.432 9.48.068 8.02 4.5 3.88zM16.5 6h-6V4h6a4 4 0 0 1 4 4v8.45l2.068-1.93 1.364 1.46-4.432 4.14-4.432-4.14 1.364-1.46 2.068 1.93V8c0-1.1-.896-2-2-2z',label:'1'},
                               {path:'M16.697 5.5c-1.222-.06-2.679.51-3.89 2.16l-.805 1.09-.806-1.09C9.984 6.01 8.526 5.44 7.304 5.5c-1.243.07-2.349.78-2.91 1.91-.552 1.12-.633 2.78.479 4.82 1.074 1.97 3.257 4.27 7.129 6.61 3.87-2.34 6.052-4.64 7.126-6.61 1.111-2.04 1.03-3.7.477-4.82z',label:'12'},
                               {path:'M8.75 21V3h2v18h-2zM13 21V8.5h2V21h-2zM4.5 21V13h2v8h-2zM17.5 21V11.5h2V21h-2z',label:'2.4K'},
                             ].map(({path,label}) => (
-                              <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#71767b', fontSize: 13 }}>
-                                <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d={path}/></svg>{label}
+                              <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#71767b', fontSize: 12 }}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d={path}/></svg>{label}
                               </span>
                             ))}
                           </div>
-                          {/* Status / API auto-post strip */}
-                          <div style={{ flexShrink: 0, padding: '6px 14px', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 26 }}>
-                            <span style={{ fontSize: 11, lineHeight: 1.3, color: postMeResult?.ok ? '#4ade80' : postMeResult?.error ? '#f87171' : '#71767b' }}>
-                              {postMeLoading ? 'Posting via API…'
-                                : postMeResult?.ok ? (postMeResult.note || '✓ Posted to X')
-                                : postMeResult?.error ? postMeResult.error.slice(0, 90)
-                                : 'Tap POST TO X to open the composer with your caption.'}
-                            </span>
-                            <button type="button" onClick={(e) => { stop(e); handlePostMeToX(); }} disabled={postMeLoading}
-                              style={{ flexShrink: 0, background: 'transparent', border: '1px solid rgba(255,255,255,0.18)', color: '#71767b', borderRadius: 6, padding: '4px 9px', fontSize: 10, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                              {postMeLoading ? '…' : 'Auto-post (API)'}
-                            </button>
-                          </div>
+                          {/* Transient status toast — only while posting / after a result */}
+                          {statusMsg && (
+                            <div style={{ position: 'absolute', left: 12, right: 12, bottom: 10, background: 'rgba(0,0,0,0.82)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '6px 10px', fontSize: 11, lineHeight: 1.3, color: postMeResult?.error ? '#f87171' : '#4ade80' }}>
+                              {String(statusMsg).slice(0, 110)}
+                            </div>
+                          )}
                         </div>
                       );
                     })()
@@ -11545,7 +11535,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 
             {/* Brand row — exact auth brandStyle */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', justifyContent: 'space-between' }}>
-              <img src="/img/circle_logo.png" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', objectFit: 'contain', border: '2px solid rgba(255,255,255,0.35)', display: 'block' }} />
+              <img src="/img/circle_logo.png" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', objectFit: 'contain', overflow: 'visible', display: 'block' }} />
               <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.44)', fontWeight: 700, fontFamily: '"Space Mono", monospace' }}>
                 {adhocActive ? (adhocTerminal.brand || 'Working') : activeModuleCard ? 'Updating Dashboard' : 'Client Access'}
               </span>
@@ -17461,6 +17451,7 @@ const dashboardCss = `
      to fit, with the creative held at its true 16:10 video ratio. */
   .tile-intake-placeholder-post-me {
     background: #000;
+    cursor: default;
   }
   /* Card-shell download button — top-right of every card's image shell (card +
      list views). Glass disc; opens a fixed menu when a card has >1 asset. */

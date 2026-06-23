@@ -5,8 +5,8 @@ import { useCallback, useState } from 'react';
 // Shown when a signed-in user has no assigned dashboard. Collects a website URL
 // and provisions their client (which queues the first Creative Brief) BEFORE the
 // dashboard is processed. URL is required.
-export default function WebsiteUrlGate({ user, onProvisioned }) {
-  const [url, setUrl] = useState('');
+export default function WebsiteUrlGate({ user, onProvisioned, initialUrl = '' }) {
+  const [url, setUrl] = useState(initialUrl || '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 

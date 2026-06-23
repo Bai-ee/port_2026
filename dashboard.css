@@ -6560,6 +6560,9 @@
     #dashboard-source-cta-row { max-width: 100%; box-sizing: border-box; justify-content: space-between; gap: clamp(10px, 3vw, 20px); padding: 4px clamp(12px, 4vw, 24px); }
     #run-idle-indicator-dot { width: 18px; height: 18px; flex-shrink: 0; background: conic-gradient(rgba(42,36,32,0.15) 0%, rgba(42,36,32,0.08) 100%); -webkit-mask: radial-gradient(circle, transparent 58%, black 59%); mask: radial-gradient(circle, transparent 58%, black 59%); border-radius: 50%; display: inline-block !important; }
     #run-active-indicator-label { display: none; }
+    /* Mobile: icons only in the source CTA row — hide the numeric/label values. */
+    #dashboard-source-cta-row .cap-source-value,
+    #dashboard-source-cta-row .dl-all-text { display: none; }
     .cap-view-toggle--top { display: none; }
     .cap-view-toggle--top + .cap-source-divider { display: none; }
     #dashboard-source-band { margin-bottom: 0; }

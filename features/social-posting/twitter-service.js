@@ -299,6 +299,47 @@ export function normalizePostText(content) {
   return String(content || '').replace(/\s+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
+// Strategist-written single promo post via Claude — the same model the Strategy
+// Developer uses. Returns one X-ready caption (≤280 chars) promoting the brand's
+// site. brand: { name, summary, url, industry }. Falls back to a derived line on
+// any failure so the caller always gets usable copy.
+export async function generatePromoCopy(brand = {}) {
+  const name = String(brand.name || '').slice(0, 120);
+  const summary = String(brand.summary || '').slice(0, 600);
+  const url = String(brand.url || '').slice(0, 200);
+  const industry = String(brand.industry || '').slice(0, 80);
+  const fallback = ((name && summary) ? `${name} — ${summary.slice(0, 120)}` : (name ? `Check out ${name}` : 'Check out our new site'))
+    + (url ? `\n\n${url}` : '');
+  try {
+    const { createAnthropicClient } = require('../not-the-rug-brief/anthropic-client.js');
+    const anthropic = createAnthropicClient();
+    const prompt = [
+      `Write ONE X (Twitter) post promoting this brand's website.`,
+      name && `Brand: ${name}`,
+      industry && `Industry: ${industry}`,
+      summary && `About: ${summary}`,
+      url && `Link to include verbatim at the end: ${url}`,
+      ``,
+      `Rules: under 240 characters (excluding the link), confident and specific,`,
+      `no hashtags, no emojis, no quotation marks around the post, first person or brand voice.`,
+      `Return ONLY the post text, nothing else.`,
+    ].filter(Boolean).join('\n');
+    const res = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 300,
+      system: 'You are a senior social media strategist. Return only the post text.',
+      messages: [{ role: 'user', content: prompt }],
+    });
+    let text = String(res?.content?.[0]?.text || '').trim().replace(/^["']|["']$/g, '');
+    if (!text) return normalizePostText(fallback).slice(0, 280);
+    // Guarantee the link is present.
+    if (url && !text.includes(url)) text = `${text}\n\n${url}`;
+    return normalizePostText(text).slice(0, 280);
+  } catch {
+    return normalizePostText(fallback).slice(0, 280);
+  }
+}
+
 export function runPostingAgents(content, context = {}) {
   const base = normalizePostText(content);
 
@@ -400,11 +441,17 @@ function mapTwitterError(error) {
   } else if (error?.code === 429) {
     message = 'Twitter rate limit exceeded. Wait before posting again.';
     hint = 'Retry after the X API rate limit window resets.';
+  } else if (error?.code === 402) {
+    // X's credit-based API model: the enrolled developer account has no credits,
+    // so even text posts are rejected. This is a billing action on X's side.
+    message = 'X API posting is out of credits on this developer account.';
+    hint = 'Add credits / upgrade the X API plan at developer.x.com for the enrolled account, or use the web composer to post manually.';
   } else if (error?.message) {
     message = error.message;
   }
   const out = new Error(message);
-  out.status = error?.code === 429 ? 429 : 500;
+  out.status = error?.code === 429 ? 429 : error?.code === 402 ? 402 : 500;
+  out.code = error?.code || null;
   out.details = error?.message;
   out.hint = hint;
   out.twitterError = compactTwitterError(error);

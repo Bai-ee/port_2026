@@ -1,0 +1,632 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Creative Brief · Vol. 01 · HITLOOP</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700;900&family=Space+Grotesk:wght@300..700&family=Space+Mono:wght@400;700&display=swap"/>
+  <style>
+  :root{
+    --bg:#f6f3ea;
+    --bg2:#efe9d6;
+    --ink:#0a0a0a;
+    --ink-soft:#5a5346;
+    --line:rgba(212,196,171,0.82);
+    --card:rgba(255,255,255,0.5);
+    --hl:rgba(255,255,255,0.65);
+    --brand:#116dff;
+    --grad:linear-gradient(92deg,#7a5cff 0%,#b14bff 38%,#ff4fa1 72%,#ff7a3a 100%);
+    --gutter:max(8vw, calc((100% - 1100px) / 2));
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:"Space Grotesk",system-ui,sans-serif;
+    color:var(--ink);
+    background:
+      radial-gradient(700px 420px at 0% 4%,    rgba(255,120,90,0.38) 0%, transparent 65%),
+      radial-gradient(620px 380px at 100% 16%, rgba(176,90,255,0.32) 0%, transparent 65%),
+      radial-gradient(700px 420px at 0% 30%,   rgba(255,90,160,0.32) 0%, transparent 65%),
+      radial-gradient(600px 380px at 100% 44%, rgba(90,140,255,0.30) 0%, transparent 65%),
+      radial-gradient(720px 440px at 0% 58%,   rgba(255,180,90,0.32) 0%, transparent 65%),
+      radial-gradient(620px 400px at 100% 72%, rgba(200,90,255,0.30) 0%, transparent 65%),
+      radial-gradient(660px 400px at 0% 86%,   rgba(120,200,255,0.28) 0%, transparent 65%),
+      radial-gradient(560px 360px at 100% 98%, rgba(255,120,160,0.28) 0%, transparent 65%),
+      linear-gradient(180deg, #fefdf9 0%, #fbf8f0 50%, #fdfaf2 100%);
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:"Space Mono",ui-monospace,monospace}
+  .doto{font-family:"Doto",monospace;letter-spacing:.02em}
+
+  section.page{
+    min-height:100vh;
+    padding:clamp(48px,9vh,120px) var(--gutter) clamp(64px,10vh,140px);
+    display:flex; flex-direction:column; justify-content:center;
+    border-bottom:1px solid rgba(0,0,0,0.05);
+    position:relative; overflow:hidden;
+  }
+  .eyebrow{
+    font-family:"Space Mono",monospace; font-size:11px;
+    letter-spacing:.22em; text-transform:uppercase; color:var(--ink-soft);
+    display:flex; gap:18px; align-items:center; margin-bottom:24px; flex-wrap:wrap;
+  }
+  .eyebrow .dot{width:6px;height:6px;background:var(--ink);border-radius:50%}
+  .headline{
+    font-family:"Doto",monospace;
+    font-weight:900; letter-spacing:-.01em; line-height:.92;
+    font-size:clamp(64px, 13vw, 200px);
+    margin:0 0 24px;
+    text-transform:uppercase;
+  }
+  .sub{
+    font-family:"Space Grotesk",sans-serif;
+    font-weight:300; font-size:clamp(20px,2.4vw,34px);
+    line-height:1.25; color:#1a1a1a; max-width:58ch; margin:0 0 40px;
+  }
+  .rule{height:1px;background:rgba(0,0,0,.1);margin:28px 0}
+
+  .cover .title-stack{display:flex;align-items:baseline;gap:20px;flex-wrap:wrap}
+  .cover .meta{
+    display:grid; grid-template-columns:repeat(4,minmax(0,1fr));
+    gap:24px 40px; margin-top:40px;
+    border-top:1px solid rgba(0,0,0,.15); padding-top:24px;
+  }
+  .cover .meta .k{font-family:"Space Mono",monospace;font-size:10px;letter-spacing:.25em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:6px}
+  .cover .meta .v{font-family:"Space Grotesk";font-size:18px;word-break:break-word}
+  .marquee{
+    overflow:hidden; white-space:nowrap;
+    font-family:"Doto",monospace; font-weight:900;
+    font-size:clamp(44px,10vw,160px); text-transform:uppercase;
+    line-height:1; letter-spacing:.02em;
+    border-top:1px solid rgba(0,0,0,.2);
+    border-bottom:1px solid rgba(0,0,0,.2);
+    padding:12px 0; margin-top:40px;
+  }
+  .marquee span{display:inline-block}
+
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:18px;
+    box-shadow:0 1px 0 var(--hl), inset 0 1px 0 rgba(255,255,255,0.4);
+    padding:clamp(18px,2vw,28px);
+  }
+
+  .brief-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:clamp(24px,3vw,48px);align-items:start}
+  @media(max-width:900px){.brief-grid{grid-template-columns:1fr}}
+  .stat-row{display:grid;grid-template-columns:120px 1fr;gap:16px;padding:14px 0;border-bottom:1px dashed rgba(0,0,0,.15)}
+  .stat-row:last-child{border-bottom:0}
+  .stat-row .k{font-family:"Space Mono",monospace;font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-soft);padding-top:4px}
+  .stat-row .v{font-family:"Space Grotesk";font-size:16px;line-height:1.45}
+
+  .pull{
+    font-family:"Space Grotesk"; font-weight:300;
+    font-size:clamp(26px,3.2vw,44px); line-height:1.2;
+    border-left:4px solid var(--ink); padding:8px 0 8px 24px;
+    max-width:28ch;
+  }
+  .meta-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:30px}
+  @media(max-width:800px){.meta-grid{grid-template-columns:1fr 1fr}}
+  .meta-tile{background:rgba(255,255,255,.55);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .meta-tile .k{font-family:"Space Mono";font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:6px}
+  .meta-tile .v{font-family:"Space Grotesk";font-size:15px;word-break:break-word}
+
+  footer{padding:40px var(--gutter);font-family:"Space Mono";font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
+
+  .sec-num{
+    position:absolute; top:24px; right:var(--gutter);
+    font-family:"Doto"; font-weight:900;
+    font-size:clamp(80px,14vw,220px);
+    color:transparent; -webkit-text-stroke:1.5px rgba(0,0,0,.12);
+    line-height:.8; pointer-events:none; user-select:none;
+  }
+
+  .flow{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  @media(max-width:800px){.flow{grid-template-columns:1fr}}
+  .flow .node{padding:22px;border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.55)}
+  .flow .node .n{font-family:"Space Mono";font-size:10px;letter-spacing:.22em;color:var(--ink-soft);margin-bottom:8px}
+  .flow .node .t{font-family:"Doto";font-weight:900;font-size:26px;text-transform:uppercase;line-height:1}
+  .flow .node p{font-family:"Space Grotesk";font-size:14px;margin:10px 0 0;color:#2a2a2a}
+
+  /* Mobile: stack labels above values and enlarge all body/label text so the
+     brief reads as a vertical breakdown on narrow screens. Presentation-only —
+     targets the shared .k/.v/tile/flow classes used by every brief renderer. */
+  @media(max-width:640px){
+    section.page{padding:clamp(40px,7vh,72px) var(--gutter) clamp(48px,8vh,96px)}
+    .eyebrow{font-size:13px;gap:12px;margin-bottom:20px}
+    .sub{font-size:clamp(19px,5.2vw,24px);line-height:1.4;margin-bottom:32px}
+
+    .stat-row{grid-template-columns:1fr;gap:6px;padding:18px 0}
+    .stat-row .k{font-size:13px;letter-spacing:.18em;padding-top:0}
+    .stat-row .v{font-size:18px;line-height:1.55}
+
+    .pull{font-size:clamp(22px,6vw,30px);padding:6px 0 6px 18px;max-width:none}
+
+    .meta-grid{grid-template-columns:1fr;margin-top:24px}
+    .meta-tile .k{font-size:12px}
+    .meta-tile .v{font-size:17px}
+
+    .cover .meta{grid-template-columns:1fr 1fr;gap:20px 24px;margin-top:32px}
+    .cover .meta .k{font-size:12px}
+    .cover .meta .v{font-size:17px}
+
+    .flow .node{padding:20px}
+    .flow .node .n{font-size:12px}
+    .flow .node .t{font-size:24px}
+    .flow .node p{font-size:16px;line-height:1.55}
+
+    footer{font-size:12px}
+  }
+
+  /* ── Bento board system — one number or one phrase per tile. All rules
+     scoped under .bento (plus the cover weather strip id) so the shared
+     stylesheet stays additive for estimate-renderer / brief-renderer. ── */
+  .bento{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .bento .s2{grid-column:span 2}
+  .bento-gap{height:clamp(20px,3vh,36px)}
+
+  .bento .tile{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:18px;
+    box-shadow:0 1px 0 var(--hl), inset 0 1px 0 rgba(255,255,255,0.4);
+    padding:clamp(16px,2.4vw,26px);
+    display:flex;flex-direction:column;justify-content:space-between;
+    gap:14px;min-height:128px;min-width:0;overflow:hidden;
+  }
+  .bento .tile .k{
+    font-family:"Space Mono",monospace;font-size:11px;
+    letter-spacing:.22em;text-transform:uppercase;color:var(--ink-soft);
+    display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;
+  }
+  .bento .tile .big{
+    font-family:"Doto",monospace;font-weight:900;line-height:.85;
+    font-size:clamp(44px,12.5vw,112px);letter-spacing:.01em;
+    max-width:100%;overflow-wrap:break-word;
+  }
+  .bento .tile .big .unit{font-size:.32em;letter-spacing:.06em;vertical-align:baseline}
+  .bento .tile .word{
+    font-family:"Space Grotesk";font-weight:500;line-height:1.02;
+    font-size:clamp(24px,6.5vw,48px);letter-spacing:-.01em;
+    text-wrap:balance;max-width:100%;overflow-wrap:break-word;
+  }
+  .bento .tile .word.lite{font-weight:300}
+  .bento .tile .foot{
+    font-family:"Space Grotesk";font-size:12px;line-height:1.45;
+    color:var(--ink-soft);max-width:42ch;
+  }
+  .bento .v-good{color:#166534}
+  .bento .v-avg{color:#b45309}
+  .bento .v-bad{color:#c2410c}
+  .bento .verdict{
+    font-family:"Space Mono";font-size:11px;letter-spacing:.22em;
+    text-transform:uppercase;font-weight:700;
+  }
+  .bento .tile.ink{background:var(--ink);border-color:var(--ink);color:#f6f3ea;box-shadow:none}
+  .bento .tile.ink .k{color:rgba(246,243,234,.65)}
+  .bento .tile.ink .foot{color:rgba(246,243,234,.6)}
+  .bento .tile.quote .word{font-weight:300;font-size:clamp(24px,6.5vw,46px);line-height:1.12;max-width:30ch}
+
+  /* Quote-wall tiles — tweets, web pulls, reddit voices. */
+  .bento .tile.say{justify-content:flex-start;gap:16px}
+  .bento .tile.say .q{
+    font-family:"Space Grotesk";font-weight:300;
+    font-size:clamp(19px,4.8vw,30px);line-height:1.28;
+    max-width:100%;overflow-wrap:break-word;
+  }
+  .bento .tile.say .who{
+    font-family:"Space Mono",monospace;font-size:11px;
+    letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);
+    display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+  }
+  .bento .tile.say .who .src{padding:3px 9px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.5)}
+  .bento .tile.ink.say .who{color:rgba(246,243,234,.65)}
+  .bento .tile.ink.say .who .src{background:transparent;border-color:rgba(246,243,234,.3)}
+
+  /* Calendar day tiles — compact, one post idea per day. */
+  .bento .tile.day{min-height:0;gap:8px;padding:14px 16px;justify-content:flex-start}
+  .bento .tile.day .word{font-size:clamp(16px,4.2vw,22px);line-height:1.15}
+  .bento .tile.day .foot{font-size:11px}
+
+  /* Cover weather strip — its own row at the top of the title stack. */
+  #brief-cover-weather{
+    flex-basis:100%;width:100%;
+    font-family:"Space Mono",monospace;font-size:11px;
+    letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft);
+    margin:0 0 14px;
+  }
+
+  @media(min-width:760px){
+    .bento{grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+    .bento .s2{grid-column:span 2}
+    .bento .s3{grid-column:span 3}
+    .bento .s4{grid-column:span 4}
+    .bento .tile{min-height:160px}
+    .bento .tile.day{min-height:0}
+    .bento .tile .big{font-size:clamp(64px,7.5vw,128px)}
+    .bento .tile .word{font-size:clamp(28px,3.2vw,48px)}
+    .bento .tile.day .word{font-size:clamp(16px,1.6vw,22px)}
+  }
+
+  @media print{
+    section.page{min-height:auto;padding:48px 40px;page-break-after:always;page-break-inside:avoid}
+    .sec-num{font-size:140px}
+  }
+
+  /* Primary "send to my email" CTA inside the cover title-stack, above the
+     headline. Kept inline here (not in brief-css.cjs) so it ships with the
+     markup and isn't subject to the .cjs require-cache in dev. */
+  @property --cta-angle{syntax:'<angle>';initial-value:0deg;inherits:false}
+  @keyframes briefCtaSpin{to{--cta-angle:360deg}}
+  /* Pinned to the iframe viewport — stays in place while the brief scrolls. */
+  .cap-brief-email-cta-row{position:fixed;top:40px;left:var(--gutter);z-index:50;display:flex;margin:0}
+  .cap-brief-email-cta{
+    position:relative;isolation:isolate;display:inline-flex;align-items:center;gap:.5rem;
+    padding:.5rem .75rem;border:none;border-radius:999px;cursor:pointer;line-height:1;
+    font-family:"Space Grotesk",sans-serif;font-weight:700;letter-spacing:.01em;
+    font-size:clamp(13px,1.4vw,15px);color:#fff;white-space:nowrap;
+    background:linear-gradient(175deg,rgba(255,255,255,.18) 0%,rgba(255,255,255,0) 52%),linear-gradient(135deg,hsl(185,100%,45%) 0%,hsl(262,100%,55%) 52%,hsl(314,100%,50%) 100%);
+    box-shadow:0 2px 8px rgba(0,0,0,.2),inset 0 1px 0 rgba(255,255,255,.28),inset 0 -1px 0 rgba(0,0,0,.1);
+  }
+  .cap-brief-email-cta::before{
+    content:'';position:absolute;inset:0;border-radius:inherit;padding:2px;
+    background:conic-gradient(from var(--cta-angle),transparent 0deg,transparent 180deg,hsla(185,100%,58%,.12) 200deg,hsla(200,100%,62%,.35) 225deg,hsla(225,100%,64%,.6) 250deg,hsla(250,100%,66%,.78) 275deg,hsla(275,100%,66%,.88) 300deg,hsla(300,100%,68%,.94) 322deg,hsla(320,80%,80%,.97) 338deg,rgba(255,255,255,1) 350deg,transparent 358deg);
+    -webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+    -webkit-mask-composite:xor;mask-composite:exclude;
+    animation:briefCtaSpin 2.4s linear infinite;pointer-events:none;
+  }
+  .cap-brief-email-cta img{width:1.75rem;height:1.75rem;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,.35);flex-shrink:0;display:block}
+  .cap-brief-email-cta .arrow{font-size:.7rem;opacity:.75;margin-left:.1rem}
+  @media print{.cap-brief-email-cta-row{display:none}}
+  /* Tighten vertical spacing between the top (cover) elements only. */
+  /* CTA is now fixed (out of flow) — restore the space it used to take above
+     the headline so the cover sits where it did before. */
+  .cover .title-stack{margin-top:56px}
+  /* Date/time stamp headline — small, two lines (date over time), sitting
+     directly under the brief name. */
+  .cover .headline{
+    margin:14px 0 10px;
+    flex-basis:100%;
+    width:100%;
+    font-size:clamp(28px,5vw,56px);
+    line-height:1.08;
+  }
+  /* Brief name — sits above the date headline inside the title stack;
+     slightly heavier and larger than .sub (300 / clamp(20px,2.4vw,34px)).
+     flex-basis:100% forces its own row in the flex title-stack. */
+  .cover-brief-name{
+    flex-basis:100%;
+    width:100%;
+    font-family:"Space Grotesk",sans-serif;
+    font-weight:500;
+    font-size:clamp(23px,2.8vw,38px);
+    line-height:1.2;
+    margin:0 0 8px;
+  }
+  /* Cover summary — spans the full page width, justified so it stretches
+     flush to both edges. */
+  .cover .sub{margin:28px 0 16px;width:100%;max-width:100%;text-align:justify}
+  /* JARVIS-mode executive summary — multi-paragraph, body scale (the giant
+     .sub treatment is for one-line headlines only). */
+  #brief-cover-exec-summary{margin:28px 0 16px;width:100%;max-width:100%}
+  #brief-cover-exec-summary p{font-size:clamp(15px,1.45vw,18px);line-height:1.6;font-weight:400;margin:0 0 12px;max-width:100%;text-align:justify}
+  #brief-cover-exec-summary p:last-child{margin-bottom:0}
+  /* Creative Brief — BIG TYPE, minimal chrome. No boxes, no borders: pure type
+     hierarchy on the canvas with vast spacing between sections (Nothing:
+     subtract, type does the work, confidence through emptiness). Monochrome,
+     installed ink/gray. The one moment is the oversized verdict. */
+  .cb-flow{display:flex;flex-direction:column;gap:clamp(44px,7vw,88px);width:100%;max-width:100%}
+  .cb-lede{font-family:"Space Grotesk",sans-serif;font-size:clamp(17px,1.7vw,21px);line-height:1.5;font-weight:300;color:var(--ink-soft);margin:0;max-width:60ch;text-wrap:pretty}
+  /* Cover hero — lead with the strongest asset (video/mockup). */
+  .cb-hero{margin:10px 0 6px;max-width:820px}
+  .cb-hero .cb-evidence{margin:0}
+  .cb-hero-cap{font-family:"Space Grotesk",sans-serif;font-weight:500;font-size:clamp(22px,2.6vw,34px);line-height:1.1;letter-spacing:-.01em;margin:18px 0 0;color:var(--ink)}
+  .cb-cover-lede{font-family:"Space Grotesk",sans-serif;font-weight:300;font-size:clamp(18px,1.9vw,24px);line-height:1.4;color:var(--ink-soft);margin:22px 0 0;max-width:60ch}
+  /* Inline evidence — a medium asset thumbnail inside the story + CTAs. */
+  .cb-evidence{margin:28px 0 0;max-width:460px}
+  .cb-evidence--video{max-width:540px}
+  .cb-evidence img,.cb-evidence video{display:block;width:100%;height:auto;border-radius:14px;border:1px solid var(--line);box-shadow:0 14px 38px rgba(0,0,0,.16)}
+  .cb-evidence figcaption{margin-top:14px}
+  /* CTAs — clear Download (solid ink) + Book a Call (outline), used throughout. */
+  .cb-cta-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+  .cb-cta-row--lg{margin-top:30px}
+  .cb-cta{display:inline-flex;align-items:center;font-family:"Space Mono",monospace;font-size:12px;letter-spacing:.14em;text-transform:uppercase;text-decoration:none;padding:13px 24px;border-radius:999px;border:1px solid var(--ink);background:transparent;color:var(--ink)}
+  .cb-cta--dl,.cb-cta--solid{background:var(--ink);color:#f6f3ea}
+  .cb-cta:hover{opacity:.86}
+  /* Full-bleed bento tiles (Key Insight ink verdict) span the row at EVERY
+     width — the base brief CSS only defines .s4 above 760px, so below it the
+     tile collapsed to half. */
+  .cb-page .bento .s3,.cb-page .bento .s4{grid-column:1 / -1}
+  /* Deliverables — bordered grid (Nothing: structure is ornament). Connected
+     hairline cells, no fill, no shadows, no radius — matches the document's
+     other grids. Each cell: index → media → name → description → CTAs. */
+  .cb-deliverables-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:0;border:1px solid var(--line);border-width:1px 0 0 1px;width:100%}
+  .cb-deliverable{display:flex;flex-direction:column;gap:14px;min-width:0;background:transparent;border:1px solid var(--line);border-width:0 1px 1px 0;padding:clamp(20px,2.4vw,34px)}
+  .cb-deliverable-idx{font-family:"Space Mono",monospace;font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--ink-soft)}
+  .cb-deliverable-media{margin:0}
+  .cb-deliverable-media img,.cb-deliverable-media video{display:block;width:100%;height:auto;border:1px solid var(--line)}
+  .cb-deliverable-media--empty{display:flex;align-items:center;justify-content:center;text-align:center;min-height:150px;padding:18px;border:1px dashed var(--line);font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft)}
+  .cb-deliverable-name{font-family:"Space Grotesk",sans-serif;font-weight:500;font-size:clamp(20px,2vw,28px);letter-spacing:-.01em;line-height:1.05;color:var(--ink)}
+  .cb-deliverable-desc{font-family:"Space Grotesk",sans-serif;font-weight:300;font-size:clamp(14px,1.4vw,17px);line-height:1.5;color:var(--ink-soft);margin:0}
+  .cb-deliverable .cb-cta-row{margin-top:auto;padding-top:4px}
+  .cb-deliverable .cb-cta{padding:10px 18px;font-size:11px}
+  @media(max-width:760px){.cb-deliverables-grid{grid-template-columns:1fr}}
+  /* Cover handoff — Nothing container: one bordered box, sig on the left,
+     "what you get" on the right, split by a single hairline divider. */
+  .cb-handoff{display:grid;grid-template-columns:1fr auto;align-items:center;gap:0;border:1px solid var(--ink);padding:0;margin:30px 0 0;width:100%;max-width:100%}
+  .cb-handoff-sig{order:2;display:flex;align-items:center;justify-content:center;padding:clamp(20px,2.6vw,32px);border-left:1px solid var(--ink)}
+  .cb-cover-sig{display:block;height:auto;width:clamp(120px,13vw,168px);opacity:.9}
+  .cb-package{order:1;padding:clamp(20px,2.4vw,30px);min-width:0}
+  .cb-package-label{font-family:"Space Mono",monospace;font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:6px}
+  .cb-package-list{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+  .cb-package-list li{display:flex;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid var(--line);font-family:"Space Grotesk",sans-serif;font-weight:400;font-size:clamp(15px,1.5vw,19px);line-height:1.3;color:var(--ink)}
+  .cb-package-thumb{flex-shrink:0;width:64px;height:46px;border:1px solid var(--line);overflow:hidden;display:block;background:var(--card)}
+  .cb-package-thumb img,.cb-package-thumb video{width:100%;height:100%;object-fit:cover;display:block}
+  .cb-package-thumb--empty{background:var(--card)}
+  .cb-package-text{flex:1;min-width:0}
+  .cb-package-foot{font-family:"Space Grotesk",sans-serif;font-weight:300;font-size:clamp(13px,1.3vw,15px);line-height:1.5;color:var(--ink-soft);margin:14px 0 0}
+  /* Mobile — stack: line items first, signature underneath, divider becomes a
+     horizontal rule between them. */
+  @media(max-width:600px){
+    .cb-handoff{grid-template-columns:1fr}
+    .cb-handoff-sig{order:2;border-left:0;border-top:1px solid var(--ink);justify-content:flex-start}
+    .cb-package{order:1}
+  }
+  /* Decorative motifs — dot strips, corner brackets, dotted eyebrow + index. */
+  .cb-page::before{content:'';position:absolute;top:16px;left:var(--gutter);width:24px;height:24px;border-left:2px solid rgba(10,10,10,.22);border-top:2px solid rgba(10,10,10,.22);pointer-events:none}
+  .cb-page::after{content:'';position:absolute;left:var(--gutter);bottom:26px;width:140px;height:11px;background-image:radial-gradient(rgba(10,10,10,.18) 1.3px,transparent 1.6px);background-size:14px 11px;pointer-events:none}
+  .cb-deco{height:10px;width:128px;margin:0 0 22px;background-image:radial-gradient(rgba(10,10,10,.26) 1.4px, transparent 1.7px);background-size:13px 10px}
+  .cb-pg-eyebrow{display:flex;align-items:center;gap:14px;font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:18px}
+  .cb-pg-eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--ink);flex-shrink:0}
+  .cb-pg-eyebrow .idx{margin-left:auto;color:rgba(10,10,10,.35)}
+  .cb-page .rule{height:1px;background:rgba(0,0,0,.12);margin:22px 0 26px;max-width:520px}
+  /* What's Missing — big-numbered gap list. */
+  .cb-gaps{display:flex;flex-direction:column;gap:0;max-width:660px}
+  .cb-gap{display:flex;align-items:baseline;gap:22px;padding:18px 0;border-bottom:1px dashed rgba(0,0,0,.16)}
+  .cb-gap-n{font-family:"Doto",monospace;font-weight:900;font-size:clamp(26px,3.6vw,44px);color:transparent;-webkit-text-stroke:1.4px rgba(0,0,0,.24);line-height:.8;flex-shrink:0}
+  .cb-gap-t{font-family:"Space Grotesk",sans-serif;font-weight:500;font-size:clamp(19px,2.2vw,28px);line-height:1.18;letter-spacing:-.01em}
+  /* Biggest Risk — alert block + effect tags. */
+  .cb-alert{border-left:5px solid var(--ink);padding:4px 0 4px 26px;max-width:640px}
+  .cb-alert .sub{margin:0}
+  .cb-tags{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+  .cb-tag{font-family:"Space Mono",monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;padding:10px 16px;border:1px solid var(--line);border-radius:0;background:transparent;color:var(--ink)}
+  /* ── Pushed 30% harder — bigger type + bolder decoration (scoped to Creative
+     Brief pages so the executive brief is untouched). ── */
+  /* Doto is monospace, so long single-word lines ("Deliverables.",
+     "Opportunity.") run off-screen at a large max. Clamp so the longest token
+     fits the ~1100px content column and narrow screens; break only as a last
+     resort rather than overflow the page. */
+  .cb-page .headline{font-size:clamp(40px,10vw,132px);line-height:.88;overflow-wrap:break-word;hyphens:auto}
+  .cb-page .sec-num{font-size:clamp(130px,22vw,340px);-webkit-text-stroke-width:2px;top:16px}
+  .cb-page .sub{font-size:clamp(22px,2.9vw,40px);line-height:1.22}
+  .cb-page .pull{font-size:clamp(34px,4.4vw,60px);border-left-width:6px;padding-left:30px;max-width:22ch;line-height:1.08}
+  .cb-page .bento .tile.ink .word{font-size:clamp(34px,4.8vw,62px);line-height:1.04}
+  /* You're In flow — connected hairline grid, straight edges, no fill (matches
+     the deliverables grid for document-wide consistency). */
+  .cb-page .flow{gap:0;border:1px solid var(--line);border-width:1px 0 0 1px}
+  .cb-page .flow .node{padding:28px;border:1px solid var(--line);border-width:0 1px 1px 0;border-radius:0;background:transparent}
+  .cb-page .flow .node .t{font-size:clamp(32px,3.8vw,46px)}
+  /* The Opportunity grid — connected hairline cells, straight edges, no fill
+     (matches the deliverables + flow grids). */
+  .cb-page .meta-grid{gap:0;border:1px solid var(--line);border-width:1px 0 0 1px;margin-top:8px}
+  .cb-page .meta-grid .meta-tile{padding:22px;background:transparent;border:1px solid var(--line);border-width:0 1px 1px 0;border-radius:0}
+  .cb-page .meta-grid .meta-tile .v{font-size:clamp(18px,2.1vw,27px);font-weight:500;line-height:1.25}
+  /* The trailing upside line drops to a readable body size with clear space
+     above so it never collides with the grid (the giant .sub is for headlines). */
+  #cb-opportunity .sub{font-size:clamp(17px,1.9vw,24px);line-height:1.5;font-weight:300;margin:36px 0 0;max-width:62ch}
+  .cb-deco{width:188px;height:14px;background-size:18px 14px}
+  .cb-gap-n{font-size:clamp(38px,5.2vw,68px);-webkit-text-stroke-width:1.6px}
+  .cb-gap-t{font-size:clamp(22px,2.7vw,36px)}
+  .cb-alert{border-left-width:7px;padding-left:34px}
+  .cb-tag{font-size:13px;padding:12px 20px;letter-spacing:.1em}
+  /* Download buttons for deliverable assets. */
+  .cb-dl-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+  .cb-dl{display:inline-flex;align-items:center;gap:6px;font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink);text-decoration:none;padding:9px 16px;border:1px solid var(--line);border-radius:999px;background:var(--card)}
+  .cb-dl:hover{background:var(--ink);color:#f6f3ea;border-color:var(--ink)}
+  #onboarding-cover-mockup .cb-dl{margin-top:10px}
+  .cb-verdict{font-family:"Space Grotesk",sans-serif;font-size:clamp(32px,6vw,72px);line-height:1.02;font-weight:500;letter-spacing:-.025em;color:var(--ink);margin:0;max-width:18ch;text-wrap:balance}
+  .cb-sec{display:flex;flex-direction:column;gap:14px;max-width:60ch}
+  .cb-eyebrow{font-family:"Space Mono",monospace;font-size:12px;letter-spacing:.26em;text-transform:uppercase;color:var(--ink-soft)}
+  .cb-text{font-family:"Space Grotesk",sans-serif;font-size:clamp(18px,2vw,26px);line-height:1.42;font-weight:300;color:var(--ink);margin:0;text-wrap:pretty}
+  .cb-decision{font-family:"Space Grotesk",sans-serif;font-size:clamp(28px,4vw,52px);line-height:1.06;font-weight:500;letter-spacing:-.02em;color:var(--ink);margin:0;max-width:20ch;text-wrap:balance}
+  .cb-points{margin:6px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px}
+  .cb-points li{position:relative;padding-left:22px;font-family:"Space Grotesk",sans-serif;font-size:clamp(16px,1.6vw,19px);line-height:1.45;font-weight:300;color:var(--ink)}
+  .cb-points li::before{content:'';position:absolute;left:0;top:0.62em;width:7px;height:7px;border-radius:50%;background:var(--ink)}
+  .cb-proof{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 44px}
+  .cb-proof-item{display:flex;flex-direction:column;gap:3px}
+  .cb-proof-name{font-family:"Space Grotesk",sans-serif;font-size:clamp(17px,1.7vw,22px);font-weight:500;color:var(--ink);letter-spacing:-.01em}
+  .cb-proof-desc{font-family:"Space Grotesk",sans-serif;font-size:clamp(14px,1.3vw,16px);line-height:1.45;font-weight:300;color:var(--ink-soft)}
+  .cb-closer{font-family:"Space Mono",monospace;font-size:13px;line-height:1.6;letter-spacing:.02em;color:var(--ink-soft);margin:0;max-width:52ch}
+  @media(max-width:760px){
+    .cb-proof{grid-template-columns:1fr;gap:18px}
+  }
+  .cover .meta{margin-top:18px;padding-top:14px;gap:14px 32px}
+  /* Brand band — one line, letters spread edge-to-edge across the full width
+     (flex space-between), never wrapping or clipping. */
+  .cover .marquee{
+    margin-top:20px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    white-space:nowrap;
+    overflow:hidden;
+  }
+  .cover .marquee span{display:inline-block;flex:0 0 auto}
+  /* Onboarding brief — multi-device mockup pinned to the cover's top-right,
+     small, occupying the right half; cover text narrows to the left. */
+  /* Mockup fills the right side: spans from 53% to the right gutter, so it
+     grows with the page while the cover copy (capped at 48%) never reaches
+     it — a clean ~5% gap regardless of --gutter. */
+  #onboarding-cover-mockup{
+    position:absolute;
+    top:clamp(56px,10vh,130px);
+    left:53%;
+    right:var(--gutter);
+    z-index:2;
+    pointer-events:none;
+  }
+  #onboarding-cover-mockup img{
+    display:block;width:100%;height:auto;
+    filter:drop-shadow(0 18px 40px rgba(0,0,0,.16));
+  }
+  @media(min-width:760px){
+    /* Only the title block stays in the left half beside the mockup; the
+       summary and meta row below it span the full page width. */
+    .cover--has-onboarding-mockup .title-stack{max-width:48%}
+    /* Justify both lines so the weather block has flush left+right edges
+       (no ragged end) while staying within the left-half column. */
+    .cover--has-onboarding-mockup #brief-cover-weather{
+      max-width:100%;line-height:1.6;
+      text-align:justify;text-align-last:justify;
+    }
+  }
+  @media(max-width:759px){
+    /* Mobile: let it sit static under the headline instead of overlapping. */
+    #onboarding-cover-mockup{position:static;left:auto;width:100%;margin:16px 0 4px}
+    .cap-brief-email-cta-row{left:0;right:0;justify-content:center;}
+    .cover .title-stack{margin-top:0}
+  }
+  @media(max-width:480px){
+    /* Small phones: push mockup down to clear the fixed CTA button. */
+    #onboarding-cover-mockup{margin-top:46px}
+  }
+  </style>
+</head>
+<body>
+  <section class="page cover cover--has-onboarding-mockup">
+    <div class="sec-num">00</div>
+    <div id="onboarding-cover-mockup" aria-hidden="true"><img src="/img/deliverables/hitloop-device-mockup.png" alt="Homepage device mockup" /></div>
+    <div class="title-stack">
+      
+      
+      <div class="cover-brief-name">Creative Brief</div>
+      <h1 class="headline">06/20/26<br/>10:45 AM EST</h1>
+    </div>
+    <div class="sub" id="brief-cover-exec-summary">
+      <p class="cb-cover-lede">This Creative Brief audits your current digital presence, outlining how your site, content, and brand are presented across screens, social platforms, and real-world use.</p>
+      <p class="cb-cover-lede">It establishes a baseline for onboarding, reducing time spent gathering context and creating a clear starting point for more tailored, hands-on creative work when you're ready.</p>
+      <p class="cb-cover-lede">When you're ready to go further, reach out to your human directly — we'll turn this baseline into tailored, hands-on creative work, together.</p>
+    </div>
+    <div class="cb-handoff" id="brief-cover-handoff">
+      <div class="cb-handoff-sig"><img class="cb-cover-sig" src="/img/sig.png" alt="Signature" /></div>
+      <div class="cb-package" id="brief-cover-package">
+        <div class="cb-package-label">What you get</div>
+        <ul class="cb-package-list">
+          <li><span class="cb-package-thumb"><img src="/img/deliverables/hitloop-device-mockup.png" alt="" /></span><span class="cb-package-text">Cross-device views of your site</span></li><li><span class="cb-package-thumb"><img src="https://hitloop.agency/img/og_meta.optimized.jpg" alt="" /></span><span class="cb-package-text">Social preview validation</span></li><li><span class="cb-package-thumb"><video src="/img/deliverables/hitloop-video.webm" autoplay muted loop playsinline></video></span><span class="cb-package-text">A shareable video of your brand</span></li>
+        </ul>
+        <p class="cb-package-foot">Everything you need to understand, review, and use immediately.</p>
+      </div>
+    </div>
+    <div class="meta">
+      <div><div class="k">Date</div><div class="v">2026 · 06 · 20</div></div>
+      <div><div class="k">Site</div><div class="v">—</div></div>
+      <div><div class="k">Brief Title</div><div class="v">Creative Brief</div></div>
+      <div><div class="k">Account</div><div class="v mono" style="font-size:13px">—</div></div>
+    </div>
+    <div class="marquee"><span>H</span><span>I</span><span>T</span><span>L</span><span>O</span><span>O</span><span>P</span></div>
+  </section>
+
+  <section class="page cb-page" id="cb-deliverables">
+    <div class="sec-num">01</div>
+    <div class="cb-deco" aria-hidden="true"></div>
+    <div class="cb-pg-eyebrow"><span class="dot"></span><span>Creative Brief</span><span class="idx">01</span></div>
+    <h2 class="headline">Deliverables.</h2>
+    <div class="rule"></div>
+    <div class="cb-deliverables-grid"><div class="cb-deliverable" id="cb-d-video"><div class="cb-deliverable-idx">D01</div><div class="cb-deliverable-media"><video src="/img/deliverables/hitloop-video.webm" autoplay muted loop playsinline></video></div><div class="cb-deliverable-name">Video Post</div><p class="cb-deliverable-desc">Your site turned into a social-ready video — see how your brand reads in motion and download content ready to share.</p><div class="cb-cta-row"><a class="cb-cta cb-cta--dl" href="/img/deliverables/hitloop-video.webm" download target="_blank" rel="noopener noreferrer">Download</a><a class="cb-cta cb-cta--contact" href="https://calendly.com/bballi/30min" target="_blank" rel="noopener noreferrer">Book a Call</a></div></div><div class="cb-deliverable" id="cb-d-mockup"><div class="cb-deliverable-idx">D02</div><div class="cb-deliverable-media"><img src="/img/deliverables/hitloop-device-mockup.png" alt="Device Mockup"/></div><div class="cb-deliverable-name">Device Mockup</div><p class="cb-deliverable-desc">Your homepage in a polished real-world device frame, ready for decks, posts, and presentations.</p><div class="cb-cta-row"><a class="cb-cta cb-cta--dl" href="/img/deliverables/hitloop-device-mockup.png" download target="_blank" rel="noopener noreferrer">Download</a><a class="cb-cta cb-cta--contact" href="https://calendly.com/bballi/30min" target="_blank" rel="noopener noreferrer">Book a Call</a></div></div><div class="cb-deliverable" id="cb-d-tablet"><div class="cb-deliverable-idx">D03</div><div class="cb-deliverable-media"><img src="/img/deliverables/hitloop-tablet.jpg" alt="Tablet View"/></div><div class="cb-deliverable-name">Tablet View</div><p class="cb-deliverable-desc">Tablet capture — confirm the experience holds up at mid-size.</p><div class="cb-cta-row"><a class="cb-cta cb-cta--dl" href="/img/deliverables/hitloop-tablet.jpg" download target="_blank" rel="noopener noreferrer">Download</a><a class="cb-cta cb-cta--contact" href="https://calendly.com/bballi/30min" target="_blank" rel="noopener noreferrer">Book a Call</a></div></div><div class="cb-deliverable" id="cb-d-mobile"><div class="cb-deliverable-idx">D04</div><div class="cb-deliverable-media"><img src="/img/deliverables/hitloop-mobile.jpg" alt="Mobile View"/></div><div class="cb-deliverable-name">Mobile View</div><p class="cb-deliverable-desc">Mobile capture — catch layout and content issues on the screen most people use.</p><div class="cb-cta-row"><a class="cb-cta cb-cta--dl" href="/img/deliverables/hitloop-mobile.jpg" download target="_blank" rel="noopener noreferrer">Download</a><a class="cb-cta cb-cta--contact" href="https://calendly.com/bballi/30min" target="_blank" rel="noopener noreferrer">Book a Call</a></div></div><div class="cb-deliverable" id="cb-d-social"><div class="cb-deliverable-idx">D05</div><div class="cb-deliverable-media"><img src="https://hitloop.agency/img/og_meta.optimized.jpg" alt="Social Preview"/></div><div class="cb-deliverable-name">Social Preview</div><p class="cb-deliverable-desc">How your brand appears when shared across platforms — and what to fix for clean, clickable links.</p><div class="cb-cta-row"><a class="cb-cta cb-cta--dl" href="https://hitloop.agency/img/og_meta.optimized.jpg" download target="_blank" rel="noopener noreferrer">Download</a><a class="cb-cta cb-cta--contact" href="https://calendly.com/bballi/30min" target="_blank" rel="noopener noreferrer">Book a Call</a></div></div></div>
+  </section>
+
+  <section class="page cb-page" id="cb-system">
+    <div class="sec-num">02</div>
+    <div class="cb-deco" aria-hidden="true"></div>
+    <div class="cb-pg-eyebrow"><span class="dot"></span><span>Creative Brief</span><span class="idx">02</span></div>
+    <h2 class="headline">You're<br/>In.</h2>
+    <div class="rule"></div>
+    <p class="pull">Hit Loop manages your creative operations, automating the daily work that keeps you visible, accessible, and consistent across platforms.</p>
+      <div class="flow"><div class="node"><div class="n">01</div><div class="t">Fix</div><p>What to fix on your site and content.</p></div><div class="node"><div class="n">02</div><div class="t">Watch</div><p>What competitors are pushing right now.</p></div><div class="node"><div class="n">03</div><div class="t">Move</div><p>What&#39;s moving across your category.</p></div></div>
+      <div class="rule"></div>
+      <p class="sub">The system tracks everything. A human makes sure it's actually right for you.</p>
+      <div class="cb-cta-row cb-cta-row--lg"><a class="cb-cta cb-cta--solid" href="https://calendly.com/bballi/30min" target="_blank" rel="noopener noreferrer">Book a Call</a></div>
+  </section>
+
+  <section class="page cb-page" id="cb-insight">
+    <div class="sec-num">03</div>
+    <div class="cb-deco" aria-hidden="true"></div>
+    <div class="cb-pg-eyebrow"><span class="dot"></span><span>Creative Brief</span><span class="idx">03</span></div>
+    <h2 class="headline">Key<br/>Insight.</h2>
+    <div class="rule"></div>
+    <div class="bento">
+    <div class="tile ink s4">
+      
+      
+      <div class="word">Sharp positioning and a credible niche, but zero visual evidence to back the &quot;high-performance&quot; claim.</div>
+      
+      
+    </div></div>
+  </section>
+
+  <section class="page cb-page" id="cb-what-this-site-is">
+    <div class="sec-num">04</div>
+    <div class="cb-deco" aria-hidden="true"></div>
+    <div class="cb-pg-eyebrow"><span class="dot"></span><span>Creative Brief</span><span class="idx">04</span></div>
+    <h2 class="headline">What This<br/>Site Is.</h2>
+    <div class="rule"></div>
+    <p class="pull">A solo AI-assisted creative and engineering studio (led by Bryan Balli) targeting founders and small businesses who need senior-level output without agency pricing. Built to convert skeptical buyers who&#39;ve been burned by &quot;set it and forget it&quot; AI tools.</p>
+  </section>
+
+  <section class="page cb-page" id="cb-whats-missing">
+    <div class="sec-num">05</div>
+    <div class="cb-deco" aria-hidden="true"></div>
+    <div class="cb-pg-eyebrow"><span class="dot"></span><span>Creative Brief</span><span class="idx">05</span></div>
+    <h2 class="headline">What's<br/>Missing.</h2>
+    <div class="rule"></div>
+    <div class="cb-gaps"><div class="cb-gap"><span class="cb-gap-n">01</span><span class="cb-gap-t">No pricing, packages, or scope anchors visible.</span></div></div><p class="sub">No screenshots or screen captures loaded, visual system is unverifiable.</p><p class="sub">No portfolio, case studies, or work samples confirmed in evidence.</p><p class="sub">No social proof, testimonials, logos, or client names absent from observable data.</p><p class="sub">The offer is well-articulated in metadata, but there&#39;s no on-page proof that the work matches the pitch.</p>
+  </section>
+
+  <section class="page cb-page" id="cb-biggest-risk">
+    <div class="sec-num">06</div>
+    <div class="cb-deco" aria-hidden="true"></div>
+    <div class="cb-pg-eyebrow"><span class="dot"></span><span>Creative Brief</span><span class="idx">06</span></div>
+    <h2 class="headline">Biggest<br/>Risk.</h2>
+    <div class="rule"></div>
+    <div class="cb-alert"><p class="sub">The entire value proposition rests on &quot;human taste + AI leverage,&quot; but with no visual evidence captured and no work samples confirmed, a skeptical founder has nothing to validate that claim against, the site asks for trust it hasn&#39;t yet earned on-page.</p></div><div class="cb-tags"><span class="cb-tag">Reduces conversion from cold traffic, who need to see before they believe.</span><span class="cb-tag">Reduces credibility of the &quot;high-performance web experiences&quot; claim when the site&#39;s own performance can&#39;t be assessed.</span><span class="cb-tag">Reduces differentiation from generic AI-tool freelancers making the same &quot;it sounds like you&quot; promise.</span></div>
+  </section>
+
+  <section class="page cb-page" id="cb-opportunity">
+    <div class="sec-num">07</div>
+    <div class="cb-deco" aria-hidden="true"></div>
+    <div class="cb-pg-eyebrow"><span class="dot"></span><span>Creative Brief</span><span class="idx">07</span></div>
+    <h2 class="headline">The<br/>Opportunity.</h2>
+    <div class="rule"></div>
+    <div class="meta-grid"><div class="meta-tile"><div class="v">Positioning is genuinely differentiated, &quot;Human in the Loop&quot; directly names the fear buyers have about pure-AI agencies, and the meta description deploys it cleanly.</div></div><div class="meta-tile"><div class="v">OG/share-card metadata is properly configured, links unfurl with title, description, and image, meaning social sharing works as a passive awareness channel.</div></div><div class="meta-tile"><div class="v">Cross-device layouts exist across 2 viewports, signaling at least baseline responsive attention.</div></div></div><p class="sub">If the site adds visible work samples and one or two sharp client proof points, the positioning has enough specificity to convert without a sales call.</p>
+  </section>
+
+  <section class="page cb-page" id="cb-decision">
+    <div class="sec-num">08</div>
+    <div class="cb-deco" aria-hidden="true"></div>
+    <div class="cb-pg-eyebrow"><span class="dot"></span><span>Creative Brief</span><span class="idx">08</span></div>
+    <h2 class="headline">The<br/>Decision.</h2>
+    <div class="rule"></div>
+    <p class="pull">Is this site a portfolio meant to show the work, or a landing page meant to sell the service, because right now it&#39;s trying to be both and proving neither?</p><div class="cb-tags"><span class="cb-tag">That answer determines whether case studies or a clear CTA/offer block should lead the page.</span><span class="cb-tag">It determines how much copy explains the process vs. how much just books the call.</span><span class="cb-tag">It determines whether Bryan&#39;s name and face are a trust signal to lean into or a liability to downplay for scale.</span><span class="cb-tag">It determines what &quot;proof&quot; looks like, screenshots of client dashboards, before/afters, or named outcomes.</span></div><div class="cb-cta-row cb-cta-row--lg"><a class="cb-cta cb-cta--solid" href="https://calendly.com/bballi/30min" target="_blank" rel="noopener noreferrer">Book a Call</a></div>
+  </section>
+
+
+
+
+  <footer>
+    <span>Generated · 2026-06-20 14:45:58</span>
+    <span>Client · HITLOOP</span>
+    <span>Marketing Brief · Vol. 01 · HITLOOP</span>
+  </footer>
+  <script>
+    (function () {
+      var b = document.getElementById('brief-email-cta');
+      if (!b) return;
+      b.addEventListener('click', function () {
+        try { window.parent.postMessage({ type: 'brief-open-subscribe' }, '*'); } catch (e) {}
+      });
+    })();
+  </script>
+</body>
+</html>

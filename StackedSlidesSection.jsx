@@ -1,5 +1,6 @@
 'use client';
 import React, { useLayoutEffect, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import ReelPlayer from './ReelPlayer';
 import gsap from 'gsap';
@@ -7,6 +8,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { createSharedParticleGalleryRenderer } from './sharedParticleGalleryRenderer';
 import { BrainIcon } from './components/ui/brain';
 import SubscribeModal from './components/payments/SubscribeModal';
+import DeliverableHoverCard, { PRELOAD_ASSETS } from './components/home/DeliverableHoverCards';
 import {
   Bot,
   BriefcaseBusiness,
@@ -191,17 +193,29 @@ const PORTFOLIO_IMAGES = [
 ];
 
 const CMO_TABLE_ROWS = [
-  { task: 'Creative Brief',         value: 'A baseline that replaces onboarding calls and gives us a clear understanding of your visual identity.' },
-  { task: 'Video Post',             value: 'An MP4 motion promo of your homepage, ready to post across social.', sub: true },
-  { task: 'Device Mockups',         value: 'Your site staged on desktop, tablet, and mobile as one clean image.', sub: true },
-  { task: 'Full-Page Images',       value: 'Full-length captures of your site across all three screen sizes.', sub: true },
-  { task: 'Social Preview',         value: 'The share-card image your links unfurl to on social and chat apps.', sub: true },
-  { task: 'Daily Stand Up Email',   value: 'A snapshot of what matters across your brand, website and socials. Monitored and enhanced by a Human in the Loop.' },
+  { task: 'ONBOARD NOW',            value: 'A visual audit of your site delivered as a Creative Brief that replaces traditional onboarding, plus video content you can share!', bold: true },
+  { task: 'Social Preview',         value: 'See how your site appears when shared across platforms.', sub: true },
+  { task: 'Device Mockups',         value: 'See how your homepage loads across different devices.', sub: true },
+  { task: 'Full Page Views',        value: 'See full-page screenshots to confirm content and consistency.', sub: true },
+  { task: 'Video Mockup',           value: 'Turn your site into a social-ready promo video, ready to post.', sub: true },
+  { task: 'Post Me',                value: 'See your brand as a finished social post, ready to publish.', sub: true },
+  { task: 'DAILY STAND UP',         value: 'A team of agents guided by your Human integrates strategy and deliverables into one accessible dashboard and Daily Brief email.', bold: true },
   { task: 'Marketing',              value: 'Track signals, competitors, narrative shifts, and how to act on them.', sub: true },
   { task: 'Creative',               value: 'Maintain a consistent look and feel across site, socials, and content.', sub: true },
   { task: 'Social Media',           value: 'Plan, generate, and guide posts with timing, direction, and campaigns.', sub: true },
   { task: 'Web',                    value: "Visually confirm your website's health, elevate AI readiness and SEO.", sub: true },
 ];
+
+// Maps deliverable table rows to their hard-coded HITLOOP hover preview card.
+// Rows not listed (DAILY STAND UP + its director sub-rows) have no preview.
+const TASK_TO_CARD = {
+  'ONBOARD NOW': 'creative-brief',
+  'Social Preview': 'social-preview',
+  'Device Mockups': 'device-mockups',
+  'Full Page Views': 'full-page',
+  'Video Mockup': 'video-post',
+  'Post Me': 'post-me',
+};
 
 const isSubFirst = (arr, i) => arr[i].sub && (i === 0 || !arr[i - 1].sub);
 const isSubLast = (arr, i) => arr[i].sub && (i === arr.length - 1 || !arr[i + 1].sub);
@@ -494,6 +508,59 @@ const StackedSlidesSection = () => {
   const CMO_PLACEHOLDER_URL = 'yourwebsite.com';
   const [homepageUrl, setHomepageUrl] = useState('');
   const [urlIsValid, setUrlIsValid] = useState(false);
+  // Desktop-only hover preview: floats a static HITLOOP deliverable card next to
+  // the hovered table row. { id, top, left } or null.
+  // Hover-preview cards. Each consecutive hover alternates the side it slides in
+  // from (right → over the right of the table, left → over the left), and the
+  // previous card slides back off its own side as the new one slides in.
+  const [hoverCards, setHoverCards] = useState([]); // [{ key, id, top, left, offX, rot, shown }]
+  const cardTimer = useRef(null);
+  const cardKey = useRef(0);
+  const lastSide = useRef(null);
+  const raf2 = (fn) => requestAnimationFrame(() => requestAnimationFrame(fn));
+  const placeRowCard = (rect, side) => {
+    const CARD_W = 380;
+    const CARD_H = 460;
+    const M = 8;
+    let top = rect.top + rect.height / 2 - CARD_H / 2;
+    top = Math.max(M, Math.min(top, window.innerHeight - CARD_H - M));
+    let left = side === 'right' ? rect.right - 130 : rect.left - CARD_W + 130;
+    left = Math.min(left, window.innerWidth - CARD_W - M);
+    left = Math.max(left, M);
+    return { top, left, offX: side === 'right' ? 170 : -170, rot: side === 'right' ? 3.2 : -3.2 };
+  };
+  const showRowCard = (e, task) => {
+    if (isTouchScrollDevice()) return;
+    const id = TASK_TO_CARD[task];
+    if (!id) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const side = lastSide.current === 'right' ? 'left' : 'right';
+    lastSide.current = side;
+    const { top, left, offX, rot } = placeRowCard(rect, side);
+    const key = (cardKey.current += 1);
+    if (cardTimer.current) { clearTimeout(cardTimer.current); cardTimer.current = null; }
+    // Existing cards start sliding out; the new one mounts off-screen on its side.
+    setHoverCards((prev) => [...prev.map((c) => ({ ...c, shown: false })), { key, id, top, left, offX, rot, shown: false }]);
+    raf2(() => setHoverCards((prev) => prev.map((c) => (c.key === key ? { ...c, shown: true } : c))));
+    // After the slide completes, drop everything but the newest card.
+    cardTimer.current = setTimeout(() => {
+      setHoverCards((prev) => prev.filter((c) => c.key === key));
+      cardTimer.current = null;
+    }, 760);
+  };
+  const hideRowCard = () => {
+    setHoverCards((prev) => prev.map((c) => ({ ...c, shown: false })));
+    if (cardTimer.current) clearTimeout(cardTimer.current);
+    cardTimer.current = setTimeout(() => { setHoverCards([]); cardTimer.current = null; }, 760);
+  };
+  // Warm-cache the hover-card assets (images, video, brief HTML) on mount so the
+  // first hover renders clean with no flash. Desktop pointer only.
+  useEffect(() => {
+    if (typeof window === 'undefined' || isTouchScrollDevice()) return;
+    PRELOAD_ASSETS.images.forEach((src) => { const img = new Image(); img.src = src; });
+    try { fetch(PRELOAD_ASSETS.video).catch(() => {}); } catch {}
+    try { fetch(PRELOAD_ASSETS.brief).catch(() => {}); } catch {}
+  }, []);
   const [showCmoModal, setShowCmoModal] = useState(false);
   const router = useRouter();
 
@@ -1247,6 +1314,18 @@ const StackedSlidesSection = () => {
 
   return (
     <section style={sectionStyle}>
+      {hoverCards.length > 0 && typeof document !== 'undefined'
+        ? createPortal(
+            <>
+              {hoverCards.map((c) => (
+                <div key={c.key} style={{ position: 'fixed', top: c.top, left: c.left, zIndex: 99999, pointerEvents: 'none' }}>
+                  <DeliverableHoverCard id={c.id} shown={c.shown} rot={c.rot} offX={c.offX} />
+                </div>
+              ))}
+            </>,
+            document.body
+          )
+        : null}
       <style>{`
         :root {
           --font-grotesk: 'Space Grotesk', system-ui, sans-serif;
@@ -1319,6 +1398,22 @@ const StackedSlidesSection = () => {
         }
         .deliverables-toggle:hover {
           opacity: 0.7;
+        }
+        /* Desktop-only row hover for the deliverables table (the .cmo-table-inner
+           table is hidden below 900px, so this never fires on mobile). */
+        .cmo-table-inner table tbody tr td {
+          transition: background 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .cmo-table-inner table tbody tr:hover td {
+          background: rgba(42, 36, 32, 0.045);
+        }
+        .cmo-table-inner table tbody tr:hover td:first-child {
+          border-top-left-radius: 0.5rem;
+          border-bottom-left-radius: 0.5rem;
+        }
+        .cmo-table-inner table tbody tr:hover td:last-child {
+          border-top-right-radius: 0.5rem;
+          border-bottom-right-radius: 0.5rem;
         }
         #inline-footer-bullet-list li:last-child {
           padding-bottom: 0 !important;
@@ -1831,7 +1926,7 @@ const StackedSlidesSection = () => {
                                         <p style={{ margin: '0 0 0.6rem', fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.4)', fontFamily: "'Space Mono', monospace" }}>Your Business, Mapped</p>
                                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem', fontFamily: "'Space Grotesk', system-ui, sans-serif", flex: 1 }}>
                                           <thead><tr style={{ borderBottom: '1px solid rgba(42,36,32,0.15)' }}><th style={{ width: '1.2rem' }} /><th style={{ textAlign: 'left', padding: '0.28rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.45)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Access</th></tr></thead>
-                                          <tbody>{CMO_TABLE_ROWS.map((row, ri, arr) => (<tr key={row.task} style={{ borderBottom: (row.task === 'Daily Stand Up Email' || row.task === 'Creative Brief' || (row.sub && !isSubLast(arr, ri))) ? 'none' : '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.38rem 0.2rem', textAlign: 'center', position: 'relative' }}>{row.task === 'Creative Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? <BriefConnector first={isSubFirst(arr, ri)} last={isSubLast(arr, ri)} /> : <span className="cmo-arrow" aria-hidden="true"><Lock size={12} /></span>}</td><td style={{ padding: row.sub ? '0.38rem 0.4rem 0.38rem 0.9rem' : '0.38rem 0.4rem', color: row.sub ? 'rgba(42,36,32,0.55)' : '#2a2420', fontWeight: row.sub ? 400 : 500 }}>{row.task}</td></tr>))}</tbody>
+                                          <tbody>{CMO_TABLE_ROWS.map((row, ri, arr) => (<tr key={row.task} style={{ borderBottom: (row.task === 'DAILY STAND UP' || row.task === 'ONBOARD NOW' || (row.sub && !isSubLast(arr, ri))) ? 'none' : '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.38rem 0.2rem', textAlign: 'center', position: 'relative' }}>{row.task === 'ONBOARD NOW' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? <BriefConnector first={isSubFirst(arr, ri)} last={isSubLast(arr, ri)} /> : <span className="cmo-arrow" aria-hidden="true"><Lock size={12} /></span>}</td><td style={{ padding: row.sub ? '0.38rem 0.4rem 0.38rem 0.9rem' : '0.38rem 0.4rem', color: row.sub ? 'rgba(42,36,32,0.55)' : '#2a2420', fontWeight: row.bold ? 700 : (row.sub ? 400 : 500) }}>{row.task}</td></tr>))}</tbody>
                                         </table>
                                       </div>
                                     </div>
@@ -1848,13 +1943,19 @@ const StackedSlidesSection = () => {
                                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
                                         <colgroup><col style={{ width: '2rem' }} /><col style={{ width: '26%' }} /><col /></colgroup>
                                         <thead><tr><th aria-hidden="true" /><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Access</th><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>What you get</th></tr></thead>
-                                        <tbody>{CMO_TABLE_ROWS.map((row, ri, arr) => (<tr key={row.task} style={{ borderBottom: (row.task === 'Daily Stand Up Email' || row.task === 'Creative Brief' || (row.sub && !isSubLast(arr, ri))) ? 'none' : '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.7rem 0.2rem', textAlign: 'center', verticalAlign: 'middle', position: 'relative' }}>{row.task === 'Creative Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? <BriefConnector first={isSubFirst(arr, ri)} last={isSubLast(arr, ri)} /> : <span className="cmo-arrow" aria-hidden="true"><Lock size={12} /></span>}</td><td style={{ padding: row.sub ? '0.7rem 0.4rem 0.7rem 1.1rem' : '0.7rem 0.4rem', color: row.sub ? 'rgba(42,36,32,0.55)' : 'rgba(42,36,32,0.75)', fontWeight: row.sub ? 400 : 500 }}>{row.task}</td><td style={{ padding: '0.7rem 0.4rem 0.7rem 0.6rem', textAlign: 'left', color: row.sub ? 'rgba(42,36,32,0.48)' : 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
+                                        <tbody>{CMO_TABLE_ROWS.map((row, ri, arr) => (<tr key={row.task} onMouseEnter={(e) => showRowCard(e, row.task)} onMouseLeave={hideRowCard} style={{ borderBottom: (row.task === 'DAILY STAND UP' || row.task === 'ONBOARD NOW' || (row.sub && !isSubLast(arr, ri))) ? 'none' : '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.7rem 0.2rem', textAlign: 'center', verticalAlign: 'middle', position: 'relative' }}>{row.task === 'ONBOARD NOW' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? <BriefConnector first={isSubFirst(arr, ri)} last={isSubLast(arr, ri)} /> : <span className="cmo-arrow" aria-hidden="true"><Lock size={12} /></span>}</td><td style={{ padding: row.sub ? '0.7rem 0.4rem 0.7rem 1.1rem' : '0.7rem 0.4rem', color: row.sub ? 'rgba(42,36,32,0.55)' : 'rgba(42,36,32,0.75)', fontWeight: row.bold ? 700 : (row.sub ? 400 : 500) }}>{row.task}</td><td style={{ padding: '0.7rem 0.4rem 0.7rem 0.6rem', textAlign: 'left', color: row.sub ? 'rgba(42,36,32,0.48)' : 'rgba(42,36,32,0.65)', fontWeight: row.bold ? 700 : 400 }}>{row.sub ? `• ${row.value}` : row.value}</td></tr>))}</tbody>
                                       </table>
-                                    <blockquote id="cmo-quote-desktop" style={{ margin: 'clamp(1rem, 2vw, 1.5rem) 0 0', padding: 'clamp(0.75rem, 1.5vw, 1rem) 0', fontSize: 'clamp(1rem, 1.5vw, 1.35rem)', lineHeight: 1.55, color: 'rgba(42,36,32,0.72)', fontStyle: 'italic', fontFamily: "'Space Grotesk', system-ui, sans-serif", boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
-                                      <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: '3.25rem', height: '3.25rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', flexShrink: 0, display: 'block' }} />
-                                      <span>HITLOOP curates AI systems that handle the work for you, backed by qualified Humans in the Loop when you need direct support.</span>
+                                    <blockquote id="cmo-quote-desktop" style={{ margin: 0, padding: 'clamp(1.5rem, 4vw, 3rem) 0', fontSize: 'clamp(0.9rem, 1.4vw, 1.15rem)', lineHeight: 1.55, color: 'rgba(42,36,32,0.72)', fontStyle: 'italic', fontFamily: "'Space Grotesk', system-ui, sans-serif", boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 'clamp(1.5rem, 3vw, 2.5rem)' }}>
+                                      <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: 'clamp(2.5rem, 4vw, 3.5rem)', height: 'clamp(2.5rem, 4vw, 3.5rem)', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', flexShrink: 0, display: 'block' }} />
+                                      <div style={{ flex: 1, minWidth: 0 }}>
+                                        <span style={{ display: 'block', margin: '0 0 0.65rem' }}>“Hit Loop is a hands-on creative partnership delivering agentic solutions with taste and automation. Your Human curates multiple systems to deliver professional outcomes, so you can save time and headspace while growing your business.”</span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', fontStyle: 'normal' }}>
+                                          <span style={quoteAttributionNameStyle}>Bryan Balli</span>
+                                          <span style={{ color: 'rgba(42,36,32,0.3)', fontSize: '0.75rem' }}>·</span>
+                                          <span style={quoteAttributionRoleStyle}>Creative Lead, HITloop</span>
+                                        </div>
+                                      </div>
                                     </blockquote>
-                                    <cite className="cmo-quote-attribution" style={{ display: 'block', textAlign: 'center', marginTop: '0.5rem', fontStyle: 'normal', fontFamily: "'Space Mono', monospace", fontSize: '0.66rem', letterSpacing: '0.08em', color: 'rgba(42,36,32,0.45)' }}>HITLOOP.AGENCY</cite>
                                     </div>
                                   </div>
                                   <div id="cmo-dashboard-table" className="cmo-table-outer" style={{ gridColumn: '1 / -1', marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
@@ -1866,13 +1967,19 @@ const StackedSlidesSection = () => {
                                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
                                     <colgroup><col style={{ width: '2rem' }} /><col style={{ width: '26%' }} /><col /></colgroup>
                                       <thead><tr><th style={{ width: '1.5rem' }} /><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Get</th><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>What you get</th></tr></thead>
-                                      <tbody>{CMO_TABLE_ROWS.map((row, ri, arr) => (<tr key={row.task} data-sub={row.sub || undefined} data-sublast={isSubLast(arr, ri) || undefined} style={{ borderBottom: (row.task === 'Daily Stand Up Email' || row.task === 'Creative Brief' || (row.sub && !isSubLast(arr, ri))) ? 'none' : '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.7rem 0.2rem', textAlign: 'center', position: 'relative' }}>{row.task === 'Creative Brief' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? <BriefConnector first={isSubFirst(arr, ri)} last={isSubLast(arr, ri)} /> : <span className="cmo-arrow" aria-hidden="true"><Lock size={12} /></span>}</td><td style={{ padding: row.sub ? '0.7rem 0.4rem 0.7rem 1.1rem' : '0.7rem 0.4rem', color: row.sub ? 'rgba(42,36,32,0.55)' : 'rgba(42,36,32,0.75)', fontWeight: row.sub ? 400 : 500 }}>{row.task}</td><td style={{ padding: '0.7rem 0.4rem 0.7rem 0.6rem', textAlign: 'left', color: row.sub ? 'rgba(42,36,32,0.48)' : 'rgba(42,36,32,0.65)', fontWeight: 400 }}>{row.value}</td></tr>))}</tbody>
+                                      <tbody>{CMO_TABLE_ROWS.map((row, ri, arr) => (<tr key={row.task} data-sub={row.sub || undefined} data-sublast={isSubLast(arr, ri) || undefined} style={{ borderBottom: (row.task === 'DAILY STAND UP' || row.task === 'ONBOARD NOW' || (row.sub && !isSubLast(arr, ri))) ? 'none' : '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.7rem 0.2rem', textAlign: 'center', position: 'relative' }}>{row.task === 'ONBOARD NOW' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? <BriefConnector first={isSubFirst(arr, ri)} last={isSubLast(arr, ri)} /> : <span className="cmo-arrow" aria-hidden="true"><Lock size={12} /></span>}</td><td style={{ padding: row.sub ? '0.7rem 0.4rem 0.7rem 1.1rem' : '0.7rem 0.4rem', color: row.sub ? 'rgba(42,36,32,0.55)' : 'rgba(42,36,32,0.75)', fontWeight: row.bold ? 700 : (row.sub ? 400 : 500) }}>{row.task}</td><td style={{ padding: '0.7rem 0.4rem 0.7rem 0.6rem', textAlign: 'left', color: row.sub ? 'rgba(42,36,32,0.48)' : 'rgba(42,36,32,0.65)', fontWeight: row.bold ? 700 : 400 }}>{row.sub ? `• ${row.value}` : row.value}</td></tr>))}</tbody>
                                     </table>
-                                    <blockquote id="cmo-quote-mobile" style={{ margin: 'clamp(1rem, 2vw, 1.5rem) 0 0', padding: 'clamp(0.75rem, 1.5vw, 1rem) 0', fontSize: 'clamp(1rem, 1.5vw, 1.35rem)', lineHeight: 1.55, color: 'rgba(42,36,32,0.72)', fontStyle: 'italic', fontFamily: "'Space Grotesk', system-ui, sans-serif", boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
-                                      <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: '3.25rem', height: '3.25rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', flexShrink: 0, display: 'block' }} />
-                                      <span>HITLOOP curates AI systems that handle the work for you, backed by qualified Humans in the Loop when you need direct support.</span>
+                                    <blockquote id="cmo-quote-mobile" style={{ margin: 0, padding: 'clamp(1.5rem, 4vw, 3rem) 0', fontSize: 'clamp(0.9rem, 1.4vw, 1.15rem)', lineHeight: 1.55, color: 'rgba(42,36,32,0.72)', fontStyle: 'italic', fontFamily: "'Space Grotesk', system-ui, sans-serif", boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 'clamp(1.5rem, 3vw, 2.5rem)' }}>
+                                      <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: 'clamp(2.5rem, 4vw, 3.5rem)', height: 'clamp(2.5rem, 4vw, 3.5rem)', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', flexShrink: 0, display: 'block' }} />
+                                      <div style={{ flex: 1, minWidth: 0 }}>
+                                        <span style={{ display: 'block', margin: '0 0 0.65rem' }}>“Hit Loop is a hands-on creative partnership delivering agentic solutions with taste and automation. Your Human curates multiple systems to deliver professional outcomes, so you can save time and headspace while growing your business.”</span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', fontStyle: 'normal' }}>
+                                          <span style={quoteAttributionNameStyle}>Bryan Balli</span>
+                                          <span style={{ color: 'rgba(42,36,32,0.3)', fontSize: '0.75rem' }}>·</span>
+                                          <span style={quoteAttributionRoleStyle}>Creative Lead, HITloop</span>
+                                        </div>
+                                      </div>
                                     </blockquote>
-                                    <cite className="cmo-quote-attribution" style={{ display: 'block', textAlign: 'center', marginTop: '0.5rem', fontStyle: 'normal', fontFamily: "'Space Mono', monospace", fontSize: '0.66rem', letterSpacing: '0.08em', color: 'rgba(42,36,32,0.45)' }}>HITLOOP.AGENCY</cite>
                                   </div>
                                 </article>
                               </div>

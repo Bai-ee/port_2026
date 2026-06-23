@@ -4,6 +4,7 @@ import {
   attachMediaToPost,
   createSocialPost,
   diagnoseTwitterAccess,
+  generatePromoCopy,
   getTwitterCredentialStatus,
   postNow,
   processDuePosts,
@@ -102,6 +103,11 @@ export async function POST(request) {
       return json({ ok: true, ...result });
     }
 
+    if (action === 'generate-copy') {
+      const copy = await generatePromoCopy(body.brand || {});
+      return json({ ok: true, copy });
+    }
+
     if (action === 'diagnose') {
       const result = await diagnoseTwitterAccess();
       return json({ ok: true, diagnostics: result });
@@ -138,6 +144,7 @@ export async function POST(request) {
         error: err.message || 'Social posting action failed.',
         details: err.details || null,
         hint: err.hint || null,
+        code: err.code || null,
         twitterError: err.twitterError || null,
       },
       err.status || 500

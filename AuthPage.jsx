@@ -104,11 +104,17 @@ const AuthPageInner = () => {
     }
   }, [searchParams]);
 
+  // Don't bounce to the dashboard while an auth submit is in flight. On sign-up,
+  // createUserWithEmailAndPassword fires onAuthStateChanged (user set) BEFORE the
+  // awaited provisioning writes users/{uid}.clientId. Redirecting here would land
+  // on /dashboard pre-provision and trip the WebsiteUrlGate — asking for the
+  // website URL again even though the captured URL is already being processed.
+  // The submit handlers redirect themselves once provisioning has resolved.
   useEffect(() => {
-    if (user) {
+    if (user && !submitting) {
       router.replace(redirectPath);
     }
-  }, [user, redirectPath, router]);
+  }, [user, submitting, redirectPath, router]);
 
   const handleChange = (event) => {
     const { name, value } = event.target;

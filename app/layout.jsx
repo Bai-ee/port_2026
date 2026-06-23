@@ -85,12 +85,12 @@ export const metadata = {
     },
   },
   icons: {
-    // Brand signature mark as favicon — same art used in the header logo.
+    // Profile avatar as favicon — circular-masked version of the "Meet with Human" CTA art.
     icon: [
-      { url: '/img/sig.png', type: 'image/png', sizes: '276x208' },
+      { url: '/img/profile2_circle.png', type: 'image/png', sizes: '509x509' },
     ],
-    shortcut: [{ url: '/img/sig.png', type: 'image/png' }],
-    apple: [{ url: '/img/sig.png', type: 'image/png' }],
+    shortcut: [{ url: '/img/profile2_circle.png', type: 'image/png' }],
+    apple: [{ url: '/img/profile2_circle.png', type: 'image/png' }],
   },
   category: 'technology',
 };
