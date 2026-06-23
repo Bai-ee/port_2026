@@ -52,6 +52,31 @@ import SubscribeModal from './components/payments/SubscribeModal';
 import { AdminEmailDigestView, AdminEmailSettingsView, AdminCreateClientView } from './components/AdminEmailModals';
 import { ContactCapabilitiesPanel } from './StackedSlidesSection';
 
+// Extract the "Suggested Post" caption the Creative Brief flow scribes into the
+// onboarding summary (a single labeled string). Returns '' when absent.
+const CB_SUMMARY_LABELS = ['Headline', 'What This Site Is', "What's Missing", 'Biggest Risk', 'The Opportunity', 'Decision', 'Suggested Post'];
+function parseBriefSuggestedPost(raw) {
+  if (!raw) return '';
+  let collecting = false;
+  const out = [];
+  for (const ln of String(raw).split('\n')) {
+    const t = ln.trim();
+    if (!t) continue;
+    const isLabel = CB_SUMMARY_LABELS.find((L) => t.toLowerCase().startsWith(`${L.toLowerCase()}:`));
+    if (isLabel) {
+      if (collecting) break; // next section reached
+      if (isLabel === 'Suggested Post') {
+        collecting = true;
+        const after = t.slice(t.indexOf(':') + 1).trim();
+        if (after) out.push(after);
+      }
+      continue;
+    }
+    if (collecting) out.push(t);
+  }
+  return out.join(' ').replace(/\s+/g, ' ').trim();
+}
+
 const LeadGenDashboard = dynamic(() => import('./components/dashboard/LeadGenDashboard'), {
   loading: () => null,
   ssr: false,
@@ -4703,16 +4728,20 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	  // Build the suggested X caption from brand/brief data. Shared by the handler
 	  // and the tile mockup so the preview matches what actually gets posted.
 	  const buildPostMeCaption = useCallback(() => {
-	    // A strategist-generated caption wins once present; otherwise derive a
-	    // sensible default from the brand brief.
+	    // A strategist-generated caption wins once present.
 	    if (postMeCopy && postMeCopy.trim()) return postMeCopy.trim().slice(0, 280);
+	    const url = client?.websiteUrl || client?.website || '';
+	    const tail = url ? `\n\n${url}` : '';
+	    // Next, the caption scribed by the Creative Brief flow ("Suggested Post",
+	    // derived from "What This Site Is") and stored in the onboarding summary.
+	    const briefPost = parseBriefSuggestedPost(dashboardState?.briefSummaries?.onboarding?.summary);
+	    if (briefPost) return (briefPost.slice(0, 280 - tail.length) + tail).slice(0, 280);
+	    // Fallback: derive a sensible default from the brand brief.
 	    const biz = client?.businessName || '';
 	    const tag = dashboardState?.snapshot?.brandOverview?.summary
 	      || dashboardState?.snapshot?.brandOverview?.positioning
 	      || dashboardState?.snapshot?.brandOverview?.headline || '';
-	    const url = client?.websiteUrl || client?.website || '';
 	    const base = (biz && tag) ? `${biz} — ${tag.slice(0, 100)}` : (biz ? `Check out ${biz}` : (tag.slice(0, 140) || 'Check out our new site.'));
-	    const tail = url ? `\n\n${url}` : '';
 	    return (base + tail).slice(0, 280);
 	  }, [client, dashboardState, postMeCopy]);
 
@@ -7626,43 +7655,13 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       // POST ME card — suggested X post (video + static) built from brief/brand data.
       const bizName  = client?.businessName || brandOverview?.headline || 'My Business';
       const siteUrl  = client?.websiteUrl   || client?.website || '';
-      const tagline  = brandOverview?.summary || brandOverview?.positioning || brandOverview?.headline || '';
       const cleanUrl = siteUrl.replace(/^https?:\/\/(?:www\.)?/, '').replace(/\/$/, '');
-      // Suggested caption is scribed by the Creative Brief flow ("Suggested Post"
-      // section, derived from "What This Site Is") and stored inside the onboarding
-      // summary string. Parse that section out and prefer it as the post copy.
-      const suggestedPost = (() => {
-        const raw = dashboardState?.briefSummaries?.onboarding?.summary || '';
-        if (!raw) return '';
-        const labels = ['Headline', 'What This Site Is', "What's Missing", 'Biggest Risk', 'The Opportunity', 'Decision', 'Suggested Post'];
-        let collecting = false;
-        const out = [];
-        for (const ln of raw.split('\n')) {
-          const t = ln.trim();
-          if (!t) continue;
-          const isLabel = labels.find((L) => t.toLowerCase().startsWith(`${L.toLowerCase()}:`));
-          if (isLabel) {
-            if (collecting) break; // next section reached
-            if (isLabel === 'Suggested Post') {
-              collecting = true;
-              const after = t.slice(t.indexOf(':') + 1).trim();
-              if (after) out.push(after);
-            }
-            continue;
-          }
-          if (collecting) out.push(t);
-        }
-        return out.join(' ').replace(/\s+/g, ' ').trim();
-      })();
-      // Build copy: prefer the scribed caption, fall back to brand tagline. The
-      // caption carries no URL, so reserve room for the link tail within 280.
-      const buildCopy = (fallbackBase) => {
-        const base = suggestedPost || fallbackBase;
-        const tail = siteUrl ? `\n\n${siteUrl}` : '';
-        return (base.slice(0, 280 - tail.length) + tail).slice(0, 280);
-      };
-      const videoCopy  = buildCopy(tagline ? `${bizName} — ${tagline.slice(0, 100)}` : `Check out ${bizName}`);
-      const staticCopy = buildCopy(tagline ? tagline.slice(0, 140) : `${bizName} is live.`);
+      // Single source of truth: the same caption the X composer + auto-post use
+      // (strategist copy > Creative Brief "Suggested Post" > brand tagline). Keeps
+      // the displayed row, the intent links, and the actual post in lockstep.
+      const caption = buildPostMeCaption();
+      const videoCopy  = caption;
+      const staticCopy = caption;
       const xVideoIntent  = `https://x.com/intent/post?text=${encodeURIComponent(videoCopy)}`;
       const xStaticIntent = `https://x.com/intent/post?text=${encodeURIComponent(staticCopy)}`;
       const hasVideoAsset  = Boolean(latestStudioVideoUrl);
