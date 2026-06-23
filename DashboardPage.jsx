@@ -50,7 +50,7 @@ import { deriveFindings } from './features/scout-intake/derived-findings.mjs';
 import ModuleCardControls from './components/dashboard/ModuleCardControls';
 import SubscribeModal from './components/payments/SubscribeModal';
 import { AdminEmailDigestView, AdminEmailSettingsView, AdminCreateClientView } from './components/AdminEmailModals';
-import SiteFooter from './SiteFooter';
+import { ContactCapabilitiesPanel } from './StackedSlidesSection';
 
 const LeadGenDashboard = dynamic(() => import('./components/dashboard/LeadGenDashboard'), {
   loading: () => null,
@@ -2697,6 +2697,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	  const [mockupStudioRenderError, setMockupStudioRenderError] = useState('');
 	  const [postMeLoading, setPostMeLoading] = useState(false);
 	  const [postMeResult, setPostMeResult] = useState(null); // null | { ok, twitterId, error }
+	  const [postMeCopy, setPostMeCopy] = useState(''); // strategist-generated caption (overrides the default)
+	  const [postMeCopyLoading, setPostMeCopyLoading] = useState(false);
 	  // Tracks the last website auto-filled from the effective client so the draft
 	  // URL follows a client switch (operator → impersonated client) UNTIL the user
 	  // manually edits the field. Without this the draft locks onto the first site
@@ -2709,21 +2711,28 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	  const [adhocTerminal, setAdhocTerminal] = useState(null); // { open, status:'running'|'done'|'error', title, brand, host, lines:[], videoUrl }
 	  const adhocTimerRef = useRef(null);
 
-	  useEffect(() => {
-	    const site = client?.websiteUrl || client?.website || '';
-	    if (!site) return;
-	    setMockupStudioDraft((prev) => {
-	      // Follow the effective client's site unless the user hand-edited the field
-	      // (sourceUrl differs from what we last auto-filled). Empty also follows.
-	      const userEdited = prev.sourceUrl && prev.sourceUrl !== autoFilledStudioUrlRef.current;
-	      if (userEdited) return prev;
-	      autoFilledStudioUrlRef.current = site;
-	      return prev.sourceUrl === site ? prev : { ...prev, sourceUrl: site };
-	    });
-	  }, [client?.websiteUrl, client?.website]);
+		  useEffect(() => {
+		    const site = client?.websiteUrl || client?.website || '';
+		    if (!site) return;
+		    setMockupStudioDraft((prev) => {
+		      // Follow the effective client's site unless the user hand-edited the field
+		      // (sourceUrl differs from what we last auto-filled). Empty also follows.
+		      const draftIsFallback = /^https?:\/\/(?:www\.)?hitloop\.agency\/?$/i.test(String(prev.sourceUrl || '').trim());
+		      const userEdited = prev.sourceUrl && prev.sourceUrl !== autoFilledStudioUrlRef.current && !draftIsFallback;
+		      if (userEdited) return prev;
+		      autoFilledStudioUrlRef.current = site;
+		      return prev.sourceUrl === site ? prev : { ...prev, sourceUrl: site };
+		    });
+		  }, [client?.websiteUrl, client?.website]);
 
-	  const openMockupStudio = useCallback(({ autoVideo = false, director = false } = {}) => {
-	    const site = mockupStudioDraft.sourceUrl || client?.websiteUrl || client?.website || '';
+		  const clientStudioSourceUrl = useMemo(() => {
+		    const raw = String(client?.websiteUrl || client?.website || '').trim();
+		    if (!raw) return '';
+		    return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+		  }, [client?.websiteUrl, client?.website]);
+
+		  const openMockupStudio = useCallback(({ autoVideo = false, director = false } = {}) => {
+		    const site = mockupStudioDraft.sourceUrl || clientStudioSourceUrl || '';
 	    const params = new URLSearchParams();
 	    if (site) params.set('url', site);
 	    params.set('viewport', mockupStudioDraft.viewportId || 'desktop');
@@ -2732,7 +2741,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    if (autoVideo) params.set('autovideo', '1');
 	    if (director) params.set('director', '1');
 	    window.open(`/dashboard/studio?${params.toString()}`, '_blank');
-	  }, [client?.websiteUrl, client?.website, mockupStudioDraft]);
+		  }, [clientStudioSourceUrl, mockupStudioDraft]);
 
 	  const closeAdhocTerminal = useCallback(() => {
 	    if (adhocTimerRef.current) { clearInterval(adhocTimerRef.current); adhocTimerRef.current = null; }
@@ -2791,9 +2800,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    }
 	  }, []);
 
-	  const runMockupStudioVideo = useCallback(async () => {
+	  const runMockupStudioVideo = useCallback(async ({ sourceUrlOverride = null } = {}) => {
 	    if (!user || mockupStudioRenderLoading) return;
-	    const site = (mockupStudioDraft.sourceUrl || client?.websiteUrl || client?.website || '').trim();
+	    const site = String(sourceUrlOverride || mockupStudioDraft.sourceUrl || clientStudioSourceUrl || '').trim();
 	    if (!/^https?:\/\/\S+$/i.test(site)) {
 	      setMockupStudioRenderError('Enter a valid http(s) website URL.');
 	      return;
@@ -2830,26 +2839,47 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	              environment: { mode: 'preset', preset: envId, reflections: true },
 	            }),
 	          });
-	          const data = await res.json().catch(() => ({}));
-	          if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-	          if (data?.capture) {
-	            setBootstrap((prev) => {
-	              const dash = prev?.dashboardState || {};
-	              const current = Array.isArray(dash.studioCaptures) ? dash.studioCaptures : [];
-	              const deduped = current.filter((item) => item?.storagePath !== data.capture.storagePath);
-	              return { ...prev, dashboardState: { ...dash, studioCaptures: [...deduped, data.capture].slice(-40) } };
-	            });
-	            setModalTab('assets');
-	          }
-	          return { doneText: 'video ready — saved to assets', videoUrl: data?.capture?.downloadUrl || null };
-	        },
-	      });
+		          const data = await res.json().catch(() => ({}));
+		          if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+		          let capture = data?.capture || null;
+		          if (!capture && data?.jobId) {
+		            for (let attempt = 0; attempt < 90; attempt += 1) {
+		              await new Promise((resolve) => setTimeout(resolve, 3000));
+		              const jobRes = await fetch(apiPath(`/api/dashboard/studio-render?jobId=${encodeURIComponent(data.jobId)}`), {
+		                headers: { Authorization: `Bearer ${token}` },
+		              });
+		              const jobData = await jobRes.json().catch(() => ({}));
+		              if (!jobRes.ok) throw new Error(jobData?.error || `Render job poll failed (${jobRes.status})`);
+		              const job = jobData?.job || null;
+		              if (job?.status === 'done' && job.capture) {
+		                capture = job.capture;
+		                break;
+		              }
+		              if (job?.status === 'failed') {
+		                throw new Error(job.error || 'Studio render failed.');
+		              }
+		            }
+		          }
+		          if (capture) {
+		            setBootstrap((prev) => {
+		              const dash = prev?.dashboardState || {};
+		              const current = Array.isArray(dash.studioCaptures) ? dash.studioCaptures : [];
+		              const deduped = current.filter((item) => item?.storagePath !== capture.storagePath);
+		              return { ...prev, dashboardState: { ...dash, studioCaptures: [...deduped, capture].slice(-40) } };
+		            });
+		            setModalTab('assets');
+		          }
+		          return capture
+		            ? { doneText: 'video ready — saved to assets', videoUrl: capture.downloadUrl || null }
+		            : { doneText: 'video queued — it will appear in assets when ready', videoUrl: null };
+		        },
+		      });
 	    } catch (err) {
 	      setMockupStudioRenderError(err?.message || 'Studio render failed.');
 	    } finally {
 	      setMockupStudioRenderLoading(false);
 	    }
-	  }, [user, mockupStudioRenderLoading, mockupStudioDraft, client?.websiteUrl, client?.website, apiPath, runWithTerminal]);
+	  }, [user, mockupStudioRenderLoading, mockupStudioDraft, clientStudioSourceUrl, apiPath, runWithTerminal]);
 
 
 	  const openLeadgenFlow = useCallback(async (step) => {
@@ -4455,6 +4485,56 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     return () => unsub();
   }, [client?.clientId, client?.id, isImpersonating]);
 
+  // Live studio captures. The motion-mockup video renders asynchronously and can
+  // land AFTER the onboarding run completes — i.e. after the bootstrap poll has
+  // already stopped (its finally clears the interval when the run HTTP call
+  // returns). Since dashboardState is a one-shot bootstrap payload with no other
+  // dashboard_state listener, the Video Promo deliverable would otherwise stay
+  // empty (reads as "failed") until a manual refresh. Subscribe to the client's
+  // dashboard_state and merge ONLY studioCaptures into bootstrap — cherry-picked
+  // so the raw doc's Firestore Timestamps never clobber bootstrap's serialized
+  // ({_seconds}) shape that the rest of the dashboard consumes.
+  useEffect(() => {
+    const cid = client?.clientId || client?.id || bootstrap?.effectiveClientId;
+    if (!cid || !db || isImpersonating) return undefined;
+    const ref = doc(db, 'dashboard_state', cid);
+    const unsub = onSnapshot(
+      ref,
+      (snap) => {
+        if (cancelledRef.current) return;
+        if (!snap.exists()) return;
+        const data = snap.data() || {};
+        const caps = Array.isArray(data.studioCaptures) ? data.studioCaptures : null;
+        const pending = data.studioVideoPending || null;
+        if (!caps && pending === undefined) return;
+        setBootstrap((prev) => {
+          if (!prev?.dashboardState) return prev;
+          const ds = prev.dashboardState;
+          // Skip no-op snapshots (unrelated dashboard_state writes) so this never
+          // forces a re-render unless captures or the pending marker changed.
+          const cur = ds.studioCaptures;
+          const curLen = Array.isArray(cur) ? cur.length : -1;
+          const curLast = curLen > 0 ? cur[curLen - 1]?.storagePath : null;
+          const nextLen = caps ? caps.length : curLen;
+          const nextLast = caps && caps.length ? caps[caps.length - 1]?.storagePath : (caps ? null : curLast);
+          const capsSame = curLen === nextLen && curLast === nextLast;
+          const pendingSame = (ds.studioVideoPending?.jobId || null) === (pending?.jobId || null);
+          if (capsSame && pendingSame) return prev;
+          return {
+            ...prev,
+            dashboardState: {
+              ...ds,
+              ...(caps ? { studioCaptures: caps } : {}),
+              studioVideoPending: pending,
+            },
+          };
+        });
+      },
+      (err) => { if (process.env.NODE_ENV !== 'production') console.warn('[studio-captures] snapshot:', err?.message || err); },
+    );
+    return () => unsub();
+  }, [client?.clientId, client?.id, bootstrap?.effectiveClientId, isImpersonating]);
+
   const recentRuns = bootstrap.recentRuns || [];
   // The client's first scout-brief run is the Onboarding Brief; later ones are
   // Executive Briefs. Server derives this in the bootstrap payload.
@@ -4590,10 +4670,23 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // Latest studio video — keep both the URL and its real contentType. The render
   // pipeline emits WebM by default, which X rejects; the type must travel with
   // the URL so the post handler can decide whether the asset is X-postable.
+  const normalizeStudioSourceKey = useCallback((url) => {
+    try {
+      const parsed = new URL(/^https?:\/\//i.test(String(url || '')) ? String(url || '') : `https://${url}`);
+      return `${parsed.protocol}//${parsed.hostname.replace(/^www\./, '').toLowerCase()}${parsed.pathname.replace(/\/+$/, '') || '/'}`;
+    } catch {
+      return String(url || '').trim().toLowerCase();
+    }
+  }, []);
+  const clientStudioSourceKey = normalizeStudioSourceKey(clientStudioSourceUrl);
   const latestStudioVideo = (() => {
     const caps = Array.isArray(dashboardState?.studioCaptures) ? dashboardState.studioCaptures : [];
     for (let i = caps.length - 1; i >= 0; i -= 1) {
-      if (caps[i]?.type === 'studio_video' && caps[i]?.downloadUrl) {
+      if (
+        caps[i]?.type === 'studio_video' &&
+        caps[i]?.downloadUrl &&
+        (!clientStudioSourceKey || normalizeStudioSourceKey(caps[i].sourceUrl) === clientStudioSourceKey)
+      ) {
         return { url: caps[i].downloadUrl, contentType: caps[i].contentType || null };
       }
     }
@@ -4610,6 +4703,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	  // Build the suggested X caption from brand/brief data. Shared by the handler
 	  // and the tile mockup so the preview matches what actually gets posted.
 	  const buildPostMeCaption = useCallback(() => {
+	    // A strategist-generated caption wins once present; otherwise derive a
+	    // sensible default from the brand brief.
+	    if (postMeCopy && postMeCopy.trim()) return postMeCopy.trim().slice(0, 280);
 	    const biz = client?.businessName || '';
 	    const tag = dashboardState?.snapshot?.brandOverview?.summary
 	      || dashboardState?.snapshot?.brandOverview?.positioning
@@ -4618,7 +4714,73 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    const base = (biz && tag) ? `${biz} — ${tag.slice(0, 100)}` : (biz ? `Check out ${biz}` : (tag.slice(0, 140) || 'Check out our new site.'));
 	    const tail = url ? `\n\n${url}` : '';
 	    return (base + tail).slice(0, 280);
-	  }, [client, dashboardState]);
+	  }, [client, dashboardState, postMeCopy]);
+
+	  // Generate on-brand promo copy with the existing posting-agent pipeline
+	  // (Strategy Developer): seeds from the brand brief, returns optimized copy +
+	  // brand-aligned hashtags with Knowledge Base context.
+	  const generatePostMeCopy = useCallback(async () => {
+	    if (!user || postMeCopyLoading) return;
+	    setPostMeCopyLoading(true);
+	    try {
+	      const token = await user.getIdToken();
+	      const biz = client?.businessName || '';
+	      const tag = dashboardState?.snapshot?.brandOverview?.summary
+	        || dashboardState?.snapshot?.brandOverview?.positioning
+	        || dashboardState?.snapshot?.brandOverview?.headline || '';
+	      const url = client?.websiteUrl || client?.website || '';
+	      const industry = dashboardState?.snapshot?.brandOverview?.industry
+	        || dashboardState?.marketCategory?.value || '';
+	      const res = await fetch('/api/social-posting', {
+	        method: 'POST',
+	        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+	        body: JSON.stringify({ action: 'generate-copy', brand: { name: biz, summary: tag, url, industry } }),
+	      });
+	      const data = await res.json().catch(() => ({}));
+	      if (res.ok && data.ok && data.copy) {
+	        setPostMeCopy(data.copy.slice(0, 280));
+	      }
+	    } catch { /* non-fatal — keep the existing/default caption */ }
+	    finally { setPostMeCopyLoading(false); }
+	  }, [user, postMeCopyLoading, client, dashboardState]);
+
+	  // Simplified post path (no API credits needed): open X's web composer with
+	  // the caption prefilled, and copy the image to the clipboard so the user can
+	  // paste it straight in (X accepts pasted images). Video can't be pasted or
+	  // pre-attached via a web intent, so we kick off a download to drag in.
+	  const handleOpenXComposer = useCallback(async () => {
+	    const caption = buildPostMeCaption();
+	    const composer = window.open(
+	      `https://x.com/intent/post?text=${encodeURIComponent(caption)}`,
+	      '_blank', 'noopener'
+	    );
+	    const ogImage = dashboardState?.siteMeta?.ogImage || null;
+	    try {
+	      if (ogImage && navigator.clipboard && window.ClipboardItem) {
+	        // Fetch → PNG blob → clipboard (X's composer accepts pasted images).
+	        const res = await fetch(ogImage);
+	        const srcBlob = await res.blob();
+	        const bmp = await createImageBitmap(srcBlob);
+	        const canvas = document.createElement('canvas');
+	        canvas.width = bmp.width; canvas.height = bmp.height;
+	        canvas.getContext('2d').drawImage(bmp, 0, 0);
+	        const pngBlob = await new Promise((r) => canvas.toBlob(r, 'image/png'));
+	        await navigator.clipboard.write([new window.ClipboardItem({ 'image/png': pngBlob })]);
+	        setPostMeResult({ ok: true, composer: true, note: 'X composer opened — paste the image (⌘/Ctrl+V).' });
+	      } else if (latestStudioVideoUrl && latestStudioVideoIsXReady) {
+	        // Trigger a download of the MP4 so the user can drag it into the composer.
+	        const a = document.createElement('a');
+	        a.href = latestStudioVideoUrl; a.download = `${(client?.businessName || 'video')}-post.mp4`;
+	        document.body.appendChild(a); a.click(); a.remove();
+	        setPostMeResult({ ok: true, composer: true, note: 'X composer opened — video downloaded, drag it in.' });
+	      } else {
+	        setPostMeResult({ ok: true, composer: true, note: 'X composer opened with your caption.' });
+	      }
+	    } catch {
+	      setPostMeResult({ ok: true, composer: true, note: 'X composer opened — attach your media manually.' });
+	    }
+	    if (!composer) setPostMeResult({ ok: false, error: 'Popup blocked — allow popups to open the X composer.' });
+	  }, [buildPostMeCaption, dashboardState, latestStudioVideoUrl, latestStudioVideoIsXReady, client]);
 
 	  const handlePostMeToX = useCallback(async () => {
 	    if (!user || postMeLoading) return;
@@ -4650,8 +4812,18 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	      });
 	      const data = await res.json().catch(() => ({}));
 	      if (!res.ok || !data.ok) {
-	        if (pendingTab) { try { pendingTab.close(); } catch {} }
-	        setPostMeResult({ ok: false, error: data.hint || data.error || 'Post failed. Check X API credentials.' });
+	        // 402 / credits depleted = X API posting needs paid credits. Fall back to
+	        // the free web composer (text + link prefilled) in the already-open tab so
+	        // the user can still post manually — media can't ride a web intent, though.
+	        const isCredits = res.status === 402 || data.code === 402 || /credit/i.test(data.error || '');
+	        if (isCredits) {
+	          const intent = `https://x.com/intent/post?text=${encodeURIComponent(buildPostMeCaption())}`;
+	          if (pendingTab) { try { pendingTab.location = intent; } catch {} }
+	          setPostMeResult({ ok: false, error: 'X API is out of credits — opened the web composer so you can post manually (attach the video/image there).' });
+	        } else {
+	          if (pendingTab) { try { pendingTab.close(); } catch {} }
+	          setPostMeResult({ ok: false, error: data.hint || data.error || 'Post failed. Check X API credentials.' });
+	        }
 	      } else {
 	        const twitterId = data.post?.twitterId || null;
 	        const tweetUrl = twitterId ? `https://x.com/i/web/status/${twitterId}` : 'https://x.com';
@@ -6022,7 +6194,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   const cbMockupReady = Boolean(dashboardState?.artifacts?.homepageDeviceMockup?.downloadUrl);
   const cbScreensReady = Boolean(_cbFp['desktop-full']?.downloadUrl || _cbFp['tablet-full']?.downloadUrl || _cbFp['mobile-full']?.downloadUrl || dashboardState?.artifacts?.homepageScreenshots?.desktop?.downloadUrl);
   const cbSocialReady = Boolean(dashboardState?.siteMeta?.ogImage);
-  const cbVideoReady = Array.isArray(dashboardState?.studioCaptures) && dashboardState.studioCaptures.some((c) => c?.type === 'studio_video' && c?.downloadUrl);
+  const cbVideoReady = Boolean(latestStudioVideoUrl);
   const cbSummaryReady = Boolean(dashboardState?.briefSummaries?.onboarding?.summary);
   const creativeBriefReady = cbMockupReady && cbScreensReady && cbVideoReady && cbSummaryReady;
   const hasBriefDocumentData = Boolean(hasIntakeData || hasDailyBriefData);
@@ -6965,7 +7137,26 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     })(),
     (() => {
       const studioCaptures = Array.isArray(dashboardState?.studioCaptures) ? dashboardState.studioCaptures : [];
-      const latestVideo = [...studioCaptures].reverse().find((item) => item?.type === 'studio_video');
+      const latestVideo = [...studioCaptures].reverse().find((item) => {
+        if (item?.type !== 'studio_video') return false;
+        if (!clientStudioSourceKey) return true;
+        return normalizeStudioSourceKey(item.sourceUrl) === clientStudioSourceKey;
+      });
+      // In-flight render marker (set by the run-brief worker on enqueue, cleared
+      // on success in studio-render-core). Drives a "Rendering…" state for the
+      // ~13-25s gap between the onboarding run finishing and the async video
+      // landing — so the card never reads as empty/failed mid-render. Honored
+      // only when recent (a failed render that never clears the flag falls back
+      // to the normal empty state after 10min) and matching this client's site.
+      const studioPending = dashboardState?.studioVideoPending || null;
+      const videoRendering = !latestVideo && !!studioPending && (() => {
+        const q = Date.parse(studioPending.queuedAt || '');
+        if (!Number.isFinite(q) || Date.now() - q > 10 * 60 * 1000) return false;
+        if (clientStudioSourceKey && studioPending.sourceUrl) {
+          return normalizeStudioSourceKey(studioPending.sourceUrl) === clientStudioSourceKey;
+        }
+        return true;
+      })();
       return {
         id: 'mockup-studio',
         category: 'content',
@@ -6977,7 +7168,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         description: activeCapabilityFilter === 'deliverables'
           ? 'Turns your site into social-ready motion, shows how your brand moves and creates content ready to share beyond your site.'
           : 'Polished device mockups showing how your site presents in real-world use. Download ready-to-use visuals for decks, posts, or presentations.',
-        placeholderLabel: latestVideo ? 'VIDEO\nREADY' : 'OPEN\nSTUDIO',
+        placeholderLabel: latestVideo ? 'VIDEO\nREADY' : videoRendering ? 'RENDERING\n…' : 'OPEN\nSTUDIO',
         rows: latestVideo
           ? [
               { key: 'ms-video',   label: 'Latest video', value: latestVideo.label || '3D mockup video' },
@@ -6985,15 +7176,23 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               { key: 'ms-source',  label: 'Source',       value: latestVideo.sourceUrl || client?.websiteUrl || 'Stored' },
               { key: 'ms-action',  label: 'Action',       value: 'Click RUN VIDEO to generate a fresh animated mockup' },
             ]
+          : videoRendering
+          ? [
+              { key: 'ms-status',  label: 'Status',  value: 'Rendering your motion mockup on the GPU…' },
+              { key: 'ms-source',  label: 'Source',  value: studioPending.sourceUrl || client?.websiteUrl || 'Your site' },
+              { key: 'ms-action',  label: 'Action',  value: 'This usually takes under a minute — the video appears here automatically.' },
+            ]
           : [
               { key: 'ms-source',  label: 'Source',   value: mockupStudioDraft.sourceUrl || client?.websiteUrl || 'No website on file' },
               { key: 'ms-device',  label: 'Device',   value: MOCKUP_STUDIO_VIEWPORTS.find((v) => v.id === mockupStudioDraft.viewportId)?.label || 'Desktop' },
               { key: 'ms-camera',  label: 'Camera',   value: MOCKUP_STUDIO_TEMPLATES.find((t) => t.id === mockupStudioDraft.templateId)?.label || 'Spiral In' },
               { key: 'ms-action',  label: 'Action',   value: 'Click Details to customize, or RUN VIDEO to start with these defaults' },
             ],
-        footerLeft: latestVideo ? 'Video ready' : 'Ready',
+        footerLeft: latestVideo ? 'Video ready' : videoRendering ? 'Rendering…' : 'Ready',
         footerRight: 'ACTIVE',
-        readinessBadge: latestVideo ? { tone: 'ok', label: 'Passed' } : null,
+        readinessBadge: latestVideo
+          ? { tone: 'ok', label: 'Passed' }
+          : videoRendering ? { tone: 'partial', label: 'Rendering…' } : null,
         deliverableAsset: latestStudioVideoUrl ? {
           title: 'Video Post',
           kind: 'video',
@@ -7002,7 +7201,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         footerAction: {
           label: mockupStudioRenderLoading ? '…' : 'RUN VIDEO',
           loading: mockupStudioRenderLoading,
-          onClick: runMockupStudioVideo,
+          onClick: () => runMockupStudioVideo({ sourceUrlOverride: clientStudioSourceUrl }),
         },
       };
     })(),
@@ -7477,11 +7676,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         xIntentUrl:       activeIntent,
         xVideoIntentUrl:  xVideoIntent,
         xStaticIntentUrl: xStaticIntent,
-        // Always render the action — posts text-only when no media is attached.
+        // Primary action = open the X web composer (caption prefilled + image to
+        // clipboard). No API credits needed. API auto-post lives in the mockup.
         footerAction: {
-          label: postMeLoading ? 'Posting…' : postMeResult?.ok ? '✓ Posted' : 'POST TO X',
-          loading: postMeLoading,
-          onClick: handlePostMeToX,
+          label: 'POST TO X',
+          onClick: handleOpenXComposer,
         },
       };
     })(),
@@ -9068,9 +9267,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       if (card.id === 'mockup-studio') {
         // A rendered studio video means the card succeeded — show Passed
         // regardless of any analyzer signal.
-        const hasStudioVideo = Array.isArray(dashboardState?.studioCaptures)
-          && dashboardState.studioCaptures.some((c) => c?.type === 'studio_video' && c?.downloadUrl);
-        if (hasStudioVideo) return { tone: 'ok', label: 'Passed' };
+        if (latestStudioVideoUrl) return { tone: 'ok', label: 'Passed' };
       }
       if (card.id === 'onboarding-brief') {
         // Creative Brief is Active/Passed once all its required deliverables have
@@ -9080,8 +9277,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         const cbFp = dashboardState?.artifacts?.fullPageScreenshots || {};
         const cbScreens = Boolean(cbFp['desktop-full']?.downloadUrl || cbFp['tablet-full']?.downloadUrl || cbFp['mobile-full']?.downloadUrl)
           || Boolean(dashboardState?.artifacts?.homepageScreenshots?.desktop?.downloadUrl);
-        const cbVideo = Array.isArray(dashboardState?.studioCaptures)
-          && dashboardState.studioCaptures.some((c) => c?.type === 'studio_video' && c?.downloadUrl);
+        const cbVideo = Boolean(latestStudioVideoUrl);
         const cbSummary = Boolean(dashboardState?.briefSummaries?.onboarding?.summary);
         if (cbMockup && cbScreens && cbVideo && cbSummary) return { tone: 'ok', label: 'Passed' };
       }
@@ -9566,7 +9762,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                             aria-hidden="true"
                             style={{ marginTop: 1 }}
                           />
-                          <span style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: GRAD, WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>
+                          <span className="cap-source-value" style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: GRAD, WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>
                             {pct}<span style={{ fontSize: 13 }}>%</span>
                           </span>
                           <svg className="coverage-gauge" width="28" height="16" viewBox="0 0 36 21" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
@@ -9595,7 +9791,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                           setActiveTileModal({ title: briefCard.title, description: briefCard.description, dynamicShortDescription: briefCard.dynamicShortDescription || null, rows: briefCard.rows, cardId: briefCard.id, placeholderLabel: briefCard.placeholderLabel, number: briefCard.number, label: briefCard.label, isCapabilityCard: true, vizType: null, recommendation: briefCard.recommendation || null, analyzer: briefCard.analyzer || null, readinessBadge: briefCard.readinessBadge || null });
                         }}
                       >
-                        <FileText size={18} strokeWidth={1.75} stroke="url(#coverage-grad)" aria-hidden="true" style={{ marginTop: 1 }} />
+                        <FileText size={22} strokeWidth={2} stroke="url(#coverage-grad)" aria-hidden="true" style={{ marginTop: 1 }} />
                       </button>
                       <button
                         type="button"
@@ -9605,7 +9801,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         style={{ display: 'inline-flex', alignItems: 'center', padding: 0, background: 'none', border: 'none', cursor: 'pointer' }}
                         onClick={() => setShowCooldownModal(true)}
                       >
-                        <span style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>
+                        <span className="cap-source-value" style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>
                           {formatBriefCooldown(briefCooldownSeconds).value}<span style={{ fontSize: 13 }}>{formatBriefCooldown(briefCooldownSeconds).unit}</span>
                         </span>
                       </button>
@@ -9633,7 +9829,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     {isAdmin ? (
                     <span id="reseed-url-group" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
                       <span className="cap-source-divider" aria-hidden="true" />
-                      <Globe id="dashboard-source-cta-icon" size={15} strokeWidth={1.5} aria-hidden="true" />
+                      <Globe id="dashboard-source-cta-icon" size={22} strokeWidth={2} aria-hidden="true" />
                       <input
                         id="reseed-url-input"
                         type="url"
@@ -10315,132 +10511,103 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       playsInline
                     />
                   ) : card.id === 'post-me' ? (
-                    // Framed X screenshot mockup — device frame + X top-nav + post card.
-                    // Media renders as a STATIC (paused) video first-frame or OG image.
+                    // Full-bleed X post preview — fills the whole tile face and
+                    // mirrors a real X timeline post. Media is a STATIC frame.
                     (() => {
                       const pmBiz    = client?.businessName || brandOverview?.headline || 'Your Business';
                       const pmHandle = '@' + (client?.businessName || 'yourbrand').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 15);
-                      const pmCopy   = brandOverview?.summary || brandOverview?.positioning || brandOverview?.headline || 'Check out our new site.';
-                      const pmClean  = (client?.websiteUrl || client?.website || '').replace(/^https?:\/\/(?:www\.)?/, '').replace(/\/$/, '');
+                      const pmCopy   = buildPostMeCaption();
+                      const pmUrl    = client?.websiteUrl || client?.website || '';
+                      const pmClean  = pmUrl.replace(/^https?:\/\/(?:www\.)?/, '').replace(/\/$/, '');
+                      // Body = caption minus any trailing URL; the host renders as a blue link.
+                      const pmBody   = pmCopy.replace(pmUrl, '').replace(pmClean, '').replace(/\s+$/, '').trim();
                       const pmImg    = siteMeta?.ogImage || multiDevicePreviewSrc || null;
+                      const pmHasVideo = Boolean(latestStudioVideoUrl);
                       const pmHasMedia = Boolean(latestStudioVideoUrl || pmImg);
+                      const stop = (e) => { e.stopPropagation(); };
                       return (
                         <div id="post-me-tile-mockup" style={{
-                          width: '100%', height: '100%', display: 'flex', alignItems: 'stretch',
-                          justifyContent: 'center', padding: 6, boxSizing: 'border-box',
-                          background: 'radial-gradient(circle at 50% 0%, #15202b 0%, #0a0a0a 70%)',
+                          position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+                          background: '#000', color: '#e7e9ea',
+                          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
+                          overflow: 'hidden', textAlign: 'left',
                         }}>
-                          {/* Device frame */}
-                          <div style={{
-                            width: '100%', maxWidth: 240, display: 'flex', flexDirection: 'column',
-                            background: '#000', borderRadius: 14, overflow: 'hidden',
-                            border: '1px solid rgba(255,255,255,0.14)',
-                            boxShadow: '0 8px 24px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.04)',
-                          }}>
-                            {/* X top nav — centered logo, hairline underline */}
-                            <div style={{
-                              flexShrink: 0, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              borderBottom: '1px solid rgba(255,255,255,0.1)', position: 'relative',
-                            }}>
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
-                                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.742l7.722-8.831L1.534 2.25H8.08l4.259 5.631zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                          {/* Top bar: X logo + Generate-copy control */}
+                          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 14px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.742l7.722-8.831L1.534 2.25H8.08l4.259 5.631zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                            <button type="button" onClick={(e) => { stop(e); generatePostMeCopy(); }} disabled={postMeCopyLoading}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(29,155,240,0.12)', border: '1px solid rgba(29,155,240,0.5)', color: '#1d9bf0', borderRadius: 20, padding: '4px 11px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={postMeCopyLoading ? { animation: 'sb-spin 0.8s linear infinite' } : undefined}>
+                                <path d="M21 12a9 9 0 1 1-2.64-6.36" /><polyline points="21 3 21 8 16 8" />
                               </svg>
-                            </div>
-                            {/* Post body */}
-                            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 10px 0' }}>
-                              {/* Author row */}
-                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, flexShrink: 0 }}>
-                                <div style={{
-                                  width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
-                                  background: 'linear-gradient(135deg, #1d9bf0 0%, #0a7ab8 100%)',
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  fontSize: 13, fontWeight: 800, color: '#fff', fontFamily: 'sans-serif',
-                                }}>{pmBiz.charAt(0).toUpperCase()}</div>
-                                <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                                    <span style={{ fontSize: 10, fontWeight: 700, color: '#e7e9ea', fontFamily: 'sans-serif', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 110 }}>
-                                      {pmBiz.slice(0, 24)}
-                                    </span>
-                                    {/* verified check */}
-                                    <svg width="12" height="12" viewBox="0 0 22 22" fill="#1d9bf0" style={{ flexShrink: 0 }}>
-                                      <path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.469-.445-1.053-.751-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.469-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.22.878 1.69.47.444 1.055.75 1.69.88.635.13 1.294.08 1.902-.144.27.586.7 1.084 1.24 1.44.54.354 1.167.55 1.813.566.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.239 1.266.296 1.903.164.636-.132 1.22-.447 1.68-.907.46-.46.776-1.044.908-1.681s.075-1.299-.165-1.903c.586-.274 1.084-.705 1.439-1.246.354-.54.551-1.17.569-1.816zM9.662 14.85l-3.429-3.428 1.293-1.302 2.072 2.072 4.4-4.794 1.347 1.246z"/>
-                                    </svg>
-                                    <span style={{ fontSize: 9, color: '#71767b', fontFamily: 'sans-serif', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                      {pmHandle} · now
-                                    </span>
-                                  </div>
-                                </div>
-                                <div style={{ flexShrink: 0, background: '#eff3f4', color: '#0f1419', borderRadius: 20, padding: '3px 9px', fontSize: 9, fontWeight: 700, fontFamily: 'sans-serif' }}>
-                                  Follow
+                              {postMeCopyLoading ? 'Writing…' : postMeCopy ? 'Regenerate' : 'Generate copy'}
+                            </button>
+                          </div>
+                          {/* Post body */}
+                          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: '9px 14px 0' }}>
+                            {/* Author row */}
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9, flexShrink: 0 }}>
+                              <div style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0, background: 'linear-gradient(135deg,#1d9bf0,#0a7ab8)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, color: '#fff' }}>{pmBiz.charAt(0).toUpperCase()}</div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <span style={{ fontSize: 15, fontWeight: 700, color: '#e7e9ea', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '60%' }}>{pmBiz}</span>
+                                  <svg width="16" height="16" viewBox="0 0 22 22" fill="#1d9bf0" style={{ flexShrink: 0 }}><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.469-.445-1.053-.751-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.469-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.22.878 1.69.47.444 1.055.75 1.69.88.635.13 1.294.08 1.902-.144.27.586.7 1.084 1.24 1.44.54.354 1.167.55 1.813.566.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.239 1.266.296 1.903.164.636-.132 1.22-.447 1.68-.907.46-.46.776-1.044.908-1.681s.075-1.299-.165-1.903c.586-.274 1.084-.705 1.439-1.246.354-.54.551-1.17.569-1.816zM9.662 14.85l-3.429-3.428 1.293-1.302 2.072 2.072 4.4-4.794 1.347 1.246z"/></svg>
+                                  <span style={{ fontSize: 14, color: '#71767b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pmHandle} · now</span>
                                 </div>
                               </div>
-                              {/* Post text */}
-                              <p style={{
-                                margin: 0, fontSize: 10, lineHeight: 1.4, color: '#e7e9ea', fontFamily: 'sans-serif', flexShrink: 0,
-                                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-                              }}>
-                                {pmCopy.slice(0, 110)}{pmCopy.length > 110 ? '…' : ''}
-                                {pmClean && <span style={{ color: '#1d9bf0' }}> {pmClean}</span>}
-                              </p>
-                              {/* Media card */}
-                              {pmHasMedia && (
-                                <div style={{ flex: 1, minHeight: 0, borderRadius: 14, overflow: 'hidden', position: 'relative', border: '1px solid rgba(255,255,255,0.12)' }}>
-                                  {latestStudioVideoUrl ? (
-                                    <video
-                                      src={latestStudioVideoUrl}
-                                      poster={pmImg || undefined}
-                                      muted playsInline preload="metadata"
-                                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }}
-                                    />
-                                  ) : (
-                                    <img src={pmImg} alt={pmBiz} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                                  )}
-                                  {latestStudioVideoUrl && (
-                                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-                                      <div style={{
-                                        width: 34, height: 34, borderRadius: '50%', background: 'rgba(0,0,0,0.6)',
-                                        border: '2px solid rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                      }}>
-                                        <svg width="12" height="12" viewBox="0 0 12 12" fill="white"><path d="M3 2l7 4-7 4V2z"/></svg>
-                                      </div>
+                              <div style={{ flexShrink: 0, background: '#eff3f4', color: '#0f1419', borderRadius: 20, padding: '5px 14px', fontSize: 13, fontWeight: 700 }}>Follow</div>
+                            </div>
+                            {/* Caption */}
+                            <p style={{ margin: '6px 0 0', fontSize: 13, lineHeight: 1.38, color: '#e7e9ea', whiteSpace: 'pre-wrap', flexShrink: 0, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                              {pmBody}{pmClean && <span style={{ color: '#1d9bf0' }}>{' '}{pmClean}</span>}
+                            </p>
+                            {/* Media — sizes to the leftover height and holds the
+                                video's true 16:10 ratio, so it shrinks to fit the
+                                fixed shell without cropping (centered, gutters ok). */}
+                            {pmHasMedia && (
+                              <div style={{ flex: 1, minHeight: 0, marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <div style={{ height: '100%', aspectRatio: '16 / 10', maxWidth: '100%', borderRadius: 14, overflow: 'hidden', position: 'relative', border: '1px solid rgba(255,255,255,0.14)' }}>
+                                {pmHasVideo ? (
+                                  <video src={latestStudioVideoUrl} poster={pmImg || undefined} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
+                                ) : (
+                                  <img src={pmImg} alt={pmBiz} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                                )}
+                                {pmHasVideo && (
+                                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                                    <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(0,0,0,0.55)', border: '2px solid rgba(255,255,255,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                      <svg width="16" height="16" viewBox="0 0 12 12" fill="white"><path d="M3 2l7 4-7 4V2z"/></svg>
                                     </div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                            {/* Action / status row */}
-                            <div style={{
-                              flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12,
-                              padding: '6px 12px 8px', minHeight: 24,
-                            }}>
-                              {postMeResult?.ok ? (
-                                <span style={{ fontSize: 9, color: '#4ade80', fontFamily: 'sans-serif', fontWeight: 600 }}>
-                                  ✓ Posted to X
-                                  {postMeResult.twitterId && (
-                                    <a href={`https://x.com/i/web/status/${postMeResult.twitterId}`}
-                                      target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
-                                      style={{ marginLeft: 5, color: '#1d9bf0', textDecoration: 'underline' }}>View ↗</a>
-                                  )}
-                                </span>
-                              ) : postMeResult?.error ? (
-                                <span style={{ fontSize: 8, color: '#f87171', fontFamily: 'sans-serif', lineHeight: 1.3 }}>
-                                  {postMeResult.error.slice(0, 80)}
-                                </span>
-                              ) : postMeLoading ? (
-                                <span style={{ fontSize: 9, color: '#71767b', fontFamily: 'sans-serif' }}>Uploading &amp; posting…</span>
-                              ) : (
-                                [{path: 'M1.751 10c0-4.42 3.584-8 8.005-8h.366a8.001 8.001 0 0 1 7.97 9.58l.001.02 1.024 1.024a1.07 1.07 0 0 1-.953 1.763L16.5 22.5l-2.836-2.837c-.33.1-.67.187-1.014.256A8 8 0 0 1 2.1 11.39 8 8 0 0 1 1.75 10Z', label: '4'},
-                                 {path: 'M4.5 3.88l4.432 4.14-1.364 1.46L5.5 7.55V16c0 1.1.896 2 2 2H13v2H7.5a4 4 0 0 1-4-4V7.55L1.432 9.48.068 8.02 4.5 3.88zM16.5 6h-6V4h6a4 4 0 0 1 4 4v8.45l2.068-1.93 1.364 1.46-4.432 4.14-4.432-4.14 1.364-1.46 2.068 1.93V8c0-1.1-.896-2-2-2z', label: '1'},
-                                 {path: 'M16.697 5.5c-1.222-.06-2.679.51-3.89 2.16l-.805 1.09-.806-1.09C9.984 6.01 8.526 5.44 7.304 5.5c-1.243.07-2.349.78-2.91 1.91-.552 1.12-.633 2.78.479 4.82 1.074 1.97 3.257 4.27 7.129 6.61 3.87-2.34 6.052-4.64 7.126-6.61 1.111-2.04 1.03-3.7.477-4.82-.561-1.13-1.666-1.84-2.908-1.91z', label: '12'},
-                                 {path: 'M8.75 21V3h2v18h-2zM13 21V8.5h2V21h-2zM4.5 21V13h2v8h-2zM17.5 21V11.5h2V21h-2z', label: '89'},
-                                ].map(({ path, label }) => (
-                                  <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 3, color: '#71767b' }}>
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d={path}/></svg>
-                                    <span style={{ fontSize: 9, fontFamily: 'sans-serif' }}>{label}</span>
-                                  </span>
-                                ))
-                              )}
-                            </div>
+                                  </div>
+                                )}
+                                <span style={{ position: 'absolute', bottom: 8, left: 10, fontSize: 11, fontWeight: 600, background: 'rgba(0,0,0,0.7)', color: '#fff', borderRadius: 4, padding: '2px 7px' }}>{pmHasVideo ? 'VIDEO' : 'IMAGE'}</span>
+                              </div>
+                              </div>
+                            )}
+                          </div>
+                          {/* Engagement bar */}
+                          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 18px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                            {[{path:'M1.751 10c0-4.42 3.584-8 8.005-8h.366a8.001 8.001 0 0 1 7.97 9.58l.001.02 1.024 1.024a1.07 1.07 0 0 1-.953 1.763L16.5 22.5l-2.836-2.837c-.33.1-.67.187-1.014.256A8 8 0 0 1 2.1 11.39 8 8 0 0 1 1.75 10Z',label:'4'},
+                              {path:'M4.5 3.88l4.432 4.14-1.364 1.46L5.5 7.55V16c0 1.1.896 2 2 2H13v2H7.5a4 4 0 0 1-4-4V7.55L1.432 9.48.068 8.02 4.5 3.88zM16.5 6h-6V4h6a4 4 0 0 1 4 4v8.45l2.068-1.93 1.364 1.46-4.432 4.14-4.432-4.14 1.364-1.46 2.068 1.93V8c0-1.1-.896-2-2-2z',label:'1'},
+                              {path:'M16.697 5.5c-1.222-.06-2.679.51-3.89 2.16l-.805 1.09-.806-1.09C9.984 6.01 8.526 5.44 7.304 5.5c-1.243.07-2.349.78-2.91 1.91-.552 1.12-.633 2.78.479 4.82 1.074 1.97 3.257 4.27 7.129 6.61 3.87-2.34 6.052-4.64 7.126-6.61 1.111-2.04 1.03-3.7.477-4.82z',label:'12'},
+                              {path:'M8.75 21V3h2v18h-2zM13 21V8.5h2V21h-2zM4.5 21V13h2v8h-2zM17.5 21V11.5h2V21h-2z',label:'2.4K'},
+                            ].map(({path,label}) => (
+                              <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#71767b', fontSize: 13 }}>
+                                <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d={path}/></svg>{label}
+                              </span>
+                            ))}
+                          </div>
+                          {/* Status / API auto-post strip */}
+                          <div style={{ flexShrink: 0, padding: '6px 14px', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 26 }}>
+                            <span style={{ fontSize: 11, lineHeight: 1.3, color: postMeResult?.ok ? '#4ade80' : postMeResult?.error ? '#f87171' : '#71767b' }}>
+                              {postMeLoading ? 'Posting via API…'
+                                : postMeResult?.ok ? (postMeResult.note || '✓ Posted to X')
+                                : postMeResult?.error ? postMeResult.error.slice(0, 90)
+                                : 'Tap POST TO X to open the composer with your caption.'}
+                            </span>
+                            <button type="button" onClick={(e) => { stop(e); handlePostMeToX(); }} disabled={postMeLoading}
+                              style={{ flexShrink: 0, background: 'transparent', border: '1px solid rgba(255,255,255,0.18)', color: '#71767b', borderRadius: 6, padding: '4px 9px', fontSize: 10, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                              {postMeLoading ? '…' : 'Auto-post (API)'}
+                            </button>
                           </div>
                         </div>
                       );
@@ -10623,19 +10790,51 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       // Non-admins can view deliverables but not run them: every
                       // action button reads "Re-run" with a lock on the right and
                       // is fully inert (no hover, no click).
-                      if (!isAdmin) return (
-                        <button
-                          type="button"
-                          id={`tile-${card.id}-rerun-btn`}
-                          className="tile-foot-rerun-btn tile-foot-rerun-btn--locked"
-                          disabled
-                          aria-disabled="true"
-                          tabIndex={-1}
-                          style={{ pointerEvents: 'none' }}
-                        >
-                          Re-run <Lock size={12} strokeWidth={2} aria-hidden="true" style={{ marginLeft: 4, verticalAlign: 'middle' }} />
-                        </button>
-                      );
+                      if (!isAdmin) {
+                        // Exception — signup deliverables self-heal: when a
+                        // deliverable card failed to return its asset, the client
+                        // may re-run it until it succeeds. The button activates
+                        // while the asset is missing and reverts to the inert
+                        // locked state the moment the content lands (cb*Ready) —
+                        // no endless re-runs once it's correct.
+                        const selfHeal = {
+                          'social-preview':    { done: cbSocialReady,                  loading: Boolean(moduleRunLoading['social-preview']),    run: () => handleModuleRun('social-preview', true, null, true) },
+                          'multi-device-view': { done: cbMockupReady && cbScreensReady, loading: Boolean(moduleRunLoading['multi-device-view']), run: () => handleModuleRun('multi-device-view', true, null, true) },
+                          // Full Page Images ("Capture Devices") — the full-page
+                          // captures are produced by the multi-device-view module.
+                          // Re-run only the full pages when the mockup already
+                          // exists, else a full capture.
+                          'cross-device-images': { done: cbScreensReady, loading: Boolean(moduleRunLoading['multi-device-view']), run: () => handleModuleRun('multi-device-view', true, cbMockupReady ? { fullPagesOnly: true } : null, true) },
+                          'mockup-studio':     { done: cbVideoReady,                    loading: Boolean(mockupStudioRenderLoading),             run: () => runMockupStudioVideo({ sourceUrlOverride: clientStudioSourceUrl }) },
+                        }[card.id];
+                        if (selfHeal && !selfHeal.done) {
+                          const busy = selfHeal.loading || isRunActive;
+                          return (
+                            <button
+                              type="button"
+                              id={`tile-${card.id}-rerun-btn`}
+                              className="tile-foot-rerun-btn"
+                              disabled={busy}
+                              onClick={(e) => { e.stopPropagation(); if (busy) return; selfHeal.run(); }}
+                            >
+                              {selfHeal.loading ? '…' : 'Re-run'}
+                            </button>
+                          );
+                        }
+                        return (
+                          <button
+                            type="button"
+                            id={`tile-${card.id}-rerun-btn`}
+                            className="tile-foot-rerun-btn tile-foot-rerun-btn--locked"
+                            disabled
+                            aria-disabled="true"
+                            tabIndex={-1}
+                            style={{ pointerEvents: 'none' }}
+                          >
+                            Re-run <Lock size={12} strokeWidth={2} aria-hidden="true" style={{ marginLeft: 4, verticalAlign: 'middle' }} />
+                          </button>
+                        );
+                      }
                       if (card.id === 'survey-status') return null;
                       if (!card.moduleControls) {
                         if (!card.footerAction) return null;
@@ -11222,7 +11421,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         </>
         )}
 
-        <SiteFooter />
+        <ContactCapabilitiesPanel />
       </main>
 
       {/* ── Leadgen flow panel (per-client cards: Prepare Brief, etc.) ── */}
@@ -17234,6 +17433,11 @@ const dashboardCss = `
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.45);
     overflow: hidden;
   }
+  /* Post Me keeps the standard shell size; only its contents (the X post) shrink
+     to fit, with the creative held at its true 16:10 video ratio. */
+  .tile-intake-placeholder-post-me {
+    background: #000;
+  }
   /* Card-shell download button — top-right of every card's image shell (card +
      list views). Glass disc; opens a fixed menu when a card has >1 asset. */
   .card-dl-btn {
@@ -18163,9 +18367,10 @@ const dashboardCss = `
     flex: 1;
     position: relative;
   }
-  .tile-intake-heading {
+  .tile-heading.tile-intake-heading {
     grid-area: auto;
     margin: 0;
+    font-weight: 500;
   }
   .tile-intake-source-line {
     display: block;
@@ -22403,7 +22608,7 @@ const dashboardCss = `
     .tile-mobile-chevron { display: none; }
   }
   @media (max-width: 620px) {
-    #founders-shell { padding-top: 60px; }
+    #founders-shell { padding: 12px; }
     /* Phones: DELIVERABLES stacks to a single card per row (was 2-across). */
     .cap-bucket-deliverables .cap-step-grid { grid-template-columns: 1fr; }
     #founders-hero-shell { gap: 16px; }
@@ -22611,6 +22816,9 @@ const dashboardCss = `
       line-height: 1;
     }
     #run-active-indicator-label { display: none; }
+    /* Mobile: icons only in the source CTA row — hide the numeric/label values. */
+    #dashboard-source-cta-row .cap-source-value,
+    #dashboard-source-cta-row .dl-all-text { display: none; }
     #run-active-indicator-dot {
       width: 20px;
       height: 20px;

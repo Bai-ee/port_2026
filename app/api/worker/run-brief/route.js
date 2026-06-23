@@ -399,21 +399,42 @@ export async function POST(request) {
       // on first-run triggers only (signup/reseed); non-fatal and bounded so a
       // slow or unconfigured render never fails the intake. Routine
       // brief-refreshes skip it to avoid re-rendering the video every run.
-      if (websiteUrl && (claimedRun.trigger === 'signup' || claimedRun.trigger === 'reseed' || claimedRun.trigger === 'creative-brief')) {
+      //
+      // Render ONLY from the client's real site, never the hitloop fallback —
+      // otherwise a website-less signup produces a hitloop video the card then
+      // (correctly) rejects, so the card reads as "failed" with a junk asset on
+      // file. When the client later adds their site, a reseed/creative-brief run
+      // re-enters here with a real renderSiteUrl and queues the video then.
+      const renderSiteUrl = ownSiteUrl
+        || (claimedRun.sourceUrl && claimedRun.sourceUrl !== FALLBACK_BRIEF_SITE ? claimedRun.sourceUrl : null);
+      if (renderSiteUrl && (claimedRun.trigger === 'signup' || claimedRun.trigger === 'reseed' || claimedRun.trigger === 'creative-brief')) {
         try {
           const renderJobs = require('../../../../api/_lib/studio-render-jobs.cjs');
           const { getSignupVideoRecipe } = require('../../../../api/_lib/signup-video-recipe.cjs');
           await onProgress('studio-video', 'Queueing your motion mockup…');
           const { jobId } = await renderJobs.createRenderJob({
             clientId,
-            recipe: await getSignupVideoRecipe(websiteUrl),
+            recipe: await getSignupVideoRecipe(renderSiteUrl),
+            // Onboarding can fire signup + creative-brief runs seconds apart;
+            // dedupe so the same site isn't rendered twice (double GPU cost).
+            dedupeWindowMs: 15 * 60 * 1000,
           });
+          // Mark the video as in-flight so the Video Promo card can show a
+          // "Rendering…" state during the gap between the run finishing and the
+          // async render landing in studioCaptures (cleared on success in
+          // studio-render-core.appendCaptureRef; the card also ignores a stale
+          // flag so a failed render recovers without a backend clear).
+          await _fb.adminDb.collection('dashboard_state').doc(clientId).set({
+            studioVideoPending: { jobId, sourceUrl: renderSiteUrl, queuedAt: new Date().toISOString() },
+          }, { merge: true }).catch(() => {});
           await triggerStudioRenderWorker(request);
           console.log(`[WORKER] studio video queued for ${clientId} — ${jobId}`);
           await onProgress('studio-video', 'Motion mockup queued.');
         } catch (studioErr) {
           console.warn(`[WORKER] studio video queue threw (non-fatal) for ${clientId}: ${studioErr?.message}`);
         }
+      } else if (!renderSiteUrl && (claimedRun.trigger === 'signup' || claimedRun.trigger === 'reseed' || claimedRun.trigger === 'creative-brief')) {
+        console.log(`[WORKER] studio video skipped for ${clientId} — no real client site yet (fallback only)`);
       }
 
       const anyOk = results.some((r) => r.ok);

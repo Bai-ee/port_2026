@@ -31,7 +31,10 @@ async function appendCaptureRef(clientId, ref) {
     const current = Array.isArray(snap.data()?.studioCaptures) ? snap.data().studioCaptures : [];
     const deduped = current.filter((item) => item?.storagePath !== ref.storagePath);
     const next = [...deduped, ref].slice(-MAX_STORED_CAPTURES);
-    tx.set(docRef, { studioCaptures: next }, { merge: true });
+    // Clear the in-flight marker the run-brief worker set on enqueue — the video
+    // is now in studioCaptures, so the Video Promo card flips from "Rendering…"
+    // to "Passed" via its live listener.
+    tx.set(docRef, { studioCaptures: next, studioVideoPending: null }, { merge: true });
   });
 }
 

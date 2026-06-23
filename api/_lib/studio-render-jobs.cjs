@@ -28,7 +28,10 @@ const fb = require('./firebase-admin.cjs');
 const COLLECTION = 'render_jobs';
 const LOCK_COLLECTION = 'render_queue_locks';
 const STUDIO_LOCK_DOC = 'studio_render';
-const LEASE_TIMEOUT_MS = 8 * 60 * 1000;
+// Lease must outlive a worker invocation but expire soon after, so a killed
+// worker's job is reclaimable without racing a still-running render. The worker
+// route caps at maxDuration=300s; 330s leaves a 30s safety margin past that.
+const LEASE_TIMEOUT_MS = 330 * 1000;
 const MAX_ATTEMPTS = 5;
 const BACKOFF_MS = [30_000, 90_000, 3 * 60_000, 8 * 60_000, 15 * 60_000];
 
@@ -49,10 +52,46 @@ function trimRecipeSummary(recipe = {}) {
  * @param {string} args.clientId
  * @param {object} args.recipe   - the render recipe (stored trimmed)
  * @param {string} [args.postId] - social post id to pair this render with
- * @returns {Promise<{ jobId: string }>}
+ * @param {number} [args.dedupeWindowMs] - if set, skip creating a new job when a
+ *        job for the same clientId + recipe.url already exists in queued/rendering/
+ *        done within this window, and return that job's id instead. Used by the
+ *        signup pipeline, where a single onboarding can fire multiple first-run
+ *        triggers (signup + creative-brief) that would otherwise each enqueue a
+ *        render of the same site. Manual/dashboard renders omit it so an explicit
+ *        re-render is never suppressed.
+ * @returns {Promise<{ jobId: string, deduped?: boolean }>}
  */
-async function createRenderJob({ clientId, recipe, postId = null }) {
+async function createRenderJob({ clientId, recipe, postId = null, dedupeWindowMs = 0 }) {
   if (!clientId) throw new Error('clientId is required to create a render job.');
+
+  if (dedupeWindowMs > 0) {
+    const sourceUrl = String(recipe?.url || '').trim();
+    if (sourceUrl) {
+      const cutoff = Date.now() - dedupeWindowMs;
+      try {
+        // Single equality filter only (no orderBy) so this needs no composite
+        // index; recency is filtered in memory below.
+        const recent = await fb.adminDb
+          .collection(COLLECTION)
+          .where('clientId', '==', clientId)
+          .limit(25)
+          .get();
+        const dup = recent.docs
+          .map((d) => d.data())
+          .find((j) => {
+            if (!['queued', 'rendering', 'done'].includes(j.status)) return false;
+            if (String(j.recipe?.url || '').trim() !== sourceUrl) return false;
+            const created = j.createdAtTs?.toMillis ? j.createdAtTs.toMillis() : Date.parse(j.createdAt || '');
+            return Number.isFinite(created) && created >= cutoff;
+          });
+        if (dup) return { jobId: dup.jobId, deduped: true };
+      } catch (err) {
+        // Dedupe is best-effort — a query failure must never block enqueueing.
+        console.warn(`[studio-render-jobs] dedupe check failed for ${clientId}: ${err?.message}`);
+      }
+    }
+  }
+
   const jobId = `render_${Date.now()}_${randomUUID().slice(0, 8)}`;
   const now = new Date().toISOString();
   await fb.adminDb.collection(COLLECTION).doc(jobId).set({
@@ -134,14 +173,17 @@ async function clearStudioQueueLease(jobId) {
 async function claimNextRenderJob({ workerId = null } = {}) {
   const nowMs = Date.now();
 
-  const candidatesSnap = await fb.adminDb
-    .collection(COLLECTION)
-    .where('status', '==', 'queued')
-    .limit(50)
-    .get();
+  // Candidates are queued jobs that are due, PLUS orphaned `rendering` jobs
+  // whose lease has expired (worker died mid-render and never completed/failed
+  // them). Without the orphan path a killed worker freezes the whole queue,
+  // since the singleton lease blocks every later claim until manually cleared.
+  const [queuedSnap, renderingSnap0] = await Promise.all([
+    fb.adminDb.collection(COLLECTION).where('status', '==', 'queued').limit(50).get(),
+    fb.adminDb.collection(COLLECTION).where('status', '==', 'rendering').limit(50).get(),
+  ]);
 
-  const runnable = candidatesSnap.docs
-    .map((doc) => ({ ref: doc.ref, id: doc.id, data: doc.data() }))
+  const queuedRunnable = queuedSnap.docs
+    .map((doc) => ({ ref: doc.ref, id: doc.id, data: doc.data(), reclaim: false }))
     .filter(({ data }) => {
       const attempts = Number(data.attempts || 0);
       if (attempts >= MAX_ATTEMPTS) return false;
@@ -149,7 +191,16 @@ async function claimNextRenderJob({ workerId = null } = {}) {
         ? data.nextAttemptAtTs.toMillis()
         : (data.nextAttemptAt ? Date.parse(data.nextAttemptAt) : 0);
       return !Number.isFinite(next) || next <= nowMs;
-    })
+    });
+
+  const orphaned = renderingSnap0.docs
+    .map((doc) => ({ ref: doc.ref, id: doc.id, data: doc.data(), reclaim: true }))
+    .filter(({ data }) => {
+      if (Number(data.attempts || 0) >= MAX_ATTEMPTS) return false;
+      return !isLeaseActive(data, nowMs); // lease expired => abandoned render
+    });
+
+  const runnable = [...queuedRunnable, ...orphaned]
     .sort((a, b) => String(a.data.createdAt || '').localeCompare(String(b.data.createdAt || '')));
 
   if (!runnable.length) return null;
@@ -179,13 +230,20 @@ async function claimNextRenderJob({ workerId = null } = {}) {
     if (renderingSnap.docs.some((doc) => doc.id !== selected.id && isLeaseActive(doc.data(), nowMs))) return;
 
     const job = jobSnap.data();
-    if (job.status !== 'queued') return;
+    // Claimable if queued, or a `rendering` orphan whose lease has expired.
+    // Re-checked inside the transaction so a worker that just renewed its lease
+    // (or completed) is never stolen from.
+    const claimable = job.status === 'queued'
+      || (job.status === 'rendering' && !isLeaseActive(job, nowMs));
+    if (!claimable) return;
     const attempts = Number(job.attempts || 0);
     if (attempts >= MAX_ATTEMPTS) return;
-    const next = job.nextAttemptAtTs?.toMillis
-      ? job.nextAttemptAtTs.toMillis()
-      : (job.nextAttemptAt ? Date.parse(job.nextAttemptAt) : 0);
-    if (Number.isFinite(next) && next > nowMs) return;
+    if (job.status === 'queued') {
+      const next = job.nextAttemptAtTs?.toMillis
+        ? job.nextAttemptAtTs.toMillis()
+        : (job.nextAttemptAt ? Date.parse(job.nextAttemptAt) : 0);
+      if (Number.isFinite(next) && next > nowMs) return;
+    }
 
     tx.set(selected.ref, {
       status: 'rendering',
