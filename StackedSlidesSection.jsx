@@ -191,7 +191,7 @@ const PORTFOLIO_IMAGES = [
 ];
 
 const CMO_TABLE_ROWS = [
-  { task: 'Creative Brief',         value: 'A creative baseline that replaces onboarding calls and gives us clear knowledge to kick off next steps.' },
+  { task: 'Creative Brief',         value: 'A baseline that replaces onboarding calls and gives us a clear understanding of your visual identity.' },
   { task: 'Video Post',             value: 'An MP4 motion promo of your homepage, ready to post across social.', sub: true },
   { task: 'Device Mockups',         value: 'Your site staged on desktop, tablet, and mobile as one clean image.', sub: true },
   { task: 'Full-Page Images',       value: 'Full-length captures of your site across all three screen sizes.', sub: true },
@@ -3853,3 +3853,261 @@ const debugRangeStyle = {
 };
 
 export default StackedSlidesSection;
+
+// ── Dashboard contact + capabilities panel ──────────────────────────────────
+// Renders the SAME capability-cards-section + contact footer as the homepage
+// (StackedSlidesSection above), reusing the identical module-scope styles/data
+// so the two stay in lockstep. The only intentional difference: the website
+// URL-input pill (#footer-url-input-row) is omitted — dashboard users are
+// already signed in. Used by DashboardPage in place of <SiteFooter />.
+export function ContactCapabilitiesPanel() {
+  const [activeMobileCapability, setActiveMobileCapability] = useState(null);
+  const marqueeShellRef = useRef(null);
+  const marqueeTrackRef = useRef(null);
+  const marqueeSetRef = useRef(null);
+
+  // Tap-outside closes an open mobile capability preview (touch only).
+  useEffect(() => {
+    if (!isTouchScrollDevice() || activeMobileCapability === null) return undefined;
+    const handle = (event) => {
+      if (!event.target.closest('[data-capability-card]')) setActiveMobileCapability(null);
+    };
+    document.addEventListener('pointerdown', handle);
+    return () => document.removeEventListener('pointerdown', handle);
+  }, [activeMobileCapability]);
+
+  // "previously at…" agency-logo marquee — copied from StackedSlidesSection so
+  // the scroll behavior is identical (IntersectionObserver-gated, visibility-paused).
+  useEffect(() => {
+    const shell = marqueeShellRef.current;
+    const track = marqueeTrackRef.current;
+    const set = marqueeSetRef.current;
+    if (!shell || !track || !set) return;
+
+    let itemWidth = 0;
+    let offset = 0;
+    let frameId = 0;
+    let measureFrameId = 0;
+    let lastTime = 0;
+    let isVisible = false;
+
+    const applyTransform = () => { track.style.transform = `translate3d(${offset}px, 0, 0)`; };
+    const measure = () => {
+      itemWidth = set.getBoundingClientRect().width;
+      if (!itemWidth) return;
+      offset = itemWidth ? -((Math.abs(offset) % itemWidth)) : 0;
+      applyTransform();
+    };
+    const scheduleMeasure = () => {
+      cancelAnimationFrame(measureFrameId);
+      measureFrameId = requestAnimationFrame(measure);
+    };
+    const stop = () => {
+      if (!frameId) return;
+      cancelAnimationFrame(frameId);
+      frameId = 0;
+      lastTime = 0;
+    };
+    const tick = (time) => {
+      if (!isVisible || document.hidden || !itemWidth) { stop(); return; }
+      if (!lastTime) lastTime = time;
+      const delta = Math.min((time - lastTime) / 1000, 0.05);
+      lastTime = time;
+      offset -= delta * (isTouchScrollDevice() ? 28 : 42);
+      if (offset <= -itemWidth) offset += itemWidth;
+      applyTransform();
+      frameId = requestAnimationFrame(tick);
+    };
+    const start = () => {
+      if (frameId || document.hidden || !isVisible || !itemWidth) return;
+      lastTime = 0;
+      frameId = requestAnimationFrame(tick);
+    };
+    const handleVisibility = () => { if (document.hidden) { stop(); return; } start(); };
+
+    const intersectionObserver = new IntersectionObserver(
+      ([entry]) => {
+        isVisible = entry?.isIntersecting ?? false;
+        if (isVisible) { start(); return; }
+        stop();
+      },
+      { root: null, threshold: 0, rootMargin: '120px 0px' }
+    );
+    const resizeObserver = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(scheduleMeasure) : null;
+    const images = Array.from(set.querySelectorAll('img'));
+    const onImageLoad = () => scheduleMeasure();
+    images.forEach((image) => { if (!image.complete) image.addEventListener('load', onImageLoad); });
+
+    resizeObserver?.observe(shell);
+    resizeObserver?.observe(set);
+    intersectionObserver.observe(shell);
+    document.addEventListener('visibilitychange', handleVisibility);
+    scheduleMeasure();
+
+    return () => {
+      stop();
+      cancelAnimationFrame(measureFrameId);
+      resizeObserver?.disconnect();
+      intersectionObserver.disconnect();
+      document.removeEventListener('visibilitychange', handleVisibility);
+      images.forEach((image) => image.removeEventListener('load', onImageLoad));
+    };
+  }, []);
+
+  return (
+    <section
+      id="dashboard-contact-capabilities"
+      style={{ ...panelStyle, minHeight: 'auto', background: 'transparent', boxShadow: 'none', color: '#2a2420' }}
+    >
+      <style>{`
+        @keyframes agentMarquee { from { transform: translate3d(0,0,0); } to { transform: translate3d(-50%,0,0); } }
+        @media (max-width: 767px) {
+          #dashboard-contact-capabilities #capability-cards-grid { grid-template-columns: 1fr !important; }
+          #dashboard-contact-capabilities #footer-contact-cta { width: 100% !important; justify-content: center !important; box-sizing: border-box !important; }
+          #dashboard-contact-capabilities [data-capability-card] { overflow: hidden !important; max-width: 100% !important; box-sizing: border-box !important; }
+          #dashboard-contact-capabilities #agency-marquee-shell > div > div { padding-right: 2rem !important; gap: 2rem !important; }
+        }
+        #dashboard-contact-capabilities #panel-capabilities-layout { padding-left: 0 !important; padding-right: 0 !important; }
+        #dashboard-contact-capabilities #capability-cards-section { border-top: none !important; }
+        @media (min-width: 1280px) {
+          #dashboard-contact-capabilities #capability-cards-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+        }
+      `}</style>
+      <div style={contentStyle}>
+        <div style={innerStyle}>
+          <div id="panel-capabilities-layout" style={gridLayoutStyle}>
+            <section id="capability-cards-section" data-capability-grid style={capabilitySectionStyle}>
+              <div id="capability-cards-grid" style={{ ...capabilityGridStyle, marginTop: '5.75rem' }}>
+                {AUTOMATION_CAPABILITIES.filter((item) => !item.tablePreview).map((item) => {
+                  const Icon = AUTOMATION_ICON_COMPONENTS[item.icon];
+                  const isMobileCapabilityOpen = isTouchScrollDevice() && activeMobileCapability === item.title;
+                  return (
+                    <article
+                      key={item.title}
+                      data-capability-card
+                      style={{ ...capabilityCardStyle, zIndex: isMobileCapabilityOpen ? 6 : 1 }}
+                      onClick={() => {
+                        if (!isTouchScrollDevice()) return;
+                        setActiveMobileCapability((current) => (current === item.title ? null : item.title));
+                      }}
+                    >
+                      {isMobileCapabilityOpen ? (
+                        <div style={mobileCapabilityPreviewStyle} aria-hidden="true">
+                          {item.previewVideo ? (
+                            <video src={item.previewVideo} autoPlay muted loop playsInline style={mobileCapabilityPreviewImageStyle} />
+                          ) : (
+                            <img src={item.previewImage} alt="" style={mobileCapabilityPreviewImageStyle} />
+                          )}
+                        </div>
+                      ) : null}
+                      <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 'clamp(0.8rem, 1.5vw, 1rem)' }}>
+                        <div style={capabilityContentStyle}>
+                          <h4 style={capabilityCardTitleStyle}>{item.title}</h4>
+                          {item.body && <p style={capabilityCardBodyStyle}>{item.body}</p>}
+                        </div>
+                        <div style={{ ...capabilityBadgeStyle, color: item.badgeColor, flexShrink: 0 }}>
+                          {Icon ? <Icon size={20} strokeWidth={2.1} /> : item.badge}
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+            <div data-grid-window style={gridWindowStyle}>
+              <div data-grid-inner style={gridInnerContainerStyle}>
+                <div id="stacked-inline-footer" style={inlineFooterStyle}>
+                  <div id="inline-footer-value-block" style={inlineFooterNewsletterStyle}>
+                    <div id="footer-marquee-shell" style={{ width: '100%', overflow: 'hidden', marginBottom: 'clamp(24px, 5vw, 75px)', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', animation: 'agentMarquee 28s linear infinite' }}>
+                        {[0, 1].map((i) => (
+                          <div key={i} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
+                            {['CONTACT', '•', 'CONTACT', '•'].map((w, j) => (
+                              <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <img src="/img/sig.png" alt="Bryan Balli signature" style={inlineFooterSignatureStyle} />
+
+                    <div id="footer-cta-input-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 'clamp(0.5rem, 1.5vw, 1rem)', width: '100%', marginTop: 'clamp(1.25rem, 2.5vw, 2rem)', marginBottom: 0 }}>
+                      <a
+                        id="footer-contact-cta"
+                        href="https://calendly.com/bballi/30min"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="cta-pill-btn"
+                        style={{ ...heroCtaStyle, textDecoration: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, alignSelf: 'center' }}
+                      >
+                        <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
+                        Meet with a Human
+                        <span style={ctaIconStyle}>↗</span>
+                      </a>
+                    </div>
+                    <p style={{ ...supportTextStyle, marginTop: 'clamp(1rem, 2vw, 1.5rem)', marginBottom: 'clamp(0.75rem, 1.5vw, 1.25rem)', textAlign: 'left' }}>
+                      Partner with <strong>BRYAN BALLI</strong>, an experienced Media Developer leveraging LLMs, capable of automating your Brands operations, Design, Development and Marketing.<br /><br />Humans in the Loop (HITLOOP) offers various automations leveraging agentic solutions that follow established processes, to elevate and automate Creative Services.
+                    </p>
+                    <p id="footer-previously-at" style={{ margin: '0.5rem 0 0.35rem', textAlign: 'center', fontSize: '0.7rem', letterSpacing: '0.06em', color: 'rgba(42,36,32,0.32)', fontFamily: "'Space Mono', monospace" }}>previously at…</p>
+                    <a id="agency-marquee-shell" ref={marqueeShellRef} href="https://www.linkedin.com/in/bryanballi/" target="_blank" rel="noopener noreferrer" style={{ ...agencyMarqueeShellStyle, cursor: 'pointer', textDecoration: 'none', display: 'block' }}>
+                      <div ref={marqueeTrackRef} style={agencyMarqueeTrackStyle}>
+                        <div ref={marqueeSetRef} style={agencyMarqueeSetStyle}>
+                          {agencyLogos.map((logo) => (
+                            <img key={`agency-a-${logo.alt}`} src={logo.src} alt={logo.alt} style={logo.scale ? { ...agencyLogoStyle, height: `${22 * logo.scale}px` } : agencyLogoStyle} />
+                          ))}
+                        </div>
+                        <div aria-hidden="true" style={agencyMarqueeSetStyle}>
+                          {agencyLogos.map((logo) => (
+                            <img key={`agency-b-${logo.alt}`} src={logo.src} alt="" style={logo.scale ? { ...agencyLogoStyle, height: `${22 * logo.scale}px` } : agencyLogoStyle} />
+                          ))}
+                        </div>
+                      </div>
+                    </a>
+                  </div>
+                  <div id="inline-footer-seo-nav" style={inlineFooterSeoNavStyle}>
+                    <div style={inlineFooterNavColStyle}>
+                      <span style={inlineFooterNavHeadingStyle}>Work</span>
+                      <a href="/work" style={inlineFooterNavLinkStyle}>Featured Projects</a>
+                      <a href="/case-studies" style={inlineFooterNavLinkStyle}>Case Studies</a>
+                      <a href="/process" style={inlineFooterNavLinkStyle}>Process</a>
+                    </div>
+                    <div style={inlineFooterNavColStyle}>
+                      <span style={inlineFooterNavHeadingStyle}>Services</span>
+                      <a href="/services/ai-design-consulting" style={inlineFooterNavLinkStyle}>AI Design Consulting</a>
+                      <a href="/services/web-development" style={inlineFooterNavLinkStyle}>Web Development</a>
+                      <a href="/services/brand-identity" style={inlineFooterNavLinkStyle}>Brand Identity</a>
+                      <a href="/services/design-systems" style={inlineFooterNavLinkStyle}>Design Systems</a>
+                      <a href="/services/seo-geo" style={inlineFooterNavLinkStyle}>SEO &amp; GEO</a>
+                    </div>
+                    <div style={inlineFooterNavColStyle}>
+                      <span style={inlineFooterNavHeadingStyle}>FAQ</span>
+                      <a href="/faq#what-is-a-creative-technologist" style={inlineFooterNavLinkStyle}>What Is a Creative Technologist?</a>
+                      <a href="/faq#ai-design-engineer" style={inlineFooterNavLinkStyle}>What Is an AI Design Engineer?</a>
+                      <a href="/faq#how-i-work" style={inlineFooterNavLinkStyle}>How I Work</a>
+                      <a href="/faq#pricing" style={inlineFooterNavLinkStyle}>Pricing &amp; Engagements</a>
+                      <a href="/faq#turnaround" style={inlineFooterNavLinkStyle}>Turnaround &amp; Availability</a>
+                    </div>
+                    <div style={inlineFooterNavColStyle}>
+                      <span style={inlineFooterNavHeadingStyle}>Company</span>
+                      <a href="/about" style={inlineFooterNavLinkStyle}>About</a>
+                      <a href="/how-it-works" style={inlineFooterNavLinkStyle}>How It Works</a>
+                      <a href="/contact" style={inlineFooterNavLinkStyle}>Contact</a>
+                      <a href="https://calendly.com/bballi/30min" target="_blank" rel="noopener noreferrer" style={inlineFooterNavLinkStyle}>Book a Call</a>
+                    </div>
+                  </div>
+                  <div id="inline-footer-bottom" style={inlineFooterBottomStyle}>
+                    <span style={inlineFooterCopyrightStyle}>© 2026 Bryan Balli · All rights reserved</span>
+                    <div style={inlineFooterLegalStyle}>
+                      <a href="https://www.linkedin.com/in/bryanballi" style={inlineFooterLegalLinkStyle}>LinkedIn</a>
+                      <a href="https://x.com/bai_ee" style={inlineFooterLegalLinkStyle}>𝕏</a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
