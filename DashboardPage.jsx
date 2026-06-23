@@ -7628,16 +7628,41 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       const siteUrl  = client?.websiteUrl   || client?.website || '';
       const tagline  = brandOverview?.summary || brandOverview?.positioning || brandOverview?.headline || '';
       const cleanUrl = siteUrl.replace(/^https?:\/\/(?:www\.)?/, '').replace(/\/$/, '');
-      const videoCopy = (() => {
-        const base = tagline ? `${bizName} — ${tagline.slice(0, 100)}` : `Check out ${bizName}`;
-        const tail = siteUrl ? `\n\n${siteUrl}` : '';
-        return (base + tail).slice(0, 280);
+      // Suggested caption is scribed by the Creative Brief flow ("Suggested Post"
+      // section, derived from "What This Site Is") and stored inside the onboarding
+      // summary string. Parse that section out and prefer it as the post copy.
+      const suggestedPost = (() => {
+        const raw = dashboardState?.briefSummaries?.onboarding?.summary || '';
+        if (!raw) return '';
+        const labels = ['Headline', 'What This Site Is', "What's Missing", 'Biggest Risk', 'The Opportunity', 'Decision', 'Suggested Post'];
+        let collecting = false;
+        const out = [];
+        for (const ln of raw.split('\n')) {
+          const t = ln.trim();
+          if (!t) continue;
+          const isLabel = labels.find((L) => t.toLowerCase().startsWith(`${L.toLowerCase()}:`));
+          if (isLabel) {
+            if (collecting) break; // next section reached
+            if (isLabel === 'Suggested Post') {
+              collecting = true;
+              const after = t.slice(t.indexOf(':') + 1).trim();
+              if (after) out.push(after);
+            }
+            continue;
+          }
+          if (collecting) out.push(t);
+        }
+        return out.join(' ').replace(/\s+/g, ' ').trim();
       })();
-      const staticCopy = (() => {
-        const base = tagline ? tagline.slice(0, 140) : `${bizName} is live.`;
+      // Build copy: prefer the scribed caption, fall back to brand tagline. The
+      // caption carries no URL, so reserve room for the link tail within 280.
+      const buildCopy = (fallbackBase) => {
+        const base = suggestedPost || fallbackBase;
         const tail = siteUrl ? `\n\n${siteUrl}` : '';
-        return (base + tail).slice(0, 280);
-      })();
+        return (base.slice(0, 280 - tail.length) + tail).slice(0, 280);
+      };
+      const videoCopy  = buildCopy(tagline ? `${bizName} — ${tagline.slice(0, 100)}` : `Check out ${bizName}`);
+      const staticCopy = buildCopy(tagline ? tagline.slice(0, 140) : `${bizName} is live.`);
       const xVideoIntent  = `https://x.com/intent/post?text=${encodeURIComponent(videoCopy)}`;
       const xStaticIntent = `https://x.com/intent/post?text=${encodeURIComponent(staticCopy)}`;
       const hasVideoAsset  = Boolean(latestStudioVideoUrl);

@@ -838,7 +838,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   // Deliverables / Success / Decision Needed). Render it as styled sections —
   // eyebrow label + body paragraph(s) or bullet list — with varying type scale
   // and smooth vertical rhythm, instead of flat paragraphs.
-  const CB_LABELS = ['Headline', 'What This Site Is', "What's Missing", 'Biggest Risk', 'The Opportunity', 'Decision'];
+  const CB_LABELS = ['Headline', 'What This Site Is', "What's Missing", 'Biggest Risk', 'The Opportunity', 'Decision', 'Suggested Post'];
   const renderCreativeBriefSummary = (textRaw) => {
     const sections = [];
     let cur = null;
@@ -973,6 +973,12 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     if (dec && dec.paras.length) {
       const [q, ...rest] = dec.paras;
       pages.push(page('The<br/>Decision.', `${pull(q)}${subFrom(rest.filter((p) => p.length > 0))}${tagRow(dec.bullets)}${bookCall}`, 'cb-decision'));
+    }
+
+    // Suggested Post — the ready-to-post caption that also feeds the Post Me card.
+    const post = byLabel('Suggested Post');
+    if (post && post.paras.length) {
+      pages.push(page('Suggested<br/>Post.', `${pull(post.paras.join(' '))}${bookCall}`, 'cb-suggested-post'));
     }
 
     // Cover — the device mockup sits in the top-right corner (isCoverMockup);

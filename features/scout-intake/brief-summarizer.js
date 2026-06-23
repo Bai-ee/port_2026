@@ -420,7 +420,9 @@ Biggest Risk:
 The Opportunity:
 [2-3 "- " dash bullets of existing strengths (name the signals/numbers), then one sentence on what this could become with the right moves.]
 Decision:
-[A direct binary question the founder must answer (e.g. "Are you building a passion project or a permanent institution?"), then 2-4 "- " dash bullets of what that decision determines.]`;
+[A direct binary question the founder must answer (e.g. "Are you building a passion project or a permanent institution?"), then 2-4 "- " dash bullets of what that decision determines.]
+Suggested Post:
+[ONE ready-to-post social caption, max 200 characters, derived from What This Site Is and written in the brand's voice to make someone click. Plain sentence(s). No hashtags, no URL, no quotes, no emoji.]`;
 }
 
 const CREATIVE_BRIEF_TOOL = {
@@ -432,7 +434,7 @@ const CREATIVE_BRIEF_TOOL = {
       summary: {
         type: 'string',
         description:
-          'The full website-only Creative Brief as a punchy sales pitch in the exact labeled format (Headline, What This Site Is, What\'s Missing, Biggest Risk, The Opportunity, Decision). Plain text, each label on its own line, dash bullets where specified. No markdown headers, no asterisks.',
+          'The full website-only Creative Brief as a punchy sales pitch in the exact labeled format (Headline, What This Site Is, What\'s Missing, Biggest Risk, The Opportunity, Decision, Suggested Post). Plain text, each label on its own line, dash bullets where specified. No markdown headers, no asterisks.',
       },
     },
     required: ['summary'],
