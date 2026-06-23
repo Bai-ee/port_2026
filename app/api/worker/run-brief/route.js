@@ -77,29 +77,32 @@ function json(body, status = 200) {
   });
 }
 
-function triggerStudioRenderWorker(request) {
+async function triggerStudioRenderWorker(request) {
   const proto = request.headers.get('x-forwarded-proto') || 'http';
   const host = request.headers.get('host') || 'localhost:3000';
   const workerUrl = `${proto}://${host}/api/worker/render-studio`;
-  after(async () => {
-    try {
-      const response = await fetch(workerUrl, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-worker-secret': process.env.WORKER_SECRET || '',
-        },
-        body: JSON.stringify({ source: 'run-brief-studio-video' }),
-        cache: 'no-store',
-      });
-      if (!response.ok) {
-        const detail = await response.text().catch(() => '');
-        console.warn(`[WORKER] studio render worker trigger failed: ${response.status} ${detail.trim()}`);
-      }
-    } catch (err) {
-      console.warn(`[WORKER] studio render worker trigger threw: ${err?.message}`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    const response = await fetch(workerUrl, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-worker-secret': process.env.WORKER_SECRET || '',
+      },
+      body: JSON.stringify({ source: 'run-brief-studio-video' }),
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      console.warn(`[WORKER] studio render worker trigger failed: ${response.status} ${detail.trim()}`);
     }
-  });
+  } catch (err) {
+    console.warn(`[WORKER] studio render worker trigger threw: ${err?.message}`);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function authorizeRequest(request) {
@@ -405,7 +408,7 @@ export async function POST(request) {
             clientId,
             recipe: await getSignupVideoRecipe(websiteUrl),
           });
-          triggerStudioRenderWorker(request);
+          await triggerStudioRenderWorker(request);
           console.log(`[WORKER] studio video queued for ${clientId} — ${jobId}`);
           await onProgress('studio-video', 'Motion mockup queued.');
         } catch (studioErr) {

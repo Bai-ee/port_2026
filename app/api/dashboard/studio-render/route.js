@@ -1,4 +1,4 @@
-import { after, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
@@ -21,25 +21,32 @@ function json(body, status = 200) {
   return NextResponse.json(body, { status, headers: { 'cache-control': 'no-store' } });
 }
 
-function triggerRenderWorker(request) {
+async function triggerRenderWorker(request) {
   const proto = request.headers.get('x-forwarded-proto') || 'http';
   const host = request.headers.get('host') || 'localhost:3000';
   const workerUrl = `${proto}://${host}/api/worker/render-studio`;
-  after(async () => {
-    try {
-      await fetch(workerUrl, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-worker-secret': process.env.WORKER_SECRET || '',
-        },
-        body: JSON.stringify({ source: 'dashboard-studio-render' }),
-        cache: 'no-store',
-      });
-    } catch (err) {
-      console.warn(`[studio-render] worker trigger failed: ${err?.message}`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    const response = await fetch(workerUrl, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-worker-secret': process.env.WORKER_SECRET || '',
+      },
+      body: JSON.stringify({ source: 'dashboard-studio-render' }),
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      console.warn(`[studio-render] worker trigger failed: ${response.status} ${detail.trim()}`);
     }
-  });
+  } catch (err) {
+    console.warn(`[studio-render] worker trigger threw: ${err?.message}`);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function resolveContext(request) {
@@ -73,7 +80,7 @@ export async function POST(request) {
     recipe: body,
     postId: body?.postId ? String(body.postId).slice(0, 120) : null,
   });
-  triggerRenderWorker(request);
+  await triggerRenderWorker(request);
   return json({ ok: true, queued: true, jobId }, 202);
 }
 
