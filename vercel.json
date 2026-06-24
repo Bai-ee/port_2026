@@ -7,10 +7,6 @@
     {
       "path": "/api/worker/render-studio",
       "schedule": "15 13 * * *"
-    },
-    {
-      "path": "/api/social-posting/process-due",
-      "schedule": "*/15 * * * *"
     }
   ]
 }
