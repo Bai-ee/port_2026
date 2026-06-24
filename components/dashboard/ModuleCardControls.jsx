@@ -3,11 +3,11 @@
 import React from 'react';
 
 const STATUS_META = {
-  succeeded: { dot: '#22c55e', label: 'Active',    glow: '0 0 5px 2px rgba(34,197,94,0.45)' },
-  partial:   { dot: '#f59e0b', label: 'Partial',   glow: '0 0 5px 2px rgba(245,158,11,0.35)' },
-  failed:    { dot: '#ef4444', label: 'Failed',    glow: '0 0 5px 2px rgba(239,68,68,0.45)' },
-  running:   { dot: '#f59e0b', label: 'Running…',  glow: '0 0 5px 2px rgba(245,158,11,0.45)' },
-  queued:    { dot: '#f59e0b', label: 'Queued',    glow: '0 0 5px 2px rgba(245,158,11,0.30)' },
+  succeeded: { dot: '#22c55e', label: 'Active',    glow: 'none' },
+  partial:   { dot: '#f59e0b', label: 'Partial',   glow: 'none' },
+  failed:    { dot: '#ef4444', label: 'Failed',    glow: 'none' },
+  running:   { dot: '#f59e0b', label: 'Running…',  glow: 'none' },
+  queued:    { dot: '#f59e0b', label: 'Queued',    glow: 'none' },
   idle:      { dot: '#6b7280', label: 'Idle',      glow: 'none' },
   disabled:  { dot: '#6b7280', label: 'Inactive',  glow: 'none' },
   inactive:  { dot: '#6b7280', label: 'Inactive',  glow: 'none' },

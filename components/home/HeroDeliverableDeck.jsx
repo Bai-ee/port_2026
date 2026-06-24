@@ -124,7 +124,7 @@ export default function HeroDeliverableDeck() {
         const transition =
           isExiting || isEntering
             ? 'opacity 0.55s ease' // fade only; transform changes snap (invisible)
-            : 'transform 0.85s cubic-bezier(0.34, 1.4, 0.5, 1), opacity 0.55s ease';
+            : 'transform 0.85s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.55s ease';
         return (
           <div
             key={id}

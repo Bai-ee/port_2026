@@ -45,7 +45,7 @@ export default function SendPreviewModal({ open, prospect, onClose, getIdToken }
     }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
 
       <div id="send-preview-modal-shell" style={{
-        background: '#fff', borderRadius: 18, width: '100%', maxWidth: 640,
+        background: '#fff', borderRadius: 12, width: '100%', maxWidth: 640,
         maxHeight: '90vh', display: 'flex', flexDirection: 'column',
         overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.18)',
       }}>

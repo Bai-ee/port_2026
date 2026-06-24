@@ -348,8 +348,8 @@ export default function SettingsModal({ open, onClose, getIdToken }) {
           overflow: auto;
           background: #fafafa;
           border: 1px solid rgba(0, 0, 0, 0.08);
-          border-radius: 18px;
-          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
+          border-radius: 12px;
+          box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
           font-family: 'Inter', system-ui, -apple-system, sans-serif;
           color: #1a1a1a;
           --lg-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;

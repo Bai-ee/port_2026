@@ -31,7 +31,7 @@ const CARDS = [
   {
     id: 'what-a-design-system-is',
     heading: 'What a Design System Is',
-    body: 'A shared vocabulary between design and engineering — tokens for color, type, and spacing, a component library built on them, and documentation that keeps teams aligned as the product scales.',
+    body: 'Tokens for color, type, and spacing feed a component library that engineers install as a package — so any design update propagates across the product without manual reconciliation.',
   },
   {
     id: 'extraction-process',
@@ -130,7 +130,7 @@ export default function DesignSystemsPage() {
             margin: 0,
           }}
         >
-          Component libraries, token architecture, and design-to-code pipelines that give teams a single source of truth and a faster path to ship.
+          Component libraries, token architecture, and design-to-code pipelines so engineers and designers pull from the same token set, reducing design-review cycles and eliminating one-off style overrides.
         </p>
       </section>
 

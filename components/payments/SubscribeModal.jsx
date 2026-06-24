@@ -95,7 +95,7 @@ const SUBSCRIPTION_TIERS = [
     priceMain: '$4',
     priceUnit: '/month',
     cadence: '1 brief a week sent to your email',
-    replaces: 'Start tracking trends, competitors, and how your business looks across digital with weekly Briefs and a Human in the Loop.',
+    replaces: 'One brief a week: competitor moves, trend signals, and a plain-English read on how your business appears online.',
   },
   {
     id: 'weekly-plus',

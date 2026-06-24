@@ -882,7 +882,7 @@ export default function BrandSystemChat({ getIdToken, onComplete, onLog, apiPath
           display: flex; flex-direction: column;
           width: 100%; min-height: 0; flex: 1 1 auto;
           background: linear-gradient(180deg, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0.5) 100%);
-          box-shadow: 0 5px 10px rgba(0,0,0,0.1), 0 15px 30px rgba(0,0,0,0.1), 0 20px 40px rgba(0,0,0,0.15);
+          box-shadow: 0 2px 8px rgba(0,0,0,0.08);
           backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
           border-radius: 10px; border: 1px solid rgba(42,36,32,0.1); overflow: hidden;
         }

@@ -56,3 +56,6 @@ ds-bundle/
 .design-sync/.cache/
 .design-sync/learnings/
 .design-sync/node_modules
+
+# Skills CLI install artifacts (local only)
+skills-lock.json

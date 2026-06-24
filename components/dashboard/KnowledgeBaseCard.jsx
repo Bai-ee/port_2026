@@ -201,24 +201,9 @@ export default function KnowledgeBaseCard({ getIdToken }) {
         paddingRight: 6,
       }}
     >
-      <div id="kb-summary-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '10px 12px', border: '1px solid rgba(42,36,32,0.1)', borderRadius: 8, background: 'rgba(255,255,255,0.6)' }}>
-          <span className="mu-label">Items</span>
-          <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 600 }}>{itemCount}</span>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '10px 12px', border: '1px solid rgba(42,36,32,0.1)', borderRadius: 8, background: 'rgba(255,255,255,0.6)' }}>
-          <span className="mu-label">Remaining</span>
-          <span style={{ color: approachingLimit ? '#e67e22' : 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 600 }}>
-            {limits.remaining ?? 0}
-          </span>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '10px 12px', border: '1px solid rgba(42,36,32,0.1)', borderRadius: 8, background: 'rgba(255,255,255,0.6)' }}>
-          <span className="mu-label">Retrieval</span>
-          <span style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-            OpenAI
-          </span>
-        </div>
-      </div>
+      <p id="kb-summary-row" style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-secondary)', letterSpacing: '0.04em' }}>
+        {itemCount} items · <span style={{ color: approachingLimit ? '#e67e22' : 'inherit' }}>{limits.remaining ?? 0} remaining</span> · OpenAI
+      </p>
 
       {error && (
         <p id="kb-error-banner" className="mu-notice mu-notice--danger">{error}</p>

@@ -124,7 +124,7 @@ export default function WebsiteUrlGate({ user, onProvisioned, initialUrl = '' })
                 : 'linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)',
               color: '#fff',
               border: 'none',
-              borderRadius: 999,
+              borderRadius: 8,
               padding: '0 18px',
               fontSize: 13,
               fontFamily: '"Space Grotesk", system-ui, -apple-system, sans-serif',

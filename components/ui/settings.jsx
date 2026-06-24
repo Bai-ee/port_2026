@@ -47,7 +47,7 @@ const SettingsIcon = forwardRef(({ onMouseEnter, onMouseLeave, className, size =
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth="2"
-        transition={{ type: "spring", stiffness: 50, damping: 10 }}
+        transition={{ type: "tween", duration: 0.2, ease: "easeInOut" }}
         variants={{
           normal: {
             rotate: 0,

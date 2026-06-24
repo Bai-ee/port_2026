@@ -41,7 +41,7 @@ const CARDS = [
   {
     id: 'the-standard',
     heading: 'The Standard',
-    body: 'Pixel-accurate to design. Performant by default. Lighthouse scores are a starting point, not a finish line. Accessible, responsive, and built to last.',
+    body: 'Pixel-accurate to design. Performant by default. Lighthouse scores are a floor, not a ceiling — Core Web Vitals, accessibility, and bundle size all stay in scope. Accessible, responsive, and built to last.',
   },
   {
     id: 'timeline',

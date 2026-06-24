@@ -119,7 +119,7 @@ export default function WorkPage() {
             margin: 0,
           }}
         >
-          Selected projects spanning AI-assisted platforms, interactive web experiences, design systems, and client intelligence dashboards.
+          Four active projects — intake pipeline, particle renderer, design system extraction, and SEO audit. Case study write-ups in progress.
         </p>
       </section>
 

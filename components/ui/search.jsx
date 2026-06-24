@@ -48,8 +48,8 @@ const SearchIcon = forwardRef(({ onMouseEnter, onMouseLeave, className, size = 2
         strokeLinejoin="round"
         strokeWidth="2"
         transition={{
-          duration: 1,
-          bounce: 0.3,
+          duration: 0.25,
+          ease: 'easeOut',
         }}
         variants={{
           normal: { x: 0, y: 0 },

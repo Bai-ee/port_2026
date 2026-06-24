@@ -128,7 +128,7 @@ export default function SitePromptEditorModal({ open, prospect, onClose, onSaved
           flex-direction: column;
           background: #fafafa;
           border: 1px solid rgba(0, 0, 0, 0.08);
-          border-radius: 18px;
+          border-radius: 10px;
           box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
           font-family: 'Inter', system-ui, -apple-system, sans-serif;
           color: #1a1a1a;

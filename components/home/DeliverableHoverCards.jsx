@@ -95,7 +95,7 @@ const descStyle = { margin: 0, fontSize: '0.92rem', lineHeight: 1.4, color: '#2a
 const statusTagStyle = { display: 'inline', fontFamily: MONO, fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: '#15803d', background: 'rgba(34,197,94,0.16)', padding: '0.12rem 0.4rem', borderRadius: '4px', marginRight: '0.45rem', whiteSpace: 'nowrap' };
 const footStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '1rem', gap: '0.6rem' };
 const footStatusStyle = { display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontFamily: MONO, fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.55)' };
-const dotStyle = { width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 5px 2px rgba(34,197,94,0.45)', flexShrink: 0 };
+const dotStyle = { width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e', flexShrink: 0 };
 const btnGroupStyle = { display: 'inline-flex', alignItems: 'center', gap: '0.4rem' };
 const btnStyle = { display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontFamily: MONO, fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#2a2420', background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(42,36,32,0.2)', borderRadius: '7px', padding: '0.45rem 0.6rem', whiteSpace: 'nowrap' };
 

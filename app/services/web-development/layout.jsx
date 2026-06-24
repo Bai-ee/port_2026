@@ -9,7 +9,7 @@ const serviceSchema = {
   '@type': 'Service',
   name: 'Web Development',
   description:
-    'High-performance web builds using Next.js, React, GSAP, and Three.js — shipped with design precision and production-grade engineering.',
+    'High-performance web builds using Next.js, React, GSAP, and Three.js — delivered with sub-100ms response times, accurate pixel fidelity, and full CI/CD deployment pipelines.',
   provider: {
     '@type': 'Person',
     name: 'Bryan Balli',
@@ -40,7 +40,7 @@ export const metadata = {
   openGraph: {
     title: 'Web Development — HIT Agency',
     description:
-      'High-performance web builds using Next.js, React, GSAP, and Three.js — shipped with design precision and production-grade engineering.',
+      'High-performance web builds using Next.js, React, GSAP, and Three.js — built for production — pixel-accurate UI, < 100 ms TTFB, and zero-regression deploys',
     url: '/services/web-development',
     type: 'website',
   },

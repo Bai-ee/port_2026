@@ -2420,8 +2420,11 @@ export default function StudioPage() {
               transition:
                 background 0.55s cubic-bezier(0.16, 1, 0.3, 1),
                 box-shadow 0.55s cubic-bezier(0.16, 1, 0.3, 1),
-                transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+                transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
               will-change: transform;
+            }
+            @media (prefers-reduced-motion: reduce) {
+              .studio-rail-card { transition: none; }
             }
             .studio-rail-card::before {
               content: '';

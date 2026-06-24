@@ -148,6 +148,7 @@ export default function IntakeModalPreviewPage() {
           0%, 100% { opacity: 1; transform: scale(1); }
           50% { opacity: 0.55; transform: scale(0.8); }
         }
+        @media (prefers-reduced-motion: reduce) { #preview-status-dot { animation: none; } }
 
         /* ── Marquee ── */
         #preview-marquee-viewport { width: 100%; overflow: hidden; margin: 0 0 0.7rem; }

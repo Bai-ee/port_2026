@@ -128,8 +128,8 @@ export default function BriefEditorModal({ open, prospect, onClose, onSaved }) {
           flex-direction: column;
           background: #fafafa;
           border: 1px solid rgba(0, 0, 0, 0.08);
-          border-radius: 18px;
-          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
+          border-radius: 8px;
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
           font-family: 'Inter', system-ui, -apple-system, sans-serif;
           color: #1a1a1a;
           overflow: hidden;

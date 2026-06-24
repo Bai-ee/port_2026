@@ -72,7 +72,7 @@ export default function ContactPage() {
             color: '#0a0a0a',
           }}
         >
-          Let's<br />Talk.
+          Start a<br />Project.
         </h1>
 
         <p
@@ -162,7 +162,7 @@ export default function ContactPage() {
             Working Hours
           </div>
           <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 300, fontSize: 'clamp(0.9rem,1.3vw,1rem)', lineHeight: 1.7, color: 'rgba(26,26,26,0.8)', margin: 0 }}>
-            Available beyond standard 9–5 to accommodate your flow state. Time zone: Central (Chicago). Response SLA: same business day for existing clients, 24 hours for new inquiries.
+            Available before 9 and after 5 CT — book a slot or email and expect a reply the same business day. Time zone: Central (Chicago). Response SLA: same business day for existing clients, 24 hours for new inquiries.
           </p>
         </div>
       </section>
