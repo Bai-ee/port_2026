@@ -101,10 +101,35 @@ export default function RootLayout({ children }) {
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/* Non-render-blocking font load: preload the CSS, attach it as
+            media="print" (so it doesn't block first paint), then flip to
+            media="all" once loaded. display=swap covers FOIT. Literal font
+            family names are preserved, so all existing styles keep working.
+            <noscript> guarantees fonts for JS-disabled clients. */}
         <link
+          rel="preload"
+          as="style"
           href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700;900&family=Space+Grotesk:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap"
-          rel="stylesheet"
         />
+        <link
+          id="gfont-css"
+          rel="stylesheet"
+          media="print"
+          href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700;900&family=Space+Grotesk:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap"
+        />
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){var l=document.getElementById('gfont-css');if(!l)return;if(l.sheet){l.media='all';}else{l.addEventListener('load',function(){l.media='all';});}})();",
+          }}
+        />
+        <noscript>
+          {/* eslint-disable-next-line @next/next/no-page-custom-font */}
+          <link
+            rel="stylesheet"
+            href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700;900&family=Space+Grotesk:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap"
+          />
+        </noscript>
       </head>
       <body
         suppressHydrationWarning
