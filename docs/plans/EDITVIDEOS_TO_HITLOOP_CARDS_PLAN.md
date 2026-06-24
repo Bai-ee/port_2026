@@ -2,6 +2,12 @@
 
 Date: 2026-06-24
 
+> **STATUS: SHIPPED (Video Remix slice).** This plan is now **historical**. The as-built feature
+> (queue + bridge + reconcile + card + params tab) is documented in the source of truth:
+> [`docs/source-of-truth/VIDEO-REMIX-EDITVIDEOS-BRIDGE.md`](../source-of-truth/VIDEO-REMIX-EDITVIDEOS-BRIDGE.md).
+> v1 reuses the **live EditVideos render pipeline** (Phase 5 revised) instead of self-hosting FFmpeg;
+> `services/media-render` (Phase 0) is shelved. Read the SSOT before changing anything.
+
 ## Objective
 
 Port the valuable parts of `/Users/bballi/Documents/Repos/EditVideos/arweave-video-generator` into Hitloop as dashboard cards, without moving FFmpeg, large uploads, or Arweave upload work into Vercel request/response paths.
