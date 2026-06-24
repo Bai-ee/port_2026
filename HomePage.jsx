@@ -350,8 +350,9 @@ const HomePage = () => {
           <AppCanvas params={params} liveParamsRef={paramsRef} backgroundColor={canvasBackground} snapRef={snapCanvasRef} scatterRef={scatterCanvasRef} />
         </div>
         <HeroHeadline headerLogoRef={headerLogoRef} textColor={textColor} />
-        {/* Keyword-rich subheading for crawlers — visually hidden but read by
-            search engines and assistive tech as the first H2 under the brand H1. */}
+        {/* Section heading for screen readers and crawlers. Kept concise and
+            honest (no keyword stuffing). Full credentials live in JSON-LD
+            Person/Organization schema on this route. */}
         <h2
           style={{
             position: 'absolute',
@@ -367,7 +368,7 @@ const HomePage = () => {
             margin: 0,
           }}
         >
-          Bryan Balli is an AI design engineer and creative technologist based in Chicago. He builds AI-assisted client intelligence platforms, modular intake pipelines, and high-performance web experiences for founders, agencies, and growing teams — combining Next.js, Three.js, and GSAP with the Claude API and OpenAI to ship production-quality work with intelligent automation built in. Agency background spans Publicis, Epsilon, Conversant, and Alliance Data. Clients include TikTok, HBO Max, and TST. Starting engagement scope: $3,500. Typical project timeline: 2–6 weeks.
+          AI design engineering and client intelligence platforms by Bryan Balli, Chicago
         </h2>
       </section>
 

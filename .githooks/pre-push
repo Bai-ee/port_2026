@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Pre-push deploy-check (from /deploy-check skill, automated).
+# Blocks pushes that contain secret-like files or hardcoded keys.
+# Advises on dependency/migration changes. Bypass with: git push --no-verify
+set -uo pipefail
+
+range=""
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue
+  if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+    # New branch on remote: diff against origin/main if available, else full history.
+    if git rev-parse --verify -q origin/main >/dev/null; then
+      range="origin/main..$local_sha"
+    else
+      base=$(git rev-list --max-parents=0 "$local_sha" | tail -1)
+      range="$base..$local_sha"
+    fi
+  else
+    range="$remote_sha..$local_sha"
+  fi
+done
+
+[ -z "$range" ] && range="origin/main..HEAD"
+
+files=$(git diff --name-only "$range" 2>/dev/null)
+diff=$(git diff "$range" 2>/dev/null)
+blockers=0
+
+# 1. Secret-like filenames (allow .example/.sample templates).
+secretfiles=$(printf '%s\n' "$files" | grep -iE '(^|/)\.env|secret|credential' | grep -vE '\.(example|sample)$' || true)
+if [ -n "$secretfiles" ]; then
+  echo "❌ pre-push: secret-like files staged for push:"
+  printf '   %s\n' $secretfiles
+  blockers=1
+fi
+
+# 2. Hardcoded secrets/keys in the diff.
+hits=$(printf '%s\n' "$diff" | grep -nE 'sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN ([A-Z]+ )?PRIVATE KEY-----|"private_key"[[:space:]]*:' || true)
+if [ -n "$hits" ]; then
+  echo "❌ pre-push: possible hardcoded secret/key in diff:"
+  printf '%s\n' "$hits" | head -5
+  blockers=1
+fi
+
+# 3. Advisories (non-blocking).
+printf '%s\n' "$files" | grep -qE 'package(-lock)?\.json$' && echo "ℹ️  dependency manifest changed — confirm packages exist in prod."
+printf '%s\n' "$files" | grep -qiE 'migration|schema\.sql|\.migration\.' && echo "ℹ️  migration/schema changed — run migrations in prod first."
+
+if [ "$blockers" -ne 0 ]; then
+  echo "→ push blocked. Fix the above, or bypass once with: git push --no-verify"
+  exit 1
+fi
+echo "✅ pre-push deploy-check passed"
+exit 0

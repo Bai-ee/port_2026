@@ -109,7 +109,8 @@ function FAQItem({ item, isOpen, onToggle }) {
           textAlign: 'left',
         }}
       >
-        <span style={{
+        <h3 style={{
+          margin: 0,
           fontFamily: '"Space Grotesk", system-ui, sans-serif',
           fontSize: 'clamp(0.95rem, 1.6vw, 1.1rem)',
           fontWeight: 600,
@@ -117,7 +118,7 @@ function FAQItem({ item, isOpen, onToggle }) {
           lineHeight: 1.35,
         }}>
           {item.q}
-        </span>
+        </h3>
         <span
           aria-hidden="true"
           style={{

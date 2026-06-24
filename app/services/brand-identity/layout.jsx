@@ -1,3 +1,5 @@
+import { breadcrumbSchema } from '../../../lib/schema.js';
+
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL
   || (process.env.VERCEL_PROJECT_PRODUCTION_URL
@@ -51,7 +53,7 @@ export default function BrandIdentityLayout({ children }) {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(serviceSchema) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify([serviceSchema, breadcrumbSchema([{ name: 'Home', path: '/' }, { name: 'Brand Identity', path: '/services/brand-identity' }], SITE_URL)]) }}
       />
       {children}
     </>

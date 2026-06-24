@@ -1,4 +1,5 @@
 import HomePage from '../HomePage.jsx';
+import { organizationSchema, webApplicationSchema } from '../lib/schema.js';
 
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL
@@ -84,7 +85,13 @@ export default function Home() {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify([personSchema, websiteSchema, ...reviewSchemas]),
+          __html: JSON.stringify([
+            organizationSchema(SITE_URL),
+            webApplicationSchema(SITE_URL),
+            personSchema,
+            websiteSchema,
+            ...reviewSchemas,
+          ]),
         }}
       />
       <HomePage />
