@@ -986,6 +986,7 @@ module.exports = {
   FULL_PAGE_SCREENSHOT_VARIANTS,
   captureScreenshotBuffer,
   persistWebsiteScreenshotArtifact,
+  renderPdfBuffer,
   persistBriefPdfArtifact,
   fetchBrowserlessContent,
 };

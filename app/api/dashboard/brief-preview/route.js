@@ -25,6 +25,7 @@ const { validatePostUrl } = require('../../../../features/not-the-rug-brief/post
 const { buildWatchlist } = require('../../../../features/intelligence/_brief-intel.js');
 const { getClientWeather } = require('../../../../features/intelligence/_weather.js');
 const { getComposition, resolveBriefType, DEFAULT_BRIEF_TYPE, isBriefAllowed } = require('../../../../features/scout-intake/brief-sections.cjs');
+const { renderPdfBuffer } = require('../../../../api/_lib/browserless.cjs');
 
 function makeReqShim(request) {
   return {
@@ -1047,7 +1048,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     position:relative;isolation:isolate;display:inline-flex;align-items:center;gap:.5rem;
     padding:.5rem .75rem;border:none;border-radius:999px;cursor:pointer;line-height:1;
     font-family:"Space Grotesk",sans-serif;font-weight:700;letter-spacing:.01em;
-    font-size:clamp(13px,1.4vw,15px);color:#fff;white-space:nowrap;
+    font-size:clamp(13px,1.4vw,15px);color:#fff;white-space:nowrap;text-decoration:none;
     background:linear-gradient(175deg,rgba(255,255,255,.18) 0%,rgba(255,255,255,0) 52%),linear-gradient(135deg,hsl(185,100%,45%) 0%,hsl(262,100%,55%) 52%,hsl(314,100%,50%) 100%);
     box-shadow:0 2px 8px rgba(0,0,0,.2),inset 0 1px 0 rgba(255,255,255,.28),inset 0 -1px 0 rgba(0,0,0,.1);
   }
@@ -1281,11 +1282,11 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     ${isCoverMockup ? `<div id="onboarding-cover-mockup" aria-hidden="true"><img src="${esc(mockupSrc)}" alt="Homepage device mockup" /></div>` : ''}
     <div class="title-stack">
       <div class="cap-brief-email-cta-row">
-        <button type="button" id="brief-email-cta" class="cap-brief-email-cta">
+        <a id="brief-email-cta" class="cap-brief-email-cta" href="https://calendly.com/bballi/30min" target="_blank" rel="noopener noreferrer">
           <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" />
-          MEET WITH YOUR HUMAN
+          MEET WITH A HUMAN
           <span class="arrow" aria-hidden="true">↗</span>
-        </button>
+        </a>
       </div>
       ${weather?.today ? `<div id="brief-cover-weather">${esc(`${weather.place || 'Local'} · ${weather.today.short} ${weather.today.temp}°${weather.today.unit}`)}${weather.days?.length > 1 ? esc(' · ' + weather.days.slice(1, 3).map((d) => `${d.name.slice(0, 3)} ${d.short.split(/\s+/).slice(0, 2).join(' ')} ${d.temp}°`).join(' · ')) : ''}</div>` : ''}
       <div class="cover-brief-name">${esc(briefLabel)}</div>
@@ -1307,15 +1308,6 @@ ${bodySections}
     ${clientId ? `<span>Client · ${esc(clientId)}</span>` : ''}
     <span>Marketing Brief · Vol. 01${clientName ? ' · ' + esc(clientName) : ''}</span>
   </footer>
-  <script>
-    (function () {
-      var b = document.getElementById('brief-email-cta');
-      if (!b) return;
-      b.addEventListener('click', function () {
-        try { window.parent.postMessage({ type: 'brief-open-subscribe' }, '*'); } catch (e) {}
-      });
-    })();
-  </script>
 </body>
 </html>`;
 }
@@ -1331,7 +1323,29 @@ export async function GET(request) {
   // Whole-handler guard: any uncaught throw surfaces its message in the
   // response (and full stack in the server log) instead of a blank 500.
   try {
-    return await handleGet(request);
+    const wantsPdf = request.nextUrl?.searchParams?.get('format') === 'pdf';
+    const res = await handleGet(request);
+    // ?format=pdf — re-render the same brief HTML to PDF via Browserless
+    // (same path the leadgen estimate uses). Only convert successful HTML;
+    // error pages pass through so the client sees the real status/message.
+    if (wantsPdf && res.ok && (res.headers.get('content-type') || '').includes('text/html')) {
+      const html = await res.text();
+      const pdf = await renderPdfBuffer({ html, pdfMode: 'edge-to-edge' });
+      if (!pdf.ok) {
+        return new Response(pdf.warning?.message || 'Brief PDF render unavailable.', { status: 503 });
+      }
+      const key = request.nextUrl?.searchParams?.get('brief') || 'brief';
+      const fileName = `${String(key).replace(/[^a-z0-9-_]+/gi, '-')}.pdf`;
+      return new Response(pdf.buffer, {
+        status: 200,
+        headers: {
+          'content-type': 'application/pdf',
+          'content-disposition': `attachment; filename="${fileName}"`,
+          'cache-control': 'no-store',
+        },
+      });
+    }
+    return res;
   } catch (err) {
     console.error('[brief-preview] GET failed:', err);
     return errorPage(500, `brief-preview failed: ${err?.message || 'unknown error'}`);
