@@ -2542,19 +2542,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // Shows time left + reschedule picker, with subscribe / run-once options.
   const [showCooldownModal, setShowCooldownModal] = useState(false);
 
-  // The brief renders in a sandboxed iframe; its in-cover "Send to my email"
-  // CTA can't call React directly, so it postMessages the parent. Open the
-  // subscribe modal when that message arrives.
-  useEffect(() => {
-    const onBriefMessage = (e) => {
-      if (e?.data?.type === 'brief-open-subscribe') {
-        setBriefFullScreen(false);
-        setShowSubscribeModal(true);
-      }
-    };
-    window.addEventListener('message', onBriefMessage);
-    return () => window.removeEventListener('message', onBriefMessage);
-  }, []);
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
   const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
@@ -3515,6 +3502,35 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // and show it in the brief fullscreen overlay. Keys map to compositions in
   // features/scout-intake/brief-sections.cjs via BRIEF_TYPE_BY_CARD.
   const [namedBriefView, setNamedBriefView] = useState(null); // { key, html } | { key, loading: true } | null
+  const [namedBriefPdfBusy, setNamedBriefPdfBusy] = useState(false);
+  // Download the open brief as a PDF — re-renders the same composition through
+  // the brief-preview route's ?format=pdf branch (Browserless), fetched with the
+  // auth token then saved via a blob URL.
+  const downloadNamedBriefPdf = useCallback(async (key) => {
+    if (!user || !key || namedBriefPdfBusy) return;
+    setNamedBriefPdfBusy(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(apiPath(`/api/dashboard/brief-preview?brief=${encodeURIComponent(key)}&format=pdf`), {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${String(key).replace(/[^a-z0-9-_]+/gi, '-')}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('[brief-pdf] download failed:', err);
+    } finally {
+      setNamedBriefPdfBusy(false);
+    }
+  }, [user, apiPath, namedBriefPdfBusy]);
   const openNamedBriefPreview = useCallback(async (key) => {
     if (!user) return;
     setNamedBriefView({ key, loading: true });
@@ -11960,6 +11976,14 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         <div id="brief-fullscreen-overlay" onClick={() => setNamedBriefView(null)}>
           <div id="brief-fullscreen-container" onClick={(e) => e.stopPropagation()}>
             <div id="brief-fullscreen-actions">
+              {namedBriefView.html && (
+                <button
+                  type="button"
+                  id="brief-fullscreen-download"
+                  onClick={() => downloadNamedBriefPdf(namedBriefView.key)}
+                  disabled={namedBriefPdfBusy}
+                >{namedBriefPdfBusy ? '… PDF' : '↓ Download'}</button>
+              )}
               <button
                 type="button"
                 id="brief-fullscreen-close"
@@ -11971,7 +11995,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 id="brief-fullscreen-iframe"
                 title="Brief preview"
                 srcDoc={namedBriefView.html}
-                sandbox="allow-same-origin allow-scripts"
+                sandbox="allow-same-origin allow-scripts allow-popups"
               />
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '0 10%', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', color: namedBriefView.error ? '#b42318' : 'rgba(42,36,32,0.6)' }}>
