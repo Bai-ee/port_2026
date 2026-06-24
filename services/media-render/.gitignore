@@ -1,0 +1,4 @@
+node_modules/
+
+# Generated render outputs — never commit media bytes.
+__tests__/fixtures/**/generated/

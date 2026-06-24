@@ -1,0 +1,20 @@
+{
+  "name": "@hitloop/media-render",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone FFmpeg media-render worker (video remix engine) ported and normalized from EditVideos. External worker only — never a Vercel function.",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test",
+    "make:fixtures": "bash scripts/make-fixtures.sh",
+    "render:fixture": "node scripts/render-fixture.js"
+  },
+  "dependencies": {}
+}

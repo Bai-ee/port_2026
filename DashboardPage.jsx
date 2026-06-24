@@ -2251,6 +2251,7 @@ const NON_ADMIN_UNLOCKED_CARD_IDS = new Set([
   'style-guide',
   'cross-device-images',
   'post-me',
+  'video-remix',
 ]);
 
 // Launch onboarding gate: non-admins get only DELIVERABLES. Every other nav
@@ -2725,6 +2726,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    environmentId: 'loft',
 	  });
 	  const [mockupStudioRenderLoading, setMockupStudioRenderLoading] = useState(false);
+	  const [videoRemixLoading, setVideoRemixLoading] = useState(false);
 	  const [mockupStudioRenderError, setMockupStudioRenderError] = useState('');
 	  const [postMeLoading, setPostMeLoading] = useState(false);
 	  const [postMeResult, setPostMeResult] = useState(null); // null | { ok, twitterId, error }
@@ -2911,6 +2913,80 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	      setMockupStudioRenderLoading(false);
 	    }
 	  }, [user, mockupStudioRenderLoading, mockupStudioDraft, clientStudioSourceUrl, apiPath, runWithTerminal]);
+
+	  // Enqueue a Video Remix media_job. Metadata-only POST — the external FFmpeg
+	  // worker drains it and writes the capture back into dashboard_state.mediaCaptures,
+	  // which the live listener above picks up. We optimistically set the pending
+	  // marker so the card flips to "Queued…" without waiting for the round-trip.
+	  const runVideoRemix = useCallback(async ({ sourceFolders = null } = {}) => {
+	    if (!user || videoRemixLoading) return;
+	    setVideoRemixLoading(true);
+	    try {
+	      const token = await user.getIdToken();
+
+	      // Use REAL EditVideos source folders so the live render pipeline has clips
+	      // to work with. Fall back to ['uploads'] only if discovery returns nothing.
+	      let folders = Array.isArray(sourceFolders) && sourceFolders.length ? sourceFolders : null;
+	      if (!folders) {
+	        try {
+	          const fRes = await fetch(apiPath('/api/dashboard/media?action=folders'), {
+	            headers: { Authorization: `Bearer ${token}` },
+	          });
+	          const fData = await fRes.json().catch(() => ({}));
+	          if (Array.isArray(fData?.folders) && fData.folders.length) {
+	            folders = fData.folders.slice(0, 2);
+	          }
+	        } catch { /* fall through to default */ }
+	      }
+	      if (!folders || !folders.length) folders = ['uploads'];
+
+	      const res = await fetch(apiPath('/api/dashboard/media?action=create-video-remix'), {
+	        method: 'POST',
+	        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+	        body: JSON.stringify({
+	          sourceFolders: folders,
+	          output: { width: 720, height: 720, fps: 30, format: 'mp4', durationSeconds: 30 },
+	        }),
+	      });
+	      const data = await res.json().catch(() => ({}));
+	      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+	      if (data?.jobId) {
+	        if (!cancelledRef.current) {
+	          setBootstrap((prev) => {
+	            const dash = prev?.dashboardState || {};
+	            return {
+	              ...prev,
+	              dashboardState: {
+	                ...dash,
+	                mediaVideoPending: { jobId: data.jobId, editJobId: data.editJobId || null, type: 'video-remix', queuedAt: new Date().toISOString(), sourceFolders: folders },
+	              },
+	            };
+	          });
+	        }
+
+	        // Light poll: reconcile (server-side, on job GET) pulls the EditVideos
+	        // result forward so the live listener flips the card to "Video ready".
+	        // No manual state write on done — reconcile + listener own mediaCaptures.
+	        const jobId = data.jobId;
+	        for (let i = 0; i < 24; i += 1) {
+	          await new Promise((r) => setTimeout(r, 5000));
+	          if (cancelledRef.current) break;
+	          try {
+	            const jRes = await fetch(apiPath(`/api/dashboard/media?action=job&jobId=${encodeURIComponent(jobId)}`), {
+	              headers: { Authorization: `Bearer ${token}` },
+	            });
+	            const jData = await jRes.json().catch(() => ({}));
+	            const status = jData?.job?.status;
+	            if (status === 'done' || status === 'failed') break;
+	          } catch { /* keep polling */ }
+	        }
+	      }
+	    } catch (err) {
+	      if (process.env.NODE_ENV !== 'production') console.warn('[video-remix] enqueue:', err?.message || err);
+	    } finally {
+	      if (!cancelledRef.current) setVideoRemixLoading(false);
+	    }
+	  }, [user, videoRemixLoading, apiPath]);
 
 
 	  const openLeadgenFlow = useCallback(async (step) => {
@@ -4592,12 +4668,17 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         const data = snap.data() || {};
         const caps = Array.isArray(data.studioCaptures) ? data.studioCaptures : null;
         const pending = data.studioVideoPending || null;
-        if (!caps && pending === undefined) return;
+        // Video Remix (media_jobs) lands in the same dashboard_state doc, so this
+        // one listener also carries its captures + pending marker. Same cherry-pick
+        // rule — never let raw Firestore Timestamps clobber the serialized bootstrap.
+        const mediaCaps = Array.isArray(data.mediaCaptures) ? data.mediaCaptures : null;
+        const mediaPending = data.mediaVideoPending || null;
+        if (!caps && pending === undefined && !mediaCaps && data.mediaVideoPending === undefined) return;
         setBootstrap((prev) => {
           if (!prev?.dashboardState) return prev;
           const ds = prev.dashboardState;
           // Skip no-op snapshots (unrelated dashboard_state writes) so this never
-          // forces a re-render unless captures or the pending marker changed.
+          // forces a re-render unless captures or a pending marker changed.
           const cur = ds.studioCaptures;
           const curLen = Array.isArray(cur) ? cur.length : -1;
           const curLast = curLen > 0 ? cur[curLen - 1]?.storagePath : null;
@@ -4605,13 +4686,22 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           const nextLast = caps && caps.length ? caps[caps.length - 1]?.storagePath : (caps ? null : curLast);
           const capsSame = curLen === nextLen && curLast === nextLast;
           const pendingSame = (ds.studioVideoPending?.jobId || null) === (pending?.jobId || null);
-          if (capsSame && pendingSame) return prev;
+          const mCur = ds.mediaCaptures;
+          const mCurLen = Array.isArray(mCur) ? mCur.length : -1;
+          const mCurLast = mCurLen > 0 ? mCur[mCurLen - 1]?.storagePath : null;
+          const mNextLen = mediaCaps ? mediaCaps.length : mCurLen;
+          const mNextLast = mediaCaps && mediaCaps.length ? mediaCaps[mediaCaps.length - 1]?.storagePath : (mediaCaps ? null : mCurLast);
+          const mediaCapsSame = mCurLen === mNextLen && mCurLast === mNextLast;
+          const mediaPendingSame = (ds.mediaVideoPending?.jobId || null) === (mediaPending?.jobId || null);
+          if (capsSame && pendingSame && mediaCapsSame && mediaPendingSame) return prev;
           return {
             ...prev,
             dashboardState: {
               ...ds,
               ...(caps ? { studioCaptures: caps } : {}),
               studioVideoPending: pending,
+              ...(mediaCaps ? { mediaCaptures: mediaCaps } : {}),
+              mediaVideoPending: mediaPending,
             },
           };
         });
@@ -7769,6 +7859,60 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         footerAction: {
           label: 'POST TO X',
           onClick: handleOpenXComposer,
+        },
+      };
+    })(),
+    (() => {
+      const mediaCaptures = Array.isArray(dashboardState?.mediaCaptures) ? dashboardState.mediaCaptures : [];
+      const latestRemix = [...mediaCaptures].reverse().find((item) => item?.type === 'video_remix') || null;
+      const remixUrl = latestRemix?.downloadUrl || latestRemix?.url || null;
+      const mediaPending = dashboardState?.mediaVideoPending || null;
+      // Queued only counts while fresh — a stale pending marker (worker never ran)
+      // must not pin the card to "Queued…" forever. 15min matches the job lease.
+      const remixRendering = !latestRemix && !!mediaPending && (() => {
+        const q = Date.parse(mediaPending.queuedAt || '');
+        return Number.isFinite(q) && Date.now() - q <= 15 * 60 * 1000;
+      })();
+      return {
+        id: 'video-remix',
+        category: 'deliverables',
+        number: 'VR',
+        label: 'VIDEO REMIX',
+        title: 'Video Remix',
+        description: 'Stitches your uploaded clips, images, and Arweave audio into a short branded video — rendered off-platform and delivered here.',
+        placeholderLabel: latestRemix ? 'VIDEO\nREADY' : remixRendering ? 'QUEUED\n…' : 'RUN\nREMIX',
+        rows: latestRemix
+          ? [
+              { key: 'vr-video',  label: 'Latest remix', value: latestRemix.label || 'Branded remix' },
+              { key: 'vr-length', label: 'Duration',     value: latestRemix.durationSeconds ? `${latestRemix.durationSeconds}s` : 'Saved' },
+              { key: 'vr-source', label: 'Source clips', value: Array.isArray(latestRemix.sourceFolders) && latestRemix.sourceFolders.length ? latestRemix.sourceFolders.join(', ') : 'Stored' },
+              { key: 'vr-action', label: 'Action',       value: 'Click RUN REMIX to generate a fresh cut' },
+            ]
+          : remixRendering
+          ? [
+              { key: 'vr-status', label: 'Status',       value: 'Queued for the media render worker…' },
+              { key: 'vr-source', label: 'Source clips', value: Array.isArray(mediaPending.sourceFolders) && mediaPending.sourceFolders.length ? mediaPending.sourceFolders.join(', ') : 'Selected media' },
+              { key: 'vr-action', label: 'Action',       value: 'The finished video appears here automatically when the worker completes.' },
+            ]
+          : [
+              { key: 'vr-about',  label: 'About',  value: 'Short branded video from your source media plus optional Arweave audio.' },
+              { key: 'vr-output', label: 'Output', value: '720×720 · 30s · MP4' },
+              { key: 'vr-action', label: 'Action', value: 'Click RUN REMIX to queue a render with your default media.' },
+            ],
+        footerLeft: latestRemix ? 'Video ready' : remixRendering ? 'Queued…' : 'Ready',
+        footerRight: 'ACTIVE',
+        readinessBadge: latestRemix
+          ? { tone: 'ok', label: 'Passed' }
+          : remixRendering ? { tone: 'partial', label: 'Queued…' } : null,
+        deliverableAsset: remixUrl ? {
+          title: 'Video Remix',
+          kind: 'video',
+          items: [{ src: remixUrl, filename: `${deliverableBizName}-remix.mp4` }],
+        } : null,
+        footerAction: {
+          label: videoRemixLoading ? '…' : 'RUN REMIX',
+          loading: videoRemixLoading,
+          onClick: () => runVideoRemix({}),
         },
       };
     })(),
