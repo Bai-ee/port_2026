@@ -2672,6 +2672,12 @@
   .tile.tile-intake-card--btns-only .tile-view-details-btn {
     pointer-events: auto;
   }
+  /* Video Remix shell player must stay interactive on --btns-only cards, whose
+     body is pointer-events:none — otherwise every click on the native video
+     controls (play / scrub / volume) is swallowed and audio can't be unmuted. */
+  .tile.tile-intake-card--btns-only .tile-intake-placeholder-video-remix video {
+    pointer-events: auto;
+  }
   /* ── Global card-hover override: every intake/data-viz card renders at full
         opacity with no card-level hover state. Direct button :hover (Run,
         Details, download, etc.) still works because those rules don't depend
