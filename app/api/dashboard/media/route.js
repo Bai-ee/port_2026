@@ -7,7 +7,7 @@ const { getEffectiveClientContext } = require('../../../../api/_lib/client-provi
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
 const mediaJobs = require('../../../../api/_lib/media-jobs.cjs');
 const { validateRemixRecipe } = require('../../../../api/_lib/media-recipe.cjs');
-const { enqueueVideoJob, triggerWorker, listSourceFolders } = require('../../../../api/_lib/editvideos-bridge.cjs');
+const { enqueueVideoJob, triggerWorker, listSourceFolders, listOptions } = require('../../../../api/_lib/editvideos-bridge.cjs');
 const { reconcileMediaJob } = require('../../../../api/_lib/media-reconcile.cjs');
 
 // Metadata-only route: it creates/reads media_jobs records and writes pending
@@ -153,6 +153,16 @@ export async function GET(request) {
       } catch {
         // Bridge unconfigured — degrade to an empty list so the card falls back.
         return json({ ok: true, folders: [] });
+      }
+    }
+
+    if (action === 'options') {
+      try {
+        const options = await listOptions();
+        return json({ ok: true, options });
+      } catch {
+        // Bridge unconfigured — degrade so the params tab still renders (Random only).
+        return json({ ok: true, options: { filters: [], overlays: [], artists: [], logos: [] } });
       }
     }
   } catch (err) {

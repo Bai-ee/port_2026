@@ -17,6 +17,16 @@
 // appear in a valid value, so we reject the whole input rather than sanitize it.
 const FOLDER_NAME_RE = /^[a-zA-Z0-9_-]{1,120}$/;
 const KEY_RE = /^[a-zA-Z0-9_]{1,80}$/;
+const ARTIST_RE = /^[A-Za-z0-9 _.\-]{1,60}$/;
+const OVERLAY_EFFECT_RE = /^[a-z0-9_]{1,40}$/;
+const LOGO_NAME_RE = /^[A-Za-z0-9._-]{1,80}$/;
+
+// Strip ASCII/Unicode control chars so a free-text label can never carry hidden
+// terminators into a downstream filename or render arg.
+function stripControlChars(str) {
+  // eslint-disable-next-line no-control-regex
+  return String(str).replace(/[\x00-\x1f\x7f]/g, '').trim();
+}
 
 const V1_OUTPUT = Object.freeze({
   width: 720,
@@ -112,24 +122,73 @@ function validateRemixRecipe(input) {
     recipe.arweaveAudioUrl = validateAudioUrl(input.arweaveAudioUrl);
   }
 
+  // Audio source: artist + mix selection + tracks toggle.
+  if (input.artist !== undefined && input.artist !== null && input.artist !== '') {
+    if (typeof input.artist !== 'string' || !ARTIST_RE.test(input.artist.trim())) {
+      throw new Error('artist has invalid characters.');
+    }
+    recipe.artist = input.artist.trim();
+  }
+  if (input.mixTitle !== undefined && input.mixTitle !== null && input.mixTitle !== '') {
+    const mix = stripControlChars(input.mixTitle).slice(0, 120);
+    if (mix) recipe.mixTitle = mix;
+  }
+  if (input.useTrax !== undefined) {
+    recipe.useTrax = !!input.useTrax;
+  }
+
   if (input.filter !== undefined && input.filter !== null) {
     const key = input.filter?.key;
+    const hasIntensity = input.filter?.intensity !== undefined && input.filter?.intensity !== null;
+    const next = {};
     if (key !== undefined && key !== null) {
       if (typeof key !== 'string' || !KEY_RE.test(key)) {
         throw new Error('filter.key has invalid characters.');
       }
-      recipe.filter = { key };
+      next.key = key;
     }
+    if (hasIntensity) {
+      const intensity = Number(input.filter.intensity);
+      if (!Number.isFinite(intensity) || intensity < 0 || intensity > 1) {
+        throw new Error('filter.intensity must be a number between 0 and 1.');
+      }
+      next.intensity = intensity;
+    }
+    if (Object.keys(next).length) recipe.filter = next;
   }
 
   if (input.overlay !== undefined && input.overlay !== null) {
     const enabled = !!input.overlay?.enabled;
     if (enabled) {
       const effect = input.overlay?.effect;
-      if (typeof effect !== 'string' || !KEY_RE.test(effect)) {
+      if (typeof effect !== 'string' || (effect !== 'random' && !OVERLAY_EFFECT_RE.test(effect))) {
         throw new Error('overlay.effect has invalid characters.');
       }
       recipe.overlay = { enabled: true, effect };
+    }
+  }
+
+  if (input.logos !== undefined && input.logos !== null && typeof input.logos === 'object') {
+    const logos = {};
+    for (const slot of ['top', 'end']) {
+      const val = input.logos[slot];
+      if (val === undefined || val === null || val === '') continue;
+      if (typeof val !== 'string' || !LOGO_NAME_RE.test(val)) {
+        throw new Error(`logos.${slot} has invalid characters.`);
+      }
+      logos[slot] = val;
+    }
+    if (Object.keys(logos).length) recipe.logos = logos;
+  }
+
+  if (input.useArtistImage !== undefined) {
+    recipe.useArtistImage = !!input.useArtistImage;
+  }
+
+  if (input.endCard !== undefined && input.endCard !== null && typeof input.endCard === 'object') {
+    if (input.endCard.text !== undefined && input.endCard.text !== null && input.endCard.text !== '') {
+      const text = stripControlChars(input.endCard.text).slice(0, 80);
+      if (text) recipe.endCard = { text };
     }
   }
 

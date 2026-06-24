@@ -143,3 +143,82 @@ test('validateRemixRecipe ignores disabled overlay and omits empty filter', () =
   assert.equal(out.overlay, undefined);
   assert.equal(out.filter, undefined);
 });
+
+// --- Video Remix params: artist / mix / trax / intensity / logos / endCard ---
+
+test('validateRemixRecipe carries through valid params tab fields', () => {
+  const out = validateRemixRecipe({
+    sourceFolders: ['skyline'],
+    artist: 'Bai-ee',
+    mixTitle: 'Live at The Loft 2024',
+    useTrax: true,
+    useArtistImage: true,
+    filter: { key: 'look_hard_bw_street_doc', intensity: 0.5 },
+    overlay: { enabled: true, effect: 'random' },
+    logos: { top: 'ue_barcode_black.png', end: 'serial_logo.png' },
+    endCard: { text: 'thanks for watching' },
+  });
+  assert.equal(out.artist, 'Bai-ee');
+  assert.equal(out.mixTitle, 'Live at The Loft 2024');
+  assert.equal(out.useTrax, true);
+  assert.equal(out.useArtistImage, true);
+  assert.deepEqual(out.filter, { key: 'look_hard_bw_street_doc', intensity: 0.5 });
+  assert.deepEqual(out.overlay, { enabled: true, effect: 'random' });
+  assert.deepEqual(out.logos, { top: 'ue_barcode_black.png', end: 'serial_logo.png' });
+  assert.deepEqual(out.endCard, { text: 'thanks for watching' });
+});
+
+test('validateRemixRecipe rejects a bad artist name', () => {
+  assert.throws(
+    () => validateRemixRecipe({ sourceFolders: ['a'], artist: 'bad/artist!' }),
+    /artist has invalid characters/
+  );
+});
+
+test('validateRemixRecipe rejects a bad overlay effect but allows random', () => {
+  assert.throws(
+    () => validateRemixRecipe({ sourceFolders: ['a'], overlay: { enabled: true, effect: 'BAD-EFFECT' } }),
+    /overlay.effect/
+  );
+  const out = validateRemixRecipe({ sourceFolders: ['a'], overlay: { enabled: true, effect: 'random' } });
+  assert.deepEqual(out.overlay, { enabled: true, effect: 'random' });
+});
+
+test('validateRemixRecipe rejects a bad logo filename', () => {
+  assert.throws(
+    () => validateRemixRecipe({ sourceFolders: ['a'], logos: { top: 'has space.png' } }),
+    /logos.top/
+  );
+  assert.throws(
+    () => validateRemixRecipe({ sourceFolders: ['a'], logos: { end: '../evil.png' } }),
+    /logos.end/
+  );
+});
+
+test('validateRemixRecipe validates filter intensity range', () => {
+  assert.throws(
+    () => validateRemixRecipe({ sourceFolders: ['a'], filter: { intensity: 1.5 } }),
+    /filter.intensity/
+  );
+  assert.throws(
+    () => validateRemixRecipe({ sourceFolders: ['a'], filter: { intensity: -0.1 } }),
+    /filter.intensity/
+  );
+  const out = validateRemixRecipe({ sourceFolders: ['a'], filter: { intensity: 0 } });
+  assert.deepEqual(out.filter, { intensity: 0 });
+});
+
+test('validateRemixRecipe strips control chars and caps endCard text length', () => {
+  const out = validateRemixRecipe({
+    sourceFolders: ['a'],
+    mixTitle: `clean title`,
+    endCard: { text: 'x'.repeat(200) },
+  });
+  assert.equal(out.mixTitle, 'cleantitle');
+  assert.equal(out.endCard.text.length, 80);
+});
+
+test('validateRemixRecipe still strips unknown fields with new optionals absent', () => {
+  const out = validateRemixRecipe({ sourceFolders: ['a'], evil: 'x' });
+  assert.deepEqual(Object.keys(out).sort(), ['output', 'sourceFolders', 'type']);
+});

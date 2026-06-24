@@ -94,31 +94,32 @@ function mapRecipeToVideoJob(recipe = {}, { jobId } = {}) {
   }
 
   const mixTitle = recipe.mixTitle ? String(recipe.mixTitle) : 'Hitloop Video Remix';
-  const filterIntensity = recipe.filter?.intensity != null
+  const rawIntensity = recipe.filter?.intensity != null
     ? Number(recipe.filter.intensity)
     : 0.8;
+  const filterIntensity = Math.min(1, Math.max(0, Number.isFinite(rawIntensity) ? rawIntensity : 0.8));
 
   return {
     jobId,
     status: 'pending',
     // artist:null is valid → the EditVideos worker uses random Arweave audio.
-    artist: null,
+    artist: recipe.artist ? String(recipe.artist) : null,
     mixTitle,
     duration: 30,
     videoFilter: recipe.filter?.key ? String(recipe.filter.key) : null,
     filterIntensity,
-    useTrax: false,
+    useTrax: !!recipe.useTrax,
     selectedFolders,
     enableOverlay: !!recipe.overlay?.enabled,
     overlayEffect: recipe.overlay?.enabled && recipe.overlay?.effect
       ? String(recipe.overlay.effect)
       : null,
-    topLogo: null,
-    endLogo: null,
-    // No Underground-Existence artist thumbnails on the Hitloop path.
-    useArtistImage: false,
+    topLogo: recipe.logos?.top ? String(recipe.logos.top) : null,
+    endLogo: recipe.logos?.end ? String(recipe.logos.end) : null,
+    // Optional Underground-Existence artist thumbnail end-card.
+    useArtistImage: !!recipe.useArtistImage,
     customEndMedia: null,
-    endTextOverlay: null,
+    endTextOverlay: recipe.endCard?.text ? String(recipe.endCard.text) : null,
     videoOrder: null,
     completedAt: null,
     videoUrl: null,
@@ -129,6 +130,102 @@ function mapRecipeToVideoJob(recipe = {}, { jobId } = {}) {
       mixTitle,
     },
   };
+}
+
+// --- options discovery (filters/overlays static, artists/logos live) --------
+const FILTER_OPTIONS = [
+  { key: 'look_hard_bw_street_doc', label: 'Hard B&W Street Doc' },
+  { key: 'look_gritty_neon_club', label: 'Gritty Neon Club' },
+  { key: 'look_faded_90s_tape', label: 'Faded 90s Tape' },
+  { key: 'look_camcorder_ghost', label: 'Camcorder Ghost' },
+  { key: 'look_club_cinematic_dirty', label: 'Club Cinematic Dirty' },
+  { key: 'look_neon_nightclub', label: 'Neon Nightclub' },
+  { key: 'look_zine_posterized_color', label: 'Zine Posterized Color' },
+  { key: 'look_pixel_grit_vertical', label: 'Pixel Grit' },
+  { key: 'look_sodium_streetlight', label: 'Sodium Streetlight' },
+];
+
+const OVERLAY_OPTIONS = [
+  { value: '', label: 'None' },
+  { value: 'analog_film', label: 'Analog Film' },
+  { value: 'gritt', label: 'Gritt' },
+  { value: 'noise', label: 'Noise' },
+  { value: 'retro_dust', label: 'Retro Dust' },
+  { value: 'random', label: 'Random' },
+];
+
+const OPTIONS_CACHE_TTL_MS = 60 * 1000;
+let _optionsCache = { at: 0, options: null };
+
+/**
+ * Read available artists + their mix titles from the EditVideos Firebase.
+ * Mirrors EditVideos api/artists.js: system/artists doc, data.artists array of
+ * { artistName, mixes:[{ mixTitle, mixArweaveURL, ... }] }. Degrades to [].
+ * @returns {Promise<Array<{name:string, mixes:string[]}>>}
+ */
+async function listArtists() {
+  try {
+    const snap = await bridgeDb().collection('system').doc('artists').get();
+    if (!snap.exists) return [];
+    const data = snap.data() || {};
+    if (!Array.isArray(data.artists)) return [];
+    return data.artists
+      .filter((a) => a && a.artistName)
+      .map((a) => ({
+        name: String(a.artistName),
+        mixes: Array.isArray(a.mixes)
+          ? a.mixes.map((m) => (m && m.mixTitle ? String(m.mixTitle) : null)).filter(Boolean)
+          : [],
+      }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * List logo filenames from the EditVideos bucket `logos/` folder. Returns png/jpg
+ * basenames only (excludes serial_logo.png and svgs). Degrades to [].
+ * @returns {Promise<string[]>}
+ */
+async function listLogos() {
+  try {
+    const [files] = await bridgeBucket().getFiles({ prefix: 'logos/' });
+    const names = new Set();
+    for (const file of files) {
+      const base = String(file.name).split('/').pop();
+      if (!base) continue;
+      const lower = base.toLowerCase();
+      if (lower === 'serial_logo.png') continue;
+      if (lower.endsWith('.svg')) continue;
+      if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+        names.add(base);
+      }
+    }
+    return Array.from(names);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Build the full options payload for the Video Remix params tab. Filters/overlays
+ * are static; artists + logos are read live (degrade to []). Cached ~60s.
+ * @returns {Promise<{filters:Array, overlays:Array, artists:Array, logos:string[]}>}
+ */
+async function listOptions() {
+  const now = Date.now();
+  if (_optionsCache.options && now - _optionsCache.at < OPTIONS_CACHE_TTL_MS) {
+    return _optionsCache.options;
+  }
+  const [artists, logos] = await Promise.all([listArtists(), listLogos()]);
+  const options = {
+    filters: FILTER_OPTIONS,
+    overlays: OVERLAY_OPTIONS,
+    artists,
+    logos,
+  };
+  _optionsCache = { at: now, options };
+  return options;
 }
 
 // --- enqueue ----------------------------------------------------------------
@@ -244,6 +341,7 @@ module.exports = {
   triggerWorker,
   getVideoJob,
   listSourceFolders,
+  listOptions,
   APP_NAME,
   JOBS_COLLECTION,
 };

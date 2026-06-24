@@ -1256,6 +1256,7 @@ const CUSTOM_DETAIL_CARD_IDS = new Set([
   'client-brief',
   'client-mockup',
   'mockup-studio',
+  'video-remix',
   'client-site',
   'social-media-posting',
   'strategy-builder',
@@ -2727,6 +2728,24 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	  });
 	  const [mockupStudioRenderLoading, setMockupStudioRenderLoading] = useState(false);
 	  const [videoRemixLoading, setVideoRemixLoading] = useState(false);
+	  const [videoRemixError, setVideoRemixError] = useState('');
+	  // Video Remix params tab — advanced setup mirrored on the EditVideos generator.
+	  const [videoRemixDraft, setVideoRemixDraft] = useState({
+	    artist: 'random',
+	    mixTitle: '',
+	    useTrax: false,
+	    selectedFolders: [],
+	    videoFilter: 'look_hard_bw_street_doc',
+	    filterIntensity: 0.8,
+	    enableOverlay: false,
+	    overlayEffect: '',
+	    topLogo: '',
+	    endLogo: '',
+	    useArtistImage: false,
+	    endTextOverlay: '',
+	  });
+	  const [videoRemixOptions, setVideoRemixOptions] = useState({ filters: [], overlays: [], artists: [], logos: [] });
+	  const [videoRemixFolders, setVideoRemixFolders] = useState([]);
 	  const [mockupStudioRenderError, setMockupStudioRenderError] = useState('');
 	  const [postMeLoading, setPostMeLoading] = useState(false);
 	  const [postMeResult, setPostMeResult] = useState(null); // null | { ok, twitterId, error }
@@ -2918,75 +2937,107 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	  // worker drains it and writes the capture back into dashboard_state.mediaCaptures,
 	  // which the live listener above picks up. We optimistically set the pending
 	  // marker so the card flips to "Queued…" without waiting for the round-trip.
-	  const runVideoRemix = useCallback(async ({ sourceFolders = null } = {}) => {
+	  const runVideoRemix = useCallback(async ({ sourceFolders = null, recipe: recipeOverride = null } = {}) => {
 	    if (!user || videoRemixLoading) return;
 	    setVideoRemixLoading(true);
+	    setVideoRemixError('');
 	    try {
-	      const token = await user.getIdToken();
+	      await runWithTerminal({
+	        title: 'GENERATING VIDEO REMIX',
+	        brand: 'Video Remix',
+	        host: '',
+	        stages: [
+	          { pfx: '[QUEUE]',    text: 'creating render job…' },
+	          { pfx: '[DISPATCH]', text: 'waking the EditVideos render worker…' },
+	          { pfx: '[RENDER]',   text: 'compositing clips, filters & audio…' },
+	          { pfx: '[SAVE]',     text: 'saving to your deliverables…' },
+	        ],
+	        task: async () => {
+	          const token = await user.getIdToken();
 
-	      // Use REAL EditVideos source folders so the live render pipeline has clips
-	      // to work with. Fall back to ['uploads'] only if discovery returns nothing.
-	      let folders = Array.isArray(sourceFolders) && sourceFolders.length ? sourceFolders : null;
-	      if (!folders) {
-	        try {
-	          const fRes = await fetch(apiPath('/api/dashboard/media?action=folders'), {
-	            headers: { Authorization: `Bearer ${token}` },
-	          });
-	          const fData = await fRes.json().catch(() => ({}));
-	          if (Array.isArray(fData?.folders) && fData.folders.length) {
-	            folders = fData.folders.slice(0, 2);
+	          // Recipe: an explicit override (from the params tab) wins; otherwise
+	          // resolve real EditVideos folders so the pipeline has clips to work with.
+	          let recipe = recipeOverride;
+	          if (!recipe) {
+	            let folders = Array.isArray(sourceFolders) && sourceFolders.length ? sourceFolders : null;
+	            if (!folders) {
+	              try {
+	                const fRes = await fetch(apiPath('/api/dashboard/media?action=folders'), {
+	                  headers: { Authorization: `Bearer ${token}` },
+	                });
+	                const fData = await fRes.json().catch(() => ({}));
+	                if (Array.isArray(fData?.folders) && fData.folders.length) folders = fData.folders.slice(0, 2);
+	              } catch { /* fall through to default */ }
+	            }
+	            if (!folders || !folders.length) folders = ['uploads'];
+	            recipe = { sourceFolders: folders, output: { width: 720, height: 720, fps: 30, format: 'mp4', durationSeconds: 30 } };
 	          }
-	        } catch { /* fall through to default */ }
-	      }
-	      if (!folders || !folders.length) folders = ['uploads'];
 
-	      const res = await fetch(apiPath('/api/dashboard/media?action=create-video-remix'), {
-	        method: 'POST',
-	        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-	        body: JSON.stringify({
-	          sourceFolders: folders,
-	          output: { width: 720, height: 720, fps: 30, format: 'mp4', durationSeconds: 30 },
-	        }),
-	      });
-	      const data = await res.json().catch(() => ({}));
-	      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-	      if (data?.jobId) {
-	        if (!cancelledRef.current) {
-	          setBootstrap((prev) => {
-	            const dash = prev?.dashboardState || {};
-	            return {
-	              ...prev,
-	              dashboardState: {
-	                ...dash,
-	                mediaVideoPending: { jobId: data.jobId, editJobId: data.editJobId || null, type: 'video-remix', queuedAt: new Date().toISOString(), sourceFolders: folders },
-	              },
-	            };
+	          const res = await fetch(apiPath('/api/dashboard/media?action=create-video-remix'), {
+	            method: 'POST',
+	            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+	            body: JSON.stringify(recipe),
 	          });
-	        }
+	          const data = await res.json().catch(() => ({}));
+	          if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+	          const jobId = data?.jobId;
+	          if (!jobId) throw new Error('No job id returned from the server.');
 
-	        // Light poll: reconcile (server-side, on job GET) pulls the EditVideos
-	        // result forward so the live listener flips the card to "Video ready".
-	        // No manual state write on done — reconcile + listener own mediaCaptures.
-	        const jobId = data.jobId;
-	        for (let i = 0; i < 24; i += 1) {
-	          await new Promise((r) => setTimeout(r, 5000));
-	          if (cancelledRef.current) break;
-	          try {
-	            const jRes = await fetch(apiPath(`/api/dashboard/media?action=job&jobId=${encodeURIComponent(jobId)}`), {
-	              headers: { Authorization: `Bearer ${token}` },
+	          // Optimistic pending so the card face flips to "Queued…" right away.
+	          if (!cancelledRef.current) {
+	            setBootstrap((prev) => {
+	              const dash = prev?.dashboardState || {};
+	              return {
+	                ...prev,
+	                dashboardState: {
+	                  ...dash,
+	                  mediaVideoPending: { jobId, editJobId: data.editJobId || null, type: 'video-remix', queuedAt: new Date().toISOString(), sourceFolders: recipe.sourceFolders },
+	                },
+	              };
 	            });
-	            const jData = await jRes.json().catch(() => ({}));
-	            const status = jData?.job?.status;
-	            if (status === 'done' || status === 'failed') break;
-	          } catch { /* keep polling */ }
-	        }
-	      }
+	          }
+
+	          // Poll until done/failed. The job GET reconciles server-side, so on
+	          // `done` the job carries the final capture (job.output). We MERGE it
+	          // into local state directly — this makes the card flip to "Video
+	          // ready" even when the live dashboard_state listener is off (admin
+	          // impersonation) or the bootstrap payload was served from cache.
+	          let capture = null;
+	          for (let i = 0; i < 60; i += 1) {
+	            await new Promise((r) => setTimeout(r, 5000));
+	            if (cancelledRef.current) break;
+	            let job = null;
+	            try {
+	              const jRes = await fetch(apiPath(`/api/dashboard/media?action=job&jobId=${encodeURIComponent(jobId)}`), {
+	                headers: { Authorization: `Bearer ${token}` },
+	              });
+	              const jData = await jRes.json().catch(() => ({}));
+	              job = jData?.job || null;
+	            } catch { continue; }
+	            if (job?.status === 'done') { capture = job.output || null; break; }
+	            if (job?.status === 'failed') throw new Error(job.error || 'The render worker reported a failure.');
+	          }
+
+	          if (capture && !cancelledRef.current) {
+	            setBootstrap((prev) => {
+	              const dash = prev?.dashboardState || {};
+	              const cur = Array.isArray(dash.mediaCaptures) ? dash.mediaCaptures : [];
+	              const deduped = cur.filter((c) => c?.jobId !== capture.jobId && c?.storagePath !== capture.storagePath);
+	              return { ...prev, dashboardState: { ...dash, mediaCaptures: [...deduped, capture].slice(-40), mediaVideoPending: null } };
+	            });
+	          }
+
+	          return capture
+	            ? { doneText: 'video ready — saved to your deliverables', videoUrl: capture.downloadUrl || null }
+	            : { doneText: 'video queued — it will appear here when the worker finishes', videoUrl: null };
+	        },
+	      });
 	    } catch (err) {
-	      if (process.env.NODE_ENV !== 'production') console.warn('[video-remix] enqueue:', err?.message || err);
+	      setVideoRemixError(err?.message || 'Video remix failed.');
 	    } finally {
 	      if (!cancelledRef.current) setVideoRemixLoading(false);
 	    }
-	  }, [user, videoRemixLoading, apiPath]);
+	  }, [user, videoRemixLoading, apiPath, runWithTerminal]);
 
 
 	  const openLeadgenFlow = useCallback(async (step) => {
@@ -3961,8 +4012,42 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    if (id === 'brand-system') { setModalTab('master-prompt'); return; }
 	    if (id === 'local-weather') { setModalTab('config'); return; }
 	    if (id === 'mockup-studio') { setModalTab('setup'); return; }
+	    if (id === 'video-remix') { setModalTab('remix'); return; }
 	    setModalTab(CUSTOM_DETAIL_CARD_IDS.has(id) ? 'solutions' : 'report');
   }, [activeTileModal?.cardId, bootstrap?.dashboardState?.artifacts?.skillDocs]);
+
+  // Load Video Remix options (filters/overlays/artists/logos) + source folders
+  // when the params modal opens. Guards against refetch + unmount like siblings.
+  useEffect(() => {
+    if (activeTileModal?.cardId !== 'video-remix') return undefined;
+    if (!user) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const headers = { Authorization: `Bearer ${token}` };
+        const [optRes, folderRes] = await Promise.all([
+          fetch(apiPath('/api/dashboard/media?action=options'), { headers, cache: 'no-store' }),
+          fetch(apiPath('/api/dashboard/media?action=folders'), { headers, cache: 'no-store' }),
+        ]);
+        const optData = await optRes.json().catch(() => ({}));
+        const folderData = await folderRes.json().catch(() => ({}));
+        if (cancelled) return;
+        if (optData?.options) {
+          setVideoRemixOptions({
+            filters: Array.isArray(optData.options.filters) ? optData.options.filters : [],
+            overlays: Array.isArray(optData.options.overlays) ? optData.options.overlays : [],
+            artists: Array.isArray(optData.options.artists) ? optData.options.artists : [],
+            logos: Array.isArray(optData.options.logos) ? optData.options.logos : [],
+          });
+        }
+        if (Array.isArray(folderData?.folders)) setVideoRemixFolders(folderData.folders);
+      } catch {
+        /* degrade — tab still renders with Random-only defaults */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activeTileModal?.cardId, user, apiPath]);
 
   useEffect(() => {
     if (!showTierModal) return undefined;
@@ -13650,6 +13735,84 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   </div>
                 )}
 
+                {/* Market Signals — run each search source live and confirm the raw
+                    results per parameter. Reuses the scout-test engine (web/x/reddit)
+                    via renderSourcePlatformRow. LIGHTWEIGHT: it runs the same searches
+                    the brief uses but does NOT refresh the stored brief, and shows raw
+                    results (not brief-formatted). Admin-only (generic tile modal). */}
+                {activeTileModal.cardId === 'signals' && (
+                  <div id="signals-panel" className="tile-detail-bento-cell">
+                    <div className="mu-tab-pane" style={{ padding: 18 }}>
+                      <p style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--text-secondary)', margin: 0 }}>
+                        Run each search source live and confirm the raw results it returns — per parameter, not brief-formatted. This is a check tool: it runs the same searches the brief uses but does <strong>not</strong> refresh the stored brief.
+                      </p>
+                      {marketingBriefConfig ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                            <div className="tile-detail-row-section-head" style={{ margin: 0 }}>Search Sources</div>
+                            <button
+                              type="button"
+                              className="tile-view-details-btn"
+                              onClick={() => {
+                                (marketingBriefConfig?.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS)
+                                  .filter((k) => UNLOCKED_SOURCE_PLATFORMS.includes(k))
+                                  .forEach((k) => runScoutTestForPlatform(k));
+                              }}
+                            >Run all enabled</button>
+                          </div>
+                          {[
+                            WEB_SEARCH_SOURCES.find((p) => p.key === 'web'),
+                            SOCIAL_SIGNAL_SOURCES.find((p) => p.key === 'x'),
+                            SOCIAL_SIGNAL_SOURCES.find((p) => p.key === 'reddit'),
+                          ].filter(Boolean).map((p) => renderSourcePlatformRow(p))}
+                          <p style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--text-secondary)', margin: '4px 0 0 2px' }}>
+                            Toggle a source on, then <strong>Run</strong> to confirm exactly what it returns.
+                          </p>
+
+                          {/* Inputs · the non-source search parameters. These aren't simple
+                              on/off (they're handles, keywords, a freshness window) — each
+                              shows its current state and deep-links to its own card to edit.
+                              Editing there changes what every brief run uses. */}
+                          <div className="tile-detail-row-section-head" style={{ marginTop: 14 }}>Inputs · customize</div>
+                          {[
+                            { id: 'watchlist', number: 'WL', label: 'WATCHLIST', title: 'Watchlist & Competitors',
+                              status: `${(marketingBriefConfig?.kols || []).length} handle${(marketingBriefConfig?.kols || []).length === 1 ? '' : 's'}${marketingBriefConfig?.kolSearchMode ? ` · ${marketingBriefConfig.kolSearchMode}` : ''}` },
+                            { id: 'brand-keywords', number: 'SP', label: 'SEARCH PARAMETERS', title: 'Search Parameters',
+                              status: `${(marketingBriefConfig?.brandKeywords || []).length} keyword${(marketingBriefConfig?.brandKeywords || []).length === 1 ? '' : 's'} · ${(marketingBriefConfig?.categoryTerms || []).length} category` },
+                            { id: 'scout-focus', number: 'SF', label: 'SCOUT FOCUS', title: 'Research Focus',
+                              status: `freshness ${marketingBriefConfig?.freshnessDays ?? 7}d` },
+                          ].map((it) => (
+                            <div key={it.id} className="tile-detail-stat-row" style={{ alignItems: 'center' }}>
+                              <span className="tile-detail-stat-label">{it.title}</span>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.06em', color: 'var(--text-secondary)' }}>{it.status}</span>
+                                <button type="button" className="tile-view-details-btn" onClick={() => openCapabilityCard({ id: it.id, category: 'growth', number: it.number, label: it.label, title: it.title, description: '', rows: [] })}>Customize →</button>
+                              </span>
+                            </div>
+                          ))}
+                          {/* Local Weather — a real on/off (weather.enabled) plus a link to set the ZIP. */}
+                          <div className="tile-detail-stat-row" style={{ alignItems: 'center' }}>
+                            <span className="tile-detail-stat-label">Local Weather</span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <button type="button" className="tile-view-details-btn" onClick={() => setMarketingBriefConfig((prev) => ({ ...(prev || {}), weather: { ...((prev || {}).weather || {}), enabled: !(prev?.weather?.enabled) } }))}>
+                                {marketingBriefConfig?.weather?.enabled ? 'On' : 'Off'}
+                              </button>
+                              <button type="button" className="tile-view-details-btn" onClick={() => openCapabilityCard({ id: 'local-weather', category: 'growth', number: 'LW', label: 'LOCAL WEATHER', title: 'Local Weather', description: '', rows: [] })}>Customize →</button>
+                            </span>
+                          </div>
+
+                          <p style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--text-secondary)', margin: '10px 0 0 2px' }}>
+                            This configuration is exactly what a full <strong>Executive / Marketing Brief</strong> run includes.
+                          </p>
+                          {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
+                        </div>
+                      ) : (
+                        <p className="mu-notice" style={{ marginTop: 12 }}>Loading Scout config…</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Brief Preview — Agent Data Contract + cost estimate + Run Now → populates the Executive Brief */}
                 {activeTileModal.cardId === 'brief-preview' && (
                   <div id="brief-preview-panel" className="tile-detail-bento-cell">
@@ -14936,6 +15099,234 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                              );
 	                            }) : (
 	                              <div className="mu-empty">No Studio assets yet. Use SETUP, then click Run Video.</div>
+	                            )}
+	                          </div>
+	                        )}
+	                      </div>
+	                    </div>
+	                  );
+	                })()}
+
+	                {/* Video Remix — params setup + saved video assets */}
+	                {activeTileModal.cardId === 'video-remix' && (() => {
+	                  const mediaCaptures = Array.isArray(dashboardState?.mediaCaptures) ? dashboardState.mediaCaptures : [];
+	                  const savedRemixes = [...mediaCaptures].reverse().filter((item) => item?.type === 'video_remix');
+	                  const updateRemixDraft = (key, value) => setVideoRemixDraft((prev) => ({ ...prev, [key]: value }));
+	                  const draft = videoRemixDraft;
+	                  const artistList = Array.isArray(videoRemixOptions.artists) ? videoRemixOptions.artists : [];
+	                  const filterList = Array.isArray(videoRemixOptions.filters) ? videoRemixOptions.filters : [];
+	                  const overlayList = Array.isArray(videoRemixOptions.overlays) ? videoRemixOptions.overlays : [];
+	                  const logoList = Array.isArray(videoRemixOptions.logos) ? videoRemixOptions.logos : [];
+	                  const selectedArtist = artistList.find((a) => a.name === draft.artist) || null;
+	                  const artistMixes = selectedArtist && Array.isArray(selectedArtist.mixes) ? selectedArtist.mixes : [];
+	                  const canGenerate = !videoRemixLoading && draft.selectedFolders.length > 0;
+	                  const toggleFolder = (folder) => setVideoRemixDraft((prev) => {
+	                    const has = prev.selectedFolders.includes(folder);
+	                    return { ...prev, selectedFolders: has ? prev.selectedFolders.filter((f) => f !== folder) : [...prev.selectedFolders, folder] };
+	                  });
+	                  const buildRecipeAndRun = () => {
+	                    const recipe = {
+	                      sourceFolders: draft.selectedFolders,
+	                      output: { width: 720, height: 720, fps: 30, format: 'mp4', durationSeconds: 30 },
+	                      artist: draft.artist === 'random' ? null : draft.artist,
+	                      mixTitle: draft.mixTitle || null,
+	                      useTrax: draft.useTrax,
+	                      filter: draft.videoFilter && draft.videoFilter !== 'random'
+	                        ? { key: draft.videoFilter, intensity: draft.filterIntensity }
+	                        : { intensity: draft.filterIntensity },
+	                      overlay: draft.enableOverlay && draft.overlayEffect
+	                        ? { enabled: true, effect: draft.overlayEffect }
+	                        : { enabled: false },
+	                      logos: { top: draft.topLogo || null, end: draft.endLogo || null },
+	                      useArtistImage: draft.useArtistImage,
+	                      endCard: draft.endTextOverlay ? { text: draft.endTextOverlay } : null,
+	                    };
+	                    runVideoRemix({ recipe });
+	                  };
+	                  return (
+	                    <div
+	                      id="video-remix-modal-tabs-container"
+	                      className="tile-detail-bento-cell tile-detail-tabbed-container"
+	                    >
+	                      <div className="tile-detail-tabs">
+	                        <button type="button" className={`tile-detail-tab${modalTab === 'remix' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('remix')}>REMIX</button>
+	                        <button type="button" className={`tile-detail-tab${modalTab === 'assets' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('assets')}>SAVED ASSETS</button>
+	                      </div>
+	                      <div className="tile-detail-tab-content">
+	                        {modalTab === 'remix' && (
+	                          <div className="mu-tab-pane">
+	                            <section className="mu-section">
+	                              <div className="mu-section-head">
+	                                <span className="mu-index">VR</span>
+	                                <div>
+	                                  <h3>Video Remix setup</h3>
+	                                  <p>Pick the audio, source clips, look, overlay, logos, and end-card, then render a fresh 720×720 cut off-platform.</p>
+	                                </div>
+	                                <span className="mu-chip mu-chip--success">READY</span>
+	                              </div>
+	                              <div id="video-remix-settings" data-tooltip-disabled="true" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+	                                <label className="mu-field">
+	                                  <span className="mu-label">Audio source</span>
+	                                  <select className="mu-select" value={draft.useTrax ? 'tracks' : 'mix'} onChange={(e) => updateRemixDraft('useTrax', e.target.value === 'tracks')}>
+	                                    <option value="mix">Artist mix</option>
+	                                    <option value="tracks">Tracks (useTrax)</option>
+	                                  </select>
+	                                </label>
+	                                <label className="mu-field">
+	                                  <span className="mu-label">Artist</span>
+	                                  <select className="mu-select" value={draft.artist} onChange={(e) => setVideoRemixDraft((prev) => ({ ...prev, artist: e.target.value, mixTitle: '' }))}>
+	                                    <option value="random">Random</option>
+	                                    {artistList.map((a) => <option key={a.name} value={a.name}>{a.name}</option>)}
+	                                  </select>
+	                                </label>
+	                                {!draft.useTrax && (
+	                                  <label className="mu-field">
+	                                    <span className="mu-label">Mix</span>
+	                                    <select className="mu-select" value={draft.mixTitle} disabled={draft.artist === 'random' || !artistMixes.length} onChange={(e) => updateRemixDraft('mixTitle', e.target.value)}>
+	                                      <option value="">{draft.artist === 'random' ? 'Pick an artist first' : (artistMixes.length ? 'Random mix' : 'No mixes available')}</option>
+	                                      {artistMixes.map((m) => <option key={m} value={m}>{m}</option>)}
+	                                    </select>
+	                                  </label>
+	                                )}
+	                                <div className="mu-field">
+	                                  <span className="mu-label">Source folders ({draft.selectedFolders.length} selected)</span>
+	                                  {videoRemixFolders.length ? (
+	                                    <div className="mb-config-platform-grid" role="group" aria-label="Source folders">
+	                                      {videoRemixFolders.map((folder) => {
+	                                        const on = draft.selectedFolders.includes(folder);
+	                                        return (
+	                                          <button
+	                                            key={folder}
+	                                            type="button"
+	                                            role="switch"
+	                                            aria-checked={on}
+	                                            aria-label={folder}
+	                                            onClick={() => toggleFolder(folder)}
+	                                            className={`mb-config-platform-toggle${on ? ' is-on' : ''}`}
+	                                          >
+	                                            <span className="mb-config-platform-check" aria-hidden="true">{on ? '✓' : ''}</span>
+	                                            <span className="mb-config-platform-body">
+	                                              <span className="mb-config-platform-title">{folder}</span>
+	                                            </span>
+	                                          </button>
+	                                        );
+	                                      })}
+	                                    </div>
+	                                  ) : (
+	                                    <p className="mu-notice" style={{ marginTop: 0 }}>No source folders found yet.</p>
+	                                  )}
+	                                </div>
+	                                <label className="mu-field">
+	                                  <span className="mu-label">Filter look</span>
+	                                  <select className="mu-select" value={draft.videoFilter} onChange={(e) => updateRemixDraft('videoFilter', e.target.value)}>
+	                                    <option value="random">Random</option>
+	                                    {filterList.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
+	                                  </select>
+	                                </label>
+	                                <label className="mu-field">
+	                                  <span className="mu-label">Filter intensity — {Math.round(draft.filterIntensity * 100)}%</span>
+	                                  <input
+	                                    type="range"
+	                                    min="0"
+	                                    max="1"
+	                                    step="0.05"
+	                                    value={draft.filterIntensity}
+	                                    onChange={(e) => updateRemixDraft('filterIntensity', Number(e.target.value))}
+	                                  />
+	                                </label>
+	                                <label className="mu-field">
+	                                  <span className="mu-label">Overlay</span>
+	                                  <select
+	                                    className="mu-select"
+	                                    value={draft.enableOverlay ? draft.overlayEffect : ''}
+	                                    onChange={(e) => {
+	                                      const v = e.target.value;
+	                                      updateRemixDraft('overlayEffect', v);
+	                                      updateRemixDraft('enableOverlay', !!v);
+	                                    }}
+	                                  >
+	                                    {(overlayList.length ? overlayList : [{ value: '', label: 'None' }]).map((o) => <option key={o.value || 'none'} value={o.value}>{o.label}</option>)}
+	                                  </select>
+	                                </label>
+	                                <label className="mu-field">
+	                                  <span className="mu-label">Top logo</span>
+	                                  <select className="mu-select" value={draft.topLogo} onChange={(e) => updateRemixDraft('topLogo', e.target.value)}>
+	                                    <option value="">None</option>
+	                                    {logoList.map((l) => <option key={l} value={l}>{l}</option>)}
+	                                  </select>
+	                                </label>
+	                                <label className="mu-field">
+	                                  <span className="mu-label">End logo</span>
+	                                  <select
+	                                    className="mu-select"
+	                                    value={draft.endLogo}
+	                                    onChange={(e) => {
+	                                      const v = e.target.value;
+	                                      updateRemixDraft('endLogo', v);
+	                                      if (v) updateRemixDraft('endTextOverlay', '');
+	                                    }}
+	                                  >
+	                                    <option value="">None</option>
+	                                    {logoList.map((l) => <option key={l} value={l}>{l}</option>)}
+	                                  </select>
+	                                </label>
+	                                <button
+	                                  type="button"
+	                                  role="switch"
+	                                  aria-checked={draft.useArtistImage}
+	                                  aria-label="Use artist image end-card"
+	                                  onClick={() => updateRemixDraft('useArtistImage', !draft.useArtistImage)}
+	                                  className={`mb-config-platform-toggle${draft.useArtistImage ? ' is-on' : ''}`}
+	                                  style={{ width: '100%' }}
+	                                >
+	                                  <span className="mb-config-platform-check" aria-hidden="true">{draft.useArtistImage ? '✓' : ''}</span>
+	                                  <span className="mb-config-platform-body">
+	                                    <span className="mb-config-platform-title">Artist image end-card</span>
+	                                  </span>
+	                                </button>
+	                                <label className="mu-field">
+	                                  <span className="mu-label">End-card text {draft.endLogo ? '(disabled — end logo set)' : ''}</span>
+	                                  <input
+	                                    className="mu-input"
+	                                    value={draft.endTextOverlay}
+	                                    maxLength={80}
+	                                    disabled={!!draft.endLogo}
+	                                    placeholder="Optional end-card caption"
+	                                    onChange={(e) => updateRemixDraft('endTextOverlay', e.target.value)}
+	                                  />
+	                                </label>
+	                              </div>
+	                              {videoRemixError ? (
+	                                <p className="mu-notice mu-notice--danger" style={{ marginTop: 0 }}>{videoRemixError}</p>
+	                              ) : null}
+	                              <button type="button" className="mu-cta-primary" style={{ width: '100%' }} onClick={buildRecipeAndRun} disabled={!canGenerate}>
+	                                <span>{videoRemixLoading ? 'Rendering…' : 'Generate Video'}</span>
+	                              </button>
+	                            </section>
+	                          </div>
+	                        )}
+	                        {modalTab === 'assets' && (
+	                          <div className="tile-detail-tab-pane">
+	                            {savedRemixes.length ? savedRemixes.map((asset) => {
+	                              const url = asset.downloadUrl || asset.url || null;
+	                              return (
+	                                <div key={asset.storagePath || url || asset.jobId} className="mu-saved-card">
+	                                  <div className="mu-saved-head">
+	                                    <div>
+	                                      <span className="mu-saved-meta">video_remix · {asset.capturedAt ? new Date(asset.capturedAt).toLocaleString() : 'Saved'}</span>
+	                                      <h4 className="mu-saved-title">{asset.label || 'Branded remix'}</h4>
+	                                    </div>
+	                                    {url ? (
+	                                      <a className="mu-btn-outline" href={url} target="_blank" rel="noopener noreferrer">Open <UpRightArrow style={{ marginLeft: '0.1rem', opacity: 0.82 }} /></a>
+	                                    ) : null}
+	                                  </div>
+	                                  {url ? (
+	                                    <video src={url} controls muted playsInline preload="metadata" style={{ width: '100%', maxHeight: 260, borderRadius: 8, background: '#000' }} />
+	                                  ) : null}
+	                                </div>
+	                              );
+	                            }) : (
+	                              <div className="mu-empty">No remixes yet. Use REMIX, then click Generate Video.</div>
 	                            )}
 	                          </div>
 	                        )}
