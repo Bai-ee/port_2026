@@ -1,4 +1,5 @@
 import React from 'react';
+import Image from 'next/image';
 
 const agencyLogos = [
   { src: '/img/agencies/publicis.png', alt: 'Publicis', scale: 2 },
@@ -223,7 +224,7 @@ export default function SiteFooter() {
             </div>
           </div>
 
-          <img id="site-footer-sig" src="/img/sig.png" alt="Bryan Balli signature" />
+          <Image id="site-footer-sig" src="/img/sig.png" alt="Bryan Balli signature" width={276} height={208} style={{ width: 'min(110px,31vw)', height: 'auto', display: 'block' }} />
 
           {/* CTA */}
           <div id="site-footer-cta-row">
@@ -235,7 +236,7 @@ export default function SiteFooter() {
               className="cta-pill-btn"
               style={{ ...ctaStyle, textDecoration: 'none', border: 'none' }}
             >
-              <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
+              <Image src="/img/profile2_400x400.png" alt="" width={28} height={28} style={ctaAvatarStyle} />
               Meet With Your Human
               <span style={ctaIconStyle}>↗</span>
             </a>

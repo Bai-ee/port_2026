@@ -2,6 +2,7 @@
 import React, { useLayoutEffect, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import ReelPlayer from './ReelPlayer';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -44,10 +45,10 @@ const isNarrowTouchViewport = () =>
   window.matchMedia(NARROW_SCROLL_MEDIA_QUERY).matches;
 
 const agencyLogos = [
-  { src: '/img/agencies/publicis.png', alt: 'Publicis', scale: 2 },
-  { src: '/img/agencies/epsilon.png', alt: 'Epsilon' },
-  { src: '/img/agencies/conversant.png', alt: 'Conversant' },
-  { src: '/img/agencies/alliance.png', alt: 'Alliance Data' },
+  { src: '/img/agencies/publicis.png', alt: 'Publicis', scale: 2, w: 105, h: 100 },
+  { src: '/img/agencies/epsilon.png', alt: 'Epsilon', w: 175, h: 48 },
+  { src: '/img/agencies/conversant.png', alt: 'Conversant', w: 228, h: 42 },
+  { src: '/img/agencies/alliance.png', alt: 'Alliance Data', w: 201, h: 50 },
 ];
 
 const testimonials = [
@@ -1899,7 +1900,7 @@ const StackedSlidesSection = () => {
                             ? { ...ctaSecondaryStyle, cursor: 'pointer', textDecoration: 'none', flexShrink: 0, height: '3.25rem', boxSizing: 'border-box', alignSelf: 'center' }
                             : { ...heroCtaStyle, cursor: 'pointer', border: 'none', textDecoration: 'none', flexShrink: 0, height: '3.25rem', boxSizing: 'border-box', alignSelf: 'center' }}
                         >
-                          <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
+                          <Image src="/img/profile2_400x400.png" width={28} height={28} style={ctaAvatarStyle} alt="" />
                           Meet with A Human
                           <span style={ctaIconStyle}>↗</span>
                         </a>
@@ -1961,7 +1962,7 @@ const StackedSlidesSection = () => {
                                       boxShadow: '0 6px 20px rgba(0,0,0,0.09), 0 1px 0 rgba(255,255,255,0.85)',
                                     }}
                                   >
-                                    <img src={img} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', objectPosition: objPos, display: 'block', pointerEvents: 'none', userSelect: 'none' }} />
+                                    <Image src={img} alt="" fill sizes="(max-width: 768px) 33vw, 400px" style={{ objectFit: 'contain', objectPosition: objPos, pointerEvents: 'none', userSelect: 'none' }} />
                                   </div>
                                 ))}
                                 <article
@@ -2000,9 +2001,9 @@ const StackedSlidesSection = () => {
                                         <tbody>{CMO_TABLE_ROWS.map((row, ri, arr) => (<tr key={row.task} data-no-hover={TASK_TO_CARD[row.task] ? undefined : true} onMouseEnter={(e) => showRowCard(e, row.task)} onMouseLeave={hideRowCard} style={{ borderBottom: (row.task === 'DAILY STAND UP' || row.task === 'ONBOARD NOW' || (row.sub && !isSubLast(arr, ri))) ? 'none' : '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.7rem 0.2rem', textAlign: 'center', verticalAlign: 'middle', position: 'relative' }}>{row.task === 'ONBOARD NOW' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? <BriefConnector first={isSubFirst(arr, ri)} last={isSubLast(arr, ri)} /> : <span className="cmo-arrow" aria-hidden="true"><Lock size={12} /></span>}</td><td style={{ padding: row.sub ? '0.7rem 0.4rem 0.7rem 1.1rem' : '0.7rem 0.4rem', color: row.sub ? 'rgba(42,36,32,0.55)' : 'rgba(42,36,32,0.75)', fontWeight: row.bold ? 700 : (row.sub ? 400 : 500) }}>{row.task}</td><td style={{ padding: '0.7rem 0.4rem 0.7rem 0.6rem', textAlign: 'left', color: row.sub ? 'rgba(42,36,32,0.48)' : 'rgba(42,36,32,0.65)', fontWeight: row.bold ? 700 : 400 }}>{row.sub ? `• ${row.value}` : row.value}</td></tr>))}</tbody>
                                       </table>
                                     <blockquote id="cmo-quote-desktop" style={{ margin: 0, padding: 'clamp(1.5rem, 4vw, 3rem) 0', fontSize: 'clamp(0.9rem, 1.4vw, 1.15rem)', lineHeight: 1.55, color: 'rgba(42,36,32,0.72)', fontStyle: 'italic', fontFamily: "'Space Grotesk', system-ui, sans-serif", boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 'clamp(1.5rem, 3vw, 2.5rem)' }}>
-                                      <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: 'clamp(2.5rem, 4vw, 3.5rem)', height: 'clamp(2.5rem, 4vw, 3.5rem)', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', flexShrink: 0, display: 'block' }} />
+                                      <Image src="/img/profile2_400x400.png" width={56} height={56} alt="" aria-hidden="true" style={{ width: 'clamp(2.5rem, 4vw, 3.5rem)', height: 'clamp(2.5rem, 4vw, 3.5rem)', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', flexShrink: 0, display: 'block' }} />
                                       <div style={{ flex: 1, minWidth: 0 }}>
-                                        <span style={{ display: 'block', margin: '0 0 0.65rem' }}>“Hit Loop is a hands-on creative partnership delivering agentic solutions with taste and automation. Your Human curates multiple systems to deliver professional outcomes, so you can save time and money.”</span>
+                                        <span style={{ display: 'block', margin: '0 0 0.65rem' }}>"Hit Loop is a hands-on creative partnership delivering agentic solutions with taste and automation. Your Human curates multiple systems to deliver professional outcomes, so you can save time and money."</span>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', fontStyle: 'normal' }}>
                                           <span style={quoteAttributionNameStyle}>Bryan Balli</span>
                                           <span style={{ color: 'rgba(42,36,32,0.3)', fontSize: '0.75rem' }}>·</span>
@@ -2024,9 +2025,9 @@ const StackedSlidesSection = () => {
                                       <tbody>{CMO_TABLE_ROWS.map((row, ri, arr) => (<tr key={row.task} data-sub={row.sub || undefined} data-sublast={isSubLast(arr, ri) || undefined} style={{ borderBottom: (row.task === 'DAILY STAND UP' || row.task === 'ONBOARD NOW' || (row.sub && !isSubLast(arr, ri))) ? 'none' : '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.7rem 0.2rem', textAlign: 'center', position: 'relative' }}>{row.task === 'ONBOARD NOW' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? <BriefConnector first={isSubFirst(arr, ri)} last={isSubLast(arr, ri)} /> : <span className="cmo-arrow" aria-hidden="true"><Lock size={12} /></span>}</td><td style={{ padding: row.sub ? '0.7rem 0.4rem 0.7rem 1.1rem' : '0.7rem 0.4rem', color: row.sub ? 'rgba(42,36,32,0.55)' : 'rgba(42,36,32,0.75)', fontWeight: row.bold ? 700 : (row.sub ? 400 : 500) }}>{row.task}</td><td style={{ padding: '0.7rem 0.4rem 0.7rem 0.6rem', textAlign: 'left', color: row.sub ? 'rgba(42,36,32,0.48)' : 'rgba(42,36,32,0.65)', fontWeight: row.bold ? 700 : 400 }}>{row.sub ? `• ${row.value}` : row.value}</td></tr>))}</tbody>
                                     </table>
                                     <blockquote id="cmo-quote-mobile" style={{ margin: 0, padding: 'clamp(1.5rem, 4vw, 3rem) 0', fontSize: 'clamp(0.9rem, 1.4vw, 1.15rem)', lineHeight: 1.55, color: 'rgba(42,36,32,0.72)', fontStyle: 'italic', fontFamily: "'Space Grotesk', system-ui, sans-serif", boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 'clamp(1.5rem, 3vw, 2.5rem)' }}>
-                                      <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: 'clamp(2.5rem, 4vw, 3.5rem)', height: 'clamp(2.5rem, 4vw, 3.5rem)', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', flexShrink: 0, display: 'block' }} />
+                                      <Image src="/img/profile2_400x400.png" width={56} height={56} alt="" aria-hidden="true" style={{ width: 'clamp(2.5rem, 4vw, 3.5rem)', height: 'clamp(2.5rem, 4vw, 3.5rem)', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', flexShrink: 0, display: 'block' }} />
                                       <div style={{ flex: 1, minWidth: 0 }}>
-                                        <span style={{ display: 'block', margin: '0 0 0.65rem' }}>“Hit Loop is a hands-on creative partnership delivering agentic solutions with taste and automation. Your Human curates multiple systems to deliver professional outcomes, so you can save time and money.”</span>
+                                        <span style={{ display: 'block', margin: '0 0 0.65rem' }}>"Hit Loop is a hands-on creative partnership delivering agentic solutions with taste and automation. Your Human curates multiple systems to deliver professional outcomes, so you can save time and money."</span>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', fontStyle: 'normal' }}>
                                           <span style={quoteAttributionNameStyle}>Bryan Balli</span>
                                           <span style={{ color: 'rgba(42,36,32,0.3)', fontSize: '0.75rem' }}>·</span>
@@ -2051,7 +2052,7 @@ const StackedSlidesSection = () => {
                                     {item.previewVideo ? (
                                       <video src={item.previewVideo} autoPlay muted loop playsInline style={mobileCapabilityPreviewImageStyle} />
                                     ) : (
-                                      <img src={item.previewImage} alt="" style={mobileCapabilityPreviewImageStyle} />
+                                      <Image src={item.previewImage} alt="" fill sizes="90vw" style={{ objectFit: 'cover', display: 'block' }} />
                                     )}
                                   </div>
                                 ) : null}
@@ -2097,12 +2098,12 @@ const StackedSlidesSection = () => {
                             { type: 'testimonial', data: testimonials[3] },
                             { type: 'image', src: PORTFOLIO_IMAGES[8] },
                           ].map((item) => item.type === 'image' ? (
-                            <div key={item.src} className="testimonials-port-img" style={{ width: '100%', borderRadius: '0.75rem', overflow: 'hidden', border: '1px solid rgba(42,36,32,0.1)', aspectRatio: '16 / 5', boxSizing: 'border-box' }}>
-                              <img src={item.src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                            <div key={item.src} className="testimonials-port-img" style={{ position: 'relative', width: '100%', borderRadius: '0.75rem', overflow: 'hidden', border: '1px solid rgba(42,36,32,0.1)', aspectRatio: '16 / 5', boxSizing: 'border-box' }}>
+                              <Image src={item.src} alt="" fill sizes="(max-width: 768px) 100vw, 50vw" style={{ objectFit: 'cover' }} />
                             </div>
                           ) : (
                             <article key={item.data.name + item.data.company} style={{ ...secondaryQuoteItemStyle, width: '100%', boxSizing: 'border-box', overflow: 'hidden', aspectRatio: '19 / 6', flexDirection: 'row', alignItems: 'center', gap: 'clamp(1.5rem, 3vw, 2.5rem)', padding: 'clamp(1.5rem, 3vw, 2.5rem)' }}>
-                              <img src={item.data.img} alt={item.data.name} style={{ ...testimonialCardAvatarStyle, flexShrink: 0, width: 'clamp(2.5rem, 4vw, 3.5rem)', height: 'clamp(2.5rem, 4vw, 3.5rem)' }} />
+                              <Image src={item.data.img} alt={item.data.name} width={56} height={56} style={{ ...testimonialCardAvatarStyle, flexShrink: 0, width: 'clamp(2.5rem, 4vw, 3.5rem)', height: 'clamp(2.5rem, 4vw, 3.5rem)' }} />
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <p style={{ ...featuredQuoteTextStyle, fontSize: 'clamp(0.9rem, 1.4vw, 1.15rem)', margin: '0 0 0.65rem' }}>{item.data.quote}</p>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
@@ -2154,7 +2155,7 @@ const StackedSlidesSection = () => {
                             {item.previewVideo ? (
                               <video src={item.previewVideo} autoPlay muted loop playsInline style={mobileCapabilityPreviewImageStyle} />
                             ) : (
-                              <img src={item.previewImage} alt="" style={mobileCapabilityPreviewImageStyle} />
+                              <Image src={item.previewImage} alt="" fill sizes="90vw" style={{ objectFit: 'cover', display: 'block' }} />
                             )}
                           </div>
                         ) : null}
@@ -2188,7 +2189,7 @@ const StackedSlidesSection = () => {
                           ))}
                         </div>
                       </div>
-                      <img src="/img/sig.png" alt="Bryan Balli signature" style={inlineFooterSignatureStyle} />
+                      <Image src="/img/sig.png" alt="Bryan Balli signature" width={276} height={208} style={inlineFooterSignatureStyle} />
 
                       <div id="footer-cta-input-row" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'clamp(0.5rem, 1.5vw, 1rem)', width: '100%', marginTop: 'clamp(1.25rem, 2.5vw, 2rem)', marginBottom: 0 }}>
                         <div id="footer-url-input-row" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 1, minWidth: 'min(100%, 18rem)', height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
@@ -2204,7 +2205,7 @@ const StackedSlidesSection = () => {
                           className="cta-pill-btn"
                           style={{ ...heroCtaStyle, textDecoration: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, alignSelf: 'center' }}
                         >
-                          <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
+                          <Image src="/img/profile2_400x400.png" width={28} height={28} style={ctaAvatarStyle} alt="" />
                           Meet with A Human
                           <span style={ctaIconStyle}>↗</span>
                         </a>
@@ -2217,12 +2218,12 @@ const StackedSlidesSection = () => {
                         <div ref={marqueeTrackRef} style={agencyMarqueeTrackStyle}>
                           <div ref={marqueeSetRef} style={agencyMarqueeSetStyle}>
                             {agencyLogos.map((logo) => (
-                              <img key={`agency-a-${logo.alt}`} src={logo.src} alt={logo.alt} style={logo.scale ? { ...agencyLogoStyle, height: `${22 * logo.scale}px` } : agencyLogoStyle} />
+                              <Image key={`agency-a-${logo.alt}`} src={logo.src} alt={logo.alt} width={logo.w} height={logo.h} style={logo.scale ? { ...agencyLogoStyle, width: 'auto', height: `${22 * logo.scale}px` } : { ...agencyLogoStyle, width: 'auto' }} />
                             ))}
                           </div>
                           <div aria-hidden="true" style={agencyMarqueeSetStyle}>
                             {agencyLogos.map((logo) => (
-                              <img key={`agency-b-${logo.alt}`} src={logo.src} alt="" style={logo.scale ? { ...agencyLogoStyle, height: `${22 * logo.scale}px` } : agencyLogoStyle} />
+                              <Image key={`agency-b-${logo.alt}`} src={logo.src} alt="" width={logo.w} height={logo.h} style={logo.scale ? { ...agencyLogoStyle, width: 'auto', height: `${22 * logo.scale}px` } : { ...agencyLogoStyle, width: 'auto' }} />
                             ))}
                           </div>
                         </div>
@@ -2349,7 +2350,7 @@ const StackedSlidesSection = () => {
         >
           <div id="cmo-auth-card" onClick={(e) => e.stopPropagation()}>
             <div id="cmo-auth-brand-row">
-              <img id="cmo-auth-sig" src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" />
+              <Image id="cmo-auth-sig" src="/img/profile2_400x400.png" width={44} height={44} alt="" aria-hidden="true" />
               <span id="cmo-auth-eyebrow">ONBOARDING</span>
               <button type="button" id="cmo-auth-back-btn" onClick={() => setShowCmoModal(false)} aria-label="Close">✕</button>
             </div>
@@ -4157,7 +4158,7 @@ export function ContactCapabilitiesPanel() {
                           {item.previewVideo ? (
                             <video src={item.previewVideo} autoPlay muted loop playsInline style={mobileCapabilityPreviewImageStyle} />
                           ) : (
-                            <img src={item.previewImage} alt="" style={mobileCapabilityPreviewImageStyle} />
+                            <Image src={item.previewImage} alt="" fill sizes="90vw" style={{ objectFit: 'cover', display: 'block' }} />
                           )}
                         </div>
                       ) : null}
@@ -4190,7 +4191,7 @@ export function ContactCapabilitiesPanel() {
                         ))}
                       </div>
                     </div>
-                    <img src="/img/sig.png" alt="Bryan Balli signature" style={inlineFooterSignatureStyle} />
+                    <Image src="/img/sig.png" alt="Bryan Balli signature" width={276} height={208} style={inlineFooterSignatureStyle} />
 
                     <div id="footer-cta-input-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 'clamp(0.5rem, 1.5vw, 1rem)', width: '100%', marginTop: 'clamp(1.25rem, 2.5vw, 2rem)', marginBottom: 0 }}>
                       <a
@@ -4201,7 +4202,7 @@ export function ContactCapabilitiesPanel() {
                         className="cta-pill-btn"
                         style={{ ...heroCtaStyle, textDecoration: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, alignSelf: 'center' }}
                       >
-                        <img src="/img/profile2_400x400.png?v=1774582808" style={ctaAvatarStyle} alt="" />
+                        <Image src="/img/profile2_400x400.png" width={28} height={28} style={ctaAvatarStyle} alt="" />
                         Meet with a Human
                         <span style={ctaIconStyle}>↗</span>
                       </a>
@@ -4214,12 +4215,12 @@ export function ContactCapabilitiesPanel() {
                       <div ref={marqueeTrackRef} style={agencyMarqueeTrackStyle}>
                         <div ref={marqueeSetRef} style={agencyMarqueeSetStyle}>
                           {agencyLogos.map((logo) => (
-                            <img key={`agency-a-${logo.alt}`} src={logo.src} alt={logo.alt} style={logo.scale ? { ...agencyLogoStyle, height: `${22 * logo.scale}px` } : agencyLogoStyle} />
+                            <Image key={`agency-a-${logo.alt}`} src={logo.src} alt={logo.alt} width={logo.w} height={logo.h} style={logo.scale ? { ...agencyLogoStyle, width: 'auto', height: `${22 * logo.scale}px` } : { ...agencyLogoStyle, width: 'auto' }} />
                           ))}
                         </div>
                         <div aria-hidden="true" style={agencyMarqueeSetStyle}>
                           {agencyLogos.map((logo) => (
-                            <img key={`agency-b-${logo.alt}`} src={logo.src} alt="" style={logo.scale ? { ...agencyLogoStyle, height: `${22 * logo.scale}px` } : agencyLogoStyle} />
+                            <Image key={`agency-b-${logo.alt}`} src={logo.src} alt="" width={logo.w} height={logo.h} style={logo.scale ? { ...agencyLogoStyle, width: 'auto', height: `${22 * logo.scale}px` } : { ...agencyLogoStyle, width: 'auto' }} />
                           ))}
                         </div>
                       </div>

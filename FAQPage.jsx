@@ -1,15 +1,16 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import Image from 'next/image';
 import InternalPageBackground from './InternalPageBackground';
 import Header from './Header';
 import { internalPageGlassCardStyle } from './pageSurfaceSystem';
 
 const agencyLogos = [
-  { src: '/img/agencies/publicis.png', alt: 'Publicis', scale: 2 },
-  { src: '/img/agencies/epsilon.png', alt: 'Epsilon' },
-  { src: '/img/agencies/conversant.png', alt: 'Conversant' },
-  { src: '/img/agencies/alliance.png', alt: 'Alliance Data' },
+  { src: '/img/agencies/publicis.png', alt: 'Publicis', scale: 2, intrinsicW: 105, intrinsicH: 100 },
+  { src: '/img/agencies/epsilon.png', alt: 'Epsilon', intrinsicW: 175, intrinsicH: 48 },
+  { src: '/img/agencies/conversant.png', alt: 'Conversant', intrinsicW: 228, intrinsicH: 42 },
+  { src: '/img/agencies/alliance.png', alt: 'Alliance Data', intrinsicW: 201, intrinsicH: 50 },
 ];
 
 const FAQS = [
@@ -330,7 +331,7 @@ export default function FAQPage() {
               </div>
             </div>
 
-            <img src="/img/sig.png" alt="Bryan Balli signature" style={{ width: 'min(110px, 31vw)', height: 'auto', display: 'block' }} />
+            <Image src="/img/sig.png" alt="Bryan Balli signature" width={110} height={83} style={{ width: 'min(110px, 31vw)', height: 'auto', display: 'block' }} />
 
             <blockquote style={{ margin: 'clamp(1rem, 2vw, 1.5rem) 0', padding: 'clamp(1rem, 2vw, 1.5rem) clamp(1.25rem, 3vw, 2rem)', borderLeft: '3px solid rgba(42,36,32,0.15)', fontSize: 'clamp(1.35rem, 1.85vw, 1.65rem)', lineHeight: 1.55, color: 'rgba(42,36,32,0.72)', fontStyle: 'italic', fontFamily: "'Space Grotesk', system-ui, sans-serif", textAlign: 'left' }}>
               "Brief, prototype, and pipeline — scoped to what you actually need to launch and keep running."
@@ -366,7 +367,7 @@ export default function FAQPage() {
                 marginBottom: '20px',
               }}
             >
-              <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: '1.75rem', height: '1.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', flexShrink: 0, display: 'block' }} />
+              <Image src="/img/profile2_400x400.png" alt="" aria-hidden="true" width={28} height={28} style={{ width: '1.75rem', height: '1.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', flexShrink: 0, display: 'block' }} />
               Meet With Your Human
               <span aria-hidden="true" style={{ fontSize: '0.7rem', opacity: 0.75, marginLeft: '0.1rem' }}>↗</span>
             </a>
@@ -382,14 +383,20 @@ export default function FAQPage() {
               <div className="faq-marquee-agency" style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', animation: 'agentMarquee 18s linear infinite' }}>
                 {['a', 'b'].map((k) => (
                   <div key={k} aria-hidden={k === 'b' ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '2rem', paddingRight: 'clamp(0.5rem, 1.5vw, 2rem)', flexShrink: 0 }}>
-                    {agencyLogos.map((logo) => (
-                      <img
-                        key={logo.alt}
-                        src={logo.src}
-                        alt={k === 'a' ? logo.alt : ''}
-                        style={{ height: logo.scale ? `${22 * logo.scale}px` : '22px', width: 'auto', display: 'block', opacity: 0.45, filter: 'grayscale(1)', flexShrink: 0 }}
-                      />
-                    ))}
+                    {agencyLogos.map((logo) => {
+                      const renderedH = logo.scale ? 22 * logo.scale : 22;
+                      const renderedW = Math.round((logo.intrinsicW / logo.intrinsicH) * renderedH);
+                      return (
+                        <Image
+                          key={logo.alt}
+                          src={logo.src}
+                          alt={k === 'a' ? logo.alt : ''}
+                          width={renderedW}
+                          height={renderedH}
+                          style={{ height: `${renderedH}px`, width: 'auto', display: 'block', opacity: 0.45, filter: 'grayscale(1)', flexShrink: 0 }}
+                        />
+                      );
+                    })}
                   </div>
                 ))}
               </div>

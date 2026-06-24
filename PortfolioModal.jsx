@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import Image from 'next/image';
 import SubscribeModal from './components/payments/SubscribeModal';
 import {
   benefits,
@@ -119,7 +120,7 @@ const renderPageBody = (pageId, { onSubscribe } = {}) => {
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                <img src="/img/profile2_400x400.png?v=1774582808" style={avatarStyle} alt="Bryan Balli, AI design engineer and creative technologist" />
+                <Image src="/img/profile2_400x400.png" width={28} height={28} style={avatarStyle} alt="Bryan Balli, AI design engineer and creative technologist" />
                 {plan.cta}
                 <span style={btnIconStyle}>↗</span>
               </a>
@@ -132,7 +133,7 @@ const renderPageBody = (pageId, { onSubscribe } = {}) => {
           <p style={priceStyle}>$5<span style={unitStyle}>/mo</span></p>
           <p style={copyStyle}>Ongoing access to tools and updates. Cancel anytime.</p>
           <button type="button" className="cta-pill-btn" style={{ ...primaryButtonStyle, border: 'none' }} onClick={onSubscribe}>
-            <img src="/img/profile2_400x400.png?v=1774582808" style={avatarStyle} alt="Bryan Balli, AI design engineer and creative technologist" />
+            <Image src="/img/profile2_400x400.png" width={28} height={28} style={avatarStyle} alt="Bryan Balli, AI design engineer and creative technologist" />
             Subscribe
             <span style={btnIconStyle}>↗</span>
           </button>
@@ -155,7 +156,7 @@ const renderPageBody = (pageId, { onSubscribe } = {}) => {
           data-cal-namespace="30min"
           data-cal-config='{"layout":"month_view","useSlotsViewOnSmallScreen":"true"}'
         >
-          <img src="/img/profile2_400x400.png?v=1774582808" style={avatarStyle} alt="Bryan Balli, AI design engineer and creative technologist" />
+          <Image src="/img/profile2_400x400.png" width={28} height={28} style={avatarStyle} alt="Bryan Balli, AI design engineer and creative technologist" />
           Book a Call
           <span style={btnIconStyle}>↗</span>
         </a>
@@ -174,7 +175,7 @@ const renderPageBody = (pageId, { onSubscribe } = {}) => {
         <div style={newsletterFormStyle}>
           <input type="email" placeholder="Your email address" style={inputStyle} />
           <button type="button" className="cta-pill-btn" style={primaryButtonStyle}>
-            <img src="/img/profile2_400x400.png?v=1774582808" style={avatarStyle} alt="Bryan Balli, AI design engineer and creative technologist" />
+            <Image src="/img/profile2_400x400.png" width={28} height={28} style={avatarStyle} alt="Bryan Balli, AI design engineer and creative technologist" />
             Subscribe
           </button>
         </div>
@@ -528,8 +529,6 @@ const unitStyle = {
 };
 
 const avatarStyle = {
-  width: '1.75rem',
-  height: '1.75rem',
   borderRadius: '50%',
   objectFit: 'cover',
   border: '2px solid rgba(255,255,255,0.35)',

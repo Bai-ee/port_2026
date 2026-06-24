@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { useAuth } from './AuthContext';
 
 const Header = ({ logoRef, onOpenPage, logoSrc = '/img/sig.png' }) => {
@@ -46,7 +47,7 @@ const Header = ({ logoRef, onOpenPage, logoSrc = '/img/sig.png' }) => {
           <div ref={logoRef} aria-hidden="true" style={{ width: 0, height: 0, pointerEvents: 'none', position: 'absolute' }} />
 
           <a href="/" id="founders-brand" aria-label="Back to homepage">
-            <img src={logoSrc} alt={isSignatureLogo ? 'Bryan Balli signature' : 'Bryan Balli logo'} width={isSignatureLogo ? 276 : 663} height={isSignatureLogo ? 208 : 552} loading="eager" decoding="async" style={{ mixBlendMode: 'darken' }} />
+            <Image src={logoSrc} alt={isSignatureLogo ? 'Bryan Balli signature' : 'Bryan Balli logo'} width={isSignatureLogo ? 276 : 663} height={isSignatureLogo ? 208 : 552} priority style={{ mixBlendMode: 'darken' }} />
           </a>
 
           <div id="founders-top-actions">

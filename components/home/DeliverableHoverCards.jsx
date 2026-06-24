@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Image from 'next/image';
 
 /*
  * Static, hard-coded recreations of the HITLOOP dashboard deliverable cards,
@@ -113,17 +114,17 @@ const SHELLS = {
   ),
   'social-preview': (
     <div style={shellStyle}>
-      <img src={ASSETS.social} alt="HITLOOP social share preview" style={imgCover} />
+      <Image src={ASSETS.social} alt="HITLOOP social share preview" fill sizes="(max-width: 768px) 100vw, 50vw" style={{ objectFit: 'cover', display: 'block' }} />
     </div>
   ),
   'device-mockups': (
     <div style={shellStyle}>
-      <img src={ASSETS.mockup} alt="HITLOOP multi-device mockup" style={imgCover} />
+      <Image src={ASSETS.mockup} alt="HITLOOP multi-device mockup" fill sizes="(max-width: 768px) 100vw, 50vw" style={{ objectFit: 'cover', display: 'block' }} />
     </div>
   ),
   'full-page': (
     <div style={shellStyle}>
-      <img src={ASSETS.fullpage} alt="HITLOOP full-page screenshot" style={{ ...imgCover, objectPosition: 'center top' }} />
+      <Image src={ASSETS.fullpage} alt="HITLOOP full-page screenshot" fill sizes="(max-width: 768px) 100vw, 50vw" style={{ objectFit: 'cover', objectPosition: 'center top', display: 'block' }} />
     </div>
   ),
   'video-post': (
@@ -136,7 +137,7 @@ const SHELLS = {
     // website video sitting in that region — objectFit:contain preserves the
     // video's ratio; its letterbox is black, matching the blacked media area.
     <div style={{ ...shellStyle, background: '#000', aspectRatio: '542 / 362' }}>
-      <img src={ASSETS.postme} alt="HITLOOP social post" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', display: 'block' }} />
+      <Image src={ASSETS.postme} alt="HITLOOP social post" fill sizes="(max-width: 768px) 100vw, 50vw" style={{ objectFit: 'fill', display: 'block' }} />
       <video
         src={ASSETS.video}
         autoPlay muted loop playsInline
