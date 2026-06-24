@@ -123,7 +123,7 @@ export default function AboutPage() {
             {
               id: 'about-card-availability',
               title: 'The Availability',
-              body: 'Available beyond standard working hours to accommodate your flow state. One conversation translates across desktop, mobile, social, email, and print collateral.',
+              body: 'Available before 9 and after 5 CT — reply the same business day. One conversation translates across desktop, mobile, social, email, and print collateral.',
             },
           ].map(({ id, title, body }) => (
             <div key={id} id={id} style={cardStyle}>

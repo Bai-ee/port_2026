@@ -3,7 +3,7 @@ const itemListSchema = {
   '@type': 'ItemList',
   name: 'Featured Work · HIT Agency',
   description:
-    'Selected projects spanning AI-assisted platforms, interactive web experiences, design systems, and client intelligence dashboards.',
+    'Four active projects — intake pipeline, particle renderer, design system extraction, and SEO audit. Case study write-ups in progress.',
   itemListElement: [
     {
       '@type': 'ListItem',
@@ -39,7 +39,7 @@ const itemListSchema = {
 export const metadata = {
   title: 'Featured Work',
   description:
-    'Selected projects spanning AI-assisted platforms, interactive web experiences, design systems, and client intelligence dashboards.',
+    'Four active projects — intake pipeline, particle renderer, design system extraction, and SEO audit. Case study write-ups in progress.',
   keywords: [
     'HIT Agency portfolio',
     'AI design engineer work',

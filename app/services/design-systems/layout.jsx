@@ -9,7 +9,7 @@ const serviceSchema = {
   '@type': 'Service',
   name: 'Design Systems',
   description:
-    'Component libraries, token architecture, and design-to-code pipelines that give teams a single source of truth and a faster path to ship.',
+    'Component libraries, token architecture, and design-to-code pipelines that let engineers and designers pull from the same token set, cutting design-review cycles and one-off style overrides.',
   provider: {
     '@type': 'Person',
     name: 'Bryan Balli',
@@ -40,7 +40,7 @@ export const metadata = {
   openGraph: {
     title: 'Design Systems — HIT Agency',
     description:
-      'Component libraries, token architecture, and design-to-code pipelines that give teams a single source of truth and a faster path to ship.',
+      'Component libraries, token architecture, and design-to-code pipelines that let engineers and designers pull from the same token set, cutting design-review cycles and one-off style overrides.',
     url: '/services/design-systems',
     type: 'website',
   },

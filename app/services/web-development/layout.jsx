@@ -40,7 +40,7 @@ export const metadata = {
   openGraph: {
     title: 'Web Development — HIT Agency',
     description:
-      'High-performance web builds using Next.js, React, GSAP, and Three.js — built for production — pixel-accurate UI, < 100 ms TTFB, and zero-regression deploys',
+      'High-performance web builds using Next.js, React, GSAP, and Three.js — delivered with sub-100ms response times, accurate pixel fidelity, and full CI/CD deployment pipelines.',
     url: '/services/web-development',
     type: 'website',
   },

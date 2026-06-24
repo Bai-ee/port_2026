@@ -98,7 +98,7 @@ export default function InnerPageShell({ children, secNum }) {
             <img src="/img/sig.png" alt="Bryan Balli signature" style={{ width: 'min(110px, 31vw)', height: 'auto', display: 'block' }} />
 
             <blockquote style={{ margin: 'clamp(1rem, 2vw, 1.5rem) 0', padding: 'clamp(1rem, 2vw, 1.5rem) clamp(1.25rem, 3vw, 2rem)', borderLeft: '3px solid rgba(42,36,32,0.15)', fontSize: 'clamp(1.35rem, 1.85vw, 1.65rem)', lineHeight: 1.55, color: 'rgba(42,36,32,0.72)', fontStyle: 'italic', fontFamily: "'Space Grotesk', system-ui, sans-serif", textAlign: 'left' }}>
-              "Get all the high-impact deliverables needed to launch digital products and integrate automation into daily operations."
+              "Brief, prototype, and pipeline — scoped to what you actually need to launch and keep running."
             </blockquote>
 
             <p style={{ margin: 0, fontSize: 'clamp(0.7rem, 1.4vw, 0.91rem)', lineHeight: 1.6, fontWeight: 400, textAlign: 'left', color: 'rgba(42,36,32,0.8)', width: '100%' }}>

@@ -130,7 +130,7 @@ export default function WebDevelopmentPage() {
             margin: 0,
           }}
         >
-          High-performance web builds using Next.js, React, GSAP, and Three.js — shipped with design precision and production-grade engineering.
+          High-performance web builds using Next.js, React, GSAP, and Three.js — delivered with sub-100ms response times, accurate pixel fidelity, and full CI/CD deployment pipelines.
         </p>
       </section>
 
