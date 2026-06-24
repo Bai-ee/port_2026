@@ -3,6 +3,7 @@ import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
+const { safeFetch } = require('../../../../api/_lib/safe-fetch.cjs');
 
 export const maxDuration = 20;
 
@@ -29,11 +30,13 @@ export async function GET(request) {
   if (!/^https?:\/\/\S+$/i.test(url)) return json({ error: 'A valid http(s) URL is required.' }, 400);
 
   try {
-    const res = await fetch(url, {
-      method: 'GET',
-      redirect: 'follow',
-      signal: AbortSignal.timeout(12000),
-      headers: { 'user-agent': 'Mozilla/5.0 (compatible; HitloopStudio/1.0)' },
+    const res = await safeFetch(url, {
+      timeoutMs: 12000,
+      maxBytes: 512 * 1024,
+      fetchOptions: {
+        method: 'GET',
+        headers: { 'user-agent': 'Mozilla/5.0 (compatible; HitloopStudio/1.0)' },
+      },
     });
     const xfo = (res.headers.get('x-frame-options') || '').toLowerCase();
     const csp = (res.headers.get('content-security-policy') || '').toLowerCase();

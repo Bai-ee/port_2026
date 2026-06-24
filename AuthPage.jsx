@@ -41,6 +41,10 @@ const AuthPageInner = () => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [isHomepageCreate, setIsHomepageCreate] = useState(false);
+  // True when the homepage entry was an email (not a website/idea) — lets signup
+  // proceed straight to email+password+Google; the website is collected later by
+  // the dashboard WebsiteUrlGate.
+  const [isEmailEntry, setIsEmailEntry] = useState(false);
 
   const redirectPath = useMemo(() => searchParams.get('redirect') || '/dashboard', [searchParams]);
 
@@ -93,6 +97,7 @@ const AuthPageInner = () => {
     if (flow === 'homepage-create') {
       setIsHomepageCreate(true);
       setMode('create');
+      setIsEmailEntry(Boolean(emailParam) && !urlParam && !ideaParam);
       if (urlParam || ideaParam || emailParam) {
         setForm((current) => ({
           ...current,
@@ -131,7 +136,9 @@ const AuthPageInner = () => {
     }
 
     // A dashboard needs something to analyze — a website OR a brand name / idea.
-    if (!form.websiteUrl.trim() && !form.ideaDescription.trim()) {
+    // Exception: an email-only entry proceeds straight to signup; the website is
+    // collected afterward by the dashboard WebsiteUrlGate.
+    if (!isEmailEntry && !form.websiteUrl.trim() && !form.ideaDescription.trim()) {
       throw new Error('Enter a website, or a brand name / idea, to create your dashboard.');
     }
   };
@@ -337,6 +344,9 @@ const AuthPageInner = () => {
                   CAPTURED
                 </span>
               </div>
+            ) : isEmailEntry ? (
+              /* Email entry — straight to signup; no website/idea required here. */
+              null
             ) : (
               /* No website — capture a brand name / idea instead (editable) */
               <label id="auth-captured-idea" style={labelStyle}>

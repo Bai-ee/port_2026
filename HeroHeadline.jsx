@@ -1,6 +1,8 @@
 import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import gsap from 'gsap';
+// Hidden for now — hero card deck.
+// import HeroDeliverableDeck from './components/home/HeroDeliverableDeck';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -312,8 +314,8 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
         </div>
       </div>
 
-
-
+      {/* Self-cycling deliverable card deck, right gutter of the hero. Hidden for now. */}
+      {/* <HeroDeliverableDeck /> */}
     </>
   );
 };

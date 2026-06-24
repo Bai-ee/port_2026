@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { after, NextResponse } from 'next/server';
 import { createRequire } from 'module';
 
 import { chunkText } from '../../../../../features/knowledge-base/chunk.js';
@@ -75,8 +75,14 @@ export async function POST(request) {
       chunks,
       status: 'processing',
     });
-    const embedded = await embedKnowledgeItemChunks({ clientId: context.clientId, itemId: item.id });
-    return json({ ok: true, item: { ...item, status: 'ready', error: null }, chunkCount: chunks.length, embedded });
+    after(async () => {
+      try {
+        await embedKnowledgeItemChunks({ clientId: context.clientId, itemId: item.id });
+      } catch (err) {
+        console.error('[knowledge-base/ingest-url/embed]', err?.message || err);
+      }
+    });
+    return json({ ok: true, item: { ...item, status: 'processing', error: null }, chunkCount: chunks.length, embedded: { queued: true } }, 202);
   } catch (err) {
     return json({ error: err.message || 'URL ingest failed.' }, err.status || 500);
   }

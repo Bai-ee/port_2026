@@ -67,7 +67,7 @@ export default function DashboardLoadingOverlay({
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '1rem' }}>
           <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', display: 'block' }} />
           <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.44)', fontWeight: 700, fontFamily: '"Space Mono", monospace' }}>
-            Dashboard Access
+            {isMobile ? 'Access' : 'Dashboard Access'}
           </span>
           <img
             src="/img/circle_logo.png"

@@ -2,7 +2,7 @@
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
-const { readResponseText, safeFetch, validateUrl } = require('../../../api/_lib/safe-fetch.cjs');
+const { readResponseBuffer, readResponseText, safeFetch, validateUrl } = require('../../../api/_lib/safe-fetch.cjs');
 
 describe('validateUrl — SSRF protection', () => {
   const blocked = [
@@ -79,5 +79,26 @@ describe('safeFetch — redirect and body-size protection', () => {
     });
 
     assert.equal(await readResponseText(response, 100), 'safe body');
+  });
+
+  test('readResponseBuffer rejects oversized binary bodies without content-length', async () => {
+    const response = new Response(Buffer.from('abcdef'), {
+      status: 200,
+      headers: { 'content-type': 'application/octet-stream' },
+    });
+
+    await assert.rejects(
+      () => readResponseBuffer(response, 4),
+      /response too large/
+    );
+  });
+
+  test('readResponseBuffer returns binary body within limit', async () => {
+    const response = new Response(Buffer.from('safe body'), {
+      status: 200,
+      headers: { 'content-type': 'application/octet-stream' },
+    });
+
+    assert.equal((await readResponseBuffer(response, 100)).toString('utf8'), 'safe body');
   });
 });

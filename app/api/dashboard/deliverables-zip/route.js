@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic';
 const require = createRequire(import.meta.url);
 const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../../api/_lib/client-provisioning.cjs');
+const { readResponseBuffer, safeFetch } = require('../../../../api/_lib/safe-fetch.cjs');
 
 // SSRF guard: the client passes asset URLs, so only allow https on the known
 // Firebase Storage hosts (the bucket these deliverables live in). Anything else
@@ -17,12 +18,15 @@ const ALLOWED_HOST_SUFFIXES = [
   'firebasestorage.googleapis.com',
   'storage.googleapis.com',
 ];
+const MAX_ASSET_BYTES = 15 * 1024 * 1024;
+const MAX_ZIP_INPUT_BYTES = 60 * 1024 * 1024;
 
 function isAllowedAssetUrl(raw) {
   try {
     const u = new URL(String(raw));
     if (u.protocol !== 'https:') return false;
-    return ALLOWED_HOST_SUFFIXES.some((suffix) => u.hostname === suffix || u.hostname.endsWith(`.${suffix}`) || u.hostname.endsWith(suffix));
+    const hostname = u.hostname.toLowerCase();
+    return ALLOWED_HOST_SUFFIXES.some((suffix) => hostname === suffix || hostname.endsWith(`.${suffix}`));
   } catch {
     return false;
   }
@@ -78,11 +82,22 @@ export async function POST(request) {
   const zip = new JSZip();
   const used = new Set();
   let added = 0;
-  await Promise.all(allowed.map(async (a, i) => {
+  let totalBytes = 0;
+  for (const [i, a] of allowed.entries()) {
     try {
-      const res = await fetch(a.url);
-      if (!res.ok) return;
-      const buf = Buffer.from(await res.arrayBuffer());
+      const res = await safeFetch(a.url, {
+        timeoutMs: 15000,
+        maxBytes: MAX_ASSET_BYTES,
+        fetchOptions: {
+          headers: { 'user-agent': 'HitloopDeliverablesZip/1.0' },
+        },
+      });
+      if (!res.ok) continue;
+      const buf = await readResponseBuffer(res, MAX_ASSET_BYTES);
+      totalBytes += buf.length;
+      if (totalBytes > MAX_ZIP_INPUT_BYTES) {
+        return json({ error: 'Deliverable bundle is too large.' }, 413);
+      }
       let name = safeName(a.name, `asset-${i + 1}`);
       // De-dupe filenames so zip entries never collide.
       if (used.has(name)) {
@@ -95,7 +110,7 @@ export async function POST(request) {
     } catch {
       // Skip an asset that fails to fetch; the rest still bundle.
     }
-  }));
+  }
 
   if (!added) {
     return json({ error: 'Could not fetch any deliverable assets.' }, 502);

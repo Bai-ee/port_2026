@@ -9745,7 +9745,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                             ) : (
                               <Download size={22} strokeWidth={2} stroke="url(#coverage-grad)" aria-hidden="true" style={{ marginTop: 1 }} />
                             )}
-                            <span className="dl-all-text dl-all-text--full" style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>DL ALL ASSETS</span>
+                            <span className="dl-all-text dl-all-text--full" style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>DL ASSETS</span>
                             <span className="dl-all-text dl-all-text--short" style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>DL</span>
                           </button>
                         </>
@@ -9814,18 +9814,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         }}
                       >
                         <FileText size={22} strokeWidth={2} stroke="url(#coverage-grad)" aria-hidden="true" style={{ marginTop: 1 }} />
-                      </button>
-                      <button
-                        type="button"
-                        id="brief-cooldown-time-btn"
-                        title={`Next free brief runs in ${formatBriefCooldown(briefCooldownSeconds).value}${formatBriefCooldown(briefCooldownSeconds).unit}`}
-                        aria-label="Brief cooldown options"
-                        style={{ display: 'inline-flex', alignItems: 'center', padding: 0, background: 'none', border: 'none', cursor: 'pointer' }}
-                        onClick={() => setShowCooldownModal(true)}
-                      >
-                        <span className="cap-source-value" style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>
-                          {formatBriefCooldown(briefCooldownSeconds).value}<span style={{ fontSize: 13 }}>{formatBriefCooldown(briefCooldownSeconds).unit}</span>
-                        </span>
                       </button>
                     </span>
                     {/* Background-run indicator — always rendered; spins when active, placeholder ring when idle */}
@@ -10570,13 +10558,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                             </div>
                             {/* In-flow controls — reserve their own space so nothing collides. */}
                             <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <button type="button" title="Auto-post via X API" onClick={(e) => { stop(e); handlePostMeToX(); }} disabled={postMeLoading}
-                                style={{ width: 26, height: 26, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.16)', color: '#e7e9ea', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}>
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
-                              </button>
                               <button type="button" title="Generate new copy" onClick={(e) => { stop(e); generatePostMeCopy(); }} disabled={postMeCopyLoading}
-                                style={{ width: 26, height: 26, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.16)', color: '#e7e9ea', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}>
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={postMeCopyLoading ? { animation: 'sb-spin 0.8s linear infinite' } : undefined}><path d="M21 12a9 9 0 1 1-2.64-6.36" /><polyline points="21 3 21 8 16 8" /></svg>
+                                style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: 0, opacity: postMeCopyLoading ? 0.5 : 0.9 }}>
+                                <svg width="17" height="17" viewBox="0 0 24 24" fill="white"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.742l7.722-8.831L1.534 2.25H8.08l4.259 5.631zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
                               </button>
                             </div>
                           </div>
@@ -11633,7 +11617,14 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               ) : (
                 <span id="intake-modal-footer-note">
                   {adhocActive
-                    ? (adhocTerminal.status === 'error' ? 'Render failed — close and try again.' : 'Rendering on GPU — saves to your assets.')
+                    ? (adhocTerminal.status === 'error'
+                        ? 'Render failed — close and try again.'
+                        : (
+                          <>
+                            <span className="footer-note-full">You can close and come back anytime</span>
+                            <span className="footer-note-mobile">You can close</span>
+                          </>
+                        ))
                     : (
                       <>
                         <span className="footer-note-full">You can close and come back anytime</span>

@@ -17,8 +17,8 @@ const ASSETS = {
   mockup: '/img/deliverables/hitloop-device-mockup.png',
   fullpage: '/img/deliverables/hitloop-fullpage.jpg',
   social: '/img/deliverables/hitloop-social.jpg',
-  video: '/img/deliverables/hitloop-video.webm',
-  postme: '/img/postme.png',
+  video: '/img/deliverables/hitloop-video.mp4',
+  postme: '/img/deliverables/hitloop-postme-frame.png',
   brief: '/creative-brief-hitloop.html',
 };
 
@@ -37,9 +37,8 @@ function briefTease(iframe) {
   if (iframe._teaseRaf) cancelAnimationFrame(iframe._teaseRaf);
   if (iframe._teaseTimer) clearTimeout(iframe._teaseTimer);
   const START_DELAY_MS = 600;
-  const DURATION_MS = 19500;
+  const DURATION_MS = 25350; // 30% slower than 19.5s
   const PAUSE_MS = 1600;
-  const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
   const maxScroll = () => Math.max(0, (doc.documentElement?.scrollHeight || doc.body?.scrollHeight || 0) - win.innerHeight);
   const runPass = () => {
     const max = maxScroll();
@@ -48,7 +47,8 @@ function briefTease(iframe) {
     const step = (ts) => {
       if (startTs == null) startTs = ts;
       const p = Math.min(1, (ts - startTs) / DURATION_MS);
-      win.scrollTo(0, max * ease(p));
+      // Linear — constant speed the whole pass (no ease-in/out acceleration).
+      win.scrollTo(0, max * p);
       if (p < 1) { iframe._teaseRaf = requestAnimationFrame(step); return; }
       // Reached bottom → pause, reset, loop.
       iframe._teaseTimer = setTimeout(() => { win.scrollTo(0, 0); iframe._teaseTimer = setTimeout(runPass, 400); }, PAUSE_MS);
@@ -132,8 +132,16 @@ const SHELLS = {
     </div>
   ),
   'post-me': (
-    <div style={{ ...shellStyle, background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <img src={ASSETS.postme} alt="HITLOOP social post mockup" style={{ ...imgCover, objectFit: 'contain' }} />
+    // Post format kept (postme frame, media area blacked out) with the live
+    // website video sitting in that region — objectFit:contain preserves the
+    // video's ratio; its letterbox is black, matching the blacked media area.
+    <div style={{ ...shellStyle, background: '#000', aspectRatio: '542 / 362' }}>
+      <img src={ASSETS.postme} alt="HITLOOP social post" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', display: 'block' }} />
+      <video
+        src={ASSETS.video}
+        autoPlay muted loop playsInline
+        style={{ position: 'absolute', left: '7.75%', top: '26.2%', width: '84.9%', height: '63.3%', objectFit: 'contain', display: 'block' }}
+      />
     </div>
   ),
 };
@@ -174,7 +182,7 @@ const CARDS = {
 
 const GENERATED = 'GENERATED JUN 23, 2026, 1:59 PM EST';
 
-export default function DeliverableHoverCard({ id, shown = true, rot = 3.2, offX = 520 }) {
+export default function DeliverableHoverCard({ id, shown = true, rot = 3.2, offX = 520, width, noShadow = false }) {
   const card = CARDS[id];
   if (!card) return null;
   return (
@@ -183,11 +191,21 @@ export default function DeliverableHoverCard({ id, shown = true, rot = 3.2, offX
         aria-hidden="true"
         style={{
           ...cardStyle,
+          ...(width ? { width } : null),
+          // Flat variant (deck): drop the heavy cast shadow and define each card
+          // edge with a visible border instead, so a stack doesn't read as heavy.
+          ...(noShadow
+            ? {
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.6)',
+                border: '1px solid rgba(42,36,32,0.28)',
+              }
+            : null),
           transformOrigin: rot >= 0 ? 'center left' : 'center right',
           // Smooth slide (from the off-screen side) + fade + rotation, in and out.
           transition: 'opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1), transform 0.72s cubic-bezier(0.22, 1, 0.36, 1)',
           opacity: shown ? 1 : 0,
-          transform: shown ? `translateX(0) rotate(${rot}deg)` : `translateX(${offX}px) rotate(${rot * 1.8}deg)`,
+          // scale(0.8) → cards 20% smaller (uniform: chrome, type, media).
+          transform: shown ? `translateX(0) rotate(${rot}deg) scale(0.8)` : `translateX(${offX}px) rotate(${rot * 1.8}deg) scale(0.8)`,
         }}
       >
         <h3 style={titleStyle}>{card.title}</h3>

@@ -25,6 +25,7 @@ const publicRoutes = [
   { path: '/preview/canvas', name: 'preview-canvas', expectText: 'Background' },
   { path: '/preview/intake-modal', name: 'preview-intake-modal', expectText: 'INTAKE' },
   { path: '/preview/mini-brief', name: 'preview-mini-brief', expectText: 'Mini Brief' },
+  { path: '/api/health', name: 'health', expectText: '"ok":true', minBodyLength: 10 },
 ];
 
 const privateRoutes = [
@@ -101,7 +102,7 @@ async function smokeRoute(browser, spec, kind) {
     const actual = normalizeForExpect(bodyText);
     if (!actual.includes(expected)) failures.push(`missing text: ${spec.expectText}`);
   }
-  if (kind === 'public' && result.bodyLength < 120) failures.push(`body too short: ${result.bodyLength}`);
+  if (kind === 'public' && result.bodyLength < (spec.minBodyLength ?? 120)) failures.push(`body too short: ${result.bodyLength}`);
   if (kind === 'private' && result.finalPath !== spec.expectedUrl) failures.push(`redirect mismatch: ${result.finalPath}`);
   result.failures = failures;
 

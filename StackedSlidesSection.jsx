@@ -194,10 +194,10 @@ const PORTFOLIO_IMAGES = [
 
 const CMO_TABLE_ROWS = [
   { task: 'ONBOARD NOW',            value: 'A visual audit of your site delivered as a Creative Brief that replaces traditional onboarding, plus video content you can share!', bold: true },
-  { task: 'Social Preview',         value: 'See how your site appears when shared across platforms.', sub: true },
-  { task: 'Device Mockups',         value: 'See how your homepage loads across different devices.', sub: true },
-  { task: 'Full Page Views',        value: 'See full-page screenshots to confirm content and consistency.', sub: true },
   { task: 'Video Mockup',           value: 'Turn your site into a social-ready promo video, ready to post.', sub: true },
+  { task: 'Device Mockups',         value: 'See how your homepage loads across different devices.', sub: true },
+  { task: 'Social Preview',         value: 'See how your site appears when shared across platforms.', sub: true },
+  { task: 'Full Page Views',        value: 'See full-page screenshots to confirm content and consistency.', sub: true },
   { task: 'Post Me',                value: 'See your brand as a finished social post, ready to publish.', sub: true },
   { task: 'DAILY STAND UP',         value: 'A team of agents guided by your Human integrates strategy and deliverables into one accessible dashboard and Daily Brief email.', bold: true },
   { task: 'Marketing',              value: 'Track signals, competitors, narrative shifts, and how to act on them.', sub: true },
@@ -527,14 +527,14 @@ const StackedSlidesSection = () => {
     let left = side === 'right' ? rect.right - 130 : rect.left - CARD_W + 130;
     left = Math.min(left, window.innerWidth - CARD_W - M);
     left = Math.max(left, M);
-    return { top, left, offX: side === 'right' ? 170 : -170, rot: side === 'right' ? 3.2 : -3.2 };
+    return { top, left, offX: side === 'right' ? 88 : -88, rot: side === 'right' ? 3.2 : -3.2 };
   };
   const showRowCard = (e, task) => {
     if (isTouchScrollDevice()) return;
     const id = TASK_TO_CARD[task];
     if (!id) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    const side = lastSide.current === 'right' ? 'left' : 'right';
+    const side = 'right'; // keep every card on the right (no left/right alternation)
     lastSide.current = side;
     const { top, left, offX, rot } = placeRowCard(rect, side);
     const key = (cardKey.current += 1);
@@ -553,13 +553,37 @@ const StackedSlidesSection = () => {
     if (cardTimer.current) clearTimeout(cardTimer.current);
     cardTimer.current = setTimeout(() => { setHoverCards([]); cardTimer.current = null; }, 760);
   };
-  // Warm-cache the hover-card assets (images, video, brief HTML) on mount so the
-  // first hover renders clean with no flash. Desktop pointer only.
+  // "Get Your Dashboard" hover image (dash.png pop) disabled for now — handlers
+  // removed from the button. Kept commented for easy restore.
+  // const showDashHover = (e) => {
+  //   if (isTouchScrollDevice()) return;
+  //   const rect = e.currentTarget.getBoundingClientRect();
+  //   const M = 10;
+  //   const imgW = Math.min(620, Math.round(window.innerWidth * 0.46));
+  //   const tableEl = typeof document !== 'undefined' ? document.querySelector('.cmo-table-inner') : null;
+  //   const anchor = tableEl ? tableEl.getBoundingClientRect() : rect;
+  //   let left = anchor.left - imgW + 24;
+  //   left = Math.min(left, window.innerWidth - imgW - M);
+  //   left = Math.max(left, M);
+  //   let top = anchor.top - Math.round(imgW * 0.05);
+  //   top = Math.max(M, Math.min(top, window.innerHeight - 220));
+  //   const key = (cardKey.current += 1);
+  //   if (cardTimer.current) { clearTimeout(cardTimer.current); cardTimer.current = null; }
+  //   setHoverCards((prev) => [...prev.map((c) => ({ ...c, shown: false })), { key, kind: 'image', src: '/img/dash.png', imgW, top, left, offX: -88, rot: -3.2, shown: false }]);
+  //   raf2(() => setHoverCards((prev) => prev.map((c) => (c.key === key ? { ...c, shown: true } : c))));
+  //   cardTimer.current = setTimeout(() => { setHoverCards((prev) => prev.filter((c) => c.key === key)); cardTimer.current = null; }, 760);
+  // };
+  // Warm lightweight hover-card images after idle on capable desktop links.
+  // Video and iframe previews wait for explicit hover intent so the homepage
+  // does not spend bandwidth/CPU on media the visitor may never open.
+  const [warmAssets, setWarmAssets] = useState(false);
   useEffect(() => {
     if (typeof window === 'undefined' || isTouchScrollDevice()) return;
-    PRELOAD_ASSETS.images.forEach((src) => { const img = new Image(); img.src = src; });
-    try { fetch(PRELOAD_ASSETS.video).catch(() => {}); } catch {}
-    try { fetch(PRELOAD_ASSETS.brief).catch(() => {}); } catch {}
+    if (window.navigator?.connection?.saveData) return;
+    PRELOAD_ASSETS.images.forEach((src) => { const img = new Image(); img.src = src; if (img.decode) img.decode().catch(() => {}); });
+    const idle = window.requestIdleCallback || ((cb) => setTimeout(cb, 1200));
+    const handle = idle(() => setWarmAssets(true));
+    return () => { (window.cancelIdleCallback || clearTimeout)(handle); };
   }, []);
   const [showCmoModal, setShowCmoModal] = useState(false);
   const router = useRouter();
@@ -1314,12 +1338,39 @@ const StackedSlidesSection = () => {
 
   return (
     <section style={sectionStyle}>
+      {warmAssets && typeof document !== 'undefined'
+        ? createPortal(
+            <div aria-hidden="true" style={{ position: 'fixed', left: -99999, top: 0, width: 1, height: 1, overflow: 'hidden', opacity: 0, pointerEvents: 'none' }}>
+              {PRELOAD_ASSETS.images.map((src) => <img key={src} src={src} alt="" />)}
+            </div>,
+            document.body
+          )
+        : null}
       {hoverCards.length > 0 && typeof document !== 'undefined'
         ? createPortal(
             <>
               {hoverCards.map((c) => (
                 <div key={c.key} style={{ position: 'fixed', top: c.top, left: c.left, zIndex: 99999, pointerEvents: 'none' }}>
-                  <DeliverableHoverCard id={c.id} shown={c.shown} rot={c.rot} offX={c.offX} />
+                  {c.kind === 'image' ? (
+                    <img
+                      src={c.src}
+                      alt=""
+                      aria-hidden="true"
+                      style={{
+                        display: 'block',
+                        width: c.imgW,
+                        height: 'auto',
+                        borderRadius: '14px',
+                        boxShadow: '0 30px 90px rgba(0,0,0,0.34), 0 4px 14px rgba(0,0,0,0.12)',
+                        transformOrigin: c.rot >= 0 ? 'center left' : 'center right',
+                        transition: 'opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1), transform 0.72s cubic-bezier(0.22, 1, 0.36, 1)',
+                        opacity: c.shown ? 1 : 0,
+                        transform: c.shown ? `translateX(0) rotate(${c.rot}deg) scale(0.8)` : `translateX(${c.offX}px) rotate(${c.rot * 1.8}deg) scale(0.8)`,
+                      }}
+                    />
+                  ) : (
+                    <DeliverableHoverCard id={c.id} shown={c.shown} rot={c.rot} offX={c.offX} />
+                  )}
                 </div>
               ))}
             </>,
@@ -1404,14 +1455,17 @@ const StackedSlidesSection = () => {
         .cmo-table-inner table tbody tr td {
           transition: background 0.18s cubic-bezier(0.16, 1, 0.3, 1);
         }
-        .cmo-table-inner table tbody tr:hover td {
+        .cmo-table-inner table tbody tr:not([data-no-hover]) {
+          cursor: pointer;
+        }
+        .cmo-table-inner table tbody tr:not([data-no-hover]):hover td {
           background: rgba(42, 36, 32, 0.045);
         }
-        .cmo-table-inner table tbody tr:hover td:first-child {
+        .cmo-table-inner table tbody tr:not([data-no-hover]):hover td:first-child {
           border-top-left-radius: 0.5rem;
           border-bottom-left-radius: 0.5rem;
         }
-        .cmo-table-inner table tbody tr:hover td:last-child {
+        .cmo-table-inner table tbody tr:not([data-no-hover]):hover td:last-child {
           border-top-right-radius: 0.5rem;
           border-bottom-right-radius: 0.5rem;
         }
@@ -1832,7 +1886,7 @@ const StackedSlidesSection = () => {
                       <div id="panel-hero-text-row" style={{ ...textRowStyle, display: 'flex', alignItems: 'center', gap: 'clamp(0.5rem, 1.5vw, 1rem)', width: '100%' }}>
                         <div id="hero-url-input-row" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 1, minWidth: 0, height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                           <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
-                          <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website or big idea" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
+                          <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
                           <button className={urlIsValid ? 'cta-pill-btn cta-pill-btn--active' : undefined} onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaSecondaryStyle, flexShrink: 0, opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}>Onboard in 30 Seconds<span style={ctaIconStyle}>↗</span></button>
                         </div>
                         <a
@@ -1936,19 +1990,19 @@ const StackedSlidesSection = () => {
                                     {item.body && <p id="cmo-card-onboard-body" style={{ ...capabilityCardBodyStyle, maxWidth: 'none', textAlign: 'center' }}>{item.body}</p>}
                                     <div id="cmo-url-input-row" className="cmo-url-input-desktop" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.85rem', height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                                       <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
-                                      <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website or big idea" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
-                                      <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}>Get Your Dashboard<span style={ctaIconStyle}>↗</span></button>
+                                      <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
+                                      <span id="cmo-dashboard-cta-hover-shell" style={{ display: 'inline-flex', flexShrink: 0, cursor: 'pointer' }}><button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'pointer', padding: '0.75rem 0.75rem' }}>Get Your Dashboard<span style={ctaIconStyle}>↗</span></button></span>
                                     </div>
                                     <div className="cmo-table-inner" style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
                                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
                                         <colgroup><col style={{ width: '2rem' }} /><col style={{ width: '26%' }} /><col /></colgroup>
                                         <thead><tr><th aria-hidden="true" /><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Access</th><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>What you get</th></tr></thead>
-                                        <tbody>{CMO_TABLE_ROWS.map((row, ri, arr) => (<tr key={row.task} onMouseEnter={(e) => showRowCard(e, row.task)} onMouseLeave={hideRowCard} style={{ borderBottom: (row.task === 'DAILY STAND UP' || row.task === 'ONBOARD NOW' || (row.sub && !isSubLast(arr, ri))) ? 'none' : '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.7rem 0.2rem', textAlign: 'center', verticalAlign: 'middle', position: 'relative' }}>{row.task === 'ONBOARD NOW' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? <BriefConnector first={isSubFirst(arr, ri)} last={isSubLast(arr, ri)} /> : <span className="cmo-arrow" aria-hidden="true"><Lock size={12} /></span>}</td><td style={{ padding: row.sub ? '0.7rem 0.4rem 0.7rem 1.1rem' : '0.7rem 0.4rem', color: row.sub ? 'rgba(42,36,32,0.55)' : 'rgba(42,36,32,0.75)', fontWeight: row.bold ? 700 : (row.sub ? 400 : 500) }}>{row.task}</td><td style={{ padding: '0.7rem 0.4rem 0.7rem 0.6rem', textAlign: 'left', color: row.sub ? 'rgba(42,36,32,0.48)' : 'rgba(42,36,32,0.65)', fontWeight: row.bold ? 700 : 400 }}>{row.sub ? `• ${row.value}` : row.value}</td></tr>))}</tbody>
+                                        <tbody>{CMO_TABLE_ROWS.map((row, ri, arr) => (<tr key={row.task} data-no-hover={TASK_TO_CARD[row.task] ? undefined : true} onMouseEnter={(e) => showRowCard(e, row.task)} onMouseLeave={hideRowCard} style={{ borderBottom: (row.task === 'DAILY STAND UP' || row.task === 'ONBOARD NOW' || (row.sub && !isSubLast(arr, ri))) ? 'none' : '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.7rem 0.2rem', textAlign: 'center', verticalAlign: 'middle', position: 'relative' }}>{row.task === 'ONBOARD NOW' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? <BriefConnector first={isSubFirst(arr, ri)} last={isSubLast(arr, ri)} /> : <span className="cmo-arrow" aria-hidden="true"><Lock size={12} /></span>}</td><td style={{ padding: row.sub ? '0.7rem 0.4rem 0.7rem 1.1rem' : '0.7rem 0.4rem', color: row.sub ? 'rgba(42,36,32,0.55)' : 'rgba(42,36,32,0.75)', fontWeight: row.bold ? 700 : (row.sub ? 400 : 500) }}>{row.task}</td><td style={{ padding: '0.7rem 0.4rem 0.7rem 0.6rem', textAlign: 'left', color: row.sub ? 'rgba(42,36,32,0.48)' : 'rgba(42,36,32,0.65)', fontWeight: row.bold ? 700 : 400 }}>{row.sub ? `• ${row.value}` : row.value}</td></tr>))}</tbody>
                                       </table>
                                     <blockquote id="cmo-quote-desktop" style={{ margin: 0, padding: 'clamp(1.5rem, 4vw, 3rem) 0', fontSize: 'clamp(0.9rem, 1.4vw, 1.15rem)', lineHeight: 1.55, color: 'rgba(42,36,32,0.72)', fontStyle: 'italic', fontFamily: "'Space Grotesk', system-ui, sans-serif", boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 'clamp(1.5rem, 3vw, 2.5rem)' }}>
                                       <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: 'clamp(2.5rem, 4vw, 3.5rem)', height: 'clamp(2.5rem, 4vw, 3.5rem)', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', flexShrink: 0, display: 'block' }} />
                                       <div style={{ flex: 1, minWidth: 0 }}>
-                                        <span style={{ display: 'block', margin: '0 0 0.65rem' }}>“Hit Loop is a hands-on creative partnership delivering agentic solutions with taste and automation. Your Human curates multiple systems to deliver professional outcomes, so you can save time and headspace while growing your business.”</span>
+                                        <span style={{ display: 'block', margin: '0 0 0.65rem' }}>“Hit Loop is a hands-on creative partnership delivering agentic solutions with taste and automation. Your Human curates multiple systems to deliver professional outcomes, so you can save time and money.”</span>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', fontStyle: 'normal' }}>
                                           <span style={quoteAttributionNameStyle}>Bryan Balli</span>
                                           <span style={{ color: 'rgba(42,36,32,0.3)', fontSize: '0.75rem' }}>·</span>
@@ -1961,7 +2015,7 @@ const StackedSlidesSection = () => {
                                   <div id="cmo-dashboard-table" className="cmo-table-outer" style={{ gridColumn: '1 / -1', marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
                                     <div className="cmo-url-input-mobile" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                                       <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
-                                      <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter website or idea" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
+                                      <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
                                       <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="cmo-table-submit-label">Get Your Dashboard</span><span className="cmo-table-submit-arrow" style={ctaIconStyle}>↗</span></button>
                                     </div>
                                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
@@ -1972,7 +2026,7 @@ const StackedSlidesSection = () => {
                                     <blockquote id="cmo-quote-mobile" style={{ margin: 0, padding: 'clamp(1.5rem, 4vw, 3rem) 0', fontSize: 'clamp(0.9rem, 1.4vw, 1.15rem)', lineHeight: 1.55, color: 'rgba(42,36,32,0.72)', fontStyle: 'italic', fontFamily: "'Space Grotesk', system-ui, sans-serif", boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 'clamp(1.5rem, 3vw, 2.5rem)' }}>
                                       <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: 'clamp(2.5rem, 4vw, 3.5rem)', height: 'clamp(2.5rem, 4vw, 3.5rem)', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', flexShrink: 0, display: 'block' }} />
                                       <div style={{ flex: 1, minWidth: 0 }}>
-                                        <span style={{ display: 'block', margin: '0 0 0.65rem' }}>“Hit Loop is a hands-on creative partnership delivering agentic solutions with taste and automation. Your Human curates multiple systems to deliver professional outcomes, so you can save time and headspace while growing your business.”</span>
+                                        <span style={{ display: 'block', margin: '0 0 0.65rem' }}>“Hit Loop is a hands-on creative partnership delivering agentic solutions with taste and automation. Your Human curates multiple systems to deliver professional outcomes, so you can save time and money.”</span>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', fontStyle: 'normal' }}>
                                           <span style={quoteAttributionNameStyle}>Bryan Balli</span>
                                           <span style={{ color: 'rgba(42,36,32,0.3)', fontSize: '0.75rem' }}>·</span>
@@ -2139,7 +2193,7 @@ const StackedSlidesSection = () => {
                       <div id="footer-cta-input-row" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'clamp(0.5rem, 1.5vw, 1rem)', width: '100%', marginTop: 'clamp(1.25rem, 2.5vw, 2rem)', marginBottom: 0 }}>
                         <div id="footer-url-input-row" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 1, minWidth: 'min(100%, 18rem)', height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                           <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
-                          <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website or big idea" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
+                          <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
                           <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="footer-submit-label">Onboard in 30 Seconds</span><span style={ctaIconStyle}>↗</span></button>
                         </div>
                         <a
@@ -2323,7 +2377,7 @@ const StackedSlidesSection = () => {
                 id="cmo-modal-url-input"
                 value={homepageUrl}
                 onChange={handleHomepageUrlChange}
-                placeholder="Enter your website or big idea"
+                placeholder="Enter website or email"
               />
               <button
                 type="submit"

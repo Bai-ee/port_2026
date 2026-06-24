@@ -65,16 +65,15 @@ function hasValidWorkerSecret(req) {
   return safeSecretEquals(provided, configured);
 }
 
-async function verifyAdminRequest(req) {
-  if (hasValidWorkerSecret(req)) {
-    return {
-      uid: 'worker-secret',
-      email: null,
-      isWorkerSecret: true,
-      authType: 'worker-secret',
-    };
-  }
+async function isAdminEmail(rawEmail) {
+  if (!rawEmail) return false;
+  const email = String(rawEmail).trim().toLowerCase();
+  if (!email) return false;
+  const adminSnapshot = await fb.adminDb.collection('admins').doc(email).get();
+  return adminSnapshot.exists;
+}
 
+async function verifyAdminRequest(req) {
   const decoded = await verifyRequestUser(req);
   const rawEmail = decoded.email;
 
@@ -87,8 +86,7 @@ async function verifyAdminRequest(req) {
   // any capitalized character would miss the lookup and falsely 403.
   const email = String(rawEmail).trim().toLowerCase();
 
-  const adminSnapshot = await fb.adminDb.collection('admins').doc(email).get();
-  if (!adminSnapshot.exists) {
+  if (!(await isAdminEmail(email))) {
     throw new Error(`Forbidden: admin access required (email=${email}).`);
   }
 
@@ -99,6 +97,7 @@ module.exports = {
   buildAuthRequestShim,
   getHeaderValue,
   hasValidWorkerSecret,
+  isAdminEmail,
   safeSecretEquals,
   verifyAdminRequest,
   verifyRequestUser,

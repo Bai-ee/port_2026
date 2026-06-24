@@ -19,7 +19,11 @@ clients/*/
 !clients/_shared/
 
 # Local AI / editor workflow
+CLAUDE.md
 .claude/
+
+# Regenerable diagnostic artifacts (relocated out of scripts/)
+docs/diagnostics/
 .vscode/
 .cursor/
 .agents/
