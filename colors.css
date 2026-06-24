@@ -243,8 +243,8 @@ body.cmo-modal-open #founders-top-strip { display: none; }
 .founders-chat-label-short { display: none; }
 .founders-chat-label-full  { display: inline; }
 #founders-chat-cta-icon {
-  font-size: 0.72rem;
-  opacity: 0.82;
+  font-size: 0.95rem;
+  opacity: 0.9;
 }
 /* Homepage variant: white bg + black text */
 .founders-chat-cta--light {

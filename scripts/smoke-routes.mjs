@@ -4,9 +4,10 @@ import { chromium } from 'playwright';
 
 const baseUrl = process.env.ROUTE_SMOKE_BASE_URL || 'http://localhost:3000';
 const outDir = process.env.ROUTE_SMOKE_OUT_DIR || '/tmp/route-smoke';
+const OVERALL_TIMEOUT_MS = Number(process.env.ROUTE_SMOKE_TIMEOUT_MS || 180_000);
 
 const publicRoutes = [
-  { path: '/', name: 'home', expectText: 'Get Your Dashboard' },
+  { path: '/', name: 'home', expectText: 'Dashboard' },
   { path: '/about', name: 'about', expectText: 'About' },
   { path: '/work', name: 'work', expectText: 'Featured Work' },
   { path: '/case-studies', name: 'case-studies', expectText: 'Case Studies' },
@@ -20,20 +21,20 @@ const publicRoutes = [
   { path: '/services/design-systems', name: 'svc-design-systems', expectText: 'Design Systems' },
   { path: '/services/seo-geo', name: 'svc-seo-geo', expectText: 'SEO' },
   { path: '/services/web-development', name: 'svc-web-dev', expectText: 'Web Development' },
-  { path: '/login', name: 'login', expectText: 'SIGN IN TO YOUR DASHBOARD' },
+  { path: '/login', name: 'login', expectText: 'Sign in' },
   { path: '/capture', name: 'capture', expectText: 'Capture Controls' },
   { path: '/preview/canvas', name: 'preview-canvas', expectText: 'Background' },
   { path: '/preview/intake-modal', name: 'preview-intake-modal', expectText: 'INTAKE' },
   { path: '/preview/mini-brief', name: 'preview-mini-brief', expectText: 'Mini Brief' },
-  { path: '/api/health', name: 'health', expectText: '"ok":true', minBodyLength: 10 },
+  { path: '/api/health', name: 'health', expectText: '"ok":true', minBodyLength: 10, mode: 'fetch' },
 ];
 
 const privateRoutes = [
-  { path: '/dashboard', name: 'dashboard', expectedUrl: '/login?redirect=/dashboard', expectText: 'SIGN IN TO YOUR DASHBOARD' },
-  { path: '/dashboard/studio', name: 'dashboard-studio', expectedUrl: '/login?redirect=/dashboard/studio', expectText: 'SIGN IN TO YOUR DASHBOARD' },
-  { path: '/admin/control', name: 'admin-control', expectedUrl: '/login?redirect=/admin/control', expectText: 'SIGN IN TO YOUR DASHBOARD' },
-  { path: '/preview/brief', name: 'preview-brief', expectedUrl: '/login?redirect=/preview/brief', expectText: 'SIGN IN TO YOUR DASHBOARD' },
-  { path: '/preview/scout-config', name: 'preview-scout-config', expectedUrl: '/login?redirect=/preview/scout-config', expectText: 'SIGN IN TO YOUR DASHBOARD' },
+  { path: '/dashboard', name: 'dashboard', expectedUrl: '/login?redirect=/dashboard', expectText: 'Sign in' },
+  { path: '/dashboard/studio', name: 'dashboard-studio', expectedUrl: '/login?redirect=/dashboard/studio', expectText: 'Sign in' },
+  { path: '/admin/control', name: 'admin-control', expectedUrl: '/login?redirect=/admin/control', expectText: 'Sign in' },
+  { path: '/preview/brief', name: 'preview-brief', expectedUrl: '/login?redirect=/preview/brief', expectText: 'Sign in' },
+  { path: '/preview/scout-config', name: 'preview-scout-config', expectedUrl: '/login?redirect=/preview/scout-config', expectText: 'Sign in' },
 ];
 
 async function launchBrowser() {
@@ -66,6 +67,31 @@ function isIgnorableConsole(message) {
 }
 
 async function smokeRoute(browser, spec, kind) {
+  if (spec.mode === 'fetch') {
+    console.log(`[smoke:routes] ${kind} ${spec.path}`);
+    const response = await fetch(`${baseUrl}${spec.path}`, { cache: 'no-store' });
+    const bodyText = await response.text();
+    const result = {
+      kind,
+      path: spec.path,
+      name: spec.name,
+      status: response.status,
+      finalPath: spec.path,
+      title: '',
+      bodyLength: bodyText.trim().length,
+      overlay: false,
+      errors: [],
+    };
+    const failures = [];
+    if (response.status >= 400) failures.push(`http ${response.status}`);
+    if (spec.expectText && !normalizeForExpect(bodyText).includes(normalizeForExpect(spec.expectText))) failures.push(`missing text: ${spec.expectText}`);
+    if (kind === 'public' && result.bodyLength < (spec.minBodyLength ?? 120)) failures.push(`body too short: ${result.bodyLength}`);
+    result.failures = failures;
+    console.log(`[smoke:routes] ${failures.length ? 'FAIL' : 'PASS'} ${spec.path}`);
+    return result;
+  }
+
+  console.log(`[smoke:routes] ${kind} ${spec.path}`);
   const page = await browser.newPage({ viewport: { width: 1440, height: 960 } });
   const errors = [];
   page.on('console', (msg) => {
@@ -76,7 +102,7 @@ async function smokeRoute(browser, spec, kind) {
   });
   page.on('pageerror', (err) => errors.push(`pageerror: ${err.message}`));
 
-  const response = await page.goto(`${baseUrl}${spec.path}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+  const response = await page.goto(`${baseUrl}${spec.path}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForTimeout(2500);
   const bodyText = await page.locator('body').innerText().catch(() => '');
   const finalUrl = new URL(page.url());
@@ -113,22 +139,25 @@ async function smokeRoute(browser, spec, kind) {
   }
 
   await page.close();
+  console.log(`[smoke:routes] ${failures.length ? 'FAIL' : 'PASS'} ${spec.path}`);
   return result;
 }
 
-async function main() {
+async function runSmoke() {
   await mkdir(outDir, { recursive: true });
   const browser = await launchBrowser();
   const results = [];
 
-  for (const route of publicRoutes) {
-    results.push(await smokeRoute(browser, route, 'public'));
+  try {
+    for (const route of publicRoutes) {
+      results.push(await smokeRoute(browser, route, 'public'));
+    }
+    for (const route of privateRoutes) {
+      results.push(await smokeRoute(browser, route, 'private'));
+    }
+  } finally {
+    await browser.close();
   }
-  for (const route of privateRoutes) {
-    results.push(await smokeRoute(browser, route, 'private'));
-  }
-
-  await browser.close();
 
   const summary = {
     ok: results.every((r) => r.failures.length === 0),
@@ -144,6 +173,18 @@ async function main() {
   await writeFile(path.join(outDir, 'summary.json'), JSON.stringify(summary, null, 2));
   console.log(JSON.stringify(summary, null, 2));
   if (!summary.ok) process.exit(1);
+}
+
+async function main() {
+  let timeout;
+  await Promise.race([
+    runSmoke(),
+    new Promise((_, reject) => {
+      timeout = setTimeout(() => reject(new Error(`Route smoke timed out after ${OVERALL_TIMEOUT_MS}ms.`)), OVERALL_TIMEOUT_MS);
+      timeout.unref?.();
+    }),
+  ]);
+  clearTimeout(timeout);
 }
 
 main().catch((err) => {

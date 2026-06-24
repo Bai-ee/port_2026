@@ -14,16 +14,17 @@ const SITE_URL =
 export const metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: 'HIT Agency — AI Design & Engineering Studio',
-    template: '%s · HIT Agency',
+    default: 'HITLOOP | Human in the Loop',
+    template: '%s | HITLOOP',
   },
   description:
-    'HIT Agency (Human in the Loop) is an AI-powered design and engineering studio led by Bryan Balli. We build AI-assisted client dashboards, intelligent intake pipelines, and high-performance web experiences for founders and growth brands.',
+    'HITLOOP is a Human in the Loop creative partnership led by Bryan Balli, combining strategy, design, development, and automation to help founders launch products, grow their brand, and scale execution. Human judgment where it matters. Automation where it helps.',
   keywords: [
-    'HIT Agency',
-    'Human in the Loop Agency',
+    'HITLOOP',
+    'Human in the Loop',
     'hitloop.agency',
     'Bryan Balli',
+    'creative partnership',
     'AI design engineer',
     'creative technologist',
     'AI consultant',
@@ -35,8 +36,8 @@ export const metadata = {
     'GSAP animation',
   ],
   authors: [{ name: 'Bryan Balli', url: SITE_URL }],
-  creator: 'HIT Agency',
-  publisher: 'HIT Agency',
+  creator: 'HITLOOP',
+  publisher: 'HITLOOP',
   alternates: {
     canonical: '/',
   },
@@ -44,16 +45,16 @@ export const metadata = {
     type: 'website',
     locale: 'en_US',
     url: SITE_URL,
-    siteName: 'HIT Agency',
-    title: 'HIT Agency — AI Design & Engineering Studio',
+    siteName: 'HITLOOP',
+    title: 'HITLOOP | Human in the Loop',
     description:
-      'HIT Agency (Human in the Loop) is an AI-powered design and engineering studio led by Bryan Balli. We build AI-assisted client dashboards, intelligent intake pipelines, and high-performance web experiences for founders and growth brands.',
+      'A creative partnership led by Bryan Balli, helping founders launch products, execute marketing campaigns, and build scalable systems through strategy, design, development, and automation.',
     images: [
       {
         url: '/img/og_meta.optimized.jpg',
         width: 1200,
         height: 630,
-        alt: 'HIT Agency — AI-powered design and engineering studio led by Bryan Balli',
+        alt: 'HITLOOP — Human in the Loop creative partnership led by Bryan Balli',
         type: 'image/jpeg',
       },
     ],
@@ -62,13 +63,13 @@ export const metadata = {
     card: 'summary_large_image',
     site: '@bai_ee',
     creator: '@bai_ee',
-    title: 'HIT Agency — AI Design & Engineering Studio',
+    title: 'HITLOOP | Human in the Loop',
     description:
-      'HIT Agency (Human in the Loop) is an AI-powered design and engineering studio led by Bryan Balli. We build AI-assisted client dashboards, intelligent intake pipelines, and high-performance web experiences.',
+      'Led by Bryan Balli. Built for founders who need momentum.',
     images: [
       {
         url: '/img/og_meta.optimized.jpg',
-        alt: 'HIT Agency — AI-powered design and engineering studio led by Bryan Balli',
+        alt: 'HITLOOP — Human in the Loop creative partnership led by Bryan Balli',
       },
     ],
   },
@@ -116,6 +117,10 @@ export default function RootLayout({ children }) {
           rel="stylesheet"
           media="print"
           href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700;900&family=Space+Grotesk:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap"
+          // The inline script below flips media print→all before hydration, so the
+          // client DOM intentionally differs from the SSR'd attribute. Suppress the
+          // expected hydration mismatch (fonts still load correctly).
+          suppressHydrationWarning
         />
         <script
           dangerouslySetInnerHTML={{

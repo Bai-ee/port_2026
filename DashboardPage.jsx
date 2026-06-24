@@ -8,15 +8,14 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 gsap.registerPlugin(ScrollTrigger);
 import Link from 'next/link';
 import {
-  ArrowUpRight,
   BriefcaseBusiness,
   CalendarDays,
   ChevronDown,
   ClipboardList,
   Database,
   Download,
+  DownloadCloud,
   FileText,
-  House,
   Mail,
   ChartColumnIncreasing,
   LaptopMinimalCheck,
@@ -38,6 +37,7 @@ import {
   X as XIcon,
 } from 'lucide-react';
 import { BrainIcon } from './components/ui/brain';
+import UpRightArrow from './components/UpRightArrow';
 import { useAuth } from './AuthContext';
 import { collection, doc, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from './firebase';
@@ -75,6 +75,25 @@ function parseBriefSuggestedPost(raw) {
     if (collecting) out.push(t);
   }
   return out.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+function sanitizeBriefHtmlForStandalone(rawHtml) {
+  const html = String(rawHtml || '');
+  if (!html || typeof window === 'undefined' || typeof window.DOMParser !== 'function') return html;
+  try {
+    const doc = new window.DOMParser().parseFromString(html, 'text/html');
+    doc.querySelectorAll('script').forEach((node) => node.remove());
+    doc.querySelectorAll('*').forEach((node) => {
+      for (const attr of Array.from(node.attributes || [])) {
+        if (/^on/i.test(attr.name)) node.removeAttribute(attr.name);
+      }
+    });
+    return `<!doctype html>\n${doc.documentElement.outerHTML}`;
+  } catch {
+    return html
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+  }
 }
 
 const LeadGenDashboard = dynamic(() => import('./components/dashboard/LeadGenDashboard'), {
@@ -3087,23 +3106,41 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // the dashboard's own styles.
   const [briefPreviewHtml, setBriefPreviewHtml] = useState('');
   const [briefPreviewLoading, setBriefPreviewLoading] = useState(true);
+  // Shell/tile variant: injects a self-contained <style> that hides the gradient
+  // CTA in the small previews. Self-contained (not reliant on the API's CSS) so
+  // it works even on already-fetched/cached brief HTML. Full-screen open keeps
+  // the unmodified HTML (CTA shows).
+  const briefShellHtml = useMemo(
+    () => (briefPreviewHtml
+      ? briefPreviewHtml.replace('</head>', '<style>.cap-brief-email-cta-row{display:none !important}</style></head>')
+      : ''),
+    [briefPreviewHtml],
+  );
   // Creative Brief card auto-scroll tease — once the preview iframe loads, slowly
   // scroll its (same-origin, scriptless) document from the cover to the bottom to
-  // hint at the contents, then rest at the end. Non-interactive; pointer-events
-  // stay off the iframe. Re-arms whenever the iframe remounts (new run → new key).
-  const briefTeaseRef = useRef({ raf: 0, timer: 0 });
+  // hint at the contents, then loop back to the top and run again. The shell is
+  // interactive: the user can scrub up/down; any input pauses the auto-scroll and
+  // it resumes 5s after the last interaction. A plain click still opens the
+  // full-screen brief. Re-arms whenever the iframe remounts (new run → new key).
+  const briefTeaseRef = useRef({ raf: 0, timer: 0, resumeTimer: 0, cleanup: null });
   const startBriefTease = useCallback((iframe) => {
     const state = briefTeaseRef.current;
     cancelAnimationFrame(state.raf);
     clearTimeout(state.timer);
+    clearTimeout(state.resumeTimer);
+    state.cleanup?.();
+    state.cleanup = null;
     let win, doc;
     try { win = iframe?.contentWindow; doc = iframe?.contentDocument; } catch { return; }
     if (!win || !doc) return;
-    // Respect reduced-motion — no auto-scroll; the cover stays put.
-    if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
-    const START_DELAY_MS = 1400;   // let the cover read first
-    const PX_PER_SEC = 60;         // content-space speed (iframe is scaled 0.25 → ~15px/s on screen)
-    state.timer = setTimeout(() => {
+    // Make the shell scrubbable (default tile-brief-preview is pointer-events:none).
+    iframe.style.pointerEvents = 'auto';
+    const reduceMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const START_DELAY_MS = 1400;        // let the cover read first
+    const REST_AT_BOTTOM_MS = 1800;     // pause on the last page before looping
+    const RESUME_AFTER_IDLE_MS = 5000;  // resume 5s after the last interaction
+    const PX_PER_SEC = 60;              // content-space speed (iframe scaled 0.25 → ~15px/s on screen)
+    const pass = () => {
       let last = null;
       const step = (ts) => {
         if (last == null) last = ts;
@@ -3111,14 +3148,39 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         const max = Math.max(0, (doc.documentElement?.scrollHeight || doc.body?.scrollHeight || 0) - win.innerHeight);
         const next = Math.min(max, (win.scrollY || 0) + PX_PER_SEC * dt);
         win.scrollTo(0, next);
-        if (next < max - 0.5) state.raf = requestAnimationFrame(step);  // else: rest at bottom
+        if (next < max - 0.5) {
+          state.raf = requestAnimationFrame(step);
+        } else {
+          // Reached the bottom — rest, snap back to the cover, then run again.
+          state.timer = setTimeout(() => { win.scrollTo(0, 0); state.timer = setTimeout(pass, START_DELAY_MS); }, REST_AT_BOTTOM_MS);
+        }
       };
       state.raf = requestAnimationFrame(step);
-    }, START_DELAY_MS);
+    };
+    // User input pauses the auto-scroll; it resumes after a 5s idle gap.
+    const onInteract = () => {
+      cancelAnimationFrame(state.raf);
+      clearTimeout(state.timer);
+      clearTimeout(state.resumeTimer);
+      if (reduceMotion) return;
+      state.resumeTimer = setTimeout(pass, RESUME_AFTER_IDLE_MS);
+    };
+    const onClick = () => setBriefFullScreen(true);
+    const inputEvents = ['wheel', 'touchstart', 'touchmove', 'pointerdown', 'keydown'];
+    inputEvents.forEach((ev) => win.addEventListener(ev, onInteract, { passive: true }));
+    doc.addEventListener('click', onClick);
+    state.cleanup = () => {
+      inputEvents.forEach((ev) => win.removeEventListener(ev, onInteract));
+      doc.removeEventListener('click', onClick);
+    };
+    // Respect reduced-motion — scrubbing still works, but no auto-scroll.
+    if (!reduceMotion) state.timer = setTimeout(pass, START_DELAY_MS);
   }, []);
   useEffect(() => () => {
     cancelAnimationFrame(briefTeaseRef.current.raf);
     clearTimeout(briefTeaseRef.current.timer);
+    clearTimeout(briefTeaseRef.current.resumeTimer);
+    briefTeaseRef.current.cleanup?.();
   }, []);
   // Dedicated HTML preview for the Marketing Brief modal's BRIEF tab.
   // Always fetched with `?type=marketing` so it shows the marketing render
@@ -3209,7 +3271,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   }));
   const [customBriefSaving, setCustomBriefSaving] = useState(false);
   const [customBriefDeletingId, setCustomBriefDeletingId] = useState('');
-  const [customBriefVercelLaunchingId, setCustomBriefVercelLaunchingId] = useState('');
+  const [copiedBriefId, setCopiedBriefId] = useState('');
   const [customBriefSubmitError, setCustomBriefSubmitError] = useState('');
   const [customBriefSubmitSuccess, setCustomBriefSubmitSuccess] = useState('');
   const [brandSnapshotDraft, setBrandSnapshotDraft] = useState(() => buildBrandSnapshotDraft(null));
@@ -3719,41 +3781,24 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     }
   }, [user, customBriefDeletingId, apiPath]);
 
-  const launchCustomBriefVercel = useCallback(async (brief) => {
+  // Copy a saved brief's public share link (the deploy-free dynamic route,
+  // /briefs/[clientId]/[briefSlug]) to the clipboard. No Vercel deploy involved.
+  const copyBriefLink = useCallback(async (brief) => {
     const briefId = brief?.id || brief?.briefSlug;
-    if (!user || !briefId || customBriefVercelLaunchingId) return;
-
-    setCustomBriefVercelLaunchingId(briefId);
-    setCustomBriefSubmitError('');
-    setCustomBriefSubmitSuccess('');
+    const url = brief?.publicUrl;
+    if (!briefId || !url) return;
     try {
-      const token = await user.getIdToken();
-      const res = await fetch(apiPath('/api/dashboard/custom-briefs/vercel'), {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        cache: 'no-store',
-        body: JSON.stringify({ briefId }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || 'Could not launch custom brief on Vercel.');
-      setCustomBriefs((prev) => prev.map((item) => {
-        if (item.id !== briefId && item.briefSlug !== briefId) return item;
-        return {
-          ...item,
-          vercel: data.vercel || item.vercel || null,
-          vercelUrl: data.vercel?.url || item.vercelUrl || '',
-          vercelReadyState: data.vercel?.readyState || item.vercelReadyState || '',
-        };
-      }));
-      setCustomBriefSubmitSuccess(data?.vercel?.url
-        ? `Brief launched on Vercel. Link added to the brief card: ${data.vercel.url}`
-        : 'Brief deploy sent to Vercel.');
-    } catch (err) {
-      setCustomBriefSubmitError(err instanceof Error ? err.message : 'Could not launch custom brief on Vercel.');
-    } finally {
-      setCustomBriefVercelLaunchingId('');
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else if (typeof window !== 'undefined') {
+        window.prompt('Copy this brief link:', url);
+      }
+      setCopiedBriefId(briefId);
+      setTimeout(() => setCopiedBriefId((cur) => (cur === briefId ? '' : cur)), 2000);
+    } catch {
+      if (typeof window !== 'undefined') window.prompt('Copy this brief link:', url);
     }
-  }, [user, customBriefVercelLaunchingId, apiPath]);
+  }, []);
 
   // Fetch the newsletter HTML for the Newsletter tile's PREVIEW tab.
   // Loads the real newsletter if available, otherwise the generic template.
@@ -4596,12 +4641,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     }
     if (!forceModal && card.category === 'brief' && BRIEF_TYPE_BY_CARD[card.id] && dashboardState?.marketingBrief) {
       openNamedBriefPreview(BRIEF_TYPE_BY_CARD[card.id]);
-      return;
-    }
-    // Post Me card — the shell itself is NOT clickable. All actions live on the
-    // explicit controls inside (POST TO X footer, corner icons), so a stray click
-    // on the preview does nothing.
-    if (!forceModal && card.id === 'post-me') {
       return;
     }
     // Deliverables-bucket cards (Video Post, Social Preview, Device Mockups,
@@ -7711,6 +7750,17 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         footerLeft: 'Live',
         footerRight: 'ACTIVE',
         readinessBadge: { tone: 'ok', label: 'Passed' },
+        // Large-format viewer payload — the same creative this card would post:
+        // the promo video when X-ready, otherwise the social/static image.
+        deliverableAsset: hasVideoAsset ? {
+          title: 'Post Me',
+          kind: 'video',
+          items: [{ src: latestStudioVideoUrl, filename: `${deliverableBizName}-post.mp4` }],
+        } : (hasStaticAsset ? {
+          title: 'Post Me',
+          kind: 'image',
+          items: [{ src: siteMeta?.ogImage || multiDevicePreviewSrc, label: 'Social Post', filename: `${deliverableBizName}-post.png` }],
+        } : null),
         xIntentUrl:       activeIntent,
         xVideoIntentUrl:  xVideoIntent,
         xStaticIntentUrl: xStaticIntent,
@@ -9393,9 +9443,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             <img src="/img/circle_logo.png" alt="" aria-hidden="true" />
           </Link>
           <div id="founders-top-actions">
-            <Link href="/" id="founders-linkedin" aria-label="Homepage">
-              <House size={18} strokeWidth={1.75} />
-            </Link>
             <button type="button" id="founders-login-link" onClick={handleSignOut}>
               Logout
             </button>
@@ -9407,7 +9454,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             >
               <span className="founders-chat-label-full">Contact</span>
               <span className="founders-chat-label-short">Contact</span>
-              <span id="founders-chat-cta-icon">↗</span>
+              <UpRightArrow id="founders-chat-cta-icon" />
             </a>
           </div>
           <div id="founders-hidden-controls" aria-hidden="true">
@@ -9688,7 +9735,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 title="Open payment options"
                 onClick={() => setShowSubscribeModal(true)}
               >
-                <ArrowUpRight size={12} strokeWidth={1.75} aria-hidden="true" />
+                <UpRightArrow size={12} />
               </button>
             </div>
           </div>
@@ -9759,9 +9806,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                             {dlAllBusy ? (
                               <span aria-hidden="true" style={{ width: 16, height: 16, borderRadius: '50%', background: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)', animation: 'run-indicator-pulse 1.4s ease-in-out infinite', flexShrink: 0 }} />
                             ) : (
-                              <Download size={22} strokeWidth={2} stroke="url(#coverage-grad)" aria-hidden="true" style={{ marginTop: 1 }} />
+                              <DownloadCloud size={22} strokeWidth={2} stroke="url(#coverage-grad)" aria-hidden="true" style={{ marginTop: 1 }} />
                             )}
-                            <span className="dl-all-text dl-all-text--full" style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>DL ASSETS</span>
+                            <span className="dl-all-text dl-all-text--full" style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>DOWNLOAD</span>
                             <span className="dl-all-text dl-all-text--short" style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>DL</span>
                           </button>
                         </>
@@ -9772,10 +9819,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       // Data Coverage micro-readout — mirrors the audit-summary
                       // ("Data Coverage") card's gauge: captured tier-1 fields / total.
                       const auditCard = intakeCapabilityCards.find((c) => c.id === 'audit-summary');
-                      const { captured, total, pct } = computeDataCoverage(auditCard?.rows);
-                      const SEMI = Math.PI * 15; // semicircle arc length (r=15)
-                      // Primary brand gradient, shared by the brain strokes (CSS),
-                      // the value text (background-clip), and the meter (SVG url).
+                      const { pct } = computeDataCoverage(auditCard?.rows);
+                      // Primary brand gradient for the value text (background-clip).
                       const GRAD = 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)';
                       return (
                         <span
@@ -9783,7 +9828,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                           title="Data coverage and quality"
                           style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 2px', flexShrink: 0, background: 'none', border: 'none', cursor: 'default' }}
                         >
-                          {/* Shared gradient def for the brain + meter strokes */}
+                          {/* Shared gradient def for sibling icon strokes (Download /
+                              FileText reference url(#coverage-grad)). */}
                           <svg width="0" height="0" aria-hidden="true" style={{ position: 'absolute' }}>
                             <defs>
                               <linearGradient id="coverage-grad" x1="0" y1="0" x2="1" y2="1">
@@ -9794,7 +9840,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                             </defs>
                           </svg>
                           <BrainIcon
-                            ref={(api) => { api?.startAnimation?.(); }}
+                            ref={() => {}}
                             className="coverage-brain"
                             size={22}
                             aria-hidden="true"
@@ -9803,10 +9849,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                           <span className="cap-source-value" style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: GRAD, WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>
                             {pct}<span style={{ fontSize: 13 }}>%</span>
                           </span>
-                          <svg className="coverage-gauge" width="28" height="16" viewBox="0 0 36 21" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
-                            <path d="M3 18 A15 15 0 0 1 33 18" stroke="rgba(42,36,32,0.14)" strokeWidth="3.4" strokeLinecap="round" />
-                            <path d="M3 18 A15 15 0 0 1 33 18" stroke="url(#coverage-grad)" strokeWidth="3.4" strokeLinecap="round" strokeDasharray={SEMI} strokeDashoffset={SEMI - (SEMI * pct) / 100} />
-                          </svg>
                         </span>
                       );
                     })()}
@@ -9881,7 +9923,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         <span className="reseed-run-btn-label-mobile">
                           {reseedLoading ? 'Queueing...' : 'Rerun'}
                         </span>
-                        <span id="reseed-run-btn-icon">↗</span>
+                        <UpRightArrow id="reseed-run-btn-icon" />
                       </button>
                     </span>
                     ) : null}
@@ -10284,25 +10326,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     ? { background: `linear-gradient(135deg, ${sgDisplayData.colors.primary.hex}, ${sgDisplayData.colors.secondary?.hex || sgDisplayData.colors.neutral?.hex || '#ddd'})` }
                     : undefined}
                 >
-                  {_cardDownloads.length > 0 && (
-                    <button
-                      type="button"
-                      id={`card-dl-${card.id}`}
-                      className="card-dl-btn"
-                      data-tooltip-disabled="true"
-                      aria-label={card.id === 'cross-device-images' ? 'Download all three images' : _cardDownloads.length === 1 ? `Download ${_cardDownloads[0].label}` : 'Download assets'}
-                      title={card.id === 'cross-device-images' ? 'Download all three images' : _cardDownloads.length === 1 ? `Download ${_cardDownloads[0].label}` : 'Download assets'}
-                      onClick={(e) => onCardDownloadClick(e, _cardDownloads, card.id === 'cross-device-images')}
-                    >
-                      <Download size={16} strokeWidth={2.2} aria-hidden="true" />
-                    </button>
-                  )}
                   {card.id === 'brief' && briefPreviewHtml ? (
                     <iframe
                       key={dashboardState?.latestRunId || 'brief-preview'}
                       className="tile-brief-preview"
                       title="Brief preview"
-                      srcDoc={briefPreviewHtml}
+                      srcDoc={briefShellHtml}
                       sandbox="allow-same-origin"
                     />
                   ) : card.id === 'brief' && briefPreviewLoading ? (
@@ -10517,7 +10546,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       key={dashboardState?.latestRunId || 'creative-brief-preview'}
                       className="tile-brief-preview"
                       title="Creative Brief preview"
-                      srcDoc={briefPreviewHtml}
+                      srcDoc={briefShellHtml}
                       sandbox="allow-same-origin"
                       onLoad={(e) => startBriefTease(e.currentTarget)}
                     />
@@ -10774,19 +10803,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     })()}
                   </span>
                   <span className="tile-foot-right-group" data-tooltip-disabled="true">
-                    {card.id === 'brief' && briefPdfUrl && (
-                      <a
-                        href={briefPdfUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        download="brief.pdf"
-                        className="tile-download-btn"
-                        onClick={(e) => { e.stopPropagation(); }}
-                        aria-label="Download brief PDF"
-                      >
-                        DL ↓
-                      </a>
-                    )}
                     {(() => {
                       if (isLocked) return (
                         <button
@@ -10970,7 +10986,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         );
                       }}
                     >
-                        Details ↗{!isAdmin && <Lock size={11} strokeWidth={2} aria-hidden="true" style={{ marginLeft: 4, verticalAlign: 'middle' }} />}
+                        Details <UpRightArrow style={{ marginLeft: '0.1rem', opacity: 0.82 }} />{!isAdmin && <Lock size={11} strokeWidth={2} aria-hidden="true" style={{ marginLeft: 4, verticalAlign: 'middle' }} />}
                     </button>
                   </span>
                 </div>
@@ -11102,7 +11118,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                   {pastBriefView.loading ? (
                                     <p className="mu-notice">Loading brief…</p>
                                   ) : pastBriefView.html ? (
-                                    <iframe className="cap-brief-full-frame" title="Past brief" srcDoc={pastBriefView.html} sandbox="allow-same-origin" />
+                                    <iframe className="cap-brief-full-frame" title="Past brief" srcDoc={pastBriefView.html} sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads" />
                                   ) : (
                                     <p className="mu-notice mu-notice--danger">{pastBriefView.error || 'Could not load this brief.'}</p>
                                   )}
@@ -11629,7 +11645,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   || '\u00A0'}
               </span>
               {adhocActive && adhocTerminal.status === 'done' && adhocTerminal.videoUrl ? (
-                <a id="intake-modal-footer-action" href={adhocTerminal.videoUrl} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 'auto', textDecoration: 'underline', color: '#2a2420', fontFamily: '"Space Mono", monospace', fontSize: '0.72rem' }}>Open Video ↗</a>
+                <a id="intake-modal-footer-action" href={adhocTerminal.videoUrl} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 'auto', textDecoration: 'underline', color: '#2a2420', fontFamily: '"Space Mono", monospace', fontSize: '0.72rem' }}>Open Video <UpRightArrow style={{ marginLeft: '0.15rem', opacity: 0.82 }} /></a>
               ) : (
                 <span id="intake-modal-footer-note">
                   {adhocActive
@@ -11919,7 +11935,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                             setActiveTileModal({ title: targetCard.title, description: targetCard.description, rows: targetCard.rows, cardId: targetCard.id, placeholderLabel: targetCard.placeholderLabel, number: targetCard.number, label: targetCard.label, isCapabilityCard: true, vizType: null, recommendation: null, analyzer: null, readinessBadge: null });
                           }}
                         >
-                          ↗ VIEW
+                          <UpRightArrow style={{ marginRight: '0.2rem', opacity: 0.82 }} />VIEW
                         </button>
                       )}
                     </div>
@@ -11957,6 +11973,23 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               )}
               <button
                 type="button"
+                id="brief-fullscreen-share"
+                onClick={() => {
+                  // Open the Creative Brief on its own page in a new tab. Blob URL
+                  // renders the full brief HTML (with CTA) standalone; inject a
+                  // <base> so the brief's relative asset paths (/img/…) still resolve.
+                  const shareHtml = sanitizeBriefHtmlForStandalone(briefPreviewHtml).replace(
+                    '<head>',
+                    `<head><base href="${window.location.origin}/" />`,
+                  );
+                  const blob = new Blob([shareHtml], { type: 'text/html' });
+                  const url = URL.createObjectURL(blob);
+                  window.open(url, '_blank', 'noopener');
+                  setTimeout(() => URL.revokeObjectURL(url), 60000);
+                }}
+              ><UpRightArrow style={{ marginRight: '0.2rem', opacity: 0.82 }} />Share</button>
+              <button
+                type="button"
                 id="brief-fullscreen-close"
                 onClick={() => setBriefFullScreen(false)}
               >[ ✕ ]</button>
@@ -11965,7 +11998,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               id="brief-fullscreen-iframe"
               title="Daily Brief"
               srcDoc={briefPreviewHtml}
-              sandbox="allow-same-origin"
+              sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads"
             />
           </div>
         </div>
@@ -11975,6 +12008,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       {namedBriefView && (
         <div id="brief-fullscreen-overlay" onClick={() => setNamedBriefView(null)}>
           <div id="brief-fullscreen-container" onClick={(e) => e.stopPropagation()}>
+            <span id="brief-fullscreen-title" aria-hidden="true">
+              <span className="bfs-title-full">CLIENT ACCESS</span>
+              <span className="bfs-title-mobile">ACCESS</span>
+            </span>
             <div id="brief-fullscreen-actions">
               {namedBriefView.html && (
                 <button
@@ -11995,7 +12032,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 id="brief-fullscreen-iframe"
                 title="Brief preview"
                 srcDoc={namedBriefView.html}
-                sandbox="allow-same-origin allow-scripts allow-popups"
+                sandbox="allow-same-origin allow-scripts allow-popups allow-downloads"
               />
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '0 10%', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', color: namedBriefView.error ? '#b42318' : 'rgba(42,36,32,0.6)' }}>
@@ -12011,6 +12048,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       {deliverableView && (
         <div id="brief-fullscreen-overlay" onClick={() => setDeliverableView(null)}>
           <div id="brief-fullscreen-container" className="deliverable-view-container" onClick={(e) => e.stopPropagation()}>
+            <span id="brief-fullscreen-title" aria-hidden="true">
+              <span className="bfs-title-full">CLIENT ACCESS</span>
+              <span className="bfs-title-mobile">ACCESS</span>
+            </span>
             <div id="brief-fullscreen-actions">
               {deliverableView.items.length === 1 && (
                 <a
@@ -12211,7 +12252,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       key={dashboardState?.latestRunId || 'brief-preview-modal'}
                       className="tile-brief-preview"
                       title="Brief preview"
-                      srcDoc={briefPreviewHtml}
+                      srcDoc={briefShellHtml}
                       sandbox="allow-same-origin"
                     />
                   ) : (activeTileModal.cardId === 'marketing-brief' || activeTileModal.cardId === 'marketing-brief-doc') && marketingBriefPreviewHtml ? (
@@ -12493,7 +12534,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                 <span className="mu-saved-meta">{[ev.date, ev.location].filter(Boolean).join(' · ')}</span>
                                 {ev.summary ? <p className="mu-saved-body" style={{ fontSize: 12 }}>{ev.summary}</p> : null}
                                 <div style={{ display: 'flex', gap: 8 }}>
-                                  {ev.url ? <a href={ev.url} target="_blank" rel="noopener noreferrer" className="mu-btn-outline" style={{ alignSelf: 'flex-start', textDecoration: 'none', fontSize: 11, minHeight: 28, padding: '0 10px' }}>Open ↗</a> : null}
+                                  {ev.url ? <a href={ev.url} target="_blank" rel="noopener noreferrer" className="mu-btn-outline" style={{ alignSelf: 'flex-start', textDecoration: 'none', fontSize: 11, minHeight: 28, padding: '0 10px' }}>Open <UpRightArrow style={{ marginLeft: '0.1rem', opacity: 0.82 }} /></a> : null}
                                   <button
                                     type="button"
                                     className="mu-btn-outline"
@@ -12838,7 +12879,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, maxWidth: 480, textAlign: 'center' }}>
                                 <span className="mu-label">Preview deployed</span>
                                 <a className="mu-btn-outline mu-btn-outline--accent" href={previewUrl} target="_blank" rel="noopener noreferrer">
-                                  Open Preview <ArrowUpRight size={14} strokeWidth={2} />
+                                  Open Preview <UpRightArrow size={14} />
                                 </a>
                                 <span className="mu-notice" style={{ wordBreak: 'break-all', fontSize: 11, minHeight: 'unset', padding: '8px 12px' }}>{previewUrl}</span>
                                 <p style={{ fontSize: 11, lineHeight: 1.5, color: 'rgba(42,36,32,0.5)', margin: 0, maxWidth: 360 }}>
@@ -13732,7 +13773,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                               disabled={customBriefSaving || !customBriefDraft.html.trim() || !customBriefDraft.title.trim()}
                             >
                               <span>{customBriefSaving ? 'Saving...' : 'Save Brief'}</span>
-                              <span style={{ fontSize: 13, opacity: 0.82 }}>↗</span>
+                              <UpRightArrow style={{ fontSize: 13, opacity: 0.82 }} />
                             </button>
                           </div>
                         </div>
@@ -13794,7 +13835,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                               disabled={customBriefSaving || !customBriefDraft.html.trim() || !customBriefDraft.title.trim()}
                             >
                               <span>{customBriefSaving ? 'Saving...' : 'Save Brief'}</span>
-                              <span style={{ fontSize: 13, opacity: 0.82 }}>↗</span>
+                              <UpRightArrow style={{ fontSize: 13, opacity: 0.82 }} />
                             </button>
                           </div>
                         </div>
@@ -13832,7 +13873,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                       <h4 className="mu-saved-title">{brief.title || brief.briefSlug || 'Custom brief'}</h4>
                                     </div>
                                     <div className="mu-chip-row" style={{ flexShrink: 0 }}>
-                                      {brief.vercelReadyState && <span className="mu-chip">{brief.vercelReadyState}</span>}
                                       {brief.hideOgSubhead && <span className="mu-chip">No OG subhead</span>}
                                     </div>
                                   </div>
@@ -13846,8 +13886,18 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                   <div className="mu-card-actions">
                                     {brief.publicUrl && (
                                       <a className="mu-btn-outline" href={brief.publicUrl} target="_blank" rel="noopener noreferrer">
-                                        Open <ArrowUpRight size={13} strokeWidth={2} />
+                                        Open <UpRightArrow size={13} />
                                       </a>
+                                    )}
+                                    {brief.publicUrl && (
+                                      <button
+                                        type="button"
+                                        className="mu-btn-outline"
+                                        onClick={() => copyBriefLink(brief)}
+                                        title="Copy the public share link"
+                                      >
+                                        {copiedBriefId === (brief.id || brief.briefSlug) ? 'Copied ✓' : 'Copy link'}
+                                      </button>
                                     )}
                                     {brief.ogImageUrl && (
                                       <a className="mu-btn-outline" href={brief.ogImageUrl} target="_blank" rel="noopener noreferrer">
@@ -13858,24 +13908,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                       <a className="mu-btn-outline" href={withDownloadParam(brief.ogImageUrl)} download={`${brief.title || brief.briefSlug || 'custom-brief'} OG Image.png`}>
                                         Download OG
                                       </a>
-                                    )}
-                                    {brief.vercelUrl && (
-                                      <a className="mu-btn-outline mu-btn-outline--accent" href={brief.vercelUrl} target="_blank" rel="noopener noreferrer">
-                                        Vercel <ArrowUpRight size={13} strokeWidth={2} />
-                                      </a>
-                                    )}
-                                    {isAdmin && (
-                                      <button
-                                        type="button"
-                                        className="mu-btn-update"
-                                        style={{ minHeight: 36, padding: '0 14px', fontSize: 12 }}
-                                        onClick={() => launchCustomBriefVercel(brief)}
-                                        disabled={customBriefVercelLaunchingId === (brief.id || brief.briefSlug)}
-                                      >
-                                        {customBriefVercelLaunchingId === (brief.id || brief.briefSlug)
-                                          ? 'Launching...'
-                                          : brief.vercelUrl ? 'Redeploy' : 'Launch'}
-                                      </button>
                                     )}
                                     {(brief.pdfDownloadUrl || brief.pdfUrl) ? (
                                       <a className="mu-btn-outline" href={brief.pdfDownloadUrl || brief.pdfUrl} target="_blank" rel="noopener noreferrer" download={brief.pdfFileName || titlePdfFileName(brief.title || brief.briefSlug)}>
@@ -14316,7 +14348,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                       <h4 className="mu-saved-title">{brief.title || brief.briefSlug || 'Custom brief'}</h4>
                                     </div>
                                     <div className="mu-chip-row" style={{ flexShrink: 0 }}>
-                                      {brief.vercelReadyState && <span className="mu-chip">{brief.vercelReadyState}</span>}
                                       {brief.hideOgSubhead && <span className="mu-chip">No OG subhead</span>}
                                     </div>
                                   </div>
@@ -14325,8 +14356,18 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                   <div className="mu-card-actions">
                                     {brief.publicUrl && (
                                       <a className="mu-btn-outline" href={brief.publicUrl} target="_blank" rel="noopener noreferrer">
-                                        Open Brief <ArrowUpRight size={13} strokeWidth={2} />
+                                        Open Brief <UpRightArrow size={13} />
                                       </a>
+                                    )}
+                                    {brief.publicUrl && (
+                                      <button
+                                        type="button"
+                                        className="mu-btn-outline"
+                                        onClick={() => copyBriefLink(brief)}
+                                        title="Copy the public share link"
+                                      >
+                                        {copiedBriefId === (brief.id || brief.briefSlug) ? 'Copied ✓' : 'Copy link'}
+                                      </button>
                                     )}
                                     {brief.ogImageUrl && (
                                       <a className="mu-btn-outline" href={brief.ogImageUrl} target="_blank" rel="noopener noreferrer">
@@ -14337,24 +14378,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                       <a className="mu-btn-outline" href={withDownloadParam(brief.ogImageUrl)} download={`${brief.title || brief.briefSlug || 'custom-brief'} OG Image.png`}>
                                         Download OG
                                       </a>
-                                    )}
-                                    {brief.vercelUrl && (
-                                      <a className="mu-btn-outline mu-btn-outline--accent" href={brief.vercelUrl} target="_blank" rel="noopener noreferrer">
-                                        Vercel <ArrowUpRight size={13} strokeWidth={2} />
-                                      </a>
-                                    )}
-                                    {isAdmin && (
-                                      <button
-                                        type="button"
-                                        className="mu-btn-update"
-                                        style={{ minHeight: 36, padding: '0 14px', fontSize: 12 }}
-                                        onClick={() => launchCustomBriefVercel(brief)}
-                                        disabled={customBriefVercelLaunchingId === (brief.id || brief.briefSlug)}
-                                      >
-                                        {customBriefVercelLaunchingId === (brief.id || brief.briefSlug)
-                                          ? 'Launching...'
-                                          : brief.vercelUrl ? 'Redeploy' : 'Launch'}
-                                      </button>
                                     )}
                                     {(brief.pdfDownloadUrl || brief.pdfUrl) ? (
                                       <a className="mu-btn-outline" href={brief.pdfDownloadUrl || brief.pdfUrl} target="_blank" rel="noopener noreferrer" download={brief.pdfFileName || titlePdfFileName(brief.title || brief.briefSlug)}>
@@ -14757,7 +14780,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                      <h4 className="mu-saved-title">{asset.label || asset.viewportLabel || asset.variant || 'Studio asset'}</h4>
 	                                    </div>
 	                                    {asset.downloadUrl ? (
-	                                      <a className="mu-btn-outline" href={asset.downloadUrl} target="_blank" rel="noopener noreferrer">Open ↗</a>
+	                                      <a className="mu-btn-outline" href={asset.downloadUrl} target="_blank" rel="noopener noreferrer">Open <UpRightArrow style={{ marginLeft: '0.1rem', opacity: 0.82 }} /></a>
 	                                    ) : null}
 	                                  </div>
 	                                  {isVideo && asset.downloadUrl ? (
@@ -15220,7 +15243,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                   <span className={`tile-readiness-tag readiness-${tone}`}>{getToneLabel(ratio)}</span>
                                   {openCard && (
                                     <button type="button" className="adq-sc-open-btn" onClick={openCard} aria-label={`Open ${section.header.label}`}>
-                                      View card <ArrowUpRight size={10} strokeWidth={2} />
+                                      View card <UpRightArrow size={10} />
                                     </button>
                                   )}
                                 </div>
@@ -17770,6 +17793,7 @@ const dashboardCss = `
     align-items: center;
   }
   #brief-fullscreen-download,
+  #brief-fullscreen-share,
   #brief-fullscreen-close {
     background: rgba(255, 255, 255, 0.9);
     border: 1px solid rgba(42, 36, 32, 0.15);
@@ -17782,6 +17806,7 @@ const dashboardCss = `
     text-decoration: none;
   }
   #brief-fullscreen-download:hover,
+  #brief-fullscreen-share:hover,
   #brief-fullscreen-close:hover {
     background: #2a2420;
     color: #fff;
@@ -22395,7 +22420,7 @@ const dashboardCss = `
     .cap-bucket-deliverables .cap-step-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   @media (max-width: 900px) {
-    #founders-shell { padding: 64px 24px 64px; } /* padding-top = nav height (64px) */
+    #founders-shell { padding: 88px 24px 64px; } /* padding-top = nav height (64px) + 24px clearance */
     #founders-top-strip-inner { padding: 0 24px; }
     #dashboard-source-cta-row { width: 100%; }
     #capability-section { padding-top: 0; }
@@ -22638,7 +22663,8 @@ const dashboardCss = `
     .tile-mobile-chevron { display: none; }
   }
   @media (max-width: 620px) {
-    #founders-shell { padding: 12px; }
+    /* padding-top clears the fixed top strip (nav ~64px) with 24px breathing room; sides/bottom stay tight. */
+    #founders-shell { padding: 88px 12px 12px; }
     /* Phones: DELIVERABLES stacks to a single card per row (was 2-across). */
     .cap-bucket-deliverables .cap-step-grid { grid-template-columns: 1fr; }
     #founders-hero-shell { gap: 16px; }
@@ -22720,9 +22746,8 @@ const dashboardCss = `
   @media (max-width: 620px) {
     #dashboard-dl-all-chip .dl-all-text--full { display: none; }
     #dashboard-dl-all-chip .dl-all-text--short { display: inline; }
-    /* Strip the chips down to icon + first value: drop the brain gauge and the
-       brief cooldown digit; the brief icon stays. */
-    #dashboard-coverage-chip .coverage-gauge { display: none; }
+    /* Strip the chips down to icon + first value: drop the brief cooldown
+       digit; the brief icon stays. */
     #brief-cooldown-time-btn { display: none; }
   }
   #reseed-url-input {
@@ -25226,14 +25251,17 @@ const dashboardCss = `
 
   /* Brief fullscreen buttons — add lift */
   #brief-fullscreen-download,
+  #brief-fullscreen-share,
   #brief-fullscreen-close {
     transition: background var(--dur-base) ease, color var(--dur-base) ease, border-color var(--dur-base) ease, transform var(--dur-spring) var(--ease-spring);
   }
   #brief-fullscreen-download:hover,
+  #brief-fullscreen-share:hover,
   #brief-fullscreen-close:hover {
     transform: translateY(-1px);
   }
   #brief-fullscreen-download:active,
+  #brief-fullscreen-share:active,
   #brief-fullscreen-close:active {
     transform: translateY(0);
     transition-duration: 80ms;

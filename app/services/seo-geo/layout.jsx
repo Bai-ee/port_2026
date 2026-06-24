@@ -74,14 +74,14 @@ export const metadata = {
     'AI Overviews optimization',
     'ChatGPT citation optimization',
     'Perplexity SEO',
-    'HIT Agency SEO',
+    'HITLOOP SEO',
     'Lighthouse audit',
     'structured data JSON-LD',
     'E-E-A-T',
   ],
   alternates: { canonical: '/services/seo-geo' },
   openGraph: {
-    title: 'SEO & GEO — HIT Agency',
+    title: 'SEO & GEO | HITLOOP',
     description:
       'AI-assisted SEO audits, generative engine optimization, and performance baselines — built for visibility in both traditional search and AI-powered answers.',
     url: '/services/seo-geo',

@@ -7,7 +7,7 @@ const SITE_URL =
 const creativeWorkSchema = {
   '@context': 'https://schema.org',
   '@type': 'ImageGallery',
-  name: 'Gallery · HIT Agency',
+  name: 'Gallery | HITLOOP',
   description:
     'Visual samples across web, motion, brand, and interactive — a surface-level view of the work before the case studies are ready.',
   url: `${SITE_URL}/gallery`,
@@ -29,7 +29,7 @@ export const metadata = {
   description:
     'Visual samples across web, motion, brand, and interactive — a surface-level view of the work before the case studies are ready.',
   keywords: [
-    'HIT Agency gallery',
+    'HITLOOP gallery',
     'design portfolio',
     'Three.js visuals',
     'web design samples',
@@ -38,7 +38,7 @@ export const metadata = {
   ],
   alternates: { canonical: '/gallery' },
   openGraph: {
-    title: 'Gallery · HIT Agency',
+    title: 'Gallery | HITLOOP',
     description: 'Web, motion, brand, and interactive — visual samples from the portfolio.',
     url: '/gallery',
     type: 'website',

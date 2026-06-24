@@ -1,7 +1,7 @@
 const itemListSchema = {
   '@context': 'https://schema.org',
   '@type': 'ItemList',
-  name: 'Case Studies · HIT Agency',
+  name: 'Case Studies | HITLOOP',
   description:
     'Process documentation, results, and the decisions behind them — from intake through delivery.',
   itemListElement: [
@@ -34,7 +34,7 @@ export const metadata = {
   description:
     'Process documentation, results, and the decisions behind them — from intake through delivery.',
   keywords: [
-    'HIT Agency case studies',
+    'HITLOOP case studies',
     'AI design engineer case study',
     'GEO audit case study',
     'Three.js case study',
@@ -42,7 +42,7 @@ export const metadata = {
   ],
   alternates: { canonical: '/case-studies' },
   openGraph: {
-    title: 'Case Studies · HIT Agency',
+    title: 'Case Studies | HITLOOP',
     description: 'Process documentation, results, and the decisions behind each project.',
     url: '/case-studies',
     type: 'website',

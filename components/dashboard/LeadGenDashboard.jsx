@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Filter, Settings2, Radar, ArrowUpRight, Play, Loader2, ChevronDown, Info, MapPin, Mail, Share2, Monitor, Gauge, Bot, Layers, Paintbrush, RotateCcw, Wand2, ExternalLink, Package, Send, Star, Images, LayoutDashboard } from 'lucide-react';
+import { Plus, Filter, Settings2, Radar, Play, Loader2, ChevronDown, Info, MapPin, Mail, Share2, Monitor, Gauge, Bot, Layers, Paintbrush, RotateCcw, Wand2, ExternalLink, Package, Send, Star, Images, LayoutDashboard } from 'lucide-react';
+import UpRightArrow from '../UpRightArrow';
 import { collection, doc, onSnapshot, query as fsQuery, orderBy, limit, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../../firebase';
 import { VERTICAL_MAP, VERTICAL_KEYS, getVerticalLabel } from '../../features/leadgen/vertical-map';
@@ -852,10 +853,10 @@ const stageCounts = useMemo(() => {
                           className="leadgen-row-action-link"
                           aria-label={`Open ${p.name} website in new tab`}
                         >
-                          <ArrowUpRight size={14} strokeWidth={2} />
+                          <UpRightArrow size={14} />
                         </a>
                       ) : (
-                        <ArrowUpRight size={14} strokeWidth={2} style={{ opacity: 0.3 }} />
+                        <UpRightArrow size={14} style={{ opacity: 0.3 }} />
                       )}
                       <ChevronDown
                         size={13}

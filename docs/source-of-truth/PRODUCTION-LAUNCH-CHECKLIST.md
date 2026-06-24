@@ -1,6 +1,6 @@
 # Production Launch Checklist — Creative Brief & Deliverables
 
-Last updated: 2026-06-23
+Last updated: 2026-06-24
 Companion to [PRODUCTION-READINESS-TRACKER.md](PRODUCTION-READINESS-TRACKER.md). Scope: launch the Creative Brief and Deliverables buckets only; all other buckets stay gated.
 
 ## Launch Scope (explicit)
@@ -14,13 +14,16 @@ Companion to [PRODUCTION-READINESS-TRACKER.md](PRODUCTION-READINESS-TRACKER.md).
 - [ ] `npm audit --audit-level=moderate` — 0 vulnerabilities
 - [ ] `npm test` — green
 - [ ] `npm run build` — passes
-- [ ] `npm run smoke:routes` — passes
+- [ ] `npm run smoke:routes` or `npm run smoke:preview` — passes with current UI copy/redirect expectations
 - [ ] Preview deploy inspected (function sizes; `/api/leadgen/generate` NFT warning bounded)
 - [ ] Stripe test payment + webhook verified on preview
 - [ ] Admin access verified via `admins` collection (`/api/admin/whoami` → admin:true)
 - [ ] Cron routes confirmed in Vercel logs (daily-digest, render-studio, social-posting)
 - [ ] Worker queue drains cleanly
 - [ ] No accidental local artifacts in deploy (`git status --short`)
+- [ ] No generated creative brief exports committed (`scripts/creative-brief-*.html`)
+- [ ] Public HITLOOP creative brief route reviewed and verified
+- [ ] Deliverable file proxy hardened or kept out of the release
 
 ## Production Env Verification
 
@@ -29,7 +32,42 @@ Companion to [PRODUCTION-READINESS-TRACKER.md](PRODUCTION-READINESS-TRACKER.md).
 - [ ] **`STUDIO_RENDER_URL` + `STUDIO_RENDER_SECRET`** — blank in `.env.example`; render-studio cron 500s if unset. **Blocker for Video Promo deliverable.**
 - [ ] Browserless: `BROWSERLESS_TOKEN` (+ optional `BROWSERLESS_BASE_URL`)
 - [ ] Firebase Admin envs; Anthropic env
+- [ ] Firebase Admin envs specifically confirmed for `/api/public/hitloop-creative-brief`
 - [ ] Move hardcoded fallbacks out of `daily-digest/route.js` (VERCEL_PROJECT_ID ~22, VERCEL_TEAM_ID ~23, GA4_PROPERTY_ID ~24) into env or confirm intentional.
+
+Smoke-test-only envs are not production runtime requirements:
+
+- `PREVIEW_SMOKE_*`
+- `ROUTE_SMOKE_*`
+- `VERCEL_*` used by local scripts/tooling
+
+## 2026-06-24 Pre-Flight Items
+
+Pre-flight found 0 commits ahead and 0 staged files. The current branch has a broad uncommitted working tree, so no code ships until intentional files are staged, committed, pushed, previewed, and smoke-tested.
+
+Do not commit:
+
+- `scripts/creative-brief-bryan-balli-WUoltG84.html`
+- `scripts/creative-brief-valessa-nhEgZLmg.html`
+
+Current `.gitignore` includes `scripts/creative-brief-*.html` to prevent generated client brief exports from being accidentally tracked.
+
+New public/API surface requiring review:
+
+- `app/api/public/hitloop-creative-brief/route.js`
+  - Confirm it only reads the hardcoded HITLOOP client.
+  - Confirm Firebase Admin envs in Vercel production.
+  - Confirm cache behavior is acceptable for homepage freshness.
+- `app/api/dashboard/deliverable-file/route.js`
+  - Harden before production or exclude from the release.
+  - Restrict to the project bucket/known asset references.
+  - Add rate limiting and total ZIP byte cap.
+  - Avoid making the app a public arbitrary Storage download/zip proxy.
+
+Visible launch copy change:
+
+- Full brand rename `HIT Agency` → `HITLOOP`.
+- Verify metadata, schema, OG tags, header/footer, admin digest, dashboard copy, and public creative brief copy are consistent.
 
 ## Known Launch Blockers
 
@@ -46,6 +84,7 @@ None hard. The Studio render path is wired and verified working end-to-end (manu
 - Pre-aggregated `platform_metrics` doc to cut redundant `clients`/`brief_runs` full scans.
 - `usage_events` index (`clientId ASC, createdAt DESC`).
 - Observability: alerts on 5xx, worker queue age, Browserless failure/spend, Stripe webhook failures.
+- Update route smoke harness so it logs per-route progress, has an overall timeout, and matches current UI copy.
 
 ## Docs Status (this audit)
 

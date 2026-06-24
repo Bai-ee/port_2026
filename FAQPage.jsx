@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import Image from 'next/image';
 import InternalPageBackground from './InternalPageBackground';
 import Header from './Header';
+import UpRightArrow from './components/UpRightArrow';
 import { internalPageGlassCardStyle } from './pageSurfaceSystem';
 
 const agencyLogos = [
@@ -369,7 +370,7 @@ export default function FAQPage() {
             >
               <Image src="/img/profile2_400x400.png" alt="" aria-hidden="true" width={28} height={28} style={{ width: '1.75rem', height: '1.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', flexShrink: 0, display: 'block' }} />
               Meet With Your Human
-              <span aria-hidden="true" style={{ fontSize: '0.7rem', opacity: 0.75, marginLeft: '0.1rem' }}>↗</span>
+              <UpRightArrow style={{ fontSize: '0.95rem', opacity: 0.9, marginLeft: '0.1rem' }} />
             </a>
 
             {/* Agency logo marquee */}

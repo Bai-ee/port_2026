@@ -11,8 +11,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import gsap from 'gsap';
-import { SlidersHorizontal, Clapperboard, Images, ChevronRight, ArrowUpRight, Monitor, Download, RefreshCw, Play, Square, RotateCcw, Orbit, MousePointer2, Smartphone, Tablet, RectangleHorizontal, RectangleVertical, Palette, Save } from 'lucide-react';
+import { SlidersHorizontal, Clapperboard, Images, ChevronRight, Monitor, Download, RefreshCw, Play, Square, RotateCcw, Orbit, MousePointer2, Smartphone, Tablet, RectangleHorizontal, RectangleVertical, Palette, Save } from 'lucide-react';
 import { useAuth } from '../../../AuthContext';
+import UpRightArrow from '../../../components/UpRightArrow';
 import GlassTooltipLayer from '../../../components/GlassTooltipLayer';
 
 const VIEWPORTS = {
@@ -2314,7 +2315,7 @@ export default function StudioPage() {
                     <span className="studio-cta-full">Save</span><span className="studio-cta-short">Save</span><Save className="studio-cta-icon" size={15} strokeWidth={2.5} />
                   </button>
                   <button className="cta-pill-btn" style={{ ...ui.navCta, width: 'auto', opacity: (busy || dirRendering) ? 0.5 : 1 }} disabled={busy || dirRendering} onClick={generateCloudVideo}>
-                    <span className="studio-cta-full">Render</span><span className="studio-cta-short">Render</span><ArrowUpRight size={15} strokeWidth={2.5} />
+                    <span className="studio-cta-full">Render</span><span className="studio-cta-short">Render</span><UpRightArrow size={15} />
                   </button>
                 </div>
               </div>
@@ -2972,7 +2973,7 @@ export default function StudioPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontFamily: '"Space Mono", monospace', fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.32)', marginTop: '0.9rem', borderTop: '1px solid rgba(212,196,171,0.4)', paddingTop: '0.7rem' }}>
               <span>{renderHost || ' '}</span>
               {renderPhase === 'done' && renderVideoUrl ? (
-                <a href={renderVideoUrl} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 'auto', textDecoration: 'underline', color: '#2a2420', fontFamily: '"Space Mono", monospace', fontSize: '0.72rem', textTransform: 'none', letterSpacing: 0 }}>Open Video ↗</a>
+                <a href={renderVideoUrl} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 'auto', textDecoration: 'underline', color: '#2a2420', fontFamily: '"Space Mono", monospace', fontSize: '0.72rem', textTransform: 'none', letterSpacing: 0 }}>Open Video <UpRightArrow style={{ marginLeft: '0.15rem', opacity: 0.82 }} /></a>
               ) : (
                 <span style={{ marginLeft: 'auto', textTransform: 'none', letterSpacing: '0.02em' }}>
                   {renderPhase === 'failed' ? 'Render failed — close and try again.' : 'Rendering on GPU — saves to your assets.'}

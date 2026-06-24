@@ -161,8 +161,8 @@
   .founders-chat-label-short { display: none; }
   .founders-chat-label-full  { display: inline; }
   #founders-chat-cta-icon {
-    font-size: 0.72rem;
-    opacity: 0.82;
+    font-size: 0.95rem;
+    opacity: 0.9;
   }
   #founders-hidden-controls {
     position: absolute;
@@ -1734,6 +1734,7 @@
     align-items: center;
   }
   #brief-fullscreen-download,
+  #brief-fullscreen-share,
   #brief-fullscreen-close {
     background: rgba(255, 255, 255, 0.9);
     border: 1px solid rgba(42, 36, 32, 0.15);
@@ -1746,9 +1747,30 @@
     text-decoration: none;
   }
   #brief-fullscreen-download:hover,
+  #brief-fullscreen-share:hover,
   #brief-fullscreen-close:hover {
     background: #2a2420;
     color: #fff;
+  }
+  #brief-fullscreen-title {
+    position: absolute;
+    top: 12px;
+    left: 0;
+    right: 0;
+    z-index: 9;
+    text-align: center;
+    pointer-events: none;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #2a2420;
+    line-height: 28px;
+  }
+  #brief-fullscreen-title .bfs-title-mobile { display: none; }
+  @media (max-width: 480px) {
+    #brief-fullscreen-title .bfs-title-full { display: none; }
+    #brief-fullscreen-title .bfs-title-mobile { display: inline; }
   }
   #brief-fullscreen-iframe {
     width: 100%;
@@ -9112,14 +9134,17 @@
 
   /* Brief fullscreen buttons — add lift */
   #brief-fullscreen-download,
+  #brief-fullscreen-share,
   #brief-fullscreen-close {
     transition: background var(--dur-base) ease, color var(--dur-base) ease, border-color var(--dur-base) ease, transform var(--dur-spring) var(--ease-spring);
   }
   #brief-fullscreen-download:hover,
+  #brief-fullscreen-share:hover,
   #brief-fullscreen-close:hover {
     transform: translateY(-1px);
   }
   #brief-fullscreen-download:active,
+  #brief-fullscreen-share:active,
   #brief-fullscreen-close:active {
     transform: translateY(0);
     transition-duration: 80ms;

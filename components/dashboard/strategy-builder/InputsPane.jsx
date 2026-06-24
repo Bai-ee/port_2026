@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import SignalToggles from './SignalToggles.jsx';
+import UpRightArrow from '../../UpRightArrow';
 
 const VERTICALS = [
   'restaurant', 'bar', 'cafe',
@@ -231,7 +232,7 @@ export default function InputsPane({ bootstrap, config, onConfigChange, onGenera
                     onClick={() => onOpenCard(src.card)}
                     className="sb-link-btn"
                   >
-                    ↗
+                    <UpRightArrow />
                   </button>
                 ) : (
                   <span style={{ width: 28, flexShrink: 0 }} />

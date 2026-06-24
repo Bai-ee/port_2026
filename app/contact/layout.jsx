@@ -7,7 +7,7 @@ const SITE_URL =
 const contactSchema = {
   '@context': 'https://schema.org',
   '@type': 'ContactPage',
-  name: 'Contact HIT Agency',
+  name: 'Contact HITLOOP',
   description:
     'Book a 30-minute call, send a note, or start with the intake brief — whichever fits where you are right now.',
   url: `${SITE_URL}/contact`,
@@ -25,7 +25,7 @@ export const metadata = {
   description:
     'Book a 30-minute call, send a note, or start with the intake brief — whichever fits where you are right now.',
   keywords: [
-    'contact HIT Agency',
+    'contact HITLOOP',
     'hire AI design engineer',
     'book a call',
     'creative technologist contact',
@@ -33,7 +33,7 @@ export const metadata = {
   ],
   alternates: { canonical: '/contact' },
   openGraph: {
-    title: 'Contact · HIT Agency',
+    title: 'Contact | HITLOOP',
     description: 'Book a call, send a note, or start with the intake brief.',
     url: '/contact',
     type: 'website',

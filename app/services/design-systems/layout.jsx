@@ -35,12 +35,12 @@ export const metadata = {
     'Storybook documentation',
     'CSS custom properties',
     'Radix UI',
-    'HIT Agency design systems',
+    'HITLOOP design systems',
     'design-to-code pipeline',
   ],
   alternates: { canonical: '/services/design-systems' },
   openGraph: {
-    title: 'Design Systems — HIT Agency',
+    title: 'Design Systems | HITLOOP',
     description:
       'Component libraries, token architecture, and design-to-code pipelines that let engineers and designers pull from the same token set, cutting design-review cycles and one-off style overrides.',
     url: '/services/design-systems',

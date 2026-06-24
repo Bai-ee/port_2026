@@ -2,6 +2,7 @@
 
 import InnerPageShell from './InnerPageShell';
 import { internalPageGlassCardStyle } from './pageSurfaceSystem';
+import UpRightArrow from './components/UpRightArrow';
 
 const cardStyle = {
   ...internalPageGlassCardStyle,
@@ -162,7 +163,7 @@ export default function CaseStudiesPage() {
               whiteSpace: 'nowrap',
             }}
           >
-            Book a call ↗
+            Book a call <UpRightArrow style={{ marginLeft: '0.1rem', opacity: 0.85 }} />
           </a>
         </div>
       </section>

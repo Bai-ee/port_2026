@@ -50,6 +50,7 @@ export default function DashboardRoute() {
   // 'error' (status check failed; retry instead of mounting a broken dashboard)
   const [provisionStatus, setProvisionStatus] = useState('checking');
   const [provisionError, setProvisionError] = useState('');
+  const [showSignedOutFallback, setShowSignedOutFallback] = useState(false);
   // URL captured at sign-up — used to auto-provision, and to prefill the gate if
   // that auto-provision fails so the user never retypes it.
   const [pendingUrl, setPendingUrl] = useState('');
@@ -69,6 +70,15 @@ export default function DashboardRoute() {
       router.replace(intentionalLogout ? '/' : '/login?redirect=/dashboard');
     }
   }, [user, loading, router]);
+
+  useEffect(() => {
+    if (loading || user) {
+      setShowSignedOutFallback(false);
+      return undefined;
+    }
+    const timer = setTimeout(() => setShowSignedOutFallback(true), 1200);
+    return () => clearTimeout(timer);
+  }, [loading, user]);
 
   // Fade out the loading card only once three conditions are met:
   //   1. auth has resolved         (loading === false)
@@ -164,7 +174,12 @@ export default function DashboardRoute() {
   // While auth resolves, render nothing — no "Opening Dashboard" gate flash
   // before the styled loading overlay. Only block once resolved AND signed out.
   if (loading) return null;
+  // Signed out → the effect above redirects (intentional logout → homepage,
+  // direct visit → /login). Render nothing so no "Sign in to open Dashboard"
+  // gate card flashes during a normal redirect. If routing stalls, reveal a
+  // minimal fallback instead of leaving a blank page.
   if (!user) {
+    if (!showSignedOutFallback) return null;
     return (
       <main style={{
         minHeight: '100dvh',
@@ -178,7 +193,7 @@ export default function DashboardRoute() {
         <section style={{
           width: 'min(100%, 420px)',
           display: 'grid',
-          gap: 16,
+          gap: 14,
           textAlign: 'center',
           background: 'rgba(255,255,255,0.72)',
           border: '1px solid #E4E4E4',
@@ -204,20 +219,15 @@ export default function DashboardRoute() {
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: 7,
-              background: 'linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)',
+              background: '#2a2420',
               color: '#fff',
-              border: 'none',
               borderRadius: 999,
               padding: '0 18px',
               fontSize: 13,
               fontFamily: '"Space Grotesk", system-ui, -apple-system, sans-serif',
               fontWeight: 700,
-              letterSpacing: '0.01em',
-              lineHeight: 1,
               textDecoration: 'none',
               margin: '0 auto',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1)',
             }}
           >
             Sign in

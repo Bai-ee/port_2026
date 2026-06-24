@@ -1,7 +1,7 @@
 const itemListSchema = {
   '@context': 'https://schema.org',
   '@type': 'ItemList',
-  name: 'Featured Work · HIT Agency',
+  name: 'Featured Work | HITLOOP',
   description:
     'Four active projects — intake pipeline, particle renderer, design system extraction, and SEO audit. Case study write-ups in progress.',
   itemListElement: [
@@ -41,7 +41,7 @@ export const metadata = {
   description:
     'Four active projects — intake pipeline, particle renderer, design system extraction, and SEO audit. Case study write-ups in progress.',
   keywords: [
-    'HIT Agency portfolio',
+    'HITLOOP portfolio',
     'AI design engineer work',
     'Three.js projects',
     'design systems',
@@ -50,7 +50,7 @@ export const metadata = {
   ],
   alternates: { canonical: '/work' },
   openGraph: {
-    title: 'Featured Work · HIT Agency',
+    title: 'Featured Work | HITLOOP',
     description:
       'AI platforms, Three.js experiences, design systems, and SEO intelligence — selected work.',
     url: '/work',

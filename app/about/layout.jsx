@@ -45,7 +45,7 @@ export const metadata = {
   ],
   alternates: { canonical: '/about' },
   openGraph: {
-    title: 'About · HIT Agency',
+    title: 'About | HITLOOP',
     description:
       'Creative technologist with a decade of experience spanning design strategy and front-end engineering.',
     url: '/about',

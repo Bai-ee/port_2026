@@ -1,5 +1,6 @@
 import React from 'react';
 import Image from 'next/image';
+import UpRightArrow from './components/UpRightArrow';
 
 const agencyLogos = [
   { src: '/img/agencies/publicis.png', alt: 'Publicis', scale: 2 },
@@ -40,7 +41,7 @@ const ctaAvatarStyle = {
   display: 'block',
 };
 
-const ctaIconStyle = { fontSize: '0.7rem', opacity: 0.75, marginLeft: '0.1rem' };
+const ctaIconStyle = { fontSize: '0.95rem', opacity: 0.9, marginLeft: '0.1rem' };
 
 export default function SiteFooter() {
   return (
@@ -238,7 +239,7 @@ export default function SiteFooter() {
             >
               <Image src="/img/profile2_400x400.png" alt="" width={28} height={28} style={ctaAvatarStyle} />
               Meet With Your Human
-              <span style={ctaIconStyle}>↗</span>
+              <UpRightArrow style={ctaIconStyle} />
             </a>
           </div>
 

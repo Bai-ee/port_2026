@@ -56,20 +56,20 @@ const faqSchema = {
 export const metadata = {
   title: 'FAQ — AI Design Engineer & Creative Technologist',
   description:
-    'Answers to common questions about working with HIT Agency — an AI-powered design and engineering studio. Services, pricing, intake process, tech stack, and how to get started.',
+    'Answers to common questions about working with HITLOOP — a Human in the Loop creative partnership. Services, pricing, intake process, tech stack, and how to get started.',
   keywords: [
     'AI design engineer FAQ',
     'creative technologist FAQ',
     'hire AI design engineer',
     'AI-assisted web development',
     'intake pipeline explained',
-    'HIT Agency pricing',
+    'HITLOOP pricing',
     'Next.js GSAP Three.js developer',
     'client intelligence dashboard',
   ],
   alternates: { canonical: '/faq' },
   openGraph: {
-    title: 'FAQ — HIT Agency · AI Design & Engineering Studio',
+    title: 'FAQ | HITLOOP',
     description:
       'What an AI design engineer does, how engagements work, what things cost, and how to get started.',
     url: '/faq',

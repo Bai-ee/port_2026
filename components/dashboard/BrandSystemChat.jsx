@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import UpRightArrow from '../UpRightArrow';
 
 // ── Image compression ──────────────────────────────────────────────────────────
 const MAX_BASE64_BYTES = 4_500_000;
@@ -676,7 +677,7 @@ export default function BrandSystemChat({ getIdToken, onComplete, onLog, apiPath
             {copied ? 'Copied ✓' : 'Copy Prompt'}
           </button>
           <button className="chat-confirm-btn" type="button" onClick={() => onComplete?.(finalResult)}>
-            Open Details ↗
+            Open Details <UpRightArrow style={{ marginLeft: '0.15rem', opacity: 0.85 }} />
           </button>
         </div>
         {generating && (

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import SubscribeModal from './components/payments/SubscribeModal';
+import UpRightArrow from './components/UpRightArrow';
 import {
   benefits,
   plans,
@@ -122,7 +123,7 @@ const renderPageBody = (pageId, { onSubscribe } = {}) => {
               >
                 <Image src="/img/profile2_400x400.png" width={28} height={28} style={avatarStyle} alt="Bryan Balli, AI design engineer and creative technologist" />
                 {plan.cta}
-                <span style={btnIconStyle}>↗</span>
+                <UpRightArrow style={btnIconStyle} />
               </a>
             </article>
           ))}
@@ -135,7 +136,7 @@ const renderPageBody = (pageId, { onSubscribe } = {}) => {
           <button type="button" className="cta-pill-btn" style={{ ...primaryButtonStyle, border: 'none' }} onClick={onSubscribe}>
             <Image src="/img/profile2_400x400.png" width={28} height={28} style={avatarStyle} alt="Bryan Balli, AI design engineer and creative technologist" />
             Subscribe
-            <span style={btnIconStyle}>↗</span>
+            <UpRightArrow style={btnIconStyle} />
           </button>
         </article>
       </div>
@@ -158,7 +159,7 @@ const renderPageBody = (pageId, { onSubscribe } = {}) => {
         >
           <Image src="/img/profile2_400x400.png" width={28} height={28} style={avatarStyle} alt="Bryan Balli, AI design engineer and creative technologist" />
           Book a Call
-          <span style={btnIconStyle}>↗</span>
+          <UpRightArrow style={btnIconStyle} />
         </a>
       </article>
       <article style={featureCardStyle}>

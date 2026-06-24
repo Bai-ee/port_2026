@@ -142,7 +142,7 @@ function hostnameOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return String(url); }
 }
 
-function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [], weather = null, moduleBriefs = [], auditMockupUrl = null, studioVideoUrl = null, socialPreviewImageUrl = null, fullPageScreenshots = null, company = null, researchConfig = null, strategyData = null, signalsCore = [], socialQueue = [], briefType = DEFAULT_BRIEF_TYPE, coverSummary = null, previousRunAt = null, displayLabel = null }) {
+function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [], weather = null, moduleBriefs = [], auditMockupUrl = null, studioVideoUrl = null, socialPreviewImageUrl = null, siteMeta = null, fullPageScreenshots = null, company = null, researchConfig = null, strategyData = null, signalsCore = [], socialQueue = [], briefType = DEFAULT_BRIEF_TYPE, coverSummary = null, previousRunAt = null, displayLabel = null }) {
   const content = marketingBrief?.content || {};
   const agentData = marketingBrief?.scoutBrief?.agentData || {};
   const opportunities = agentData?.viralOpportunities?.opportunities || marketingBrief?.contentOpportunities || [];
@@ -875,7 +875,6 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   <section class="page cb-page"${secId ? ` id="${secId}"` : ''}>
     <div class="sec-num">${num}</div>
     <div class="cb-deco" aria-hidden="true"></div>
-    <div class="cb-pg-eyebrow"><span class="dot"></span><span>Creative Brief</span><span class="idx">${num}</span></div>
     <h2 class="headline">${title}</h2>
     <div class="rule"></div>
     ${inner}
@@ -886,18 +885,39 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     const longParas = (s) => s.paras.filter((p) => p.length > 64);
     const shortParas = (s) => s.paras.filter((p) => p.length <= 64);
     const pull = (text) => `<p class="pull">${esc(text)}</p>`;
-    const flowNodes = (items) => `<div class="flow">${items.map((it, i) => `<div class="node"><div class="n">${String(i + 1).padStart(2, '0')}</div><div class="t">${esc(it.t)}</div>${it.p ? `<p>${esc(it.p)}</p>` : ''}</div>`).join('')}</div>`;
-    const gapList = (items) => `<div class="cb-gaps">${items.map((g, i) => `<div class="cb-gap"><span class="cb-gap-n">${String(i + 1).padStart(2, '0')}</span><span class="cb-gap-t">${esc(g)}</span></div>`).join('')}</div>`;
+    const gapList = (items) => `<div class="cb-gaps">${items.map((g, i) => `<div class="cb-gap"><span class="cb-gap-n">${String(i + 1).padStart(2, '0')}</span><span class="cb-gap-sep" aria-hidden="true">—</span><span class="cb-gap-t">${esc(g)}</span></div>`).join('')}</div>`;
     const metaTiles = (items) => `<div class="meta-grid">${items.map((t) => `<div class="meta-tile"><div class="v">${esc(t)}</div></div>`).join('')}</div>`;
     const tagRow = (items) => items.length ? `<div class="cb-tags">${items.map((t) => `<span class="cb-tag">${esc(t)}</span>`).join('')}</div>` : '';
     // Assets as inline evidence with a clear Download + Contact CTA on each, so
     // every deliverable connects to "get the file" and "talk to a human".
     const ok = (u) => u && /^https?:\/\/\S+$/i.test(u);
-    const CONTACT_URL = 'https://calendly.com/bballi/30min';
-    const ctaRow = (url) => `<div class="cb-cta-row">${ok(url) ? `<a class="cb-cta cb-cta--dl" href="${esc(url)}" download target="_blank" rel="noopener noreferrer">Download</a>` : ''}<a class="cb-cta cb-cta--contact" href="${CONTACT_URL}" target="_blank" rel="noopener noreferrer">Book a Call</a></div>`;
-    const evImg = (url, alt) => ok(url) ? `<figure class="cb-evidence"><img src="${esc(url)}" alt="${esc(alt)}"/><figcaption>${ctaRow(url)}</figcaption></figure>` : '';
-    const evVideo = (url) => ok(url) ? `<figure class="cb-evidence cb-evidence--video"><video src="${esc(url)}" autoplay muted loop playsinline></video><figcaption>${ctaRow(url)}</figcaption></figure>` : '';
-    const bookCall = `<div class="cb-cta-row cb-cta-row--lg"><a class="cb-cta cb-cta--solid" href="${CONTACT_URL}" target="_blank" rel="noopener noreferrer">Book a Call</a></div>`;
+    // Downloads route through the same-origin proxy so the file SAVES (not opens
+    // in a new tab) with a descriptive name: <client>-<asset>-<date>.<ext>.
+    const dlClient = String(clientName || clientId || 'client').toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'client';
+    const dlDate = (() => { try { return new Date(generated).toISOString().slice(0, 10); } catch { return ''; } })();
+    const slugify = (s) => String(s || 'asset').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50);
+    const extFor = (url, type) => type === 'video'
+      ? 'mp4'
+      : ((/\.(png|jpe?g|webp|gif|mp4|webm|pdf)(?:\?|$)/i.exec(String(url)) || [, 'png'])[1] || 'png').toLowerCase();
+    const dlName = (descriptor, url, type) => [dlClient, slugify(descriptor), dlDate].filter(Boolean).join('-') + '.' + extFor(url, type);
+    const dlHref = (url, descriptor, type) => `/api/dashboard/deliverable-file?u=${encodeURIComponent(url)}&n=${encodeURIComponent(dlName(descriptor, url, type))}`;
+    // Multi-asset download → one zip. items: [{url, descriptor, type}].
+    const dlZipHref = (items, zipBase) => {
+      const params = [];
+      for (const it of items) {
+        if (!ok(it.url)) continue;
+        params.push(`u=${encodeURIComponent(it.url)}`);
+        params.push(`n=${encodeURIComponent(dlName(it.descriptor, it.url, it.type))}`);
+      }
+      params.push(`zn=${encodeURIComponent([dlClient, slugify(zipBase), dlDate].filter(Boolean).join('-'))}`);
+      return `/api/dashboard/deliverable-file?${params.join('&')}`;
+    };
+    // Download-only — contact / "Book a Call" CTAs removed from every page; the
+    // only action a client sees in the brief is downloading their assets.
+    const ctaRow = (url, descriptor = 'deliverable', type = 'img') => ok(url)
+      ? `<div class="cb-cta-row"><a class="cb-cta cb-cta--dl" href="${esc(dlHref(url, descriptor, type))}" download>Download</a></div>`
+      : '';
     // Deliverables row — every asset side by side, full viewport width, each
     // with Download + Book a Call; stacks to one column on mobile.
     // Each asset carries a stable anchor slug so the cover "What you get" links
@@ -920,94 +940,246 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
         : `<img src="${esc(a.url)}" alt="${esc(a.name)}"/>`;
     };
     const deliverablesRow = deliverableAssets.length
-      ? `<div class="cb-deliverables-grid">${deliverableAssets.map((a, i) => `<div class="cb-deliverable" id="${a.slug}"><div class="cb-deliverable-idx">D${String(i + 1).padStart(2, '0')}</div><div class="cb-deliverable-media">${deliverableMedia(a)}</div><div class="cb-deliverable-name">${esc(a.name)}</div><p class="cb-deliverable-desc">${esc(a.desc)}</p>${ctaRow(a.url)}</div>`).join('')}</div>`
+      ? `<div class="cb-deliverables-grid">${deliverableAssets.map((a, i) => `<div class="cb-deliverable" id="${a.slug}"><div class="cb-deliverable-idx">D${String(i + 1).padStart(2, '0')}</div><div class="cb-deliverable-media">${deliverableMedia(a)}</div><div class="cb-deliverable-name">${esc(a.name)}</div><p class="cb-deliverable-desc">${esc(a.desc)}</p>${ctaRow(a.url, a.name, a.type)}</div>`).join('')}</div>`
       : '';
 
-    // LEAD WITH DELIVERABLES — bordered asset grid up front (what they walk away with).
-    if (deliverablesRow) {
+    // INTRO SPLIT — "You're In." (welcome, left) + "Key Insight." (verdict,
+    // right) share one page directly below the cover. Each column keeps its
+    // oversized label; the two columns stack on mobile.
+    const hero = byLabel('Headline');
+    const heroWord = (hero && hero.paras.length) ? hero.paras.join(' ') : '';
+    const splitNum = String((n += 1)).padStart(2, '0');
+    const splitCol = (id, title, body) => `<div class="cb-split-col" id="${id}"><h2 class="headline">${title}</h2><div class="rule"></div>${body}</div>`;
+    const ONBOARD_COPY = [
+      'Most agencies start by asking questions. Hit Loop starts by doing the work.',
+      'Before a single onboarding call, the assets above were generated to establish context, capture observations, and identify opportunities across your website, brand, and digital presence.',
+      'The result is less time spent explaining your business and more time focused on what comes next. Instead of paying for discovery, you arrive with a brief, creative assets, and a starting point for meaningful discussion.',
+      "When you're ready, your Human steps in to review the findings, validate the opportunities, and help prioritize the work that will create the greatest impact.",
+      'By the time we speak, the conversation has already moved beyond introductions and into execution.',
+    ];
+    const [onboardLead, ...onboardRest] = ONBOARD_COPY;
+    const onboardBody = `<div class="cb-onboard-copy">
+      <p class="cb-onboard-lead">${esc(onboardLead)}</p>
+      ${onboardRest.map((p) => `<p class="cb-onboard-line">${esc(p)}</p>`).join('')}
+    </div>`;
+    const systemCol = splitCol('cb-system', "You're<br/>Onboarded.", onboardBody);
+    const insightCol = heroWord ? splitCol('cb-insight', 'Key<br/>Insight.', `<div class="bento">${bTile({ span: 's4', cls: 'ink', word: heroWord })}</div>`) : '';
+    pages.push(`
+  <section class="page cb-page" id="cb-intro-split">
+    <div class="sec-num">${splitNum}</div>
+    <div class="cb-deco" aria-hidden="true"></div>
+    <div class="cb-split${insightCol ? '' : ' cb-split--single'}">${systemCol}${insightCol}</div>
+  </section>`);
+
+    // FEATURED POST — the Suggested Post caption rendered as a real X / Share
+    // Post card with the studio video front and center. Mirrors the dashboard
+    // Post Me card UI (DashboardPage.jsx #post-me-tile-mockup).
+    const featPost = byLabel('Suggested Post');
+    if (featPost && featPost.paras.length) {
+      const handle = '@' + String(clientName || 'yourbrand').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 15);
+      const site = hostnameOf(websiteUrl) || '';
+      const caption = featPost.paras.join(' ');
+      const featMedia = ok(studioVideoUrl)
+        ? `<div class="cb-xpost-media"><video src="${esc(studioVideoUrl)}" autoplay muted loop playsinline></video></div>`
+        : ok(mockupSrc)
+        ? `<div class="cb-xpost-media"><img src="${esc(mockupSrc)}" alt="Featured creative"/></div>`
+        : ok(socialPreviewImageUrl)
+        ? `<div class="cb-xpost-media"><img src="${esc(socialPreviewImageUrl)}" alt="Featured creative"/></div>`
+        : '';
+      const xActions = [
+        { p: 'M1.751 10c0-4.42 3.584-8 8.005-8h.366a8.001 8.001 0 0 1 7.97 9.58l.001.02 1.024 1.024a1.07 1.07 0 0 1-.953 1.763L16.5 22.5l-2.836-2.837c-.33.1-.67.187-1.014.256A8 8 0 0 1 2.1 11.39 8 8 0 0 1 1.75 10Z', l: '4' },
+        { p: 'M4.5 3.88l4.432 4.14-1.364 1.46L5.5 7.55V16c0 1.1.896 2 2 2H13v2H7.5a4 4 0 0 1-4-4V7.55L1.432 9.48.068 8.02 4.5 3.88zM16.5 6h-6V4h6a4 4 0 0 1 4 4v8.45l2.068-1.93 1.364 1.46-4.432 4.14-4.432-4.14 1.364-1.46 2.068 1.93V8c0-1.1-.896-2-2-2z', l: '1' },
+        { p: 'M16.697 5.5c-1.222-.06-2.679.51-3.89 2.16l-.805 1.09-.806-1.09C9.984 6.01 8.526 5.44 7.304 5.5c-1.243.07-2.349.78-2.91 1.91-.552 1.12-.633 2.78.479 4.82 1.074 1.97 3.257 4.27 7.129 6.61 3.87-2.34 6.052-4.64 7.126-6.61 1.111-2.04 1.03-3.7.477-4.82z', l: '12' },
+        { p: 'M8.75 21V3h2v18h-2zM13 21V8.5h2V21h-2zM4.5 21V13h2v8h-2zM17.5 21V11.5h2V21h-2z', l: '2.4K' },
+      ].map(({ p, l }) => `<span><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="${p}"/></svg>${l}</span>`).join('');
+      const xCard = `<div class="cb-xpost">
+      <div class="cb-xpost-head">
+        <img class="cb-xpost-avatar" src="/img/profile2_400x400.png?v=1774582808" alt="" />
+        <div class="cb-xpost-id">
+          <span class="cb-xpost-name">${esc(clientName || 'Your Brand')}</span>
+          <svg class="cb-xpost-badge" width="15" height="15" viewBox="0 0 22 22" fill="#1d9bf0"><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.469-.445-1.053-.751-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.469-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.22.878 1.69.47.444 1.055.75 1.69.88.635.13 1.294.08 1.902-.144.27.586.7 1.084 1.24 1.44.54.354 1.167.55 1.813.566.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.239 1.266.296 1.903.164.636-.132 1.22-.447 1.68-.907.46-.46.776-1.044.908-1.681s.075-1.299-.165-1.903c.586-.274 1.084-.705 1.439-1.246.354-.54.551-1.17.569-1.816zM9.662 14.85l-3.429-3.428 1.293-1.302 2.072 2.072 4.4-4.794 1.347 1.246z"/></svg>
+          <span class="cb-xpost-handle">${esc(handle)}</span>
+        </div>
+        <svg class="cb-xpost-logo" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.742l7.722-8.831L1.534 2.25H8.08l4.259 5.631zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+      </div>
+      <p class="cb-xpost-caption">${esc(caption)}${site ? ` <span class="cb-xpost-link">${esc(site)}</span>` : ''}</p>
+      ${featMedia}
+      <div class="cb-xpost-actions">${xActions}</div>
+    </div>`;
+      // Post copy lifted out of the mock as a slightly oversized, easy-to-copy
+      // quote beside the video mock (2-col, stacks on mobile). Primary action
+      // downloads the video; secondary copies the caption (live iframe only —
+      // inert but harmless in the PDF).
+      const postActions = `<div class="cb-post-actions">${ok(studioVideoUrl) ? `<a class="cb-cta cb-cta--solid" href="${esc(studioVideoUrl)}" download target="_blank" rel="noopener noreferrer">Download Video</a>` : ''}<button type="button" class="cb-cta cb-post-copy" data-copy="${esc(caption)}" onclick="(function(b){try{navigator.clipboard.writeText(b.dataset.copy);var t=b.textContent;b.textContent='Copied';setTimeout(function(){b.textContent=t},1600);}catch(e){}})(this)">Copy Caption</button></div>`;
+      const featuredCopy = `<div class="cb-featured-copy"><blockquote class="cb-post-quote">${esc(caption)}</blockquote>${postActions}</div>`;
+      // Deliverables ride underneath as a sub-category of the same page.
+      const deliverablesBlock = deliverablesRow
+        ? `<div class="cb-sub-head" id="cb-deliverables"><span>Deliverables</span><span class="cb-sub-head-meta">${deliverableAssets.length} assets</span></div>${deliverablesRow}`
+        : '';
+      pages.push(page('Featured<br/>Post.', `<div class="cb-featured-row">${featuredCopy}<div class="cb-featured-mock">${xCard}</div></div>${deliverablesBlock}`, 'cb-featured-post'));
+    } else if (deliverablesRow) {
+      // No Suggested Post caption this run — still surface deliverables alone.
       pages.push(page('Deliverables.', deliverablesRow, 'cb-deliverables'));
     }
 
-    // "YOU'RE IN" — welcome + capabilities as a numbered flow + CTA.
-    pages.push(page("You're<br/>In.", `${pull('Hit Loop manages your creative operations, automating the daily work that keeps you visible, accessible, and consistent across platforms.')}
-      ${flowNodes([
-        { t: 'Fix', p: 'What to fix on your site and content.' },
-        { t: 'Watch', p: 'What competitors are pushing right now.' },
-        { t: 'Move', p: "What's moving across your category." },
-      ])}
-      <div class="rule"></div>
-      <p class="sub">The system tracks everything. A human makes sure it's actually right for you.</p>
-      ${bookCall}`, 'cb-system'));
-
-    // Key Insight — the verdict.
-    const hero = byLabel('Headline');
-    if (hero && hero.paras.length) {
-      pages.push(page('Key<br/>Insight.', `<div class="bento">${bTile({ span: 's4', cls: 'ink', word: hero.paras.join(' ') })}</div>`, 'cb-insight'));
-    }
-
-    // What This Site Is — a big pull-quote statement.
+    // SITE AUDIT — one compact page. "What This Site Is" reads big at the top,
+    // then every site-specific section is demoted to a sub-category (same inner
+    // styling as before: checklist, alert, tiles, pull) under one header.
     const wtis = byLabel('What This Site Is');
-    if (wtis && wtis.paras.length) {
-      pages.push(page('What This<br/>Site Is.', `${wtis.paras.map((p) => pull(p)).join('')}`, 'cb-what-this-site-is'));
-    }
-
-    // What's Missing — a big-numbered gap list.
     const miss = byLabel("What's Missing");
-    if (miss) {
-      pages.push(page("What's<br/>Missing.", `${gapList([...shortParas(miss), ...miss.bullets])}${subFrom(longParas(miss))}`, 'cb-whats-missing'));
-    }
-
-    // Biggest Risk — alert block + effect tags.
     const risk = byLabel('Biggest Risk');
-    if (risk) {
-      pages.push(page('Biggest<br/>Risk.', `<div class="cb-alert">${subFrom(longParas(risk))}</div>${tagRow(risk.bullets)}`, 'cb-biggest-risk'));
-    }
-
-    // The Opportunity — strengths grid + the upside line.
     const opp = byLabel('The Opportunity');
-    if (opp) {
-      pages.push(page('The<br/>Opportunity.', `${metaTiles([...shortParas(opp), ...opp.bullets])}${subFrom(longParas(opp))}`, 'cb-opportunity'));
-    }
-
-    // The Decision — binary question as a pull, stakes as tags, contact CTA.
     const dec = byLabel('Decision');
+    // Each sub-section is its own wrapper (id on the wrapper, not the label) so
+    // layout/spacing can be scoped per section.
+    const subSection = (label, inner, id) => inner
+      ? `<section class="cb-subsec"${id ? ` id="${id}"` : ''}><div class="cb-sub-head"><span>${esc(label)}</span></div>${inner}</section>`
+      : '';
+    const missInner = miss ? gapList([...miss.paras, ...miss.bullets]) : '';
+    const riskInner = risk ? `<div class="cb-alert">${subFrom(longParas(risk))}</div>${tagRow(risk.bullets)}` : '';
+    const oppInner = opp ? `${metaTiles([...shortParas(opp), ...opp.bullets])}${subFrom(longParas(opp))}` : '';
+    let decInner = '';
     if (dec && dec.paras.length) {
       const [q, ...rest] = dec.paras;
-      pages.push(page('The<br/>Decision.', `${pull(q)}${subFrom(rest.filter((p) => p.length > 0))}${tagRow(dec.bullets)}${bookCall}`, 'cb-decision'));
+      decInner = `${pull(q)}${subFrom(rest.filter((p) => p.length > 0))}${tagRow(dec.bullets)}`;
+    }
+    // Social Share — surfaces exactly what the site exposes when shared: a
+    // faux share-card preview (og:image, falling back to the largest icon /
+    // favicon) plus a captured/missing checklist of the social tags we read.
+    // Renders whenever a homepage was captured; "all missing" IS the finding.
+    const socialInner = (() => {
+      const sm = siteMeta || {};
+      if (!siteMeta && !socialPreviewImageUrl) return '';
+      const shareImg = socialPreviewImageUrl || sm.ogImage || null;
+      const fallbackIcon = sm.appleTouchIcon || sm.favicon || null;
+      const host = hostnameOf(websiteUrl) || sm.siteName || '';
+      const cardImg = ok(shareImg)
+        ? `<div class="cb-social-card-img"><img src="${esc(shareImg)}" alt="${esc(sm.ogImageAlt || 'Share image')}"/></div>`
+        : ok(fallbackIcon)
+        ? `<div class="cb-social-card-img cb-social-card-img--icon"><img src="${esc(fallbackIcon)}" alt="Site icon"/></div>`
+        : `<div class="cb-social-card-img cb-social-card-img--empty">No share image set</div>`;
+      const card = `<div class="cb-social-card">${cardImg}<div class="cb-social-card-meta">${host ? `<span class="cb-social-card-host">${esc(host)}</span>` : ''}<span class="cb-social-card-title">${esc(sm.title || sm.siteName || host || 'Untitled')}</span>${sm.description ? `<span class="cb-social-card-desc">${esc(sm.description)}</span>` : ''}</div></div>`;
+      const checks = [
+        { label: 'Share image (og:image)', val: sm.ogImage },
+        { label: 'Image alt text', val: sm.ogImageAlt },
+        { label: 'Title', val: sm.title },
+        { label: 'Description', val: sm.description },
+        { label: 'Site name', val: sm.siteName },
+        { label: 'Favicon', val: sm.favicon },
+        { label: 'Brand color', val: sm.themeColor },
+      ];
+      const list = `<ul class="cb-social-checks">${checks.map((c) => `<li class="cb-social-check ${c.val ? 'is-ok' : 'is-miss'}"><span class="cb-social-mark" aria-hidden="true">${c.val ? '✓' : '✗'}</span><span class="cb-social-label">${esc(c.label)}</span><span class="cb-social-status">${c.val ? 'Captured' : 'Missing'}</span></li>`).join('')}</ul>`;
+      return `<div class="cb-social"><div class="cb-social-preview">${card}</div>${list}</div>`;
+    })();
+    if (wtis || miss || risk || opp || dec || socialInner) {
+      // WTIS lead reads full-width across the page (not a narrow pull-quote).
+      const wtisBig = (wtis && wtis.paras.length) ? wtis.paras.map((p) => `<p class="cb-wtis-lead">${esc(p)}</p>`).join('') : '';
+      const missSec = subSection("What's Missing", missInner, 'cb-whats-missing');
+      const riskSec = subSection('Biggest Risk', riskInner, 'cb-biggest-risk');
+      // What's Missing + Biggest Risk sit side by side, stacking on mobile.
+      const missRiskRow = (missSec || riskSec) ? `<div class="cb-audit-row">${missSec}${riskSec}</div>` : '';
+      const auditBody = `${wtisBig}
+      ${subSection('Social Share', socialInner, 'cb-social-share')}
+      ${missRiskRow}
+      ${subSection('The Opportunity', oppInner, 'cb-opportunity')}
+      ${subSection('The Decision', decInner, 'cb-decision')}`;
+      pages.push(page('Your Website<br/>Status.', auditBody, 'cb-what-this-site-is'));
     }
 
-    // Suggested Post — the ready-to-post caption that also feeds the Post Me card.
-    const post = byLabel('Suggested Post');
-    if (post && post.paras.length) {
-      pages.push(page('Suggested<br/>Post.', `${pull(post.paras.join(' '))}${bookCall}`, 'cb-suggested-post'));
-    }
+    // CONTACT YOUR HUMAN — closing page in the same format as the rest of the
+    // brief: a direct line to the human plus the services Hit Loop offers.
+    // Contact details mirror the marketing site (Calendly / email / socials).
+    const HUMAN = {
+      calendly: 'https://calendly.com/bballi/30min',
+      email: 'bryanballi@gmail.com',
+      linkedin: 'https://www.linkedin.com/in/bryanballi',
+      x: 'https://x.com/bai_ee',
+    };
+    const SERVICES = [
+      { name: 'Brand Identity & Design', desc: 'Logos, visual systems, and brand kits, built to hold up across every surface your business shows up on.' },
+      { name: 'Websites & Landing Pages', desc: 'Designed, built, and optimized to convert. Sites that perform on every screen, at every stage.' },
+      { name: 'Social Media & Content', desc: 'Posts, captions, and content strategy aligned to how your brand sounds and what your audience wants.' },
+      { name: 'Video & Motion', desc: 'Short-form content, reels, and visual storytelling crafted to get watched, saved, and shared.' },
+      { name: 'SEO & Content Strategy', desc: 'Search visibility and structured content growth — the long game, built to compound over time.' },
+      { name: 'Email & Newsletter Systems', desc: 'Campaigns, automated flows, and newsletters built to keep your audience close and revenue moving.' },
+      { name: 'Daily Briefs', desc: 'Automated daily intelligence briefings that surface what matters — competitor moves, content opportunities, and operational signals — delivered to your dashboard every morning.' },
+      { name: 'AI Automation & Workflows', desc: 'Custom systems that remove manual work and scale output, built around how your business actually runs.' },
+      { name: 'Blockchain', desc: 'Web3 product design, token UX, and smart contract interfaces — built for clarity in a space where trust is everything.' },
+      { name: 'Browser Based Games', desc: 'Game UI, interactive experiences, and player-facing systems designed to keep users engaged and coming back.' },
+    ];
+    const servicesGrid = `<div class="cb-services-grid">${SERVICES.map((s, i) => `<div class="cb-service"><div class="cb-service-idx">S${String(i + 1).padStart(2, '0')}</div><div class="cb-service-name">${esc(s.name)}</div><p class="cb-service-desc">${esc(s.desc)}</p></div>`).join('')}</div>`;
+    const contactActions = `<div class="cb-contact-actions"><a class="cb-cta cb-cta--solid" href="${HUMAN.calendly}" target="_blank" rel="noopener noreferrer">Meet with a Human</a><a class="cb-cta" href="mailto:${esc(HUMAN.email)}">Email Us</a></div>`;
+    // LinkedIn + X buttons that sit under the role line on every signature.
+    const humanSocials = `<div class="cb-human-socials"><a href="${HUMAN.linkedin}" target="_blank" rel="noopener noreferrer">LinkedIn</a><a href="${HUMAN.x}" target="_blank" rel="noopener noreferrer">X</a></div>`;
+    const sigBlock = `<div class="cb-contact-sig"><img class="cb-cover-sig" src="/img/sig.png" alt="Signature" /><div class="cb-human"><div class="cb-human-label">Your Human</div><div class="cb-human-name">Bryan Balli</div><div class="cb-human-role">Creative Lead @ HITLOOP</div>${humanSocials}</div></div>`;
+    const contactBody = `<div class="cb-contact-top">
+      <div class="cb-contact-lede">${pull("Your brief is built. Onboarding is complete. When you're ready to move from insight to execution, your Human is one click away. Here's what we bring to the table.")}${contactActions}</div>
+      ${sigBlock}
+    </div>
+      <div class="cb-sub-head" id="cb-services-head"><span>What We Offer</span><span class="cb-sub-head-meta">${SERVICES.length} services</span></div>
+      ${servicesGrid}`;
+    pages.push(page('Contact Your<br/>Human.', contactBody, 'cb-contact'));
+
+    // Suggested Post now renders as the Featured Post X-card above (after Key
+    // Insight) — no separate bottom page.
 
     // Cover — the device mockup sits in the top-right corner (isCoverMockup);
     // no video on the cover. Just the lede + the "What you get" rows (plain,
     // non-linked, each with a thumbnail of the matching deliverable).
-    const pkgItems = [
-      { label: 'Cross-device views of your site', thumb: mockupSrc, thumbType: 'img' },
-      { label: 'Social preview validation', thumb: socialPreviewImageUrl, thumbType: 'img' },
-      { label: 'A shareable video of your brand', thumb: studioVideoUrl, thumbType: 'video' },
-    ];
+    // Cover list mirrors the actual deliverables (deliverableAssets) so every
+    // asset shipped this run shows as its own line item with a thumbnail.
+    // Friendlier cover labels for the known assets; unknown names pass through.
+    const PKG_LABELS = {
+      'Video Post': 'A shareable video of your brand',
+      'Device Mockup': 'Your homepage in a device mockup',
+      'Social Preview': 'Social preview validation',
+    };
+    // Desktop / Tablet / Mobile collapse into a single "device views" line; its
+    // download bundles all three captures into one zip.
+    const DEVICE_NAMES = ['Desktop View', 'Tablet View', 'Mobile View'];
+    const deviceAssets = deliverableAssets.filter((a) => DEVICE_NAMES.includes(a.name) && ok(a.url));
+    const deviceThumb = deviceAssets[0] || null;
+    const pkgItems = [];
+    let devicePushed = false;
+    for (const a of deliverableAssets) {
+      if (DEVICE_NAMES.includes(a.name)) {
+        if (!devicePushed && deviceThumb) {
+          pkgItems.push({
+            label: 'Full desktop, tablet and mobile views',
+            thumb: deviceThumb.url,
+            thumbType: 'img',
+            dlZip: deviceAssets.map((d) => ({ url: d.url, descriptor: d.name, type: d.type })),
+            zipBase: 'site-views',
+          });
+          devicePushed = true;
+        }
+        continue;
+      }
+      pkgItems.push({ label: PKG_LABELS[a.name] || a.name, thumb: a.url, thumbType: a.type, dl: ok(a.url) ? a.url : null, emptyLabel: a.emptyLabel, fileBase: a.name });
+    }
     const pkgThumb = (a) => ok(a.thumb)
       ? (a.thumbType === 'video'
           ? `<span class="cb-package-thumb"><video src="${esc(a.thumb)}" autoplay muted loop playsinline></video></span>`
           : `<span class="cb-package-thumb"><img src="${esc(a.thumb)}" alt="" /></span>`)
       : '<span class="cb-package-thumb cb-package-thumb--empty"></span>';
-    const coverHtml = `<div class="sub" id="brief-cover-exec-summary">
-      <p class="cb-cover-lede">This Creative Brief audits your current digital presence, outlining how your site, content, and brand are presented across screens, social platforms, and real-world use.</p>
-      <p class="cb-cover-lede">It establishes a baseline for onboarding, reducing time spent gathering context and creating a clear starting point for more tailored, hands-on creative work when you're ready.</p>
-      <p class="cb-cover-lede">When you're ready to go further, reach out to your human directly — we'll turn this baseline into tailored, hands-on creative work, together.</p>
-    </div>
-    <div class="cb-handoff" id="brief-cover-handoff">
-      <div class="cb-handoff-sig"><img class="cb-cover-sig" src="/img/sig.png" alt="Signature" /></div>
+    const coverHtml = `<div class="cb-handoff" id="brief-cover-handoff">
+      <div class="cb-handoff-sig">
+        <img class="cb-cover-sig" src="/img/sig.png" alt="Signature" />
+        <div class="cb-human" id="brief-cover-human">
+          <div class="cb-human-label">Your Human</div>
+          <div class="cb-human-name">Bryan Balli</div>
+          <div class="cb-human-role">Creative Lead @ HITLOOP</div>
+          ${humanSocials}
+        </div>
+      </div>
       <div class="cb-package" id="brief-cover-package">
-        <div class="cb-package-label">What you get</div>
+        <div class="cb-package-label">Deliverables Snapshot</div>
         <ul class="cb-package-list">
-          ${pkgItems.map((a) => `<li>${pkgThumb(a)}<span class="cb-package-text">${a.label}</span></li>`).join('')}
+          ${pkgItems.map((a) => {
+            const href = a.dlZip ? dlZipHref(a.dlZip, a.zipBase) : (a.dl ? dlHref(a.dl, a.fileBase, a.thumbType === 'video' ? 'video' : 'img') : null);
+            return `<li>${pkgThumb(a)}<span class="cb-package-text">${esc(a.label)}</span>${href ? `<a class="cb-package-dl" href="${esc(href)}" download>↓ Download</a>` : ''}</li>`;
+          }).join('')}
         </ul>
-        <p class="cb-package-foot">Everything you need to understand, review, and use immediately.</p>
       </div>
     </div>`;
     return { coverHtml, pages: pages.join('\n') };
@@ -1111,7 +1283,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   .cb-evidence--video{max-width:540px}
   .cb-evidence img,.cb-evidence video{display:block;width:100%;height:auto;border-radius:14px;border:1px solid var(--line);box-shadow:0 14px 38px rgba(0,0,0,.16)}
   .cb-evidence figcaption{margin-top:14px}
-  /* CTAs — clear Download (solid ink) + Book a Call (outline), used throughout. */
+  /* CTAs — Download only (solid ink). Contact CTAs removed from the brief. */
   .cb-cta-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
   .cb-cta-row--lg{margin-top:30px}
   .cb-cta{display:inline-flex;align-items:center;font-family:"Space Mono",monospace;font-size:12px;letter-spacing:.14em;text-transform:uppercase;text-decoration:none;padding:13px 24px;border-radius:999px;border:1px solid var(--ink);background:transparent;color:var(--ink)}
@@ -1126,29 +1298,125 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
      other grids. Each cell: index → media → name → description → CTAs. */
   .cb-deliverables-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:0;border:1px solid var(--line);border-width:1px 0 0 1px;width:100%}
   .cb-deliverable{display:flex;flex-direction:column;gap:14px;min-width:0;background:transparent;border:1px solid var(--line);border-width:0 1px 1px 0;padding:clamp(20px,2.4vw,34px)}
+  /* Services — same connected hairline grid as deliverables (index → name →
+     description), used in the closing Contact Your Human page. */
+  .cb-services-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:0;border:1px solid var(--line);border-width:1px 0 0 1px;width:100%}
+  .cb-service{display:flex;flex-direction:column;gap:10px;min-width:0;border:1px solid var(--line);border-width:0 1px 1px 0;padding:clamp(20px,2.4vw,32px)}
+  .cb-service-idx{font-family:"Space Mono",monospace;font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--ink-soft)}
+  .cb-service-name{font-family:"Space Grotesk",sans-serif;font-weight:600;font-size:clamp(17px,1.7vw,21px);line-height:1.2;color:var(--ink)}
+  .cb-service-desc{font-family:"Space Grotesk",sans-serif;font-weight:300;font-size:clamp(13px,1.3vw,15px);line-height:1.5;color:var(--ink-soft);margin:0}
+  /* Lede (left) + signature block (right); stacks on mobile. */
+  .cb-contact-top{display:grid;grid-template-columns:1fr auto;gap:clamp(28px,5vw,72px);align-items:center;width:100%}
+  .cb-contact-lede{min-width:0}
+  .cb-contact-sig{display:flex;flex-direction:column;align-items:center;text-align:center;gap:16px;flex-shrink:0;min-width:200px}
+  @media(max-width:760px){.cb-contact-top{grid-template-columns:1fr;gap:32px;justify-items:start}.cb-contact-sig{align-items:flex-start;text-align:left}.cb-contact-sig .cb-human{align-items:flex-start;text-align:left}}
+  .cb-contact-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:30px}
+  /* LinkedIn + X buttons under each signature's role line. */
+  .cb-human-socials{display:flex;gap:8px;margin-top:10px}
+  .cb-human-socials a{font-family:"Space Mono",monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;text-decoration:none;color:var(--ink);border:1px solid var(--ink);padding:6px 12px;border-radius:999px;white-space:nowrap}
+  .cb-human-socials a:hover{background:var(--ink);color:#f6f3ea}
   .cb-deliverable-idx{font-family:"Space Mono",monospace;font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--ink-soft)}
-  .cb-deliverable-media{margin:0}
-  .cb-deliverable-media img,.cb-deliverable-media video{display:block;width:100%;height:auto;border:1px solid var(--line)}
-  .cb-deliverable-media--empty{display:flex;align-items:center;justify-content:center;text-align:center;min-height:150px;padding:18px;border:1px dashed var(--line);font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft)}
+  /* Fixed-height media so every cell is the same size — full-page screenshots
+     crop to the box (top-anchored) instead of stretching the row taller. */
+  .cb-deliverable-media{margin:0;height:clamp(170px,20vw,220px);overflow:hidden;border:1px solid var(--line)}
+  .cb-deliverable-media img,.cb-deliverable-media video{display:block;width:100%;height:100%;object-fit:cover;object-position:top center}
+  .cb-deliverable-media--empty{display:flex;align-items:center;justify-content:center;text-align:center;height:100%;padding:18px;border:0;font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft)}
   .cb-deliverable-name{font-family:"Space Grotesk",sans-serif;font-weight:500;font-size:clamp(20px,2vw,28px);letter-spacing:-.01em;line-height:1.05;color:var(--ink)}
   .cb-deliverable-desc{font-family:"Space Grotesk",sans-serif;font-weight:300;font-size:clamp(14px,1.4vw,17px);line-height:1.5;color:var(--ink-soft);margin:0}
   .cb-deliverable .cb-cta-row{margin-top:auto;padding-top:4px}
   .cb-deliverable .cb-cta{padding:10px 18px;font-size:11px}
   @media(max-width:760px){.cb-deliverables-grid{grid-template-columns:1fr}}
+  /* Featured Post — the Suggested Post as a real X / Share Post card, mirroring
+     the dashboard Post Me tile. Dark card object on the light brief canvas. */
+  .cb-xpost{max-width:560px;background:#000;color:#e7e9ea;border:1px solid var(--line);border-radius:18px;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;box-shadow:0 18px 50px rgba(0,0,0,.22)}
+  .cb-xpost-head{display:flex;align-items:center;gap:10px;padding:16px 18px 8px}
+  .cb-xpost-avatar{width:42px;height:42px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1px solid rgba(255,255,255,.14);background:#15202b;display:block}
+  .cb-xpost-id{display:flex;align-items:center;gap:5px;flex:1;min-width:0}
+  .cb-xpost-name{font-weight:700;font-size:16px;color:#e7e9ea;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%}
+  .cb-xpost-badge{flex-shrink:0}
+  .cb-xpost-handle{font-size:14px;color:#71767b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cb-xpost-logo{flex-shrink:0;color:#e7e9ea;opacity:.9}
+  .cb-xpost-caption{margin:0;padding:2px 18px 12px;font-size:15px;line-height:1.45;color:#e7e9ea;white-space:pre-wrap}
+  .cb-xpost-link{color:#1d9bf0}
+  .cb-xpost-media{margin:0 18px;border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,.12);aspect-ratio:16/10;background:#000}
+  .cb-xpost-media video,.cb-xpost-media img{width:100%;height:100%;object-fit:cover;display:block}
+  .cb-xpost-actions{display:flex;align-items:center;justify-content:space-between;padding:14px 26px 18px}
+  .cb-xpost-actions span{display:flex;align-items:center;gap:6px;color:#71767b;font-size:13px}
+  @media(max-width:760px){.cb-xpost{max-width:100%}}
+  /* Featured Post page: post copy (oversized quote + actions) beside the video
+     mock in a 2-col row; stacks on mobile. Deliverables sub-category below. */
+  .cb-featured-row{display:grid;grid-template-columns:1fr minmax(0,560px);gap:clamp(28px,4vw,64px);align-items:center;width:100%;margin:0 0 clamp(40px,6vw,72px)}
+  .cb-featured-copy{min-width:0;display:flex;flex-direction:column;gap:clamp(22px,3vw,34px)}
+  .cb-featured-mock{min-width:0;display:flex;justify-content:center}
+  .cb-post-quote{margin:0;font-family:"Space Grotesk",sans-serif;font-weight:400;font-size:clamp(20px,2.4vw,30px);line-height:1.32;color:var(--ink);border-left:4px solid var(--ink);padding-left:22px;text-wrap:pretty}
+  .cb-post-actions{display:flex;flex-wrap:wrap;gap:12px}
+  .cb-post-copy{cursor:pointer}
+  @media(max-width:760px){.cb-featured-row{grid-template-columns:1fr;gap:28px}}
+  .cb-sub-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;width:100%;border-top:1px solid var(--line);padding-top:18px;margin:0 0 22px;font-family:"Space Mono",monospace;font-size:13px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink)}
+  .cb-sub-head-meta{font-size:11px;letter-spacing:.16em;color:var(--ink-soft)}
+  /* Site-audit page (combined): no h1-scale headers inside — the sub-heads do
+     the dividing. Bigger gaps + a solid ink rule define each section; content
+     drops to compact body scale. Id-scoped so it overrides the .cb-page sizes
+     without affecting Key Insight / Featured / You're In. */
+  #cb-what-this-site-is .cb-sub-head{margin:clamp(46px,6vw,84px) 0 22px;padding-top:22px;border-top:1.5px solid var(--ink);font-family:"Doto",monospace;font-weight:900;font-size:clamp(26px,3.6vw,46px);letter-spacing:.03em;line-height:1}
+  #cb-what-this-site-is .pull{font-size:clamp(22px,2.5vw,32px);line-height:1.2;border-left-width:4px;padding-left:22px;max-width:34ch}
+  #cb-what-this-site-is .sub{font-size:clamp(15px,1.5vw,18px);line-height:1.55;font-weight:300;max-width:none}
+  #cb-what-this-site-is .cb-gap-t{font-size:clamp(15px,1.5vw,18px);line-height:1.4}
+  #cb-what-this-site-is .cb-gap{padding:10px 0}
+  #cb-what-this-site-is .meta-grid .meta-tile{padding:18px}
+  #cb-what-this-site-is .meta-grid .meta-tile .v{font-size:clamp(15px,1.5vw,18px);line-height:1.35}
+  #cb-what-this-site-is .cb-tag{font-size:11px;padding:9px 14px;letter-spacing:.08em}
+  #cb-what-this-site-is .cb-alert{border-left-width:4px;padding-left:22px}
+  /* WTIS lead — full-width statement across the page, not a narrow pull-quote. */
+  #cb-what-this-site-is .cb-wtis-lead{font-family:"Space Grotesk",sans-serif;font-weight:500;font-size:clamp(22px,2.5vw,32px);line-height:1.2;border-left:4px solid var(--ink);padding-left:22px;max-width:none;width:100%;margin:0 0 6px;text-wrap:pretty}
+  /* What's Missing + Biggest Risk side by side; stack on mobile. align-items
+     start so the shorter column doesn't stretch. */
+  #cb-what-this-site-is .cb-audit-row{display:grid;grid-template-columns:1fr 1fr;gap:clamp(28px,4vw,60px);align-items:start}
+  #cb-what-this-site-is .cb-subsec{min-width:0}
+  @media(max-width:760px){#cb-what-this-site-is .cb-audit-row{grid-template-columns:1fr;gap:0}}
+  /* Social Share — share-card preview (left) + captured/missing checklist (right).
+     Flat hairline borders, one type scale (16px Grotesk body + 11px Mono micro-
+     labels), no shadows or filled badges — matches the rest of the brief. */
+  .cb-social{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(28px,3.5vw,56px);align-items:start;width:100%}
+  .cb-social-card{border:1px solid var(--line);overflow:hidden;background:var(--card);max-width:460px}
+  .cb-social-card-img{aspect-ratio:1.91/1;overflow:hidden;background:var(--card);border-bottom:1px solid var(--line)}
+  .cb-social-card-img img{width:100%;height:100%;object-fit:cover;display:block}
+  .cb-social-card-img--icon{display:flex;align-items:center;justify-content:center}
+  .cb-social-card-img--icon img{width:72px;height:72px;object-fit:contain}
+  .cb-social-card-img--empty{display:flex;align-items:center;justify-content:center;font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft)}
+  .cb-social-card-meta{display:flex;flex-direction:column;gap:6px;padding:16px 18px}
+  .cb-social-card-host{font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft)}
+  .cb-social-card-title{font-family:"Space Grotesk",sans-serif;font-weight:500;font-size:16px;line-height:1.3;color:var(--ink)}
+  .cb-social-card-desc{font-family:"Space Grotesk",sans-serif;font-weight:300;font-size:14px;line-height:1.5;color:var(--ink-soft);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .cb-social-checks{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+  .cb-social-check{display:flex;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid var(--line)}
+  .cb-social-mark{flex-shrink:0;width:16px;text-align:center;font-family:"Space Mono",monospace;font-size:13px;font-weight:400;line-height:1}
+  .cb-social-check.is-ok .cb-social-mark{color:var(--ink)}
+  .cb-social-check.is-miss .cb-social-mark{color:var(--ink-soft)}
+  .cb-social-label{flex:1;min-width:0;font-family:"Space Grotesk",sans-serif;font-weight:400;font-size:16px;line-height:1.3;color:var(--ink)}
+  .cb-social-check.is-miss .cb-social-label{color:var(--ink-soft)}
+  .cb-social-status{font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft);flex-shrink:0}
+  @media(max-width:760px){.cb-social{grid-template-columns:1fr;gap:24px}}
   /* Cover handoff — Nothing container: one bordered box, sig on the left,
      "what you get" on the right, split by a single hairline divider. */
-  .cb-handoff{display:grid;grid-template-columns:1fr auto;align-items:center;gap:0;border:1px solid var(--ink);padding:0;margin:30px 0 0;width:100%;max-width:100%}
-  .cb-handoff-sig{order:2;display:flex;align-items:center;justify-content:center;padding:clamp(20px,2.6vw,32px);border-left:1px solid var(--ink)}
+  .cb-handoff{display:grid;grid-template-columns:1fr auto;align-items:center;gap:0;border:0;padding:0;margin:30px 0 0;width:100%;max-width:100%}
+  .cb-handoff-sig{order:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:clamp(20px,2.6vw,32px);border-left:1px solid var(--ink)}
   .cb-cover-sig{display:block;height:auto;width:clamp(120px,13vw,168px);opacity:.9}
+  /* Your Human tile — sits under the signature. */
+  .cb-human{display:flex;flex-direction:column;align-items:center;text-align:center;gap:2px}
+  .cb-human-label{font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--ink-soft)}
+  .cb-human-name{font-family:"Space Grotesk",sans-serif;font-weight:600;font-size:clamp(16px,1.7vw,20px);line-height:1.1;color:var(--ink)}
+  .cb-human-role{font-family:"Space Grotesk",sans-serif;font-weight:300;font-size:clamp(12px,1.2vw,14px);line-height:1.2;color:var(--ink-soft)}
   .cb-package{order:1;padding:clamp(20px,2.4vw,30px);min-width:0}
   .cb-package-label{font-family:"Space Mono",monospace;font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:6px}
   .cb-package-list{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
   .cb-package-list li{display:flex;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid var(--line);font-family:"Space Grotesk",sans-serif;font-weight:400;font-size:clamp(15px,1.5vw,19px);line-height:1.3;color:var(--ink)}
-  .cb-package-thumb{flex-shrink:0;width:64px;height:46px;border:1px solid var(--line);overflow:hidden;display:block;background:var(--card)}
+  .cb-package-thumb{flex-shrink:0;width:64px;height:46px;overflow:hidden;display:block;background:var(--card)}
   .cb-package-thumb img,.cb-package-thumb video{width:100%;height:100%;object-fit:cover;display:block}
   .cb-package-thumb--empty{background:var(--card)}
   .cb-package-text{flex:1;min-width:0}
-  .cb-package-foot{font-family:"Space Grotesk",sans-serif;font-weight:300;font-size:clamp(13px,1.3vw,15px);line-height:1.5;color:var(--ink-soft);margin:14px 0 0}
+  .cb-package-dl{flex-shrink:0;font-family:"Space Mono",monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;text-decoration:none;color:#f6f3ea;background:var(--ink);border:1px solid var(--ink);padding:7px 13px;border-radius:999px;white-space:nowrap}
+  .cb-package-dl:hover{opacity:.85}
   /* Mobile — stack: line items first, signature underneath, divider becomes a
      horizontal rule between them. */
   @media(max-width:600px){
@@ -1160,15 +1428,14 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   .cb-page::before{content:'';position:absolute;top:16px;left:var(--gutter);width:24px;height:24px;border-left:2px solid rgba(10,10,10,.22);border-top:2px solid rgba(10,10,10,.22);pointer-events:none}
   .cb-page::after{content:'';position:absolute;left:var(--gutter);bottom:26px;width:140px;height:11px;background-image:radial-gradient(rgba(10,10,10,.18) 1.3px,transparent 1.6px);background-size:14px 11px;pointer-events:none}
   .cb-deco{height:10px;width:128px;margin:0 0 22px;background-image:radial-gradient(rgba(10,10,10,.26) 1.4px, transparent 1.7px);background-size:13px 10px}
-  .cb-pg-eyebrow{display:flex;align-items:center;gap:14px;font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:18px}
-  .cb-pg-eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--ink);flex-shrink:0}
-  .cb-pg-eyebrow .idx{margin-left:auto;color:rgba(10,10,10,.35)}
   .cb-page .rule{height:1px;background:rgba(0,0,0,.12);margin:22px 0 26px;max-width:520px}
   /* What's Missing — big-numbered gap list. */
+  /* Numbered checklist — tight rows, small mono index + em-dash + text. */
   .cb-gaps{display:flex;flex-direction:column;gap:0;max-width:660px}
-  .cb-gap{display:flex;align-items:baseline;gap:22px;padding:18px 0;border-bottom:1px dashed rgba(0,0,0,.16)}
-  .cb-gap-n{font-family:"Doto",monospace;font-weight:900;font-size:clamp(26px,3.6vw,44px);color:transparent;-webkit-text-stroke:1.4px rgba(0,0,0,.24);line-height:.8;flex-shrink:0}
-  .cb-gap-t{font-family:"Space Grotesk",sans-serif;font-weight:500;font-size:clamp(19px,2.2vw,28px);line-height:1.18;letter-spacing:-.01em}
+  .cb-gap{display:flex;align-items:baseline;gap:12px;padding:12px 0;border-bottom:1px solid rgba(0,0,0,.1)}
+  .cb-gap-n{font-family:"Space Mono",monospace;font-weight:700;font-size:clamp(14px,1.5vw,17px);color:var(--ink-soft);line-height:1.3;flex-shrink:0}
+  .cb-gap-sep{color:var(--ink-soft);flex-shrink:0}
+  .cb-gap-t{font-family:"Space Grotesk",sans-serif;font-weight:500;font-size:clamp(16px,1.8vw,21px);line-height:1.35;letter-spacing:-.01em}
   /* Biggest Risk — alert block + effect tags. */
   .cb-alert{border-left:5px solid var(--ink);padding:4px 0 4px 26px;max-width:640px}
   .cb-alert .sub{margin:0}
@@ -1185,6 +1452,23 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   .cb-page .sub{font-size:clamp(22px,2.9vw,40px);line-height:1.22}
   .cb-page .pull{font-size:clamp(34px,4.4vw,60px);border-left-width:6px;padding-left:30px;max-width:22ch;line-height:1.08}
   .cb-page .bento .tile.ink .word{font-size:clamp(34px,4.8vw,62px);line-height:1.04}
+  /* Intro split — You're In (left) + Key Insight (right) on one page; oversized
+     labels sit side by side on desktop and stack on mobile. Headline scoped down
+     from the full-page size so two columns fit the content width. */
+  #cb-intro-split .cb-split{display:grid;grid-template-columns:1fr 1fr;gap:clamp(28px,4vw,64px);align-items:start;width:100%}
+  #cb-intro-split .cb-split--single{grid-template-columns:1fr}
+  #cb-intro-split .cb-split-col{min-width:0}
+  #cb-intro-split .headline{font-size:clamp(34px,6.4vw,92px)}
+  #cb-intro-split .rule{max-width:none}
+  /* Welcome description reads as supporting copy, not a headline-scale pull. */
+  #cb-intro-split .pull{font-size:clamp(17px,2vw,26px);line-height:1.34;max-width:36ch;border-left-width:4px;padding-left:22px}
+  /* Onboarded copy — a lead statement (ink bar) over spaced, marked points so
+     the column reads cleanly and fills the space. */
+  #cb-intro-split .cb-onboard-copy{display:flex;flex-direction:column;gap:clamp(15px,1.9vw,24px);max-width:56ch}
+  #cb-intro-split .cb-onboard-lead{font-family:"Space Grotesk",sans-serif;font-weight:500;font-size:clamp(18px,1.9vw,24px);line-height:1.3;color:var(--ink);margin:0;border-left:4px solid var(--ink);padding-left:18px}
+  #cb-intro-split .cb-onboard-line{position:relative;font-family:"Space Grotesk",sans-serif;font-weight:300;font-size:clamp(14px,1.45vw,17px);line-height:1.56;color:var(--ink-soft);margin:0;padding-left:18px}
+  #cb-intro-split .cb-onboard-line::before{content:'';position:absolute;left:0;top:.6em;width:7px;height:7px;border:1.5px solid var(--ink);background:transparent}
+  @media(max-width:760px){#cb-intro-split .cb-split{grid-template-columns:1fr;gap:10px}}
   /* You're In flow — connected hairline grid, straight edges, no fill (matches
      the deliverables grid for document-wide consistency). */
   .cb-page .flow{gap:0;border:1px solid var(--line);border-width:1px 0 0 1px}
@@ -1197,10 +1481,9 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   .cb-page .meta-grid .meta-tile .v{font-size:clamp(18px,2.1vw,27px);font-weight:500;line-height:1.25}
   /* The trailing upside line drops to a readable body size with clear space
      above so it never collides with the grid (the giant .sub is for headlines). */
-  #cb-opportunity .sub{font-size:clamp(17px,1.9vw,24px);line-height:1.5;font-weight:300;margin:36px 0 0;max-width:62ch}
+  #cb-opportunity .sub{font-size:clamp(15px,1.6vw,19px);line-height:1.55;font-weight:300;margin:clamp(40px,5vw,68px) 0 0;max-width:none}
   .cb-deco{width:188px;height:14px;background-size:18px 14px}
-  .cb-gap-n{font-size:clamp(38px,5.2vw,68px);-webkit-text-stroke-width:1.6px}
-  .cb-gap-t{font-size:clamp(22px,2.7vw,36px)}
+  .cb-gap-t{font-size:clamp(17px,1.9vw,22px)}
   .cb-alert{border-left-width:7px;padding-left:34px}
   .cb-tag{font-size:13px;padding:12px 20px;letter-spacing:.1em}
   /* Download buttons for deliverable assets. */
@@ -1284,7 +1567,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
       <div class="cap-brief-email-cta-row">
         <a id="brief-email-cta" class="cap-brief-email-cta" href="https://calendly.com/bballi/30min" target="_blank" rel="noopener noreferrer">
           <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" />
-          MEET WITH A HUMAN
+          Meet with a Human
           <span class="arrow" aria-hidden="true">↗</span>
         </a>
       </div>
@@ -1446,6 +1729,9 @@ async function handleGet(request) {
     studioVideoUrl,
     // Social share preview (OG image) — feeds the Creative Brief social section.
     socialPreviewImageUrl: dash.siteMeta?.ogImage || null,
+    // Full homepage meta — drives the Social Share capture checklist (what
+    // social tags were/weren't found) + favicon fallback in Your Website Status.
+    siteMeta: dash.siteMeta || null,
     // Full-page captures (same source as the Cross-Device Layouts card) so the
     // deliverables show full-page shots, not just the viewport homepage.
     fullPageScreenshots: dash.artifacts?.fullPageScreenshots || null,

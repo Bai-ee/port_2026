@@ -33,14 +33,14 @@ export const metadata = {
     'brand snapshot',
     'visual identity',
     'Figma design system',
-    'HIT Agency branding',
+    'HITLOOP branding',
     'token-based design system',
     'typography scale',
     'color palette accessibility',
   ],
   alternates: { canonical: '/services/brand-identity' },
   openGraph: {
-    title: 'Brand Identity — HIT Agency',
+    title: 'Brand Identity | HITLOOP',
     description:
       'Design system extraction, brand snapshot analysis, and visual identity work — translating brand direction into production-ready systems.',
     url: '/services/brand-identity',

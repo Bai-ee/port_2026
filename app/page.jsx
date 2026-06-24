@@ -43,9 +43,9 @@ const websiteSchema = {
   '@type': 'WebSite',
   '@id': `${SITE_URL}#website`,
   url: SITE_URL,
-  name: 'HIT Agency',
+  name: 'HITLOOP',
   description:
-    'HIT Agency — AI-powered design and engineering studio. Client dashboards, intelligent intake pipelines, and high-performance web experiences led by Bryan Balli.',
+    'HITLOOP — a Human in the Loop creative partnership led by Bryan Balli. Strategy, design, development, and automation for founders who need execution.',
   publisher: { '@id': `${SITE_URL}#bryan-balli` },
   inLanguage: 'en-US',
 };

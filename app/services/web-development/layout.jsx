@@ -32,7 +32,7 @@ export const metadata = {
     'React developer',
     'GSAP animation',
     'Three.js developer',
-    'web development HIT Agency',
+    'web development HITLOOP',
     'Tailwind CSS',
     'Firebase',
     'Vercel deployment',
@@ -40,7 +40,7 @@ export const metadata = {
   ],
   alternates: { canonical: '/services/web-development' },
   openGraph: {
-    title: 'Web Development — HIT Agency',
+    title: 'Web Development | HITLOOP',
     description:
       'High-performance web builds using Next.js, React, GSAP, and Three.js — delivered with sub-100ms response times, accurate pixel fidelity, and full CI/CD deployment pipelines.',
     url: '/services/web-development',

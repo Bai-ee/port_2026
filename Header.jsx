@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { useAuth } from './AuthContext';
+import UpRightArrow from './components/UpRightArrow';
 
 const Header = ({ logoRef, onOpenPage, logoSrc = '/img/sig.png' }) => {
   const isSignatureLogo = logoSrc === '/img/sig.png';
@@ -77,7 +78,7 @@ const Header = ({ logoRef, onOpenPage, logoSrc = '/img/sig.png' }) => {
             >
               <span className="founders-chat-label-full">Dashboard</span>
               <span className="founders-chat-label-short">Dash</span>
-              <span id="founders-chat-cta-icon">↗</span>
+              <UpRightArrow id="founders-chat-cta-icon" />
             </button>
           </div>
         </div>

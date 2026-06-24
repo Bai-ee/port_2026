@@ -16,7 +16,7 @@ const briefIntel = require('../../../../features/intelligence/_brief-intel.js');
 // ── Config ──────────────────────────────────────────────────────────────────
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const DIGEST_TO = process.env.DIGEST_EMAIL || 'bryanballi@gmail.com';
-const DIGEST_FROM = process.env.DIGEST_FROM || 'HitLoop Daily <digest@hitloop.agency>';
+const DIGEST_FROM = process.env.DIGEST_FROM || 'HITLOOP Daily <digest@hitloop.agency>';
 const WORKER_SECRET = process.env.WORKER_SECRET;
 const VERCEL_TOKEN = process.env.VERCEL_API_TOKEN;
 const VERCEL_PROJECT_ID = process.env.VERCEL_PROJECT_ID || 'prj_h2AHIKHmJu7eV1DdmiTra2WFmPv6';
@@ -932,7 +932,7 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light">
-<title>HitLoop Daily Digest</title>
+<title>HITLOOP Daily Digest</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Doto:wght@400;700;900&family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
 body{margin:0;padding:0;background:${DT.bg};}
@@ -1249,7 +1249,7 @@ export async function GET(request) {
     }
 
     const sessionStr = ga4.overview ? `, ${ga4.overview.sessions} session${ga4.overview.sessions !== 1 ? 's' : ''}` : '';
-    const subject = `HitLoop Daily — ${firebase.newUsers} sign-up${firebase.newUsers !== 1 ? 's' : ''}, ${firebase.recentRuns} dashboard${firebase.recentRuns !== 1 ? 's' : ''}${sessionStr} · ${dateStr}`;
+    const subject = `HITLOOP Daily — ${firebase.newUsers} sign-up${firebase.newUsers !== 1 ? 's' : ''}, ${firebase.recentRuns} dashboard${firebase.recentRuns !== 1 ? 's' : ''}${sessionStr} · ${dateStr}`;
 
     const html = buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs);
 

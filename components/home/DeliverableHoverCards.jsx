@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Image from 'next/image';
+import UpRightArrow from '../UpRightArrow';
 
 /*
  * Static, hard-coded recreations of the HITLOOP dashboard deliverable cards,
@@ -20,7 +21,9 @@ const ASSETS = {
   social: '/img/deliverables/hitloop-social.jpg',
   video: '/img/deliverables/hitloop-video.mp4',
   postme: '/img/deliverables/hitloop-postme-frame.png',
-  brief: '/creative-brief-hitloop.html',
+  // Live render of HITLOOP's latest Creative Brief (cached ~10 min) instead of a
+  // committed static snapshot — see app/api/public/hitloop-creative-brief.
+  brief: '/api/public/hitloop-creative-brief',
 };
 
 // Auto-scroll tease for the Creative Brief iframe — mirrors the dashboard's
@@ -217,7 +220,7 @@ export default function DeliverableHoverCard({ id, shown = true, rot = 3.2, offX
           <span style={footStatusStyle}><span style={dotStyle} />Active</span>
           <span style={btnGroupStyle}>
             <span style={btnStyle}>{card.action}</span>
-            <span style={btnStyle}>Details <span aria-hidden="true">↗</span></span>
+            <span style={btnStyle}>Details <UpRightArrow style={{ marginLeft: '0.1rem', opacity: 0.85 }} /></span>
           </span>
         </div>
       </article>

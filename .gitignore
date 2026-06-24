@@ -40,6 +40,7 @@ input/
 output/
 print-screenshots/
 docs/storyboards/
+scripts/creative-brief-*.html
 
 # Original unoptimized reel (use reel.optimized.mp4 for production)
 public/vid/reel.mp4
