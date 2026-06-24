@@ -4004,6 +4004,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     if (id === 'client-mockup') { setModalTab('preview'); return; }
     if (id === 'client-site')   { setModalTab('preview'); return; }
     if (id === 'client-estimate') { setModalTab('estimate'); return; }
+    if (id === 'signals') { setModalTab('sources'); return; }
     if (id === 'seo-performance') { setModalTab('report'); return; }
     if (id === 'agent-readiness') { setModalTab('report'); return; }
     if (id === 'design-evaluation' && bootstrap?.dashboardState?.analyzerOutputs?.['design-evaluation']) { setModalTab('report'); return; }
@@ -4461,6 +4462,81 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       </React.Fragment>
     );
   };
+
+  // Market Signals control panel — the SOURCES tab of the Market Signals modal.
+  // Runs each search source live (scout-test; lightweight — does NOT refresh the
+  // stored brief) and deep-links to the cards that own the other parameters.
+  // This is exactly the input set a full Executive / Marketing Brief run uses.
+  const renderSignalsControlPanel = () => (
+    <>
+      <p style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--text-secondary)', margin: 0 }}>
+        Run each search source live and confirm the raw results it returns — per parameter, not brief-formatted. This is a check tool: it runs the same searches the brief uses but does <strong>not</strong> refresh the stored brief.
+      </p>
+      {marketingBriefConfig ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <div className="tile-detail-row-section-head" style={{ margin: 0 }}>Search Sources</div>
+            <button
+              type="button"
+              className="tile-view-details-btn"
+              onClick={() => {
+                (marketingBriefConfig?.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS)
+                  .filter((k) => UNLOCKED_SOURCE_PLATFORMS.includes(k))
+                  .forEach((k) => runScoutTestForPlatform(k));
+              }}
+            >Run all enabled</button>
+          </div>
+          {[
+            WEB_SEARCH_SOURCES.find((p) => p.key === 'web'),
+            SOCIAL_SIGNAL_SOURCES.find((p) => p.key === 'x'),
+            SOCIAL_SIGNAL_SOURCES.find((p) => p.key === 'reddit'),
+          ].filter(Boolean).map((p) => renderSourcePlatformRow(p))}
+          <p style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--text-secondary)', margin: '4px 0 0 2px' }}>
+            Toggle a source on, then <strong>Run</strong> to confirm exactly what it returns.
+          </p>
+
+          {/* Inputs · the non-source search parameters. These aren't simple
+              on/off (handles, keywords, a freshness window) — each shows its
+              current state and deep-links to its own card to edit. Editing
+              there changes what every brief run uses. */}
+          <div className="tile-detail-row-section-head" style={{ marginTop: 14 }}>Inputs · customize</div>
+          {[
+            { id: 'watchlist', number: 'WL', label: 'WATCHLIST', title: 'Watchlist & Competitors',
+              status: `${(marketingBriefConfig?.kols || []).length} handle${(marketingBriefConfig?.kols || []).length === 1 ? '' : 's'}${marketingBriefConfig?.kolSearchMode ? ` · ${marketingBriefConfig.kolSearchMode}` : ''}` },
+            { id: 'brand-keywords', number: 'SP', label: 'SEARCH PARAMETERS', title: 'Search Parameters',
+              status: `${(marketingBriefConfig?.brandKeywords || []).length} keyword${(marketingBriefConfig?.brandKeywords || []).length === 1 ? '' : 's'} · ${(marketingBriefConfig?.categoryTerms || []).length} category` },
+            { id: 'scout-focus', number: 'SF', label: 'SCOUT FOCUS', title: 'Research Focus',
+              status: `freshness ${marketingBriefConfig?.freshnessDays ?? 7}d` },
+          ].map((it) => (
+            <div key={it.id} className="tile-detail-stat-row" style={{ alignItems: 'center' }}>
+              <span className="tile-detail-stat-label">{it.title}</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.06em', color: 'var(--text-secondary)' }}>{it.status}</span>
+                <button type="button" className="tile-view-details-btn" onClick={() => openCapabilityCard({ id: it.id, category: 'growth', number: it.number, label: it.label, title: it.title, description: '', rows: [] })}>Customize →</button>
+              </span>
+            </div>
+          ))}
+          {/* Local Weather — a real on/off (weather.enabled) plus a link to set the ZIP. */}
+          <div className="tile-detail-stat-row" style={{ alignItems: 'center' }}>
+            <span className="tile-detail-stat-label">Local Weather</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button type="button" className="tile-view-details-btn" onClick={() => setMarketingBriefConfig((prev) => ({ ...(prev || {}), weather: { ...((prev || {}).weather || {}), enabled: !(prev?.weather?.enabled) } }))}>
+                {marketingBriefConfig?.weather?.enabled ? 'On' : 'Off'}
+              </button>
+              <button type="button" className="tile-view-details-btn" onClick={() => openCapabilityCard({ id: 'local-weather', category: 'growth', number: 'LW', label: 'LOCAL WEATHER', title: 'Local Weather', description: '', rows: [] })}>Customize →</button>
+            </span>
+          </div>
+
+          <p style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--text-secondary)', margin: '10px 0 0 2px' }}>
+            This configuration is exactly what a full <strong>Executive / Marketing Brief</strong> run includes.
+          </p>
+          {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
+        </div>
+      ) : (
+        <p className="mu-notice" style={{ marginTop: 12 }}>Loading Scout config…</p>
+      )}
+    </>
+  );
 
   // Full-width debug meta row for a tested source. Rendered at the bento-grid
   // level (#scout-test-meta-band) — outside the panel column — so it spans the
@@ -4953,6 +5029,16 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     return isAdmin ? newestAny : null;
   })();
   const latestStudioVideoUrl = latestStudioVideo?.url || null;
+  // Newest generated Video Remix — drives the card shell + modal preview so the
+  // card face becomes the last rendered video (mirrors the Mockup Studio card).
+  const latestRemixVideoUrl = (() => {
+    const caps = Array.isArray(dashboardState?.mediaCaptures) ? dashboardState.mediaCaptures : [];
+    for (let i = caps.length - 1; i >= 0; i -= 1) {
+      const c = caps[i];
+      if (c?.type === 'video_remix' && c?.downloadUrl) return c.downloadUrl;
+    }
+    return null;
+  })();
   // X accepts MP4 video only (not WebM/OGG). Used to gate the video path in Post Me.
   const latestStudioVideoIsXReady = (() => {
     const ct = (latestStudioVideo?.contentType || '').toLowerCase();
@@ -10794,6 +10880,17 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       loop
                       playsInline
                     />
+                  ) : card.id === 'video-remix' && latestRemixVideoUrl ? (
+                    // Video Remix card shell becomes the last generated remix video.
+                    <video
+                      key={latestRemixVideoUrl}
+                      className="tile-studio-video"
+                      src={latestRemixVideoUrl}
+                      autoPlay
+                      muted
+                      loop
+                      playsInline
+                    />
                   ) : card.id === 'post-me' ? (
                     // Clean, authentic X post that fills the fixed shell. Just the
                     // X UI — header, caption, the creative at true 16:10, engagement.
@@ -12496,6 +12593,17 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     <div className="tile-brief-preview-loading" role="status" aria-label="Loading brief">
                       <div className="brief-loader-spinner" aria-hidden="true" />
                     </div>
+                  ) : activeTileModal.cardId === 'video-remix' && latestRemixVideoUrl ? (
+                    // Modal shell mirrors the card face: the last generated remix video.
+                    <video
+                      key={latestRemixVideoUrl}
+                      className="tile-studio-video"
+                      src={latestRemixVideoUrl}
+                      autoPlay
+                      muted
+                      loop
+                      playsInline
+                    />
                   ) : activeTileModal.isCapabilityCard ? (
                     <span className="tile-empty-label">{activeTileModal.placeholderLabel}</span>
                   ) : (
@@ -13731,84 +13839,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
                       </div>
                     ) : null}
-                    </div>
-                  </div>
-                )}
-
-                {/* Market Signals — run each search source live and confirm the raw
-                    results per parameter. Reuses the scout-test engine (web/x/reddit)
-                    via renderSourcePlatformRow. LIGHTWEIGHT: it runs the same searches
-                    the brief uses but does NOT refresh the stored brief, and shows raw
-                    results (not brief-formatted). Admin-only (generic tile modal). */}
-                {activeTileModal.cardId === 'signals' && (
-                  <div id="signals-panel" className="tile-detail-bento-cell">
-                    <div className="mu-tab-pane" style={{ padding: 18 }}>
-                      <p style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--text-secondary)', margin: 0 }}>
-                        Run each search source live and confirm the raw results it returns — per parameter, not brief-formatted. This is a check tool: it runs the same searches the brief uses but does <strong>not</strong> refresh the stored brief.
-                      </p>
-                      {marketingBriefConfig ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                            <div className="tile-detail-row-section-head" style={{ margin: 0 }}>Search Sources</div>
-                            <button
-                              type="button"
-                              className="tile-view-details-btn"
-                              onClick={() => {
-                                (marketingBriefConfig?.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS)
-                                  .filter((k) => UNLOCKED_SOURCE_PLATFORMS.includes(k))
-                                  .forEach((k) => runScoutTestForPlatform(k));
-                              }}
-                            >Run all enabled</button>
-                          </div>
-                          {[
-                            WEB_SEARCH_SOURCES.find((p) => p.key === 'web'),
-                            SOCIAL_SIGNAL_SOURCES.find((p) => p.key === 'x'),
-                            SOCIAL_SIGNAL_SOURCES.find((p) => p.key === 'reddit'),
-                          ].filter(Boolean).map((p) => renderSourcePlatformRow(p))}
-                          <p style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--text-secondary)', margin: '4px 0 0 2px' }}>
-                            Toggle a source on, then <strong>Run</strong> to confirm exactly what it returns.
-                          </p>
-
-                          {/* Inputs · the non-source search parameters. These aren't simple
-                              on/off (they're handles, keywords, a freshness window) — each
-                              shows its current state and deep-links to its own card to edit.
-                              Editing there changes what every brief run uses. */}
-                          <div className="tile-detail-row-section-head" style={{ marginTop: 14 }}>Inputs · customize</div>
-                          {[
-                            { id: 'watchlist', number: 'WL', label: 'WATCHLIST', title: 'Watchlist & Competitors',
-                              status: `${(marketingBriefConfig?.kols || []).length} handle${(marketingBriefConfig?.kols || []).length === 1 ? '' : 's'}${marketingBriefConfig?.kolSearchMode ? ` · ${marketingBriefConfig.kolSearchMode}` : ''}` },
-                            { id: 'brand-keywords', number: 'SP', label: 'SEARCH PARAMETERS', title: 'Search Parameters',
-                              status: `${(marketingBriefConfig?.brandKeywords || []).length} keyword${(marketingBriefConfig?.brandKeywords || []).length === 1 ? '' : 's'} · ${(marketingBriefConfig?.categoryTerms || []).length} category` },
-                            { id: 'scout-focus', number: 'SF', label: 'SCOUT FOCUS', title: 'Research Focus',
-                              status: `freshness ${marketingBriefConfig?.freshnessDays ?? 7}d` },
-                          ].map((it) => (
-                            <div key={it.id} className="tile-detail-stat-row" style={{ alignItems: 'center' }}>
-                              <span className="tile-detail-stat-label">{it.title}</span>
-                              <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.06em', color: 'var(--text-secondary)' }}>{it.status}</span>
-                                <button type="button" className="tile-view-details-btn" onClick={() => openCapabilityCard({ id: it.id, category: 'growth', number: it.number, label: it.label, title: it.title, description: '', rows: [] })}>Customize →</button>
-                              </span>
-                            </div>
-                          ))}
-                          {/* Local Weather — a real on/off (weather.enabled) plus a link to set the ZIP. */}
-                          <div className="tile-detail-stat-row" style={{ alignItems: 'center' }}>
-                            <span className="tile-detail-stat-label">Local Weather</span>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                              <button type="button" className="tile-view-details-btn" onClick={() => setMarketingBriefConfig((prev) => ({ ...(prev || {}), weather: { ...((prev || {}).weather || {}), enabled: !(prev?.weather?.enabled) } }))}>
-                                {marketingBriefConfig?.weather?.enabled ? 'On' : 'Off'}
-                              </button>
-                              <button type="button" className="tile-view-details-btn" onClick={() => openCapabilityCard({ id: 'local-weather', category: 'growth', number: 'LW', label: 'LOCAL WEATHER', title: 'Local Weather', description: '', rows: [] })}>Customize →</button>
-                            </span>
-                          </div>
-
-                          <p style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--text-secondary)', margin: '10px 0 0 2px' }}>
-                            This configuration is exactly what a full <strong>Executive / Marketing Brief</strong> run includes.
-                          </p>
-                          {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
-                        </div>
-                      ) : (
-                        <p className="mu-notice" style={{ marginTop: 12 }}>Loading Scout config…</p>
-                      )}
                     </div>
                   </div>
                 )}
@@ -15369,6 +15399,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     <div className="tile-detail-tabs">
                       {(() => {
                         const tabs = [
+                          // Market Signals leads with its live-search control panel.
+                          ...(activeTileModal.cardId === 'signals' ? [{ key: 'sources', label: 'SOURCES' }] : []),
                           { key: 'report', label: 'REPORT' },
                           ...(activeTileModal.analyzer ? [
                             { key: 'solutions', label: 'SOLUTIONS' },
@@ -15387,6 +15419,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       })()}
                     </div>
                     <div className="tile-detail-tab-content">
+                      {activeTileModal.cardId === 'signals' && modalTab === 'sources' && (
+                        <div className="tile-detail-tab-pane" style={{ padding: 18 }}>
+                          {renderSignalsControlPanel()}
+                        </div>
+                      )}
+
                       {['report', 'solutions', 'problems'].includes(modalTab) && (
                         <TileDetailAnalysisContent
                           modalTab={modalTab}
