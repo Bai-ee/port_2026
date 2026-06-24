@@ -3428,7 +3428,14 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       brandName: typeof next.brandName === 'string' && next.brandName.trim() ? next.brandName : fallback.brandName,
       brandKeywords: joinConfigList(next.brandKeywords) || fallback.brandKeywords,
       categoryTerms: joinConfigList(next.categoryTerms) || fallback.categoryTerms,
+      // Parked (toggled-off) keywords/category terms — UI-only park lists the
+      // scout pipeline never reads. Persisted so on/off state survives reloads.
+      brandKeywordsOff: joinConfigList(next.brandKeywordsOff),
+      categoryTermsOff: joinConfigList(next.categoryTermsOff),
       kols: joinConfigList(next.kols),
+      // Parked (toggled-off) watchlist handles — UI-only, the scout pipeline
+      // only ever reads `kols`. Persisted so on/off state survives reloads.
+      kolsOff: joinConfigList(next.kolsOff),
       competitors: joinConfigList(next.competitors),
       searches: Array.isArray(next.searches) ? next.searches : fallback.searches,
       scribeTone: typeof next.scribeTone === 'string' && next.scribeTone.trim() ? next.scribeTone : fallback.scribeTone,
@@ -4467,6 +4474,53 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // Runs each search source live (scout-test; lightweight — does NOT refresh the
   // stored brief) and deep-links to the cards that own the other parameters.
   // This is exactly the input set a full Executive / Marketing Brief run uses.
+  //
+  // Generic per-item control for a string-list config field (handles, keywords,
+  // category terms). Lists each item with on/off + remove. Disabled items are
+  // parked in `<field>Off` — a UI-only field the scout pipeline never reads — so
+  // toggling off excludes an item from the run without deleting it.
+  const renderTermControl = ({ field, offField, title, addCard, suffix = '' }) => {
+    const active = splitMarketingBriefTerms(marketingBriefConfig?.[field]);
+    const off = splitMarketingBriefTerms(marketingBriefConfig?.[offField]).filter((t) => !active.includes(t));
+    const toggle = (t) => setMarketingBriefConfig((prev) => {
+      const on = splitMarketingBriefTerms(prev?.[field]);
+      const o = splitMarketingBriefTerms(prev?.[offField]);
+      return on.includes(t)
+        ? { ...(prev || {}), [field]: on.filter((x) => x !== t).join('\n'), [offField]: [...o.filter((x) => x !== t), t].join('\n') }
+        : { ...(prev || {}), [field]: [...on, t].join('\n'), [offField]: o.filter((x) => x !== t).join('\n') };
+    });
+    const remove = (t) => setMarketingBriefConfig((prev) => ({
+      ...(prev || {}),
+      [field]: splitMarketingBriefTerms(prev?.[field]).filter((x) => x !== t).join('\n'),
+      [offField]: splitMarketingBriefTerms(prev?.[offField]).filter((x) => x !== t).join('\n'),
+    }));
+    const rows = [...active.map((t) => ({ t, on: true })), ...off.map((t) => ({ t, on: false }))];
+    return (
+      <div style={{ border: '1px solid var(--border, #2a2420)', borderRadius: 8, padding: '8px 10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: rows.length ? 8 : 0 }}>
+          <span className="tile-detail-stat-label">{title}</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.06em', color: 'var(--text-secondary)' }}>
+              {active.length} on{off.length ? ` · ${off.length} off` : ''}{suffix}
+            </span>
+            <button type="button" className="tile-view-details-btn" onClick={() => openCapabilityCard(addCard)}>+ Add</button>
+          </span>
+        </div>
+        {rows.length ? rows.map(({ t, on }) => (
+          <div key={t} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '4px 0', opacity: on ? 1 : 0.5 }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-primary)' }}>{t}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button type="button" className="tile-view-details-btn" style={{ minWidth: 46, color: on ? 'var(--accent, #10b981)' : 'var(--text-secondary)' }} onClick={() => toggle(t)}>{on ? 'ON' : 'OFF'}</button>
+              <button type="button" aria-label={`Remove ${t}`} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 15, lineHeight: 1, padding: '0 4px' }} onClick={() => remove(t)}>×</button>
+            </span>
+          </div>
+        )) : (
+          <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '6px 0 0' }}>Nothing yet — <strong>+ Add</strong> opens the card.</p>
+        )}
+      </div>
+    );
+  };
+
   const renderSignalsControlPanel = () => (
     <>
       <p style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--text-secondary)', margin: 0 }}>
@@ -4495,33 +4549,53 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             Toggle a source on, then <strong>Run</strong> to confirm exactly what it returns.
           </p>
 
-          {/* Inputs · the non-source search parameters. These aren't simple
-              on/off (handles, keywords, a freshness window) — each shows its
-              current state and deep-links to its own card to edit. Editing
-              there changes what every brief run uses. */}
+          {/* Inputs · the non-source search parameters. Watchlist is expanded to
+              list each handle with a per-handle on/off + remove. Disabled handles
+              are parked in `kolsOff` (a UI-only field the scout pipeline never
+              reads), so toggling off excludes a handle from the run WITHOUT
+              deleting it — no pipeline change needed. */}
           <div className="tile-detail-row-section-head" style={{ marginTop: 14 }}>Inputs · customize</div>
-          {[
-            { id: 'watchlist', number: 'WL', label: 'WATCHLIST', title: 'Watchlist & Competitors',
-              status: `${(marketingBriefConfig?.kols || []).length} handle${(marketingBriefConfig?.kols || []).length === 1 ? '' : 's'}${marketingBriefConfig?.kolSearchMode ? ` · ${marketingBriefConfig.kolSearchMode}` : ''}` },
-            { id: 'brand-keywords', number: 'SP', label: 'SEARCH PARAMETERS', title: 'Search Parameters',
-              status: `${(marketingBriefConfig?.brandKeywords || []).length} keyword${(marketingBriefConfig?.brandKeywords || []).length === 1 ? '' : 's'} · ${(marketingBriefConfig?.categoryTerms || []).length} category` },
-            { id: 'scout-focus', number: 'SF', label: 'SCOUT FOCUS', title: 'Research Focus',
-              status: `freshness ${marketingBriefConfig?.freshnessDays ?? 7}d` },
-          ].map((it) => (
-            <div key={it.id} className="tile-detail-stat-row" style={{ alignItems: 'center' }}>
-              <span className="tile-detail-stat-label">{it.title}</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.06em', color: 'var(--text-secondary)' }}>{it.status}</span>
-                <button type="button" className="tile-view-details-btn" onClick={() => openCapabilityCard({ id: it.id, category: 'growth', number: it.number, label: it.label, title: it.title, description: '', rows: [] })}>Customize →</button>
-              </span>
-            </div>
-          ))}
-          {/* Local Weather — a real on/off (weather.enabled) plus a link to set the ZIP. */}
+
+          {renderTermControl({
+            field: 'kols', offField: 'kolsOff', title: 'Watchlist & Competitors',
+            suffix: ` · ${marketingBriefConfig?.kolSearchMode || 'per-handle'}`,
+            addCard: { id: 'watchlist', category: 'growth', number: 'WL', label: 'WATCHLIST', title: 'Watchlist & Competitors', description: '', rows: [] },
+          })}
+          {renderTermControl({
+            field: 'brandKeywords', offField: 'brandKeywordsOff', title: 'Brand Keywords',
+            addCard: { id: 'brand-keywords', category: 'growth', number: 'SP', label: 'SEARCH PARAMETERS', title: 'Search Parameters', description: '', rows: [] },
+          })}
+          {renderTermControl({
+            field: 'categoryTerms', offField: 'categoryTermsOff', title: 'Category Terms',
+            addCard: { id: 'brand-keywords', category: 'growth', number: 'SP', label: 'SEARCH PARAMETERS', title: 'Search Parameters', description: '', rows: [] },
+          })}
+
+          {/* Research Focus — freshness is a single value (1–30d), not a list, so
+              it gets an inline stepper instead of on/off. */}
+          <div className="tile-detail-stat-row" style={{ alignItems: 'center' }}>
+            <span className="tile-detail-stat-label">Research Focus</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.06em', color: 'var(--text-secondary)' }}>freshness</span>
+              <button type="button" className="tile-view-details-btn" aria-label="Decrease freshness window" onClick={() => setMarketingBriefConfig((prev) => ({ ...(prev || {}), freshnessDays: Math.max(1, (Number(prev?.freshnessDays) || 7) - 1) }))}>−</button>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, minWidth: 34, textAlign: 'center', color: 'var(--text-primary)' }}>{marketingBriefConfig?.freshnessDays ?? 7}d</span>
+              <button type="button" className="tile-view-details-btn" aria-label="Increase freshness window" onClick={() => setMarketingBriefConfig((prev) => ({ ...(prev || {}), freshnessDays: Math.min(30, (Number(prev?.freshnessDays) || 7) + 1) }))}>+</button>
+              <button type="button" className="tile-view-details-btn" onClick={() => openCapabilityCard({ id: 'scout-focus', category: 'growth', number: 'SF', label: 'SCOUT FOCUS', title: 'Research Focus', description: '', rows: [] })}>Customize →</button>
+            </span>
+          </div>
+          {/* Local Weather — a real on/off (weather.enabled) + inline ZIP, plus a link. */}
           <div className="tile-detail-stat-row" style={{ alignItems: 'center' }}>
             <span className="tile-detail-stat-label">Local Weather</span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <button type="button" className="tile-view-details-btn" onClick={() => setMarketingBriefConfig((prev) => ({ ...(prev || {}), weather: { ...((prev || {}).weather || {}), enabled: !(prev?.weather?.enabled) } }))}>
-                {marketingBriefConfig?.weather?.enabled ? 'On' : 'Off'}
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="ZIP"
+                value={marketingBriefConfig?.weather?.zip || ''}
+                onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), weather: { ...((prev || {}).weather || {}), zip: e.target.value.replace(/[^0-9]/g, '').slice(0, 5) } }))}
+                style={{ width: 62, fontFamily: 'var(--font-mono)', fontSize: 12, padding: '3px 6px', borderRadius: 6, border: '1px solid var(--border, #2a2420)', background: 'transparent', color: 'var(--text-primary)' }}
+              />
+              <button type="button" className="tile-view-details-btn" style={{ minWidth: 46, color: marketingBriefConfig?.weather?.enabled ? 'var(--accent, #10b981)' : 'var(--text-secondary)' }} onClick={() => setMarketingBriefConfig((prev) => ({ ...(prev || {}), weather: { ...((prev || {}).weather || {}), enabled: !(prev?.weather?.enabled) } }))}>
+                {marketingBriefConfig?.weather?.enabled ? 'ON' : 'OFF'}
               </button>
               <button type="button" className="tile-view-details-btn" onClick={() => openCapabilityCard({ id: 'local-weather', category: 'growth', number: 'LW', label: 'LOCAL WEATHER', title: 'Local Weather', description: '', rows: [] })}>Customize →</button>
             </span>
@@ -10881,7 +10955,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       playsInline
                     />
                   ) : card.id === 'video-remix' && latestRemixVideoUrl ? (
-                    // Video Remix card shell becomes the last generated remix video.
+                    // Video Remix card shell becomes the last generated remix video —
+                    // contained (full frame, no crop) with native controls so audio
+                    // can be unmuted. stopPropagation keeps control clicks from
+                    // triggering the card's open-modal handler.
                     <video
                       key={latestRemixVideoUrl}
                       className="tile-studio-video"
@@ -10890,6 +10967,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       muted
                       loop
                       playsInline
+                      controls
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
                     />
                   ) : card.id === 'post-me' ? (
                     // Clean, authentic X post that fills the fixed shell. Just the
@@ -12594,7 +12674,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       <div className="brief-loader-spinner" aria-hidden="true" />
                     </div>
                   ) : activeTileModal.cardId === 'video-remix' && latestRemixVideoUrl ? (
-                    // Modal shell mirrors the card face: the last generated remix video.
+                    // Modal shell mirrors the card face: the last generated remix
+                    // video, contained with native controls for audio toggle.
                     <video
                       key={latestRemixVideoUrl}
                       className="tile-studio-video"
@@ -12603,6 +12684,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       muted
                       loop
                       playsInline
+                      controls
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
                     />
                   ) : activeTileModal.isCapabilityCard ? (
                     <span className="tile-empty-label">{activeTileModal.placeholderLabel}</span>
