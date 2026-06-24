@@ -1531,6 +1531,19 @@ function appendCacheBust(url, key) {
   return `${url}${joiner}v=${encodeURIComponent(String(key))}`;
 }
 
+// Stable ref for the Video Remix shell/modal players. Sets `muted` ONCE (so the
+// browser allows autoplay) and never again — passing React's reactive `muted`
+// prop would re-mute the element on every re-render, undoing a user's un-mute
+// via the native controls. Module-scope so the ref identity is stable and React
+// attaches it a single time per mounted element.
+function initRemixShellVideo(el) {
+  if (!el || el.dataset.remixInited) return;
+  el.dataset.remixInited = '1';
+  el.muted = true;
+  const p = el.play?.();
+  if (p && typeof p.catch === 'function') p.catch(() => {});
+}
+
 function readPendingDashboardSignup() {
   if (typeof window === 'undefined') return null;
   try {
@@ -10963,8 +10976,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       key={latestRemixVideoUrl}
                       className="tile-studio-video"
                       src={latestRemixVideoUrl}
+                      ref={initRemixShellVideo}
                       autoPlay
-                      muted
                       loop
                       playsInline
                       controls
@@ -12680,8 +12693,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       key={latestRemixVideoUrl}
                       className="tile-studio-video"
                       src={latestRemixVideoUrl}
+                      ref={initRemixShellVideo}
                       autoPlay
-                      muted
                       loop
                       playsInline
                       controls
