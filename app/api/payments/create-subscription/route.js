@@ -3,6 +3,7 @@ import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 const { checkRateLimit, getClientIp } = require('../../../../api/_lib/rate-limit.cjs');
+const { resolveSubscriptionPriceId } = require('../../../../api/_lib/subscription-prices.cjs');
 
 export const runtime = 'nodejs';
 
@@ -50,10 +51,13 @@ export async function POST(request) {
     return json({ error: 'Valid email required.' }, 400);
   }
 
-  const priceId = process.env.STRIPE_PRICE_ID;
-  if (!priceId) {
-    return json({ error: 'Subscriptions are not configured.' }, 500);
+  let resolvedPrice;
+  try {
+    resolvedPrice = resolveSubscriptionPriceId(body?.tier || 'weekly');
+  } catch (err) {
+    return json({ error: err.message || 'Subscription tier is not available.' }, err.status || 500);
   }
+  const { tier, priceId } = resolvedPrice;
 
   try {
     const stripe = getStripe();
@@ -77,14 +81,14 @@ export async function POST(request) {
     if (dupeSub) {
       const clientSecret = dupeSub?.latest_invoice?.payment_intent?.client_secret;
       if (clientSecret) {
-        return json({ subscriptionId: dupeSub.id, clientSecret });
+        return json({ subscriptionId: dupeSub.id, clientSecret, tier });
       }
       // Incomplete sub without client_secret — retrieve expanded
       const expanded = await stripe.subscriptions.retrieve(dupeSub.id, {
         expand: ['latest_invoice.payment_intent'],
       });
       const cs = expanded?.latest_invoice?.payment_intent?.client_secret;
-      if (cs) return json({ subscriptionId: expanded.id, clientSecret: cs });
+      if (cs) return json({ subscriptionId: expanded.id, clientSecret: cs, tier });
     }
 
     const subscription = await stripe.subscriptions.create(
@@ -94,7 +98,7 @@ export async function POST(request) {
         payment_behavior: 'default_incomplete',
         payment_settings: { save_default_payment_method: 'on_subscription' },
         expand: ['latest_invoice.payment_intent'],
-        metadata: { source: 'portfolio-subscribe-modal' },
+        metadata: { source: 'portfolio-subscribe-modal', tier },
       },
       {
         idempotencyKey: `sub-create:${email}:${priceId}:${Math.floor(Date.now() / 3_600_000)}`,
@@ -106,7 +110,7 @@ export async function POST(request) {
       return json({ error: 'Could not start payment. Try again.' }, 500);
     }
 
-    return json({ subscriptionId: subscription.id, clientSecret });
+    return json({ subscriptionId: subscription.id, clientSecret, tier });
   } catch (err) {
     console.error('[payments/create-subscription]', err?.message || err);
     return json({ error: 'Payment setup failed. Try again later.' }, 500);

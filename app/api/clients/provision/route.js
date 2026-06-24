@@ -5,6 +5,7 @@ const require = createRequire(import.meta.url);
 const { buildAuthRequestShim, verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
 const { provisionClientForUser } = require('../../../../api/_lib/client-provisioning.cjs');
 const { logError, logInfo, logWarn } = require('../../../../api/_lib/observability.cjs');
+const { checkRateLimit, getClientIp } = require('../../../../api/_lib/rate-limit.cjs');
 
 function json(body, status = 200) {
   return NextResponse.json(body, {
@@ -22,6 +23,23 @@ export async function POST(request) {
       { error: err instanceof Error ? err.message : 'Unauthorized.' },
       401
     );
+  }
+
+  const ip = getClientIp(request);
+  const [ipLimit, uidLimit] = await Promise.all([
+    checkRateLimit({
+      key: `provision:ip:${ip}`,
+      limit: 8,
+      windowSeconds: 3600,
+    }),
+    checkRateLimit({
+      key: `provision:uid:${decoded.uid}`,
+      limit: 3,
+      windowSeconds: 24 * 3600,
+    }),
+  ]);
+  if (!ipLimit.allowed || !uidLimit.allowed) {
+    return json({ error: 'Too many provisioning attempts. Try again later.' }, 429);
   }
 
   let body = {};

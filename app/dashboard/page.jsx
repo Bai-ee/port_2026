@@ -46,8 +46,10 @@ export default function DashboardRoute() {
   const [bgReady, setBgReady] = useState(false);
   // provisionStatus: 'checking' (gate decision pending) | 'provisioning' (auto-
   // provisioning from the sign-up URL) | 'gate' (no dashboard + no captured URL,
-  // prompt for one) | 'ready' (has dashboard / admin → mount dashboard)
+  // prompt for one) | 'ready' (has dashboard / admin → mount dashboard) |
+  // 'error' (status check failed; retry instead of mounting a broken dashboard)
   const [provisionStatus, setProvisionStatus] = useState('checking');
+  const [provisionError, setProvisionError] = useState('');
   // URL captured at sign-up — used to auto-provision, and to prefill the gate if
   // that auto-provision fails so the user never retypes it.
   const [pendingUrl, setPendingUrl] = useState('');
@@ -106,8 +108,12 @@ export default function DashboardRoute() {
         });
         const data = await res.json().catch(() => ({}));
         if (cancelled) return;
-        // On error, fail open to the dashboard rather than trapping the user.
-        const needsGate = res.ok && !data.hasDashboard && !data.isAdmin;
+        if (!res.ok) {
+          setProvisionError(data?.error || 'Could not confirm your dashboard workspace.');
+          setProvisionStatus('error');
+          return;
+        }
+        const needsGate = !data.hasDashboard && !data.isAdmin;
         if (!needsGate) {
           setProvisionStatus('ready');
           return;
@@ -139,7 +145,10 @@ export default function DashboardRoute() {
           if (!cancelled) setProvisionStatus('gate');
         }
       } catch {
-        if (!cancelled) setProvisionStatus('ready');
+        if (!cancelled) {
+          setProvisionError('Could not confirm your dashboard workspace.');
+          setProvisionStatus('error');
+        }
       }
     })();
     return () => { cancelled = true; };
@@ -262,6 +271,58 @@ export default function DashboardRoute() {
   // any processing. Prefilled with the sign-up URL if an auto-provision failed.
   if (provisionStatus === 'gate') {
     return <WebsiteUrlGate user={user} initialUrl={pendingUrl} onProvisioned={handleProvisioned} />;
+  }
+
+  if (provisionStatus === 'error') {
+    return (
+      <main style={{
+        minHeight: '100dvh',
+        display: 'grid',
+        placeItems: 'center',
+        padding: 24,
+        background: 'linear-gradient(180deg,#fefdf9 0%,#fbf8f0 60%,#fdfaf2 100%)',
+        color: '#1a1a1a',
+        fontFamily: '"Space Grotesk", system-ui, -apple-system, sans-serif',
+      }}>
+        <section style={{
+          width: 'min(100%, 420px)',
+          display: 'grid',
+          gap: 12,
+          textAlign: 'center',
+          background: 'rgba(255,255,255,0.72)',
+          border: '1px solid #E4E4E4',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.6)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          borderRadius: 12,
+          padding: 24,
+        }}>
+          <span style={{ fontSize: 9, fontFamily: '"Space Mono", ui-monospace, monospace', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#8a8a8a', fontWeight: 700 }}>
+            Dashboard
+          </span>
+          <h1 style={{ margin: 0, fontSize: 24, lineHeight: 1.15, letterSpacing: 0 }}>
+            Workspace check failed
+          </h1>
+          <p style={{ margin: 0, color: '#444', fontSize: 14, lineHeight: 1.55 }}>
+            {provisionError || 'Could not confirm your dashboard workspace.'}
+          </p>
+          <button type="button" onClick={() => window.location.reload()} style={{
+            height: 40,
+            justifySelf: 'center',
+            borderRadius: 999,
+            border: '1px solid #d6d6d6',
+            background: '#fff',
+            padding: '0 18px',
+            fontSize: 13,
+            fontFamily: '"Space Grotesk", system-ui, -apple-system, sans-serif',
+            fontWeight: 700,
+            cursor: 'pointer',
+          }}>
+            Retry
+          </button>
+        </section>
+      </main>
+    );
   }
 
   return (

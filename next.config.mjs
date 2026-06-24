@@ -72,6 +72,37 @@ const firebaseAdminTraceDeps = [
   'teeny-request/node_modules/agent-base', 'teeny-request/node_modules/https-proxy-agent',
 ].map((p) => `./node_modules/${p}/**/*`);
 
+const leadgenTraceExcludes = [
+  './*.js',
+  './*.jsx',
+  './*.md',
+  './*.pdf',
+  './admin/**/*',
+  './ai-seo-audit/**/*',
+  './app/**/*',
+  './brief-design-system-reference/**/*',
+  './clients/**/*',
+  './components/**/*',
+  './dashboard/**/*',
+  './data/**/*',
+  './docs/**/*',
+  './ds-bundle/**/*',
+  './features/intelligence/**/*',
+  './features/knowledge-base/**/*',
+  './features/not-the-rug-brief/**/*',
+  './features/scout-intake/**/*',
+  './features/social-posting/**/*',
+  './features/x-growth/**/*',
+  './lib/**/*',
+  './marketing/**/*',
+  './onboarding/**/*',
+  './output/**/*',
+  './print-screenshots/**/*',
+  './public/**/*',
+  './scripts/**/*',
+  './services/**/*',
+];
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Dev-only Next.js indicator badge — move from default bottom-left to bottom-right.
@@ -81,9 +112,7 @@ const nextConfig = {
     '*': [
       // App logic loaded at runtime via createRequire() from outside the app/ tree.
       // The tracer does not follow these external CJS/JS modules, so include them explicitly.
-      './api/**/*',
-      './features/**/*',
-      './onboarding/**/*',
+      './api/_lib/**/*',
       // firebase-admin transitive deps the tracer under-includes (see above).
       ...firebaseAdminTraceDeps,
       // Next runtime (Turbopack keeps these external to the route bundle).
@@ -111,11 +140,13 @@ const nextConfig = {
       './node_modules/**/*.cjs.map',
       './.claude/**/*',
       './.venv/**/*',
+      './clients/**/*',
       './dist/**/*',
       './docs/storyboards/**/*',
       './input/**/*',
       './output/**/*',
       './print-screenshots/**/*',
+      './scripts/**/*',
       './public/img/fast_poker_BW*.png',
       './public/img/interactive_ss_*.png',
       './public/img/og_meta.png',
@@ -126,26 +157,10 @@ const nextConfig = {
       './public/vid/reel.mp4',
     ],
     '/api/leadgen/generate': [
-      './WHITEPAPER.pdf',
-      './admin/**/*',
-      './ai-seo-audit/**/*',
-      './brief-design-system-reference/**/*',
-      './dashboard/**/*',
-      './docs/**/*',
-      './public/docs/**/*',
-      './public/vid/**/*',
-      './scripts/**/*',
+      ...leadgenTraceExcludes,
     ],
     '/api/leadgen/generate-site': [
-      './WHITEPAPER.pdf',
-      './admin/**/*',
-      './ai-seo-audit/**/*',
-      './brief-design-system-reference/**/*',
-      './dashboard/**/*',
-      './docs/**/*',
-      './public/docs/**/*',
-      './public/vid/**/*',
-      './scripts/**/*',
+      ...leadgenTraceExcludes,
     ],
   },
   turbopack: {

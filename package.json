@@ -46,8 +46,21 @@
     "uuid": "^13.0.0"
   },
   "overrides": {
+    "gaxios": {
+      "uuid": "^11.1.1"
+    },
+    "google-gax": {
+      "uuid": "^11.1.1"
+    },
+    "next": {
+      "postcss": "^8.5.10"
+    },
+    "postcss": "^8.5.10",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "teeny-request": {
+      "uuid": "^11.1.1"
+    }
   },
   "devDependencies": {
     "playwright": "^1.61.0"

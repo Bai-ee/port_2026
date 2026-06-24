@@ -17,7 +17,7 @@ const MD_MAP = {
   '/services/ai-design-consulting': '/md/services-ai-design-consulting.md',
 };
 
-export function middleware(request) {
+export function proxy(request) {
   const accept = request.headers.get('accept') || '';
   if (!accept.includes('text/markdown')) return NextResponse.next();
 

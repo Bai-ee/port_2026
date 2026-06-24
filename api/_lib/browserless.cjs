@@ -4,6 +4,7 @@ const path = require('path');
 const { randomUUID } = require('crypto');
 const fb = require('./firebase-admin.cjs');
 const { saveBufferArtifact } = require('./storage-artifacts.cjs');
+const { validateUrl } = require('./safe-fetch.cjs');
 
 const DEFAULT_BASE_URL = 'https://production-sfo.browserless.io';
 const DEFAULT_REQUEST_TIMEOUT_MS = 45000;
@@ -239,6 +240,19 @@ async function captureScreenshotBuffer(args) {
 }
 
 async function captureScreenshotBufferOnce({ clientId, runId, targetUrl, variant, attempt = 1 }) {
+  try {
+    await validateUrl(targetUrl);
+  } catch (err) {
+    return {
+      ok: false,
+      warning: buildWarning(
+        'unsafe_target_url',
+        'Website screenshot skipped because the URL is not a safe public http(s) target.',
+        { detail: err.message }
+      ),
+    };
+  }
+
   // Sentinel: if this line does not show up in server logs, the dev server
   // has not reloaded this module — restart it.
   console.log(`[browserless:v2] capture attempt=${attempt} variant=${variant?.id} url=${targetUrl}`);

@@ -50,11 +50,12 @@ function sanitizeParams(params = {}) {
 }
 
 export async function POST(request) {
-  // Rate limit: 200 analytics events per IP per hour
+  // Rate limit: anonymous analytics are sampled client-side; keep server-side
+  // writes bounded under crawler or abuse traffic.
   const ip = getClientIp(request);
   const rl = await checkRateLimit({
     key: `anon:${ip}:analytics-homepage`,
-    limit: 200,
+    limit: 60,
     windowSeconds: 3600,
   });
   if (!rl.allowed) {

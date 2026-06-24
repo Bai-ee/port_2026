@@ -7,6 +7,7 @@ const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../../api/_lib/client-provisioning.cjs');
 const { captureScreenshotBuffer } = require('../../../../api/_lib/browserless.cjs');
 const { saveBufferArtifact } = require('../../../../api/_lib/storage-artifacts.cjs');
+const { validateUrl } = require('../../../../api/_lib/safe-fetch.cjs');
 
 export const maxDuration = 120;
 
@@ -193,6 +194,11 @@ export async function POST(request) {
   // action === 'capture'
   const url = String(field('url', '') || '').trim();
   if (!/^https?:\/\/\S+$/i.test(url)) return json({ error: 'A valid http(s) URL is required.' }, 400);
+  try {
+    await validateUrl(url);
+  } catch {
+    return json({ error: 'A safe public http(s) URL is required.' }, 400);
+  }
   const viewportId = STUDIO_VIEWPORTS[field('viewportId')] ? String(field('viewportId')) : 'desktop';
   const preset = STUDIO_VIEWPORTS[viewportId];
   const scale = Math.min(3, Math.max(1, Number(field('scale')) || 2));

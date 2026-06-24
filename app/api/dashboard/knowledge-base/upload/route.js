@@ -1,5 +1,5 @@
 import { extname } from 'node:path';
-import { NextResponse } from 'next/server';
+import { after, NextResponse } from 'next/server';
 import { createRequire } from 'module';
 
 import { chunkText } from '../../../../../features/knowledge-base/chunk.js';
@@ -151,13 +151,20 @@ export async function POST(request) {
       );
 
     stage = 'embed';
-    const embedded = await embedKnowledgeItemChunks({ clientId: context.clientId, itemId: item.id });
+    after(async () => {
+      try {
+        await embedKnowledgeItemChunks({ clientId: context.clientId, itemId: item.id });
+      } catch (err) {
+        console.error('[knowledge-base/upload/embed]', err?.message || err);
+      }
+    });
+
     return json({
       ok: true,
       item: {
         ...item,
         type: extracted.type || 'file',
-        status: 'ready',
+        status: 'processing',
         error: null,
         storagePath,
         fileName,
@@ -167,9 +174,9 @@ export async function POST(request) {
         documentPages: extracted.pages || null,
       },
       chunkCount: chunks.length,
-      embedded,
+      embedded: { queued: true },
       warnings: Array.isArray(extracted.warnings) ? extracted.warnings : [],
-    });
+    }, 202);
   } catch (err) {
     if (item?.id) {
       await updateKnowledgeItemStatus({

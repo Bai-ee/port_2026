@@ -95,6 +95,7 @@ const upsertUserProfile = async (user, profile = {}) => {
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -145,7 +146,33 @@ export const AuthProvider = ({ children }) => {
     return unsubscribe;
   }, [user]);
 
-  const isAdmin = useMemo(() => user?.email === 'bryanballi@gmail.com', [user?.email]);
+  useEffect(() => {
+    if (!user) {
+      setIsAdmin(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const response = await fetch('/api/admin/whoami', {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!cancelled) {
+          setIsAdmin(Boolean(response.ok && data?.admin?.docExists));
+        }
+      } catch {
+        if (!cancelled) setIsAdmin(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   const value = useMemo(() => ({
     user,
@@ -267,7 +294,7 @@ export const AuthProvider = ({ children }) => {
       clearPendingDashboardSignup();
       await signOut(auth);
     },
-  }), [loading, user, userProfile]);
+  }), [loading, user, userProfile, isAdmin]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

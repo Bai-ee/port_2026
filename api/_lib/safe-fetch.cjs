@@ -152,6 +152,39 @@ async function readResponseText(response, maxBytes = DEFAULT_MAX_BYTES) {
   return new TextDecoder().decode(merged);
 }
 
+async function readResponseBuffer(response, maxBytes = DEFAULT_MAX_BYTES) {
+  const contentLength = parseInt(response.headers.get('content-length') || '0', 10);
+  if (contentLength > maxBytes) {
+    throw new Error(`SSRF_BLOCKED: response too large (${contentLength} bytes, max ${maxBytes})`);
+  }
+
+  if (!response.body || typeof response.body.getReader !== 'function') {
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    if (buffer.length > maxBytes) {
+      throw new Error(`SSRF_BLOCKED: response too large (max ${maxBytes} bytes)`);
+    }
+    return buffer;
+  }
+
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      try { await reader.cancel(); } catch { /* ignore */ }
+      throw new Error(`SSRF_BLOCKED: response too large (max ${maxBytes} bytes)`);
+    }
+    chunks.push(Buffer.from(value));
+  }
+
+  return Buffer.concat(chunks, total);
+}
+
 /**
  * SSRF-safe fetch. Validates the URL (and each redirect target) before fetching.
  *
@@ -214,4 +247,4 @@ async function safeFetch(url, { timeoutMs = DEFAULT_TIMEOUT_MS, maxBytes = DEFAU
   return response;
 }
 
-module.exports = { readResponseText, safeFetch, validateUrl };
+module.exports = { readResponseBuffer, readResponseText, safeFetch, validateUrl };

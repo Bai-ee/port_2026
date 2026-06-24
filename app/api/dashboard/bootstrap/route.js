@@ -2,9 +2,11 @@ import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
+const auth = require('../../../../api/_lib/auth.cjs');
 const { getDashboardBootstrap } = require('../../../../api/_lib/client-provisioning.cjs');
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
+
+const { verifyRequestUser } = auth;
 
 function makeReqShim(request) {
   return {
@@ -13,6 +15,17 @@ function makeReqShim(request) {
       Authorization: request.headers.get('authorization'),
     },
   };
+}
+
+async function checkAdminEmail(rawEmail) {
+  if (typeof auth.isAdminEmail === 'function') {
+    return auth.isAdminEmail(rawEmail);
+  }
+  if (!rawEmail) return false;
+  const email = String(rawEmail).trim().toLowerCase();
+  if (!email) return false;
+  const snap = await fb.adminDb.collection('admins').doc(email).get();
+  return snap.exists;
 }
 
 export async function GET(request) {
@@ -34,7 +47,7 @@ export async function GET(request) {
     // never when a real brief already exists (marketingBrief or scribe). Without
     // these guards the seeder wrote a fake "Admin Dashboard" brief into whatever
     // client the admin was viewing, clobbering real client data.
-    const isAdmin = decoded.email === 'bryanballi@gmail.com';
+    const isAdmin = await checkAdminEmail(decoded.email);
     if (
       isAdmin
       && !bootstrap?.impersonating

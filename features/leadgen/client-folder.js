@@ -7,10 +7,8 @@
 
 import { mkdir, writeFile, readFile, access, readdir } from 'fs/promises';
 import path from 'path';
-import { fileURLToPath } from 'url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const LOCAL_CLIENTS_ROOT = path.join(__dirname, '..', '..', 'clients');
+const LOCAL_CLIENTS_ROOT = 'clients';
 const CLIENTS_ROOT = process.env.VERCEL
   ? '/tmp/clients'
   : LOCAL_CLIENTS_ROOT;

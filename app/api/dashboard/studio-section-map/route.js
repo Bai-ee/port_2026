@@ -5,6 +5,7 @@ const require = createRequire(import.meta.url);
 const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../../api/_lib/client-provisioning.cjs');
 const { getBrowserlessConfig } = require('../../../../api/_lib/browserless.cjs');
+const { validateUrl } = require('../../../../api/_lib/safe-fetch.cjs');
 
 export const maxDuration = 60;
 
@@ -56,6 +57,11 @@ export async function POST(request) {
   let url;
   try { url = String((await request.json())?.url || '').trim(); } catch { return json({ error: 'Invalid JSON body.' }, 400); }
   if (!/^https?:\/\/\S+$/i.test(url)) return json({ error: 'A valid http(s) URL is required.' }, 400);
+  try {
+    await validateUrl(url);
+  } catch {
+    return json({ error: 'A safe public http(s) URL is required.' }, 400);
+  }
 
   const cfg = getBrowserlessConfig();
   if (!cfg.enabled) return json({ error: 'Browserless not configured.' }, 503);
