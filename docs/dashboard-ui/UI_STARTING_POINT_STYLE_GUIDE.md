@@ -59,6 +59,42 @@ This surface appears in:
 
 ## Finalized Components
 
+### 0. `/dashboard/studio` video studio shell
+
+Use this as the default standard for video-editor, render-studio, motion-preview, and timeline-based creative tooling.
+
+Purpose:
+- full-viewport production workspace
+- video/mockup editor shells
+- timeline-based preview tools
+- render/export flows with persistent asset output
+
+Construction:
+- fixed full-screen shell with the preview/artboard as the largest object
+- central exportable artboard with stable aspect-ratio sizing
+- under-canvas control strip for device/transport/render actions
+- camera/keyframe timeline directly below the preview
+- floating right rail of independent collapsible glass cards
+- closeable render terminal overlay plus outcome toast
+- captures/gallery state inside the editor rail
+
+Source:
+- [VIDEO_STUDIO_UX_KIT.md](/Users/bballi/Documents/Repos/Bballi_Portfolio/docs/dashboard-ui/VIDEO_STUDIO_UX_KIT.md:1)
+- [app/dashboard/studio/page.jsx](/Users/bballi/Documents/Repos/Bballi_Portfolio/app/dashboard/studio/page.jsx:1)
+
+Default use:
+- video editors
+- motion mockup studios
+- render setup tools
+- timeline/keyframe authoring surfaces
+- media export workspaces
+
+Do not use it for:
+- dashboard card modal tabs
+- simple admin forms
+- report/document previews
+- marketing landing pages
+
 ### 1. `#auth-card`
 
 Use this as the default auth / onboarding / gated-entry card.

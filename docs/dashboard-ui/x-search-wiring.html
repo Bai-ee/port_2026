@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>X / Twitter Search Wiring — Scout Pipeline</title>
+<style>
+  :root{
+    --bg:#0b0c0e; --panel:#131519; --panel2:#171a1f; --line:#262a31;
+    --ink:#e8eaed; --soft:#9aa1ab; --faint:#646b76;
+    --x:#1d9bf0; --a:#5ad1a0; --b:#f0c64c; --c:#b98cf0; --off:#e0556b;
+    --mono:'SF Mono',ui-monospace,'Cascadia Code','Roboto Mono',Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;
+    -webkit-font-smoothing:antialiased;padding:0 0 90px}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+  a{color:var(--x);text-decoration:none}
+  code,.mono{font-family:var(--mono)}
+
+  /* header */
+  header{border-bottom:1px solid var(--line);padding:40px 0 32px;margin-bottom:40px;
+    background:radial-gradient(1200px 300px at 20% -40%,rgba(29,155,240,.10),transparent)}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.32em;text-transform:uppercase;
+    color:var(--x);margin-bottom:14px}
+  h1{font-size:38px;line-height:1.08;letter-spacing:-.02em;font-weight:680;max-width:18ch}
+  .sub{color:var(--soft);margin-top:14px;max-width:64ch;font-size:15px}
+
+  h2{font-size:13px;letter-spacing:.22em;text-transform:uppercase;color:var(--faint);
+    font-family:var(--mono);margin:0 0 18px;font-weight:600}
+  section{margin-bottom:56px}
+
+  /* pipeline strip */
+  .pipe{display:flex;align-items:stretch;gap:0;flex-wrap:wrap;border:1px solid var(--line);
+    border-radius:14px;overflow:hidden;background:var(--panel)}
+  .pstep{flex:1;min-width:150px;padding:18px 16px;border-right:1px solid var(--line);position:relative}
+  .pstep:last-child{border-right:none}
+  .pstep .n{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.2em}
+  .pstep .t{font-weight:640;margin-top:6px;font-size:14px}
+  .pstep .d{color:var(--soft);font-size:12px;margin-top:4px;font-family:var(--mono)}
+  .pstep.hl .t{color:var(--x)}
+  .pstep .arr{position:absolute;right:-7px;top:50%;transform:translateY(-50%);z-index:2;
+    color:var(--faint);font-size:14px;background:var(--bg);border-radius:50%}
+
+  /* legend */
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin:-6px 0 26px;font-size:12px;color:var(--soft)}
+  .legend span{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono)}
+  .dot{width:9px;height:9px;border-radius:3px;display:inline-block}
+  .da{background:var(--a)} .db{background:var(--b)} .dc{background:var(--c)} .doff{background:var(--off)}
+
+  /* cards */
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:0;
+    overflow:hidden;display:flex;flex-direction:column}
+  .card .top{padding:16px 18px 14px;border-bottom:1px solid var(--line);position:relative}
+  .card .grp{position:absolute;top:0;left:0;width:4px;height:100%}
+  .grp-A{background:var(--a)} .grp-B{background:var(--b)} .grp-C{background:var(--c)} .grp-OFF{background:var(--off)}
+  .card h3{font-size:16px;font-weight:660;letter-spacing:-.01em;display:flex;align-items:center;gap:9px}
+  .badge{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:5px;letter-spacing:.06em;
+    border:1px solid var(--line);color:var(--soft)}
+  .badge.gA{color:var(--a);border-color:rgba(90,209,160,.4)}
+  .badge.gB{color:var(--b);border-color:rgba(240,198,76,.4)}
+  .badge.gC{color:var(--c);border-color:rgba(185,140,240,.4)}
+  .badge.gOFF{color:var(--off);border-color:rgba(224,85,107,.4)}
+  .loc{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:7px}
+  .card .body{padding:14px 18px 18px;font-size:13.5px;color:var(--ink);flex:1}
+  .writes{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:13px}
+  .chip{font-family:var(--mono);font-size:11px;background:var(--panel2);border:1px solid var(--line);
+    color:var(--x);padding:3px 8px;border-radius:6px}
+  .effect{color:var(--soft);font-size:13px}
+  .effect strong{color:var(--ink);font-weight:620}
+
+  /* priority ladder */
+  .ladder{display:flex;flex-direction:column;gap:10px}
+  .rung{display:flex;align-items:center;gap:16px;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:14px 18px}
+  .rung .num{font-family:var(--mono);font-size:22px;font-weight:700;color:var(--x);width:34px;flex:none}
+  .rung .lab{font-weight:640;font-size:15px;width:210px;flex:none}
+  .rung .role{color:var(--soft);font-size:13px}
+  .rung .role b{color:var(--ink)}
+  @media(max-width:620px){.rung .lab{width:auto}.rung{flex-wrap:wrap}}
+
+  /* flags */
+  .flags{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.flags{grid-template-columns:1fr}}
+  .flag{background:linear-gradient(180deg,rgba(240,198,76,.06),transparent);
+    border:1px solid var(--line);border-left:3px solid var(--b);border-radius:10px;padding:16px 18px}
+  .flag .h{font-weight:660;font-size:14px;margin-bottom:7px;display:flex;align-items:center;gap:8px}
+  .flag p{color:var(--soft);font-size:13px}
+
+  /* tabs / generic route */
+  .tabs{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:22px}
+  .tab{padding:9px 20px;font-family:var(--mono);font-size:12px;letter-spacing:.08em;cursor:pointer;
+    background:var(--panel);color:var(--soft);border:none;border-right:1px solid var(--line)}
+  .tab:last-child{border-right:none}
+  .tab.active{background:var(--x);color:#03121f;font-weight:600}
+  .view{display:none}.view.active{display:block}
+
+  .qbuild{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;
+    font-family:var(--mono);font-size:13px}
+  .qrow{display:flex;align-items:flex-start;gap:12px;padding:11px 0;border-bottom:1px dashed var(--line);flex-wrap:wrap}
+  .qrow:last-child{border-bottom:none}
+  .qtag{font-size:10px;letter-spacing:.14em;color:var(--faint);width:140px;flex:none;padding-top:3px}
+  .qval{color:var(--ink);flex:1;min-width:240px;word-break:break-word}
+  .qval .site{color:var(--x)}
+  .qval .var{color:var(--a)}
+  .qval .ghost{color:var(--faint)}
+  .note{color:var(--soft);font-size:12.5px;margin-top:16px;font-family:var(--sans);line-height:1.55}
+  .note b{color:var(--ink)}
+  .row-off{opacity:.42}
+  .pill-on{font-family:var(--mono);font-size:10px;color:var(--a);border:1px solid rgba(90,209,160,.4);
+    padding:1px 7px;border-radius:20px;margin-left:8px}
+  .pill-none{font-family:var(--mono);font-size:10px;color:var(--off);border:1px solid rgba(224,85,107,.4);
+    padding:1px 7px;border-radius:20px;margin-left:8px}
+
+  /* mechanics */
+  .mech{display:flex;flex-direction:column;gap:14px}
+  .mblock{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px}
+  .mblock .mh{display:flex;align-items:center;gap:10px;font-weight:660;font-size:16px;margin-bottom:8px;flex-wrap:wrap}
+  .term{font-family:var(--mono);font-size:12px;color:var(--x);background:var(--panel2);
+    border:1px solid var(--line);padding:2px 8px;border-radius:6px}
+  .mblock p{color:var(--soft);font-size:13.5px;margin-bottom:9px}
+  .mblock p:last-child{margin-bottom:0}
+  .mblock b{color:var(--ink)}
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}
+  @media(max-width:680px){.split{grid-template-columns:1fr}}
+  .sb{border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:12.5px;color:var(--soft)}
+  .sb .sbh{font-family:var(--mono);font-size:10px;letter-spacing:.14em;margin-bottom:6px;font-weight:600}
+  .sb.soft{border-color:rgba(240,198,76,.32)} .sb.soft .sbh{color:var(--b)}
+  .sb.hard{border-color:rgba(90,209,160,.32)} .sb.hard .sbh{color:var(--a)}
+  .dests{list-style:none;margin:6px 0 0;padding:0;font-size:13px}
+  .dests li{display:flex;gap:10px;padding:8px 0;border-top:1px dashed var(--line);color:var(--soft)}
+  .dests li:first-child{border-top:none}
+  .dests .kind{font-family:var(--mono);font-size:10px;letter-spacing:.1em;padding:2px 7px;border-radius:20px;
+    height:fit-content;flex:none;margin-top:1px}
+  .kind.s{color:var(--b);border:1px solid rgba(240,198,76,.4)}
+  .kind.h{color:var(--a);border:1px solid rgba(90,209,160,.4)}
+  .dests b{color:var(--ink)}
+  .ref{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:10px}
+  /* mockup — toggles */
+  .mock-toggles{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:22px}
+  .tg{display:inline-flex;align-items:center;gap:11px;background:var(--panel);border:1px solid var(--line);
+    border-radius:11px;padding:10px 15px;cursor:pointer;user-select:none}
+  .tg .sw{width:34px;height:19px;border-radius:20px;background:#3a3f48;position:relative;transition:.18s;flex:none}
+  .tg .sw::after{content:'';position:absolute;width:15px;height:15px;border-radius:50%;background:#aab;
+    top:2px;left:2px;transition:.18s}
+  .tg.on .sw{background:var(--x)} .tg.on .sw::after{left:17px;background:#fff}
+  .tg.on.gate .sw{background:var(--a)}
+  .tg .txt{display:flex;flex-direction:column;line-height:1.2}
+  .tg .lab2{font-weight:600;font-size:13px}
+  .tg .grp2{font-family:var(--mono);font-size:10px;color:var(--faint);margin-top:2px}
+  .tg.on .grp2{color:var(--soft)}
+
+  /* mockup — the paper brief */
+  .paper{background:#f4f1ea;color:#191919;border-radius:16px;padding:32px 32px 36px;
+    box-shadow:0 24px 70px rgba(0,0,0,.45);font-family:'Space Grotesk',var(--sans)}
+  .p-kick{font-family:var(--mono);font-size:10px;letter-spacing:.26em;text-transform:uppercase;color:#a23d2c}
+  .p-h{font-size:30px;font-weight:680;letter-spacing:-.02em;line-height:1.05;margin:7px 0 3px}
+  .p-sub{color:#6b6256;font-size:13px}
+  .p-sec{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#8a8073;
+    margin:28px 0 13px;border-top:1px solid #ddd6c8;padding-top:15px}
+  .countgrid{display:flex;gap:12px;flex-wrap:wrap}
+  .cbox{background:#fff;border:1px solid #e3ddd0;border-radius:12px;padding:15px 18px;flex:1;min-width:120px}
+  .cbox .big{font-size:30px;font-weight:720;line-height:1;color:#191919}
+  .cbox .cl{font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:#8a8073;margin-top:7px}
+  .bento2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:680px){.bento2{grid-template-columns:1fr}}
+  .bq2{background:#fff;border:1px solid #e3ddd0;border-radius:12px;padding:16px 17px}
+  .bq2 .q{font-size:15px;line-height:1.42;font-weight:540;color:#23211c}
+  .bq2 .q em{font-style:italic;color:#a23d2c;font-weight:600}
+  .bq2 .who{font-family:var(--mono);font-size:11px;color:#8a8073;margin-top:11px;
+    display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .tagpill{font-family:var(--mono);font-size:9px;letter-spacing:.1em;padding:1px 7px;border-radius:20px;flex:none}
+  .tag-live{color:#1a8a4f;border:1px solid #1a8a4f55}
+  .tag-bg{color:#8a8073;border:1px solid #8a807344}
+  .srow2{display:flex;flex-direction:column;gap:4px;padding:13px 0;border-bottom:1px solid #e6e0d3}
+  .srow2:last-child{border-bottom:none}
+  .srow2 .k2{font-weight:640;font-size:14px;display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+  .srow2 .v2{color:#4f4a40;font-size:13.5px;line-height:1.45}
+  .srow2 .lnk{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+    color:#1d6fa8;text-decoration:underline;text-underline-offset:3px;margin-top:4px;display:inline-block}
+  .srcpill{font-family:var(--mono);font-size:9px;letter-spacing:.08em;border:1px solid #cfc7b6;color:#8a8073;
+    border-radius:20px;padding:1px 8px;font-weight:500}
+  .p-empty{background:#fff;border:1px dashed #cdbfa6;border-radius:12px;padding:30px 22px;text-align:center;
+    color:#8a8073;font-size:14px}
+  .p-empty b{color:#a23d2c}
+  .p-note{background:#fbf3e3;border:1px solid #ecdcb8;color:#7a6a44;border-radius:10px;padding:11px 14px;
+    font-size:12.5px;margin-top:14px;line-height:1.5}
+  .p-note b{color:#5e5026}
+  footer{border-top:1px solid var(--line);padding-top:22px;color:var(--faint);font-size:12px;
+    font-family:var(--mono)}
+  .kvs{color:var(--soft)}.kvs b{color:var(--ink)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="eyebrow">Scout Pipeline · Intelligence Wiring</div>
+    <h1>How dashboard cards shape the X&nbsp;/&nbsp;Twitter search</h1>
+    <p class="sub">Five cards feed one config object. <code>config-loader.js</code> compiles that config
+    into search rows — one of which is the <code>site:x.com</code> row. This maps each card to the field it
+    writes and exactly how that field changes what gets searched on X.</p>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- PIPELINE -->
+  <section>
+    <h2>The path · card → search row</h2>
+    <div class="pipe">
+      <div class="pstep"><div class="n">01 · UI</div><div class="t">Dashboard cards</div><div class="d">DashboardPage.jsx</div><span class="arr">→</span></div>
+      <div class="pstep"><div class="n">02 · WRITE</div><div class="t">marketingBriefConfig</div><div class="d">POST /marketing-brief/config</div><span class="arr">→</span></div>
+      <div class="pstep"><div class="n">03 · STORE</div><div class="t">client_configs</div><div class="d">Firestore doc</div><span class="arr">→</span></div>
+      <div class="pstep hl"><div class="n">04 · COMPILE</div><div class="t">config-loader.js</div><div class="d">buildSearchPlan()</div><span class="arr">→</span></div>
+      <div class="pstep hl"><div class="n">05 · SEARCH</div><div class="t">X row + KOL rows</div><div class="d">web_search · last30days</div></div>
+    </div>
+  </section>
+
+  <!-- CARDS -->
+  <section>
+    <h2>The five cards</h2>
+    <div class="legend">
+      <span><i class="dot da"></i>A · directly builds X / KOL rows</span>
+      <span><i class="dot db"></i>B · the terms the X row carries</span>
+      <span><i class="dot dc"></i>C · recency / directives only</span>
+      <span><i class="dot doff"></i>not X</span>
+    </div>
+
+    <div class="cards">
+
+      <div class="card">
+        <div class="top"><span class="grp grp-A"></span>
+          <h3>Social Media Signals <span class="badge gA">GROUP A · GATE</span></h3>
+          <div class="loc">id=social-signals · DashboardPage.jsx:8411</div>
+        </div>
+        <div class="body">
+          <div class="writes"><span class="chip">sourcePlatforms</span></div>
+          <div class="effect"><strong>Master X on/off switch.</strong> If <code>'x'</code> is in the list,
+          <code>buildPerPlatformSearchRows</code> emits the <code>site:x.com OR site:twitter.com</code> row
+          (config-loader.js:140, 150–164). Also flips on the <strong>last30days</strong> X channel and passes
+          KOLs as <code>xRelated</code> (clients.js:332, 344). No <code>x</code> here → X is never searched.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="top"><span class="grp grp-A"></span>
+          <h3>Watchlist <span class="badge gA">GROUP A · WHO</span></h3>
+          <div class="loc">id=watchlist · DashboardPage.jsx:8373</div>
+        </div>
+        <div class="body">
+          <div class="writes"><span class="chip">kols</span><span class="chip">kolSearchMode</span><span class="chip">competitors</span></div>
+          <div class="effect"><code>buildKolSearches</code> (config-loader.js:192–210) makes dedicated rows:
+          <strong>per-handle</strong> = one row per <code>@handle</code>, <strong>combined</strong> = one OR'd row.
+          These run through web_search (land X tweets) <em>and</em> feed last30days <code>xRelated</code>.
+          <code>competitors</code> only feed category / opportunity fallback terms.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="top"><span class="grp grp-B"></span>
+          <h3>Search Parameters <span class="badge gB">GROUP B · WHAT</span></h3>
+          <div class="loc">id=brand-keywords · DashboardPage.jsx:8322</div>
+        </div>
+        <div class="body">
+          <div class="writes"><span class="chip">brandKeywords</span><span class="chip">categoryTerms</span><span class="chip">searches</span><span class="chip">brandName</span></div>
+          <div class="effect"><strong>The subject the X row searches for.</strong> The X site row inherits
+          <code>subject = brand + category</code> (config-loader.js:151–162). Custom <code>searches[]</code>
+          rows also run on X if they hit x.com. Change these → change what the X row looks for.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="top"><span class="grp grp-C"></span>
+          <h3>Scout Focus <span class="badge gC">GROUP C · WHEN</span></h3>
+          <div class="loc">id=scout-focus · DashboardPage.jsx:8355</div>
+        </div>
+        <div class="body">
+          <div class="writes"><span class="chip">freshnessDays</span><span class="chip">sourceFocus</span><span class="chip">scoutInstructions</span></div>
+          <div class="effect"><strong>Recency only.</strong> <code>freshnessDays</code> (1–30, default 7) is the
+          recency dial — a <em>soft</em> "prefer the last N days" hint on the X web_search row and a <em>hard</em>
+          lookback on the supplementary channels. <code>sourceFocus</code> / <code>scoutInstructions</code> are
+          analysis hints to the LLM — <em>not</em> query terms; they don't change what's searched.
+          <span style="display:block;margin-top:8px;color:var(--faint);font-size:12px">↓ full mechanics below</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="top"><span class="grp grp-OFF"></span>
+          <h3>Web Search + Platforms <span class="badge gOFF">NOT X</span></h3>
+          <div class="loc">id=platform-search · DashboardPage.jsx:8391</div>
+        </div>
+        <div class="body">
+          <div class="writes"><span class="chip">sourcePlatforms (web)</span></div>
+          <div class="effect">Toggles web search only. <strong>The X toggle lives in Social Media Signals</strong>,
+          not here. No effect on the X search plan.</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- PRIORITY -->
+  <section>
+    <h2>How to read it · priority for X</h2>
+    <div class="ladder">
+      <div class="rung"><div class="num">1</div><div class="lab">Social Media Signals</div><div class="role"><b>Gate.</b> X off here = nothing else matters.</div></div>
+      <div class="rung"><div class="num">2</div><div class="lab">Watchlist</div><div class="role"><b>The who.</b> Handles → dedicated X rows + last30days.</div></div>
+      <div class="rung"><div class="num">3</div><div class="lab">Search Parameters</div><div class="role"><b>The what.</b> Brand / category terms the X row carries.</div></div>
+      <div class="rung"><div class="num">4</div><div class="lab">Scout Focus</div><div class="role"><b>The when.</b> Freshness window on X results.</div></div>
+    </div>
+  </section>
+
+  <!-- FLAGS -->
+  <section>
+    <h2>Two things worth flagging</h2>
+    <div class="flags">
+      <div class="flag">
+        <div class="h">⚡ KOLs drive two channels at once</div>
+        <p>The same <code>kols</code> field powers (a) web_search per-handle rows and (b) last30days
+        <code>xRelated</code>. One card, two retrieval paths.</p>
+      </div>
+      <div class="flag">
+        <div class="h">👤 X enabled but no KOLs</div>
+        <p>X is still searched — but only the generic brand / category <code>site:x.com</code> row.
+        No handle-level monitoring. The brand's own timeline isn't pulled unless a handle is in the
+        watchlist (and <code>xHandle</code> for last30days is currently <code>null</code> in clients.js:344).</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- MECHANICS -->
+  <section>
+    <h2>How it actually works · mechanics</h2>
+    <div class="mech">
+
+      <div class="mblock">
+        <div class="mh"><span class="term">freshnessDays</span> the recency dial — what "time window" really means</div>
+        <p>One number (1–30, default 7) that says <b>how far back to care</b>. It is <b>not</b> a single hard
+        date filter — it does two different things depending on the channel:</p>
+        <div class="split">
+          <div class="sb soft">
+            <div class="sbh">SOFT · the X web_search row</div>
+            The number is written into the search prompt as text:
+            <code>"Prioritize content from the last N day(s). Today: 2026-06-24"</code>. web_search has
+            <b>no date parameter</b> — this is just an instruction. A highly relevant <b>older</b> tweet can
+            still surface; recent ones are merely <b>preferred</b>, not enforced.
+          </div>
+          <div class="sb hard">
+            <div class="sbh">HARD · the supplementary channels</div>
+            For last30days and GDELT news the number becomes a <b>real cutoff</b> passed to the fetcher
+            (<code>--lookback-days</code>). Anything older than the window is simply not returned.
+          </div>
+        </div>
+        <p style="margin-bottom:4px"><b>Where the one number lands:</b></p>
+        <ul class="dests">
+          <li><span class="kind s">SOFT</span><span><b>X web_search row</b> — prompt bias "prefer last N days" · today's date injected so the model knows what "recent" means. <span class="ref" style="margin:0">xscout.js:511</span></span></li>
+          <li><span class="kind h">HARD</span><span><b>last30days X channel</b> — <code>lookbackDays = max(7, freshnessDays)</code>, so the floor is 7 days even if you set 1. <span class="ref" style="margin:0">config-loader.js:467</span></span></li>
+          <li><span class="kind h">HARD</span><span><b>GDELT brand-news</b> — clamped to 1–7 days. <span class="ref" style="margin:0">runtime.js:229 · news-monitor.js:43</span></span></li>
+        </ul>
+        <p class="ref">Lower = tighter, today-ish (crittersQuest = 1). Higher = wider net (notTheRug = 7). Clamped to [1,30] at save · config-loader.js:345.</p>
+      </div>
+
+      <div class="mblock">
+        <div class="mh"><span class="term">site:x.com</span> the X row is a Google-indexed search — not the X API</div>
+        <p>The <code>site:x.com OR site:twitter.com</code> row runs through Claude <b>web_search</b>. It finds
+        publicly <b>indexed</b> tweet permalinks — it does <b>not</b> call the X/Twitter API and does not log in.
+        So coverage = whatever the search index has crawled. Login-walled, deleted, or very-fresh
+        (last-few-minutes) tweets may simply not appear. <b>No credentials are used for reading.</b></p>
+        <p class="ref">PLATFORM_SITE_QUERIES.x · config-loader.js:140 — "x tweet permalinks are indexed by Google; x.com is canonical."</p>
+      </div>
+
+      <div class="mblock">
+        <div class="mh"><span class="term">two channels</span> X data arrives via two independent paths</div>
+        <p><b>1 · web_search rows</b> — the <code>site:x.com</code> row plus per-handle watchlist rows.
+        Credential-free, index-dependent, soft recency.</p>
+        <p><b>2 · last30days service</b> — a separate CLI fetch (hard lookback, floored at 7 days) that can reach
+        X through the watchlist handles passed as <code>xRelated</code>. Runs only when <code>'x'</code> is enabled
+        and the service is configured.</p>
+        <p class="ref">They merge in the brief; the same KOL handle can feed both at once.</p>
+      </div>
+
+      <div class="mblock">
+        <div class="mh"><span class="term">subject</span> what the X row actually queries</div>
+        <p>The X site row does <b>not</b> search your raw keyword list. It searches
+        <code>subject = companyName + first words of the brand's idea / category</code> (config-loader.js:151–162).
+        <b>Search Parameters</b> (brandKeywords + categoryTerms) is what refines that subject. So editing keywords
+        changes the words after <code>site:x.com OR site:twitter.com</code> — nothing else about the row.</p>
+      </div>
+
+      <div class="mblock">
+        <div class="mh"><span class="term">kolSearchMode</span> per-handle vs combined</div>
+        <p><b>per-handle</b> (default) = one search row per <code>@handle</code> → each handle gets its own results
+        bucket, so findings are cleanly attributed to the right account. Costs one search per handle.</p>
+        <p><b>combined</b> = all handles OR'd into a single row → cheaper (one search), but results land in one
+        shared bucket and attribution is fuzzier. <span class="ref" style="margin:0">buildKolSearches · config-loader.js:192–210</span></p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- GENERIC ROUTE -->
+  <section>
+    <h2>The generic route · nothing customized</h2>
+    <div class="tabs">
+      <button class="tab active" data-view="generic">OUT OF THE BOX</button>
+      <button class="tab" data-view="custom">FULLY TUNED</button>
+    </div>
+
+    <div class="view active" id="view-generic">
+      <div class="qbuild">
+        <div class="qrow">
+          <div class="qtag">PLATFORMS</div>
+          <div class="qval">default = <span class="var">['web','x','reddit','hackernews','instagram']</span>
+            <span class="pill-on">X ON BY DEFAULT</span><br/>
+            <span class="ghost">config-loader.js:112 — X is included unless a card removes it</span></div>
+        </div>
+        <div class="qrow">
+          <div class="qtag">BRAND</div>
+          <div class="qval"><span class="var">"CompanyName"</span> OR <span class="var">"hostname"</span> OR site:hostname
+            <br/><span class="ghost">companyName derived from the website domain — no keywords needed</span></div>
+        </div>
+        <div class="qrow">
+          <div class="qtag">CATEGORY</div>
+          <div class="qval"><span class="var">CompanyName</span> industry trends 2026
+            <br/><span class="ghost">fallback when categoryTerms is empty</span></div>
+        </div>
+        <div class="qrow">
+          <div class="qtag">CONTENT OPPS</div>
+          <div class="qval"><span class="var">CompanyName</span> reviews OR <span class="var">hostname</span> competitors</div>
+        </div>
+        <div class="qrow">
+          <div class="qtag">X / TWITTER ROW</div>
+          <div class="qval"><span class="site">site:x.com OR site:twitter.com</span> <span class="var">CompanyName</span>
+            <br/><span class="ghost">the only X-specific row — generic brand-on-X</span></div>
+        </div>
+        <div class="qrow row-off">
+          <div class="qtag">WATCHLIST ROWS</div>
+          <div class="qval">— none — <span class="pill-none">NO KOLs</span>
+            <br/><span class="ghost">no handles configured → zero handle-level X monitoring</span></div>
+        </div>
+      </div>
+      <p class="note"><b>Net:</b> every client gets <b>some</b> X coverage out of the box — a generic
+      brand-name-on-X search — because <code>sourcePlatforms</code> defaults to include <code>'x'</code> and
+      BRAND/CATEGORY rows derive from the website domain. What's missing by default is the <b>who</b>:
+      no watchlist = no per-handle tweets, no <code>xRelated</code> last30days enrichment, no brand timeline.</p>
+    </div>
+
+    <div class="view" id="view-custom">
+      <div class="qbuild">
+        <div class="qrow">
+          <div class="qtag">PLATFORMS</div>
+          <div class="qval"><span class="var">['x','reddit',…]</span> <span class="pill-on">X ON</span>
+            <span class="ghost">set by Social Media Signals</span></div>
+        </div>
+        <div class="qrow">
+          <div class="qtag">X / TWITTER ROW</div>
+          <div class="qval"><span class="site">site:x.com OR site:twitter.com</span>
+            <span class="var">brandKeywords + categoryTerms</span>
+            <br/><span class="ghost">subject sharpened by Search Parameters</span></div>
+        </div>
+        <div class="qrow">
+          <div class="qtag">WATCHLIST · per-handle</div>
+          <div class="qval"><span class="var">@founder</span> &nbsp;·&nbsp; <span class="var">@competitor</span> &nbsp;·&nbsp; <span class="var">@kol</span>
+            <span class="pill-on">N ROWS</span>
+            <br/><span class="ghost">one row each — also pushed to last30days xRelated</span></div>
+        </div>
+        <div class="qrow">
+          <div class="qtag">CUSTOM SEARCHES</div>
+          <div class="qval"><span class="var">searches[]</span> — bespoke rows, hit X when results land on x.com</div>
+        </div>
+        <div class="qrow">
+          <div class="qtag">FRESHNESS</div>
+          <div class="qval"><span class="var">freshnessDays</span> → <span class="ghost">soft "prefer last N days" on the X web_search row · hard lookback (floor 7) on last30days — see Mechanics</span></div>
+        </div>
+      </div>
+      <p class="note"><b>Net:</b> tuned config layers handle-level monitoring and a focused subject on top
+      of the generic base. The cards <b>sharpen</b> X coverage (who / what / when) rather than enable it
+      from zero — the gate is the only thing that turns it fully off.</p>
+    </div>
+  </section>
+
+  <!-- MOCKUP -->
+  <section>
+    <h2>Mockup · how the X / social data lands in the executive brief</h2>
+    <p class="sub" style="margin:-6px 0 22px;max-width:66ch">Toggle the cards to build the data live. This mirrors the
+    <b>social / X portion</b> of the rendered brief — bento quote tiles, Market Signals rows with
+    <code>↗ View post on X</code> links, and the count tiles. Placeholder content.</p>
+
+    <div class="mock-toggles">
+      <div class="tg gate on" data-key="gate"><span class="sw"></span><span class="txt"><span class="lab2">Social Media Signals</span><span class="grp2">gate · X on/off</span></span></div>
+      <div class="tg on" data-key="watchlist"><span class="sw"></span><span class="txt"><span class="lab2">Watchlist</span><span class="grp2">who · @handles</span></span></div>
+      <div class="tg on" data-key="params"><span class="sw"></span><span class="txt"><span class="lab2">Search Parameters</span><span class="grp2">what · subject</span></span></div>
+      <div class="tg on" data-key="tight"><span class="sw"></span><span class="txt"><span class="lab2">Scout Focus</span><span class="grp2">when · tight 1d / wide 7d</span></span></div>
+    </div>
+
+    <div class="paper" id="paper"><!-- rendered by JS --></div>
+  </section>
+
+  <footer>
+    <div class="kvs">Sources · <b>config-loader.js</b> buildSearchPlan(213) buildKolSearches(192) buildPerPlatformSearchRows(150) PLATFORM_SITE_QUERIES.x(140)
+    &nbsp;|&nbsp; <b>clients.js</b> last30days(332,344) &nbsp;|&nbsp; <b>DashboardPage.jsx</b> cards(8322–8411)
+    &nbsp;|&nbsp; <b>route</b> /api/dashboard/marketing-brief/config</div>
+  </footer>
+
+</div>
+
+<script>
+  document.querySelectorAll('.tab').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      document.querySelectorAll('.tab').forEach(function(b){b.classList.remove('active')});
+      document.querySelectorAll('.view').forEach(function(v){v.classList.remove('active')});
+      btn.classList.add('active');
+      document.getElementById('view-' + btn.dataset.view).classList.add('active');
+    });
+  });
+
+  /* ── Interactive brief mockup ────────────────────────────────────────── */
+  var state = { gate:true, watchlist:true, params:true, tight:true };
+
+  // Quote tiles (EX1 "The Last N Hours"). need[] = state keys that must be ON.
+  var QUOTES = [
+    { who:'@dogfluencer_bk', src:'X', live:true, need:['watchlist'],
+      q:'My golden came back actually <em>tired</em> — rare for a 30-min walk. Whoever ran the Williamsburg route, thank you.' },
+    { who:'@bk_petparents', src:'X', live:true, need:['watchlist'],
+      q:'Anyone in Greenpoint know a walker that sends photo updates mid-walk? Asking for my anxious corgi.' },
+    { who:'Web', src:'Web', live:false, need:[],
+      qP:'Brooklyn dog-walking demand climbs as return-to-office mandates expand across NYC firms.',
+      qG:'Pet-care industry — broad 2026 trend coverage, not brand-specific.' }
+  ];
+  // Market Signals rows (KOL activity + brand mentions, with X post links).
+  var ROWS = [
+    { src:'X', need:['watchlist'], k:'@dogfluencer_bk',
+      v:'Unprompted positive UGC — client praised a Williamsburg walk. Est. reach ~12k.' },
+    { src:'X', need:['watchlist'], k:'@bk_petparents',
+      v:'Open question — wants a Greenpoint walker with photo updates. Live reply window.' },
+    { src:'X', need:[],
+      kP:'“Not The Rug” on X', kG:'Brand-name match on X',
+      vP:'Surfaced in a thread comparing reliable Brooklyn dog walkers.',
+      vG:'Generic brand-name appearance on X — low context, no thread.' }
+  ];
+  // Viral Windows (opportunities).
+  var VIRAL = [
+    { need:['watchlist'], k:'Greenpoint walker rec thread',
+      v:'3 parents asking for referrals right now — inject within ~6h with the photo-update angle.' }
+  ];
+
+  function ok(item){ return item.need.every(function(n){ return state[n]; }); }
+  function esc(s){ return String(s); }
+
+  function renderPaper(){
+    var p = document.getElementById('paper');
+    var win = state.tight ? '18 Hours' : '7 Days';
+
+    if (!state.gate){
+      p.innerHTML =
+        '<div class="p-kick">Marketing Director</div>'+
+        '<div class="p-h">The Last '+win+'.</div>'+
+        '<div class="p-sub">Social / X signals for this brief.</div>'+
+        '<div class="p-sec">Social · X</div>'+
+        '<div class="p-empty"><b>X is off.</b><br/>Social Media Signals doesn’t include <code>x</code>, so no X content is gathered or rendered in the brief.</div>';
+      return;
+    }
+
+    var quotes = QUOTES.filter(ok);
+    var rows   = ROWS.filter(ok);
+    var viral  = VIRAL.filter(ok);
+    var kolCount = quotes.filter(function(q){return q.src==='X';}).length;
+    var mentionCount = rows.length;
+
+    var qHtml = quotes.map(function(it){
+      var text = it.q || (state.params ? it.qP : it.qG);
+      var live = it.live && state.tight;
+      var tag = it.src==='X'
+        ? '<span class="tagpill '+(live?'tag-live':'tag-bg')+'">'+(live?'LIVE':'BACKGROUND')+'</span>'
+        : '<span class="tagpill tag-bg">WEB</span>';
+      return '<div class="bq2"><div class="q">“'+text+'”</div>'+
+             '<div class="who"><span>'+it.who+'</span>'+tag+'</div></div>';
+    }).join('');
+
+    var rHtml = rows.map(function(it){
+      var k = it.k || (state.params ? it.kP : it.kG);
+      var v = it.v || (state.params ? it.vP : it.vG);
+      return '<div class="srow2"><div class="k2">'+k+' <span class="srcpill">'+it.src+'</span></div>'+
+             '<div class="v2">'+v+'</div>'+
+             '<a class="lnk" href="#" onclick="return false">↗ View post on '+it.src+'</a></div>';
+    }).join('');
+
+    var vHtml = viral.map(function(it){
+      return '<div class="srow2"><div class="k2">'+it.k+'</div>'+
+             '<div class="v2">'+it.v+'</div>'+
+             '<a class="lnk" href="#" onclick="return false">↗ View thread on X</a></div>';
+    }).join('');
+
+    var notes = '';
+    if (!state.watchlist) notes += '<div class="p-note"><b>No watchlist.</b> Generic brand-on-X only — no @handle quotes, no KOL rows, no last30days <code>xRelated</code>. Add handles to monitor specific voices.</div>';
+    if (state.watchlist && !state.params) notes += '<div class="p-note"><b>Search Parameters generic.</b> Matches fall back to brand-name only, so context is thinner. Add brand/category terms to sharpen the subject.</div>';
+    if (!state.tight) notes += '<div class="p-note"><b>Scout Focus wide (7d).</b> Items read as <code>[BACKGROUND]</code> rather than live — a broader net, less "happening now."</div>';
+
+    p.innerHTML =
+      '<div class="p-kick">Marketing Director</div>'+
+      '<div class="p-h">The Last '+win+'.</div>'+
+      '<div class="p-sub">Everything Scout heard on X this cycle.</div>'+
+
+      '<div class="p-sec">At a glance</div>'+
+      '<div class="countgrid">'+
+        '<div class="cbox"><div class="big">'+kolCount+'</div><div class="cl">KOL Voices</div></div>'+
+        '<div class="cbox"><div class="big">'+mentionCount+'</div><div class="cl">Brand Mentions</div></div>'+
+        '<div class="cbox"><div class="big">'+viral.length+'</div><div class="cl">Viral Windows</div></div>'+
+      '</div>'+
+
+      (qHtml ? '<div class="p-sec">Voices · quote wall</div><div class="bento2">'+qHtml+'</div>' : '')+
+      (rHtml ? '<div class="p-sec">Market Signals · X activity</div>'+rHtml : '')+
+      (vHtml ? '<div class="p-sec">Viral Windows</div>'+vHtml : '')+
+      (!rHtml && !qHtml ? '<div class="p-sec">Social · X</div><div class="p-empty">X is on, but nothing matched the current settings.</div>' : '')+
+      notes;
+  }
+
+  document.querySelectorAll('.tg').forEach(function(tg){
+    tg.addEventListener('click', function(){
+      var key = tg.dataset.key;
+      state[key] = !state[key];
+      tg.classList.toggle('on', state[key]);
+      renderPaper();
+    });
+  });
+  renderPaper();
+</script>
+</body>
+</html>

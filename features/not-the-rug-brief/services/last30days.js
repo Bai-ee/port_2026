@@ -155,7 +155,10 @@ async function fetchLast30Days(clientConfig = {}) {
       maxBuffer: MAX_BUFFER,
       env: {
         ...process.env,
-        HOME: os.homedir(), // ensure ~/.config/last30days/.env is discoverable
+        // ~/.config/last30days/.env holds the skill's API keys. When the server
+        // runs under a sandbox HOME (e.g. a background dev process), os.homedir()
+        // points away from the real config — LAST30DAYS_HOME lets dev pin it.
+        HOME: process.env.LAST30DAYS_HOME || os.homedir(),
       },
     });
 

@@ -54,6 +54,12 @@ Style guide and tracking:
 - [docs/DASHBOARD_MODAL_COMPONENT_STYLE_GUIDE.md](/Users/bballi/Documents/Repos/Bballi_Portfolio/docs/DASHBOARD_MODAL_COMPONENT_STYLE_GUIDE.md:1)
 - [docs/DASHBOARD_MODAL_CARD_UI_GUIDE.md](/Users/bballi/Documents/Repos/Bballi_Portfolio/docs/DASHBOARD_MODAL_CARD_UI_GUIDE.md:1)
 - [docs/UI_STARTING_POINT_STYLE_GUIDE.md](/Users/bballi/Documents/Repos/Bballi_Portfolio/docs/UI_STARTING_POINT_STYLE_GUIDE.md:1)
+- [docs/dashboard-ui/VIDEO_STUDIO_UX_KIT.md](/Users/bballi/Documents/Repos/Bballi_Portfolio/docs/dashboard-ui/VIDEO_STUDIO_UX_KIT.md:1)
+
+Video/editor note:
+
+- `/dashboard/studio` is now captured as the standard for future video editors and render studios.
+- Do not force future video-editor work into the dashboard modal tab primitives; use the Video Studio UX Kit for full-screen editing surfaces.
 
 Pilot implementation:
 
@@ -195,4 +201,3 @@ Avoid:
 - Warm/yellow/tan surfaces.
 - Unmasked conic pseudo-elements.
 - Multiple gradient-filled primary CTAs in one visible tab.
-

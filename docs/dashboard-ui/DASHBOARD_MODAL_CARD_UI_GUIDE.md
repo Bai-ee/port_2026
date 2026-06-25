@@ -14,6 +14,11 @@ Component iteration page:
 - [public/docs/dashboard-modal-component-style-guide.html](/Users/bballi/Documents/Repos/Bballi_Portfolio/public/docs/dashboard-modal-component-style-guide.html:1)
 - Dev URL: `/docs/dashboard-modal-component-style-guide.html`
 
+Full-screen video/editor standard:
+
+- [VIDEO_STUDIO_UX_KIT.md](/Users/bballi/Documents/Repos/Bballi_Portfolio/docs/dashboard-ui/VIDEO_STUDIO_UX_KIT.md:1)
+- Use this for video-editor and motion-studio work. The modal card kit remains the standard for dashboard card detail tabs.
+
 ## UI Kit Coverage Audit
 
 Every unique UI/data pattern found in current dashboard card modal content now has a primitive represented in the UI kit:
@@ -30,6 +35,7 @@ Every unique UI/data pattern found in current dashboard card modal content now h
 - Social Posting: composer, character count, optimize/draft/post/schedule actions, diagnostics list, agent cards, queue cards.
 - Strategy Builder: source toggles, segmented controls, sliders, pacing strip, calendar/post rows, inline edit, regen, queue/schedule all, export rows.
 - Market Category and Newsletter: category override/data rows, report frame, email/newsletter iframe preview, details rows.
+- Video Studio: documented separately as a full-screen editor shell with export artboard, under-canvas transport, keyframe timeline, floating right rail, render terminal, toasts, and captures.
 
 New modal card development should map its content to one of these primitives first. If it needs a genuinely new pattern, add it to the UI kit and this coverage list before implementing the card UI.
 

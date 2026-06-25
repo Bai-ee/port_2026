@@ -16,10 +16,19 @@ function arr(v) {
 /**
  * Read + normalize the latest brief intelligence for a client.
  * Returns null if no marketingBrief has been generated for the client yet.
+ *
+ * CANONICAL PROJECTION: this is the single normalized view of
+ * `dashboard_state.marketingBrief.scoutBrief` that the email digest, the
+ * executive brief (dashboard renderMarketingBriefHtml), and the newsletter
+ * aggregator all consume. It is a SUPERSET of every agentData signal — no
+ * caps are applied (admin WIP surface), so no consumer loses fields. Do not
+ * re-read agentData directly in a consumer; extend this projection instead.
+ *
  * @returns {Promise<null | {
- *   headline: string, humanBrief: string, generatedAt: string|null,
+ *   headline: string, humanBrief: string, delta: string, generatedAt: string|null,
  *   opportunities: Array, kols: Array, competitors: Array, narratives: Array,
- *   content: object, readyToPublish: boolean|null
+ *   brandMentions: Array, redditSignals: Array, localDemandSignals: Array,
+ *   searchedFor: Array, content: object, readyToPublish: boolean|null
  * }>}
  */
 async function getBriefIntelligence(clientId) {
@@ -31,43 +40,82 @@ async function getBriefIntelligence(clientId) {
   } catch {
     return null;
   }
-  const marketingBrief = state?.marketingBrief;
+  return projectBrief(state?.marketingBrief, state);
+}
+
+/**
+ * Pure projection — normalize an ALREADY-LOADED marketingBrief into the
+ * canonical superset (no Firebase read). This is the shared core both surfaces
+ * call: getBriefIntelligence (email) wraps it after a Firebase read, and the
+ * executive brief view passes the marketingBrief it already loaded. Returns
+ * null when no marketingBrief is present. Returned shape documented above.
+ */
+function projectBrief(marketingBrief, state = null) {
   if (!marketingBrief) return null;
 
-  const agentData = marketingBrief?.scoutBrief?.agentData || {};
+  const scoutBrief = marketingBrief?.scoutBrief || {};
+  const agentData = scoutBrief?.agentData || {};
   const opportunities = arr(agentData?.viralOpportunities?.opportunities).length
     ? arr(agentData.viralOpportunities.opportunities)
     : arr(marketingBrief?.contentOpportunities);
 
   return {
     headline: marketingBrief?.headline || state?.headline || '',
-    humanBrief: marketingBrief?.scoutBrief?.humanBrief || '',
-    generatedAt: marketingBrief?.generatedAtIso || null,
-    opportunities: opportunities.slice(0, 6).map((o) => ({
+    humanBrief: scoutBrief?.humanBrief || '',
+    delta: scoutBrief?.delta || '',
+    generatedAt: marketingBrief?.generatedAtIso || scoutBrief?.timestamp || null,
+    opportunities: opportunities.map((o) => ({
       topic: o.conversation || o.topic || o.title || 'Opportunity',
       angle: o.injectionAngle || o.whyNow || o.summary || '',
       priority: o.priority || o.authenticity || '',
       windowHours: o.windowHours || null,
+      suggestedReply: o.suggestedReply || '',
       url: o.url || '',
     })),
-    kols: arr(agentData.kolActivity).slice(0, 5).map((k) => ({
+    kols: arr(agentData.kolActivity).map((k) => ({
       name: k.name || k.author || 'KOL',
       platform: k.platform || '',
       detail: k.content || k.summary || '',
       sentiment: k.sentiment || '',
+      signalType: k.signalType || '',
+      followers: k.followers || '',
       url: k.url || '',
+      profileUrl: k.profileUrl || '',
     })),
-    competitors: arr(agentData.competitorIntel).slice(0, 5).map((c) => ({
+    competitors: arr(agentData.competitorIntel).map((c) => ({
       name: c.competitor || 'Competitor',
       finding: c.finding || '',
       impact: c.impact || '',
       url: c.url || '',
     })),
-    narratives: arr(agentData.categoryTrends).slice(0, 5).map((t) => ({
+    narratives: arr(agentData.categoryTrends).map((t) => ({
       trend: t.trend || t.topic || 'Trend',
       detail: t.detail || '',
       relevance: t.relevance || '',
     })),
+    brandMentions: arr(agentData.brandMentions).map((m) => ({
+      source: m.source || '',
+      author: m.author || '',
+      content: m.content || m.finding || '',
+      sentiment: m.sentiment || '',
+      reach: m.reach || '',
+      url: m.url || '',
+    })),
+    redditSignals: arr(agentData.redditSignals).map((r) => ({
+      title: r.title || 'Reddit signal',
+      subreddit: r.subreddit || '',
+      signalType: r.signalType || '',
+      summary: r.summary || '',
+      actionableTakeaway: r.actionableTakeaway || '',
+      url: r.url || '',
+    })),
+    localDemandSignals: arr(agentData.localDemandSignals).map((s) => ({
+      signal: s.signal || s.title || 'Local signal',
+      insight: s.insight || s.summary || '',
+      source: s.source || '',
+      url: s.url || '',
+    })),
+    searchedFor: arr(agentData?.viralOpportunities?.searchedFor),
     content: marketingBrief?.content || {},
     readyToPublish: marketingBrief?.guardianFlags?.readyToPublish ?? null,
     _agentData: agentData, // raw, for per-handle watchlist matching (stripped before return)
@@ -99,7 +147,7 @@ function buildWatchlist(kols, agentData) {
       const hay = `${normHandle(m.author)} ${String(m.content || '').toLowerCase()} ${String(m.url || '').toLowerCase()}`;
       if (h && hay.includes(h)) activity.push({ text: m.content || '', url: m.url || '', platform: '' });
     }
-    return { handle, found: activity.length > 0, activity: activity.slice(0, 4) };
+    return { handle, found: activity.length > 0, activity };
   });
 }
 
@@ -124,6 +172,18 @@ function briefIntelToText(intel) {
   if (intel.narratives.length) {
     lines.push('Narratives to get into:');
     intel.narratives.forEach((n) => lines.push(`- ${n.trend}${n.detail ? ` — ${n.detail}` : ''}`));
+  }
+  if (arr(intel.brandMentions).length) {
+    lines.push('Brand mentions:');
+    intel.brandMentions.forEach((m) => lines.push(`- ${m.author || m.source || 'mention'}${m.sentiment ? ` (${m.sentiment})` : ''}: ${m.content}`));
+  }
+  if (arr(intel.redditSignals).length) {
+    lines.push('Reddit signals:');
+    intel.redditSignals.forEach((r) => lines.push(`- ${r.subreddit ? `${r.subreddit} ` : ''}${r.title}: ${r.summary}${r.actionableTakeaway ? ` — ${r.actionableTakeaway}` : ''}`));
+  }
+  if (arr(intel.localDemandSignals).length) {
+    lines.push('Local demand signals:');
+    intel.localDemandSignals.forEach((s) => lines.push(`- ${s.signal}: ${s.insight}`));
   }
   if (arr(intel.watchlist).length) {
     lines.push('Watchlist accounts (report each by name):');
@@ -168,4 +228,4 @@ async function getBriefForClient(clientId) {
   return { clientId, clientName, intel };
 }
 
-module.exports = { getBriefIntelligence, briefIntelToText, getBriefForClient, buildWatchlist };
+module.exports = { getBriefIntelligence, projectBrief, briefIntelToText, getBriefForClient, buildWatchlist };

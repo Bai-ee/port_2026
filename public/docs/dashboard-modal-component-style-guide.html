@@ -2144,6 +2144,89 @@
             </article>
           </section>
 
+          <section class="section" id="section-video-studio">
+            <div class="section-head">
+              <span class="index">M</span>
+              <div>
+                <h3>Video Studio Workspace</h3>
+                <p>The `/dashboard/studio` shell is the standard for future video editors: preview first, timeline below, floating inspector rail, render terminal, and saved captures.</p>
+              </div>
+              <span class="chip chip-success">Editor Standard</span>
+            </div>
+
+            <div class="preview-surface" style="padding:14px; display:grid; gap:12px; background:linear-gradient(135deg, rgba(255,255,255,0.76), rgba(255,255,255,0.44));">
+              <div style="display:grid; grid-template-columns:minmax(0,1fr) 240px; gap:12px; align-items:stretch;">
+                <div style="display:grid; gap:10px; min-width:0;">
+                  <div style="position:relative; min-height:220px; border-radius:16px; border:1px solid rgba(255,255,255,0.72); background:#0b0b0f; box-shadow:0 18px 48px rgba(20,20,30,0.18), 0 2px 10px rgba(0,0,0,0.1); overflow:hidden;">
+                    <div style="position:absolute; inset:18px; border-radius:12px; background:radial-gradient(circle at 20% 20%, rgba(0,173,181,0.34), transparent 30%), radial-gradient(circle at 82% 14%, rgba(139,92,246,0.34), transparent 32%), linear-gradient(135deg,#15151c,#282832); display:grid; place-items:center; color:white; font-family:var(--font-display); font-size:clamp(2rem,8vw,5rem); line-height:.9;">3D</div>
+                    <span class="chip" style="position:absolute; top:10px; left:10px; background:rgba(0,0,0,0.52); color:#fff; border-color:rgba(255,255,255,0.2);">Output · 1920x1200</span>
+                    <div style="position:absolute; top:10px; right:10px; display:flex; gap:8px;">
+                      <button class="btn btn-icon" type="button" aria-label="Orbit" style="background:rgba(0,0,0,0.5); color:white; border:0;">◎</button>
+                      <button class="btn btn-icon" type="button" aria-label="Refresh" style="background:rgba(0,0,0,0.5); color:white; border:0;">↻</button>
+                    </div>
+                  </div>
+
+                  <div style="display:grid; gap:10px;">
+                    <div style="display:grid; grid-template-columns:1fr auto 1fr; gap:12px; align-items:start;">
+                      <div class="button-row" style="gap:8px;">
+                        <button class="btn btn-icon" type="button" aria-label="Desktop">▭</button>
+                        <button class="btn btn-icon" type="button" aria-label="Mobile">▯</button>
+                        <button class="btn btn-icon" type="button" aria-label="Tablet">▭</button>
+                      </div>
+                      <div class="button-row" style="gap:10px;">
+                        <button class="btn btn-icon-cta" type="button" aria-label="Play">▶</button>
+                        <button class="btn btn-icon" type="button" aria-label="Stop">■</button>
+                        <button class="btn btn-icon" type="button" aria-label="Reset">↻</button>
+                      </div>
+                      <div class="button-row" style="justify-content:flex-end;">
+                        <button class="btn btn-nav" type="button">Save</button>
+                        <button class="btn cta-pill-btn" type="button">Render <span class="cta-icon">↗</span></button>
+                      </div>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:minmax(0,1fr) 64px; gap:10px; align-items:center;">
+                      <div style="position:relative; height:32px; border:1px solid var(--line); border-radius:999px; background:rgba(255,255,255,0.78); box-shadow:inset 0 1px 2px rgba(0,0,0,0.06);">
+                        <span style="position:absolute; left:14px; top:0; bottom:0; width:38%; border-radius:999px; background:rgba(236,72,153,0.14);"></span>
+                        <span style="position:absolute; left:38%; top:-3px; bottom:-3px; width:3px; margin-left:-1.5px; border-radius:999px; background:#ec4899; box-shadow:0 0 0 1px rgba(255,255,255,0.85);"></span>
+                        <span style="position:absolute; left:38%; top:-11px; width:22px; height:22px; transform:translateX(-50%); border-radius:50%; display:grid; place-items:center;"><span style="width:13px; height:13px; border-radius:50%; background:#ec4899; box-shadow:0 1px 3px rgba(0,0,0,0.3),0 0 0 2px #fff;"></span></span>
+                        <span style="position:absolute; left:14%; top:50%; width:9px; height:9px; margin:-4.5px 0 0 -4.5px; transform:rotate(45deg); border-radius:2px; background:#fff; border:1px solid var(--ink-muted);"></span>
+                        <span style="position:absolute; left:58%; top:50%; width:9px; height:9px; margin:-4.5px 0 0 -4.5px; transform:rotate(45deg); border-radius:2px; background:var(--ink); border:1px solid #fff;"></span>
+                        <span style="position:absolute; left:86%; top:50%; width:9px; height:9px; margin:-4.5px 0 0 -4.5px; transform:rotate(45deg); border-radius:2px; background:#fff; border:1px solid var(--ink-muted);"></span>
+                      </div>
+                      <input value="10" aria-label="Duration seconds" style="height:32px; text-align:center; border-radius:10px; border:1px solid var(--line); background:rgba(255,255,255,0.78); font-family:var(--font-mono); font-size:13px;" />
+                    </div>
+                  </div>
+                </div>
+
+                <div style="display:grid; gap:10px; align-content:start;">
+                  <article class="list-card" style="background:rgba(255,255,255,1);">
+                    <div class="list-head"><span class="list-title">Size</span><span class="chip">Reel</span></div>
+                    <div class="button-row"><button class="btn" type="button">Landscape</button><button class="btn btn-dark" type="button">Square</button><button class="btn" type="button">Reel</button></div>
+                  </article>
+                  <article class="list-card" style="background:rgba(255,255,255,1);">
+                    <div class="list-head"><span class="list-title">Background</span><span class="chip">Scene</span></div>
+                    <div class="segmented"><button type="button" class="is-active">Scene</button><button type="button">Color</button></div>
+                    <div class="range-wrap"><span class="label">Brightness - 100%</span><input type="range" min="40" max="160" value="100" /></div>
+                  </article>
+                  <article class="list-card" style="background:rgba(255,255,255,1);">
+                    <div class="list-head"><span class="list-title">Director</span><span class="chip chip-success">GPU</span></div>
+                    <div class="field-grid" style="grid-template-columns:1fr 1fr;"><label class="field"><span class="label">Length</span><select><option>10S</option></select></label><label class="field"><span class="label">FPS</span><select><option>30</option></select></label></div>
+                  </article>
+                  <article class="list-card" style="background:rgba(255,255,255,1);">
+                    <div class="list-head"><span class="list-title">Captures</span><span class="chip">3 assets</span></div>
+                    <div class="preview-media" style="height:58px;">video / image preview rows</div>
+                  </article>
+                </div>
+              </div>
+            </div>
+
+            <div class="interaction-legend">
+              <span class="legend-item"><span class="legend-dot"></span>Use the dedicated spec before building a new video editor: docs/dashboard-ui/VIDEO_STUDIO_UX_KIT.md</span>
+              <span class="legend-item"><span class="legend-dot legend-dot--accent"></span>Right rail cards use the dashboard rail hover/open state: glass rest, white lifted hover, gradient masked hairline.</span>
+              <span class="legend-item"><span class="legend-dot legend-dot--star"></span>Render jobs use the terminal overlay plus success/error toast, never spinner-only feedback.</span>
+            </div>
+          </section>
+
           <section class="section" id="section-interaction-states">
             <div class="section-head">
               <span class="index">L</span>

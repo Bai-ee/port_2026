@@ -4,6 +4,11 @@ Source HTML:
 
 - [public/docs/dashboard-modal-component-style-guide.html](/Users/bballi/Documents/Repos/Bballi_Portfolio/public/docs/dashboard-modal-component-style-guide.html:1)
 
+Video studio extension:
+
+- [VIDEO_STUDIO_UX_KIT.md](/Users/bballi/Documents/Repos/Bballi_Portfolio/docs/dashboard-ui/VIDEO_STUDIO_UX_KIT.md:1)
+- Use the video studio kit, not the modal tab kit, for full-screen video editors, render studios, timeline editors, and motion preview tools.
+
 Local review URL when the dev server is running:
 
 - `/docs/dashboard-modal-component-style-guide.html`
@@ -36,3 +41,4 @@ Coverage:
 - `Operations`: search result cards, citation chips, highlighted matches, saved artifact cards, event/result cards.
 - `Composer`: social composer, character count, diagnostics, queue card, schedule/export/action states.
 - `Calendar`: pacing strip, generated post rows, inline edit/regen/queue actions.
+- `Video Studio`: full-screen editor shell, export artboard, under-canvas controls, keyframe timeline, floating rail cards, render terminal, toasts, captures.

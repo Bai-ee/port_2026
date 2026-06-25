@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Scout · Scribe · Guard — Interaction Map</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c232c;
+    --line: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --scout: #3fb950;   /* green */
+    --scribe: #58a6ff;  /* blue */
+    --guard: #d29922;   /* amber */
+    --pipe: #6e7681;
+    --code: #79c0ff;
+    --warn: #f85149;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    padding: 32px 24px 80px;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  h2 { font-size: 18px; margin: 40px 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  .sub { color: var(--muted); margin: 0 0 8px; }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+  code { color: var(--code); background: rgba(110,118,129,.15); padding: 1px 5px; border-radius: 4px; }
+
+  /* legend */
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; margin: 16px 0 8px; }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12.5px; }
+  .dot { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+
+  /* pipeline rail */
+  .rail { display: flex; flex-direction: column; gap: 0; margin-top: 8px; }
+  .stage {
+    display: grid;
+    grid-template-columns: 60px 1fr;
+    gap: 16px;
+    align-items: stretch;
+  }
+  .stage .num {
+    display: flex; align-items: flex-start; justify-content: center;
+    padding-top: 16px;
+  }
+  .stage .num b {
+    width: 34px; height: 34px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--panel-2); border: 1px solid var(--line);
+    font-weight: 700; color: var(--muted);
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin: 8px 0;
+  }
+  .card.scout  { border-left: 4px solid var(--scout); }
+  .card.scribe { border-left: 4px solid var(--scribe); }
+  .card.guard  { border-left: 4px solid var(--guard); }
+  .card.plain  { border-left: 4px solid var(--pipe); }
+  .card h3 { margin: 0 0 4px; font-size: 15px; display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+  .tag { font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px; padding: 2px 7px; border-radius: 20px; font-weight: 700; }
+  .tag.scout { background: rgba(63,185,80,.15); color: var(--scout); }
+  .tag.scribe { background: rgba(88,166,255,.15); color: var(--scribe); }
+  .tag.guard { background: rgba(210,153,34,.15); color: var(--guard); }
+  .tag.det { background: rgba(139,148,158,.15); color: var(--muted); }
+  .tag.llm { background: rgba(247,81,73,.13); color: var(--warn); }
+  .card p { margin: 6px 0; }
+  .card .file { color: var(--muted); font-size: 12px; }
+  .card .file code { color: var(--text); }
+  .io { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  .io > div { background: var(--panel-2); border-radius: 7px; padding: 9px 11px; }
+  .io .lbl { font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin-bottom: 4px; }
+  .arrow {
+    grid-column: 2;
+    display: flex; align-items: center; gap: 10px;
+    color: var(--pipe); font-size: 12px; padding: 2px 4px;
+  }
+  .arrow::before { content: "↓"; font-size: 18px; }
+  .arrow b { color: var(--text); font-weight: 600; }
+
+  /* handoff table */
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+  th, td { text-align: left; padding: 9px 11px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .4px; }
+  td code { white-space: nowrap; }
+
+  /* edit-here boxes */
+  .edit-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 8px; }
+  @media (max-width: 860px) { .edit-grid { grid-template-columns: 1fr; } .io { grid-template-columns: 1fr; } }
+  .edit { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .edit.scout { border-top: 3px solid var(--scout); }
+  .edit.scribe { border-top: 3px solid var(--scribe); }
+  .edit.guard { border-top: 3px solid var(--guard); }
+  .edit h4 { margin: 0 0 8px; font-size: 14px; }
+  .edit ul { margin: 0; padding-left: 16px; }
+  .edit li { margin: 7px 0; }
+  .edit li b { color: var(--text); }
+  .note { background: rgba(210,153,34,.08); border: 1px solid rgba(210,153,34,.3); border-radius: 8px; padding: 11px 14px; margin-top: 14px; color: var(--text); font-size: 13px; }
+  .footer { margin-top: 40px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); padding-top: 14px; }
+  .key { color: var(--scribe); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Scout · Scribe · Guard</h1>
+  <p class="sub">How the three intake-pipeline roles interact — and where to make changes. Lives in <code>features/scout-intake/</code>. Orchestrated by <code>runner.js → runIntakePipeline</code>.</p>
+
+  <div class="legend">
+    <span><i class="dot" style="background:var(--scout)"></i> Scout — analyzers (extract signals)</span>
+    <span><i class="dot" style="background:var(--scribe)"></i> Scribe — Haiku LLM (writes copy + brief)</span>
+    <span><i class="dot" style="background:var(--guard)"></i> Guard — deterministic SEO fact-lock</span>
+    <span><i class="dot" style="background:var(--pipe)"></i> shared / pipeline plumbing</span>
+  </div>
+  <p class="sub" style="font-size:12.5px"><span class="key">cardId</span> is the single join key threading all three roles together.</p>
+
+  <h2>Pipeline flow (top → bottom = execution order)</h2>
+  <div class="rail">
+
+    <!-- Stage 1-2 setup -->
+    <div class="stage">
+      <div class="num"><b>1</b></div>
+      <div>
+        <div class="card plain">
+          <h3>Fetch + Synthesize <span class="tag det">setup</span></h3>
+          <p>Crawl site, extract design system, run live PSI + AI-SEO audit, LLM brand synthesis.</p>
+          <p class="file"><code>site-fetcher.js</code> · <code>design-system-extractor.js</code> · <code>pagespeed.js</code> · <code>ai-seo-audit.js</code> · <code>intake-synthesizer.js</code></p>
+          <div class="io">
+            <div><div class="lbl">produces</div><code>sharedResults</code> = { intake, styleGuide, pagespeed, siteMeta }, <code>evidence</code>, <code>aiSeoAudit</code></div>
+            <div><div class="lbl">used by</div>Scout (all), Guard (pagespeed + aiSeoAudit)</div>
+          </div>
+        </div>
+        <div class="arrow"><b>sharedResults + evidence</b> → fan out to analyzers</div>
+      </div>
+    </div>
+
+    <!-- Stage 3 SCOUT -->
+    <div class="stage">
+      <div class="num"><b>2</b></div>
+      <div>
+        <div class="card scout">
+          <h3>SCOUT <span class="tag scout">analyzers</span> <span class="tag det">deterministic</span> <span class="tag llm">+ optional Haiku per card</span></h3>
+          <p>Fans out one analyzer per card in parallel. Extracts &amp; scores signals from evidence/PSI/synthesis. No prose — rules, scores, findings. Tier gates which cards run.</p>
+          <p class="file"><code>analyzers/index.js → runAnalyzers()</code> · per-card: <code>passthrough.js</code> / <code>runtime.js</code> / <code>pagespeed.js</code> / <code>design-system.js</code> · external: <code>external-scouts.js</code> (weather/reviews/reddit)</p>
+          <div class="io">
+            <div><div class="lbl">in</div>sharedResults, evidence, userContext, tier</div>
+            <div><div class="lbl">out</div><code>analyzerResults.byCard[cardId]</code> = { status, signals, confidence, notes }<br><code>analyzerOutputs[cardId].aggregate</code> (richer, P4 skills)</div>
+          </div>
+        </div>
+        <div class="arrow"><b>analyzerResults + analyzerOutputs</b> → keyed by cardId</div>
+      </div>
+    </div>
+
+    <!-- Stage 5 SCRIBE -->
+    <div class="stage">
+      <div class="num"><b>3</b></div>
+      <div>
+        <div class="card scribe">
+          <h3>SCRIBE <span class="tag scribe">copy + brief</span> <span class="tag llm">Haiku 4.5 · 1 call</span></h3>
+          <p>Reads aggregated signals, writes confident prose per card (short + expanded + recommendation) AND the brief document (headline, summary, priority signals, opportunities). Confidence scales copy length budget. Distinguishes tool failure from site problem.</p>
+          <p class="file"><code>scribe.js → runScribe()</code> · digest: <code>buildCardDigest()</code> · prompt: <code>buildScribePrompt()</code> · tool: <code>buildScribeTool()</code> · budgets: <code>card-contract.js</code> · voice: <code>card-voice.js</code></p>
+          <div class="io">
+            <div><div class="lbl">in</div>analyzerResults, analyzerOutputs, userContext, websiteUrl</div>
+            <div><div class="lbl">out</div><code>scribeResult.cards[cardId]</code> = { short, expanded, recommendation }<br><code>scribeResult.brief</code> = { headline, summary, … }</div>
+          </div>
+        </div>
+        <div class="arrow"><b>scribeResult.cards['seo-performance']</b> → handed to Guard as <code>existingCard</code> (draft to fact-lock)</div>
+      </div>
+    </div>
+
+    <!-- Stage 6 GUARD -->
+    <div class="stage">
+      <div class="num"><b>4</b></div>
+      <div>
+        <div class="card guard">
+          <h3>GUARD <span class="tag guard">SEO fact-lock</span> <span class="tag det">deterministic · $0</span></h3>
+          <p>Runs AFTER Scribe, only for the SEO card. Builds a fact pack from live PSI + AI-SEO + builder findings, regenerates the card deterministically, and <b>overwrites Scribe's SEO card</b>. Validation forbids contradicting PSI (can't say "audit failed" when scores exist, can't say "schema missing" when schema present, must name hosting provider when confidence high).</p>
+          <p class="file"><code>seo-comment-guardian.js → runSeoCommentGuardian()</code> · facts: <code>buildSeoFactPack()</code> · gen: <code>buildDeterministicSeoComment()</code> · gates: <code>validateSeoGuardianComment()</code></p>
+          <div class="io">
+            <div><div class="lbl">in</div>pagespeed, aiSeoAudit, seoAggregate, existingCard (Scribe's draft)</div>
+            <div><div class="lbl">out</div>overwrites <code>scribeResult.cards['seo-performance']</code> · marked <code>factLocked: true</code> · <code>validationErrors[]</code></div>
+          </div>
+        </div>
+        <div class="arrow"><b>final cards + brief</b> → normalize → Firestore</div>
+      </div>
+    </div>
+
+    <!-- Stage 7 -->
+    <div class="stage">
+      <div class="num"><b>5</b></div>
+      <div>
+        <div class="card plain">
+          <h3>Normalize + Persist <span class="tag det">write</span></h3>
+          <p>Merge into <code>dashboard_state/{clientId}</code> via <code>run-lifecycle.cjs → completeRun</code>. Feeds dashboard cards + brief email.</p>
+          <p class="file"><code>runner.js → normalizeIntakeResult()</code> · <code>api/_lib/run-lifecycle.cjs</code></p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <h2>Handoff edges (who hands what to whom)</h2>
+  <table>
+    <thead><tr><th>From → To</th><th>Payload</th><th>Join key</th><th>Code anchor</th></tr></thead>
+    <tbody>
+      <tr><td>Setup → <b style="color:var(--scout)">Scout</b></td><td><code>sharedResults</code>, <code>evidence</code>, <code>userContext</code>, <code>tier</code></td><td>—</td><td><code>runner.js</code> → <code>runAnalyzers(...)</code></td></tr>
+      <tr><td><b style="color:var(--scout)">Scout</b> → <b style="color:var(--scribe)">Scribe</b></td><td><code>analyzerResults.byCard[cardId]</code> + <code>analyzerOutputs[cardId].aggregate</code></td><td><span class="key">cardId</span></td><td><code>scribe.js</code> → <code>buildCardDigest()</code></td></tr>
+      <tr><td><b style="color:var(--scribe)">Scribe</b> → <b style="color:var(--guard)">Guard</b></td><td><code>scribeResult.cards['seo-performance']</code> as <code>existingCard</code></td><td><code>'seo-performance'</code></td><td><code>runner.js</code> → <code>runSeoCommentGuardian({ existingCard })</code></td></tr>
+      <tr><td><b style="color:var(--guard)">Guard</b> → Persist</td><td>overwritten SEO card (<code>factLocked</code>) + rest of Scribe cards/brief</td><td><span class="key">cardId</span></td><td><code>runner.js</code> → <code>normalizeIntakeResult()</code></td></tr>
+      <tr><td>Setup → <b style="color:var(--guard)">Guard</b> (direct)</td><td><code>pagespeed</code>, <code>aiSeoAudit</code> (bypasses Scribe — raw facts)</td><td>—</td><td>Guard reads live PSI, not Scribe's text</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Where to make changes</h2>
+  <div class="edit-grid">
+    <div class="edit scout">
+      <h4 style="color:var(--scout)">Affect SCOUT</h4>
+      <ul>
+        <li><b>New signal / metric:</b> add or edit a per-card analyzer in <code>analyzers/</code> (model on <code>passthrough.js</code> or <code>runtime.js</code>).</li>
+        <li><b>Register a card→analyzer:</b> set <code>card.analyzer.impl</code> in the card contract; <code>index.js</code> dispatches by it.</li>
+        <li><b>External sources</b> (weather/reviews/reddit): <code>external-scouts.js</code> + <code>scoutConfig</code> in <code>client_configs</code>.</li>
+        <li><b>Tier gating:</b> which cards run free vs paid — <code>pickCards</code> in <code>runner.js</code>.</li>
+      </ul>
+    </div>
+    <div class="edit scribe">
+      <h4 style="color:var(--scribe)">Affect SCRIBE</h4>
+      <ul>
+        <li><b>Tone / wording rules:</b> <code>buildScribePrompt()</code> in <code>scribe.js</code>.</li>
+        <li><b>Per-role voice:</b> <code>card-voice.js</code> (actionClass → guidance).</li>
+        <li><b>Copy length budgets / card meta:</b> <code>card-contract.js</code> (short/expanded ranges).</li>
+        <li><b>Brief fields</b> (headline, summary, opportunities): tool schema in <code>buildScribeTool()</code> + prompt.</li>
+        <li><b>Confidence → length scaling:</b> <code>buildCardDigest()</code>.</li>
+      </ul>
+    </div>
+    <div class="edit guard">
+      <h4 style="color:var(--guard)">Affect GUARD</h4>
+      <ul>
+        <li><b>What counts as fact:</b> <code>buildSeoFactPack()</code> (PSI scores, CWV, schema, hosting).</li>
+        <li><b>How SEO card reads:</b> <code>buildDeterministicSeoComment()</code> (pure, no LLM).</li>
+        <li><b>Forbidden / required claims:</b> <code>validateSeoGuardianComment()</code>.</li>
+        <li><b>Scope:</b> currently only <code>'seo-performance'</code>. To guard another card, clone this module + wire a second call after Scribe.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>Key mental model:</b> Scout = facts/scores (no prose) → Scribe = prose for every card + the brief (LLM, can hallucinate) → Guard = re-asserts hard SEO facts over Scribe for the one card where hallucination is costly. Each stage is <b>non-fatal</b>: a failure logs a warning and downstream fills or skips. Scout failure → card skipped. Scribe failure → raw intake shown. Guard failure → falls back to Scribe's SEO card.
+  </div>
+
+  <div class="footer">
+    Source: <code>features/scout-intake/</code> · orchestrator <code>runner.js → runIntakePipeline</code> · SSOT <code>docs/source-of-truth/MARKET-SIGNALS-AND-SCOUT-PROJECTION.md</code>.<br>
+    This file is a navigation map — verify line numbers against current source before editing.
+  </div>
+
+</div>
+</body>
+</html>

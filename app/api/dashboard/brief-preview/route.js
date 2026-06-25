@@ -22,7 +22,7 @@ const { getDashboardBootstrap } = require('../../../../api/_lib/client-provision
 const { renderBriefHtml } = require('../../../../features/scout-intake/brief-renderer');
 const { BRIEF_CSS } = require('../../../../features/scout-intake/brief-css.cjs');
 const { validatePostUrl } = require('../../../../features/not-the-rug-brief/post-url-validator.cjs');
-const { buildWatchlist } = require('../../../../features/intelligence/_brief-intel.js');
+const { buildWatchlist, projectBrief } = require('../../../../features/intelligence/_brief-intel.js');
 const { getClientWeather } = require('../../../../features/intelligence/_weather.js');
 const { getComposition, resolveBriefType, DEFAULT_BRIEF_TYPE, isBriefAllowed } = require('../../../../features/scout-intake/brief-sections.cjs');
 const { renderPdfBuffer } = require('../../../../api/_lib/browserless.cjs');
@@ -145,15 +145,21 @@ function hostnameOf(url) {
 function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [], weather = null, moduleBriefs = [], auditMockupUrl = null, studioVideoUrl = null, socialPreviewImageUrl = null, siteMeta = null, fullPageScreenshots = null, company = null, researchConfig = null, strategyData = null, signalsCore = [], socialQueue = [], briefType = DEFAULT_BRIEF_TYPE, coverSummary = null, previousRunAt = null, displayLabel = null }) {
   const content = marketingBrief?.content || {};
   const agentData = marketingBrief?.scoutBrief?.agentData || {};
-  const opportunities = agentData?.viralOpportunities?.opportunities || marketingBrief?.contentOpportunities || [];
-  const kols = agentData?.kolActivity || [];
-  const trends = agentData?.categoryTrends || [];
-  const competitors = agentData?.competitorIntel || [];
-  const redditSignals = agentData?.redditSignals || [];
-  const localDemandSignals = agentData?.localDemandSignals || [];
-  const brandMentions = agentData?.brandMentions || [];
-  const headline = marketingBrief?.headline || 'Founder marketing brief';
-  const scoutBrief = marketingBrief?.scoutBrief?.humanBrief || 'No Scout brief text was stored for this run.';
+  // Single source of truth: every signal array is derived from the shared
+  // canonical projection (features/intelligence/_brief-intel.js → projectBrief),
+  // the same one the daily-digest email consumes, so the two surfaces never
+  // drift on which fields exist or how they're named. `agentData` above is still
+  // read raw for buildWatchlist's per-handle matching (see below).
+  const projected = projectBrief(marketingBrief) || {};
+  const opportunities = projected.opportunities || [];
+  const kols = projected.kols || [];
+  const trends = projected.narratives || [];
+  const competitors = projected.competitors || [];
+  const redditSignals = projected.redditSignals || [];
+  const localDemandSignals = projected.localDemandSignals || [];
+  const brandMentions = projected.brandMentions || [];
+  const headline = projected.headline || 'Founder marketing brief';
+  const scoutBrief = projected.humanBrief || 'No Scout brief text was stored for this run.';
   const guardian = marketingBrief?.guardianFlags || null;
   const generated = generatedAt || marketingBrief?.generatedAtIso || new Date().toISOString();
   const generatedDt = new Date(generated);
@@ -191,25 +197,32 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   const marketSignalRows = [
     ...compactList(kols, (item) => buildRow({
       label: item.name || item.author || 'KOL',
-      value: item.content || item.summary || item.sentiment || '',
+      value: item.detail || item.content || item.summary || item.sentiment || '',
       url: item.url || '',
       profileUrl: item.profileUrl || '',
       platform: item.platform || '',
-    }), 4),
+    }), Infinity),
     ...compactList(trends, (item) => buildRow({
       label: item.trend || item.topic || 'Market trend',
       value: item.detail || item.relevance || '',
       url: item.url || '',
       profileUrl: '',
       platform: item.source || '',
-    }), 4),
+    }), Infinity),
     ...compactList(signalsCore, (item) => buildRow({
       label: item.label || item.topic || item.title || 'Intake signal',
       value: item.summary || item.detail || item.whyNow || '',
       url: item.url || '',
       profileUrl: '',
       platform: item.source || 'site intake',
-    }), 4),
+    }), Infinity),
+    ...compactList(brandMentions, (item) => buildRow({
+      label: item.author || item.source || 'Brand mention',
+      value: item.content || item.summary || '',
+      url: item.url || '',
+      profileUrl: item.profileUrl || '',
+      platform: item.source || '',
+    }), Infinity),
   ];
 
   // ── Card roll-up helpers — every configured/derived card gets a row; empty
@@ -286,12 +299,12 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   </section>`;
 
   const opportunityRows = compactList(opportunities, (item) => buildRow({
-    label: item.conversation || item.topic || item.title || 'Opportunity',
-    value: item.injectionAngle || item.whyNow || item.summary || '',
+    label: item.topic || item.conversation || item.title || 'Opportunity',
+    value: item.angle || item.injectionAngle || item.whyNow || item.summary || '',
     url: item.url || '',
     profileUrl: item.profileUrl || '',
     platform: item.source || '',
-  }), 6);
+  }), Infinity);
   const xPost = content.x_post || content.primary_post || content.post || '';
   const threadOpener = content.x_thread_opener || content.thread_opener || '';
   const contentAngle = content.content_angle || content.angle || '';
@@ -342,19 +355,18 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   const trendQuoteTiles = sortedTrends
     .map((t) => ({ q: firstQuoted(t.detail), who: t.trend || t.topic || 'Market trend' }))
     .filter((t) => t.q)
-    .slice(0, 2)
     .map((t) => bQuote({ span: 's2', src: 'Web', q: t.q, who: clip(t.who, 60) }));
   const kolQuoteTiles = compactList(kols, (item) => ({
-    q: clip(item.content || item.summary || '', 220),
+    q: clip(item.detail || item.content || item.summary || '', 220),
     who: item.name || item.author || 'KOL',
     url: item.url || '',
     platform: item.platform || 'X',
-  }), 3).filter((t) => t.q).map((t) => bQuote({ span: 's2', src: t.platform, q: t.q, who: t.who, url: t.url }));
+  }), Infinity).filter((t) => t.q).map((t) => bQuote({ span: 's2', src: t.platform, q: t.q, who: t.who, url: t.url }));
   const redditQuoteTiles = compactList(redditSignals, (item) => ({
     q: clip(item.summary || item.actionableTakeaway || '', 220),
     who: item.subreddit ? `r/${String(item.subreddit).replace(/^r\//, '')}` : 'Reddit',
     url: item.url || '',
-  }), 2).filter((t) => t.q && t.q.length > 30).map((t) => bQuote({ span: 's2', src: 'Reddit', q: t.q, who: t.who, url: t.url }));
+  }), Infinity).filter((t) => t.q && t.q.length > 30).map((t) => bQuote({ span: 's2', src: 'Reddit', q: t.q, who: t.who, url: t.url }));
   const quoteWall = [...trendQuoteTiles, ...kolQuoteTiles, ...redditQuoteTiles];
   const lastHoursSection = `
   <section class="page">
@@ -366,7 +378,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
       ${leadTrend
         ? bTile({ span: 's2', cls: 'ink', label: `Category Shift${leadTrend.relevance ? ` · ${leadTrend.relevance} relevance` : ''}`, word: clip(leadTrend.trend || leadTrend.topic, 90), foot: firstSentenceOf(leadTrend.detail || leadTrend.relevance, 200) })
         : bTile({ span: 's2', label: 'Category Signal', word: 'No new category signal this run', lite: true, foot: 'Scout searches again on the next pass.' })}
-      ${restTrends.slice(0, 2).map((t) => bTile({ span: 's2', label: 'Market Trend', word: clip(t.trend || t.topic, 90), lite: true, foot: firstSentenceOf(t.detail || '', 160) })).join('')}
+      ${restTrends.map((t) => bTile({ span: 's2', label: 'Market Trend', word: clip(t.trend || t.topic, 90), lite: true, foot: firstSentenceOf(t.detail || '', 160) })).join('')}
       ${bTile({ span: 's2', label: 'Viral Windows', big: opportunityRows.length, foot: opportunityRows.length ? 'Open conversations to inject into — detail in Viral Windows.' : 'No live viral signal this cycle.' })}
     </div>
     ${quoteWall.length ? `<div class="bento-gap"></div><div class="bento">${quoteWall.join('')}</div>` : ''}
@@ -374,10 +386,10 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
 
   // EX2 · Who We're Listening To — competitors, mentions, watch coverage.
   const competitorTiles = compactList(competitors, (item) => ({
-    name: item.competitor || 'Competitor',
+    name: item.name || item.competitor || 'Competitor',
     finding: item.finding || item.impact || '',
     impact: item.impact || '',
-  }), 2).map((c) => bTile({ span: 's2', label: `Competitor${c.impact ? ` · ${c.impact} impact` : ''}`, word: clip(c.name, 50), lite: true, foot: clip(c.finding, 220) }));
+  }), Infinity).map((c) => bTile({ span: 's2', label: `Competitor${c.impact ? ` · ${c.impact} impact` : ''}`, word: clip(c.name, 50), lite: true, foot: clip(c.finding, 220) }));
   const mentionCount = brandMentions.length;
   const kolCount = kols.length;
   const listeningSection = `
@@ -422,7 +434,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   const todayLine = s30?.today
     ? [s30.today.angle, s30.today.post].filter(Boolean).join(' — ')
     : xPost;
-  const dayTiles = planDays.slice(0, 14).map((d) => bTile({
+  const dayTiles = planDays.map((d) => bTile({
     span: 's2', cls: 'day',
     label: d?.date || 'Day',
     word: clip(d?.theme || d?.angle || d?.idea || '—', 80),
@@ -448,12 +460,12 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
 
   // Competitor Snapshot: competitor intel from web search
   const competitorRows = compactList(competitors, (item) => buildRow({
-    label: item.competitor || 'Competitor',
+    label: item.name || item.competitor || 'Competitor',
     value: item.finding || item.impact || '',
     url: item.url || '',
     profileUrl: '',
     platform: '',
-  }), 8);
+  }), Infinity);
 
   // Local Signals: Reddit signals + local demand signals + brand mentions from Reddit/web
   const redditLocalRows = [
@@ -465,14 +477,14 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
       url: item.url || '',
       profileUrl: '',
       platform: 'Reddit',
-    }), 5).filter((row) => row.value),
+    }), Infinity).filter((row) => row.value),
     ...compactList(localDemandSignals, (item) => buildRow({
       label: item.signal || item.topic || item.title || 'Local signal',
       value: item.insight || item.detail || item.summary || '',
       url: item.url || '',
       profileUrl: '',
       platform: item.source || 'Local',
-    }), 8),
+    }), Infinity),
     ...compactList(
       brandMentions.filter((m) => /reddit\.com/i.test(m.url || '') || /reddit/i.test(m.source || '')),
       (item) => buildRow({
@@ -482,7 +494,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
         profileUrl: '',
         platform: 'Reddit',
       }),
-      3,
+      Infinity,
     ),
   ];
 

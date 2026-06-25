@@ -4483,15 +4483,15 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     );
   };
 
-  // Market Signals control panel — the SOURCES tab of the Market Signals modal.
-  // Runs each search source live (scout-test; lightweight — does NOT refresh the
-  // stored brief) and deep-links to the cards that own the other parameters.
-  // This is exactly the input set a full Executive / Marketing Brief run uses.
-  //
+  // ── Market Signals modal — style-guide UI (.signals-sg) ───────────────────
+  // Mirrors public/docs/dashboard-modal-component-style-guide.html. All markup
+  // below uses the scoped `sg-*` classes (defined in dashboard.css) so the
+  // light-glass component language stays isolated to this modal.
+
   // Generic per-item control for a string-list config field (handles, keywords,
-  // category terms). Lists each item with on/off + remove. Disabled items are
-  // parked in `<field>Off` — a UI-only field the scout pipeline never reads — so
-  // toggling off excludes an item from the run without deleting it.
+  // category terms): a list-card whose rows each have ON/OFF + remove. Disabled
+  // items are parked in `<field>Off` (a UI-only field the scout pipeline never
+  // reads), so toggling off excludes an item from the run without deleting it.
   const renderTermControl = ({ field, offField, title, addCard, suffix = '' }) => {
     const active = splitMarketingBriefTerms(marketingBriefConfig?.[field]);
     const off = splitMarketingBriefTerms(marketingBriefConfig?.[offField]).filter((t) => !active.includes(t));
@@ -4509,71 +4509,127 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     }));
     const rows = [...active.map((t) => ({ t, on: true })), ...off.map((t) => ({ t, on: false }))];
     return (
-      <div style={{ border: '1px solid var(--border, #2a2420)', borderRadius: 8, padding: '8px 10px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: rows.length ? 8 : 0 }}>
-          <span className="tile-detail-stat-label">{title}</span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.06em', color: 'var(--text-secondary)' }}>
-              {active.length} on{off.length ? ` · ${off.length} off` : ''}{suffix}
-            </span>
-            <button type="button" className="tile-view-details-btn" onClick={() => openCapabilityCard(addCard)}>+ Add</button>
-          </span>
+      <article className="sg-list">
+        <div className="sg-list-head">
+          <span className="sg-list-title">{title}</span>
+          <span className="sg-chip">{active.length} on{off.length ? ` · ${off.length} off` : ''}{suffix}</span>
+          <button type="button" className="sg-btn" onClick={() => openCapabilityCard(addCard)}>+ Add</button>
         </div>
         {rows.length ? rows.map(({ t, on }) => (
-          <div key={t} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '4px 0', opacity: on ? 1 : 0.5 }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-primary)' }}>{t}</span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button type="button" className="tile-view-details-btn" style={{ minWidth: 46, color: on ? 'var(--accent, #10b981)' : 'var(--text-secondary)' }} onClick={() => toggle(t)}>{on ? 'ON' : 'OFF'}</button>
-              <button type="button" aria-label={`Remove ${t}`} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 15, lineHeight: 1, padding: '0 4px' }} onClick={() => remove(t)}>×</button>
-            </span>
+          <div key={t} className={`sg-inv${on ? '' : ' is-off'}`}>
+            <span className="name">{t}</span>
+            <button type="button" className={`sg-btn ${on ? 'sg-btn-on' : 'sg-btn-off'}`} style={{ minWidth: 52 }} onClick={() => toggle(t)}>{on ? 'ON' : 'OFF'}</button>
+            <button type="button" className="sg-btn sg-btn-danger" aria-label={`Remove ${t}`} style={{ minWidth: 38, padding: '0 10px' }} onClick={() => remove(t)}>×</button>
           </div>
         )) : (
-          <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '6px 0 0' }}>Nothing yet — <strong>+ Add</strong> opens the card.</p>
+          <p className="sg-hint" style={{ margin: '4px 0 0' }}>Nothing yet — <strong>+ Add</strong> opens the card.</p>
         )}
-      </div>
+      </article>
     );
   };
 
-  const renderSignalsControlPanel = () => (
-    <>
-      <p style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--text-secondary)', margin: 0 }}>
-        Run each search source live and confirm the raw results it returns — per parameter, not brief-formatted. This is a check tool: it runs the same searches the brief uses but does <strong>not</strong> refresh the stored brief.
-      </p>
-      {marketingBriefConfig ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-            <div className="tile-detail-row-section-head" style={{ margin: 0 }}>Search Sources</div>
-            <button
-              type="button"
-              className="tile-view-details-btn"
-              onClick={() => {
-                (marketingBriefConfig?.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS)
-                  .filter((k) => UNLOCKED_SOURCE_PLATFORMS.includes(k))
-                  .forEach((k) => runScoutTestForPlatform(k));
-              }}
-            >Run all enabled</button>
+  // One source pill (web / x / reddit) with a Run button + expandable raw
+  // results. Built inline (not renderSourcePlatformRow) so the SOURCES tab gets
+  // the style-guide look without changing the shared config modals. Reuses
+  // runScoutTestForPlatform + scoutTestState + scoutTestExpanded.
+  const renderSgSourceRow = (key, label, desc) => {
+    const selected = (marketingBriefConfig?.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS).includes(key);
+    const test = scoutTestState[key];
+    const expanded = !!scoutTestExpanded[key];
+    return (
+      <React.Fragment key={key}>
+        <div className="sg-source">
+          <span className="sg-source-value">
+            <span>{label}{!selected ? ' · off' : ''}<small>{desc}</small></span>
+          </span>
+          <span className="sg-source-actions">
+            <button type="button" className={`sg-btn ${selected ? 'sg-btn-on' : 'sg-btn-off'}`} style={{ minWidth: 52 }} onClick={() => toggleMarketingBriefSourcePlatform(key)}>{selected ? 'ON' : 'OFF'}</button>
+            {selected ? (
+              <>
+                <button type="button" className="sg-btn sg-btn-outline" disabled={test?.loading} onClick={() => runScoutTestForPlatform(key)}>{test?.loading ? 'Running…' : 'Run'}</button>
+                {test && !test.loading ? (
+                  <button type="button" className="sg-btn" aria-label={`${expanded ? 'Collapse' : 'Expand'} ${label} results`} onClick={() => setScoutTestExpanded((s) => ({ ...s, [key]: !s[key] }))}>{expanded ? '▲' : '▼'}</button>
+                ) : null}
+              </>
+            ) : null}
+          </span>
+        </div>
+        {selected && expanded && test && !test.loading ? (
+          <div style={{ display: 'grid', gap: 8, paddingLeft: 6 }}>
+            {test.error ? (
+              <p className="sg-notice sg-notice-danger" style={{ margin: 0 }}>{test.error}</p>
+            ) : (test.items || []).length === 0 ? (
+              <p className="sg-notice" style={{ margin: 0 }}>{(test.meta && test.meta.note) || `No ${label} results for these queries.`}</p>
+            ) : (
+              <>
+                <span className="sg-label">{test.items.length} result{test.items.length === 1 ? '' : 's'}{typeof test.costUsd === 'number' && test.costUsd > 0 ? ` · ≈ $${test.costUsd.toFixed(3)}` : ''}</span>
+                {test.items.map((it, i) => (
+                  <article key={`${key}-r-${i}`} className="sg-result">
+                    <div className="sg-result-head">
+                      <div>
+                        <span className="sg-result-meta"><span>{label}</span>{it.tag ? <span>{it.tag}</span> : null}</span>
+                        <h4 className="sg-result-title">{it.title}</h4>
+                      </div>
+                    </div>
+                    {it.summary ? <p className="sg-result-body">{it.summary}</p> : null}
+                    {it.url ? <a href={it.url} target="_blank" rel="noopener noreferrer">↗ View source</a> : null}
+                  </article>
+                ))}
+              </>
+            )}
           </div>
-          {[
-            WEB_SEARCH_SOURCES.find((p) => p.key === 'web'),
-            SOCIAL_SIGNAL_SOURCES.find((p) => p.key === 'x'),
-            SOCIAL_SIGNAL_SOURCES.find((p) => p.key === 'reddit'),
-          ].filter(Boolean).map((p) => renderSourcePlatformRow(p))}
-          <p style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--text-secondary)', margin: '4px 0 0 2px' }}>
-            Toggle a source on, then <strong>Run</strong> to confirm exactly what it returns.
-          </p>
+        ) : null}
+      </React.Fragment>
+    );
+  };
 
-          {/* Inputs · the non-source search parameters. Watchlist is expanded to
-              list each handle with a per-handle on/off + remove. Disabled handles
-              are parked in `kolsOff` (a UI-only field the scout pipeline never
-              reads), so toggling off excludes a handle from the run WITHOUT
-              deleting it — no pipeline change needed. */}
-          <div className="tile-detail-row-section-head" style={{ marginTop: 14 }}>Inputs · customize</div>
+  // SOURCES tab — control panel. Runs each source live (lightweight; no brief
+  // refresh) and deep-links to the cards that own the other parameters.
+  const renderSignalsControlPanel = () => {
+    if (!marketingBriefConfig) {
+      return <div className="signals-sg"><p className="sg-notice">Loading Scout config…</p></div>;
+    }
+    const fresh = marketingBriefConfig?.freshnessDays ?? 7;
+    const mode = marketingBriefConfig?.kolSearchMode === 'combined' ? 'combined' : 'per-handle';
+    const setMode = (m) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), kolSearchMode: m }));
+    return (
+      <div className="signals-sg">
+        <section className="sg-section">
+          <div className="sg-head">
+            <span className="sg-index">01</span>
+            <div>
+              <h3>Search Sources</h3>
+              <p>Toggle a source on, then Run to confirm exactly what it returns. Lightweight — does not refresh the stored brief.</p>
+            </div>
+            <button type="button" className="sg-btn sg-cta" onClick={() => {
+              (marketingBriefConfig?.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS)
+                .filter((k) => UNLOCKED_SOURCE_PLATFORMS.includes(k))
+                .forEach((k) => runScoutTestForPlatform(k));
+            }}><span>Run all enabled</span></button>
+          </div>
+          <div style={{ display: 'grid', gap: 10 }}>
+            {renderSgSourceRow('web', 'Web / News', 'Open web — market news, launches, pages your audience sees.')}
+            {renderSgSourceRow('x', 'X / Twitter', 'Timely posts and reply windows a social manager could act on.')}
+            {renderSgSourceRow('reddit', 'Reddit', 'Questions, complaints, and recommendations in real buyer language.')}
+          </div>
+        </section>
 
+        <section className="sg-section">
+          <div className="sg-head">
+            <span className="sg-index">02</span>
+            <div>
+              <h3>Inputs · Customize</h3>
+              <p>Per-item on/off + remove. Off items are parked (not deleted) and excluded from the run. This is exactly the input set a full Executive / Marketing Brief run uses.</p>
+            </div>
+          </div>
           {renderTermControl({
             field: 'kols', offField: 'kolsOff', title: 'Watchlist & Competitors',
-            suffix: ` · ${marketingBriefConfig?.kolSearchMode || 'per-handle'}`,
             addCard: { id: 'watchlist', category: 'growth', number: 'WL', label: 'WATCHLIST', title: 'Watchlist & Competitors', description: '', rows: [] },
           })}
+          <div className="sg-seg" role="group" aria-label="Watchlist search mode">
+            <button type="button" className={mode === 'per-handle' ? 'is-active' : ''} onClick={() => setMode('per-handle')}>Per-handle</button>
+            <button type="button" className={mode === 'combined' ? 'is-active' : ''} onClick={() => setMode('combined')}>Combined</button>
+          </div>
           {renderTermControl({
             field: 'brandKeywords', offField: 'brandKeywordsOff', title: 'Brand Keywords',
             addCard: { id: 'brand-keywords', category: 'growth', number: 'SP', label: 'SEARCH PARAMETERS', title: 'Search Parameters', description: '', rows: [] },
@@ -4582,48 +4638,118 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             field: 'categoryTerms', offField: 'categoryTermsOff', title: 'Category Terms',
             addCard: { id: 'brand-keywords', category: 'growth', number: 'SP', label: 'SEARCH PARAMETERS', title: 'Search Parameters', description: '', rows: [] },
           })}
+        </section>
 
-          {/* Research Focus — freshness is a single value (1–30d), not a list, so
-              it gets an inline stepper instead of on/off. */}
-          <div className="tile-detail-stat-row" style={{ alignItems: 'center' }}>
-            <span className="tile-detail-stat-label">Research Focus</span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.06em', color: 'var(--text-secondary)' }}>freshness</span>
-              <button type="button" className="tile-view-details-btn" aria-label="Decrease freshness window" onClick={() => setMarketingBriefConfig((prev) => ({ ...(prev || {}), freshnessDays: Math.max(1, (Number(prev?.freshnessDays) || 7) - 1) }))}>−</button>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, minWidth: 34, textAlign: 'center', color: 'var(--text-primary)' }}>{marketingBriefConfig?.freshnessDays ?? 7}d</span>
-              <button type="button" className="tile-view-details-btn" aria-label="Increase freshness window" onClick={() => setMarketingBriefConfig((prev) => ({ ...(prev || {}), freshnessDays: Math.min(30, (Number(prev?.freshnessDays) || 7) + 1) }))}>+</button>
-              <button type="button" className="tile-view-details-btn" onClick={() => openCapabilityCard({ id: 'scout-focus', category: 'growth', number: 'SF', label: 'SCOUT FOCUS', title: 'Research Focus', description: '', rows: [] })}>Customize →</button>
+        <section className="sg-section">
+          <div className="sg-head">
+            <span className="sg-index">03</span>
+            <div>
+              <h3>Recency &amp; Local</h3>
+              <p>Freshness window for the run, and the optional local-weather signal.</p>
+            </div>
+          </div>
+          <div className="sg-range">
+            <span className="sg-label">Freshness window — {fresh} day{fresh === 1 ? '' : 's'}</span>
+            <input type="range" min="1" max="30" value={fresh} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), freshnessDays: Number(e.target.value) }))} />
+            <div className="sg-range-scale"><span>1d</span><span>30d</span></div>
+          </div>
+          <div className="sg-source">
+            <span className="sg-source-value"><span>Local Weather<small>{marketingBriefConfig?.weather?.enabled ? 'On — used as a live operational signal' : 'Off'}</small></span></span>
+            <span className="sg-source-actions">
+              <input className="sg-input sg-input-zip" type="text" inputMode="numeric" placeholder="ZIP" value={marketingBriefConfig?.weather?.zip || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), weather: { ...((prev || {}).weather || {}), zip: e.target.value.replace(/[^0-9]/g, '').slice(0, 5) } }))} />
+              <button type="button" className={`sg-btn ${marketingBriefConfig?.weather?.enabled ? 'sg-btn-on' : 'sg-btn-off'}`} style={{ minWidth: 52 }} onClick={() => setMarketingBriefConfig((prev) => ({ ...(prev || {}), weather: { ...((prev || {}).weather || {}), enabled: !(prev?.weather?.enabled) } }))}>{marketingBriefConfig?.weather?.enabled ? 'ON' : 'OFF'}</button>
+              <button type="button" className="sg-btn sg-btn-outline" onClick={() => openCapabilityCard({ id: 'local-weather', category: 'growth', number: 'LW', label: 'LOCAL WEATHER', title: 'Local Weather', description: '', rows: [] })}>Open</button>
             </span>
           </div>
-          {/* Local Weather — a real on/off (weather.enabled) + inline ZIP, plus a link. */}
-          <div className="tile-detail-stat-row" style={{ alignItems: 'center' }}>
-            <span className="tile-detail-stat-label">Local Weather</span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input
-                type="text"
-                inputMode="numeric"
-                placeholder="ZIP"
-                value={marketingBriefConfig?.weather?.zip || ''}
-                onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), weather: { ...((prev || {}).weather || {}), zip: e.target.value.replace(/[^0-9]/g, '').slice(0, 5) } }))}
-                style={{ width: 62, fontFamily: 'var(--font-mono)', fontSize: 12, padding: '3px 6px', borderRadius: 6, border: '1px solid var(--border, #2a2420)', background: 'transparent', color: 'var(--text-primary)' }}
-              />
-              <button type="button" className="tile-view-details-btn" style={{ minWidth: 46, color: marketingBriefConfig?.weather?.enabled ? 'var(--accent, #10b981)' : 'var(--text-secondary)' }} onClick={() => setMarketingBriefConfig((prev) => ({ ...(prev || {}), weather: { ...((prev || {}).weather || {}), enabled: !(prev?.weather?.enabled) } }))}>
-                {marketingBriefConfig?.weather?.enabled ? 'ON' : 'OFF'}
-              </button>
-              <button type="button" className="tile-view-details-btn" onClick={() => openCapabilityCard({ id: 'local-weather', category: 'growth', number: 'LW', label: 'LOCAL WEATHER', title: 'Local Weather', description: '', rows: [] })}>Customize →</button>
-            </span>
-          </div>
+        </section>
 
-          <p style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--text-secondary)', margin: '10px 0 0 2px' }}>
-            This configuration is exactly what a full <strong>Executive / Marketing Brief</strong> run includes.
-          </p>
-          {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
+        {marketingBriefError ? <p className="sg-notice sg-notice-danger">{marketingBriefError}</p> : null}
+      </div>
+    );
+  };
+
+  // IN BRIEF tab — preview of how the SOURCES results land in the brief.
+  const renderSignalsBriefMock = () => {
+    const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
+    const x = scoutTestState?.x?.items || [];
+    const reddit = scoutTestState?.reddit?.items || [];
+    const web = scoutTestState?.web?.items || [];
+    const total = x.length + reddit.length + web.length;
+    const link = (u, label) => (u ? <a href={u} target="_blank" rel="noopener noreferrer">↗ {label}{hostOf(u) ? ` · ${hostOf(u)}` : ''}</a> : null);
+
+    if (total === 0) {
+      return (
+        <div className="signals-sg">
+          <div className="sg-empty">Run a source on the <strong style={{ margin: '0 4px' }}>SOURCES</strong> tab first — results render here exactly as they appear in the Market Signals section of the brief.</div>
         </div>
-      ) : (
-        <p className="mu-notice" style={{ marginTop: 12 }}>Loading Scout config…</p>
-      )}
-    </>
-  );
+      );
+    }
+
+    return (
+      <div className="signals-sg">
+        <div className="sg-metrics">
+          <div className="sg-metric"><span className="sg-metric-value">{x.length}</span><span className="sg-metric-label">X Voices</span></div>
+          <div className="sg-metric"><span className="sg-metric-value">{web.length}</span><span className="sg-metric-label">Web Signals</span></div>
+          <div className="sg-metric"><span className="sg-metric-value">{reddit.length}</span><span className="sg-metric-label">Reddit</span></div>
+        </div>
+
+        <div className="sg-paper">
+          <div className="kick">Marketing Director · Market Signals</div>
+          <h2>The Latest Signals.</h2>
+          <p className="lede">How these {total} live result{total === 1 ? '' : 's'} appear in the Market Signals section — aggregated into the Executive Brief.</p>
+
+          {x.length ? (
+            <>
+              <div className="psec">Voices · X / Twitter</div>
+              <div className="quotewall">
+                {x.map((it, i) => (
+                  <div key={`xq-${i}`} className="qtile">
+                    <div className="q">“{it.summary || it.title}”</div>
+                    <div className="who"><span>{it.tag || it.title || '@source'}</span><span style={{ color: '#1a8a4f' }}>LIVE</span></div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : null}
+
+          {web.length ? (
+            <>
+              <div className="psec">Market Signals · Web</div>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {web.map((it, i) => (
+                  <article key={`webr-${i}`} className="sg-result">
+                    <h4 className="sg-result-title">{it.tag ? `[${it.tag}] ` : ''}{it.title}</h4>
+                    {it.summary ? <p className="sg-result-body">{it.summary}</p> : null}
+                    {link(it.url, 'Source')}
+                  </article>
+                ))}
+              </div>
+            </>
+          ) : null}
+
+          {reddit.length ? (
+            <>
+              <div className="psec">Community · Reddit</div>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {reddit.map((it, i) => (
+                  <article key={`rdr-${i}`} className="sg-result">
+                    <h4 className="sg-result-title">{it.tag ? `${it.tag} · ` : ''}{it.title}</h4>
+                    {it.summary ? <p className="sg-result-body">{it.summary}</p> : null}
+                    {link(it.url, 'View thread')}
+                  </article>
+                ))}
+              </div>
+            </>
+          ) : null}
+
+          <p className="lede" style={{ marginTop: 22, borderTop: '1px solid #ddd6c8', paddingTop: 13 }}>
+            These feed the brief's <strong>Market Signals</strong> section and roll up into the <strong>Executive Brief</strong>. Design preview — we port the final look to the live brief renderer.
+          </p>
+        </div>
+      </div>
+    );
+  };
+
 
   // Full-width debug meta row for a tested source. Rendered at the bento-grid
   // level (#scout-test-meta-band) — outside the panel column — so it spans the
@@ -12689,18 +12815,30 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   ) : activeTileModal.cardId === 'video-remix' && latestRemixVideoUrl ? (
                     // Modal shell mirrors the card face: the last generated remix
                     // video, contained with native controls for audio toggle.
-                    <video
-                      key={latestRemixVideoUrl}
-                      className="tile-studio-video"
-                      src={latestRemixVideoUrl}
-                      ref={initRemixShellVideo}
-                      autoPlay
-                      loop
-                      playsInline
-                      controls
-                      onClick={(e) => e.stopPropagation()}
-                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
-                    />
+                    // Wrapped in the style-guide preview pane (.preview-surface +
+                    // .toolbar); the video keeps its exact attributes/styling.
+                    <div className="vrk-scope vrk-player-shell" onClick={(e) => e.stopPropagation()}>
+                      <div className="preview-surface">
+                        <div className="toolbar">
+                          <a className="btn btn-outline" href={latestRemixVideoUrl} download>Download</a>
+                          <a className="btn btn-outline" href={latestRemixVideoUrl} target="_blank" rel="noopener noreferrer">Open <span className="cta-icon">↗</span></a>
+                        </div>
+                        <div className="preview-media">
+                          <video
+                            key={latestRemixVideoUrl}
+                            className="tile-studio-video"
+                            src={latestRemixVideoUrl}
+                            ref={initRemixShellVideo}
+                            autoPlay
+                            loop
+                            playsInline
+                            controls
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
+                          />
+                        </div>
+                      </div>
+                    </div>
                   ) : activeTileModal.isCapabilityCard ? (
                     <span className="tile-empty-label">{activeTileModal.placeholderLabel}</span>
                   ) : (
@@ -15273,189 +15411,195 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                  return (
 	                    <div
 	                      id="video-remix-modal-tabs-container"
-	                      className="tile-detail-bento-cell tile-detail-tabbed-container"
+	                      className="vrk-scope tile-detail-bento-cell panel"
 	                    >
-	                      <div className="tile-detail-tabs">
-	                        <button type="button" className={`tile-detail-tab${modalTab === 'remix' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('remix')}>REMIX</button>
-	                        <button type="button" className={`tile-detail-tab${modalTab === 'assets' ? ' tile-detail-tab--active' : ''}`} onClick={() => setModalTab('assets')}>SAVED ASSETS</button>
+	                      <div className="tabs">
+	                        <button type="button" className={`tab${modalTab === 'remix' ? ' is-active' : ''}`} onClick={() => setModalTab('remix')}>REMIX</button>
+	                        <button type="button" className={`tab${modalTab === 'assets' ? ' is-active' : ''}`} onClick={() => setModalTab('assets')}>SAVED ASSETS</button>
 	                      </div>
-	                      <div className="tile-detail-tab-content">
+	                      <div className="panel-body">
 	                        {modalTab === 'remix' && (
-	                          <div className="mu-tab-pane">
-	                            <section className="mu-section">
-	                              <div className="mu-section-head">
-	                                <span className="mu-index">VR</span>
-	                                <div>
-	                                  <h3>Video Remix setup</h3>
-	                                  <p>Pick the audio, source clips, look, overlay, logos, and end-card, then render a fresh 720×720 cut off-platform.</p>
-	                                </div>
-	                                <span className="mu-chip mu-chip--success">READY</span>
+	                          <section className="section">
+	                            <div className="section-head">
+	                              <span className="index">VR</span>
+	                              <div>
+	                                <h3>Video Remix setup</h3>
+	                                <p>Pick the audio, source clips, look, overlay, logos, and end-card, then render a fresh 720×720 cut off-platform.</p>
 	                              </div>
-	                              <div id="video-remix-settings" data-tooltip-disabled="true" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-	                                <label className="mu-field">
-	                                  <span className="mu-label">Audio source</span>
-	                                  <select className="mu-select" value={draft.useTrax ? 'tracks' : 'mix'} onChange={(e) => updateRemixDraft('useTrax', e.target.value === 'tracks')}>
-	                                    <option value="mix">Artist mix</option>
-	                                    <option value="tracks">Tracks (useTrax)</option>
+	                              <a
+	                                className="btn btn-outline"
+	                                href="/dashboard/video-remix-studio"
+	                                target="_blank"
+	                                rel="noopener noreferrer"
+	                                style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}
+	                              >
+	                                Open Studio <UpRightArrow style={{ marginLeft: '0.1rem', opacity: 0.82 }} />
+	                              </a>
+	                            </div>
+	                            <div id="video-remix-settings" data-tooltip-disabled="true" style={{ display: 'grid', gap: 16 }}>
+	                              <div className="field">
+	                                <span className="label">Audio source</span>
+	                                <div className="segmented" role="group" aria-label="Audio source">
+	                                  <button type="button" className={!draft.useTrax ? 'is-active' : ''} onClick={() => updateRemixDraft('useTrax', false)}>Artist mix</button>
+	                                  <button type="button" className={draft.useTrax ? 'is-active' : ''} onClick={() => updateRemixDraft('useTrax', true)}>Tracks</button>
+	                                </div>
+	                              </div>
+	                              <label className="field">
+	                                <span className="label">Artist</span>
+	                                <select value={draft.artist} onChange={(e) => setVideoRemixDraft((prev) => ({ ...prev, artist: e.target.value, mixTitle: '' }))}>
+	                                  <option value="random">Random</option>
+	                                  {artistList.map((a) => <option key={a.name} value={a.name}>{a.name}</option>)}
+	                                </select>
+	                              </label>
+	                              {!draft.useTrax && (
+	                                <label className="field">
+	                                  <span className="label">Mix</span>
+	                                  <select value={draft.mixTitle} disabled={draft.artist === 'random' || !artistMixes.length} onChange={(e) => updateRemixDraft('mixTitle', e.target.value)}>
+	                                    <option value="">{draft.artist === 'random' ? 'Pick an artist first' : (artistMixes.length ? 'Random mix' : 'No mixes available')}</option>
+	                                    {artistMixes.map((m) => <option key={m} value={m}>{m}</option>)}
 	                                  </select>
 	                                </label>
-	                                <label className="mu-field">
-	                                  <span className="mu-label">Artist</span>
-	                                  <select className="mu-select" value={draft.artist} onChange={(e) => setVideoRemixDraft((prev) => ({ ...prev, artist: e.target.value, mixTitle: '' }))}>
-	                                    <option value="random">Random</option>
-	                                    {artistList.map((a) => <option key={a.name} value={a.name}>{a.name}</option>)}
-	                                  </select>
-	                                </label>
-	                                {!draft.useTrax && (
-	                                  <label className="mu-field">
-	                                    <span className="mu-label">Mix</span>
-	                                    <select className="mu-select" value={draft.mixTitle} disabled={draft.artist === 'random' || !artistMixes.length} onChange={(e) => updateRemixDraft('mixTitle', e.target.value)}>
-	                                      <option value="">{draft.artist === 'random' ? 'Pick an artist first' : (artistMixes.length ? 'Random mix' : 'No mixes available')}</option>
-	                                      {artistMixes.map((m) => <option key={m} value={m}>{m}</option>)}
-	                                    </select>
-	                                  </label>
+	                              )}
+	                              <div className="field">
+	                                <span className="label">Source folders ({draft.selectedFolders.length} selected)</span>
+	                                {videoRemixFolders.length ? (
+	                                  <div className="toggle-grid" role="group" aria-label="Source folders">
+	                                    {videoRemixFolders.map((folder) => {
+	                                      const on = draft.selectedFolders.includes(folder);
+	                                      return (
+	                                        <button
+	                                          key={folder}
+	                                          type="button"
+	                                          role="switch"
+	                                          aria-checked={on}
+	                                          aria-label={folder}
+	                                          onClick={() => toggleFolder(folder)}
+	                                          className={`toggle-card${on ? ' is-on' : ''}`}
+	                                        >
+	                                          <span className="check" aria-hidden="true">{on ? '✓' : ''}</span>
+	                                          <span>
+	                                            <span className="toggle-title">{folder}</span>
+	                                          </span>
+	                                        </button>
+	                                      );
+	                                    })}
+	                                  </div>
+	                                ) : (
+	                                  <p className="hint">No source folders found yet.</p>
 	                                )}
-	                                <div className="mu-field">
-	                                  <span className="mu-label">Source folders ({draft.selectedFolders.length} selected)</span>
-	                                  {videoRemixFolders.length ? (
-	                                    <div className="mb-config-platform-grid" role="group" aria-label="Source folders">
-	                                      {videoRemixFolders.map((folder) => {
-	                                        const on = draft.selectedFolders.includes(folder);
-	                                        return (
-	                                          <button
-	                                            key={folder}
-	                                            type="button"
-	                                            role="switch"
-	                                            aria-checked={on}
-	                                            aria-label={folder}
-	                                            onClick={() => toggleFolder(folder)}
-	                                            className={`mb-config-platform-toggle${on ? ' is-on' : ''}`}
-	                                          >
-	                                            <span className="mb-config-platform-check" aria-hidden="true">{on ? '✓' : ''}</span>
-	                                            <span className="mb-config-platform-body">
-	                                              <span className="mb-config-platform-title">{folder}</span>
-	                                            </span>
-	                                          </button>
-	                                        );
-	                                      })}
-	                                    </div>
-	                                  ) : (
-	                                    <p className="mu-notice" style={{ marginTop: 0 }}>No source folders found yet.</p>
-	                                  )}
-	                                </div>
-	                                <label className="mu-field">
-	                                  <span className="mu-label">Filter look</span>
-	                                  <select className="mu-select" value={draft.videoFilter} onChange={(e) => updateRemixDraft('videoFilter', e.target.value)}>
-	                                    <option value="random">Random</option>
-	                                    {filterList.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
-	                                  </select>
-	                                </label>
-	                                <label className="mu-field">
-	                                  <span className="mu-label">Filter intensity — {Math.round(draft.filterIntensity * 100)}%</span>
-	                                  <input
-	                                    type="range"
-	                                    min="0"
-	                                    max="1"
-	                                    step="0.05"
-	                                    value={draft.filterIntensity}
-	                                    onChange={(e) => updateRemixDraft('filterIntensity', Number(e.target.value))}
-	                                  />
-	                                </label>
-	                                <label className="mu-field">
-	                                  <span className="mu-label">Overlay</span>
-	                                  <select
-	                                    className="mu-select"
-	                                    value={draft.enableOverlay ? draft.overlayEffect : ''}
-	                                    onChange={(e) => {
-	                                      const v = e.target.value;
-	                                      updateRemixDraft('overlayEffect', v);
-	                                      updateRemixDraft('enableOverlay', !!v);
-	                                    }}
-	                                  >
-	                                    {(overlayList.length ? overlayList : [{ value: '', label: 'None' }]).map((o) => <option key={o.value || 'none'} value={o.value}>{o.label}</option>)}
-	                                  </select>
-	                                </label>
-	                                <label className="mu-field">
-	                                  <span className="mu-label">Top logo</span>
-	                                  <select className="mu-select" value={draft.topLogo} onChange={(e) => updateRemixDraft('topLogo', e.target.value)}>
-	                                    <option value="">None</option>
-	                                    {logoList.map((l) => <option key={l} value={l}>{l}</option>)}
-	                                  </select>
-	                                </label>
-	                                <label className="mu-field">
-	                                  <span className="mu-label">End logo</span>
-	                                  <select
-	                                    className="mu-select"
-	                                    value={draft.endLogo}
-	                                    onChange={(e) => {
-	                                      const v = e.target.value;
-	                                      updateRemixDraft('endLogo', v);
-	                                      if (v) updateRemixDraft('endTextOverlay', '');
-	                                    }}
-	                                  >
-	                                    <option value="">None</option>
-	                                    {logoList.map((l) => <option key={l} value={l}>{l}</option>)}
-	                                  </select>
-	                                </label>
-	                                <button
-	                                  type="button"
-	                                  role="switch"
-	                                  aria-checked={draft.useArtistImage}
-	                                  aria-label="Use artist image end-card"
-	                                  onClick={() => updateRemixDraft('useArtistImage', !draft.useArtistImage)}
-	                                  className={`mb-config-platform-toggle${draft.useArtistImage ? ' is-on' : ''}`}
-	                                  style={{ width: '100%' }}
-	                                >
-	                                  <span className="mb-config-platform-check" aria-hidden="true">{draft.useArtistImage ? '✓' : ''}</span>
-	                                  <span className="mb-config-platform-body">
-	                                    <span className="mb-config-platform-title">Artist image end-card</span>
-	                                  </span>
-	                                </button>
-	                                <label className="mu-field">
-	                                  <span className="mu-label">End-card text {draft.endLogo ? '(disabled — end logo set)' : ''}</span>
-	                                  <input
-	                                    className="mu-input"
-	                                    value={draft.endTextOverlay}
-	                                    maxLength={80}
-	                                    disabled={!!draft.endLogo}
-	                                    placeholder="Optional end-card caption"
-	                                    onChange={(e) => updateRemixDraft('endTextOverlay', e.target.value)}
-	                                  />
-	                                </label>
 	                              </div>
-	                              {videoRemixError ? (
-	                                <p className="mu-notice mu-notice--danger" style={{ marginTop: 0 }}>{videoRemixError}</p>
-	                              ) : null}
-	                              <button type="button" className="mu-cta-primary" style={{ width: '100%' }} onClick={buildRecipeAndRun} disabled={!canGenerate}>
-	                                <span>{videoRemixLoading ? 'Rendering…' : 'Generate Video'}</span>
+	                              <label className="field">
+	                                <span className="label">Filter look</span>
+	                                <select value={draft.videoFilter} onChange={(e) => updateRemixDraft('videoFilter', e.target.value)}>
+	                                  <option value="random">Random</option>
+	                                  {filterList.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
+	                                </select>
+	                              </label>
+	                              <div className="range-wrap">
+	                                <span className="label">Filter intensity — {Math.round(draft.filterIntensity * 100)}%</span>
+	                                <input
+	                                  type="range"
+	                                  min="0"
+	                                  max="1"
+	                                  step="0.05"
+	                                  value={draft.filterIntensity}
+	                                  onChange={(e) => updateRemixDraft('filterIntensity', Number(e.target.value))}
+	                                />
+	                                <div className="range-scale"><span>0%</span><span>100%</span></div>
+	                              </div>
+	                              <label className="field">
+	                                <span className="label">Overlay</span>
+	                                <select
+	                                  value={draft.enableOverlay ? draft.overlayEffect : ''}
+	                                  onChange={(e) => {
+	                                    const v = e.target.value;
+	                                    updateRemixDraft('overlayEffect', v);
+	                                    updateRemixDraft('enableOverlay', !!v);
+	                                  }}
+	                                >
+	                                  {(overlayList.length ? overlayList : [{ value: '', label: 'None' }]).map((o) => <option key={o.value || 'none'} value={o.value}>{o.label}</option>)}
+	                                </select>
+	                              </label>
+	                              <label className="field">
+	                                <span className="label">Top logo</span>
+	                                <select value={draft.topLogo} onChange={(e) => updateRemixDraft('topLogo', e.target.value)}>
+	                                  <option value="">None</option>
+	                                  {logoList.map((l) => <option key={l} value={l}>{l}</option>)}
+	                                </select>
+	                              </label>
+	                              <label className="field">
+	                                <span className="label">End logo</span>
+	                                <select
+	                                  value={draft.endLogo}
+	                                  onChange={(e) => {
+	                                    const v = e.target.value;
+	                                    updateRemixDraft('endLogo', v);
+	                                    if (v) updateRemixDraft('endTextOverlay', '');
+	                                  }}
+	                                >
+	                                  <option value="">None</option>
+	                                  {logoList.map((l) => <option key={l} value={l}>{l}</option>)}
+	                                </select>
+	                              </label>
+	                              <button
+	                                type="button"
+	                                role="switch"
+	                                aria-checked={draft.useArtistImage}
+	                                aria-label="Use artist image end-card"
+	                                onClick={() => updateRemixDraft('useArtistImage', !draft.useArtistImage)}
+	                                className={`toggle-card${draft.useArtistImage ? ' is-on' : ''}`}
+	                                style={{ width: '100%' }}
+	                              >
+	                                <span className="check" aria-hidden="true">{draft.useArtistImage ? '✓' : ''}</span>
+	                                <span>
+	                                  <span className="toggle-title">Artist image end-card</span>
+	                                  <span className="toggle-desc">Close on the artist image instead of a text caption.</span>
+	                                </span>
 	                              </button>
-	                            </section>
-	                          </div>
+	                              <label className="field">
+	                                <span className="label">End-card text {draft.endLogo ? '(disabled — end logo set)' : ''}</span>
+	                                <input
+	                                  value={draft.endTextOverlay}
+	                                  maxLength={80}
+	                                  disabled={!!draft.endLogo}
+	                                  placeholder="Optional end-card caption"
+	                                  onChange={(e) => updateRemixDraft('endTextOverlay', e.target.value)}
+	                                />
+	                              </label>
+	                            </div>
+	                            {videoRemixError ? (
+	                              <p className="hint-danger">{videoRemixError}</p>
+	                            ) : null}
+	                            <button type="button" className="btn cta-pill-btn cta-primary-wide" onClick={buildRecipeAndRun} disabled={!canGenerate}>
+	                              <span className="cta-text">{videoRemixLoading ? 'Rendering…' : 'Generate Video'}</span>
+	                              <span className="cta-icon">↗</span>
+	                            </button>
+	                          </section>
 	                        )}
 	                        {modalTab === 'assets' && (
-	                          <div className="tile-detail-tab-pane">
-	                            {savedRemixes.length ? savedRemixes.map((asset) => {
-	                              const url = asset.downloadUrl || asset.url || null;
-	                              return (
-	                                <div key={asset.storagePath || url || asset.jobId} className="mu-saved-card">
-	                                  <div className="mu-saved-head">
-	                                    <div>
-	                                      <span className="mu-saved-meta">video_remix · {asset.capturedAt ? new Date(asset.capturedAt).toLocaleString() : 'Saved'}</span>
-	                                      <h4 className="mu-saved-title">{asset.label || 'Branded remix'}</h4>
-	                                    </div>
-	                                    {url ? (
-	                                      <a className="mu-btn-outline" href={url} target="_blank" rel="noopener noreferrer">Open <UpRightArrow style={{ marginLeft: '0.1rem', opacity: 0.82 }} /></a>
-	                                    ) : null}
-	                                  </div>
+	                          savedRemixes.length ? savedRemixes.map((asset) => {
+	                            const url = asset.downloadUrl || asset.url || null;
+	                            return (
+	                              <article key={asset.storagePath || url || asset.jobId} className="list-card">
+	                                <div className="list-head">
+	                                  <span className="list-title">{asset.label || 'Branded remix'}</span>
 	                                  {url ? (
-	                                    <video src={url} controls muted playsInline preload="metadata" style={{ width: '100%', maxHeight: 260, borderRadius: 8, background: '#000' }} />
+	                                    <a className="btn btn-outline" href={url} target="_blank" rel="noopener noreferrer">Open <span className="cta-icon">↗</span></a>
 	                                  ) : null}
 	                                </div>
-	                              );
-	                            }) : (
-	                              <div className="mu-empty">No remixes yet. Use REMIX, then click Generate Video.</div>
-	                            )}
-	                          </div>
+	                                <div className="list-body">video_remix · {asset.capturedAt ? new Date(asset.capturedAt).toLocaleString() : 'Saved'}</div>
+	                                {url ? (
+	                                  <div className="preview-surface">
+	                                    <div className="preview-media">
+	                                      <video src={url} controls playsInline preload="metadata" />
+	                                    </div>
+	                                  </div>
+	                                ) : null}
+	                              </article>
+	                            );
+	                          }) : (
+	                            <div className="empty">No remixes yet. Use REMIX, then click Generate Video.</div>
+	                          )
 	                        )}
 	                      </div>
 	                    </div>
@@ -25991,6 +26135,440 @@ const dashboardCss = `
   /* Past brief rows already have bg hover — add transition */
   .cap-past-brief-row {
     transition: background var(--dur-base) ease;
+  }
+
+  /* ── Market Signals modal — scoped style-guide components (.signals-sg) ──
+     Mirrors public/docs/dashboard-modal-component-style-guide.html. Scoped
+     under .signals-sg so the light-glass language stays isolated to the
+     Market Signals SOURCES / IN BRIEF tabs and never leaks elsewhere. */
+  .signals-sg {
+    --sg-ink: #2a2420; --sg-ink-soft: rgba(42,36,32,0.72); --sg-ink-muted: rgba(42,36,32,0.52);
+    --sg-line: rgba(42,36,32,0.12); --sg-line-soft: rgba(42,36,32,0.14);
+    --sg-surface-strong: rgba(255,255,255,0.78);
+    --sg-a: hsl(185,100%,45%); --sg-b: hsl(262,100%,55%); --sg-c: hsl(314,100%,50%);
+    --sg-success: #285f3b; --sg-warning: #67533d; --sg-danger: #9f1f17;
+    --sg-radius: 8px;
+    --sg-mono: "Space Mono", ui-monospace, monospace;
+    --sg-ui: "Space Grotesk", system-ui, sans-serif;
+    --sg-ease: cubic-bezier(0.34,1.56,0.64,1);
+    display: grid; gap: 14px; margin: -18px; padding: 18px;
+    color: var(--sg-ink); font-family: var(--sg-ui);
+    background: radial-gradient(circle at 88% 0%, rgba(0,173,181,0.06), transparent 22rem), linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%);
+  }
+  .signals-sg * { box-sizing: border-box; }
+  .signals-sg .sg-section { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--sg-line); border-radius: var(--sg-radius); background: var(--sg-surface-strong); box-shadow: 0 1px 0 rgba(255,255,255,0.72), inset 0 1px 0 rgba(255,255,255,0.35); }
+  .signals-sg .sg-head { display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 12px; align-items: start; }
+  .signals-sg .sg-index { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 28px; border: 1px solid var(--sg-line); border-radius: 6px; background: rgba(255,255,255,0.5); font-family: var(--sg-mono); font-size: 12px; color: var(--sg-ink-soft); }
+  .signals-sg .sg-head h3 { margin: 0; font-size: 18px; line-height: 1.25; color: var(--sg-ink); }
+  .signals-sg .sg-head p { margin: 4px 0 0; color: var(--sg-ink-soft); font-size: 13px; line-height: 1.5; }
+  .signals-sg .sg-label { display: block; color: var(--sg-ink-soft); font-size: 12px; font-weight: 700; font-family: var(--sg-mono); letter-spacing: 0.08em; text-transform: uppercase; }
+  .signals-sg .sg-hint { color: var(--sg-ink-muted); font-size: 12.5px; line-height: 1.5; }
+  .signals-sg .sg-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; min-height: 36px; padding: 0 15px; border: 1px solid var(--sg-line); border-radius: 999px; background: rgba(255,255,255,0.52); color: var(--sg-ink); font: 700 12px/1 var(--sg-mono); letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; box-shadow: inset 0 1px 0 rgba(255,255,255,0.5); transition: background 160ms ease, box-shadow 160ms ease, border-color 160ms ease, transform 220ms var(--sg-ease); }
+  .signals-sg .sg-btn:hover:not(:disabled) { background: rgba(255,255,255,0.82); border-color: rgba(42,36,32,0.18); box-shadow: 0 4px 14px rgba(42,36,32,0.08), inset 0 1px 0 rgba(255,255,255,0.5); transform: translateY(-1px); }
+  .signals-sg .sg-btn:active:not(:disabled) { transform: translateY(0); }
+  .signals-sg .sg-btn:disabled { cursor: not-allowed; opacity: 0.52; }
+  .signals-sg .sg-btn-outline { min-height: 34px; border: 1.5px solid #111; border-radius: 7px; background: #fff; color: #111; }
+  .signals-sg .sg-btn-outline:hover { background: #f7f7f7; border-color: #222; }
+  .signals-sg .sg-btn-danger { color: var(--sg-danger); border-color: rgba(159,31,23,0.24); background: rgba(159,31,23,0.04); }
+  .signals-sg .sg-btn-danger:hover { background: rgba(159,31,23,0.1); border-color: rgba(159,31,23,0.44); }
+  .signals-sg .sg-btn-on { color: var(--sg-success); border-color: rgba(40,95,59,0.4); background: rgba(40,95,59,0.1); }
+  .signals-sg .sg-btn-off { color: var(--sg-ink-muted); }
+  .signals-sg .sg-cta { isolation: isolate; overflow: hidden; min-height: 40px; padding: 0 18px; border: none; border-radius: 999px; color: #fff; font: 700 13px/1 var(--sg-ui); letter-spacing: 0.01em; text-transform: none; background: linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, var(--sg-a) 0%, var(--sg-b) 52%, var(--sg-c) 100%); box-shadow: 0 0 14px 3px rgba(0,200,228,0.22), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28); }
+  .signals-sg .sg-cta:hover { transform: translateY(-1px); box-shadow: 0 0 26px 5px rgba(0,200,228,0.34), 0 4px 14px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.28); }
+  .signals-sg .sg-source { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: center; min-height: 58px; padding: 8px 10px 8px 18px; border: 1px solid var(--sg-line); border-radius: 999px; background: rgba(255,255,255,0.68); box-shadow: 0 1px 0 rgba(255,255,255,0.8), inset 0 1px 0 rgba(255,255,255,0.6), 0 10px 26px rgba(42,36,32,0.06); transition: border-color 160ms ease, box-shadow 160ms ease; }
+  .signals-sg .sg-source:hover { border-color: rgba(42,36,32,0.22); box-shadow: 0 1px 0 rgba(255,255,255,0.8), inset 0 1px 0 rgba(255,255,255,0.6), 0 14px 34px rgba(42,36,32,0.1); }
+  .signals-sg .sg-source-value { display: flex; align-items: center; min-width: 0; gap: 12px; color: rgba(42,36,32,0.7); font: 400 16px/1.25 var(--sg-ui); }
+  .signals-sg .sg-source-value small { display: block; color: var(--sg-ink-muted); font: 400 11px/1.3 var(--sg-mono); margin-top: 3px; }
+  .signals-sg .sg-source-actions { display: flex; align-items: center; gap: 8px; }
+  .signals-sg .sg-seg { display: flex; padding: 4px; border: 1px solid var(--sg-line); border-radius: 999px; background: rgba(255,255,255,0.96); box-shadow: inset 0 1px 0 rgba(255,255,255,0.45); }
+  .signals-sg .sg-seg button { flex: 1; min-height: 36px; border: 0; border-radius: 999px; background: transparent; color: var(--sg-ink-soft); font: 700 12px/1 var(--sg-mono); letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; transition: background 160ms ease, color 140ms ease; }
+  .signals-sg .sg-seg button:hover:not(.is-active) { background: rgba(42,36,32,0.06); color: var(--sg-ink); }
+  .signals-sg .sg-seg .is-active { background: var(--sg-ink); color: #fff; box-shadow: 0 3px 10px rgba(42,36,32,0.14); }
+  .signals-sg .sg-range { display: grid; gap: 7px; }
+  .signals-sg .sg-range input[type="range"] { width: 100%; min-height: 30px; padding: 0; accent-color: var(--sg-ink); background: transparent; border: 0; }
+  .signals-sg .sg-range-scale { display: flex; justify-content: space-between; color: var(--sg-ink-muted); font: 12px/1 var(--sg-mono); }
+  .signals-sg .sg-list { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--sg-line); border-radius: var(--sg-radius); background: var(--sg-surface-strong); }
+  .signals-sg .sg-list-head { display: flex; align-items: center; gap: 10px; }
+  .signals-sg .sg-list-title { flex: 1; color: var(--sg-ink); font-size: 14px; font-weight: 700; }
+  .signals-sg .sg-inv { display: grid; grid-template-columns: minmax(0,1fr) auto auto; gap: 10px; align-items: center; padding: 7px 4px; border-bottom: 1px solid var(--sg-line-soft); }
+  .signals-sg .sg-inv:last-child { border-bottom: 0; }
+  .signals-sg .sg-inv .name { min-width: 0; color: var(--sg-ink); font: 400 13px/1.3 var(--sg-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .signals-sg .sg-inv.is-off .name { color: var(--sg-ink-muted); }
+  .signals-sg .sg-chip { display: inline-flex; align-items: center; min-height: 28px; padding: 3px 10px; border: 1px solid var(--sg-line); border-radius: 999px; background: rgba(255,255,255,0.5); color: var(--sg-ink-soft); font: 400 12px/1 var(--sg-mono); letter-spacing: 0.04em; }
+  .signals-sg .sg-chip-success { color: var(--sg-success); border-color: rgba(40,95,59,0.3); background: rgba(40,95,59,0.08); }
+  .signals-sg .sg-metrics { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; }
+  .signals-sg .sg-metric { display: grid; gap: 5px; min-height: 70px; padding: 12px; border: 1px solid var(--sg-line); border-radius: var(--sg-radius); background: rgba(255,255,255,0.78); }
+  .signals-sg .sg-metric-value { color: var(--sg-ink); font: 700 24px/1 var(--sg-ui); font-variant-numeric: tabular-nums; }
+  .signals-sg .sg-metric-label { color: var(--sg-ink-muted); font: 700 10px/1.2 var(--sg-mono); letter-spacing: 0.08em; text-transform: uppercase; }
+  .signals-sg .sg-result { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--sg-line); border-radius: var(--sg-radius); background: rgba(255,255,255,0.76); transition: border-color 160ms ease, box-shadow 160ms ease, transform 220ms var(--sg-ease); }
+  .signals-sg .sg-result:hover { border-color: rgba(42,36,32,0.2); box-shadow: 0 4px 16px rgba(42,36,32,0.08); transform: translateY(-1px); }
+  .signals-sg .sg-result-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .signals-sg .sg-result-meta { display: flex; flex-wrap: wrap; gap: 6px; color: var(--sg-ink-muted); font: 10px/1.4 var(--sg-mono); letter-spacing: 0.06em; text-transform: uppercase; }
+  .signals-sg .sg-result-title { margin: 3px 0 0; color: var(--sg-ink); font-size: 15px; line-height: 1.3; font-weight: 700; }
+  .signals-sg .sg-result-body { margin: 0; color: var(--sg-ink-soft); font-size: 13px; line-height: 1.5; }
+  .signals-sg .sg-result a { font: 10px/1 var(--sg-mono); letter-spacing: 0.1em; text-transform: uppercase; color: #1d6fa8; text-decoration: underline; text-underline-offset: 3px; }
+  .signals-sg .sg-notice { border: 1px solid var(--sg-line); border-radius: var(--sg-radius); padding: 8px 12px; color: var(--sg-ink-soft); background: rgba(255,255,255,0.72); font-size: 13px; line-height: 1.45; }
+  .signals-sg .sg-notice-danger { border-color: rgba(159,31,23,0.22); background: rgba(159,31,23,0.05); color: var(--sg-danger); }
+  .signals-sg .sg-empty { display: grid; place-items: center; min-height: 150px; padding: 26px 16px; border: 1px dashed var(--sg-line); border-radius: var(--sg-radius); background: rgba(255,255,255,0.36); text-align: center; color: var(--sg-ink-soft); font-size: 14px; line-height: 1.5; }
+  .signals-sg .sg-input { width: 100%; min-height: 40px; border: 1px solid var(--sg-line); border-radius: var(--sg-radius); background: rgba(255,255,255,0.96); color: var(--sg-ink); padding: 8px 12px; font: 14px/1.4 var(--sg-mono); outline: none; box-shadow: inset 0 1px 0 rgba(255,255,255,0.55); }
+  .signals-sg .sg-input:focus { border-color: rgba(42,36,32,0.36); box-shadow: 0 0 0 3px rgba(42,36,32,0.08), inset 0 1px 0 rgba(255,255,255,0.65); }
+  .signals-sg .sg-input-zip { width: 84px; }
+  .signals-sg .sg-paper { background: #f4f1ea; border: 1px solid #e3ddd0; border-radius: 12px; padding: 24px; }
+  .signals-sg .sg-paper .kick { font: 700 10px/1 var(--sg-mono); letter-spacing: 0.26em; text-transform: uppercase; color: #a23d2c; }
+  .signals-sg .sg-paper h2 { font: 680 24px/1.05 var(--sg-ui); letter-spacing: -0.02em; margin: 6px 0 3px; color: #191919; }
+  .signals-sg .sg-paper .lede { color: #6b6256; font-size: 12.5px; margin: 0; }
+  .signals-sg .sg-paper .psec { font: 700 11px/1 var(--sg-mono); letter-spacing: 0.16em; text-transform: uppercase; color: #8a8073; margin: 22px 0 12px; border-top: 1px solid #ddd6c8; padding-top: 13px; }
+  .signals-sg .sg-paper .quotewall { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .signals-sg .sg-paper .qtile { background: #fff; border: 1px solid #e3ddd0; border-radius: 12px; padding: 14px 15px; }
+  .signals-sg .sg-paper .qtile .q { font: 540 14.5px/1.42 var(--sg-ui); color: #23211c; }
+  .signals-sg .sg-paper .qtile .who { display: flex; justify-content: space-between; gap: 8px; font: 11px/1 var(--sg-mono); color: #8a8073; margin-top: 9px; }
+
+  /* Video Remix modal kit. Keep this inside dashboardCss because DashboardPage
+     injects this string directly; external dashboard.css is not guaranteed here. */
+  .vrk-scope {
+    --vrk-ink: #2a2420;
+    --vrk-ink-soft: rgba(42,36,32,0.72);
+    --vrk-ink-muted: rgba(42,36,32,0.52);
+    --vrk-line: rgba(42,36,32,0.12);
+    --vrk-surface: rgba(255,255,255,0.62);
+    --vrk-surface-strong: rgba(255,255,255,0.78);
+    --vrk-success: #285f3b;
+    --vrk-danger: #9f1f17;
+    --vrk-a: hsl(185,100%,45%);
+    --vrk-b: hsl(262,100%,55%);
+    --vrk-c: hsl(314,100%,50%);
+    --vrk-radius: 8px;
+    --vrk-cell-radius: 16px;
+    --vrk-ui: "Space Grotesk", system-ui, sans-serif;
+    --vrk-mono: "Space Mono", ui-monospace, monospace;
+    --vrk-ease: cubic-bezier(0.34,1.56,0.64,1);
+    color: var(--vrk-ink);
+    font-family: var(--vrk-ui);
+  }
+  .vrk-scope, .vrk-scope * { box-sizing: border-box; }
+  .vrk-scope.panel,
+  .vrk-scope .panel {
+    overflow: hidden;
+    border: 1px solid var(--vrk-line);
+    border-radius: var(--vrk-cell-radius);
+    background: var(--vrk-surface);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.7), inset 0 1px 0 rgba(255,255,255,0.35);
+    backdrop-filter: blur(22px);
+    -webkit-backdrop-filter: blur(22px);
+  }
+  #video-remix-modal-tabs-container.vrk-scope {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .vrk-scope .tabs {
+    display: flex;
+    flex-shrink: 0;
+    min-height: 48px;
+    border-bottom: 1px solid var(--vrk-line);
+    background: rgba(255,255,255,0.28);
+  }
+  .vrk-scope .tab {
+    flex: 1;
+    min-height: 48px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: var(--vrk-ink-soft);
+    cursor: pointer;
+    font: 700 12px/1 var(--vrk-mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    transition: color 160ms ease, background 140ms ease;
+  }
+  .vrk-scope .tab:hover:not(.is-active) { color: var(--vrk-ink); background: rgba(255,255,255,0.38); }
+  .vrk-scope .tab.is-active {
+    color: var(--vrk-ink);
+    border-image: linear-gradient(90deg, var(--vrk-a), var(--vrk-b), var(--vrk-c)) 0 0 1 0;
+  }
+  .vrk-scope .panel-body {
+    display: grid;
+    flex: 1;
+    gap: 16px;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 16px;
+    overscroll-behavior: contain;
+  }
+  .vrk-scope .section {
+    display: grid;
+    gap: 14px;
+    padding: 16px;
+    border: 1px solid var(--vrk-line);
+    border-radius: var(--vrk-radius);
+    background: var(--vrk-surface-strong);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.72), inset 0 1px 0 rgba(255,255,255,0.35);
+  }
+  .vrk-scope .section-head {
+    display: grid;
+    grid-template-columns: auto minmax(0,1fr) auto;
+    gap: 12px;
+    align-items: start;
+  }
+  .vrk-scope .index {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 28px;
+    border: 1px solid var(--vrk-line);
+    border-radius: 6px;
+    background: rgba(255,255,255,0.5);
+    color: var(--vrk-ink-soft);
+    font: 700 12px/1 var(--vrk-mono);
+  }
+  .vrk-scope .section h3 {
+    margin: 0;
+    color: var(--vrk-ink);
+    font: 700 18px/1.25 var(--vrk-ui);
+    letter-spacing: 0;
+  }
+  .vrk-scope .section p {
+    margin: 5px 0 0;
+    color: var(--vrk-ink-soft);
+    font-size: 14px;
+    line-height: 1.55;
+  }
+  .vrk-scope .label {
+    display: block;
+    color: var(--vrk-ink-soft);
+    font: 700 12px/1.2 var(--vrk-mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .vrk-scope .field,
+  .vrk-scope .range-wrap {
+    display: grid;
+    gap: 7px;
+  }
+  .vrk-scope input,
+  .vrk-scope select,
+  .vrk-scope textarea {
+    width: 100%;
+    min-height: 54px;
+    border: 1px solid var(--vrk-line);
+    border-radius: var(--vrk-radius);
+    background: rgba(255,255,255,0.96);
+    color: var(--vrk-ink);
+    padding: 12px 16px;
+    font: 16px/1.45 var(--vrk-mono);
+    outline: none;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.55);
+  }
+  .vrk-scope input:focus,
+  .vrk-scope select:focus,
+  .vrk-scope textarea:focus {
+    border-color: rgba(42,36,32,0.36);
+    box-shadow: 0 0 0 3px rgba(42,36,32,0.08), inset 0 1px 0 rgba(255,255,255,0.65);
+  }
+  .vrk-scope input:disabled,
+  .vrk-scope select:disabled,
+  .vrk-scope .btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.52;
+  }
+  .vrk-scope input[type="range"] {
+    min-height: 32px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    accent-color: var(--vrk-ink);
+  }
+  .vrk-scope .range-scale {
+    display: flex;
+    justify-content: space-between;
+    color: var(--vrk-ink-muted);
+    font: 12px/1 var(--vrk-mono);
+  }
+  .vrk-scope .segmented {
+    display: flex;
+    padding: 4px;
+    border: 1px solid var(--vrk-line);
+    border-radius: 999px;
+    background: rgba(255,255,255,0.96);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.45);
+  }
+  .vrk-scope .segmented button {
+    flex: 1;
+    min-height: 44px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--vrk-ink-soft);
+    font: 700 13px/1 var(--vrk-mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 160ms ease, color 140ms ease;
+  }
+  .vrk-scope .segmented button:hover:not(.is-active) { background: rgba(42,36,32,0.06); color: var(--vrk-ink); }
+  .vrk-scope .segmented .is-active { background: var(--vrk-ink); color: #fff; box-shadow: 0 3px 10px rgba(42,36,32,0.14); }
+  .vrk-scope .toggle-grid {
+    display: grid;
+    grid-template-columns: repeat(3,minmax(0,1fr));
+    gap: 12px;
+  }
+  .vrk-scope .toggle-card {
+    display: grid;
+    grid-template-columns: auto minmax(0,1fr);
+    gap: 12px;
+    min-height: 72px;
+    padding: 14px;
+    border: 1px solid var(--vrk-line);
+    border-radius: var(--vrk-radius);
+    background: rgba(255,255,255,0.96);
+    color: var(--vrk-ink);
+    text-align: left;
+    cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.45);
+    transition: background 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 220ms var(--vrk-ease);
+  }
+  .vrk-scope .toggle-card:hover {
+    background: #fff;
+    border-color: rgba(42,36,32,0.22);
+    box-shadow: 0 3px 12px rgba(42,36,32,0.07), inset 0 1px 0 rgba(255,255,255,0.45);
+    transform: translateY(-1px);
+  }
+  .vrk-scope .toggle-card.is-on {
+    background: var(--vrk-surface-strong);
+    border-color: rgba(42,36,32,0.22);
+  }
+  .vrk-scope .check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: 1px solid rgba(42,36,32,0.18);
+    border-radius: 999px;
+    background: rgba(255,255,255,0.55);
+    color: var(--vrk-ink);
+    font: 700 12px/1 var(--vrk-mono);
+  }
+  .vrk-scope .is-on .check { background: var(--vrk-ink); border-color: var(--vrk-ink); color: #fff; }
+  .vrk-scope .toggle-title {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--vrk-ink);
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .vrk-scope .toggle-desc {
+    display: block;
+    margin-top: 5px;
+    color: var(--vrk-ink-muted);
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .vrk-scope .btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    padding: 0 15px;
+    border: 1px solid var(--vrk-line);
+    border-radius: 999px;
+    background: rgba(255,255,255,0.52);
+    color: var(--vrk-ink);
+    font: 700 12px/1 var(--vrk-mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-decoration: none;
+    cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.5);
+    transition: background 160ms ease, box-shadow 160ms ease, border-color 160ms ease, transform 220ms var(--vrk-ease);
+  }
+  .vrk-scope .btn:hover:not(:disabled) {
+    background: rgba(255,255,255,0.82);
+    border-color: rgba(42,36,32,0.18);
+    box-shadow: 0 4px 14px rgba(42,36,32,0.08), inset 0 1px 0 rgba(255,255,255,0.5);
+    transform: translateY(-1px);
+  }
+  .vrk-scope .btn-outline {
+    min-height: 34px;
+    border: 1.5px solid #111;
+    border-radius: 7px;
+    background: #fff;
+    color: #111;
+    box-shadow: none;
+  }
+  .vrk-scope .cta-pill-btn {
+    isolation: isolate;
+    gap: 0.5rem;
+    min-height: 2.75rem;
+    border: none;
+    color: #fff;
+    font-family: var(--vrk-ui);
+    font-size: 0.95rem;
+    letter-spacing: 0.01em;
+    text-transform: none;
+    overflow: hidden;
+    background: linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, var(--vrk-a) 0%, var(--vrk-b) 52%, var(--vrk-c) 100%);
+    box-shadow: 0 0 14px 3px rgba(0,200,228,0.22), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1);
+  }
+  .vrk-scope .cta-primary-wide {
+    width: 100%;
+    min-height: 52px;
+    padding: 0 24px;
+    font-size: 16px;
+    justify-self: stretch;
+  }
+  .vrk-scope .hint,
+  .vrk-scope .empty,
+  .vrk-scope .list-body {
+    color: var(--vrk-ink-soft);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .vrk-scope .hint-danger { color: var(--vrk-danger); font-size: 13px; line-height: 1.5; }
+  .vrk-scope .list-card {
+    display: grid;
+    gap: 8px;
+    padding: 12px 14px;
+    border: 1px solid var(--vrk-line);
+    border-radius: var(--vrk-radius);
+    background: var(--vrk-surface-strong);
+  }
+  .vrk-scope .list-head { display: flex; align-items: center; gap: 10px; }
+  .vrk-scope .list-title { flex: 1; color: var(--vrk-ink); font-size: 14px; font-weight: 700; line-height: 1.35; }
+  .vrk-scope .empty {
+    display: grid;
+    place-items: center;
+    min-height: 180px;
+    padding: 28px 16px;
+    border: 1px dashed var(--vrk-line);
+    border-radius: var(--vrk-radius);
+    background: rgba(255,255,255,0.36);
+    text-align: center;
+  }
+  .vrk-scope .toolbar { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--vrk-line); background: rgba(255,255,255,0.44); }
+  .vrk-scope .preview-surface { overflow: hidden; border: 1px solid var(--vrk-line); border-radius: var(--vrk-radius); background: rgba(255,255,255,0.86); }
+  .vrk-scope .preview-media {
+    display: grid;
+    place-items: center;
+    min-height: 190px;
+    background: linear-gradient(135deg, rgba(0,173,181,0.08), rgba(122,77,255,0.08)), rgba(255,255,255,0.9);
+  }
+  .vrk-scope .preview-media video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+  .vrk-scope.vrk-player-shell { position: absolute; inset: 0; display: flex; flex-direction: column; }
+  .vrk-scope.vrk-player-shell .preview-surface { flex: 1; display: flex; flex-direction: column; border: 0; border-radius: 0; background: #000; }
+  .vrk-scope.vrk-player-shell .preview-media { flex: 1; min-height: 0; padding: 0; background: #000; }
+  @media (max-width: 860px) {
+    .vrk-scope .section-head { grid-template-columns: auto minmax(0,1fr); }
+    .vrk-scope .section-head .btn { grid-column: 1 / -1; }
+    .vrk-scope .toggle-grid { grid-template-columns: 1fr; }
   }
 `;
 
