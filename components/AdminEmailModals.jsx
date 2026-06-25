@@ -1,11 +1,15 @@
 'use client';
 
 // AdminEmailModals.jsx — admin-only modal content for the dashboard "Admin"
-// bucket. Two views rendered inside the standard tile-detail modal:
-//   • AdminEmailDigestView   — view the digest email (content + analytics) + send
-//   • AdminEmailSettingsView — enable / format / customize the digest summary
-// Logic and state live here to keep DashboardPage.jsx lean. Styling reuses the
-// dashboard's established modal classes (tile-detail-*, mb-config-*).
+// bucket. The Email Digest card is the single control surface, mirroring the
+// Market Signals card pattern: a SETTINGS tab that sets the params, then a
+// PREVIEW tab that renders + sends the resulting email.
+//   • AdminEmailDigestView — SETTINGS (config) + PREVIEW (email + send)
+//   • AdminCreateClientView — website-less client workspace
+// The SETTINGS tab is styled with the dashboard-modal style guide primitives
+// (scoped under `.vrk-scope`: .section / .toggle-grid / .segmented / .field-grid),
+// the same kit the Video Remix modal uses. See
+// public/docs/dashboard-modal-component-style-guide.html.
 
 import React, { useCallback, useEffect, useState } from 'react';
 
@@ -24,122 +28,38 @@ async function authFetch(user, path, options = {}) {
   return data;
 }
 
-// ── Email Digest: view the rendered email + analytics, send on demand ─────────
-export function AdminEmailDigestView({ user }) {
-  const [tab, setTab] = useState('email');
-  const [mode, setMode] = useState('template'); // 'template' (placeholder) | 'live'
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [preview, setPreview] = useState(null); // { html, paragraph, placeholder }
-  const [status, setStatus] = useState(null);    // { kind, msg }
+// Email section toggles — [include key, card title, card description, customize
+// cardId]. Order is the rough top-to-bottom order of the email. The 4th element
+// is the dashboard card to open for customizing that section (null = no card
+// yet). Creative Brief is opt-in (off by default).
+const SECTION_TOGGLES = [
+  ['marketingBrief', 'Marketing Brief', 'Strategy, signals + Happening on X', 'signals'],
+  ['creativeBrief', 'Creative Brief', 'Attach the client’s run Creative Brief', 'onboarding-brief'],
+  ['calendar', 'Calendar Agenda', 'Up to 5 days of events', 'calendar-connect'],
+  ['webStats', 'Web Stats', 'GA4 traffic + homepage activity', null],
+  ['platformStats', 'Platform Stats', 'Sign-ups, dashboards, pipeline', null],
+  ['deployments', 'Deployments', 'Vercel deploys + runtime errors', null],
+];
 
-  // Opening the card shows the TEMPLATE (placeholder) preview — no live data is
-  // gathered and nothing is generated. Live data is only fetched on request.
-  const load = useCallback(async (nextMode = 'template') => {
-    if (!user) return;
-    setLoading(true);
-    setError('');
-    setMode(nextMode);
-    try {
-      const param = nextMode === 'live' ? '1' : 'template';
-      const data = await authFetch(user, `/api/admin/daily-digest?preview=${param}`);
-      setPreview({ html: data.html || '', paragraph: data.paragraph || data.summary?.paragraph || '', placeholder: Boolean(data.placeholder) });
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
+// ── Email Digest: SETTINGS (params) + PREVIEW (rendered email + send) ─────────
+export function AdminEmailDigestView({ user, onOpenCard }) {
+  const [tab, setTab] = useState('settings'); // 'settings' | 'preview'
+  const [clientsExpanded, setClientsExpanded] = useState(false); // "Include client briefs" collapsible — default collapsed
 
-  useEffect(() => { load('template'); }, [load]);
-
-  // Run & Send — gathers live data and delivers the email to the configured recipient.
-  const runAndSend = useCallback(async () => {
-    if (!user) return;
-    if (typeof window !== 'undefined' && !window.confirm('Run the digest with live data and send it to the configured recipient now?')) return;
-    setStatus({ kind: 'pending', msg: 'Running & sending…' });
-    try {
-      await authFetch(user, '/api/admin/daily-digest?send=1');
-      setStatus({ kind: 'ok', msg: 'Sent.' });
-    } catch (e) {
-      setStatus({ kind: 'error', msg: e.message });
-    }
-  }, [user]);
-
-  const isTemplate = mode === 'template';
-
-  return (
-    <div className="tile-detail-bento-cell tile-detail-tabbed-container">
-      <div className="tile-detail-tabs">
-        <button type="button" className={`tile-detail-tab${tab === 'email' ? ' tile-detail-tab--active' : ''}`} onClick={() => setTab('email')}>EMAIL</button>
-        <button type="button" className={`tile-detail-tab${tab === 'summary' ? ' tile-detail-tab--active' : ''}`} onClick={() => setTab('summary')}>SUMMARY</button>
-      </div>
-      <div className="tile-detail-tab-content">
-        {loading ? (
-          <div style={emptyWrap}><span style={emptyLabel}>{isTemplate ? 'Loading template…' : 'Gathering live data…'}</span></div>
-        ) : error ? (
-          <div style={emptyWrap}><span style={emptyLabel}>Preview failed</span><span style={emptyBody}>{error}</span></div>
-        ) : tab === 'email' ? (
-          <div className="tile-detail-tab-pane" style={{ padding: 0, height: '100%', overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
-            <div style={{
-              flexShrink: 0, padding: '8px 12px', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase',
-              color: preview?.placeholder ? 'var(--warning)' : 'var(--success)',
-              background: preview?.placeholder ? 'rgba(212,168,67,0.12)' : 'rgba(74,158,92,0.12)',
-              borderRadius: 6, marginBottom: 8,
-            }}>
-              {preview?.placeholder ? 'Template preview · placeholder data — sections fill in when you Run & Send' : 'Live preview · real data from the last 24 hours'}
-            </div>
-            {preview?.html ? (
-              <iframe
-                title="Daily digest email"
-                srcDoc={preview.html}
-                style={{ width: '100%', flex: 1, minHeight: 560, border: '1px solid rgba(42,36,32,0.08)', borderRadius: 8, background: '#fff' }}
-              />
-            ) : (
-              <div style={emptyWrap}><span style={emptyLabel}>No email content</span></div>
-            )}
-          </div>
-        ) : (
-          <div className="tile-detail-tab-pane" style={{ padding: 18 }}>
-            <p style={{ fontSize: 14, lineHeight: 1.62, color: 'var(--text-display)', margin: 0 }}>
-              {preview?.paragraph || 'No summary text — the LLM summary may be disabled in Email Settings.'}
-            </p>
-          </div>
-        )}
-      </div>
-      <div className="mb-config-actionbar">
-        <span className="mb-config-actionbar-note">
-          {status
-            ? (status.kind === 'error' ? `Error: ${status.msg}` : status.msg)
-            : (isTemplate ? 'Reviewing the layout with placeholder data — nothing is generated or sent.' : 'Showing real data from the last 24 hours — still nothing sent.')}
-        </span>
-        <div className="mb-config-actionbar-buttons">
-          {isTemplate ? (
-            <button type="button" className="mb-config-mini-btn" onClick={() => load('live')} disabled={loading}>Preview live data</button>
-          ) : (
-            <button type="button" className="mb-config-mini-btn" onClick={() => load('template')} disabled={loading}>Back to template</button>
-          )}
-          <button type="button" className="tile-foot-rerun-btn" onClick={runAndSend} disabled={status?.kind === 'pending'}>Run &amp; Send</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Email Settings: enable / format / customize the LLM summary ───────────────
-export function AdminEmailSettingsView({ user }) {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  // ── Settings state (params that drive the email) ──
+  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [settingsError, setSettingsError] = useState('');
   const [form, setForm] = useState(null);
   const [docs, setDocs] = useState([]);
   const [clientId, setClientId] = useState('');
   const [clients, setClients] = useState([]);
-  const [status, setStatus] = useState(null);
+  const [saveStatus, setSaveStatus] = useState(null);
+  const [runState, setRunState] = useState({}); // { [clientId]: 'running' | 'done' | 'error: msg' }
 
-  const load = useCallback(async () => {
+  const loadSettings = useCallback(async () => {
     if (!user) return;
-    setLoading(true);
-    setError('');
+    setSettingsLoading(true);
+    setSettingsError('');
     try {
       const data = await authFetch(user, '/api/admin/digest-config');
       setForm(data.config || null);
@@ -147,9 +67,9 @@ export function AdminEmailSettingsView({ user }) {
       setClientId(data.clientId || '');
       setClients(data.clients || []);
     } catch (e) {
-      setError(e.message);
+      setSettingsError(e.message);
     } finally {
-      setLoading(false);
+      setSettingsLoading(false);
     }
   }, [user]);
 
@@ -160,7 +80,6 @@ export function AdminEmailSettingsView({ user }) {
     });
   }, []);
 
-  const [runState, setRunState] = useState({}); // { [clientId]: 'running' | 'done' | 'error: msg' }
   const runBrief = useCallback(async (cid) => {
     if (!user || !cid) return;
     setRunState((s) => ({ ...s, [cid]: 'running' }));
@@ -172,147 +91,334 @@ export function AdminEmailSettingsView({ user }) {
     }
   }, [user]);
 
-  useEffect(() => { load(); }, [load]);
-
   const save = useCallback(async () => {
     if (!user || !form) return;
-    setStatus({ kind: 'pending', msg: 'Saving…' });
+    setSaveStatus({ kind: 'pending', msg: 'Saving…' });
     try {
       const data = await authFetch(user, '/api/admin/digest-config', { method: 'POST', body: JSON.stringify(form) });
       setForm(data.config);
-      setStatus({ kind: 'ok', msg: 'Saved.' });
+      setSaveStatus({ kind: 'ok', msg: 'Saved.' });
     } catch (e) {
-      setStatus({ kind: 'error', msg: e.message });
+      setSaveStatus({ kind: 'error', msg: e.message });
     }
   }, [user, form]);
 
-  if (loading) {
-    return <div className="tile-detail-bento-cell" style={{ ...emptyWrap, minHeight: 320 }}><span style={emptyLabel}>Loading settings…</span></div>;
-  }
-  if (error) {
-    return <div className="tile-detail-bento-cell" style={{ ...emptyWrap, minHeight: 320 }}><span style={emptyLabel}>Settings failed</span><span style={emptyBody}>{error}</span></div>;
-  }
-  if (!form) {
-    return <div className="tile-detail-bento-cell" style={{ ...emptyWrap, minHeight: 320 }}><span style={emptyLabel}>No config</span></div>;
-  }
+  // ── Preview state (the rendered email) ──
+  const [previewMode, setPreviewMode] = useState('template'); // 'template' | 'live'
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState('');
+  const [preview, setPreview] = useState(null); // { html, paragraph, placeholder }
+  const [sendStatus, setSendStatus] = useState(null);
+
+  // Render the preview honoring the current (even unsaved) include toggles, so
+  // flipping a section off in SETTINGS and tabbing over shows it drop out.
+  const loadPreview = useCallback(async (nextMode = 'template', includeFlags) => {
+    if (!user) return;
+    setPreviewLoading(true);
+    setPreviewError('');
+    setPreviewMode(nextMode);
+    try {
+      const param = nextMode === 'live' ? '1' : 'template';
+      let path = `/api/admin/daily-digest?preview=${param}`;
+      if (includeFlags) {
+        const on = Object.entries(includeFlags).filter(([, v]) => v !== false).map(([k]) => k).join(',');
+        path += `&include=${encodeURIComponent(on)}`;
+      }
+      const data = await authFetch(user, path);
+      setPreview({ html: data.html || '', paragraph: data.paragraph || data.summary?.paragraph || '', placeholder: Boolean(data.placeholder) });
+    } catch (e) {
+      setPreviewError(e.message);
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [user]);
+
+  const runAndSend = useCallback(async () => {
+    if (!user) return;
+    if (typeof window !== 'undefined' && !window.confirm('Run the digest with live data and send it to the configured recipient now?')) return;
+    setSendStatus({ kind: 'pending', msg: 'Running & sending…' });
+    try {
+      await authFetch(user, '/api/admin/daily-digest?send=1');
+      setSendStatus({ kind: 'ok', msg: 'Sent.' });
+    } catch (e) {
+      setSendStatus({ kind: 'error', msg: e.message });
+    }
+  }, [user]);
+
+  useEffect(() => { loadSettings(); }, [loadSettings]);
+
+  // Reload the template preview each time the PREVIEW tab is opened, so it
+  // reflects the latest include toggles from the SETTINGS tab.
+  useEffect(() => {
+    if (tab === 'preview') loadPreview('template', form?.include);
+  }, [tab, form, loadPreview]);
+
+  const isTemplate = previewMode === 'template';
 
   return (
     <div className="tile-detail-bento-cell tile-detail-tabbed-container">
-      <div className="tile-detail-tab-content">
-        <div className="tile-detail-tab-pane custom-brief-submit-pane">
-          <section className="mb-config-section">
-            <div className="mb-config-section-head">
-              <span className="mb-config-section-index">01</span>
-              <div>
-                <h4>Client data sources</h4>
-                <p>Home client feeds your brain + primary brief. Include others to fold their latest brief into the email. Calendar & site analytics always show regardless.</p>
-              </div>
-              <span className="mb-config-section-status">{(form.includeClientIds || []).length + 1} feeding</span>
-            </div>
-            <label className="mb-config-field">
-              <span className="mb-config-label">Home client (brain + brief)</span>
-              <select
-                className="mb-config-input"
-                value={form.homeClientId || ''}
-                onChange={(e) => setForm((f) => ({ ...f, homeClientId: e.target.value || null }))}
-              >
-                <option value="">Default ({clientId || 'email-resolved'})</option>
-                {clients.map((c) => (
-                  <option key={c.clientId} value={c.clientId}>{c.name}{c.websiteUrl ? '' : ' · no site'}</option>
-                ))}
-              </select>
-            </label>
-            <div className="mb-config-field">
-              <span className="mb-config-label">Include client briefs</span>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 220, overflow: 'auto' }}>
-                {clients.length ? clients.map((c) => {
-                  const checked = (form.includeClientIds || []).includes(c.clientId);
-                  const rs = runState[c.clientId];
-                  return (
-                    <div key={c.clientId} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-display)' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flex: 1, minWidth: 0 }}>
-                        <input type="checkbox" checked={checked} onChange={() => toggleInclude(c.clientId)} />
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}{c.websiteUrl ? '' : ' · no site'}</span>
-                      </label>
-                      {rs && rs.startsWith('error') ? <span style={{ fontSize: 10, color: 'var(--accent, #d71921)', whiteSpace: 'nowrap' }} title={rs}>failed</span> : null}
-                      {rs === 'done' ? <span style={{ fontSize: 10, color: 'var(--success, #4A9E5C)', whiteSpace: 'nowrap' }}>done</span> : null}
-                      <button type="button" className="mb-config-mini-btn" onClick={() => runBrief(c.clientId)} disabled={rs === 'running'} style={{ whiteSpace: 'nowrap' }}>
-                        {rs === 'running' ? 'Running…' : 'Run brief'}
-                      </button>
-                    </div>
-                  );
-                }) : <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>No clients.</span>}
-              </div>
-              <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>Run brief generates today&apos;s strategy for that client (may take ~1 min). Re-open Email Digest to see it.</span>
-            </div>
-          </section>
+      <div className="tile-detail-tabs">
+        <button type="button" className={`tile-detail-tab${tab === 'settings' ? ' tile-detail-tab--active' : ''}`} onClick={() => setTab('settings')}>SETTINGS</button>
+        <button type="button" className={`tile-detail-tab${tab === 'preview' ? ' tile-detail-tab--active' : ''}`} onClick={() => setTab('preview')}>EMAIL PREVIEW</button>
+      </div>
 
-          <section className="mb-config-section">
-            <div className="mb-config-section-head">
-              <span className="mb-config-section-index">02</span>
-              <div>
-                <h4>Summary generation</h4>
-                <p>The LLM writes the opening paragraph from your brief, calendar, analytics, and recent uploads.</p>
-              </div>
-              <span className="mb-config-section-status">{clientId || 'no client'}</span>
-            </div>
-            <div className="custom-brief-submit-grid">
-              <label className="mb-config-field">
-                <span className="mb-config-label">LLM summary</span>
-                <select className="mb-config-input" value={form.summaryEnabled ? 'on' : 'off'} onChange={(e) => setForm((f) => ({ ...f, summaryEnabled: e.target.value === 'on' }))}>
-                  <option value="on">Enabled</option>
-                  <option value="off">Disabled</option>
-                </select>
-              </label>
-              <label className="mb-config-field">
-                <span className="mb-config-label">Recent docs fed</span>
-                <input type="number" min="1" max="20" className="mb-config-input" value={form.recentDocsCount} onChange={(e) => setForm((f) => ({ ...f, recentDocsCount: Number(e.target.value) }))} />
-              </label>
-            </div>
-            <label className="mb-config-field">
-              <span className="mb-config-label">Tone</span>
-              <input className="mb-config-input" value={form.tone || ''} onChange={(e) => setForm((f) => ({ ...f, tone: e.target.value }))} />
-            </label>
-            <label className="mb-config-field">
-              <span className="mb-config-label">Extra instructions</span>
-              <textarea className="mb-config-textarea" rows={4} placeholder="Optional steering (e.g. flag overdue tasks, highlight revenue)…" value={form.extraInstructions || ''} onChange={(e) => setForm((f) => ({ ...f, extraInstructions: e.target.value }))} />
-            </label>
-          </section>
+      {tab === 'settings' ? (
+        // ── SETTINGS tab — the params that drive the email (style-guide kit) ──
+        settingsLoading ? (
+          <div style={{ ...emptyWrap, minHeight: 320 }}><span style={emptyLabel}>Loading settings…</span></div>
+        ) : settingsError ? (
+          <div style={{ ...emptyWrap, minHeight: 320 }}><span style={emptyLabel}>Settings failed</span><span style={emptyBody}>{settingsError}</span></div>
+        ) : !form ? (
+          <div style={{ ...emptyWrap, minHeight: 320 }}><span style={emptyLabel}>No config</span></div>
+        ) : (
+          <div className="tile-detail-tab-content">
+            <div className="vrk-scope" id="email-digest-settings-shell" style={{ display: 'grid', gap: 16, padding: 16, alignContent: 'start', overflowY: 'auto' }}>
 
-          <section className="mb-config-section">
-            <div className="mb-config-section-head">
-              <span className="mb-config-section-index">03</span>
-              <div>
-                <h4>Documents feeding the summary</h4>
-                <p>The most recent uploads from the home client's Company Brain.</p>
-              </div>
-              <span className="mb-config-section-status">{docs.length} doc{docs.length === 1 ? '' : 's'}</span>
-            </div>
-            {docs.length ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {docs.map((d) => (
-                  <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13, color: 'var(--text-display)', borderBottom: '1px dashed rgba(42,36,32,0.12)', padding: '6px 0' }}>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</span>
-                    <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>{d.chars}</span>
+              <section className="section">
+                <div className="section-head">
+                  <span className="index">01</span>
+                  <div>
+                    <h3>Client data sources</h3>
+                    <p>Home client feeds your brain + primary brief. Include others to fold their latest brief into the email.</p>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <p className="tile-analyzer-solutions-empty">No knowledge-base docs found for this client.</p>
-            )}
-          </section>
+                  <span className="label">{(form.includeClientIds || []).length + 1} feeding</span>
+                </div>
+                <div className="field" style={{ display: 'grid', gap: 6 }}>
+                  <span className="label">Home client (brain + brief)</span>
+                  <select value={form.homeClientId || ''} onChange={(e) => setForm((f) => ({ ...f, homeClientId: e.target.value || null }))}>
+                    <option value="">Default ({clientId || 'email-resolved'})</option>
+                    {clients.map((c) => (
+                      <option key={c.clientId} value={c.clientId}>{c.name}{c.websiteUrl ? '' : ' · no site'}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field" style={{ display: 'grid', gap: 6 }}>
+                  <button
+                    type="button"
+                    aria-expanded={clientsExpanded}
+                    onClick={() => setClientsExpanded((v) => !v)}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '4px 0', border: 0, background: 'none', cursor: 'pointer', minHeight: 0 }}
+                  >
+                    <span className="label" style={{ margin: 0 }}>Include client briefs ({(form.includeClientIds || []).length} on)</span>
+                    <span className="label" style={{ margin: 0 }}>{clientsExpanded ? '▲ Hide' : '▼ Show'}</span>
+                  </button>
+                  {clientsExpanded ? (
+                    <>
+                      <div style={{ display: 'grid', gap: 6, maxHeight: 220, overflow: 'auto' }}>
+                        {clients.length ? clients.map((c) => {
+                          const checked = (form.includeClientIds || []).includes(c.clientId);
+                          const rs = runState[c.clientId];
+                          return (
+                            <div key={c.clientId} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flex: 1, minWidth: 0, fontSize: 14, color: 'var(--vrk-ink, #2a2420)' }}>
+                                <input type="checkbox" checked={checked} onChange={() => toggleInclude(c.clientId)} style={{ width: 18, minHeight: 18 }} />
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}{c.websiteUrl ? '' : ' · no site'}</span>
+                              </label>
+                              {rs && rs.startsWith('error') ? <span style={{ fontSize: 10, color: 'var(--danger, #9f1f17)', whiteSpace: 'nowrap' }} title={rs}>failed</span> : null}
+                              {rs === 'done' ? <span style={{ fontSize: 10, color: 'var(--success, #285f3b)', whiteSpace: 'nowrap' }}>done</span> : null}
+                              <button type="button" className="btn btn-outline" onClick={() => runBrief(c.clientId)} disabled={rs === 'running'} style={{ whiteSpace: 'nowrap' }}>
+                                {rs === 'running' ? 'Running…' : 'Run brief'}
+                              </button>
+                            </div>
+                          );
+                        }) : <span className="hint">No clients.</span>}
+                      </div>
+                      <span className="hint">Run brief generates today&apos;s strategy for that client (~1 min). Switch to EMAIL PREVIEW to see it.</span>
+                    </>
+                  ) : null}
+                </div>
+              </section>
 
-          {status?.kind === 'error' && <p className="mb-config-error">{status.msg}</p>}
-          <div className="mb-config-actionbar">
-            <span className="mb-config-actionbar-note">
-              {status && status.kind !== 'error' ? status.msg : 'Saved settings apply to the next digest and live previews.'}
-            </span>
-            <div className="mb-config-actionbar-buttons">
-              <button type="button" className="tile-foot-rerun-btn" onClick={save} disabled={status?.kind === 'pending'}>{status?.kind === 'pending' ? 'Saving…' : 'Save Config'}</button>
+              <section className="section">
+                <div className="section-head">
+                  <span className="index">02</span>
+                  <div>
+                    <h3>Summary generation</h3>
+                    <p>The LLM writes the opening paragraph from your brief, calendar, analytics, and recent uploads.</p>
+                  </div>
+                  <span className="label">{clientId || 'no client'}</span>
+                </div>
+                <div className="field-grid">
+                  <label className="field" style={{ display: 'grid', gap: 6 }}>
+                    <span className="label">LLM summary</span>
+                    <select value={form.summaryEnabled ? 'on' : 'off'} onChange={(e) => setForm((f) => ({ ...f, summaryEnabled: e.target.value === 'on' }))}>
+                      <option value="on">Enabled</option>
+                      <option value="off">Disabled</option>
+                    </select>
+                  </label>
+                  <label className="field" style={{ display: 'grid', gap: 6 }}>
+                    <span className="label">Recent docs fed</span>
+                    <input type="number" min="1" max="20" value={form.recentDocsCount} onChange={(e) => setForm((f) => ({ ...f, recentDocsCount: Number(e.target.value) }))} />
+                  </label>
+                </div>
+                <label className="field" style={{ display: 'grid', gap: 6 }}>
+                  <span className="label">Tone</span>
+                  <input value={form.tone || ''} onChange={(e) => setForm((f) => ({ ...f, tone: e.target.value }))} />
+                </label>
+                <label className="field" style={{ display: 'grid', gap: 6 }}>
+                  <span className="label">Extra instructions</span>
+                  <textarea rows={4} placeholder="Optional steering (e.g. flag overdue tasks, highlight revenue)…" value={form.extraInstructions || ''} onChange={(e) => setForm((f) => ({ ...f, extraInstructions: e.target.value }))} />
+                </label>
+              </section>
+
+              <section className="section">
+                <div className="section-head">
+                  <span className="index">03</span>
+                  <div>
+                    <h3>Sections included in the email</h3>
+                    <p>Toggle what flows into the email. Creative Brief attaches the client&apos;s run brief; Calendar agenda is controlled here too.</p>
+                  </div>
+                  <span className="label">{SECTION_TOGGLES.filter(([k]) => form.include?.[k]).length}/{SECTION_TOGGLES.length} on</span>
+                </div>
+                <div className="toggle-grid" role="group" aria-label="Email sections">
+                  {SECTION_TOGGLES.map(([key, title, desc, cardId]) => {
+                    const on = !!form.include?.[key];
+                    const toggle = () => setForm((f) => ({ ...f, include: { ...(f.include || {}), [key]: !on } }));
+                    return (
+                      <div
+                        key={key}
+                        role="button"
+                        tabIndex={0}
+                        aria-pressed={on}
+                        className={`toggle-card${on ? ' is-on' : ''}`}
+                        onClick={toggle}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
+                      >
+                        <span className="check">{on ? '✓' : ''}</span>
+                        <span style={{ minWidth: 0 }}>
+                          <span className="toggle-title">{title}</span>
+                          <span className="toggle-desc">{desc}</span>
+                          {cardId && onOpenCard ? (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); onOpenCard(cardId); }}
+                              style={{ marginTop: 9, padding: 0, border: 0, background: 'none', cursor: 'pointer', font: '700 11px/1 var(--vrk-mono, monospace)', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--vrk-ink, #2a2420)' }}
+                            >
+                              Customize ↗
+                            </button>
+                          ) : null}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section className="section">
+                <div className="section-head">
+                  <span className="index">04</span>
+                  <div>
+                    <h3>Schedule</h3>
+                    <p>When the digest sends. Stored now; the daily cron still fires until per-recipient dispatch ships.</p>
+                  </div>
+                  <span className="label">{form.schedule?.frequency || 'daily'}</span>
+                </div>
+                <div className="field" style={{ display: 'grid', gap: 6 }}>
+                  <span className="label">Frequency</span>
+                  <div className="segmented" role="group" aria-label="Frequency">
+                    {['daily', 'weekly', 'off'].map((fq) => (
+                      <button key={fq} type="button" className={(form.schedule?.frequency || 'daily') === fq ? 'is-active' : ''} onClick={() => setForm((p) => ({ ...p, schedule: { ...(p.schedule || {}), frequency: fq } }))}>{fq}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="field-grid">
+                  <label className="field" style={{ display: 'grid', gap: 6 }}>
+                    <span className="label">Send hour (0–23)</span>
+                    <input type="number" min="0" max="23" value={form.schedule?.sendHour ?? 7} onChange={(e) => setForm((p) => ({ ...p, schedule: { ...(p.schedule || {}), sendHour: Number(e.target.value) } }))} />
+                  </label>
+                  {form.schedule?.frequency === 'weekly' ? (
+                    <label className="field" style={{ display: 'grid', gap: 6 }}>
+                      <span className="label">Weekday</span>
+                      <select value={form.schedule?.weekday ?? 1} onChange={(e) => setForm((p) => ({ ...p, schedule: { ...(p.schedule || {}), weekday: Number(e.target.value) } }))}>
+                        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => (<option key={i} value={i}>{d}</option>))}
+                      </select>
+                    </label>
+                  ) : null}
+                  <label className="field" style={{ display: 'grid', gap: 6 }}>
+                    <span className="label">Timezone</span>
+                    <input value={form.schedule?.timezone || ''} onChange={(e) => setForm((p) => ({ ...p, schedule: { ...(p.schedule || {}), timezone: e.target.value } }))} />
+                  </label>
+                </div>
+              </section>
+
+              <section className="section">
+                <div className="section-head">
+                  <span className="index">05</span>
+                  <div>
+                    <h3>Documents feeding the summary</h3>
+                    <p>The most recent uploads from the home client&apos;s Company Brain.</p>
+                  </div>
+                  <span className="label">{docs.length} doc{docs.length === 1 ? '' : 's'}</span>
+                </div>
+                {docs.length ? (
+                  <div style={{ display: 'grid', gap: 0 }}>
+                    {docs.map((d) => (
+                      <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13, color: 'var(--vrk-ink-soft, #5a5346)', borderBottom: '1px solid rgba(42,36,32,0.1)', padding: '8px 2px' }}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</span>
+                        <span style={{ fontFamily: 'var(--vrk-mono, monospace)' }}>{d.chars}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="empty">No knowledge-base docs found for this client.</p>
+                )}
+              </section>
+
+              {saveStatus?.kind === 'error' && <p className="hint-danger">{saveStatus.msg}</p>}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', paddingTop: 4 }}>
+                <span className="hint">{saveStatus && saveStatus.kind !== 'error' ? saveStatus.msg : 'Saved settings apply to the next digest and the EMAIL PREVIEW (live).'}</span>
+                <button type="button" className="btn" style={{ background: '#2a2420', color: '#fff', borderColor: '#2a2420' }} onClick={save} disabled={saveStatus?.kind === 'pending'}>{saveStatus?.kind === 'pending' ? 'Saving…' : 'Save Config'}</button>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
+        )
+      ) : (
+        // ── EMAIL PREVIEW tab — the rendered email + send ──
+        <>
+          <div className="tile-detail-tab-content">
+            {previewLoading ? (
+              <div style={emptyWrap}><span style={emptyLabel}>{isTemplate ? 'Loading template…' : 'Gathering live data…'}</span></div>
+            ) : previewError ? (
+              <div style={emptyWrap}><span style={emptyLabel}>Preview failed</span><span style={emptyBody}>{previewError}</span></div>
+            ) : (
+              <div className="tile-detail-tab-pane" style={{ padding: 0, height: '100%', overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+                <div style={{
+                  flexShrink: 0, padding: '8px 12px', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase',
+                  color: preview?.placeholder ? 'var(--warning)' : 'var(--success)',
+                  background: preview?.placeholder ? 'rgba(212,168,67,0.12)' : 'rgba(74,158,92,0.12)',
+                  borderRadius: 6, marginBottom: 8,
+                }}>
+                  {preview?.placeholder ? 'Template preview · placeholder data — reflects your section toggles; real data fills in on Run & Send' : 'Live preview · real data from the last 24 hours (honors your SETTINGS)'}
+                </div>
+                {preview?.html ? (
+                  <iframe
+                    title="Daily digest email"
+                    srcDoc={preview.html}
+                    style={{ width: '100%', flex: 1, minHeight: 560, border: '1px solid rgba(42,36,32,0.08)', borderRadius: 8, background: '#fff' }}
+                  />
+                ) : (
+                  <div style={emptyWrap}><span style={emptyLabel}>No email content</span></div>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="mb-config-actionbar">
+            <span className="mb-config-actionbar-note">
+              {sendStatus
+                ? (sendStatus.kind === 'error' ? `Error: ${sendStatus.msg}` : sendStatus.msg)
+                : (isTemplate ? 'Reviewing the layout with placeholder data — nothing is generated or sent.' : 'Showing real data from the last 24 hours — still nothing sent.')}
+            </span>
+            <div className="mb-config-actionbar-buttons">
+              {isTemplate ? (
+                <button type="button" className="mb-config-mini-btn" onClick={() => loadPreview('live', form?.include)} disabled={previewLoading}>Preview live data</button>
+              ) : (
+                <button type="button" className="mb-config-mini-btn" onClick={() => loadPreview('template', form?.include)} disabled={previewLoading}>Back to template</button>
+              )}
+              <button type="button" className="tile-foot-rerun-btn" onClick={runAndSend} disabled={sendStatus?.kind === 'pending'}>Run &amp; Send</button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -334,7 +440,7 @@ export function AdminCreateClientView({ user }) {
         method: 'POST',
         body: JSON.stringify({ companyName, ideaDescription }),
       });
-      setStatus({ kind: 'ok', msg: `Created ${data.clientId}. Run its first brief below, then set it as Home in Email Settings.`, clientId: data.clientId });
+      setStatus({ kind: 'ok', msg: `Created ${data.clientId}. Run its first brief below, then set it as Home in the Email Digest settings.`, clientId: data.clientId });
       setCompanyName('');
       setIdeaDescription('');
     } catch (e) {

@@ -160,9 +160,11 @@ export async function POST(request) {
   let priorEvents = [];
   let priorLocalSignals = [];
   let priorAuditSeed = null;
+  let priorCalendar = null;
   try {
     const priorSnap = await fb.adminDb.collection('client_configs').doc(context.clientId).get();
     priorWeather = priorSnap.data()?.marketingBriefConfig?.weather || null;
+    priorCalendar = priorSnap.data()?.marketingBriefConfig?.calendar || null;
     priorScoutConfig = priorSnap.data()?.scoutConfig || null;
     priorSourceWebsiteUrl = priorSnap.data()?.sourceInputs?.websiteUrl || null;
     const a = priorSnap.data()?.marketingBriefConfig?.acknowledgedCards;
@@ -225,6 +227,11 @@ export async function POST(request) {
     analysisRecipes: Array.isArray(body?.analysisRecipes)
       ? [...new Set(body.analysisRecipes.map((s) => String(s || '').trim()).filter(Boolean))].slice(0, 12)
       : [],
+    // Calendar / Agenda toggle (Market Signals card). Controls whether the daily
+    // digest includes the Today's Agenda section. Defaults ON when never set.
+    calendar: {
+      enabled: (body?.calendar?.enabled ?? priorCalendar?.enabled) !== false,
+    },
     // Watchlist pull detail level (Market Signals card) — booleans.
     watchlistDetail: {
       tweets: body?.watchlistDetail?.tweets !== false,

@@ -55,6 +55,21 @@ function projectBrief(marketingBrief, state = null) {
 
   const scoutBrief = marketingBrief?.scoutBrief || {};
   const agentData = scoutBrief?.agentData || {};
+  const strategyPlan = state?.strategyBuilder?.lastPlan || null;
+  const strategyToday = strategyPlan?.today || null;
+  const strategyItems = arr(strategyPlan?.items)
+    .slice(0, 30)
+    .map((item) => ({
+      id: item.id || '',
+      scheduledAt: item.scheduledAt || '',
+      content: item.content || '',
+      kind: item.kind || '',
+      rationale: item.rationale || '',
+      mediaHint: item.mediaHint || '',
+      signalUsed: item.signal_used || item.signalUsed || '',
+      xStrategy: item.xStrategy || null,
+    }))
+    .filter((item) => item.content);
   const opportunities = arr(agentData?.viralOpportunities?.opportunities).length
     ? arr(agentData.viralOpportunities.opportunities)
     : arr(marketingBrief?.contentOpportunities);
@@ -122,6 +137,25 @@ function projectBrief(marketingBrief, state = null) {
     // REPORT tab (written by /api/dashboard/watchlist-pull). Raw recipe text;
     // the email parses + renders it in the brief-kit look.
     watchlistAnalysis: marketingBrief?.reportSnapshot?.watchlistAnalysis?.text || '',
+    strategyBuilder: strategyPlan ? {
+      campaignId: strategyPlan.campaignId || '',
+      generatedAt: strategyPlan.generatedAt || null,
+      today: strategyToday ? {
+        date: strategyToday.date || '',
+        strategyIntent: strategyToday.strategy_intent || '',
+        signalsUsed: arr(strategyToday.signals_used),
+        posts: arr(strategyToday.posts).map((post) => ({
+          id: post.id || '',
+          content: post.content || '',
+          platformHint: post.platform_hint || '',
+          signalUsed: post.signal_used || '',
+          mediaHint: post.mediaHint || '',
+          rationale: post.rationale || '',
+          xStrategy: post.xStrategy || null,
+        })).filter((post) => post.content),
+      } : null,
+      items: strategyItems,
+    } : null,
     _agentData: agentData, // raw, for per-handle watchlist matching (stripped before return)
   };
 }
@@ -200,6 +234,14 @@ function briefIntelToText(intel) {
   if (intel.weather?.today) {
     lines.push(`Local weather (${intel.weather.place}): today ${intel.weather.today.short}, ${intel.weather.today.temp}°${intel.weather.today.unit}. 3-day — ${intel.weather.threeDayLine}`);
   }
+  if (intel.strategyBuilder?.today?.posts?.length) {
+    lines.push('Strategy Builder day-of posts:');
+    intel.strategyBuilder.today.posts.forEach((p) => lines.push(`- ${p.content}${p.signalUsed ? ` (signal: ${p.signalUsed})` : ''}`));
+  }
+  if (intel.strategyBuilder?.items?.length) {
+    lines.push('Strategy Builder 30-day plan preview:');
+    intel.strategyBuilder.items.slice(0, 7).forEach((item) => lines.push(`- ${(item.scheduledAt || '').slice(0, 10)} ${item.kind || 'post'}: ${item.content}`));
+  }
   return lines.join('\n');
 }
 
@@ -232,4 +274,35 @@ async function getBriefForClient(clientId) {
   return { clientId, clientName, intel };
 }
 
-module.exports = { getBriefIntelligence, projectBrief, briefIntelToText, getBriefForClient, buildWatchlist };
+/**
+ * Pull the run Creative Brief (onboarding deliverable) for a client so the
+ * digest can attach it. Reads `dashboard_state/{clientId}.briefSummaries.onboarding`
+ * (the emailable cover summary) + a hero image. Returns null when none has run.
+ * @returns {Promise<{clientName,summary,generatedAt,image}|null>}
+ */
+async function getCreativeBriefForClient(clientId) {
+  if (!clientId) return null;
+  try {
+    const snap = await fb.adminDb.collection('dashboard_state').doc(clientId).get();
+    if (!snap.exists) return null;
+    const data = snap.data() || {};
+    const onboarding = data.briefSummaries?.onboarding || null;
+    const summary = String(onboarding?.summary || '').trim();
+    if (!summary) return null;
+    let clientName = '';
+    try {
+      const cs = await fb.adminDb.collection('clients').doc(clientId).get();
+      clientName = cs.data()?.companyName || '';
+    } catch { /* optional */ }
+    return {
+      clientName,
+      summary,
+      generatedAt: onboarding?.generatedAtIso || null,
+      image: data.artifacts?.homepageDeviceMockup?.downloadUrl || data.siteMeta?.ogImage || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+module.exports = { getBriefIntelligence, projectBrief, briefIntelToText, getBriefForClient, getCreativeBriefForClient, buildWatchlist };

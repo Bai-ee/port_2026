@@ -3,7 +3,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { mapRecipeToVideoJob } = require('../editvideos-bridge.cjs');
+const { mapRecipeToVideoJob, normalizeSourceFileRef } = require('../editvideos-bridge.cjs');
 
 const BASE = {
   type: 'video-remix',
@@ -89,7 +89,52 @@ test('mapRecipeToVideoJob maps manual six-segment video order', () => {
   assert.deepEqual(job.videoOrder, videoOrder);
 });
 
+test('mapRecipeToVideoJob maps artist, mix, track toggle, logos, artist image, and end text', () => {
+  const job = mapRecipeToVideoJob(
+    {
+      ...BASE,
+      artist: 'Baiee',
+      mixTitle: 'Night Set',
+      useTrax: true,
+      logos: { top: 'top-logo.png', end: 'end-logo.jpg' },
+      useArtistImage: true,
+      endCard: { text: 'BOOK NOW' },
+    },
+    { jobId: 'JOB-8' }
+  );
+  assert.equal(job.artist, 'Baiee');
+  assert.equal(job.mixTitle, 'Night Set');
+  assert.equal(job.metadata.mixTitle, 'Night Set');
+  assert.equal(job.useTrax, true);
+  assert.equal(job.topLogo, 'top-logo.png');
+  assert.equal(job.endLogo, 'end-logo.jpg');
+  assert.equal(job.useArtistImage, true);
+  assert.equal(job.endTextOverlay, 'BOOK NOW');
+});
+
 test('mapRecipeToVideoJob rejects empty selectedFolders', () => {
   assert.throws(() => mapRecipeToVideoJob({ ...BASE, sourceFolders: [] }, { jobId: 'X' }), /non-empty/);
   assert.throws(() => mapRecipeToVideoJob({ ...BASE, sourceFolders: undefined }, { jobId: 'X' }), /non-empty/);
+});
+
+test('normalizeSourceFileRef accepts flat and one-level nested source paths', () => {
+  assert.deepEqual(
+    normalizeSourceFileRef({ fullPath: 'skyline/clip 1.mp4' }),
+    { folder: 'skyline', fileName: 'clip 1.mp4', fullPath: 'skyline/clip 1.mp4' }
+  );
+  assert.deepEqual(
+    normalizeSourceFileRef({ storagePath: 'assets/retro_dust/dust.mov' }),
+    { folder: 'assets/retro_dust', fileName: 'dust.mov', fullPath: 'assets/retro_dust/dust.mov' }
+  );
+  assert.deepEqual(
+    normalizeSourceFileRef({ folder: 'neighborhood', fileName: 'still.webp' }),
+    { folder: 'neighborhood', fileName: 'still.webp', fullPath: 'neighborhood/still.webp' }
+  );
+});
+
+test('normalizeSourceFileRef rejects traversal, deep paths, reserved folders, and non-media files', () => {
+  assert.throws(() => normalizeSourceFileRef({ fullPath: '../clip.mp4' }), /invalid path/);
+  assert.throws(() => normalizeSourceFileRef({ fullPath: 'a/b/c/d.mp4' }), /folder and file/);
+  assert.throws(() => normalizeSourceFileRef({ fullPath: 'logos/logo.png' }), /not available/);
+  assert.throws(() => normalizeSourceFileRef({ folder: 'skyline', fileName: 'notes.txt' }), /Only media/);
 });

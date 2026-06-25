@@ -17,6 +17,7 @@ const { getProvider } = require('./providers');
 const { MODELS, logCostEstimate } = require('./optimizer');
 const { getDefaultClientConfig, requireClientConfig } = require('./clients');
 const { getContentSchema } = require('./content-schema');
+const { resolveVoiceProfile } = require('./voice-resolver');
 
 function getAnthropicClient() {
   return getProvider();
@@ -301,7 +302,10 @@ async function runGuardian(contentOutput, clientId) {
     const content = contentOutput.content || {};
 
     // --- Load knowledge files ---
-    const { glossary, brandVoice, gameKnowledge } = await loadKnowledge(clientId);
+    // Voice comes from the single resolver (approved Client Brain -> brand-voice.json
+    // fallback) so Guardian QA judges against the same voice Scribe wrote with.
+    const { glossary, gameKnowledge } = await loadKnowledge(clientId);
+    const brandVoice = await resolveVoiceProfile(clientId);
 
     // --- Check 1: Restricted terms (pure JS) — hardBlock on match ---
     const { hardBlock, violations } = checkRestrictedTerms(content, glossary, config);

@@ -76,7 +76,7 @@ function kolLine(x, max = 260) {
  * @returns {Array<{ role: string, content: string }>}
  */
 export function buildTodayPrompt(ctx) {
-  const { client, brand, campaign, intelligence, knowledgeBase, now } = ctx;
+  const { client, brand, campaign, intelligence, knowledgeBase, clientBrain, now } = ctx;
   const today = (now || new Date().toISOString()).slice(0, 10);
   const c = campaign || {};
 
@@ -95,6 +95,9 @@ export function buildTodayPrompt(ctx) {
 
   const knowledgeBaseBlock = knowledgeBase?.block
     ? `CLIENT KNOWLEDGE BASE — MASTER SOURCE OF TRUTH\n${cap(knowledgeBase.block, 2800)}`
+    : '';
+  const clientBrainBlock = clientBrain?.context
+    ? `CLIENT BRAIN CONTEXT\n${cap(clientBrain.context, 1800)}`
     : '';
 
   const xGrowth = ctx.xGrowth || null;
@@ -140,6 +143,8 @@ ${intelLines.join('\n') || 'none'}
 
 ${knowledgeBaseBlock || 'CLIENT KNOWLEDGE BASE: none'}
 
+${clientBrainBlock || 'CLIENT BRAIN CONTEXT: none'}
+
 ${xGrowthBlock || ''}
 
 BRAND
@@ -166,7 +171,7 @@ ${todaySchema}`;
 }
 
 export function buildPrompt(ctx, todayStrategy = null) {
-  const { client, brand, brief, intelligence, media, seo, knowledgeBase, cardFindings, campaign, signals, config, now, xGrowth } = ctx;
+  const { client, brand, brief, intelligence, media, seo, knowledgeBase, clientBrain, cardFindings, campaign, signals, config, now, xGrowth } = ctx;
 
   const loc = client?.location || {};
   const clientBlock = [
@@ -225,6 +230,7 @@ export function buildPrompt(ctx, todayStrategy = null) {
   const knowledgeBaseBlock = knowledgeBase?.block
     ? cap(knowledgeBase.block, 3400)
     : '';
+  const clientBrainBlock = clientBrain?.context ? cap(clientBrain.context, 2200) : '';
 
   // Signals — compact serialization
   const holidayItems = signals?.holidays?.enabled && signals?.holidays?.items?.length
@@ -344,6 +350,9 @@ ${seoBlock || 'none'}
 
 CLIENT KNOWLEDGE BASE (master source for offer, claims, positioning, ICP, product facts, and brand language)
 ${knowledgeBaseBlock || 'none'}
+
+CLIENT BRAIN CONTEXT (approved strategic summary; use it to steer tone, positioning, audience, and offers without inventing facts)
+${clientBrainBlock || 'none'}
 
 PIPELINE SIGNALS (read-only context, do not echo)
 ${findingsSummary}

@@ -459,12 +459,13 @@ const SUMMARY_TOOL = {
   },
 };
 
-function buildSummaryPrompt({ label, evidenceText, clientName, websiteUrl, tone }) {
+function buildSummaryPrompt({ label, evidenceText, clientName, websiteUrl, tone, clientBrainContext = '' }) {
   return [
     `You are writing the cover paragraph for the "${label}" — a marketing intelligence brief${clientName ? ` for ${clientName}` : ''}${websiteUrl ? ` (${websiteUrl})` : ''}.`,
     '',
     'Below is the data from each section included in this brief. Write ONE easy-to-read paragraph that summarizes the highlights across these sections — the single most useful takeaway per section, woven into flowing prose. Skip sections listed under NO DATA entirely; never invent findings for them. Be concrete and specific to this data, not generic.',
     ...(tone ? ['', `Voice and structure for this brief: ${tone}`] : []),
+    ...(clientBrainContext ? ['', '## CLIENT BRAND VOICE (approved Client Brain — match this voice/positioning, avoid its do-not-use language)', clientBrainContext] : []),
     '',
     evidenceText,
   ].join('\n');
@@ -484,12 +485,18 @@ function extractToolInput(response) {
  * @param {object} [options] - { clientName, websiteUrl, greeting }
  * @returns {Promise<{ ok: boolean, summary: string|null, runCostData: object|null, error: string|null }>}
  */
-async function summarizeBriefCover(briefType, data = {}, { clientName = '', websiteUrl = '', greeting = '' } = {}) {
+async function summarizeBriefCover(briefType, data = {}, { clientName = '', websiteUrl = '', greeting = '', clientBrainContext = '' } = {}) {
   const { label, evidenceText, sectionCount, briefType: resolved } = buildBriefSummaryEvidence(briefType, data);
 
   if (!sectionCount) {
     return { ok: false, summary: null, runCostData: null, error: 'No section data available to summarize.' };
   }
+
+  // Approved Client Brain voice/positioning (optional, additive). Empty => the
+  // prompts read exactly as before.
+  const brainBlock = clientBrainContext
+    ? ['', '## CLIENT BRAND VOICE (approved Client Brain — match this voice/positioning, avoid its do-not-use language)', clientBrainContext]
+    : [];
 
   // Executive daily runs JARVIS mode: full assistant-voice brief under its
   // own system prompt. The Creative Brief ('onboarding') runs the website-only
@@ -524,6 +531,7 @@ async function summarizeBriefCover(briefType, data = {}, { clientName = '', webs
                 ? ['', '## WHAT CHANGED SINCE THE LAST BRIEF (build the brief from this — these are the NEW items, tagged by Scout)', deltaText]
                 : []),
               ...(scoutNarrative ? ['', '## FULL SCOUT NARRATIVE (background context — do NOT restate established facts from here)', scoutNarrative] : []),
+              ...brainBlock,
               '',
               evidenceText,
             ].join('\n'),
@@ -542,6 +550,7 @@ async function summarizeBriefCover(briefType, data = {}, { clientName = '', webs
             role: 'user',
             content: [
               `WEBSITE EVIDENCE BUNDLE${clientName ? ` for ${clientName}` : ''}${websiteUrl ? ` (${websiteUrl})` : ''}. Produce the website-only Creative Brief using ONLY this evidence.`,
+              ...brainBlock,
               '',
               evidenceText,
             ].join('\n'),
@@ -554,7 +563,7 @@ async function summarizeBriefCover(briefType, data = {}, { clientName = '', webs
         tools: [SUMMARY_TOOL],
         tool_choice: { type: 'tool', name: 'write_brief_summary' },
         messages: [
-          { role: 'user', content: buildSummaryPrompt({ label, evidenceText, clientName, websiteUrl, tone: toneFor(resolved) }) },
+          { role: 'user', content: buildSummaryPrompt({ label, evidenceText, clientName, websiteUrl, tone: toneFor(resolved), clientBrainContext }) },
         ],
       };
 

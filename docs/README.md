@@ -5,6 +5,7 @@ Organized by function. **The active source of truth lives in [`source-of-truth/`
 | Folder | What's in it |
 |---|---|
 | `source-of-truth/` | **Active canonical docs** — SSOT, launch pipeline/wiring/checklist, readiness tracker, docs-accuracy report. Start here. |
+| `company-brain/` | Gated Client Brain docs — reusable client context schema, source toggles, card spec, downstream usage, and Bryan example seed. |
 | `launch/` | Production readiness / hardening playbooks, prelaunch prompts, the docs-audit plan, signup-launch plan. |
 | `dashboard-ui/` | Dashboard modal/card/terminal UI guides, style guides, wireframes (`.html`), card-description system. |
 | `pipeline/` | Modular card pipeline specs, client intelligence layer, `CLAUDE_PHASE_*` runtime/worker/state/admin docs, dataflow, scout analyzer skills. |

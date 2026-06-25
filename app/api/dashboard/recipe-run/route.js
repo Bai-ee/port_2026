@@ -89,18 +89,40 @@ export async function POST(request) {
     return json({ error: 'Too many analysis runs. Try again later.' }, 429);
   }
 
-  // Content = the stored scout signals (the same agentData the brief renders).
+  // Stored market signals. Most recipes read agentData (what the brief renders);
+  // reply-targets reads an assembled reply candidate pool (watchlist mentions +
+  // brand mentions + reddit + KOL) — the data the watchlist pull persists.
   const stateSnap = await fb.adminDb.collection('dashboard_state').doc(clientId).get();
-  const agentData = stateSnap.exists ? (stateSnap.data()?.marketingBrief?.scoutBrief?.agentData || null) : null;
-  if (!agentData) {
+  const marketingBrief = stateSnap.exists ? (stateSnap.data()?.marketingBrief || {}) : {};
+  const agentData = marketingBrief?.scoutBrief?.agentData || null;
+  const watchlistTimelines = marketingBrief?.watchlistTimelines || null;
+
+  // reply-pool recipes can run on watchlist data alone; agentData-recipes need it.
+  const needsAgentData = recipeIds.some((id) => getRecipe(id)?.contentKind !== 'reply-pool');
+  const wantsReplyPool = recipeIds.some((id) => getRecipe(id)?.contentKind === 'reply-pool');
+  if (needsAgentData && !agentData) {
     return json({ error: 'No stored market signals to analyze yet — run a brief (or refresh signals) first.' }, 409);
   }
-  const agentDataChars = (() => {
-    try { return JSON.stringify(agentData).length; } catch { return String(agentData).length; }
-  })();
-  if (agentDataChars > MAX_AGENT_DATA_CHARS) {
-    return json({ error: 'Stored market signals are too large for an interactive analysis run. Refresh signals or narrow the enabled analysis skills.' }, 413);
+  if (wantsReplyPool && !agentData && !watchlistTimelines) {
+    return json({ error: 'No reply candidates yet — run a brief or pull the Watchlist (Mentions on) first.' }, 409);
   }
+  if (agentData) {
+    const agentDataChars = (() => {
+      try { return JSON.stringify(agentData).length; } catch { return String(agentData).length; }
+    })();
+    if (needsAgentData && agentDataChars > MAX_AGENT_DATA_CHARS) {
+      return json({ error: 'Stored market signals are too large for an interactive analysis run. Refresh signals or narrow the enabled analysis skills.' }, 413);
+    }
+  }
+
+  // The reply candidate pool — built once, used for reply-pool recipes.
+  const replyPool = {
+    watchlistMentions: Array.isArray(watchlistTimelines?.handles) ? watchlistTimelines.handles : [],
+    brandMentions: Array.isArray(agentData?.brandMentions) ? agentData.brandMentions : [],
+    redditSignals: Array.isArray(agentData?.redditSignals) ? agentData.redditSignals : [],
+    kolActivity: Array.isArray(agentData?.kolActivity) ? agentData.kolActivity : [],
+  };
+  const contentFor = (recipeId) => (getRecipe(recipeId)?.contentKind === 'reply-pool' ? replyPool : agentData);
 
   // Optional positioning context for grounding.
   let context = '';
@@ -114,7 +136,7 @@ export async function POST(request) {
   for (const recipeId of recipeIds) {
     try {
       // eslint-disable-next-line no-await-in-loop
-      const r = await runAnalysisRecipe({ recipeId, content: agentData, context });
+      const r = await runAnalysisRecipe({ recipeId, content: contentFor(recipeId), context });
       results.push(r);
     } catch (err) {
       results.push({ ok: false, recipeId, analysis: null, costUsd: 0, ms: 0, error: err.message || 'Recipe failed.' });

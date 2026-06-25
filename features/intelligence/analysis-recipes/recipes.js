@@ -39,6 +39,18 @@ const RECIPES = {
     model: DEFAULT_MODEL,
     maxTokens: DEFAULT_MAX_TOKENS,
   },
+  'reply-targets': {
+    id: 'reply-targets',
+    label: 'Reply Targets',
+    description: 'Engagement triage — ranks the posts worth REPLYING to (watchlist mentions, brand mentions, Reddit, KOL activity) with a scored rationale and a drafted reply per post. Needs the Watchlist pulled with Mentions on.',
+    file: 'reply-targets.md',
+    source: 'coreyhaines31/marketingskills · social/listening (adapted)',
+    model: DEFAULT_MODEL,
+    maxTokens: DEFAULT_MAX_TOKENS,
+    // Reads an assembled reply candidate pool, not raw agentData. See the
+    // recipe-run route's content router.
+    contentKind: 'reply-pool',
+  },
 };
 
 function listRecipes() {

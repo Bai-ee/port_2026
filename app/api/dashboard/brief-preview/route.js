@@ -427,18 +427,49 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   // SC · 30-Day Plan — today's move, plan config, weather hook, calendar.
   const s30 = strategyData?.strategy30 || null;
   const strat = strategyData?.strategy || null;
-  const planDays = Array.isArray(s30?.days) ? s30.days : [];
+  const strategyBuilder = strategyData?.strategyBuilder || null;
+  const strategyBuilderItems = Array.isArray(strategyBuilder?.items) ? strategyBuilder.items : [];
+  const strategyBuilderToday = strategyBuilder?.today || null;
+  const strategyBuilderTodayPosts = Array.isArray(strategyBuilderToday?.posts) ? strategyBuilderToday.posts : [];
+  const strategyBuilderDays = (() => {
+    const byDay = new Map();
+    for (const item of strategyBuilderItems) {
+      const day = String(item?.scheduledAt || '').slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
+      if (!byDay.has(day)) byDay.set(day, []);
+      byDay.get(day).push(item);
+    }
+    return Array.from(byDay.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(0, 30)
+      .map(([date, items]) => {
+        const first = items[0] || {};
+        return {
+          date,
+          theme: first.kind || 'post',
+          idea: first.content || '',
+          post: first.content || '',
+          count: items.length,
+        };
+      });
+  })();
+  const planDays = strategyBuilderDays.length ? strategyBuilderDays : (Array.isArray(s30?.days) ? s30.days : []);
   const angleList = Array.isArray(strat?.contentAngles)
     ? strat.contentAngles.map((a) => a?.angle || a?.label || (typeof a === 'string' ? a : '')).filter(Boolean)
     : [];
-  const todayLine = s30?.today
+  const todayLine = strategyBuilderTodayPosts.length
+    ? [
+        strategyBuilderToday?.strategy_intent,
+        strategyBuilderTodayPosts.map((p) => p?.content).filter(Boolean).join(' / '),
+      ].filter(Boolean).join(' — ')
+    : s30?.today
     ? [s30.today.angle, s30.today.post].filter(Boolean).join(' — ')
     : xPost;
   const dayTiles = planDays.map((d) => bTile({
     span: 's2', cls: 'day',
     label: d?.date || 'Day',
     word: clip(d?.theme || d?.angle || d?.idea || '—', 80),
-    foot: clip(d?.idea || d?.post || '', 140),
+    foot: clip(`${d?.idea || d?.post || ''}${d?.count > 1 ? ` (+${d.count - 1} more)` : ''}`, 140),
   })).join('');
   const campaignSection = `
   <section class="page">
@@ -449,11 +480,13 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
       ${todayLine
         ? bTile({ span: 's2', cls: 'ink', label: 'Today · Ready To Post', word: clip(todayLine, 200), foot: angleList.length ? `Angles in rotation: ${clip(angleList.join(' · '), 160)}` : '' })
         : bTile({ span: 's2', cls: 'ink', label: 'Today', word: 'Nothing staged for today', foot: 'Produced with each executive brief run.' })}
-      ${bTile({ span: '', label: 'Calendar', big: planDays.length || '—', unit: planDays.length ? ' DAYS' : '', foot: planDays.length ? 'Rolling window — regenerates with every run.' : 'First pass pending — runs with each executive brief.' })}
+      ${bTile({ span: '', label: 'Calendar', big: planDays.length || '—', unit: strategyBuilderItems.length ? ' DAYS' : (planDays.length ? ' DAYS' : ''), foot: strategyBuilderItems.length ? `${strategyBuilderItems.length} Market Insights-driven posts.` : planDays.length ? 'Rolling window — regenerates with every run.' : 'First pass pending — runs with each executive brief.' })}
       ${weather?.today
         ? bTile({ span: '', label: `Local Weather${weather.place ? ` · ${weather.place}` : ''}`, big: weather.today.temp, unit: `°${weather.today.unit} ${String(weather.today.short).toUpperCase()}`, foot: weather.threeDayLine || '' })
         : bTile({ span: '', label: 'Local Weather', word: 'Not configured', lite: true, foot: 'Set a ZIP on the Local Weather card.' })}
-      ${strat?.postStrategy?.approach ? bTile({ span: 's4', label: 'Posting Approach', word: clip(strat.postStrategy.approach, 160), lite: true, foot: s30?.revisionNotes ? clip(`Revisions: ${s30.revisionNotes}`, 200) : '' }) : ''}
+      ${strategyBuilderToday?.strategy_intent
+        ? bTile({ span: 's4', label: 'Posting Approach', word: clip(strategyBuilderToday.strategy_intent, 160), lite: true, foot: strategyBuilderToday?.signals_used?.length ? clip(`Signals: ${strategyBuilderToday.signals_used.join(' · ')}`, 200) : '' })
+        : strat?.postStrategy?.approach ? bTile({ span: 's4', label: 'Posting Approach', word: clip(strat.postStrategy.approach, 160), lite: true, foot: s30?.revisionNotes ? clip(`Revisions: ${s30.revisionNotes}`, 200) : '' }) : ''}
     </div>
     ${dayTiles ? `<div class="bento-gap"></div><div class="bento">${dayTiles}</div>` : ''}
   </section>`;
@@ -1755,7 +1788,11 @@ async function handleGet(request) {
       conversationItemCount,
     },
     researchConfig,
-    strategyData: { strategy30: dash.strategy30 || null, strategy: dash.strategy || null },
+    strategyData: {
+      strategy30: dash.strategy30 || null,
+      strategyBuilder: dash.strategyBuilder?.lastPlan || null,
+      strategy: dash.strategy || null,
+    },
     signalsCore: Array.isArray(dash.signals?.core) ? dash.signals.core : [],
     socialQueue: await readSocialQueue(clientId).catch(() => []),
   };

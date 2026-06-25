@@ -914,6 +914,7 @@ const AdminPage = () => {
                       onChange={(e) => setDigestForm((f) => ({ ...f, extraInstructions: e.target.value }))}
                     />
                   </div>
+
                   <div className="digest-actions">
                     <button type="button" className="admin-action-btn" onClick={saveDigest}>SAVE</button>
                     <button type="button" className="admin-action-btn admin-action-btn-secondary" onClick={previewDigest}>PREVIEW</button>

@@ -49,7 +49,8 @@ import { BRIEF_TIER_ACCESS, BRIEF_PRODUCERS } from './features/scout-intake/brie
 import { deriveFindings } from './features/scout-intake/derived-findings.mjs';
 import ModuleCardControls from './components/dashboard/ModuleCardControls';
 import SubscribeModal from './components/payments/SubscribeModal';
-import { AdminEmailDigestView, AdminEmailSettingsView, AdminCreateClientView } from './components/AdminEmailModals';
+import { AdminEmailDigestView, AdminCreateClientView } from './components/AdminEmailModals';
+import { CalendarConnectView } from './components/CalendarConnectModal';
 import { ContactCapabilitiesPanel } from './StackedSlidesSection';
 import { ROSITAS_GBP_REPORT } from './lib/gbpReputationReport';
 
@@ -261,6 +262,11 @@ const StrategyBuilderCard = dynamic(() => import('./components/dashboard/Strateg
 });
 
 const KnowledgeBaseCard = dynamic(() => import('./components/dashboard/KnowledgeBaseCard'), {
+  loading: () => null,
+  ssr: false,
+});
+
+const ClientBrainCard = dynamic(() => import('./components/dashboard/ClientBrainCard'), {
   loading: () => null,
   ssr: false,
 });
@@ -1390,15 +1396,16 @@ const CUSTOM_DETAIL_CARD_IDS = new Set([
   'brand-system',
   'industry',
   'knowledge-base',
+  'client-brain',
   'client-brief',
   'client-mockup',
   'mockup-studio',
   'video-remix',
+  'media-library',
   'client-site',
   'social-media-posting',
   'strategy-builder',
   'email-digest',
-  'email-settings',
   'create-client',
   'local-weather',
   // Conversation Intake + Scout Config slice cards — single top panel only,
@@ -1420,8 +1427,9 @@ const CUSTOM_DETAIL_CARD_IDS = new Set([
 const CARD_ACTION_EDIT = new Set([
   'brand-keywords', 'watchlist', 'scout-focus', 'platform-search', 'social-signals',
   'conversation-intake', 'local-weather', 'business-model', 'brief-preview',
-  'knowledge-base', 'email-settings', 'email-digest', 'industry', 'create-client',
+  'knowledge-base', 'client-brain', 'email-digest', 'industry', 'create-client',
   'social-media-posting', 'strategy-30', 'strategy-builder', 'mockup-studio',
+  'video-remix', 'media-library',
 ]);
 
 // Brief card → composition key in features/scout-intake/brief-sections.cjs.
@@ -2404,6 +2412,7 @@ const NON_ADMIN_UNLOCKED_CARD_IDS = new Set([
   'cross-device-images',
   'post-me',
   'video-remix',
+  'media-library',
 ]);
 
 // Launch onboarding gate: non-admins get only DELIVERABLES. Every other nav
@@ -2910,6 +2919,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	  const [videoRemixUploadQueue, setVideoRemixUploadQueue] = useState([]);
 	  const [videoRemixUploadLoading, setVideoRemixUploadLoading] = useState(false);
 	  const [videoRemixUploadError, setVideoRemixUploadError] = useState('');
+	  const [mediaLibraryUsage, setMediaLibraryUsage] = useState(null);
+	  const [mediaLibraryUsageLoading, setMediaLibraryUsageLoading] = useState(false);
+	  const [mediaLibraryDeleteBusy, setMediaLibraryDeleteBusy] = useState(false);
+	  const [mediaLibraryDeleteError, setMediaLibraryDeleteError] = useState('');
+	  const [mediaLibraryDeleteResult, setMediaLibraryDeleteResult] = useState(null);
 	  const videoRemixUploadInputRef = useRef(null);
 	  const videoRemixFolderFileCacheRef = useRef(new Map());
 	  const videoRemixFolderFilesRequestRef = useRef(0);
@@ -3612,6 +3626,68 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    apiPath,
 	    refreshVideoRemixFolders,
 	    loadVideoRemixFolderFiles,
+	  ]);
+
+	  const loadMediaLibraryUsage = useCallback(async () => {
+	    if (!user) return null;
+	    setMediaLibraryUsageLoading(true);
+	    try {
+	      const token = await user.getIdToken();
+	      const res = await fetch(apiPath('/api/dashboard/media?action=usage'), {
+	        headers: { Authorization: `Bearer ${token}` },
+	        cache: 'no-store',
+	      });
+	      const data = await res.json().catch(() => ({}));
+	      if (!res.ok) throw new Error(data?.error || `Usage failed (${res.status})`);
+	      setMediaLibraryUsage(data.usage || null);
+	      return data.usage || null;
+	    } catch {
+	      setMediaLibraryUsage(null);
+	      return null;
+	    } finally {
+	      setMediaLibraryUsageLoading(false);
+	    }
+	  }, [user, apiPath]);
+
+	  const deleteVideoRemixSourceFile = useCallback(async (file) => {
+	    if (!user || !file || mediaLibraryDeleteBusy) return;
+	    const label = file.name || file.fullPath || 'this source file';
+	    if (typeof window !== 'undefined' && !window.confirm(`Delete "${label}" from source media? This cannot be undone.`)) {
+	      return;
+	    }
+	    setMediaLibraryDeleteBusy(true);
+	    setMediaLibraryDeleteError('');
+	    setMediaLibraryDeleteResult(null);
+	    try {
+	      const token = await user.getIdToken();
+	      const res = await fetch(apiPath('/api/dashboard/media?action=delete-source-media'), {
+	        method: 'POST',
+	        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+	        body: JSON.stringify({ files: [{ fullPath: file.fullPath, name: file.name }] }),
+	      });
+	      const data = await res.json().catch(() => ({}));
+	      if (!res.ok) throw new Error(data?.error || `Delete failed (${res.status})`);
+	      setMediaLibraryDeleteResult(data);
+	      const folder = videoRemixFolderFiles.folder;
+	      if (folder) {
+	        videoRemixFolderFileCacheRef.current.delete(folder);
+	        await loadVideoRemixFolderFiles(folder);
+	      }
+	      await refreshVideoRemixFolders().catch(() => {});
+	      await loadMediaLibraryUsage().catch(() => {});
+	    } catch (err) {
+	      setMediaLibraryDeleteError(err?.message || 'Delete failed.');
+	    } finally {
+	      setMediaLibraryDeleteBusy(false);
+	    }
+	  }, [
+	    user,
+	    apiPath,
+	    mediaLibraryDeleteBusy,
+	    videoRemixFolderFiles.folder,
+	    loadVideoRemixFolderFiles,
+	    refreshVideoRemixFolders,
+	    loadMediaLibraryUsage,
 	  ]);
 
 
@@ -4606,14 +4682,15 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    if (id === 'local-weather') { setModalTab('config'); return; }
 	    if (id === 'mockup-studio') { setModalTab('setup'); return; }
 	    if (id === 'video-remix') { setModalTab('remix'); return; }
+	    if (id === 'media-library') { setModalTab('source'); return; }
 	    if (id === 'archive-publishing') { setModalTab('archive'); return; }
 	    setModalTab(CUSTOM_DETAIL_CARD_IDS.has(id) ? 'solutions' : 'report');
   }, [activeTileModal?.cardId, bootstrap?.dashboardState?.artifacts?.skillDocs]);
 
   // Load Video Remix options (filters/overlays/artists/logos) + source folders
-  // when the params modal opens. Guards against refetch + unmount like siblings.
+  // when the params/media-library modal opens. Guards against refetch + unmount.
   useEffect(() => {
-    if (activeTileModal?.cardId !== 'video-remix') return undefined;
+    if (activeTileModal?.cardId !== 'video-remix' && activeTileModal?.cardId !== 'media-library') return undefined;
     if (!user) return undefined;
     let cancelled = false;
     (async () => {
@@ -4650,6 +4727,13 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     })();
     return () => { cancelled = true; };
   }, [activeTileModal?.cardId, user, apiPath]);
+
+  useEffect(() => {
+    if (activeTileModal?.cardId !== 'media-library') return undefined;
+    loadMediaLibraryUsage().catch(() => {});
+    refreshVideoRemixFolders().catch(() => {});
+    return undefined;
+  }, [activeTileModal?.cardId, loadMediaLibraryUsage, refreshVideoRemixFolders]);
 
   // Load archive sources + manifest when the Archive / Publishing modal opens.
   useEffect(() => {
@@ -4970,6 +5054,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // over the stored Marketing Insights signals via /api/dashboard/recipe-run.
   const [recipeCatalog, setRecipeCatalog] = useState([]);
   const [recipeRun, setRecipeRun] = useState({ loading: false, results: [], error: '' });
+  // Reply Targets → Post Me hand-off status (keyed by recipe result render).
+  const [replyDraftState, setReplyDraftState] = useState({ busy: false, msg: '', error: '' });
   // Handle-first watchlist X timelines (one entry per configured handle).
   const [watchlistPull, setWatchlistPull] = useState({ loading: false, handles: [], error: '' });
 
@@ -5061,6 +5147,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     saveMarketingBriefConfig({ override: next });
   }, [marketingBriefConfig, saveMarketingBriefConfig]);
 
+  // Calendar / Agenda inclusion is governed by the Email Digest admin card
+  // (`include.calendar` on digest_config), not the Market Signals card. See
+  // docs/source-of-truth/EMAIL-DIGEST-CARD.md (P2b migration).
+
   const runAnalysisRecipes = useCallback(async () => {
     if (!user) return;
     const ids = Array.isArray(marketingBriefConfig?.analysisRecipes) ? marketingBriefConfig.analysisRecipes : [];
@@ -5146,6 +5236,27 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       setWatchlistPull({ loading: false, handles: [], error: err instanceof Error ? err.message : 'Watchlist pull failed.' });
     }
   }, [user, apiPath, marketingBriefConfig, runWithTerminal]);
+
+  // Reply Targets → Post Me: create a draft reply post per target. Drafts carry
+  // the target post as replyTo context; the operator reviews/posts from Post Me.
+  const sendReplyTargetsToPostMe = useCallback(async (targets) => {
+    if (!user || !Array.isArray(targets) || !targets.length) return;
+    setReplyDraftState({ busy: true, msg: '', error: '' });
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(apiPath('/api/social-posting'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create-reply-drafts', targets }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) throw new Error(data?.error || 'Could not create reply drafts.');
+      const n = data.createdCount || 0;
+      setReplyDraftState({ busy: false, msg: `${n} reply draft${n === 1 ? '' : 's'} sent to Post Me.`, error: '' });
+    } catch (err) {
+      setReplyDraftState({ busy: false, msg: '', error: err instanceof Error ? err.message : 'Could not create reply drafts.' });
+    }
+  }, [user, apiPath]);
 
   // Single "Run all" — non-X sources via scout-test, X via the handle-first
   // watchlist pull, then the enabled analysis skills, landing on the REPORT.
@@ -5687,6 +5798,69 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     });
   };
 
+  // Render the Reply Targets skill — ranked posts worth replying to, each with a
+  // drafted reply, plus a one-click hand-off to Post Me (creates draft replies).
+  const renderReplyTargetsBlock = (res) => {
+    const { data, prose } = parseRecipeAnalysis(res.analysis);
+    const targets = Array.isArray(data?.replyTargets) ? data.replyTargets : [];
+    const tierLabel = (t) => (t === 1 ? 'Tier 1 · relationship' : t === 2 ? 'Tier 2 · visibility' : t === 3 ? 'Tier 3 · light touch' : '');
+    // Only targets with a drafted reply can become Post Me drafts.
+    const sendable = targets
+      .filter((t) => String(t?.suggestedReply || '').trim())
+      .map((t) => ({ author: t.author, url: t.url, text: t.text, source: t.source, suggestedReply: t.suggestedReply }));
+    return (
+      <div className="kit-paper" key={`recipe-brief-${res.recipeId}`} id="recipe-brief-reply-targets">
+        <div className="b-eyebrow"><span className="dot" />Engagement Triage · Reply Targets</div>
+        <h2 className="b-headline">Worth Replying To</h2>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', margin: '0 0 16px' }}>
+          <button
+            type="button"
+            className="sg-btn sg-cta"
+            disabled={replyDraftState.busy || !sendable.length}
+            onClick={() => sendReplyTargetsToPostMe(sendable)}
+          >
+            {replyDraftState.busy ? 'Sending…' : `Send ${sendable.length || ''} repl${sendable.length === 1 ? 'y' : 'ies'} to Post Me`}
+          </button>
+          {replyDraftState.msg ? <span className="sg-result-body" style={{ margin: 0 }}>{replyDraftState.msg}</span> : null}
+          {replyDraftState.error ? <span className="sg-notice sg-notice-danger" style={{ margin: 0 }}>{replyDraftState.error}</span> : null}
+        </div>
+
+        {data?.poolNote ? <div className="b-sowhat" style={{ marginBottom: 16 }}><span className="lbl">Pool</span>{data.poolNote}</div> : null}
+
+        {targets.length ? (
+          <div className="b-stack">
+            {targets.map((t, i) => (
+              <div className="b-card" key={`rt-${i}`}>
+                <div className="b-theme-head">
+                  <span className="b-handle-name">{t.author || 'unknown'}</span>
+                  <span className="b-tags">
+                    {t.score != null ? <span className="status-tag">{t.score}/10</span> : null}
+                    {t.tier ? <span className="dur">{tierLabel(t.tier)}</span> : null}
+                    {t.source ? <span className="dur">{t.source}</span> : null}
+                  </span>
+                </div>
+                {t.text ? <p className="pull" style={{ margin: '12px 0 0', maxWidth: 'none' }}>“{t.text}”</p> : null}
+                {t.url ? <p className="b-body mono" style={{ fontSize: 11, margin: '6px 0 0', color: 'var(--ink-soft)' }}><a className="b-link" href={t.url} target="_blank" rel="noopener noreferrer">↗ post</a></p> : null}
+                {t.why ? <div className="b-sowhat"><span className="lbl">Why</span>{t.why}</div> : null}
+                {t.suggestedReply ? <p className="b-body" style={{ margin: '10px 0 0' }}><strong>Draft reply:</strong> {t.suggestedReply}</p> : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="b-body">No reply targets this run. Pull the Watchlist with <strong>Mentions</strong> on (or run a brief), then re-run this skill.</p>
+        )}
+
+        {prose ? (
+          <>
+            <div className="b-sec" style={{ marginTop: 22 }}>Today’s move</div>
+            <div style={{ marginTop: 4 }}>{renderProse(prose, 'prose-reply-targets')}</div>
+          </>
+        ) : null}
+      </div>
+    );
+  };
+
   // Render one recipe synthesis as a brief-kit paper (UI-kit components only —
   // b-eyebrow / b-headline / meta-grid / b-grid / b-card / stat-row / pull / dur).
   const renderRecipeBriefBlock = (res) => {
@@ -6000,7 +6174,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           ) : null}
 
           {gbpRep ? renderGbpReputationBlock(gbpRep) : null}
-          {recipeResults.map((res) => renderRecipeBriefBlock(res))}
+          {recipeResults.map((res) => (res.recipeId === 'reply-targets' ? renderReplyTargetsBlock(res) : renderRecipeBriefBlock(res)))}
         </div>
       </div>
     );
@@ -6348,6 +6522,34 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   const displayProfile = bootstrap.userProfile || userProfile;
   const currentRun = recentRuns[0] || null;
   const dashboardState = bootstrap.dashboardState;
+  const applyClientBrainToBootstrap = useCallback((brain) => {
+    if (!brain) return;
+    const sourceRefs = Array.isArray(brain.sourceRefs) ? brain.sourceRefs : [];
+    const missing = Array.isArray(brain.missingData) ? brain.missingData : [];
+    const enabledCount = sourceRefs.filter((src) => src.enabled !== false).length;
+    setBootstrap((prev) => ({
+      ...prev,
+      dashboardState: {
+        ...(prev?.dashboardState || {}),
+        clientBrain: {
+          clientId: brain.clientId || prev?.effectiveClientId || null,
+          status: brain.status || 'draft',
+          version: brain.version || 1,
+          generatedAt: brain.generatedAt || null,
+          approvedAt: brain.approvedAt || null,
+          confidence: sourceRefs.length ? (enabledCount >= 3 ? 'medium' : 'low') : 'low',
+          sourceCount: sourceRefs.length,
+          enabledSourceCount: enabledCount,
+          highPriorityMissingCount: missing.filter((item) => item.priority === 'high').length,
+          identity: brain.identity || {},
+          aiContextPack: {
+            shortContext: brain.aiContextPack?.shortContext || '',
+            longContext: brain.aiContextPack?.longContext || '',
+          },
+        },
+      },
+    }));
+  }, []);
 
   const refreshVideoRemixJobs = useCallback(async () => {
     if (!user) return;
@@ -6817,6 +7019,33 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   const isStyleGuideMock = !styleGuideData;
   const outputsPreview  = dashboardState?.outputsPreview || null;
   const strategy30 = dashboardState?.strategy30 || null;
+  const clientBrain = dashboardState?.clientBrain || null;
+  const strategyBuilderPlan = dashboardState?.strategyBuilder?.lastPlan || null;
+  const strategyBuilderItems = Array.isArray(strategyBuilderPlan?.items) ? strategyBuilderPlan.items : [];
+  const strategyBuilderToday = strategyBuilderPlan?.today || null;
+  const strategyBuilderTodayPosts = Array.isArray(strategyBuilderToday?.posts) ? strategyBuilderToday.posts : [];
+  const strategyBuilderPrimaryPost = strategyBuilderTodayPosts[0] || null;
+  const strategyBuilderDayRows = (() => {
+    const byDay = new Map();
+    for (const item of strategyBuilderItems) {
+      const day = String(item?.scheduledAt || '').slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
+      if (!byDay.has(day)) byDay.set(day, []);
+      byDay.get(day).push(item);
+    }
+    return Array.from(byDay.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(0, 4)
+      .map(([day, items]) => {
+        const first = items[0] || {};
+        return {
+          date: day,
+          theme: first.kind || 'post',
+          idea: first.content || '',
+          count: items.length,
+        };
+      });
+  })();
   // Phase-4 Scribe: per-card short + expanded copy. When present for a card,
   // the modal description is overridden with scribe.expanded. Absent → static
   // fallback copy already defined on each intakeCapabilityCards entry.
@@ -8985,6 +9214,29 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       footerRight: 'REVIEWED',
     },
     {
+      id: 'client-brain',
+      category: 'knowledge',
+      number: 'CB',
+      label: 'CLIENT BRAIN',
+      title: 'Client Brain',
+      description: 'Aggregates client inputs into an approved context pack that downstream strategy, copy, brief, and post cards can use.',
+      placeholderLabel: clientBrain?.aiContextPack?.shortContext ? 'CLIENT\nCONTEXT' : 'BUILD\nBRAIN',
+      rows: [
+        { key: 'cb-status', label: 'Status', value: clientBrain?.status || 'Not generated' },
+        { key: 'cb-sources', label: 'Sources', value: clientBrain?.sourceCount != null ? `${clientBrain.enabledSourceCount || 0}/${clientBrain.sourceCount} enabled` : 'Discovered on open' },
+        { key: 'cb-confidence', label: 'Confidence', value: clientBrain?.confidence || 'Pending' },
+        { key: 'cb-gaps', label: 'High-priority gaps', value: String(clientBrain?.highPriorityMissingCount || 0) },
+        { key: 'cb-context', label: 'CLIENT_CONTEXT', value: clientBrain?.aiContextPack?.shortContext ? 'Ready' : 'Generate to create context pack' },
+      ],
+      footerLeft: clientBrain?.status === 'approved' ? 'Approved' : clientBrain?.status === 'generated' ? 'Generated' : 'Ready',
+      footerRight: 'CONTEXT',
+      readinessBadge: clientBrain?.status === 'approved'
+        ? { tone: 'ok', label: 'Approved' }
+        : clientBrain?.status === 'generated'
+          ? { tone: 'ok', label: 'Generated' }
+          : null,
+    },
+    {
       id: 'knowledge-base',
       category: 'knowledge',
       number: 'KB',
@@ -9605,6 +9857,32 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       };
     })(),
     (() => {
+      const usage = mediaLibraryUsage || {};
+      const folderCount = Number(usage.totalFolders || videoRemixFolderDetails.length || videoRemixFolders.length) || 0;
+      const totalFiles = Number(usage.totalFiles || 0) || videoRemixFolderDetails.reduce((sum, f) => sum + (Number(f.count) || 0), 0);
+      const totalBytes = Number(usage.totalBytes || 0) || videoRemixFolderDetails.reduce((sum, f) => sum + (Number(f.sizeBytes) || 0), 0);
+      const artistCount = Array.isArray(videoRemixOptions.artists) ? videoRemixOptions.artists.length : 0;
+      const logoCount = Array.isArray(videoRemixOptions.logos) ? videoRemixOptions.logos.length : 0;
+      return {
+        id: 'media-library',
+        category: 'deliverables',
+        number: 'ML',
+        label: 'MEDIA LIBRARY',
+        title: 'Media Library',
+        description: 'Client source media, reusable audio choices, logo/end-card assets, usage, and cleanup controls for the Video Remix pipeline.',
+        placeholderLabel: folderCount ? 'MEDIA\nLIBRARY' : 'ADD\nMEDIA',
+        rows: [
+          { key: 'ml-folders', label: 'Source folders', value: folderCount ? `${folderCount}` : 'Not loaded' },
+          { key: 'ml-files',   label: 'Media files',    value: totalFiles ? `${totalFiles}` : 'Upload clips or images' },
+          { key: 'ml-usage',   label: 'Storage',        value: totalBytes ? formatVideoRemixBytes(totalBytes) : 'Estimate after refresh' },
+          { key: 'ml-catalog', label: 'Catalog',        value: `${artistCount || '—'} artists · ${logoCount || '—'} logos` },
+        ],
+        footerLeft: mediaLibraryUsageLoading ? 'Refreshing…' : folderCount ? 'Ready' : 'Open',
+        footerRight: 'ACTIVE',
+        readinessBadge: folderCount ? { tone: 'ok', label: 'Ready' } : null,
+      };
+    })(),
+    (() => {
       const mediaCaptures = Array.isArray(dashboardState?.mediaCaptures) ? dashboardState.mediaCaptures : [];
       const latestRemix = [...mediaCaptures].reverse().find((item) => item?.type === 'video_remix') || null;
       const remixUrl = latestRemix?.downloadUrl || latestRemix?.url || null;
@@ -9696,6 +9974,22 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           : archivedCount ? { tone: 'ok', label: 'Archived' } : null,
       };
     })(),
+    {
+      id: 'calendar-connect',
+      category: 'knowledge',
+      number: 'CA',
+      label: 'CONNECT CALENDAR',
+      title: 'Google Calendar',
+      description: 'Connect your Google Calendar (read-only) so the daily digest shows your agenda under the executive summary. Toggle the agenda on/off in the Email Digest panel (admin).',
+      placeholderLabel: 'CONNECT\nCALENDAR',
+      rows: [
+        { key: 'cal-about',  label: 'About',   value: 'One-click Google sign-in. Read-only access to your events.' },
+        { key: 'cal-feeds',  label: 'Feeds',   value: 'Today’s Agenda in the daily digest email.' },
+        { key: 'cal-toggle', label: 'Control', value: 'Turn the agenda on/off in the Market Signals card.' },
+      ],
+      footerLeft: 'Connect',
+      footerRight: 'CALENDAR',
+    },
     {
       id: 'website-landing',
       category: 'website',
@@ -9895,12 +10189,22 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       label: 'TODAY',
       title: 'Day-of Post',
       description: 'Shows today\'s recommended post, why it matters, and what priority finding it supports.',
-      placeholderLabel: strategy30?.today?.post ? 'TODAY' : 'VIEW\nPRIORITY',
+      placeholderLabel: strategyBuilderPrimaryPost?.content || strategy30?.today?.post ? 'TODAY' : 'VIEW\nPRIORITY',
       rows: (() => {
         // Day-of post from the rolled strategy, backed by the run's priority evidence.
         const escalations = marketingScoutAgentData?.escalations || [];
         const top = escalations.find((e) => e?.summary) || null;
         const action = marketingBrief?.headline || resolvedPrioritySignal;
+        if (strategyBuilderPrimaryPost?.content) {
+          return [
+            { key: 'dp-post', label: 'Post', value: strategyBuilderPrimaryPost.content },
+            ...(strategyBuilderToday?.strategy_intent ? [{ key: 'dp-intent', label: 'Intent', value: strategyBuilderToday.strategy_intent }] : []),
+            ...(strategyBuilderPrimaryPost.signal_used ? [{ key: 'dp-signal', label: 'Signal used', value: strategyBuilderPrimaryPost.signal_used }] : []),
+            ...(strategyBuilderPrimaryPost.rationale ? [{ key: 'dp-why', label: 'Why today', value: strategyBuilderPrimaryPost.rationale }] : []),
+            ...(action ? [{ key: 'dp-priority', label: 'Priority action', value: action }] : []),
+            ...(top ? [{ key: 'dp-finding', label: 'Key finding', value: top.summary }] : []),
+          ];
+        }
         if (strategy30?.today?.post) {
           return [
             { key: 'dp-post', label: 'Post', value: strategy30.today.post },
@@ -9917,7 +10221,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           ...(marketingBrief?.content?.content_angle ? [{ key: 'dp-angle', label: 'Suggested angle', value: marketingBrief.content.content_angle }] : []),
         ];
       })(),
-      footerLeft: (strategy30?.today?.post || marketingBrief?.headline || hasPrioritySignalData) ? 'Live' : WORK_NEEDED_LABEL,
+      footerLeft: (strategyBuilderPrimaryPost?.content || strategy30?.today?.post || marketingBrief?.headline || hasPrioritySignalData) ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
     },
     {
@@ -9926,23 +10230,35 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       number: 'CP',
       label: 'CUSTOM',
       title: 'Custom Post Strategy',
-      locked: true,
-      description: 'Acts like a strategist: builds a custom day or week plan from the brief, company knowledge, and your inputs.',
-      placeholderLabel: 'CUSTOM\nSTRATEGY',
-      rows: [
-        { key: 'sb-source', label: 'Source', value: hasMarketingBriefData ? 'Marketing Brief' : 'Needs Scout brief' },
-        {
-          key: 'sb-knowledge-base',
-          label: 'Knowledge Base',
-          value: summarizeKnowledgeBaseSources(strategyBuilderKnowledgeBaseSources, 'Toggleable priority source'),
-        },
-        { key: 'sb-angle', label: 'Angle', value: marketingBrief?.content?.content_angle || marketingBrief?.headline || resolvedContentAngle || 'Run the Executive Brief first.' },
-        { key: 'sb-platform', label: 'Platform', value: 'X / Twitter' },
-        ...(strategy?.postStrategy?.formats?.length ? [{ key: 'sb-formats', label: 'Formats', value: strategy.postStrategy.formats.join(' · ') }] : []),
-      ],
-      footerLeft: hasMarketingBriefData ? 'Live' : WORK_NEEDED_LABEL,
-      footerRight: 'REVIEWED',
-      readinessBadge: hasMarketingBriefData ? { tone: 'ok', label: 'Ready' } : null,
+      locked: !hasMarketingBriefData,
+      description: 'Builds a day-of post and 30-day calendar from Market Insights, Company Brain, brand voice, SEO, local signals, events, and campaign inputs.',
+      placeholderLabel: strategyBuilderItems.length ? 'CUSTOM\nPLAN' : 'CUSTOM\nSTRATEGY',
+      rows: strategyBuilderItems.length
+        ? [
+            ...(strategyBuilderPrimaryPost?.content ? [{ key: 'sb-today', label: 'Today', value: strategyBuilderPrimaryPost.content }] : []),
+            ...(strategyBuilderToday?.signals_used?.length ? [{ key: 'sb-signals', label: 'Signals used', value: strategyBuilderToday.signals_used.join(' · ') }] : []),
+            { key: 'sb-count', label: 'Plan', value: `${strategyBuilderItems.length} posts · ${strategyBuilderPlan?.anchors?.length || 0} anchors` },
+            {
+              key: 'sb-knowledge-base',
+              label: 'Knowledge Base',
+              value: summarizeKnowledgeBaseSources(strategyBuilderKnowledgeBaseSources, 'Toggleable priority source'),
+            },
+          ]
+        : [
+            { key: 'sb-source', label: 'Source', value: hasMarketingBriefData ? 'Marketing Brief ready' : 'Needs Market Brief' },
+            {
+              key: 'sb-knowledge-base',
+              label: 'Knowledge Base',
+              value: summarizeKnowledgeBaseSources(strategyBuilderKnowledgeBaseSources, 'Toggleable priority source'),
+            },
+            { key: 'sb-angle', label: 'Angle', value: marketingBrief?.content?.content_angle || marketingBrief?.headline || resolvedContentAngle || 'Run the Executive Brief first.' },
+            { key: 'sb-platform', label: 'Platform', value: 'X / Twitter' },
+          ],
+      footerLeft: strategyBuilderItems.length ? 'Live' : (hasMarketingBriefData ? 'Ready' : WORK_NEEDED_LABEL),
+      footerRight: strategyBuilderItems.length ? `${strategyBuilderItems.length} POSTS` : 'BUILD',
+      readinessBadge: strategyBuilderItems.length
+        ? { tone: 'ok', label: 'Ready' }
+        : hasMarketingBriefData ? { tone: 'ok', label: 'Ready' } : null,
     },
     {
       id: 'strategy-30',
@@ -9951,8 +10267,17 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       label: '30-DAY STRATEGY',
       title: '30-Day Strategy',
       description: 'Maintains a 30-day posting plan and updates it when new signals or notes change the direction.',
-      placeholderLabel: strategy30?.days?.length ? 'PLAN' : 'RUN\nBRIEF',
-      rows: strategy30?.days?.length
+      placeholderLabel: strategyBuilderItems.length || strategy30?.days?.length ? 'PLAN' : 'RUN\nBRIEF',
+      rows: strategyBuilderDayRows.length
+        ? [
+            ...strategyBuilderDayRows.map((d, i) => ({
+              key: `sb30-${i}`,
+              label: d.date,
+              value: `${d.theme ? `${String(d.theme).toUpperCase()} — ` : ''}${d.idea}${d.count > 1 ? ` (+${d.count - 1})` : ''}`,
+            })),
+            ...(strategyBuilderToday?.strategy_intent ? [{ key: 'sb30-intent', label: 'Today intent', value: strategyBuilderToday.strategy_intent }] : []),
+          ]
+        : strategy30?.days?.length
         ? [
             ...strategy30.days.slice(0, 4).map((d, i) => ({
               key: `s30-${i}`,
@@ -9962,9 +10287,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             ...(strategy30.revisionNotes ? [{ key: 's30-notes', label: 'Last revision', value: strategy30.revisionNotes }] : []),
           ]
         : buildWorkNeededRows('Run the Executive Brief — the 30-day strategy is generated and revised on each run.'),
-      footerLeft: strategy30?.days?.length ? 'Live' : WORK_NEEDED_LABEL,
-      footerRight: strategy30?.days?.length ? `${strategy30.days.length} DAYS · EDITABLE` : 'EDITABLE',
-      readinessBadge: strategy30?.days?.length ? { tone: 'ok', label: 'Ready' } : null,
+      footerLeft: strategyBuilderItems.length || strategy30?.days?.length ? 'Live' : WORK_NEEDED_LABEL,
+      footerRight: strategyBuilderItems.length ? `${strategyBuilderItems.length} POSTS · OPEN BUILDER` : strategy30?.days?.length ? `${strategy30.days.length} DAYS · EDITABLE` : 'EDITABLE',
+      readinessBadge: strategyBuilderItems.length || strategy30?.days?.length ? { tone: 'ok', label: 'Ready' } : null,
     },
     {
       id: 'trust-credibility',
@@ -10278,34 +10603,17 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       number: 'ED',
       label: 'EMAIL DIGEST',
       title: 'Email Digest',
-      description: 'Lets an admin review and send the daily email summary with agenda and site notes.',
+      description: 'Sets the daily email params (sources, summary, included sections, schedule) on the SETTINGS tab, then renders + sends it on the EMAIL PREVIEW tab.',
       placeholderLabel: 'MAIL',
       rows: [
+        { key: 'ed-settings', label: 'Settings tab', value: 'Sources · summary · sections · schedule' },
+        { key: 'ed-preview', label: 'Preview tab', value: 'Rendered email + Run & Send' },
         { key: 'ed-recipient', label: 'Recipient', value: 'Configured (DIGEST_EMAIL)' },
-        { key: 'ed-schedule', label: 'Schedule', value: 'Daily · cron' },
-        { key: 'ed-content', label: 'Content', value: 'Summary + agenda + analytics' },
         { key: 'ed-access', label: 'Access', value: 'Admin only' },
       ],
       footerLeft: 'Live',
       footerRight: 'ADMIN',
       readinessBadge: { tone: 'ok', label: 'Live' },
-    }, {
-      id: 'email-settings',
-      category: 'admin',
-      number: 'ES',
-      label: 'EMAIL SETTINGS',
-      title: 'Email Settings',
-      description: 'Lets an admin choose how the email summary should sound and what information it should use.',
-      placeholderLabel: 'CFG',
-      rows: [
-        { key: 'es-summary', label: 'LLM summary', value: 'Toggle on/off' },
-        { key: 'es-tone', label: 'Tone', value: 'Customizable' },
-        { key: 'es-docs', label: 'Docs fed', value: 'Recent uploads' },
-        { key: 'es-access', label: 'Access', value: 'Admin only' },
-      ],
-      footerLeft: 'Ready',
-      footerRight: 'ADMIN',
-      readinessBadge: { tone: 'ok', label: 'Ready' },
     }, {
       id: 'create-client',
       category: 'admin',
@@ -11981,7 +12289,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   if (activeCapabilityFilter === 'knowledge') {
                     // Knowledge Officer: Cross-Device Layouts, Data Coverage,
                     // Company Brain, Day-of Post lead; Market Category stays last.
-                    const order = ['multi-device-view', 'social-preview', 'audit-summary', 'knowledge-base', 'priority-signal', 'survey-status', 'business-model', 'industry'];
+                    const order = ['multi-device-view', 'social-preview', 'audit-summary', 'client-brain', 'knowledge-base', 'priority-signal', 'survey-status', 'business-model', 'industry'];
                     const ai = order.indexOf(a.id); const bi = order.indexOf(b.id);
                     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
                   }
@@ -14364,19 +14672,25 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   </div>
                 ) : null}
 
-                {/* Admin · Email Digest — view rendered email + analytics, send */}
+                {/* Admin · Email Digest — SETTINGS (params) + EMAIL PREVIEW (send) */}
                 {activeTileModal.cardId === 'email-digest' && (
-                  <AdminEmailDigestView user={user} />
-                )}
-
-                {/* Admin · Email Settings — enable / format / customize summary */}
-                {activeTileModal.cardId === 'email-settings' && (
-                  <AdminEmailSettingsView user={user} />
+                  <AdminEmailDigestView
+                    user={user}
+                    onOpenCard={(cardId) => {
+                      const c = intakeCapabilityCards.find((x) => x.id === cardId);
+                      if (c) openCapabilityCard(c);
+                    }}
+                  />
                 )}
 
                 {/* Admin · Create Client — website-less workspace */}
                 {activeTileModal.cardId === 'create-client' && (
                   <AdminCreateClientView user={user} />
+                )}
+
+                {/* Knowledge Officer · Google Calendar — per-client OAuth connection */}
+                {activeTileModal.cardId === 'calendar-connect' && (
+                  <CalendarConnectView user={user} />
                 )}
 
                 {/* Local Weather — CONFIG (zip + toggle) + FORECAST tabs */}
@@ -15554,6 +15868,49 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                               </div>
                             ))}
                           </div>
+                        ) : strategyBuilderDayRows.length ? (
+                          <div className="mu-list">
+                            <p className="mu-notice">A newer Strategy Builder plan is available. Open Custom Post Strategy to edit posts, review signal rationale, and queue the calendar.</p>
+                            {strategyBuilderDayRows.map((d, i) => (
+                              <div key={`sb30-row-${i}`} className="mu-query" style={{ gap: 8 }}>
+                                <div className="mu-query-head">
+                                  <span className="mu-query-num">{d.date}{d.count > 1 ? ` · ${d.count} posts` : ''}</span>
+                                </div>
+                                <div className="tile-detail-stat-row">
+                                  <span className="tile-detail-stat-label">{String(d.theme || 'post').toUpperCase()}</span>
+                                  <span className="tile-detail-stat-value">{d.idea || '—'}</span>
+                                </div>
+                              </div>
+                            ))}
+                            <div className="mu-footer">
+                              <span className="mu-footer-note">Strategy Builder is the Market Insights-driven planner.</span>
+                              <button
+                                type="button"
+                                className="mu-cta-primary"
+                                style={{ width: 'auto', minWidth: 140 }}
+                                onClick={() => {
+                                  const c = intakeCapabilityCards.find((x) => x.id === 'strategy-builder');
+                                  if (!c) return;
+                                  setActiveTileModal({
+                                    title: c.title,
+                                    description: c.description,
+                                    rows: c.rows,
+                                    cardId: c.id,
+                                    placeholderLabel: c.placeholderLabel,
+                                    number: c.number,
+                                    label: c.label,
+                                    isCapabilityCard: true,
+                                    vizType: null,
+                                    recommendation: c.recommendation || null,
+                                    analyzer: c.analyzer || null,
+                                    readinessBadge: c.readinessBadge || null,
+                                  });
+                                }}
+                              >
+                                <span>Open Builder</span>
+                              </button>
+                            </div>
+                          </div>
                         ) : (
                           <p className="mu-notice">No strategy yet — run the Executive Brief to generate the 30-day plan.</p>
                         )}
@@ -16499,6 +16856,25 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   </div>
                 )}
 
+                {/* Client Brain card — strategic aggregate context layer */}
+                {activeTileModal.cardId === 'client-brain' && (
+                  <div
+                    id="client-brain-modal-panel"
+                    className="tile-detail-bento-cell tile-detail-tabbed-container"
+                    style={{ overflowY: 'auto', minHeight: 0 }}
+                  >
+                    <ClientBrainCard
+                      getIdToken={brandSystemGetIdToken}
+                      onSaved={applyClientBrainToBootstrap}
+                      onOpenCard={(cardId) => {
+                        const targetCard = intakeCapabilityCards.find((c) => c.id === cardId);
+                        if (!targetCard) return;
+                        setActiveTileModal({ title: targetCard.title, description: targetCard.description, rows: targetCard.rows, cardId: targetCard.id, placeholderLabel: targetCard.placeholderLabel, number: targetCard.number, label: targetCard.label, isCapabilityCard: true, vizType: null, recommendation: null, analyzer: null, readinessBadge: null });
+                      }}
+                    />
+                  </div>
+                )}
+
                 {/* Knowledge Base card */}
                 {activeTileModal.cardId === 'knowledge-base' && (
                   <div
@@ -16767,8 +17143,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                  );
 	                })()}
 
-	                {/* Video Remix — params setup + saved video assets */}
-	                {activeTileModal.cardId === 'video-remix' && (() => {
+	                {/* Media Library / Video Remix — source media, params setup + saved video assets */}
+	                {(activeTileModal.cardId === 'video-remix' || activeTileModal.cardId === 'media-library') && (() => {
+	                  const isMediaLibraryCard = activeTileModal.cardId === 'media-library';
 	                  const mediaCaptures = Array.isArray(dashboardState?.mediaCaptures) ? dashboardState.mediaCaptures : [];
 	                  const savedRemixes = [...mediaCaptures].reverse().filter((item) => item?.type === 'video_remix');
 	                  const updateRemixDraft = (key, value) => setVideoRemixDraft((prev) => ({ ...prev, [key]: value }));
@@ -16838,6 +17215,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                        >
 	                          SOURCE MEDIA
 	                        </button>
+	                        <button type="button" className={`tab${modalTab === 'usage' ? ' is-active' : ''}`} onClick={() => { setModalTab('usage'); loadMediaLibraryUsage().catch(() => {}); }}>USAGE</button>
 	                        <button type="button" className={`tab${modalTab === 'assets' ? ' is-active' : ''}`} onClick={() => setModalTab('assets')}>SAVED ASSETS</button>
 	                      </div>
 	                      <div className="panel-body">
@@ -16846,8 +17224,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                            <div className="section-head">
 	                              <span className="index">VR</span>
 	                              <div>
-	                                <h3>Video Remix setup</h3>
-	                                <p>Pick the audio, source clips, look, overlay, logos, and end-card, then render a fresh 720×720 cut off-platform.</p>
+	                                <h3>{isMediaLibraryCard ? 'Remix-ready media catalog' : 'Video Remix setup'}</h3>
+	                                <p>{isMediaLibraryCard ? 'Browse reusable folders, audio, looks, overlays, logos, and end-card choices before rendering.' : 'Pick the audio, source clips, look, overlay, logos, and end-card, then render a fresh 720×720 cut off-platform.'}</p>
 	                              </div>
 	                              <a
 	                                className="btn btn-outline"
@@ -17298,11 +17676,100 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                  ) : (
 	                                    <div className="empty">No media files in this folder.</div>
 	                                  )}
+	                                  {isAdmin && videoRemixFolderFiles.files.length ? (
+	                                    <div className="list-card" style={{ marginTop: 12 }}>
+	                                      <div className="list-head">
+	                                        <span className="list-title">Cleanup</span>
+	                                        <span className="hint">Delete only selected source files. Archived assets and generated remixes are not touched.</span>
+	                                      </div>
+	                                      {mediaLibraryDeleteError ? <p className="hint-danger">{mediaLibraryDeleteError}</p> : null}
+	                                      {mediaLibraryDeleteResult ? (
+	                                        <p className="hint">Deleted {mediaLibraryDeleteResult.deleted?.length || 0} file(s){mediaLibraryDeleteResult.errors?.length ? ` · ${mediaLibraryDeleteResult.errors.length} failed` : ''}.</p>
+	                                      ) : null}
+	                                      <div className="upload-queue" data-tooltip-disabled="true">
+	                                        {videoRemixFolderFiles.files.map((file) => (
+	                                          <div key={`cleanup-${file.fullPath || file.name}`} className="upload-row">
+	                                            <span className="upload-kind">{file.kind === 'image' ? 'IMG' : 'VID'}</span>
+	                                            <span className="upload-file">
+	                                              <span className="upload-name">{file.name}</span>
+	                                              <span className="upload-meta">{formatVideoRemixBytes(file.size)} · {file.contentType || file.kind}</span>
+	                                            </span>
+	                                            <button
+	                                              type="button"
+	                                              className="btn btn-outline upload-remove"
+	                                              disabled={mediaLibraryDeleteBusy}
+	                                              onClick={() => deleteVideoRemixSourceFile(file)}
+	                                            >
+	                                              Delete
+	                                            </button>
+	                                          </div>
+	                                        ))}
+	                                      </div>
+	                                    </div>
+	                                  ) : null}
 	                                </div>
 	                              ) : null}
 	                            </section>
 	                          </>
 	                        )}
+	                        {modalTab === 'usage' && (() => {
+	                          const usage = mediaLibraryUsage || {};
+	                          const folders = Array.isArray(usage.sourceFolders) ? usage.sourceFolders : folderDetailList;
+	                          const largest = Array.isArray(usage.largestFolders) && usage.largestFolders.length ? usage.largestFolders : folders.slice(0, 8);
+	                          return (
+	                            <section className="section">
+	                              <div className="section-head">
+	                                <span className="index">US</span>
+	                                <div>
+	                                  <h3>Media usage</h3>
+	                                  <p>Source folder inventory, upload limits, reusable catalog counts, and cleanup status for the EditVideos bridge.</p>
+	                                </div>
+	                                <button type="button" className="btn btn-outline" disabled={mediaLibraryUsageLoading} onClick={() => loadMediaLibraryUsage()}>
+	                                  {mediaLibraryUsageLoading ? 'Refreshing…' : 'Refresh'}
+	                                </button>
+	                              </div>
+	                              <div className="field-grid">
+	                                <div className="list-card">
+	                                  <div className="list-head"><span className="list-title">Source inventory</span></div>
+	                                  <div className="list-body">
+	                                    {Number(usage.totalFolders || folders.length) || 0} folders · {Number(usage.totalFiles || 0) || folders.reduce((sum, f) => sum + (Number(f.count) || 0), 0)} media files · {formatVideoRemixBytes(Number(usage.totalBytes || 0) || folders.reduce((sum, f) => sum + (Number(f.sizeBytes) || 0), 0))}
+	                                  </div>
+	                                </div>
+	                                <div className="list-card">
+	                                  <div className="list-head"><span className="list-title">Reusable catalog</span></div>
+	                                  <div className="list-body">
+	                                    {artistList.length || 0} artists · {artistList.reduce((sum, a) => sum + (Array.isArray(a.mixes) ? a.mixes.length : 0), 0)} mixes · {logoList.length || 0} logos · {overlayList.length || 0} overlays
+	                                  </div>
+	                                </div>
+	                              </div>
+	                              <div className="list-card">
+	                                <div className="list-head"><span className="list-title">Largest folders</span></div>
+	                                {largest.length ? (
+	                                  <div className="upload-queue" data-tooltip-disabled="true">
+	                                    {largest.map((folder) => (
+	                                      <div key={`usage-${folder.name}`} className="upload-row">
+	                                        <span className="upload-kind">DIR</span>
+	                                        <span className="upload-file">
+	                                          <span className="upload-name">{folder.name}</span>
+	                                          <span className="upload-meta">{folder.count ?? '—'} files · {folder.latestUpdated ? `updated ${new Date(folder.latestUpdated).toLocaleDateString()}` : folder.type || 'folder'}</span>
+	                                        </span>
+	                                        <span className="upload-meta">{formatVideoRemixBytes(folder.sizeBytes)}</span>
+	                                      </div>
+	                                    ))}
+	                                  </div>
+	                                ) : (
+	                                  <div className="empty">Refresh usage after source folders load.</div>
+	                                )}
+	                              </div>
+	                              <div className="list-card">
+	                                <div className="list-head"><span className="list-title">Upload limits</span></div>
+	                                <div className="list-body">
+	                                  Up to {usage.limits?.maxUploadFiles || 25} files per batch · videos up to {formatVideoRemixBytes(usage.limits?.maxVideoUploadBytes || 500 * 1024 * 1024)} · images up to {formatVideoRemixBytes(usage.limits?.maxImageUploadBytes || 50 * 1024 * 1024)}. Uploads go direct to storage.
+	                                </div>
+	                              </div>
+	                            </section>
+	                          );
+	                        })()}
 	                        {modalTab === 'assets' && (
 	                          savedRemixes.length ? savedRemixes.map((asset) => {
 	                            const url = asset.downloadUrl || asset.url || null;
@@ -18668,7 +19135,7 @@ const shellStyle = { minHeight: '100dvh', position: 'relative', overflow: 'hidde
 
 // ── CSS ───────────────────────────────────────────────────────────────────────
 
-const dashboardCss = `
+export const dashboardCss = `
   :root {
     --accent: #D71921;
     --success: #4A9E5C;
@@ -22015,6 +22482,32 @@ const dashboardCss = `
       min-width: 0;
       flex: 1 1 160px;
     }
+  }
+  /* ── Modal-content mobile hardening (≤600px) ─────────────────────────────
+     Inner panels/rows/tabs that survived the bento stack but still overflow,
+     mis-clamp, or sit inconsistently narrow at phone widths. Audit-sourced;
+     presentation-only, desktop untouched. */
+  @media (max-width: 600px) {
+    /* Recover inner width + equalize gutters across stacked sibling cells. */
+    .tile-detail-tab-content { padding: 14px 12px; box-sizing: border-box; }
+    #tile-detail-bento-about { padding: 14px 14px 16px; box-sizing: border-box; }
+    #tile-detail-bento-data { padding: 14px 14px 16px; box-sizing: border-box; }
+    /* 4-tab rows wrap labels at 16px gap on a ~351px card — tighten. */
+    .tile-detail-tabs { gap: 4px; }
+    .tile-detail-tab { padding: 10px 4px; }
+    /* Audit-summary rows: drop the 3-col + min-width:480px that forced h-scroll. */
+    .tile-detail-audit-row { grid-template-columns: 1fr; min-width: 0; gap: 2px; }
+    .tile-detail-audit-status, .tile-detail-audit-tier { padding-left: 0; text-align: left; white-space: normal; }
+    #tile-detail-bento-rows:has(.tile-detail-audit-row) { overflow-x: visible; }
+    /* Section headers with nowrap action controls — stack so the title column
+       isn't crushed to a few characters. */
+    .mu-section-head { grid-template-columns: 1fr; }
+    /* Saved-for-brief rows: let long meta wrap above the Remove button. */
+    #events-saved-for-brief .mu-saved-card { flex-wrap: wrap; }
+    #events-saved-for-brief .mu-saved-card .mu-saved-meta { min-width: 0; flex: 1 1 100%; }
+    /* CTAs with inline width:auto stay undersized vs sibling panels — normalize. */
+    #conversation-intake-panel .mu-cta-primary,
+    #business-model-panel .mu-cta-primary { width: 100% !important; min-width: 0 !important; }
   }
   .tile-detail-bento-label {
     display: block;
@@ -28178,9 +28671,17 @@ const dashboardCss = `
        centered, full-width card; the pane padding is the only inset. */
     .signals-sg { margin: 0; padding: 0; }
     .signals-pane { padding: 12px; }
-    .signals-sg .sg-source { padding: 10px 12px 10px 16px; gap: 8px; }
+    /* Collapse the section header to ONE column so the index badge, title, and
+       "Run all" CTA each stack at the section's left edge — the h3 then aligns
+       with the row cards below instead of hanging right of the index column. */
+    .signals-sg .sg-head { grid-template-columns: 1fr; }
+    .signals-sg .sg-head .sg-index { justify-self: start; }
+    .signals-sg .sg-head .sg-cta { grid-column: 1 / -1; width: 100%; justify-self: stretch; }
+    /* Stack each source/skill pill: label over actions, squared off so wrapped
+       action buttons don't balloon a 999px pill vertically. */
+    .signals-sg .sg-source { grid-template-columns: 1fr; align-items: stretch; border-radius: 14px; padding: 10px 12px 10px 16px; gap: 8px; }
     .signals-sg .sg-source-value { font-size: 14px; }
-    .signals-sg .sg-source-actions { flex-wrap: wrap; justify-content: flex-end; }
+    .signals-sg .sg-source-actions { flex-wrap: wrap; justify-content: flex-start; width: 100%; }
   }
   .signals-sg .sg-seg { display: flex; padding: 4px; border: 1px solid var(--sg-line); border-radius: 999px; background: rgba(255,255,255,0.96); box-shadow: inset 0 1px 0 rgba(255,255,255,0.45); }
   .signals-sg .sg-seg button { flex: 1; min-height: 36px; border: 0; border-radius: 999px; background: transparent; color: var(--sg-ink-soft); font: 700 12px/1 var(--sg-mono); letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; transition: background 160ms ease, color 140ms ease; }
@@ -28224,6 +28725,57 @@ const dashboardCss = `
   .signals-sg .sg-paper .qtile { background: #fff; border: 1px solid #e3ddd0; border-radius: 12px; padding: 14px 15px; }
   .signals-sg .sg-paper .qtile .q { font: 540 14.5px/1.42 var(--sg-ui); color: #23211c; }
   .signals-sg .sg-paper .qtile .who { display: flex; justify-content: space-between; gap: 8px; font: 11px/1 var(--sg-mono); color: #8a8073; margin-top: 9px; }
+  .client-brain-card { display: grid; gap: 14px; height: 100%; min-height: 0; color: var(--sg-ink); }
+  /* Flex + wrap so the action buttons drop to their own line when they can't
+     fit beside the title — never overlap the eyebrow (grid 'auto' track sized
+     to all buttons on one line and crushed the title to 0). */
+  .client-brain-card .cb-topbar { display: flex; flex-wrap: wrap; gap: 12px 14px; align-items: flex-start; justify-content: space-between; }
+  .client-brain-card .cb-topbar > div:first-child { min-width: 0; flex: 1 1 220px; }
+  .client-brain-card .cb-topbar h3 { margin: 2px 0 0; font-size: 22px; line-height: 1.15; color: var(--sg-ink); }
+  .client-brain-card .cb-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; flex: 1 1 auto; }
+  .client-brain-card .cb-tabs { position: sticky; top: 0; z-index: 2; background: rgba(244, 241, 234, 0.86); backdrop-filter: blur(10px); padding-top: 2px; }
+  .client-brain-card .cb-panel { display: grid; gap: 12px; min-height: 0; }
+  .client-brain-card .cb-source-row { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--sg-line); border-radius: var(--sg-radius); background: rgba(255,255,255,0.76); }
+  .client-brain-card .cb-source-row--off { opacity: 0.6; }
+  .client-brain-card .cb-source-main { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: start; }
+  .client-brain-card .cb-source-main h4 { margin: 0; font-size: 15px; line-height: 1.25; color: var(--sg-ink); }
+  .client-brain-card .cb-source-main p,
+  .client-brain-card .cb-field-block p,
+  .client-brain-card .cb-muted { margin: 5px 0 0; color: var(--sg-ink-soft); font-size: 13px; line-height: 1.45; }
+  .client-brain-card .cb-chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .client-brain-card .cb-warning { margin: 0; color: var(--sg-danger); font-size: 12.5px; line-height: 1.45; }
+  .client-brain-card .cb-use-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+  .client-brain-card .cb-check { display: flex; align-items: center; gap: 6px; min-height: 30px; padding: 6px 8px; border: 1px solid var(--sg-line-soft); border-radius: 7px; background: rgba(255,255,255,0.54); color: var(--sg-ink-soft); font: 700 10px/1.2 var(--sg-mono); text-transform: uppercase; letter-spacing: 0.05em; }
+  .client-brain-card .cb-check input { margin: 0; accent-color: var(--sg-ink); }
+  .client-brain-card .cb-generated-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .client-brain-card .cb-field-block { min-width: 0; padding: 14px; border: 1px solid var(--sg-line); border-radius: var(--sg-radius); background: rgba(255,255,255,0.74); }
+  .client-brain-card .cb-mini-list { display: grid; gap: 5px; margin: 8px 0 0; padding-left: 18px; color: var(--sg-ink-soft); font-size: 13px; line-height: 1.4; }
+  .client-brain-card .cb-copy-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .client-brain-card .cb-context-box { max-height: 280px; overflow: auto; white-space: pre-wrap; margin: 0; padding: 14px; border: 1px solid var(--sg-line); border-radius: var(--sg-radius); background: rgba(255,255,255,0.86); color: var(--sg-ink); font: 12.5px/1.5 var(--sg-mono); }
+  .client-brain-card .cb-usage-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  /* Internal padding so content keeps consistent gutters and never clips the
+     rounded bento-cell corners (desktop + mobile). */
+  #client-brain-modal-panel { padding: 18px 20px; box-sizing: border-box; }
+  /* Sticky tab bar bleeds to the panel edges so its blur backdrop spans full width. */
+  .client-brain-card .cb-tabs { margin: 0 -20px; padding: 2px 20px 0; }
+  .client-brain-card .cb-source-edit { display: flex; justify-content: flex-end; }
+  .client-brain-card .cb-edit-link {
+    display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
+    background: rgba(255,255,255,0.6); border: 1px solid var(--sg-line-soft); border-radius: 7px;
+    padding: 5px 10px; color: var(--sg-ink-soft); font: 700 10px/1 var(--sg-mono);
+    text-transform: uppercase; letter-spacing: 0.06em; transition: border-color 0.15s ease, color 0.15s ease;
+  }
+  .client-brain-card .cb-edit-link:hover { color: var(--sg-ink); border-color: var(--sg-ink-soft); }
+  .client-brain-card .cb-edit-link[disabled] { opacity: 0.4; cursor: default; }
+  .client-brain-card .cb-field-block .cb-edit-link { margin-top: 10px; }
+  @media (max-width: 820px) {
+    .client-brain-card .cb-generated-grid,
+    .client-brain-card .cb-usage-grid { grid-template-columns: 1fr; }
+    .client-brain-card .cb-actions { justify-content: flex-start; }
+    .client-brain-card .cb-use-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #client-brain-modal-panel { padding: 14px 14px; }
+    .client-brain-card .cb-tabs { margin: 0 -14px; padding: 2px 14px 0; }
+  }
 
   /* Video Remix modal kit. Keep this inside dashboardCss because DashboardPage
      injects this string directly; external dashboard.css is not guaranteed here. */

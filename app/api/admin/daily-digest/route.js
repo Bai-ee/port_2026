@@ -264,9 +264,9 @@ async function getGoogleAccessToken() {
   return token.token;
 }
 
-async function runGA4Report(accessToken, body) {
+async function runGA4Report(accessToken, body, propertyId = GA4_PROPERTY_ID) {
   const res = await fetch(
-    `https://analyticsdata.googleapis.com/v1beta/properties/${GA4_PROPERTY_ID}:runReport`,
+    `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`,
     {
       method: 'POST',
       headers: {
@@ -285,7 +285,7 @@ async function runGA4Report(accessToken, body) {
   return res.json();
 }
 
-async function getGA4Metrics() {
+async function getGA4Metrics({ propertyId = GA4_PROPERTY_ID, eventNames = DIGEST_EVENT_NAMES } = {}) {
   try {
     const accessToken = await getGoogleAccessToken();
 
@@ -301,7 +301,7 @@ async function getGA4Metrics() {
         { name: 'bounceRate' },
         { name: 'engagedSessions' },
       ],
-    });
+    }, propertyId);
 
     const ov = overviewReport.rows?.[0]?.metricValues || [];
     const overview = {
@@ -324,7 +324,7 @@ async function getGA4Metrics() {
       ],
       orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
       limit: 10,
-    });
+    }, propertyId);
 
     const topPages = (pagesReport.rows || []).map((r) => ({
       path: r.dimensionValues[0].value,
@@ -342,7 +342,7 @@ async function getGA4Metrics() {
       ],
       orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
       limit: 10,
-    });
+    }, propertyId);
 
     const trafficSources = (sourcesReport.rows || []).map((r) => ({
       source: r.dimensionValues[0].value,
@@ -360,12 +360,12 @@ async function getGA4Metrics() {
         filter: {
           fieldName: 'eventName',
           inListFilter: {
-            values: DIGEST_EVENT_NAMES,
+            values: eventNames,
           },
         },
       },
       orderBys: [{ metric: { metricName: 'eventCount' }, desc: true }],
-    });
+    }, propertyId);
 
     const events = {};
     (eventsReport.rows || []).forEach((r) => {
@@ -513,11 +513,17 @@ async function getCalendarAccessToken() {
   return token.token;
 }
 
-/** Fetch up to 5 days of events for DIGEST_CALENDAR_ID, expanding recurrences,
- *  grouped by local day, plus a one-line summary of tomorrow's schedule. */
-async function getCalendarAgenda(timestamp) {
+/** Fetch up to 5 days of events, grouped by local day, plus a one-line summary
+ *  of tomorrow. Prefers the home client's one-click OAuth connection
+ *  (calendar_connections/{clientId}); falls back to the service-account-shared
+ *  DIGEST_CALENDAR_ID. opts: { clientId, enabled }. When enabled === false
+ *  (Market Signals "Calendar / Agenda" toggle off), the section is skipped. */
+async function getCalendarAgenda(timestamp, opts = {}) {
   const DAY_MS = 24 * 60 * 60 * 1000;
   const SPAN_DAYS = 5;
+  if (opts.enabled === false) {
+    return { events: [], days: [], tomorrowSummary: '', error: null, disabled: true };
+  }
   try {
     const now = new Date(timestamp);
     const offset = tzOffset(DIGEST_TIMEZONE, now);
@@ -537,9 +543,24 @@ async function getCalendarAgenda(timestamp) {
     const timeMin = `${days[0].key}T00:00:00${offset}`;
     const timeMax = `${days[SPAN_DAYS - 1].key}T23:59:59${offset}`;
 
-    const accessToken = await getCalendarAccessToken();
+    // Prefer the home client's connected calendar (one-click OAuth); fall back
+    // to the service-account-shared DIGEST_CALENDAR_ID for backward compat.
+    let accessToken = null;
+    let calendarId = DIGEST_CALENDAR_ID;
+    try {
+      const cal = require('../../../../api/_lib/calendar-oauth.cjs');
+      if (opts.clientId && cal.isConfigured()) {
+        const conn = await cal.getConnection(opts.clientId);
+        if (conn?.refreshToken) {
+          const t = await cal.getAccessTokenForClient(opts.clientId);
+          if (t) { accessToken = t; calendarId = conn.calendarId || 'primary'; }
+        }
+      }
+    } catch { /* fall back to service account below */ }
+    if (!accessToken) accessToken = await getCalendarAccessToken();
+
     const url =
-      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(DIGEST_CALENDAR_ID)}/events` +
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events` +
       `?singleEvents=true&orderBy=startTime&maxResults=250` +
       `&timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}` +
       `&timeZone=${encodeURIComponent(DIGEST_TIMEZONE)}`;
@@ -699,6 +720,7 @@ function dDataTable(headers, bodyRows) {
 }
 
 function buildAgendaSection(agenda) {
+  if (agenda.disabled) return ''; // Calendar / Agenda toggle off — hide the section.
   if (agenda.error) {
     return dSection('Schedule', 'Agenda', `<div style="background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:14px 16px;font-family:${DT.fBody};font-size:13px;color:${DT.accent};">Calendar unavailable: ${escapeHtml(agenda.error)}</div>`);
   }
@@ -792,7 +814,8 @@ function buildStrategicBriefSection(intel, clientName) {
   if (!intel) return '';
   const hasContent =
     intel.opportunities?.length || intel.kols?.length || intel.competitors?.length ||
-    intel.narratives?.length || intel.humanBrief || intel.watchlist?.length || intel.weather?.today;
+    intel.narratives?.length || intel.humanBrief || intel.watchlist?.length || intel.weather?.today ||
+    intel.strategyBuilder?.today?.posts?.length || intel.strategyBuilder?.items?.length;
   if (!hasContent) return '';
 
   const w = intel.weather;
@@ -840,7 +863,13 @@ function buildStrategicBriefSection(intel, clientName) {
     : '';
 
   const c = intel.content || {};
+  const strategyPostBlocks = (intel.strategyBuilder?.today?.posts || []).map((p, index) => ({
+    label: p.platformHint ? `Today · ${String(p.platformHint).toUpperCase()}` : `Today · Post ${index + 1}`,
+    text: p.content,
+    foot: [p.signalUsed ? `Signal: ${p.signalUsed}` : '', p.rationale || ''].filter(Boolean).join(' · '),
+  }));
   const postBlocks = [
+    ...strategyPostBlocks,
     c.x_post && { label: 'X post', text: c.x_post },
     c.x_thread_opener && { label: 'Thread opener', text: c.x_thread_opener },
     c.discord_announcement && { label: 'Discord', text: c.discord_announcement },
@@ -849,7 +878,15 @@ function buildStrategicBriefSection(intel, clientName) {
     ? postBlocks.map((p) => `<div style="margin-bottom:10px;padding:12px 14px;background:${DT.card};border:1px solid ${DT.line};border-radius:10px;">
         <div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:${DT.light};margin-bottom:6px;">${escapeHtml(p.label)}</div>
         <div style="font-family:${DT.fBody};font-size:13px;color:${DT.ink};line-height:1.5;">${escapeHtml(p.text)}</div>
+        ${p.foot ? `<div style="margin-top:6px;font-family:${DT.fBody};font-size:11px;color:${DT.soft};line-height:1.45;">${escapeHtml(p.foot)}</div>` : ''}
       </div>`).join('')
+    : '';
+  const planPreview = (intel.strategyBuilder?.items || []).slice(0, 7);
+  const planPreviewHtml = planPreview.length
+    ? `<div style="margin-top:14px;">${dMini('30-day plan preview')}${dDataTable([{ label: 'Date' }, { label: 'Post' }], planPreview.map((item) => `<tr>
+        <td style="${TD}width:120px;font-family:${DT.fMono};font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:${DT.light};vertical-align:top;">${escapeHtml(String(item.scheduledAt || '').slice(0, 10))}</td>
+        <td style="${TD}"><strong>${escapeHtml(item.kind || 'post')}</strong><div style="margin-top:2px;color:${DT.soft};font-size:12px;">${escapeHtml(item.content || '')}</div></td>
+      </tr>`).join(''))}</div>`
     : '';
 
   return `<div style="margin-bottom:32px;">
@@ -860,6 +897,7 @@ function buildStrategicBriefSection(intel, clientName) {
     ${signalsHtml ? `<div style="margin-bottom:14px;">${dMini('Signals · KOLs / competitors / narratives')}${dDataTable([{ label: 'Type' }, { label: 'Finding' }], signalsHtml)}</div>` : ''}
     ${watchlistHtml ? `<div style="margin-bottom:14px;">${dMini('Watchlist · accounts (name-for-name)')}${dDataTable([{ label: 'Account' }, { label: 'Activity this run' }], watchlistHtml)}</div>` : ''}
     ${postsHtml ? `<div>${dMini('Suggested posts')}${postsHtml}</div>` : ''}
+    ${planPreviewHtml}
   </div>`;
 }
 
@@ -954,8 +992,22 @@ function buildWatchlistBriefSection(analysisText) {
   </div>`;
 }
 
-function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs) {
-  const strategicSections = (Array.isArray(briefs) ? briefs : [])
+/** Creative Brief attachment — inlines the run onboarding-brief summary + a hero
+ *  image in the digest's warm-cream style. Returns '' when nothing has run. */
+function buildCreativeBriefSection(creative) {
+  if (!creative || !creative.summary) return '';
+  const img = creative.image
+    ? `<img src="${escapeHtml(creative.image)}" alt="" style="width:100%;max-width:520px;border-radius:12px;border:1px solid ${DT.line};margin:0 0 14px;display:block;">`
+    : '';
+  const text = escapeHtml(creative.summary).replace(/\n{2,}/g, '<br><br>').replace(/\n/g, '<br>');
+  const body = `${img}<p style="font-family:${DT.fBody};font-size:14px;line-height:1.62;color:${DT.ink};margin:0;">${text}</p>`;
+  return dSection('Deliverable', `Creative Brief${creative.clientName ? ` &middot; ${escapeHtml(creative.clientName)}` : ''}`, body);
+}
+
+function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, include = {
+  calendar: true, marketingBrief: true, creativeBrief: false, webStats: true, platformStats: true, deployments: true, homepage: true,
+}, creative = null) {
+  const strategicSections = include.marketingBrief === false ? '' : (Array.isArray(briefs) ? briefs : [])
     .map((b) => `${buildStrategicBriefSection(b.intel, b.clientName)}${buildWatchlistBriefSection(b.intel?.watchlistAnalysis)}`)
     .filter((s) => s && s.trim())
     .join('');
@@ -1051,19 +1103,25 @@ a{text-decoration:none;}
           <!-- Executive summary (LLM) -->
           ${buildSummarySection(summary)}
 
+          <!-- Today's Agenda (calendar) — directly under the summary -->
+          ${include.calendar ? buildAgendaSection(agenda) : ''}
+
           <!-- Strategic brief (mirrors established daily brief) -->
           ${strategicSections}
 
+          <!-- Creative Brief (attached run deliverable) -->
+          ${include.creativeBrief ? buildCreativeBriefSection(creative) : ''}
+
           <!-- Key metrics -->
-          ${dSection('Platform', 'Overview', dStatCells([
+          ${include.platformStats ? dSection('Platform', 'Overview', dStatCells([
             { num: firebase.newUsers, label: 'New sign-ups' },
             { num: firebase.totalUsers, label: 'Total users' },
             { num: firebase.recentRuns, label: 'Dashboards' },
             { num: vercel.totalDeployments || 0, label: 'Deployments' },
-          ], 4))}
+          ], 4)) : ''}
 
           <!-- GA4 overview -->
-          ${ga4.overview
+          ${include.webStats === false ? '' : ga4.overview
             ? dSection('Google Analytics', 'Traffic', `${dStatCells([
                 { num: ga4.overview.sessions, label: 'Sessions' },
                 { num: ga4.overview.pageViews, label: 'Page views' },
@@ -1073,11 +1131,8 @@ a{text-decoration:none;}
               ], 5)}<div style="font-family:${DT.fMono};font-size:11px;color:${DT.soft};letter-spacing:.02em;">Avg session <strong style="color:${DT.ink};">${Math.floor(ga4.overview.avgSessionDuration / 60)}m ${ga4.overview.avgSessionDuration % 60}s</strong> &nbsp;&middot;&nbsp; Engaged <strong style="color:${DT.ink};">${ga4.overview.engagedSessions}</strong></div>`)
             : (ga4.error ? dSection('Google Analytics', 'Traffic', `<p style="font-family:${DT.fBody};font-size:13px;color:${DT.accent};margin:0;">GA4 unavailable: ${escapeHtml(ga4.error)}</p>`) : '')}
 
-          <!-- Today's Agenda -->
-          ${buildAgendaSection(agenda)}
-
           <!-- Top pages -->
-          ${ga4.topPages?.length ? dSection('Analytics', 'Top Pages', dDataTable(
+          ${include.webStats !== false && ga4.topPages?.length ? dSection('Analytics', 'Top Pages', dDataTable(
             [{ label: 'Page' }, { label: 'Views', right: true }, { label: 'Users', right: true }],
             ga4.topPages.map((p) => `<tr>
               <td style="${TD}max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(p.path)}</td>
@@ -1087,7 +1142,7 @@ a{text-decoration:none;}
           )) : ''}
 
           <!-- Traffic sources -->
-          ${ga4.trafficSources?.length ? dSection('Analytics', 'Sources', dDataTable(
+          ${include.webStats !== false && ga4.trafficSources?.length ? dSection('Analytics', 'Sources', dDataTable(
             [{ label: 'Source / Medium' }, { label: 'Sessions', right: true }, { label: 'Users', right: true }],
             ga4.trafficSources.map((s) => `<tr>
               <td style="${TD}">${escapeHtml(s.source)} <span style="color:${DT.light};">/ ${escapeHtml(s.medium)}</span></td>
@@ -1097,30 +1152,30 @@ a{text-decoration:none;}
           )) : ''}
 
           <!-- Key events -->
-          ${Object.keys(ga4.events || {}).length ? dSection('Analytics', 'Key Events',
+          ${include.webStats !== false && Object.keys(ga4.events || {}).length ? dSection('Analytics', 'Key Events',
             `<div>${Object.entries(ga4.events).map(([name, count]) => dChip(escapeHtml(name.replace(/_/g, ' ')), count)).join('')}</div>`
           ) : ''}
 
           <!-- Homepage interactions -->
-          ${buildHomepageAnalyticsSection(homepage)}
+          ${include.homepage !== false ? buildHomepageAnalyticsSection(homepage) : ''}
 
-          <!-- New sign-ups -->
+          <!-- New sign-ups / Dashboards / Pipeline status (platform stats) -->
+          ${include.platformStats ? `
           ${dSection('Firebase', 'New Sign-ups', dDataTable([{ label: 'Email' }, { label: 'Website' }, { label: 'Time', right: true }], newUsersRows))}
 
-          <!-- Dashboards -->
           ${dSection('Firebase', 'Dashboards', dDataTable([{ label: 'Website' }, { label: 'Status' }, { label: 'Time', right: true }], recentRunsRows))}
 
-          <!-- Pipeline status -->
           ${dSection('Firebase', 'Pipeline Status',
             `<div style="margin-bottom:10px;">${statusBreakdown || `<span style="color:${DT.light};font-family:${DT.fBody};font-size:13px;">No pipeline data</span>`}</div><div style="font-family:${DT.fMono};font-size:11px;color:${DT.soft};letter-spacing:.02em;">Total runs <strong style="color:${DT.ink};">${firebase.totalRuns}</strong> &nbsp;&middot;&nbsp; Clients <strong style="color:${DT.ink};">${firebase.totalClients}</strong></div>`
-          )}
+          )}` : ''}
 
-          <!-- Deployments -->
+          <!-- Deployments + runtime errors -->
+          ${include.deployments ? `
           ${dSection('Vercel', 'Deployments',
             `${vercel.errors ? `<p style="font-family:${DT.fBody};color:${DT.accent};font-size:12px;margin:0 0 10px;">Note: ${escapeHtml(vercel.errors)}</p>` : ''}${dDataTable([{ label: 'Status' }, { label: 'Commit' }, { label: 'Time', right: true }], deploymentsRows)}`
           )}
 
-          ${errorSection}
+          ${errorSection}` : ''}
 
           <!-- Footer -->
           <div style="border-top:1.5px solid ${DT.line};padding-top:22px;margin-top:32px;">
@@ -1247,6 +1302,12 @@ function buildPlaceholderData(timestamp) {
     summary: {
       paragraph: 'This is placeholder executive-summary text. When you run the digest, an AI-written recap of the day’s sign-ups, traffic, deployments, and strategic brief will appear here in this slot.',
     },
+    creative: {
+      clientName: 'Sample Client',
+      summary: 'Placeholder Creative Brief — when the Creative Brief toggle is on and the client has a run brief, its cover summary is attached here, with a hero mockup above it. This is the same onboarding deliverable shown on the Creative Brief card.',
+      generatedAt: iso(),
+      image: null,
+    },
     // One placeholder brief carrying only a watchlist-analysis snapshot, so the
     // "Happening on X" block renders in the template preview. The strategic-brief
     // block stays empty (no opportunities/KOLs/etc.) on purpose.
@@ -1276,6 +1337,23 @@ export async function GET(request) {
   const isTemplate = previewParam === 'template';
   const isSendNow = url.searchParams.get('send') === '1';
 
+  // Optional `include` override (preview only): comma-separated list of the
+  // section keys to turn ON, so the Email Digest card can preview the layout
+  // with the admin's current (even unsaved) toggles. Absent → use saved config.
+  // Present-but-empty (`include=`) → all sections off.
+  const includeOverride = (() => {
+    if (!url.searchParams.has('include')) return null;
+    const on = new Set(String(url.searchParams.get('include') || '').split(',').map((s) => s.trim()).filter(Boolean));
+    return {
+      calendar: on.has('calendar'),
+      marketingBrief: on.has('marketingBrief'),
+      creativeBrief: on.has('creativeBrief'),
+      webStats: on.has('webStats'),
+      platformStats: on.has('platformStats'),
+      deployments: on.has('deployments'),
+    };
+  })();
+
   // Auth: cron/worker secret for the scheduled run; admin token for dashboard
   // preview / send-now actions.
   let adminOk = false;
@@ -1297,7 +1375,9 @@ export async function GET(request) {
     try {
       const ts = Date.now();
       const ph = buildPlaceholderData(ts);
-      const html = buildEmailHtml(ph.firebase, ph.vercel, ph.ga4, ph.agenda, ph.homepage, ts, ph.summary, ph.briefs);
+      const include = includeOverride || { calendar: true, marketingBrief: true, creativeBrief: false, webStats: true, platformStats: true, deployments: true };
+      const renderInclude = { ...include, homepage: include.webStats };
+      const html = buildEmailHtml(ph.firebase, ph.vercel, ph.ga4, ph.agenda, ph.homepage, ts, ph.summary, ph.briefs, renderInclude, ph.creative);
       return json({ ok: true, template: true, placeholder: true, timestamp: new Date(ts).toISOString(), paragraph: ph.summary.paragraph, html });
     } catch (err) {
       logError('daily_digest_template_error', { error: err.message });
@@ -1308,13 +1388,56 @@ export async function GET(request) {
   try {
     const timestamp = Date.now();
     logInfo('daily_digest_start', { timestamp: new Date(timestamp).toISOString() });
+
+    // Resolve the digest home client up front so the agenda reads that client's
+    // connected calendar. The Email Digest card's `include.calendar` toggle is the
+    // single authority for whether the agenda is included (P2b migration).
+    let homeClientId = null;
+    let digestCfg = null;
+    try {
+      const configClientId = await digestConfig.resolveDigestClientId();
+      digestCfg = await digestConfig.getDigestConfig(configClientId);
+      homeClientId = digestCfg.homeClientId || configClientId;
+    } catch { /* resolution failed — agenda falls back to the env calendar */ }
+
+    // Email Digest card aggregation toggles. These gate the collectors (to skip
+    // their API cost) and the rendered sections. A preview `include` override
+    // (the card's current, possibly-unsaved toggles) wins over the saved config.
+    const include = includeOverride || digestCfg?.include || {
+      calendar: true, marketingBrief: true, creativeBrief: false, webStats: true, platformStats: true, deployments: true,
+    };
+
+    // Web Stats card settings (Website Developer bucket) — per-home-client GA4
+    // property, tracked event list, and homepage block toggle. Empty values fall
+    // back to the route env/defaults so behavior is unchanged when never set.
+    let webStats = {};
+    if (homeClientId) {
+      try {
+        const ccSnap = await fb.adminDb.collection('client_configs').doc(homeClientId).get();
+        webStats = ccSnap.data()?.webStatsConfig || {};
+      } catch { /* default: env values */ }
+    }
+    const ga4PropertyId = webStats.ga4PropertyId || GA4_PROPERTY_ID;
+    const ga4EventNames = Array.isArray(webStats.trackedEvents) && webStats.trackedEvents.length
+      ? webStats.trackedEvents
+      : DIGEST_EVENT_NAMES;
+    const homepageEnabled = webStats.homepageEnabled !== false;
+
+    const NEUTRAL_VERCEL = { deployments: [], errorLogs: [], totalDeployments: 0 };
+    const NEUTRAL_GA4 = { overview: null, topPages: [], trafficSources: [], events: {}, error: null };
+    const NEUTRAL_AGENDA = { events: [], days: [], tomorrowSummary: '', error: null };
+    const NEUTRAL_HOMEPAGE = { totalEvents: 0, byEventName: [], byInteractionType: [], topTargets: [], outboundLinks: [], scrollDepths: [], webVitals: [], error: null };
+
     const [firebase, vercel, ga4, agenda, homepage] = await Promise.all([
-      getFirebaseMetrics(),
-      getVercelMetrics(),
-      getGA4Metrics(),
-      getCalendarAgenda(timestamp),
-      getHomepageAnalyticsMetrics(),
+      getFirebaseMetrics(), // always — powers the subject line + platform stats
+      include.deployments ? getVercelMetrics() : Promise.resolve(NEUTRAL_VERCEL),
+      include.webStats ? getGA4Metrics({ propertyId: ga4PropertyId, eventNames: ga4EventNames }) : Promise.resolve(NEUTRAL_GA4),
+      include.calendar ? getCalendarAgenda(timestamp, { clientId: homeClientId, enabled: true }) : Promise.resolve(NEUTRAL_AGENDA),
+      (include.webStats && homepageEnabled) ? getHomepageAnalyticsMetrics() : Promise.resolve(NEUTRAL_HOMEPAGE),
     ]);
+
+    // Render flags: homepage block also honors the Web Stats homepage toggle.
+    const renderInclude = { ...include, homepage: include.webStats && homepageEnabled };
 
     const dateStr = new Date(timestamp).toLocaleDateString('en-US', {
       month: 'short',
@@ -1327,16 +1450,25 @@ export async function GET(request) {
     // unconditionally elsewhere and never depend on this block.
     let summary = null;
     let briefs = [];
+    let creative = null;
     try {
       const fullDateStr = new Date(timestamp).toLocaleDateString('en-US', {
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
       });
-      const configClientId = await digestConfig.resolveDigestClientId();
-      const cfg = await digestConfig.getDigestConfig(configClientId);
-      const homeClientId = cfg.homeClientId || configClientId;
+      const cfg = digestCfg || await digestConfig.getDigestConfig(await digestConfig.resolveDigestClientId());
+      if (!homeClientId) homeClientId = cfg.homeClientId || null;
       const briefClientIds = [...new Set([homeClientId, ...(cfg.includeClientIds || [])].filter(Boolean))];
 
-      briefs = (await Promise.all(briefClientIds.map((cid) => briefIntel.getBriefForClient(cid)))).filter(Boolean);
+      // Strategic brief fetch is gated by the Marketing Brief include toggle; the
+      // executive summary stays independent (it also recaps analytics + agenda).
+      if (include.marketingBrief) {
+        briefs = (await Promise.all(briefClientIds.map((cid) => briefIntel.getBriefForClient(cid)))).filter(Boolean);
+      }
+
+      // Creative Brief attachment (opt-in) — the run onboarding deliverable for the home client.
+      if (include.creativeBrief && homeClientId) {
+        creative = await briefIntel.getCreativeBriefForClient(homeClientId);
+      }
 
       if (cfg.summaryEnabled) {
         const { text: docsText } = await digestConfig.getRecentDocsText({
@@ -1346,9 +1478,20 @@ export async function GET(request) {
           .map((b) => `[${b.clientName}]\n${briefIntel.briefIntelToText(b.intel)}`)
           .join('\n\n')
           .slice(0, 12000);
+        // Approved Client Brain voice/positioning (optional, additive). Absent or
+        // unapproved => '' => summary behaves exactly as before.
+        let clientBrainContext = '';
+        try {
+          const { loadClientBrainContext } = require('../../../../features/client-brain/store.cjs');
+          if (homeClientId) {
+            clientBrainContext = await loadClientBrainContext(homeClientId, { useFor: 'emailDigest', maxChars: 1800 });
+          }
+        } catch (e) {
+          logWarn('daily_digest_client_brain_failed', { error: e.message });
+        }
         summary = await briefSummary.generateBriefSummary({
           dateStr: fullDateStr, agenda, ga4, firebase, homepage, docsText,
-          briefText, config: cfg,
+          briefText, clientBrainContext, config: cfg,
         });
       }
     } catch (err) {
@@ -1358,7 +1501,7 @@ export async function GET(request) {
     const sessionStr = ga4.overview ? `, ${ga4.overview.sessions} session${ga4.overview.sessions !== 1 ? 's' : ''}` : '';
     const subject = `HITLOOP Daily — ${firebase.newUsers} sign-up${firebase.newUsers !== 1 ? 's' : ''}, ${firebase.recentRuns} dashboard${firebase.recentRuns !== 1 ? 's' : ''}${sessionStr} · ${dateStr}`;
 
-    const html = buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs);
+    const html = buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, renderInclude, creative);
 
     // Preview mode (admin dashboard): build everything, send nothing.
     if (isPreview) {

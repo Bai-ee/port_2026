@@ -303,7 +303,7 @@ export function normalizePostText(content) {
 // Developer uses. Returns one X-ready caption (≤280 chars) promoting the brand's
 // site. brand: { name, summary, url, industry }. Falls back to a derived line on
 // any failure so the caller always gets usable copy.
-export async function generatePromoCopy(brand = {}) {
+export async function generatePromoCopy(brand = {}, { clientBrainContext = '' } = {}) {
   const name = String(brand.name || '').slice(0, 120);
   const summary = String(brand.summary || '').slice(0, 600);
   const url = String(brand.url || '').slice(0, 200);
@@ -318,6 +318,7 @@ export async function generatePromoCopy(brand = {}) {
       name && `Brand: ${name}`,
       industry && `Industry: ${industry}`,
       summary && `About: ${summary}`,
+      clientBrainContext && `\nApproved Client Brain (match this voice/positioning, avoid its do-not-use language):\n${clientBrainContext}`,
       url && `Link to include verbatim at the end: ${url}`,
       ``,
       `Rules: under 240 characters (excluding the link), confident and specific,`,
@@ -572,6 +573,17 @@ export async function createSocialPost(clientId, payload) {
     source: payload.source || 'manual',
     status,
     scheduledAt: payload.scheduledAt || null,
+    // Optional reply context (from the Reply Targets skill): the post this draft
+    // replies to. Threaded posting via the X API is a later item — v1 carries the
+    // target so the operator can review + reply. null = standalone post.
+    replyTo: payload.replyTo && typeof payload.replyTo === 'object'
+      ? {
+          author: String(payload.replyTo.author || '').slice(0, 120),
+          url: String(payload.replyTo.url || '').slice(0, 400),
+          text: String(payload.replyTo.text || '').slice(0, 600),
+          source: String(payload.replyTo.source || '').slice(0, 40),
+        }
+      : null,
     twitterId: null,
     error: null,
     createdAt: now,

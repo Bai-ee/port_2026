@@ -54,11 +54,14 @@ function compactData({ dateStr, agenda, ga4, firebase, homepage }) {
  * Generate the executive-summary paragraph.
  * @returns {Promise<{ paragraph: string, model: string, usage: object }>}
  */
-async function generateBriefSummary({ dateStr, agenda, ga4, firebase, homepage, docsText = '', briefText = '', config = {} }) {
+async function generateBriefSummary({ dateStr, agenda, ga4, firebase, homepage, docsText = '', briefText = '', clientBrainContext = '', config = {} }) {
   const tone = config.tone || 'concise, professional, direct';
   const extra = config.extraInstructions ? `\nAdditional instructions: ${config.extraInstructions}` : '';
   const dataBlock = compactData({ dateStr, agenda, ga4, firebase, homepage });
   const briefBlock = briefText ? `\n\n${briefText}` : '';
+  const brainBlock = clientBrainContext
+    ? `\n\nClient brand context (the approved Client Brain — match this voice/positioning and honor its do-not-use language):\n${clientBrainContext}`
+    : '';
   const docBlock = docsText
     ? `\n\nReference documents the user uploaded (context on what's important/upcoming):\n${docsText}`
     : '';
@@ -70,9 +73,10 @@ async function generateBriefSummary({ dateStr, agenda, ga4, firebase, homepage, 
     `KOL and competitor moves, and narratives to get into; then what's new and important (analytics/platform); ` +
     `then the day's schedule and what's coming up. ` +
     `Ground every claim in the supplied data, brief, and documents — never invent numbers, posts, or events. ` +
-    `If a topic has no data, omit it gracefully rather than noting its absence.${extra}`;
+    `If a topic has no data, omit it gracefully rather than noting its absence.` +
+    `${clientBrainContext ? ' When client brand context is supplied, match its voice and positioning and avoid its do-not-use language.' : ''}${extra}`;
 
-  const userContent = `Here is today's data:\n\n${dataBlock}${briefBlock}${docBlock}`;
+  const userContent = `Here is today's data:\n\n${dataBlock}${briefBlock}${brainBlock}${docBlock}`;
 
   const response = await callAnthropic({
     model: SUMMARY_MODEL,

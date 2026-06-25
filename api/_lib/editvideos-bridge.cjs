@@ -313,6 +313,7 @@ let _folderCache = { at: 0, folders: null };
 let _folderDetailsCache = { at: 0, folders: null };
 let _folderMediaCache = new Map();
 let _corsCache = { at: 0, ok: false };
+let _usageCache = { at: 0, usage: null };
 
 function isExcludedFolder(folderName) {
   const lower = String(folderName).toLowerCase();
@@ -331,6 +332,7 @@ function invalidateFolderCache() {
   _folderCache = { at: 0, folders: null };
   _folderDetailsCache = { at: 0, folders: null };
   _folderMediaCache = new Map();
+  _usageCache = { at: 0, usage: null };
 }
 
 function displayNameForFolder(folderName) {
@@ -375,6 +377,37 @@ function sanitizeNewFolderName(name) {
   if (!safe) throw new Error('New folder name must include letters or numbers.');
   if (isExcludedFolder(safe)) throw new Error('That folder name is reserved.');
   return safe;
+}
+
+function sanitizeMediaFileName(name) {
+  if (typeof name !== 'string') throw new Error('File name must be a string.');
+  const trimmed = name.trim();
+  if (!trimmed || trimmed.includes('/') || trimmed.includes('\\') || trimmed.includes('..')) {
+    throw new Error('File name has an invalid path.');
+  }
+  if (!/^[A-Za-z0-9._ ()-]{1,180}$/.test(trimmed)) {
+    throw new Error('File name has invalid characters.');
+  }
+  if (!isMediaFilePath(trimmed)) throw new Error('Only media files can be deleted here.');
+  return trimmed;
+}
+
+function normalizeSourceFileRef(row = {}) {
+  if (!row || typeof row !== 'object') throw new Error('File row must be an object.');
+  if (row.fullPath || row.storagePath) {
+    const fullPath = String(row.fullPath || row.storagePath || '').trim();
+    if (!fullPath || fullPath.startsWith('/') || fullPath.includes('\\') || fullPath.includes('..')) {
+      throw new Error('File path has an invalid path.');
+    }
+    const parts = fullPath.split('/');
+    if (parts.length < 2 || parts.length > 3) throw new Error('File path must include folder and file name.');
+    const fileName = sanitizeMediaFileName(parts.pop());
+    const folder = sanitizeExistingFolderPath(parts.join('/'));
+    return { folder, fileName, fullPath: `${folder}/${fileName}` };
+  }
+  const folder = sanitizeExistingFolderPath(row.folder);
+  const fileName = sanitizeMediaFileName(row.fileName || row.name);
+  return { folder, fileName, fullPath: `${folder}/${fileName}` };
 }
 
 function sanitizeUploadFile(file, index) {
@@ -476,9 +509,18 @@ async function discoverSourceFolderDetails() {
         name: folder,
         displayName: displayNameForFolder(folder),
         count: 0,
+        sizeBytes: 0,
+        latestUpdated: null,
         type: folder.includes('/') ? 'nested' : 'root',
       };
-      if (isMediaFilePath(file.name)) current.count += 1;
+      if (isMediaFilePath(file.name)) {
+        current.count += 1;
+        current.sizeBytes += Number(file.metadata?.size || 0) || 0;
+        const updated = file.metadata?.updated || null;
+        if (updated && (!current.latestUpdated || String(updated) > String(current.latestUpdated))) {
+          current.latestUpdated = updated;
+        }
+      }
       folders.set(folder, current);
     }
   }
@@ -596,6 +638,63 @@ async function createUploadSession({ folderMode = 'existing', folderName, files 
     expiresAt: new Date(Date.now() + SIGNED_UPLOAD_TTL_MS).toISOString(),
     uploads,
   };
+}
+
+async function getMediaUsage() {
+  const now = Date.now();
+  if (_usageCache.usage && now - _usageCache.at < FOLDER_MEDIA_CACHE_TTL_MS) {
+    return _usageCache.usage;
+  }
+  const folders = await listSourceFoldersWithCounts();
+  const totalFiles = folders.reduce((sum, folder) => sum + (Number(folder.count) || 0), 0);
+  const totalBytes = folders.reduce((sum, folder) => sum + (Number(folder.sizeBytes) || 0), 0);
+  const usage = {
+    source: 'editvideos',
+    sourceFolders: folders,
+    totalFolders: folders.length,
+    totalFiles,
+    totalBytes,
+    largestFolders: folders
+      .slice()
+      .sort((a, b) => (Number(b.sizeBytes) || 0) - (Number(a.sizeBytes) || 0))
+      .slice(0, 8),
+    limits: {
+      maxUploadFiles: MAX_UPLOAD_FILES,
+      maxVideoUploadBytes: MAX_VIDEO_UPLOAD_BYTES,
+      maxImageUploadBytes: MAX_IMAGE_UPLOAD_BYTES,
+    },
+    calculatedAt: new Date().toISOString(),
+  };
+  _usageCache = { at: now, usage };
+  return usage;
+}
+
+async function deleteSourceFiles(files = []) {
+  if (!Array.isArray(files) || files.length === 0) throw new Error('At least one file is required.');
+  if (files.length > 25) throw new Error('Delete at most 25 files at a time.');
+  const bucket = bridgeBucket();
+  const deleted = [];
+  const errors = [];
+  for (const row of files) {
+    let ref = null;
+    try {
+      ref = normalizeSourceFileRef(row);
+      await bucket.file(ref.fullPath).delete();
+      deleted.push(ref);
+    } catch (err) {
+      const notFound = err?.code === 404 || String(err?.message || '').includes('No such object');
+      if (notFound) {
+        deleted.push(ref || { fullPath: row?.fullPath || row?.storagePath || row?.fileName || row?.name || 'unknown' });
+      } else {
+        errors.push({
+          fullPath: ref?.fullPath || row?.fullPath || row?.storagePath || null,
+          error: err?.message || 'Delete failed.',
+        });
+      }
+    }
+  }
+  invalidateFolderCache();
+  return { deleted, errors, status: errors.length ? (deleted.length ? 'partial' : 'failed') : 'done' };
 }
 
 // ===========================================================================
@@ -972,6 +1071,9 @@ module.exports = {
   listSourceFoldersWithCounts,
   listFolderMedia,
   createUploadSession,
+  getMediaUsage,
+  deleteSourceFiles,
+  normalizeSourceFileRef,
   ensureUploadCors,
   invalidateFolderCache,
   listOptions,

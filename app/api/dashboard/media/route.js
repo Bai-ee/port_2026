@@ -16,6 +16,8 @@ const {
   createUploadSession,
   invalidateFolderCache,
   listOptions,
+  getMediaUsage,
+  deleteSourceFiles,
   getArchiveManifest,
   getArchiveJob,
   normalizeArchiveSources,
@@ -68,6 +70,7 @@ async function requireAdmin(decoded) {
 }
 
 const ARCHIVE_MUTATIONS = new Set(['archive-to-arweave', 'deploy-website', 'update-arns']);
+const ADMIN_MEDIA_MUTATIONS = new Set(['delete-source-media']);
 
 // Transactional merge into dashboard_state.{clientId}.archivePublishing so the
 // card listener updates without clobbering sibling fields.
@@ -102,6 +105,27 @@ export async function POST(request) {
   }
 
   const action = new URL(request.url).searchParams.get('action');
+
+  if (ADMIN_MEDIA_MUTATIONS.has(action)) {
+    try {
+      await requireAdmin(decoded);
+    } catch (err) {
+      return json({ error: err.message }, err.status || 403);
+    }
+
+    let body = {};
+    try { body = await request.json(); } catch { body = {}; }
+
+    try {
+      if (action === 'delete-source-media') {
+        const files = Array.isArray(body?.files) ? body.files.slice(0, 25) : [];
+        const result = await deleteSourceFiles(files);
+        return json({ ok: true, ...result });
+      }
+    } catch (err) {
+      return json({ error: err.message || 'Media mutation failed.' }, err.status || 500);
+    }
+  }
 
   // --- Archive / Publishing (admin-only, Knowledge Officer card) -----------
   if (action && (action.startsWith('archive-') || ARCHIVE_MUTATIONS.has(action) || action === 'deploy-website')) {
@@ -445,6 +469,15 @@ export async function GET(request) {
         return json({ ok: true, ...result });
       } catch (err) {
         return json({ error: err.message || 'Could not list folder media.' }, 400);
+      }
+    }
+
+    if (action === 'usage') {
+      try {
+        const usage = await getMediaUsage();
+        return json({ ok: true, usage });
+      } catch (err) {
+        return json({ ok: true, usage: null, disabled: true, reason: err.message || 'Media usage unavailable.' });
       }
     }
 

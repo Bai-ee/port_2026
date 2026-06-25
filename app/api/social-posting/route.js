@@ -104,8 +104,42 @@ export async function POST(request) {
     }
 
     if (action === 'generate-copy') {
-      const copy = await generatePromoCopy(body.brand || {});
+      // Approved Client Brain voice/positioning (optional, additive). Absent or
+      // unapproved => '' => promo copy behaves exactly as before.
+      let clientBrainContext = '';
+      try {
+        const { loadClientBrainContext } = require('../../../features/client-brain/store.cjs');
+        clientBrainContext = await loadClientBrainContext(context.clientId, { useFor: 'socialPosts', maxChars: 1500 });
+      } catch { /* non-fatal — fall back to brand-only copy */ }
+      const copy = await generatePromoCopy(body.brand || {}, { clientBrainContext });
       return json({ ok: true, copy });
+    }
+
+    // Reply Targets skill → Post Me. Turn selected reply targets into draft
+    // posts (status 'draft', source 'reply-targets') carrying the target post as
+    // replyTo context. The operator reviews/edits/posts from the Post Me queue.
+    if (action === 'create-reply-drafts') {
+      const targets = Array.isArray(body.targets) ? body.targets.slice(0, 10) : [];
+      if (!targets.length) return json({ error: 'No reply targets supplied.' }, 400);
+      const created = [];
+      const failed = [];
+      for (const t of targets) {
+        const content = String(t?.suggestedReply || '').trim().slice(0, 280);
+        if (!content) { failed.push({ target: t?.url || t?.author || 'unknown', error: 'No suggested reply text.' }); continue; }
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          const post = await createSocialPost(context.clientId, {
+            content,
+            source: 'reply-targets',
+            status: 'draft',
+            replyTo: { author: t?.author, url: t?.url, text: t?.text, source: t?.source },
+          });
+          created.push(post);
+        } catch (err) {
+          failed.push({ target: t?.url || t?.author || 'unknown', error: err.message || 'Draft failed.' });
+        }
+      }
+      return json({ ok: created.length > 0, created, createdCount: created.length, failed });
     }
 
     if (action === 'diagnose') {

@@ -23,6 +23,7 @@ const fb = require('../../api/_lib/firebase-admin.cjs');
 const { getClientWeather } = require('../intelligence/_weather.js');
 const { summarizeBriefCover } = require('./brief-summarizer');
 const { BRIEF_COMPOSITIONS } = require('./brief-sections.cjs');
+const { loadClientBrainContext } = require('../client-brain/store.cjs');
 
 const ALL_BRIEF_TYPES = Object.keys(BRIEF_COMPOSITIONS);
 
@@ -90,12 +91,22 @@ export async function generateBriefSummaries({ clientId, runId, briefTypes = ALL
       : [],
     weather,
   };
+  // Approved Client Brain voice/positioning (optional, additive). Absent or
+  // unapproved => '' => every cover paragraph reads exactly as before.
+  let clientBrainContext = '';
+  try {
+    clientBrainContext = await loadClientBrainContext(clientId, { useFor: 'copy', maxChars: 1800 });
+  } catch (err) {
+    console.warn(`[brief-summaries] client brain load failed for ${clientId}: ${err?.message}`);
+  }
+
   const options = {
     clientName: clientConfig?.clientName || clientConfig?.sourceInputs?.clientName || '',
     websiteUrl: clientConfig?.sourceInputs?.websiteUrl || clientConfig?.websiteUrl || '',
     // Time-of-day salutation in the CLIENT's timezone (scout-config-generator
     // stores it) — the executive brief opens with it.
     greeting: greetingFor(clientConfig?.scoutConfig?.timeZone || 'America/Chicago'),
+    clientBrainContext,
   };
 
   const generatedAtIso = new Date().toISOString();

@@ -72,21 +72,49 @@ export async function POST(request) {
 
   try {
     const result = await runWatchlistPull({ clientId, clientConfig, detail });
-    // Mirror the watchlist-analysis ("Happening on X") to Firestore so the daily
-    // digest email can render the same REPORT-tab block server-side. Best-effort:
-    // a failed write never blocks returning the timelines to the dashboard.
-    if (result?.ok && result?.analysis?.text) {
+    // Persist to Firestore so downstream consumers (daily digest, the
+    // reply-targets analysis skill, Post Me) can read the watchlist data that
+    // until now lived only in the browser. Best-effort: a failed write never
+    // blocks returning the timelines to the dashboard.
+    if (result?.ok) {
       try {
-        await fb.adminDb.collection('dashboard_state').doc(clientId).set({
+        const generatedAt = new Date().toISOString();
+        // Compact raw timelines — keep the repliable fields, bound per-handle so
+        // the doc stays small. This is the candidate pool the reply skill ranks.
+        const compactItem = (it) => ({
+          author: it.author || '',
+          text: String(it.text || '').slice(0, 600),
+          url: it.url || '',
+          likes: it.likes || 0,
+          replies: it.replies || 0,
+          reposts: it.reposts || 0,
+          publishedAt: it.publishedAt || null,
+        });
+        const timelines = (result.handles || [])
+          .filter((h) => (h.ownPosts?.length || h.mentions?.length))
+          .map((h) => ({
+            handle: h.handle,
+            engagementTotal: h.engagementTotal || 0,
+            ownPosts: (h.ownPosts || []).slice(0, 8).map(compactItem),
+            mentions: (h.mentions || []).slice(0, 12).map(compactItem),
+          }));
+        const patch = {
           marketingBrief: {
-            reportSnapshot: {
-              watchlistAnalysis: {
-                text: result.analysis.text,
-                generatedAt: new Date().toISOString(),
-              },
+            watchlistTimelines: {
+              handles: timelines,
+              spotlight: result.spotlight || null,
+              detail: detail || null,
+              generatedAt,
             },
           },
-        }, { merge: true });
+        };
+        // Keep mirroring the "Happening on X" summary for the digest REPORT block.
+        if (result?.analysis?.text) {
+          patch.marketingBrief.reportSnapshot = {
+            watchlistAnalysis: { text: result.analysis.text, generatedAt },
+          };
+        }
+        await fb.adminDb.collection('dashboard_state').doc(clientId).set(patch, { merge: true });
       } catch { /* non-fatal — snapshot is additive */ }
     }
     return json(result); // 200 even on ok:false so the UI can show the message

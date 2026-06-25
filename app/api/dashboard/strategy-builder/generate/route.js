@@ -12,6 +12,8 @@ import {
   getKnowledgeBaseRuntimeContext,
 } from '../../../../../features/knowledge-base/pipeline-context.js';
 
+const { loadClientBrainContext } = require('../../../../../features/client-brain/store.cjs');
+
 export const maxDuration = 120;
 
 function makeReqShim(request) {
@@ -199,6 +201,9 @@ export async function POST(request) {
         charCap: 3400,
       })
     : null;
+  const clientBrainContext = srcOn('client-brain')
+    ? await loadClientBrainContext(clientId, { useFor: 'socialPosts', maxChars: 2500 })
+    : '';
 
   const brandIncluded = srcOn('brand-snapshot');
   const includedCardFindings = srcOn('analyzer') ? cardFindings : {};
@@ -298,6 +303,7 @@ export async function POST(request) {
           sources: knowledgeBase.sources,
         }
       : null,
+    clientBrain: clientBrainContext ? { context: clientBrainContext } : null,
     cardFindings: includedCardFindings,
     campaign,
     signals,

@@ -22,6 +22,17 @@ const VERTICALS = [
 // tile id opened by the ↗ link (null = no openable tile, e.g. lead-gen filter).
 const DATA_SOURCES = [
   {
+    key: 'client-brain',
+    label: 'Client Brain',
+    card: 'client-brain',
+    readiness: (ds) =>
+      ds?.clientBrain?.aiContextPack?.shortContext
+        ? 'ready'
+        : ds?.clientBrain
+        ? 'partial'
+        : 'empty',
+  },
+  {
     key: 'marketing-brief',
     label: 'Marketing Brief',
     card: 'marketing-brief',

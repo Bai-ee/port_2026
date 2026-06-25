@@ -100,6 +100,11 @@
  */
 
 /**
+ * @typedef {Object} ClientBrainContext
+ * @property {string} context — compact CLIENT_CONTEXT pack from Client Brain
+ */
+
+/**
  * @typedef {Object} Promotion
  * @property {string} id
  * @property {string} label
@@ -127,6 +132,7 @@
  * @property {Intelligence|null} [intelligence]
  * @property {MediaDirection|null} [media]
  * @property {SeoContext|null} [seo]
+ * @property {ClientBrainContext|null} [clientBrain]
  * @property {Campaign} [campaign]
  * @property {Record<string, CardFindings>} cardFindings
  * @property {{ weather: { enabled: boolean, forecast?: DayForecast[] }, events: { enabled: boolean, items?: LocalEvent[] }, holidays: { enabled: boolean, items?: Holiday[] } }} signals

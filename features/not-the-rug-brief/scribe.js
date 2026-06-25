@@ -12,6 +12,7 @@ const { runGuardian } = require('./guardian');
 const { getDefaultClientConfig, requireClientConfig } = require('./clients');
 const { getIntelligenceConfig, normalizeIntelligence } = require('./intelligence');
 const { loadBrandVoice, loadGameKnowledge } = require('./knowledge');
+const { resolveVoiceProfile } = require('./voice-resolver');
 const { getContentSchema } = require('./content-schema');
 
 const DEFAULT_CONFIG = getDefaultClientConfig();
@@ -168,7 +169,10 @@ function buildScribePrompt(briefData, config = getDefaultClientConfig()) {
   } = briefData;
   const intelligence = getIntelligenceConfig(config);
 
-  const voice = loadBrandVoice(config.clientId);
+  // Prefer the voice profile resolved in runScribe (Client Brain -> file
+  // fallback). Falls back to a direct file read for any sync caller that did
+  // not pre-resolve.
+  const voice = config._resolvedVoice !== undefined ? config._resolvedVoice : loadBrandVoice(config.clientId);
   if (!voice) {
     console.warn(`[SCRIBE] brand-voice.json not found for ${config.clientId} — using fallback tone`);
   }
@@ -405,7 +409,9 @@ async function runScribe(clientId = DEFAULT_CONFIG.clientId, config = null, inco
 
     const resolvedConfig = config || requireClientConfig(clientId);
     const briefData = extractBriefData(brief, resolvedConfig);
-    const prompt = buildScribePrompt(briefData, resolvedConfig);
+    // One read path for voice/tone: approved Client Brain -> brand-voice.json.
+    const resolvedVoice = await resolveVoiceProfile(clientId);
+    const prompt = buildScribePrompt(briefData, { ...resolvedConfig, _resolvedVoice: resolvedVoice });
 
     const response = await getAnthropicClient().messages.create({
       model: MODELS.briefWrite, // claude-sonnet-4-6 — quality matters for content
