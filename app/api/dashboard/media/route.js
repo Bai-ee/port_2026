@@ -7,7 +7,16 @@ const { getEffectiveClientContext } = require('../../../../api/_lib/client-provi
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
 const mediaJobs = require('../../../../api/_lib/media-jobs.cjs');
 const { validateRemixRecipe } = require('../../../../api/_lib/media-recipe.cjs');
-const { enqueueVideoJob, triggerWorker, listSourceFolders, listOptions } = require('../../../../api/_lib/editvideos-bridge.cjs');
+const {
+  enqueueVideoJob,
+  triggerWorker,
+  listSourceFolders,
+  listSourceFoldersWithCounts,
+  listFolderMedia,
+  createUploadSession,
+  invalidateFolderCache,
+  listOptions,
+} = require('../../../../api/_lib/editvideos-bridge.cjs');
 const { reconcileMediaJob } = require('../../../../api/_lib/media-reconcile.cjs');
 
 // Metadata-only route: it creates/reads media_jobs records and writes pending
@@ -109,6 +118,27 @@ export async function POST(request) {
     }
   }
 
+  if (action === 'create-upload-session') {
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return json({ error: 'Invalid JSON body.' }, 400);
+    }
+
+    try {
+      const session = await createUploadSession(body || {});
+      return json({ ok: true, session });
+    } catch (err) {
+      return json({ error: err.message || 'Could not create upload session.' }, 400);
+    }
+  }
+
+  if (action === 'complete-upload') {
+    invalidateFolderCache();
+    return json({ ok: true });
+  }
+
   return json({ error: 'Unknown action.' }, 400);
 }
 
@@ -142,17 +172,47 @@ export async function GET(request) {
 
     if (action === 'jobs') {
       const type = params.get('type') || null;
-      const jobs = await mediaJobs.listMediaJobs(clientId, { type, limit: 20 });
+      let jobs = await mediaJobs.listMediaJobs(clientId, { type, limit: 20 });
+      const activeJobs = jobs.filter((job) => job?.editJobId && (job.status === 'queued' || job.status === 'processing'));
+      if (activeJobs.length) {
+        await Promise.all(activeJobs.slice(0, 5).map((job) => (
+          reconcileMediaJob(job, clientId).catch((recErr) => {
+            console.warn(`[media] reconcile failed for ${job.jobId}: ${recErr?.message}`);
+          })
+        )));
+        jobs = await mediaJobs.listMediaJobs(clientId, { type, limit: 20 });
+      }
       return json({ ok: true, jobs });
     }
 
     if (action === 'folders') {
       try {
+        if (params.get('withCounts') === '1') {
+          try {
+            const folders = await listSourceFoldersWithCounts();
+            return json({ ok: true, folders });
+          } catch (countErr) {
+            console.warn(`[media] counted folder listing failed: ${countErr?.message}`);
+            const folders = await listSourceFolders();
+            return json({ ok: true, folders: folders.map((name) => ({ name, displayName: name, count: null, type: name.includes('/') ? 'nested' : 'root' })) });
+          }
+        }
         const folders = await listSourceFolders();
         return json({ ok: true, folders });
       } catch {
         // Bridge unconfigured — degrade to an empty list so the card falls back.
         return json({ ok: true, folders: [] });
+      }
+    }
+
+    if (action === 'folder-files') {
+      const folder = params.get('folder');
+      if (!folder) return json({ error: 'folder is required.' }, 400);
+      try {
+        const result = await listFolderMedia(folder, { limit: Number(params.get('limit') || 60) });
+        return json({ ok: true, ...result });
+      } catch (err) {
+        return json({ error: err.message || 'Could not list folder media.' }, 400);
       }
     }
 

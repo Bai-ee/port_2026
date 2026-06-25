@@ -9619,7 +9619,7 @@
   gap: 0.5rem;
   min-height: 2.75rem;
   padding: 0.5rem 0.75rem;
-  border: none;
+  border: 1px solid transparent;
   color: #fff;
   font-family: var(--font-ui);
   font-size: clamp(0.8rem, 1.1vw, 0.875rem);
@@ -9640,9 +9640,10 @@
 .vrk-scope .cta-pill-btn::before {
   content: "";
   position: absolute;
-  inset: 0;
+  inset: -1px;
   border-radius: inherit;
   padding: 2px;
+  opacity: 0;
   background: conic-gradient(
     from var(--vrk-cta-angle),
     transparent 0deg,
@@ -9665,24 +9666,29 @@
     linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
-  animation: vrk-cta-border-spin 2.4s linear infinite;
   pointer-events: none;
+  transition: opacity var(--dur-base) ease;
 }
 
 .vrk-scope .cta-pill-btn::after {
   display: none;
 }
 
-.vrk-scope .cta-pill-btn:hover {
+.vrk-scope .cta-pill-btn:hover:not(:disabled) {
   background:
     linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%),
     linear-gradient(135deg, var(--accent-a) 0%, var(--accent-b) 52%, var(--accent-c) 100%);
   box-shadow:
-    0 0 28px 6px rgba(0,200,228,0.36),
-    0 4px 14px rgba(0,0,0,0.26),
+    0 0 14px 3px rgba(0,200,228,0.22),
+    0 2px 8px rgba(0,0,0,0.2),
     inset 0 1px 0 rgba(255,255,255,0.28),
     inset 0 -1px 0 rgba(0,0,0,0.1);
-  transform: translateY(-1px);
+  transform: none;
+}
+
+.vrk-scope .cta-pill-btn:hover:not(:disabled)::before {
+  opacity: 1;
+  animation: vrk-cta-border-spin 1.8s linear infinite;
 }
 
 .vrk-scope .cta-pill-btn:active {
@@ -9932,6 +9938,365 @@
   font-size: 12px;
 }
 
+.vrk-scope .upload-drop {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 96px;
+  padding: 18px;
+  border: 1.5px dashed rgba(42,36,32,0.22);
+  border-radius: var(--radius);
+  background: rgba(255,255,255,0.58);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-base) ease, border-color var(--dur-base) ease, transform var(--dur-spring) var(--ease-spring);
+}
+
+.vrk-scope .upload-drop:hover {
+  background: rgba(255,255,255,0.9);
+  border-color: rgba(42,36,32,0.38);
+  transform: translateY(-1px);
+}
+
+.vrk-scope .upload-drop-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+}
+
+.vrk-scope .upload-drop-title,
+.vrk-scope .folder-name,
+.vrk-scope .upload-name {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-weight: 700;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vrk-scope .upload-drop-meta,
+.vrk-scope .folder-meta,
+.vrk-scope .upload-meta,
+.vrk-scope .media-thumb-name {
+  display: block;
+  margin-top: 5px;
+  color: var(--ink-muted);
+  font: 12px/1.25 var(--font-mono);
+}
+
+.vrk-scope .orientation-grid,
+.vrk-scope .folder-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.vrk-scope .orientation-tile,
+.vrk-scope .folder-card {
+  display: grid;
+  gap: 10px;
+  min-height: 88px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255,255,255,0.86);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-base) ease, border-color var(--dur-base) ease, transform var(--dur-spring) var(--ease-spring);
+}
+
+.vrk-scope .orientation-tile:hover,
+.vrk-scope .folder-card:hover {
+  background: #fff;
+  border-color: rgba(42,36,32,0.24);
+  transform: translateY(-1px);
+}
+
+.vrk-scope .orientation-tile.is-on,
+.vrk-scope .folder-card.is-on {
+  border-color: rgba(42,36,32,0.38);
+  box-shadow: inset 0 0 0 1px rgba(42,36,32,0.18);
+}
+
+.vrk-scope .folder-card.is-previewing {
+  background: rgba(255,255,255,0.98);
+}
+
+.vrk-scope .orientation-shape {
+  display: block;
+  border: 1px solid rgba(42,36,32,0.26);
+  border-radius: 4px;
+  background: linear-gradient(135deg, rgba(0,200,228,0.18), rgba(122,77,255,0.18));
+}
+
+.vrk-scope .orientation-auto { width: 34px; height: 34px; border-radius: 999px; }
+.vrk-scope .orientation-square { width: 34px; height: 34px; }
+.vrk-scope .orientation-portrait { width: 24px; height: 40px; }
+.vrk-scope .orientation-landscape { width: 44px; height: 26px; }
+
+.vrk-scope .upload-queue,
+.vrk-scope .folder-preview {
+  display: grid;
+  gap: 8px;
+}
+
+.vrk-scope .upload-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(90px, 160px) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 62px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255,255,255,0.86);
+}
+
+.vrk-scope .upload-kind {
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  height: 30px;
+  border-radius: 6px;
+  background: rgba(42,36,32,0.08);
+  color: var(--ink-soft);
+  font: 700 11px/1 var(--font-mono);
+}
+
+.vrk-scope .upload-progress {
+  display: block;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(42,36,32,0.1);
+}
+
+.vrk-scope .upload-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--a), var(--b), var(--c));
+  transition: width var(--dur-base) ease;
+}
+
+.vrk-scope .upload-remove {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+
+.vrk-scope .media-thumb-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.vrk-scope .media-thumb {
+  position: relative;
+  appearance: none;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255,255,255,0.82);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur-base) ease, box-shadow var(--dur-base) ease, background var(--dur-base) ease;
+}
+
+.vrk-scope .media-thumb:hover:not(:disabled) {
+  border-color: rgba(42,36,32,0.34);
+  background: #fff;
+  box-shadow: inset 0 0 0 1px rgba(42,36,32,0.14);
+}
+
+.vrk-scope .media-thumb.is-ordered {
+  border-color: rgba(17,109,255,0.52);
+  box-shadow: inset 0 0 0 1px rgba(17,109,255,0.22);
+}
+
+.vrk-scope .media-thumb:disabled {
+  cursor: default;
+  color: var(--ink-soft);
+}
+
+.vrk-scope .media-thumb img,
+.vrk-scope .media-thumb video {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #111;
+}
+
+.vrk-scope .media-thumb-order-badge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  border: 1px solid rgba(255,255,255,0.7);
+  border-radius: 999px;
+  background: rgba(17,17,17,0.82);
+  color: #fff;
+  font: 700 12px/1 var(--font-mono);
+}
+
+.vrk-scope .media-thumb-name,
+.vrk-scope .order-slot-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vrk-scope .media-thumb-meta,
+.vrk-scope .order-count {
+  color: var(--ink-soft);
+  font: 700 11px/1 var(--font-mono);
+  text-transform: uppercase;
+}
+
+.vrk-scope .order-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.vrk-scope .order-status,
+.vrk-scope .order-builder {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255,255,255,0.64);
+}
+
+.vrk-scope .order-status {
+  grid-template-columns: auto minmax(0,1fr) auto;
+  align-items: center;
+}
+
+.vrk-scope .order-status.is-ready {
+  border-color: rgba(17,109,255,0.36);
+  background: rgba(17,109,255,0.06);
+}
+
+.vrk-scope .order-status-title {
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.vrk-scope .order-builder-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.vrk-scope .order-builder-head .hint {
+  margin: 4px 0 0;
+}
+
+.vrk-scope .order-row {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.vrk-scope .order-slot {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(92px,1fr) auto auto;
+  gap: 6px;
+  min-width: 0;
+  min-height: 158px;
+  padding: 8px;
+  border: 1px dashed rgba(42,36,32,0.24);
+  border-radius: var(--radius);
+  background: rgba(255,255,255,0.52);
+}
+
+.vrk-scope .order-slot.is-filled {
+  border-style: solid;
+  background: rgba(255,255,255,0.9);
+}
+
+.vrk-scope .order-slot video {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #111;
+}
+
+.vrk-scope .order-slot-index {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(42,36,32,0.08);
+  color: var(--ink);
+  font: 700 11px/1 var(--font-mono);
+}
+
+.vrk-scope .order-slot-empty {
+  display: grid;
+  place-items: center;
+  min-height: 92px;
+  border-radius: 6px;
+  background: rgba(42,36,32,0.05);
+  color: var(--ink-soft);
+  font: 700 11px/1 var(--font-mono);
+  text-transform: uppercase;
+}
+
+.vrk-scope .order-slot-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 4px;
+}
+
+.vrk-scope .mini-icon-btn {
+  display: inline-grid;
+  place-items: center;
+  min-height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  font: 700 10px/1 var(--font-mono);
+  cursor: pointer;
+}
+
+.vrk-scope .mini-icon-btn:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
 .vrk-scope .chip {
   display: inline-flex;
   align-items: center;
@@ -10077,4 +10442,45 @@
   min-height: 0;
   padding: 0;
   background: #000;
+}
+
+@media (max-width: 860px) {
+  .vrk-scope .section-head {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .vrk-scope .section-head .btn {
+    grid-column: 1 / -1;
+  }
+
+  .vrk-scope .toggle-grid,
+  .vrk-scope .field-grid,
+  .vrk-scope .orientation-grid,
+  .vrk-scope .folder-grid,
+  .vrk-scope .media-thumb-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .vrk-scope .order-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .vrk-scope .order-status,
+  .vrk-scope .order-builder-head {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .vrk-scope .order-actions {
+    justify-content: flex-start;
+  }
+
+  .vrk-scope .upload-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .vrk-scope .upload-progress,
+  .vrk-scope .upload-remove {
+    grid-column: 1 / -1;
+  }
 }

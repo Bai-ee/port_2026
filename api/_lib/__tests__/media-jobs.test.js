@@ -43,7 +43,15 @@ test('createMediaJob writes a queued doc with trimmed + full recipe', async () =
   assert.deepEqual(job.recipe.sourceFolders, ['skyline', 'neighborhood']);
   assert.equal(job.recipe.filter, 'look_hard_bw');
   assert.equal(job.recipe.overlay, 'retro_dust');
+  assert.equal(job.recipe.manualOrderSegments, 0);
   assert.equal(job.recipeFull.arweaveAudioUrl, 'https://arweave.net/abc');
+});
+
+test('createMediaJob summarizes manual video order segment count', async () => {
+  const videoOrder = Array.from({ length: 6 }, (_, segmentIndex) => ({ segmentIndex, videoName: `clip-${segmentIndex}.mp4` }));
+  const { jobId } = await jobs.createMediaJob({ clientId: 'c1', recipe: { ...RECIPE, videoOrder } });
+  const job = await jobs.getMediaJob(jobId, 'c1');
+  assert.equal(job.recipe.manualOrderSegments, 6);
 });
 
 test('createMediaJob requires clientId and a known type', async () => {

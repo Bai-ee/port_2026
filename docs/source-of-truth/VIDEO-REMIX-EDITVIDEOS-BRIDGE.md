@@ -32,6 +32,17 @@ Card "RUN REMIX" (or REMIX tab → Generate)
         clear mediaVideoPending, completeMediaJob(jobId)
       • on 'failed': failMediaJob(jobId)
   → Card shell + Details modal play the latest video (latestRemixVideoUrl) with native controls.
+
+SOURCE MEDIA tab (Video Remix modal)
+  → GET /api/dashboard/media?action=folders&withCounts=1
+      • listSourceFoldersWithCounts() scans the EditVideos bucket and returns folder cards/counts
+  → GET /api/dashboard/media?action=folder-files&folder=...
+      • listFolderMedia() returns signed one-hour preview URLs for media in that folder
+  → POST /api/dashboard/media?action=create-upload-session
+      • createUploadSession() validates folder/files and returns short-lived signed PUT URLs
+  → Browser uploads files directly to the EditVideos bucket (no file bytes through Vercel)
+  → POST /api/dashboard/media?action=complete-upload clears the folder cache
+  → Uploaded folder is selected in the REMIX tab's `sourceFolders`.
 ```
 
 ## Files (Hitloop)
@@ -39,12 +50,12 @@ Card "RUN REMIX" (or REMIX tab → Generate)
 | File | Role |
 |---|---|
 | `api/_lib/media-jobs.cjs` | `media_jobs` queue (lease/retry/orphan-reclaim, mirrors `studio-render-jobs.cjs`). `createMediaJob`, `getMediaJob`, `listMediaJobs`, `setMediaJobEditRef`, `listInFlightMediaJobs`, `completeMediaJob`, `failMediaJob`. |
-| `api/_lib/editvideos-bridge.cjs` | Named 2nd firebase-admin app `editvideos`. `mapRecipeToVideoJob`, `enqueueVideoJob`, `triggerWorker`, `getVideoJob`, `listSourceFolders`, `listOptions` (artists/mixes/filters/overlays/logos, 60s cache). |
-| `api/_lib/media-recipe.cjs` | `validateRemixRecipe` + folder allowlist (`sanitizeFolderName`). Output locked 720/30/30. |
+| `api/_lib/editvideos-bridge.cjs` | Named 2nd firebase-admin app `editvideos`. `mapRecipeToVideoJob`, `enqueueVideoJob`, `triggerWorker`, `getVideoJob`, `listSourceFolders`, `listSourceFoldersWithCounts`, `listFolderMedia`, `createUploadSession`, `listOptions` (artists/mixes/filters/overlays/logos, 60s cache). |
+| `api/_lib/media-recipe.cjs` | `validateRemixRecipe` + folder allowlist (`sanitizeFolderName`). Output locked 720/30/30. Allows safe two-segment existing EV folders such as `assets/retro_dust`; new upload folders stay flat. |
 | `api/_lib/media-reconcile.cjs` | `reconcileMediaJob(job, clientId)` — EditVideos → Hitloop. |
-| `app/api/dashboard/media/route.js` | Metadata-only route. Actions: `create-video-remix`, `job` (reconciles), `jobs`, `folders`, `options`. |
+| `app/api/dashboard/media/route.js` | Metadata-only route. Actions: `create-video-remix`, `job` (reconciles), `jobs`, `folders`, `folder-files`, `create-upload-session`, `complete-upload`, `options`. |
 | `app/api/worker/media-reconcile/route.js` | Backstop sweep (worker-secret auth); also pingable by the EV Action. |
-| `DashboardPage.jsx` | `video-remix` card, `dashboard_state` listener (carries `mediaCaptures`/`mediaVideoPending`), `runVideoRemix`, REMIX params tab, shell/modal `<video>` (`latestRemixVideoUrl`). |
+| `DashboardPage.jsx` | `video-remix` card, `dashboard_state` listener (carries `mediaCaptures`/`mediaVideoPending`), `runVideoRemix`, REMIX params tab, SOURCE MEDIA upload tab, shell/modal `<video>` (`latestRemixVideoUrl`). |
 | `services/media-render/` | **Shelved** standalone FFmpeg worker (local fixtures only). Future client-scoped path. |
 | `api/_lib/__tests__/{media-jobs,media-recipe,editvideos-bridge}.test.js` | Unit tests (node:test + in-memory Firestore fake). Test glob includes `api/**/__tests__`. |
 
@@ -100,6 +111,7 @@ gracefully if absent (job queues, no render). Rotating these in EditVideos requi
    (volume/unmute) can't be clicked.
 5. **EditVideos folders are global/shared**, not per-client. Fine for single-operator. True
    multi-tenant means un-shelving `services/media-render` + client-scoped source paths.
+   The SOURCE MEDIA upload tab currently writes to those same global/shared folders.
 6. **Capture lands even without the live listener.** `runVideoRemix` merges `job.output` into local
    state on poll-`done`, so the card flips to "Video ready" even under admin impersonation (listener
    off) or a cached bootstrap.
@@ -110,6 +122,8 @@ gracefully if absent (job queues, no render). Rotating these in EditVideos requi
 - **New recipe field:** add to `validateRemixRecipe` (sanitize) → `mapRecipeToVideoJob` (map to the EV
   `videoJobs` field) → REMIX tab control in `DashboardPage.jsx`. Verify the EV worker honors the field.
 - **New action:** add a metadata-only branch in `app/api/dashboard/media/route.js` (no file bytes, no FFmpeg).
+- **Upload media:** keep uploads direct-to-storage through `create-upload-session`; do not proxy video
+  or image bytes through the dashboard route.
 - **Multi-tenant / client-scoped media:** un-shelve `services/media-render`, add a `FirebaseMediaStore`,
   and move source folders under `clients/{clientId}/media/...` (the original plan's Phase 0/3).
 

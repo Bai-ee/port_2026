@@ -31,6 +31,43 @@ function getAnthropicClient() {
 
 const DEFAULT_CONFIG = getDefaultClientConfig();
 
+// Fetch the real recent posts of the watchlist handles via the X API — the SAME
+// fetcher the Market Signals test uses, so the brief's X data == the single-line
+// test. Best effort: returns [] when X is disabled, no handles, or the API read
+// is blocked (free tier). Items are the grounded source of truth for kolActivity.
+async function fetchXTimelineItems(config) {
+  try {
+    const platforms = config?.scout?.sourcePlatforms || [];
+    const handles = Array.isArray(config?.kols) ? config.kols : [];
+    if (!platforms.includes('x') || !handles.length) return [];
+    const { fetchHandleTimelines } = await import('../social-posting/twitter-service.js');
+    const tl = await fetchHandleTimelines(handles, { perHandle: 5 });
+    if (!tl.ok && tl.errors?.length) {
+      console.warn(`[${new Date().toISOString()}] XSCOUT: X timelines unavailable — ${tl.errors.join('; ').slice(0, 160)}`);
+    }
+    return tl.ok ? tl.items : [];
+  } catch (err) {
+    console.warn(`[${new Date().toISOString()}] XSCOUT: X timeline fetch threw — ${err.message}`);
+    return [];
+  }
+}
+
+// Map X-API timeline items → kolActivity entries (the grounded, real-permalink
+// version). These REPLACE web-search-derived kolActivity when present, because
+// the API gives the exact posts from the exact watched accounts.
+function xTimelinesToKolActivity(items = []) {
+  return items.map((it) => ({
+    name: it.author || it.handle || 'KOL',
+    platform: 'x',
+    content: it.summary || '',
+    url: it.url || '',
+    profileUrl: it.handle ? `https://x.com/${String(it.handle).replace(/^@/, '')}` : '',
+    sentiment: '',
+    signalType: 'LIVE',
+    followers: '',
+  })).filter((k) => k.content && k.url);
+}
+
 function getWeatherSourceUrl(weatherReport = null) {
   const firstNeighborhood = weatherReport?.neighborhoods?.[0];
   return firstNeighborhood?.sourceUrls?.forecastHourly
@@ -285,7 +322,7 @@ function stampRunMeta(agentData, searchResults, startTime, config) {
   return next;
 }
 
-function hydrateAgentData(agentData = {}, weatherReport = null, redditReport = null, searchResults = [], compactContext = '', last30daysMapped = null, config = null) {
+function hydrateAgentData(agentData = {}, weatherReport = null, redditReport = null, searchResults = [], compactContext = '', last30daysMapped = null, config = null, xTimelineItems = []) {
   const next = agentData && typeof agentData === 'object' ? { ...agentData } : {};
 
   // Configured local-market inputs (weather window, saved events, custom user
@@ -380,6 +417,19 @@ function hydrateAgentData(agentData = {}, weatherReport = null, redditReport = n
       const existingUrls = new Set(existing.map((s) => s.url).filter(Boolean));
       const novel = last30daysMapped.localDemandSignals.filter((s) => !existingUrls.has(s.url));
       if (novel.length > 0) next.localDemandSignals = [...existing, ...novel].slice(0, 6);
+    }
+  }
+
+  // Real X handle timelines (X API) are the grounded source of truth for
+  // kolActivity — they REPLACE web-search-derived KOL guesses. Real posts first,
+  // then any non-X KOL items the synthesis found, deduped by URL.
+  if (Array.isArray(xTimelineItems) && xTimelineItems.length > 0) {
+    const real = xTimelinesToKolActivity(xTimelineItems);
+    if (real.length > 0) {
+      const seen = new Set(real.map((k) => k.url));
+      const nonXLeftover = (Array.isArray(next.kolActivity) ? next.kolActivity : [])
+        .filter((k) => k && String(k.platform || '').toLowerCase() !== 'x' && !seen.has(k.url));
+      next.kolActivity = [...real, ...nonXLeftover];
     }
   }
 
@@ -973,7 +1023,15 @@ async function runXScout(config = DEFAULT_CONFIG) {
     // Remove internal flag before saving
     delete brief.needsRetry;
 
-    brief.agentData = hydrateAgentData(brief.agentData, weatherReport, redditReport, searchResults, compactContext, last30daysMapped, config);
+    // Real X handle timelines (X API) — same fetcher the Market Signals test
+    // uses, so the brief's X/KOL data matches the single-line test. Grounded
+    // source of truth for kolActivity (replaces web-search KOL guesses).
+    const xTimelineItems = await fetchXTimelineItems(config);
+    if (xTimelineItems.length) {
+      console.log(`[${new Date().toISOString()}] XSCOUT: fetched ${xTimelineItems.length} real X post(s) from watchlist handles`);
+    }
+
+    brief.agentData = hydrateAgentData(brief.agentData, weatherReport, redditReport, searchResults, compactContext, last30daysMapped, config, xTimelineItems);
     brief.agentData = stampRunMeta(brief.agentData, searchResults, startTime, config);
 
     brief.stageCosts = scoutStageCosts;

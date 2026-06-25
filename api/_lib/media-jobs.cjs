@@ -60,6 +60,7 @@ function trimRecipeSummary(recipe = {}) {
     filter: String(recipe?.filter?.key || '').slice(0, 80) || null,
     overlay: recipe?.overlay?.enabled ? String(recipe?.overlay?.effect || '').slice(0, 80) : null,
     arweaveAudio: recipe?.arweaveAudioUrl ? String(recipe.arweaveAudioUrl).slice(0, 400) : null,
+    manualOrderSegments: Array.isArray(recipe?.videoOrder) ? recipe.videoOrder.length : 0,
   };
 }
 

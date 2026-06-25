@@ -77,6 +77,18 @@ test('mapRecipeToVideoJob passes selectedFolders through verbatim', () => {
   assert.deepEqual(job.selectedFolders, ['a', 'b', 'c']);
 });
 
+test('mapRecipeToVideoJob maps manual six-segment video order', () => {
+  const videoOrder = Array.from({ length: 6 }, (_, index) => ({
+    segmentIndex: index,
+    videoName: `clip-${index + 1}.mp4`,
+  }));
+  const job = mapRecipeToVideoJob(
+    { ...BASE, sourceFolders: ['skyline'], videoOrder },
+    { jobId: 'JOB-7' }
+  );
+  assert.deepEqual(job.videoOrder, videoOrder);
+});
+
 test('mapRecipeToVideoJob rejects empty selectedFolders', () => {
   assert.throws(() => mapRecipeToVideoJob({ ...BASE, sourceFolders: [] }, { jobId: 'X' }), /non-empty/);
   assert.throws(() => mapRecipeToVideoJob({ ...BASE, sourceFolders: undefined }, { jobId: 'X' }), /non-empty/);

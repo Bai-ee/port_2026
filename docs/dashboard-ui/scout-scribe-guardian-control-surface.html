@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Control Surface — Scout · Scribe · Guardian</title>
+<style>
+  :root{
+    --bg:#0b0c0e; --panel:#131519; --panel2:#171a1f; --line:#262a31;
+    --ink:#e8eaed; --soft:#9aa1ab; --faint:#646b76;
+    --x:#1d9bf0;           /* info / produced-not-surfaced */
+    --ok:#5ad1a0;          /* card config — a knob */
+    --warn:#f0c64c;        /* file-based — semi-buried */
+    --bad:#e0556b;         /* hardcoded — buried */
+    --mono:'SF Mono',ui-monospace,'Cascadia Code','Roboto Mono',Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;
+    -webkit-font-smoothing:antialiased;padding:0 0 90px}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+  a{color:var(--x);text-decoration:none}
+  code,.mono{font-family:var(--mono)}
+
+  header{border-bottom:1px solid var(--line);padding:40px 0 32px;margin-bottom:40px;
+    background:radial-gradient(1200px 300px at 20% -40%,rgba(90,209,160,.10),transparent)}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.32em;text-transform:uppercase;
+    color:var(--ok);margin-bottom:14px}
+  h1{font-size:38px;line-height:1.08;letter-spacing:-.02em;font-weight:680;max-width:20ch}
+  .sub{color:var(--soft);margin-top:14px;max-width:70ch;font-size:15px}
+
+  h2{font-size:13px;letter-spacing:.22em;text-transform:uppercase;color:var(--faint);
+    font-family:var(--mono);margin:0 0 18px;font-weight:600}
+  section{margin-bottom:56px}
+
+  /* legend */
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin:-6px 0 26px;font-size:12.5px;color:var(--soft)}
+  .legend span{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono)}
+  .dot{width:10px;height:10px;border-radius:3px;display:inline-block;flex:none}
+  .d-ok{background:var(--ok)} .d-warn{background:var(--warn)} .d-bad{background:var(--bad)} .d-info{background:var(--x)}
+
+  /* layer strip */
+  .pipe{display:flex;align-items:stretch;gap:0;flex-wrap:wrap;border:1px solid var(--line);
+    border-radius:14px;overflow:hidden;background:var(--panel)}
+  .pstep{flex:1;min-width:200px;padding:18px 18px;border-right:1px solid var(--line);position:relative}
+  .pstep:last-child{border-right:none}
+  .pstep .n{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.2em}
+  .pstep .t{font-weight:660;margin-top:6px;font-size:15px}
+  .pstep .d{color:var(--soft);font-size:12.5px;margin-top:6px;font-family:var(--mono)}
+  .pstep .ease{font-family:var(--mono);font-size:11px;margin-top:9px;display:inline-block;
+    padding:2px 8px;border-radius:6px;border:1px solid var(--line)}
+  .ease.e-ok{color:var(--ok);border-color:rgba(90,209,160,.4)}
+  .ease.e-warn{color:var(--warn);border-color:rgba(240,198,76,.4)}
+  .ease.e-bad{color:var(--bad);border-color:rgba(224,85,107,.4)}
+
+  /* stage cards */
+  .stage{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:18px}
+  .stage .head{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;
+    gap:12px;flex-wrap:wrap;position:relative}
+  .stage .bar{position:absolute;top:0;left:0;width:4px;height:100%}
+  .bar-scout{background:var(--ok)} .bar-scribe{background:var(--warn)} .bar-guard{background:var(--x)}
+  .stage h3{font-size:19px;font-weight:680;letter-spacing:-.01em}
+  .stage .tl{font-family:var(--mono);font-size:11.5px;color:var(--faint)}
+  .verdict-line{color:var(--soft);font-size:13px;margin-left:auto;font-family:var(--mono)}
+  .stage .body{padding:6px 20px 18px}
+
+  .lane{display:flex;gap:14px;padding:15px 0;border-bottom:1px dashed var(--line);align-items:flex-start}
+  .lane:last-child{border-bottom:none}
+  .lane .tag{font-family:var(--mono);font-size:10px;letter-spacing:.12em;font-weight:700;
+    width:118px;flex:none;padding:5px 0 0;display:flex;align-items:center;gap:7px}
+  .tag.ok{color:var(--ok)} .tag.warn{color:var(--warn)} .tag.bad{color:var(--bad)} .tag.info{color:var(--x)}
+  .lane .content{flex:1}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{font-family:var(--mono);font-size:11.5px;background:var(--panel2);border:1px solid var(--line);
+    padding:3px 9px;border-radius:6px;color:var(--ink)}
+  .chip.ok{color:var(--ok);border-color:rgba(90,209,160,.28)}
+  .chip.warn{color:var(--warn);border-color:rgba(240,198,76,.28)}
+  .chip.bad{color:var(--bad);border-color:rgba(224,85,107,.28)}
+  .lane .meaning{color:var(--soft);font-size:13px;margin-top:9px;line-height:1.5}
+  .lane .meaning b{color:var(--ink)} .lane .meaning code{color:var(--ink)}
+  .lane .ref{font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-top:7px}
+
+  /* verdict block */
+  .verdict{background:linear-gradient(180deg,rgba(29,155,240,.07),transparent);
+    border:1px solid var(--line);border-left:3px solid var(--x);border-radius:12px;padding:18px 20px;margin-top:4px}
+  .verdict .vh{font-weight:660;font-size:14.5px;margin-bottom:10px;display:flex;align-items:center;gap:9px}
+  .verdict pre{font-family:var(--mono);font-size:12.5px;color:var(--ink);background:var(--panel2);
+    border:1px solid var(--line);border-radius:9px;padding:13px 15px;overflow-x:auto;line-height:1.6}
+  .verdict .k{color:var(--x)} .verdict .b{color:var(--warn)} .verdict .c{color:var(--soft)}
+  .verdict p{color:var(--soft);font-size:13px;margin-top:11px;line-height:1.55}
+  .verdict p b{color:var(--ink)}
+
+  /* flags */
+  .flags{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.flags{grid-template-columns:1fr}}
+  .flag{background:linear-gradient(180deg,rgba(240,198,76,.06),transparent);
+    border:1px solid var(--line);border-left:3px solid var(--warn);border-radius:10px;padding:16px 18px}
+  .flag.gap{background:linear-gradient(180deg,rgba(224,85,107,.07),transparent);border-left-color:var(--bad)}
+  .flag .h{font-weight:660;font-size:14px;margin-bottom:7px;display:flex;align-items:center;gap:8px}
+  .flag p{color:var(--soft);font-size:13px;line-height:1.55}
+  .flag p b{color:var(--ink)} .flag code{color:var(--ink)}
+
+  /* promote block */
+  .promote{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 22px}
+  .promote .row{display:flex;gap:14px;padding:11px 0;border-bottom:1px dashed var(--line);align-items:flex-start}
+  .promote .row:last-child{border-bottom:none}
+  .promote .verdict-pill{font-family:var(--mono);font-size:10px;letter-spacing:.1em;padding:3px 9px;border-radius:20px;
+    flex:none;height:fit-content;margin-top:2px}
+  .vp-yes{color:var(--ok);border:1px solid rgba(90,209,160,.4)}
+  .vp-no{color:var(--faint);border:1px solid var(--line)}
+  .promote .row .txt{font-size:13.5px;color:var(--soft);line-height:1.5}
+  .promote .row .txt b{color:var(--ink)}
+
+  footer{border-top:1px solid var(--line);padding-top:22px;color:var(--faint);font-size:12px;font-family:var(--mono)}
+  .kvs{color:var(--soft)}.kvs b{color:var(--ink)}
+  .xlink{margin-top:14px;font-size:12.5px;font-family:var(--mono)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="eyebrow">Marketing Intelligence · Steering Map</div>
+    <h1>Control surface — what's a knob vs. what's buried</h1>
+    <p class="sub">Three modules shape the marketing brief: <b>Scout</b> gathers, <b>Scribe</b> writes,
+    <b>Guardian</b> QAs. Each is steered by some mix of three layers — card config (easy), knowledge files
+    (hand-edit JSON), and hardcoded prompt/constants (code change). This shows, per module, exactly which
+    knobs you can already turn and which are buried.</p>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- LEGEND -->
+  <section>
+    <div class="legend">
+      <span><i class="dot d-ok"></i>✅ Card config — UI-editable knob</span>
+      <span><i class="dot d-warn"></i>⚠️ Knowledge file — hand-edit JSON</span>
+      <span><i class="dot d-bad"></i>❌ Hardcoded — code change</span>
+      <span><i class="dot d-info"></i>📤 Produced but not surfaced</span>
+    </div>
+  </section>
+
+  <!-- THREE LAYERS -->
+  <section>
+    <h2>The three driving layers · easiest → hardest to dial</h2>
+    <div class="pipe">
+      <div class="pstep">
+        <div class="n">LAYER 01</div>
+        <div class="t">Card config</div>
+        <div class="d">client_configs → marketingBriefConfig + scoutConfig · config-loader.js</div>
+        <span class="ease e-ok">✅ edit in UI</span>
+      </div>
+      <div class="pstep">
+        <div class="n">LAYER 02</div>
+        <div class="t">Knowledge files</div>
+        <div class="d">knowledge/{clientId}/*.json · brand-voice · brief-context · glossary</div>
+        <span class="ease e-warn">⚠️ hand-edit JSON</span>
+      </div>
+      <div class="pstep">
+        <div class="n">LAYER 03</div>
+        <div class="t">Hardcoded</div>
+        <div class="d">xscout.js · scribe.js · guardian.js · config-loader.js · optimizer.js</div>
+        <span class="ease e-bad">❌ code change</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCOUT -->
+  <section>
+    <h2>Per-module breakdown</h2>
+
+    <div class="stage">
+      <div class="head"><span class="bar bar-scout"></span>
+        <h3>SCOUT</h3>
+        <span class="tl">runXScout · search → trim → synth</span>
+        <span class="verdict-line">mostly exposed already</span>
+      </div>
+      <div class="body">
+        <div class="lane">
+          <div class="tag ok"><i class="dot d-ok"></i>KNOB</div>
+          <div class="content">
+            <div class="chips">
+              <span class="chip ok">searches[]</span><span class="chip ok">kols</span><span class="chip ok">kolSearchMode</span>
+              <span class="chip ok">brandKeywords</span><span class="chip ok">categoryTerms</span><span class="chip ok">competitors</span>
+              <span class="chip ok">sourcePlatforms</span><span class="chip ok">sourceFocus</span><span class="chip ok">scoutInstructions</span>
+              <span class="chip ok">freshnessDays</span><span class="chip ok">agentDataTemplate</span><span class="chip ok">reddit queries</span>
+              <span class="chip ok">last30days.*</span>
+            </div>
+            <div class="meaning">All card-editable via the Market Signals / Brand &amp; Keywords / Scout Focus cards. This is why
+            <b>Scout is the most steerable of the three</b> — the search plan is compiled from these.</div>
+          </div>
+        </div>
+        <div class="lane">
+          <div class="tag bad"><i class="dot d-bad"></i>BURIED</div>
+          <div class="content">
+            <div class="chips">
+              <span class="chip bad">PLATFORM_SITE_QUERIES</span><span class="chip bad">default plan shape</span>
+              <span class="chip bad">Stage-1 search prompt</span><span class="chip bad">models</span><span class="chip bad">max_uses + token caps</span>
+            </div>
+            <div class="meaning">Host map + plan skeleton + the search prompt + which model each stage uses + how many searches run.
+            Steer the prompt through the existing <code>sourceFocus</code>/<code>scoutInstructions</code> slots rather than editing the template.</div>
+            <div class="ref">config-loader.js:134-146 (hosts) · :273-291 (plan) · xscout.js:468-513 (prompt) · :913 (max_uses) · optimizer.js MODELS</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCRIBE -->
+    <div class="stage">
+      <div class="head"><span class="bar bar-scribe"></span>
+        <h3>SCRIBE</h3>
+        <span class="tl">runScribe · composes post + brief</span>
+        <span class="verdict-line">partly exposed — rich part is file-based</span>
+      </div>
+      <div class="body">
+        <div class="lane">
+          <div class="tag ok"><i class="dot d-ok"></i>KNOB</div>
+          <div class="content">
+            <div class="chips">
+              <span class="chip ok">scribeTone</span><span class="chip ok">scribeHardConstraints</span><span class="chip ok">intelligence labels</span>
+            </div>
+            <div class="meaning">Top-level tone + hard rules, card-editable.</div>
+          </div>
+        </div>
+        <div class="lane">
+          <div class="tag warn"><i class="dot d-warn"></i>FILE</div>
+          <div class="content">
+            <div class="chips">
+              <span class="chip warn">brand-voice.json · daily_brief_voice.role</span><span class="chip warn">sections_tone</span>
+              <span class="chip warn">voice_pillars</span><span class="chip warn">avoid</span><span class="chip warn">brief-context.json</span>
+            </div>
+            <div class="meaning"><b>The real voice and how data is framed lives here</b> — not card-editable today. Hand-edit JSON in
+            <code>knowledge/{clientId}/</code>. <b>Note: <code>brand-voice.json</code> dials both Scribe AND Guardian.</b></div>
+          </div>
+        </div>
+        <div class="lane">
+          <div class="tag bad"><i class="dot d-bad"></i>BURIED</div>
+          <div class="content">
+            <div class="chips">
+              <span class="chip bad">buildScribePrompt structure</span><span class="chip bad">section order</span>
+              <span class="chip bad">output format</span><span class="chip bad">REASONING / RULES</span>
+            </div>
+            <div class="meaning">"How it processes / presents" = the prompt skeleton. Code change.</div>
+            <div class="ref">scribe.js:155 buildScribePrompt</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GUARDIAN -->
+    <div class="stage">
+      <div class="head"><span class="bar bar-guard"></span>
+        <h3>GUARDIAN</h3>
+        <span class="tl">runGuardian · read-only QA gate</span>
+        <span class="verdict-line">knobs exist · verdict not surfaced</span>
+      </div>
+      <div class="body">
+        <div class="lane">
+          <div class="tag ok"><i class="dot d-ok"></i>KNOB</div>
+          <div class="content">
+            <div class="chips">
+              <span class="chip ok">restrictedPatterns</span><span class="chip ok">competitorNames</span><span class="chip ok">reviewerContext</span>
+            </div>
+            <div class="meaning">Card-editable guard rules.</div>
+          </div>
+        </div>
+        <div class="lane">
+          <div class="tag warn"><i class="dot d-warn"></i>FILE</div>
+          <div class="content">
+            <div class="chips">
+              <span class="chip warn">glossary.json · restricted_terms</span><span class="chip warn">per-term guardian_note</span>
+              <span class="chip warn">brand-voice.json · voice_pillars / avoid</span><span class="chip warn">game-knowledge · guardian_rules</span>
+            </div>
+            <div class="meaning">The factual-rules + voice-rules the Haiku check reasons against.</div>
+          </div>
+        </div>
+        <div class="lane">
+          <div class="tag bad"><i class="dot d-bad"></i>BURIED</div>
+          <div class="content">
+            <div class="chips">
+              <span class="chip bad">scoring weights 0.5 / 0.5</span><span class="chip bad">thresholds ≥70 publish / &lt;70 review</span>
+              <span class="chip bad">severity logic</span><span class="chip bad">Haiku QA prompt</span><span class="chip bad">models</span>
+            </div>
+            <div class="meaning">The pass/fail math + the QA prompt. Code change.</div>
+            <div class="ref">guardian.js:340-343 (math) · :198-244 (prompt)</div>
+          </div>
+        </div>
+        <div class="lane">
+          <div class="tag info"><i class="dot d-info"></i>SURFACE</div>
+          <div class="content">
+            <div class="verdict">
+              <div class="vh">📤 The verdict already exists — it just isn't shown in the UI</div>
+<pre><span class="c">// returned by runGuardian — guardian.js:351-366</span>
+{
+  <span class="k">readyToPublish</span>: <span class="b">false</span>,   <span class="c">// !hardBlock &amp;&amp; overallScore ≥ 70</span>
+  <span class="k">overallScore</span>: <span class="b">82</span>,       <span class="c">// 0.5·factual + 0.5·voice</span>
+  <span class="k">factualScore</span>: <span class="b">90</span>,
+  <span class="k">voiceScore</span>: <span class="b">74</span>,
+  <span class="k">hardBlock</span>: <span class="b">false</span>,       <span class="c">// restricted-term hit = true</span>
+  <span class="k">concerns</span>: [ <span class="c">…major issues, plain text…</span> ],
+  <span class="k">flags</span>: [ { type, severity, field, issue, suggestion } ],
+  <span class="k">reviewRequired</span>: <span class="b">true</span>
+}</pre>
+              <p><b>"Confirm what's getting through" = surface this object</b> in the Guardian control tab (scores +
+              what blocked + what flagged). No new logic needed — the data is produced on every run and thrown away at the UI.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FLAGS -->
+  <section>
+    <h2>Two things worth flagging</h2>
+    <div class="flags">
+      <div class="flag">
+        <div class="h">🔗 One file, two stages</div>
+        <p><code>brand-voice.json</code> drives <b>both</b> Scribe (tone / framing) and Guardian (voice QA). Editing it
+        re-tunes how content is written <b>and</b> how it's judged — keep that in mind when dialing voice.</p>
+      </div>
+      <div class="flag gap">
+        <div class="h">⚠️ Guardian reads the wrong config source</div>
+        <p><code>runGuardian</code> pulls <code>requireClientConfig</code> (the <b>static registry</b>) + local knowledge
+        files — <b>not the Firestore runtime config</b>. So a Firestore-provisioned client's Guardian card knobs may not
+        flow. <b>Fix this before "dial per client" works.</b> <span class="mono" style="color:var(--faint)">guardian.js:300, 49-56</span></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- PROMOTE -->
+  <section>
+    <h2>What to promote to a config block</h2>
+    <div class="promote">
+      <div class="row"><span class="verdict-pill vp-yes">PROMOTE</span><div class="txt"><b>models (per stage)</b> — swap Scout/Scribe/Guardian models without a deploy. Cost/quality dial.</div></div>
+      <div class="row"><span class="verdict-pill vp-yes">PROMOTE</span><div class="txt"><b>max_uses + token caps</b> — how many searches run, how much each stage emits. Direct cost dial.</div></div>
+      <div class="row"><span class="verdict-pill vp-yes">PROMOTE</span><div class="txt"><b>Guardian thresholds</b> (publish / review cutoffs) — tune strictness per client.</div></div>
+      <div class="row"><span class="verdict-pill vp-no">LEAVE</span><div class="txt"><b>PLATFORM_SITE_QUERIES host map + default plan shape</b> — structural, changes rarely. Code is fine.</div></div>
+      <div class="row"><span class="verdict-pill vp-no">LEAVE</span><div class="txt"><b>Stage-1 / Scribe prompt skeletons</b> — steer via existing <code>sourceFocus</code> / <code>scoutInstructions</code> / <code>scribeTone</code> slots, not by exposing the whole template.</div></div>
+    </div>
+    <p class="xlink">Related visual · <a href="x-search-wiring.html">x-search-wiring.html</a> — how cards shape the X search plan.</p>
+  </section>
+
+  <footer>
+    <div class="kvs">Canonical doc · <b>docs/source-of-truth/MARKET-SIGNALS-AND-SCOUT-PROJECTION.md §6b</b>
+    &nbsp;|&nbsp; Sources · <b>config-loader.js</b> · <b>xscout.js</b> · <b>scribe.js</b> · <b>guardian.js</b> · <b>optimizer.js</b> (MODELS)
+    &nbsp;|&nbsp; Knowledge · <b>features/not-the-rug-brief/knowledge/{clientId}/*.json</b></div>
+  </footer>
+
+</div>
+</body>
+</html>

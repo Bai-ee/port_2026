@@ -10,15 +10,16 @@ const { sanitizeFolderName, validateRemixRecipe, V1_OUTPUT } = require('../media
 test('sanitizeFolderName accepts allowlisted segments', () => {
   assert.equal(sanitizeFolderName('skyline'), 'skyline');
   assert.equal(sanitizeFolderName('my_folder-2'), 'my_folder-2');
+  assert.equal(sanitizeFolderName('assets/retro_dust'), 'assets/retro_dust');
   assert.equal(sanitizeFolderName('  trimmed  '), 'trimmed');
 });
 
-test('sanitizeFolderName rejects traversal, absolute, separators, empty, bad chars', () => {
+test('sanitizeFolderName rejects traversal, absolute, unsafe separators, empty, bad chars', () => {
   assert.throws(() => sanitizeFolderName('..'), /traversal/);
   assert.throws(() => sanitizeFolderName('../etc'), /separators|traversal/);
-  assert.throws(() => sanitizeFolderName('a/../b'), /separators|traversal/);
+  assert.throws(() => sanitizeFolderName('a/../b'), /separators|traversal|invalid characters/);
   assert.throws(() => sanitizeFolderName('/abs'), /separators/);
-  assert.throws(() => sanitizeFolderName('a/b'), /separators/);
+  assert.throws(() => sanitizeFolderName('a/b/c'), /invalid characters/);
   assert.throws(() => sanitizeFolderName('a\\b'), /separators/);
   assert.throws(() => sanitizeFolderName(''), /empty/);
   assert.throws(() => sanitizeFolderName('   '), /empty/);
@@ -33,13 +34,13 @@ test('sanitizeFolderName rejects traversal, absolute, separators, empty, bad cha
 
 test('validateRemixRecipe normalizes a valid recipe and locks output', () => {
   const out = validateRemixRecipe({
-    sourceFolders: ['skyline', 'neighborhood'],
+    sourceFolders: ['skyline', 'assets/retro_dust'],
     filter: { key: 'look_hard_bw' },
     overlay: { enabled: true, effect: 'retro_dust' },
     arweaveAudioUrl: 'https://arweave.net/abc',
   });
   assert.equal(out.type, 'video-remix');
-  assert.deepEqual(out.sourceFolders, ['skyline', 'neighborhood']);
+  assert.deepEqual(out.sourceFolders, ['skyline', 'assets/retro_dust']);
   assert.deepEqual(out.output, V1_OUTPUT);
   assert.equal(out.output.width, 720);
   assert.equal(out.output.height, 720);
@@ -80,7 +81,7 @@ test('validateRemixRecipe rejects traversal/absolute folders inside sourceFolder
   assert.throws(() => validateRemixRecipe({ sourceFolders: ['ok', '..'] }), /traversal/);
   assert.throws(() => validateRemixRecipe({ sourceFolders: ['ok', '../escape'] }), /separators|traversal/);
   assert.throws(() => validateRemixRecipe({ sourceFolders: ['/abs'] }), /separators/);
-  assert.throws(() => validateRemixRecipe({ sourceFolders: ['a/b'] }), /separators/);
+  assert.throws(() => validateRemixRecipe({ sourceFolders: ['a/b/c'] }), /invalid characters/);
   assert.throws(() => validateRemixRecipe({ sourceFolders: [''] }), /empty/);
 });
 
@@ -216,6 +217,44 @@ test('validateRemixRecipe strips control chars and caps endCard text length', ()
   });
   assert.equal(out.mixTitle, 'cleantitle');
   assert.equal(out.endCard.text.length, 80);
+});
+
+test('validateRemixRecipe carries a valid six-segment videoOrder for one folder', () => {
+  const videoOrder = Array.from({ length: 6 }, (_, index) => ({
+    segmentIndex: index,
+    videoName: `clip ${index + 1}.mp4`,
+  }));
+  const out = validateRemixRecipe({ sourceFolders: ['skyline'], videoOrder });
+  assert.deepEqual(out.videoOrder, videoOrder);
+});
+
+test('validateRemixRecipe rejects invalid videoOrder payloads', () => {
+  const validOrder = Array.from({ length: 6 }, (_, index) => ({
+    segmentIndex: index,
+    videoName: `clip-${index + 1}.mp4`,
+  }));
+  assert.throws(
+    () => validateRemixRecipe({ sourceFolders: ['skyline', 'neighborhood'], videoOrder: validOrder }),
+    /exactly one source folder/
+  );
+  assert.throws(
+    () => validateRemixRecipe({ sourceFolders: ['skyline'], videoOrder: validOrder.slice(0, 5) }),
+    /exactly 6 segments/
+  );
+  assert.throws(
+    () => validateRemixRecipe({
+      sourceFolders: ['skyline'],
+      videoOrder: validOrder.map((item, index) => (index === 2 ? { ...item, segmentIndex: 4 } : item)),
+    }),
+    /segmentIndex/
+  );
+  assert.throws(
+    () => validateRemixRecipe({
+      sourceFolders: ['skyline'],
+      videoOrder: validOrder.map((item, index) => (index === 3 ? { ...item, videoName: '../escape.mp4' } : item)),
+    }),
+    /videoName/
+  );
 });
 
 test('validateRemixRecipe still strips unknown fields with new optionals absent', () => {

@@ -220,6 +220,17 @@ export async function POST(request) {
     scribeHardConstraints: normalizeLineList(body?.scribeHardConstraints, { maxItems: 20, maxLen: 240 }),
     guardianReviewerContext: String(body?.guardianReviewerContext || '').trim().slice(0, 800),
     guardianRestrictedPatterns: normalizeLineList(body?.guardianRestrictedPatterns, { maxItems: 30, maxLen: 240 }),
+    // Enabled analysis-skill recipe ids (Market Signals card). Array of registry
+    // ids the user toggled ON; the recipe-run path executes only these. See SSOT §8.
+    analysisRecipes: Array.isArray(body?.analysisRecipes)
+      ? [...new Set(body.analysisRecipes.map((s) => String(s || '').trim()).filter(Boolean))].slice(0, 12)
+      : [],
+    // Watchlist pull detail level (Market Signals card) — booleans.
+    watchlistDetail: {
+      tweets: body?.watchlistDetail?.tweets !== false,
+      mentions: body?.watchlistDetail?.mentions !== false,
+      latestOnly: body?.watchlistDetail?.latestOnly === true,
+    },
     updatedAtIso: new Date().toISOString(),
   };
 

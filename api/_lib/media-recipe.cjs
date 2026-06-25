@@ -12,14 +12,16 @@
 // v1 also LOCKS output to 720x720 / 30fps / 30s — clients cannot request larger
 // or longer renders that would blow worker time/cost budgets.
 
-// A folder name is exactly one path segment from a strict allowlist. No slashes,
-// no dots-as-traversal, no backslashes, no leading separators — those can never
-// appear in a valid value, so we reject the whole input rather than sanitize it.
+// A folder name is a strict allowlist path with at most one slash. New uploads
+// are still created as a single flat segment, but the live EditVideos bucket
+// already exposes a few safe nested source folders such as assets/retro_dust.
+// Traversal, backslashes, empty segments, and arbitrary deep paths stay rejected.
 const FOLDER_NAME_RE = /^[a-zA-Z0-9_-]{1,120}$/;
 const KEY_RE = /^[a-zA-Z0-9_]{1,80}$/;
 const ARTIST_RE = /^[A-Za-z0-9 _.\-]{1,60}$/;
 const OVERLAY_EFFECT_RE = /^[a-z0-9_]{1,40}$/;
 const LOGO_NAME_RE = /^[A-Za-z0-9._-]{1,80}$/;
+const VIDEO_ORDER_NAME_RE = /^[A-Za-z0-9._ ()-]{1,180}$/;
 
 // Strip ASCII/Unicode control chars so a free-text label can never carry hidden
 // terminators into a downstream filename or render arg.
@@ -44,8 +46,8 @@ const ALLOWED_AUDIO_HOSTS = [
 ];
 
 /**
- * Validate a single client-scoped folder segment.
- * Returns the safe segment, or throws on anything that could escape the prefix.
+ * Validate a source folder name. Returns the safe name, or throws on anything
+ * that could escape the allowed EditVideos source-folder shape.
  */
 function sanitizeFolderName(name) {
   if (typeof name !== 'string') {
@@ -56,13 +58,14 @@ function sanitizeFolderName(name) {
     throw new Error('Folder name must not be empty.');
   }
   // Explicit traversal/separator guards before the allowlist, for clear errors.
-  if (trimmed.includes('/') || trimmed.includes('\\')) {
-    throw new Error(`Folder name must not contain path separators: ${name}`);
+  if (trimmed.startsWith('/') || trimmed.endsWith('/') || trimmed.includes('\\')) {
+    throw new Error(`Folder name has invalid path separators: ${name}`);
   }
   if (trimmed.includes('..')) {
     throw new Error(`Folder name must not contain path traversal: ${name}`);
   }
-  if (!FOLDER_NAME_RE.test(trimmed)) {
+  const parts = trimmed.split('/');
+  if (parts.length > 2 || parts.some((part) => !FOLDER_NAME_RE.test(part))) {
     throw new Error(`Folder name has invalid characters: ${name}`);
   }
   return trimmed;
@@ -190,6 +193,28 @@ function validateRemixRecipe(input) {
       const text = stripControlChars(input.endCard.text).slice(0, 80);
       if (text) recipe.endCard = { text };
     }
+  }
+
+  if (input.videoOrder !== undefined && input.videoOrder !== null) {
+    if (normalizedFolders.length !== 1) {
+      throw new Error('videoOrder requires exactly one source folder.');
+    }
+    if (!Array.isArray(input.videoOrder) || input.videoOrder.length !== 6) {
+      throw new Error('videoOrder must contain exactly 6 segments.');
+    }
+    recipe.videoOrder = input.videoOrder.map((item, index) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        throw new Error('videoOrder items must be objects.');
+      }
+      if (Number(item.segmentIndex) !== index) {
+        throw new Error('videoOrder segmentIndex must match its row index.');
+      }
+      const videoName = stripControlChars(item.videoName || '').slice(0, 180);
+      if (!videoName || videoName.includes('/') || videoName.includes('\\') || videoName.includes('..') || !VIDEO_ORDER_NAME_RE.test(videoName)) {
+        throw new Error('videoOrder.videoName has invalid characters.');
+      }
+      return { segmentIndex: index, videoName };
+    });
   }
 
   return recipe;

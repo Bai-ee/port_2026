@@ -1701,6 +1701,190 @@
       .toggle-grid { grid-template-columns: 1fr; }
       .easing-row { grid-template-columns: 1fr; gap: 3px; }
     }
+
+    /* =====================================================================
+       TOP-LEVEL KIT TABS — switch between Dashboard Modals + Creative Brief
+       ===================================================================== */
+    .kit-tabnav {
+      display: inline-flex;
+      gap: 4px;
+      padding: 4px;
+      margin-bottom: 24px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.42);
+      backdrop-filter: blur(22px);
+    }
+    .kit-tab {
+      font-family: var(--font-mono);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-size: 12px;
+      color: var(--ink-muted);
+      background: transparent;
+      border: 0;
+      border-radius: 999px;
+      padding: 10px 20px;
+      cursor: pointer;
+      transition: background 0.2s ease, color 0.2s ease;
+    }
+    .kit-tab:hover:not(.is-active) { color: var(--ink); }
+    .kit-tab.is-active {
+      color: var(--ink);
+      background: var(--surface-strong);
+      box-shadow: 0 1px 0 rgba(255,255,255,0.7), inset 0 1px 0 rgba(255,255,255,0.5);
+    }
+    .kit-view { display: none; }
+    .kit-view.is-active { display: block; }
+
+    /* =====================================================================
+       CREATIVE BRIEF KIT — scoped under .brief-kit so the brief's own
+       primitives (.card/.eyebrow/.headline/.sub/.chip…) never collide with
+       the dashboard kit classes above. Tokens mirror docs/dashboard-ui/brief.html.
+       ===================================================================== */
+    .brief-kit {
+      --bg:#f6f3ea; --ink:#0a0a0a; --ink-soft:#5a5346;
+      --line:rgba(212,196,171,0.82); --card:rgba(255,255,255,0.5);
+      --hl:rgba(255,255,255,0.65); --brand:#116dff;
+      --grad:linear-gradient(92deg,#7a5cff 0%,#b14bff 38%,#ff4fa1 72%,#ff7a3a 100%);
+      color:#0a0a0a;
+    }
+    .brief-kit .kit-note {
+      font-family: var(--font-ui);
+      color: var(--ink-soft);
+      font-size: 14px;
+      max-width: 68ch;
+      margin: 0 0 28px;
+    }
+    /* preview surface — the warm paper the brief lives on */
+    .brief-kit .kit-block {
+      border: 1px solid var(--brief-kit-line, rgba(212,196,171,0.82));
+      border-radius: var(--cell-radius);
+      margin-bottom: 20px;
+      overflow: hidden;
+      background: rgba(255,255,255,0.5);
+    }
+    .brief-kit .kit-block-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 14px 18px;
+      border-bottom: 1px solid rgba(212,196,171,0.82);
+      background: rgba(255,255,255,0.7);
+    }
+    .brief-kit .kit-block-head h3 {
+      font-family: var(--font-ui);
+      font-size: 15px;
+      margin: 0;
+      color: #0a0a0a;
+    }
+    .brief-kit .kit-block-head code {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--ink-soft);
+      letter-spacing: 0.04em;
+    }
+    .brief-kit .kit-paper {
+      padding: clamp(20px,3vw,36px);
+      background:
+        radial-gradient(520px 320px at 0% 0%, rgba(255,120,90,0.20) 0%, transparent 65%),
+        radial-gradient(460px 300px at 100% 30%, rgba(176,90,255,0.16) 0%, transparent 65%),
+        radial-gradient(520px 320px at 20% 100%, rgba(255,180,90,0.16) 0%, transparent 65%),
+        linear-gradient(180deg, #fefdf9 0%, #fbf8f0 100%);
+    }
+    .brief-kit .mono { font-family: var(--font-mono); }
+
+    /* brief primitives (mirrored from brief.html, scoped) */
+    .brief-kit .b-eyebrow {
+      font-family: var(--font-mono); font-size:11px;
+      letter-spacing:.22em; text-transform:uppercase; color:var(--ink-soft);
+      display:flex; gap:18px; align-items:center; margin-bottom:18px;
+    }
+    .brief-kit .b-eyebrow .dot{ width:6px;height:6px;background:#0a0a0a;border-radius:50%; }
+    .brief-kit .b-headline {
+      font-family:"Doto",monospace; font-weight:900; letter-spacing:-.01em;
+      line-height:.92; font-size:clamp(48px,8vw,104px); margin:0 0 18px;
+      text-transform:uppercase;
+    }
+    .brief-kit .b-sub {
+      font-family: var(--font-ui); font-weight:300;
+      font-size:clamp(18px,2vw,26px); line-height:1.25; color:#1a1a1a;
+      max-width:58ch; margin:0;
+    }
+    .brief-kit .b-rule{height:1px;background:rgba(0,0,0,.1);margin:24px 0;}
+    .brief-kit .b-card{
+      background:var(--card); border:1px solid var(--line); border-radius:18px;
+      box-shadow:0 1px 0 var(--hl), inset 0 1px 0 rgba(255,255,255,0.4);
+      padding:clamp(18px,2vw,28px);
+    }
+    .brief-kit .b-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:clamp(20px,3vw,40px);align-items:start;}
+    @media(max-width:900px){.brief-kit .b-grid{grid-template-columns:1fr}}
+    .brief-kit .stat-row{display:grid;grid-template-columns:120px 1fr;gap:16px;padding:14px 0;border-bottom:1px dashed rgba(0,0,0,.15);}
+    .brief-kit .stat-row:last-child{border-bottom:0;}
+    .brief-kit .stat-row .k{font-family:var(--font-mono);font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-soft);padding-top:4px;}
+    .brief-kit .stat-row .v{font-family:var(--font-ui);font-size:16px;line-height:1.45;}
+    .brief-kit .pull{
+      font-family:var(--font-ui); font-weight:300;
+      font-size:clamp(24px,3vw,40px); line-height:1.2;
+      border-left:4px solid #0a0a0a; padding:8px 0 8px 24px; max-width:28ch; margin:0;
+    }
+    .brief-kit .meta-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+    @media(max-width:800px){.brief-kit .meta-grid{grid-template-columns:1fr 1fr}}
+    .brief-kit .meta-tile{background:rgba(255,255,255,.55);border:1px solid var(--line);border-radius:14px;padding:16px;}
+    .brief-kit .meta-tile .k{font-family:var(--font-mono);font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:6px;}
+    .brief-kit .meta-tile .v{font-family:var(--font-ui);font-size:15px;word-break:break-word;}
+    .brief-kit .swatch{height:140px;border-radius:16px;border:1px solid var(--line);position:relative;overflow:hidden;display:flex;align-items:flex-end;padding:16px;color:#fff;}
+    .brief-kit .swatch .hex{font-family:var(--font-mono);font-size:13px;}
+    .brief-kit .swatch.light{color:#111;}
+    .brief-kit .swatch-row{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+    @media(max-width:700px){.brief-kit .swatch-row{grid-template-columns:1fr}}
+    .brief-kit .type-sample{font-family:var(--font-ui);font-size:44px;line-height:1;margin:0 0 6px;}
+    .brief-kit .dur-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+    .brief-kit .dur{font-family:var(--font-mono);font-size:11px;padding:6px 10px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.5);}
+    .brief-kit .scores{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+    @media(max-width:700px){.brief-kit .scores{grid-template-columns:repeat(2,1fr)}}
+    .brief-kit .score{aspect-ratio:1/1;border-radius:20px;border:1px solid var(--line);background:rgba(255,255,255,.5);display:flex;flex-direction:column;justify-content:space-between;padding:18px;}
+    .brief-kit .score .lbl{font-family:var(--font-mono);font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-soft);}
+    .brief-kit .score .num{font-family:"Doto";font-weight:900;font-size:clamp(40px,6vw,80px);line-height:.9;}
+    .brief-kit .score.bad .num{color:#c2410c;}
+    .brief-kit .score.ok .num{color:#166534;}
+    .brief-kit .bar-row{display:flex;align-items:center;gap:14px;margin:10px 0;font-family:var(--font-mono);font-size:12px;}
+    .brief-kit .bar-row .name{width:140px;text-transform:uppercase;letter-spacing:.18em;font-size:10px;color:var(--ink-soft);}
+    .brief-kit .bar{flex:1;height:10px;background:rgba(0,0,0,.06);border-radius:999px;overflow:hidden;}
+    .brief-kit .bar > i{display:block;height:100%;background:var(--grad);}
+    .brief-kit .status-tag{display:inline-flex;align-items:center;gap:8px;font-family:var(--font-mono);font-size:10px;letter-spacing:.2em;text-transform:uppercase;padding:6px 12px;border-radius:999px;background:#fff;border:1px solid var(--line);color:#0a0a0a;}
+    .brief-kit .status-tag.warn{background:rgba(220,38,38,0.06);border-color:rgba(220,38,38,0.40);color:#dc2626;}
+    .brief-kit .status-tag.warn::before{content:"";width:6px;height:6px;border-radius:50%;background:#dc2626;box-shadow:0 0 0 3px rgba(220,38,38,0.15);}
+    .brief-kit .wn-eyebrow{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;font-family:var(--font-mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-soft);}
+    .brief-kit .ring{
+      width:min(320px,70vw);aspect-ratio:1/1;border-radius:50%;
+      border:1px dashed rgba(0,0,0,.25);
+      display:flex;align-items:center;justify-content:center;position:relative;
+    }
+    .brief-kit .ring::before,.brief-kit .ring::after{content:"";position:absolute;inset:12%;border-radius:50%;border:1px dashed rgba(0,0,0,.2);}
+    .brief-kit .ring::after{inset:26%;}
+    .brief-kit .ring .core{font-family:"Doto";font-weight:900;font-size:clamp(20px,3vw,38px);text-align:center;max-width:60%;line-height:.95;text-transform:uppercase;}
+    .brief-kit .flow{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
+    @media(max-width:800px){.brief-kit .flow{grid-template-columns:1fr}}
+    .brief-kit .flow .node{padding:22px;border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.55);}
+    .brief-kit .flow .node .n{font-family:var(--font-mono);font-size:10px;letter-spacing:.22em;color:var(--ink-soft);margin-bottom:8px;}
+    .brief-kit .flow .node .t{font-family:"Doto";font-weight:900;font-size:26px;text-transform:uppercase;line-height:1;}
+    .brief-kit .flow .node p{font-family:var(--font-ui);font-size:14px;margin:10px 0 0;color:#2a2a2a;}
+    .brief-kit .marquee{
+      overflow:hidden; white-space:nowrap;
+      font-family:"Doto",monospace; font-weight:900;
+      font-size:clamp(36px,7vw,96px); text-transform:uppercase;
+      line-height:1; letter-spacing:.02em;
+      border-top:1px solid rgba(0,0,0,.2); border-bottom:1px solid rgba(0,0,0,.2);
+      padding:12px 0; color:#0a0a0a;
+    }
+    .brief-kit .sec-num-demo{
+      font-family:"Doto"; font-weight:900; font-size:clamp(72px,12vw,160px);
+      color:transparent; -webkit-text-stroke:1.5px rgba(0,0,0,.18);
+      line-height:.8; user-select:none;
+    }
   </style>
 </head>
 <body>
@@ -1721,6 +1905,13 @@
         <div class="status-line"><span>Surface</span><strong>White glass</strong></div>
       </div>
     </header>
+
+    <nav class="kit-tabnav" id="kit-tabnav" aria-label="UI kit views">
+      <button class="kit-tab is-active" type="button" data-kit-target="kit-view-dashboard">Dashboard Modals</button>
+      <button class="kit-tab" type="button" data-kit-target="kit-view-brief">Creative Brief</button>
+    </nav>
+
+    <div class="kit-view is-active" id="kit-view-dashboard">
 
     <section class="modal-demo">
       <aside class="panel visual-cell">
@@ -2618,9 +2809,191 @@
         </div>
       </aside>
     </div>
+
+    </div><!-- /#kit-view-dashboard -->
+
+    <div class="kit-view brief-kit" id="kit-view-brief">
+      <p class="kit-note">
+        Reference primitives for the Creative Brief surface (the public brief page,
+        <code>docs/dashboard-ui/brief.html</code>). A different language than the dashboard modals:
+        warm paper ground, Doto display headlines, Space&nbsp;Mono labels, glass-on-paper cards.
+        Use these as the starting point when building other brief-style pages.
+      </p>
+
+      <!-- Foundations -->
+      <div class="kit-block">
+        <div class="kit-block-head"><h3>Foundations · Tokens</h3><code>brief.html :root</code></div>
+        <div class="kit-paper">
+          <div class="swatch-row" style="margin-bottom:16px">
+            <div class="swatch" style="background:#116dff"><div><div class="mono" style="font-size:10px;letter-spacing:.22em;opacity:.8">--brand · CTA / FOCUS</div><div class="hex">#116DFF</div></div></div>
+            <div class="swatch" style="background:#0a0a0a"><div><div class="mono" style="font-size:10px;letter-spacing:.22em;opacity:.8">--ink · TEXT</div><div class="hex">#0A0A0A</div></div></div>
+            <div class="swatch light" style="background:#f6f3ea"><div><div class="mono" style="font-size:10px;letter-spacing:.22em;color:#666">--bg · PAPER GROUND</div><div class="hex">#F6F3EA</div></div></div>
+          </div>
+          <div class="swatch-row">
+            <div class="swatch" style="background:linear-gradient(92deg,#7a5cff 0%,#b14bff 38%,#ff4fa1 72%,#ff7a3a 100%)"><div><div class="mono" style="font-size:10px;letter-spacing:.22em;opacity:.85">--grad · NAV CTA / BARS / MARQUEE</div></div></div>
+            <div class="swatch light" style="background:#fff;border-style:dashed"><div><div class="mono" style="font-size:10px;letter-spacing:.22em;color:#666">--line · rgba(212,196,171,.82)</div></div></div>
+            <div class="swatch light" style="background:rgba(255,255,255,.5)"><div><div class="mono" style="font-size:10px;letter-spacing:.22em;color:#666">--card · rgba(255,255,255,.5)</div></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Type -->
+      <div class="kit-block">
+        <div class="kit-block-head"><h3>Foundations · Type</h3><code>Doto · Space Grotesk · Space Mono</code></div>
+        <div class="kit-paper">
+          <p class="type-sample" style="font-family:'Doto';font-weight:900;text-transform:uppercase">Doto&nbsp;900</p>
+          <div class="mono" style="font-size:12px;color:var(--ink-soft);margin-bottom:18px">Display headlines · uppercase · line-height .92</div>
+          <p class="type-sample">Space Grotesk</p>
+          <div class="mono" style="font-size:12px;color:var(--ink-soft);margin-bottom:18px">Body + subheads · weight 300 for leads</div>
+          <p class="mono" style="font-size:24px;margin:0">Space Mono · 0123</p>
+          <div class="mono" style="font-size:12px;color:var(--ink-soft)">Eyebrows, keys, chips · letter-spacing .22em · uppercase</div>
+        </div>
+      </div>
+
+      <!-- Section header pattern -->
+      <div class="kit-block">
+        <div class="kit-block-head"><h3>Section Header</h3><code>.eyebrow · .headline · .sub · .sec-num</code></div>
+        <div class="kit-paper" style="position:relative">
+          <div class="sec-num-demo" style="position:absolute;top:12px;right:18px">01</div>
+          <div class="b-eyebrow"><span class="dot"></span>BR · Brief<span>Live · Reviewed</span></div>
+          <h2 class="b-headline">The<br/>Brief.</h2>
+          <p class="b-sub">Lead sentence sets positioning in one breath — weight 300, generous size, max ~58ch.</p>
+        </div>
+      </div>
+
+      <!-- Card + stat-row + pull -->
+      <div class="kit-block">
+        <div class="kit-block-head"><h3>Brief Grid · Card / Stat Rows / Pull Quote</h3><code>.brief-grid · .card · .stat-row · .pull</code></div>
+        <div class="kit-paper">
+          <div class="b-grid">
+            <div class="b-card">
+              <div class="stat-row"><div class="k">Industry</div><div class="v">B2C Events &amp; Music Culture — Underground Electronic Music</div></div>
+              <div class="stat-row"><div class="k">Model</div><div class="v">Event ticketing + exclusive vinyl + partnerships</div></div>
+              <div class="stat-row"><div class="k">Tone</div><div class="v">Reverent + Bold</div></div>
+              <div class="stat-row"><div class="k">Target</div><div class="v">Chicago acid-house enthusiasts, collectors, DJs aged 25–50.</div></div>
+            </div>
+            <div>
+              <p class="pull">"Stewards of a specific sonic and cultural lineage."</p>
+              <div class="b-rule"></div>
+              <p style="font-family:var(--font-ui);font-size:16px;line-height:1.55;color:#1a1a1a;max-width:40ch">
+                Supporting paragraph sits under the pull quote — narrative voice, ~40ch measure.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Meta grid -->
+      <div class="kit-block">
+        <div class="kit-block-head"><h3>Meta Grid</h3><code>.meta-grid · .meta-tile</code></div>
+        <div class="kit-paper">
+          <div class="meta-grid">
+            <div class="meta-tile"><div class="k">Title</div><div class="v">VIVA ACID — Events &amp; Education</div></div>
+            <div class="meta-tile"><div class="k">Site Name</div><div class="v">Viva Acid House</div></div>
+            <div class="meta-tile"><div class="k">OG Type</div><div class="v">website</div></div>
+            <div class="meta-tile"><div class="k">Locale</div><div class="v">en</div></div>
+            <div class="meta-tile"><div class="k">Theme Color</div><div class="v">Not provided</div></div>
+            <div class="meta-tile"><div class="k">Canonical</div><div class="v mono" style="font-size:12px">vivaacid.com</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Style guide block: type/motion + swatches -->
+      <div class="kit-block">
+        <div class="kit-block-head"><h3>Style-Guide Block</h3><code>.sg-grid · .swatch · .type-sample · .dur</code></div>
+        <div class="kit-paper">
+          <div class="b-grid" style="grid-template-columns:1fr 1fr">
+            <div class="b-card">
+              <div class="wn-eyebrow"><span>Heading + Body</span></div>
+              <div class="type-sample">Arial / Helvetica</div>
+              <div class="mono" style="font-size:12px;color:var(--ink-soft)">system sans-serif · grid · contained</div>
+            </div>
+            <div class="b-card">
+              <div class="wn-eyebrow"><span>Motion Durations</span></div>
+              <div class="dur-row">
+                <span class="dur">0.12s</span><span class="dur">0.2s</span><span class="dur">0.3s</span>
+                <span class="dur">0.4s</span><span class="dur">0.5s</span><span class="dur">0.8s</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scores + bars -->
+      <div class="kit-block">
+        <div class="kit-block-head"><h3>Performance · Scores / Bars</h3><code>.scores · .score · .bar-row · .bar</code></div>
+        <div class="kit-paper">
+          <div class="scores" style="margin-bottom:24px">
+            <div class="score bad"><div class="lbl">Perf</div><div class="num">61</div></div>
+            <div class="score ok"><div class="lbl">SEO</div><div class="num">92</div></div>
+            <div class="score ok"><div class="lbl">A11y</div><div class="num">92</div></div>
+            <div class="score ok"><div class="lbl">BP</div><div class="num">100</div></div>
+          </div>
+          <div class="b-card">
+            <div class="bar-row"><span class="name">LCP · 14.0s</span><span class="bar"><i style="width:100%;background:#c2410c"></i></span><span>SLOW</span></div>
+            <div class="bar-row"><span class="name">CLS · 0.00</span><span class="bar"><i style="width:4%;background:#166534"></i></span><span>OK</span></div>
+            <div class="bar-row"><span class="name">TTFB · 0.0s</span><span class="bar"><i style="width:2%;background:#166534"></i></span><span>OK</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Status tags / work-needed -->
+      <div class="kit-block">
+        <div class="kit-block-head"><h3>Status Tags</h3><code>.status-tag · .status-tag.warn · .wn-eyebrow</code></div>
+        <div class="kit-paper">
+          <div class="b-card">
+            <div class="wn-eyebrow"><span>PS · Priority Signal</span><span class="status-tag warn">Work Needed</span></div>
+            <p style="margin:0;font-family:var(--font-ui);font-size:15px;line-height:1.5">Warn variant flags a section the crawl could not validate. Neutral tag below.</p>
+            <div class="b-rule"></div>
+            <span class="status-tag">Live · Reviewed</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Industry ring -->
+      <div class="kit-block">
+        <div class="kit-block-head"><h3>Industry Ring</h3><code>.ring · .ring .core</code></div>
+        <div class="kit-paper" style="display:flex;justify-content:center">
+          <div class="ring"><div class="core">Acid<br/>House<br/>303</div></div>
+        </div>
+      </div>
+
+      <!-- Flow nodes -->
+      <div class="kit-block">
+        <div class="kit-block-head"><h3>Process Flow</h3><code>.flow · .node</code></div>
+        <div class="kit-paper">
+          <div class="flow">
+            <div class="node"><div class="n">Step 01</div><div class="t">Scrape</div><p>Crawl the site — pages, metadata, links, OG tags.</p></div>
+            <div class="node"><div class="n">Step 02</div><div class="t">Extract</div><p>Signals: tone cues, offers, partners, audience frames.</p></div>
+            <div class="node"><div class="n">Step 03</div><div class="t">Normalize</div><p>Map to brand / industry / model schema.</p></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Marquee -->
+      <div class="kit-block">
+        <div class="kit-block-head"><h3>Marquee Divider</h3><code>.marquee</code></div>
+        <div class="kit-paper" style="padding-left:0;padding-right:0">
+          <div class="marquee"><span>BRIEF • BRIEF • BRIEF • BRIEF • BRIEF</span></div>
+        </div>
+      </div>
+
+    </div><!-- /#kit-view-brief -->
   </main>
 
   <script>
+    /* Top-level kit tabs (Dashboard Modals / Creative Brief) */
+    document.querySelectorAll("#kit-tabnav .kit-tab").forEach(function(tab) {
+      tab.addEventListener("click", function() {
+        document.querySelectorAll("#kit-tabnav .kit-tab").forEach(function(t) { t.classList.remove("is-active"); });
+        document.querySelectorAll(".kit-view").forEach(function(v) { v.classList.remove("is-active"); });
+        tab.classList.add("is-active");
+        var view = document.getElementById(tab.getAttribute("data-kit-target"));
+        if (view) view.classList.add("is-active");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+    });
+
     /* Segmented controls */
     document.querySelectorAll(".segmented button").forEach(function(button) {
       button.addEventListener("click", function() {

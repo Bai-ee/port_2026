@@ -152,44 +152,67 @@ async function runScoutTest({ clientId, platform, clientConfig = {} }) {
     ].filter((it) => it.title) : [];
     result = { ok: r.ok, items, cost: r.cost || 0, error: r.error, meta: { ...(r.meta || {}), queriesTried: redditConfig.mentionQueries.concat(redditConfig.opportunityQueries) } };
   } else if (platform === 'x') {
-    // Established X access = the last30days pipeline (real API/cookies) — the
-    // SAME path the brief uses (e.g. Fast Poker), not web_search. Run it scoped
-    // to X only and surface the normalized X signals.
-    const l30 = (cfg.last30days && cfg.last30days.enabled) ? cfg.last30days : {};
-    // Build a CLEAN X topic — brand + a couple category terms only. The stored
-    // last30days.primaryTopic jams in competitor URLs and @handles, which makes
-    // the Bird (X) query malformed/over-long and it fails. Handles go via
-    // --x-related instead; competitor URLs are dropped from the topic.
-    const cleanBrand = String(companyName || '').replace(/^["']+|["']+$/g, '').trim();
-    const cleanTopic = [cleanBrand, ...(cfg.categoryTerms || []).slice(0, 2)]
-      .filter(Boolean).join(' ').slice(0, 120);
+    // PRIMARY: real X timelines for the watchlist handles via the X API
+    // (GET /2/users/:id/tweets). Most relevant + efficient — exact posts from the
+    // exact accounts, real permalinks, works in production. SAME fetcher the brief
+    // uses, so the single-line test == the full run.
     const xHandles = (Array.isArray(cfg.kols) ? cfg.kols : [])
-      .map((s) => String(s).trim().replace(/^@/, '')).filter(Boolean).slice(0, 6);
-    const x30Config = {
-      clientId,
-      clientName: companyName,
-      last30days: {
-        ...l30,
-        enabled:         true,
-        sources:         'x',
-        primaryTopic:    cleanTopic || cleanBrand,
-        lookbackDays:    Math.max(7, Number(cfg.scout?.freshnessDays) || 7),
-        xRelated:        xHandles.join(','),
-        brandTerms:      cfg.brandKeywords || [],
-        competitorNames: cfg.competitors || [],
-      },
-    };
-    const service = await fetchLast30Days(x30Config);
-    const xMeta = { source: 'last30days (X)', status: service?.status || null, lookbackDays: x30Config.last30days.lookbackDays, topic: x30Config.last30days.primaryTopic };
-    if (!service || service.status === 'error' || service.status === 'empty') {
-      result = { ok: false, items: [], cost: 0, error: service?.error || 'last30days returned no X data.', meta: xMeta };
-    } else {
-      const items = normalizeSignals(service, x30Config)
-        .filter((s) => /^(x|twitter)$/i.test(s.platform))
-        .slice(0, 10)
-        .map((s) => ({ title: s.title, url: s.url, summary: s.body || '', tag: s.author || s.container || 'x' }))
-        .filter((it) => it.title);
-      result = { ok: true, items, cost: 0, meta: { ...xMeta, note: items.length === 0 ? 'last30days ran but returned no X items for this topic/window.' : undefined } };
+      .map((s) => String(s).trim().replace(/^@/, '')).filter(Boolean).slice(0, 12);
+
+    let xDone = false;
+    if (xHandles.length) {
+      try {
+        const { fetchHandleTimelines } = await import('../social-posting/twitter-service.js');
+        const tl = await fetchHandleTimelines(xHandles, { perHandle: 5 });
+        if (tl.ok && tl.items.length) {
+          result = {
+            ok: true,
+            items: tl.items.slice(0, 30),
+            cost: 0,
+            meta: {
+              source: 'X API · user timelines',
+              handles: xHandles.map((h) => `@${h}`),
+              note: tl.errors.length ? `some handles failed: ${tl.errors.join('; ').slice(0, 160)}` : undefined,
+            },
+          };
+          xDone = true;
+        }
+      } catch { /* fall through to last30days */ }
+    }
+
+    // FALLBACK: last30days topic search — only when there are no handles or the
+    // X API read is unavailable (e.g. free tier / 403). last30days is dev-only.
+    if (!xDone) {
+      const l30 = (cfg.last30days && cfg.last30days.enabled) ? cfg.last30days : {};
+      const cleanBrand = String(companyName || '').replace(/^["']+|["']+$/g, '').trim();
+      const cleanTopic = [cleanBrand, ...(cfg.categoryTerms || []).slice(0, 2)]
+        .filter(Boolean).join(' ').slice(0, 120);
+      const x30Config = {
+        clientId,
+        clientName: companyName,
+        last30days: {
+          ...l30,
+          enabled:         true,
+          sources:         'x',
+          primaryTopic:    cleanTopic || cleanBrand,
+          lookbackDays:    Math.max(7, Number(cfg.scout?.freshnessDays) || 7),
+          xRelated:        xHandles.join(','),
+          brandTerms:      cfg.brandKeywords || [],
+          competitorNames: cfg.competitors || [],
+        },
+      };
+      const service = await fetchLast30Days(x30Config);
+      const xMeta = { source: 'last30days (X) · fallback', status: service?.status || null, lookbackDays: x30Config.last30days.lookbackDays, topic: x30Config.last30days.primaryTopic };
+      if (!service || service.status === 'error' || service.status === 'empty') {
+        result = { ok: false, items: [], cost: 0, error: service?.error || (xHandles.length ? 'X API read unavailable and last30days returned no X data.' : 'No watchlist handles set and last30days returned no X data.'), meta: xMeta };
+      } else {
+        const items = normalizeSignals(service, x30Config)
+          .filter((s) => /^(x|twitter)$/i.test(s.platform))
+          .slice(0, 10)
+          .map((s) => ({ title: s.title, url: s.url, summary: s.body || '', tag: s.author || s.container || 'x' }))
+          .filter((it) => it.title);
+        result = { ok: true, items, cost: 0, meta: { ...xMeta, note: items.length === 0 ? 'last30days ran but returned no X items for this topic/window.' : undefined } };
+      }
     }
   } else {
     // web (default): the general (non platform-site-restricted) plan rows —

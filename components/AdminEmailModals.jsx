@@ -83,7 +83,8 @@ export function AdminEmailDigestView({ user }) {
           <div className="tile-detail-tab-pane" style={{ padding: 0, height: '100%', overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
             <div style={{
               flexShrink: 0, padding: '8px 12px', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase',
-              color: preview?.placeholder ? '#8a6a1f' : '#2f6b3d', background: preview?.placeholder ? '#f6f0e2' : '#edf4ec',
+              color: preview?.placeholder ? 'var(--warning)' : 'var(--success)',
+              background: preview?.placeholder ? 'rgba(212,168,67,0.12)' : 'rgba(74,158,92,0.12)',
               borderRadius: 6, marginBottom: 8,
             }}>
               {preview?.placeholder ? 'Template preview · placeholder data — sections fill in when you Run & Send' : 'Live preview · real data from the last 24 hours'}

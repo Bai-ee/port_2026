@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Analysis Recipes — Data Pipeline &amp; Skill Flow</title>
+<style>
+  :root{
+    --bg:#0b0c0e; --panel:#131519; --panel2:#171a1f; --line:#262a31;
+    --ink:#e8eaed; --soft:#9aa1ab; --faint:#646b76;
+    --x:#1d9bf0;           /* data / endpoint */
+    --ok:#5ad1a0;          /* config knob / done */
+    --warn:#f0c64c;        /* analyzer / file-based */
+    --bad:#e0556b;         /* pending / not-built */
+    --mono:'SF Mono',ui-monospace,'Cascadia Code','Roboto Mono',Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;
+    -webkit-font-smoothing:antialiased;padding:0 0 90px}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+  a{color:var(--x);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code,.mono{font-family:var(--mono)}
+
+  header{border-bottom:1px solid var(--line);padding:40px 0 32px;margin-bottom:40px;
+    background:radial-gradient(1200px 300px at 20% -40%,rgba(29,155,240,.12),transparent)}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.32em;text-transform:uppercase;
+    color:var(--x);margin-bottom:14px}
+  h1{font-size:38px;line-height:1.08;letter-spacing:-.02em;font-weight:680;max-width:22ch}
+  .sub{color:var(--soft);margin-top:14px;max-width:74ch;font-size:15px}
+  .crumbs{margin-top:16px;font-family:var(--mono);font-size:12px;color:var(--faint)}
+
+  h2{font-size:13px;letter-spacing:.22em;text-transform:uppercase;color:var(--faint);
+    font-family:var(--mono);margin:0 0 18px;font-weight:600}
+  section{margin-bottom:56px}
+
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin:-6px 0 26px;font-size:12.5px;color:var(--soft)}
+  .legend span{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono)}
+  .dot{width:10px;height:10px;border-radius:3px;display:inline-block;flex:none}
+  .d-ok{background:var(--ok)} .d-warn{background:var(--warn)} .d-bad{background:var(--bad)} .d-info{background:var(--x)}
+
+  /* pipeline strip */
+  .pipe{display:flex;align-items:stretch;gap:0;flex-wrap:wrap;border:1px solid var(--line);
+    border-radius:14px;overflow:hidden;background:var(--panel)}
+  .pstep{flex:1;min-width:190px;padding:18px;border-right:1px solid var(--line);position:relative}
+  .pstep:last-child{border-right:none}
+  .pstep .n{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.2em}
+  .pstep .t{font-weight:660;margin-top:6px;font-size:15px}
+  .pstep .d{color:var(--soft);font-size:12.5px;margin-top:6px;font-family:var(--mono);line-height:1.5}
+  .pstep .tag{font-family:var(--mono);font-size:10px;margin-top:10px;display:inline-block;
+    padding:2px 8px;border-radius:6px;border:1px solid var(--line)}
+  .t-ok{color:var(--ok);border-color:rgba(90,209,160,.4)}
+  .t-warn{color:var(--warn);border-color:rgba(240,198,76,.4)}
+  .t-info{color:var(--x);border-color:rgba(29,155,240,.4)}
+
+  /* generic cards */
+  .stage{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:18px}
+  .stage .head{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;
+    gap:12px;flex-wrap:wrap;position:relative}
+  .stage .bar{position:absolute;top:0;left:0;width:4px;height:100%}
+  .bar-cust{background:var(--warn)} .bar-watch{background:var(--ok)}
+  .stage h3{font-size:18px;font-weight:680;letter-spacing:-.01em}
+  .stage .tl{font-family:var(--mono);font-size:11.5px;color:var(--faint)}
+  .pill{font-family:var(--mono);font-size:10px;letter-spacing:.1em;padding:3px 9px;border-radius:20px;
+    border:1px solid var(--line);color:var(--soft);margin-left:auto}
+  .stage .body{padding:6px 20px 18px}
+
+  .lane{display:flex;gap:14px;padding:14px 0;border-bottom:1px dashed var(--line);align-items:flex-start}
+  .lane:last-child{border-bottom:none}
+  .lane .tag{font-family:var(--mono);font-size:10px;letter-spacing:.12em;font-weight:700;
+    width:130px;flex:none;padding:4px 0 0}
+  .tag.ok{color:var(--ok)} .tag.warn{color:var(--warn)} .tag.bad{color:var(--bad)} .tag.info{color:var(--x)}
+  .lane .content{flex:1}
+  .lane .meaning{color:var(--soft);font-size:13px;line-height:1.55}
+  .lane .meaning b{color:var(--ink)} .lane .meaning code{color:var(--ink)}
+  .lane .ref{font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-top:7px}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{font-family:var(--mono);font-size:11.5px;background:var(--panel2);border:1px solid var(--line);
+    padding:3px 9px;border-radius:6px;color:var(--ink)}
+
+  /* numbered steps */
+  .steps{counter-reset:step;border:1px solid var(--line);border-radius:14px;background:var(--panel);overflow:hidden}
+  .step{display:flex;gap:16px;padding:18px 20px;border-bottom:1px solid var(--line)}
+  .step:last-child{border-bottom:none}
+  .step::before{counter-increment:step;content:counter(step,decimal-leading-zero);
+    font-family:var(--mono);font-size:12px;color:var(--x);flex:none;padding-top:2px}
+  .step .h{font-weight:660;font-size:15px;margin-bottom:5px}
+  .step p{color:var(--soft);font-size:13px;line-height:1.55}
+  .step p b{color:var(--ink)} .step code{color:var(--ink)}
+
+  /* schema block */
+  pre{font-family:var(--mono);font-size:12.5px;color:var(--ink);background:var(--panel2);
+    border:1px solid var(--line);border-radius:11px;padding:16px 18px;overflow-x:auto;line-height:1.65}
+  pre .k{color:var(--x)} pre .b{color:var(--warn)} pre .c{color:var(--faint)} pre .s{color:var(--ok)}
+
+  /* read/leverage grid */
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .card .h{font-weight:660;font-size:14px;margin-bottom:7px;display:flex;align-items:center;gap:8px}
+  .card p{color:var(--soft);font-size:13px;line-height:1.55}
+  .card p b{color:var(--ink)} .card code{color:var(--ink)}
+  .card.knob{border-left:3px solid var(--ok)}
+  .card.read{border-left:3px solid var(--x)}
+
+  /* confidence table */
+  table{width:100%;border-collapse:collapse;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);font-size:13px;color:var(--soft)}
+  th{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint)}
+  td b{color:var(--ink)}
+  tr:last-child td{border-bottom:none}
+  td .lvl{font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:6px}
+  .lvl.hi{color:var(--ok);border:1px solid rgba(90,209,160,.4)}
+  .lvl.med{color:var(--warn);border:1px solid rgba(240,198,76,.4)}
+  .lvl.lo{color:var(--bad);border:1px solid rgba(224,85,107,.4)}
+
+  footer{border-top:1px solid var(--line);padding-top:22px;color:var(--faint);font-size:12px;font-family:var(--mono)}
+  .kvs{color:var(--soft)}.kvs b{color:var(--ink)}
+  .xlink{margin-top:14px;font-size:12.5px;font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Market Signals · Analysis Recipes</div>
+    <h1>How analysis skills plug into the Market Signals pipeline.</h1>
+    <p class="sub">An "analysis recipe" is an imported marketing skill run as a swappable prompt over content Scout already gathered. Recipes are <b>analyzers, not data fetchers</b> — they never replace Scout. This page maps the data pipeline, how a skill is added, what it returns, and how to read it.</p>
+    <div class="crumbs">SSOT: docs/source-of-truth/MARKET-SIGNALS-AND-SCOUT-PROJECTION.md §8 &nbsp;·&nbsp; Card join key: <code>signals</code></div>
+  </header>
+
+  <!-- ============ PIPELINE ============ -->
+  <section id="pipeline">
+    <h2>01 · The data pipeline</h2>
+    <div class="legend">
+      <span><i class="dot d-ok"></i> config knob (card)</span>
+      <span><i class="dot d-info"></i> data / endpoint</span>
+      <span><i class="dot d-warn"></i> analyzer (LLM)</span>
+    </div>
+    <div class="pipe">
+      <div class="pstep">
+        <div class="n">SOURCE</div>
+        <div class="t">Scout runs</div>
+        <div class="d">runXScout searches web · X · Reddit, trims + synthesizes.</div>
+        <span class="tag t-ok">SOURCES config steers it</span>
+      </div>
+      <div class="pstep">
+        <div class="n">STORE</div>
+        <div class="t">agentData</div>
+        <div class="d">dashboard_state.marketingBrief.scoutBrief.agentData — the durable signal set.</div>
+        <span class="tag t-info">persisted</span>
+      </div>
+      <div class="pstep">
+        <div class="n">SELECT</div>
+        <div class="t">Toggle skills</div>
+        <div class="d">SOURCES → "04 · Analysis Skills" ON/OFF → marketingBriefConfig.analysisRecipes.</div>
+        <span class="tag t-ok">card knob</span>
+      </div>
+      <div class="pstep">
+        <div class="n">RUN</div>
+        <div class="t">recipe-run</div>
+        <div class="d">POST /api/dashboard/recipe-run {recipeIds} → one Anthropic call per recipe over agentData.</div>
+        <span class="tag t-warn">analyzer · max 4/run</span>
+      </div>
+      <div class="pstep">
+        <div class="n">RENDER</div>
+        <div class="t">REPORT tab</div>
+        <div class="d">renderSignalsBriefMock → per-recipe brief blocks in the .brief-kit scope.</div>
+        <span class="tag t-info">read-only</span>
+      </div>
+    </div>
+    <div class="lane" style="margin-top:18px;border:none;padding:0">
+      <div class="tag info">GROUND RULE</div>
+      <div class="content"><div class="meaning"><code>recipe-run</code> <b>writes nothing</b> and does <b>not</b> trigger the brief pipeline. It is the analyzer-side equivalent of <code>scout-test</code>: it confirms what an analyzer produces over content we already have. Output quality is bounded by the agentData Scout supplied.</div></div>
+    </div>
+  </section>
+
+  <!-- ============ REGISTRY ============ -->
+  <section id="registry">
+    <h2>02 · The recipe registry — what's installed</h2>
+    <div class="stage">
+      <div class="head"><div class="bar bar-cust"></div><h3>Customer Research Synthesis</h3><span class="tl">id: customer-research</span><span class="pill">renderRecipeBriefBlock</span></div>
+      <div class="body">
+        <div class="lane"><div class="tag warn">SOURCE</div><div class="content"><div class="meaning">coreyhaines31/marketingskills · skills/customer-research (MIT). Headless adaptation — no Q&amp;A, no file discovery.</div></div></div>
+        <div class="lane"><div class="tag info">RETURNS</div><div class="content"><div class="chips"><span class="chip">themes</span><span class="chip">jobsToBeDone</span><span class="chip">vocabulary</span><span class="chip">alternatives</span><span class="chip">contradictions</span><span class="chip">dataQuality.gaps</span><span class="chip">+ prose</span></div></div></div>
+        <div class="lane"><div class="tag ok">USE</div><div class="content"><div class="meaning">JTBD, pains, trigger events, money quotes, customer vocabulary — confidence-scored. The "synthesis shape" — renders automatically, no UI code.</div></div></div>
+      </div>
+    </div>
+    <div class="stage">
+      <div class="head"><div class="bar bar-watch"></div><h3>Watchlist Brief — "Happening on X"</h3><span class="tl">id: watchlist-analysis</span><span class="pill">renderWatchlistAnalysisBlock</span></div>
+      <div class="body">
+        <div class="lane"><div class="tag warn">SOURCE</div><div class="content"><div class="meaning">internal — handle-first X analysis over the tracked watchlist.</div></div></div>
+        <div class="lane"><div class="tag info">RETURNS</div><div class="content"><div class="chips"><span class="chip">overview</span><span class="chip">spotlight</span><span class="chip">handles[]</span><span class="chip">priorityAction</span><span class="chip">+ prose</span></div></div></div>
+        <div class="lane"><div class="tag ok">USE</div><div class="content"><div class="meaning">What each tracked handle posts, how each is talked about, the most-engaged spotlight, and a suggested action. A <b>custom shape</b> — needs its own render fn.</div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ADD A SKILL ============ -->
+  <section id="add">
+    <h2>03 · How to add a skill into the flow</h2>
+    <div class="steps">
+      <div class="step"><div><div class="h">Drop the prompt asset</div><p>Add <code>&lt;id&gt;.md</code> in <code>features/intelligence/analysis-recipes/</code> — YAML frontmatter (<code>id</code>, <code>label</code>, <code>source</code>, <code>mode: analyzer</code>, <code>inputs</code>, <code>output</code>) then the prompt body. The body must define a <b>strict output contract</b>: raw JSON object first (no code fence), one blank line, then &lt;200-word prose. <b>Grounding rule is mandatory</b> — every claim traces to a supplied item or is omitted.</p></div></div>
+      <div class="step"><div><div class="h">Register it</div><p>Add an entry to <code>RECIPES</code> in <code>recipes.js</code> (<code>id</code>, <code>label</code>, <code>description</code>, <code>file</code>, <code>source</code>, <code>model</code>, <code>maxTokens</code>). It now <b>auto-appears</b> in the SOURCES "04 · Analysis Skills" toggle list — the card reads the catalog from <code>GET /api/dashboard/recipe-run</code>, it never hardcodes a list.</p></div></div>
+      <div class="step"><div><div class="h">Decide the render</div><p>Synthesis-shaped output (themes/JTBD/vocabulary/alternatives/contradictions/dataQuality) → <code>renderRecipeBriefBlock</code> renders it with <b>no UI change</b>. A custom shape → add a render fn (pattern: <code>renderWatchlistAnalysisBlock</code>) and branch to it in <code>renderSignalsBriefMock</code>.</p></div></div>
+      <div class="step"><div><div class="h">Prove, then wire</div><p>Validate on real data with the CLI before toggling: <code>node features/intelligence/analysis-recipes/run-recipe.js --recipe &lt;id&gt; --content ./scoutBrief.json</code>. Then toggle ON in the card and <b>Run enabled</b>. The swap-slot doubles as an <b>A/B mechanism</b> — two recipes over the same content compare side by side in REPORT.</p></div></div>
+    </div>
+  </section>
+
+  <!-- ============ OUTPUT SCHEMA ============ -->
+  <section id="schema">
+    <h2>04 · Synthesis output schema (customer-research)</h2>
+    <pre><span class="c">// raw JSON first (no fence), blank line, then &lt;200-word prose</span>
+{
+  <span class="k">"themes"</span>: [
+    { <span class="k">"name"</span>, <span class="k">"summary"</span>, <span class="k">"frequency"</span>:<span class="b">int</span>, <span class="k">"intensity"</span>:<span class="s">"high|medium|low"</span>,
+      <span class="k">"confidence"</span>:<span class="s">"high|medium|low"</span>,
+      <span class="k">"quotes"</span>:[{ <span class="k">"quote"</span>, <span class="k">"source"</span>, <span class="k">"url"</span> }],
+      <span class="k">"implication"</span> <span class="c">// the "so what" — the marketing instruction</span> }
+  ],
+  <span class="k">"jobsToBeDone"</span>: [{ <span class="k">"functional"</span>, <span class="k">"emotional"</span>, <span class="k">"social"</span> }],
+  <span class="k">"vocabulary"</span>:   [ <span class="s">"exact customer phrase"</span> ],   <span class="c">// copy gold — use verbatim</span>
+  <span class="k">"alternatives"</span>: [ ... ],   <span class="c">// competitor / DIY / nothing → comparison pages</span>
+  <span class="k">"contradictions"</span>:[ ... ],   <span class="c">// say one thing, imply another → test these</span>
+  <span class="k">"dataQuality"</span>: { <span class="k">"itemsAnalyzed"</span>:<span class="b">int</span>, <span class="k">"overallConfidence"</span>:<span class="s">"..."</span>, <span class="k">"gaps"</span>:[ <span class="c">"what we still don't know"</span> ] }
+}</pre>
+    <p class="sub" style="margin-top:14px">The REPORT render surfaces every field, in reading order: <b>Summary → Themes → Jobs to be done → Customer vocabulary → Alternatives → Contradictions → What we still don't know.</b></p>
+  </section>
+
+  <!-- ============ READ IT ============ -->
+  <section id="read">
+    <h2>05 · How to read &amp; leverage it</h2>
+    <p class="sub" style="margin:-6px 0 20px">Read confidence first, act second. A theme is only as trustworthy as its sourcing.</p>
+    <table style="margin-bottom:22px">
+      <thead><tr><th>Confidence</th><th>Criteria</th><th>What to do</th></tr></thead>
+      <tbody>
+        <tr><td><span class="lvl hi">High</span></td><td>Theme in <b>3+ independent</b> items, unprompted, consistent</td><td>Ship into headline / positioning — decision-grade.</td></tr>
+        <tr><td><span class="lvl med">Medium</span></td><td>2 items, or only prompted, or one segment</td><td>Use directionally; validate before betting budget.</td></tr>
+        <tr><td><span class="lvl lo">Low</span></td><td>Single item; possible outlier</td><td>Treat as a hypothesis; broaden sources to confirm.</td></tr>
+      </tbody>
+    </table>
+    <div class="grid2">
+      <div class="card read"><div class="h">Themes → angle</div><p>High-confidence + high-intensity theme = your headline. The <b>"So what"</b> line is already the messaging instruction.</p></div>
+      <div class="card read"><div class="h">Vocabulary → copy</div><p>Paste exact phrases verbatim into ads, landing pages, post hooks. Don't translate to corporate ("drowning in spreadsheets" &gt; "process inefficiency").</p></div>
+      <div class="card read"><div class="h">JTBD → value props</div><p>Functional = feature copy · emotional = tone · social = status/identity framing.</p></div>
+      <div class="card read"><div class="h">Alternatives / Contradictions</div><p>Alternatives → comparison + switching-cost pages. Contradictions → where to dig or run a test; don't trust stated preference at face value.</p></div>
+      <div class="card read"><div class="h">Gaps → next research</div><p>Each "what we still don't know" is the next Scout query. Close a gap → raise the next run's confidence.</p></div>
+      <div class="card read"><div class="h">Sample bias</div><p>Reddit skews skeptical, reviews skew negative, forums skew power-users. A single-source theme isn't "all customers" — that's why it's tagged Low.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ BETTER INPUT ============ -->
+  <section id="input">
+    <h2>06 · Better input → better synthesis</h2>
+    <p class="sub" style="margin:-6px 0 20px">Recipes only analyze what Scout supplied. Confidence = frequency × <b>independent sources</b>, unprompted voice only. These SOURCES knobs move the output:</p>
+    <div class="grid2">
+      <div class="card knob"><div class="h"><i class="dot d-ok"></i> categoryTerms</div><p>Drives the PAIN POINTS + CATEGORY queries → biggest lever for <b>themes, pains, vocabulary</b>. Use how customers describe the space, not your internal label.</p></div>
+      <div class="card knob"><div class="h"><i class="dot d-ok"></i> competitors</div><p>Feeds the COMPETITORS query → fills <b>Alternatives</b> + <b>Contradictions</b>. Empty = those sections stay empty.</p></div>
+      <div class="card knob"><div class="h"><i class="dot d-ok"></i> brandKeywords</div><p>Catches direct mentions → brand pains + <b>money quotes</b>. Add misspellings, product names, abbreviations.</p></div>
+      <div class="card knob"><div class="h"><i class="dot d-ok"></i> watchlist handles</div><p>KOL voice. Track people who talk to your buyers, not just big accounts. Quality &gt; quantity.</p></div>
+      <div class="card knob"><div class="h"><i class="dot d-ok"></i> custom searches</div><p>Where you raise confidence on purpose — add unprompted-voice patterns: <code>"wish there was"</code>, <code>"switched from"</code>, <code>"anyone recommend"</code>.</p></div>
+      <div class="card knob"><div class="h"><i class="dot d-ok"></i> source diversity</div><p>X + Reddit + reviews promotes Low → High faster than more queries on one platform. One thread 5× is still one source.</p></div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="kvs">Registry: <b>features/intelligence/analysis-recipes/recipes.js</b> &nbsp;·&nbsp; Runner: <b>run-recipe.js</b> &nbsp;·&nbsp; Endpoint: <b>app/api/dashboard/recipe-run/route.js</b> &nbsp;·&nbsp; Render: <b>DashboardPage.jsx</b> (renderSignalsBriefMock / renderRecipeBriefBlock / renderWatchlistAnalysisBlock)</div>
+    <div class="xlink">SSOT §8 → <a href="../source-of-truth/MARKET-SIGNALS-AND-SCOUT-PROJECTION.md">MARKET-SIGNALS-AND-SCOUT-PROJECTION.md</a> &nbsp;·&nbsp; UI kit → <a href="../../public/docs/dashboard-modal-component-style-guide.html">dashboard-modal-component-style-guide.html</a></div>
+  </footer>
+
+</div>
+</body>
+</html>

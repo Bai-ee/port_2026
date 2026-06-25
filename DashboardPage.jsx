@@ -55,6 +55,8 @@ import { ContactCapabilitiesPanel } from './StackedSlidesSection';
 // Extract the "Suggested Post" caption the Creative Brief flow scribes into the
 // onboarding summary (a single labeled string). Returns '' when absent.
 const CB_SUMMARY_LABELS = ['Headline', 'What This Site Is', "What's Missing", 'Biggest Risk', 'The Opportunity', 'Decision', 'Suggested Post'];
+const VIDEO_REMIX_FOLDER_FILE_CACHE_TTL_MS = 5 * 60 * 1000;
+const VIDEO_REMIX_PENDING_STORAGE_PREFIX = 'video-remix-pending-job';
 function parseBriefSuggestedPost(raw) {
   if (!raw) return '';
   let collecting = false;
@@ -75,6 +77,134 @@ function parseBriefSuggestedPost(raw) {
     if (collecting) out.push(t);
   }
   return out.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+function sanitizeVideoRemixFolderPreview(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9_-]+/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+}
+
+function formatVideoRemixBytes(bytes) {
+  const size = Number(bytes || 0);
+  if (!Number.isFinite(size) || size <= 0) return '0 B';
+  if (size >= 1024 * 1024 * 1024) return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  if (size >= 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${size} B`;
+}
+
+function safeDownloadName(value, fallback = 'download') {
+  return String(value || fallback)
+    .replace(/[^a-z0-9._-]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 96) || fallback;
+}
+
+async function downloadBrowserAsset(href, filename = 'download', { preferNativeShare = false, mimeType = '' } = {}) {
+  if (!href || typeof window === 'undefined') return;
+  const cleanFilename = safeDownloadName(filename);
+  let blobUrl = null;
+  try {
+    const res = await fetch(href, { mode: 'cors', cache: 'force-cache' });
+    if (!res.ok) throw new Error(String(res.status));
+    const blob = await res.blob();
+    const typedBlob = mimeType && blob.type !== mimeType ? new Blob([blob], { type: mimeType }) : blob;
+
+    if (preferNativeShare && typeof File === 'function' && navigator?.share && navigator?.canShare) {
+      const file = new File([typedBlob], cleanFilename, { type: typedBlob.type || mimeType || 'application/octet-stream' });
+      if (navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: cleanFilename });
+          return;
+        } catch (shareErr) {
+          if (shareErr?.name === 'AbortError') return;
+        }
+      }
+    }
+
+    blobUrl = URL.createObjectURL(typedBlob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = cleanFilename;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch {
+    const a = document.createElement('a');
+    a.href = href;
+    a.download = cleanFilename;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } finally {
+    if (blobUrl) setTimeout(() => URL.revokeObjectURL(blobUrl), 4000);
+  }
+}
+
+function videoRemixPendingStorageKey(clientId) {
+  return `${VIDEO_REMIX_PENDING_STORAGE_PREFIX}:${clientId || 'self'}`;
+}
+
+function readVideoRemixPendingJob(clientId) {
+  if (typeof window === 'undefined' || !clientId) return null;
+  try {
+    const raw = window.localStorage.getItem(videoRemixPendingStorageKey(clientId));
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeVideoRemixPendingJob(clientId, value) {
+  if (typeof window === 'undefined' || !clientId) return;
+  try {
+    if (value) window.localStorage.setItem(videoRemixPendingStorageKey(clientId), JSON.stringify(value));
+    else window.localStorage.removeItem(videoRemixPendingStorageKey(clientId));
+  } catch {
+    /* localStorage is an optimization only */
+  }
+}
+
+function normalizeVideoRemixFolderDetails(rawFolders) {
+  return (Array.isArray(rawFolders) ? rawFolders : [])
+    .map((item) => {
+      if (typeof item === 'string') return { name: item, displayName: item, count: null, type: 'root' };
+      return {
+        name: String(item?.name || ''),
+        displayName: String(item?.displayName || item?.name || ''),
+        count: Number.isFinite(Number(item?.count)) ? Number(item.count) : null,
+        type: item?.type || 'root',
+      };
+    })
+    .filter((item) => item.name);
+}
+
+function uploadVideoRemixFileToSignedUrl({ file, upload, onProgress }) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(upload.method || 'PUT', upload.uploadUrl);
+    xhr.setRequestHeader('Content-Type', upload.contentType || file.type || 'application/octet-stream');
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && typeof onProgress === 'function') {
+        onProgress(Math.round((event.loaded / event.total) * 100));
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new Error(`Upload failed (${xhr.status})`));
+    };
+    xhr.onerror = () => reject(new Error('Upload failed before storage accepted the file.'));
+    xhr.send(file);
+  });
 }
 
 function sanitizeBriefHtmlForStandalone(rawHtml) {
@@ -467,6 +597,10 @@ function buildDefaultMarketingBriefConfig(client, dashboardState) {
     acknowledgedCards: {},
     kols: '',
     competitors: '',
+    // Enabled analysis-skill recipe ids (Market Signals card). Empty = none run.
+    analysisRecipes: [],
+    // Watchlist pull detail level — what to fetch per handle.
+    watchlistDetail: { tweets: true, mentions: true, latestOnly: false },
     agentDataTemplate: `{
   "brandMentions": [{"source":"...","author":"...","content":"...","sentiment":"positive|neutral|negative","reach":"high|medium|low","url":"<post permalink — not profile or homepage>"}],
   "competitorIntel": [{"competitor":"...","finding":"...","impact":"high|medium|low","url":"<post permalink — not profile or homepage>"}],
@@ -2759,6 +2893,22 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	  });
 	  const [videoRemixOptions, setVideoRemixOptions] = useState({ filters: [], overlays: [], artists: [], logos: [] });
 	  const [videoRemixFolders, setVideoRemixFolders] = useState([]);
+	  const [videoRemixFolderDetails, setVideoRemixFolderDetails] = useState([]);
+	  const [videoRemixFolderFiles, setVideoRemixFolderFiles] = useState({ folder: '', files: [] });
+	  const [videoRemixFolderFilesLoading, setVideoRemixFolderFilesLoading] = useState(false);
+	  const [videoRemixVideoOrder, setVideoRemixVideoOrder] = useState({ folder: '', items: [] });
+	  const [videoRemixUploadDraft, setVideoRemixUploadDraft] = useState({
+	    folderMode: 'existing',
+	    existingFolder: '',
+	    newFolderName: '',
+	    orientation: 'auto',
+	  });
+	  const [videoRemixUploadQueue, setVideoRemixUploadQueue] = useState([]);
+	  const [videoRemixUploadLoading, setVideoRemixUploadLoading] = useState(false);
+	  const [videoRemixUploadError, setVideoRemixUploadError] = useState('');
+	  const videoRemixUploadInputRef = useRef(null);
+	  const videoRemixFolderFileCacheRef = useRef(new Map());
+	  const videoRemixFolderFilesRequestRef = useRef(0);
 	  const [mockupStudioRenderError, setMockupStudioRenderError] = useState('');
 	  const [postMeLoading, setPostMeLoading] = useState(false);
 	  const [postMeResult, setPostMeResult] = useState(null); // null | { ok, twitterId, error }
@@ -2952,6 +3102,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	  // marker so the card flips to "Queued…" without waiting for the round-trip.
 	  const runVideoRemix = useCallback(async ({ sourceFolders = null, recipe: recipeOverride = null } = {}) => {
 	    if (!user || videoRemixLoading) return;
+	    const pendingClientId = client?.clientId || client?.id || bootstrap?.effectiveClientId;
+	    let pendingJobId = null;
 	    setVideoRemixLoading(true);
 	    setVideoRemixError('');
 	    try {
@@ -2995,6 +3147,13 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	          if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
 	          const jobId = data?.jobId;
 	          if (!jobId) throw new Error('No job id returned from the server.');
+	          pendingJobId = jobId;
+	          writeVideoRemixPendingJob(pendingClientId, {
+	            jobId,
+	            editJobId: data.editJobId || null,
+	            queuedAt: new Date().toISOString(),
+	            sourceFolders: recipe.sourceFolders,
+	          });
 
 	          // Optimistic pending so the card face flips to "Queued…" right away.
 	          if (!cancelledRef.current) {
@@ -3028,10 +3187,14 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	              job = jData?.job || null;
 	            } catch { continue; }
 	            if (job?.status === 'done') { capture = job.output || null; break; }
-	            if (job?.status === 'failed') throw new Error(job.error || 'The render worker reported a failure.');
+	            if (job?.status === 'failed') {
+	              writeVideoRemixPendingJob(pendingClientId, null);
+	              throw new Error(job.error || 'The render worker reported a failure.');
+	            }
 	          }
 
 	          if (capture && !cancelledRef.current) {
+	            writeVideoRemixPendingJob(pendingClientId, null);
 	            setBootstrap((prev) => {
 	              const dash = prev?.dashboardState || {};
 	              const cur = Array.isArray(dash.mediaCaptures) ? dash.mediaCaptures : [];
@@ -3046,11 +3209,239 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	        },
 	      });
 	    } catch (err) {
+	      if (pendingJobId) writeVideoRemixPendingJob(pendingClientId, null);
 	      setVideoRemixError(err?.message || 'Video remix failed.');
 	    } finally {
 	      if (!cancelledRef.current) setVideoRemixLoading(false);
 	    }
-	  }, [user, videoRemixLoading, apiPath, runWithTerminal]);
+	  }, [user, videoRemixLoading, client?.clientId, client?.id, bootstrap?.effectiveClientId, apiPath, runWithTerminal]);
+
+	  const refreshVideoRemixFolders = useCallback(async () => {
+	    if (!user) return [];
+	    const token = await user.getIdToken();
+	    const res = await fetch(apiPath('/api/dashboard/media?action=folders&withCounts=1'), {
+	      headers: { Authorization: `Bearer ${token}` },
+	      cache: 'no-store',
+	    });
+	    const data = await res.json().catch(() => ({}));
+	    if (!res.ok) throw new Error(data?.error || `Folder refresh failed (${res.status})`);
+	    const details = normalizeVideoRemixFolderDetails(data?.folders);
+	    setVideoRemixFolderDetails(details);
+	    setVideoRemixFolders(details.map((item) => item.name));
+	    setVideoRemixUploadDraft((prev) => {
+	      if (prev.existingFolder && details.some((item) => item.name === prev.existingFolder)) return prev;
+	      return { ...prev, existingFolder: details[0]?.name || '' };
+	    });
+	    return details;
+	  }, [user, apiPath]);
+
+	  const loadVideoRemixFolderFiles = useCallback(async (folderName) => {
+	    if (!user || !folderName) return;
+	    const requestId = videoRemixFolderFilesRequestRef.current + 1;
+	    videoRemixFolderFilesRequestRef.current = requestId;
+	    const cached = videoRemixFolderFileCacheRef.current.get(folderName);
+	    if (cached && Date.now() - cached.at < VIDEO_REMIX_FOLDER_FILE_CACHE_TTL_MS) {
+	      setVideoRemixFolderFiles({ folder: cached.folder || folderName, files: cached.files || [] });
+	      setVideoRemixFolderFilesLoading(false);
+	      return;
+	    }
+	    setVideoRemixFolderFiles({ folder: folderName, files: cached?.files || [] });
+	    setVideoRemixFolderFilesLoading(true);
+	    try {
+	      const token = await user.getIdToken();
+	      const res = await fetch(apiPath(`/api/dashboard/media?action=folder-files&folder=${encodeURIComponent(folderName)}&limit=36`), {
+	        headers: { Authorization: `Bearer ${token}` },
+	        cache: 'no-store',
+	      });
+	      const data = await res.json().catch(() => ({}));
+	      if (!res.ok) throw new Error(data?.error || `Folder preview failed (${res.status})`);
+	      if (videoRemixFolderFilesRequestRef.current !== requestId) return;
+	      const nextPreview = {
+	        folder: data.folder || folderName,
+	        files: Array.isArray(data.files) ? data.files : [],
+	      };
+	      videoRemixFolderFileCacheRef.current.set(folderName, { ...nextPreview, at: Date.now() });
+	      setVideoRemixFolderFiles(nextPreview);
+	    } catch (err) {
+	      if (videoRemixFolderFilesRequestRef.current === requestId) {
+	        setVideoRemixUploadError(err?.message || 'Could not preview that folder.');
+	      }
+	    } finally {
+	      if (videoRemixFolderFilesRequestRef.current === requestId) {
+	        setVideoRemixFolderFilesLoading(false);
+	      }
+	    }
+	  }, [user, apiPath]);
+
+	  const addVideoRemixUploadFiles = useCallback((fileList) => {
+	    const files = Array.from(fileList || []);
+	    if (!files.length) return;
+	    setVideoRemixUploadError('');
+	    setVideoRemixUploadQueue((prev) => [
+	      ...prev,
+	      ...files.map((file, index) => ({
+	        id: `${Date.now()}-${index}-${file.name}`,
+	        file,
+	        name: file.name,
+	        size: file.size,
+	        type: file.type || 'application/octet-stream',
+	        progress: 0,
+	        status: 'queued',
+	        error: '',
+	      })),
+	    ]);
+	  }, []);
+
+	  const removeVideoRemixUploadFile = useCallback((id) => {
+	    if (videoRemixUploadLoading) return;
+	    setVideoRemixUploadQueue((prev) => prev.filter((item) => item.id !== id));
+	  }, [videoRemixUploadLoading]);
+
+	  const addVideoRemixOrderItem = useCallback((file, folderName) => {
+	    if (!file || file.kind !== 'video') return;
+	    const folder = folderName || videoRemixFolderFiles.folder;
+	    if (!folder) return;
+	    setVideoRemixVideoOrder((prev) => {
+	      const currentItems = prev.folder === folder ? prev.items : [];
+	      const key = file.fullPath || file.name;
+	      if (currentItems.some((item) => (item.fullPath || item.name) === key) || currentItems.length >= 6) {
+	        return { folder, items: currentItems };
+	      }
+	      return {
+	        folder,
+	        items: [
+	          ...currentItems,
+	          {
+	            name: file.name,
+	            fullPath: file.fullPath || '',
+	            url: file.url || '',
+	            kind: 'video',
+	          },
+	        ],
+	      };
+	    });
+	  }, [videoRemixFolderFiles.folder]);
+
+	  const removeVideoRemixOrderItem = useCallback((index) => {
+	    setVideoRemixVideoOrder((prev) => ({
+	      ...prev,
+	      items: prev.items.filter((_, itemIndex) => itemIndex !== index),
+	    }));
+	  }, []);
+
+	  const moveVideoRemixOrderItem = useCallback((index, direction) => {
+	    setVideoRemixVideoOrder((prev) => {
+	      const nextIndex = index + direction;
+	      if (nextIndex < 0 || nextIndex >= prev.items.length) return prev;
+	      const items = [...prev.items];
+	      const [item] = items.splice(index, 1);
+	      items.splice(nextIndex, 0, item);
+	      return { ...prev, items };
+	    });
+	  }, []);
+
+	  const clearVideoRemixOrder = useCallback(() => {
+	    setVideoRemixVideoOrder((prev) => ({ folder: prev.folder, items: [] }));
+	  }, []);
+
+	  const applyVideoRemixOrderFolder = useCallback((folderName) => {
+	    const folder = folderName || videoRemixVideoOrder.folder;
+	    if (!folder) return;
+	    setVideoRemixDraft((prev) => ({ ...prev, selectedFolders: [folder] }));
+	    setModalTab('remix');
+	  }, [videoRemixVideoOrder.folder]);
+
+	  const runVideoRemixUpload = useCallback(async () => {
+	    if (!user || videoRemixUploadLoading) return;
+	    const files = videoRemixUploadQueue.filter((item) => item.file && item.status !== 'done');
+	    if (!files.length) {
+	      setVideoRemixUploadError('Add at least one video or image file.');
+	      return;
+	    }
+	    const folderMode = videoRemixUploadDraft.folderMode === 'new' ? 'new' : 'existing';
+	    const targetFolder = folderMode === 'new'
+	      ? sanitizeVideoRemixFolderPreview(videoRemixUploadDraft.newFolderName)
+	      : (videoRemixUploadDraft.existingFolder || videoRemixFolders[0] || '');
+	    if (!targetFolder) {
+	      setVideoRemixUploadError(folderMode === 'new' ? 'Name the new folder first.' : 'Choose a folder first.');
+	      return;
+	    }
+	    setVideoRemixUploadLoading(true);
+	    setVideoRemixUploadError('');
+	    try {
+	      const token = await user.getIdToken();
+	      const res = await fetch(apiPath('/api/dashboard/media?action=create-upload-session'), {
+	        method: 'POST',
+	        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+	        body: JSON.stringify({
+	          folderMode,
+	          folderName: targetFolder,
+	          orientation: videoRemixUploadDraft.orientation || 'auto',
+	          files: files.map((item) => ({ name: item.name, type: item.type, size: item.size })),
+	        }),
+	      });
+	      const data = await res.json().catch(() => ({}));
+	      if (!res.ok) throw new Error(data?.error || `Upload session failed (${res.status})`);
+	      const uploads = Array.isArray(data?.session?.uploads) ? data.session.uploads : [];
+	      if (uploads.length !== files.length) throw new Error('Upload session did not return a URL for every file.');
+
+	      for (let i = 0; i < uploads.length; i += 1) {
+	        const queueItem = files[i];
+	        const upload = uploads[i];
+	        setVideoRemixUploadQueue((prev) => prev.map((item) => (
+	          item.id === queueItem.id ? { ...item, status: 'uploading', progress: Math.max(item.progress || 0, 1), error: '' } : item
+	        )));
+	        await uploadVideoRemixFileToSignedUrl({
+	          file: queueItem.file,
+	          upload,
+	          onProgress: (progress) => {
+	            setVideoRemixUploadQueue((prev) => prev.map((item) => (
+	              item.id === queueItem.id ? { ...item, progress } : item
+	            )));
+	          },
+	        });
+	        setVideoRemixUploadQueue((prev) => prev.map((item) => (
+	          item.id === queueItem.id ? { ...item, status: 'done', progress: 100, storagePath: upload.storagePath } : item
+	        )));
+	      }
+
+	      await fetch(apiPath('/api/dashboard/media?action=complete-upload'), {
+	        method: 'POST',
+	        headers: { Authorization: `Bearer ${token}` },
+	      }).catch(() => {});
+	      const refreshed = await refreshVideoRemixFolders().catch(() => []);
+	      const folderName = data?.session?.folder || targetFolder;
+	      videoRemixFolderFileCacheRef.current.delete(folderName);
+	      setVideoRemixDraft((prev) => ({
+	        ...prev,
+	        selectedFolders: prev.selectedFolders.includes(folderName)
+	          ? prev.selectedFolders
+	          : [...prev.selectedFolders, folderName],
+	      }));
+	      setVideoRemixUploadDraft((prev) => ({ ...prev, existingFolder: folderName, folderMode: 'existing' }));
+	      setVideoRemixFolderFiles({ folder: folderName, files: [] });
+	      if (refreshed.some((item) => item.name === folderName)) {
+	        loadVideoRemixFolderFiles(folderName);
+	      }
+	      setModalTab('remix');
+	    } catch (err) {
+	      setVideoRemixUploadError(err?.message || 'Upload failed.');
+	      setVideoRemixUploadQueue((prev) => prev.map((item) => (
+	        item.status === 'uploading' ? { ...item, status: 'error', error: err?.message || 'Upload failed.' } : item
+	      )));
+	    } finally {
+	      setVideoRemixUploadLoading(false);
+	    }
+	  }, [
+	    user,
+	    videoRemixUploadLoading,
+	    videoRemixUploadQueue,
+	    videoRemixUploadDraft,
+	    videoRemixFolders,
+	    apiPath,
+	    refreshVideoRemixFolders,
+	    loadVideoRemixFolderFiles,
+	  ]);
 
 
 	  const openLeadgenFlow = useCallback(async (step) => {
@@ -3463,6 +3854,14 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       // Per-card user acknowledgment — { cardId: true } once the user saves that
       // card. Drives the green status dot (audit prefill alone stays red).
       acknowledgedCards: (next.acknowledgedCards && typeof next.acknowledgedCards === 'object') ? next.acknowledgedCards : (fallback.acknowledgedCards || {}),
+      // Enabled analysis-skill recipe ids — always an array so the toggle UI is safe.
+      analysisRecipes: Array.isArray(next.analysisRecipes) ? next.analysisRecipes : (fallback.analysisRecipes || []),
+      // Watchlist detail toggles — always an object with boolean flags.
+      watchlistDetail: {
+        tweets: next.watchlistDetail?.tweets !== false,
+        mentions: next.watchlistDetail?.mentions !== false,
+        latestOnly: next.watchlistDetail?.latestOnly === true,
+      },
     };
   }, [client, bootstrap?.dashboardState]);
 
@@ -4049,7 +4448,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         const headers = { Authorization: `Bearer ${token}` };
         const [optRes, folderRes] = await Promise.all([
           fetch(apiPath('/api/dashboard/media?action=options'), { headers, cache: 'no-store' }),
-          fetch(apiPath('/api/dashboard/media?action=folders'), { headers, cache: 'no-store' }),
+          fetch(apiPath('/api/dashboard/media?action=folders&withCounts=1'), { headers, cache: 'no-store' }),
         ]);
         const optData = await optRes.json().catch(() => ({}));
         const folderData = await folderRes.json().catch(() => ({}));
@@ -4062,7 +4461,15 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             logos: Array.isArray(optData.options.logos) ? optData.options.logos : [],
           });
         }
-        if (Array.isArray(folderData?.folders)) setVideoRemixFolders(folderData.folders);
+        if (Array.isArray(folderData?.folders)) {
+          const details = normalizeVideoRemixFolderDetails(folderData.folders);
+          setVideoRemixFolderDetails(details);
+          setVideoRemixFolders(details.map((item) => item.name));
+          setVideoRemixUploadDraft((prev) => {
+            if (prev.existingFolder && details.some((item) => item.name === prev.existingFolder)) return prev;
+            return { ...prev, existingFolder: details[0]?.name || '' };
+          });
+        }
       } catch {
         /* degrade — tab still renders with Random-only defaults */
       }
@@ -4373,6 +4780,193 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     }
   }, [user, apiPath]);
 
+  // ── Analysis skills (recipes) ─────────────────────────────────────────────
+  // Catalog of available analysis skills (from the server registry), the set the
+  // user toggled ON (marketingBriefConfig.analysisRecipes), and the last run's
+  // synthesis output. Toggling a skill auto-saves; Run executes the enabled set
+  // over the stored Marketing Insights signals via /api/dashboard/recipe-run.
+  const [recipeCatalog, setRecipeCatalog] = useState([]);
+  const [recipeRun, setRecipeRun] = useState({ loading: false, results: [], error: '' });
+  // Handle-first watchlist X timelines (one entry per configured handle).
+  const [watchlistPull, setWatchlistPull] = useState({ loading: false, handles: [], error: '' });
+
+  // Persist the last analysis report + live-source results per client so the
+  // REPORT tab survives tab/modal close AND reload — kept until the next run
+  // replaces it. Keyed by client so switching clients shows the right report.
+  useEffect(() => {
+    const cid = client?.clientId || client?.id;
+    if (!cid || typeof window === 'undefined') return;
+    try {
+      const rawR = window.localStorage.getItem(`recipeReport:lastRun:${cid}`);
+      if (rawR) { const p = JSON.parse(rawR); if (p && Array.isArray(p.results)) setRecipeRun({ loading: false, results: p.results, error: '' }); }
+      const rawS = window.localStorage.getItem(`scoutTest:lastRun:${cid}`);
+      if (rawS) { const p = JSON.parse(rawS); if (p && typeof p === 'object') setScoutTestState(p); }
+      const rawW = window.localStorage.getItem(`watchlistPull:lastRun:${cid}`);
+      if (rawW) { const p = JSON.parse(rawW); if (p && Array.isArray(p.handles)) setWatchlistPull({ loading: false, handles: p.handles, spotlight: p.spotlight || null, analysis: p.analysis || null, error: '' }); }
+    } catch { /* ignore corrupt cache */ }
+  }, [client?.clientId, client?.id]);
+
+  useEffect(() => {
+    const cid = client?.clientId || client?.id;
+    if (!cid || typeof window === 'undefined' || watchlistPull.loading) return;
+    try {
+      if (watchlistPull.handles && watchlistPull.handles.length) {
+        window.localStorage.setItem(`watchlistPull:lastRun:${cid}`, JSON.stringify({ handles: watchlistPull.handles, spotlight: watchlistPull.spotlight || null, analysis: watchlistPull.analysis || null }));
+      }
+    } catch { /* non-fatal */ }
+  }, [watchlistPull, client?.clientId, client?.id]);
+
+  useEffect(() => {
+    const cid = client?.clientId || client?.id;
+    if (!cid || typeof window === 'undefined' || recipeRun.loading) return;
+    try {
+      if (recipeRun.results && recipeRun.results.length) {
+        window.localStorage.setItem(`recipeReport:lastRun:${cid}`, JSON.stringify({ results: recipeRun.results }));
+      }
+    } catch { /* quota/serialize — non-fatal */ }
+  }, [recipeRun, client?.clientId, client?.id]);
+
+  useEffect(() => {
+    const cid = client?.clientId || client?.id;
+    if (!cid || typeof window === 'undefined') return;
+    const settled = {};
+    for (const [k, v] of Object.entries(scoutTestState || {})) {
+      if (v && !v.loading && ((v.items && v.items.length) || v.error)) {
+        settled[k] = { items: v.items || [], count: v.count, costUsd: v.costUsd, ms: v.ms, meta: v.meta || null, error: v.error || '' };
+      }
+    }
+    try {
+      if (Object.keys(settled).length) window.localStorage.setItem(`scoutTest:lastRun:${cid}`, JSON.stringify(settled));
+    } catch { /* non-fatal */ }
+  }, [scoutTestState, client?.clientId, client?.id]);
+
+  useEffect(() => {
+    if (!user) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch(apiPath('/api/dashboard/recipe-run'), { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+        const data = await res.json().catch(() => ({}));
+        if (!cancelled && res.ok && Array.isArray(data.recipes)) setRecipeCatalog(data.recipes);
+      } catch { /* non-fatal — catalog stays empty */ }
+    })();
+    return () => { cancelled = true; };
+  }, [user, apiPath]);
+
+  const enabledRecipeIds = Array.isArray(marketingBriefConfig?.analysisRecipes) ? marketingBriefConfig.analysisRecipes : [];
+
+  const toggleAnalysisRecipe = useCallback((id) => {
+    if (!marketingBriefConfig) return;
+    const on = Array.isArray(marketingBriefConfig.analysisRecipes) ? marketingBriefConfig.analysisRecipes : [];
+    const nextIds = on.includes(id) ? on.filter((x) => x !== id) : [...on, id];
+    const next = { ...marketingBriefConfig, analysisRecipes: nextIds };
+    setMarketingBriefConfig(next);
+    saveMarketingBriefConfig({ override: next });
+  }, [marketingBriefConfig, saveMarketingBriefConfig]);
+
+  const runAnalysisRecipes = useCallback(async () => {
+    if (!user) return;
+    const ids = Array.isArray(marketingBriefConfig?.analysisRecipes) ? marketingBriefConfig.analysisRecipes : [];
+    if (!ids.length) { setRecipeRun({ loading: false, results: [], error: 'Toggle at least one analysis skill ON first.' }); return; }
+    setRecipeRun({ loading: true, results: [], error: '' });
+
+    // Per-skill cosmetic stage lines streamed into the shared terminal while the
+    // single recipe-run POST works server-side (same UX as a brief/Studio run).
+    const labelFor = (id) => (recipeCatalog.find((r) => r.id === id)?.label || id);
+    let host = ''; try { host = new URL(String(client?.websiteUrl || client?.website || '')).hostname.replace(/^www\./, ''); } catch { /* no host */ }
+    const stages = [
+      { pfx: '[LOAD]', text: 'loading stored market signals…' },
+      ...ids.map((id) => ({ pfx: '[SKILL]', text: `analyzing · ${labelFor(id)}…` })),
+      { pfx: '[SYNTH]', text: 'composing grounded synthesis…' },
+    ];
+
+    try {
+      await runWithTerminal({
+        title: 'RUNNING ANALYSIS SKILLS',
+        brand: 'Analysis skills',
+        host,
+        stages,
+        task: async () => {
+          const token = await user.getIdToken();
+          const res = await fetch(apiPath('/api/dashboard/recipe-run'), {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ recipeIds: ids }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data?.error || 'Could not run analysis skills.');
+          const results = data.results || [];
+          setRecipeRun({ loading: false, results, error: '' });
+          // Surface the formatted report where the user expects it (REPORT tab).
+          if (results.some((r) => r.ok)) setModalTab('report');
+          const okCount = results.filter((r) => r.ok).length;
+          const totalCost = results.reduce((sum, r) => sum + (Number(r.costUsd) || 0), 0);
+          return { doneText: `${okCount}/${results.length} skill${results.length === 1 ? '' : 's'} synthesized${totalCost > 0 ? ` · ≈ $${totalCost.toFixed(3)}` : ''}` };
+        },
+      });
+    } catch (err) {
+      setRecipeRun({ loading: false, results: [], error: err instanceof Error ? err.message : 'Could not run analysis skills.' });
+    }
+  }, [user, apiPath, marketingBriefConfig, recipeCatalog, client, runWithTerminal]);
+
+  // Handle-first pull: for each watchlist handle, fetch its real X timeline via
+  // last30days --x-handle (the targeted mode proven to return the account's
+  // actual activity). Declared before runAllSignals (which depends on it).
+  const runWatchlistPullNow = useCallback(async () => {
+    if (!user) return;
+    const handles = splitMarketingBriefTerms(marketingBriefConfig?.kols)
+      .map((h) => String(h).replace(/^@+/, '').trim())
+      .filter((h) => h.length >= 2)
+      .slice(0, 6);
+    if (!handles.length) { setWatchlistPull({ loading: false, handles: [], error: 'No watchlist handles — add handles in the Watchlist card.' }); return; }
+    setWatchlistPull({ loading: true, handles: [], error: '' });
+    try {
+      await runWithTerminal({
+        title: 'PULLING WATCHLIST TIMELINES',
+        brand: 'Watchlist',
+        host: '',
+        stages: [
+          { pfx: '[X]', text: 'connecting to X via last30days…' },
+          ...handles.map((h) => ({ pfx: '[PULL]', text: `@${h} — recent activity…` })),
+          { pfx: '[RANK]', text: 'ranking + deduping…' },
+        ],
+        task: async () => {
+          const token = await user.getIdToken();
+          const res = await fetch(apiPath('/api/dashboard/watchlist-pull'), {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ detail: marketingBriefConfig?.watchlistDetail || null }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data.ok === false) throw new Error(data?.error || 'Watchlist pull failed.');
+          const got = (data.handles || []);
+          setWatchlistPull({ loading: false, handles: got, spotlight: data.spotlight || null, analysis: data.analysis || null, error: '' });
+          const live = got.filter((h) => h.count > 0).length;
+          return { doneText: `${live}/${got.length} handle${got.length === 1 ? '' : 's'} · ${data.count || 0} posts` };
+        },
+      });
+    } catch (err) {
+      setWatchlistPull({ loading: false, handles: [], error: err instanceof Error ? err.message : 'Watchlist pull failed.' });
+    }
+  }, [user, apiPath, marketingBriefConfig, runWithTerminal]);
+
+  // Single "Run all" — non-X sources via scout-test, X via the handle-first
+  // watchlist pull, then the enabled analysis skills, landing on the REPORT.
+  const runAllSignals = useCallback(async () => {
+    const sources = (marketingBriefConfig?.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS)
+      .filter((k) => UNLOCKED_SOURCE_PLATFORMS.includes(k));
+    // X comes from the handle-first watchlist pull (real timelines), NOT the
+    // noisy --x-related topic search. Other sources still use scout-test.
+    sources.filter((k) => k !== 'x').forEach((k) => runScoutTestForPlatform(k));
+    const handles = splitMarketingBriefTerms(marketingBriefConfig?.kols)
+      .map((h) => String(h).replace(/^@+/, '').trim()).filter((h) => h.length >= 2);
+    if (handles.length) await runWatchlistPullNow();
+    const ids = Array.isArray(marketingBriefConfig?.analysisRecipes) ? marketingBriefConfig.analysisRecipes : [];
+    if (ids.length) await runAnalysisRecipes();
+    setModalTab('report');
+  }, [marketingBriefConfig, runScoutTestForPlatform, runWatchlistPullNow, runAnalysisRecipes]);
+
   // Shared row renderer for the Web Search + Platforms and Social Media Signals
   // cards: unlocked sources render as toggles, locked sources as Upgrade rows.
   // Active (toggled-on) sources get a Test CTA + expandable caret with results.
@@ -4592,6 +5186,21 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     const fresh = marketingBriefConfig?.freshnessDays ?? 7;
     const mode = marketingBriefConfig?.kolSearchMode === 'combined' ? 'combined' : 'per-handle';
     const setMode = (m) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), kolSearchMode: m }));
+    // Watchlist detail toggles (what to pull per handle) — auto-saves like sources.
+    const wd = {
+      tweets: marketingBriefConfig?.watchlistDetail?.tweets !== false,
+      mentions: marketingBriefConfig?.watchlistDetail?.mentions !== false,
+      latestOnly: marketingBriefConfig?.watchlistDetail?.latestOnly === true,
+    };
+    const toggleDetail = (key) => {
+      const next = { ...(marketingBriefConfig || {}), watchlistDetail: { ...wd, [key]: !wd[key] } };
+      setMarketingBriefConfig(next);
+      saveMarketingBriefConfig({ override: next });
+    };
+    const detailLabel = (!wd.tweets && !wd.mentions) ? 'Off — turn on Tweets or Mentions'
+      : (wd.tweets && wd.mentions) ? 'Their posts + mentions'
+      : wd.tweets ? (wd.latestOnly ? 'Just their last post' : 'Their posts only')
+      : 'Mentions only';
     return (
       <div className="signals-sg">
         <section className="sg-section">
@@ -4601,11 +5210,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               <h3>Search Sources</h3>
               <p>Toggle a source on, then Run to confirm exactly what it returns. Lightweight — does not refresh the stored brief.</p>
             </div>
-            <button type="button" className="sg-btn sg-cta" onClick={() => {
-              (marketingBriefConfig?.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS)
-                .filter((k) => UNLOCKED_SOURCE_PLATFORMS.includes(k))
-                .forEach((k) => runScoutTestForPlatform(k));
-            }}><span>Run all enabled</span></button>
+            <button type="button" className="sg-btn sg-cta" id="signals-run-all-btn" disabled={recipeRun.loading} onClick={runAllSignals}><span>{recipeRun.loading ? 'Running…' : 'Run all'}</span></button>
           </div>
           <div style={{ display: 'grid', gap: 10 }}>
             {renderSgSourceRow('web', 'Web / News', 'Open web — market news, launches, pages your audience sees.')}
@@ -4630,6 +5235,44 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             <button type="button" className={mode === 'per-handle' ? 'is-active' : ''} onClick={() => setMode('per-handle')}>Per-handle</button>
             <button type="button" className={mode === 'combined' ? 'is-active' : ''} onClick={() => setMode('combined')}>Combined</button>
           </div>
+
+          {/* Handle-first pull — fetch each watchlist handle's REAL X timeline
+              (last30days --x-handle). Phase 1: raw confirmation, pre-analysis. */}
+          <article className="sg-list" id="watchlist-timelines-pull">
+            <div className="sg-list-head">
+              <span className="sg-list-title">Watchlist Timelines · X</span>
+              <span className="sg-chip">{(watchlistPull.handles || []).filter((h) => h.count > 0).length}/{(watchlistPull.handles || []).length || splitMarketingBriefTerms(marketingBriefConfig?.kols).filter((h) => h.replace(/^@+/, '').length >= 2).length} live</span>
+              <button type="button" className="sg-btn sg-btn-outline" disabled={watchlistPull.loading || (!wd.tweets && !wd.mentions)} onClick={runWatchlistPullNow}>{watchlistPull.loading ? 'Pulling…' : 'Pull timelines'}</button>
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', margin: '8px 0 2px' }} id="watchlist-detail-toggles">
+              <button type="button" className={`sg-btn ${wd.tweets ? 'sg-btn-on' : 'sg-btn-off'}`} style={{ minWidth: 70 }} onClick={() => toggleDetail('tweets')}>Tweets</button>
+              <button type="button" className={`sg-btn ${wd.mentions ? 'sg-btn-on' : 'sg-btn-off'}`} style={{ minWidth: 78 }} onClick={() => toggleDetail('mentions')}>Mentions</button>
+              <button type="button" className={`sg-btn ${wd.latestOnly ? 'sg-btn-on' : 'sg-btn-off'}`} style={{ minWidth: 84 }} disabled={!wd.tweets} onClick={() => toggleDetail('latestOnly')}>Just latest</button>
+              <span className="sg-hint" style={{ margin: 0 }}>{detailLabel}</span>
+            </div>
+            {watchlistPull.error ? <p className="sg-notice sg-notice-danger" style={{ margin: '6px 0 0' }}>{watchlistPull.error}</p> : null}
+            {(watchlistPull.handles || []).length ? (
+              <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
+                {watchlistPull.handles.map((h) => (
+                  <div key={`wl-${h.handle}`} className={`sg-inv${h.count ? '' : ' is-off'}`} style={{ display: 'block', padding: '10px 12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <span className="name" style={{ fontWeight: 700 }}>@{h.handle}</span>
+                      <span className="sg-chip">{h.count} post{h.count === 1 ? '' : 's'}{h.error && !h.count ? ` · ${h.error}` : ''}</span>
+                    </div>
+                    {(h.ownPosts || []).slice(0, 5).map((it, i) => (
+                      <div key={`wl-${h.handle}-${i}`} style={{ borderLeft: '2px solid var(--sg-line, #e5ddd0)', paddingLeft: 8, marginTop: 6 }}>
+                        <div style={{ fontSize: 12, lineHeight: 1.4 }}>{(it.text || '').slice(0, 180)}</div>
+                        <div style={{ fontFamily: 'var(--sg-mono)', fontSize: 10, color: 'var(--text-secondary)', marginTop: 2 }}>♥ {it.likes || 0} · ↺ {it.reposts || 0} · 💬 {it.replies || 0}{it.url ? <> · <a href={it.url} target="_blank" rel="noopener noreferrer">↗ view</a></> : null}</div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="sg-hint" style={{ margin: '6px 0 0' }}>Pull each watchlist handle&apos;s real recent X activity to confirm before analysis.</p>
+            )}
+          </article>
+
           {renderTermControl({
             field: 'brandKeywords', offField: 'brandKeywordsOff', title: 'Brand Keywords',
             addCard: { id: 'brand-keywords', category: 'growth', number: 'SP', label: 'SEARCH PARAMETERS', title: 'Search Parameters', description: '', rows: [] },
@@ -4663,88 +5306,428 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           </div>
         </section>
 
+        <section className="sg-section" id="signals-analysis-skills-section">
+          <div className="sg-head">
+            <span className="sg-index">04</span>
+            <div>
+              <h3>Analysis Skills</h3>
+              <p>Toggle analysis skills on — they run with the live sources via <strong>Run all</strong> (top). Analyzers over the stored signals, not new searches.</p>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gap: 10 }} id="recipe-toggle-list">
+            {recipeCatalog.length ? recipeCatalog.map((r) => {
+              const on = enabledRecipeIds.includes(r.id);
+              return (
+                <div className="sg-source" key={r.id} id={`recipe-toggle-${r.id}`}>
+                  <span className="sg-source-value">
+                    <span>{r.label}{!on ? ' · off' : ''}<small>{r.description}</small></span>
+                  </span>
+                  <span className="sg-source-actions">
+                    <button type="button" className={`sg-btn ${on ? 'sg-btn-on' : 'sg-btn-off'}`} style={{ minWidth: 52 }} onClick={() => toggleAnalysisRecipe(r.id)}>{on ? 'ON' : 'OFF'}</button>
+                  </span>
+                </div>
+              );
+            }) : (
+              <p className="sg-hint" style={{ margin: 0 }}>No analysis skills registered.</p>
+            )}
+          </div>
+          {recipeRun.error ? <p className="sg-notice sg-notice-danger" style={{ marginTop: 10 }}>{recipeRun.error}</p> : null}
+          {recipeRun.results.length ? (
+            <div style={{ display: 'grid', gap: 10, marginTop: 12 }} id="recipe-run-output">
+              {recipeRun.results.map((res, i) => {
+                const meta = recipeCatalog.find((r) => r.id === res.recipeId);
+                return (
+                  <article className="sg-result" key={`${res.recipeId}-${i}`} id={`recipe-result-${res.recipeId}`}>
+                    <div className="sg-result-head">
+                      <div>
+                        <span className="sg-result-meta">
+                          <span>{meta?.label || res.recipeId}</span>
+                          {res.ok ? <span>{typeof res.costUsd === 'number' && res.costUsd > 0 ? `≈ $${res.costUsd.toFixed(3)}` : ''}{res.ms ? ` · ${(res.ms / 1000).toFixed(1)}s` : ''}</span> : null}
+                        </span>
+                      </div>
+                    </div>
+                    {res.ok ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                        <span className="sg-result-body" style={{ margin: 0 }}>Synthesis ready — formatted in the <strong>REPORT</strong> tab.</span>
+                        <button type="button" className="sg-btn sg-btn-outline" onClick={() => setModalTab('report')}>View in REPORT →</button>
+                      </div>
+                    ) : (
+                      <p className="sg-notice sg-notice-danger" style={{ margin: 0 }}>{res.error || 'No output.'}</p>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          ) : null}
+        </section>
+
         {marketingBriefError ? <p className="sg-notice sg-notice-danger">{marketingBriefError}</p> : null}
       </div>
     );
   };
 
   // IN BRIEF tab — preview of how the SOURCES results land in the brief.
+  // Extract the leading JSON object + trailing prose from a recipe's analysis
+  // output (recipes emit "{...json...}\n\n<prose synthesis>").
+  const parseRecipeAnalysis = (text) => {
+    if (!text || typeof text !== 'string') return { data: null, prose: '' };
+    const start = text.indexOf('{');
+    if (start === -1) return { data: null, prose: text.trim() };
+    let depth = 0, end = -1, inStr = false, esc = false;
+    for (let i = start; i < text.length; i += 1) {
+      const c = text[i];
+      if (esc) { esc = false; continue; }
+      if (c === '\\' && inStr) { esc = true; continue; }
+      if (c === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (c === '{') depth += 1;
+      else if (c === '}') { depth -= 1; if (depth === 0) { end = i; break; } }
+    }
+    if (end === -1) return { data: null, prose: text.trim() };
+    let data = null;
+    try { data = JSON.parse(text.slice(start, end + 1)); } catch { data = null; }
+    return { data, prose: text.slice(end + 1).trim() };
+  };
+
+  // Render the recipe's trailing prose as clean brief copy — strips code fences,
+  // turns `## heading` into a section label, drops `---` rules, and renders
+  // `**bold**` inline. Prevents raw markdown tokens from leaking into the mock.
+  const renderProse = (text, keyPrefix) => {
+    if (!text) return null;
+    const cleaned = text.replace(/```[a-z]*\n?/gi, '').trim();
+    const inline = (s, k) => s.split(/(\*\*[^*]+\*\*)/g).map((p, i) => (
+      /^\*\*[^*]+\*\*$/.test(p)
+        ? <strong key={`${k}-b${i}`}>{p.slice(2, -2)}</strong>
+        : <React.Fragment key={`${k}-t${i}`}>{p}</React.Fragment>
+    ));
+    return cleaned.split(/\n{2,}/).map((raw, i) => {
+      const block = raw.trim();
+      const k = `${keyPrefix}-pb-${i}`;
+      if (!block || /^-{3,}$/.test(block)) return null;
+      if (/^#{1,6}\s/.test(block)) return <div key={k} className="b-sec">{block.replace(/^#{1,6}\s+/, '')}</div>;
+      const lines = block.split(/\n/).map((l) => l.trim()).filter((l) => l && !/^-{3,}$/.test(l));
+      return (
+        <p key={k} className="b-body">
+          {lines.map((l, j) => (
+            <React.Fragment key={`${k}-l${j}`}>{j ? <br /> : null}{inline(l.replace(/^#{1,6}\s+/, ''), `${k}-${j}`)}</React.Fragment>
+          ))}
+        </p>
+      );
+    });
+  };
+
+  // Render one recipe synthesis as a brief-kit paper (UI-kit components only —
+  // b-eyebrow / b-headline / meta-grid / b-grid / b-card / stat-row / pull / dur).
+  const renderRecipeBriefBlock = (res) => {
+    const meta = recipeCatalog.find((r) => r.id === res.recipeId);
+    const { data, prose } = parseRecipeAnalysis(res.analysis);
+    const themes = Array.isArray(data?.themes) ? data.themes : [];
+    const jtbd = Array.isArray(data?.jobsToBeDone) ? data.jobsToBeDone : [];
+    const vocab = Array.isArray(data?.vocabulary) ? data.vocabulary : [];
+    const alternatives = Array.isArray(data?.alternatives) ? data.alternatives : [];
+    const contradictions = Array.isArray(data?.contradictions) ? data.contradictions : [];
+    const dq = data?.dataQuality || null;
+    const gaps = Array.isArray(dq?.gaps) ? dq.gaps : [];
+    const conf = dq?.overallConfidence;
+    const confClass = (c) => (c === 'low' ? ' warn' : c === 'high' ? ' ok' : '');
+    return (
+      <div className="kit-paper" key={`recipe-brief-${res.recipeId}`} id={`recipe-brief-${res.recipeId}`}>
+        <div className="b-eyebrow"><span className="dot" />Marketing Director · Analysis{conf ? <span>{conf} confidence</span> : null}</div>
+        <h2 className="b-headline">{meta?.label || 'Analysis'}</h2>
+
+        {dq ? (
+          <div className="meta-grid" style={{ marginBottom: 18 }}>
+            <div className="meta-tile"><div className="k">Signals analyzed</div><div className="v">{dq.itemsAnalyzed != null ? dq.itemsAnalyzed : '—'}</div></div>
+            <div className="meta-tile"><div className="k">Confidence</div><div className="v">{conf || '—'}</div></div>
+            <div className="meta-tile"><div className="k">Cost</div><div className="v">{typeof res.costUsd === 'number' && res.costUsd > 0 ? `≈ $${res.costUsd.toFixed(3)}` : '—'}</div></div>
+          </div>
+        ) : null}
+
+        {/* Summary first — the human TL;DR, then the structured pieces below. */}
+        {prose ? (
+          <>
+            <div className="b-sec">Summary</div>
+            <div style={{ marginTop: 4 }}>{renderProse(prose, `prose-${res.recipeId}`)}</div>
+          </>
+        ) : null}
+
+        {themes.length ? (
+          <>
+            <div className="b-sec" style={{ marginTop: 22 }}>Themes</div>
+            <div className="b-stack">
+              {themes.map((t, i) => {
+                const q = Array.isArray(t.quotes) ? t.quotes[0] : null;
+                return (
+                  <div className="b-card" key={`th-${res.recipeId}-${i}`}>
+                    <div className="b-theme-head">
+                      <span className="b-handle-name">{t.name}</span>
+                      <span className="b-tags">
+                        {t.confidence ? <span className={`status-tag${confClass(t.confidence)}`}>{t.confidence} conf</span> : null}
+                        {t.intensity ? <span className="dur">{t.intensity} intensity</span> : null}
+                        {t.frequency != null ? <span className="dur">{t.frequency}× seen</span> : null}
+                      </span>
+                    </div>
+                    {t.summary ? <p className="b-body" style={{ margin: '10px 0 0' }}>{t.summary}</p> : null}
+                    {q?.quote ? <p className="pull" style={{ margin: '12px 0 0', maxWidth: 'none' }}>“{q.quote}”</p> : null}
+                    {(q?.source || q?.url) ? (
+                      <p className="b-body mono" style={{ fontSize: 11, margin: '6px 0 0', color: 'var(--ink-soft)' }}>{q?.source || ''}{q?.url ? <> · <a className="b-link" href={q.url} target="_blank" rel="noopener noreferrer">↗ source</a></> : null}</p>
+                    ) : null}
+                    {t.implication ? <div className="b-sowhat"><span className="lbl">So what</span>{t.implication}</div> : null}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        ) : null}
+
+        {jtbd.length ? (
+          <>
+            <div className="b-sec" style={{ marginTop: 22 }}>Jobs to be done</div>
+            <div className="b-stack">
+              {jtbd.map((j, i) => (
+                <div className="meta-grid" key={`jtbd-${res.recipeId}-${i}`}>
+                  <div className="meta-tile"><div className="k">Functional</div><div className="v">{j.functional || '—'}</div></div>
+                  <div className="meta-tile"><div className="k">Emotional</div><div className="v">{j.emotional || '—'}</div></div>
+                  <div className="meta-tile"><div className="k">Social</div><div className="v">{j.social || '—'}</div></div>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : null}
+
+        {vocab.length ? (
+          <>
+            <div className="b-sec" style={{ marginTop: 22 }}>Customer vocabulary</div>
+            <div className="dur-row">
+              {vocab.slice(0, 18).map((v, i) => <span className="dur" key={`vc-${res.recipeId}-${i}`}>“{v}”</span>)}
+            </div>
+          </>
+        ) : null}
+
+        {alternatives.length ? (
+          <>
+            <div className="b-sec" style={{ marginTop: 22 }}>Alternatives considered</div>
+            <div className="dur-row">
+              {alternatives.map((v, i) => <span className="dur" key={`alt-${res.recipeId}-${i}`}>{v}</span>)}
+            </div>
+          </>
+        ) : null}
+
+        {contradictions.length ? (
+          <>
+            <div className="b-sec" style={{ marginTop: 22 }}>Contradictions</div>
+            <div className="b-stack">
+              {contradictions.map((c, i) => (
+                <div className="b-card" key={`con-${res.recipeId}-${i}`} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <span className="status-tag warn" style={{ flexShrink: 0 }}>flag</span>
+                  <p className="b-body" style={{ margin: 0 }}>{c}</p>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : null}
+
+        {gaps.length ? (
+          <>
+            <div className="b-sec" style={{ marginTop: 22 }}>What we still don’t know</div>
+            <div className="b-stack">
+              {gaps.map((g, i) => (
+                <p className="b-body" key={`gap-${res.recipeId}-${i}`} style={{ margin: 0 }}>• {g}</p>
+              ))}
+            </div>
+          </>
+        ) : null}
+      </div>
+    );
+  };
+
+  // REPORT tab = the brief, built ENTIRELY from the brief-kit UI components
+  // (.brief-kit scope ported from dashboard-modal-component-style-guide.html).
+  // Top-of-report scribe — the overall read over the watchlist data.
+  const renderWatchlistAnalysisBlock = (a) => {
+    if (!a || !a.text) return null;
+    const { data, prose } = parseRecipeAnalysis(a.text);
+    const spot = data?.spotlight;
+    const spotHandle = spot?.handle ? String(spot.handle).replace(/^@+/, '') : '';
+    // Bold tracked handle names (with or without @) wherever they appear in free-form text.
+    const handleNames = Array.from(new Set(
+      (Array.isArray(data?.handles) ? data.handles : [])
+        .map((h) => String(h.handle || '').replace(/^@+/, '').trim())
+        .filter(Boolean)
+    ));
+    const boldHandles = (text) => {
+      if (!text || !handleNames.length) return text;
+      const escaped = handleNames.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+      const re = new RegExp(`(@?(?:${escaped.join('|')})\\b)`, 'gi');
+      return String(text).split(re).map((part, i) => {
+        const bare = part.replace(/^@+/, '');
+        return handleNames.some((n) => n.toLowerCase() === bare.toLowerCase())
+          ? <strong key={i}>{part}</strong>
+          : part;
+      });
+    };
+    return (
+      <div className="kit-paper" id="watchlist-analysis-block">
+        <div className="b-eyebrow"><span className="dot" />Marketing Director · Watchlist Brief{spotHandle ? <span>spotlight @{spotHandle}</span> : null}</div>
+        <h2 className="b-headline">Happening on X</h2>
+        {data?.overview ? (
+          <>
+            <div className="b-sec" style={{ marginTop: 4 }}>Overview</div>
+            <p className="pull" style={{ marginTop: 8, maxWidth: 'none' }}>{boldHandles(data.overview)}</p>
+          </>
+        ) : null}
+        {data?.priorityAction ? (
+          <>
+            <div className="b-sec" style={{ marginTop: 22 }}>Suggested action</div>
+            <p className="pull" style={{ marginTop: 8, maxWidth: 'none' }}>{data.priorityAction}</p>
+          </>
+        ) : null}
+        {Array.isArray(data?.handles) && data.handles.length ? (
+          <>
+            <div className="b-sec" style={{ marginTop: 18 }}>Per handle</div>
+            <div className="b-handle-grid">
+              {data.handles.map((h, i) => {
+                const hh = String(h.handle || '').replace(/^@+/, '');
+                return (
+                  <div className="b-card b-handle-card" key={`wla-${i}`}>
+                    <span className="b-handle-name">@{hh}</span>
+                    {h.posting ? <p className="b-body" style={{ margin: '8px 0 0' }}>{h.posting}</p> : null}
+                    {h.talkedAbout ? (
+                      <div className="b-handle-foot">
+                        <div className="b-sec">Talked about</div>
+                        <p className="b-body" style={{ margin: '3px 0 0' }}>{h.talkedAbout}</p>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        ) : null}
+        {spot?.why ? (
+          <div className="b-feature" style={{ marginTop: 22 }}>
+            <div className="lbl">Spotlight · @{spotHandle}</div>
+            <div className="txt">{spot.why}</div>
+          </div>
+        ) : null}
+        {!data && prose ? renderProse(prose, 'wla') : null}
+      </div>
+    );
+  };
+
   const renderSignalsBriefMock = () => {
     const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
-    const x = scoutTestState?.x?.items || [];
+    // X = real per-handle watchlist timelines (each handle's OWN posts).
+    const handles = (watchlistPull.handles || []).filter((h) => (h.ownPosts || []).length);
+    const handleTotal = handles.reduce((n, h) => n + (h.ownPosts?.length || 0), 0);
+    const spotlight = watchlistPull.spotlight || null;
+    const eng = (p) => (
+      <div className="b-eng">
+        <span>♥ {p.likes || 0}</span><span>↺ {p.reposts || 0}</span><span>💬 {p.replies || 0}</span>
+        {p.url ? <a className="b-link" href={p.url} target="_blank" rel="noopener noreferrer">↗ view</a> : null}
+      </div>
+    );
     const reddit = scoutTestState?.reddit?.items || [];
     const web = scoutTestState?.web?.items || [];
-    const total = x.length + reddit.length + web.length;
-    const link = (u, label) => (u ? <a href={u} target="_blank" rel="noopener noreferrer">↗ {label}{hostOf(u) ? ` · ${hostOf(u)}` : ''}</a> : null);
+    const total = handleTotal + reddit.length + web.length;
+    const recipeResults = (recipeRun.results || []).filter((r) => r.ok && r.analysis);
 
-    if (total === 0) {
+    if (total === 0 && !recipeResults.length) {
       return (
-        <div className="signals-sg">
-          <div className="sg-empty">Run a source on the <strong style={{ margin: '0 4px' }}>SOURCES</strong> tab first — results render here exactly as they appear in the Market Signals section of the brief.</div>
+        <div className="brief-kit">
+          <div className="kit-paper">
+            <div className="b-eyebrow"><span className="dot" />Marketing Director · Report</div>
+            <p className="b-sub">Run <strong>Pull timelines</strong> or an analysis skill on the <strong>SOURCES</strong> tab — the report renders here and stays until your next run.</p>
+          </div>
         </div>
       );
     }
 
+    const sourceCard = (it, i, kind) => (
+      <div className="b-card" key={`${kind}-${i}`}>
+        <div className="stat-row"><div className="k">{kind === 'web' ? 'Signal' : 'Thread'}</div><div className="v">{it.tag ? `${it.tag} · ` : ''}{it.title}</div></div>
+        {it.summary ? <div className="stat-row"><div className="k">Detail</div><div className="v">{it.summary}</div></div> : null}
+        {it.url ? <div className="stat-row"><div className="k">Source</div><div className="v"><a className="b-link" href={it.url} target="_blank" rel="noopener noreferrer">↗ {hostOf(it.url) || 'source'}</a></div></div> : null}
+      </div>
+    );
+
     return (
-      <div className="signals-sg">
-        <div className="sg-metrics">
-          <div className="sg-metric"><span className="sg-metric-value">{x.length}</span><span className="sg-metric-label">X Voices</span></div>
-          <div className="sg-metric"><span className="sg-metric-value">{web.length}</span><span className="sg-metric-label">Web Signals</span></div>
-          <div className="sg-metric"><span className="sg-metric-value">{reddit.length}</span><span className="sg-metric-label">Reddit</span></div>
-        </div>
+      <div className="brief-kit">
+        <div className="b-stack">
+          {watchlistPull.analysis ? renderWatchlistAnalysisBlock(watchlistPull.analysis) : null}
 
-        <div className="sg-paper">
-          <div className="kick">Marketing Director · Market Signals</div>
-          <h2>The Latest Signals.</h2>
-          <p className="lede">How these {total} live result{total === 1 ? '' : 's'} appear in the Market Signals section — aggregated into the Executive Brief.</p>
+          {total > 0 ? (
+            <div className="kit-paper" id="signals-report-paper">
+              <div className="b-eyebrow"><span className="dot" />Marketing Director · Market Signals</div>
+              <h2 className="b-headline">Additional Signals</h2>
+              <p className="b-sub">{handleTotal} post{handleTotal === 1 ? '' : 's'} from {handles.length} tracked handle{handles.length === 1 ? '' : 's'}{(web.length + reddit.length) ? ` · ${web.length + reddit.length} web/community signal${(web.length + reddit.length) === 1 ? '' : 's'}` : ''}.</p>
 
-          {x.length ? (
-            <>
-              <div className="psec">Voices · X / Twitter</div>
-              <div className="quotewall">
-                {x.map((it, i) => (
-                  <div key={`xq-${i}`} className="qtile">
-                    <div className="q">“{it.summary || it.title}”</div>
-                    <div className="who"><span>{it.tag || it.title || '@source'}</span><span style={{ color: '#1a8a4f' }}>LIVE</span></div>
+              {handles.length ? (
+                <div className="scores" style={{ margin: '12px 0' }}>
+                  {handles.slice(0, 3).map((h) => (
+                    <div className="score" key={`sc-${h.handle}`}><div className="lbl">@{h.handle}</div><div className="num">{h.engagementTotal || 0}</div></div>
+                  ))}
+                </div>
+              ) : null}
+
+              {handles.map((h) => {
+                const feat = h.featured && (h.featured.text || h.featured.url) ? h.featured : null;
+                const rest = (h.ownPosts || []).filter((p) => !feat || p.url !== feat.url).slice(0, 6);
+                return (
+                  <div key={`wlh-${h.handle}`}>
+                    <div className="b-handle-head">
+                      <span className={`b-handle-name${h.handle === spotlight ? ' spot' : ''}`}>@{h.handle}</span>
+                      <span className="b-handle-meta">{h.count} post{h.count === 1 ? '' : 's'} · {h.engagementTotal || 0} interactions</span>
+                    </div>
+                    <div className="b-bento">
+                      {feat ? (
+                        <div className="b-feature">
+                          <div className="lbl">Top post</div>
+                          <div className="txt">{(feat.text || '').slice(0, 240)}</div>
+                          {eng(feat)}
+                        </div>
+                      ) : null}
+                      {rest.map((p, i) => (
+                        <div className="b-bubble" key={`wlh-${h.handle}-${i}`}>
+                          <div className="txt">{(p.text || '').slice(0, 170)}</div>
+                          {eng(p)}
+                        </div>
+                      ))}
+                    </div>
+                    {(h.mentions || []).length ? (
+                      <>
+                        <div className="b-sec" style={{ marginTop: 14 }}>Mentions · how @{h.handle} is talked about</div>
+                        <div className="b-stack">
+                          {h.mentions.slice(0, 5).map((m, i) => (
+                            <div className="b-bubble" key={`men-${h.handle}-${i}`} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12, justifyContent: 'space-between' }}>
+                              <div className="txt" style={{ flex: 1 }}>@{m.author}: {(m.text || '').slice(0, 150)}</div>
+                              <span className="b-handle-meta" style={{ whiteSpace: 'nowrap' }}>♥{m.likes || 0} 💬{m.replies || 0}{m.url ? <> · <a className="b-link" href={m.url} target="_blank" rel="noopener noreferrer">↗</a></> : null}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : null}
                   </div>
-                ))}
-              </div>
-            </>
+                );
+              })}
+
+              {web.length ? (
+                <>
+                  <div className="b-sec" style={{ marginTop: 16 }}>Market Signals · Web</div>
+                  <div className="b-stack">{web.map((it, i) => sourceCard(it, i, 'web'))}</div>
+                </>
+              ) : null}
+
+              {reddit.length ? (
+                <>
+                  <div className="b-sec" style={{ marginTop: 16 }}>Community · Reddit</div>
+                  <div className="b-stack">{reddit.map((it, i) => sourceCard(it, i, 'reddit'))}</div>
+                </>
+              ) : null}
+            </div>
           ) : null}
 
-          {web.length ? (
-            <>
-              <div className="psec">Market Signals · Web</div>
-              <div style={{ display: 'grid', gap: 8 }}>
-                {web.map((it, i) => (
-                  <article key={`webr-${i}`} className="sg-result">
-                    <h4 className="sg-result-title">{it.tag ? `[${it.tag}] ` : ''}{it.title}</h4>
-                    {it.summary ? <p className="sg-result-body">{it.summary}</p> : null}
-                    {link(it.url, 'Source')}
-                  </article>
-                ))}
-              </div>
-            </>
-          ) : null}
-
-          {reddit.length ? (
-            <>
-              <div className="psec">Community · Reddit</div>
-              <div style={{ display: 'grid', gap: 8 }}>
-                {reddit.map((it, i) => (
-                  <article key={`rdr-${i}`} className="sg-result">
-                    <h4 className="sg-result-title">{it.tag ? `${it.tag} · ` : ''}{it.title}</h4>
-                    {it.summary ? <p className="sg-result-body">{it.summary}</p> : null}
-                    {link(it.url, 'View thread')}
-                  </article>
-                ))}
-              </div>
-            </>
-          ) : null}
-
-          <p className="lede" style={{ marginTop: 22, borderTop: '1px solid #ddd6c8', paddingTop: 13 }}>
-            These feed the brief's <strong>Market Signals</strong> section and roll up into the <strong>Executive Brief</strong>. Design preview — we port the final look to the live brief renderer.
-          </p>
+          {recipeResults.map((res) => renderRecipeBriefBlock(res))}
         </div>
       </div>
     );
@@ -5092,6 +6075,97 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   const displayProfile = bootstrap.userProfile || userProfile;
   const currentRun = recentRuns[0] || null;
   const dashboardState = bootstrap.dashboardState;
+
+  const refreshVideoRemixJobs = useCallback(async () => {
+    if (!user) return;
+    const cid = client?.clientId || client?.id || bootstrap?.effectiveClientId;
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(apiPath('/api/dashboard/media?action=jobs&type=video-remix'), {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !Array.isArray(data.jobs)) return;
+      const jobs = data.jobs;
+      const completedCaptures = jobs
+        .filter((job) => job?.status === 'done' && job.output?.downloadUrl)
+        .map((job) => job.output);
+      const activeJob = jobs.find((job) => job?.status === 'queued' || job?.status === 'processing') || null;
+      if (completedCaptures.length || activeJob) {
+        setBootstrap((prev) => {
+          if (!prev?.dashboardState) return prev;
+          const ds = prev.dashboardState;
+          const current = Array.isArray(ds.mediaCaptures) ? ds.mediaCaptures : [];
+          const keyed = new Map(current.map((capture) => [capture?.jobId || capture?.storagePath || capture?.downloadUrl, capture]));
+          for (const capture of completedCaptures) {
+            keyed.set(capture?.jobId || capture?.storagePath || capture?.downloadUrl, capture);
+          }
+          return {
+            ...prev,
+            dashboardState: {
+              ...ds,
+              mediaCaptures: Array.from(keyed.values()).filter(Boolean).slice(-40),
+              mediaVideoPending: activeJob
+                ? {
+                  jobId: activeJob.jobId,
+                  editJobId: activeJob.editJobId || null,
+                  type: 'video-remix',
+                  queuedAt: activeJob.createdAt || activeJob.updatedAt || new Date().toISOString(),
+                  sourceFolders: activeJob.recipe?.sourceFolders || activeJob.recipeFull?.sourceFolders || [],
+                }
+                : null,
+            },
+          };
+        });
+      }
+      const localPending = readVideoRemixPendingJob(cid);
+      const localJob = localPending?.jobId ? jobs.find((job) => job.jobId === localPending.jobId) : null;
+      if (localJob && localJob.status !== 'queued' && localJob.status !== 'processing') {
+        writeVideoRemixPendingJob(cid, null);
+      }
+    } catch {
+      /* non-fatal: live dashboard listener and worker reconcile still cover it */
+    }
+  }, [user, client?.clientId, client?.id, bootstrap?.effectiveClientId, apiPath]);
+
+  useEffect(() => {
+    const cid = client?.clientId || client?.id || bootstrap?.effectiveClientId;
+    if (!user || !cid) return undefined;
+    const localPending = readVideoRemixPendingJob(cid);
+    if (localPending?.jobId) {
+      setBootstrap((prev) => {
+        if (!prev?.dashboardState) return prev;
+        const ds = prev.dashboardState;
+        if (ds.mediaVideoPending?.jobId === localPending.jobId) return prev;
+        return {
+          ...prev,
+          dashboardState: {
+            ...ds,
+            mediaVideoPending: {
+              jobId: localPending.jobId,
+              editJobId: localPending.editJobId || null,
+              type: 'video-remix',
+              queuedAt: localPending.queuedAt || new Date().toISOString(),
+              sourceFolders: localPending.sourceFolders || [],
+            },
+          },
+        };
+      });
+    }
+    refreshVideoRemixJobs();
+    const handleFocus = () => refreshVideoRemixJobs();
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') refreshVideoRemixJobs();
+    };
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [user, client?.clientId, client?.id, bootstrap?.effectiveClientId, refreshVideoRemixJobs]);
+
   const openCapabilityCard = useCallback((card, options = {}) => {
     if (!card) return;
     const forceModal = Boolean(options.forceModal);
@@ -5621,6 +6695,14 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   const adhocActive = !showIntakeModal && Boolean(adhocTerminal?.open);
   const adhocRunning = adhocActive && adhocTerminal?.status === 'running';
 
+  // Auto-close the render terminal once it finishes. Brief delay so the final
+  // "done" line + Open Video link stay readable. Errors stay open for retry.
+  useEffect(() => {
+    if (adhocTerminal?.status !== 'done') return undefined;
+    const t = setTimeout(() => closeAdhocTerminal(), 4000);
+    return () => clearTimeout(t);
+  }, [adhocTerminal?.status, closeAdhocTerminal]);
+
   // ── Intake modal dismissal persistence + background-run toast ───────────────
   // Closing the build terminal mid-run must survive a reload: persist the
   // dismissal keyed to the active run so a reload drops straight to the
@@ -6072,9 +7154,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     }
   }, [showIntakeModal, completionCountdown, revealedLineCount, adhocTerminal]);
 
-  // Marquee rAF for modal — exact same implementation as AuthPage
+  // Marquee rAF for modal — exact same implementation as AuthPage.
+  // Runs whenever the modal is mounted: the intake/build flow (showIntakeModal)
+  // OR an adhoc render terminal (Video Remix / Analysis Skills), which opens with
+  // showIntakeModal false — otherwise its header marquee stays frozen.
   useEffect(() => {
-    if (!showIntakeModal) return undefined;
+    if (!showIntakeModal && !adhocTerminal?.open) return undefined;
     const SPEED = 72;
     const tick = (timestamp) => {
       if (modalMarqueePrevTimeRef.current === null) modalMarqueePrevTimeRef.current = timestamp;
@@ -6091,7 +7176,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     };
     modalMarqueeAnimRef.current = requestAnimationFrame(tick);
     return () => { cancelAnimationFrame(modalMarqueeAnimRef.current); modalMarqueePrevTimeRef.current = null; };
-  }, [showIntakeModal]);
+  }, [showIntakeModal, adhocTerminal?.open]);
 
   // Marquee rAF for no-workspace associate screen
   useEffect(() => {
@@ -9950,11 +11035,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 role="menuitem"
                 onClick={(e) => {
                   e.preventDefault();
-                  const a = document.createElement('a');
-                  fetch(it.href, { mode: 'cors' })
-                    .then((r) => { if (!r.ok) throw new Error(); return r.blob(); })
-                    .then((b) => { const u = URL.createObjectURL(b); a.href = u; a.download = it.filename || 'download'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000); })
-                    .catch(() => window.open(it.href, '_blank', 'noopener'));
+                  downloadBrowserAsset(it.href, it.filename || 'download', {
+                    preferNativeShare: /^video\//i.test(it.contentType || '') || /\.(mp4|mov|m4v|webm)(\?|$)/i.test(it.href || ''),
+                    mimeType: it.contentType || '',
+                  });
                   setDownloadMenu(null);
                 }}
               >
@@ -10653,8 +11737,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               // card-shell download button shows when this is non-empty.
               const getCardDownloads = (card) => {
                 const out = [];
-                const add = (label, href, filename) => { if (href) out.push({ label, href, filename }); };
-                const safe = (s) => String(s || 'download').replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 80);
+                const add = (label, href, filename, contentType = '') => { if (href) out.push({ label, href, filename, contentType }); };
+                const safe = (s) => safeDownloadName(s || 'download').slice(0, 80);
                 switch (card.id) {
                   case 'brief':
                   case 'marketing-brief':
@@ -10664,7 +11748,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     add('Brief (PDF)', briefPdfUrl, `${safe(client?.businessName || 'creative')}-brief.pdf`);
                     break;
                   case 'mockup-studio':
-                    add('Motion mockup (MP4)', latestStudioVideoUrl, `${safe(client?.businessName || 'mockup')}-studio.mp4`);
+                    add('Motion mockup (MP4)', latestStudioVideoUrl, `${safe(client?.businessName || 'mockup')}-studio.mp4`, latestStudioVideo?.contentType || 'video/mp4');
+                    break;
+                  case 'video-remix':
+                    add('Video remix (MP4)', latestRemixVideoUrl, `${safe(client?.businessName || 'video-remix')}-remix.mp4`, 'video/mp4');
                     break;
                   case 'multi-device-view':
                     add('Device mockup (PNG)', homepageDeviceMockupUrl, `${safe(client?.businessName)}-device-mockup.png`);
@@ -10689,18 +11776,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               // Fetch the asset and save it locally (real "Save", not a tab open).
               // Cross-origin hosts that block CORS fall back to opening the URL.
               const triggerDownload = async (href, filename) => {
-                try {
-                  const res = await fetch(href, { mode: 'cors' });
-                  if (!res.ok) throw new Error(String(res.status));
-                  const blob = await res.blob();
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url; a.download = filename || 'download';
-                  document.body.appendChild(a); a.click(); a.remove();
-                  setTimeout(() => URL.revokeObjectURL(url), 4000);
-                } catch {
-                  window.open(href, '_blank', 'noopener');
-                }
+                await downloadBrowserAsset(href, filename || 'download', {
+                  preferNativeShare: /\.(mp4|mov|m4v|webm)(\?|$)/i.test(href || ''),
+                  mimeType: /\.(mp4|mov|m4v)(\?|$)/i.test(href || '') ? 'video/mp4' : '',
+                });
               };
 
               // Click handler for a card's download button: one asset → download it;
@@ -12190,7 +13269,16 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   || '\u00A0'}
               </span>
               {adhocActive && adhocTerminal.status === 'done' && adhocTerminal.videoUrl ? (
-                <a id="intake-modal-footer-action" href={adhocTerminal.videoUrl} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 'auto', textDecoration: 'underline', color: '#2a2420', fontFamily: '"Space Mono", monospace', fontSize: '0.72rem' }}>Open Video <UpRightArrow style={{ marginLeft: '0.15rem', opacity: 0.82 }} /></a>
+                <span id="intake-modal-footer-action" style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+                  <button
+                    type="button"
+                    onClick={() => downloadBrowserAsset(adhocTerminal.videoUrl, `${safeDownloadName(client?.businessName || 'video')}-render.mp4`, { preferNativeShare: true, mimeType: 'video/mp4' })}
+                    style={{ border: 0, background: 'transparent', padding: 0, textDecoration: 'underline', color: '#2a2420', fontFamily: '"Space Mono", monospace', fontSize: '0.72rem', cursor: 'pointer' }}
+                  >
+                    Save Video
+                  </button>
+                  <a href={adhocTerminal.videoUrl} target="_blank" rel="noopener noreferrer" download={`${safeDownloadName(client?.businessName || 'video')}-render.mp4`} style={{ textDecoration: 'underline', color: '#2a2420', fontFamily: '"Space Mono", monospace', fontSize: '0.72rem' }}>Open <UpRightArrow style={{ marginLeft: '0.15rem', opacity: 0.82 }} /></a>
+                </span>
               ) : (
                 <span id="intake-modal-footer-note">
                   {adhocActive
@@ -12819,10 +13907,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     // .toolbar); the video keeps its exact attributes/styling.
                     <div className="vrk-scope vrk-player-shell" onClick={(e) => e.stopPropagation()}>
                       <div className="preview-surface">
-                        <div className="toolbar">
-                          <a className="btn btn-outline" href={latestRemixVideoUrl} download>Download</a>
-                          <a className="btn btn-outline" href={latestRemixVideoUrl} target="_blank" rel="noopener noreferrer">Open <span className="cta-icon">↗</span></a>
-                        </div>
                         <div className="preview-media">
                           <video
                             key={latestRemixVideoUrl}
@@ -15382,9 +16466,26 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                  const filterList = Array.isArray(videoRemixOptions.filters) ? videoRemixOptions.filters : [];
 	                  const overlayList = Array.isArray(videoRemixOptions.overlays) ? videoRemixOptions.overlays : [];
 	                  const logoList = Array.isArray(videoRemixOptions.logos) ? videoRemixOptions.logos : [];
+	                  const folderDetailList = videoRemixFolderDetails.length
+	                    ? videoRemixFolderDetails
+	                    : videoRemixFolders.map((name) => ({ name, displayName: name, count: null, type: 'root' }));
 	                  const selectedArtist = artistList.find((a) => a.name === draft.artist) || null;
 	                  const artistMixes = selectedArtist && Array.isArray(selectedArtist.mixes) ? selectedArtist.mixes : [];
 	                  const canGenerate = !videoRemixLoading && draft.selectedFolders.length > 0;
+	                  const effectiveExistingFolder = videoRemixUploadDraft.existingFolder || folderDetailList[0]?.name || '';
+	                  const uploadTargetFolder = videoRemixUploadDraft.folderMode === 'new'
+	                    ? sanitizeVideoRemixFolderPreview(videoRemixUploadDraft.newFolderName)
+	                    : effectiveExistingFolder;
+	                  const uploadQueuedCount = videoRemixUploadQueue.filter((item) => item.status !== 'done').length;
+	                  const orderItems = videoRemixVideoOrder.items || [];
+	                  const orderFolder = videoRemixVideoOrder.folder;
+	                  const videoOrderReady = orderFolder
+	                    && draft.selectedFolders.length === 1
+	                    && draft.selectedFolders[0] === orderFolder
+	                    && orderItems.length === 6;
+	                  const videoOrderPayload = videoOrderReady
+	                    ? orderItems.map((item, index) => ({ segmentIndex: index, videoName: item.name }))
+	                    : null;
 	                  const toggleFolder = (folder) => setVideoRemixDraft((prev) => {
 	                    const has = prev.selectedFolders.includes(folder);
 	                    return { ...prev, selectedFolders: has ? prev.selectedFolders.filter((f) => f !== folder) : [...prev.selectedFolders, folder] };
@@ -15405,6 +16506,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                      logos: { top: draft.topLogo || null, end: draft.endLogo || null },
 	                      useArtistImage: draft.useArtistImage,
 	                      endCard: draft.endTextOverlay ? { text: draft.endTextOverlay } : null,
+	                      ...(videoOrderPayload ? { videoOrder: videoOrderPayload } : {}),
 	                    };
 	                    runVideoRemix({ recipe });
 	                  };
@@ -15415,6 +16517,16 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                    >
 	                      <div className="tabs">
 	                        <button type="button" className={`tab${modalTab === 'remix' ? ' is-active' : ''}`} onClick={() => setModalTab('remix')}>REMIX</button>
+	                        <button
+	                          type="button"
+	                          className={`tab${modalTab === 'source' ? ' is-active' : ''}`}
+	                          onClick={() => {
+	                            setModalTab('source');
+	                            refreshVideoRemixFolders().catch((err) => setVideoRemixUploadError(err?.message || 'Could not load source folders.'));
+	                          }}
+	                        >
+	                          SOURCE MEDIA
+	                        </button>
 	                        <button type="button" className={`tab${modalTab === 'assets' ? ' is-active' : ''}`} onClick={() => setModalTab('assets')}>SAVED ASSETS</button>
 	                      </div>
 	                      <div className="panel-body">
@@ -15462,9 +16574,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                              )}
 	                              <div className="field">
 	                                <span className="label">Source folders ({draft.selectedFolders.length} selected)</span>
-	                                {videoRemixFolders.length ? (
+	                                {folderDetailList.length ? (
 	                                  <div className="toggle-grid" role="group" aria-label="Source folders">
-	                                    {videoRemixFolders.map((folder) => {
+	                                    {folderDetailList.map((folderInfo) => {
+	                                      const folder = folderInfo.name;
 	                                      const on = draft.selectedFolders.includes(folder);
 	                                      return (
 	                                        <button
@@ -15479,6 +16592,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                          <span className="check" aria-hidden="true">{on ? '✓' : ''}</span>
 	                                          <span>
 	                                            <span className="toggle-title">{folder}</span>
+	                                            {folderInfo.count != null ? <span className="toggle-desc">{folderInfo.count} media files</span> : null}
 	                                          </span>
 	                                        </button>
 	                                      );
@@ -15487,6 +16601,17 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                ) : (
 	                                  <p className="hint">No source folders found yet.</p>
 	                                )}
+	                                {orderFolder ? (
+	                                  <div className={`order-status${videoOrderReady ? ' is-ready' : ''}`}>
+	                                    <span className="order-status-title">Manual order</span>
+	                                    <span>{orderItems.length}/6 videos from {orderFolder}</span>
+	                                    {!videoOrderReady ? (
+	                                      <button type="button" className="btn btn-outline" onClick={() => applyVideoRemixOrderFolder(orderFolder)}>
+	                                        Use this folder
+	                                      </button>
+	                                    ) : null}
+	                                  </div>
+	                                ) : null}
 	                              </div>
 	                              <label className="field">
 	                                <span className="label">Filter look</span>
@@ -15576,15 +16701,316 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                            </button>
 	                          </section>
 	                        )}
+	                        {modalTab === 'source' && (
+	                          <>
+	                            <section className="section">
+	                              <div className="section-head">
+	                                <span className="index">UP</span>
+	                                <div>
+	                                  <h3>Source media</h3>
+	                                  <p>Upload clips or stills into an EditVideos source folder, then use that folder for the next remix.</p>
+	                                </div>
+	                                <button type="button" className="btn btn-outline" onClick={refreshVideoRemixFolders}>Refresh</button>
+	                              </div>
+	                              <input
+	                                ref={videoRemixUploadInputRef}
+	                                type="file"
+	                                accept="video/*,image/*,.mov,.mp4,.m4v,.avi,.mkv,.webm,.png,.jpg,.jpeg,.gif,.svg,.webp"
+	                                multiple
+	                                hidden
+	                                onChange={(e) => {
+	                                  addVideoRemixUploadFiles(e.target.files);
+	                                  e.target.value = '';
+	                                }}
+	                              />
+	                              <button
+	                                type="button"
+	                                className="upload-drop"
+	                                onClick={() => videoRemixUploadInputRef.current?.click()}
+	                                onDragOver={(e) => e.preventDefault()}
+	                                onDrop={(e) => {
+	                                  e.preventDefault();
+	                                  addVideoRemixUploadFiles(e.dataTransfer.files);
+	                                }}
+	                              >
+	                                <span className="upload-drop-icon"><Paperclip size={18} /></span>
+	                                <span>
+	                                  <span className="upload-drop-title">Add videos or images</span>
+	                                  <span className="upload-drop-meta">MOV, MP4, WEBM, PNG, JPG, GIF, SVG</span>
+	                                </span>
+	                              </button>
+	                              <div className="field-grid">
+	                                <div className="field">
+	                                  <span className="label">Folder target</span>
+	                                  <div className="segmented" role="group" aria-label="Folder target">
+	                                    <button
+	                                      type="button"
+	                                      className={videoRemixUploadDraft.folderMode !== 'new' ? 'is-active' : ''}
+	                                      onClick={() => setVideoRemixUploadDraft((prev) => ({ ...prev, folderMode: 'existing' }))}
+	                                    >
+	                                      Existing
+	                                    </button>
+	                                    <button
+	                                      type="button"
+	                                      className={videoRemixUploadDraft.folderMode === 'new' ? 'is-active' : ''}
+	                                      onClick={() => setVideoRemixUploadDraft((prev) => ({ ...prev, folderMode: 'new' }))}
+	                                    >
+	                                      New
+	                                    </button>
+	                                  </div>
+	                                </div>
+	                                {videoRemixUploadDraft.folderMode === 'new' ? (
+	                                  <label className="field">
+	                                    <span className="label">New folder</span>
+	                                    <input
+	                                      value={videoRemixUploadDraft.newFolderName}
+	                                      placeholder="neighborhood-cutaways"
+	                                      onChange={(e) => setVideoRemixUploadDraft((prev) => ({ ...prev, newFolderName: e.target.value }))}
+	                                    />
+	                                    <span className="hint">Folder: {uploadTargetFolder || 'not set'}</span>
+	                                  </label>
+	                                ) : (
+	                                  <label className="field">
+	                                    <span className="label">Existing folder</span>
+	                                    <select
+	                                      value={effectiveExistingFolder}
+	                                      onChange={(e) => setVideoRemixUploadDraft((prev) => ({ ...prev, existingFolder: e.target.value }))}
+	                                      disabled={!folderDetailList.length}
+	                                    >
+	                                      {folderDetailList.length ? folderDetailList.map((folder) => (
+	                                        <option key={folder.name} value={folder.name}>
+	                                          {folder.name}{folder.count != null ? ` (${folder.count})` : ''}
+	                                        </option>
+	                                      )) : <option value="">Loading EditVideos folders...</option>}
+	                                    </select>
+	                                  </label>
+	                                )}
+	                              </div>
+	                              <div className="field">
+	                                <span className="label">Orientation</span>
+	                                <div className="orientation-grid" role="group" aria-label="Upload orientation">
+	                                  {[
+	                                    ['auto', 'Auto', 'Detect'],
+	                                    ['square', 'Square', '1:1'],
+	                                    ['portrait', 'Portrait', '9:16'],
+	                                    ['landscape', 'Landscape', '16:9'],
+	                                  ].map(([value, label, meta]) => (
+	                                    <button
+	                                      key={value}
+	                                      type="button"
+	                                      className={`orientation-tile${videoRemixUploadDraft.orientation === value ? ' is-on' : ''}`}
+	                                      onClick={() => setVideoRemixUploadDraft((prev) => ({ ...prev, orientation: value }))}
+	                                    >
+	                                      <span className={`orientation-shape orientation-${value}`} />
+	                                      <span>
+	                                        <span className="toggle-title">{label}</span>
+	                                        <span className="toggle-desc">{meta}</span>
+	                                      </span>
+	                                    </button>
+	                                  ))}
+	                                </div>
+	                              </div>
+	                              {videoRemixUploadQueue.length ? (
+	                                <div className="upload-queue" data-tooltip-disabled="true">
+	                                  {videoRemixUploadQueue.map((item) => (
+	                                    <div key={item.id} className={`upload-row upload-row-${item.status}`}>
+	                                      <span className="upload-kind">{String(item.type || '').startsWith('image/') ? 'IMG' : 'VID'}</span>
+	                                      <span className="upload-file">
+	                                        <span className="upload-name">{item.name}</span>
+	                                        <span className="upload-meta">{formatVideoRemixBytes(item.size)} · {item.status}</span>
+	                                      </span>
+	                                      <span className="upload-progress" aria-label={`${item.progress || 0}%`}>
+	                                        <span style={{ width: `${Math.max(0, Math.min(100, item.progress || 0))}%` }} />
+	                                      </span>
+	                                      <button
+	                                        type="button"
+	                                        className="btn btn-outline upload-remove"
+	                                        disabled={videoRemixUploadLoading || item.status === 'done'}
+	                                        onClick={() => removeVideoRemixUploadFile(item.id)}
+	                                      >
+	                                        Remove
+	                                      </button>
+	                                    </div>
+	                                  ))}
+	                                </div>
+	                              ) : null}
+	                              {videoRemixUploadError ? <p className="hint-danger">{videoRemixUploadError}</p> : null}
+	                              <button
+	                                type="button"
+	                                className="btn cta-pill-btn cta-primary-wide"
+	                                disabled={videoRemixUploadLoading || !uploadQueuedCount || !uploadTargetFolder}
+	                                onClick={runVideoRemixUpload}
+	                              >
+	                                <span className="cta-text">{videoRemixUploadLoading ? 'Uploading…' : 'Upload to Source Folder'}</span>
+	                                <span className="cta-icon">↗</span>
+	                              </button>
+	                            </section>
+	                            <section className="section">
+	                              <div className="section-head">
+	                                <span className="index">FL</span>
+	                                <div>
+	                                  <h3>Folder browser</h3>
+	                                  <p>Select any folder here to preview its media or send it back to Remix.</p>
+	                                </div>
+	                              </div>
+	                              {folderDetailList.length ? (
+	                                <div className="folder-grid">
+	                                  {folderDetailList.map((folder) => {
+	                                    const selected = draft.selectedFolders.includes(folder.name);
+	                                    const previewing = videoRemixFolderFiles.folder === folder.name;
+	                                    return (
+	                                      <button
+	                                        key={folder.name}
+	                                        type="button"
+	                                        className={`folder-card${selected ? ' is-on' : ''}${previewing ? ' is-previewing' : ''}`}
+	                                        onClick={() => loadVideoRemixFolderFiles(folder.name)}
+	                                      >
+	                                        <span className="folder-name">{folder.name}</span>
+	                                        <span className="folder-meta">{folder.count != null ? `${folder.count} files` : folder.type}</span>
+	                                      </button>
+	                                    );
+	                                  })}
+	                                </div>
+	                              ) : (
+	                                <div className="empty">No source folders found.</div>
+	                              )}
+	                              {videoRemixFolderFiles.folder ? (
+	                                <div className="folder-preview">
+	                                  <div className="list-head">
+	                                    <span className="list-title">{videoRemixFolderFiles.folder}</span>
+	                                    <div className="order-actions">
+	                                      <button
+	                                        type="button"
+	                                        className="btn btn-outline"
+	                                        onClick={() => {
+	                                          const folder = videoRemixFolderFiles.folder;
+	                                          setVideoRemixDraft((prev) => ({
+	                                            ...prev,
+	                                            selectedFolders: prev.selectedFolders.includes(folder) ? prev.selectedFolders : [...prev.selectedFolders, folder],
+	                                          }));
+	                                          setModalTab('remix');
+	                                        }}
+	                                      >
+	                                        Use for Remix
+	                                      </button>
+	                                      <button
+	                                        type="button"
+	                                        className="btn btn-outline"
+	                                        disabled={orderFolder !== videoRemixFolderFiles.folder || orderItems.length !== 6}
+	                                        onClick={() => applyVideoRemixOrderFolder(videoRemixFolderFiles.folder)}
+	                                      >
+	                                        Use order
+	                                      </button>
+	                                    </div>
+	                                  </div>
+	                                  <div className="order-builder">
+	                                    <div className="order-builder-head">
+	                                      <div>
+	                                        <span className="label">Clip order row</span>
+	                                        <p className="hint">Tap video thumbnails below to fill the six render segments in order.</p>
+	                                      </div>
+	                                      <div className="order-actions">
+	                                        <span className="order-count">{orderFolder === videoRemixFolderFiles.folder ? orderItems.length : 0}/6</span>
+	                                        <button
+	                                          type="button"
+	                                          className="btn btn-outline"
+	                                          disabled={orderFolder !== videoRemixFolderFiles.folder || !orderItems.length}
+	                                          onClick={clearVideoRemixOrder}
+	                                        >
+	                                          Clear
+	                                        </button>
+	                                      </div>
+	                                    </div>
+	                                    <div className="order-row" aria-label="Selected video order">
+	                                      {Array.from({ length: 6 }, (_, index) => {
+	                                        const item = orderFolder === videoRemixFolderFiles.folder ? orderItems[index] : null;
+	                                        return (
+	                                          <div key={`${videoRemixFolderFiles.folder}-slot-${index}`} className={`order-slot${item ? ' is-filled' : ''}`}>
+	                                            <span className="order-slot-index">{index + 1}</span>
+	                                            {item ? (
+	                                              <>
+	                                                {item.url ? (
+	                                                  <video src={item.url} muted playsInline preload="metadata" />
+	                                                ) : (
+	                                                  <span className="order-slot-empty">Video</span>
+	                                                )}
+	                                                <span className="order-slot-name">{item.name}</span>
+	                                                <div className="order-slot-controls">
+	                                                  <button type="button" className="mini-icon-btn" disabled={index === 0} onClick={() => moveVideoRemixOrderItem(index, -1)}>Left</button>
+	                                                  <button type="button" className="mini-icon-btn" disabled={index === orderItems.length - 1} onClick={() => moveVideoRemixOrderItem(index, 1)}>Right</button>
+	                                                  <button type="button" className="mini-icon-btn" onClick={() => removeVideoRemixOrderItem(index)} aria-label={`Remove ${item.name}`}>
+	                                                    <Trash2 size={12} />
+	                                                  </button>
+	                                                </div>
+	                                              </>
+	                                            ) : (
+	                                              <span className="order-slot-empty">Drop {index + 1}</span>
+	                                            )}
+	                                          </div>
+	                                        );
+	                                      })}
+	                                    </div>
+	                                  </div>
+	                                  {videoRemixFolderFilesLoading ? (
+	                                    <div className="empty">Loading folder media…</div>
+	                                  ) : videoRemixFolderFiles.files.length ? (
+	                                    <div className="media-thumb-grid">
+	                                      {videoRemixFolderFiles.files.map((file) => {
+	                                        const orderedIndex = orderFolder === videoRemixFolderFiles.folder
+	                                          ? orderItems.findIndex((item) => (item.fullPath || item.name) === (file.fullPath || file.name))
+	                                          : -1;
+	                                        return (
+	                                          <button
+	                                            key={file.fullPath || file.name}
+	                                            type="button"
+	                                            className={`media-thumb${orderedIndex >= 0 ? ' is-ordered' : ''}`}
+	                                            disabled={file.kind !== 'video'}
+	                                            onClick={() => addVideoRemixOrderItem(file, videoRemixFolderFiles.folder)}
+	                                            aria-label={file.kind === 'video' ? `Add ${file.name} to clip order` : `${file.name} preview`}
+	                                          >
+	                                            {file.kind === 'video' ? (
+	                                              <video src={file.url || undefined} muted playsInline preload="metadata" />
+	                                            ) : file.url ? (
+	                                              <img src={file.url} alt={file.name} loading="lazy" />
+	                                            ) : (
+	                                              <span>{file.kind}</span>
+	                                            )}
+	                                            {file.kind === 'video' ? (
+	                                              <span className="media-thumb-order-badge">{orderedIndex >= 0 ? orderedIndex + 1 : '+'}</span>
+	                                            ) : null}
+	                                            <span className="media-thumb-name">{file.name}</span>
+	                                            <span className="media-thumb-meta">{file.kind === 'video' ? 'Add to order' : 'Preview only'}</span>
+	                                          </button>
+	                                        );
+	                                      })}
+	                                    </div>
+	                                  ) : (
+	                                    <div className="empty">No media files in this folder.</div>
+	                                  )}
+	                                </div>
+	                              ) : null}
+	                            </section>
+	                          </>
+	                        )}
 	                        {modalTab === 'assets' && (
 	                          savedRemixes.length ? savedRemixes.map((asset) => {
 	                            const url = asset.downloadUrl || asset.url || null;
+	                            const fileName = safeDownloadName(`${client?.businessName || 'video-remix'}-${asset.jobId || asset.capturedAt || 'render'}.mp4`);
 	                            return (
 	                              <article key={asset.storagePath || url || asset.jobId} className="list-card">
 	                                <div className="list-head">
 	                                  <span className="list-title">{asset.label || 'Branded remix'}</span>
 	                                  {url ? (
-	                                    <a className="btn btn-outline" href={url} target="_blank" rel="noopener noreferrer">Open <span className="cta-icon">↗</span></a>
+	                                    <div className="order-actions">
+	                                      <button
+	                                        type="button"
+	                                        className="btn btn-outline"
+	                                        onClick={() => downloadBrowserAsset(url, fileName, { preferNativeShare: true, mimeType: asset.contentType || 'video/mp4' })}
+	                                      >
+	                                        Save Video
+	                                      </button>
+	                                      <a className="btn btn-outline" href={url} target="_blank" rel="noopener noreferrer" download={fileName}>Open <span className="cta-icon">↗</span></a>
+	                                    </div>
 	                                  ) : null}
 	                                </div>
 	                                <div className="list-body">video_remix · {asset.capturedAt ? new Date(asset.capturedAt).toLocaleString() : 'Saved'}</div>
@@ -15666,7 +17092,15 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         </div>
                       )}
 
-                      {['report', 'solutions', 'problems'].includes(modalTab) && (
+                      {/* Market Signals REPORT tab = the brief-style mockup with all data
+                          (analysis-skill synthesis + any live source results). */}
+                      {activeTileModal.cardId === 'signals' && modalTab === 'report' && (
+                        <div className="tile-detail-tab-pane" style={{ padding: 18 }}>
+                          {renderSignalsBriefMock()}
+                        </div>
+                      )}
+
+                      {['report', 'solutions', 'problems'].includes(modalTab) && !(activeTileModal.cardId === 'signals' && modalTab === 'report') && (
                         <TileDetailAnalysisContent
                           modalTab={modalTab}
                           activeTileModal={activeTileModal}
@@ -23242,8 +24676,8 @@ const dashboardCss = `
     /* DELIVERABLES drops from 4-across to 2-across at this breakpoint (never 3). */
     .cap-bucket-deliverables .cap-step-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     #dashboard-source-cta-row { box-shadow: 0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4) !important; }
-    /* No navigation on mobile — hide the bucket nav entirely. */
-    #capability-nav-col { display: none; }
+    /* Mobile: bucket nav returns as a horizontal row of circular icon pills. */
+    #capability-nav-col { display: flex; flex-direction: row; justify-content: center; align-items: center; gap: 10px; padding: 0; margin-bottom: 8px; }
     #dashboard-source-band { margin-bottom: 0; }
     .capability-nav-btn { flex: 1 1 0; width: clamp(34px, 8vw, 52px); height: clamp(34px, 8vw, 52px); max-width: clamp(34px, 8vw, 52px); min-width: 0; padding: 0; border-radius: 50%; flex-direction: row; align-items: center; justify-content: center; gap: 0; background: rgba(255, 255, 255, 1); }
     .capability-nav-btn:hover { background: rgba(255, 255, 255, 1); box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.067), 0px 15px 30px rgba(0, 0, 0, 0.067), 0px 20px 40px rgba(0, 0, 0, 0.1); }
@@ -25753,6 +27187,12 @@ const dashboardCss = `
     cursor: not-allowed;
   }
   .mu-cta-primary:disabled::before { display: none; }
+  /* Card-modal scope only: the animated CTA border is hover-only (static otherwise).
+     Buttons outside the card modal keep the always-on spin. */
+  #tile-detail-modal-card .mu-cta-primary::before,
+  #tile-detail-modal-card .mu-btn-update::before { animation: none; }
+  #tile-detail-modal-card .mu-cta-primary:hover:not(:disabled)::before,
+  #tile-detail-modal-card .mu-btn-update:hover:not(:disabled)::before { animation: cta-border-spin 2.4s linear infinite; }
   .mu-footer {
     position: sticky;
     bottom: -18px;
@@ -26387,6 +27827,11 @@ const dashboardCss = `
     color: var(--vrk-ink-muted);
     font: 12px/1 var(--vrk-mono);
   }
+  .vrk-scope .field-grid {
+    display: grid;
+    grid-template-columns: repeat(2,minmax(0,1fr));
+    gap: 12px;
+  }
   .vrk-scope .segmented {
     display: flex;
     padding: 4px;
@@ -26471,6 +27916,322 @@ const dashboardCss = `
     font-size: 13px;
     line-height: 1.45;
   }
+  .vrk-scope .upload-drop {
+    display: grid;
+    grid-template-columns: auto minmax(0,1fr);
+    gap: 12px;
+    align-items: center;
+    min-height: 96px;
+    padding: 18px;
+    border: 1.5px dashed rgba(42,36,32,0.22);
+    border-radius: var(--vrk-radius);
+    background: rgba(255,255,255,0.58);
+    color: var(--vrk-ink);
+    text-align: left;
+    cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease, transform 220ms var(--vrk-ease);
+  }
+  .vrk-scope .upload-drop:hover {
+    background: rgba(255,255,255,0.9);
+    border-color: rgba(42,36,32,0.38);
+    transform: translateY(-1px);
+  }
+  .vrk-scope .upload-drop-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 999px;
+    background: var(--vrk-ink);
+    color: #fff;
+  }
+  .vrk-scope .upload-drop-title,
+  .vrk-scope .folder-name,
+  .vrk-scope .upload-name {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--vrk-ink);
+    font-weight: 700;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .vrk-scope .upload-drop-meta,
+  .vrk-scope .folder-meta,
+  .vrk-scope .upload-meta,
+  .vrk-scope .media-thumb-name {
+    display: block;
+    margin-top: 5px;
+    color: var(--vrk-ink-muted);
+    font: 12px/1.25 var(--vrk-mono);
+  }
+  .vrk-scope .orientation-grid,
+  .vrk-scope .folder-grid {
+    display: grid;
+    grid-template-columns: repeat(4,minmax(0,1fr));
+    gap: 10px;
+  }
+  .vrk-scope .orientation-tile,
+  .vrk-scope .folder-card {
+    display: grid;
+    gap: 10px;
+    min-height: 88px;
+    padding: 12px;
+    border: 1px solid var(--vrk-line);
+    border-radius: var(--vrk-radius);
+    background: rgba(255,255,255,0.86);
+    color: var(--vrk-ink);
+    text-align: left;
+    cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease, transform 220ms var(--vrk-ease);
+  }
+  .vrk-scope .orientation-tile:hover,
+  .vrk-scope .folder-card:hover {
+    background: #fff;
+    border-color: rgba(42,36,32,0.24);
+    transform: translateY(-1px);
+  }
+  .vrk-scope .orientation-tile.is-on,
+  .vrk-scope .folder-card.is-on {
+    border-color: rgba(42,36,32,0.38);
+    box-shadow: inset 0 0 0 1px rgba(42,36,32,0.18);
+  }
+  .vrk-scope .folder-card.is-previewing {
+    background: rgba(255,255,255,0.98);
+  }
+  .vrk-scope .orientation-shape {
+    display: block;
+    border: 1px solid rgba(42,36,32,0.26);
+    border-radius: 4px;
+    background: linear-gradient(135deg, rgba(0,200,228,0.18), rgba(122,77,255,0.18));
+  }
+  .vrk-scope .orientation-auto { width: 34px; height: 34px; border-radius: 999px; }
+  .vrk-scope .orientation-square { width: 34px; height: 34px; }
+  .vrk-scope .orientation-portrait { width: 24px; height: 40px; }
+  .vrk-scope .orientation-landscape { width: 44px; height: 26px; }
+  .vrk-scope .upload-queue,
+  .vrk-scope .folder-preview {
+    display: grid;
+    gap: 8px;
+  }
+  .vrk-scope .upload-row {
+    display: grid;
+    grid-template-columns: auto minmax(0,1fr) minmax(90px,160px) auto;
+    gap: 10px;
+    align-items: center;
+    min-height: 62px;
+    padding: 10px;
+    border: 1px solid var(--vrk-line);
+    border-radius: var(--vrk-radius);
+    background: rgba(255,255,255,0.86);
+  }
+  .vrk-scope .upload-kind {
+    display: inline-grid;
+    place-items: center;
+    width: 42px;
+    height: 30px;
+    border-radius: 6px;
+    background: rgba(42,36,32,0.08);
+    color: var(--vrk-ink-soft);
+    font: 700 11px/1 var(--vrk-mono);
+  }
+  .vrk-scope .upload-progress {
+    display: block;
+    height: 8px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(42,36,32,0.1);
+  }
+  .vrk-scope .upload-progress span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--vrk-a), var(--vrk-b), var(--vrk-c));
+    transition: width 180ms ease;
+  }
+  .vrk-scope .upload-remove {
+    min-height: 32px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+  .vrk-scope .media-thumb-grid {
+    display: grid;
+    grid-template-columns: repeat(4,minmax(0,1fr));
+    gap: 10px;
+  }
+  .vrk-scope .media-thumb {
+    position: relative;
+    appearance: none;
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+    overflow: hidden;
+    padding: 8px;
+    border: 1px solid var(--vrk-line);
+    border-radius: var(--vrk-radius);
+    background: rgba(255,255,255,0.82);
+    color: var(--vrk-ink);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+  }
+  .vrk-scope .media-thumb:hover:not(:disabled) {
+    border-color: rgba(42,36,32,0.34);
+    background: #fff;
+    box-shadow: inset 0 0 0 1px rgba(42,36,32,0.14);
+  }
+  .vrk-scope .media-thumb.is-ordered {
+    border-color: rgba(17,109,255,0.52);
+    box-shadow: inset 0 0 0 1px rgba(17,109,255,0.22);
+  }
+  .vrk-scope .media-thumb:disabled {
+    cursor: default;
+    color: var(--vrk-ink-soft);
+  }
+  .vrk-scope .media-thumb img,
+  .vrk-scope .media-thumb video {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+    border-radius: 6px;
+    background: #111;
+  }
+  .vrk-scope .media-thumb-order-badge {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    display: inline-grid;
+    place-items: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 7px;
+    border: 1px solid rgba(255,255,255,0.7);
+    border-radius: 999px;
+    background: rgba(17,17,17,0.82);
+    color: #fff;
+    font: 700 12px/1 var(--vrk-mono);
+  }
+  .vrk-scope .media-thumb-name,
+  .vrk-scope .order-slot-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .vrk-scope .media-thumb-meta,
+  .vrk-scope .order-count {
+    color: var(--vrk-ink-soft);
+    font: 700 11px/1 var(--vrk-mono);
+    text-transform: uppercase;
+  }
+  .vrk-scope .order-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  .vrk-scope .order-status,
+  .vrk-scope .order-builder {
+    display: grid;
+    gap: 10px;
+    padding: 10px;
+    border: 1px solid var(--vrk-line);
+    border-radius: var(--vrk-radius);
+    background: rgba(255,255,255,0.64);
+  }
+  .vrk-scope .order-status {
+    grid-template-columns: auto minmax(0,1fr) auto;
+    align-items: center;
+  }
+  .vrk-scope .order-status.is-ready {
+    border-color: rgba(17,109,255,0.36);
+    background: rgba(17,109,255,0.06);
+  }
+  .vrk-scope .order-status-title {
+    color: var(--vrk-ink);
+    font-weight: 800;
+  }
+  .vrk-scope .order-builder-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .vrk-scope .order-builder-head .hint {
+    margin: 4px 0 0;
+  }
+  .vrk-scope .order-row {
+    display: grid;
+    grid-template-columns: repeat(6,minmax(0,1fr));
+    gap: 8px;
+  }
+  .vrk-scope .order-slot {
+    position: relative;
+    display: grid;
+    grid-template-rows: auto minmax(92px,1fr) auto auto;
+    gap: 6px;
+    min-width: 0;
+    min-height: 158px;
+    padding: 8px;
+    border: 1px dashed rgba(42,36,32,0.24);
+    border-radius: var(--vrk-radius);
+    background: rgba(255,255,255,0.52);
+  }
+  .vrk-scope .order-slot.is-filled {
+    border-style: solid;
+    background: rgba(255,255,255,0.9);
+  }
+  .vrk-scope .order-slot video {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+    border-radius: 6px;
+    background: #111;
+  }
+  .vrk-scope .order-slot-index {
+    display: inline-grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    background: rgba(42,36,32,0.08);
+    color: var(--vrk-ink);
+    font: 700 11px/1 var(--vrk-mono);
+  }
+  .vrk-scope .order-slot-empty {
+    display: grid;
+    place-items: center;
+    min-height: 92px;
+    border-radius: 6px;
+    background: rgba(42,36,32,0.05);
+    color: var(--vrk-ink-soft);
+    font: 700 11px/1 var(--vrk-mono);
+    text-transform: uppercase;
+  }
+  .vrk-scope .order-slot-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 4px;
+  }
+  .vrk-scope .mini-icon-btn {
+    display: inline-grid;
+    place-items: center;
+    min-height: 26px;
+    padding: 0 6px;
+    border: 1px solid var(--vrk-line);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--vrk-ink);
+    font: 700 10px/1 var(--vrk-mono);
+    cursor: pointer;
+  }
+  .vrk-scope .mini-icon-btn:disabled {
+    opacity: 0.42;
+    cursor: default;
+  }
   .vrk-scope .btn {
     position: relative;
     display: inline-flex;
@@ -26508,7 +28269,7 @@ const dashboardCss = `
     isolation: isolate;
     gap: 0.5rem;
     min-height: 2.75rem;
-    border: none;
+    border: 1px solid transparent;
     color: #fff;
     font-family: var(--vrk-ui);
     font-size: 0.95rem;
@@ -26517,6 +28278,39 @@ const dashboardCss = `
     overflow: hidden;
     background: linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, var(--vrk-a) 0%, var(--vrk-b) 52%, var(--vrk-c) 100%);
     box-shadow: 0 0 14px 3px rgba(0,200,228,0.22), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1);
+  }
+  .vrk-scope .cta-pill-btn::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 2px;
+    opacity: 0;
+    background: conic-gradient(from var(--vrk-cta-angle, 0deg), transparent 0deg, transparent 210deg, var(--vrk-a) 250deg, var(--vrk-b) 300deg, var(--vrk-c) 340deg, transparent 360deg);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    transition: opacity 160ms ease;
+  }
+  .vrk-scope .cta-pill-btn:hover:not(:disabled) {
+    background: linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, var(--vrk-a) 0%, var(--vrk-b) 52%, var(--vrk-c) 100%);
+    border-color: transparent;
+    box-shadow: 0 0 14px 3px rgba(0,200,228,0.22), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1);
+    transform: none;
+  }
+  .vrk-scope .cta-pill-btn:hover:not(:disabled)::before {
+    opacity: 1;
+    animation: vrk-cta-border-spin 1.8s linear infinite;
+  }
+  @property --vrk-cta-angle {
+    syntax: "<angle>";
+    inherits: false;
+    initial-value: 0deg;
+  }
+  @keyframes vrk-cta-border-spin {
+    to { --vrk-cta-angle: 360deg; }
   }
   .vrk-scope .cta-primary-wide {
     width: 100%;
@@ -26569,7 +28363,123 @@ const dashboardCss = `
     .vrk-scope .section-head { grid-template-columns: auto minmax(0,1fr); }
     .vrk-scope .section-head .btn { grid-column: 1 / -1; }
     .vrk-scope .toggle-grid { grid-template-columns: 1fr; }
+    .vrk-scope .field-grid,
+    .vrk-scope .orientation-grid,
+    .vrk-scope .folder-grid,
+    .vrk-scope .media-thumb-grid { grid-template-columns: 1fr; }
+    .vrk-scope .order-row { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    .vrk-scope .order-status,
+    .vrk-scope .order-builder-head { grid-template-columns: 1fr; display: grid; }
+    .vrk-scope .order-actions { justify-content: flex-start; }
+    .vrk-scope .upload-row { grid-template-columns: auto minmax(0,1fr); }
+    .vrk-scope .upload-progress,
+    .vrk-scope .upload-remove { grid-column: 1 / -1; }
   }
+
+  /* ── Creative Brief kit (ported verbatim from
+     public/docs/dashboard-modal-component-style-guide.html → .brief-kit).
+     Used by the Market Signals REPORT tab. Self-contained: scopes its own
+     tokens so it doesn't inherit dashboard colors. ─────────────────────── */
+  .brief-kit {
+    --ink:#0a0a0a; --ink-soft:#5a5346;
+    --line:rgba(212,196,171,0.82); --card:rgba(255,255,255,0.5);
+    --hl:rgba(255,255,255,0.65); --brand:#116dff;
+    --grad:linear-gradient(92deg,#7a5cff 0%,#b14bff 38%,#ff4fa1 72%,#ff7a3a 100%);
+    --font-ui:"Space Grotesk", system-ui, sans-serif;
+    --font-mono:"Space Mono", ui-monospace, monospace;
+    color:var(--ink); font-family:var(--font-ui);
+  }
+  /* COMPACT report scope — sized for the in-modal Reports tab, not a full-page brief. */
+  .brief-kit .kit-paper {
+    border-radius:14px; border:1px solid var(--line);
+    padding:clamp(14px,1.6vw,20px);
+    background:
+      radial-gradient(520px 320px at 0% 0%, rgba(255,120,90,0.20) 0%, transparent 65%),
+      radial-gradient(460px 300px at 100% 30%, rgba(176,90,255,0.16) 0%, transparent 65%),
+      radial-gradient(520px 320px at 20% 100%, rgba(255,180,90,0.16) 0%, transparent 65%),
+      linear-gradient(180deg, #fefdf9 0%, #fbf8f0 100%);
+  }
+  .brief-kit .mono { font-family: var(--font-mono); }
+  .brief-kit .b-eyebrow {
+    font-family: var(--font-mono); font-size:10.5px;
+    letter-spacing:.2em; text-transform:uppercase; color:var(--ink-soft);
+    display:flex; gap:12px; align-items:center; margin-bottom:10px; flex-wrap:wrap;
+  }
+  .brief-kit .b-eyebrow .dot{ width:6px;height:6px;background:#0a0a0a;border-radius:50%; }
+  .brief-kit .b-headline {
+    font-family:"Doto",monospace; font-weight:900; letter-spacing:-.01em;
+    line-height:.95; font-size:clamp(22px,2.8vw,34px); margin:0 0 10px;
+    text-transform:uppercase; color:var(--ink);
+  }
+  .brief-kit .b-sub {
+    font-family: var(--font-ui); font-weight:400;
+    font-size:clamp(13px,1.3vw,15px); line-height:1.35; color:#1a1a1a;
+    max-width:70ch; margin:0;
+  }
+  .brief-kit .b-body { font-family:var(--font-ui); font-size:13.5px; line-height:1.5; color:#1a1a1a; max-width:70ch; margin:0 0 8px; }
+  .brief-kit .b-rule{height:1px;background:rgba(0,0,0,.1);margin:14px 0;}
+  .brief-kit .b-card{
+    background:var(--card); border:1px solid var(--line); border-radius:12px;
+    box-shadow:0 1px 0 var(--hl), inset 0 1px 0 rgba(255,255,255,0.4);
+    padding:clamp(11px,1.3vw,15px);
+  }
+  .brief-kit .b-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:clamp(12px,1.6vw,20px);align-items:start;}
+  .brief-kit .stat-row{display:grid;grid-template-columns:92px 1fr;gap:12px;padding:7px 0;border-bottom:1px dashed rgba(0,0,0,.15);}
+  .brief-kit .stat-row:last-child{border-bottom:0;}
+  .brief-kit .stat-row .k{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);padding-top:3px;}
+  .brief-kit .stat-row .v{font-family:var(--font-ui);font-size:13.5px;line-height:1.4;color:var(--ink);}
+  .brief-kit .pull{
+    font-family:var(--font-ui); font-weight:300;
+    font-size:clamp(16px,1.9vw,21px); line-height:1.25;
+    border-left:3px solid #0a0a0a; padding:4px 0 4px 14px; max-width:36ch; margin:0; color:var(--ink);
+  }
+  .brief-kit .meta-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+  .brief-kit .meta-tile{background:rgba(255,255,255,.55);border:1px solid var(--line);border-radius:12px;padding:11px;}
+  .brief-kit .meta-tile .k{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:5px;}
+  .brief-kit .meta-tile .v{font-family:var(--font-ui);font-size:13.5px;word-break:break-word;color:var(--ink);}
+  .brief-kit .status-tag{display:inline-flex;align-items:center;gap:8px;font-family:var(--font-mono);font-size:10px;letter-spacing:.2em;text-transform:uppercase;padding:6px 12px;border-radius:999px;background:#fff;border:1px solid var(--line);color:#0a0a0a;}
+  .brief-kit .status-tag.warn{background:rgba(220,38,38,0.06);border-color:rgba(220,38,38,0.40);color:#dc2626;}
+  .brief-kit .status-tag.warn::before{content:"";width:6px;height:6px;border-radius:50%;background:#dc2626;box-shadow:0 0 0 3px rgba(220,38,38,0.15);}
+  .brief-kit .status-tag.ok{background:rgba(22,101,52,0.06);border-color:rgba(22,101,52,0.40);color:#166534;}
+  .brief-kit .dur-row{display:flex;flex-wrap:wrap;gap:6px;}
+  .brief-kit .dur{font-family:var(--font-mono);font-size:10.5px;padding:4px 9px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.5);color:var(--ink);}
+  .brief-kit .scores{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+  .brief-kit .score{border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.5);display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:10px 14px;}
+  .brief-kit .score .lbl{font-family:var(--font-mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft);}
+  .brief-kit .score .num{font-family:"Doto";font-weight:900;font-size:clamp(22px,2.6vw,30px);line-height:1;color:var(--ink);}
+  .brief-kit .b-link{font-family:var(--font-mono);font-size:11px;color:var(--brand);text-decoration:none;}
+  .brief-kit .b-link:hover{text-decoration:underline;}
+  .brief-kit .b-stack{display:flex;flex-direction:column;gap:10px;}
+  .brief-kit .b-sec{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft);margin:4px 0 2px;}
+  /* Per-source platform section — handle header, featured punch-out, bento bubbles. */
+  .brief-kit .b-handle-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:14px 0 8px;flex-wrap:wrap;}
+  .brief-kit .b-handle-name{font-family:"Doto",monospace;font-weight:900;font-size:clamp(15px,1.9vw,20px);text-transform:uppercase;line-height:1;}
+  .brief-kit .b-handle-meta{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.04em;color:var(--ink-soft);}
+  .brief-kit .b-handle-name.spot::after{content:"★";margin-left:6px;color:#ff7a3a;}
+  /* Theme module — scannable header row (name + confidence/intensity/frequency tags) + "so what" callout. */
+  .brief-kit .b-theme-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+  .brief-kit .b-tags{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+  .brief-kit .b-sowhat{margin-top:12px;padding:9px 12px;border-radius:10px;background:rgba(17,109,255,0.06);border:1px solid rgba(17,109,255,0.25);font-family:var(--font-ui);font-size:13px;line-height:1.45;color:var(--ink);}
+  .brief-kit .b-sowhat .lbl{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--brand);margin-right:8px;}
+  /* Per-handle module grid — fills full width, equal-height cards, footer pinned to bottom. */
+  .brief-kit .b-handle-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr));gap:10px;align-items:stretch;}
+  .brief-kit .b-handle-card{display:flex;flex-direction:column;}
+  .brief-kit .b-handle-foot{margin-top:auto;padding-top:10px;border-top:1px dashed rgba(0,0,0,.15);}
+  .brief-kit .b-bento{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,180px),1fr));gap:9px;}
+  .brief-kit .b-bubble{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:9px 11px;display:flex;flex-direction:column;gap:7px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.4);}
+  .brief-kit .b-bubble .txt{font-family:var(--font-ui);font-size:12.5px;line-height:1.38;color:var(--ink);}
+  /* Featured "punch-out" — most-popular post, black ground spanning the row. */
+  .brief-kit .b-feature{grid-column:1/-1;background:#0a0a0a;color:#fff;border-radius:14px;padding:clamp(13px,1.7vw,18px);display:flex;flex-direction:column;gap:9px;position:relative;overflow:hidden;}
+  .brief-kit .b-feature::before{content:"";position:absolute;inset:-40% -10% auto auto;width:60%;height:160%;background:radial-gradient(closest-side,rgba(176,90,255,0.35),transparent);pointer-events:none;}
+  .brief-kit .b-feature .lbl{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,0.6);position:relative;}
+  .brief-kit .b-feature .txt{font-family:var(--font-ui);font-weight:300;font-size:clamp(14px,1.6vw,18px);line-height:1.3;position:relative;}
+  .brief-kit .b-eng{display:flex;gap:11px;flex-wrap:wrap;align-items:center;font-family:var(--font-mono);font-size:10.5px;color:var(--ink-soft);position:relative;}
+  .brief-kit .b-eng span{display:inline-flex;gap:5px;align-items:center;}
+  .brief-kit .b-feature .b-eng{color:rgba(255,255,255,0.78);}
+  .brief-kit .b-feature .b-link{color:#fff;}
+  @media(max-width:900px){.brief-kit .b-grid{grid-template-columns:1fr}}
+  @media(max-width:800px){.brief-kit .meta-grid,.brief-kit .scores{grid-template-columns:1fr 1fr}}
+  @media(max-width:560px){.brief-kit .meta-grid,.brief-kit .scores{grid-template-columns:1fr}.brief-kit .b-bento{grid-template-columns:1fr}}
 `;
 
 

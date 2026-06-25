@@ -720,3 +720,71 @@ export async function processDuePosts(clientId) {
 export async function processDuePostsForAllClients() {
   return runDueSweep(await readDuePosts(null));
 }
+
+// ── X READ — fetch the actual recent posts of specific handles ────────────────
+// Uses the X API v2 user-timeline (GET /2/users/:id/tweets) via the same OAuth
+// 1.0a client used for posting. This is the most efficient + relevant way to get
+// a watchlist account's posts — exact tweets from the exact accounts, with real
+// permalinks — and it works in production (no Python/last30days). Read access
+// requires a paid X project tier (Basic+); on a read-blocked tier the v2 calls
+// throw 403 and we surface that so callers can fall back to web_search.
+//
+// Returns { ok, items, errors } where each item matches the scout-test/agentData
+// item shape: { title, url, summary, tag, handle, author, createdAt, platform }.
+export async function fetchHandleTimelines(handles = [], opts = {}) {
+  const perHandle = Math.max(1, Math.min(20, Number(opts.perHandle) || 5));
+  const excludeRetweets = opts.excludeRetweets !== false; // default: skip RTs
+  const clean = (Array.isArray(handles) ? handles : [])
+    .map((h) => String(h || '').trim().replace(/^@+/, ''))
+    .filter((h) => /^[A-Za-z0-9_]{1,15}$/.test(h)) // valid X usernames only
+    .slice(0, 12);
+
+  if (!clean.length) return { ok: false, items: [], errors: ['no valid handles'] };
+
+  let client;
+  try {
+    client = getTwitterClient();
+  } catch (err) {
+    return { ok: false, items: [], errors: [err.message || 'no X credentials'] };
+  }
+
+  const items = [];
+  const errors = [];
+  for (const username of clean) {
+    try {
+      const user = await client.v2.userByUsername(username);
+      const userId = user?.data?.id;
+      const displayName = user?.data?.name || `@${username}`;
+      if (!userId) { errors.push(`${username}: not found`); continue; }
+
+      const timeline = await client.v2.userTimeline(userId, {
+        max_results: Math.max(5, perHandle), // API min is 5
+        exclude: excludeRetweets ? ['retweets', 'replies'] : [],
+        'tweet.fields': 'created_at,public_metrics',
+      });
+      const tweets = (timeline?.data?.data || timeline?.tweets || []).slice(0, perHandle);
+      for (const t of tweets) {
+        const text = String(t.text || '').trim();
+        if (!text) continue;
+        items.push({
+          title: displayName,
+          url: `https://x.com/${username}/status/${t.id}`,
+          summary: text,
+          tag: `@${username}`,
+          handle: `@${username}`,
+          author: displayName,
+          createdAt: t.created_at || null,
+          metrics: t.public_metrics || null,
+          platform: 'x',
+        });
+      }
+    } catch (err) {
+      const code = err?.code || err?.status;
+      errors.push(`${username}: ${code || ''} ${err?.message || 'read failed'}`.trim());
+      // 403 = tier lacks read access → stop early, the rest will 403 too.
+      if (code === 403) { errors.push('x-read-forbidden'); break; }
+    }
+  }
+
+  return { ok: items.length > 0, items, errors };
+}
