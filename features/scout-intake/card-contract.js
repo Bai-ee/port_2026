@@ -699,6 +699,41 @@ const CARD_CONTRACT = [
     sources: [],
     missingStateRules: [],
   })),
+
+  // ── Local reputation (paid · diagnostic) ────────────────────────────────
+  {
+    id: 'gbp-reputation',
+    navLabel: 'REPUTATION',
+    navTitle: 'Google Business Profile Reputation',
+    category: 'content',
+    role: 'local-reputation',
+    sourceField: 'externalSignals.googleBusinessProfile',
+    analyzer: { impl: 'gbp-reputation', required: false },
+    analyzerSkill: null,
+    analyzerSkills: ['gbp-review-audit'],
+    copy: {
+      short:    { min: 80,  max: 180 },
+      expanded: { min: 300, max: 750 },
+    },
+    qualityScaling: true,
+    tier: 'paid',
+    actionClass: 'diagnose',
+    sources: ['gbp.reviews', 'gbp.profile', 'gbp.localSeoChecklist'],
+    missingStateRules: [
+      {
+        id: 'gbp-not-connected',
+        when: 'externalSignals.googleBusinessProfile is null',
+        reason: 'Google Business Profile is not connected for this client.',
+        offer: 'Connect GBP so Hitloop can monitor reviews, profile completeness, and local SEO tasks.',
+      },
+      {
+        id: 'reviews-need-reply',
+        when: 'googleBusinessProfile.unrepliedCount > 0',
+        reason: 'Some customer reviews do not have owner replies.',
+        offer: 'Draft and review owner responses before publishing.',
+      },
+    ],
+  },
 ];
 
 const CARDS_BY_ID = Object.fromEntries(CARD_CONTRACT.map((card) => [card.id, card]));

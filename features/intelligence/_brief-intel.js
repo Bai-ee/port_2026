@@ -118,6 +118,10 @@ function projectBrief(marketingBrief, state = null) {
     searchedFor: arr(agentData?.viralOpportunities?.searchedFor),
     content: marketingBrief?.content || {},
     readyToPublish: marketingBrief?.guardianFlags?.readyToPublish ?? null,
+    // Watchlist-analysis ("Happening on X") snapshot mirrored from the dashboard
+    // REPORT tab (written by /api/dashboard/watchlist-pull). Raw recipe text;
+    // the email parses + renders it in the brief-kit look.
+    watchlistAnalysis: marketingBrief?.reportSnapshot?.watchlistAnalysis?.text || '',
     _agentData: agentData, // raw, for per-handle watchlist matching (stripped before return)
   };
 }

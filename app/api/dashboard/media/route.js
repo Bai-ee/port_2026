@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
+const { verifyRequestUser, isAdminEmail } = require('../../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../../api/_lib/client-provisioning.cjs');
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
 const mediaJobs = require('../../../../api/_lib/media-jobs.cjs');
@@ -16,7 +16,20 @@ const {
   createUploadSession,
   invalidateFolderCache,
   listOptions,
+  getArchiveManifest,
+  getArchiveJob,
+  normalizeArchiveSources,
+  estimateArchiveFiles,
+  archiveFirebaseFile,
+  estimateWebsiteDeploy,
+  deployWebsite,
+  updateArns,
 } = require('../../../../api/_lib/editvideos-bridge.cjs');
+const {
+  buildArchivedAsset,
+  mergeArchivedAssets,
+  buildLatestArchiveJob,
+} = require('../../../../api/_lib/archive-publishing-projection.cjs');
 const { reconcileMediaJob } = require('../../../../api/_lib/media-reconcile.cjs');
 
 // Metadata-only route: it creates/reads media_jobs records and writes pending
@@ -46,6 +59,28 @@ async function resolveContext(request) {
   return { decoded, context };
 }
 
+// Archive / Publishing actions are admin-only (wallet-funded, irreversible
+// Arweave uploads). Resolve admin from the verified token email, not the
+// impersonation flag — a real admin acting on their own dashboard must pass.
+async function requireAdmin(decoded) {
+  const ok = await isAdminEmail(decoded?.email);
+  if (!ok) { const e = new Error('Forbidden: admin access required.'); e.status = 403; throw e; }
+}
+
+const ARCHIVE_MUTATIONS = new Set(['archive-to-arweave', 'deploy-website', 'update-arns']);
+
+// Transactional merge into dashboard_state.{clientId}.archivePublishing so the
+// card listener updates without clobbering sibling fields.
+async function writeArchivePublishing(clientId, mutate) {
+  const docRef = fb.adminDb.collection('dashboard_state').doc(clientId);
+  await fb.adminDb.runTransaction(async (tx) => {
+    const snap = await tx.get(docRef);
+    const current = snap.data()?.archivePublishing || {};
+    const next = mutate(current) || current;
+    tx.set(docRef, { archivePublishing: next }, { merge: true });
+  });
+}
+
 // Mirror studio-render-core.appendCaptureRef: client-scoped dashboard_state doc,
 // transactional merge-set so the live card listener flips to "Queued" without
 // clobbering sibling fields.
@@ -59,13 +94,148 @@ async function setVideoPending(clientId, marker) {
 
 export async function POST(request) {
   let context;
+  let decoded;
   try {
-    ({ context } = await resolveContext(request));
+    ({ context, decoded } = await resolveContext(request));
   } catch (err) {
     return json({ error: err.message || 'Unauthorized.' }, err.status || 401);
   }
 
   const action = new URL(request.url).searchParams.get('action');
+
+  // --- Archive / Publishing (admin-only, Knowledge Officer card) -----------
+  if (action && (action.startsWith('archive-') || ARCHIVE_MUTATIONS.has(action) || action === 'deploy-website')) {
+    try {
+      await requireAdmin(decoded);
+    } catch (err) {
+      return json({ error: err.message }, err.status || 403);
+    }
+
+    let body = {};
+    try { body = await request.json(); } catch { body = {}; }
+
+    try {
+      if (action === 'archive-estimate') {
+        const files = Array.isArray(body?.files) ? body.files : [];
+        const estimate = await estimateArchiveFiles(files);
+        await writeArchivePublishing(context.clientId, (cur) => ({
+          ...cur,
+          costEstimate: { mode: 'archive', ...estimate },
+        }));
+        return json({ ok: true, estimate });
+      }
+
+      if (action === 'archive-to-arweave') {
+        const files = Array.isArray(body?.files) ? body.files.slice(0, 25) : [];
+        if (!files.length) return json({ error: 'No files selected to archive.' }, 400);
+
+        // One media_jobs parent record for the batch (audit/history).
+        const { jobId } = await mediaJobs.createMediaJob({
+          clientId: context.clientId,
+          type: 'arweave-archive',
+          recipe: { source: files[0]?.source || 'editvideosFolder', files },
+        });
+        await writeArchivePublishing(context.clientId, (cur) => ({
+          ...cur,
+          latestArchiveJob: buildLatestArchiveJob({ jobId, status: 'processing', fileCount: files.length }),
+        }));
+
+        const archivedAssets = [];
+        const errors = [];
+        for (const row of files) {
+          // Map each row to an EditVideos {folder, fileName}. Source-folder rows
+          // carry it directly; capture rows need a stored storagePath/folder.
+          const folder = row.folder || (row.fullPath ? row.fullPath.split('/').slice(0, -1).join('/') : null);
+          const fileName = row.fileName || (row.fullPath ? row.fullPath.split('/').pop() : null);
+          if (!folder || !fileName) {
+            errors.push({ label: row.label, error: 'No EditVideos storage path for this file.' });
+            continue;
+          }
+          try {
+            const result = await archiveFirebaseFile({ folder, fileName });
+            archivedAssets.push(buildArchivedAsset(row, result));
+          } catch (fileErr) {
+            errors.push({ label: row.label, error: fileErr.message || 'Archive failed.' });
+          }
+        }
+
+        const status = archivedAssets.length === 0 ? 'failed'
+          : errors.length ? 'partial' : 'done';
+        await writeArchivePublishing(context.clientId, (cur) => {
+          const merged = mergeArchivedAssets(cur, archivedAssets);
+          return {
+            ...merged,
+            latestArchiveJob: buildLatestArchiveJob({
+              jobId,
+              status,
+              fileCount: files.length,
+              error: errors.length ? `${errors.length} file(s) failed` : null,
+              completedAt: new Date().toISOString(),
+            }),
+          };
+        });
+        if (status === 'done') await mediaJobs.completeMediaJob(jobId, { archivedFiles: archivedAssets });
+        else if (status === 'failed') await mediaJobs.failMediaJob(jobId, errors[0]?.error || 'Archive failed.');
+        else await mediaJobs.completeMediaJob(jobId, { archivedFiles: archivedAssets, errors });
+
+        return json({ ok: true, jobId, status, archivedAssets, errors });
+      }
+
+      if (action === 'deploy-website') {
+        const result = await deployWebsite({ websiteDir: body?.websiteDir });
+        const deployedAt = new Date().toISOString();
+        await writeArchivePublishing(context.clientId, (cur) => ({
+          ...cur,
+          latestDeployment: {
+            deploymentId: result.manifestId || `deploy_${Date.now()}`,
+            status: result.status,
+            manifestId: result.manifestId,
+            arweaveUrl: result.arweaveUrl,
+            arnsUrl: result.arnsUrl,
+            filesUploaded: result.filesUploaded,
+            filesUnchanged: result.filesUnchanged,
+            totalFiles: result.totalFiles,
+            costEstimate: result.costEstimate,
+            deployedAt,
+            arnsUpdatedAt: result.arnsUrl ? deployedAt : null,
+            arnsError: null,
+          },
+        }));
+        return json({ ok: true, deployment: result });
+      }
+
+      if (action === 'update-arns') {
+        const manifestId = body?.manifestId;
+        if (!manifestId) return json({ error: 'manifestId is required.' }, 400);
+        try {
+          const result = await updateArns({ manifestId });
+          await writeArchivePublishing(context.clientId, (cur) => ({
+            ...cur,
+            latestDeployment: {
+              ...(cur.latestDeployment || {}),
+              arnsUrl: result.arnsUrl,
+              arnsUpdatedAt: result.updatedAt,
+              arnsError: null,
+            },
+          }));
+          return json({ ok: true, arns: result });
+        } catch (arnsErr) {
+          // Never erase deploy success — record the error, return it visibly.
+          await writeArchivePublishing(context.clientId, (cur) => ({
+            ...cur,
+            latestDeployment: {
+              ...(cur.latestDeployment || {}),
+              arnsError: arnsErr.message || 'ArNS update failed.',
+            },
+          }));
+          return json({ error: arnsErr.message || 'ArNS update failed.' }, arnsErr.status || 500);
+        }
+      }
+    } catch (err) {
+      return json({ error: err.message || 'Archive action failed.' }, err.status || 500);
+    }
+    return json({ error: 'Unknown archive action.' }, 400);
+  }
 
   if (action === 'create-video-remix') {
     let body;
@@ -144,8 +314,9 @@ export async function POST(request) {
 
 export async function GET(request) {
   let context;
+  let decoded;
   try {
-    ({ context } = await resolveContext(request));
+    ({ context, decoded } = await resolveContext(request));
   } catch (err) {
     return json({ error: err.message || 'Unauthorized.' }, err.status || 401);
   }
@@ -153,6 +324,67 @@ export async function GET(request) {
   const clientId = context.clientId;
   const params = new URL(request.url).searchParams;
   const action = params.get('action');
+
+  // --- Archive / Publishing reads (admin-only in v1) -----------------------
+  if (action === 'archive-sources' || action === 'archive-manifest' || action === 'archive-job' || action === 'website-deploy-estimate') {
+    try {
+      await requireAdmin(decoded);
+    } catch (err) {
+      return json({ error: err.message }, err.status || 403);
+    }
+    try {
+      if (action === 'archive-manifest') {
+        try {
+          const manifest = await getArchiveManifest();
+          return json({ ok: true, manifest });
+        } catch (err) {
+          // Bridge unconfigured / unreachable — degrade, don't crash the card.
+          return json({ ok: true, manifest: { source: 'editvideos', version: null, lastUpdated: null, folders: {}, entries: [] }, disabled: true, reason: err.message });
+        }
+      }
+
+      if (action === 'archive-job') {
+        const archiveJobId = params.get('jobId');
+        if (!archiveJobId) return json({ error: 'jobId is required.' }, 400);
+        const job = await getArchiveJob(archiveJobId);
+        if (!job) return json({ error: 'Archive job not found.' }, 404);
+        return json({ ok: true, job });
+      }
+
+      if (action === 'archive-sources') {
+        const stateSnap = await fb.adminDb.collection('dashboard_state').doc(clientId).get();
+        const state = stateSnap.exists ? stateSnap.data() : {};
+        let folderFiles = null;
+        const folder = params.get('folder');
+        if (folder) {
+          try {
+            folderFiles = await listFolderMedia(folder, { limit: Number(params.get('limit') || 60) });
+          } catch {
+            folderFiles = null;
+          }
+        }
+        const sources = normalizeArchiveSources({
+          mediaCaptures: state?.mediaCaptures || [],
+          studioCaptures: state?.studioCaptures || [],
+          folderFiles,
+        });
+        return json({ ok: true, sources });
+      }
+
+      if (action === 'website-deploy-estimate') {
+        try {
+          const estimate = await estimateWebsiteDeploy({ websiteDir: params.get('websiteDir') || undefined });
+          estimate.estimatedAt = new Date().toISOString();
+          await writeArchivePublishing(clientId, (cur) => ({ ...cur, costEstimate: estimate }));
+          return json({ ok: true, estimate });
+        } catch (err) {
+          return json({ error: err.message || 'Deploy estimate failed.' }, err.status || 500);
+        }
+      }
+    } catch (err) {
+      return json({ error: err.message || 'Archive read failed.' }, err.status || 500);
+    }
+  }
 
   try {
     if (action === 'job') {

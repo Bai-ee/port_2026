@@ -598,6 +598,371 @@ async function createUploadSession({ folderMode = 'existing', folderName, files 
   };
 }
 
+// ===========================================================================
+// Archive / Publishing bridge — archive-publishing card (Knowledge Officer).
+//
+// HITLOOP does NOT run Arweave/Turbo uploads or website deploys itself. The
+// EditVideos deployed app owns those wallet-funded, irreversible operations:
+//   POST {EDITVIDEOS_API_BASE}/api/archive-upload   → archive one Firebase file
+//   GET  {EDITVIDEOS_API_BASE}/api/deploy-website    → estimate deploy diff
+//   POST {EDITVIDEOS_API_BASE}/api/deploy-website    → deploy site (+ ArNS)
+// HITLOOP reads the EditVideos `archiveManifest`/`archiveJobs` Firestore docs
+// directly through the named bridge app (read-only), and calls the HTTP
+// endpoints for the actual mutations. Every mutation is admin-gated in the
+// route; this module only carries metadata + status + cost. See
+// docs/plans/ARCHIVE_PUBLISHING_CARD_PLAN.md.
+// ===========================================================================
+
+const ARCHIVE_MANIFEST_COLLECTION = 'archiveManifest';
+const ARCHIVE_MANIFEST_DOC = 'main';
+const ARCHIVE_JOBS_COLLECTION = 'archiveJobs';
+
+// Mirror EditVideos lib/ArweaveCostCalculator.js base rates so HITLOOP estimates
+// match what the deployed app charges. AR price is fetched live (CoinGecko) with
+// a $10/AR fallback, exactly like the EditVideos calculator.
+const BYTES_PER_MB = 1024 * 1024;
+const COST_PER_MB_AR = 0.0001;
+const COST_PER_MB_USD = 0.10;
+const AR_PRICE_CACHE_TTL_MS = 5 * 60 * 1000;
+let _arPriceCache = { at: 0, price: null };
+
+function editvideosApiBase() {
+  const base = String(process.env.EDITVIDEOS_API_BASE || '').trim().replace(/\/$/, '');
+  return base || null;
+}
+
+// --- pure cost math (firebase-free, unit-testable) --------------------------
+/**
+ * Cost breakdown for a single byte count. Pure — pass arPriceUSD explicitly.
+ * Shape mirrors EditVideos calculateCost().
+ */
+function costForBytes(fileSizeBytes, arPriceUSD = 10) {
+  const bytes = Math.max(0, Number(fileSizeBytes) || 0);
+  const price = Number(arPriceUSD) > 0 ? Number(arPriceUSD) : 10;
+  const sizeMB = bytes / BYTES_PER_MB;
+  const costAR = sizeMB * COST_PER_MB_AR;
+  const costUSD = costAR * price;
+  return {
+    sizeBytes: bytes,
+    sizeMB: Number(sizeMB.toFixed(4)),
+    sizeKB: Number((bytes / 1024).toFixed(2)),
+    costAR: Number(costAR.toFixed(8)),
+    costUSD: Number(costUSD.toFixed(4)),
+    costUSDApprox: Number((sizeMB * COST_PER_MB_USD).toFixed(4)),
+    arPriceUSD: Number(price.toFixed(2)),
+  };
+}
+
+/**
+ * Total cost for an array of files (each {sizeBytes|size|fileSize}). Pure.
+ * @returns {{fileCount, sizeBytes, costAR, costUSD, costUSDApprox, arPriceUSD, estimatedAt:null}}
+ */
+function summarizeArchiveCost(files = [], arPriceUSD = 10) {
+  const list = Array.isArray(files) ? files : [];
+  const totalBytes = list.reduce((sum, f) => {
+    const b = Number(f?.sizeBytes ?? f?.size ?? f?.fileSize) || 0;
+    return sum + Math.max(0, b);
+  }, 0);
+  const breakdown = costForBytes(totalBytes, arPriceUSD);
+  return {
+    fileCount: list.length,
+    sizeBytes: breakdown.sizeBytes,
+    costAR: breakdown.costAR,
+    costUSD: breakdown.costUSD,
+    costUSDApprox: breakdown.costUSDApprox,
+    arPriceUSD: breakdown.arPriceUSD,
+    estimatedAt: null,
+  };
+}
+
+// --- pure manifest normalization (firebase-free, unit-testable) -------------
+/**
+ * Normalize the EditVideos archiveManifest doc into a flat, render-ready shape.
+ * Always returns { source:'editvideos', version, lastUpdated, folders, entries }.
+ * `entries` is a flat array with the fields the Manifest tab renders.
+ */
+function normalizeArchiveManifest(raw = {}) {
+  const foldersRaw = raw && typeof raw.folders === 'object' && raw.folders ? raw.folders : {};
+  const entries = [];
+  const folders = {};
+  for (const folderName of Object.keys(foldersRaw)) {
+    const files = Array.isArray(foldersRaw[folderName]?.files) ? foldersRaw[folderName].files : [];
+    const normFiles = files.map((f) => {
+      const entry = {
+        label: String(f?.name || f?.label || 'file'),
+        folder: folderName,
+        sourcePath: String(f?.firebasePath || f?.sourcePath || `${folderName}/${f?.name || ''}`),
+        transactionId: f?.transactionId || null,
+        arweaveUrl: f?.arweaveUrl || (f?.transactionId ? `https://arweave.net/${f.transactionId}` : null),
+        turboUrl: f?.turboUrl || null,
+        fileSize: Number(f?.fileSize ?? f?.size) || null,
+        contentType: f?.contentType || null,
+        status: f?.status || (f?.transactionId ? 'confirmed' : 'unknown'),
+        archivedAt: f?.archivedAt || null,
+      };
+      entries.push(entry);
+      return entry;
+    });
+    folders[folderName] = { files: normFiles };
+  }
+  entries.sort((a, b) => String(b.archivedAt || '').localeCompare(String(a.archivedAt || '')));
+  return {
+    source: 'editvideos',
+    version: raw?.version || '1.0.0',
+    lastUpdated: raw?.lastUpdated || null,
+    folders,
+    entries,
+  };
+}
+
+/**
+ * Normalize selectable archive sources from dashboard captures + folder files
+ * into a single typed list of file rows for the Archive tab. Pure.
+ * @param {{mediaCaptures?:Array, studioCaptures?:Array, folderFiles?:{folder?:string,files?:Array}}} args
+ */
+function normalizeArchiveSources({ mediaCaptures = [], studioCaptures = [], folderFiles = null } = {}) {
+  const rows = [];
+  const remixes = Array.isArray(mediaCaptures) ? mediaCaptures : [];
+  for (const cap of remixes) {
+    if (!cap || cap.type !== 'video_remix') continue;
+    rows.push({
+      source: 'mediaCaptures',
+      sourceLabel: 'Finished Videos',
+      label: cap.label || 'Video remix',
+      fileName: cap.fileName || `${cap.jobId || 'remix'}.mp4`,
+      url: cap.downloadUrl || cap.url || null,
+      storagePath: cap.storagePath || null,
+      folder: cap.storageFolder || null,
+      contentType: cap.contentType || 'video/mp4',
+      sizeBytes: Number(cap.fileSize ?? cap.sizeBytes) || null,
+      sourceCaptureJobId: cap.jobId || null,
+      arweave: cap.arweave || null,
+    });
+  }
+  const studio = Array.isArray(studioCaptures) ? studioCaptures : [];
+  for (const cap of studio) {
+    if (!cap) continue;
+    rows.push({
+      source: 'studioCaptures',
+      sourceLabel: 'Studio Captures',
+      label: cap.label || 'Studio capture',
+      fileName: cap.fileName || `${cap.jobId || 'studio'}.mp4`,
+      url: cap.downloadUrl || cap.url || null,
+      storagePath: cap.storagePath || null,
+      folder: cap.storageFolder || null,
+      contentType: cap.contentType || (cap.kind === 'image' ? 'image/png' : 'video/mp4'),
+      sizeBytes: Number(cap.fileSize ?? cap.sizeBytes) || null,
+      sourceCaptureJobId: cap.jobId || null,
+      arweave: cap.arweave || null,
+    });
+  }
+  if (folderFiles && Array.isArray(folderFiles.files)) {
+    for (const f of folderFiles.files) {
+      rows.push({
+        source: 'editvideosFolder',
+        sourceLabel: 'Source Folders',
+        label: f.name,
+        fileName: f.name,
+        folder: folderFiles.folder || (f.fullPath ? f.fullPath.split('/').slice(0, -1).join('/') : null),
+        fullPath: f.fullPath || null,
+        url: f.url || null,
+        storagePath: f.fullPath || null,
+        contentType: f.contentType || null,
+        sizeBytes: Number(f.size) || null,
+        sourceCaptureJobId: null,
+        arweave: null,
+      });
+    }
+  }
+  return rows;
+}
+
+/** Normalize an EditVideos deploy-website POST result. Pure. */
+function mapDeployResult(raw = {}) {
+  return {
+    status: raw?.success ? 'done' : 'failed',
+    manifestId: raw?.manifestId || null,
+    manifestUrl: raw?.manifestUrl || null,
+    arweaveUrl: raw?.websiteUrl || raw?.manifestUrl || null,
+    arnsUrl: raw?.arnsUrl || null,
+    filesUploaded: Number(raw?.filesUploaded) || 0,
+    filesUnchanged: Number(raw?.filesUnchanged) || 0,
+    totalFiles: Number(raw?.totalFiles ?? raw?.filesUploaded) || 0,
+    costEstimate: raw?.costEstimate || null,
+    error: raw?.success ? null : (raw?.error || raw?.message || 'Deploy failed.'),
+  };
+}
+
+/** Normalize an EditVideos deploy-website GET (estimate) result. Pure. */
+function mapDeployEstimate(raw = {}) {
+  const cost = raw?.cost || {};
+  return {
+    mode: 'website-deploy',
+    filesChanged: Number(raw?.filesChanged) || 0,
+    filesUnchanged: Number(raw?.filesUnchanged) || 0,
+    totalFiles: Number(raw?.totalFiles) || 0,
+    sizeBytes: Number(cost?.sizeBytes) || 0,
+    costAR: Number(cost?.costAR) || 0,
+    costUSD: Number(cost?.costUSD) || 0,
+    arPriceUSD: Number(cost?.arPriceUSD) || 0,
+    formatted: raw?.formatted || null,
+    estimatedAt: null,
+  };
+}
+
+// --- live AR price + estimate -----------------------------------------------
+async function getArPriceUSD() {
+  const now = Date.now();
+  if (_arPriceCache.price && now - _arPriceCache.at < AR_PRICE_CACHE_TTL_MS) return _arPriceCache.price;
+  try {
+    const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=arweave&vs_currencies=usd', {
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`AR price API ${res.status}`);
+    const data = await res.json();
+    const price = data?.arweave?.usd;
+    if (price && price > 0) {
+      _arPriceCache = { at: now, price };
+      return price;
+    }
+    throw new Error('Invalid AR price');
+  } catch {
+    return 10; // fallback, mirrors EditVideos calculator
+  }
+}
+
+/** Estimate archive cost for selected files using live AR price. */
+async function estimateArchiveFiles(files = []) {
+  const arPrice = await getArPriceUSD();
+  const summary = summarizeArchiveCost(files, arPrice);
+  summary.estimatedAt = new Date().toISOString();
+  return summary;
+}
+
+// --- read EditVideos archive state (read-only via bridge app) ---------------
+/** Read + normalize the EditVideos archiveManifest/main doc. Degrades to empty. */
+async function getArchiveManifest() {
+  const snap = await bridgeDb().collection(ARCHIVE_MANIFEST_COLLECTION).doc(ARCHIVE_MANIFEST_DOC).get();
+  if (!snap.exists) return normalizeArchiveManifest({});
+  return normalizeArchiveManifest(snap.data() || {});
+}
+
+/** Read a single EditVideos archiveJobs doc. Null if missing. */
+async function getArchiveJob(archiveJobId) {
+  if (!archiveJobId) return null;
+  const snap = await bridgeDb().collection(ARCHIVE_JOBS_COLLECTION).doc(String(archiveJobId)).get();
+  if (!snap.exists) return null;
+  return snap.data() || null;
+}
+
+// --- mutations (proxied to the EditVideos deployed app over HTTP) -----------
+function requireApiBase() {
+  const base = editvideosApiBase();
+  if (!base) {
+    const err = new Error('EditVideos publishing API not configured (EDITVIDEOS_API_BASE).');
+    err.status = 503;
+    throw err;
+  }
+  return base;
+}
+
+/**
+ * Archive ONE Firebase file to Arweave via the EditVideos archive-upload API.
+ * @param {{folder:string, fileName:string}} args
+ * @returns {Promise<object>} the EditVideos JSON result (transactionId/arweaveUrl/...)
+ */
+async function archiveFirebaseFile({ folder, fileName } = {}) {
+  if (!folder || !fileName) throw new Error('folder and fileName are required to archive.');
+  const base = requireApiBase();
+  const res = await fetch(`${base}/api/archive-upload`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ folder, fileName }),
+  });
+  let data = null;
+  try { data = await res.json(); } catch { data = null; }
+  if (!res.ok || !data?.success) {
+    const err = new Error(data?.error || `Archive failed (${res.status}).`);
+    err.status = res.status || 500;
+    throw err;
+  }
+  return data;
+}
+
+/** Estimate a website deploy diff via the EditVideos deploy-website GET. */
+async function estimateWebsiteDeploy({ websiteDir } = {}) {
+  const base = requireApiBase();
+  const qs = websiteDir ? `?websiteDir=${encodeURIComponent(websiteDir)}` : '';
+  const res = await fetch(`${base}/api/deploy-website${qs}`, { method: 'GET' });
+  let data = null;
+  try { data = await res.json(); } catch { data = null; }
+  if (!res.ok || !data?.success) {
+    const err = new Error(data?.error || `Deploy estimate failed (${res.status}).`);
+    err.status = res.status || 500;
+    throw err;
+  }
+  return mapDeployEstimate(data);
+}
+
+/** Deploy the configured website to Arweave via the EditVideos deploy-website POST. */
+async function deployWebsite({ websiteDir } = {}) {
+  const base = requireApiBase();
+  const res = await fetch(`${base}/api/deploy-website`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(websiteDir ? { websiteDir } : {}),
+  });
+  let data = null;
+  try { data = await res.json(); } catch { data = null; }
+  if (!res.ok || !data?.success) {
+    const err = new Error(data?.error || `Deploy failed (${res.status}).`);
+    err.status = res.status || 500;
+    throw err;
+  }
+  return mapDeployResult(data);
+}
+
+/**
+ * Update the ArNS pointer for a deployment manifest. EditVideos performs ArNS
+ * inline during deploy; a standalone retry endpoint is OPTIONAL there. If it is
+ * not deployed, degrade with a clear 503 so the UI shows "not available" rather
+ * than crashing. Never blocks deploy success.
+ */
+async function updateArns({ manifestId } = {}) {
+  if (!manifestId) throw new Error('manifestId is required to update ArNS.');
+  const base = requireApiBase();
+  const res = await fetch(`${base}/api/update-arns`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transactionId: manifestId, manifestId }),
+  }).catch(() => null);
+  if (!res) {
+    const err = new Error('ArNS update endpoint unreachable.');
+    err.status = 503;
+    throw err;
+  }
+  if (res.status === 404) {
+    const err = new Error('ArNS retry is not exposed by EditVideos; redeploy to refresh the pointer.');
+    err.status = 501;
+    throw err;
+  }
+  let data = null;
+  try { data = await res.json(); } catch { data = null; }
+  if (!res.ok || !data?.success) {
+    const err = new Error(data?.error || `ArNS update failed (${res.status}).`);
+    err.status = res.status || 500;
+    throw err;
+  }
+  return {
+    status: 'done',
+    arnsUrl: data?.arnsUrl || null,
+    arnsName: data?.arnsName || process.env.EDITVIDEOS_ARNS_NAME || null,
+    manifestId,
+    updatedAt: new Date().toISOString(),
+    error: null,
+  };
+}
+
 module.exports = {
   mapRecipeToVideoJob,
   enqueueVideoJob,
@@ -610,6 +975,24 @@ module.exports = {
   ensureUploadCors,
   invalidateFolderCache,
   listOptions,
+  // archive / publishing
+  costForBytes,
+  summarizeArchiveCost,
+  normalizeArchiveManifest,
+  normalizeArchiveSources,
+  mapDeployResult,
+  mapDeployEstimate,
+  getArPriceUSD,
+  estimateArchiveFiles,
+  getArchiveManifest,
+  getArchiveJob,
+  archiveFirebaseFile,
+  estimateWebsiteDeploy,
+  deployWebsite,
+  updateArns,
+  editvideosApiBase,
   APP_NAME,
   JOBS_COLLECTION,
+  ARCHIVE_MANIFEST_COLLECTION,
+  ARCHIVE_JOBS_COLLECTION,
 };

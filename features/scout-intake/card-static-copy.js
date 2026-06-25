@@ -109,6 +109,12 @@ const CARD_STATIC_COPY = {
   'admin-dashboard-history': { description: 'Keeps every run and brief on record so progress and past decisions are easy to review.' },
   'image-generation':        { description: 'Creates branded post images with logo, layout, and text controls before publishing.' },
   'knowledge-file-config':   { description: 'Sets up a new brand by adding its facts, voice rules, and working notes.' },
+
+  // ── Local reputation ─────────────────────────────────────────────────
+  'gbp-reputation': {
+    description: 'Reviews Google Business Profile reputation health, flags reviews that need replies, and suggests the next local SEO action.',
+    placeholderLabel: 'LOCAL REPUTATION',
+  },
 };
 
 function getStaticCopy(cardId) {

@@ -72,6 +72,23 @@ export async function POST(request) {
 
   try {
     const result = await runWatchlistPull({ clientId, clientConfig, detail });
+    // Mirror the watchlist-analysis ("Happening on X") to Firestore so the daily
+    // digest email can render the same REPORT-tab block server-side. Best-effort:
+    // a failed write never blocks returning the timelines to the dashboard.
+    if (result?.ok && result?.analysis?.text) {
+      try {
+        await fb.adminDb.collection('dashboard_state').doc(clientId).set({
+          marketingBrief: {
+            reportSnapshot: {
+              watchlistAnalysis: {
+                text: result.analysis.text,
+                generatedAt: new Date().toISOString(),
+              },
+            },
+          },
+        }, { merge: true });
+      } catch { /* non-fatal — snapshot is additive */ }
+    }
     return json(result); // 200 even on ok:false so the UI can show the message
   } catch (err) {
     return json({ ok: false, handles: [], count: 0, error: err.message || 'Watchlist pull failed.' }, 500);

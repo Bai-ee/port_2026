@@ -23,12 +23,14 @@ const runtime = require('./runtime');
 const passthrough = require('./passthrough');
 const designSystem = require('./design-system');
 const pagespeed = require('./pagespeed');
+const gbpReputation = require('./gbp-reputation');
 
 const REGISTRY = {
   runtime,
   passthrough,
   'design-system-extractor': designSystem,
   pagespeed,
+  'gbp-reputation': gbpReputation,
 };
 
 function pickCards(tier) {

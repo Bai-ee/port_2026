@@ -1,0 +1,8 @@
+{
+  "name": "gbp-reputation",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Google Business Profile reputation card — deterministic analyzer, reusable SEO checklist + reply templates",
+  "main": "analyzer.js",
+  "type": "commonjs"
+}

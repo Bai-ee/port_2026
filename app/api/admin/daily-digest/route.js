@@ -863,10 +863,101 @@ function buildStrategicBriefSection(intel, clientName) {
   </div>`;
 }
 
+/** Split a recipe analysis string into leading JSON + trailing prose. Ported
+ *  from the dashboard's parseRecipeAnalysis (DashboardPage.jsx) so the email
+ *  renders the same watchlist-analysis shape server-side. */
+function parseRecipeAnalysis(text) {
+  if (!text || typeof text !== 'string') return { data: null, prose: '' };
+  const start = text.indexOf('{');
+  if (start === -1) return { data: null, prose: text.trim() };
+  let depth = 0, end = -1, inStr = false, esc = false;
+  for (let i = start; i < text.length; i += 1) {
+    const c = text[i];
+    if (esc) { esc = false; continue; }
+    if (c === '\\' && inStr) { esc = true; continue; }
+    if (c === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (c === '{') depth += 1;
+    else if (c === '}') { depth -= 1; if (depth === 0) { end = i; break; } }
+  }
+  if (end === -1) return { data: null, prose: text.trim() };
+  let data = null;
+  try { data = JSON.parse(text.slice(start, end + 1)); } catch { data = null; }
+  return { data, prose: text.slice(end + 1).trim() };
+}
+
+/** "Happening on X" watchlist brief — email port of renderWatchlistAnalysisBlock
+ *  (DashboardPage.jsx). Renders the dashboard REPORT-tab block in the brief-kit
+ *  look using email-safe inline styles + the digest's warm-cream tokens
+ *  (no pseudo-elements / CSS grid). Returns '' when there's nothing to show. */
+function buildWatchlistBriefSection(analysisText) {
+  const { data, prose } = parseRecipeAnalysis(analysisText);
+  if (!data && !prose) return '';
+
+  const spotHandle = data?.spotlight?.handle ? String(data.spotlight.handle).replace(/^@+/, '') : '';
+  const handleNames = Array.from(new Set(
+    (Array.isArray(data?.handles) ? data.handles : [])
+      .map((h) => String(h.handle || '').replace(/^@+/, '').trim())
+      .filter(Boolean)
+  ));
+  // Bold tracked handle names wherever they appear in free-form text. Escape
+  // first — handle names are alphanumeric/underscore, unchanged by escaping.
+  const boldHandles = (raw) => {
+    const safe = escapeHtml(String(raw || ''));
+    if (!handleNames.length) return safe;
+    const escaped = handleNames.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const re = new RegExp(`(@?(?:${escaped.join('|')})\\b)`, 'gi');
+    return safe.replace(re, '<strong>$1</strong>');
+  };
+
+  const sec = (t) => `<div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:${DT.light};margin:0 0 6px;">${t}</div>`;
+  const pull = (inner) => `<p style="font-family:${DT.fBody};font-weight:300;font-size:18px;line-height:1.3;border-left:3px solid ${DT.ink};padding:2px 0 2px 14px;margin:0;color:${DT.ink};">${inner}</p>`;
+
+  const eyebrow = `<div style="font-family:${DT.fMono};font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:${DT.light};margin:0 0 10px;"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${DT.ink};vertical-align:middle;margin-right:8px;"></span>Marketing Director &middot; Watchlist Brief${spotHandle ? ` &middot; spotlight @${escapeHtml(spotHandle)}` : ''}</div>`;
+  const headline = `<div style="font-family:${DT.fDisp};font-weight:900;font-size:30px;line-height:.95;letter-spacing:-.005em;text-transform:uppercase;color:${DT.ink};margin:0 0 12px;">Happening on X</div>`;
+
+  const overviewHtml = data?.overview
+    ? `<div style="margin-bottom:16px;">${sec('Overview')}${pull(boldHandles(data.overview))}</div>` : '';
+  const actionHtml = data?.priorityAction
+    ? `<div style="margin-bottom:16px;">${sec('Suggested action')}${pull(escapeHtml(data.priorityAction))}</div>` : '';
+
+  const handlesArr = Array.isArray(data?.handles) ? data.handles : [];
+  const handleCards = handlesArr.length
+    ? `<div style="margin-bottom:16px;">${sec('Per handle')}<div style="font-size:0;line-height:0;">${handlesArr.map((h) => {
+        const hh = escapeHtml(String(h.handle || '').replace(/^@+/, ''));
+        return `<div style="display:inline-block;vertical-align:top;width:48%;min-width:200px;margin:0 2% 10px 0;background:rgba(255,255,255,0.55);border:1px solid ${DT.line};border-radius:12px;padding:13px;box-sizing:border-box;">
+          <div style="font-family:${DT.fDisp};font-weight:900;font-size:18px;line-height:1;text-transform:uppercase;color:${DT.ink};">@${hh}</div>
+          ${h.posting ? `<p style="font-family:${DT.fBody};font-size:13px;line-height:1.5;color:${DT.ink};margin:8px 0 0;">${escapeHtml(h.posting)}</p>` : ''}
+          ${h.talkedAbout ? `<div style="margin-top:10px;padding-top:10px;border-top:1px dashed ${DT.dash};">${sec('Talked about')}<p style="font-family:${DT.fBody};font-size:13px;line-height:1.5;color:${DT.soft};margin:3px 0 0;">${escapeHtml(h.talkedAbout)}</p></div>` : ''}
+        </div>`;
+      }).join('')}</div></div>` : '';
+
+  const spotlightHtml = data?.spotlight?.why
+    ? `<div style="background:${DT.ink};border-radius:14px;padding:16px 18px;margin-top:6px;">
+        <div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,0.6);margin-bottom:8px;">Spotlight &middot; @${escapeHtml(spotHandle)}</div>
+        <div style="font-family:${DT.fBody};font-weight:300;font-size:16px;line-height:1.3;color:#fff;">${escapeHtml(data.spotlight.why)}</div>
+      </div>` : '';
+
+  const proseFallback = (!data && prose)
+    ? `<p style="font-family:${DT.fBody};font-size:13.5px;line-height:1.55;color:${DT.ink};margin:0;">${escapeHtml(prose).replace(/\n{2,}/g, '<br><br>').replace(/\n/g, '<br>')}</p>` : '';
+
+  const body = `${overviewHtml}${actionHtml}${handleCards}${spotlightHtml}${proseFallback}`;
+  if (!body.trim()) return '';
+
+  // kit-paper — warm-cream report card, matching the dashboard REPORT tab look.
+  return `<div style="margin-bottom:32px;">
+    <div style="border:1px solid ${DT.line};border-radius:14px;padding:20px;background:${DT.card};">
+      ${eyebrow}
+      ${headline}
+      ${body}
+    </div>
+  </div>`;
+}
+
 function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs) {
   const strategicSections = (Array.isArray(briefs) ? briefs : [])
-    .map((b) => buildStrategicBriefSection(b.intel, b.clientName))
-    .filter(Boolean)
+    .map((b) => `${buildStrategicBriefSection(b.intel, b.clientName)}${buildWatchlistBriefSection(b.intel?.watchlistAnalysis)}`)
+    .filter((s) => s && s.trim())
     .join('');
   const dateStr = new Date(timestamp).toLocaleDateString('en-US', {
     weekday: 'long',
@@ -1156,7 +1247,23 @@ function buildPlaceholderData(timestamp) {
     summary: {
       paragraph: 'This is placeholder executive-summary text. When you run the digest, an AI-written recap of the day’s sign-ups, traffic, deployments, and strategic brief will appear here in this slot.',
     },
-    briefs: [],
+    // One placeholder brief carrying only a watchlist-analysis snapshot, so the
+    // "Happening on X" block renders in the template preview. The strategic-brief
+    // block stays empty (no opportunities/KOLs/etc.) on purpose.
+    briefs: [{
+      clientName: 'Sample Client',
+      intel: {
+        watchlistAnalysis: JSON.stringify({
+          overview: 'Placeholder watchlist read — @sample_handle is shipping launch teasers while @another_voice drives the category conversation. Real overview text fills in when you run Pull timelines in the dashboard.',
+          priorityAction: 'Placeholder action — reply to @sample_handle’s launch thread within the hour to ride the engagement window.',
+          handles: [
+            { handle: 'sample_handle', posting: 'Posting launch teasers and behind-the-scenes clips; high reply volume.', talkedAbout: 'Mentioned as the one to watch in the category this week.' },
+            { handle: 'another_voice', posting: 'Sharing market commentary and contrarian takes.', talkedAbout: 'Quoted across several threads debating the new direction.' },
+          ],
+          spotlight: { handle: 'sample_handle', why: 'Placeholder spotlight — biggest engagement spike of the tracked set; their launch thread is the conversation to enter.' },
+        }),
+      },
+    }],
   };
 }
 

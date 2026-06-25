@@ -51,6 +51,7 @@ import ModuleCardControls from './components/dashboard/ModuleCardControls';
 import SubscribeModal from './components/payments/SubscribeModal';
 import { AdminEmailDigestView, AdminEmailSettingsView, AdminCreateClientView } from './components/AdminEmailModals';
 import { ContactCapabilitiesPanel } from './StackedSlidesSection';
+import { ROSITAS_GBP_REPORT } from './lib/gbpReputationReport';
 
 // Extract the "Suggested Post" caption the Creative Brief flow scribes into the
 // onboarding summary (a single labeled string). Returns '' when absent.
@@ -599,6 +600,8 @@ function buildDefaultMarketingBriefConfig(client, dashboardState) {
     competitors: '',
     // Enabled analysis-skill recipe ids (Market Signals card). Empty = none run.
     analysisRecipes: [],
+    // Local reputation listener — GBP review/profile/SEO health (Market Signals toggle).
+    gbpReputation: { enabled: false },
     // Watchlist pull detail level — what to fetch per handle.
     watchlistDetail: { tweets: true, mentions: true, latestOnly: false },
     agentDataTemplate: `{
@@ -1409,6 +1412,7 @@ const CUSTOM_DETAIL_CARD_IDS = new Set([
   'brief-preview',
   'business-model',
   'strategy-30',
+  'archive-publishing',
 ]);
 
 // Cards whose list-row icon is a pencil (editable/config) vs an eye (view-only,
@@ -2909,6 +2913,27 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	  const videoRemixUploadInputRef = useRef(null);
 	  const videoRemixFolderFileCacheRef = useRef(new Map());
 	  const videoRemixFolderFilesRequestRef = useRef(0);
+	  // --- Archive / Publishing card (Knowledge Officer, admin-only) ---------
+	  const [archiveSources, setArchiveSources] = useState([]);
+	  const [archiveSourcesLoading, setArchiveSourcesLoading] = useState(false);
+	  const [archiveSourceMode, setArchiveSourceMode] = useState('mediaCaptures');
+	  const [archiveFolders, setArchiveFolders] = useState([]);
+	  const [archiveSelectedFolder, setArchiveSelectedFolder] = useState('');
+	  const [archiveSelected, setArchiveSelected] = useState({});
+	  const [archiveEstimate, setArchiveEstimate] = useState(null);
+	  const [archiveManifest, setArchiveManifest] = useState(null);
+	  const [archiveManifestLoading, setArchiveManifestLoading] = useState(false);
+	  const [archiveBusy, setArchiveBusy] = useState(false);
+	  const [archiveConfirming, setArchiveConfirming] = useState(false);
+	  const [archiveError, setArchiveError] = useState('');
+	  const [archiveResult, setArchiveResult] = useState(null);
+	  const [deployEstimate, setDeployEstimate] = useState(null);
+	  const [deployBusy, setDeployBusy] = useState(false);
+	  const [deployConfirming, setDeployConfirming] = useState(false);
+	  const [deployResult, setDeployResult] = useState(null);
+	  const [deployError, setDeployError] = useState('');
+	  const [arnsBusy, setArnsBusy] = useState(false);
+	  const [arnsError, setArnsError] = useState('');
 	  const [mockupStudioRenderError, setMockupStudioRenderError] = useState('');
 	  const [postMeLoading, setPostMeLoading] = useState(false);
 	  const [postMeResult, setPostMeResult] = useState(null); // null | { ok, twitterId, error }
@@ -3215,6 +3240,152 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	      if (!cancelledRef.current) setVideoRemixLoading(false);
 	    }
 	  }, [user, videoRemixLoading, client?.clientId, client?.id, bootstrap?.effectiveClientId, apiPath, runWithTerminal]);
+
+	  // --- Archive / Publishing handlers (admin-only; all calls go through the
+	  // metadata-only /api/dashboard/media route, which proxies wallet-funded
+	  // mutations to the EditVideos deployed app). -----------------------------
+	  const archiveAuthHeaders = useCallback(async () => {
+	    const token = await user.getIdToken();
+	    return { Authorization: `Bearer ${token}` };
+	  }, [user]);
+
+	  const refreshArchiveSources = useCallback(async (mode = archiveSourceMode, folder = archiveSelectedFolder) => {
+	    if (!user) return;
+	    setArchiveSourcesLoading(true);
+	    setArchiveError('');
+	    try {
+	      const headers = await archiveAuthHeaders();
+	      const qs = mode === 'editvideosFolder' && folder ? `&folder=${encodeURIComponent(folder)}` : '';
+	      const res = await fetch(apiPath(`/api/dashboard/media?action=archive-sources${qs}`), { headers, cache: 'no-store' });
+	      const data = await res.json();
+	      if (!res.ok) throw new Error(data?.error || 'Could not load archive sources.');
+	      setArchiveSources(Array.isArray(data.sources) ? data.sources : []);
+	    } catch (err) {
+	      setArchiveError(err?.message || 'Could not load archive sources.');
+	      setArchiveSources([]);
+	    } finally {
+	      setArchiveSourcesLoading(false);
+	    }
+	  }, [user, apiPath, archiveAuthHeaders, archiveSourceMode, archiveSelectedFolder]);
+
+	  const loadArchiveFolders = useCallback(async () => {
+	    if (!user || archiveFolders.length) return;
+	    try {
+	      const headers = await archiveAuthHeaders();
+	      const res = await fetch(apiPath('/api/dashboard/media?action=folders&withCounts=1'), { headers, cache: 'no-store' });
+	      const data = await res.json();
+	      const list = Array.isArray(data?.folders) ? data.folders : [];
+	      setArchiveFolders(list.map((f) => (typeof f === 'string' ? { name: f, displayName: f } : f)));
+	    } catch { /* degrade — folder picker stays empty */ }
+	  }, [user, apiPath, archiveAuthHeaders, archiveFolders.length]);
+
+	  const refreshArchiveManifest = useCallback(async () => {
+	    if (!user) return;
+	    setArchiveManifestLoading(true);
+	    try {
+	      const headers = await archiveAuthHeaders();
+	      const res = await fetch(apiPath('/api/dashboard/media?action=archive-manifest'), { headers, cache: 'no-store' });
+	      const data = await res.json();
+	      if (!res.ok) throw new Error(data?.error || 'Could not load manifest.');
+	      setArchiveManifest(data.manifest || null);
+	    } catch (err) {
+	      setArchiveError(err?.message || 'Could not load manifest.');
+	    } finally {
+	      setArchiveManifestLoading(false);
+	    }
+	  }, [user, apiPath, archiveAuthHeaders]);
+
+	  const runArchiveEstimate = useCallback(async (files) => {
+	    if (!user || !files?.length) return;
+	    setArchiveError('');
+	    try {
+	      const headers = { ...(await archiveAuthHeaders()), 'Content-Type': 'application/json' };
+	      const res = await fetch(apiPath('/api/dashboard/media?action=archive-estimate'), {
+	        method: 'POST', headers, body: JSON.stringify({ files }),
+	      });
+	      const data = await res.json();
+	      if (!res.ok) throw new Error(data?.error || 'Estimate failed.');
+	      setArchiveEstimate(data.estimate || null);
+	    } catch (err) {
+	      setArchiveError(err?.message || 'Estimate failed.');
+	    }
+	  }, [user, apiPath, archiveAuthHeaders]);
+
+	  const runArchiveSelected = useCallback(async (files) => {
+	    if (!user || !files?.length || archiveBusy) return;
+	    setArchiveBusy(true);
+	    setArchiveError('');
+	    setArchiveResult(null);
+	    try {
+	      const headers = { ...(await archiveAuthHeaders()), 'Content-Type': 'application/json' };
+	      const res = await fetch(apiPath('/api/dashboard/media?action=archive-to-arweave'), {
+	        method: 'POST', headers, body: JSON.stringify({ files }),
+	      });
+	      const data = await res.json();
+	      if (!res.ok) throw new Error(data?.error || 'Archive failed.');
+	      setArchiveResult({ status: data.status, archivedAssets: data.archivedAssets || [], errors: data.errors || [] });
+	      setArchiveSelected({});
+	      setArchiveConfirming(false);
+	      refreshArchiveManifest().catch(() => {});
+	    } catch (err) {
+	      setArchiveError(err?.message || 'Archive failed.');
+	    } finally {
+	      setArchiveBusy(false);
+	    }
+	  }, [user, apiPath, archiveAuthHeaders, archiveBusy, refreshArchiveManifest]);
+
+	  const runDeployEstimate = useCallback(async () => {
+	    if (!user || deployBusy) return;
+	    setDeployError('');
+	    try {
+	      const headers = await archiveAuthHeaders();
+	      const res = await fetch(apiPath('/api/dashboard/media?action=website-deploy-estimate'), { headers, cache: 'no-store' });
+	      const data = await res.json();
+	      if (!res.ok) throw new Error(data?.error || 'Deploy estimate failed.');
+	      setDeployEstimate(data.estimate || null);
+	    } catch (err) {
+	      setDeployError(err?.message || 'Deploy estimate failed.');
+	    }
+	  }, [user, apiPath, archiveAuthHeaders, deployBusy]);
+
+	  const runDeployWebsite = useCallback(async () => {
+	    if (!user || deployBusy) return;
+	    setDeployBusy(true);
+	    setDeployError('');
+	    try {
+	      const headers = { ...(await archiveAuthHeaders()), 'Content-Type': 'application/json' };
+	      const res = await fetch(apiPath('/api/dashboard/media?action=deploy-website'), {
+	        method: 'POST', headers, body: JSON.stringify({}),
+	      });
+	      const data = await res.json();
+	      if (!res.ok) throw new Error(data?.error || 'Deploy failed.');
+	      setDeployResult(data.deployment || null);
+	      setDeployConfirming(false);
+	    } catch (err) {
+	      setDeployError(err?.message || 'Deploy failed.');
+	    } finally {
+	      setDeployBusy(false);
+	    }
+	  }, [user, apiPath, archiveAuthHeaders, deployBusy]);
+
+	  const runUpdateArns = useCallback(async (manifestId) => {
+	    if (!user || !manifestId || arnsBusy) return;
+	    setArnsBusy(true);
+	    setArnsError('');
+	    try {
+	      const headers = { ...(await archiveAuthHeaders()), 'Content-Type': 'application/json' };
+	      const res = await fetch(apiPath('/api/dashboard/media?action=update-arns'), {
+	        method: 'POST', headers, body: JSON.stringify({ manifestId }),
+	      });
+	      const data = await res.json();
+	      if (!res.ok) throw new Error(data?.error || 'ArNS update failed.');
+	      setDeployResult((prev) => prev ? { ...prev, arnsUrl: data.arns?.arnsUrl, arnsUpdatedAt: data.arns?.updatedAt, arnsError: null } : prev);
+	    } catch (err) {
+	      setArnsError(err?.message || 'ArNS update failed.');
+	    } finally {
+	      setArnsBusy(false);
+	    }
+	  }, [user, apiPath, archiveAuthHeaders, arnsBusy]);
 
 	  const refreshVideoRemixFolders = useCallback(async () => {
 	    if (!user) return [];
@@ -3856,6 +4027,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       acknowledgedCards: (next.acknowledgedCards && typeof next.acknowledgedCards === 'object') ? next.acknowledgedCards : (fallback.acknowledgedCards || {}),
       // Enabled analysis-skill recipe ids — always an array so the toggle UI is safe.
       analysisRecipes: Array.isArray(next.analysisRecipes) ? next.analysisRecipes : (fallback.analysisRecipes || []),
+      // Local reputation listener — always an object with a boolean flag.
+      gbpReputation: { enabled: next.gbpReputation?.enabled === true },
       // Watchlist detail toggles — always an object with boolean flags.
       watchlistDetail: {
         tweets: next.watchlistDetail?.tweets !== false,
@@ -4433,6 +4606,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    if (id === 'local-weather') { setModalTab('config'); return; }
 	    if (id === 'mockup-studio') { setModalTab('setup'); return; }
 	    if (id === 'video-remix') { setModalTab('remix'); return; }
+	    if (id === 'archive-publishing') { setModalTab('archive'); return; }
 	    setModalTab(CUSTOM_DETAIL_CARD_IDS.has(id) ? 'solutions' : 'report');
   }, [activeTileModal?.cardId, bootstrap?.dashboardState?.artifacts?.skillDocs]);
 
@@ -4476,6 +4650,15 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     })();
     return () => { cancelled = true; };
   }, [activeTileModal?.cardId, user, apiPath]);
+
+  // Load archive sources + manifest when the Archive / Publishing modal opens.
+  useEffect(() => {
+    if (activeTileModal?.cardId !== 'archive-publishing') return undefined;
+    if (!user) return undefined;
+    refreshArchiveSources('mediaCaptures', '').catch(() => {});
+    refreshArchiveManifest().catch(() => {});
+    return undefined;
+  }, [activeTileModal?.cardId, user, refreshArchiveSources, refreshArchiveManifest]);
 
   useEffect(() => {
     if (!showTierModal) return undefined;
@@ -4865,6 +5048,19 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     saveMarketingBriefConfig({ override: next });
   }, [marketingBriefConfig, saveMarketingBriefConfig]);
 
+  // Local reputation listener toggle — adds GBP review/profile/SEO health to
+  // what Market Signals listens to. Mirrors the recipe-toggle auto-save flow.
+  const gbpReputationEnabled = marketingBriefConfig?.gbpReputation?.enabled === true;
+  const toggleGbpReputation = useCallback(() => {
+    if (!marketingBriefConfig) return;
+    const next = {
+      ...marketingBriefConfig,
+      gbpReputation: { enabled: !(marketingBriefConfig?.gbpReputation?.enabled === true) },
+    };
+    setMarketingBriefConfig(next);
+    saveMarketingBriefConfig({ override: next });
+  }, [marketingBriefConfig, saveMarketingBriefConfig]);
+
   const runAnalysisRecipes = useCallback(async () => {
     if (!user) return;
     const ids = Array.isArray(marketingBriefConfig?.analysisRecipes) ? marketingBriefConfig.analysisRecipes : [];
@@ -5203,7 +5399,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       : 'Mentions only';
     return (
       <div className="signals-sg">
-        <section className="sg-section">
+        <section className="sg-section" id="signals-search-sources-section">
           <div className="sg-head">
             <span className="sg-index">01</span>
             <div>
@@ -5361,7 +5557,82 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           ) : null}
         </section>
 
+        <section className="sg-section" id="signals-local-reputation-section">
+          <div className="sg-head">
+            <span className="sg-index">05</span>
+            <div>
+              <h3>Local Reputation</h3>
+              <p>Listen to Google Business Profile reviews, profile completeness, and local SEO gaps. Diagnostic + reply drafts only — nothing publishes. Renders in the <strong>REPORT</strong> tab.</p>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gap: 10 }} id="gbp-reputation-toggle-list">
+            <div className="sg-source" id="gbp-reputation-toggle">
+              <span className="sg-source-value">
+                <span>Google Business Profile{!gbpReputationEnabled ? ' · off' : ''}<small>Reviews needing replies, profile health, and the next local SEO action.</small></span>
+              </span>
+              <span className="sg-source-actions">
+                <button type="button" className={`sg-btn ${gbpReputationEnabled ? 'sg-btn-on' : 'sg-btn-off'}`} style={{ minWidth: 52 }} onClick={toggleGbpReputation}>{gbpReputationEnabled ? 'ON' : 'OFF'}</button>
+              </span>
+            </div>
+          </div>
+        </section>
+
         {marketingBriefError ? <p className="sg-notice sg-notice-danger">{marketingBriefError}</p> : null}
+      </div>
+    );
+  };
+
+  // GBP Reputation REPORT block — renders the deterministic reputation
+  // projection (Rosita's mock until live GBP OAuth lands). Read-only drafts.
+  const renderGbpReputationBlock = (rep) => {
+    if (!rep) return null;
+    const isDanger = rep.priorityAction?.severity === 'high';
+    return (
+      <div className="kit-paper" id="gbp-reputation-report-block">
+        <div className="b-eyebrow"><span className="dot" />Marketing Director · Local Reputation</div>
+        {!rep.connected ? (
+          <>
+            <h2 className="b-headline">Connect Google Business Profile</h2>
+            <p className="b-sub">{rep.priorityAction?.reason || 'No live reputation data is available yet.'}</p>
+          </>
+        ) : (
+          <>
+            <h2 className="b-headline">{rep.locationName}</h2>
+            <p className="b-sub">{rep.ratingAverage} rating across {rep.reviewCount} reviews · {rep.unrepliedCount} need a reply{rep.negativeUnrepliedCount ? `, incl. ${rep.negativeUnrepliedCount} negative` : ''}.</p>
+            <div className="scores" style={{ margin: '12px 0' }}>
+              <div className="score"><div className="lbl">Rating</div><div className="num">{rep.ratingAverage}</div></div>
+              <div className="score"><div className="lbl">Need reply</div><div className="num">{rep.unrepliedCount}</div></div>
+              <div className="score"><div className="lbl">Negative</div><div className="num">{rep.negativeUnrepliedCount}</div></div>
+              <div className="score"><div className="lbl">SEO done</div><div className="num">{rep.seoChecklist.completed}/{rep.seoChecklist.total}</div></div>
+            </div>
+            <div className={`sg-notice ${isDanger ? 'sg-notice-danger' : 'sg-notice-muted'}`} style={{ margin: '8px 0 14px' }}>
+              <strong>First action:</strong> {rep.priorityAction.label} — {rep.priorityAction.reason}
+            </div>
+            {rep.suggestedReplies.length ? (
+              <>
+                <div className="b-sec">Reviews needing reply · draft responses</div>
+                <div className="b-stack">
+                  {rep.suggestedReplies.slice(0, 4).map((s, i) => (
+                    <div className="b-card" key={`gbp-reply-${i}`}>
+                      <div className="stat-row"><div className="k">{s.rating}★ · {s.reviewer}</div><div className="v" style={{ textTransform: 'uppercase', fontSize: 11, opacity: 0.7 }}>{s.sentiment}</div></div>
+                      <div className="stat-row"><div className="k">Draft</div><div className="v">{s.draft}</div></div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : null}
+            {rep.seoChecklist.priorityItems.length ? (
+              <>
+                <div className="b-sec" style={{ marginTop: 16 }}>Local SEO · next gaps</div>
+                <div className="b-stack">
+                  {rep.seoChecklist.priorityItems.map((it, i) => (
+                    <div className="b-bubble" key={`gbp-seo-${i}`}><div className="txt">{it.label} <span style={{ opacity: 0.6 }}>· {it.frequency}</span></div></div>
+                  ))}
+                </div>
+              </>
+            ) : null}
+          </>
+        )}
       </div>
     );
   };
@@ -5631,8 +5902,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     const web = scoutTestState?.web?.items || [];
     const total = handleTotal + reddit.length + web.length;
     const recipeResults = (recipeRun.results || []).filter((r) => r.ok && r.analysis);
+    const gbpRep = (marketingBriefConfig?.gbpReputation?.enabled === true) ? ROSITAS_GBP_REPORT : null;
 
-    if (total === 0 && !recipeResults.length) {
+    if (total === 0 && !recipeResults.length && !gbpRep) {
       return (
         <div className="brief-kit">
           <div className="kit-paper">
@@ -5727,6 +5999,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             </div>
           ) : null}
 
+          {gbpRep ? renderGbpReputationBlock(gbpRep) : null}
           {recipeResults.map((res) => renderRecipeBriefBlock(res))}
         </div>
       </div>
@@ -9383,6 +9656,44 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           loading: videoRemixLoading,
           onClick: () => runVideoRemix({}),
         },
+      };
+    })(),
+    (() => {
+      const ap = dashboardState?.archivePublishing || {};
+      const archivedCount = Array.isArray(ap.archivedAssets) ? ap.archivedAssets.length : 0;
+      const latestAsset = archivedCount ? ap.archivedAssets[ap.archivedAssets.length - 1] : null;
+      const deploy = ap.latestDeployment || null;
+      const job = ap.latestArchiveJob || null;
+      const lastUrl = deploy?.arnsUrl || deploy?.arweaveUrl || latestAsset?.arweaveUrl || null;
+      const jobActive = job && (job.status === 'queued' || job.status === 'processing');
+      const jobFailed = (job && job.status === 'failed') || (deploy && deploy.status === 'failed');
+      return {
+        id: 'archive-publishing',
+        category: 'knowledge',
+        adminOnly: true,
+        number: 'AP',
+        label: 'ARCHIVE & PUBLISH',
+        title: 'Archive / Publishing',
+        description: 'Permanently archive approved videos and media to Arweave, inspect the manifest, estimate cost, and deploy/point the Arweave microsite. Admin only.',
+        placeholderLabel: archivedCount ? 'OPEN\nPUBLISHING' : 'ARCHIVE\nTO ARWEAVE',
+        rows: archivedCount
+          ? [
+              { key: 'ap-count',  label: 'Archived assets', value: `${archivedCount} on Arweave` },
+              { key: 'ap-latest', label: 'Latest',          value: latestAsset?.label || '—' },
+              { key: 'ap-deploy', label: 'Last deployment',  value: deploy?.status ? `${deploy.status}${deploy.manifestId ? ` · ${String(deploy.manifestId).slice(0, 10)}…` : ''}` : 'None yet' },
+              { key: 'ap-url',    label: 'Permanent link',    value: lastUrl ? 'Stored' : '—' },
+            ]
+          : [
+              { key: 'ap-about',  label: 'About',  value: 'Archive approved videos/files to Arweave for permanent provenance and delivery links.' },
+              { key: 'ap-admin',  label: 'Access', value: 'Admin-only. Estimate first; uploads are wallet-funded and permanent.' },
+              { key: 'ap-action', label: 'Action', value: 'Open Publishing to select files and archive.' },
+            ],
+        footerLeft: jobActive ? 'Working…' : jobFailed ? 'Action failed' : archivedCount ? 'Archived' : 'Ready',
+        footerRight: 'ADMIN',
+        readinessBadge: jobActive
+          ? { tone: 'partial', label: 'Working…' }
+          : jobFailed ? { tone: 'fail', label: 'Failed' }
+          : archivedCount ? { tone: 'ok', label: 'Archived' } : null,
       };
     })(),
     {
@@ -17032,6 +17343,233 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                  );
 	                })()}
 
+	                {/* Archive / Publishing — Archive · Manifest · Website · ArNS · Cost */}
+	                {activeTileModal.cardId === 'archive-publishing' && (() => {
+	                  const ap = dashboardState?.archivePublishing || {};
+	                  const tab = ['archive', 'manifest', 'website', 'arns', 'cost'].includes(modalTab) ? modalTab : 'archive';
+	                  const rows = archiveSources.filter((r) => r.source === archiveSourceMode);
+	                  const keyOf = (r) => r.storagePath || r.fullPath || r.url || `${r.folder || ''}/${r.fileName || r.label}`;
+	                  const selectedRows = Object.values(archiveSelected);
+	                  const deploy = ap.latestDeployment || null;
+	                  const job = ap.latestArchiveJob || null;
+	                  const manifestEntries = Array.isArray(archiveManifest?.entries) ? archiveManifest.entries : [];
+	                  const toggleRow = (r) => setArchiveSelected((prev) => {
+	                    const k = keyOf(r); const next = { ...prev };
+	                    if (next[k]) delete next[k]; else next[k] = r;
+	                    return next;
+	                  });
+	                  const switchSourceMode = (mode) => {
+	                    setArchiveSourceMode(mode);
+	                    setArchiveSelected({});
+	                    setArchiveEstimate(null);
+	                    if (mode === 'editvideosFolder') {
+	                      loadArchiveFolders().catch(() => {});
+	                      if (archiveSelectedFolder) refreshArchiveSources('editvideosFolder', archiveSelectedFolder).catch(() => {});
+	                    } else {
+	                      refreshArchiveSources(mode, '').catch(() => {});
+	                    }
+	                  };
+	                  return (
+	                    <div id="archive-publishing-modal-tabs-container" className="apk-scope tile-detail-bento-cell panel">
+	                      <div className="apk-tabs">
+	                        {[['archive', 'ARCHIVE'], ['manifest', 'MANIFEST'], ['website', 'WEBSITE'], ['arns', 'ARNS'], ['cost', 'COST']].map(([k, label]) => (
+	                          <button key={k} type="button" className={`apk-tab${tab === k ? ' is-active' : ''}`} onClick={() => {
+	                            setModalTab(k);
+	                            if (k === 'manifest') refreshArchiveManifest().catch(() => {});
+	                          }}>{label}</button>
+	                        ))}
+	                      </div>
+
+	                      {archiveError ? <div className="apk-error">{archiveError}</div> : null}
+
+	                      {tab === 'archive' && (
+	                        <div className="apk-body">
+	                          <div className="apk-seg">
+	                            {[['mediaCaptures', 'Finished Videos'], ['studioCaptures', 'Studio Captures'], ['editvideosFolder', 'Source Folders']].map(([m, label]) => (
+	                              <button key={m} type="button" className={`apk-seg-btn${archiveSourceMode === m ? ' is-active' : ''}`} onClick={() => switchSourceMode(m)}>{label}</button>
+	                            ))}
+	                          </div>
+
+	                          {archiveSourceMode === 'editvideosFolder' && (
+	                            <div className="apk-folder-row">
+	                              <select className="apk-select" value={archiveSelectedFolder} onChange={(e) => {
+	                                const f = e.target.value; setArchiveSelectedFolder(f);
+	                                setArchiveSelected({});
+	                                if (f) refreshArchiveSources('editvideosFolder', f).catch(() => {});
+	                              }}>
+	                                <option value="">Select a folder…</option>
+	                                {archiveFolders.map((f) => (
+	                                  <option key={f.name} value={f.name}>{f.displayName || f.name}{f.count != null ? ` (${f.count})` : ''}</option>
+	                                ))}
+	                              </select>
+	                            </div>
+	                          )}
+
+	                          {archiveSourcesLoading ? (
+	                            <div className="apk-empty">Loading sources…</div>
+	                          ) : rows.length === 0 ? (
+	                            <div className="apk-empty">{archiveSourceMode === 'editvideosFolder' && !archiveSelectedFolder ? 'Pick a folder to list files.' : 'No files available in this source.'}</div>
+	                          ) : (
+	                            <div className="apk-table">
+	                              {rows.map((r) => {
+	                                const k = keyOf(r);
+	                                const archived = r.arweave?.transactionId;
+	                                return (
+	                                  <label key={k} className="apk-row">
+	                                    <input type="checkbox" checked={!!archiveSelected[k]} onChange={() => toggleRow(r)} disabled={archiveBusy} />
+	                                    <span className="apk-row-name">{r.label || r.fileName}</span>
+	                                    <span className="apk-row-meta">{r.contentType || '—'}</span>
+	                                    <span className="apk-row-meta">{r.sizeBytes ? formatVideoRemixBytes(r.sizeBytes) : '—'}</span>
+	                                    <span className="apk-row-state">{archived ? 'Archived' : 'Not archived'}</span>
+	                                  </label>
+	                                );
+	                              })}
+	                            </div>
+	                          )}
+
+	                          {selectedRows.length > 0 && (
+	                            <div className="apk-actions">
+	                              <div className="apk-estimate-line">
+	                                {archiveEstimate
+	                                  ? `Estimate: ${archiveEstimate.fileCount} file(s) · ${formatVideoRemixBytes(archiveEstimate.sizeBytes)} · ~${archiveEstimate.costAR} AR (~$${archiveEstimate.costUSD})`
+	                                  : `${selectedRows.length} file(s) selected — estimate before archiving.`}
+	                              </div>
+	                              <div className="apk-btn-row">
+	                                <button type="button" className="apk-btn" disabled={archiveBusy} onClick={() => runArchiveEstimate(selectedRows)}>Estimate</button>
+	                                {!archiveConfirming ? (
+	                                  <button type="button" className="apk-btn apk-btn--primary" disabled={archiveBusy || !archiveEstimate} onClick={() => setArchiveConfirming(true)}>Archive selected</button>
+	                                ) : (
+	                                  <>
+	                                    <span className="apk-confirm-note">Permanent + wallet-funded. Confirm?</span>
+	                                    <button type="button" className="apk-btn" disabled={archiveBusy} onClick={() => setArchiveConfirming(false)}>Cancel</button>
+	                                    <button type="button" className="apk-btn apk-btn--danger" disabled={archiveBusy} onClick={() => runArchiveSelected(selectedRows)}>{archiveBusy ? 'Archiving…' : 'Confirm archive'}</button>
+	                                  </>
+	                                )}
+	                              </div>
+	                            </div>
+	                          )}
+
+	                          {archiveResult && (
+	                            <div className="apk-result">
+	                              <div className="apk-result-head">Archive result: {archiveResult.status}</div>
+	                              {archiveResult.archivedAssets.map((a) => (
+	                                <div key={a.transactionId || a.label} className="apk-result-row">
+	                                  <span>{a.label}</span>
+	                                  {a.arweaveUrl ? <a href={a.arweaveUrl} target="_blank" rel="noreferrer">Arweave</a> : null}
+	                                  <span className="apk-tx">{a.transactionId ? `${a.transactionId.slice(0, 12)}…` : '—'}</span>
+	                                </div>
+	                              ))}
+	                              {archiveResult.errors?.map((e, i) => (
+	                                <div key={`err-${i}`} className="apk-result-row apk-result-row--err">{e.label}: {e.error}</div>
+	                              ))}
+	                            </div>
+	                          )}
+	                        </div>
+	                      )}
+
+	                      {tab === 'manifest' && (
+	                        <div className="apk-body">
+	                          <div className="apk-btn-row">
+	                            <button type="button" className="apk-btn" disabled={archiveManifestLoading} onClick={() => refreshArchiveManifest()}>{archiveManifestLoading ? 'Loading…' : 'Refresh'}</button>
+	                            <span className="apk-row-meta">{archiveManifest?.lastUpdated ? `Updated ${new Date(archiveManifest.lastUpdated).toLocaleString()}` : ''}</span>
+	                          </div>
+	                          {manifestEntries.length === 0 ? (
+	                            <div className="apk-empty">No archived files in the manifest yet.</div>
+	                          ) : (
+	                            <div className="apk-table">
+	                              {manifestEntries.map((e) => (
+	                                <div key={e.transactionId || e.sourcePath} className="apk-row apk-row--static">
+	                                  <span className="apk-row-name">{e.label}</span>
+	                                  <span className="apk-row-meta">{e.folder}</span>
+	                                  <span className="apk-row-meta">{e.fileSize ? formatVideoRemixBytes(e.fileSize) : '—'}</span>
+	                                  <span className={`apk-row-state apk-status-${e.status}`}>{e.status}</span>
+	                                  <span className="apk-row-links">
+	                                    {e.arweaveUrl ? <a href={e.arweaveUrl} target="_blank" rel="noreferrer">open</a> : null}
+	                                    {e.transactionId ? <button type="button" className="apk-link-btn" onClick={() => navigator.clipboard?.writeText(e.transactionId)}>copy tx</button> : null}
+	                                    {e.arweaveUrl ? <button type="button" className="apk-link-btn" onClick={() => navigator.clipboard?.writeText(e.arweaveUrl)}>copy url</button> : null}
+	                                  </span>
+	                                </div>
+	                              ))}
+	                            </div>
+	                          )}
+	                        </div>
+	                      )}
+
+	                      {tab === 'website' && (
+	                        <div className="apk-body">
+	                          <div className="apk-note">Operator-only. The deploy target is the configured EditVideos artist microsite. Estimate before deploying.</div>
+	                          {deployError ? <div className="apk-error">{deployError}</div> : null}
+	                          {deployEstimate && (
+	                            <div className="apk-estimate-line">Diff: {deployEstimate.filesChanged} changed / {deployEstimate.filesUnchanged} unchanged / {deployEstimate.totalFiles} total · {formatVideoRemixBytes(deployEstimate.sizeBytes)} · ~{deployEstimate.costAR} AR (~${deployEstimate.costUSD})</div>
+	                          )}
+	                          <div className="apk-btn-row">
+	                            <button type="button" className="apk-btn" disabled={deployBusy} onClick={() => runDeployEstimate()}>Estimate deploy</button>
+	                            {!deployConfirming ? (
+	                              <button type="button" className="apk-btn apk-btn--primary" disabled={deployBusy} onClick={() => setDeployConfirming(true)}>Deploy to Arweave</button>
+	                            ) : (
+	                              <>
+	                                <span className="apk-confirm-note">Permanent + wallet-funded. Confirm?</span>
+	                                <button type="button" className="apk-btn" disabled={deployBusy} onClick={() => setDeployConfirming(false)}>Cancel</button>
+	                                <button type="button" className="apk-btn apk-btn--danger" disabled={deployBusy} onClick={() => runDeployWebsite()}>{deployBusy ? 'Deploying…' : 'Confirm deploy'}</button>
+	                              </>
+	                            )}
+	                          </div>
+	                          {(deployResult || deploy) && (() => {
+	                            const d = deployResult || deploy;
+	                            return (
+	                              <div className="apk-result">
+	                                <div className="apk-result-head">Last deployment: {d.status}</div>
+	                                <div className="apk-result-row"><span>Manifest</span><span className="apk-tx">{d.manifestId || '—'}</span></div>
+	                                <div className="apk-result-row"><span>Files</span><span>{d.filesUploaded} uploaded / {d.filesUnchanged} unchanged / {d.totalFiles} total</span></div>
+	                                {d.arweaveUrl ? <div className="apk-result-row"><span>Arweave</span><a href={d.arweaveUrl} target="_blank" rel="noreferrer">open</a></div> : null}
+	                                {d.arnsUrl ? <div className="apk-result-row"><span>ArNS</span><a href={d.arnsUrl} target="_blank" rel="noreferrer">open</a></div> : null}
+	                              </div>
+	                            );
+	                          })()}
+	                        </div>
+	                      )}
+
+	                      {tab === 'arns' && (
+	                        <div className="apk-body">
+	                          {arnsError ? <div className="apk-error">{arnsError}</div> : null}
+	                          {!deploy?.manifestId ? (
+	                            <div className="apk-empty">No deployment with a manifest ID yet. Deploy the website first.</div>
+	                          ) : (
+	                            <>
+	                              <div className="apk-result-row"><span>Manifest ID</span><span className="apk-tx">{deploy.manifestId}</span></div>
+	                              <div className="apk-result-row"><span>Last ArNS</span>{deploy.arnsUrl ? <a href={deploy.arnsUrl} target="_blank" rel="noreferrer">{deploy.arnsUrl}</a> : <span>—</span>}</div>
+	                              <div className="apk-result-row"><span>Updated</span><span>{deploy.arnsUpdatedAt ? new Date(deploy.arnsUpdatedAt).toLocaleString() : '—'}</span></div>
+	                              {deploy.arnsError ? <div className="apk-error">Last error: {deploy.arnsError}</div> : null}
+	                              <div className="apk-btn-row">
+	                                <button type="button" className="apk-btn apk-btn--primary" disabled={arnsBusy} onClick={() => runUpdateArns(deploy.manifestId)}>{arnsBusy ? 'Updating…' : (deploy.arnsError ? 'Retry ArNS update' : 'Update ArNS')}</button>
+	                              </div>
+	                              <div className="apk-note">ArNS propagation can take a few minutes. A failed update never erases the deployment.</div>
+	                            </>
+	                          )}
+	                        </div>
+	                      )}
+
+	                      {tab === 'cost' && (
+	                        <div className="apk-body">
+	                          <div className="apk-result-head">Archive batch estimate</div>
+	                          {archiveEstimate ? (
+	                            <div className="apk-estimate-line">{archiveEstimate.fileCount} file(s) · {formatVideoRemixBytes(archiveEstimate.sizeBytes)} · ~{archiveEstimate.costAR} AR (~${archiveEstimate.costUSD}) · AR ${archiveEstimate.arPriceUSD}</div>
+	                          ) : (
+	                            <div className="apk-empty">Select files on the Archive tab and click Estimate.</div>
+	                          )}
+	                          <div className="apk-result-head" style={{ marginTop: 14 }}>Website deploy estimate</div>
+	                          {deployEstimate ? (
+	                            <div className="apk-estimate-line">{deployEstimate.filesChanged} changed · {formatVideoRemixBytes(deployEstimate.sizeBytes)} · ~{deployEstimate.costAR} AR (~${deployEstimate.costUSD})</div>
+	                          ) : (
+	                            <div className="apk-empty">Run an estimate on the Website tab.</div>
+	                          )}
+	                          <div className="apk-note">Estimates are not a final invoice — actual Arweave/Turbo cost is set at upload time.</div>
+	                        </div>
+	                      )}
+	                    </div>
+	                  );
+	                })()}
+
 	                {activeTileModal.descriptionOnly ? (
                   <div
                     id={`${activeTileModal.sourceCardId || activeTileModal.cardId}-description-only`}
@@ -17087,7 +17625,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     </div>
                     <div className="tile-detail-tab-content">
                       {activeTileModal.cardId === 'signals' && modalTab === 'sources' && (
-                        <div className="tile-detail-tab-pane" style={{ padding: 18 }}>
+                        <div className="tile-detail-tab-pane signals-pane">
                           {renderSignalsControlPanel()}
                         </div>
                       )}
@@ -17095,7 +17633,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       {/* Market Signals REPORT tab = the brief-style mockup with all data
                           (analysis-skill synthesis + any live source results). */}
                       {activeTileModal.cardId === 'signals' && modalTab === 'report' && (
-                        <div className="tile-detail-tab-pane" style={{ padding: 18 }}>
+                        <div className="tile-detail-tab-pane signals-pane">
                           {renderSignalsBriefMock()}
                         </div>
                       )}
@@ -21426,7 +21964,7 @@ const dashboardCss = `
       overflow-y: auto;
     }
     #tile-detail-bento-grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
       grid-template-rows: auto;
       gap: 10px;
       flex: none;
@@ -21434,12 +21972,15 @@ const dashboardCss = `
     }
     #tile-detail-bento-image-cell {
       flex: none;
+      min-width: 0;
       min-height: 0;
       align-self: auto;
       width: 100%;
+      max-width: 100%;
       padding: 12px 14px;
       overflow: hidden;
     }
+    #tile-detail-bento-content { min-width: 0; max-width: 100%; }
     #tile-detail-bento-image-cell .tile-detail-bento-placeholder {
       width: 100%;
       height: auto;
@@ -24676,12 +25217,14 @@ const dashboardCss = `
     /* DELIVERABLES drops from 4-across to 2-across at this breakpoint (never 3). */
     .cap-bucket-deliverables .cap-step-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     #dashboard-source-cta-row { box-shadow: 0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4) !important; }
-    /* Mobile: bucket nav returns as a horizontal row of circular icon pills. */
-    #capability-nav-col { display: flex; flex-direction: row; justify-content: center; align-items: center; gap: 10px; padding: 0; margin-bottom: 8px; }
+    /* Mobile: bucket nav returns as a horizontal, scrollable row of
+       icon-only circles. Active item gets a gradient ring/circle; no text. */
+    #capability-nav-col { order: -1; display: flex; flex-direction: row; flex-wrap: nowrap; justify-content: flex-start; align-items: center; gap: 16px; padding: 18px 14px; margin-bottom: 4px; width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+    #capability-nav-col::-webkit-scrollbar { display: none; }
     #dashboard-source-band { margin-bottom: 0; }
-    .capability-nav-btn { flex: 1 1 0; width: clamp(34px, 8vw, 52px); height: clamp(34px, 8vw, 52px); max-width: clamp(34px, 8vw, 52px); min-width: 0; padding: 0; border-radius: 50%; flex-direction: row; align-items: center; justify-content: center; gap: 0; background: rgba(255, 255, 255, 1); }
+    .capability-nav-btn { flex: 0 0 auto; width: 44px; height: 44px; max-width: none; min-width: 0; padding: 0; border-radius: 50%; flex-direction: row; align-items: center; justify-content: center; gap: 0; background: rgba(255, 255, 255, 1); }
     .capability-nav-btn:hover { background: rgba(255, 255, 255, 1); box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.067), 0px 15px 30px rgba(0, 0, 0, 0.067), 0px 20px 40px rgba(0, 0, 0, 0.1); }
-    .capability-nav-btn::before { border-radius: 999px; }
+    .capability-nav-btn::before { border-radius: 50%; }
     .capability-nav-btn--active::before {
       background: linear-gradient(180deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
       opacity: 1;
@@ -24694,16 +25237,16 @@ const dashboardCss = `
       background: linear-gradient(180deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
       opacity: 1;
     }
+    .capability-nav-btn-line { display: none; }
     .capability-nav-btn-sub { display: none; }
     .capability-nav-btn-label { display: none; }
     .capability-nav-btn-label-full { display: none; }
     .capability-nav-btn-label-short { display: none; }
-    .capability-nav-btn-content { display: none; }
+    .capability-nav-btn-content { display: inline-flex; align-items: center; justify-content: center; }
     .capability-nav-btn-icon-wrap { display: inline-flex; align-items: center; justify-content: center; width: auto; height: auto; margin-left: 0; }
-    .capability-nav-btn-icon-wrap svg { width: clamp(14px, 3.5vw, 20px); height: clamp(14px, 3.5vw, 20px); }
-    #capability-nav-btn-services,
-    #capability-nav-btn-leadgen,
-    #capability-nav-btn-admin { display: none !important; }
+    .capability-nav-btn-icon-wrap svg { width: clamp(18px, 5vw, 22px); height: clamp(18px, 5vw, 22px); }
+    /* Show every bucket on mobile (incl. Marketing Director / leadgen / admin) —
+       the scrollable pill row holds them all; matches desktop's full nav. */
     #capability-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .tile-solution-actions { flex-direction: column; align-items: stretch; gap: 10px; }
     .tile { aspect-ratio: auto; min-height: 230px; grid-template-areas: "num" "head" "desc" "viz" "foot"; grid-template-columns: 1fr; row-gap: 14px; }
@@ -24727,8 +25270,11 @@ const dashboardCss = `
     .tile-intake-placeholder-brief { border-radius: 0; border: none; box-shadow: none; }
     .tile-brief-preview-wrap { border-radius: 0; }
     .tile-brief-preview-wrap iframe { border-radius: 0; }
-    .cap-brief-full { margin: 0 -24px; width: calc(100% + 48px); }
-    .cap-brief-full-frame { border-radius: 0; border-left: none; border-right: none; height: calc(100dvh - 180px); min-height: 0; }
+    /* Contain the full brief to the padded column — the old negative-margin
+       full-bleed overshot the viewport (brief sits below the shell's 24px pad,
+       nested deeper than the hack assumed) and clipped off the right edge. */
+    .cap-brief-full { margin: 0 0 14px; width: 100%; max-width: 100%; }
+    .cap-brief-full-frame { border-radius: 12px; height: calc(100dvh - 180px); min-height: 0; max-width: 100%; }
     .tile-intake-placeholder-audit-summary { flex: none; min-height: 220px; }
     /* Keep the full copy at a readable size — no line-clamp, no hidden
        source/timestamp line. */
@@ -27596,6 +28142,9 @@ const dashboardCss = `
     background: radial-gradient(circle at 88% 0%, rgba(0,173,181,0.06), transparent 22rem), linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%);
   }
   .signals-sg * { box-sizing: border-box; }
+  /* Signals tab pane inset — desktop keeps the prior 18px; mobile shrinks it
+     (see the modal mobile block) so sections fill more width. */
+  .signals-pane { padding: 18px; }
   .signals-sg .sg-section { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--sg-line); border-radius: var(--sg-radius); background: var(--sg-surface-strong); box-shadow: 0 1px 0 rgba(255,255,255,0.72), inset 0 1px 0 rgba(255,255,255,0.35); }
   .signals-sg .sg-head { display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 12px; align-items: start; }
   .signals-sg .sg-index { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 28px; border: 1px solid var(--sg-line); border-radius: 6px; background: rgba(255,255,255,0.5); font-family: var(--sg-mono); font-size: 12px; color: var(--sg-ink-soft); }
@@ -27620,6 +28169,19 @@ const dashboardCss = `
   .signals-sg .sg-source-value { display: flex; align-items: center; min-width: 0; gap: 12px; color: rgba(42,36,32,0.7); font: 400 16px/1.25 var(--sg-ui); }
   .signals-sg .sg-source-value small { display: block; color: var(--sg-ink-muted); font: 400 11px/1.3 var(--sg-mono); margin-top: 3px; }
   .signals-sg .sg-source-actions { display: flex; align-items: center; gap: 8px; }
+  /* Phones: keep the row horizontal so it uses the full width — text left,
+     actions pinned right. Smaller value font + tighter padding give the text
+     enough room to read on 2-3 lines (no one-word-per-line crush), and the
+     actions wrap rather than overflow if a row has three buttons. */
+  @media (max-width: 600px) {
+    /* Drop the desktop full-bleed coupling so every section is an equal,
+       centered, full-width card; the pane padding is the only inset. */
+    .signals-sg { margin: 0; padding: 0; }
+    .signals-pane { padding: 12px; }
+    .signals-sg .sg-source { padding: 10px 12px 10px 16px; gap: 8px; }
+    .signals-sg .sg-source-value { font-size: 14px; }
+    .signals-sg .sg-source-actions { flex-wrap: wrap; justify-content: flex-end; }
+  }
   .signals-sg .sg-seg { display: flex; padding: 4px; border: 1px solid var(--sg-line); border-radius: 999px; background: rgba(255,255,255,0.96); box-shadow: inset 0 1px 0 rgba(255,255,255,0.45); }
   .signals-sg .sg-seg button { flex: 1; min-height: 36px; border: 0; border-radius: 999px; background: transparent; color: var(--sg-ink-soft); font: 700 12px/1 var(--sg-mono); letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; transition: background 160ms ease, color 140ms ease; }
   .signals-sg .sg-seg button:hover:not(.is-active) { background: rgba(42,36,32,0.06); color: var(--sg-ink); }
@@ -27702,6 +28264,51 @@ const dashboardCss = `
     flex-direction: column;
     min-height: 0;
   }
+  /* Archive / Publishing card modal (Knowledge Officer) */
+  #archive-publishing-modal-tabs-container.apk-scope {
+    display: flex; flex: 1; flex-direction: column; min-height: 0;
+    font: 13px/1.45 var(--vrk-mono, ui-monospace, monospace);
+    color: #1a1a1a;
+  }
+  .apk-scope * { box-sizing: border-box; }
+  .apk-tabs { display: flex; gap: 2px; flex-shrink: 0; border-bottom: 1px solid rgba(0,0,0,0.12); }
+  .apk-tab { flex: 1; min-height: 42px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #6b6b6b; cursor: pointer; font: 700 11px/1 var(--vrk-mono, monospace); letter-spacing: 0.08em; }
+  .apk-tab:hover:not(.is-active) { color: #111; background: rgba(0,0,0,0.04); }
+  .apk-tab.is-active { color: #111; border-bottom-color: #3b82f6; }
+  .apk-body { display: flex; flex-direction: column; gap: 12px; padding: 14px 4px; overflow-y: auto; }
+  .apk-seg { display: flex; gap: 6px; }
+  .apk-seg-btn { flex: 1; padding: 8px 10px; border: 1px solid rgba(0,0,0,0.16); border-radius: 6px; background: #fff; color: #444; cursor: pointer; font-size: 11px; font-weight: 600; }
+  .apk-seg-btn.is-active { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+  .apk-folder-row { display: flex; }
+  .apk-select { flex: 1; padding: 8px 10px; border: 1px solid rgba(0,0,0,0.16); border-radius: 6px; background: #fff; font-size: 12px; }
+  .apk-table { display: flex; flex-direction: column; border: 1px solid rgba(0,0,0,0.1); border-radius: 6px; overflow: hidden; }
+  .apk-row { display: grid; grid-template-columns: auto 1.6fr 1fr 0.7fr 1fr; gap: 8px; align-items: center; padding: 8px 10px; border-bottom: 1px solid rgba(0,0,0,0.06); cursor: pointer; }
+  .apk-row:last-child { border-bottom: 0; }
+  .apk-row--static { grid-template-columns: 1.6fr 1fr 0.7fr 0.8fr 1.2fr; cursor: default; }
+  .apk-row-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .apk-row-meta { color: #777; font-size: 11px; }
+  .apk-row-state { font-size: 11px; color: #555; text-align: right; }
+  .apk-status-confirmed { color: #15803d; }
+  .apk-status-failed { color: #b91c1c; }
+  .apk-status-pending_confirmation, .apk-status-uploading { color: #b45309; }
+  .apk-row-links { display: flex; gap: 8px; justify-content: flex-end; }
+  .apk-row-links a, .apk-link-btn { color: #3b82f6; background: none; border: 0; padding: 0; cursor: pointer; font-size: 11px; text-decoration: underline; }
+  .apk-actions { display: flex; flex-direction: column; gap: 8px; padding-top: 6px; border-top: 1px solid rgba(0,0,0,0.08); }
+  .apk-btn-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .apk-btn { padding: 8px 14px; border: 1px solid rgba(0,0,0,0.18); border-radius: 6px; background: #fff; color: #222; cursor: pointer; font-size: 12px; font-weight: 600; }
+  .apk-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .apk-btn--primary { background: #111; border-color: #111; color: #fff; }
+  .apk-btn--danger { background: #b91c1c; border-color: #b91c1c; color: #fff; }
+  .apk-estimate-line { font-size: 12px; color: #333; }
+  .apk-confirm-note { font-size: 11px; color: #b45309; font-weight: 600; }
+  .apk-empty { padding: 24px 10px; text-align: center; color: #888; font-size: 12px; }
+  .apk-error { padding: 8px 10px; background: rgba(185,28,28,0.08); color: #b91c1c; border-radius: 6px; font-size: 12px; }
+  .apk-note { font-size: 11px; color: #888; }
+  .apk-result { display: flex; flex-direction: column; gap: 4px; padding: 10px; background: rgba(0,0,0,0.03); border-radius: 6px; }
+  .apk-result-head { font-weight: 700; font-size: 12px; }
+  .apk-result-row { display: flex; gap: 10px; justify-content: space-between; align-items: center; font-size: 12px; }
+  .apk-result-row--err { color: #b91c1c; }
+  .apk-tx { font-family: var(--vrk-mono, monospace); color: #555; font-size: 11px; }
   .vrk-scope .tabs {
     display: flex;
     flex-shrink: 0;
