@@ -237,7 +237,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   };
 
   // Company Brief — business model, market category, positioning, tone,
-  // founder Q&A, company brain, team conversations.
+  // founder Q&A, Source Library, team conversations.
   const bo = company?.brandOverview || {};
   const tone = company?.brandTone || {};
   const qa = company?.onboardingSummary || null;
@@ -260,7 +260,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
       ${qa ? valRow('Founder Q&A', esc(`${qa.answeredCount ?? 0} of ${qa.total ?? 10} answered${qa.completedAt ? ' — complete' : ''}`)) : naRow('Founder Q&A', 'Not started — answer the onboarding survey.')}
       ${kbSources.length
         ? valRow('Company brain', esc(`${kbSources.length} source${kbSources.length === 1 ? '' : 's'} — ${kbSources.slice(0, 3).map((s) => s?.title || s?.itemTitle || 'item').join(' · ')}`))
-        : naRow('Company brain', 'No knowledge uploaded — add docs to the Company Brain card.')}
+        : naRow('Source Library', 'No sources uploaded — add docs to the Source Library card.')}
       ${company?.conversationItemCount
         ? valRow('Team conversations', esc(`${company.conversationItemCount} item${company.conversationItemCount === 1 ? '' : 's'} digested into this brief`))
         : naRow('Team conversations', 'None digested — paste a team conversation to fold it in.')}

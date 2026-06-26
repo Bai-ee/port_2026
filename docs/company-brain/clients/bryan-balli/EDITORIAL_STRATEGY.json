@@ -1,0 +1,206 @@
+{
+  "enabled": true,
+  "frameworkVersion": "2.0",
+  "schedulePolicy": {
+    "platforms": {
+      "primary": ["x"],
+      "secondary": ["linkedin"],
+      "tertiary": ["website", "newsletter"]
+    },
+    "publishingCadence": {
+      "x": "1 high-quality post every weekday; 1 optional weekend post when there is real building-in-public material.",
+      "linkedin": "2 posts per week, only when the content has professional or long-form value.",
+      "website": "Only when permanent knowledge is created.",
+      "newsletter": "Weekly or biweekly; never forced."
+    },
+    "preferredPublishingWindows": {
+      "x": ["8:00-10:00 AM", "1:00-3:00 PM"],
+      "linkedin": ["Tuesday-Thursday morning"],
+      "website": ["Immediately after publication"],
+      "newsletter": ["Thursday morning"]
+    },
+    "campaignAllocation": {
+      "Creative Systems": "25%",
+      "Current Client Work": "20%",
+      "Building HITLOOP": "15%",
+      "AI Workflow Integration": "15%",
+      "Enterprise Lessons": "10%",
+      "Creative Operations": "10%",
+      "Experiments": "5%"
+    },
+    "narrativeRotation": {
+      "minDaysBetweenSameNarrative": 3,
+      "maxProjectUsesPerSevenDays": 2,
+      "rotateBy": ["Project", "Narrative", "Editorial Format", "Platform"]
+    },
+    "editorialFormatRotation": {
+      "formats": [
+        "Constraint of the Week",
+        "Production Notes",
+        "Interesting Decisions",
+        "Interesting Failures",
+        "Research Notes",
+        "Behind the Build",
+        "Brand Translation",
+        "Workflow Experiments",
+        "Market Observations",
+        "Building in Public"
+      ],
+      "maxConsecutiveRepeats": 2
+    },
+    "assetReusePolicy": {
+      "reuseAfterDays": 60,
+      "rules": [
+        "High-performing assets may be reused after 60 days with a new narrative.",
+        "Screenshots may appear across multiple campaigns.",
+        "Copy should not be repeated verbatim."
+      ]
+    },
+    "dailyAdaptationLimits": {
+      "may": [
+        "Rewrite hooks.",
+        "Reference current events.",
+        "Swap supporting examples.",
+        "Swap prepared assets within the same campaign.",
+        "Move scheduled posts within a seven-day window."
+      ],
+      "mayNot": [
+        "Change annual positioning.",
+        "Replace campaigns.",
+        "Chase unrelated trends.",
+        "Exceed campaign allocation without approval."
+      ],
+      "movableWindowDays": 7
+    },
+    "quietPeriods": [
+      "Major product launches",
+      "Industry events",
+      "Travel",
+      "Personal announcements",
+      "Client embargoes"
+    ],
+    "promotionPolicy": {
+      "maxMonthlyPct": "20%",
+      "rules": [
+        "Promotional weeks should be followed by educational or behind-the-scenes content."
+      ]
+    },
+    "fallbackRules": [
+      "If no conversation meaningfully reinforces an active campaign, publish the originally scheduled evergreen post.",
+      "If no evergreen post exists, surface the highest-ranked evergreen asset from the active campaign."
+    ],
+    "approvalPolicy": [
+      "Every scheduled recommendation must include campaign, narrative, selected asset, reason, supporting signals, and confidence.",
+      "Operator edits remain optional."
+    ],
+    "successEvaluation": [
+      "Campaign distribution",
+      "Narrative diversity",
+      "Conversation participation",
+      "Inbound opportunities",
+      "Follower quality",
+      "Bookmarks",
+      "Website traffic",
+      "Lead generation",
+      "Client inquiries",
+      "Editorial consistency"
+    ]
+  },
+  "operatorPreferences": {
+    "preferredPlatforms": ["x", "linkedin"],
+    "avoidTopics": ["generic AI hype", "fully automated creative replacement"],
+    "preferredNarratives": ["AI Workflow Integration", "Creative Systems", "Brand Translation"]
+  },
+  "campaigns": [
+    {
+      "id": "creative-systems",
+      "name": "Creative Systems",
+      "status": "active",
+      "priority": 0.95,
+      "allocationPct": 25,
+      "strategicObjective": "Become associated with designing creative systems that survive implementation across products, media, and teams.",
+      "positioningObjective": "Own Creative Systems Architecture as a durable category tied to production-ready brand and product ecosystems.",
+      "targetAudience": ["Startup founders", "Creative agencies", "AI SaaS teams", "Developer tool teams"],
+      "supportedClientBrainTopics": ["Creative Systems Architecture", "Design Engineering", "AI Workflow Design", "Creative Operations"],
+      "supportingProjects": ["Critters", "HITLOOP", "EditTrax", "Enterprise creative technology work"],
+      "narrativeBuckets": ["Brand Translation", "Creative Operations", "Cross-Medium Design", "AI Workflow Integration"],
+      "keywords": ["creative systems", "creative systems architecture", "AI workflow", "design engineering", "creative operations"],
+      "dailySignalTriggers": ["AI workflow conversations", "product design discourse", "game UI discussion", "typography discussions", "creative operations debates"],
+      "editorialFormats": ["Production Notes", "Interesting Decisions", "Behind the Build", "Workflow Experiments", "Brand Translation"],
+      "fallback": "Evergreen Brand Translation",
+      "duration": {
+        "startDate": "2026-06-26",
+        "endDate": "2026-09-30"
+      },
+      "weeklyFocus": "Show how real production decisions become reusable creative systems.",
+      "successMetrics": ["Increased association with Creative Systems Architecture", "Higher founder replies", "More profile visits from AI SaaS and creative operators"],
+      "assetLibrary": [
+        {
+          "id": "critters-ui-evolution",
+          "title": "Critters UI evolution",
+          "type": "screenshot",
+          "description": "A visual walkthrough of how Critters UI decisions evolved from character/game concept into a reusable product system.",
+          "narrative": "AI Workflow Integration",
+          "projects": ["Critters"],
+          "topics": ["creative systems", "game UI", "AI workflow", "design decisions"],
+          "platforms": ["x", "linkedin"],
+          "keywords": ["Critters", "AI workflow", "game UI", "creative systems"],
+          "clientBrainDecisionRefs": ["decisions.intelligence.identity.categoryToOwn", "decisions.intelligence.discovery.keywords"],
+          "evergreenScore": 0.95,
+          "freshnessScore": 0.82,
+          "preparedCopy": "A creative system is not the mockup. It is the chain of decisions that keeps surviving as the product changes.",
+          "mediaHint": "Use Critters UI screenshots or a short workflow comparison."
+        },
+        {
+          "id": "hitloop-client-brain-system",
+          "title": "HITLOOP Client Brain system",
+          "type": "case-study",
+          "description": "How Client Brain turns raw sources into approved decisions, card defaults, context packs, and campaign recommendations.",
+          "narrative": "Creative Operations",
+          "projects": ["HITLOOP"],
+          "topics": ["Client Brain", "creative operations", "decision engine", "human-in-the-loop"],
+          "platforms": ["x", "linkedin"],
+          "keywords": ["Client Brain", "decision engine", "creative operations", "human in the loop"],
+          "clientBrainDecisionRefs": ["decisions.decisionDrivers", "decisions.intelligence.discovery.watchLists"],
+          "evergreenScore": 0.9,
+          "freshnessScore": 0.9,
+          "preparedCopy": "Most AI tools collect context. HITLOOP is built around approving decisions.",
+          "mediaHint": "Use a diagram of CLIENT_BRAIN.md compiling into Decision Pack, Context Pack, and Card Defaults."
+        },
+        {
+          "id": "edittrax-workflow-translation",
+          "title": "EditTrax workflow translation",
+          "type": "historic-work",
+          "description": "Historic workflow example showing how creative tooling, media constraints, and product UX translate into system design.",
+          "narrative": "Cross-Medium Design",
+          "projects": ["EditTrax"],
+          "topics": ["workflow design", "music", "media systems", "creative technology"],
+          "platforms": ["x", "linkedin"],
+          "keywords": ["workflow design", "creative technology", "media systems"],
+          "clientBrainDecisionRefs": ["decisions.intelligence.authority.trustReasons"],
+          "evergreenScore": 0.78,
+          "freshnessScore": 0.62,
+          "preparedCopy": "Cross-medium design is where a lot of systems thinking becomes visible.",
+          "mediaHint": "Use workflow screenshots, diagrams, or before/after process notes."
+        },
+        {
+          "id": "enterprise-production-lessons",
+          "title": "Enterprise production lessons",
+          "type": "story",
+          "description": "Lessons from enterprise adtech and rich-media production about building systems that survive handoff, scale, and changing constraints.",
+          "narrative": "Brand Translation",
+          "projects": ["Enterprise creative technology work"],
+          "topics": ["enterprise production", "brand systems", "handoff", "implementation"],
+          "platforms": ["x", "linkedin"],
+          "keywords": ["brand systems", "implementation", "enterprise creative technology"],
+          "clientBrainDecisionRefs": ["decisions.intelligence.authority.workHistory", "decisions.proof.points"],
+          "evergreenScore": 0.88,
+          "freshnessScore": 0.58,
+          "preparedCopy": "The real test of a brand system is not whether it looks good on day one. It is whether it still works after handoff.",
+          "mediaHint": "Use anonymized diagrams or production notes rather than unsupported client/result claims."
+        }
+      ]
+    }
+  ],
+  "recentPublishing": []
+}

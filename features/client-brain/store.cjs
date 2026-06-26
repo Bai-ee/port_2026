@@ -1,6 +1,7 @@
 'use strict';
 
 const fb = require('../../api/_lib/firebase-admin.cjs');
+const { compileClientBrainMarkdown, createClientBrainMarkdownTemplate } = require('./markdown.cjs');
 
 const CLIENT_BRAIN_VERSION = 1;
 const DEFAULT_USE_FOR = Object.freeze({
@@ -15,6 +16,12 @@ const DEFAULT_USE_FOR = Object.freeze({
   socialPosts: true,
   marketingInsights: true,
 });
+
+const DEFAULT_DECISION_STATUS = 'suggested';
+const MARKETING_BRIEF_CARD_ID = 'marketing-brief';
+const MARKET_INSIGHTS_CARD_ID = 'market-insights';
+const DEFAULT_MARKETING_SOURCE_PLATFORMS = Object.freeze(['web', 'x', 'reddit', 'hackernews', 'instagram']);
+const ACQUISITION_METHODS = new Set(['automatic', 'interview', 'research', 'feedback', 'manual']);
 
 const VALID_SOURCE_TYPES = new Set([
   'onboarding',
@@ -147,6 +154,87 @@ function asArray(value, limit = 12) {
   if (Array.isArray(value)) return value.map((v) => compact(typeof v === 'string' ? v : JSON.stringify(v), 160)).filter(Boolean).slice(0, limit);
   const text = compact(value, 240);
   return text ? [text] : [];
+}
+
+function cleanList(input, { maxItems = 20, maxLen = 160 } = {}) {
+  const rows = Array.isArray(input)
+    ? input
+    : String(input || '').split(/[\n,]+/);
+  return rows
+    .map((item) => String(item || '').trim().slice(0, maxLen))
+    .filter(Boolean)
+    .filter((item, index, arr) => {
+      const key = item.toLowerCase().replace(/^@+/, '').replace(/^["']|["']$/g, '');
+      return arr.findIndex((other) => other.toLowerCase().replace(/^@+/, '').replace(/^["']|["']$/g, '') === key) === index;
+    })
+    .slice(0, maxItems);
+}
+
+function cleanSearchRows(input, limit = 8) {
+  return (Array.isArray(input) ? input : [])
+    .map((row, index) => ({
+      label: compact(row?.label || `SEARCH ${index + 1}`, 60),
+      query: compact(row?.query, 600),
+      goal: compact(row?.goal, 240),
+    }))
+    .filter((row) => row.query)
+    .slice(0, limit);
+}
+
+function normalizeAcquisition(meta = {}) {
+  const acquisition = meta.acquisition && typeof meta.acquisition === 'object' ? meta.acquisition : {};
+  const method = ACQUISITION_METHODS.has(acquisition.method)
+    ? acquisition.method
+    : ACQUISITION_METHODS.has(meta.method)
+      ? meta.method
+      : meta.updatedBy === 'operator'
+        ? 'manual'
+        : 'automatic';
+  return {
+    method,
+    confidenceReason: acquisition.confidenceReason || meta.confidenceReason || (method === 'feedback' ? 'Promoted from card settings.' : 'Derived from enabled Client Brain sources.'),
+    researchRequired: Boolean(acquisition.researchRequired),
+    lastValidatedAt: acquisition.lastValidatedAt || meta.updatedAt || nowIso(),
+    validationStatus: acquisition.validationStatus || (meta.status === 'approved' ? 'approved' : 'pending'),
+  };
+}
+
+function decisionValue(value, meta = {}) {
+  return {
+    value,
+    status: meta.status || DEFAULT_DECISION_STATUS,
+    confidence: meta.confidence || 'medium',
+    sourceIds: Array.isArray(meta.sourceIds) ? meta.sourceIds.filter(Boolean) : [],
+    updatedBy: meta.updatedBy || 'system',
+    updatedAt: meta.updatedAt || nowIso(),
+    appliedToCards: Array.isArray(meta.appliedToCards) ? meta.appliedToCards.filter(Boolean) : [],
+    acquisition: normalizeAcquisition(meta),
+  };
+}
+
+function decisionList(input, meta = {}, opts = {}) {
+  return decisionValue(cleanList(input, opts), meta);
+}
+
+function decisionScalar(input, meta = {}) {
+  return decisionValue(compact(input, meta.max || 400), meta);
+}
+
+function valueOfDecision(decision, fallback) {
+  if (decision && typeof decision === 'object' && Object.prototype.hasOwnProperty.call(decision, 'value')) {
+    return decision.value;
+  }
+  return fallback;
+}
+
+function slugify(value, fallback = 'decision-driver') {
+  const slug = String(value || '')
+    .toLowerCase()
+    .replace(/https?:\/\//g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+  return slug || fallback;
 }
 
 function dateFromFirestore(value) {
@@ -596,6 +684,11 @@ function publicBrain(brain, sourceRefs) {
       offers: {},
       proof: {},
       content: {},
+      discovery: {},
+      decisions: {},
+      decisionAcquisition: {},
+      completion: { score: 0, domains: {}, informationalOnly: true },
+      missingDecisionQueue: [],
       aiContextPack: {},
       missingData: [],
       contradictions: [],
@@ -625,11 +718,545 @@ function buildDashboardMirror(brain) {
     enabledSourceCount: enabledCount,
     highPriorityMissingCount: missing.filter((m) => m.priority === 'high').length,
     contradictionCount: contradictions.length,
+    completionScore: brain.completion?.score || 0,
+    missingDecisionCount: Array.isArray(brain.missingDecisionQueue) ? brain.missingDecisionQueue.length : 0,
     identity: brain.identity || {},
     aiContextPack: {
       shortContext: brain.aiContextPack?.shortContext || '',
       longContext: brain.aiContextPack?.longContext || '',
     },
+  };
+}
+
+function buildSearchRowsFromDecisions(decisions) {
+  const keywords = cleanList(valueOfDecision(decisions?.search?.keywords, []), { maxItems: 8 });
+  const topics = cleanList(valueOfDecision(decisions?.search?.topicsToMonitor, []), { maxItems: 8 });
+  const competitors = cleanList(valueOfDecision(decisions?.search?.competitorTerms, []), { maxItems: 8 });
+  const rows = [];
+  if (keywords.length) {
+    rows.push({
+      label: 'BRAND',
+      query: keywords.join(' OR '),
+      goal: 'Find current mentions, questions, and language around the client and its offers.',
+    });
+  }
+  if (topics.length) {
+    rows.push({
+      label: 'CATEGORY',
+      query: topics.join(' OR '),
+      goal: 'Find market conversations, timely angles, and category language worth acting on.',
+    });
+  }
+  if (competitors.length) {
+    rows.push({
+      label: 'COMPETITORS',
+      query: competitors.join(' OR '),
+      goal: 'Track competitor positioning, offers, launches, and audience reactions.',
+    });
+  }
+  return rows.slice(0, 8);
+}
+
+function buildIntelligenceDomains({ identity = {}, positioning = {}, voice = {}, audience = {}, offers = {}, proof = {}, content = {}, marketingBriefConfig = {}, scoutConfig = {}, dashboardState = {}, sourceIds = [], meta = {} } = {}) {
+  const domainMeta = { ...meta, appliedToCards: [] };
+  const brandKeywords = [
+    identity.name,
+    ...cleanList(marketingBriefConfig.brandKeywords, { maxItems: 12 }),
+    ...cleanList(scoutConfig.brandKeywords, { maxItems: 12 }),
+  ];
+  const categoryTerms = [
+    identity.category,
+    dashboardState.marketCategory?.value,
+    ...cleanList(marketingBriefConfig.categoryTerms, { maxItems: 12 }),
+    ...cleanList(scoutConfig.categoryTerms, { maxItems: 12 }),
+    ...cleanList(content.pillars, { maxItems: 12 }),
+  ];
+  const competitors = [
+    ...cleanList(marketingBriefConfig.competitors, { maxItems: 20 }),
+    ...cleanList(scoutConfig.competitors, { maxItems: 20 }),
+  ];
+  const handles = [
+    ...cleanList(marketingBriefConfig.kols, { maxItems: 20 }),
+    ...cleanList(scoutConfig.kols, { maxItems: 20 }),
+  ];
+  const publications = cleanList(marketingBriefConfig.publications || scoutConfig.publications, { maxItems: 20 });
+  const communities = cleanList(marketingBriefConfig.communities || scoutConfig.communities || scoutConfig.reddit?.subreddits, { maxItems: 20 });
+  const podcasts = cleanList(marketingBriefConfig.podcasts || scoutConfig.podcasts, { maxItems: 20 });
+  const events = cleanList(marketingBriefConfig.events || marketingBriefConfig.conferences || scoutConfig.events || scoutConfig.conferences, { maxItems: 20 });
+  const directories = cleanList(marketingBriefConfig.directories || scoutConfig.directories, { maxItems: 20 });
+  const awards = cleanList(marketingBriefConfig.awards || scoutConfig.awards, { maxItems: 20 });
+  const socialEcosystems = cleanList(marketingBriefConfig.socialEcosystems || scoutConfig.socialEcosystems, { maxItems: 20 });
+  const hashtags = cleanList(marketingBriefConfig.hashtags || scoutConfig.hashtags, { maxItems: 20 });
+  const watchLists = cleanList(marketingBriefConfig.watchLists || scoutConfig.watchLists || scoutConfig.kols || marketingBriefConfig.kols, { maxItems: 30 });
+  const primaryPlatforms = cleanList(marketingBriefConfig.sourcePlatforms?.length ? marketingBriefConfig.sourcePlatforms : DEFAULT_MARKETING_SOURCE_PLATFORMS, { maxItems: 10 });
+  const proofPoints = [
+    ...cleanList(proof.projects, { maxItems: 12 }),
+    ...cleanList(proof.workHistory, { maxItems: 12 }),
+    ...cleanList(proof.metrics, { maxItems: 12 }),
+    ...cleanList(proof.testimonials, { maxItems: 8 }),
+  ];
+  const doNotSay = [
+    ...cleanList(voice.bannedWords, { maxItems: 20 }),
+    ...cleanList(voice.avoidPatterns, { maxItems: 20 }),
+  ];
+
+  return {
+    identity: {
+      who: decisionScalar(identity.description || positioning.oneLiner || identity.name, domainMeta),
+      selling: decisionList(offers.services || offers.products, domainMeta, { maxItems: 12 }),
+      hiredBy: decisionList(audience.primary, domainMeta, { maxItems: 12 }),
+      categoryToOwn: decisionList(categoryTerms, domainMeta, { maxItems: 12 }),
+      categoryToAvoid: decisionList(positioning.avoidPositioning || doNotSay, domainMeta, { maxItems: 12 }),
+      legitimateAuthority: decisionList(proofPoints, { ...domainMeta, sourceIds }, { maxItems: 12 }),
+    },
+    market: {
+      directCompetitors: decisionList(competitors, domainMeta, { maxItems: 20 }),
+      adjacentCompetitors: decisionList([], domainMeta, { maxItems: 20 }),
+      thoughtLeaders: decisionList(handles, domainMeta, { maxItems: 20 }),
+      publications: decisionList(publications, domainMeta, { maxItems: 20 }),
+      communities: decisionList(communities, domainMeta, { maxItems: 20 }),
+      brandsToolsStartups: decisionList([...competitors, ...categoryTerms], domainMeta, { maxItems: 24 }),
+      keywords: decisionList([...brandKeywords, ...categoryTerms], domainMeta, { maxItems: 24 }),
+    },
+    discovery: {
+      keywords: decisionList([...brandKeywords, ...categoryTerms], domainMeta, { maxItems: 24 }),
+      primaryPlatforms: decisionList(primaryPlatforms, domainMeta, { maxItems: 10 }),
+      communities: decisionList(communities, domainMeta, { maxItems: 20 }),
+      publications: decisionList(publications, domainMeta, { maxItems: 20 }),
+      podcasts: decisionList(podcasts, domainMeta, { maxItems: 20 }),
+      events: decisionList(events, domainMeta, { maxItems: 20 }),
+      directories: decisionList(directories, domainMeta, { maxItems: 20 }),
+      awards: decisionList(awards, domainMeta, { maxItems: 20 }),
+      socialEcosystems: decisionList(socialEcosystems, domainMeta, { maxItems: 20 }),
+      hashtags: decisionList(hashtags, domainMeta, { maxItems: 20 }),
+      watchLists: decisionList(watchLists, domainMeta, { maxItems: 30 }),
+    },
+    authority: {
+      trustReasons: decisionList(proofPoints, { ...domainMeta, sourceIds }, { maxItems: 16 }),
+      workHistory: decisionList(proof.workHistory || proof.projects, domainMeta, { maxItems: 12 }),
+      metrics: decisionList(proof.metrics, domainMeta, { maxItems: 12 }),
+      allowedClaims: decisionList([...proofPoints, positioning.oneLiner].filter(Boolean), domainMeta, { maxItems: 16 }),
+      prohibitedClaims: decisionList(doNotSay, domainMeta, { maxItems: 20 }),
+    },
+    content: {
+      recurringThemes: decisionList(content.pillars || categoryTerms, domainMeta, { maxItems: 16 }),
+      topicsToOwn: decisionList(categoryTerms, domainMeta, { maxItems: 16 }),
+      topicsToAvoid: decisionList(doNotSay, domainMeta, { maxItems: 20 }),
+      frameworks: decisionList(content.frameworks, domainMeta, { maxItems: 12 }),
+      stories: decisionList(content.stories || content.postExamples, domainMeta, { maxItems: 12 }),
+      opinions: decisionList(content.opinions, domainMeta, { maxItems: 12 }),
+      recurringSeries: decisionList(content.recurringSeries, domainMeta, { maxItems: 12 }),
+      formats: decisionList([content.linkedInStyle, content.twitterStyle, content.emailDigestStyle], domainMeta, { maxItems: 8 }),
+    },
+    opportunity: {
+      icpSegments: decisionList(audience.primary, domainMeta, { maxItems: 12 }),
+      verticals: decisionList([identity.category, dashboardState.leadgen?.vertical, ...categoryTerms], domainMeta, { maxItems: 12 }),
+      geographies: decisionList([identity.location, dashboardState.leadgen?.city], domainMeta, { maxItems: 8 }),
+      partnershipTargets: decisionList(handles, domainMeta, { maxItems: 20 }),
+      outreachAngles: decisionList([positioning.oneLiner, ...cleanList(content.pillars, { maxItems: 8 })], domainMeta, { maxItems: 12 }),
+      qualificationSignals: decisionList(audience.motivations || offers.services, domainMeta, { maxItems: 12 }),
+      disqualifiers: decisionList(audience.objections || doNotSay, domainMeta, { maxItems: 12 }),
+    },
+  };
+}
+
+function buildDecisionDriversFromDomains(domains = {}, meta = {}) {
+  const ownTerms = cleanList(domains.identity?.categoryToOwn?.value || domains.market?.keywords?.value, { maxItems: 8 });
+  const primary = ownTerms[0] || domains.identity?.who?.value || 'Client positioning';
+  const searchTerms = cleanList([
+    ...cleanList(domains.market?.keywords?.value, { maxItems: 16 }),
+    ...cleanList(domains.discovery?.keywords?.value, { maxItems: 16 }),
+    ...cleanList(domains.content?.topicsToOwn?.value, { maxItems: 12 }),
+    ...cleanList(domains.discovery?.watchLists?.value, { maxItems: 12 }),
+  ], { maxItems: 24 });
+  const competitors = cleanList([
+    ...cleanList(domains.market?.directCompetitors?.value, { maxItems: 12 }),
+    ...cleanList(domains.market?.adjacentCompetitors?.value, { maxItems: 12 }),
+  ], { maxItems: 20 });
+  const kols = cleanList([
+    ...cleanList(domains.market?.thoughtLeaders?.value, { maxItems: 20 }),
+    ...cleanList(domains.discovery?.watchLists?.value, { maxItems: 20 }),
+  ], { maxItems: 30 });
+  const communities = cleanList([
+    ...cleanList(domains.market?.communities?.value, { maxItems: 20 }),
+    ...cleanList(domains.discovery?.communities?.value, { maxItems: 20 }),
+    ...cleanList(domains.discovery?.socialEcosystems?.value, { maxItems: 20 }),
+  ], { maxItems: 30 });
+  const contentSeries = cleanList([
+    ...cleanList(domains.content?.recurringSeries?.value, { maxItems: 12 }),
+    ...cleanList(domains.content?.recurringThemes?.value, { maxItems: 12 }),
+  ], { maxItems: 20 });
+  const leadGen = cleanList([
+    ...cleanList(domains.opportunity?.icpSegments?.value, { maxItems: 12 }),
+    ...cleanList(domains.opportunity?.verticals?.value, { maxItems: 12 }),
+  ], { maxItems: 20 });
+
+  const driver = {
+    id: slugify(primary),
+    label: `Own ${primary}`,
+    status: meta.status || DEFAULT_DECISION_STATUS,
+    confidence: meta.confidence || 'medium',
+    sourceIds: Array.isArray(meta.sourceIds) ? meta.sourceIds : [],
+    own: ownTerms,
+    avoid: cleanList([
+      ...cleanList(domains.identity?.categoryToAvoid?.value, { maxItems: 12 }),
+      ...cleanList(domains.content?.topicsToAvoid?.value, { maxItems: 12 }),
+    ], { maxItems: 20 }),
+    search: searchTerms,
+    competitors,
+    kols,
+    publications: cleanList([
+      ...cleanList(domains.market?.publications?.value, { maxItems: 20 }),
+      ...cleanList(domains.discovery?.publications?.value, { maxItems: 20 }),
+      ...cleanList(domains.discovery?.podcasts?.value, { maxItems: 20 }),
+      ...cleanList(domains.discovery?.events?.value, { maxItems: 20 }),
+    ], { maxItems: 30 }),
+    communities,
+    contentSeries,
+    campaigns: contentSeries.map((series) => `${series} campaign`).slice(0, 8),
+    leadGen,
+  };
+
+  const hasUsefulOutput = [
+    driver.own,
+    driver.search,
+    driver.competitors,
+    driver.kols,
+    driver.communities,
+    driver.contentSeries,
+    driver.leadGen,
+  ].some((list) => Array.isArray(list) && list.length);
+
+  return hasUsefulOutput ? [driver] : [];
+}
+
+function buildCardDefaultsForCard(decisions = {}, cardId = MARKETING_BRIEF_CARD_ID) {
+  const now = nowIso();
+  const commonMeta = { status: 'suggested', confidence: 'medium', updatedBy: 'system', updatedAt: now };
+  if (![MARKETING_BRIEF_CARD_ID, MARKET_INSIGHTS_CARD_ID, 'watchlist', 'brand-keywords', 'scout-focus'].includes(cardId)) {
+    return { fields: {}, lastBuiltAt: now };
+  }
+
+  const fields = {
+    brandName: decisionScalar(valueOfDecision(decisions?.identity?.name, ''), { ...commonMeta, appliedToCards: [cardId] }),
+    brandKeywords: decisionList(valueOfDecision(decisions?.search?.keywords, []), { ...commonMeta, appliedToCards: [cardId] }, { maxItems: 12 }),
+    categoryTerms: decisionList(valueOfDecision(decisions?.search?.topicsToMonitor, []), { ...commonMeta, appliedToCards: [cardId] }, { maxItems: 12 }),
+    kols: decisionList(valueOfDecision(decisions?.social?.handlesToFollow, []), { ...commonMeta, appliedToCards: [cardId] }, { maxItems: 20 }),
+    competitors: decisionList(valueOfDecision(decisions?.search?.competitorTerms, []), { ...commonMeta, appliedToCards: [cardId] }, { maxItems: 20 }),
+    sourcePlatforms: decisionList(valueOfDecision(decisions?.social?.platforms, DEFAULT_MARKETING_SOURCE_PLATFORMS), { ...commonMeta, appliedToCards: [cardId] }, { maxItems: 10 }),
+    searches: decisionValue(buildSearchRowsFromDecisions(decisions), { ...commonMeta, appliedToCards: [cardId] }),
+    sourceFocus: decisionScalar([
+      valueOfDecision(decisions?.positioning?.oneLiner, ''),
+      cleanList(valueOfDecision(decisions?.audience?.primary, []), { maxItems: 4 }).length
+        ? `Audience: ${cleanList(valueOfDecision(decisions?.audience?.primary, []), { maxItems: 4 }).join(', ')}.`
+        : '',
+    ].filter(Boolean).join('\n'), { ...commonMeta, appliedToCards: [cardId], max: 1000 }),
+  };
+  return { fields, lastBuiltAt: now };
+}
+
+function buildDecisionPack(brain = {}, bundle = {}) {
+  const clientConfig = bundle.clientConfig || {};
+  const dashboardState = bundle.dashboardState || {};
+  const marketingBriefConfig = clientConfig.marketingBriefConfig || {};
+  const scoutConfig = clientConfig.scoutConfig || {};
+  const identity = brain.identity || {};
+  const positioning = brain.positioning || {};
+  const voice = brain.voice || {};
+  const audience = brain.audience || {};
+  const offers = brain.offers || {};
+  const proof = brain.proof || {};
+  const content = brain.content || {};
+
+  const sourceIds = (Array.isArray(brain.sourceRefs) ? brain.sourceRefs : [])
+    .filter((src) => src.enabled !== false)
+    .map((src) => src.id);
+  const generatedAt = nowIso();
+  const meta = { status: brain.status === 'approved' ? 'approved' : 'suggested', confidence: brain.confidence || 'medium', sourceIds, updatedBy: 'system', updatedAt: generatedAt };
+  const intelligence = buildIntelligenceDomains({
+    identity,
+    positioning,
+    voice,
+    audience,
+    offers,
+    proof,
+    content,
+    marketingBriefConfig,
+    scoutConfig,
+    dashboardState,
+    sourceIds,
+    meta,
+  });
+  const decisionDrivers = buildDecisionDriversFromDomains(intelligence, meta);
+  const categoryTerms = [
+    ...cleanList(marketingBriefConfig.categoryTerms, { maxItems: 12 }),
+    ...cleanList(scoutConfig.categoryTerms, { maxItems: 12 }),
+    identity.category,
+    dashboardState.marketCategory?.value,
+    ...cleanList(content.pillars, { maxItems: 8 }),
+  ];
+  const brandKeywords = [
+    ...cleanList(marketingBriefConfig.brandKeywords, { maxItems: 12 }),
+    ...cleanList(scoutConfig.brandKeywords, { maxItems: 12 }),
+    identity.name,
+    identity.primaryUrl ? (() => { try { return new URL(identity.primaryUrl).hostname.replace(/^www\./, ''); } catch { return ''; } })() : '',
+  ];
+  const handles = [
+    ...cleanList(marketingBriefConfig.kols, { maxItems: 20 }),
+    ...cleanList(scoutConfig.kols, { maxItems: 20 }),
+  ];
+  const competitors = [
+    ...cleanList(marketingBriefConfig.competitors, { maxItems: 20 }),
+    ...cleanList(scoutConfig.competitors, { maxItems: 20 }),
+  ];
+  const platforms = cleanList(marketingBriefConfig.sourcePlatforms?.length ? marketingBriefConfig.sourcePlatforms : DEFAULT_MARKETING_SOURCE_PLATFORMS, { maxItems: 10 });
+  const doNotSay = [
+    ...cleanList(voice.bannedWords, { maxItems: 20 }),
+    ...cleanList(voice.avoidPatterns, { maxItems: 20 }),
+    ...(Array.isArray(brain.sourceRefs) ? brain.sourceRefs.map((src) => src.doNotUseNotes).filter(Boolean) : []),
+  ];
+
+  return {
+    intelligence,
+    decisionDrivers,
+    identity: {
+      name: decisionScalar(identity.name, meta),
+      category: decisionScalar(identity.category || dashboardState.marketCategory?.value, meta),
+      primaryUrl: decisionScalar(identity.primaryUrl, meta),
+    },
+    positioning: {
+      oneLiner: decisionScalar(positioning.oneLiner || positioning.authorityPosition || identity.description, meta),
+      differentiation: decisionList(positioning.differentiation || positioning.valueProps, meta, { maxItems: 12 }),
+    },
+    audience: {
+      primary: decisionList(audience.primary, meta, { maxItems: 12 }),
+      motivations: decisionList(audience.motivations, meta, { maxItems: 12 }),
+      objections: decisionList(audience.objections, meta, { maxItems: 12 }),
+    },
+    voice: {
+      toneSummary: decisionScalar(voice.toneSummary || cleanList(voice.writingRules, { maxItems: 4 }).join(' '), meta),
+      preferredWords: decisionList(voice.preferredWords, meta, { maxItems: 20 }),
+      doNotSay: decisionList(doNotSay, meta, { maxItems: 30 }),
+    },
+    offers: {
+      services: decisionList(offers.services || offers.products, meta, { maxItems: 12 }),
+      callsToAction: decisionList(offers.callsToAction, meta, { maxItems: 8 }),
+    },
+    proof: {
+      points: decisionList(proof.projects || proof.workHistory, meta, { maxItems: 12 }),
+      metrics: decisionList(proof.metrics, meta, { maxItems: 12 }),
+    },
+    search: {
+      keywords: decisionList(brandKeywords, meta, { maxItems: 12 }),
+      excludedTerms: decisionList(doNotSay, meta, { maxItems: 20 }),
+      topicsToMonitor: decisionList(categoryTerms, meta, { maxItems: 12 }),
+      competitorTerms: decisionList(competitors, meta, { maxItems: 20 }),
+      customSearches: decisionValue(cleanSearchRows(marketingBriefConfig.searches, 8), meta),
+    },
+    social: {
+      handlesToFollow: decisionList([
+        ...handles,
+        ...cleanList(intelligence.discovery?.watchLists?.value, { maxItems: 20 }),
+      ], meta, { maxItems: 30 }),
+      handlesToAvoid: decisionList([], meta, { maxItems: 20 }),
+      platforms: decisionList(platforms, meta, { maxItems: 10 }),
+      postAngles: decisionList(content.pillars, meta, { maxItems: 12 }),
+    },
+    market: {
+      categories: decisionList([dashboardState.marketCategory?.value, identity.category, ...categoryTerms], meta, { maxItems: 12 }),
+      verticals: decisionList([identity.category, dashboardState.leadgen?.vertical], meta, { maxItems: 8 }),
+      locations: decisionList([identity.location, dashboardState.leadgen?.city], meta, { maxItems: 8 }),
+      signalsToWatch: decisionList(marketingBriefConfig.localSignals, meta, { maxItems: 12 }),
+    },
+    content: {
+      pillars: decisionList(content.pillars, meta, { maxItems: 12 }),
+      recurringSeries: decisionList(content.recurringSeries, meta, { maxItems: 12 }),
+      defaultCtas: decisionList(offers.callsToAction, meta, { maxItems: 8 }),
+      doNotSay: decisionList(doNotSay, meta, { maxItems: 30 }),
+    },
+    generatedAt,
+  };
+}
+
+const COMPLETION_DOMAINS = Object.freeze({
+  identity: [
+    ['decisions.identity.name', 'Client name'],
+    ['decisions.positioning.oneLiner', 'Approved positioning'],
+    ['decisions.audience.primary', 'Primary audience'],
+    ['decisions.offers.services', 'Offers/services'],
+  ],
+  authority: [
+    ['decisions.proof.points', 'Proof points'],
+    ['decisions.intelligence.authority.trustReasons', 'Trust reasons'],
+    ['decisions.intelligence.authority.allowedClaims', 'Allowed claims'],
+  ],
+  market: [
+    ['decisions.search.keywords', 'Search keywords'],
+    ['decisions.search.topicsToMonitor', 'Topics to monitor'],
+    ['decisions.search.competitorTerms', 'Competitors'],
+  ],
+  discovery: [
+    ['decisions.intelligence.discovery.keywords', 'Discovery keywords'],
+    ['decisions.intelligence.discovery.primaryPlatforms', 'Primary platforms'],
+    ['decisions.intelligence.discovery.communities', 'Communities'],
+    ['decisions.intelligence.discovery.publications', 'Publications'],
+    ['decisions.intelligence.discovery.watchLists', 'Watchlists'],
+  ],
+  content: [
+    ['decisions.content.pillars', 'Content pillars'],
+    ['decisions.content.recurringSeries', 'Recurring series'],
+    ['decisions.voice.toneSummary', 'Voice/tone'],
+    ['decisions.content.defaultCtas', 'Default CTAs'],
+  ],
+  opportunity: [
+    ['decisions.intelligence.opportunity.icpSegments', 'ICP segments'],
+    ['decisions.intelligence.opportunity.verticals', 'Verticals'],
+    ['decisions.intelligence.opportunity.qualificationSignals', 'Qualification signals'],
+    ['decisions.intelligence.opportunity.outreachAngles', 'Outreach angles'],
+  ],
+});
+
+function getByPath(root, path) {
+  return String(path || '').split('.').reduce((acc, key) => (acc && acc[key] != null ? acc[key] : undefined), root);
+}
+
+function decisionHasValue(decision) {
+  const value = valueOfDecision(decision, decision);
+  if (Array.isArray(value)) return value.filter(Boolean).length > 0;
+  if (value && typeof value === 'object') return Object.keys(value).length > 0;
+  return Boolean(String(value || '').trim());
+}
+
+function buildClientBrainCompletion(decisions = {}, { sourceRefs = [], missingData = [], contradictions = [] } = {}) {
+  const enabled = sourceRefs.filter((src) => src.enabled !== false);
+  const sourceScore = sourceRefs.length ? Math.round((enabled.length / sourceRefs.length) * 100) : 50;
+  const trustScore = enabled.length
+    ? Math.round(enabled.reduce((sum, src) => sum + (src.trustLevel === 'high' ? 100 : src.trustLevel === 'medium' ? 70 : 40), 0) / enabled.length)
+    : 50;
+  const freshnessScore = enabled.length
+    ? Math.round(enabled.reduce((sum, src) => sum + (src.freshness === 'current' ? 100 : src.freshness === 'recent' ? 75 : src.freshness === 'stale' ? 30 : 55), 0) / enabled.length)
+    : 50;
+  const conflictPenalty = contradictions.length ? Math.min(25, contradictions.length * 8) : 0;
+  const highGapPenalty = missingData.filter((item) => item.priority === 'high').length * 6;
+
+  const byDomain = {};
+  for (const [domain, fields] of Object.entries(COMPLETION_DOMAINS)) {
+    const completeFields = [];
+    const missingFields = [];
+    let approvedCount = 0;
+    for (const [path, label] of fields) {
+      const decision = getByPath({ decisions }, path);
+      if (decisionHasValue(decision)) {
+        completeFields.push({ path, label });
+        if (decision?.status === 'approved' || decision?.acquisition?.validationStatus === 'approved') approvedCount += 1;
+      } else {
+        missingFields.push({ path, label });
+      }
+    }
+    const coverage = Math.round((completeFields.length / fields.length) * 70);
+    const approval = Math.round((approvedCount / fields.length) * 15);
+    const sourceQuality = Math.round(((sourceScore + trustScore + freshnessScore) / 3) * 0.15);
+    const score = Math.max(0, Math.min(100, coverage + approval + sourceQuality - conflictPenalty - highGapPenalty));
+    byDomain[domain] = {
+      score,
+      completeFields,
+      missingFields,
+      approvedCount,
+      requiredCount: fields.length,
+      sourceScore,
+      trustScore,
+      freshnessScore,
+      conflictPenalty,
+    };
+  }
+
+  const domainScores = Object.values(byDomain).map((domain) => domain.score);
+  return {
+    score: domainScores.length ? Math.round(domainScores.reduce((sum, score) => sum + score, 0) / domainScores.length) : 0,
+    domains: byDomain,
+    generatedAt: nowIso(),
+    informationalOnly: true,
+  };
+}
+
+function buildMissingDecisionQueue(completion = {}) {
+  const rows = [];
+  for (const [domain, state] of Object.entries(completion.domains || {})) {
+    for (const missing of state.missingFields || []) {
+      rows.push({
+        priority: state.score < 45 ? 'high' : state.score < 75 ? 'medium' : 'low',
+        domain,
+        field: missing.path,
+        label: missing.label,
+        action: `Define ${missing.label.toLowerCase()} for ${domain} intelligence.`,
+      });
+    }
+  }
+  const priorityRank = { high: 0, medium: 1, low: 2 };
+  return rows.sort((a, b) => priorityRank[a.priority] - priorityRank[b.priority] || a.domain.localeCompare(b.domain));
+}
+
+function collectDecisionAcquisition(decisions = {}, completion = {}, queue = []) {
+  const methods = {};
+  function visit(value) {
+    if (!value || typeof value !== 'object') return;
+    if (value.acquisition?.method) {
+      methods[value.acquisition.method] = (methods[value.acquisition.method] || 0) + 1;
+    }
+    for (const child of Object.values(value)) {
+      if (child && typeof child === 'object') visit(child);
+    }
+  }
+  visit(decisions);
+  return {
+    methods,
+    completionScore: completion.score || 0,
+    domainScores: Object.fromEntries(Object.entries(completion.domains || {}).map(([domain, state]) => [domain, state.score])),
+    missingDecisionCount: queue.length,
+    generatedAt: nowIso(),
+  };
+}
+
+function buildDecisionEngine(brain = {}, bundle = {}) {
+  const decisions = brain.decisions && typeof brain.decisions === 'object'
+    ? brain.decisions
+    : buildDecisionPack(brain, bundle);
+  const existingDefaults = brain.cardDefaults && typeof brain.cardDefaults === 'object' ? brain.cardDefaults : {};
+  const marketingDefaults = buildCardDefaultsForCard(decisions, MARKETING_BRIEF_CARD_ID);
+  const completion = buildClientBrainCompletion(decisions, {
+    sourceRefs: brain.sourceRefs || [],
+    missingData: brain.missingData || [],
+    contradictions: brain.contradictions || [],
+  });
+  const missingDecisionQueue = buildMissingDecisionQueue(completion);
+  const decisionAcquisition = collectDecisionAcquisition(decisions, completion, missingDecisionQueue);
+  return {
+    decisions,
+    decisionAcquisition,
+    completion,
+    missingDecisionQueue,
+    cardDefaults: {
+      ...existingDefaults,
+      [MARKETING_BRIEF_CARD_ID]: {
+        ...marketingDefaults,
+        ...(existingDefaults[MARKETING_BRIEF_CARD_ID] || {}),
+        fields: {
+          ...marketingDefaults.fields,
+          ...(existingDefaults[MARKETING_BRIEF_CARD_ID]?.fields || {}),
+        },
+      },
+      [MARKET_INSIGHTS_CARD_ID]: {
+        ...marketingDefaults,
+        ...(existingDefaults[MARKET_INSIGHTS_CARD_ID] || {}),
+        fields: {
+          ...marketingDefaults.fields,
+          ...(existingDefaults[MARKET_INSIGHTS_CARD_ID]?.fields || {}),
+        },
+      },
+    },
+    cardSettingsSnapshot: brain.cardSettingsSnapshot && typeof brain.cardSettingsSnapshot === 'object'
+      ? brain.cardSettingsSnapshot
+      : {},
   };
 }
 
@@ -793,7 +1420,33 @@ async function generateAndSaveClientBrain(clientId, { mode = 'deterministic' } =
       draft = { ...draft, regenerationError: compact(err.message, 200) };
     }
   }
+  const engine = buildDecisionEngine(draft, bundle);
+  draft = {
+    ...draft,
+    decisions: engine.decisions,
+    decisionAcquisition: engine.decisionAcquisition,
+    completion: engine.completion,
+    missingDecisionQueue: engine.missingDecisionQueue,
+    cardDefaults: engine.cardDefaults,
+    cardSettingsSnapshot: engine.cardSettingsSnapshot,
+  };
   return saveClientBrain(clientId, draft);
+}
+
+async function compileAndSaveClientBrainMarkdown(clientId, markdownSource) {
+  const { bundle } = await getClientBrain(clientId);
+  const compiled = compileClientBrainMarkdown(markdownSource, { clientId });
+  const engine = buildDecisionEngine(compiled, bundle);
+  return saveClientBrain(clientId, {
+    ...compiled,
+    decisions: engine.decisions,
+    decisionAcquisition: engine.decisionAcquisition,
+    completion: engine.completion,
+    missingDecisionQueue: engine.missingDecisionQueue,
+    cardDefaults: engine.cardDefaults,
+    cardSettingsSnapshot: engine.cardSettingsSnapshot,
+    updatedAtIso: nowIso(),
+  });
 }
 
 async function markClientBrainStatus(clientId, status) {
@@ -827,23 +1480,151 @@ async function loadClientBrainContext(clientId, { useFor = null, maxChars = 2500
   return compact(data.aiContextPack?.shortContext || data.aiContextPack?.longContext || '', maxChars);
 }
 
+async function loadClientBrainDecisions(clientId, { cardId = null, requireApproved = true } = {}) {
+  if (!clientId) return { decisions: {}, cardDefaults: {}, fields: {} };
+  const { brain, bundle } = await getClientBrain(clientId);
+  if (!brain || (requireApproved && brain.status !== 'approved')) {
+    return { decisions: {}, cardDefaults: {}, fields: {} };
+  }
+  const engine = buildDecisionEngine(brain, bundle);
+  const cardDefaults = cardId ? (engine.cardDefaults?.[cardId] || {}) : engine.cardDefaults;
+  return {
+    decisions: engine.decisions || {},
+    cardDefaults,
+    fields: cardId ? (cardDefaults.fields || {}) : {},
+  };
+}
+
+async function loadClientBrainCardDefaults(clientId, { cardId, requireApproved = true } = {}) {
+  const out = await loadClientBrainDecisions(clientId, { cardId, requireApproved });
+  return out.cardDefaults || { fields: {} };
+}
+
+function buildMarketingBriefDecisionPatch(config = {}) {
+  const now = nowIso();
+  const meta = {
+    status: 'approved',
+    confidence: 'high',
+    updatedBy: 'operator',
+    updatedAt: now,
+    method: 'feedback',
+    confidenceReason: 'Operator promoted durable card settings back into Client Brain.',
+    appliedToCards: [MARKETING_BRIEF_CARD_ID, MARKET_INSIGHTS_CARD_ID],
+  };
+  const fields = {
+    brandName: decisionScalar(config.brandName, meta),
+    brandKeywords: decisionList(config.brandKeywords, meta, { maxItems: 12 }),
+    categoryTerms: decisionList(config.categoryTerms, meta, { maxItems: 12 }),
+    kols: decisionList(config.kols, meta, { maxItems: 20 }),
+    competitors: decisionList(config.competitors, meta, { maxItems: 20 }),
+    sourcePlatforms: decisionList(config.sourcePlatforms, meta, { maxItems: 10 }),
+    searches: decisionValue(cleanSearchRows(config.searches, 8), meta),
+    sourceFocus: decisionScalar(config.sourceFocus, { ...meta, max: 1000 }),
+  };
+  return {
+    decisions: {
+      identity: { name: fields.brandName },
+      search: {
+        keywords: fields.brandKeywords,
+        topicsToMonitor: fields.categoryTerms,
+        competitorTerms: fields.competitors,
+        customSearches: fields.searches,
+      },
+      social: {
+        handlesToFollow: fields.kols,
+        platforms: fields.sourcePlatforms,
+      },
+      market: {
+        categories: fields.categoryTerms,
+      },
+    },
+    defaults: { fields, lastAppliedAt: now, lastAppliedBy: 'operator' },
+  };
+}
+
+function mergeDeepObject(base = {}, patch = {}) {
+  const out = { ...(base && typeof base === 'object' ? base : {}) };
+  for (const [key, value] of Object.entries(patch || {})) {
+    if (value && typeof value === 'object' && !Array.isArray(value) && !(value.value !== undefined && value.status)) {
+      out[key] = mergeDeepObject(out[key], value);
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+async function saveClientBrainCardSettingsSnapshot(clientId, { cardId, config, source = 'card', promote = false } = {}) {
+  if (!clientId || !cardId || !config || typeof config !== 'object') return null;
+  const { brain } = await getClientBrain(clientId);
+  const now = nowIso();
+  const patch = {
+    cardSettingsSnapshot: {
+      ...(brain.cardSettingsSnapshot || {}),
+      [cardId]: {
+        config,
+        source,
+        updatedAt: now,
+      },
+    },
+  };
+
+  if (promote && [MARKETING_BRIEF_CARD_ID, MARKET_INSIGHTS_CARD_ID].includes(cardId)) {
+    const promoted = buildMarketingBriefDecisionPatch(config);
+    patch.decisions = mergeDeepObject(brain.decisions || {}, promoted.decisions);
+    const completion = buildClientBrainCompletion(patch.decisions, {
+      sourceRefs: brain.sourceRefs || [],
+      missingData: brain.missingData || [],
+      contradictions: brain.contradictions || [],
+    });
+    const missingDecisionQueue = buildMissingDecisionQueue(completion);
+    patch.completion = completion;
+    patch.missingDecisionQueue = missingDecisionQueue;
+    patch.decisionAcquisition = collectDecisionAcquisition(patch.decisions, completion, missingDecisionQueue);
+    patch.cardDefaults = {
+      ...(brain.cardDefaults || {}),
+      [MARKETING_BRIEF_CARD_ID]: {
+        ...((brain.cardDefaults || {})[MARKETING_BRIEF_CARD_ID] || {}),
+        ...promoted.defaults,
+      },
+      [MARKET_INSIGHTS_CARD_ID]: {
+        ...((brain.cardDefaults || {})[MARKET_INSIGHTS_CARD_ID] || {}),
+        ...promoted.defaults,
+      },
+    };
+  }
+
+  return saveClientBrain(clientId, patch);
+}
+
 module.exports = {
   CLIENT_BRAIN_VERSION,
   DEFAULT_USE_FOR,
   buildAutoSourceRefs,
   buildClientBrainDraft,
+  buildCardDefaultsForCard,
+  buildClientBrainCompletion,
+  compileAndSaveClientBrainMarkdown,
+  buildDecisionEngine,
+  buildDecisionPack,
   buildDashboardMirror,
+  buildMissingDecisionQueue,
   buildUseForContext,
+  collectDecisionAcquisition,
   computeBrainConfidence,
   confidenceFromSources,
   detectContradictions,
   generateAndSaveClientBrain,
   getClientBrain,
+  loadClientBrainCardDefaults,
   loadClientBrainContext,
+  loadClientBrainDecisions,
   markClientBrainStatus,
   mergeVoice,
   normalizeSourceRef,
   readClientBrainDoc,
+  saveClientBrainCardSettingsSnapshot,
   saveClientBrain,
   saveSourceRefs,
+  createClientBrainMarkdownTemplate,
 };

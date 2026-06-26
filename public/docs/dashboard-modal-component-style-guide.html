@@ -65,6 +65,26 @@
       backdrop-filter: blur(22px);
     }
 
+    .rule-banner {
+      margin-bottom: 24px;
+      padding: 14px 18px;
+      border: 1px solid rgba(159,31,23,0.3);
+      border-left: 4px solid var(--danger);
+      border-radius: var(--radius);
+      background: rgba(159,31,23,0.05);
+      color: var(--ink);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .rule-banner strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--danger);
+      font-family: var(--font-mono);
+      letter-spacing: 0.06em;
+    }
+
     .eyebrow,
     .label,
     .chip,
@@ -1891,7 +1911,6 @@
   <main class="page">
     <header class="guide-hero">
       <div>
-        <span class="eyebrow">Client Dashboard / Modal Components</span>
         <h1>UI KIT</h1>
         <p class="hero-copy">
           One normalized component language for dashboard card modals. Tweak this page first,
@@ -1899,12 +1918,19 @@
         </p>
       </div>
       <div class="status-stack" aria-label="Design rules">
+        <div class="status-line"><span>Eyebrows</span><strong>Never — ever</strong></div>
         <div class="status-line"><span>Primary CTA</span><strong>One per screen</strong></div>
         <div class="status-line"><span>Radius</span><strong>8px panels</strong></div>
-        <div class="status-line"><span>Typography</span><strong>Readable first</strong></div>
         <div class="status-line"><span>Surface</span><strong>White glass</strong></div>
       </div>
     </header>
+
+    <section class="rule-banner" role="note">
+      <strong>RULE — NO EYEBROWS, EVER.</strong>
+      A small uppercase kicker label sitting above a heading is a dead AI/Claude giveaway.
+      Never ship one anywhere on the site. Lead with the heading itself; if context is needed,
+      put it in the subhead or a chip — not a kicker above the title.
+    </section>
 
     <nav class="kit-tabnav" id="kit-tabnav" aria-label="UI kit views">
       <button class="kit-tab is-active" type="button" data-kit-target="kit-view-dashboard">Dashboard Modals</button>
@@ -1917,7 +1943,6 @@
       <aside class="panel visual-cell">
         <div class="preview-box">SB</div>
         <div class="visual-copy">
-          <span class="eyebrow">Card Modal Shell</span>
           <h2>Strategy Builder</h2>
           <p>
             Left side keeps the visual and summary. Right side holds the tab system.
@@ -2199,7 +2224,7 @@
               <div class="preview-media">Image / iframe / report preview</div>
             </div>
             <div class="external-preview preview-surface">
-              <span class="eyebrow">Preview Deployed</span>
+              <span class="chip chip-success">Preview Deployed</span>
               <button class="btn btn-dark" type="button">Open Preview <span class="cta-icon">↗</span></button>
               <span class="url-chip">https://preview.example.com/client/site</span>
               <p class="hint">Use when a deployment blocks iframe embedding or the user must inspect a live URL.</p>
@@ -2801,7 +2826,7 @@
             <h3>Empty State</h3>
             <div class="empty">
               <div>
-                <span class="eyebrow">No Plan Yet</span>
+                <strong>No plan yet.</strong>
                 Generate a strategy in the Inputs tab, then return here to review calendar and push actions.
               </div>
             </div>

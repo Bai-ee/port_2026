@@ -11,6 +11,11 @@ import {
   buildKnowledgeBaseRuntimeQuery,
   getKnowledgeBaseRuntimeContext,
 } from '../../../../../features/knowledge-base/pipeline-context.js';
+import {
+  buildDailyEditorialRecommendation,
+  formatEditorialRecommendationForPrompt,
+  normalizeEditorialStrategyConfig,
+} from '../../../../../features/editorial-strategy/engine.js';
 
 const { loadClientBrainContext } = require('../../../../../features/client-brain/store.cjs');
 
@@ -271,6 +276,7 @@ export async function POST(request) {
         endDate: String(p.endDate).slice(0, 30),
       })),
   };
+  const editorial = normalizeEditorialStrategyConfig(clientConfig.editorial || dsData.strategyBuilder?.config?.editorial || {});
 
   const ctx = {
     client: {
@@ -306,6 +312,7 @@ export async function POST(request) {
     clientBrain: clientBrainContext ? { context: clientBrainContext } : null,
     cardFindings: includedCardFindings,
     campaign,
+    editorial,
     signals,
     config: {
       startDate,
@@ -316,6 +323,14 @@ export async function POST(request) {
     },
     now,
   };
+
+  const editorialRecommendation = buildDailyEditorialRecommendation({
+    editorial,
+    ctx,
+    now,
+  });
+  ctx.editorialRecommendation = editorialRecommendation;
+  ctx.editorialRecommendationText = formatEditorialRecommendationForPrompt(editorialRecommendation);
 
   // Build xGrowth context from Marketing Brief signals
   try {
@@ -374,6 +389,7 @@ export async function POST(request) {
 
   // Attach today strategy to the plan before saving
   if (todayStrategy) plan.today = todayStrategy;
+  if (editorialRecommendation) plan.editorialRecommendation = editorialRecommendation;
   if (knowledgeBase?.available) {
     plan.knowledgeBaseSources = knowledgeBase.sources || [];
   }

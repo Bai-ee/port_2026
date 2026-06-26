@@ -136,6 +136,15 @@ function buildWebsiteAuditBlock(config) {
   return String(audit.block);
 }
 
+function buildClientBrainBlock(config) {
+  const cb = config?.clientBrainContext;
+  if (!cb?.available || !cb.block) return '';
+  return `CLIENT BRAIN — CURATED BRAND CONTEXT (approved):
+${String(cb.block).slice(0, 2600)}
+
+This is the client's curated identity, positioning, proof, offers, and voice — the soul of who they are and how they should sound. Weight it when choosing the priority action, content angle, and language. Apply it alongside the Knowledge Base and Scout signals; do not contradict it.`;
+}
+
 function buildConversationBlock(config) {
   const convo = config?.conversationContext;
   if (!convo?.available || !convo.block) return '';
@@ -180,6 +189,7 @@ function buildScribePrompt(briefData, config = getDefaultClientConfig()) {
   const instagramBlock = buildInstagramFormattingBlock(voice);
   const businessFactsBlock = buildBusinessFactsBlock(config);
   const knowledgeBaseBlock = buildKnowledgeBaseBlock(config);
+  const clientBrainBlock = buildClientBrainBlock(config);
   const conversationBlock = buildConversationBlock(config);
   const websiteAuditBlock = buildWebsiteAuditBlock(config);
   const strategy30Block = config?.strategy30Block || '';
@@ -253,6 +263,7 @@ ${voiceBlock}
 ${instagramBlock ? `\n\n${instagramBlock}` : ''}
 ${businessFactsBlock ? `\n\n${businessFactsBlock}` : ''}
 ${knowledgeBaseBlock ? `\n\n${knowledgeBaseBlock}` : ''}
+${clientBrainBlock ? `\n\n${clientBrainBlock}` : ''}
 ${conversationBlock ? `\n\n${conversationBlock}` : ''}
 ${websiteAuditBlock ? `\n\n${websiteAuditBlock}` : ''}
 ${strategy30Block ? `\n\n${strategy30Block}` : ''}

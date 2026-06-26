@@ -1,6 +1,6 @@
 # Marketing Brief Handoff
 
-Last updated: 2026-05-12
+Last updated: 2026-06-26
 
 ## Goal
 
@@ -12,6 +12,8 @@ After running the Marketing Brief card, the user expects:
 
 - Scout config is editable from the Marketing Brief card modal.
 - Scout source platforms can be checked on/off.
+- Approved Client Brain values can seed empty Marketing Brief config fields.
+- Saved Marketing Brief settings can be promoted back into Client Brain as feedback decisions.
 - Scribe output becomes a proper founder-ready brief, not only raw card rows.
 - The designed brief should be readable from the established `Daily Brief` card in the Brief nav bucket.
 - The Marketing Brief modal should also have a tab where the generated brief can be read.
@@ -29,6 +31,8 @@ After running the Marketing Brief card, the user expects:
 - `app/api/dashboard/marketing-brief/config/route.js`
   - `GET` / `POST` for `client_configs/{clientId}.marketingBriefConfig`.
   - Normalizes searches, KOLs, competitors, freshness, and `sourcePlatforms`.
+  - On `GET`, loads approved Client Brain defaults through `loadClientBrainCardDefaults(..., { cardId:'marketing-brief' })` and fills empty fields only.
+  - On `POST`, saves a Client Brain card settings snapshot and promotes durable card settings back into Brain decisions.
 
 - `app/api/dashboard/marketing-brief/run/route.js`
   - Creates a `brief_runs` doc with `pipelineType: 'scout-brief'`.
@@ -59,6 +63,7 @@ After running the Marketing Brief card, the user expects:
 2. Dashboard loads config from:
    - `GET /api/dashboard/marketing-brief/config`
    - Firestore: `client_configs/{clientId}.marketingBriefConfig`
+   - Approved Client Brain card defaults, applied only to empty config fields.
 3. User edits:
    - `sourceFocus`
    - `sourcePlatforms`
@@ -87,6 +92,7 @@ After running the Marketing Brief card, the user expects:
 10. The designed Marketing Brief is visible in:
    - Daily Brief card preview when latest run is Marketing Brief.
    - Marketing Brief card modal `BRIEF` tab.
+11. Saving config writes a `cardSettingsSnapshot` into Client Brain and, when promoted, updates approved/suggested Brain decisions with `acquisition.method = feedback`.
 
 ## Important Current Behavior
 
@@ -137,6 +143,33 @@ Runtime mapping:
 - Social platforms also feed `last30days.sources` when enabled.
 - Disabled platforms are explicitly described to Scout as out of scope except for incidental broad web/news coverage.
 
+## Client Brain Defaults And Feedback
+
+Marketing Brief / Market Signals is the first structured Client Brain default consumer.
+
+Read-time behavior:
+
+- The config route loads Brain defaults through `loadClientBrainCardDefaults(context.clientId, { cardId: 'marketing-brief' })`.
+- Defaults fill only empty fields.
+- Manual card settings are not overwritten.
+- The response includes `clientBrainDefaults.fields` and `clientBrainDefaults.appliedFields`.
+
+Save-time behavior:
+
+- The config route saves `marketingBriefConfig` as the card's canonical run config.
+- It also calls `saveClientBrainCardSettingsSnapshot(..., { cardId: 'marketing-brief', promote: true })`.
+- Promoted values update Brain decisions for search keywords, topics, competitors, handles/platforms, market categories, and identity name.
+- Promotion is non-fatal: if Brain save fails, the card config still saves and remains canonical for its own runs.
+
+Precedence:
+
+```text
+manual card setting
+  > approved Client Brain decision
+  > company/default template
+  > hardcoded fallback
+```
+
 ## Known Caveats
 
 - The designed Marketing Brief render in `brief-preview/route.js` is a custom HTML renderer, not the full original intake `brief-renderer.js`.
@@ -162,6 +195,7 @@ Result:
 
 ## Recommended Next Work
 
+0. Keep this handoff aligned with `docs/features/marketing-brief/README.md` and `docs/source-of-truth/MARKET-SIGNALS-AND-SCOUT-PROJECTION.md`.
 1. Make `/api/dashboard/brief-preview?type=marketing` explicitly used by the Marketing Brief modal so old intake briefs and marketing briefs can coexist without ambiguity.
 2. Consider extracting the Marketing Brief HTML renderer from `app/api/dashboard/brief-preview/route.js` into a reusable module.
 3. Add a `Knowledge Sources` layer for durable assets like white papers:

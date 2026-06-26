@@ -1,50 +1,329 @@
+---
+schemaVersion: hitloop.client-brain.v1
+clientId: bryan-balli
+clientName: Bryan Balli
+status: draft
+updatedAt: 2026-06-26
+---
+
 # Bryan Example Client Brain
 
 This file is example seed content only. Do not hardcode it into runtime logic.
 
-Bryan Balli, also known as Bai-ee, is a multidisciplinary creative technologist and Creative Systems Architect with experience spanning graphic design, rich media, front-end development, motion, brand systems, Web3, gaming, and AI-integrated workflows.
+## Identity Intelligence
 
-Current strategic positioning:
+### Name
+Bryan Balli
 
+### Category To Own
+- Creative Systems Architecture
+- Design Engineering
+- Creative Technology
+- AI-integrated creative workflows
+- Brand systems
+- Creative operations
+
+### Category To Avoid
+- Generic AI agency
+- Full-service marketing agency
+- Prompt shop
+- Hype-led Web3 consultancy
+
+### Positioning
 Creative Systems Architect integrating AI into production-ready brand and product ecosystems.
 
-Core themes:
+### Primary Audience
+- Startup founders
+- Creative agencies
+- AI SaaS teams
+- Web3 and gaming teams
+- Developer tool teams
 
-- execution-native design
-- brand systems
-- AI-integrated creative workflows
-- human-in-the-loop automation
-- cross-platform translation
-- gaming, NFT, and Web3 ecosystem design
-- legacy brand translation
-- decentralized creative operations
-- productized creative infrastructure
+### Offers
+- Creative systems architecture
+- AI workflow design
+- Brand system translation
+- Productized creative infrastructure
+- Human-in-the-loop automation
 
-Anchor projects:
+## Market Intelligence
 
-- Critters Quest: Web3/game ecosystem for brand systems, lore, UI, NFTs, gaming loops, decentralized workflows, automation, and durability
-- Rosita's: legacy restaurant brand translation across physical and digital surfaces
-- EditTrax: creator infrastructure, music archive, metadata, ownership, permanence
-- Claire Calls: AI product UX, conversational behavior, trust, voice-first systems
-- HITLOOP: human-in-the-loop creative operating system for strategy, automation, and client deliverables
+### Search Keywords
+- Creative Systems
+- Creative Systems Architect
+- Creative Operations
+- Design Engineering
+- Brand Systems
+- Creative Technology
+- Design Systems
+- AI Workflow Design
+- Creative Automation
+- Human in the Loop
 
-Tone:
+### Competitors
+- Creative technologists
+- Design engineering studios
+- AI creative workflow consultants
 
+### Thought Leaders
+- Charlota
+- Jack Butcher
+- Dickie Bush
+- Kieran Drew
+
+### Publications
+- Fast Company
+- a16z
+- Linear blog
+- Figma blog
+- Anthropic
+- OpenAI
+- Stripe
+- Framer
+- Creative Boom
+- It's Nice That
+
+### Communities
+- Designer founders
+- Creative technologists
+- Web3 builders
+- Indie Hackers
+- Developer tooling
+- Creative operations
+- Brand strategy
+- Gaming UX
+
+### Topics To Monitor
+- AI creative workflows
+- Creative infrastructure
+- Design systems for startups
+- Developer marketing
+- Creative ops automation
+- Web3 brand systems
+- Game UI
+
+## Discovery Intelligence
+
+### Keywords
+- Creative Systems
+- Creative Systems Architecture
+- Creative Operations
+- Design Engineering
+- Creative Technology
+- Brand Systems
+- AI Workflow Design
+- Execution Native Design
+- Human in the Loop
+
+### Primary Platforms
+- web
+- x
+- linkedin
+- reddit
+- hackernews
+- instagram
+
+### Communities
+- Creative Technologists
+- Founder Twitter
+- Design Twitter
+- AI Builders
+- Gaming
+- Web3
+
+### Publications
+- Fast Company
+- a16z
+- Linear blog
+- Figma blog
+- Anthropic
+- OpenAI
+- Stripe
+- Framer
+
+### Podcasts
+- Design Better
+- Lenny's Podcast
+- The Knowledge Project
+- Acquired
+
+### Events
+- Config
+- SXSW
+- Adobe MAX
+- AI Engineer Summit
+
+### Directories
+- Clutch
+- Contra
+- Product Hunt
+- Built In
+
+### Awards
+- Webby Awards
+- Awwwards
+- CSS Design Awards
+
+### Social Ecosystems
+- Creative Technologists
+- Founder Twitter
+- Design Twitter
+- AI Builders
+- Gaming
+- Web3
+
+### Hashtags
+- #creativesystems
+- #designengineering
+- #creativeoperations
+- #aiworkflow
+
+### Watch Lists
+- Charlota
+- Jack Butcher
+- Dickie Bush
+- Kieran Drew
+
+## Authority Intelligence
+
+### Proof Points
+- 15+ years enterprise adtech and creative technology experience
+- Rich media and front-end engineering background
+- Brand, Web3, gaming, music, and AI product work
+- Human-in-the-loop HITLOOP operating model
+
+### Work History
+- Greystripe
+- ValueClick
+- Conversant
+- Alliance Data
+- Epsilon
+- Publicis Groupe
+- Web3
+- Gaming
+- Music labels
+
+### Allowed Claims
+- Enterprise creative technology experience
+- Cross-platform brand and product systems experience
+- Front-end engineering and rich media background
+- AI-integrated creative workflow experience
+
+### Prohibited Claims
+- Guaranteed growth
+- Fully automated creative replacement
+- Generic AI agency language
+- Unsupported client/result claims
+
+## Content Intelligence
+
+### Content Pillars
+- AI Integration Notes
+- Brand Translation
+- Execution Native
+- Creative Systems
+- Startup Lessons
+- Project Diaries
+- Critters Architecture
+- Design Stress Tests
+
+### Recurring Series
+- AI Integration Notes
+- Creative Systems
+- Project Diaries
+- Design Stress Tests
+
+### Voice
 Short, direct, tactical, systems-first, low fluff, no generic agency language, no hype, calm authority, founder/operator-facing.
 
-Example posts:
+### Do Not Say
+- revolutionary
+- game-changing
+- unlock your potential
+- powered by AI
+- end-to-end agency
 
-Most Web3 projects optimize for launch day.
+### Calls To Action
+- Book a working session
+- Build the system
+- Turn the idea into a working loop
 
-Few optimize for year three.
+## Opportunity Intelligence
 
-Durability > hype.
+### ICP Segments
+- Startup founders
+- Creative agencies
+- Web3 teams
+- Gaming teams
+- AI SaaS teams
+- Developer tool teams
+- Enterprise creative teams
 
-AI generates options.
+### Verticals
+- AI SaaS
+- Developer tools
+- Web3
+- Gaming
+- Design systems
+- Enterprise creative
 
-Systems decide what survives.
+### Geographies
+- Chicago
+- San Francisco
 
-Modernizing legacy isn't redesign.
+### Lead Gen Targets
+- AI SaaS founders
+- Creative agencies adopting AI
+- Web3 product teams
+- Gaming startups
+- Developer tool companies
+- Series A startups
 
-It's translation.
+## Decision Drivers
 
+### Own Creative Systems Architecture
+
+Own:
+- Creative Systems Architecture
+- AI-integrated creative workflows
+
+Avoid:
+- Generic AI agency
+- Prompt shop
+
+Search:
+- creative systems
+- creative systems architect
+- design engineering
+- creative operations
+- AI workflow design
+
+KOLs:
+- Charlota
+- Jack Butcher
+- Dickie Bush
+- Kieran Drew
+
+Publications:
+- Figma blog
+- Linear blog
+- a16z
+- Anthropic
+- OpenAI
+
+Communities:
+- Designer founders
+- Creative technologists
+- Developer tooling
+- Creative operations
+
+Content Series:
+- AI Integration Notes
+- Creative Systems
+- Project Diaries
+
+Lead Gen:
+- AI SaaS founders
+- Creative agencies
+- Developer tools
+- Gaming teams

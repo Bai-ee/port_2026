@@ -1,5 +1,38 @@
 # Lead Gen Outreach Pipeline — PACKAGE & SEND
 
+> **AS-BUILT UPDATE — 2026-06-25 (email redesign).** The PACKAGE/SEND pipeline,
+> Firestore schema, routes, and UI below are accurate. The **email template
+> visual design changed** and supersedes §5 + "Email Template Spec" (those
+> describe the original prospect-themed postcard, kept for history).
+>
+> `features/leadgen/email-template.js` now renders in the **HITLOOP BRIEF kit**
+> (warm-cream), matching the Email Digest renderer (`app/api/admin/daily-digest/route.js`):
+> - **Tokens:** bg `#f2f7f7` · cards `#fffdf7` · ink `#12100c` · terracotta accent
+>   `#b8542e`. Doto display headline, Space Mono micro-labels, Space Grotesk body
+>   (web fonts via `@import`; Gmail/Outlook strip → system mono/sans fallback).
+> - **Layout:** compact provenance header (circle logo + `HITLOOP` + `hitloop.agency`)
+>   → Doto hero "A preview for {business}" → hero preview image → `Why I built this`
+>   (pull-quote note) → `Before / after` (two cards) → `AI readiness` (Doto stat
+>   cells) → terracotta CTA → HITLOOP footer. **No dotted mono eyebrows** (removed
+>   as an AI-design tell).
+> - **Background = bulletproof gradient** `#f8eee7 → #f2f7f7 → #e7edf1`: hosted JPG
+>   `public/img/leadgen-email-bg.jpg` via `<td background>` attr + inline
+>   `background-image:url()` + CSS-gradient fallback + Outlook `<v:background>` VML +
+>   `#f2f7f7` solid fallback. ⚠️ Gmail does **not** render CSS gradients — it shows
+>   the JPG (once deployed; the file 404s on prod until then) else the solid. Apple
+>   Mail / iOS / most webmail show the CSS gradient immediately.
+> - **`theme` param** is still accepted (package route passes it) but **unused** for
+>   the shell — the brand is fixed. Drop or rewire if per-prospect theming returns.
+> - **Footer/brand:** HITLOOP · Bryan Balli · hitloop.agency (was bryanballi.com).
+>
+> **New files (not in the original manifest):**
+> - `app/api/leadgen/email-preview/route.js` — dev-only visual harness. Open
+>   `localhost:3000/api/leadgen/email-preview` (toggles `?before=0`, `?readiness=0`).
+> - `public/img/leadgen-email-bg.jpg` — page-background gradient (7KB).
+>
+> **Open follow-ups:** (1) deploy so the bg JPG resolves in Gmail; (2) the header
+> logo points at `circle_logo.png` (554KB) — ship an optimized ~80px copy.
+
 ## Objective
 
 Build the outreach leg of the lead-gen pipeline. Two new buttons appear inline on every prospect row in `LeadGenDashboard.jsx`:
@@ -491,7 +524,9 @@ The panel will display these as terminal lines + progress indicators.
 | CREATE | `app/api/leadgen/package/route.js` | Package generation endpoint (NDJSON stream) |
 | CREATE | `app/api/leadgen/send/route.js` | Gmail send endpoint (JSON) |
 | CREATE | `features/leadgen/gmail-client.js` | Gmail OAuth2 helper + MIME builder |
-| CREATE | `features/leadgen/email-template.js` | Postcard HTML email renderer |
+| CREATE | `features/leadgen/email-template.js` | HTML email renderer (now HITLOOP brief style — see as-built note up top) |
+| CREATE | `app/api/leadgen/email-preview/route.js` | Dev-only visual harness for the email (added 2026-06-25) |
+| CREATE | `public/img/leadgen-email-bg.jpg` | Page-background gradient image, 7KB (added 2026-06-25) |
 | CREATE | `components/dashboard/leadgen/SendPreviewModal.jsx` | Email preview + send modal |
 | MODIFY | `features/leadgen/constants.js` | Add 'packaged' stage |
 | MODIFY | `components/dashboard/LeadGenDashboard.jsx` | Add PACKAGE/SEND buttons, handlers, modal |

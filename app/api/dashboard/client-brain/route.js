@@ -3,7 +3,8 @@ import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 const { resolveDashboardClientContext } = require('./_context.cjs');
-const { getClientBrain, saveClientBrain } = require('../../../../features/client-brain/store.cjs');
+const { compileAndSaveClientBrainMarkdown, getClientBrain, saveClientBrain } = require('../../../../features/client-brain/store.cjs');
+const { createClientBrainMarkdownTemplate } = require('../../../../features/client-brain/markdown.cjs');
 
 function json(body, status = 200) {
   return NextResponse.json(body, { status, headers: { 'cache-control': 'no-store' } });
@@ -19,7 +20,11 @@ export async function GET(request) {
 
   try {
     const { brain } = await getClientBrain(context.clientId);
-    return json({ ok: true, clientId: context.clientId, brain });
+    const markdownSource = brain?.markdownSource || createClientBrainMarkdownTemplate({
+      clientId: context.clientId,
+      clientName: brain?.identity?.name || context.client?.companyName || context.client?.name || '',
+    });
+    return json({ ok: true, clientId: context.clientId, brain, markdownSource });
   } catch (err) {
     return json({ error: err.message || 'Could not load Client Brain.' }, err.status || 500);
   }
@@ -41,7 +46,9 @@ export async function POST(request) {
   }
 
   try {
-    const brain = await saveClientBrain(context.clientId, body?.brain || {});
+    const brain = typeof body?.markdownSource === 'string'
+      ? await compileAndSaveClientBrainMarkdown(context.clientId, body.markdownSource)
+      : await saveClientBrain(context.clientId, body?.brain || {});
     return json({ ok: true, clientId: context.clientId, brain });
   } catch (err) {
     return json({ error: err.message || 'Could not save Client Brain.' }, err.status || 500);

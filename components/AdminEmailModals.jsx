@@ -346,7 +346,7 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
                   <span className="index">05</span>
                   <div>
                     <h3>Documents feeding the summary</h3>
-                    <p>The most recent uploads from the home client&apos;s Company Brain.</p>
+                    <p>The most recent uploads from the home client&apos;s Source Library.</p>
                   </div>
                   <span className="label">{docs.length} doc{docs.length === 1 ? '' : 's'}</span>
                 </div>

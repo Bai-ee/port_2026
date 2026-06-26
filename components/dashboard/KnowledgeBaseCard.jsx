@@ -66,7 +66,7 @@ export default function KnowledgeBaseCard({ getIdToken }) {
       setItems(Array.isArray(data.items) ? data.items : []);
       setLimits(data.limits || { maxItems: 100, remaining: 0 });
     } catch (err) {
-      setError(err.message || 'Could not load Knowledge Base items.');
+      setError(err.message || 'Could not load Source Library items.');
     } finally {
       setLoading(false);
     }
@@ -108,7 +108,7 @@ export default function KnowledgeBaseCard({ getIdToken }) {
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
       await loadItems();
     } catch (err) {
-      setError(err.message || 'Could not add Knowledge Base item.');
+      setError(err.message || 'Could not add Source Library item.');
     } finally {
       setBusy(false);
     }
@@ -116,7 +116,7 @@ export default function KnowledgeBaseCard({ getIdToken }) {
 
   async function handleDelete(itemId) {
     if (!itemId || deletingId) return;
-    if (!window.confirm('Delete this Knowledge Base item? This removes all its chunks and any uploaded file.')) return;
+    if (!window.confirm('Delete this Source Library item? This removes all its chunks and any uploaded file.')) return;
     setDeletingId(itemId);
     setError('');
     try {
@@ -129,7 +129,7 @@ export default function KnowledgeBaseCard({ getIdToken }) {
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
       await loadItems();
     } catch (err) {
-      setError(err.message || 'Could not delete Knowledge Base item.');
+      setError(err.message || 'Could not delete Source Library item.');
     } finally {
       setDeletingId(null);
     }
@@ -153,7 +153,7 @@ export default function KnowledgeBaseCard({ getIdToken }) {
       setSearchResults(Array.isArray(data.chunks) ? data.chunks : []);
     } catch (err) {
       setSearchResults([]);
-      setError(err.message || 'Knowledge Base search failed.');
+      setError(err.message || 'Source Library search failed.');
     } finally {
       setSearching(false);
     }
@@ -179,7 +179,7 @@ export default function KnowledgeBaseCard({ getIdToken }) {
     } catch (err) {
       setChatAnswer('');
       setChatSources([]);
-      setError(err.message || 'Knowledge Base chat failed.');
+      setError(err.message || 'Source Library chat failed.');
     } finally {
       setChatBusy(false);
     }
@@ -211,7 +211,7 @@ export default function KnowledgeBaseCard({ getIdToken }) {
 
       {approachingLimit && (
         <p id="kb-limit-warning" className="mu-notice">
-          Knowledge Base is approaching the {limits.maxItems || 100}-item v1 limit.
+          Source Library is approaching the {limits.maxItems || 100}-item v1 limit.
         </p>
       )}
 
@@ -232,7 +232,7 @@ export default function KnowledgeBaseCard({ getIdToken }) {
       <div id="kb-workspace">
         <section id="kb-add-section" className="kb-panel">
           <div className="kb-panel-head">
-            <span className="mu-label">Add Knowledge</span>
+            <span className="mu-label">Add Source</span>
             <span style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{activeTab === 'upload' ? 'Documents are extracted, chunked, and embedded.' : activeTab === 'url' ? 'Imports readable page text from one URL.' : 'Paste client-owned context directly.'}</span>
           </div>
           <AddItemPanel mode={activeTab} busy={busy} onSubmit={handleSubmit} />
@@ -241,7 +241,7 @@ export default function KnowledgeBaseCard({ getIdToken }) {
         <section id="kb-list-section" className="kb-panel">
           <div className="kb-panel-head-row">
             <div className="kb-panel-head">
-              <span className="mu-label">Uploaded Items</span>
+              <span className="mu-label">Library Items</span>
               <span style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{itemCount} saved · delete removes chunks and stored files.</span>
             </div>
             <button type="button" className="mu-btn-outline" style={{ minHeight: 30, padding: '0 10px', fontSize: 11 }} onClick={loadItems} disabled={loading || busy}>
@@ -255,7 +255,7 @@ export default function KnowledgeBaseCard({ getIdToken }) {
       <form id="kb-chat-panel" className="kb-panel" onSubmit={handleChat}>
         <div className="kb-panel-head-row">
           <div className="kb-panel-head">
-            <span className="mu-label">Ask Brain</span>
+            <span className="mu-label">Ask Sources</span>
             <span style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>Answers use retrieved chunks and cite the source list below.</span>
           </div>
           <span className="kb-model-chip">Haiku</span>
@@ -266,7 +266,7 @@ export default function KnowledgeBaseCard({ getIdToken }) {
             type="text"
             value={chatQuestion}
             onChange={(event) => setChatQuestion(event.target.value)}
-            placeholder="Ask a question about the uploaded knowledge"
+            placeholder="Ask a question about uploaded sources"
             className="mu-input"
           />
           <button
@@ -295,14 +295,14 @@ export default function KnowledgeBaseCard({ getIdToken }) {
       </form>
 
       <form id="kb-search-panel" onSubmit={handleSearch} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <span className="mu-label">Semantic Search</span>
+        <span className="mu-label">Source Search</span>
         <div style={{ display: 'flex', gap: 8 }}>
           <input
             id="kb-search-input"
             type="search"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search client knowledge"
+            placeholder="Search source library"
             className="mu-input"
             style={{ flex: 1 }}
           />

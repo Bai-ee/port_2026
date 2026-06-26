@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import SignalToggles from './SignalToggles.jsx';
 import UpRightArrow from '../../UpRightArrow';
 
@@ -87,7 +87,7 @@ const DATA_SOURCES = [
   },
   {
     key: 'knowledge-base',
-    label: 'Knowledge Base',
+    label: 'Source Library',
     card: 'knowledge-base',
     readiness: (ds) => {
       const sources = [
@@ -103,6 +103,55 @@ const DATA_SOURCES = [
   },
 ];
 
+const EMPTY_EDITORIAL_STRATEGY = {
+  enabled: true,
+  frameworkVersion: '2.0',
+  schedulePolicy: {},
+  campaigns: [],
+};
+
+function coerceEditorialStrategy(editorial) {
+  return editorial && typeof editorial === 'object' && !Array.isArray(editorial)
+    ? editorial
+    : EMPTY_EDITORIAL_STRATEGY;
+}
+
+function prettyJson(value) {
+  return JSON.stringify(coerceEditorialStrategy(value), null, 2);
+}
+
+function summarizeEditorialStrategy(editorial) {
+  const strategy = coerceEditorialStrategy(editorial);
+  const campaigns = Array.isArray(strategy.campaigns) ? strategy.campaigns : [];
+  const activeCampaigns = campaigns.filter((campaign) => {
+    const status = String(campaign?.status || 'active').toLowerCase();
+    return !['paused', 'complete', 'completed', 'archived'].includes(status);
+  });
+  const assets = campaigns.reduce(
+    (sum, campaign) => sum + (Array.isArray(campaign?.assetLibrary) ? campaign.assetLibrary.length : 0),
+    0
+  );
+  const schedulePolicy = strategy.schedulePolicy || {};
+  const platforms = schedulePolicy.platforms || {};
+  const primaryPlatforms = Array.isArray(platforms.primary) ? platforms.primary : [];
+  const secondaryPlatforms = Array.isArray(platforms.secondary) ? platforms.secondary : [];
+  const allocation = schedulePolicy.campaignAllocation || {};
+  const allocationSummary = Object.entries(allocation)
+    .slice(0, 4)
+    .map(([name, pct]) => `${name} ${pct}`);
+
+  return {
+    enabled: strategy.enabled !== false,
+    frameworkVersion: strategy.frameworkVersion || '2.0',
+    campaigns,
+    activeCampaigns,
+    assets,
+    primaryPlatforms,
+    secondaryPlatforms,
+    allocationSummary,
+  };
+}
+
 /**
  * @param {{
  *   bootstrap: Object,
@@ -115,6 +164,18 @@ const DATA_SOURCES = [
  */
 export default function InputsPane({ bootstrap, config, onConfigChange, onGenerate, onOpenCard, busy }) {
   const ds = bootstrap?.dashboardState || {};
+  const editorial = coerceEditorialStrategy(config.editorial);
+  const editorialSummary = useMemo(
+    () => summarizeEditorialStrategy(editorial),
+    [editorial]
+  );
+  const [editorialDraft, setEditorialDraft] = useState(() => prettyJson(editorial));
+  const [editorialError, setEditorialError] = useState('');
+
+  useEffect(() => {
+    setEditorialDraft(prettyJson(editorial));
+    setEditorialError('');
+  }, [editorial]);
 
   function update(patch) {
     onConfigChange({ ...config, ...patch });
@@ -176,6 +237,44 @@ export default function InputsPane({ bootstrap, config, onConfigChange, onGenera
   }
   function removePromotion(id) {
     updateCampaign({ promotions: promotions.filter((p) => p.id !== id) });
+  }
+
+  function applyEditorialDraft() {
+    try {
+      const parsed = JSON.parse(editorialDraft);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('Strategy pack must be a JSON object.');
+      }
+      if (parsed.campaigns != null && !Array.isArray(parsed.campaigns)) {
+        throw new Error('campaigns must be an array when provided.');
+      }
+      if (parsed.schedulePolicy != null && (typeof parsed.schedulePolicy !== 'object' || Array.isArray(parsed.schedulePolicy))) {
+        throw new Error('schedulePolicy must be an object when provided.');
+      }
+      setEditorialError('');
+      onConfigChange({ ...config, editorial: parsed });
+    } catch (err) {
+      setEditorialError(err.message || 'Invalid strategy pack JSON.');
+    }
+  }
+
+  function formatEditorialDraft() {
+    try {
+      const parsed = JSON.parse(editorialDraft);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('Strategy pack must be a JSON object.');
+      }
+      setEditorialDraft(JSON.stringify(parsed, null, 2));
+      setEditorialError('');
+    } catch (err) {
+      setEditorialError(err.message || 'Invalid strategy pack JSON.');
+    }
+  }
+
+  function clearEditorialPack() {
+    setEditorialError('');
+    setEditorialDraft(prettyJson(EMPTY_EDITORIAL_STRATEGY));
+    onConfigChange({ ...config, editorial: EMPTY_EDITORIAL_STRATEGY });
   }
 
   const OBJECTIVES = [
@@ -274,6 +373,98 @@ export default function InputsPane({ bootstrap, config, onConfigChange, onGenera
           Auto-detected from the Market Category card. Changing it there updates
           it everywhere; this is a per-strategy override.
         </span>
+      </div>
+
+      {/* Marketing Strategy Pack — compiled campaign-first editorial runtime */}
+      <div id="strategy-builder-marketing-strategy-pack" className="sb-section">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <span className="sb-label">Marketing Strategy Pack</span>
+          <span className={`sb-chip sb-chip--${editorialSummary.enabled ? 'ready' : 'empty'}`}>
+            {editorialSummary.enabled ? 'active' : 'off'}
+          </span>
+        </div>
+        <span className="sb-hint">
+          Campaigns, schedule policy, asset libraries and daily adaptation rules
+          used by Strategy Builder.
+        </span>
+
+        <div className="sb-list-stack">
+          <div className="tile-detail-stat-row sb-inline-row" style={{ alignItems: 'center' }}>
+            <span className="tile-detail-stat-label">Framework</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-secondary)' }}>
+              v{editorialSummary.frameworkVersion}
+            </span>
+          </div>
+          <div className="tile-detail-stat-row sb-inline-row" style={{ alignItems: 'center' }}>
+            <span className="tile-detail-stat-label">Campaigns</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-secondary)' }}>
+              {editorialSummary.activeCampaigns.length} active / {editorialSummary.campaigns.length} total
+            </span>
+          </div>
+          <div className="tile-detail-stat-row sb-inline-row" style={{ alignItems: 'center' }}>
+            <span className="tile-detail-stat-label">Assets</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-secondary)' }}>
+              {editorialSummary.assets} prepared
+            </span>
+          </div>
+          <div className="tile-detail-stat-row sb-inline-row" style={{ alignItems: 'center' }}>
+            <span className="tile-detail-stat-label">Platforms</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-secondary)' }}>
+              {[...editorialSummary.primaryPlatforms, ...editorialSummary.secondaryPlatforms].join(', ') || 'not set'}
+            </span>
+          </div>
+        </div>
+
+        {editorialSummary.allocationSummary.length > 0 && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {editorialSummary.allocationSummary.map((item) => (
+              <span key={item} className="sb-chip">{item}</span>
+            ))}
+          </div>
+        )}
+
+        <div className="sb-field-stack">
+          <span className="sb-label" style={{ display: 'block', marginBottom: 4 }}>Strategy pack JSON</span>
+          <textarea
+            value={editorialDraft}
+            onChange={(e) => setEditorialDraft(e.target.value)}
+            rows={10}
+            spellCheck={false}
+            className="sb-input"
+            style={{ resize: 'vertical', fontFamily: 'var(--font-mono)', fontSize: 12 }}
+            aria-label="Marketing strategy pack JSON"
+          />
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={applyEditorialDraft}
+            className="tile-foot-rerun-btn sb-small-action"
+          >
+            Apply Pack
+          </button>
+          <button
+            type="button"
+            onClick={formatEditorialDraft}
+            className="tile-foot-rerun-btn sb-small-action"
+          >
+            Format JSON
+          </button>
+          <button
+            type="button"
+            onClick={clearEditorialPack}
+            className="tile-foot-rerun-btn sb-small-action"
+          >
+            Clear
+          </button>
+        </div>
+
+        {editorialError && (
+          <div className="sb-notice sb-notice--error" style={{ marginTop: 2 }}>
+            {editorialError}
+          </div>
+        )}
       </div>
 
       {/* Campaign Setup — operational inputs the model can't infer */}

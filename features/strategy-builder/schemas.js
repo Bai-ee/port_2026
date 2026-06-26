@@ -125,6 +125,112 @@
  */
 
 /**
+ * @typedef {Object} EditorialAsset
+ * @property {string} id
+ * @property {string} title
+ * @property {'screenshot'|'video'|'image'|'design-file'|'case-study'|'story'|'thread'|'quote'|'historic-work'|'current-work'} type
+ * @property {string} [description]
+ * @property {string} [url]
+ * @property {string} [storagePath]
+ * @property {string} campaignId
+ * @property {string} [narrative]
+ * @property {string[]} [projects]
+ * @property {string[]} [topics]
+ * @property {string[]} [platforms]
+ * @property {string[]} [keywords]
+ * @property {string[]} [clientBrainDecisionRefs]
+ * @property {number} evergreenScore
+ * @property {number} freshnessScore
+ * @property {string} [preparedCopy]
+ * @property {string} [mediaHint]
+ */
+
+/**
+ * @typedef {Object} EditorialCampaign
+ * @property {string} id
+ * @property {string} name
+ * @property {'active'|'paused'|'complete'} status
+ * @property {number} priority
+ * @property {number} allocationPct
+ * @property {string} strategicObjective
+ * @property {string} positioningObjective
+ * @property {string[]} targetAudience
+ * @property {string[]} supportedClientBrainTopics
+ * @property {string[]} supportingProjects
+ * @property {EditorialAsset[]} assetLibrary
+ * @property {string[]} narrativeBuckets
+ * @property {string[]} keywords
+ * @property {string[]} dailySignalTriggers
+ * @property {string[]} editorialFormats
+ * @property {string} [fallback]
+ * @property {{ startDate?: string, endDate?: string }} duration
+ * @property {string} weeklyFocus
+ * @property {string[]} successMetrics
+ */
+
+/**
+ * @typedef {Object} EditorialSchedulePolicy
+ * @property {{ primary: string[], secondary: string[], tertiary: string[] }} platforms
+ * @property {Record<string, any>} publishingCadence
+ * @property {Record<string, any>} preferredPublishingWindows
+ * @property {Record<string, any>} campaignAllocation
+ * @property {{ minDaysBetweenSameNarrative: number, maxProjectUsesPerSevenDays: number, rotateBy: string[] }} narrativeRotation
+ * @property {{ formats: string[], maxConsecutiveRepeats: number }} editorialFormatRotation
+ * @property {{ reuseAfterDays: number, rules: string[] }} assetReusePolicy
+ * @property {{ may: string[], mayNot: string[], movableWindowDays: number }} dailyAdaptationLimits
+ * @property {string[]} quietPeriods
+ * @property {{ maxMonthlyPct: number, rules: string[] }} promotionPolicy
+ * @property {string[]} fallbackRules
+ * @property {string[]} approvalPolicy
+ * @property {string[]} successEvaluation
+ */
+
+/**
+ * @typedef {Object} EditorialStrategyConfig
+ * @property {boolean} enabled
+ * @property {string} frameworkVersion
+ * @property {EditorialSchedulePolicy} schedulePolicy
+ * @property {EditorialCampaign[]} campaigns
+ * @property {{ preferredPlatforms: string[], avoidTopics: string[], preferredNarratives: string[] }} operatorPreferences
+ * @property {Array<{ id: string, campaignId?: string, assetId?: string, narrative?: string, publishedAt?: string }>} recentPublishing
+ */
+
+/**
+ * @typedef {Object} EditorialNarrativeStrength
+ * @property {string} narrative
+ * @property {number} score
+ * @property {'weak'|'medium'|'strong'} strength
+ * @property {Array<{ type: string, label: string, matchedTerms: string[] }>} matchedSignals
+ */
+
+/**
+ * @typedef {Object} EditorialInfluenceDecision
+ * @property {'no-change'|'adapt'|'swap-within-campaign'|'interrupt-campaign'} level
+ * @property {string} label
+ * @property {string} frequencyTarget
+ * @property {string} instruction
+ */
+
+/**
+ * @typedef {Object} EditorialRecommendation
+ * @property {'recommendation'|'fallback'} mode
+ * @property {string} generatedAt
+ * @property {'no-change'|'adapt'|'swap-within-campaign'|'interrupt-campaign'} influenceLevel
+ * @property {EditorialInfluenceDecision} influenceDecision
+ * @property {Object} [schedulePolicy]
+ * @property {{ id: string, name: string, strategicObjective?: string, positioningObjective?: string, weeklyFocus?: string, allocationPct?: number, editorialFormats?: string[], fallback?: string }} [campaign]
+ * @property {string} [narrative]
+ * @property {EditorialNarrativeStrength[]} [narrativeStrength]
+ * @property {{ id: string, title: string, type: string, description?: string, url?: string, storagePath?: string, mediaHint?: string, preparedCopy?: string }} [selectedAsset]
+ * @property {string} [whySelected]
+ * @property {Array<{ type: string, label: string, summary: string, matchedTerms: string[] }>} [relevantDailySignals]
+ * @property {string[]} [suggestedCopyAdjustments]
+ * @property {'low'|'medium'|'high'} [confidence]
+ * @property {number} [opportunityScore]
+ * @property {string} fallbackRecommendation
+ */
+
+/**
  * @typedef {Object} StrategyContext
  * @property {ClientInfo} client
  * @property {BrandInfo} brand
@@ -134,6 +240,9 @@
  * @property {SeoContext|null} [seo]
  * @property {ClientBrainContext|null} [clientBrain]
  * @property {Campaign} [campaign]
+ * @property {EditorialStrategyConfig} [editorial]
+ * @property {EditorialRecommendation} [editorialRecommendation]
+ * @property {string} [editorialRecommendationText]
  * @property {Record<string, CardFindings>} cardFindings
  * @property {{ weather: { enabled: boolean, forecast?: DayForecast[] }, events: { enabled: boolean, items?: LocalEvent[] }, holidays: { enabled: boolean, items?: Holiday[] } }} signals
  * @property {{ startDate: string, days: number, postsPerDay: number, baselineMixPct: number, rampAggressiveness: number, tone?: string }} config
@@ -187,4 +296,5 @@
  * @property {string} generatedAt    — ISO datetime
  * @property {PostAnchor[]} anchors
  * @property {PostItem[]} items
+ * @property {EditorialRecommendation} [editorialRecommendation]
  */

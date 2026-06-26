@@ -217,13 +217,27 @@ async function runWatchlistPull({ clientId, clientConfig = {}, lookbackDays, det
   }
 
   const lb = lookbackDays || cfg.scout?.freshnessDays || 30;
-  let results = await fetchTimelinesViaXApi({ handles, detail: resolvedDetail });
-
-  if (!results.some((r) => r.count > 0) && localLast30DaysAllowed()) {
-    results = [];
+  const pullViaLast30Days = async () => {
+    const out = [];
     for (const h of handles) {
       // eslint-disable-next-line no-await-in-loop
-      results.push(await fetchHandleTimeline({ clientId, clientName: cfg.clientName, handle: h, lookbackDays: lb, detail: resolvedDetail }));
+      out.push(await fetchHandleTimeline({ clientId, clientName: cfg.clientName, handle: h, lookbackDays: lb, detail: resolvedDetail }));
+    }
+    return out;
+  };
+
+  // The production X API timeline reader CANNOT fetch mentions — only last30days
+  // can (it runs a separate plain-handle search). So when Mentions are requested
+  // and last30days is available (dev/local), use it directly; otherwise the API
+  // path would return own-posts and silently drop mentions. When Mentions are
+  // off, prefer the faster API path and fall back to last30days only if empty.
+  let results;
+  if (resolvedDetail.mentions && localLast30DaysAllowed()) {
+    results = await pullViaLast30Days();
+  } else {
+    results = await fetchTimelinesViaXApi({ handles, detail: resolvedDetail });
+    if (!results.some((r) => r.count > 0) && localLast30DaysAllowed()) {
+      results = await pullViaLast30Days();
     }
   }
 

@@ -53,6 +53,7 @@ top-to-bottom. Each section maps to a **future include-toggle** in the Email Dig
 |---|---|---|---|---|
 | 1 | **Hero** (date) | — | static | always on |
 | 2 | **Executive Summary** (LLM paragraph) | `generateBriefSummary` (`_brief-summary.js`) | **LLM — Haiku** (`DIGEST_SUMMARY_MODEL`, dflt `claude-haiku-4-5`) | `summaryEnabled` (exists) |
+> §2 also injects the **approved Client Brain** voice when present: the digest route loads `loadClientBrainContext(homeClientId, { useFor:'emailDigest' })` and passes it to `generateBriefSummary({ clientBrainContext })`. Absent/unapproved ⇒ `''` ⇒ summary reads exactly as before. See [`docs/company-brain/`](../company-brain/).
 | 3 | **Today's Agenda** (5-day calendar) | `getCalendarAgenda` → Google Calendar API | Calendar card / OAuth | `include.calendar` (NEW) |
 | 4 | **Strategic Brief** (opportunities, KOLs, competitors, narratives, watchlist, posts, weather) | `getBriefForClient` → `projectBrief` (`_brief-intel.js:53`) | **Market Signals** (scout `agentData`) | `include.marketingBrief` |
 | 5 | **"Happening on X"** watchlist brief | `intel.watchlistAnalysis` (`reportSnapshot.watchlistAnalysis.text`) | watchlist-pull recipe | sub-toggle of #4 |

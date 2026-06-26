@@ -76,7 +76,7 @@ function kolLine(x, max = 260) {
  * @returns {Array<{ role: string, content: string }>}
  */
 export function buildTodayPrompt(ctx) {
-  const { client, brand, campaign, intelligence, knowledgeBase, clientBrain, now } = ctx;
+  const { client, brand, campaign, intelligence, knowledgeBase, clientBrain, now, editorialRecommendationText } = ctx;
   const today = (now || new Date().toISOString()).slice(0, 10);
   const c = campaign || {};
 
@@ -145,6 +145,9 @@ ${knowledgeBaseBlock || 'CLIENT KNOWLEDGE BASE: none'}
 
 ${clientBrainBlock || 'CLIENT BRAIN CONTEXT: none'}
 
+EDITORIAL STRATEGY RECOMMENDATION
+${editorialRecommendationText || 'none'}
+
 ${xGrowthBlock || ''}
 
 BRAND
@@ -163,6 +166,7 @@ RULES
 5. strategy_intent ties the day's theme to one dominant brief signal.
 6. Every post must have xStrategy with postType, targetAction, and hypothesis.
 7. No generic hashtags (#AI, #Tech, etc.) unless they appear in the Knowledge Base or brief context.
+8. If EDITORIAL STRATEGY RECOMMENDATION is mode=recommendation, prefer that campaign/asset unless it would violate a hard fact, guardrail, or platform rule. If mode=fallback, use the strongest signal-driven scheduled/default idea.
 
 TODAY SCHEMA:
 ${todaySchema}`;
@@ -171,7 +175,7 @@ ${todaySchema}`;
 }
 
 export function buildPrompt(ctx, todayStrategy = null) {
-  const { client, brand, brief, intelligence, media, seo, knowledgeBase, clientBrain, cardFindings, campaign, signals, config, now, xGrowth } = ctx;
+  const { client, brand, brief, intelligence, media, seo, knowledgeBase, clientBrain, cardFindings, campaign, signals, config, now, xGrowth, editorialRecommendationText } = ctx;
 
   const loc = client?.location || {};
   const clientBlock = [
@@ -354,6 +358,9 @@ ${knowledgeBaseBlock || 'none'}
 CLIENT BRAIN CONTEXT (approved strategic summary; use it to steer tone, positioning, audience, and offers without inventing facts)
 ${clientBrainBlock || 'none'}
 
+EDITORIAL STRATEGY LAYER (campaign-first recommendation above the schedule)
+${editorialRecommendationText || 'none'}
+
 PIPELINE SIGNALS (read-only context, do not echo)
 ${findingsSummary}
 
@@ -397,6 +404,8 @@ RULES
 16. Treat each CAMPAIGN active promotion as a time-bound push: build a short ramp toward its endDate using kind='special' with anchorId=null (promotions are not holiday anchors). Never promote a promotion after its endDate.
 17. Every item must include xStrategy: { postType, targetAction, hypothesis }. postType must be one of: authority, reply-loop, proof-loop, kol-adjacent, case-study, offer, asset, conversation-starter. targetAction must be one of: reply, repost, quote, click, profile_click, video_view, photo_expand, dwell, follow_author. hypothesis is one sentence explaining the X algorithm rationale for this post type.
 18. No generic hashtags (#AI, #Tech, #CreativeTech, #BuildInPublic) unless they come from the client Knowledge Base, brief, or a specific signal. Omit hashtags entirely when in doubt.
+19. The EDITORIAL STRATEGY LAYER sits above individual scheduled posts. If it recommends a campaign/asset, keep that long-term positioning stable while adapting hooks, examples, platform language, and media hints to daily signals. If it says fallback, preserve the originally scheduled/default content direction.
+20. Never chase a trend that does not reinforce the editorial campaign, Client Brain positioning, or campaign setup.
 
 VALIDATION
 Re-read your output. If any rule is violated, regenerate before responding.

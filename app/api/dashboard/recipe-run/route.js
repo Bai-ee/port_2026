@@ -26,8 +26,9 @@ function json(body, status = 200) {
   return NextResponse.json(body, { status, headers: { 'cache-control': 'no-store' } });
 }
 
-// Bound cost: at most this many recipes per Run.
-const MAX_RECIPES_PER_RUN = 2;
+// Bound cost: at most this many recipes per Run. (3 = the full default skill set —
+// customer-research + watchlist-analysis + reply-targets — runs in one pass.)
+const MAX_RECIPES_PER_RUN = 3;
 const RATE_LIMIT_WINDOW_SECONDS = 60 * 60;
 const RATE_LIMIT_REQUESTS_PER_CLIENT = 6;
 const MAX_AGENT_DATA_CHARS = 80_000;

@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   buildClientBrainDraft,
+  buildClientBrainCompletion,
+  buildCardDefaultsForCard,
+  buildDecisionPack,
+  buildDecisionEngine,
   buildUseForContext,
   computeBrainConfidence,
   confidenceFromSources,
@@ -160,4 +164,102 @@ test('mergeVoice preserves non-empty prior voice over a fresh draft', () => {
 test('mergeVoice on empty prev returns the draft voice unchanged', () => {
   const draft = { toneSummary: 'auto', pillars: [] };
   assert.deepEqual(mergeVoice({}, draft), draft);
+});
+
+test('buildDecisionPack maps approved understanding and card config into structured decisions', () => {
+  const brain = {
+    status: 'approved',
+    confidence: 'high',
+    identity: { name: 'Acme Studio', category: 'creative ops', primaryUrl: 'https://acme.test' },
+    positioning: { oneLiner: 'Creative operations systems for founders.' },
+    audience: { primary: ['startup founders'] },
+    voice: { toneSummary: 'direct', bannedWords: ['synergy'] },
+    offers: { services: ['automation sprint'] },
+    content: { pillars: ['workflow automation'] },
+    sourceRefs: [{ id: 'website', enabled: true }],
+  };
+  const decisions = buildDecisionPack(brain, {
+    clientConfig: {
+      marketingBriefConfig: {
+        brandKeywords: ['Acme'],
+        categoryTerms: ['creative automation'],
+        kols: ['@opsleader'],
+        competitors: ['Other Studio'],
+        sourcePlatforms: ['web', 'x'],
+      },
+    },
+    dashboardState: { marketCategory: { value: 'AI consulting' } },
+  });
+
+  assert.equal(decisions.identity.name.value, 'Acme Studio');
+  assert.equal(decisions.identity.name.status, 'approved');
+  assert.ok(decisions.intelligence, 'intelligence domains are present');
+  assert.ok(decisions.intelligence.identity.categoryToOwn.value.includes('creative automation'));
+  assert.ok(decisions.intelligence.market.thoughtLeaders.value.includes('@opsleader'));
+  assert.ok(decisions.intelligence.discovery.keywords.value.includes('creative automation'));
+  assert.ok(decisions.intelligence.discovery.watchLists.value.includes('@opsleader'));
+  assert.ok(decisions.intelligence.authority.prohibitedClaims.value.includes('synergy'));
+  assert.ok(Array.isArray(decisions.decisionDrivers));
+  assert.equal(decisions.decisionDrivers[0].status, 'approved');
+  assert.equal(decisions.identity.name.acquisition.method, 'automatic');
+  assert.equal(decisions.identity.name.acquisition.validationStatus, 'approved');
+  assert.ok(decisions.decisionDrivers[0].search.includes('creative automation'));
+  assert.ok(decisions.decisionDrivers[0].leadGen.includes('startup founders'));
+  assert.deepEqual(decisions.search.keywords.value.slice(0, 2), ['Acme', 'Acme Studio']);
+  assert.ok(decisions.search.topicsToMonitor.value.includes('creative automation'));
+  assert.ok(decisions.social.handlesToFollow.value.includes('@opsleader'));
+  assert.ok(decisions.search.excludedTerms.value.includes('synergy'));
+});
+
+test('buildCardDefaultsForCard creates Marketing Brief defaults from decisions', () => {
+  const decisions = {
+    identity: { name: { value: 'Acme Studio' } },
+    positioning: { oneLiner: { value: 'Creative operations systems.' } },
+    audience: { primary: { value: ['startup founders'] } },
+    search: {
+      keywords: { value: ['Acme Studio'] },
+      topicsToMonitor: { value: ['creative automation'] },
+      competitorTerms: { value: ['Other Studio'] },
+    },
+    social: {
+      handlesToFollow: { value: ['@opsleader'] },
+      platforms: { value: ['web', 'x'] },
+    },
+  };
+  const defaults = buildCardDefaultsForCard(decisions, 'marketing-brief');
+
+  assert.equal(defaults.fields.brandName.value, 'Acme Studio');
+  assert.deepEqual(defaults.fields.brandKeywords.value, ['Acme Studio']);
+  assert.deepEqual(defaults.fields.kols.value, ['@opsleader']);
+  assert.equal(defaults.fields.searches.value[0].label, 'BRAND');
+  assert.match(defaults.fields.sourceFocus.value, /Creative operations/);
+});
+
+test('buildDecisionEngine adds informational acquisition, completion, and missing decision queue', () => {
+  const brain = {
+    status: 'approved',
+    confidence: 'high',
+    identity: { name: 'Acme Studio', category: 'creative ops' },
+    positioning: { oneLiner: 'Creative operations systems.' },
+    audience: { primary: ['startup founders'] },
+    offers: { services: ['automation sprint'] },
+    sourceRefs: [{ id: 'website', enabled: true, trustLevel: 'high', freshness: 'current' }],
+  };
+  const engine = buildDecisionEngine(brain, { clientConfig: {}, dashboardState: {} });
+
+  assert.equal(engine.completion.informationalOnly, true);
+  assert.ok(engine.completion.score >= 0);
+  assert.ok(engine.completion.domains.discovery);
+  assert.ok(Array.isArray(engine.missingDecisionQueue));
+  assert.ok(engine.decisionAcquisition.completionScore >= 0);
+});
+
+test('buildClientBrainCompletion scores missing fields deterministically', () => {
+  const completion = buildClientBrainCompletion({
+    identity: { name: { value: 'Acme', status: 'approved' } },
+    positioning: { oneLiner: { value: '', status: 'suggested' } },
+  }, { sourceRefs: [] });
+
+  assert.ok(completion.domains.identity.missingFields.some((field) => field.path === 'decisions.positioning.oneLiner'));
+  assert.ok(completion.domains.discovery.missingFields.length > 0);
 });

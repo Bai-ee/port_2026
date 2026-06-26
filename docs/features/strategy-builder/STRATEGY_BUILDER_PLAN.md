@@ -12,6 +12,31 @@ is the auto-poster feed boundary and the cron is pre-existing/unchanged.
 This is the frozen source-of-truth document for the Strategy Builder workstream.
 Read this first. Do not drift to older plans.
 
+## Editorial Strategy Layer Addendum
+
+As of 2026-06-26, Strategy Builder also accepts an optional campaign-first
+Editorial Strategy layer. This does not replace the existing calendar builder,
+source toggles, signal providers, or social-posting push flow.
+
+The layer lives above individual posts:
+
+```text
+strategyBuilder.config.editorial
+  -> Editorial Strategy Engine
+  -> plan.editorialRecommendation
+  -> existing today/week/30-day calendar
+  -> existing push flow
+```
+
+Primary docs:
+
+- `docs/features/editorial-strategy/README.md`
+- `features/editorial-strategy/engine.js`
+
+Rule: campaigns define durable positioning. Daily signals can alter framing,
+hooks, examples, media hints, and platform language, but must not redefine the
+campaign strategy.
+
 ---
 
 ## 1. Objective

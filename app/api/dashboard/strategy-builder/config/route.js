@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
+import { normalizeEditorialStrategyConfig } from '../../../../../features/editorial-strategy/engine.js';
 
 const require = createRequire(import.meta.url);
 const fb = require('../../../../../api/_lib/firebase-admin.cjs');
@@ -53,6 +54,15 @@ export async function POST(request) {
   const clientConfig = body?.config;
   if (!clientConfig || typeof clientConfig !== 'object') {
     return json({ error: 'config object is required.' }, 400);
+  }
+
+  let priorEditorial = null;
+  try {
+    const priorSnap = await fb.adminDb.collection('dashboard_state').doc(context.clientId).get();
+    const prior = priorSnap.exists ? (priorSnap.data() || {}) : {};
+    priorEditorial = prior.strategyBuilder?.config?.editorial || null;
+  } catch {
+    priorEditorial = null;
   }
 
   // Sanitize the per-source enable map — only {key:{enabled:bool}} entries.
@@ -117,6 +127,7 @@ export async function POST(request) {
     },
     sources,
     campaign,
+    editorial: normalizeEditorialStrategyConfig(clientConfig.editorial || priorEditorial || {}),
     savedAt: new Date().toISOString(),
   };
 

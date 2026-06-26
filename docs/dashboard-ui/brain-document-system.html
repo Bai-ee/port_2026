@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Brain Document System | Brief UI Kit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Doto:wght@700;900&family=Space+Grotesk:wght@300..700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#fbf7ee;
+    --ink:#0b0a08;
+    --soft:#645d51;
+    --muted:#8d8374;
+    --line:rgba(210,194,168,.9);
+    --card:rgba(255,255,255,.58);
+    --white:rgba(255,255,255,.78);
+    --standard:#7a5cff;
+    --working:#c85f12;
+    --runtime:#187647;
+    --card-accent:#ff4fa1;
+    --output:#111;
+    --blue:#116dff;
+    --grad:linear-gradient(92deg,#7a5cff 0%,#b14bff 38%,#ff4fa1 72%,#ff7a3a 100%);
+    --gutter:max(6vw, calc((100% - 1240px) / 2));
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;
+    color:var(--ink);
+    font-family:"Space Grotesk",system-ui,sans-serif;
+    background:
+      radial-gradient(900px 460px at 6% 10%,rgba(255,79,161,.13),transparent 60%),
+      radial-gradient(800px 460px at 94% 28%,rgba(17,109,255,.12),transparent 62%),
+      linear-gradient(180deg,#fffdf9 0%,#f8f1e3 48%,#fff9ef 100%);
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;text-decoration:none}
+  .mono{font-family:"Space Mono",ui-monospace,monospace}
+
+  .nav{
+    position:sticky;top:0;z-index:30;
+    display:flex;align-items:center;justify-content:space-between;gap:20px;
+    padding:18px clamp(20px,4vw,40px);
+    border-bottom:1px solid rgba(0,0,0,.05);
+    background:rgba(246,243,234,.8);
+    backdrop-filter:blur(16px);
+  }
+  .sig{display:flex;align-items:center;gap:12px;font-family:"Doto",monospace;font-weight:900;text-transform:uppercase}
+  .sig-mark{width:34px;height:34px;border-radius:50%;background:var(--grad);box-shadow:0 10px 28px rgba(122,92,255,.2)}
+  .nav-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+  .nav-link{
+    padding:8px 10px;border-radius:999px;
+    font-family:"Space Mono",monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#2b2822;
+  }
+  .nav-link:hover{background:rgba(255,255,255,.64)}
+
+  section{padding:clamp(46px,8vh,92px) var(--gutter);border-bottom:1px solid rgba(0,0,0,.06)}
+  .hero{min-height:72vh;display:grid;align-content:center}
+  .eyebrow{
+    display:flex;align-items:center;gap:14px;margin-bottom:20px;
+    font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--soft);
+  }
+  .eyebrow::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--ink)}
+  h1,h2{
+    margin:0;
+    font-family:"Doto",monospace;font-weight:900;text-transform:uppercase;letter-spacing:0;line-height:.9;
+  }
+  h1{font-size:clamp(58px,12vw,170px);max-width:1050px}
+  h2{font-size:clamp(38px,6vw,88px)}
+  h3{margin:0;font-size:17px;line-height:1.08}
+  p{margin:0;color:var(--soft);font-size:14px;line-height:1.34}
+  .sub{max-width:660px;margin-top:24px;font-size:clamp(19px,2.2vw,30px);line-height:1.2;color:#191713;font-weight:300}
+  .section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:34px}
+  .section-head p{max-width:520px;margin-top:12px}
+  .section-no{
+    font-family:"Doto",monospace;font-weight:900;font-size:clamp(76px,12vw,180px);line-height:.75;
+    color:transparent;-webkit-text-stroke:1.4px rgba(0,0,0,.13);
+  }
+
+  .legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:32px}
+  .tag{
+    display:inline-flex;align-items:center;gap:7px;
+    padding:6px 10px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.6);
+    font-family:"Space Mono",monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:#17130d;
+    white-space:nowrap;
+  }
+  .tag::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--blue)}
+  .tag.standard::before{background:var(--standard)}
+  .tag.working::before{background:var(--working)}
+  .tag.runtime::before{background:var(--runtime)}
+  .tag.card-tag::before{background:var(--card-accent)}
+  .tag.output::before{background:var(--output)}
+
+  .node{
+    display:block;
+    min-height:104px;
+    padding:16px;
+    border:1px solid var(--line);
+    border-radius:16px;
+    background:var(--card);
+    box-shadow:0 1px 0 rgba(255,255,255,.76), inset 0 1px 0 rgba(255,255,255,.42);
+    position:relative;
+  }
+  .node:hover{background:rgba(255,255,255,.76)}
+  .node .kind{
+    margin-bottom:10px;
+    font-family:"Space Mono",monospace;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+  }
+  .node .file{
+    display:block;margin-top:9px;
+    font-family:"Space Mono",monospace;font-size:10px;line-height:1.25;color:var(--muted);word-break:break-word;
+  }
+  .node.standard{border-top:4px solid var(--standard)}
+  .node.working{border-top:4px solid var(--working)}
+  .node.runtime{border-top:4px solid var(--runtime)}
+  .node.card-node{border-top:4px solid var(--card-accent)}
+  .node.output{border-top:4px solid var(--output)}
+  .node.dark{
+    color:#fff;background:rgba(10,10,10,.9);border-color:rgba(255,255,255,.18);
+    box-shadow:0 22px 60px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.14);
+  }
+  .node.dark .kind,.node.dark .file,.node.dark p{color:rgba(255,255,255,.68)}
+  .node.big{min-height:168px;display:grid;align-content:center;text-align:center;padding:26px}
+  .node.big h3{font-family:"Doto",monospace;font-weight:900;font-size:clamp(36px,5vw,68px);text-transform:uppercase;line-height:.88}
+  .node.small{min-height:76px;padding:13px}
+  .node.small h3{font-size:14px}
+  .node.micro{min-height:58px;padding:11px;border-radius:12px}
+  .node.micro h3{font-size:13px}
+
+  .arrow{position:relative;min-width:42px;min-height:18px;align-self:center}
+  .arrow::before{content:"";position:absolute;left:0;right:9px;top:50%;height:2px;background:rgba(0,0,0,.28)}
+  .arrow::after{
+    content:"";position:absolute;right:0;top:calc(50% - 5px);
+    border-left:9px solid rgba(0,0,0,.36);border-top:5px solid transparent;border-bottom:5px solid transparent;
+  }
+  .arrow.down{width:2px;min-width:2px;height:36px;margin:10px auto}
+  .arrow.down::before{left:0;right:auto;top:0;width:2px;height:28px}
+  .arrow.down::after{right:auto;left:-4px;top:27px;border-left:5px solid transparent;border-right:5px solid transparent;border-top:9px solid rgba(0,0,0,.36);border-bottom:0}
+  .arrow.up::after{transform:rotate(180deg)}
+
+  .hero-preview{
+    margin-top:44px;
+    display:grid;grid-template-columns:1fr 52px 1fr 52px 1fr;gap:12px;align-items:center;
+    max-width:1060px;
+  }
+  .preview-stack{display:grid;gap:9px}
+
+  .org-chart{
+    display:grid;
+    grid-template-columns:minmax(190px,.9fr) 44px minmax(250px,1fr) 44px minmax(220px,.9fr);
+    gap:14px;align-items:center;
+  }
+  .org-stack{display:grid;gap:12px}
+  .hub-stack{display:grid;gap:12px}
+  .runtime-strip{display:grid;grid-template-columns:1fr 36px 1fr;gap:12px;align-items:center}
+  .card-cluster{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .feedback-row{margin-top:18px;display:grid;grid-template-columns:1fr 44px 1fr 44px 1fr;gap:12px;align-items:center}
+
+  .rail-map{
+    display:grid;
+    grid-template-columns:repeat(4,minmax(0,1fr));
+    gap:14px;
+  }
+  .rail{display:grid;grid-template-rows:auto 1fr;gap:10px}
+  .rail-title{
+    padding:10px 12px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.58);
+    font-family:"Space Mono",monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;text-align:center;
+  }
+  .rail-nodes{display:grid;gap:9px}
+
+  .card-flow{
+    display:grid;
+    grid-template-columns:minmax(180px,.9fr) 46px minmax(220px,1fr) 46px minmax(280px,1.2fr);
+    gap:14px;align-items:center;
+  }
+  .source-stack,.runtime-stack{display:grid;gap:10px}
+  .dashboard-surface{
+    display:grid;gap:12px;
+    padding:18px;border:1px solid rgba(0,0,0,.16);border-radius:22px;background:rgba(255,255,255,.42);
+  }
+  .dashboard-title{
+    font-family:"Doto",monospace;font-weight:900;text-transform:uppercase;font-size:34px;line-height:.9;
+  }
+  .dash-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+
+  .loop{
+    display:grid;grid-template-columns:1fr 44px 1fr 44px 1fr 44px 1fr;gap:12px;align-items:center;
+  }
+  .loop .node{min-height:150px}
+
+  footer{
+    padding:34px var(--gutter);
+    display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
+    font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--soft);
+  }
+
+  @media(max-width:1040px){
+    .hero-preview,.org-chart,.feedback-row,.card-flow,.loop{grid-template-columns:1fr}
+    .arrow{width:2px;min-width:2px;height:34px;margin:0 auto}
+    .arrow::before{left:0;right:auto;top:0;width:2px;height:26px}
+    .arrow::after{right:auto;left:-4px;top:25px;border-left:5px solid transparent;border-right:5px solid transparent;border-top:9px solid rgba(0,0,0,.36);border-bottom:0}
+    .runtime-strip{grid-template-columns:1fr}
+    .rail-map{grid-template-columns:repeat(2,minmax(0,1fr))}
+  }
+  @media(max-width:680px){
+    .nav{align-items:flex-start;flex-direction:column}
+    .nav-actions{justify-content:flex-start}
+    section{padding-left:22px;padding-right:22px}
+    h1{font-size:clamp(50px,18vw,86px)}
+    .section-head{display:block}
+    .section-no{display:none}
+    .rail-map,.card-cluster,.dash-grid{grid-template-columns:1fr}
+    .node{min-height:auto}
+  }
+</style>
+</head>
+<body>
+<nav class="nav">
+  <a class="sig" href="#top" aria-label="Back to top">
+    <span class="sig-mark"></span>
+    <span>Brain Map</span>
+  </a>
+  <div class="nav-actions">
+    <a class="nav-link" href="#org-chart">Org Chart</a>
+    <a class="nav-link" href="#docs">Docs</a>
+    <a class="nav-link" href="#cards">Cards</a>
+    <a class="nav-link" href="#loop">Loop</a>
+  </div>
+</nav>
+
+<main id="top">
+  <section class="hero">
+    <div class="eyebrow">Brief UI Kit Visual Map</div>
+    <h1>Brain System Flow</h1>
+    <p class="sub">A visual org chart for how Company Brain, Client Brain, intelligence docs, marketing strategy, and dashboard cards connect.</p>
+
+    <div class="hero-preview" aria-label="Brain system summary flow">
+      <div class="preview-stack">
+        <a class="node standard small" href="../company-brain/COMPANY_BRAIN_DOCUMENT_STANDARD.md">
+          <div class="kind">Standard</div>
+          <h3>Company Brain rules</h3>
+        </a>
+        <a class="node working small" href="../company-brain/STUDIO_INTELLIGENCE_STANDARD.md">
+          <div class="kind">Workspace</div>
+          <h3>Intelligence docs</h3>
+        </a>
+      </div>
+      <div class="arrow"></div>
+      <a class="node runtime big" href="../company-brain/clients/bryan-balli/CLIENT_BRAIN.md">
+        <div class="kind">Approved runtime source</div>
+        <h3>Client Brain</h3>
+      </a>
+      <div class="arrow"></div>
+      <div class="preview-stack">
+        <a class="node card-node small" href="../features/marketing-brief/README.md">
+          <div class="kind">Card</div>
+          <h3>Marketing Brief</h3>
+        </a>
+        <a class="node card-node small" href="../features/strategy-builder/STRATEGY_BUILDER_PLAN.md">
+          <div class="kind">Card</div>
+          <h3>Strategy Builder</h3>
+        </a>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span class="tag standard">Standard</span>
+      <span class="tag working">Working docs</span>
+      <span class="tag runtime">Runtime</span>
+      <span class="tag card-tag">Card</span>
+      <span class="tag output">Output</span>
+    </div>
+  </section>
+
+  <section id="org-chart">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow">01 Org chart</div>
+        <h2>What points to what.</h2>
+        <p>Working docs promote decisions into Client Brain. Client Brain compiles into runtime data. Cards read that runtime data.</p>
+      </div>
+      <div class="section-no">01</div>
+    </div>
+
+    <div class="org-chart">
+      <div class="org-stack">
+        <a class="node standard" href="../company-brain/COMPANY_BRAIN_DOCUMENT_STANDARD.md">
+          <div class="kind">Governs shape</div>
+          <h3>Company Brain Document Standard</h3>
+          <span class="file">COMPANY_BRAIN_DOCUMENT_STANDARD.md</span>
+        </a>
+        <a class="node standard" href="../company-brain/CLIENT_BRAIN_MARKDOWN_STANDARD.md">
+          <div class="kind">Defines source format</div>
+          <h3>CLIENT_BRAIN.md Standard</h3>
+          <span class="file">CLIENT_BRAIN_MARKDOWN_STANDARD.md</span>
+        </a>
+        <a class="node working" href="../features/editorial-strategy/MARKETING_STRATEGY_FRAMEWORK.md">
+          <div class="kind">Strategy workspace</div>
+          <h3>Marketing Strategy Framework</h3>
+          <span class="file">MARKETING_STRATEGY_FRAMEWORK.md</span>
+        </a>
+      </div>
+
+      <div class="arrow"></div>
+
+      <div class="hub-stack">
+        <a class="node runtime big" href="../company-brain/clients/bryan-balli/CLIENT_BRAIN.md">
+          <div class="kind">Canonical approved source</div>
+          <h3>Client Brain</h3>
+          <span class="file">clients/{client}/CLIENT_BRAIN.md</span>
+        </a>
+        <div class="runtime-strip">
+          <a class="node runtime small" href="../../features/client-brain/markdown.cjs">
+            <div class="kind">Compiler</div>
+            <h3>Markdown parser</h3>
+          </a>
+          <div class="arrow"></div>
+          <a class="node runtime small" href="../company-brain/CLIENT_BRAIN_SCHEMA.md">
+            <div class="kind">Runtime store</div>
+            <h3>Decision Pack</h3>
+          </a>
+        </div>
+      </div>
+
+      <div class="arrow"></div>
+
+      <div class="org-stack">
+        <div class="card-cluster">
+          <a class="node card-node micro" href="../company-brain/CLIENT_BRAIN_CARD_SPEC.md"><div class="kind">Card</div><h3>Client Brain</h3></a>
+          <a class="node card-node micro" href="../features/marketing-brief/README.md"><div class="kind">Card</div><h3>Marketing Brief</h3></a>
+          <a class="node card-node micro" href="../features/strategy-builder/STRATEGY_BUILDER_PLAN.md"><div class="kind">Card</div><h3>Strategy Builder</h3></a>
+          <a class="node card-node micro" href="../features/knowledge-base/BRAIN_FEATURE_PLAN.md"><div class="kind">Card</div><h3>Knowledge Base</h3></a>
+          <a class="node card-node micro" href="../company-brain/DOWNSTREAM_CONTEXT_USAGE.md"><div class="kind">Cards</div><h3>Post Me + Email</h3></a>
+          <a class="node output micro" href="../source-of-truth/MARKET-SIGNALS-AND-SCOUT-PROJECTION.md"><div class="kind">Output</div><h3>Market Brief</h3></a>
+        </div>
+        <a class="node output" href="../company-brain/DOWNSTREAM_CONTEXT_USAGE.md">
+          <div class="kind">Rule</div>
+          <h3>Cards use helpers, not raw Markdown</h3>
+          <span class="file">DOWNSTREAM_CONTEXT_USAGE.md</span>
+        </a>
+      </div>
+    </div>
+
+    <div class="feedback-row">
+      <a class="node working small" href="../company-brain/DECISION_ACQUISITION.md">
+        <div class="kind">Input</div>
+        <h3>Research / interview / feedback</h3>
+      </a>
+      <div class="arrow"></div>
+      <a class="node runtime small" href="../company-brain/CLIENT_BRAIN_DECISION_ENGINE.md">
+        <div class="kind">Promotion</div>
+        <h3>Approved decision value</h3>
+      </a>
+      <div class="arrow"></div>
+      <a class="node output small" href="../company-brain/CLIENT_BRAIN_COMPLETION.md">
+        <div class="kind">Health</div>
+        <h3>Completion + missing queue</h3>
+      </a>
+    </div>
+  </section>
+
+  <section id="docs">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow">02 Document layers</div>
+        <h2>Docs as lanes.</h2>
+        <p>Each lane is a different job. The Brain lane is runtime. The intelligence lanes are workspaces.</p>
+      </div>
+      <div class="section-no">02</div>
+    </div>
+
+    <div class="rail-map">
+      <div class="rail">
+        <div class="rail-title">Brain standards</div>
+        <div class="rail-nodes">
+          <a class="node standard micro" href="../company-brain/README.md"><h3>Client Brain README</h3></a>
+          <a class="node standard micro" href="../company-brain/STUDIO_INTELLIGENCE_STANDARD.md"><h3>Studio Intelligence Standard</h3></a>
+          <a class="node standard micro" href="../company-brain/COMPANY_BRAIN_DOCUMENT_STANDARD.md"><h3>Company Brain Standard</h3></a>
+          <a class="node standard micro" href="../company-brain/CLIENT_BRAIN_SCHEMA.md"><h3>Runtime Schema</h3></a>
+          <a class="node standard micro" href="../company-brain/SOURCE_TOGGLE_MODEL.md"><h3>Source Toggle Model</h3></a>
+        </div>
+      </div>
+
+      <div class="rail">
+        <div class="rail-title">Client workspace</div>
+        <div class="rail-nodes">
+          <a class="node runtime micro" href="../company-brain/clients/bryan-balli/CLIENT_BRAIN.md"><h3>CLIENT_BRAIN.md</h3></a>
+          <a class="node working micro" href="../company-brain/clients/bryan-balli/AUTHORITY_INTELLIGENCE.md"><h3>Authority Intelligence</h3></a>
+          <a class="node working micro" href="../company-brain/clients/bryan-balli/MARKET_INTELLIGENCE.md"><h3>Market Intelligence</h3></a>
+          <a class="node working micro" href="../company-brain/clients/bryan-balli/DISCOVERY_INTELLIGENCE.md"><h3>Discovery Intelligence</h3></a>
+          <a class="node working micro" href="../company-brain/clients/bryan-balli/CONVERSATION_INTELLIGENCE.md"><h3>Conversation Intelligence</h3></a>
+          <a class="node working micro" href="../company-brain/clients/bryan-balli/CONTENT_LIBRARY.md"><h3>Content Library</h3></a>
+          <a class="node runtime micro" href="../company-brain/clients/bryan-balli/EDITORIAL_STRATEGY.json"><h3>EDITORIAL_STRATEGY.json</h3></a>
+        </div>
+      </div>
+
+      <div class="rail">
+        <div class="rail-title">Marketing strategy</div>
+        <div class="rail-nodes">
+          <a class="node working micro" href="../features/editorial-strategy/README.md"><h3>Editorial Strategy README</h3></a>
+          <a class="node working micro" href="../features/editorial-strategy/EDITORIAL_STRATEGY_STANDARD.md"><h3>Editorial Strategy Standard</h3></a>
+          <a class="node working micro" href="../features/editorial-strategy/MARKETING_STRATEGY_FRAMEWORK.md"><h3>Marketing Strategy Framework</h3></a>
+          <a class="node working micro" href="../features/editorial-strategy/CAMPAIGN_MODEL.md"><h3>Campaign Model</h3></a>
+          <a class="node working micro" href="../features/editorial-strategy/CAMPAIGN_MANIFEST.md"><h3>Campaign Manifest</h3></a>
+          <a class="node working micro" href="../features/editorial-strategy/NARRATIVE_MODEL.md"><h3>Narrative Model</h3></a>
+          <a class="node working micro" href="../features/editorial-strategy/DAILY_ADAPTATION_RULES.md"><h3>Daily Adaptation Rules</h3></a>
+        </div>
+      </div>
+
+      <div class="rail">
+        <div class="rail-title">Feature cards</div>
+        <div class="rail-nodes">
+          <a class="node card-node micro" href="../features/marketing-brief/README.md"><h3>Marketing Brief</h3></a>
+          <a class="node card-node micro" href="../features/marketing-brief/MARKETING_BRIEF_HANDOFF.md"><h3>Marketing Brief Handoff</h3></a>
+          <a class="node card-node micro" href="../features/strategy-builder/STRATEGY_BUILDER_PLAN.md"><h3>Strategy Builder</h3></a>
+          <a class="node card-node micro" href="../features/knowledge-base/BRAIN_FEATURE_PLAN.md"><h3>Knowledge Base</h3></a>
+          <a class="node output micro" href="../source-of-truth/SOURCE-OF-TRUTH.md"><h3>Launch Source of Truth</h3></a>
+          <a class="node output micro" href="../source-of-truth/CREATIVE-BRIEF-DELIVERABLES-WIRING.md"><h3>Card Wiring</h3></a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="cards">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow">03 Card surface</div>
+        <h2>Brain to dashboard.</h2>
+        <p>Source docs become runtime helpers, then card defaults, prompt context, reports, and strategy outputs.</p>
+      </div>
+      <div class="section-no">03</div>
+    </div>
+
+    <div class="card-flow">
+      <div class="source-stack">
+        <a class="node working small" href="../company-brain/clients/bryan-balli/MARKET_INTELLIGENCE.md"><div class="kind">Working</div><h3>Market Intelligence</h3></a>
+        <a class="node working small" href="../company-brain/clients/bryan-balli/CONTENT_LIBRARY.md"><div class="kind">Working</div><h3>Content Library</h3></a>
+        <a class="node runtime small" href="../company-brain/clients/bryan-balli/CLIENT_BRAIN.md"><div class="kind">Runtime source</div><h3>CLIENT_BRAIN.md</h3></a>
+        <a class="node runtime small" href="../company-brain/clients/bryan-balli/EDITORIAL_STRATEGY.json"><div class="kind">Runtime pack</div><h3>EDITORIAL_STRATEGY.json</h3></a>
+      </div>
+      <div class="arrow"></div>
+      <div class="runtime-stack">
+        <a class="node runtime" href="../company-brain/DOWNSTREAM_CONTEXT_USAGE.md">
+          <div class="kind">Helper APIs</div>
+          <h3>loadClientBrainContext</h3>
+          <span class="file">prompt context</span>
+        </a>
+        <a class="node runtime" href="../company-brain/DOWNSTREAM_CONTEXT_USAGE.md">
+          <div class="kind">Helper APIs</div>
+          <h3>loadClientBrainCardDefaults</h3>
+          <span class="file">structured defaults</span>
+        </a>
+      </div>
+      <div class="arrow"></div>
+      <div class="dashboard-surface">
+        <div class="dashboard-title">Dashboard Cards</div>
+        <div class="dash-grid">
+          <a class="node card-node micro" href="../company-brain/CLIENT_BRAIN_CARD_SPEC.md"><h3>Client Brain</h3></a>
+          <a class="node card-node micro" href="../features/marketing-brief/README.md"><h3>Marketing Brief</h3></a>
+          <a class="node card-node micro" href="../features/strategy-builder/STRATEGY_BUILDER_PLAN.md"><h3>Strategy Builder</h3></a>
+          <a class="node card-node micro" href="../features/knowledge-base/BRAIN_FEATURE_PLAN.md"><h3>Knowledge Base</h3></a>
+          <a class="node output micro" href="../source-of-truth/EMAIL-DIGEST-CARD.md"><h3>Email Digest</h3></a>
+          <a class="node output micro" href="../source-of-truth/CREATIVE-BRIEF-DELIVERABLES-WIRING.md"><h3>Creative Brief</h3></a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="loop">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow">04 Operating loop</div>
+        <h2>Keep the system clean.</h2>
+        <p>Research stays in workspaces. Approved decisions go into Client Brain. Cards consume runtime. Feedback improves the Brain.</p>
+      </div>
+      <div class="section-no">04</div>
+    </div>
+
+    <div class="loop">
+      <a class="node working" href="../company-brain/HITLOOP_STUDIO_METHODOLOGY.md">
+        <div class="kind">01</div>
+        <h3>Capture research</h3>
+        <span class="file">Studio Intelligence docs</span>
+      </a>
+      <div class="arrow"></div>
+      <a class="node standard" href="../company-brain/DECISION_ACQUISITION.md">
+        <div class="kind">02</div>
+        <h3>Approve decision</h3>
+        <span class="file">Decision Acquisition</span>
+      </a>
+      <div class="arrow"></div>
+      <a class="node runtime" href="../company-brain/clients/bryan-balli/CLIENT_BRAIN.md">
+        <div class="kind">03</div>
+        <h3>Update Client Brain</h3>
+        <span class="file">CLIENT_BRAIN.md</span>
+      </a>
+      <div class="arrow"></div>
+      <a class="node card-node" href="../company-brain/DOWNSTREAM_CONTEXT_USAGE.md">
+        <div class="kind">04</div>
+        <h3>Cards consume + feedback</h3>
+        <span class="file">Downstream usage</span>
+      </a>
+    </div>
+
+    <div class="arrow down"></div>
+    <a class="node dark big" href="./brain-document-system.html">
+      <div class="kind">Rule</div>
+      <h3>Brain equals approved decisions</h3>
+      <p>Everything else is a workspace, source, signal, card, or generated output.</p>
+    </a>
+  </section>
+</main>
+
+<footer>
+  <span>docs/dashboard-ui/brain-document-system.html</span>
+  <span>Visual org chart for Brain, docs, and dashboard cards</span>
+</footer>
+</body>
+</html>

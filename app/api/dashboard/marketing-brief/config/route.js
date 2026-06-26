@@ -6,6 +6,7 @@ const fb = require('../../../../../api/_lib/firebase-admin.cjs');
 const { verifyRequestUser } = require('../../../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../../../api/_lib/client-provisioning.cjs');
 const { geocodeZip } = require('../../../../../features/intelligence/_weather.js');
+const { loadClientBrainCardDefaults, saveClientBrainCardSettingsSnapshot } = require('../../../../../features/client-brain/store.cjs');
 
 // Normalize + (re)geocode the weather config. Geocodes the zip on save so the
 // brief/email can fetch a forecast by lat/lon without geocoding every run.
@@ -101,6 +102,45 @@ function normalizeLineList(input, { maxItems = 20, maxLen = 240 } = {}) {
     .slice(0, maxItems);
 }
 
+function defaultValue(item) {
+  return item && typeof item === 'object' && Object.prototype.hasOwnProperty.call(item, 'value') ? item.value : item;
+}
+
+function isEmptyConfigValue(field, value) {
+  if (field === 'searches') {
+    return !Array.isArray(value) || !value.some((row) => String(row?.query || '').trim());
+  }
+  if (Array.isArray(value)) return value.length === 0;
+  if (value && typeof value === 'object') return Object.keys(value).length === 0;
+  return !String(value || '').trim();
+}
+
+function mergeClientBrainDefaults(config, defaults) {
+  if (!config || !defaults?.fields) return { config, applied: [] };
+  const next = { ...config };
+  const applied = [];
+  for (const [field, wrapped] of Object.entries(defaults.fields || {})) {
+    const value = defaultValue(wrapped);
+    if (isEmptyConfigValue(field, value)) continue;
+    if (!isEmptyConfigValue(field, next[field])) continue;
+    next[field] = value;
+    applied.push(field);
+  }
+  return {
+    config: applied.length
+      ? {
+          ...next,
+          clientBrainDefaults: {
+            appliedFields: applied,
+            status: 'suggested',
+            updatedAtIso: new Date().toISOString(),
+          },
+        }
+      : next,
+    applied,
+  };
+}
+
 async function resolveContext(request) {
   const decoded = await verifyRequestUser(makeReqShim(request));
   const context = await getEffectiveClientContext({ uid: decoded.uid, email: decoded.email, request });
@@ -129,10 +169,20 @@ export async function GET(request) {
   if (!snap.exists) return json({ error: 'No client config.' }, 404);
 
   const data = snap.data() || {};
+  const config = data.marketingBriefConfig || null;
+  let defaults = { fields: {} };
+  try {
+    defaults = await loadClientBrainCardDefaults(context.clientId, { cardId: 'marketing-brief' });
+  } catch { /* non-fatal — config works without Client Brain defaults */ }
+  const merged = mergeClientBrainDefaults(config, defaults);
   return json({
     ok: true,
     clientId: context.clientId,
-    config: data.marketingBriefConfig || null,
+    config: merged.config,
+    clientBrainDefaults: {
+      fields: defaults.fields || {},
+      appliedFields: merged.applied,
+    },
   });
 }
 
@@ -220,6 +270,9 @@ export async function POST(request) {
       .slice(0, 20),
     scribeTone: String(body?.scribeTone || '').trim().slice(0, 4000),
     scribeHardConstraints: normalizeLineList(body?.scribeHardConstraints, { maxItems: 20, maxLen: 240 }),
+    // Include the approved Client Brain (curated identity/positioning/proof/voice)
+    // in the brief analysis. Default ON — the brain should always be considered.
+    includeClientBrain: body?.includeClientBrain !== false,
     guardianReviewerContext: String(body?.guardianReviewerContext || '').trim().slice(0, 800),
     guardianRestrictedPatterns: normalizeLineList(body?.guardianRestrictedPatterns, { maxItems: 30, maxLen: 240 }),
     // Enabled analysis-skill recipe ids (Market Signals card). Array of registry
@@ -286,6 +339,15 @@ export async function POST(request) {
     writePayload,
     { merge: true }
   );
+
+  try {
+    await saveClientBrainCardSettingsSnapshot(context.clientId, {
+      cardId: 'marketing-brief',
+      config: marketingBriefConfig,
+      source: 'card',
+      promote: true,
+    });
+  } catch { /* non-fatal — card config is canonical for its own run state */ }
 
   return json({ ok: true, clientId: context.clientId, config: marketingBriefConfig });
 }

@@ -328,6 +328,10 @@ const MARKETING_BRIEF_SOURCE_PLATFORMS = [
 // troubleshoot its pipeline. Everything else stays locked behind an upgrade.
 const UNLOCKED_SOURCE_PLATFORMS = ['web', 'x', 'reddit'];
 const DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS = ['web', 'x', 'reddit'];
+// Analysis skills that read the live Watchlist X timelines (watchlistTimelines /
+// reply pool). When one of these is enabled, the report paths re-pull the current
+// handles first so the skill never analyzes a stale pull from old handles.
+const WATCHLIST_RECIPE_IDS = ['watchlist-analysis', 'reply-targets'];
 const SEARCH_PLAN_CUSTOM_MAX = 8;
 const BRAND_KEYWORD_RECOMMENDED_MIN = 2;
 const BRAND_KEYWORD_RECOMMENDED_MAX = 6;
@@ -606,6 +610,8 @@ function buildDefaultMarketingBriefConfig(client, dashboardState) {
     competitors: '',
     // Enabled analysis-skill recipe ids (Market Signals card). Empty = none run.
     analysisRecipes: [],
+    // Include the approved Client Brain in the brief analysis (Market Signals toggle). On by default.
+    includeClientBrain: true,
     // Local reputation listener — GBP review/profile/SEO health (Market Signals toggle).
     gbpReputation: { enabled: false },
     // Watchlist pull detail level — what to fetch per handle.
@@ -1305,7 +1311,7 @@ const UPGRADE_TILE_DESCRIPTIONS = {
 // so dashboard blocked tiles align with homepage add-ons.
 const UPGRADE_TILE_TITLES = {
   'creative-pipelines':      'Creative Pipelines',
-  'company-brain':           'Company Brain',
+  'company-brain':           'Source Library',
   'knowledge-assistant':     'Internal Knowledge Assistant',
   'executive-support':       'Executive Support Automation',
   'daily-operations':        'Daily Operations Engine',
@@ -2411,8 +2417,6 @@ const NON_ADMIN_UNLOCKED_CARD_IDS = new Set([
   'style-guide',
   'cross-device-images',
   'post-me',
-  'video-remix',
-  'media-library',
 ]);
 
 // Launch onboarding gate: non-admins get only DELIVERABLES. Every other nav
@@ -2768,12 +2772,15 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     return user.getIdToken();
   }, [user, impersonateId]);
 
-  // ── Company Brain quick-attach (paperclip + drag-and-drop on the card shell) ──
-  const companyBrainFileInputRef = useRef(null);
-  const [companyBrainUpload, setCompanyBrainUpload] = useState({ busy: false, dragOver: false, msg: '', tone: '' });
-  const uploadToCompanyBrain = useCallback(async (file) => {
+  // ── Quick-attach (paperclip + drag-and-drop on the card shell) ──
+  // Shared by the Source Library (knowledge-base) and Client Brain (client-brain)
+  // cards. Both upload to the knowledge base; the Client Brain consumes those
+  // sources. `cardId` scopes the overlay so the two cards never bleed state.
+  const brainDropInputs = useRef({});
+  const [companyBrainUpload, setCompanyBrainUpload] = useState({ busy: false, dragOver: false, msg: '', tone: '', cardId: null });
+  const uploadToCompanyBrain = useCallback(async (file, cardId = 'knowledge-base') => {
     if (!file) return;
-    setCompanyBrainUpload({ busy: true, dragOver: false, msg: `Uploading ${file.name}…`, tone: '' });
+    setCompanyBrainUpload({ busy: true, dragOver: false, msg: `Uploading ${file.name}…`, tone: '', cardId });
     try {
       const token = await brandSystemGetIdToken();
       const formData = new FormData();
@@ -2786,11 +2793,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-      setCompanyBrainUpload({ busy: false, dragOver: false, msg: `Added “${file.name}” to the Company Brain.`, tone: 'ok' });
+      setCompanyBrainUpload({ busy: false, dragOver: false, msg: `Added “${file.name}” to the Source Library.`, tone: 'ok', cardId });
     } catch (err) {
-      setCompanyBrainUpload({ busy: false, dragOver: false, msg: err?.message || 'Upload failed.', tone: 'err' });
+      setCompanyBrainUpload({ busy: false, dragOver: false, msg: err?.message || 'Upload failed.', tone: 'err', cardId });
     } finally {
-      setTimeout(() => setCompanyBrainUpload((p) => (p.busy ? p : { busy: false, dragOver: false, msg: '', tone: '' })), 3500);
+      setTimeout(() => setCompanyBrainUpload((p) => (p.busy ? p : { busy: false, dragOver: false, msg: '', tone: '', cardId: null })), 3500);
     }
   }, [apiPath, brandSystemGetIdToken]);
 
@@ -3995,6 +4002,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // HTML preview for the newsletter tile — fetched from /api/dashboard/newsletter-preview
   const [newsletterPreviewHtml, setNewsletterPreviewHtml] = useState('');
   const [marketingBriefConfig, setMarketingBriefConfig] = useState(null);
+  // Search-term suggestions extracted by the approved Client Brain, returned by
+  // the config GET ({ fields, appliedFields }). Surfaced in the SOURCES tab so the
+  // operator can apply brain terms into the actual Scout search inputs. See
+  // MARKET-SIGNALS-AND-SCOUT-PROJECTION.md §8 (config bootstrap — Phase 1).
+  const [clientBrainDefaults, setClientBrainDefaults] = useState(null);
   const [marketingBriefLoading, setMarketingBriefLoading] = useState(false);
   const [marketingBriefSaving, setMarketingBriefSaving] = useState(false);
   const [marketingBriefRunning, setMarketingBriefRunning] = useState(false);
@@ -4103,6 +4115,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       acknowledgedCards: (next.acknowledgedCards && typeof next.acknowledgedCards === 'object') ? next.acknowledgedCards : (fallback.acknowledgedCards || {}),
       // Enabled analysis-skill recipe ids — always an array so the toggle UI is safe.
       analysisRecipes: Array.isArray(next.analysisRecipes) ? next.analysisRecipes : (fallback.analysisRecipes || []),
+      // Include the approved Client Brain in the brief analysis — default ON.
+      includeClientBrain: next.includeClientBrain !== false,
       // Local reputation listener — always an object with a boolean flag.
       gbpReputation: { enabled: next.gbpReputation?.enabled === true },
       // Watchlist detail toggles — always an object with boolean flags.
@@ -4128,11 +4142,13 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         const data = await res.json().catch(() => ({}));
         if (!cancelled) {
           setMarketingBriefConfig(hydrateMarketingBriefConfig(res.ok ? data.config : null));
+          setClientBrainDefaults(res.ok ? (data.clientBrainDefaults || null) : null);
           setMarketingBriefError('');
         }
       } catch (err) {
         if (!cancelled) {
           setMarketingBriefConfig(hydrateMarketingBriefConfig(null));
+          setClientBrainDefaults(null);
           setMarketingBriefError(err instanceof Error ? err.message : 'Could not load marketing brief config.');
         }
       } finally {
@@ -4793,7 +4809,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // Optional scope ('marketing-director' | 'social-media-manager') runs a
   // pipeline slice for that agent brief. Callers wire it via an arrow —
   // a bare onClick would pass the click event as scope.
-  const runMarketingBrief = useCallback(async (scope = null) => {
+  const runMarketingBrief = useCallback(async (scope = null, opts = {}) => {
     const briefScope = typeof scope === 'string' ? scope : null;
     if (!user || marketingBriefRunning) return;
     setMarketingBriefRunning(true);
@@ -4804,7 +4820,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     setTimeout(kickBootstrap, 400);
     pollHandle = setInterval(kickBootstrap, 2000);
     try {
-      const saved = await saveMarketingBriefConfig();
+      // opts.configOverride = a just-computed config to persist before the run
+      // (Generate Report merges in Client Brain terms) — avoids the stale-state
+      // race where the internal save reads pre-merge config.
+      const saved = await saveMarketingBriefConfig(opts?.configOverride ? { override: opts.configOverride } : {});
       if (!saved) throw new Error('Scout config was not saved.');
       const token = await user.getIdToken();
       const res = await fetch(apiPath('/api/dashboard/marketing-brief/run'), {
@@ -4815,8 +4834,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Marketing brief run failed.');
       doBootstrap();
+      return true;
     } catch (err) {
       setMarketingBriefError(err instanceof Error ? err.message : 'Marketing brief run failed.');
+      return false;
     } finally {
       if (pollHandle) clearInterval(pollHandle);
       setMarketingBriefRunning(false);
@@ -5151,54 +5172,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // (`include.calendar` on digest_config), not the Market Signals card. See
   // docs/source-of-truth/EMAIL-DIGEST-CARD.md (P2b migration).
 
-  const runAnalysisRecipes = useCallback(async () => {
-    if (!user) return;
-    const ids = Array.isArray(marketingBriefConfig?.analysisRecipes) ? marketingBriefConfig.analysisRecipes : [];
-    if (!ids.length) { setRecipeRun({ loading: false, results: [], error: 'Toggle at least one analysis skill ON first.' }); return; }
-    setRecipeRun({ loading: true, results: [], error: '' });
-
-    // Per-skill cosmetic stage lines streamed into the shared terminal while the
-    // single recipe-run POST works server-side (same UX as a brief/Studio run).
-    const labelFor = (id) => (recipeCatalog.find((r) => r.id === id)?.label || id);
-    let host = ''; try { host = new URL(String(client?.websiteUrl || client?.website || '')).hostname.replace(/^www\./, ''); } catch { /* no host */ }
-    const stages = [
-      { pfx: '[LOAD]', text: 'loading stored market signals…' },
-      ...ids.map((id) => ({ pfx: '[SKILL]', text: `analyzing · ${labelFor(id)}…` })),
-      { pfx: '[SYNTH]', text: 'composing grounded synthesis…' },
-    ];
-
-    try {
-      await runWithTerminal({
-        title: 'RUNNING ANALYSIS SKILLS',
-        brand: 'Analysis skills',
-        host,
-        stages,
-        task: async () => {
-          const token = await user.getIdToken();
-          const res = await fetch(apiPath('/api/dashboard/recipe-run'), {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ recipeIds: ids }),
-          });
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok) throw new Error(data?.error || 'Could not run analysis skills.');
-          const results = data.results || [];
-          setRecipeRun({ loading: false, results, error: '' });
-          // Surface the formatted report where the user expects it (REPORT tab).
-          if (results.some((r) => r.ok)) setModalTab('report');
-          const okCount = results.filter((r) => r.ok).length;
-          const totalCost = results.reduce((sum, r) => sum + (Number(r.costUsd) || 0), 0);
-          return { doneText: `${okCount}/${results.length} skill${results.length === 1 ? '' : 's'} synthesized${totalCost > 0 ? ` · ≈ $${totalCost.toFixed(3)}` : ''}` };
-        },
-      });
-    } catch (err) {
-      setRecipeRun({ loading: false, results: [], error: err instanceof Error ? err.message : 'Could not run analysis skills.' });
-    }
-  }, [user, apiPath, marketingBriefConfig, recipeCatalog, client, runWithTerminal]);
-
   // Handle-first pull: for each watchlist handle, fetch its real X timeline via
   // last30days --x-handle (the targeted mode proven to return the account's
-  // actual activity). Declared before runAllSignals (which depends on it).
+  // actual activity).
   const runWatchlistPullNow = useCallback(async () => {
     if (!user) return;
     const handles = splitMarketingBriefTerms(marketingBriefConfig?.kols)
@@ -5258,21 +5234,156 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     }
   }, [user, apiPath]);
 
-  // Single "Run all" — non-X sources via scout-test, X via the handle-first
-  // watchlist pull, then the enabled analysis skills, landing on the REPORT.
-  const runAllSignals = useCallback(async () => {
-    const sources = (marketingBriefConfig?.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS)
-      .filter((k) => UNLOCKED_SOURCE_PLATFORMS.includes(k));
-    // X comes from the handle-first watchlist pull (real timelines), NOT the
-    // noisy --x-related topic search. Other sources still use scout-test.
-    sources.filter((k) => k !== 'x').forEach((k) => runScoutTestForPlatform(k));
-    const handles = splitMarketingBriefTerms(marketingBriefConfig?.kols)
-      .map((h) => String(h).replace(/^@+/, '').trim()).filter((h) => h.length >= 2);
-    if (handles.length) await runWatchlistPullNow();
+
+  // THE one-button report path. Auto-merges the approved Client Brain's search
+  // terms into the inputs (union — never drops manual terms), then runs a fresh
+  // Scout via runMarketingBrief — which drives the detailed live brief terminal
+  // (each searched item streams in) — and afterward runs whatever Analysis Skills
+  // are toggled ON over the fresh signals, landing on the REPORT tab.
+  const generateReport = useCallback(async () => {
+    if (!user || !marketingBriefConfig || marketingBriefRunning) return;
+    const bf = clientBrainDefaults?.fields || {};
+    const brainVals = (key) => {
+      const w = bf[key];
+      const v = w && typeof w === 'object' && 'value' in w ? w.value : w;
+      return splitMarketingBriefTerms(v);
+    };
+    const next = { ...marketingBriefConfig };
+    for (const key of ['brandKeywords', 'categoryTerms', 'kols', 'competitors']) {
+      const cur = splitMarketingBriefTerms(marketingBriefConfig[key]);
+      next[key] = [...new Set([...cur, ...brainVals(key)])].join('\n');
+    }
+    setMarketingBriefConfig(next);
+
+    // The WHOLE flow streams into one terminal (the shared adhoc overlay), phase by
+    // phase: search → watchlist pull → analysis skills → done. On 'done' it
+    // auto-closes (4s effect) revealing the REPORT tab, which we switch to first.
+    // We suppress the separate intake modal so this single terminal owns the screen.
+    const ids = Array.isArray(next.analysisRecipes) ? next.analysisRecipes : [];
+    const labelFor = (id) => (recipeCatalog.find((r) => r.id === id)?.label || id);
+    const hasHandles = splitMarketingBriefTerms(next.kols).some((h) => String(h).replace(/^@+/, '').trim().length >= 2);
+    const needsWatchlist = ids.some((id) => WATCHLIST_RECIPE_IDS.includes(id));
+    let host = ''; try { host = new URL(String(client?.websiteUrl || client?.website || '')).hostname.replace(/^www\./, ''); } catch { /* none */ }
+
+    // One-terminal line helpers — settle the prior active line, push the next.
+    const stepActive = (pfx, text) => setAdhocTerminal((t) => {
+      if (!t) return t;
+      const lines = settleActiveLine(t.lines.slice(), 'ok', '✓');
+      lines.push({ type: 'active', prefix: pfx, text, cursor: true });
+      return { ...t, lines };
+    });
+    const stepDone = (text) => setAdhocTerminal((t) => {
+      if (!t) return t;
+      const lines = settleActiveLine(t.lines.slice(), 'ok', '✓');
+      lines.push({ type: 'ok', prefix: '✓', text });
+      return { ...t, status: 'done', lines };
+    });
+    const stepFail = (msg) => setAdhocTerminal((t) => {
+      if (!t) return t;
+      const lines = settleActiveLine(t.lines.slice(), 'error', '✗');
+      lines.push({ type: 'error', prefix: '[ERR]', text: msg });
+      return { ...t, status: 'error', lines };
+    });
+
+    setIntakeModalDismissed(true); // let the adhoc terminal own the screen
+    setMarketingBriefRunning(true);
+    setMarketingBriefError('');
+    setAdhocTerminal({
+      open: true, status: 'running', title: 'GENERATING REPORT', brand: 'Market signals', host, videoUrl: null,
+      lines: [
+        { type: 'system', prefix: '$', text: host ? `market signals · ${host}` : 'market signals' },
+        { type: 'dim', prefix: '', text: '─'.repeat(42) },
+        { type: 'active', prefix: '[SAVE]', text: 'merging Client Brain terms + saving inputs…', cursor: true },
+      ],
+    });
+
+    try {
+      const token = await user.getIdToken();
+      const authHeaders = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+      // Phase 1 — fresh Scout search (inline; resolves when the search completes).
+      const saved = await saveMarketingBriefConfig({ override: next });
+      if (!saved) throw new Error('Could not save search inputs.');
+      stepActive('[SEARCH]', 'scanning web · X · reddit for fresh market signals…');
+      const runRes = await fetch(apiPath('/api/dashboard/marketing-brief/run'), {
+        method: 'POST', headers: authHeaders, body: JSON.stringify({ scope: 'marketing-director' }),
+      });
+      const runData = await runRes.json().catch(() => ({}));
+      if (!runRes.ok) throw new Error(runData?.error || 'Market search failed.');
+      try { doBootstrap(); } catch { /* best-effort refresh */ }
+
+      // Phase 2 — refresh the current watchlist handles (posts + mentions).
+      if (ids.length && needsWatchlist && hasHandles) {
+        stepActive('[X]', 'pulling watchlist timelines + mentions…');
+        try {
+          const wlRes = await fetch(apiPath('/api/dashboard/watchlist-pull'), {
+            method: 'POST', headers: authHeaders,
+            body: JSON.stringify({ detail: next.watchlistDetail || marketingBriefConfig?.watchlistDetail || null }),
+          });
+          const wlData = await wlRes.json().catch(() => ({}));
+          if (wlRes.ok && wlData.ok !== false) {
+            setWatchlistPull({ loading: false, handles: wlData.handles || [], spotlight: wlData.spotlight || null, analysis: wlData.analysis || null, error: '' });
+          }
+        } catch { /* non-fatal — recipe falls back to stored timelines */ }
+      }
+
+      // Phase 3 — analysis skills over the fresh signals.
+      if (!ids.length) {
+        setModalTab('report');
+        stepDone('signals refreshed — enable an Analysis Skill for a synthesized report');
+        return;
+      }
+      stepActive('[ANALYZE]', `running ${ids.length} skill${ids.length === 1 ? '' : 's'}: ${ids.map(labelFor).join(' · ')}…`);
+      setRecipeRun({ loading: true, results: [], error: '' });
+      const recipeRes = await fetch(apiPath('/api/dashboard/recipe-run'), {
+        method: 'POST', headers: authHeaders, body: JSON.stringify({ recipeIds: ids }),
+      });
+      const recipeData = await recipeRes.json().catch(() => ({}));
+      if (!recipeRes.ok) throw new Error(recipeData?.error || 'Analysis skills failed.');
+      const results = recipeData.results || [];
+      setRecipeRun({ loading: false, results, error: '' });
+      const okCount = results.filter((r) => r.ok).length;
+      setModalTab('report'); // switch underneath so the terminal's auto-close reveals it
+      stepDone(`report ready · ${okCount}/${results.length} skill${results.length === 1 ? '' : 's'} synthesized`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Generate report failed.';
+      stepFail(msg);
+      setMarketingBriefError(msg);
+      setRecipeRun((prev) => ({ ...prev, loading: false, error: msg }));
+    } finally {
+      setMarketingBriefRunning(false);
+    }
+  }, [user, marketingBriefConfig, marketingBriefRunning, clientBrainDefaults, saveMarketingBriefConfig, apiPath, doBootstrap, recipeCatalog, client, settleActiveLine]);
+
+  // Fast path: re-run the enabled Analysis Skills over the already-stored signals
+  // (no new ~3-min search). Use when the signals are fresh but the REPORT didn't
+  // render — reliable and ~50s. Reads server-stored agentData; writes nothing new.
+  const updateReportFromSignals = useCallback(async () => {
+    if (!user || marketingBriefRunning || recipeRun.loading) return;
     const ids = Array.isArray(marketingBriefConfig?.analysisRecipes) ? marketingBriefConfig.analysisRecipes : [];
-    if (ids.length) await runAnalysisRecipes();
+    if (!ids.length) { setRecipeRun({ loading: false, results: [], error: 'Turn on at least one Analysis Skill first (04 below).' }); setModalTab('report'); return; }
+    // Refresh the current handles' X timelines when a watchlist skill is on, so
+    // the X analysis matches your configured handles (not a stale pull).
+    const hasHandles = splitMarketingBriefTerms(marketingBriefConfig?.kols).some((h) => String(h).replace(/^@+/, '').trim().length >= 2);
+    if (hasHandles && ids.some((id) => WATCHLIST_RECIPE_IDS.includes(id))) {
+      try { await runWatchlistPullNow(); } catch { /* non-fatal — falls back to stored timelines */ }
+    }
+    setRecipeRun({ loading: true, results: [], error: '' });
+    try {
+      const token = await user.getIdToken();
+      const recipeRes = await fetch(apiPath('/api/dashboard/recipe-run'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipeIds: ids }),
+      });
+      const recipeData = await recipeRes.json().catch(() => ({}));
+      if (!recipeRes.ok) throw new Error(recipeData?.error || 'Analysis skills failed.');
+      setRecipeRun({ loading: false, results: recipeData.results || [], error: '' });
+    } catch (err) {
+      setRecipeRun({ loading: false, results: [], error: err instanceof Error ? err.message : 'Analysis skills failed.' });
+    }
     setModalTab('report');
-  }, [marketingBriefConfig, runScoutTestForPlatform, runWatchlistPullNow, runAnalysisRecipes]);
+  }, [user, marketingBriefRunning, recipeRun.loading, marketingBriefConfig, runWatchlistPullNow, apiPath]);
 
   // Shared row renderer for the Web Search + Platforms and Social Media Signals
   // cards: unlocked sources render as toggles, locked sources as Upgrade rows.
@@ -5508,16 +5619,91 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       : (wd.tweets && wd.mentions) ? 'Their posts + mentions'
       : wd.tweets ? (wd.latestOnly ? 'Just their last post' : 'Their posts only')
       : 'Mentions only';
+
+    // The approved Client Brain's extracted search terms — shown read-only so the
+    // operator can see what Generate Report will search. They're merged into the
+    // inputs automatically by generateReport (no Apply step). Empty/unapproved
+    // brain ⇒ no terms ⇒ this block hides itself.
+    const brainDefaultFields = clientBrainDefaults?.fields || {};
+    const brainVals = (key) => {
+      const wrapped = brainDefaultFields[key];
+      const v = wrapped && typeof wrapped === 'object' && 'value' in wrapped ? wrapped.value : wrapped;
+      return splitMarketingBriefTerms(v);
+    };
+    const BRAIN_SEARCH_FIELDS = [
+      ['brandKeywords', 'Brand Keywords'],
+      ['categoryTerms', 'Category Terms'],
+      ['kols', 'Watchlist & Competitors'],
+      ['competitors', 'Competitors'],
+    ];
+    const brainSuggestions = BRAIN_SEARCH_FIELDS
+      .map(([key, label]) => ({ key, label, vals: brainVals(key) }))
+      .filter((s) => s.vals.length);
+    const enabledSkillCount = Array.isArray(marketingBriefConfig?.analysisRecipes) ? marketingBriefConfig.analysisRecipes.length : 0;
+    const generating = marketingBriefRunning || recipeRun.loading;
     return (
       <div className="signals-sg">
+        {/* THE one button. Merges the injected Client Brain terms into the inputs,
+            runs a fresh Scout on them, runs whatever Analysis Skills are ON, and
+            drops the result in the REPORT tab. No Apply / Run-all / Refresh combo. */}
+        <section className="sg-section" id="signals-generate-report-section">
+          <div className="sg-head">
+            <span className="sg-index">▶</span>
+            <div>
+              <h3>Generate Report</h3>
+              <p>Runs a fresh search on your inputs{brainSuggestions.length ? ' (Client Brain terms included automatically)' : ''}, analyzes it with your enabled Analysis Skills, and shows the result in the REPORT tab.</p>
+            </div>
+            <button type="button" className="sg-btn sg-cta" id="signals-generate-report-btn" disabled={generating} onClick={generateReport}>
+              <span>{marketingBriefRunning ? 'Searching…' : recipeRun.loading ? 'Analyzing…' : 'Generate Report'}</span>
+            </button>
+          </div>
+          {enabledSkillCount === 0 ? (
+            <p className="sg-notice" style={{ margin: 0 }}>No Analysis Skills are ON — the report will refresh signals but show no analysis. Turn one on in “04 · Analysis Skills” below.</p>
+          ) : (
+            <p className="sg-hint" style={{ margin: 0 }}>{enabledSkillCount} analysis skill{enabledSkillCount === 1 ? '' : 's'} enabled · Generate runs a fresh Scout (~$0.10) then analyzes.</p>
+          )}
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginTop: 8 }}>
+            <button type="button" className="sg-btn sg-btn-outline" id="signals-update-report-btn" disabled={generating} onClick={updateReportFromSignals}>
+              {recipeRun.loading ? 'Analyzing…' : 'Update report only (no new search)'}
+            </button>
+            <span className="sg-hint" style={{ margin: 0 }}>Re-analyzes the latest stored signals (~50s, ~$0.05) — use when signals are fresh but the report didn’t render.</span>
+          </div>
+        </section>
+
+        {brainSuggestions.length ? (
+          <section className="sg-section" id="signals-client-brain-suggested-section">
+            <div className="sg-head">
+              <span className="sg-index">CB</span>
+              <div>
+                <h3>From your Client Brain</h3>
+                <p>Injected from the Client Brain and searched automatically when you Generate Report. Edit or park individual items in “02 · Inputs · Customize” below.</p>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gap: 10 }}>
+              {brainSuggestions.map((s) => (
+                <article key={s.key} className="sg-list" data-brain-field={s.key}>
+                  <div className="sg-list-head">
+                    <span className="sg-list-title">{s.label}</span>
+                    <span className="sg-chip">{s.vals.length} from brain</span>
+                  </div>
+                  <div className="sg-chip-row" style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                    {s.vals.slice(0, 16).map((t) => (
+                      <span key={t} className="sg-chip">{t}</span>
+                    ))}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
         <section className="sg-section" id="signals-search-sources-section">
           <div className="sg-head">
             <span className="sg-index">01</span>
             <div>
               <h3>Search Sources</h3>
-              <p>Toggle a source on, then Run to confirm exactly what it returns. Lightweight — does not refresh the stored brief.</p>
+              <p>Toggle a source on, then Run to spot-check what it returns. Diagnostic only — Generate Report above runs the full search.</p>
             </div>
-            <button type="button" className="sg-btn sg-cta" id="signals-run-all-btn" disabled={recipeRun.loading} onClick={runAllSignals}><span>{recipeRun.loading ? 'Running…' : 'Run all'}</span></button>
           </div>
           <div style={{ display: 'grid', gap: 10 }}>
             {renderSgSourceRow('web', 'Web / News', 'Open web — market news, launches, pages your audience sees.')}
@@ -5618,7 +5804,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             <span className="sg-index">04</span>
             <div>
               <h3>Analysis Skills</h3>
-              <p>Toggle analysis skills on — they run with the live sources via <strong>Run all</strong> (top). Analyzers over the stored signals, not new searches.</p>
+              <p>Toggle the skills you want — they run automatically when you <strong>Generate Report</strong> (top), analyzing the fresh search results.</p>
             </div>
           </div>
           <div style={{ display: 'grid', gap: 10 }} id="recipe-toggle-list">
@@ -6078,6 +6264,25 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     const recipeResults = (recipeRun.results || []).filter((r) => r.ok && r.analysis);
     const gbpRep = (marketingBriefConfig?.gbpReputation?.enabled === true) ? ROSITAS_GBP_REPORT : null;
 
+    // Coverage = what each configured parameter actually returned this run. Reads
+    // the fresh Scout agentData + the watchlist pull. A 0 means the source ran but
+    // found nothing (not that it was skipped) — surfaced so nothing looks dropped.
+    const ad = bootstrap?.dashboardState?.marketingBrief?.scoutBrief?.agentData || {};
+    const cnt = (a) => (Array.isArray(a) ? a.length : 0);
+    const mentionsTotal = (watchlistPull.handles || []).reduce((n, h) => n + (h.mentions?.length || 0), 0);
+    const coverage = [
+      { lbl: 'Web trends', n: cnt(ad.categoryTrends) },
+      { lbl: 'Content ops', n: cnt(ad.contentOpportunities) },
+      { lbl: 'Competitors', n: cnt(ad.competitorIntel) },
+      { lbl: 'Brand mentions', n: cnt(ad.brandMentions) },
+      { lbl: 'Reddit', n: cnt(ad.redditSignals) },
+      { lbl: 'KOL posts', n: cnt(ad.kolActivity) },
+      { lbl: 'Watchlist posts', n: handleTotal },
+      { lbl: 'Mentions', n: mentionsTotal },
+      { lbl: 'Skills run', n: recipeResults.length },
+    ];
+    const coverageHasData = coverage.some((c) => c.n > 0);
+
     if (total === 0 && !recipeResults.length && !gbpRep) {
       return (
         <div className="brief-kit">
@@ -6100,6 +6305,21 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     return (
       <div className="brief-kit">
         <div className="b-stack">
+          {coverageHasData ? (
+            <div className="kit-paper" id="signals-coverage-strip">
+              <div className="b-eyebrow"><span className="dot" />Coverage · what this run searched</div>
+              <div className="scores" style={{ margin: '10px 0 0', flexWrap: 'wrap' }}>
+                {coverage.map((c) => (
+                  <div className="score" key={c.lbl} style={c.n === 0 ? { opacity: 0.4 } : undefined} title={`${c.lbl}: ${c.n}${c.n === 0 ? ' — ran, nothing returned' : ''}`}>
+                    <div className="lbl">{c.lbl}</div>
+                    <div className="num">{c.n}</div>
+                  </div>
+                ))}
+              </div>
+              <p className="b-sub" style={{ marginTop: 8 }}>What each parameter returned this run. A <strong>0</strong> means that source ran but found nothing (e.g. no public brand mentions yet, or the Reddit query needs tuning) — not that it was skipped.</p>
+            </div>
+          ) : null}
+
           {watchlistPull.analysis ? renderWatchlistAnalysisBlock(watchlistPull.analysis) : null}
 
           {total > 0 ? (
@@ -6830,7 +7050,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 
 	  // Generate on-brand promo copy with the existing posting-agent pipeline
 	  // (Strategy Developer): seeds from the brand brief, returns optimized copy +
-	  // brand-aligned hashtags with Knowledge Base context.
+	  // brand-aligned hashtags with Source Library context.
 	  const generatePostMeCopy = useCallback(async () => {
 	    if (!user || postMeCopyLoading) return;
 	    setPostMeCopyLoading(true);
@@ -8766,7 +8986,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     rows.push({ key: 'seo-skill-warning-msgs', label: 'Skill warning messages', value: formatLogList(skillRunWarnings, (w) => w?.message) });
     rows.push({
       key: 'seo-knowledge-base',
-      label: 'Knowledge Base',
+      label: 'Source Library',
       value: summarizeKnowledgeBaseSources(globalKnowledgeBaseSources, 'Available for claim-check context'),
     });
     rows.push({ key: 'seo-scribe-warning-codes', label: 'Scribe warning codes', value: formatLogList(scribeRunWarnings, (w) => w?.code) });
@@ -8827,7 +9047,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     if (aiScore != null) rows.push({ key: 'ar-ai-score', label: 'AI Visibility', value: `${aiScore} / 100` });
     rows.push({
       key: 'ar-knowledge-base',
-      label: 'Knowledge Base',
+      label: 'Source Library',
       value: summarizeKnowledgeBaseSources(globalKnowledgeBaseSources, 'Available for claim-check context'),
     });
     const failedChecks = (agentReadinessData.checks || []).filter((c) => c.status === 'fail' || c.status === 'warn');
@@ -8933,7 +9153,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       rows: hasBusinessModelData
         ? [
             { key: 'model', label: 'Structure', value: resolvedBusinessModel },
-            { key: 'bm-knowledge-base', label: 'Knowledge Base', value: knowledgeBaseSourceSummary },
+            { key: 'bm-knowledge-base', label: 'Source Library', value: knowledgeBaseSourceSummary },
           ]
         : buildWorkNeededRows('No pricing, packaging, or service structure was clear in fetched pages.'),
       footerLeft: hasBusinessModelData ? 'Live' : WORK_NEEDED_LABEL,
@@ -8962,7 +9182,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             },
             {
               key: 'sector-kb',
-              label: 'Knowledge Base',
+              label: 'Source Library',
               value: summarizeKnowledgeBaseSources(marketCategoryKnowledgeBaseSources, 'Available for category evidence'),
             },
           ]
@@ -9025,9 +9245,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           row('strat-caption',     'Sample caption',        dashboardState?.outputsPreview?.sampleCaption),
           row('strat-kb-sources',  'KB sources used',       strategyBuilderKnowledgeBaseSources?.length),
 
-          // ── COMPANY BRAIN (Knowledge Base) ────────────────────────────────
-          { key: 'sec-knowledge', isHeader: true, label: 'COMPANY BRAIN', cardId: 'knowledge-base', cardCategory: 'knowledge' },
-          row('kb-global',         'Brain sources',         globalKnowledgeBaseSources?.length),
+          // ── SOURCE LIBRARY (Knowledge Base runtime) ───────────────────────
+          { key: 'sec-knowledge', isHeader: true, label: 'SOURCE LIBRARY', cardId: 'knowledge-base', cardCategory: 'knowledge' },
+          row('kb-global',         'Library sources',       globalKnowledgeBaseSources?.length),
           row('kb-brief',          'Brief KB sources',      marketingBriefKnowledgeBaseSources?.length),
           row('kb-strategy',       'Strategy KB sources',   strategyBuilderKnowledgeBaseSources?.length),
           row('kb-brand',          'Brand system KB',       brandSystemKnowledgeBaseSources?.length),
@@ -9217,16 +9437,16 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       id: 'client-brain',
       category: 'knowledge',
       number: 'CB',
-      label: 'CLIENT BRAIN',
-      title: 'Client Brain',
-      description: 'Aggregates client inputs into an approved context pack that downstream strategy, copy, brief, and post cards can use.',
-      placeholderLabel: clientBrain?.aiContextPack?.shortContext ? 'CLIENT\nCONTEXT' : 'BUILD\nBRAIN',
+      label: 'COMPANY BRAIN',
+      title: 'Company Brain',
+      description: 'Compiles approved CLIENT_BRAIN.md decisions into runtime context, defaults, voice, and downstream card guidance.',
+      placeholderLabel: clientBrain?.aiContextPack?.shortContext ? 'CLIENT\nCONTEXT' : 'INJECT\nBRAIN',
       rows: [
         { key: 'cb-status', label: 'Status', value: clientBrain?.status || 'Not generated' },
         { key: 'cb-sources', label: 'Sources', value: clientBrain?.sourceCount != null ? `${clientBrain.enabledSourceCount || 0}/${clientBrain.sourceCount} enabled` : 'Discovered on open' },
         { key: 'cb-confidence', label: 'Confidence', value: clientBrain?.confidence || 'Pending' },
         { key: 'cb-gaps', label: 'High-priority gaps', value: String(clientBrain?.highPriorityMissingCount || 0) },
-        { key: 'cb-context', label: 'CLIENT_CONTEXT', value: clientBrain?.aiContextPack?.shortContext ? 'Ready' : 'Generate to create context pack' },
+        { key: 'cb-context', label: 'Runtime context', value: clientBrain?.aiContextPack?.shortContext ? 'Ready' : 'Inject CLIENT_BRAIN.md' },
       ],
       footerLeft: clientBrain?.status === 'approved' ? 'Approved' : clientBrain?.status === 'generated' ? 'Generated' : 'Ready',
       footerRight: 'CONTEXT',
@@ -9240,18 +9460,18 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       id: 'knowledge-base',
       category: 'knowledge',
       number: 'KB',
-      label: 'COMPANY BRAIN',
-      title: 'Company Brain',
-      description: 'Stores the documents, links, and notes the team should use before making recommendations.',
-      placeholderLabel: 'UPLOAD\nINFORMATION',
+      label: 'SOURCE LIBRARY',
+      title: 'Source Library',
+      description: 'Stores supporting docs, links, notes, and research for retrieval. This is evidence, not the approved runtime Brain.',
+      placeholderLabel: 'UPLOAD\nSOURCES',
       rows: [
         { key: 'kb-source', label: 'Sources', value: 'Text · URLs · documents' },
         { key: 'kb-limit', label: 'Limit', value: '100 items / client' },
         { key: 'kb-retrieval', label: 'Retrieval', value: 'OpenAI embeddings · Firestore vector search · top 5 chunks' },
-        { key: 'kb-runtime-source', label: 'Pipeline source', value: 'Priority context for Strategy Builder, cards, briefs, posts, and generated sites' },
+        { key: 'kb-runtime-source', label: 'Use', value: 'Retrieved evidence for Strategy Builder, cards, briefs, posts, and generated sites' },
       ],
       footerLeft: 'Ready',
-      footerRight: 'CLIENT DATA',
+      footerRight: 'EVIDENCE',
       readinessBadge: { tone: 'ok', label: 'Ready' },
     },
 
@@ -9269,7 +9489,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             { key: 'primary', label: 'Primary', value: brandTone?.primary || 'Pending' },
             { key: 'secondary', label: 'Secondary', value: brandTone?.secondary || 'Pending' },
             { key: 'tags', label: 'Tags', value: brandTone?.tags?.slice(0, 3).join(' · ') || 'Pending' },
-            { key: 'bv-knowledge-base', label: 'Knowledge Base', value: knowledgeBaseSourceSummary },
+            { key: 'bv-knowledge-base', label: 'Source Library', value: knowledgeBaseSourceSummary },
           ]
         : buildWorkNeededRows('Not enough long-form copy or repeated messaging was fetched to infer voice.'),
       footerLeft: hasBrandToneData ? 'Live' : WORK_NEEDED_LABEL,
@@ -9506,7 +9726,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           ? [
               { key: 'bs-prompt-status', label: 'Master Prompt', value: 'Ready to copy' },
               { key: 'bs-json-status',   label: 'JSON Object',   value: 'Ready to copy' },
-              { key: 'bs-knowledge-base', label: 'Knowledge Base', value: summarizeKnowledgeBaseSources(brandSystemKnowledgeBaseSources, 'Available for brand truth') },
+              { key: 'bs-knowledge-base', label: 'Source Library', value: summarizeKnowledgeBaseSources(brandSystemKnowledgeBaseSources, 'Available for brand truth') },
               { key: 'bs-last-run',      label: 'Generated',     value: bsRun?.generatedAt || '—' },
             ]
           : buildWorkNeededRows('No prompt generated yet — click RUN to scan your pipeline and fill any gaps.'),
@@ -9865,7 +10085,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       const logoCount = Array.isArray(videoRemixOptions.logos) ? videoRemixOptions.logos.length : 0;
       return {
         id: 'media-library',
-        category: 'deliverables',
+        category: 'content',
         number: 'ML',
         label: 'MEDIA LIBRARY',
         title: 'Media Library',
@@ -9895,7 +10115,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       })();
       return {
         id: 'video-remix',
-        category: 'deliverables',
+        category: 'content',
         number: 'VR',
         label: 'VIDEO REMIX',
         title: 'Video Remix',
@@ -10231,7 +10451,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       label: 'CUSTOM',
       title: 'Custom Post Strategy',
       locked: !hasMarketingBriefData,
-      description: 'Builds a day-of post and 30-day calendar from Market Insights, Company Brain, brand voice, SEO, local signals, events, and campaign inputs.',
+      description: 'Builds a day-of post and 30-day calendar from Market Insights, Source Library evidence, Client Brain context, SEO, local signals, events, and campaign inputs.',
       placeholderLabel: strategyBuilderItems.length ? 'CUSTOM\nPLAN' : 'CUSTOM\nSTRATEGY',
       rows: strategyBuilderItems.length
         ? [
@@ -10240,7 +10460,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             { key: 'sb-count', label: 'Plan', value: `${strategyBuilderItems.length} posts · ${strategyBuilderPlan?.anchors?.length || 0} anchors` },
             {
               key: 'sb-knowledge-base',
-              label: 'Knowledge Base',
+              label: 'Source Library',
               value: summarizeKnowledgeBaseSources(strategyBuilderKnowledgeBaseSources, 'Toggleable priority source'),
             },
           ]
@@ -10248,7 +10468,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             { key: 'sb-source', label: 'Source', value: hasMarketingBriefData ? 'Marketing Brief ready' : 'Needs Market Brief' },
             {
               key: 'sb-knowledge-base',
-              label: 'Knowledge Base',
+              label: 'Source Library',
               value: summarizeKnowledgeBaseSources(strategyBuilderKnowledgeBaseSources, 'Toggleable priority source'),
             },
             { key: 'sb-angle', label: 'Angle', value: marketingBrief?.content?.content_angle || marketingBrief?.headline || resolvedContentAngle || 'Run the Executive Brief first.' },
@@ -10345,7 +10565,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         { key: 'cb-copy', label: 'Copy', value: hasSocialGeneratedDraft ? socialGeneratedDraft : 'No generated X draft yet.' },
         { key: 'cb-media', label: 'Media', value: 'Video/audio generation queued for next phase' },
         { key: 'cb-source', label: 'Source', value: hasMarketingBriefData ? 'Strategy Builder' : 'Manual / Draft Content' },
-        { key: 'cb-knowledge-base', label: 'Knowledge Base', value: knowledgeBaseSourceSummary },
+        { key: 'cb-knowledge-base', label: 'Source Library', value: knowledgeBaseSourceSummary },
       ],
       footerLeft: hasSocialGeneratedDraft ? 'Live' : WORK_NEEDED_LABEL,
       footerRight: 'REVIEWED',
@@ -10362,7 +10582,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       rows: hasDraftPostData
         ? [
             { key: 'post', label: 'Draft', value: resolvedDraftPost },
-            { key: 'draft-knowledge-base', label: 'Knowledge Base', value: knowledgeBaseSourceSummary },
+            { key: 'draft-knowledge-base', label: 'Source Library', value: knowledgeBaseSourceSummary },
           ]
         : buildWorkNeededRows('Not enough brand voice clarity to draft content credibly.'),
       footerLeft: hasDraftPostData ? 'Live' : WORK_NEEDED_LABEL,
@@ -10546,7 +10766,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         { key: 'mb-focus', label: 'Scout focus', value: marketingBriefConfig?.sourceFocus || 'Not configured' },
         { key: 'mb-instructions', label: 'Instructions', value: marketingBriefConfig?.scoutInstructions ? 'Custom' : 'Default' },
         { key: 'mb-sources', label: 'Sources', value: (marketingBriefConfig?.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS).join(' · ') },
-        { key: 'mb-knowledge-base', label: 'Knowledge Base', value: summarizeKnowledgeBaseSources(marketingBriefKnowledgeBaseSources, 'Priority client context') },
+        { key: 'mb-knowledge-base', label: 'Source Library', value: summarizeKnowledgeBaseSources(marketingBriefKnowledgeBaseSources, 'Priority client context') },
         { key: 'mb-searches', label: 'Searches', value: String(marketingBriefConfig?.searches?.filter((row) => row.query)?.length || 0) },
         { key: 'mb-kols', label: 'KOL signals', value: String(marketingScoutAgentData?.kolActivity?.length || 0) },
         { key: 'mb-viral', label: 'Viral windows', value: String(marketingScoutAgentData?.viralOpportunities?.opportunities?.length || marketingBrief?.contentOpportunities?.length || 0) },
@@ -10783,7 +11003,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         { key: 'smp-channel', label: 'Channel', value: 'X / Twitter' },
         { key: 'smp-agent-system', label: 'Agents', value: 'Content Creator · Hashtag Specialist · Engagement Optimizer' },
         { key: 'smp-source', label: 'Creative Source', value: hasSocialGeneratedDraft ? 'Creative Builder output available' : 'Manual composer ready' },
-        { key: 'smp-knowledge-base', label: 'Knowledge Base', value: knowledgeBaseSourceSummary },
+        { key: 'smp-knowledge-base', label: 'Source Library', value: knowledgeBaseSourceSummary },
       ],
       footerLeft: 'Ready',
       footerRight: 'LIVE',
@@ -11110,6 +11330,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         if (card.footerLeft === 'Live' || card.footerLeft === 'Feeding brief') return 'healthy';
         if (card.footerLeft === 'Partial' || card.footerLeft === 'Queued' || card.footerLeft === 'Coming Soon') return 'partial';
         if (card.footerLeft === 'Error') return 'critical';
+        // Company Brain: reflect actual brain quality (same score as the gauge),
+        // not the default "critical" — its footerLeft values aren't matched above.
+        if (card.id === 'client-brain') return computeClientBrainReadiness(clientBrain).level;
         // Marketing Director config cards hold settings, not audit data — they
         // read green once configured and amber when empty, never red.
         if (MARKETING_CONFIG_CARD_IDS.has(card.id)) {
@@ -12288,7 +12511,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   if (activeCapabilityFilter === 'onboarding') return chainSortKey(a.id) - chainSortKey(b.id);
                   if (activeCapabilityFilter === 'knowledge') {
                     // Knowledge Officer: Cross-Device Layouts, Data Coverage,
-                    // Company Brain, Day-of Post lead; Market Category stays last.
+                    // Source Library, Day-of Post lead; Market Category stays last.
                     const order = ['multi-device-view', 'social-preview', 'audit-summary', 'client-brain', 'knowledge-base', 'priority-signal', 'survey-status', 'business-model', 'industry'];
                     const ai = order.indexOf(a.id); const bi = order.indexOf(b.id);
                     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
@@ -12301,7 +12524,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   }
                   if (activeCapabilityFilter === 'content') {
                     // Creative Director: intake → produce → ship.
-                    const order = ['visual-dna', 'brand-voice', 'style-guide', 'brand-system', 'client-brief', 'client-mockup-creative'];
+                    // media-library anchors under INTAKE (visual-dna); video-remix under DESIGNER (client-brief).
+                    const order = ['visual-dna', 'media-library', 'brand-voice', 'style-guide', 'brand-system', 'client-brief', 'video-remix', 'client-mockup-creative'];
                     const ai = order.indexOf(a.id); const bi = order.indexOf(b.id);
                     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
                   }
@@ -12439,24 +12663,28 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 : isInactiveUnlocked
                   ? (INACTIVE_CARD_DESCRIPTIONS[card.id] || card.description || 'Run this module to populate this card.')
                   : (card.dynamicShortDescription || card.scribeShort || card.description);
-              // Company Brain accepts a quick document drop / paperclip attach
-              // directly on the card shell (no need to open the modal).
+              // Source Library + Client Brain accept a quick document drop /
+              // paperclip attach directly on the card shell. isCompanyBrain =
+              // Source Library only (drop-only, never opens the modal);
+              // isBrainDrop = either card (drag-drop + paperclip affordances).
               const isCompanyBrain = card.id === 'knowledge-base' && !isLocked;
+              const isBrainDrop = (card.id === 'knowledge-base' || card.id === 'client-brain') && !isLocked;
+              const isBrainDropActive = isBrainDrop && companyBrainUpload.cardId === card.id;
               return (
               <article
                 data-capability-card
                 data-tooltip-disabled="true"
                 data-flip-id={`cap-${card.id}`}
-                className={`tile tile-intake-card${hasIntakeData ? ' tile-ready' : ''}${card.wide ? ' tile-intake-card--wide' : ''}${hasBothButtons && !isLocked ? ' tile-intake-card--btns-only' : ''}${isDimmed && !isLocked ? ' tile-intake-card--dimmed' : ''}${isLocked ? ' tile-intake-card--locked' : ''}${isInactiveUnlocked || card.id === 'survey-status' ? ' tile-intake-card--inactive' : ''}${expandedMobileCards.has(card.id) ? ' tile-intake-card--mobile-expanded' : ''}${isCompanyBrain ? ' tile-intake-card--brain' : ''}${isCompanyBrain && companyBrainUpload.dragOver ? ' tile-intake-card--dropping' : ''}`}
+                className={`tile tile-intake-card${hasIntakeData ? ' tile-ready' : ''}${card.wide ? ' tile-intake-card--wide' : ''}${hasBothButtons && !isLocked ? ' tile-intake-card--btns-only' : ''}${isDimmed && !isLocked ? ' tile-intake-card--dimmed' : ''}${isLocked ? ' tile-intake-card--locked' : ''}${isInactiveUnlocked || card.id === 'survey-status' ? ' tile-intake-card--inactive' : ''}${expandedMobileCards.has(card.id) ? ' tile-intake-card--mobile-expanded' : ''}${isBrainDrop ? ' tile-intake-card--brain' : ''}${isBrainDropActive && companyBrainUpload.dragOver ? ' tile-intake-card--dropping' : ''}`}
                 id={card.domId || `tile-${card.id}`}
                 key={card.id}
-                onDragOver={isCompanyBrain ? (e) => { e.preventDefault(); e.stopPropagation(); if (!companyBrainUpload.dragOver) setCompanyBrainUpload((p) => ({ ...p, dragOver: true })); } : undefined}
-                onDragLeave={isCompanyBrain ? (e) => { if (e.currentTarget.contains(e.relatedTarget)) return; setCompanyBrainUpload((p) => ({ ...p, dragOver: false })); } : undefined}
-                onDrop={isCompanyBrain ? (e) => { e.preventDefault(); e.stopPropagation(); const f = e.dataTransfer?.files?.[0]; if (f) uploadToCompanyBrain(f); } : undefined}
+                onDragOver={isBrainDrop ? (e) => { e.preventDefault(); e.stopPropagation(); if (!(isBrainDropActive && companyBrainUpload.dragOver)) setCompanyBrainUpload((p) => ({ ...p, dragOver: true, cardId: card.id })); } : undefined}
+                onDragLeave={isBrainDrop ? (e) => { if (e.currentTarget.contains(e.relatedTarget)) return; setCompanyBrainUpload((p) => (p.cardId === card.id ? { ...p, dragOver: false } : p)); } : undefined}
+                onDrop={isBrainDrop ? (e) => { e.preventDefault(); e.stopPropagation(); const f = e.dataTransfer?.files?.[0]; if (f) uploadToCompanyBrain(f, card.id); } : undefined}
                 onClick={(e) => {
                   const clickedControl = e.target.closest('button, a, input, textarea, select, summary, details, [role="button"]');
                   if (clickedControl) return;
-                  // Company Brain card never opens the run modal — paperclip / drag-drop only.
+                  // Source Library card never opens the run modal — paperclip / drag-drop only.
                   if (isCompanyBrain) {
                     if (e.target.closest('.tile-mobile-chevron')) toggleMobileCard(card.id);
                     return;
@@ -12489,14 +12717,14 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               >
                 <div className="tile-number">
                   <h3 className="tile-heading tile-intake-heading">{card.title}</h3>
-                  {isCompanyBrain && (
+                  {isBrainDrop && (
                     <button
                       type="button"
                       className="tile-brain-clip-btn"
-                      title="Attach a document to the Company Brain"
-                      aria-label="Attach a document to the Company Brain"
-                      disabled={companyBrainUpload.busy}
-                      onClick={(e) => { e.stopPropagation(); companyBrainFileInputRef.current?.click(); }}
+                      title={`Attach a document to the ${card.title}`}
+                      aria-label={`Attach a document to the ${card.title}`}
+                      disabled={isBrainDropActive && companyBrainUpload.busy}
+                      onClick={(e) => { e.stopPropagation(); brainDropInputs.current[card.id]?.click(); }}
                     >
                       <Paperclip size={13} strokeWidth={1.9} />
                     </button>
@@ -12508,19 +12736,19 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     <svg viewBox="0 0 12 12"><polyline points="2,4 6,8 10,4" /></svg>
                   </span>
                 </div>
-                {isCompanyBrain && (
+                {isBrainDrop && (
                   <input
-                    ref={companyBrainFileInputRef}
+                    ref={(el) => { brainDropInputs.current[card.id] = el; }}
                     type="file"
                     accept=".pdf,.doc,.docx,.txt,.md,.markdown,.csv,.html,.htm,.rtf"
                     style={{ display: 'none' }}
-                    onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadToCompanyBrain(f); e.target.value = ''; }}
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadToCompanyBrain(f, card.id); e.target.value = ''; }}
                   />
                 )}
-                {isCompanyBrain && (companyBrainUpload.dragOver || companyBrainUpload.busy || companyBrainUpload.msg) && (
+                {isBrainDropActive && (companyBrainUpload.dragOver || companyBrainUpload.busy || companyBrainUpload.msg) && (
                   <div className={`tile-brain-dropzone${companyBrainUpload.tone === 'ok' ? ' tile-brain-dropzone--ok' : ''}${companyBrainUpload.tone === 'err' ? ' tile-brain-dropzone--err' : ''}`} aria-live="polite">
                     <Paperclip size={16} strokeWidth={1.8} aria-hidden="true" />
-                    <span>{companyBrainUpload.busy ? companyBrainUpload.msg : companyBrainUpload.msg || 'Drop a document to add it to the Company Brain'}</span>
+                    <span>{companyBrainUpload.busy ? companyBrainUpload.msg : companyBrainUpload.msg || 'Drop a document to add it to the Source Library'}</span>
                   </div>
                 )}
                 {isLocked ? (
@@ -12675,6 +12903,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     </span>
                   ) : card.id === 'audit-summary' ? (
                     renderAuditViz(card.rows, moduleState)
+                  ) : card.id === 'client-brain' ? (
+                    renderClientBrainViz(clientBrain)
                   ) : card.id === 'seo-performance' && hasSeoAuditData ? (
                     renderSeoViz(seoAudit)
                   ) : card.id === 'agent-readiness' && hasAgentReadinessData ? (
@@ -12759,7 +12989,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       <button
                         type="button"
                         className="tile-brain-attach-hint"
-                        onClick={(e) => { e.stopPropagation(); companyBrainFileInputRef.current?.click(); }}
+                        onClick={(e) => { e.stopPropagation(); brainDropInputs.current['knowledge-base']?.click(); }}
                       >
                         <Paperclip size={14} strokeWidth={1.9} aria-hidden="true" />
                         <span>Drag a document here, or click to attach</span>
@@ -13244,7 +13474,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               //   Tab 1 OVERVIEW — all cards in the full card-grid (full visuals).
               //   Tab 2 ONBOARD  — original onboarding cards, line-item only.
               //   Tab 3 AUDIT    — Data Coverage, line-item only.
-              const _onboardIds = ['survey-status', 'knowledge-base', 'business-model', 'industry'];
+              const _onboardIds = ['client-brain', 'survey-status', 'knowledge-base', 'business-model', 'industry'];
               const _auditIds = ['audit-summary'];
               _groups = [
                 { step: _bucketSteps[0], stepIdx: 0, cards: _filteredSorted, renderMode: 'grid' },
@@ -13762,10 +13992,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           role="dialog"
           aria-modal="true"
           aria-label="Dashboard build in progress"
-          /* Ad-hoc terminal (e.g. Studio render) launches from inside the tile
-             detail modal (z 900), so lift the overlay above it; normal runs keep
-             the CSS default (200). */
-          style={adhocTerminal?.open && !showIntakeModal ? { zIndex: 1000 } : undefined}
+          /* Runs launched from inside a tile detail modal (z 900) — an ad-hoc
+             render, or a brief/Generate-Report run started from a card — must
+             sit above it, else the terminal renders behind the open card and
+             looks like nothing happened. Full-page runs keep the CSS default (200). */
+          style={(adhocTerminal?.open || activeTileModal) ? { zIndex: 1000 } : undefined}
         >
 
           {/* Card: auth cardStyle. Survey is always rendered — 2-col layout
@@ -14474,6 +14705,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     </div>
                   ) : activeTileModal.cardId === 'audit-summary' ? (
                     renderAuditViz(activeTileModal.rows, moduleState)
+                  ) : activeTileModal.cardId === 'client-brain' ? (
+                    renderClientBrainViz(clientBrain)
                   ) : activeTileModal.cardId === 'seo-performance' && hasSeoAuditData ? (
                     renderSeoViz(seoAudit)
                   ) : activeTileModal.cardId === 'agent-readiness' && hasAgentReadinessData ? (
@@ -14991,7 +15224,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                 </div>
                               ))}
                               <div className="tile-detail-stat-row">
-                                <span className="tile-detail-stat-label">Knowledge Base</span>
+                                <span className="tile-detail-stat-label">Source Library</span>
                                 <span className="tile-detail-stat-value">
                                   {summarizeKnowledgeBaseSources(brandSystemKnowledgeBaseSources, 'Available for brand truth')}
                                 </span>
@@ -15043,7 +15276,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                 { key: 'cb-d-stage',    label: 'Stage',         value: clientProspect?.stage     || '—' },
                                 { key: 'cb-d-gen',      label: 'Generated',     value: gen.briefGeneratedAt ? new Date(gen.briefGeneratedAt).toLocaleString() : '—' },
                                 { key: 'cb-d-lines',    label: 'Brief size',    value: gen.briefLines ? `${gen.briefLines} lines` : (designMd ? `${designMd.split('\n').length} lines` : '—') },
-                                { key: 'cb-d-kb',       label: 'Knowledge Base', value: summarizeKnowledgeBaseSources(gen.knowledgeBaseSources || globalKnowledgeBaseSources, 'Available for offer / proof context') },
+                                { key: 'cb-d-kb',       label: 'Source Library', value: summarizeKnowledgeBaseSources(gen.knowledgeBaseSources || globalKnowledgeBaseSources, 'Available for offer / proof context') },
 
                                 { key: 'cb-h2',         isHeader: true, label: 'SCRAPED COPY' },
                                 { key: 'cb-c-headline', label: 'Hero headline', value: copy.heroHeadline    || '—' },
@@ -15183,7 +15416,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                 { key: 'cs-d-htmlat',    label: 'HTML generated', value: gen.htmlGeneratedAt ? new Date(gen.htmlGeneratedAt).toLocaleString() : '—' },
                                 { key: 'cs-d-size',      label: 'HTML size',      value: gen.htmlSizeBytes ? `${(gen.htmlSizeBytes / 1024).toFixed(1)} KB` : '—' },
                                 { key: 'cs-d-issues',    label: 'Validation issues', value: Array.isArray(gen.validationIssues) ? `${gen.validationIssues.length}` : '—' },
-                                { key: 'cs-d-kb',        label: 'Knowledge Base', value: summarizeKnowledgeBaseSources(gen.knowledgeBaseSources || globalKnowledgeBaseSources, 'Available for offer / FAQ / proof context') },
+                                { key: 'cs-d-kb',        label: 'Source Library', value: summarizeKnowledgeBaseSources(gen.knowledgeBaseSources || globalKnowledgeBaseSources, 'Available for offer / FAQ / proof context') },
 
                                 { key: 'cs-h2',          isHeader: true, label: 'AI READINESS' },
                                 { key: 'cs-d-before',    label: 'Before',         value: cmp?.before?.score != null ? String(cmp.before.score) : '—' },
@@ -15844,7 +16077,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         <div className="mu-section-head">
                           <div>
                             <h3>30-Day Strategy</h3>
-                            <p>Auto-revised on every brief run from live signals, the Company Brain, and conversation uploads. Edit any day — your edits are marked ✎ and the system keeps them unless new signals strongly contradict them.</p>
+                            <p>Auto-revised on every brief run from live signals, Source Library evidence, and conversation uploads. Edit any day — your edits are marked ✎ and the system keeps them unless new signals strongly contradict them.</p>
                           </div>
                         </div>
                         {strategy30?.revisionNotes ? (
@@ -16150,7 +16383,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                           {customBriefSubmitSuccess && <p className="mu-notice mu-notice--success">{customBriefSubmitSuccess}</p>}
 
                           <div className="mu-footer">
-                            <span className="mu-footer-note">Ingest saves the brief as a Knowledge Base item and embeds its text for downstream questions and pipeline use.</span>
+                            <span className="mu-footer-note">Ingest saves the brief as a Source Library item and embeds its text for downstream questions and pipeline use.</span>
                             <button
                               type="button"
                               className="mu-cta-primary"
@@ -16575,6 +16808,21 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                     <p>Controls how the brief should sound and which writing rules it must follow.</p>
                                   </div>
                                 </div>
+                                <label className="mu-field" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                                  <span>
+                                    <span className="mu-label">Include Client Brain</span>
+                                    <span className="mu-label" style={{ display: 'block', textTransform: 'none', letterSpacing: 0, fontWeight: 400, opacity: 0.7, marginTop: 4 }}>
+                                      Folds the approved Client Brain (identity, positioning, proof, offers, voice) into the analysis so the brief always considers who the client is. On by default.
+                                    </span>
+                                  </span>
+                                  <button
+                                    type="button"
+                                    id="mb-config-include-client-brain"
+                                    className={`sg-btn ${marketingBriefConfig.includeClientBrain !== false ? 'sg-btn-on' : 'sg-btn-off'}`}
+                                    style={{ minWidth: 52, flexShrink: 0 }}
+                                    onClick={() => setMarketingBriefConfig((prev) => ({ ...(prev || {}), includeClientBrain: !(prev?.includeClientBrain !== false) }))}
+                                  >{marketingBriefConfig.includeClientBrain !== false ? 'ON' : 'OFF'}</button>
+                                </label>
                                 <label className="mu-field">
                                   <span className="mu-label">Brief tone</span>
                                   <textarea
@@ -18820,6 +19068,54 @@ const renderAuditViz = (auditRows, _moduleState) => {
   });
 };
 
+// Company Brain (client-brain) shell preview — mirrors the Data Coverage gauge
+// (same renderGaugeViz + dq-gauge styling). Center = overall brain readiness;
+// rings = the same fields shown in the card rows (Sources / Confidence /
+// Context / Gaps) so the shell previews the brain at a glance.
+const CLIENT_BRAIN_CONF_PCT   = { low: 35, medium: 70, high: 100 };
+const CLIENT_BRAIN_CONF_SHORT = { low: 'Low', medium: 'Med', high: 'High' };
+
+// Single source of truth for Company Brain readiness — keeps the tile gauge,
+// the status badge, and the description in agreement (no more "100% gauge +
+// Holding you back" contradiction). Score = mean of sources/confidence/context,
+// lightly penalized by unresolved high-priority gaps.
+const computeClientBrainReadiness = (brain) => {
+  const b = brain || {};
+  const sourceTotal  = Number(b.sourceCount) || 0;
+  const sourceOn     = Number(b.enabledSourceCount) || 0;
+  const sourcePct    = sourceTotal > 0 ? Math.round((sourceOn / sourceTotal) * 100) : 0;
+  const confPct      = CLIENT_BRAIN_CONF_PCT[String(b.confidence || '').toLowerCase()] ?? 0;
+  const gaps         = Number(b.highPriorityMissingCount) || 0;
+  const contextReady = Boolean(b.aiContextPack?.shortContext);
+  const gapsPenalty  = gaps > 0 ? Math.min(gaps * 8, 30) : 0;
+  const base         = Math.round((sourcePct + confPct + (contextReady ? 100 : 0)) / 3);
+  const score        = Math.max(0, Math.min(100, base - gapsPenalty));
+  const level        = score >= 67 ? 'healthy' : score >= 34 ? 'partial' : 'critical';
+  return { score, level, sourcePct, confPct, gaps, contextReady, sourceOn, sourceTotal };
+};
+const renderClientBrainViz = (brain) => {
+  const b = brain || {};
+  const confKey = String(b.confidence || '').toLowerCase();
+  // Shared readiness so the gauge and the tile status badge never disagree.
+  const { score: readiness, sourcePct, confPct, gaps, contextReady, sourceOn, sourceTotal } = computeClientBrainReadiness(b);
+
+  const rings = [
+    { id: 'cb-sources',    label: 'Sources',    icon: { Icon: Database,    color: '#3b82f6' }, val: sourceOn,                          sub: `/ ${sourceTotal}`,                p: sourcePct },
+    { id: 'cb-confidence', label: 'Confidence', icon: null,                                     val: CLIENT_BRAIN_CONF_SHORT[confKey] || '—', sub: 'level',                     p: confPct },
+    { id: 'cb-context',    label: 'Context',    icon: null,                                     val: contextReady ? '✓' : '—',          sub: contextReady ? 'ready' : 'inject', p: contextReady ? 100 : 0 },
+    { id: 'cb-gaps',       label: 'Gaps',       icon: null,                                     val: gaps,                              sub: 'high',                            p: gaps > 0 ? Math.max(10, 100 - gaps * 20) : 100 },
+  ];
+
+  return renderGaugeViz({
+    score:        `${readiness}%`,
+    gaugePct:     readiness,
+    verdictLabel: `${sourceOn}/${sourceTotal} SOURCES`,
+    shellClass:   'dq-gauge-viz',
+    scoreClass:   'dq-gauge-score',
+    rings,
+  });
+};
+
 const renderSeoViz = (seoAudit) => {
   const sc  = seoAudit?.scores ?? {};
   const cwv = seoAudit?.coreWebVitals ?? {};
@@ -20070,9 +20366,10 @@ export const dashboardCss = `
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-auto-rows: auto;
     gap: 1px;
-    background: rgba(42, 36, 32, 0.1);
+    /* Background removed — gaps read transparent over the grid surface. */
+    background: transparent;
   }
-  /* DELIVERABLES bucket — 2x2 grid by default (never 3); 4-across only on ultra-wide. */
+  /* DELIVERABLES bucket — 2x2 grid by default; 3-across only on ultra-wide. */
   .cap-bucket-deliverables .cap-step-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -20729,9 +21026,10 @@ export const dashboardCss = `
     aspect-ratio: 1536 / 1024;
     border-radius: 12px;
     border: 1px solid rgba(42, 36, 32, 0.1);
+    /* Shared shell field — warm glass gradient (card faces + modal shells). */
     background:
-      linear-gradient(135deg, rgba(255,255,255,0.75), rgba(255,255,255,0.22)),
-      linear-gradient(135deg, rgba(93, 201, 184, 0.24), rgba(156, 129, 225, 0.22) 55%, rgba(240, 114, 185, 0.18));
+      linear-gradient(135deg, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.22)),
+      linear-gradient(135deg, rgba(242, 186, 118, 0.2), rgba(246, 138, 177, 0.18) 50%, rgba(162, 141, 236, 0.18));
     display: flex;
     align-items: center;
     justify-content: center;
@@ -21337,7 +21635,10 @@ export const dashboardCss = `
     font-weight: 900;
     letter-spacing: 0.04em;
     line-height: 1.08;
-    text-transform: uppercase;
+    /* Explicit none to beat the .tile-intake-placeholder span uppercase rule:
+       title-derived labels (card.title) read sentence case ("Market Signals");
+       placeholder phrases stored uppercase stay caps. */
+    text-transform: none;
     color: #2a2420;
     text-align: center;
     white-space: normal;
@@ -21679,6 +21980,18 @@ export const dashboardCss = `
     grid-area: auto;
     margin: 0;
     font-weight: 500;
+    /* Sentence case: lowercase the whole title, re-cap only the first letter,
+       so Title-Case data ("Market Signals") reads "Market signals". */
+    text-transform: lowercase;
+  }
+  .tile-heading.tile-intake-heading::first-letter {
+    text-transform: uppercase;
+  }
+  /* Source Library + Client Brain (drag-drop cards) keep their names fully
+     capitalized in the shell — overrides the global sentence-case above. */
+  .tile-intake-card--brain .tile-heading.tile-intake-heading,
+  .tile-intake-card--brain .tile-empty-label {
+    text-transform: uppercase;
   }
   .tile-intake-source-line {
     display: block;
@@ -21809,7 +22122,7 @@ export const dashboardCss = `
     background: #000;
     color: #fff;
   }
-  /* ── Company Brain quick-attach (paperclip + drag-drop) ─────────────────── */
+  /* ── Source Library quick-attach (paperclip + drag-drop) ────────────────── */
   .tile-intake-card--brain { position: relative; }
   .tile-brain-clip-btn {
     display: inline-flex;
@@ -25692,13 +26005,13 @@ export const dashboardCss = `
   @media (min-width: 1400px) {
     #capability-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   }
-  /* DELIVERABLES goes 4-across only on ultra-wide where the cards have room. */
+  /* DELIVERABLES goes 3-across only on ultra-wide where the cards have room. */
   @media (min-width: 1600px) {
-    .cap-bucket-deliverables .cap-step-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .cap-bucket-deliverables .cap-step-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   }
   @media (max-width: 1200px) {
     #founders-hero-shell { grid-template-columns: 1fr; gap: 32px; }
-    /* DELIVERABLES breaks from 4-across to 2x2 on medium and smaller. */
+    /* DELIVERABLES breaks from 3-across to 2x2 on medium and smaller. */
     .cap-bucket-deliverables .cap-step-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   @media (max-width: 900px) {
@@ -25707,12 +26020,12 @@ export const dashboardCss = `
     #dashboard-source-cta-row { width: 100%; }
     #capability-section { padding-top: 0; }
     #capability-section-shell { grid-template-columns: 1fr; gap: 8px; }
-    /* DELIVERABLES drops from 4-across to 2-across at this breakpoint (never 3). */
+    /* DELIVERABLES drops from 3-across to 2-across at this breakpoint. */
     .cap-bucket-deliverables .cap-step-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     #dashboard-source-cta-row { box-shadow: 0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4) !important; }
     /* Mobile: bucket nav returns as a horizontal, scrollable row of
        icon-only circles. Active item gets a gradient ring/circle; no text. */
-    #capability-nav-col { order: -1; display: flex; flex-direction: row; flex-wrap: nowrap; justify-content: flex-start; align-items: center; gap: 16px; padding: 18px 14px; margin-bottom: 4px; width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+    #capability-nav-col { order: -1; display: flex; flex-direction: row; flex-wrap: nowrap; justify-content: space-between; align-items: center; gap: 16px; padding: 18px 14px; margin-bottom: 4px; width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
     #capability-nav-col::-webkit-scrollbar { display: none; }
     #dashboard-source-band { margin-bottom: 0; }
     .capability-nav-btn { flex: 0 0 auto; width: 44px; height: 44px; max-width: none; min-width: 0; padding: 0; border-radius: 50%; flex-direction: row; align-items: center; justify-content: center; gap: 0; background: rgba(255, 255, 255, 1); }
@@ -28655,8 +28968,16 @@ export const dashboardCss = `
   .signals-sg .sg-btn-danger:hover { background: rgba(159,31,23,0.1); border-color: rgba(159,31,23,0.44); }
   .signals-sg .sg-btn-on { color: var(--sg-success); border-color: rgba(40,95,59,0.4); background: rgba(40,95,59,0.1); }
   .signals-sg .sg-btn-off { color: var(--sg-ink-muted); }
-  .signals-sg .sg-cta { isolation: isolate; overflow: hidden; min-height: 40px; padding: 0 18px; border: none; border-radius: 999px; color: #fff; font: 700 13px/1 var(--sg-ui); letter-spacing: 0.01em; text-transform: none; background: linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, var(--sg-a) 0%, var(--sg-b) 52%, var(--sg-c) 100%); box-shadow: 0 0 14px 3px rgba(0,200,228,0.22), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28); }
-  .signals-sg .sg-cta:hover { transform: translateY(-1px); box-shadow: 0 0 26px 5px rgba(0,200,228,0.34), 0 4px 14px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.28); }
+  /* THE single primary button: gradient fill + comet border that animates on
+     hover only. Use at most one sg-cta per action row. Re-asserts its own
+     background on hover so the .sg-btn white-hover (both classes apply) can't
+     wash it out to white-on-white. */
+  .signals-sg .sg-cta { position: relative; isolation: isolate; overflow: hidden; min-height: 40px; padding: 0 18px; border: none; border-radius: 999px; color: #fff; font: 700 13px/1 var(--sg-ui); letter-spacing: 0.01em; text-transform: none; background: linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, var(--sg-a) 0%, var(--sg-b) 52%, var(--sg-c) 100%); box-shadow: 0 0 14px 3px rgba(0,200,228,0.22), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28); }
+  .signals-sg .sg-cta > * { position: relative; z-index: 1; }
+  .signals-sg .sg-cta::before { content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 2px; background: conic-gradient(from var(--cta-angle), transparent 0deg, transparent 180deg, hsla(185,100%,58%,0.12) 200deg, hsla(200,100%,62%,0.35) 225deg, hsla(225,100%,64%,0.6) 250deg, hsla(250,100%,66%,0.78) 275deg, hsla(275,100%,66%,0.88) 300deg, hsla(300,100%,68%,0.94) 322deg, hsla(320,80%,80%,0.97) 338deg, rgba(255,255,255,1) 350deg, transparent 358deg); -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; opacity: 0; transition: opacity 160ms ease; pointer-events: none; }
+  .signals-sg .sg-cta:hover:not(:disabled) { transform: translateY(-1px); background: linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, var(--sg-a) 0%, var(--sg-b) 52%, var(--sg-c) 100%); box-shadow: 0 0 26px 5px rgba(0,200,228,0.34), 0 4px 14px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.28); }
+  .signals-sg .sg-cta:hover:not(:disabled)::before { opacity: 1; animation: cta-border-spin 2.4s linear infinite; }
+  .signals-sg .sg-cta:disabled::before { display: none; }
   .signals-sg .sg-source { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: center; min-height: 58px; padding: 8px 10px 8px 18px; border: 1px solid var(--sg-line); border-radius: 999px; background: rgba(255,255,255,0.68); box-shadow: 0 1px 0 rgba(255,255,255,0.8), inset 0 1px 0 rgba(255,255,255,0.6), 0 10px 26px rgba(42,36,32,0.06); transition: border-color 160ms ease, box-shadow 160ms ease; }
   .signals-sg .sg-source:hover { border-color: rgba(42,36,32,0.22); box-shadow: 0 1px 0 rgba(255,255,255,0.8), inset 0 1px 0 rgba(255,255,255,0.6), 0 14px 34px rgba(42,36,32,0.1); }
   .signals-sg .sg-source-value { display: flex; align-items: center; min-width: 0; gap: 12px; color: rgba(42,36,32,0.7); font: 400 16px/1.25 var(--sg-ui); }
@@ -28725,16 +29046,51 @@ export const dashboardCss = `
   .signals-sg .sg-paper .qtile { background: #fff; border: 1px solid #e3ddd0; border-radius: 12px; padding: 14px 15px; }
   .signals-sg .sg-paper .qtile .q { font: 540 14.5px/1.42 var(--sg-ui); color: #23211c; }
   .signals-sg .sg-paper .qtile .who { display: flex; justify-content: space-between; gap: 8px; font: 11px/1 var(--sg-mono); color: #8a8073; margin-top: 9px; }
-  .client-brain-card { display: grid; gap: 14px; height: 100%; min-height: 0; color: var(--sg-ink); }
-  /* Flex + wrap so the action buttons drop to their own line when they can't
-     fit beside the title — never overlap the eyebrow (grid 'auto' track sized
-     to all buttons on one line and crushed the title to 0). */
+  /* Flex column, content pinned to top. Flex (unlike an implicit 'auto' grid
+     column) keeps every child at the container's width, so a panel with wide
+     content can't stretch the shared tab bar — every tab renders identically. */
+  .client-brain-card { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 14px; min-height: 100%; color: var(--sg-ink); }
+  /* flex-shrink:0 is load-bearing: the card fills the scroll panel via min-height,
+     so without it the flex column squishes children below their content height and
+     overflow:visible content spills onto the next section (the tab collisions). */
+  .client-brain-card > * { min-width: 0; max-width: 100%; flex: 0 0 auto; }
   .client-brain-card .cb-topbar { display: flex; flex-wrap: wrap; gap: 12px 14px; align-items: flex-start; justify-content: space-between; }
   .client-brain-card .cb-topbar > div:first-child { min-width: 0; flex: 1 1 220px; }
   .client-brain-card .cb-topbar h3 { margin: 2px 0 0; font-size: 22px; line-height: 1.15; color: var(--sg-ink); }
-  .client-brain-card .cb-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; flex: 1 1 auto; }
-  .client-brain-card .cb-tabs { position: sticky; top: 0; z-index: 2; background: rgba(244, 241, 234, 0.86); backdrop-filter: blur(10px); padding-top: 2px; }
-  .client-brain-card .cb-panel { display: grid; gap: 12px; min-height: 0; }
+  /* Action rows fill the full width and split evenly — no ragged right-aligned
+     clusters. Children stretch to equal widths and a uniform height. */
+  .client-brain-card .cb-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; flex: 1 1 100%; width: 100%; }
+  .client-brain-card .cb-actions > * { flex: 1 1 0; min-width: 0; }
+  .client-brain-card .cb-actions .sg-btn,
+  .client-brain-card .cb-actions .sg-cta { width: 100%; min-height: 40px; white-space: nowrap; }
+  .client-brain-card .cb-menu { flex: 1 1 0; min-width: 0; }
+  .client-brain-card .cb-menu > .sg-btn { width: 100%; }
+  /* Overflow menu for advanced/debug actions. */
+  .client-brain-card .cb-menu { position: relative; display: inline-flex; }
+  .client-brain-card .cb-menu-backdrop { position: fixed; inset: 0; z-index: 10; border: 0; padding: 0; background: transparent; cursor: default; }
+  /* Opens upward — the action row sits near the bottom of the editor. */
+  .client-brain-card .cb-menu-panel { position: absolute; bottom: calc(100% + 6px); right: 0; z-index: 11; display: grid; gap: 2px; min-width: 200px; padding: 6px; border: 1px solid var(--sg-line); border-radius: 10px; background: rgba(255,255,255,0.97); box-shadow: 0 12px 30px rgba(42,36,32,0.16); }
+  .client-brain-card .cb-menu-item { display: flex; align-items: center; width: 100%; min-height: 36px; padding: 8px 10px; border: 0; border-radius: 7px; background: transparent; color: var(--sg-ink); font: 700 12px/1 var(--sg-mono); letter-spacing: 0.04em; text-transform: uppercase; text-align: left; cursor: pointer; transition: background 0.14s ease; }
+  .client-brain-card .cb-menu-item:hover:not(:disabled) { background: rgba(42,36,32,0.06); }
+  .client-brain-card .cb-menu-item:disabled { opacity: 0.45; cursor: not-allowed; }
+  /* Upload is the prominent first-read primary in the top action row. */
+  .client-brain-card .cb-upload-cta { cursor: pointer; }
+  /* Source tab: thin meta strip above the bare Markdown editor. */
+  .client-brain-card .cb-source-meta-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .client-brain-card .cb-source-meta { color: var(--sg-ink-muted); font: 700 10px/1.2 var(--sg-mono); letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap; }
+  .client-brain-card .cb-source-field { padding: 0; border: 0; background: transparent; }
+  .client-brain-card .cb-source-foot { margin-top: 2px; }
+  @media (max-width: 600px) {
+    .client-brain-card .cb-source-meta { display: none; }
+  }
+  /* Brain Health: one compact strip of stat pills — no section header, no index. */
+  .client-brain-card .cb-health { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 14px; border: 1px solid var(--sg-line); border-radius: var(--sg-radius); background: rgba(255,255,255,0.6); }
+  .client-brain-card .cb-health-label { flex: 0 0 auto; }
+  .client-brain-card .cb-health-stats { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 auto; }
+  /* Pills stretch to fill the row — equal widths, centered content. */
+  .client-brain-card .cb-health-stat { flex: 1 1 0; justify-content: center; display: inline-flex; align-items: baseline; gap: 5px; padding: 4px 10px; border: 1px solid var(--sg-line-soft); border-radius: 999px; background: rgba(255,255,255,0.72); color: var(--sg-ink-muted); font: 700 10px/1.2 var(--sg-mono); letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap; min-width: 0; }
+  .client-brain-card .cb-health-stat strong { color: var(--sg-ink); font-size: 12px; font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0; }
+  .client-brain-card .cb-panel { display: grid; gap: 12px; min-width: 0; min-height: 0; }
   .client-brain-card .cb-source-row { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--sg-line); border-radius: var(--sg-radius); background: rgba(255,255,255,0.76); }
   .client-brain-card .cb-source-row--off { opacity: 0.6; }
   .client-brain-card .cb-source-main { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: start; }
@@ -28755,9 +29111,18 @@ export const dashboardCss = `
   .client-brain-card .cb-usage-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
   /* Internal padding so content keeps consistent gutters and never clips the
      rounded bento-cell corners (desktop + mobile). */
-  #client-brain-modal-panel { padding: 18px 20px; box-sizing: border-box; }
-  /* Sticky tab bar bleeds to the panel edges so its blur backdrop spans full width. */
-  .client-brain-card .cb-tabs { margin: 0 -20px; padding: 2px 20px 0; }
+  /* Reserve the scrollbar gutter so content width is constant across tabs —
+     otherwise short tabs (no scrollbar) render wider than long ones and the
+     flex tab bar visibly shifts as you navigate. */
+  #client-brain-modal-panel { padding: 18px 20px; box-sizing: border-box; scrollbar-gutter: stable; }
+  /* Tighter tab bar for this card: smaller gap + padding, packs the labels closer. */
+  .client-brain-card .tile-detail-tabs { gap: 6px; }
+  .client-brain-card .tile-detail-tab { padding: 9px 6px; letter-spacing: 0.05em; }
+  /* The gradient underline is the only active/focus indicator — drop the browser
+     focus-ring box (it reads as a bordered button on the wider tabs). Keyboard
+     focus still shows the underline, so this stays accessible. */
+  .client-brain-card .tile-detail-tab:focus { outline: none; }
+  .client-brain-card .tile-detail-tab:focus-visible::after { transform: scaleX(1); opacity: 1; }
   .client-brain-card .cb-source-edit { display: flex; justify-content: flex-end; }
   .client-brain-card .cb-edit-link {
     display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
@@ -28771,10 +29136,9 @@ export const dashboardCss = `
   @media (max-width: 820px) {
     .client-brain-card .cb-generated-grid,
     .client-brain-card .cb-usage-grid { grid-template-columns: 1fr; }
-    .client-brain-card .cb-actions { justify-content: flex-start; }
+    .client-brain-card .cb-actions > * { flex: 1 1 calc(50% - 4px); }
     .client-brain-card .cb-use-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     #client-brain-modal-panel { padding: 14px 14px; }
-    .client-brain-card .cb-tabs { margin: 0 -14px; padding: 2px 14px 0; }
   }
 
   /* Video Remix modal kit. Keep this inside dashboardCss because DashboardPage

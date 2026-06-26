@@ -15,7 +15,7 @@ Why the distinction: an earlier draft of these docs asserted a runtime fact ("re
 
 ## Stack `✓code package.json`
 
-Next `16.2.3` · React `19.2.0` · firebase `12.12.0` · firebase-admin `13.8.0` · stripe `22.2.0` · @anthropic-ai/sdk `0.78.0` · three `0.165.0` · gsap `3.14.2`.
+Next `^16.2.3` in `package.json` / `16.2.9` installed in `package-lock.json` · React `19.2.0` · firebase `12.12.0` · firebase-admin `13.8.0` · stripe `22.2.0` · @anthropic-ai/sdk `0.78.0` · three `0.165.0` · gsap `3.14.2`.
 
 ## Launch scope
 
@@ -84,3 +84,11 @@ Pulls: client list, brief run history, run detail, dashboard state, artifact ref
 ## Canonical doc set
 
 This file → [PRODUCTION-LAUNCH-CHECKLIST.md](PRODUCTION-LAUNCH-CHECKLIST.md) · [LAUNCH-DATA-PIPELINE.md](LAUNCH-DATA-PIPELINE.md) · [CREATIVE-BRIEF-DELIVERABLES-WIRING.md](CREATIVE-BRIEF-DELIVERABLES-WIRING.md) · [VIDEO-REMIX-EDITVIDEOS-BRIDGE.md](VIDEO-REMIX-EDITVIDEOS-BRIDGE.md) · [MARKET-SIGNALS-AND-SCOUT-PROJECTION.md](MARKET-SIGNALS-AND-SCOUT-PROJECTION.md) · [EMAIL-DIGEST-CARD.md](EMAIL-DIGEST-CARD.md) · [ADMIN-DASHBOARD-DATA-MAP.md](ADMIN-DASHBOARD-DATA-MAP.md) · [PRODUCTION-READINESS-TRACKER.md](PRODUCTION-READINESS-TRACKER.md) · [DOCS-ACCURACY-REPORT.md](DOCS-ACCURACY-REPORT.md). SEO: [../seo/GEO-ANALYSIS.md](../seo/GEO-ANALYSIS.md).
+
+## Active Supporting Docs
+
+These are active but not launch-certification docs:
+
+- Gated Client Brain / Company Brain: [../company-brain/README.md](../company-brain/README.md)
+- Marketing Brief feature docs: [../features/marketing-brief/README.md](../features/marketing-brief/README.md)
+- Mockup Studio feature docs: [../features/studio/README.md](../features/studio/README.md)

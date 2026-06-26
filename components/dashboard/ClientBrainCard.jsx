@@ -25,7 +25,7 @@ const DOWNSTREAM = [
   { label: 'Creative Brief', status: 'wired', note: 'Cover paragraph uses CLIENT_CONTEXT (useFor: copy).' },
   { label: 'Marketing Insights', status: 'planned', note: 'Planned optional context consumer.' },
   { label: 'Social Preview', status: 'planned', note: 'Planned optional context consumer.' },
-  { label: 'Knowledge Base', status: 'planned', note: 'Planned optional context consumer.' },
+  { label: 'Source Library', status: 'planned', note: 'Planned optional evidence consumer.' },
   { label: 'Future Lead Gen', status: 'planned', note: 'Planned optional context consumer.' },
 ];
 
@@ -37,7 +37,7 @@ const SOURCE_CARD = {
   onboarding: { cardId: 'brand-system', label: 'Brand system' },
   brand_guide: { cardId: 'style-guide', label: 'Style guide' },
   marketing_insight: { cardId: 'marketing-brief', label: 'Marketing brief' },
-  knowledge_base: { cardId: 'knowledge-base', label: 'Knowledge base' },
+  knowledge_base: { cardId: 'knowledge-base', label: 'Source Library' },
 };
 
 const SECTION_CARD = {
@@ -45,8 +45,17 @@ const SECTION_CARD = {
   positioning: { cardId: 'brand-system', label: 'Brand system' },
   audience: { cardId: 'marketing-brief', label: 'Marketing brief' },
   offers: { cardId: 'create-client', label: 'Client record' },
-  proof: { cardId: 'knowledge-base', label: 'Knowledge base' },
+  proof: { cardId: 'knowledge-base', label: 'Source Library' },
   content: { cardId: 'marketing-brief', label: 'Marketing brief' },
+};
+
+const DOMAIN_LABELS = {
+  identity: 'Identity',
+  authority: 'Authority',
+  market: 'Market',
+  discovery: 'Discovery',
+  content: 'Content',
+  opportunity: 'Opportunity',
 };
 
 function EditLink({ cardId, label, onOpenCard, children }) {
@@ -97,6 +106,17 @@ function FieldList({ title, values, edit, onOpenCard }) {
   );
 }
 
+function decisionItems(decision) {
+  const value = decision?.value ?? decision;
+  return Array.isArray(value) ? value.filter(Boolean) : [];
+}
+
+function decisionText(decision, fallback = 'Not set') {
+  const value = decision?.value ?? decision;
+  if (Array.isArray(value)) return value.filter(Boolean).join(', ') || fallback;
+  return text(value, fallback);
+}
+
 function SourceRow({ source, onToggle, onUseForToggle, onOpenCard }) {
   const enabled = source.enabled !== false;
   const editTarget = SOURCE_CARD[source.sourceType];
@@ -144,14 +164,19 @@ function SourceRow({ source, onToggle, onUseForToggle, onOpenCard }) {
 }
 
 export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
-  const [tab, setTab] = useState('sources');
+  const [tab, setTab] = useState('source');
   const [brain, setBrain] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [copied, setCopied] = useState('');
+  const [markdownSource, setMarkdownSource] = useState('');
+  const [markdownBaseline, setMarkdownBaseline] = useState('');
+  const [sourceFileName, setSourceFileName] = useState('');
+  const [sourceDirty, setSourceDirty] = useState(false);
   const [voiceDraft, setVoiceDraft] = useState({ toneSummary: '', scribeInstructions: '', avoidText: '' });
   const [voiceDirty, setVoiceDirty] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const loadBrain = useCallback(async () => {
     setLoading(true);
@@ -165,8 +190,13 @@ export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
       setBrain(data.brain || null);
+      const source = data.markdownSource || data.brain?.markdownSource || '';
+      setMarkdownSource(source);
+      setMarkdownBaseline(source);
+      setSourceDirty(false);
+      setSourceFileName('');
     } catch (err) {
-      setError(err.message || 'Could not load Client Brain.');
+      setError(err.message || 'Could not load Company Brain.');
     } finally {
       setLoading(false);
     }
@@ -205,6 +235,11 @@ export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
     return score >= 7 ? 'high' : score >= 4.7 ? 'medium' : 'low';
   }, [enabledCount, sourceRefs]);
   const confidence = brain?.confidence || localConfidence;
+  const completion = brain?.completion || {};
+  const completionDomains = completion.domains || {};
+  const missingDecisionQueue = arr(brain?.missingDecisionQueue);
+  const acquisitionMethods = brain?.decisionAcquisition?.methods || {};
+  const discoveryDecisions = brain?.decisions?.intelligence?.discovery || {};
 
   function updateSource(id, updater) {
     setBrain((prev) => ({
@@ -265,12 +300,74 @@ export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
         await navigator.clipboard?.writeText(data.CLIENT_CONTEXT);
         setCopied('Copied CLIENT_CONTEXT.');
       }
-      if (action === 'generate') setTab('generated');
+      if (action === 'generate') setTab('approved');
     } catch (err) {
-      setError(err.message || `Client Brain ${action} failed.`);
+      setError(err.message || `Company Brain ${action} failed.`);
     } finally {
       setBusy('');
     }
+  }
+
+  function updateMarkdownSource(value) {
+    setMarkdownSource(value);
+    setSourceDirty(value !== markdownBaseline);
+  }
+
+  async function importMarkdownFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const source = await file.text();
+      setMarkdownSource(source);
+      setSourceDirty(source !== markdownBaseline);
+      setSourceFileName(file.name);
+      setError('');
+    } catch (err) {
+      setError(err.message || 'Could not read CLIENT_BRAIN.md.');
+    } finally {
+      event.target.value = '';
+    }
+  }
+
+  async function injectMarkdownSource() {
+    const source = String(markdownSource || '').trim();
+    if (!source) {
+      setError('CLIENT_BRAIN.md source is required.');
+      return;
+    }
+    setBusy('source');
+    setError('');
+    try {
+      const token = await getIdToken();
+      const res = await fetch('/api/dashboard/client-brain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ markdownSource: source }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      const savedSource = data.brain?.markdownSource || source;
+      setBrain(data.brain || brain);
+      setMarkdownSource(savedSource);
+      setMarkdownBaseline(savedSource);
+      setSourceDirty(false);
+      setSourceFileName('');
+      onSaved?.(data.brain);
+      setCopied('Injected CLIENT_BRAIN.md.');
+      setTab('approved');
+      setTimeout(() => setCopied(''), 1800);
+    } catch (err) {
+      setError(err.message || 'Could not inject CLIENT_BRAIN.md.');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  function resetMarkdownDraft() {
+    setMarkdownSource(markdownBaseline);
+    setSourceDirty(false);
+    setSourceFileName('');
+    setError('');
   }
 
   // Save the edited voice as the single source of tone for Scribe + Guardian.
@@ -319,28 +416,10 @@ export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
   }
 
   return (
-    <div id="client-brain-card" className="client-brain-card signals-sg">
+    <div id="client-brain-card" className="client-brain-card signals-sg" data-tooltip-disabled="true">
       <div className="cb-topbar">
         <div>
-          <span className="mu-label">Client Brain</span>
-          <h3>{text(brain?.identity?.name, 'Client profile')}</h3>
-        </div>
-        <div className="cb-actions">
-          <button type="button" className="sg-btn" disabled={Boolean(busy)} onClick={saveSources}>
-            {busy === 'save' ? 'Saving...' : 'Save sources'}
-          </button>
-          <button type="button" className="sg-btn sg-cta" disabled={Boolean(busy)} onClick={() => runAction('generate')}>
-            {busy === 'generate' ? 'Generating...' : 'Regenerate'}
-          </button>
-          <button type="button" className="sg-btn" disabled={Boolean(busy)} onClick={() => runAction('generate', { mode: 'llm' }, 'generate-ai')} title="Refine free-text fields with the model, grounded in enabled sources.">
-            {busy === 'generate-ai' ? 'Refining...' : 'Regenerate (AI)'}
-          </button>
-          <button type="button" className="sg-btn sg-btn-on" disabled={Boolean(busy)} onClick={() => runAction('approve', { status: 'approved' })}>
-            Approve
-          </button>
-          <button type="button" className="sg-btn" disabled={Boolean(busy)} onClick={() => runAction('approve', { status: 'stale' })}>
-            Mark stale
-          </button>
+          <h3>{text(brain?.identity?.name, 'Company Brain')}</h3>
         </div>
       </div>
 
@@ -348,30 +427,23 @@ export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
       {copied ? <p className="sg-notice">{copied}</p> : null}
       {brain?.regenerationError ? <p className="sg-notice sg-notice-danger">AI refine fell back to deterministic: {brain.regenerationError}</p> : null}
 
-      <section className="sg-section">
-        <div className="sg-head">
-          <span className="sg-index">01</span>
-          <div>
-            <h3>Brain Health</h3>
-            <p>Source coverage, generation status, confidence, gaps, and conflicts.{brain?.generatedBy ? ` Built: ${brain.generatedBy === 'model' ? 'AI-refined' : 'deterministic'}.` : ''}</p>
-          </div>
-        </div>
-        <div className="sg-metrics">
-          <div className="sg-metric"><span className="sg-metric-value">{brain?.status || 'draft'}</span><span className="sg-metric-label">Status</span></div>
-          <div className="sg-metric"><span className="sg-metric-value">{enabledCount}/{sourceRefs.length}</span><span className="sg-metric-label">Sources on</span></div>
-          <div className="sg-metric"><span className="sg-metric-value">{confidence}</span><span className="sg-metric-label">Confidence</span></div>
-          <div className="sg-metric"><span className="sg-metric-value">{highMissing}</span><span className="sg-metric-label">High gaps</span></div>
-          <div className="sg-metric"><span className="sg-metric-value">{contradictions.length}</span><span className="sg-metric-label">Conflicts</span></div>
+      <section className="cb-health" aria-label="Brain health">
+        <span className="mu-label cb-health-label">Brain Health</span>
+        <div className="cb-health-stats">
+          <span className="cb-health-stat"><strong>{brain?.status || 'draft'}</strong> status</span>
+          <span className="cb-health-stat"><strong>{enabledCount}/{sourceRefs.length}</strong> sources</span>
+          <span className="cb-health-stat"><strong>{confidence}</strong> confidence</span>
+          <span className="cb-health-stat"><strong>{highMissing}</strong> gaps</span>
+          <span className="cb-health-stat"><strong>{contradictions.length}</strong> conflicts</span>
         </div>
       </section>
 
-      <div className="tile-detail-tabs cb-tabs">
+      <div id="client-brain-tab-bar" className="tile-detail-tabs">
         {[
-          ['sources', 'SOURCES'],
-          ['generated', 'GENERATED'],
-          ['voice', 'VOICE'],
-          ['context', 'CONTEXT'],
-          ['usage', 'USAGE'],
+          ['source', 'BRAIN SOURCE'],
+          ['approved', 'APPROVED BRAIN'],
+          ['sourcesGaps', 'SOURCES & GAPS'],
+          ['consumers', 'CONSUMERS'],
         ].map(([id, label]) => (
           <button key={id} type="button" className={`tile-detail-tab${tab === id ? ' tile-detail-tab--active' : ''}`} onClick={() => setTab(id)}>
             {label}
@@ -379,15 +451,92 @@ export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
         ))}
       </div>
 
-      {tab === 'sources' && (
+      {tab === 'source' && (
+        <section id="client-brain-source-editor" className="cb-panel">
+          <label className="cb-field-block cb-source-field">
+            <textarea
+              rows={14}
+              value={markdownSource}
+              onChange={(e) => updateMarkdownSource(e.target.value)}
+              spellCheck={false}
+              placeholder="Paste CLIENT_BRAIN.md here, or use Upload .md…"
+              style={{ ...cbInputStyle, marginTop: 0, fontFamily: 'var(--font-mono)', fontSize: 12, minHeight: 300 }}
+            />
+          </label>
+
+          <div className="cb-actions">
+            {/* Primary flow sits beneath the editor: Upload a CLIENT_BRAIN.md, Inject
+                to compile + persist the runtime Brain. Everything else is in More. */}
+            <input
+              id="client-brain-md-file"
+              type="file"
+              accept=".md,.markdown,text/markdown,text/plain"
+              onChange={importMarkdownFile}
+              style={{ display: 'none' }}
+            />
+            <label htmlFor="client-brain-md-file" className="sg-btn sg-cta cb-upload-cta">
+              <span>⬆ Upload .md</span>
+            </label>
+            <button type="button" className="sg-btn" disabled={Boolean(busy) || !String(markdownSource || '').trim()} onClick={injectMarkdownSource}>
+              {busy === 'source' ? 'Injecting...' : 'Inject Brain'}
+            </button>
+            <div className="cb-menu">
+              <button type="button" className="sg-btn" aria-haspopup="true" aria-expanded={menuOpen} disabled={Boolean(busy)} onClick={() => setMenuOpen((o) => !o)}>
+                More ⋯
+              </button>
+              {menuOpen ? (
+                <>
+                  <button type="button" className="cb-menu-backdrop" aria-hidden="true" tabIndex={-1} onClick={() => setMenuOpen(false)} />
+                  <div className="cb-menu-panel" role="menu">
+                    <button type="button" role="menuitem" className="cb-menu-item" disabled={Boolean(busy)} onClick={() => { setMenuOpen(false); runAction('generate'); }}>
+                      {busy === 'generate' ? 'Regenerating...' : 'Regenerate Context'}
+                    </button>
+                    {brain?.status !== 'approved' ? (
+                      <button type="button" role="menuitem" className="cb-menu-item" disabled={Boolean(busy)} onClick={() => { setMenuOpen(false); runAction('approve', { status: 'approved' }); }}>
+                        Approve
+                      </button>
+                    ) : null}
+                    <button type="button" role="menuitem" className="cb-menu-item" disabled={Boolean(busy)} onClick={() => { setMenuOpen(false); saveSources(); }}>
+                      {busy === 'save' ? 'Saving...' : 'Save source toggles'}
+                    </button>
+                    <button type="button" role="menuitem" className="cb-menu-item" disabled={Boolean(busy)} onClick={() => { setMenuOpen(false); runAction('generate', { mode: 'llm' }, 'generate-ai'); }}>
+                      {busy === 'generate-ai' ? 'Refining...' : 'Regenerate with AI'}
+                    </button>
+                    <button type="button" role="menuitem" className="cb-menu-item" disabled={Boolean(busy)} onClick={() => { setMenuOpen(false); runAction('approve', { status: 'stale' }); }}>
+                      Mark stale
+                    </button>
+                    <button type="button" role="menuitem" className="cb-menu-item" disabled={Boolean(busy)} onClick={() => { setMenuOpen(false); runAction('export'); }}>
+                      Export
+                    </button>
+                    <button type="button" role="menuitem" className="cb-menu-item" disabled={Boolean(busy) || !sourceDirty} onClick={() => { setMenuOpen(false); resetMarkdownDraft(); }}>
+                      Reset draft
+                    </button>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="cb-source-meta-row">
+            <span className="mu-label">{sourceFileName ? `Loaded ${sourceFileName} — review, then Inject` : 'CLIENT_BRAIN.md — upload or paste, then Inject'}</span>
+            <span className="cb-source-meta">{brain?.generatedBy === 'markdown' ? 'markdown' : 'template'} · {brain?.markdownMeta?.schemaVersion || 'v1'} · {brain?.markdownMeta?.status || brain?.status || 'draft'} · {sourceDirty ? 'unsaved' : 'saved'}</span>
+          </div>
+        </section>
+      )}
+
+      {tab === 'sourcesGaps' && (
         <section className="cb-panel">
+          <div className="cb-field-block">
+            <span className="mu-label">Source Toggles</span>
+            <p className="cb-muted">Supporting documents and generated sources can inform Brain generation, but they do not replace the approved CLIENT_BRAIN.md runtime source.</p>
+          </div>
           {sourceRefs.length ? sourceRefs.map((source) => (
             <SourceRow key={source.id} source={source} onToggle={toggleSource} onUseForToggle={toggleUseFor} onOpenCard={onOpenCard} />
           )) : <div className="sg-empty">No sources discovered yet.</div>}
         </section>
       )}
 
-      {tab === 'generated' && (
+      {tab === 'approved' && (
         <section className="cb-panel cb-generated-grid">
           <div className="cb-field-block">
             <span className="mu-label">Identity</span>
@@ -401,9 +550,9 @@ export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
             <EditLink cardId={SECTION_CARD.positioning.cardId} label={SECTION_CARD.positioning.label} onOpenCard={onOpenCard} />
           </div>
           <div className="cb-field-block">
-            <span className="mu-label">Voice</span>
+            <span className="mu-label">Content / Voice</span>
             <p>{text(brain?.voice?.toneSummary)}</p>
-            <button type="button" className="cb-edit-link" onClick={() => setTab('voice')}>Edit voice ↗</button>
+            <p className="cb-muted">Approved tone belongs in CLIENT_BRAIN.md under Content Intelligence &gt; Voice. Supporting examples stay in Content Library or Conversation Intelligence.</p>
           </div>
           <FieldList title="Audience" values={brain?.audience?.primary} edit={SECTION_CARD.audience} onOpenCard={onOpenCard} />
           <FieldList title="Offers" values={brain?.offers?.services} edit={SECTION_CARD.offers} onOpenCard={onOpenCard} />
@@ -427,8 +576,81 @@ export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
         </section>
       )}
 
-      {tab === 'voice' && (
+      {tab === 'sourcesGaps' && (
+        <section className="cb-panel">
+          <div className="cb-field-block">
+            <span className="mu-label">Completion</span>
+            <div className="sg-metrics">
+              <div className="sg-metric"><span className="sg-metric-value">{completion.score ?? 0}%</span><span className="sg-metric-label">Overall</span></div>
+              {Object.entries(DOMAIN_LABELS).map(([key, label]) => (
+                <div key={key} className="sg-metric">
+                  <span className="sg-metric-value">{completionDomains[key]?.score ?? 0}%</span>
+                  <span className="sg-metric-label">{label}</span>
+                </div>
+              ))}
+            </div>
+            <p className="cb-muted">Completion is informational only. Cards can still run while the operator improves missing decisions.</p>
+          </div>
+
+          <div className="cb-field-block">
+            <span className="mu-label">Decision Acquisition</span>
+            {Object.keys(acquisitionMethods).length ? (
+              <div className="cb-chip-row">
+                {Object.entries(acquisitionMethods).map(([method, count]) => (
+                  <span key={method} className="sg-chip">{method}: {count}</span>
+                ))}
+              </div>
+            ) : (
+              <p className="cb-muted">No acquisition metadata yet.</p>
+            )}
+          </div>
+
+          <div className="cb-field-block">
+            <span className="mu-label">Research Queue</span>
+            {missingDecisionQueue.length ? (
+              <ul className="cb-mini-list">
+                {missingDecisionQueue.slice(0, 12).map((item, index) => (
+                  <li key={`${item.field}-${index}`}>
+                    <strong>{String(item.priority || 'medium').toUpperCase()}</strong> · {item.action || item.label}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="cb-muted">No missing decisions detected.</p>
+            )}
+          </div>
+
+          <div className="cb-field-block">
+            <span className="mu-label">Discovery Intelligence</span>
+            <div className="cb-generated-grid">
+              <FieldList title="Keywords" values={decisionItems(discoveryDecisions.keywords)} />
+              <FieldList title="Platforms" values={decisionItems(discoveryDecisions.primaryPlatforms)} />
+              <FieldList title="Communities" values={decisionItems(discoveryDecisions.communities)} />
+              <FieldList title="Publications" values={decisionItems(discoveryDecisions.publications)} />
+              <FieldList title="Podcasts" values={decisionItems(discoveryDecisions.podcasts)} />
+              <FieldList title="Events" values={decisionItems(discoveryDecisions.events)} />
+              <FieldList title="Directories" values={decisionItems(discoveryDecisions.directories)} />
+              <FieldList title="Awards" values={decisionItems(discoveryDecisions.awards)} />
+              <FieldList title="Social Ecosystems" values={decisionItems(discoveryDecisions.socialEcosystems)} />
+              <FieldList title="Hashtags" values={decisionItems(discoveryDecisions.hashtags)} />
+              <FieldList title="Watch Lists" values={decisionItems(discoveryDecisions.watchLists)} />
+            </div>
+            <p className="cb-muted">Feeds search defaults, Market Insights, watchlists, Strategy Builder, and Lead Gen discovery paths.</p>
+          </div>
+
+          <div className="cb-field-block">
+            <span className="mu-label">Discovery Summary</span>
+            <p>{decisionText(discoveryDecisions.keywords)}</p>
+          </div>
+        </section>
+      )}
+
+      {tab === 'approved' && (
         <section id="client-brain-voice-editor" className="cb-panel cb-voice-editor">
+          <div className="cb-field-block">
+            <span className="mu-label">Voice Editor</span>
+            <p className="cb-muted">This transitional editor updates the compiled voice profile. The durable source of truth should also be reflected in CLIENT_BRAIN.md &gt; Content Intelligence &gt; Voice.</p>
+          </div>
           <p className="cb-muted">
             {brain?.status === 'approved'
               ? 'This brain is approved — saved voice applies to Scribe + Guardian immediately.'
@@ -470,7 +692,7 @@ export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
         </section>
       )}
 
-      {tab === 'context' && (
+      {tab === 'consumers' && (
         <section className="cb-panel">
           <div className="cb-copy-head">
             <span className="mu-label">Output Context Pack</span>
@@ -480,12 +702,12 @@ export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
               <button type="button" className="sg-btn" disabled={Boolean(busy)} onClick={() => runAction('export')}>Export</button>
             </div>
           </div>
-          <pre className="cb-context-box">{brain?.aiContextPack?.shortContext || 'Generate the Client Brain to create CLIENT_CONTEXT.'}</pre>
+          <pre className="cb-context-box">{brain?.aiContextPack?.shortContext || 'Generate the Company Brain to create CLIENT_CONTEXT.'}</pre>
           <FieldList title="Prompt Rules" values={brain?.aiContextPack?.promptRules} />
         </section>
       )}
 
-      {tab === 'usage' && (
+      {tab === 'consumers' && (
         <section className="cb-panel">
           <div className="cb-usage-grid">
             {DOWNSTREAM.map((item) => (

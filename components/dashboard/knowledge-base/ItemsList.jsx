@@ -22,7 +22,7 @@ export default function ItemsList({ items, loading, deletingId, onDelete }) {
   }
 
   if (!items.length) {
-    return <div className="mu-empty" style={{ minHeight: 80 }}>No Knowledge Base items yet. Add pasted text or a URL to begin.</div>;
+    return <div className="mu-empty" style={{ minHeight: 80 }}>No Source Library items yet. Add pasted text, a URL, or a document to begin.</div>;
   }
 
   return (
@@ -71,7 +71,7 @@ export default function ItemsList({ items, loading, deletingId, onDelete }) {
               <button
                 id={`kb-delete-${itemId}`}
                 type="button"
-                aria-label={`Delete ${item.title || 'Knowledge Base item'}`}
+                aria-label={`Delete ${item.title || 'Source Library item'}`}
                 title="Delete item"
                 onClick={() => onDelete(item.id)}
                 disabled={deleting}

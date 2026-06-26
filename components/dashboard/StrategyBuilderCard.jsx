@@ -41,6 +41,7 @@ function makeDefaultConfig(bootstrap) {
       maxHashtags: Number.isFinite(saved.campaign?.maxHashtags) ? saved.campaign.maxHashtags : 2,
       promotions: Array.isArray(saved.campaign?.promotions) ? saved.campaign.promotions : [],
     },
+    editorial: saved.editorial && typeof saved.editorial === 'object' ? saved.editorial : { enabled: true, campaigns: [] },
     events: bootstrap?.dashboardState?.strategyBuilder?.events || [],
     postsPerDay: saved.postsPerDay || 1,
     days: saved.days || 30,

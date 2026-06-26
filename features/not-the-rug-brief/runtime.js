@@ -98,6 +98,24 @@ async function runClientPipeline({ clientId, clientConfig = null, fresh = false,
     console.warn(`[${new Date().toISOString()}] RUNTIME: knowledge base context skipped — ${err.message}`);
   }
 
+  // ── 1a. Client Brain context (curated brand/positioning/voice layer) ─────────
+  // Toggle: marketingBriefConfig.includeClientBrain (default ON). Mirrors the KB
+  // context attach — Scribe folds config.clientBrainContext into the analysis.
+  // Only an APPROVED brain feeds it (loadClientBrainContext requireApproved=true).
+  try {
+    const includeBrain = clientConfig?.marketingBriefConfig?.includeClientBrain !== false;
+    if (includeBrain) {
+      const { loadClientBrainContext } = require('../client-brain/store.cjs');
+      const block = await loadClientBrainContext(clientId, { maxChars: 2400 });
+      if (block) {
+        config.clientBrainContext = { available: true, block };
+        console.log(`[${new Date().toISOString()}] RUNTIME: client brain context loaded (${block.length} chars)`);
+      }
+    }
+  } catch (err) {
+    console.warn(`[${new Date().toISOString()}] RUNTIME: client brain context skipped — ${err.message}`);
+  }
+
   // ── 1b. Conversation intake context ─────────────────────────────────────────
   // The Marketing Director's pasted team-conversation dump is parsed into tagged
   // items and stored on the same client_configs doc, so it arrives via the
