@@ -12,10 +12,6 @@
 
 const fb = require('../../api/_lib/firebase-admin.cjs');
 
-// Reuse a published brief younger than this instead of re-running (and re-paying)
-// on a fresh send. Protects against repeated "Run & Send" clicks within minutes.
-const REUSE_WINDOW_MINUTES = 90;
-
 function compactSlug(value, fallback) {
   const slug = String(value || '')
     .trim().toLowerCase()
@@ -108,27 +104,19 @@ async function publishBriefDoc({ clientId, client, html }) {
   return `/briefs/${encodeURIComponent(publicClientSlug)}/${encodeURIComponent(publicBriefSlug)}`;
 }
 
-/** Run a fresh brief, persist it, render + publish it. Returns the public path or null. */
-async function runAndPublishFreshBrief({ clientId, client }) {
-  const { runClientPipeline } = require('../not-the-rug-brief/runtime.js');
-  const runLifecycle = require('../../api/_lib/run-lifecycle.cjs');
-
-  const ccSnap = await fb.adminDb.collection('client_configs').doc(clientId).get();
-  const clientConfig = ccSnap.exists ? ccSnap.data() : null;
-
-  const result = await runClientPipeline({ clientId, clientConfig });
-  if (!result || result.status !== 'succeeded') throw new Error(`pipeline status ${result?.status || 'unknown'}`);
-
-  // Persist to dashboard_state so the render + the dashboard both see the new brief.
-  const runId = result.pipelineRunId || `digest-${clientId}-${Date.now()}`;
-  try { await runLifecycle.completeRun(runId, clientId, result); } catch { /* non-fatal */ }
-
-  const html = await renderExecutiveBriefHtml(clientId, client);
-  return publishBriefDoc({ clientId, client, html });
-}
-
 /**
  * Resolve the hosted Executive Brief URL for the digest email.
+ *
+ * The daily-digest route refreshes the client's intelligence BEFORE calling this
+ * (on a real send), so `dashboard_state` is already fresh here. 'fresh' therefore
+ * just renders that fresh state and publishes it to today's hosted slug — it does
+ * NOT run its own pipeline (that would double the cost). Every failure degrades to
+ * the newest published brief, or null, so the email is never blocked.
+ *
+ * @param {object} opts
+ * @param {string} opts.mode  'fresh' | 'latest' | 'off'
+ * @param {boolean} opts.allowFreshRun  true only on a real send; a preview passes
+ *   false so it never publishes (just links the newest published brief).
  * @returns {Promise<string|null>} absolute URL, or null to use the caller's fallback.
  */
 async function resolveExecutiveBriefUrl({ clientId, mode = 'fresh', origin = '', allowFreshRun = false } = {}) {
@@ -142,23 +130,21 @@ async function resolveExecutiveBriefUrl({ clientId, mode = 'fresh', origin = '',
     client = cSnap.exists ? cSnap.data() || {} : {};
   } catch { client = {}; }
 
+  // 'fresh' on a real send: render the just-refreshed dashboard_state brief and
+  // publish it to today's hosted slug, overwriting any stale same-day content.
+  if (mode === 'fresh' && allowFreshRun) {
+    try {
+      const html = await renderExecutiveBriefHtml(clientId, client);
+      const path = await publishBriefDoc({ clientId, client, html });
+      return abs(path);
+    } catch {
+      // render/publish failed → fall through to newest published / null.
+    }
+  }
+
+  // 'latest', or a 'fresh' preview, or a 'fresh' publish that failed.
   const latest = await getLatestPublishedBrief(clientId).catch(() => null);
-
-  // 'latest', or 'fresh' on a preview (no paid run) → newest published brief.
-  if (mode !== 'fresh' || !allowFreshRun) return abs(latest?.path || null);
-
-  // 'fresh': reuse a very recent publish to avoid reburning cost on repeat sends.
-  if (latest && (Date.now() - latest.updatedAtMs) < REUSE_WINDOW_MINUTES * 60 * 1000) {
-    return abs(latest.path);
-  }
-
-  try {
-    const freshPath = await runAndPublishFreshBrief({ clientId, client });
-    return abs(freshPath || latest?.path || null);
-  } catch {
-    // Any failure (pipeline, render import, publish) → newest published or null.
-    return abs(latest?.path || null);
-  }
+  return abs(latest?.path || null);
 }
 
 module.exports = { resolveExecutiveBriefUrl, getLatestPublishedBrief };

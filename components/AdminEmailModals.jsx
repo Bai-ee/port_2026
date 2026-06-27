@@ -125,7 +125,9 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
   }, [user, form]);
 
   // ── Preview state (the rendered email) ──
-  const [previewMode, setPreviewMode] = useState('template'); // 'template' | 'live'
+  // Default to LIVE so the preview = exactly what sends (same route code path,
+  // same toggles, real data). Template is an opt-in "layout only" view.
+  const [previewMode, setPreviewMode] = useState('live'); // 'live' | 'template'
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
   const [preview, setPreview] = useState(null); // { html, paragraph, placeholder }
@@ -156,22 +158,29 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
 
   const runAndSend = useCallback(async () => {
     if (!user) return;
-    if (typeof window !== 'undefined' && !window.confirm('Run the digest with live data and send it to the configured recipient now?')) return;
-    setSendStatus({ kind: 'pending', msg: 'Running & sending…' });
+    if (typeof window !== 'undefined' && !window.confirm('Run a FRESH brief for every digest client, then send the email to the configured recipient now? Saves your current settings and runs the brief pipeline (LLM cost). ~1–2 min.')) return;
+    setSendStatus({ kind: 'pending', msg: 'Saving settings…' });
     try {
+      // Persist current toggles first so the send uses exactly what you configured
+      // (the send reads saved config, not unsaved form state).
+      if (form) {
+        const saved = await authFetch(user, '/api/admin/digest-config', { method: 'POST', body: JSON.stringify(form) });
+        if (saved?.config) setForm(saved.config);
+      }
+      setSendStatus({ kind: 'pending', msg: 'Running fresh briefs & sending… (~1–2 min)' });
       await authFetch(user, '/api/admin/daily-digest?send=1');
-      setSendStatus({ kind: 'ok', msg: 'Sent.' });
+      setSendStatus({ kind: 'ok', msg: 'Sent with fresh data.' });
     } catch (e) {
       setSendStatus({ kind: 'error', msg: e.message });
     }
-  }, [user]);
+  }, [user, form]);
 
   useEffect(() => { loadSettings(); }, [loadSettings]);
 
-  // Reload the template preview each time the PREVIEW tab is opened, so it
-  // reflects the latest include toggles from the SETTINGS tab.
+  // Reload the LIVE preview each time the PREVIEW tab is opened, so it reflects
+  // the latest include toggles AND real data — i.e. what will actually send.
   useEffect(() => {
-    if (tab === 'preview') loadPreview('template', form?.include);
+    if (tab === 'preview') loadPreview('live', form?.include);
   }, [tab, form, loadPreview]);
 
   const isTemplate = previewMode === 'template';
@@ -425,7 +434,7 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
                   background: preview?.placeholder ? 'rgba(212,168,67,0.12)' : 'rgba(74,158,92,0.12)',
                   borderRadius: 6, marginBottom: 8,
                 }}>
-                  {preview?.placeholder ? 'Template preview · placeholder data — reflects your section toggles; real data fills in on Run & Send' : 'Live preview · real data from the last 24 hours (honors your SETTINGS)'}
+                  {preview?.placeholder ? 'Template preview · placeholder data — layout only; switch to live to see what sends' : 'Live preview · real data + your toggles — exactly what sends. Run & Send refreshes every brief first.'}
                 </div>
                 {preview?.html ? (
                   <iframe
@@ -443,7 +452,7 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
             <span className="mb-config-actionbar-note">
               {sendStatus
                 ? (sendStatus.kind === 'error' ? `Error: ${sendStatus.msg}` : sendStatus.msg)
-                : (isTemplate ? 'Reviewing the layout with placeholder data — nothing is generated or sent.' : 'Showing real data from the last 24 hours — still nothing sent.')}
+                : (isTemplate ? 'Reviewing the layout with placeholder data — nothing is generated or sent.' : 'Showing real data + your toggles — this is what sends (nothing sent yet). Run & Send refreshes every brief first.')}
             </span>
             <div className="mb-config-actionbar-buttons">
               {isTemplate ? (

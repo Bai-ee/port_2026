@@ -1439,6 +1439,29 @@ export async function GET(request) {
       homeClientId = digestCfg.homeClientId || configClientId;
     } catch { /* resolution failed — agenda falls back to the env calendar */ }
 
+    // All clients whose intelligence feeds this email: the home client + any
+    // included clients. Computed up front so we can refresh them before reading.
+    const briefClientIds = [...new Set([homeClientId, ...(digestCfg?.includeClientIds || [])].filter(Boolean))];
+
+    // ── Fresh-run gate ──────────────────────────────────────────────────────
+    // A REAL send (the scheduled cron or a Run & Send) refreshes every digest
+    // client's scout brief + strategy plan FIRST, so the email and the linked
+    // Executive Brief reflect data generated at send time — the same refresh the
+    // scheduled cron's pre-digest worker does. A preview NEVER triggers it (cost).
+    const isRealSend = isSendNow || (!isPreview && !isTemplate);
+    if (isRealSend && briefClientIds.length) {
+      try {
+        const { refreshDigestClient } = await import('../../worker/pre-digest-refresh/route.js');
+        for (const cid of briefClientIds) {
+          const r = await refreshDigestClient(cid).catch((e) => ({ ok: false, error: e?.message }));
+          logInfo('daily_digest_prerefresh', { clientId: cid, ok: Boolean(r?.ok), error: r?.ok ? undefined : (r?.scout?.error || r?.error) });
+        }
+      } catch (err) {
+        // Refresh unavailable — fall back to last-good data; never block the email.
+        logWarn('daily_digest_prerefresh_unavailable', { error: err.message });
+      }
+    }
+
     // Email Digest card aggregation toggles. These gate the collectors (to skip
     // their API cost) and the rendered sections. A preview `include` override
     // (the card's current, possibly-unsaved toggles) wins over the saved config.
@@ -1501,12 +1524,13 @@ export async function GET(request) {
       });
       const cfg = digestCfg || await digestConfig.getDigestConfig(await digestConfig.resolveDigestClientId());
       if (!homeClientId) homeClientId = cfg.homeClientId || null;
-      const briefClientIds = [...new Set([homeClientId, ...(cfg.includeClientIds || [])].filter(Boolean))];
+      // Reuse the up-front list (recompute only if homeClientId was just resolved).
+      const briefIds = briefClientIds.length ? briefClientIds : [...new Set([homeClientId, ...(cfg.includeClientIds || [])].filter(Boolean))];
 
       // Strategic brief fetch powers BOTH the Strategic Brief block and the
       // "Happening on X" watchlist block — fetch if either is enabled.
       if (include.marketingBrief !== false || include.watchlist !== false) {
-        briefs = (await Promise.all(briefClientIds.map((cid) => briefIntel.getBriefForClient(cid)))).filter(Boolean);
+        briefs = (await Promise.all(briefIds.map((cid) => briefIntel.getBriefForClient(cid)))).filter(Boolean);
       }
 
       // Creative Brief attachment (opt-in) — the run onboarding deliverable for the home client.
