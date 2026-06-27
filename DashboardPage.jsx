@@ -23012,9 +23012,15 @@ export const dashboardCss = `
     .tile-detail-tab-content { padding: 14px 12px; box-sizing: border-box; }
     #tile-detail-bento-about { padding: 14px 14px 16px; box-sizing: border-box; }
     #tile-detail-bento-data { padding: 14px 14px 16px; box-sizing: border-box; }
-    /* 4-tab rows wrap labels at 16px gap on a ~351px card — tighten. */
-    .tile-detail-tabs { gap: 4px; }
-    .tile-detail-tab { padding: 10px 4px; }
+    /* THE width-forcer: the main tab bar is a non-wrapping flex row whose tabs
+       (uppercase 900-weight mono: SOURCES/REPORT/SOLUTIONS/PROBLEMS) can't shrink,
+       so their combined min-content (~380px) widened the whole tabbed container
+       past the phone — every width:100% panel inside then clipped. Let the bar
+       wrap to multiple rows and let the flex chain shrink to viewport. */
+    .tile-detail-tabbed-container { min-width: 0; max-width: 100%; }
+    .tile-detail-tabs { gap: 4px; flex-wrap: wrap; }
+    .tile-detail-tab { padding: 10px 4px; flex: 1 1 auto; min-width: 0; }
+    .tile-detail-tab-content { min-width: 0; max-width: 100%; }
     /* Audit-summary rows: drop the 3-col + min-width:480px that forced h-scroll. */
     .tile-detail-audit-row { grid-template-columns: 1fr; min-width: 0; gap: 2px; }
     .tile-detail-audit-status, .tile-detail-audit-tier { padding-left: 0; text-align: left; white-space: normal; }
