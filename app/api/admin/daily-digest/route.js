@@ -736,12 +736,16 @@ function dDataTable(headers, bodyRows) {
 }
 
 function buildAgendaSection(agenda) {
-  if (agenda.disabled) return ''; // Calendar / Agenda toggle off — hide the section.
+  // Visibility is toggle-gated by the caller (include.agenda). This builder
+  // always renders a section so preview and live stay in sync.
   if (agenda.error) {
     return dSection('Schedule', 'Agenda', `<div style="background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:14px 16px;font-family:${DT.fBody};font-size:13px;color:${DT.accent};">Calendar unavailable: ${escapeHtml(agenda.error)}</div>`);
   }
 
   const days = agenda.days || [];
+  if (!days.length) {
+    return dSection('Schedule', 'Agenda', `<div style="background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:14px 16px;font-family:${DT.fBody};font-size:13px;color:${DT.light};">No events on the calendar for the next 5 days.</div>`);
+  }
 
   // Each day renders as a fixed-width card; the row scrolls horizontally where
   // the client supports overflow-x (Apple Mail, most webmail). Gmail does not
@@ -817,11 +821,16 @@ function buildHomepageAnalyticsSection(homepage) {
 
 /** LLM executive-summary block, rendered at the very top of the brief. */
 function buildSummarySection(summary) {
-  if (!summary || !summary.paragraph) return '';
-  const text = escapeHtml(summary.paragraph).replace(/\n+/g, ' ');
+  // Toggle-gated by the caller (include.execSummary). When on but no paragraph
+  // was generated (summary disabled or the LLM call failed), show an explicit
+  // empty state so the EMAIL PREVIEW and the sent email stay in sync.
+  const text = summary && summary.paragraph
+    ? escapeHtml(summary.paragraph).replace(/\n+/g, ' ')
+    : '';
+  const body = text || `<span style="color:${DT.light};">No executive summary generated for this run.</span>`;
   return `<div style="margin-bottom:32px;">
     ${dKicker('Today &middot; Executive Summary')}
-    <div style="background:${DT.card};border:1px solid ${DT.line};border-left:3px solid ${DT.accent};border-radius:14px;padding:20px 22px;font-family:${DT.fBody};font-size:15px;line-height:1.62;color:${DT.ink};">${text}</div>
+    <div style="background:${DT.card};border:1px solid ${DT.line};border-left:3px solid ${DT.accent};border-radius:14px;padding:20px 22px;font-family:${DT.fBody};font-size:15px;line-height:1.62;color:${DT.ink};">${body}</div>
   </div>`;
 }
 
@@ -1020,12 +1029,19 @@ function buildCreativeBriefSection(creative) {
   return dSection('Deliverable', `Creative Brief${creative.clientName ? ` &middot; ${escapeHtml(creative.clientName)}` : ''}`, body);
 }
 
-function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, include = {
-  calendar: true, marketingBrief: true, creativeBrief: false, webStats: true, platformStats: true, deployments: true, homepage: true,
-}, creative = null) {
+function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, include = {}, creative = null, briefUrl = null) {
+  // Fallback target when no hosted brief is resolved (briefLinkMode 'off' /
+  // 'latest' with nothing published / 'fresh' run failed): the dashboard modal.
   const executiveBriefUrl = appUrl('/dashboard?open=brief');
-  const strategicSections = include.marketingBrief === false ? '' : (Array.isArray(briefs) ? briefs : [])
-    .map((b) => `${buildStrategicBriefSection(b.intel, b.clientName)}${buildWatchlistBriefSection(b.intel?.watchlistAnalysis)}`)
+  const briefLinkUrl = briefUrl || executiveBriefUrl;
+  const briefList = Array.isArray(briefs) ? briefs : [];
+  // Strategic brief + watchlist are separate toggles, rendered as separate blocks.
+  const strategicSections = include.marketingBrief === false ? '' : briefList
+    .map((b) => buildStrategicBriefSection(b.intel, b.clientName))
+    .filter((s) => s && s.trim())
+    .join('');
+  const watchlistSections = include.watchlist === false ? '' : briefList
+    .map((b) => buildWatchlistBriefSection(b.intel?.watchlistAnalysis))
     .filter((s) => s && s.trim())
     .join('');
   const dateStr = new Date(timestamp).toLocaleDateString('en-US', {
@@ -1075,16 +1091,16 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
     .map(([status, count]) => dChip(escapeHtml(status), count))
     .join('');
 
-  const errorSection = vercel.errorLogs?.length
-    ? dSection('Runtime', `Errors <span style="font-family:${DT.fMono};font-size:14px;color:${DT.accent};">(${vercel.errorLogs.length})</span>`, dDataTable(
-        [{ label: 'Path' }, { label: 'Message' }, { label: 'Status', right: true }],
-        vercel.errorLogs.map((e) => `<tr>
+  const errorRows = vercel.errorLogs?.length
+    ? vercel.errorLogs.map((e) => `<tr>
             <td style="${TD}font-family:${DT.fMono};font-size:12px;">${escapeHtml(e.path)}</td>
             <td style="${TDsub}max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(e.message)}</td>
             <td style="${TDnum}">${e.statusCode || '—'}</td>
           </tr>`).join('')
-      ))
-    : '';
+    : `<tr><td colspan="3" style="${TDempty}">No runtime errors in the last 24 hours</td></tr>`;
+  const errorSection = dSection('Runtime', `Errors${vercel.errorLogs?.length ? ` <span style="font-family:${DT.fMono};font-size:14px;color:${DT.accent};">(${vercel.errorLogs.length})</span>` : ''}`, dDataTable(
+    [{ label: 'Path' }, { label: 'Message' }, { label: 'Status', right: true }], errorRows
+  ));
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -1117,92 +1133,98 @@ a{text-decoration:none;}
             <div style="font-family:${DT.fMono};font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:${DT.light};">${dateStr}</div>
           </div>
 
-          <div style="margin:18px 0 28px;">
-            <a href="${escapeHtml(executiveBriefUrl)}" style="display:inline-block;background:${DT.ink};color:${DT.card};font-family:${DT.fMono};font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border-radius:999px;padding:13px 18px;border:1px solid ${DT.ink};">Open Executive Brief</a>
-          </div>
+          ${include.execBriefLink === false ? '' : `<div style="margin:18px 0 28px;">
+            <a href="${escapeHtml(briefLinkUrl)}" style="display:inline-block;background:${DT.ink};color:${DT.card};font-family:${DT.fMono};font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border-radius:999px;padding:13px 18px;border:1px solid ${DT.ink};">Open Executive Brief</a>
+          </div>`}
 
           <!-- Executive summary (LLM) -->
-          ${buildSummarySection(summary)}
+          ${include.execSummary === false ? '' : buildSummarySection(summary)}
 
           <!-- Today's Agenda (calendar) — directly under the summary -->
-          ${include.calendar ? buildAgendaSection(agenda) : ''}
+          ${include.agenda === false ? '' : buildAgendaSection(agenda)}
 
           <!-- Strategic brief (mirrors established daily brief) -->
           ${strategicSections}
 
+          <!-- "Happening on X" watchlist analysis -->
+          ${watchlistSections}
+
           <!-- Creative Brief (attached run deliverable) -->
           ${include.creativeBrief ? buildCreativeBriefSection(creative) : ''}
 
-          <!-- Key metrics -->
-          ${include.platformStats ? dSection('Platform', 'Overview', dStatCells([
+          <!-- Platform Overview -->
+          ${include.platformOverview === false ? '' : dSection('Platform', 'Overview', dStatCells([
             { num: firebase.newUsers, label: 'New sign-ups' },
             { num: firebase.totalUsers, label: 'Total users' },
             { num: firebase.recentRuns, label: 'Dashboards' },
             { num: vercel.totalDeployments || 0, label: 'Deployments' },
-          ], 4)) : ''}
+          ], 4))}
 
           <!-- GA4 overview -->
-          ${include.webStats === false ? '' : ga4.overview
-            ? dSection('Google Analytics', 'Traffic', `${dStatCells([
+          ${include.ga4Traffic === false ? '' : dSection('Google Analytics', 'Traffic', ga4.overview
+            ? `${dStatCells([
                 { num: ga4.overview.sessions, label: 'Sessions' },
                 { num: ga4.overview.pageViews, label: 'Page views' },
                 { num: ga4.overview.totalUsers, label: 'Visitors' },
                 { num: ga4.overview.newUsers, label: 'New' },
                 { num: `${ga4.overview.bounceRate}%`, label: 'Bounce' },
-              ], 5)}<div style="font-family:${DT.fMono};font-size:11px;color:${DT.soft};letter-spacing:.02em;">Avg session <strong style="color:${DT.ink};">${Math.floor(ga4.overview.avgSessionDuration / 60)}m ${ga4.overview.avgSessionDuration % 60}s</strong> &nbsp;&middot;&nbsp; Engaged <strong style="color:${DT.ink};">${ga4.overview.engagedSessions}</strong></div>`)
-            : (ga4.error ? dSection('Google Analytics', 'Traffic', `<p style="font-family:${DT.fBody};font-size:13px;color:${DT.accent};margin:0;">GA4 unavailable: ${escapeHtml(ga4.error)}</p>`) : '')}
+              ], 5)}<div style="font-family:${DT.fMono};font-size:11px;color:${DT.soft};letter-spacing:.02em;">Avg session <strong style="color:${DT.ink};">${Math.floor(ga4.overview.avgSessionDuration / 60)}m ${ga4.overview.avgSessionDuration % 60}s</strong> &nbsp;&middot;&nbsp; Engaged <strong style="color:${DT.ink};">${ga4.overview.engagedSessions}</strong></div>`
+            : `<p style="font-family:${DT.fBody};font-size:13px;color:${ga4.error ? DT.accent : DT.light};margin:0;">${ga4.error ? `GA4 unavailable: ${escapeHtml(ga4.error)}` : 'No traffic recorded in the last 24 hours.'}</p>`)}
 
           <!-- Top pages -->
-          ${include.webStats !== false && ga4.topPages?.length ? dSection('Analytics', 'Top Pages', dDataTable(
+          ${include.topPages === false ? '' : dSection('Analytics', 'Top Pages', dDataTable(
             [{ label: 'Page' }, { label: 'Views', right: true }, { label: 'Users', right: true }],
-            ga4.topPages.map((p) => `<tr>
+            ga4.topPages?.length ? ga4.topPages.map((p) => `<tr>
               <td style="${TD}max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(p.path)}</td>
               <td style="${TDnum}">${p.views}</td>
               <td style="${TDnum}color:${DT.soft};font-weight:400;">${p.users}</td>
-            </tr>`).join('')
-          )) : ''}
+            </tr>`).join('') : `<tr><td colspan="3" style="${TDempty}">No page data in the last 24 hours</td></tr>`
+          ))}
 
           <!-- Traffic sources -->
-          ${include.webStats !== false && ga4.trafficSources?.length ? dSection('Analytics', 'Sources', dDataTable(
+          ${include.trafficSources === false ? '' : dSection('Analytics', 'Sources', dDataTable(
             [{ label: 'Source / Medium' }, { label: 'Sessions', right: true }, { label: 'Users', right: true }],
-            ga4.trafficSources.map((s) => `<tr>
+            ga4.trafficSources?.length ? ga4.trafficSources.map((s) => `<tr>
               <td style="${TD}">${escapeHtml(s.source)} <span style="color:${DT.light};">/ ${escapeHtml(s.medium)}</span></td>
               <td style="${TDnum}">${s.sessions}</td>
               <td style="${TDnum}color:${DT.soft};font-weight:400;">${s.users}</td>
-            </tr>`).join('')
-          )) : ''}
+            </tr>`).join('') : `<tr><td colspan="3" style="${TDempty}">No traffic sources in the last 24 hours</td></tr>`
+          ))}
 
           <!-- Key events -->
-          ${include.webStats !== false && Object.keys(ga4.events || {}).length ? dSection('Analytics', 'Key Events',
-            `<div>${Object.entries(ga4.events).map(([name, count]) => dChip(escapeHtml(name.replace(/_/g, ' ')), count)).join('')}</div>`
-          ) : ''}
+          ${include.keyEvents === false ? '' : dSection('Analytics', 'Key Events',
+            Object.keys(ga4.events || {}).length
+              ? `<div>${Object.entries(ga4.events).map(([name, count]) => dChip(escapeHtml(name.replace(/_/g, ' ')), count)).join('')}</div>`
+              : `<span style="font-family:${DT.fBody};font-size:13px;color:${DT.light};">No key events in the last 24 hours</span>`
+          )}
 
           <!-- Homepage interactions -->
-          ${include.homepage !== false ? buildHomepageAnalyticsSection(homepage) : ''}
+          ${include.homepage === false ? '' : buildHomepageAnalyticsSection(homepage)}
 
-          <!-- New sign-ups / Dashboards / Pipeline status (platform stats) -->
-          ${include.platformStats ? `
-          ${dSection('Firebase', 'New Sign-ups', dDataTable([{ label: 'Email' }, { label: 'Website' }, { label: 'Time', right: true }], newUsersRows))}
+          <!-- New sign-ups -->
+          ${include.signups === false ? '' : dSection('Firebase', 'New Sign-ups', dDataTable([{ label: 'Email' }, { label: 'Website' }, { label: 'Time', right: true }], newUsersRows))}
 
-          ${dSection('Firebase', 'Dashboards', dDataTable([{ label: 'Website' }, { label: 'Status' }, { label: 'Time', right: true }], recentRunsRows))}
+          <!-- Dashboards -->
+          ${include.dashboards === false ? '' : dSection('Firebase', 'Dashboards', dDataTable([{ label: 'Website' }, { label: 'Status' }, { label: 'Time', right: true }], recentRunsRows))}
 
-          ${dSection('Firebase', 'Pipeline Status',
+          <!-- Pipeline status -->
+          ${include.pipeline === false ? '' : dSection('Firebase', 'Pipeline Status',
             `<div style="margin-bottom:10px;">${statusBreakdown || `<span style="color:${DT.light};font-family:${DT.fBody};font-size:13px;">No pipeline data</span>`}</div><div style="font-family:${DT.fMono};font-size:11px;color:${DT.soft};letter-spacing:.02em;">Total runs <strong style="color:${DT.ink};">${firebase.totalRuns}</strong> &nbsp;&middot;&nbsp; Clients <strong style="color:${DT.ink};">${firebase.totalClients}</strong></div>`
-          )}` : ''}
+          )}
 
-          <!-- Deployments + runtime errors -->
-          ${include.deployments ? `
-          ${dSection('Vercel', 'Deployments',
+          <!-- Deployments -->
+          ${include.deployments === false ? '' : dSection('Vercel', 'Deployments',
             `${vercel.errors ? `<p style="font-family:${DT.fBody};color:${DT.accent};font-size:12px;margin:0 0 10px;">Note: ${escapeHtml(vercel.errors)}</p>` : ''}${dDataTable([{ label: 'Status' }, { label: 'Commit' }, { label: 'Time', right: true }], deploymentsRows)}`
           )}
 
-          ${errorSection}` : ''}
+          <!-- Runtime errors -->
+          ${include.runtimeErrors === false ? '' : errorSection}
 
           <!-- Footer -->
           <div style="border-top:1.5px solid ${DT.line};padding-top:22px;margin-top:32px;">
             <div style="font-family:${DT.fMono};font-size:10px;letter-spacing:.08em;color:${DT.light};margin-bottom:10px;">Generated ${new Date(timestamp).toLocaleTimeString('en-US')}</div>
             <div style="font-family:${DT.fMono};font-size:10px;letter-spacing:.06em;">
-              <a href="${escapeHtml(executiveBriefUrl)}" style="color:${DT.accent};">Executive Brief</a> &nbsp;&middot;&nbsp;
+              <a href="${escapeHtml(briefLinkUrl)}" style="color:${DT.accent};">Executive Brief</a> &nbsp;&middot;&nbsp;
               <a href="https://vercel.com/baiees-projects/port-2026" style="color:${DT.accent};">Vercel</a> &nbsp;&middot;&nbsp;
               <a href="https://console.firebase.google.com/project/human-in-the-loop-a1a19" style="color:${DT.accent};">Firebase</a> &nbsp;&middot;&nbsp;
               <a href="https://analytics.google.com" style="color:${DT.accent};">GA4</a>
@@ -1365,14 +1387,9 @@ export async function GET(request) {
   const includeOverride = (() => {
     if (!url.searchParams.has('include')) return null;
     const on = new Set(String(url.searchParams.get('include') || '').split(',').map((s) => s.trim()).filter(Boolean));
-    return {
-      calendar: on.has('calendar'),
-      marketingBrief: on.has('marketingBrief'),
-      creativeBrief: on.has('creativeBrief'),
-      webStats: on.has('webStats'),
-      platformStats: on.has('platformStats'),
-      deployments: on.has('deployments'),
-    };
+    const out = {};
+    for (const k of digestConfig.INCLUDE_KEYS) out[k] = on.has(k);
+    return out;
   })();
 
   // Auth: cron/worker secret for the scheduled run; admin token for dashboard
@@ -1396,9 +1413,10 @@ export async function GET(request) {
     try {
       const ts = Date.now();
       const ph = buildPlaceholderData(ts);
-      const include = includeOverride || { calendar: true, marketingBrief: true, creativeBrief: false, webStats: true, platformStats: true, deployments: true };
-      const renderInclude = { ...include, homepage: include.webStats };
-      const html = buildEmailHtml(ph.firebase, ph.vercel, ph.ga4, ph.agenda, ph.homepage, ts, ph.summary, ph.briefs, renderInclude, ph.creative);
+      const include = includeOverride || { ...digestConfig.DEFAULT_INCLUDE };
+      // A sample hosted-brief URL so the CTA renders a realistic link in template mode.
+      const sampleBriefUrl = appUrl('/briefs/sample-client/latest');
+      const html = buildEmailHtml(ph.firebase, ph.vercel, ph.ga4, ph.agenda, ph.homepage, ts, ph.summary, ph.briefs, include, ph.creative, sampleBriefUrl);
       return json({ ok: true, template: true, placeholder: true, timestamp: new Date(ts).toISOString(), paragraph: ph.summary.paragraph, html });
     } catch (err) {
       logError('daily_digest_template_error', { error: err.message });
@@ -1411,7 +1429,7 @@ export async function GET(request) {
     logInfo('daily_digest_start', { timestamp: new Date(timestamp).toISOString() });
 
     // Resolve the digest home client up front so the agenda reads that client's
-    // connected calendar. The Email Digest card's `include.calendar` toggle is the
+    // connected calendar. The Email Digest card's `include.agenda` toggle is the
     // single authority for whether the agenda is included (P2b migration).
     let homeClientId = null;
     let digestCfg = null;
@@ -1424,9 +1442,7 @@ export async function GET(request) {
     // Email Digest card aggregation toggles. These gate the collectors (to skip
     // their API cost) and the rendered sections. A preview `include` override
     // (the card's current, possibly-unsaved toggles) wins over the saved config.
-    const include = includeOverride || digestCfg?.include || {
-      calendar: true, marketingBrief: true, creativeBrief: false, webStats: true, platformStats: true, deployments: true,
-    };
+    const include = includeOverride || digestCfg?.include || { ...digestConfig.DEFAULT_INCLUDE };
 
     // Web Stats card settings (Website Developer bucket) — per-home-client GA4
     // property, tracked event list, and homepage block toggle. Empty values fall
@@ -1449,16 +1465,23 @@ export async function GET(request) {
     const NEUTRAL_AGENDA = { events: [], days: [], tomorrowSummary: '', error: null };
     const NEUTRAL_HOMEPAGE = { totalEvents: 0, byEventName: [], byInteractionType: [], topTargets: [], outboundLinks: [], scrollDepths: [], webVitals: [], error: null };
 
+    // Derived group flags: only pay a collector's API cost when at least one of
+    // the granular sections it powers is enabled.
+    const needVercel = include.deployments !== false || include.runtimeErrors !== false;
+    const needGA4 = include.ga4Traffic !== false || include.topPages !== false
+      || include.trafficSources !== false || include.keyEvents !== false;
+    const needHomepage = include.homepage !== false && homepageEnabled;
+
     const [firebase, vercel, ga4, agenda, homepage] = await Promise.all([
       getFirebaseMetrics(), // always — powers the subject line + platform stats
-      include.deployments ? getVercelMetrics() : Promise.resolve(NEUTRAL_VERCEL),
-      include.webStats ? getGA4Metrics({ propertyId: ga4PropertyId, eventNames: ga4EventNames }) : Promise.resolve(NEUTRAL_GA4),
-      include.calendar ? getCalendarAgenda(timestamp, { clientId: homeClientId, enabled: true }) : Promise.resolve(NEUTRAL_AGENDA),
-      (include.webStats && homepageEnabled) ? getHomepageAnalyticsMetrics() : Promise.resolve(NEUTRAL_HOMEPAGE),
+      needVercel ? getVercelMetrics() : Promise.resolve(NEUTRAL_VERCEL),
+      needGA4 ? getGA4Metrics({ propertyId: ga4PropertyId, eventNames: ga4EventNames }) : Promise.resolve(NEUTRAL_GA4),
+      include.agenda !== false ? getCalendarAgenda(timestamp, { clientId: homeClientId, enabled: true }) : Promise.resolve(NEUTRAL_AGENDA),
+      needHomepage ? getHomepageAnalyticsMetrics() : Promise.resolve(NEUTRAL_HOMEPAGE),
     ]);
 
     // Render flags: homepage block also honors the Web Stats homepage toggle.
-    const renderInclude = { ...include, homepage: include.webStats && homepageEnabled };
+    const renderInclude = { ...include, homepage: include.homepage !== false && homepageEnabled };
 
     const dateStr = new Date(timestamp).toLocaleDateString('en-US', {
       month: 'short',
@@ -1480,9 +1503,9 @@ export async function GET(request) {
       if (!homeClientId) homeClientId = cfg.homeClientId || null;
       const briefClientIds = [...new Set([homeClientId, ...(cfg.includeClientIds || [])].filter(Boolean))];
 
-      // Strategic brief fetch is gated by the Marketing Brief include toggle; the
-      // executive summary stays independent (it also recaps analytics + agenda).
-      if (include.marketingBrief) {
+      // Strategic brief fetch powers BOTH the Strategic Brief block and the
+      // "Happening on X" watchlist block — fetch if either is enabled.
+      if (include.marketingBrief !== false || include.watchlist !== false) {
         briefs = (await Promise.all(briefClientIds.map((cid) => briefIntel.getBriefForClient(cid)))).filter(Boolean);
       }
 
@@ -1522,7 +1545,27 @@ export async function GET(request) {
     const sessionStr = ga4.overview ? `, ${ga4.overview.sessions} session${ga4.overview.sessions !== 1 ? 's' : ''}` : '';
     const subject = `HITLOOP Daily — ${firebase.newUsers} sign-up${firebase.newUsers !== 1 ? 's' : ''}, ${firebase.recentRuns} dashboard${firebase.recentRuns !== 1 ? 's' : ''}${sessionStr} · ${dateStr}`;
 
-    const html = buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, renderInclude, creative);
+    // Resolve the hosted Executive Brief link (run fresh / newest published /
+    // off). Best-effort: any failure falls back to the dashboard link inside
+    // buildEmailHtml so a brief problem never blocks the email. A fresh run
+    // (LLM cost) only happens on a real send — never on a preview reload.
+    let briefUrl = null;
+    const briefLinkMode = digestCfg?.briefLinkMode || 'fresh';
+    if (include.execBriefLink !== false && briefLinkMode !== 'off' && homeClientId) {
+      try {
+        const { resolveExecutiveBriefUrl } = require('../../../../features/intelligence/_digest-brief-link.js');
+        briefUrl = await resolveExecutiveBriefUrl({
+          clientId: homeClientId,
+          mode: briefLinkMode,
+          origin: appOrigin(),
+          allowFreshRun: !isPreview, // preview tab never triggers a paid run
+        });
+      } catch (err) {
+        logWarn('daily_digest_brief_link_failed', { error: err.message });
+      }
+    }
+
+    const html = buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, renderInclude, creative, briefUrl);
 
     // Preview mode (admin dashboard): build everything, send nothing.
     if (isPreview) {

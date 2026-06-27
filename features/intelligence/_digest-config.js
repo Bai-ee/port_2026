@@ -7,18 +7,67 @@
 
 const fb = require('../../api/_lib/firebase-admin.cjs');
 
-// Aggregation toggles — what content flows into the email. Each maps to a
-// section group in the digest route's buildEmailHtml. Default ON so existing
-// behavior is unchanged until a user opts a section out.
-const INCLUDE_KEYS = ['calendar', 'marketingBrief', 'creativeBrief', 'webStats', 'platformStats', 'deployments'];
+// Aggregation toggles — EVERY rendered section of the email is individually
+// on/off here. Each key maps to exactly one section in the digest route's
+// buildEmailHtml, so the EMAIL PREVIEW and the actual sent email hide/show
+// identically (no data-presence gating). Default ON (except creativeBrief).
+const INCLUDE_KEYS = [
+  'execBriefLink',    // "Open Executive Brief" CTA button (top + footer)
+  'execSummary',      // LLM executive-summary paragraph
+  'agenda',           // Today's Agenda (calendar)
+  'marketingBrief',   // Strategic Brief (opportunities / KOLs / competitors / narratives)
+  'watchlist',        // "Happening on X" watchlist analysis
+  'creativeBrief',    // Attached Creative Brief deliverable
+  'platformOverview', // Platform Overview stat cells
+  'ga4Traffic',       // GA4 Traffic overview
+  'topPages',         // GA4 Top Pages
+  'trafficSources',   // GA4 Traffic Sources
+  'keyEvents',        // GA4 Key Events
+  'homepage',         // Homepage interaction analytics
+  'signups',          // Firebase New Sign-ups table
+  'dashboards',       // Firebase Dashboards table
+  'pipeline',         // Firebase Pipeline Status
+  'deployments',      // Vercel Deployments
+  'runtimeErrors',    // Vercel Runtime Errors
+];
 const DEFAULT_INCLUDE = {
-  calendar: true,        // Today's Agenda (Calendar card / OAuth)
-  marketingBrief: true,  // Strategic Brief + "Happening on X" (Market Signals)
-  creativeBrief: false,  // Attach the run Creative Brief (opt-in — separate deliverable)
-  webStats: true,        // GA4 traffic + homepage interactions (Web Stats card)
-  platformStats: true,   // Platform Overview + sign-ups/dashboards/pipeline
-  deployments: true,     // Vercel deployments + runtime errors
+  execBriefLink: true,
+  execSummary: true,
+  agenda: true,
+  marketingBrief: true,
+  watchlist: true,
+  creativeBrief: false,
+  platformOverview: true,
+  ga4Traffic: true,
+  topPages: true,
+  trafficSources: true,
+  keyEvents: true,
+  homepage: true,
+  signups: true,
+  dashboards: true,
+  pipeline: true,
+  deployments: true,
+  runtimeErrors: true,
 };
+
+// Legacy coarse keys (the pre-granular schema). A saved doc using these expands
+// to the matching granular set so existing configs keep working unchanged.
+// Applied BEFORE granular keys so any granular key present wins.
+const LEGACY_INCLUDE_EXPANSION = {
+  calendar: ['agenda'],
+  webStats: ['ga4Traffic', 'topPages', 'trafficSources', 'keyEvents', 'homepage'],
+  platformStats: ['platformOverview', 'signups', 'dashboards', 'pipeline'],
+  deployments: ['deployments', 'runtimeErrors'],
+  marketingBrief: ['marketingBrief', 'watchlist'],
+  creativeBrief: ['creativeBrief'],
+};
+
+// How the "Open Executive Brief" link resolves its target:
+//   'fresh'  — run a brand-new brief on send and link to it (LLM cost per send)
+//   'latest' — link to the newest already-published hosted brief (free)
+//   'off'    — no hosted link (button hidden)
+const BRIEF_LINK_MODES = ['fresh', 'latest', 'off'];
+const DEFAULT_BRIEF_LINK_MODE = 'fresh';
 
 // Send schedule. Enforcement (turning this into per-recipient cron dispatch) is
 // a later phase; for now these values are stored and surfaced, the existing
@@ -42,6 +91,7 @@ const DEFAULTS = {
   includeClientIds: [],    // additional clients whose latest brief to fold in
   include: { ...DEFAULT_INCLUDE },
   schedule: { ...DEFAULT_SCHEDULE },
+  briefLinkMode: DEFAULT_BRIEF_LINK_MODE, // how the Executive Brief link resolves
 };
 
 function clampInt(value, min, max, fallback) {
@@ -58,11 +108,22 @@ function cleanIdList(value) {
 function normalizeInclude(value) {
   const out = { ...DEFAULT_INCLUDE };
   if (value && typeof value === 'object') {
+    // 1) Expand any legacy coarse keys first (a granular key below overrides).
+    for (const [legacy, targets] of Object.entries(LEGACY_INCLUDE_EXPANSION)) {
+      if (typeof value[legacy] === 'boolean') {
+        for (const t of targets) out[t] = value[legacy];
+      }
+    }
+    // 2) Apply granular keys — these win over the legacy expansion.
     for (const k of INCLUDE_KEYS) {
       if (typeof value[k] === 'boolean') out[k] = value[k];
     }
   }
   return out;
+}
+
+function normalizeBriefLinkMode(value) {
+  return BRIEF_LINK_MODES.includes(value) ? value : DEFAULT_BRIEF_LINK_MODE;
 }
 
 function normalizeSchedule(value) {
@@ -97,6 +158,7 @@ async function getDigestConfig(clientId) {
     includeClientIds: cleanIdList(data.includeClientIds),
     include: normalizeInclude(data.include),
     schedule: normalizeSchedule(data.schedule),
+    briefLinkMode: normalizeBriefLinkMode(data.briefLinkMode),
     updatedAt: data.updatedAt?.toDate?.()?.toISOString?.() || null,
   };
 }
@@ -113,6 +175,7 @@ async function saveDigestConfig(clientId, patch = {}) {
   if ('includeClientIds' in patch) next.includeClientIds = cleanIdList(patch.includeClientIds);
   if ('include' in patch) next.include = normalizeInclude(patch.include);
   if ('schedule' in patch) next.schedule = normalizeSchedule(patch.schedule);
+  if ('briefLinkMode' in patch) next.briefLinkMode = normalizeBriefLinkMode(patch.briefLinkMode);
   next.updatedAt = fb.FieldValue.serverTimestamp();
   await configDocRef(clientId).set(next, { merge: true });
   return getDigestConfig(clientId);
@@ -209,6 +272,9 @@ async function listSelectableClients() {
 
 module.exports = {
   DEFAULTS,
+  INCLUDE_KEYS,
+  DEFAULT_INCLUDE,
+  BRIEF_LINK_MODES,
   getDigestConfig,
   saveDigestConfig,
   resolveDigestClientId,

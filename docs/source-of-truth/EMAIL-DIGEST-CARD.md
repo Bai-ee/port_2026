@@ -80,7 +80,24 @@ top-to-bottom. Each section maps to a **future include-toggle** in the Email Dig
 
 ## 4. Config shape (extend `digest_config/{clientId}`)
 
-Current doc (`features/intelligence/_digest-config.js` DEFAULTS):
+> **UPDATE (granular toggles + hosted brief link).** `include.*` is now **per-section**
+> (one key = one rendered block in `buildEmailHtml`), so the EMAIL PREVIEW and the sent
+> email hide/show **identically** — every section is gated purely by its toggle, with an
+> explicit empty-state when the data is absent (no more data-presence gating that made
+> analytics silently vanish from the real email). Granular keys (default ON except
+> `creativeBrief`): `execBriefLink, execSummary, agenda, marketingBrief, watchlist,
+> creativeBrief, ga4Traffic, topPages, trafficSources, keyEvents, homepage, platformOverview,
+> signups, dashboards, pipeline, deployments, runtimeErrors`. Legacy coarse keys
+> (`calendar/webStats/platformStats/...`) still load via `LEGACY_INCLUDE_EXPANSION` in
+> `normalizeInclude`. New field **`briefLinkMode`** (`'fresh' | 'latest' | 'off'`, default
+> `'fresh'`) controls the "Open Executive Brief" link: `fresh` = run + publish a new hosted
+> brief on send (LLM cost; reuses a publish < 90 min old; falls back to the dashboard link on
+> any failure — never blocks the email), `latest` = newest already-published hosted brief,
+> `off` = no hosted link. Resolver: `features/intelligence/_digest-brief-link.js`
+> (`resolveExecutiveBriefUrl`). UI: §03 of `AdminEmailDigestView` (grouped toggle cards +
+> brief-link segmented control). Preview never triggers a paid fresh run (`allowFreshRun: !isPreview`).
+
+Original doc (`features/intelligence/_digest-config.js` DEFAULTS):
 
 ```js
 {

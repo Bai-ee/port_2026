@@ -28,18 +28,39 @@ async function authFetch(user, path, options = {}) {
   return data;
 }
 
-// Email section toggles — [include key, card title, card description, customize
-// cardId]. Order is the rough top-to-bottom order of the email. The 4th element
-// is the dashboard card to open for customizing that section (null = no card
-// yet). Creative Brief is opt-in (off by default).
-const SECTION_TOGGLES = [
-  ['marketingBrief', 'Marketing Brief', 'Strategy, signals + Happening on X', 'signals'],
-  ['creativeBrief', 'Creative Brief', 'Attach the client’s run Creative Brief', 'onboarding-brief'],
-  ['calendar', 'Calendar Agenda', 'Up to 5 days of events', 'calendar-connect'],
-  ['webStats', 'Web Stats', 'GA4 traffic + homepage activity', null],
-  ['platformStats', 'Platform Stats', 'Sign-ups, dashboards, pipeline', null],
-  ['deployments', 'Deployments', 'Vercel deploys + runtime errors', null],
+// Granular email section toggles, grouped. Each entry is
+// [include key, card title, card description, customize cardId]. One key = one
+// rendered section in the digest's buildEmailHtml, so the EMAIL PREVIEW and the
+// sent email match. The 4th element opens the dashboard card that owns that
+// section's own settings (null = no card). Creative Brief is opt-in (off).
+const SECTION_GROUPS = [
+  ['Brief', [
+    ['execBriefLink', 'Executive Brief link', 'The “Open Executive Brief” button', null],
+    ['execSummary', 'Executive summary', 'LLM opening paragraph', null],
+    ['marketingBrief', 'Strategic Brief', 'Opportunities, KOLs, competitors', 'signals'],
+    ['watchlist', 'Happening on X', 'Watchlist analysis', 'signals'],
+    ['creativeBrief', 'Creative Brief', 'Attach the client’s run brief', 'onboarding-brief'],
+    ['agenda', 'Calendar Agenda', 'Up to 5 days of events', 'calendar-connect'],
+  ]],
+  ['Web analytics', [
+    ['ga4Traffic', 'GA4 Traffic', 'Sessions, views, bounce', null],
+    ['topPages', 'Top Pages', 'Most-viewed pages', null],
+    ['trafficSources', 'Traffic Sources', 'Source / medium', null],
+    ['keyEvents', 'Key Events', 'Tracked GA4 events', null],
+    ['homepage', 'Homepage Activity', 'Clicks, scroll, web vitals', null],
+  ]],
+  ['Platform', [
+    ['platformOverview', 'Platform Overview', 'Sign-ups, users, dashboards', null],
+    ['signups', 'New Sign-ups', 'Recent user table', null],
+    ['dashboards', 'Dashboards', 'Recent brief runs', null],
+    ['pipeline', 'Pipeline Status', 'Run status breakdown', null],
+  ]],
+  ['Ops', [
+    ['deployments', 'Deployments', 'Vercel deploys', null],
+    ['runtimeErrors', 'Runtime Errors', 'Vercel error logs', null],
+  ]],
 ];
+const ALL_SECTION_KEYS = SECTION_GROUPS.flatMap(([, items]) => items.map(([k]) => k));
 
 // ── Email Digest: SETTINGS (params) + PREVIEW (rendered email + send) ─────────
 export function AdminEmailDigestView({ user, onOpenCard }) {
@@ -266,42 +287,58 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
                   <span className="index">03</span>
                   <div>
                     <h3>Sections included in the email</h3>
-                    <p>Toggle what flows into the email. Creative Brief attaches the client&apos;s run brief; Calendar agenda is controlled here too.</p>
+                    <p>Every section of the email is on/off here. The EMAIL PREVIEW hides/shows exactly what the sent email will.</p>
                   </div>
-                  <span className="label">{SECTION_TOGGLES.filter(([k]) => form.include?.[k]).length}/{SECTION_TOGGLES.length} on</span>
+                  <span className="label">{ALL_SECTION_KEYS.filter((k) => form.include?.[k]).length}/{ALL_SECTION_KEYS.length} on</span>
                 </div>
-                <div className="toggle-grid" role="group" aria-label="Email sections">
-                  {SECTION_TOGGLES.map(([key, title, desc, cardId]) => {
-                    const on = !!form.include?.[key];
-                    const toggle = () => setForm((f) => ({ ...f, include: { ...(f.include || {}), [key]: !on } }));
-                    return (
-                      <div
-                        key={key}
-                        role="button"
-                        tabIndex={0}
-                        aria-pressed={on}
-                        className={`toggle-card${on ? ' is-on' : ''}`}
-                        onClick={toggle}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
-                      >
-                        <span className="check">{on ? '✓' : ''}</span>
-                        <span style={{ minWidth: 0 }}>
-                          <span className="toggle-title">{title}</span>
-                          <span className="toggle-desc">{desc}</span>
-                          {cardId && onOpenCard ? (
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); onOpenCard(cardId); }}
-                              style={{ marginTop: 9, padding: 0, border: 0, background: 'none', cursor: 'pointer', font: '700 11px/1 var(--vrk-mono, monospace)', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--vrk-ink, #2a2420)' }}
-                            >
-                              Customize ↗
-                            </button>
-                          ) : null}
-                        </span>
-                      </div>
-                    );
-                  })}
+
+                <div className="field" style={{ display: 'grid', gap: 6 }}>
+                  <span className="label">Executive Brief link target</span>
+                  <div className="segmented" role="group" aria-label="Brief link target">
+                    {['fresh', 'latest', 'off'].map((m) => (
+                      <button key={m} type="button" className={(form.briefLinkMode || 'fresh') === m ? 'is-active' : ''} onClick={() => setForm((p) => ({ ...p, briefLinkMode: m }))}>{m}</button>
+                    ))}
+                  </div>
+                  <span className="hint">fresh = run a new brief on send (LLM cost) · latest = newest published brief · off = no hosted link. Requires the “Executive Brief link” toggle on.</span>
                 </div>
+
+                {SECTION_GROUPS.map(([groupLabel, items]) => (
+                  <div key={groupLabel} style={{ display: 'grid', gap: 8 }}>
+                    <span className="label" style={{ marginTop: 4 }}>{groupLabel}</span>
+                    <div className="toggle-grid" role="group" aria-label={`${groupLabel} sections`}>
+                      {items.map(([key, title, desc, cardId]) => {
+                        const on = !!form.include?.[key];
+                        const toggle = () => setForm((f) => ({ ...f, include: { ...(f.include || {}), [key]: !on } }));
+                        return (
+                          <div
+                            key={key}
+                            role="button"
+                            tabIndex={0}
+                            aria-pressed={on}
+                            className={`toggle-card${on ? ' is-on' : ''}`}
+                            onClick={toggle}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
+                          >
+                            <span className="check">{on ? '✓' : ''}</span>
+                            <span style={{ minWidth: 0 }}>
+                              <span className="toggle-title">{title}</span>
+                              <span className="toggle-desc">{desc}</span>
+                              {cardId && onOpenCard ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); onOpenCard(cardId); }}
+                                  style={{ marginTop: 9, padding: 0, border: 0, background: 'none', cursor: 'pointer', font: '700 11px/1 var(--vrk-mono, monospace)', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--vrk-ink, #2a2420)' }}
+                                >
+                                  Customize ↗
+                                </button>
+                              ) : null}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </section>
 
               <section className="section">
