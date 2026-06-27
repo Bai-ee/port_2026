@@ -15037,7 +15037,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                             playsInline
                             controls
                             onClick={(e) => e.stopPropagation()}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', background: '#000' }}
+                            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', background: '#000' }}
                           />
                         </div>
                       </div>
@@ -18327,11 +18327,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                      className="btn btn-outline"
 	                                      onClick={() => saveRemixToDevice(asset)}
 	                                      disabled={remixDownloadBusy === (asset.jobId || 'x')}
-	                                      title="Save to your device (iOS: share \u2192 Save Video)"
+	                                      title="Save to your device (iOS: share → Save Video)"
 	                                    >
-	                                      {remixDownloadBusy === (asset.jobId || 'x') ? '\u2026' : 'Save'}
+	                                      {remixDownloadBusy === (asset.jobId || 'x') ? <span className="vrk-btn-spinner" aria-hidden="true" /> : null}
+	                                      Save
 	                                    </button>
-	                                    <a className="btn btn-outline" href={url} target="_blank" rel="noopener noreferrer" download={fileName}>Open <span className="cta-icon">\u2197</span></a>
+	                                    <a className="btn btn-outline" href={url} target="_blank" rel="noopener noreferrer" download={fileName}>Open <span className="cta-icon">↗</span></a>
 	                                    {asset.jobId ? (
 	                                      <button
 	                                        type="button"
@@ -18340,7 +18341,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                        disabled={remixDeleteBusy === asset.jobId}
 	                                        title="Delete this video from hosting (permanent)"
 	                                      >
-	                                        {remixDeleteBusy === asset.jobId ? '\u2026' : 'Delete'}
+	                                        {remixDeleteBusy === asset.jobId ? <span className="vrk-btn-spinner" aria-hidden="true" /> : null}
+	                                        Delete
 	                                      </button>
 	                                    ) : null}
 	                                  </div>
@@ -23164,6 +23166,10 @@ export const dashboardCss = `
     .vrk-scope .label { overflow-wrap: anywhere; }
     /* 2-up field grids → single column so selects/inputs aren't crushed. */
     .vrk-scope .field-grid { grid-template-columns: 1fr; }
+    /* Email Digest SETTINGS shell + PREVIEW pane mount as flex items directly
+       in .tile-detail-tabbed-container (not .tile-detail-tab-content), so they
+       keep min-width:auto and could grow past the card — pin them to 0/100%. */
+    #email-digest-settings-shell, .tile-detail-tab-pane { min-width: 0; max-width: 100%; }
   }
   .tile-detail-bento-label {
     display: block;
@@ -30237,9 +30243,20 @@ export const dashboardCss = `
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 8px;
   }
-  .vrk-scope .saved-remix-actions .btn { width: 100%; min-width: 0; padding: 10px 8px; }
+  .vrk-scope .saved-remix-actions .btn { width: 100%; min-width: 0; padding: 10px 8px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
   .vrk-scope .saved-remix-delete { color: var(--vrk-danger); border-color: rgba(214,69,69,0.5); }
   .vrk-scope .saved-remix-delete:hover:not(:disabled) { background: rgba(214,69,69,0.08); }
+  /* In-button loader: keeps the label, shows a spinning ring beside it. */
+  .vrk-scope .vrk-btn-spinner {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    animation: vrk-btn-spin 0.7s linear infinite;
+  }
+  @keyframes vrk-btn-spin { to { transform: rotate(360deg); } }
   @media (max-width: 560px) {
     .vrk-scope .saved-remix-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
@@ -30264,7 +30281,10 @@ export const dashboardCss = `
   .vrk-scope .preview-media video { width: 100%; height: 100%; object-fit: contain; background: #000; }
   .vrk-scope.vrk-player-shell { position: absolute; inset: 0; display: flex; flex-direction: column; }
   .vrk-scope.vrk-player-shell .preview-surface { flex: 1; display: flex; flex-direction: column; border: 0; border-radius: 0; background: #000; }
-  .vrk-scope.vrk-player-shell .preview-media { flex: 1; min-height: 0; padding: 0; background: #000; }
+  /* Player shell fills like the card face: relative+block so the absolutely
+     positioned video covers the whole surface (the base .preview-media grid
+     centering would otherwise let it sit short, showing a black bar). */
+  .vrk-scope.vrk-player-shell .preview-media { position: relative; display: block; flex: 1; min-height: 0; padding: 0; background: #000; }
   @media (max-width: 860px) {
     .vrk-scope .section-head { grid-template-columns: auto minmax(0,1fr); }
     .vrk-scope .section-head .btn { grid-column: 1 / -1; }
