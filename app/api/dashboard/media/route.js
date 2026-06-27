@@ -18,6 +18,7 @@ const {
   listOptions,
   getMediaUsage,
   deleteSourceFiles,
+  deleteRenderedRemix,
   getArchiveManifest,
   getArchiveJob,
   normalizeArchiveSources,
@@ -70,7 +71,20 @@ async function requireAdmin(decoded) {
 }
 
 const ARCHIVE_MUTATIONS = new Set(['archive-to-arweave', 'deploy-website', 'update-arns']);
-const ADMIN_MEDIA_MUTATIONS = new Set(['delete-source-media']);
+const ADMIN_MEDIA_MUTATIONS = new Set(['delete-source-media', 'delete-remix']);
+
+// Remove a rendered-remix capture from dashboard_state.mediaCaptures so the
+// deleted video disappears from the card/modal. Transactional merge to avoid
+// clobbering sibling fields.
+async function removeMediaCapture(clientId, jobId) {
+  const docRef = fb.adminDb.collection('dashboard_state').doc(clientId);
+  await fb.adminDb.runTransaction(async (tx) => {
+    const snap = await tx.get(docRef);
+    const current = Array.isArray(snap.data()?.mediaCaptures) ? snap.data().mediaCaptures : [];
+    const next = current.filter((c) => c?.jobId !== jobId);
+    tx.set(docRef, { mediaCaptures: next }, { merge: true });
+  });
+}
 
 // Transactional merge into dashboard_state.{clientId}.archivePublishing so the
 // card listener updates without clobbering sibling fields.
@@ -121,6 +135,24 @@ export async function POST(request) {
         const files = Array.isArray(body?.files) ? body.files.slice(0, 25) : [];
         const result = await deleteSourceFiles(files);
         return json({ ok: true, ...result });
+      }
+
+      // Hard-delete a rendered remix the operator does not approve: removes the
+      // output object from EditVideos hosting, drops the capture from the card,
+      // and marks the media_job so the jobs reconciler can't re-add it.
+      if (action === 'delete-remix') {
+        const jobId = String(body?.jobId || '');
+        if (!jobId) return json({ error: 'jobId is required.' }, 400);
+        const job = await mediaJobs.getMediaJob(jobId, context.clientId);
+        const url = job?.output?.downloadUrl || null;
+        let storage = null;
+        if (url) {
+          try { storage = await deleteRenderedRemix(url); }
+          catch (e) { storage = { error: e.message || 'Hosting delete failed.' }; }
+        }
+        await removeMediaCapture(context.clientId, jobId);
+        await mediaJobs.failMediaJob(jobId, 'Deleted by operator.').catch(() => {});
+        return json({ ok: true, storage });
       }
     } catch (err) {
       return json({ error: err.message || 'Media mutation failed.' }, err.status || 500);
@@ -411,6 +443,35 @@ export async function GET(request) {
   }
 
   try {
+    // Same-origin streaming proxy for a rendered remix. The EditVideos signed
+    // URL has no CORS headers, so a browser `fetch(...).blob()` (required to
+    // share a File to the iOS share sheet → "Save Video" → camera roll) fails.
+    // We fetch the bytes server-side and stream them back from our own origin,
+    // with Content-Disposition so desktop browsers download too.
+    if (action === 'remix-download') {
+      const jobId = params.get('jobId');
+      if (!jobId) return json({ error: 'jobId is required.' }, 400);
+      const job = await mediaJobs.getMediaJob(jobId, clientId);
+      const srcUrl = job?.output?.downloadUrl || null;
+      if (!srcUrl) return json({ error: 'No rendered video for this job.' }, 404);
+      const upstream = await fetch(srcUrl);
+      if (!upstream.ok || !upstream.body) {
+        return json({ error: `Upstream fetch failed (${upstream.status}).` }, 502);
+      }
+      const safeName = String(params.get('filename') || `remix-${jobId}.mp4`)
+        .replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 120) || `remix-${jobId}.mp4`;
+      const len = upstream.headers.get('content-length');
+      return new Response(upstream.body, {
+        status: 200,
+        headers: {
+          'content-type': upstream.headers.get('content-type') || 'video/mp4',
+          'content-disposition': `attachment; filename="${safeName}"`,
+          'cache-control': 'private, max-age=300',
+          ...(len ? { 'content-length': len } : {}),
+        },
+      });
+    }
+
     if (action === 'job') {
       const jobId = params.get('jobId');
       if (!jobId) return json({ error: 'jobId is required.' }, 400);

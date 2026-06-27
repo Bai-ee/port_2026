@@ -697,6 +697,40 @@ async function deleteSourceFiles(files = []) {
   return { deleted, errors, status: errors.length ? (deleted.length ? 'partial' : 'failed') : 'done' };
 }
 
+// Parse the storage object path out of an EditVideos rendered-video URL.
+// Format: https://storage.googleapis.com/<bucket>/<object-path>?<signed params>
+// e.g. .../editvideos-63486.firebasestorage.app/videos/BAI_EE_video_123.mp4?...
+function parseRenderedObjectPath(videoUrl) {
+  const u = new URL(String(videoUrl));
+  const segs = u.pathname.replace(/^\/+/, '').split('/');
+  segs.shift(); // drop the bucket segment
+  return decodeURIComponent(segs.join('/'));
+}
+
+// Hard-delete a rendered remix output object from the EditVideos bucket. Guarded
+// to the `videos/` output prefix + a video extension so it can never touch
+// source folders, logos, or archive assets. Used by the Video Remix card's
+// "reject/delete" on a generated video the operator does not approve.
+async function deleteRenderedRemix(videoUrl) {
+  if (!videoUrl) throw new Error('No video URL to delete.');
+  let objectPath;
+  try { objectPath = parseRenderedObjectPath(videoUrl); }
+  catch { throw new Error('Could not parse the rendered video URL.'); }
+  if (!objectPath || !/^videos\//.test(objectPath)) {
+    throw new Error('Refusing to delete: not a rendered remix output path.');
+  }
+  if (!/\.(mp4|mov|webm|m4v)$/i.test(objectPath)) {
+    throw new Error('Refusing to delete: not a video file.');
+  }
+  try {
+    await bridgeBucket().file(objectPath).delete();
+  } catch (err) {
+    const notFound = err?.code === 404 || String(err?.message || '').includes('No such object');
+    if (!notFound) throw err; // already gone counts as success
+  }
+  return { deleted: objectPath };
+}
+
 // ===========================================================================
 // Archive / Publishing bridge — archive-publishing card (Knowledge Officer).
 //
@@ -1073,6 +1107,7 @@ module.exports = {
   createUploadSession,
   getMediaUsage,
   deleteSourceFiles,
+  deleteRenderedRemix,
   normalizeSourceFileRef,
   ensureUploadCors,
   invalidateFolderCache,

@@ -151,12 +151,14 @@ function safeDownloadName(value, fallback = 'download') {
     .slice(0, 96) || fallback;
 }
 
-async function downloadBrowserAsset(href, filename = 'download', { preferNativeShare = false, mimeType = '' } = {}) {
+async function downloadBrowserAsset(href, filename = 'download', { preferNativeShare = false, mimeType = '', fetchHeaders = null } = {}) {
   if (!href || typeof window === 'undefined') return;
   const cleanFilename = safeDownloadName(filename);
   let blobUrl = null;
   try {
-    const res = await fetch(href, { mode: 'cors', cache: 'force-cache' });
+    // fetchHeaders carries auth for same-origin proxy endpoints (e.g. the
+    // remix-download stream). Same-origin requests ignore `mode:cors` harmlessly.
+    const res = await fetch(href, { mode: 'cors', cache: 'force-cache', ...(fetchHeaders ? { headers: fetchHeaders } : {}) });
     if (!res.ok) throw new Error(String(res.status));
     const blob = await res.blob();
     const typedBlob = mimeType && blob.type !== mimeType ? new Blob([blob], { type: mimeType }) : blob;
@@ -193,6 +195,15 @@ async function downloadBrowserAsset(href, filename = 'download', { preferNativeS
   } finally {
     if (blobUrl) setTimeout(() => URL.revokeObjectURL(blobUrl), 4000);
   }
+}
+
+// Render a video's first frame as a cheap thumbnail without generating a poster
+// image: the `#t=0.1` media fragment tells the browser to paint ~0.1s in (the
+// first real frame) instead of a black frame, using only a metadata range
+// request. Fragment sits after any query string, so signed URLs are fine.
+function firstFrameThumbSrc(url) {
+  if (!url) return undefined;
+  return /#t=/.test(url) ? url : `${url}#t=0.1`;
 }
 
 function videoRemixPendingStorageKey(clientId) {
@@ -2973,6 +2984,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	  const [videoRemixUploadQueue, setVideoRemixUploadQueue] = useState([]);
 	  const [videoRemixUploadLoading, setVideoRemixUploadLoading] = useState(false);
 	  const [videoRemixUploadError, setVideoRemixUploadError] = useState('');
+	  // Per-asset busy keys (jobId) for the saved-remix download + delete actions.
+	  const [remixDownloadBusy, setRemixDownloadBusy] = useState('');
+	  const [remixDeleteBusy, setRemixDeleteBusy] = useState('');
 	  const [mediaLibraryUsage, setMediaLibraryUsage] = useState(null);
 	  const [mediaLibraryUsageLoading, setMediaLibraryUsageLoading] = useState(false);
 	  const [mediaLibraryDeleteBusy, setMediaLibraryDeleteBusy] = useState(false);
@@ -3380,6 +3394,56 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	      runVideoRemix({ recipe: buildRemixRecipe(STANDARD_REMIX_DEFAULTS, folders || undefined), sourceFolders: folders });
 	    }
 	  }, [user, videoRemixLoading, apiPath, runVideoRemix]);
+
+	  // Save a rendered remix to the device. On iOS this routes the bytes through
+	  // the SAME-ORIGIN remix-download proxy (the EditVideos signed URL has no CORS,
+	  // so fetch->blob fails) -> File -> navigator.share -> "Save Video" -> camera roll.
+	  // On desktop it falls through to a normal blob download. Needs jobId.
+	  const saveRemixToDevice = useCallback(async (asset) => {
+	    if (!asset || !user) return;
+	    const jobId = asset.jobId || null;
+	    const fileName = safeDownloadName(`${client?.businessName || 'video-remix'}-${jobId || asset.capturedAt || 'render'}.mp4`);
+	    setRemixDownloadBusy(jobId || 'x');
+	    try {
+	      const token = await user.getIdToken();
+	      if (jobId) {
+	        const proxyUrl = apiPath(`/api/dashboard/media?action=remix-download&jobId=${encodeURIComponent(jobId)}&filename=${encodeURIComponent(fileName)}`);
+	        await downloadBrowserAsset(proxyUrl, fileName, { preferNativeShare: true, mimeType: 'video/mp4', fetchHeaders: { Authorization: `Bearer ${token}` } });
+	      } else {
+	        const url = asset.downloadUrl || asset.url;
+	        await downloadBrowserAsset(url, fileName, { preferNativeShare: true, mimeType: asset.contentType || 'video/mp4' });
+	      }
+	    } finally {
+	      setRemixDownloadBusy('');
+	    }
+	  }, [user, apiPath, client?.businessName]);
+
+	  // Hard-delete a rendered remix the operator does not approve: removes it from
+	  // EditVideos hosting + the card. Confirm first (irreversible).
+	  const deleteSavedRemix = useCallback(async (asset) => {
+	    if (!asset || !user || !asset.jobId) return;
+	    if (typeof window !== 'undefined' && !window.confirm('Delete this video from hosting? This permanently removes the rendered file and cannot be undone.')) return;
+	    setRemixDeleteBusy(asset.jobId);
+	    try {
+	      const token = await user.getIdToken();
+	      const res = await fetch(apiPath('/api/dashboard/media?action=delete-remix'), {
+	        method: 'POST',
+	        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+	        body: JSON.stringify({ jobId: asset.jobId }),
+	      });
+	      const data = await res.json().catch(() => ({}));
+	      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+	      setBootstrap((prev) => {
+	        const dash = prev?.dashboardState || {};
+	        const cur = Array.isArray(dash.mediaCaptures) ? dash.mediaCaptures : [];
+	        return { ...prev, dashboardState: { ...dash, mediaCaptures: cur.filter((c) => c?.jobId !== asset.jobId) } };
+	      });
+	    } catch (err) {
+	      if (typeof window !== 'undefined') window.alert(`Delete failed: ${err?.message || 'unknown error'}`);
+	    } finally {
+	      setRemixDeleteBusy('');
+	    }
+	  }, [user, apiPath]);
 
 	  // --- Archive / Publishing handlers (admin-only; all calls go through the
 	  // metadata-only /api/dashboard/media route, which proxies wallet-funded
@@ -17651,10 +17715,14 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                            refreshVideoRemixFolders().catch((err) => setVideoRemixUploadError(err?.message || 'Could not load source folders.'));
 	                          }}
 	                        >
-	                          SOURCE MEDIA
+	                          <span className="tab-label-full">SOURCE MEDIA</span>
+	                          <span className="tab-label-short">SOURCE</span>
 	                        </button>
 	                        <button type="button" className={`tab${modalTab === 'usage' ? ' is-active' : ''}`} onClick={() => { setModalTab('usage'); loadMediaLibraryUsage().catch(() => {}); }}>USAGE</button>
-	                        <button type="button" className={`tab${modalTab === 'assets' ? ' is-active' : ''}`} onClick={() => setModalTab('assets')}>SAVED ASSETS</button>
+	                        <button type="button" className={`tab${modalTab === 'assets' ? ' is-active' : ''}`} onClick={() => setModalTab('assets')}>
+	                          <span className="tab-label-full">SAVED ASSETS</span>
+	                          <span className="tab-label-short">ASSETS</span>
+	                        </button>
 	                      </div>
 	                      <div className="panel-body">
 	                        {modalTab === 'remix' && (
@@ -18065,7 +18133,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                            {item ? (
 	                                              <>
 	                                                {item.url ? (
-	                                                  <video src={item.url} muted playsInline preload="metadata" />
+	                                                  <video src={firstFrameThumbSrc(item.url)} muted playsInline preload="metadata" />
 	                                                ) : (
 	                                                  <span className="order-slot-empty">Video</span>
 	                                                )}
@@ -18104,7 +18172,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                            aria-label={file.kind === 'video' ? `Add ${file.name} to clip order` : `${file.name} preview`}
 	                                          >
 	                                            {file.kind === 'video' ? (
-	                                              <video src={file.url || undefined} muted playsInline preload="metadata" />
+	                                              <video src={firstFrameThumbSrc(file.url)} muted playsInline preload="metadata" />
 	                                            ) : file.url ? (
 	                                              <img src={file.url} alt={file.name} loading="lazy" />
 	                                            ) : (
@@ -18135,7 +18203,17 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                      <div className="upload-queue" data-tooltip-disabled="true">
 	                                        {videoRemixFolderFiles.files.map((file) => (
 	                                          <div key={`cleanup-${file.fullPath || file.name}`} className="upload-row">
-	                                            <span className="upload-kind">{file.kind === 'image' ? 'IMG' : 'VID'}</span>
+	                                            {file.kind === 'video' && file.url ? (
+	                                              <span className="upload-kind upload-kind-thumb">
+	                                                <video src={firstFrameThumbSrc(file.url)} muted playsInline preload="metadata" />
+	                                              </span>
+	                                            ) : file.kind === 'image' && file.url ? (
+	                                              <span className="upload-kind upload-kind-thumb">
+	                                                <img src={file.url} alt="" />
+	                                              </span>
+	                                            ) : (
+	                                              <span className="upload-kind">{file.kind === 'image' ? 'IMG' : 'VID'}</span>
+	                                            )}
 	                                            <span className="upload-file">
 	                                              <span className="upload-name">{file.name}</span>
 	                                              <span className="upload-meta">{formatVideoRemixBytes(file.size)} · {file.contentType || file.kind}</span>
@@ -18221,37 +18299,50 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                            const url = asset.downloadUrl || asset.url || null;
 	                            const fileName = safeDownloadName(`${client?.businessName || 'video-remix'}-${asset.jobId || asset.capturedAt || 'render'}.mp4`);
 	                            return (
-	                              <article key={asset.storagePath || url || asset.jobId} className="list-card">
+	                              <article key={asset.storagePath || url || asset.jobId} className="list-card saved-remix-card">
 	                                <div className="list-head">
 	                                  <span className="list-title">{asset.label || 'Branded remix'}</span>
-	                                  {url ? (
-	                                    <div className="order-actions">
-	                                      <button
-	                                        type="button"
-	                                        className="btn btn-outline"
-	                                        onClick={() => remixFromSavedAsset(asset)}
-	                                        disabled={videoRemixLoading}
-	                                        title="Render a new video with this one's settings"
-	                                      >
-	                                        {videoRemixLoading ? '…' : 'Remix'}
-	                                      </button>
-	                                      <button
-	                                        type="button"
-	                                        className="btn btn-outline"
-	                                        onClick={() => downloadBrowserAsset(url, fileName, { preferNativeShare: true, mimeType: asset.contentType || 'video/mp4' })}
-	                                      >
-	                                        Save Video
-	                                      </button>
-	                                      <a className="btn btn-outline" href={url} target="_blank" rel="noopener noreferrer" download={fileName}>Open <span className="cta-icon">↗</span></a>
-	                                    </div>
-	                                  ) : null}
+	                                  <span className="list-body">{asset.capturedAt ? new Date(asset.capturedAt).toLocaleString() : 'Saved'}</span>
 	                                </div>
-	                                <div className="list-body">video_remix · {asset.capturedAt ? new Date(asset.capturedAt).toLocaleString() : 'Saved'}</div>
 	                                {url ? (
-	                                  <div className="preview-surface">
+	                                  <div className="preview-surface saved-remix-surface">
 	                                    <div className="preview-media">
 	                                      <video src={url} controls playsInline preload="metadata" />
 	                                    </div>
+	                                  </div>
+	                                ) : null}
+	                                {url ? (
+	                                  <div className="saved-remix-actions">
+	                                    <button
+	                                      type="button"
+	                                      className="btn btn-outline"
+	                                      onClick={() => remixFromSavedAsset(asset)}
+	                                      disabled={videoRemixLoading}
+	                                      title="Render a new video with this one's settings"
+	                                    >
+	                                      {videoRemixLoading ? '…' : 'Remix'}
+	                                    </button>
+	                                    <button
+	                                      type="button"
+	                                      className="btn btn-outline"
+	                                      onClick={() => saveRemixToDevice(asset)}
+	                                      disabled={remixDownloadBusy === (asset.jobId || 'x')}
+	                                      title="Save to your device (iOS: share \u2192 Save Video)"
+	                                    >
+	                                      {remixDownloadBusy === (asset.jobId || 'x') ? '\u2026' : 'Save'}
+	                                    </button>
+	                                    <a className="btn btn-outline" href={url} target="_blank" rel="noopener noreferrer" download={fileName}>Open <span className="cta-icon">\u2197</span></a>
+	                                    {asset.jobId ? (
+	                                      <button
+	                                        type="button"
+	                                        className="btn btn-outline saved-remix-delete"
+	                                        onClick={() => deleteSavedRemix(asset)}
+	                                        disabled={remixDeleteBusy === asset.jobId}
+	                                        title="Delete this video from hosting (permanent)"
+	                                      >
+	                                        {remixDeleteBusy === asset.jobId ? '\u2026' : 'Delete'}
+	                                      </button>
+	                                    ) : null}
 	                                  </div>
 	                                ) : null}
 	                              </article>
@@ -22585,6 +22676,19 @@ export const dashboardCss = `
     padding: 5px 10px;
     border-radius: 4px;
     line-height: 1;
+    /* Footer action items must never wrap to two lines (keeps all controls the
+       same height in the card footer row). */
+    white-space: nowrap;
+  }
+  /* Narrow phones: shrink footer action padding/letter-spacing so UPLOAD +
+     RUN REMIX + DETAILS all fit one row without wrapping or growing taller. */
+  @media (max-width: 430px) {
+    .tile-foot-rerun-btn,
+    .tile-view-details-btn {
+      padding: 5px 7px;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
   }
   .tile-foot-rerun-btn:disabled {
     cursor: not-allowed;
@@ -23047,6 +23151,19 @@ export const dashboardCss = `
     /* Belt-and-suspenders: no scoped modal content escapes the card horizontally.
        Targets the known card scopes only (not a blanket *) so desktop is untouched. */
     .apk-scope, .signals-sg, .client-brain-card { max-width: 100%; overflow-x: hidden; }
+    /* .vrk-scope section cards (Email Digest 01/02/03/04, etc.): the section-head
+       is a 3-col grid [index · title · aux-label]. The trailing auto column holds
+       a label that can be a long mono string (e.g. the client id BRYAN-BALLI-…),
+       which on a phone steals width and collapses the title column to ~100px —
+       title/body squish into a clipped strip. Drop the aux label to its own row
+       and let the title column take the full width. Confirmed 102px → 278px. */
+    .vrk-scope { min-width: 0; max-width: 100%; }
+    .vrk-scope .section { min-width: 0; }
+    .vrk-scope .section-head { grid-template-columns: auto minmax(0, 1fr); }
+    .vrk-scope .section-head > .label:last-child { grid-column: 1 / -1; justify-self: start; }
+    .vrk-scope .label { overflow-wrap: anywhere; }
+    /* 2-up field grids → single column so selects/inputs aren't crushed. */
+    .vrk-scope .field-grid { grid-template-columns: 1fr; }
   }
   .tile-detail-bento-label {
     display: block;
@@ -29469,7 +29586,15 @@ export const dashboardCss = `
     font: 700 12px/1 var(--vrk-mono);
     letter-spacing: 0.08em;
     text-transform: uppercase;
+    white-space: nowrap;
     transition: color 160ms ease, background 140ms ease;
+  }
+  /* Tab labels: full on desktop, one-word on mobile so they never wrap. */
+  .vrk-scope .tab-label-short { display: none; }
+  @media (max-width: 560px) {
+    .vrk-scope .tab { letter-spacing: 0.04em; font-size: 11px; }
+    .vrk-scope .tab-label-full { display: none; }
+    .vrk-scope .tab-label-short { display: inline; }
   }
   .vrk-scope .tab:hover:not(.is-active) { color: var(--vrk-ink); background: rgba(255,255,255,0.38); }
   .vrk-scope .tab.is-active {
@@ -29785,6 +29910,22 @@ export const dashboardCss = `
     color: var(--vrk-ink-soft);
     font: 700 11px/1 var(--vrk-mono);
   }
+  /* First-frame thumbnail variant of the kind box (manage/cleanup rows). */
+  .vrk-scope .upload-kind-thumb {
+    width: 48px;
+    height: 48px;
+    overflow: hidden;
+    background: #000;
+    padding: 0;
+  }
+  .vrk-scope .upload-kind-thumb video,
+  .vrk-scope .upload-kind-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    display: block;
+  }
   .vrk-scope .upload-progress {
     display: block;
     height: 8px;
@@ -30086,6 +30227,22 @@ export const dashboardCss = `
   }
   .vrk-scope .list-head { display: flex; align-items: center; gap: 10px; }
   .vrk-scope .list-title { flex: 1; color: var(--vrk-ink); font-size: 14px; font-weight: 700; line-height: 1.35; }
+  /* Saved remix: full-width video with a clean action row beneath it. The
+     actions fill the width evenly and wrap to a second row on narrow phones
+     instead of producing ragged right edges. */
+  .vrk-scope .saved-remix-surface { width: 100%; }
+  .vrk-scope .saved-remix-surface .preview-media { min-height: 220px; }
+  .vrk-scope .saved-remix-actions {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .vrk-scope .saved-remix-actions .btn { width: 100%; min-width: 0; padding: 10px 8px; }
+  .vrk-scope .saved-remix-delete { color: var(--vrk-danger); border-color: rgba(214,69,69,0.5); }
+  .vrk-scope .saved-remix-delete:hover:not(:disabled) { background: rgba(214,69,69,0.08); }
+  @media (max-width: 560px) {
+    .vrk-scope .saved-remix-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
   .vrk-scope .empty {
     display: grid;
     place-items: center;
@@ -30114,8 +30271,10 @@ export const dashboardCss = `
     .vrk-scope .toggle-grid { grid-template-columns: 1fr; }
     .vrk-scope .field-grid,
     .vrk-scope .orientation-grid,
-    .vrk-scope .folder-grid,
-    .vrk-scope .media-thumb-grid { grid-template-columns: 1fr; }
+    .vrk-scope .folder-grid { grid-template-columns: 1fr; }
+    /* Keep clip thumbnails 2-up on mobile so the folder stays scannable
+       instead of one giant thumbnail per row. */
+    .vrk-scope .media-thumb-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
     .vrk-scope .order-row { grid-template-columns: repeat(2,minmax(0,1fr)); }
     .vrk-scope .order-status,
     .vrk-scope .order-builder-head { grid-template-columns: 1fr; display: grid; }
@@ -30123,6 +30282,12 @@ export const dashboardCss = `
     .vrk-scope .upload-row { grid-template-columns: auto minmax(0,1fr); }
     .vrk-scope .upload-progress,
     .vrk-scope .upload-remove { grid-column: 1 / -1; }
+  }
+  /* Narrow phones: reclaim horizontal space so content sits flush to the
+     modal edges (less nested inset) and rows use the full width. */
+  @media (max-width: 560px) {
+    .vrk-scope .panel-body { padding: 10px; gap: 12px; }
+    .vrk-scope .section { padding: 12px; }
   }
 
   /* ── Creative Brief kit (ported verbatim from
