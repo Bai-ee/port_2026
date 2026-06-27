@@ -1,8 +1,20 @@
 # Email Digest Card — Source of Truth
 
 **Status:** P1 shipped · P2(b) shipped (calendar toggle migrated) · P2(a) stage 1 shipped
-(config backbone + digest wiring) · P2(a) stage 2 pending (the dashboard card UI).
+(config backbone + digest wiring) · P2(a) stage 2 pending (the dashboard card UI) ·
+**Granular per-section toggles shipped** (§9) · **Fresh-run-on-send + hosted Executive
+Brief link shipped** (§10).
 **Owner workstream:** normalize the Email Digest onto the Market Signals card pattern.
+
+> **Read me first if you're touching the digest (as-built jump-list):**
+> - **Every email section is on/off individually** via `include.*` (17 granular keys) — see §9.
+>   Sections are gated **purely by their toggle** with an explicit empty-state, so the EMAIL
+>   PREVIEW and the sent email hide/show identically.
+> - **A real send refreshes first.** Run & Send and the daily cron now run a **fresh brief**
+>   for every digest client BEFORE building the email; the "Open Executive Brief" button links
+>   to a freshly-published hosted page (`briefLinkMode`). Previews never refresh/publish. See §10.
+> - **Preview = what sends.** EMAIL PREVIEW defaults to **live** mode; Run & Send **saves the
+>   settings first** so saved == previewed == sent.
 
 > **Guiding principle.** The **Market Signals card** is the reference pattern for how we
 > build a brief: a control panel that toggles content on/off and produces a brief. The
@@ -24,10 +36,13 @@ Related SSOT: [`MARKET-SIGNALS-AND-SCOUT-PROJECTION.md`](MARKET-SIGNALS-AND-SCOU
 [Executive Brief]      → aggregates Marketing + Creative + operational intelligence
 ```
 
-The Email Digest is a **read-only aggregator** — it never runs the scout/scribe/guardian
-pipeline. It READS finalized intelligence and renders + sends it. The scheduled email is the
-delivery surface; the hosted **Executive Brief** is the full daily stand-up link opened from
-the email at `/dashboard?open=brief`.
+The Email Digest is a **read-only aggregator at render time** — `buildEmailHtml` never reads
+the pipeline, only finalized intelligence. **But a real send is no longer purely read-only:**
+on Run & Send and the daily cron, the digest route first runs a **fresh refresh** of every
+digest client (Scout-only signals + strategy regen, persisted to `dashboard_state`) so the
+email reflects send-time data, then renders + sends (§10). Previews stay fully read-only.
+The hosted **Executive Brief** linked from the email is a freshly-published page at
+`/briefs/{clientSlug}/{briefSlug}` (was `/dashboard?open=brief`; that's now only the fallback).
 
 Its primary content is **whatever the Market Signals card produced** (the Marketing Brief).
 Secondary content is the **Creative Brief**, **Calendar agenda**, **Web Stats** (site/user
@@ -50,31 +65,41 @@ These are 1-off cards now; candidates for subscriber-facing use later.
 
 ## 3. Email anatomy (current — the thing we are managing)
 
-Source: `app/api/admin/daily-digest/route.js` `buildEmailHtml` (~line 957). Sections render
-top-to-bottom. Each section maps to a **future include-toggle** in the Email Digest card.
+Source: `app/api/admin/daily-digest/route.js` `buildEmailHtml`. Sections render top-to-bottom.
+**Each section now maps to its own granular `include.*` key** (§9). ⚠️ **Parity rule:** every
+section is gated **only by its toggle**, never by data presence — when a toggle is ON but the
+data is empty/errored, the section still renders with an explicit empty-state ("No traffic
+recorded…", "GA4 unavailable: <error>"). This is what makes the EMAIL PREVIEW match the sent
+email. **Do not** re-introduce `ga4.overview ? … : ''` / `?.length ? … : ''` data-presence
+gates — that was the exact bug that made analytics silently vanish from the real email.
 
-| # | Section | Data source (collector) | Producer / origin | Toggle target |
+| # | Section | Data source (collector) | Producer / origin | `include.*` key |
 |---|---|---|---|---|
 | 1 | **Hero** (date) | — | static | always on |
-| 1b | **Open Executive Brief CTA** | `/dashboard?open=brief` | hosted dashboard brief preview | always on |
-| 2 | **Executive Summary** (LLM paragraph) | `generateBriefSummary` (`_brief-summary.js`) | **LLM — Haiku** (`DIGEST_SUMMARY_MODEL`, dflt `claude-haiku-4-5`) | `summaryEnabled` (exists) |
+| 1b | **Open Executive Brief CTA** | freshly-published `/briefs/{slug}` (fallback `/dashboard?open=brief`) | brief-link resolver (§10) | `execBriefLink` |
+| 2 | **Executive Summary** (LLM paragraph) | `generateBriefSummary` (`_brief-summary.js`) | **LLM — Haiku** (`DIGEST_SUMMARY_MODEL`, dflt `claude-haiku-4-5`) | `execSummary` (render) + `summaryEnabled` (LLM spend) |
 > §2 also injects the **approved Client Brain** voice when present: the digest route loads `loadClientBrainContext(homeClientId, { useFor:'emailDigest' })` and passes it to `generateBriefSummary({ clientBrainContext })`. Absent/unapproved ⇒ `''` ⇒ summary reads exactly as before. See [`docs/company-brain/`](../company-brain/).
-| 3 | **Today's Agenda** (5-day calendar) | `getCalendarAgenda` → Google Calendar API | Calendar card / OAuth | `include.calendar` (NEW) |
-| 4 | **Strategic Brief** (opportunities, KOLs, competitors, narratives, watchlist, posts, weather) | `getBriefForClient` → `projectBrief` (`_brief-intel.js:53`) | **Market Signals** (scout `agentData`) | `include.marketingBrief` |
-| 5 | **"Happening on X"** watchlist brief | `intel.watchlistAnalysis` (`reportSnapshot.watchlistAnalysis.text`) | watchlist-pull recipe | sub-toggle of #4 |
-| 4b | **Creative Brief** (attached run deliverable — cover summary + hero image) | `getCreativeBriefForClient` → `dashboard_state.briefSummaries.onboarding.summary` + `artifacts.homepageDeviceMockup`/`siteMeta.ogImage` | **Creative Brief card** (`onboarding-brief`) | `include.creativeBrief` (opt-in, **default off**) |
-| 6 | **Platform Overview** stats | `getFirebaseMetrics` | Firestore counts | `include.platformStats` (NEW) |
-| 7 | **GA4 Traffic / Top Pages / Sources / Key Events** | `getGA4Metrics` → GA4 API | Web Stats card | `include.webStats` (NEW) |
-| 8 | **Homepage interactions** (clicks, scroll, web vitals) | `getHomepageAnalyticsMetrics` → `homepage_events` | Web Stats card | `include.webStats` (NEW) |
-| 9 | **Firebase: New Sign-ups / Dashboards / Pipeline Status** | `getFirebaseMetrics` | Firestore | `include.platformStats` (NEW) |
-| 10 | **Vercel Deployments / Runtime Errors** | `getVercelMetrics` → Vercel API | Vercel | `include.deployments` (NEW) |
+| 3 | **Today's Agenda** (5-day calendar) | `getCalendarAgenda` → Google Calendar API | Calendar card / OAuth | `agenda` |
+| 4 | **Strategic Brief** (opportunities, KOLs, competitors, narratives, posts, weather) | `getBriefForClient` → `projectBrief` (`_brief-intel.js:53`) | **Market Signals** (scout `agentData`) | `marketingBrief` |
+| 5 | **"Happening on X"** watchlist brief | `intel.watchlistAnalysis` (`reportSnapshot.watchlistAnalysis.text`) | watchlist-pull recipe | `watchlist` (own key now, was sub of #4) |
+| 4b | **Creative Brief** (attached run deliverable — cover summary + hero image) | `getCreativeBriefForClient` → `dashboard_state.briefSummaries.onboarding.summary` + `artifacts.homepageDeviceMockup`/`siteMeta.ogImage` | **Creative Brief card** (`onboarding-brief`) | `creativeBrief` (opt-in, **default off**) |
+| 6 | **Platform Overview** stats | `getFirebaseMetrics` | Firestore counts | `platformOverview` |
+| 7 | **GA4 Traffic** | `getGA4Metrics` → GA4 API | Web Stats card | `ga4Traffic` |
+| 7b | **Top Pages / Sources / Key Events** | `getGA4Metrics` | Web Stats card | `topPages` / `trafficSources` / `keyEvents` |
+| 8 | **Homepage interactions** (clicks, scroll, web vitals) | `getHomepageAnalyticsMetrics` → `homepage_events` | Web Stats card | `homepage` (AND `webStatsConfig.homepageEnabled`) |
+| 9 | **Firebase: New Sign-ups / Dashboards / Pipeline Status** | `getFirebaseMetrics` | Firestore | `signups` / `dashboards` / `pipeline` |
+| 10 | **Vercel Deployments** | `getVercelMetrics` → Vercel API | Vercel | `deployments` |
+| 10b | **Vercel Runtime Errors** | `getVercelMetrics` | Vercel | `runtimeErrors` |
 | 11 | **Footer** | — | static | always on |
 
-> **Preserve-analysis rule (this phase).** The existing analysis stays and becomes
-> *configurable*, not removed: the LLM executive summary (#2) and the watchlist analysis (#5).
-> A **later phase** expands the digest's analysis to carry **scribe tone + guardian
-> feedback/QA style** — capture the current behavior now so it can be tweaked then. Do not
-> rip out the Haiku summary; make it a managed knob.
+> **Collector cost note.** Collectors are still skipped when none of their sections are on:
+> the route derives group flags (`needGA4 = ga4Traffic||topPages||trafficSources||keyEvents`,
+> `needVercel = deployments||runtimeErrors`, `needHomepage = homepage && homepageEnabled`) so a
+> fully-off analytics group makes no GA4 API call.
+
+> **Preserve-analysis rule.** The LLM executive summary (#2) and the watchlist analysis (#5)
+> stay configurable, not removed. A later phase expands the digest's analysis to carry
+> **scribe tone + guardian feedback/QA style** — do not rip out the Haiku summary.
 
 ---
 
@@ -150,16 +175,18 @@ onto what already exists, just re-skinned as a card:
 |---|---|---|
 | Save config (`/api/dashboard/marketing-brief/config`) | `/api/admin/digest-config` (GET+POST) | ✅ |
 | IN BRIEF preview tab | preview HTML via `/api/admin/daily-digest?preview=1` (or `?preview=template` for layout-only) | ✅ |
-| Run (produces brief) | Send now (`?send=1`) + scheduled cron run | ✅ |
+| Run (produces brief) | Send now (`?send=1`, **refreshes first** §10) + scheduled cron run | ✅ |
 
-So P1 is mostly a **UI/control-surface** job + **config extension**, not a new pipeline.
-
-**Live toggle reflection.** The preview endpoint accepts an optional `&include=<csv-of-on-keys>`
-override (preview only) so the EMAIL PREVIEW tab renders with the card's *current, even unsaved*
-section toggles. `AdminEmailDigestView` reloads the template preview on each tab-switch passing
-`form.include`. `include=` (empty) = all sections off; param absent = use saved config. Override
-applies to both `?preview=template` and `?preview=1` (live); every section in `buildEmailHtml` is
-gated by `include.*` (not by neutral data) so template + live hide identically.
+**Preview = what sends (as-built).** The EMAIL PREVIEW tab now defaults to **live** mode
+(`?preview=1`), not template — so what you see is exactly what sends (same route code, same
+toggles, real data). Template (`?preview=template`, placeholder data) is an opt-in "layout only"
+view. The preview endpoint takes an optional `&include=<csv-of-on-keys>` override (preview only)
+so the tab renders the card's *current, even unsaved* toggles (`form.include`); `include=` empty
+= all off, param absent = saved config. **Run & Send saves the current settings first**, so
+`saved == previewed == sent`. Because every `buildEmailHtml` section is gated only by `include.*`
+(never by data presence — §3 parity rule), and `?preview=1` and `?send=1` share one code path,
+live preview and the sent email are byte-identical except for the fresh-run brief content (§10),
+which the preview deliberately skips (no cost).
 
 ---
 
@@ -203,7 +230,10 @@ gated by `include.*` (not by neutral data) so template + live hide identically.
 | Digest config persistence + defaults + validation | `features/intelligence/_digest-config.js` |
 | Digest config admin API | `app/api/admin/digest-config/route.js` |
 | Web Stats settings API (P2a stage 1) | `app/api/dashboard/web-stats/config/route.js` → `client_configs/{clientId}.webStatsConfig` |
-| Email Digest card modal (the control surface) | `components/AdminEmailModals.jsx` → `AdminEmailDigestView`: **SETTINGS** tab styled with the dashboard-modal style guide (scoped `.vrk-scope` kit — `.section`/`.toggle-grid`/`.segmented`/`.field-grid`; the 6 section toggles are `.toggle-card`s, each with a **"Customize ↗"** link that opens that section's own card via `onOpenCard(cardId)` → `openCapabilityCard` — marketingBrief→`signals`, creativeBrief→`onboarding-brief`, calendar→`calendar-connect`; frequency is a `.segmented` control; "Include client briefs" is a **collapsible, default-collapsed** menu) + **EMAIL PREVIEW** tab (rendered email + Run&Send) |
+| Email Digest card modal (the control surface) | `components/AdminEmailModals.jsx` → `AdminEmailDigestView`: **SETTINGS** tab (`.vrk-scope` kit). §03 now renders the **17 granular toggles grouped** (`SECTION_GROUPS` = Brief / Web analytics / Platform / Ops) as `.toggle-card`s + a **brief-link-mode** `.segmented` control (`fresh`/`latest`/`off`) + per-section **"Customize ↗"** (`onOpenCard` → signals / onboarding-brief / calendar-connect). EMAIL PREVIEW defaults to **live**; **Run & Send saves config first** then `?send=1`. |
+| Hosted brief link resolver | `features/intelligence/_digest-brief-link.js` → `resolveExecutiveBriefUrl({clientId,mode,origin,allowFreshRun})` + `getLatestPublishedBrief`. Renders `renderMarketingBriefHtml` (dynamic-imported from brief-preview route) and writes a public `clients/{cid}/custom_briefs/{daily-YYYY-MM-DD}` doc + `brief_client_slugs` alias. |
+| Pre-digest fresh-run worker | `app/api/worker/pre-digest-refresh/route.js` → exports `refreshDigestClient(clientId)` (Scout-only brief + strategy regen → `completeRun` persists to `dashboard_state`). Called inline by the digest route on a real send; also a standalone cron-secret route. |
+| Shared strategy-plan core (used by the refresh) | `features/strategy-builder/generate-plan.js` → `generateStrategyPlan({clientId,clientConfig})` |
 | Creative Brief attachment fetch | `features/intelligence/_brief-intel.js` → `getCreativeBriefForClient(clientId)`; rendered by `buildCreativeBriefSection` in the digest route |
 | Admin-bucket card def (`email-digest`) | `DashboardPage.jsx` (~line 10297, `category: 'admin'`); modal render branch where `activeTileModal.cardId === 'email-digest'` |
 | ⚠️ Legacy parallel surface (do NOT add settings here) | `AdminPage.jsx` digest panel — pre-existing tone/summary/docs form; superseded by the Email Settings card, retire opportunistically |
@@ -224,3 +254,90 @@ gated by `include.*` (not by neutral data) so template + live hide identically.
    one `DIGEST_EMAIL`. Subscriber expansion (P-later) implies many recipients × schedules.
 4. **DOM identifiers** — new card containers get stable ids per repo naming rule
    (`email-digest-card-shell`, `email-digest-include-toggles-row`, `web-stats-card-shell`, etc.).
+
+---
+
+## 9. Granular per-section toggles (as-built)
+
+Defined in `features/intelligence/_digest-config.js`. **17 keys, one per rendered section**
+(default ON except `creativeBrief`). The UI groups them (`SECTION_GROUPS` in
+`AdminEmailModals.jsx`); the route gates each `buildEmailHtml` section on exactly one key.
+
+```
+execBriefLink · execSummary · agenda · marketingBrief · watchlist · creativeBrief(false)
+ga4Traffic · topPages · trafficSources · keyEvents · homepage
+platformOverview · signups · dashboards · pipeline
+deployments · runtimeErrors
+```
+
+**Back-compat (critical).** Existing `digest_config` docs were written with the OLD 6 coarse
+keys. `normalizeInclude` (in `_digest-config.js`) handles both: it FIRST expands any legacy key
+via `LEGACY_INCLUDE_EXPANSION` (`calendar→[agenda]`, `webStats→[ga4Traffic,topPages,
+trafficSources,keyEvents,homepage]`, `platformStats→[platformOverview,signups,dashboards,
+pipeline]`, `deployments→[deployments,runtimeErrors]`, `marketingBrief→[marketingBrief,
+watchlist]`, `creativeBrief→[creativeBrief]`), THEN applies any granular keys on top (granular
+wins). So an un-migrated doc keeps working; a doc saved by the new UI is fully granular. ⚠️ If
+you add a new section, add its key to `INCLUDE_KEYS` + `DEFAULT_INCLUDE`, gate the section in
+`buildEmailHtml`, parse it in the route's `includeOverride`, and add it to a `SECTION_GROUPS`
+group in the UI — and give it an empty-state (parity rule, §3).
+
+**Preview override.** The route's `includeOverride` parses `&include=<csv>` against
+`digestConfig.INCLUDE_KEYS`; the UI builds that csv from `form.include`. Keys absent from the
+csv are treated as OFF, so `getDigestConfig` (which normalizes to all 17 keys) must back the UI.
+
+**Summary's two gates.** `execSummary` (include key) controls whether the summary *block
+renders*; `summaryEnabled` (separate field, §02 of the UI) controls whether the *LLM runs*
+(spend). Both default true; the block shows an empty-state if rendered without a paragraph.
+
+**`briefLinkMode`** (top-level `digest_config` field, not under `include`): `'fresh' | 'latest'
+| 'off'`, default `'fresh'`. Validated by `normalizeBriefLinkMode`. Drives the resolver (§10).
+
+---
+
+## 10. Fresh-run-on-send + hosted Executive Brief link (as-built)
+
+**The goal:** when the digest is sent (Run & Send OR the daily cron), every associated brief is
+run FRESH first, so the email + the linked Executive Brief are legitimate at send time. A
+preview never spends money.
+
+**Flow** (`app/api/admin/daily-digest/route.js` GET, main `try`):
+1. Resolve `homeClientId` + `digestCfg`; compute `briefClientIds = [home, ...includeClientIds]`.
+2. **Fresh-run gate:** `isRealSend = isSendNow || (!isPreview && !isTemplate)`. On a real send,
+   for each `briefClientIds`, `await refreshDigestClient(cid)` — dynamic-imported from
+   `app/api/worker/pre-digest-refresh/route.js`. That runs a **Scout-only** marketing brief
+   (`scope:'marketing-director'`, ~$0.10) + regenerates the strategy plan, and `completeRun`
+   persists both to `dashboard_state/{cid}`. Failures are logged, never block the email.
+3. Collectors (GA4 / Vercel / Calendar / Firebase / homepage) run, gated by the group flags.
+4. Briefs are fetched from the (now fresh) `dashboard_state` via `getBriefForClient`.
+5. **Brief link:** if `execBriefLink` on and `briefLinkMode !== 'off'`,
+   `resolveExecutiveBriefUrl({clientId:home, mode, origin, allowFreshRun:!isPreview})`:
+   - `mode:'fresh'` + real send → `renderMarketingBriefHtml` over the fresh `dashboard_state`
+     (renderer dynamic-imported from the brief-preview route), then **publish** a public
+     `clients/{cid}/custom_briefs/daily-YYYY-MM-DD` doc (`merge:true`, so a same-day re-send
+     overwrites with fresh content, stable URL) + a `brief_client_slugs/{publicClientSlug}`
+     alias. Returns `/briefs/{publicClientSlug}/{publicBriefSlug}`.
+   - `mode:'latest'` (or a `'fresh'` preview, or a `'fresh'` publish that threw) → newest
+     published brief via `getLatestPublishedBrief`.
+   - `mode:'off'` → null. Any null → `buildEmailHtml` falls back to `/dashboard?open=brief`.
+6. `buildEmailHtml(..., renderInclude, creative, briefUrl)` → preview returns it, send sends it.
+
+**Why the digest route does the refresh inline (not a separate cron).** `vercel.json` has ONE
+digest cron (`0 13 * * *` → `/api/admin/daily-digest`). Because the route refreshes on any real
+send, that single cron does refresh-then-send in one invocation (within `maxDuration=300`). The
+`pre-digest-refresh` route still exists as a standalone cron-secret endpoint, but is **not
+required** to be separately scheduled for the refresh to happen.
+
+**⚠️ Gotchas for future edits:**
+- **Don't re-add a reuse window / second pipeline in the resolver.** It used to run its own
+  `runClientPipeline` + a 90-min publish-reuse window — that caused a today-URL with yesterday's
+  content. The refresh (step 2) is now the single source of freshness; the resolver only
+  renders + publishes what's already fresh.
+- **Cost:** every real send runs the Scout-only refresh per client (LLM). Repeated Run & Send
+  clicks each re-run. If a user wants zero per-send cost, set `briefLinkMode:'latest'` (links the
+  newest published brief; still refreshes the brief data for the email body — to make sends fully
+  free you'd also need to skip step 2, not currently exposed).
+- **Auth:** publishing writes Firestore directly via the admin SDK — it does NOT call the
+  admin-only `custom-briefs` POST route, so no JWT/worker-secret plumbing is needed in cron.
+- **Dynamic imports of route modules** (`refreshDigestClient`, `renderMarketingBriefHtml`) are
+  the established pattern here; both are wrapped so a resolution/runtime failure degrades to
+  last-good data.
