@@ -3870,6 +3870,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // the DELIVERABLES bucket the first time its HTML is ready, then stays closed so
   // the user can navigate freely. Reopened on demand by clicking the brief card.
   const autoOpenedBriefRef = useRef(false);
+  // One-shot guard for emailed dashboard deep links such as /dashboard?open=brief.
+  // The HTML arrives async from /api/dashboard/brief-preview, so open after fetch.
+  const deepLinkBriefOpenedRef = useRef(false);
   const runWasActiveRef = useRef(false);
   const prevRunIdRef = useRef(null);
   const terminalOutputRef = useRef(null);
@@ -3945,6 +3948,18 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       : ''),
     [briefPreviewHtml],
   );
+
+  useEffect(() => {
+    if (deepLinkBriefOpenedRef.current) return;
+    if (!briefPreviewHtml) return;
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search || '');
+    const openTarget = String(params.get('open') || params.get('view') || '').toLowerCase();
+    if (!['brief', 'executive', 'executive-brief'].includes(openTarget)) return;
+    deepLinkBriefOpenedRef.current = true;
+    setBriefFullScreen(true);
+  }, [briefPreviewHtml]);
+
   // Creative Brief card auto-scroll tease — once the preview iframe loads, slowly
   // scroll its (same-origin, scriptless) document from the cover to the bottom to
   // hint at the contents, then loop back to the top and run again. The shell is

@@ -20,15 +20,19 @@ Related SSOT: [`MARKET-SIGNALS-AND-SCOUT-PROJECTION.md`](MARKET-SIGNALS-AND-SCOU
 ```
 [Market Signals card]  → produces Marketing Brief   (reference pattern)
 [Creative Brief card]  → official brief standard
-[Email Digest card]    → produces the Email          ← THIS workstream
-
-Later phase: Email + Marketing + Creative briefs aggregate into one Executive Brief.  (NOT now)
+[Email Digest card]    → sends scheduled email + links to Executive Brief
+[Executive Brief]      → aggregates Marketing + Creative + operational intelligence
 ```
 
 The Email Digest is a **read-only aggregator** — it never runs the scout/scribe/guardian
-pipeline. It READS finalized intelligence and renders + sends it. Its primary content is
-**whatever the Market Signals card produced** (the Marketing Brief). Secondary content is the
-**Calendar agenda** and **Web Stats** (site/user performance).
+pipeline. It READS finalized intelligence and renders + sends it. The scheduled email is the
+delivery surface; the hosted **Executive Brief** is the full daily stand-up link opened from
+the email at `/dashboard?open=brief`.
+
+Its primary content is **whatever the Market Signals card produced** (the Marketing Brief).
+Secondary content is the **Creative Brief**, **Calendar agenda**, **Web Stats** (site/user
+performance), platform/deployment status, watchlist analysis, and any other finalized brief
+sections exposed through the shared projection.
 
 ---
 
@@ -52,6 +56,7 @@ top-to-bottom. Each section maps to a **future include-toggle** in the Email Dig
 | # | Section | Data source (collector) | Producer / origin | Toggle target |
 |---|---|---|---|---|
 | 1 | **Hero** (date) | — | static | always on |
+| 1b | **Open Executive Brief CTA** | `/dashboard?open=brief` | hosted dashboard brief preview | always on |
 | 2 | **Executive Summary** (LLM paragraph) | `generateBriefSummary` (`_brief-summary.js`) | **LLM — Haiku** (`DIGEST_SUMMARY_MODEL`, dflt `claude-haiku-4-5`) | `summaryEnabled` (exists) |
 > §2 also injects the **approved Client Brain** voice when present: the digest route loads `loadClientBrainContext(homeClientId, { useFor:'emailDigest' })` and passes it to `generateBriefSummary({ clientBrainContext })`. Absent/unapproved ⇒ `''` ⇒ summary reads exactly as before. See [`docs/company-brain/`](../company-brain/).
 | 3 | **Today's Agenda** (5-day calendar) | `getCalendarAgenda` → Google Calendar API | Calendar card / OAuth | `include.calendar` (NEW) |

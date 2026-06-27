@@ -67,7 +67,10 @@ export default function DashboardRoute() {
         intentionalLogout = sessionStorage.getItem('intentionalLogout') === '1';
         if (intentionalLogout) sessionStorage.removeItem('intentionalLogout');
       } catch {}
-      router.replace(intentionalLogout ? '/' : '/login?redirect=/dashboard');
+      const dashboardPath = typeof window !== 'undefined'
+        ? `${window.location.pathname}${window.location.search || ''}`
+        : '/dashboard';
+      router.replace(intentionalLogout ? '/' : `/login?redirect=${encodeURIComponent(dashboardPath)}`);
     }
   }, [user, loading, router]);
 

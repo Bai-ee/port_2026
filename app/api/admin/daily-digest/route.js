@@ -52,6 +52,22 @@ const DIGEST_TIMEZONE = process.env.DIGEST_TIMEZONE || 'America/Chicago';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
+function appOrigin() {
+  const raw =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.PUBLIC_APP_URL ||
+    process.env.APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '') ||
+    'https://hitloop.agency';
+  return String(raw).replace(/\/+$/, '');
+}
+
+function appUrl(path = '/') {
+  const cleanPath = String(path || '/').startsWith('/') ? path : `/${path}`;
+  return `${appOrigin()}${cleanPath}`;
+}
+
 function json(body, status = 200) {
   return NextResponse.json(body, { status, headers: { 'cache-control': 'no-store' } });
 }
@@ -1007,6 +1023,7 @@ function buildCreativeBriefSection(creative) {
 function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, include = {
   calendar: true, marketingBrief: true, creativeBrief: false, webStats: true, platformStats: true, deployments: true, homepage: true,
 }, creative = null) {
+  const executiveBriefUrl = appUrl('/dashboard?open=brief');
   const strategicSections = include.marketingBrief === false ? '' : (Array.isArray(briefs) ? briefs : [])
     .map((b) => `${buildStrategicBriefSection(b.intel, b.clientName)}${buildWatchlistBriefSection(b.intel?.watchlistAnalysis)}`)
     .filter((s) => s && s.trim())
@@ -1100,6 +1117,10 @@ a{text-decoration:none;}
             <div style="font-family:${DT.fMono};font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:${DT.light};">${dateStr}</div>
           </div>
 
+          <div style="margin:18px 0 28px;">
+            <a href="${escapeHtml(executiveBriefUrl)}" style="display:inline-block;background:${DT.ink};color:${DT.card};font-family:${DT.fMono};font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border-radius:999px;padding:13px 18px;border:1px solid ${DT.ink};">Open Executive Brief</a>
+          </div>
+
           <!-- Executive summary (LLM) -->
           ${buildSummarySection(summary)}
 
@@ -1181,7 +1202,7 @@ a{text-decoration:none;}
           <div style="border-top:1.5px solid ${DT.line};padding-top:22px;margin-top:32px;">
             <div style="font-family:${DT.fMono};font-size:10px;letter-spacing:.08em;color:${DT.light};margin-bottom:10px;">Generated ${new Date(timestamp).toLocaleTimeString('en-US')}</div>
             <div style="font-family:${DT.fMono};font-size:10px;letter-spacing:.06em;">
-              <a href="https://hitloop.agency/dashboard" style="color:${DT.accent};">Dashboard</a> &nbsp;&middot;&nbsp;
+              <a href="${escapeHtml(executiveBriefUrl)}" style="color:${DT.accent};">Executive Brief</a> &nbsp;&middot;&nbsp;
               <a href="https://vercel.com/baiees-projects/port-2026" style="color:${DT.accent};">Vercel</a> &nbsp;&middot;&nbsp;
               <a href="https://console.firebase.google.com/project/human-in-the-loop-a1a19" style="color:${DT.accent};">Firebase</a> &nbsp;&middot;&nbsp;
               <a href="https://analytics.google.com" style="color:${DT.accent};">GA4</a>
