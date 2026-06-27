@@ -459,6 +459,23 @@ function deriveMarketingBriefPerPlatformResults(agentData, selectedPlatforms) {
   return out;
 }
 
+// Shared terminal item formatting — turns a signal/result object into a short
+// one-line label, and a list of array items into terminal detail lines. Used by
+// the single-terminal flows (Generate Report / Update Report).
+function termArrCount(a) { return Array.isArray(a) ? a.length : 0; }
+function termItemText(it) {
+  return String(
+    (it && (it.title || it.headline || it.topic || it.theme || it.summary || it.text || it.name || it.signal || it.quote)) ||
+    (typeof it === 'string' ? it : '')
+  ).replace(/\s+/g, ' ').trim().slice(0, 70);
+}
+function termItemLines(arr, pfx, max = 4) {
+  return (Array.isArray(arr) ? arr : [])
+    .slice(0, max)
+    .map((it) => ({ type: 'dim', prefix: pfx, text: termItemText(it) }))
+    .filter((d) => d.text);
+}
+
 function splitMarketingBriefTerms(value) {
   const raw = Array.isArray(value) ? value : String(value || '').split(/[\n,]+/);
   return raw
@@ -3016,6 +3033,33 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    for (let i = lines.length - 1; i >= 0; i -= 1) { if (lines[i].cursor) { lines[i] = { ...lines[i], type, prefix, cursor: false }; break; } }
 	    return lines;
 	  };
+
+	  // Single-terminal phase controller — shared by Generate Report / Update Report.
+	  // termStart opens the terminal with a first active line; termPhaseOpen appends a
+	  // new active line; termPhaseClose settles the active line ✓ and lists that
+	  // phase's found items; termFinish ends (done|error) → the 4s effect auto-closes
+	  // it, revealing the REPORT tab underneath.
+	  const termStart = (title, host, firstPfx, firstText) => setAdhocTerminal({
+	    open: true, status: 'running', title, brand: 'Market signals', host: host || '', videoUrl: null,
+	    lines: [
+	      { type: 'system', prefix: '$', text: host ? `market signals · ${host}` : 'market signals' },
+	      { type: 'dim', prefix: '', text: '─'.repeat(42) },
+	      { type: 'active', prefix: firstPfx, text: firstText, cursor: true },
+	    ],
+	  });
+	  const termPhaseOpen = (pfx, text) => setAdhocTerminal((t) => (t ? { ...t, lines: [...t.lines, { type: 'active', prefix: pfx, text, cursor: true }] } : t));
+	  const termPhaseClose = (detail = []) => setAdhocTerminal((t) => {
+	    if (!t) return t;
+	    const lines = settleActiveLine(t.lines.slice(), 'ok', '✓');
+	    for (const d of detail) if (d && d.text) lines.push(d);
+	    return { ...t, lines };
+	  });
+	  const termFinish = (text, ok = true) => setAdhocTerminal((t) => {
+	    if (!t) return t;
+	    const lines = settleActiveLine(t.lines.slice(), ok ? 'ok' : 'error', ok ? '✓' : '✗');
+	    lines.push({ type: ok ? 'ok' : 'error', prefix: ok ? '✓' : '[ERR]', text });
+	    return { ...t, status: ok ? 'done' : 'error', lines };
+	  });
 	  const runWithTerminal = useCallback(async ({ title, brand, host, stages, task }) => {
 	    if (adhocTimerRef.current) clearInterval(adhocTimerRef.current);
 	    setAdhocTerminal({
@@ -5265,37 +5309,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     const needsWatchlist = ids.some((id) => WATCHLIST_RECIPE_IDS.includes(id));
     let host = ''; try { host = new URL(String(client?.websiteUrl || client?.website || '')).hostname.replace(/^www\./, ''); } catch { /* none */ }
 
-    // One-terminal line helpers — settle the prior active line, push the next.
-    const stepActive = (pfx, text) => setAdhocTerminal((t) => {
-      if (!t) return t;
-      const lines = settleActiveLine(t.lines.slice(), 'ok', '✓');
-      lines.push({ type: 'active', prefix: pfx, text, cursor: true });
-      return { ...t, lines };
-    });
-    const stepDone = (text) => setAdhocTerminal((t) => {
-      if (!t) return t;
-      const lines = settleActiveLine(t.lines.slice(), 'ok', '✓');
-      lines.push({ type: 'ok', prefix: '✓', text });
-      return { ...t, status: 'done', lines };
-    });
-    const stepFail = (msg) => setAdhocTerminal((t) => {
-      if (!t) return t;
-      const lines = settleActiveLine(t.lines.slice(), 'error', '✗');
-      lines.push({ type: 'error', prefix: '[ERR]', text: msg });
-      return { ...t, status: 'error', lines };
-    });
-
     setIntakeModalDismissed(true); // let the adhoc terminal own the screen
     setMarketingBriefRunning(true);
     setMarketingBriefError('');
-    setAdhocTerminal({
-      open: true, status: 'running', title: 'GENERATING REPORT', brand: 'Market signals', host, videoUrl: null,
-      lines: [
-        { type: 'system', prefix: '$', text: host ? `market signals · ${host}` : 'market signals' },
-        { type: 'dim', prefix: '', text: '─'.repeat(42) },
-        { type: 'active', prefix: '[SAVE]', text: 'merging Client Brain terms + saving inputs…', cursor: true },
-      ],
-    });
+    termStart('GENERATING REPORT', host, '[SAVE]', 'merging Client Brain terms + saving inputs…');
 
     try {
       const token = await user.getIdToken();
@@ -5304,17 +5321,31 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       // Phase 1 — fresh Scout search (inline; resolves when the search completes).
       const saved = await saveMarketingBriefConfig({ override: next });
       if (!saved) throw new Error('Could not save search inputs.');
-      stepActive('[SEARCH]', 'scanning web · X · reddit for fresh market signals…');
+      termPhaseClose(); // settle [SAVE]
+      termPhaseOpen('[SEARCH]', 'scanning web · X · reddit for fresh market signals…');
       const runRes = await fetch(apiPath('/api/dashboard/marketing-brief/run'), {
         method: 'POST', headers: authHeaders, body: JSON.stringify({ scope: 'marketing-director' }),
       });
       const runData = await runRes.json().catch(() => ({}));
       if (!runRes.ok) throw new Error(runData?.error || 'Market search failed.');
-      try { doBootstrap(); } catch { /* best-effort refresh */ }
+      // Read the freshly-persisted signals so we can list each found item.
+      let ad = {};
+      try {
+        const fresh = await fetchDashboardBootstrap(user, impersonateId);
+        applyBootstrapResponse(fresh);
+        ad = fresh?.dashboardState?.marketingBrief?.scoutBrief?.agentData || {};
+      } catch { try { doBootstrap(); } catch { /* best-effort */ } }
+      termPhaseClose([
+        { type: 'dim', prefix: '·', text: `${termArrCount(ad.categoryTrends)} trends · ${termArrCount(ad.competitorIntel)} competitors · ${termArrCount(ad.contentOpportunities)} angles · ${termArrCount(ad.redditSignals)} reddit · ${termArrCount(ad.kolActivity)} KOL posts · ${termArrCount(ad.brandMentions)} brand` },
+        ...termItemLines(ad.categoryTrends, '· web'),
+        ...termItemLines(ad.competitorIntel, '· comp'),
+        ...termItemLines(ad.redditSignals, '· rdt'),
+      ]);
 
       // Phase 2 — refresh the current watchlist handles (posts + mentions).
       if (ids.length && needsWatchlist && hasHandles) {
-        stepActive('[X]', 'pulling watchlist timelines + mentions…');
+        termPhaseOpen('[X]', 'pulling watchlist timelines + mentions…');
+        let wlDetail = [];
         try {
           const wlRes = await fetch(apiPath('/api/dashboard/watchlist-pull'), {
             method: 'POST', headers: authHeaders,
@@ -5323,17 +5354,19 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           const wlData = await wlRes.json().catch(() => ({}));
           if (wlRes.ok && wlData.ok !== false) {
             setWatchlistPull({ loading: false, handles: wlData.handles || [], spotlight: wlData.spotlight || null, analysis: wlData.analysis || null, error: '' });
+            wlDetail = (wlData.handles || []).slice(0, 8).map((h) => ({ type: 'dim', prefix: '· x', text: `@${h.handle} — ${h.ownPosts?.length || 0} posts · ${h.mentions?.length || 0} mentions · ${h.engagementTotal || 0} eng` }));
           }
         } catch { /* non-fatal — recipe falls back to stored timelines */ }
+        termPhaseClose(wlDetail);
       }
 
       // Phase 3 — analysis skills over the fresh signals.
       if (!ids.length) {
         setModalTab('report');
-        stepDone('signals refreshed — enable an Analysis Skill for a synthesized report');
+        termFinish('signals refreshed — enable an Analysis Skill for a synthesized report');
         return;
       }
-      stepActive('[ANALYZE]', `running ${ids.length} skill${ids.length === 1 ? '' : 's'}: ${ids.map(labelFor).join(' · ')}…`);
+      termPhaseOpen('[ANALYZE]', `running ${ids.length} skill${ids.length === 1 ? '' : 's'}: ${ids.map(labelFor).join(' · ')}…`);
       setRecipeRun({ loading: true, results: [], error: '' });
       const recipeRes = await fetch(apiPath('/api/dashboard/recipe-run'), {
         method: 'POST', headers: authHeaders, body: JSON.stringify({ recipeIds: ids }),
@@ -5343,17 +5376,21 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       const results = recipeData.results || [];
       setRecipeRun({ loading: false, results, error: '' });
       const okCount = results.filter((r) => r.ok).length;
+      termPhaseClose(results.map((r) => ({
+        type: r.ok ? 'ok' : 'error', prefix: r.ok ? '· ✓' : '· ✗',
+        text: `${labelFor(r.recipeId)}${r.ok ? ` · ${typeof r.costUsd === 'number' ? `$${r.costUsd.toFixed(3)}` : 'done'}` : ` · ${r.error || 'failed'}`}`,
+      })));
       setModalTab('report'); // switch underneath so the terminal's auto-close reveals it
-      stepDone(`report ready · ${okCount}/${results.length} skill${results.length === 1 ? '' : 's'} synthesized`);
+      termFinish(`report ready · ${okCount}/${results.length} skill${results.length === 1 ? '' : 's'} synthesized`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Generate report failed.';
-      stepFail(msg);
+      termFinish(msg, false);
       setMarketingBriefError(msg);
       setRecipeRun((prev) => ({ ...prev, loading: false, error: msg }));
     } finally {
       setMarketingBriefRunning(false);
     }
-  }, [user, marketingBriefConfig, marketingBriefRunning, clientBrainDefaults, saveMarketingBriefConfig, apiPath, doBootstrap, recipeCatalog, client, settleActiveLine]);
+  }, [user, marketingBriefConfig, marketingBriefRunning, clientBrainDefaults, saveMarketingBriefConfig, apiPath, doBootstrap, recipeCatalog, client, settleActiveLine, impersonateId, applyBootstrapResponse]);
 
   // Fast path: re-run the enabled Analysis Skills over the already-stored signals
   // (no new ~3-min search). Use when the signals are fresh but the REPORT didn't
@@ -5362,28 +5399,79 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     if (!user || marketingBriefRunning || recipeRun.loading) return;
     const ids = Array.isArray(marketingBriefConfig?.analysisRecipes) ? marketingBriefConfig.analysisRecipes : [];
     if (!ids.length) { setRecipeRun({ loading: false, results: [], error: 'Turn on at least one Analysis Skill first (04 below).' }); setModalTab('report'); return; }
-    // Refresh the current handles' X timelines when a watchlist skill is on, so
-    // the X analysis matches your configured handles (not a stale pull).
+    const labelFor = (id) => (recipeCatalog.find((r) => r.id === id)?.label || id);
     const hasHandles = splitMarketingBriefTerms(marketingBriefConfig?.kols).some((h) => String(h).replace(/^@+/, '').trim().length >= 2);
-    if (hasHandles && ids.some((id) => WATCHLIST_RECIPE_IDS.includes(id))) {
-      try { await runWatchlistPullNow(); } catch { /* non-fatal — falls back to stored timelines */ }
-    }
-    setRecipeRun({ loading: true, results: [], error: '' });
+    const needsWatchlist = ids.some((id) => WATCHLIST_RECIPE_IDS.includes(id));
+    let host = ''; try { host = new URL(String(client?.websiteUrl || client?.website || '')).hostname.replace(/^www\./, ''); } catch { /* none */ }
+
+    // Same single-terminal UX as Generate Report, minus the fresh search — runs
+    // over the already-stored signals, streaming each phase's items, then closes
+    // to reveal the updated REPORT.
+    setIntakeModalDismissed(true);
+    setMarketingBriefRunning(true);
+    setMarketingBriefError('');
+    termStart('UPDATING REPORT', host, '[SIGNALS]', 'reading latest stored market signals…');
+
     try {
       const token = await user.getIdToken();
+      const authHeaders = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+      // Stored signal counts (no new search) for the first phase detail.
+      let ad = {};
+      try {
+        const fresh = await fetchDashboardBootstrap(user, impersonateId);
+        applyBootstrapResponse(fresh);
+        ad = fresh?.dashboardState?.marketingBrief?.scoutBrief?.agentData || {};
+      } catch { /* best-effort */ }
+      termPhaseClose([
+        { type: 'dim', prefix: '·', text: `${termArrCount(ad.categoryTrends)} trends · ${termArrCount(ad.competitorIntel)} competitors · ${termArrCount(ad.contentOpportunities)} angles · ${termArrCount(ad.redditSignals)} reddit · ${termArrCount(ad.kolActivity)} KOL posts` },
+        ...termItemLines(ad.categoryTrends, '· web'),
+        ...termItemLines(ad.competitorIntel, '· comp'),
+      ]);
+
+      // Watchlist refresh (current handles + mentions) when a watchlist skill is on.
+      if (needsWatchlist && hasHandles) {
+        termPhaseOpen('[X]', 'pulling watchlist timelines + mentions…');
+        let wlDetail = [];
+        try {
+          const wlRes = await fetch(apiPath('/api/dashboard/watchlist-pull'), {
+            method: 'POST', headers: authHeaders,
+            body: JSON.stringify({ detail: marketingBriefConfig?.watchlistDetail || null }),
+          });
+          const wlData = await wlRes.json().catch(() => ({}));
+          if (wlRes.ok && wlData.ok !== false) {
+            setWatchlistPull({ loading: false, handles: wlData.handles || [], spotlight: wlData.spotlight || null, analysis: wlData.analysis || null, error: '' });
+            wlDetail = (wlData.handles || []).slice(0, 8).map((h) => ({ type: 'dim', prefix: '· x', text: `@${h.handle} — ${h.ownPosts?.length || 0} posts · ${h.mentions?.length || 0} mentions · ${h.engagementTotal || 0} eng` }));
+          }
+        } catch { /* non-fatal — recipe falls back to stored timelines */ }
+        termPhaseClose(wlDetail);
+      }
+
+      // Analysis skills over the stored signals.
+      termPhaseOpen('[ANALYZE]', `running ${ids.length} skill${ids.length === 1 ? '' : 's'}: ${ids.map(labelFor).join(' · ')}…`);
+      setRecipeRun({ loading: true, results: [], error: '' });
       const recipeRes = await fetch(apiPath('/api/dashboard/recipe-run'), {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recipeIds: ids }),
+        method: 'POST', headers: authHeaders, body: JSON.stringify({ recipeIds: ids }),
       });
       const recipeData = await recipeRes.json().catch(() => ({}));
       if (!recipeRes.ok) throw new Error(recipeData?.error || 'Analysis skills failed.');
-      setRecipeRun({ loading: false, results: recipeData.results || [], error: '' });
+      const results = recipeData.results || [];
+      setRecipeRun({ loading: false, results, error: '' });
+      const okCount = results.filter((r) => r.ok).length;
+      termPhaseClose(results.map((r) => ({
+        type: r.ok ? 'ok' : 'error', prefix: r.ok ? '· ✓' : '· ✗',
+        text: `${labelFor(r.recipeId)}${r.ok ? ` · ${typeof r.costUsd === 'number' ? `$${r.costUsd.toFixed(3)}` : 'done'}` : ` · ${r.error || 'failed'}`}`,
+      })));
+      setModalTab('report');
+      termFinish(`report ready · ${okCount}/${results.length} skill${results.length === 1 ? '' : 's'} synthesized`);
     } catch (err) {
-      setRecipeRun({ loading: false, results: [], error: err instanceof Error ? err.message : 'Analysis skills failed.' });
+      const msg = err instanceof Error ? err.message : 'Analysis skills failed.';
+      termFinish(msg, false);
+      setRecipeRun((prev) => ({ ...prev, loading: false, error: msg }));
+    } finally {
+      setMarketingBriefRunning(false);
     }
-    setModalTab('report');
-  }, [user, marketingBriefRunning, recipeRun.loading, marketingBriefConfig, runWatchlistPullNow, apiPath]);
+  }, [user, marketingBriefRunning, recipeRun.loading, marketingBriefConfig, recipeCatalog, client, apiPath, impersonateId, applyBootstrapResponse]);
 
   // Shared row renderer for the Web Search + Platforms and Social Media Signals
   // cards: unlocked sources render as toggles, locked sources as Upgrade rows.
@@ -5886,7 +5974,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     const isDanger = rep.priorityAction?.severity === 'high';
     return (
       <div className="kit-paper" id="gbp-reputation-report-block">
-        <div className="b-eyebrow"><span className="dot" />Marketing Director · Local Reputation</div>
         {!rep.connected ? (
           <>
             <h2 className="b-headline">Connect Google Business Profile</h2>
@@ -5996,7 +6083,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       .map((t) => ({ author: t.author, url: t.url, text: t.text, source: t.source, suggestedReply: t.suggestedReply }));
     return (
       <div className="kit-paper" key={`recipe-brief-${res.recipeId}`} id="recipe-brief-reply-targets">
-        <div className="b-eyebrow"><span className="dot" />Engagement Triage · Reply Targets</div>
         <h2 className="b-headline">Worth Replying To</h2>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', margin: '0 0 16px' }}>
@@ -6063,7 +6149,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     const confClass = (c) => (c === 'low' ? ' warn' : c === 'high' ? ' ok' : '');
     return (
       <div className="kit-paper" key={`recipe-brief-${res.recipeId}`} id={`recipe-brief-${res.recipeId}`}>
-        <div className="b-eyebrow"><span className="dot" />Marketing Director · Analysis{conf ? <span>{conf} confidence</span> : null}</div>
         <h2 className="b-headline">{meta?.label || 'Analysis'}</h2>
 
         {dq ? (
@@ -6199,7 +6284,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     };
     return (
       <div className="kit-paper" id="watchlist-analysis-block">
-        <div className="b-eyebrow"><span className="dot" />Marketing Director · Watchlist Brief{spotHandle ? <span>spotlight @{spotHandle}</span> : null}</div>
         <h2 className="b-headline">Happening on X</h2>
         {data?.overview ? (
           <>
@@ -6287,7 +6371,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       return (
         <div className="brief-kit">
           <div className="kit-paper">
-            <div className="b-eyebrow"><span className="dot" />Marketing Director · Report</div>
             <p className="b-sub">Run <strong>Pull timelines</strong> or an analysis skill on the <strong>SOURCES</strong> tab — the report renders here and stays until your next run.</p>
           </div>
         </div>
@@ -6307,7 +6390,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         <div className="b-stack">
           {coverageHasData ? (
             <div className="kit-paper" id="signals-coverage-strip">
-              <div className="b-eyebrow"><span className="dot" />Coverage · what this run searched</div>
               <div className="scores" style={{ margin: '10px 0 0', flexWrap: 'wrap' }}>
                 {coverage.map((c) => (
                   <div className="score" key={c.lbl} style={c.n === 0 ? { opacity: 0.4 } : undefined} title={`${c.lbl}: ${c.n}${c.n === 0 ? ' — ran, nothing returned' : ''}`}>
@@ -6324,7 +6406,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 
           {total > 0 ? (
             <div className="kit-paper" id="signals-report-paper">
-              <div className="b-eyebrow"><span className="dot" />Marketing Director · Market Signals</div>
               <h2 className="b-headline">Additional Signals</h2>
               <p className="b-sub">{handleTotal} post{handleTotal === 1 ? '' : 's'} from {handles.length} tracked handle{handles.length === 1 ? '' : 's'}{(web.length + reddit.length) ? ` · ${web.length + reddit.length} web/community signal${(web.length + reddit.length) === 1 ? '' : 's'}` : ''}.</p>
 
@@ -29923,12 +30004,6 @@ export const dashboardCss = `
       linear-gradient(180deg, #fefdf9 0%, #fbf8f0 100%);
   }
   .brief-kit .mono { font-family: var(--font-mono); }
-  .brief-kit .b-eyebrow {
-    font-family: var(--font-mono); font-size:10.5px;
-    letter-spacing:.2em; text-transform:uppercase; color:var(--ink-soft);
-    display:flex; gap:12px; align-items:center; margin-bottom:10px; flex-wrap:wrap;
-  }
-  .brief-kit .b-eyebrow .dot{ width:6px;height:6px;background:#0a0a0a;border-radius:50%; }
   .brief-kit .b-headline {
     font-family:"Doto",monospace; font-weight:900; letter-spacing:-.01em;
     line-height:.95; font-size:clamp(22px,2.8vw,34px); margin:0 0 10px;

@@ -4,10 +4,16 @@
 
 const fs = require('fs').promises;
 const path = require('path');
+const os = require('os');
 
+// On Vercel serverless the deployment FS (process.cwd() = /var/task) is
+// read-only; only os.tmpdir() (/tmp) is writable. Durable persistence lives in
+// Firestore — this JSON file store is transient scratch — so /tmp is safe here.
 const DATA_DIR = process.env.NOT_THE_RUG_BRIEF_DATA_DIR
   ? path.resolve(process.env.NOT_THE_RUG_BRIEF_DATA_DIR)
-  : path.join(process.cwd(), 'data', 'not-the-rug-brief');
+  : process.env.VERCEL
+    ? path.join(os.tmpdir(), 'not-the-rug-brief')
+    : path.join(process.cwd(), 'data', 'not-the-rug-brief');
 
 /**
  * Ensure a directory exists, creating it recursively if needed.

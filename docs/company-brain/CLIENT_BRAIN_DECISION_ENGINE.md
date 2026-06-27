@@ -667,7 +667,6 @@ Available helpers:
 
 Remaining:
 
-- Add a first-class Markdown editor in the Client Brain card.
 - Move all dashboard Brain edits to update Markdown source and recompile.
 - Add version history and rollback for `CLIENT_BRAIN.md`.
 - Add import flow for `.hitloop-client.json` / `.hitloop-client.zip`.

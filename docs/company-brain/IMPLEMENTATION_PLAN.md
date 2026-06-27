@@ -117,6 +117,21 @@ Structured default consumers:
 |----------|--------|------|
 | Marketing Brief / Market Signals config | wired | `loadClientBrainCardDefaults(..., { cardId:'marketing-brief' })` |
 
+The Market Signals card **surfaces** these structured defaults read-only in its SOURCES tab ("From your Client Brain", `#signals-client-brain-suggested-section`) and **auto-merges** them into the live search inputs when you click **Generate Report** (union, never clobbers manual terms). Approved-gated — an unapproved brain emits no defaults. Full flow: [`../source-of-truth/MARKET-SIGNALS-GENERATE-REPORT-FLOW.md`](../source-of-truth/MARKET-SIGNALS-GENERATE-REPORT-FLOW.md) §5.
+
+## Client Brain Card UI
+
+The card intentionally uses four tabs:
+
+- `BRAIN SOURCE` — upload/paste/edit `CLIENT_BRAIN.md`, then inject/compile it.
+- `APPROVED BRAIN` — reviewed compiled decisions, including the current transitional voice editor.
+- `SOURCES & GAPS` — source refs, generated/acquisition state, discovery intelligence, completion, and missing decisions.
+- `CONSUMERS` — context-pack preview/export and downstream consumer status.
+
+Tone belongs in `CLIENT_BRAIN.md` under `Content Intelligence` -> `Voice`. Supporting examples belong in `CONTENT_LIBRARY.md` or `CONVERSATION_INTELLIGENCE.md`. The visible voice editor remains a transitional compiled-field editor until dashboard edits compile back into `markdownSource`.
+
+> **Client Brain card UI:** the card modal's CSS lives only in the `dashboardCss` template literal in `DashboardPage.jsx` (not the unimported `dashboard.css`). `.client-brain-card` must stay `min-height:100%` with `> * { flex: 0 0 auto }` — a fixed `height:100%` makes flex children shrink and their `overflow:visible` content collide across sections. See the run-flow doc §9.
+
 ## Precedence
 
 Runtime card settings:
@@ -129,7 +144,6 @@ Source/runtime:
 
 ## Remaining Work
 
-- Add a first-class Markdown editor surface inside the Client Brain card.
 - Make dashboard section edits update `markdownSource` and recompile, instead of patching compiled fields.
 - Add version history for `CLIENT_BRAIN.md`.
 - Add import flow for `.hitloop-client.json` / `.hitloop-client.zip`.
