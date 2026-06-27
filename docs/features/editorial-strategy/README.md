@@ -35,6 +35,14 @@ Canonical runtime pack:
 
 - `docs/company-brain/clients/{client-id}/EDITORIAL_STRATEGY.json`
 
+Required Strategy Builder upload pack:
+
+- `docs/features/editorial-strategy/STRATEGY_BUILDER_CONFIG_PACK.example.json`
+
+Canonical feature tracking doc:
+
+- `docs/source-of-truth/STRATEGY-BUILDER-EDITORIAL-PACK.md`
+
 Bryan reference runtime pack:
 
 - `docs/company-brain/clients/bryan-balli/EDITORIAL_STRATEGY.json`
@@ -65,7 +73,55 @@ Markdown defines the standard. JSON feeds the system.
 
 Use the Markdown docs to design and validate strategy. Use `EDITORIAL_STRATEGY.json` to load the strategy into Strategy Builder.
 
-The app saves that JSON to `strategyBuilder.config.editorial`, normalizes it through `normalizeEditorialStrategyConfig()`, and uses it to seed campaign-first schedules and daily recommendations.
+The dashboard upload expects a full `strategyBuilder.config` JSON pack, not a raw editorial-only object. The full pack includes vertical, cadence, signal toggles, source toggles, events, campaign controls, and `editorial`. The app saves `strategyBuilder.config.editorial`, normalizes it through `normalizeEditorialStrategyConfig()`, and uses the complete config to hydrate the Strategy Builder UI before generation.
+
+The operational upload template is `STRATEGY_BUILDER_CONFIG_PACK.example.json`. It is intentionally broader than the canonical `EDITORIAL_STRATEGY.json` runtime file because the dashboard needs enough data to hydrate every visible Strategy Builder control, not only the editorial engine.
+
+## Strategy Builder Upload Pack
+
+Required root:
+
+```json
+{
+  "strategyBuilder": {
+    "config": {
+      "vertical": "",
+      "days": 30,
+      "postsPerDay": 1,
+      "baselineMixPct": 40,
+      "rampAggressiveness": 0.5,
+      "signals": {},
+      "sources": {},
+      "events": [],
+      "campaign": {},
+      "editorial": {}
+    }
+  }
+}
+```
+
+Required `campaign` fields:
+
+- `objective`
+- `ctaText`
+- `ctaUrl`
+- `postTime`
+- `postTime2`
+- `guardrails`
+- `emojiPolicy`
+- `maxHashtags`
+- `promotions`
+
+Hydrated UI groups:
+
+- Marketing Strategy Pack summary and impact rows
+- JSON-Hydrated Controls
+- Card Evidence Sources
+- Signal Inputs
+- Local Events
+- Cadence controls
+
+For the complete implementation map and tracking status, use `docs/source-of-truth/STRATEGY-BUILDER-EDITORIAL-PACK.md`.
 
 ## Purpose
 
@@ -234,6 +290,7 @@ Existing scheduling remains intact. If no campaign/asset aligns with the daily s
 ## Docs
 
 - `README.md` — this index and current status.
+- `STRATEGY_BUILDER_CONFIG_PACK.example.json` — required upload example for full UI hydration.
 - `EDITORIAL_STRATEGY_STANDARD.md` — established runtime standard.
 - `MARKETING_STRATEGY_FRAMEWORK.md` — campaign, schedule, approval, and evaluation framework.
 - `CAMPAIGN_MODEL.md` — campaign-first planning model.

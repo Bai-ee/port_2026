@@ -78,12 +78,12 @@ Pulls: client list, brief run history, run detail, dashboard state, artifact ref
 ## What this doc does NOT certify
 
 - Live production env values, remote GPU service health, Stripe live mode — all `⚠ops`, require an operator on the live system.
-- Gated features `▢scope` — code may exist but is not E2E-certified here.
+- Gated features `▢scope` — code may exist but is not E2E-certified here. Strategy Builder / Editorial Pack tracking lives in [STRATEGY-BUILDER-EDITORIAL-PACK.md](STRATEGY-BUILDER-EDITORIAL-PACK.md).
 - Anything in `docs/` not linked from this file — assume stale until checked against code.
 
 ## Canonical doc set
 
-This file → [PRODUCTION-LAUNCH-CHECKLIST.md](PRODUCTION-LAUNCH-CHECKLIST.md) · [LAUNCH-DATA-PIPELINE.md](LAUNCH-DATA-PIPELINE.md) · [CREATIVE-BRIEF-DELIVERABLES-WIRING.md](CREATIVE-BRIEF-DELIVERABLES-WIRING.md) · [VIDEO-REMIX-EDITVIDEOS-BRIDGE.md](VIDEO-REMIX-EDITVIDEOS-BRIDGE.md) · [MARKET-SIGNALS-AND-SCOUT-PROJECTION.md](MARKET-SIGNALS-AND-SCOUT-PROJECTION.md) · [EMAIL-DIGEST-CARD.md](EMAIL-DIGEST-CARD.md) · [ADMIN-DASHBOARD-DATA-MAP.md](ADMIN-DASHBOARD-DATA-MAP.md) · [PRODUCTION-READINESS-TRACKER.md](PRODUCTION-READINESS-TRACKER.md) · [DOCS-ACCURACY-REPORT.md](DOCS-ACCURACY-REPORT.md). SEO: [../seo/GEO-ANALYSIS.md](../seo/GEO-ANALYSIS.md).
+This file → [PRODUCTION-LAUNCH-CHECKLIST.md](PRODUCTION-LAUNCH-CHECKLIST.md) · [LAUNCH-DATA-PIPELINE.md](LAUNCH-DATA-PIPELINE.md) · [CREATIVE-BRIEF-DELIVERABLES-WIRING.md](CREATIVE-BRIEF-DELIVERABLES-WIRING.md) · [VIDEO-REMIX-EDITVIDEOS-BRIDGE.md](VIDEO-REMIX-EDITVIDEOS-BRIDGE.md) · [MARKET-SIGNALS-AND-SCOUT-PROJECTION.md](MARKET-SIGNALS-AND-SCOUT-PROJECTION.md) · [EMAIL-DIGEST-CARD.md](EMAIL-DIGEST-CARD.md) · [ADMIN-DASHBOARD-DATA-MAP.md](ADMIN-DASHBOARD-DATA-MAP.md) · [PRODUCTION-READINESS-TRACKER.md](PRODUCTION-READINESS-TRACKER.md) · [DOCS-ACCURACY-REPORT.md](DOCS-ACCURACY-REPORT.md). Gated feature tracking: [STRATEGY-BUILDER-EDITORIAL-PACK.md](STRATEGY-BUILDER-EDITORIAL-PACK.md). SEO: [../seo/GEO-ANALYSIS.md](../seo/GEO-ANALYSIS.md).
 
 ## Active Supporting Docs
 
@@ -91,4 +91,5 @@ These are active but not launch-certification docs:
 
 - Gated Client Brain / Company Brain: [../company-brain/README.md](../company-brain/README.md)
 - Marketing Brief feature docs: [../features/marketing-brief/README.md](../features/marketing-brief/README.md)
+- Strategy Builder / Editorial Pack feature docs: [../features/editorial-strategy/README.md](../features/editorial-strategy/README.md)
 - Mockup Studio feature docs: [../features/studio/README.md](../features/studio/README.md)

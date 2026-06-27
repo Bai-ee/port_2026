@@ -1,6 +1,6 @@
 # Production Readiness Tracker
 
-Last updated: 2026-06-24
+Last updated: 2026-06-26
 
 This document tracks the current production-readiness hardening work for the local `main` branch. It focuses on launch safety, security, scaling, performance, cost controls, and operational concerns.
 
@@ -9,6 +9,39 @@ This document tracks the current production-readiness hardening work for the loc
 Overall launch risk after hardening: **Medium until the current branch is preview-smoked and deployed**
 
 Public promotion status: **Local hardening is complete enough for preview.** The committed production baseline is stable, and the local branch now includes a broad but intentional release set spanning brand rename, dashboard UI, generated brief rendering, new public routes, hardened download proxy behavior, and smoke tooling. Build/tests/local smoke pass. Preview E2E still needs a Vercel protection bypass or public preview URL before production promotion.
+
+## 2026-06-26 Strategy Builder Editorial Pack Addendum
+
+Status: **gated feature; locally build-verified; not public launch-certified**
+
+The Strategy Builder JSON upload workflow now requires a full `strategyBuilder.config` pack so imported JSON can hydrate the visible UI controls, not only the embedded editorial strategy object.
+
+Tracked canonical doc:
+
+- `docs/source-of-truth/STRATEGY-BUILDER-EDITORIAL-PACK.md`
+
+Tracked example upload pack:
+
+- `docs/features/editorial-strategy/STRATEGY_BUILDER_CONFIG_PACK.example.json`
+
+Implementation surfaces:
+
+- `components/dashboard/strategy-builder/InputsPane.jsx` — paste/import JSON, validate required config fields, hydrate controls, show JSON/manual source badges.
+- `components/dashboard/strategy-builder/SignalToggles.jsx` — signal source badge.
+- `app/api/dashboard/strategy-builder/config/route.js` — sanitize and persist config.
+- `app/api/dashboard/strategy-builder/generate/route.js` — consume sanitized config, source toggles, campaign controls, events, signals, and normalized editorial strategy.
+- `features/editorial-strategy/engine.js` — normalize campaign manifests, schedule policy, assets, narrative rules, and daily recommendation inputs.
+
+Verification:
+
+- `npm run build`: pass locally after the UI + docs update.
+- Existing Turbopack NFT trace warning remains on `/api/leadgen/generate`; unrelated to Strategy Builder.
+
+Remaining before upgrading from gated:
+
+- Browser smoke the import flow against a real dashboard account.
+- Confirm Firestore persistence for `strategyBuilder.config`, `strategyBuilder.events`, and `strategyBuilder.lastPlan`.
+- Generate a plan from the example pack and verify the visible calendar reflects campaign, cadence, CTA, guardrails, source toggles, and signal settings.
 
 ## 2026-06-24 Pre-Flight Addendum
 

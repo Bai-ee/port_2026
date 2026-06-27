@@ -30,4 +30,6 @@ Anything here not linked from [`source-of-truth/SOURCE-OF-TRUTH.md`](source-of-t
 - HITLOOP Studio methodology: [`company-brain/HITLOOP_STUDIO_METHODOLOGY.md`](company-brain/HITLOOP_STUDIO_METHODOLOGY.md)
 - Marketing Brief / Market Signals: [`features/marketing-brief/README.md`](features/marketing-brief/README.md)
 - Editorial Strategy Engine: [`features/editorial-strategy/README.md`](features/editorial-strategy/README.md)
+- Strategy Builder Editorial Pack tracking: [`source-of-truth/STRATEGY-BUILDER-EDITORIAL-PACK.md`](source-of-truth/STRATEGY-BUILDER-EDITORIAL-PACK.md)
+- Strategy Builder upload example: [`features/editorial-strategy/STRATEGY_BUILDER_CONFIG_PACK.example.json`](features/editorial-strategy/STRATEGY_BUILDER_CONFIG_PACK.example.json)
 - Mockup Studio / render hosting: [`features/studio/README.md`](features/studio/README.md)

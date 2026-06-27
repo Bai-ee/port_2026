@@ -21,9 +21,9 @@ const SIGNALS = [
 ];
 
 /**
- * @param {{ signals: Object, onChange: Function }} props
+ * @param {{ signals: Object, onChange: Function, sourceHydrated?: boolean }} props
  */
-export default function SignalToggles({ signals, onChange }) {
+export default function SignalToggles({ signals, onChange, sourceHydrated = false }) {
   function handleToggle(key) {
     onChange({
       ...signals,
@@ -33,7 +33,19 @@ export default function SignalToggles({ signals, onChange }) {
 
   return (
     <div id="strategy-builder-signal-toggles" className="sb-section">
-      <span className="sb-label">Signal Inputs</span>
+      <span className="sb-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        Signal Inputs
+        <span
+          className="sb-chip"
+          style={{
+            borderColor: sourceHydrated ? 'rgba(74,222,128,0.55)' : 'rgba(245,158,11,0.45)',
+            color: sourceHydrated ? '#86efac' : '#fbbf24',
+            background: sourceHydrated ? 'rgba(74,222,128,0.08)' : 'rgba(245,158,11,0.08)',
+          }}
+        >
+          {sourceHydrated ? 'JSON' : 'Manual'}
+        </span>
+      </span>
       <div className="mb-config-platform-grid sb-toggle-grid">
         {SIGNALS.map(({ key, label, description }) => {
           const enabled = Boolean(signals?.[key]?.enabled);

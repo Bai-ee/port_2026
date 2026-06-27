@@ -1,0 +1,137 @@
+{
+  "strategyBuilder": {
+    "config": {
+      "vertical": "creative-services",
+      "days": 30,
+      "postsPerDay": 1,
+      "baselineMixPct": 40,
+      "rampAggressiveness": 0.5,
+      "signals": {
+        "weather": { "enabled": false },
+        "events": { "enabled": false },
+        "holidays": { "enabled": true }
+      },
+      "sources": {
+        "client-brain": { "enabled": true },
+        "marketing-brief": { "enabled": true },
+        "daily-brief": { "enabled": true },
+        "brand-snapshot": { "enabled": true },
+        "visual-dna": { "enabled": true },
+        "seo-performance": { "enabled": true },
+        "lead-gen": { "enabled": true },
+        "knowledge-base": { "enabled": true }
+      },
+      "events": [],
+      "campaign": {
+        "objective": "awareness",
+        "ctaText": "",
+        "ctaUrl": "",
+        "postTime": "09:00",
+        "postTime2": "",
+        "guardrails": "Avoid generic AI hype. Do not claim fully automated creative replacement.",
+        "emojiPolicy": "none",
+        "maxHashtags": 2,
+        "promotions": []
+      },
+      "editorial": {
+        "enabled": true,
+        "frameworkVersion": "2.0",
+        "schedulePolicy": {
+          "platforms": {
+            "primary": ["x"],
+            "secondary": ["linkedin"],
+            "tertiary": ["website", "newsletter"]
+          },
+          "publishingCadence": {
+            "x": "1 post every weekday",
+            "linkedin": "2 posts per week"
+          },
+          "preferredPublishingWindows": {
+            "x": ["9:00 AM"],
+            "linkedin": ["Tuesday-Thursday morning"]
+          },
+          "campaignAllocation": {
+            "Creative Systems": "60%",
+            "Proof of Work": "25%",
+            "Offers": "15%"
+          },
+          "narrativeRotation": {
+            "minDaysBetweenSameNarrative": 3,
+            "maxProjectUsesPerSevenDays": 2,
+            "rotateBy": ["Project", "Narrative", "Editorial Format"]
+          },
+          "editorialFormatRotation": {
+            "formats": ["Production Notes", "Behind the Build", "Market Observation"],
+            "maxConsecutiveRepeats": 2
+          },
+          "assetReusePolicy": {
+            "reuseAfterDays": 60,
+            "rules": ["Do not repeat copy verbatim."]
+          },
+          "dailyAdaptationLimits": {
+            "may": ["Rewrite hooks.", "Swap supporting examples."],
+            "mayNot": ["Change positioning.", "Chase unrelated trends."],
+            "movableWindowDays": 7
+          },
+          "quietPeriods": [],
+          "promotionPolicy": {
+            "maxMonthlyPct": "20%",
+            "rules": ["Promotions must support the active campaign."]
+          },
+          "fallbackRules": ["Use the active campaign fallback when signals are weak."],
+          "approvalPolicy": ["Every scheduled recommendation must include a campaign, narrative, and reason."],
+          "successEvaluation": ["Narrative consistency", "Qualified replies", "Profile visits"]
+        },
+        "operatorPreferences": {
+          "preferredPlatforms": ["x", "linkedin"],
+          "avoidTopics": ["generic AI hype"],
+          "preferredNarratives": ["Creative Systems"]
+        },
+        "campaigns": [
+          {
+            "id": "creative-systems",
+            "name": "Creative Systems",
+            "status": "active",
+            "priority": 0.95,
+            "allocationPct": 60,
+            "strategicObjective": "Become associated with designing creative systems that survive implementation.",
+            "positioningObjective": "Own a durable creative systems category.",
+            "targetAudience": ["Founders", "Creative agencies", "AI SaaS teams"],
+            "supportedClientBrainTopics": ["Creative Systems", "Design Engineering"],
+            "supportingProjects": ["HITLOOP"],
+            "narrativeBuckets": ["Brand Translation", "Creative Operations", "AI Workflow"],
+            "keywords": ["creative systems", "design engineering", "AI workflow"],
+            "dailySignalTriggers": ["AI workflow discussions", "design systems conversations"],
+            "editorialFormats": ["Production Notes", "Behind the Build"],
+            "fallback": "Evergreen Creative Systems proof point",
+            "duration": {
+              "startDate": "2026-06-26",
+              "endDate": "2026-09-30"
+            },
+            "weeklyFocus": "Show how production decisions become reusable systems.",
+            "successMetrics": ["Qualified replies", "Profile visits", "Founder conversations"],
+            "assetLibrary": [
+              {
+                "id": "client-brain-system",
+                "title": "Client Brain system",
+                "type": "case-study",
+                "description": "How approved decisions become card defaults, context packs, and campaign recommendations.",
+                "narrative": "Creative Operations",
+                "projects": ["HITLOOP"],
+                "topics": ["Client Brain", "creative operations", "human-in-the-loop"],
+                "platforms": ["x", "linkedin"],
+                "keywords": ["Client Brain", "creative operations"],
+                "clientBrainDecisionRefs": ["decisions.decisionDrivers"],
+                "evergreenScore": 0.9,
+                "freshnessScore": 0.9,
+                "preparedCopy": "Most AI tools collect context. HITLOOP is built around approving decisions.",
+                "mediaHint": "Use a simple system diagram or card flow."
+              }
+            ]
+          }
+        ],
+        "recentPublishing": []
+      }
+    }
+  }
+}
