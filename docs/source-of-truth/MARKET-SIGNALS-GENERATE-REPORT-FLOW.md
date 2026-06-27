@@ -114,6 +114,7 @@ Persisted to `dashboard_state/{id}.marketingBrief.watchlistTimelines.handles[]` 
 
 - Cap: `MAX_RECIPES_PER_RUN = 3` in `app/api/dashboard/recipe-run/route.js` (normalized from the earlier 4/run planning note so the default trio `customer-research` + `watchlist-analysis` + `reply-targets` run in one pass without opening the run wider than needed). Each recipe ≈ one Sonnet call (~$0.05, ~50s) — a 3-skill pass ≈ $0.15 / ~2 min.
 - `WATCHLIST_RECIPE_IDS = ['watchlist-analysis','reply-targets']` (`DashboardPage.jsx` module const) — when one is enabled, the flows re-pull the watchlist first.
+- Recipe prompts are embedded in `features/intelligence/analysis-recipes/recipes.js` for Vercel runtime safety. The `.md` files remain editable source, but production execution must not depend on reading those files from the serverless filesystem.
 - See `MARKET-SIGNALS-AND-SCOUT-PROJECTION.md` §8 for the recipe registry and how to add a skill.
 
 ---
