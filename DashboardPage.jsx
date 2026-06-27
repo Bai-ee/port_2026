@@ -59,6 +59,49 @@ import { ROSITAS_GBP_REPORT } from './lib/gbpReputationReport';
 const CB_SUMMARY_LABELS = ['Headline', 'What This Site Is', "What's Missing", 'Biggest Risk', 'The Opportunity', 'Decision', 'Suggested Post'];
 const VIDEO_REMIX_FOLDER_FILE_CACHE_TTL_MS = 5 * 60 * 1000;
 const VIDEO_REMIX_PENDING_STORAGE_PREFIX = 'video-remix-pending-job';
+// Max remixes a single Generate can fan out into (the multiplier control).
+const VIDEO_REMIX_MAX_COUNT = 5;
+// The original EditTrax/EditVideos house defaults: hard B&W look, no overlay
+// texture, UE white horizontal logo on top, UE square logo on the end card
+// (no artist-image end card). Shared by the params-tab draft AND the one-click
+// RUN REMIX path so both render the same branded baseline.
+const STANDARD_REMIX_DEFAULTS = {
+  artist: 'random',
+  mixTitle: '',
+  useTrax: false,
+  selectedFolders: [],
+  videoFilter: 'look_hard_bw_street_doc',
+  filterIntensity: 0.8,
+  enableOverlay: false,
+  overlayEffect: '',
+  topLogo: 'ue_logo_horiz.png',
+  endLogo: 'ue_square.png',
+  useArtistImage: false,
+  endTextOverlay: '',
+  count: 1,
+};
+// Build a render recipe from a draft-shaped settings object (or the house
+// defaults). Single source of truth for recipe construction.
+function buildRemixRecipe(settings = STANDARD_REMIX_DEFAULTS, sourceFolders) {
+  const s = { ...STANDARD_REMIX_DEFAULTS, ...settings };
+  const folders = Array.isArray(sourceFolders) ? sourceFolders : s.selectedFolders;
+  return {
+    sourceFolders: folders,
+    output: { width: 720, height: 720, fps: 30, format: 'mp4', durationSeconds: 30 },
+    artist: s.artist === 'random' ? null : s.artist,
+    mixTitle: s.mixTitle || null,
+    useTrax: s.useTrax,
+    filter: s.videoFilter && s.videoFilter !== 'random'
+      ? { key: s.videoFilter, intensity: s.filterIntensity }
+      : { intensity: s.filterIntensity },
+    overlay: s.enableOverlay && s.overlayEffect
+      ? { enabled: true, effect: s.overlayEffect }
+      : { enabled: false },
+    logos: { top: s.topLogo || null, end: s.endLogo || null },
+    useArtistImage: s.useArtistImage,
+    endCard: s.endTextOverlay ? { text: s.endTextOverlay } : null,
+  };
+}
 function parseBriefSuggestedPost(raw) {
   if (!raw) return '';
   let collecting = false;
@@ -2914,20 +2957,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	  const [videoRemixLoading, setVideoRemixLoading] = useState(false);
 	  const [videoRemixError, setVideoRemixError] = useState('');
 	  // Video Remix params tab — advanced setup mirrored on the EditVideos generator.
-	  const [videoRemixDraft, setVideoRemixDraft] = useState({
-	    artist: 'random',
-	    mixTitle: '',
-	    useTrax: false,
-	    selectedFolders: [],
-	    videoFilter: 'look_hard_bw_street_doc',
-	    filterIntensity: 0.8,
-	    enableOverlay: false,
-	    overlayEffect: '',
-	    topLogo: '',
-	    endLogo: '',
-	    useArtistImage: false,
-	    endTextOverlay: '',
-	  });
+	  const [videoRemixDraft, setVideoRemixDraft] = useState({ ...STANDARD_REMIX_DEFAULTS });
 	  const [videoRemixOptions, setVideoRemixOptions] = useState({ filters: [], overlays: [], artists: [], logos: [] });
 	  const [videoRemixFolders, setVideoRemixFolders] = useState([]);
 	  const [videoRemixFolderDetails, setVideoRemixFolderDetails] = useState([]);
@@ -2951,6 +2981,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	  const videoRemixUploadInputRef = useRef(null);
 	  const videoRemixFolderFileCacheRef = useRef(new Map());
 	  const videoRemixFolderFilesRequestRef = useRef(0);
+	  // When a card-face shortcut wants the detail modal to open on a specific tab
+	  // (e.g. the Video Remix "Upload media" button → SOURCE MEDIA), it parks the
+	  // tab here; the default-tab effect consumes it once instead of its default.
+	  const desiredModalTabRef = useRef(null);
 	  // --- Archive / Publishing card (Knowledge Officer, admin-only) ---------
 	  const [archiveSources, setArchiveSources] = useState([]);
 	  const [archiveSourcesLoading, setArchiveSourcesLoading] = useState(false);
@@ -3190,8 +3224,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	  // worker drains it and writes the capture back into dashboard_state.mediaCaptures,
 	  // which the live listener above picks up. We optimistically set the pending
 	  // marker so the card flips to "Queued…" without waiting for the round-trip.
-	  const runVideoRemix = useCallback(async ({ sourceFolders = null, recipe: recipeOverride = null } = {}) => {
+	  const runVideoRemix = useCallback(async ({ sourceFolders = null, recipe: recipeOverride = null, count = 1 } = {}) => {
 	    if (!user || videoRemixLoading) return;
+	    const renderCount = Math.max(1, Math.min(VIDEO_REMIX_MAX_COUNT, Math.floor(Number(count) || 1)));
 	    const pendingClientId = client?.clientId || client?.id || bootstrap?.effectiveClientId;
 	    let pendingJobId = null;
 	    setVideoRemixLoading(true);
@@ -3225,18 +3260,27 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	              } catch { /* fall through to default */ }
 	            }
 	            if (!folders || !folders.length) folders = ['uploads'];
-	            recipe = { sourceFolders: folders, output: { width: 720, height: 720, fps: 30, format: 'mp4', durationSeconds: 30 } };
+	            recipe = buildRemixRecipe(STANDARD_REMIX_DEFAULTS, folders);
 	          }
 
-	          const res = await fetch(apiPath('/api/dashboard/media?action=create-video-remix'), {
-	            method: 'POST',
-	            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-	            body: JSON.stringify(recipe),
-	          });
-	          const data = await res.json().catch(() => ({}));
-	          if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-	          const jobId = data?.jobId;
-	          if (!jobId) throw new Error('No job id returned from the server.');
+	          // Enqueue one render job. Returns { jobId, editJobId } or throws.
+	          const enqueueOne = async () => {
+	            const r = await fetch(apiPath('/api/dashboard/media?action=create-video-remix'), {
+	              method: 'POST',
+	              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+	              body: JSON.stringify(recipe),
+	            });
+	            const d = await r.json().catch(() => ({}));
+	            if (!r.ok) throw new Error(d?.error || `HTTP ${r.status}`);
+	            if (!d?.jobId) throw new Error('No job id returned from the server.');
+	            return d;
+	          };
+
+	          // Primary job drives the terminal progress. The extra N-1 jobs
+	          // (multiplier) are queued right after; they surface via the live
+	          // dashboard listener + focus/visibility reconcile, no block-poll.
+	          const data = await enqueueOne();
+	          const jobId = data.jobId;
 	          pendingJobId = jobId;
 	          writeVideoRemixPendingJob(pendingClientId, {
 	            jobId,
@@ -3244,6 +3288,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	            queuedAt: new Date().toISOString(),
 	            sourceFolders: recipe.sourceFolders,
 	          });
+
+	          let extraQueued = 0;
+	          for (let n = 1; n < renderCount; n += 1) {
+	            try { await enqueueOne(); extraQueued += 1; } catch { /* one extra failing shouldn't sink the batch */ }
+	          }
 
 	          // Optimistic pending so the card face flips to "Queued…" right away.
 	          if (!cancelledRef.current) {
@@ -3293,9 +3342,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	            });
 	          }
 
+	          const extraNote = extraQueued > 0 ? ` (+${extraQueued} more rendering)` : '';
 	          return capture
-	            ? { doneText: 'video ready — saved to your deliverables', videoUrl: capture.downloadUrl || null }
-	            : { doneText: 'video queued — it will appear here when the worker finishes', videoUrl: null };
+	            ? { doneText: `video ready — saved to your deliverables${extraNote}`, videoUrl: capture.downloadUrl || null }
+	            : { doneText: `video queued — it will appear here when the worker finishes${extraNote}`, videoUrl: null };
 	        },
 	      });
 	    } catch (err) {
@@ -3305,6 +3355,31 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	      if (!cancelledRef.current) setVideoRemixLoading(false);
 	    }
 	  }, [user, videoRemixLoading, client?.clientId, client?.id, bootstrap?.effectiveClientId, apiPath, runWithTerminal]);
+
+	  // One-click redo: re-run a saved remix with the SAME settings. The capture
+	  // only carries sourceFolders, but its media_job persists the full recipe
+	  // (recipeFull) keyed by jobId — read it back and replay. Falls back to the
+	  // house defaults over the asset's folders for captures predating recipeFull.
+	  const remixFromSavedAsset = useCallback(async (asset) => {
+	    if (!asset || videoRemixLoading) return;
+	    let recipe = null;
+	    try {
+	      if (asset.jobId && user) {
+	        const token = await user.getIdToken();
+	        const res = await fetch(apiPath(`/api/dashboard/media?action=job&jobId=${encodeURIComponent(asset.jobId)}`), {
+	          headers: { Authorization: `Bearer ${token}` },
+	        });
+	        const data = await res.json().catch(() => ({}));
+	        if (res.ok && data?.job?.recipeFull) recipe = data.job.recipeFull;
+	      }
+	    } catch { /* fall through to defaults */ }
+	    if (recipe) {
+	      runVideoRemix({ recipe });
+	    } else {
+	      const folders = Array.isArray(asset.sourceFolders) && asset.sourceFolders.length ? asset.sourceFolders : null;
+	      runVideoRemix({ recipe: buildRemixRecipe(STANDARD_REMIX_DEFAULTS, folders || undefined), sourceFolders: folders });
+	    }
+	  }, [user, videoRemixLoading, apiPath, runVideoRemix]);
 
 	  // --- Archive / Publishing handlers (admin-only; all calls go through the
 	  // metadata-only /api/dashboard/media route, which proxies wallet-funded
@@ -4736,6 +4811,13 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   useEffect(() => {
     if (!activeTileModal?.cardId) return;
     const id = activeTileModal.cardId;
+    // A card-face shortcut requested a specific opening tab — honor it once.
+    if (desiredModalTabRef.current) {
+      const wanted = desiredModalTabRef.current;
+      desiredModalTabRef.current = null;
+      setModalTab(wanted);
+      return;
+    }
     if (id === 'multi-device-view') { setModalTab('desktop'); return; }
     // Reference via bootstrap here — `dashboardState` is declared later in the
     // component body (TDZ) so the direct name isn't safe at effect-definition time.
@@ -10250,6 +10332,16 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           loading: videoRemixLoading,
           onClick: () => runVideoRemix({}),
         },
+        // Card-face shortcut straight to the SOURCE MEDIA upload tab so the user
+        // doesn't have to open the modal then hunt for the tab.
+        footerSecondaryAction: {
+          label: 'UPLOAD',
+          onClick: () => {
+            desiredModalTabRef.current = 'source';
+            openCapabilityCard({ id: 'video-remix', category: 'content', number: 'VR', label: 'VIDEO REMIX', title: 'Video Remix', description: '', rows: [] });
+            refreshVideoRemixFolders().catch(() => {});
+          },
+        },
       };
     })(),
     (() => {
@@ -13119,8 +13211,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     />
                   ) : card.id === 'video-remix' && latestRemixVideoUrl ? (
                     // Video Remix card shell becomes the last generated remix video —
-                    // contained (full frame, no crop) with native controls so audio
-                    // can be unmuted. stopPropagation keeps control clicks from
+                    // cover (fills the whole shell, center-cropped) so it matches the
+                    // shell ratio identically across breakpoints. Native controls so
+                    // audio can be unmuted. stopPropagation keeps control clicks from
                     // triggering the card's open-modal handler.
                     <video
                       key={latestRemixVideoUrl}
@@ -13132,7 +13225,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       playsInline
                       controls
                       onClick={(e) => e.stopPropagation()}
-                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
+                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', background: '#000' }}
                     />
                   ) : card.id === 'post-me' ? (
                     // Clean, authentic X post that fills the fixed shell. Just the
@@ -13438,15 +13531,28 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       if (!card.moduleControls) {
                         if (!card.footerAction) return null;
                         return (
-                          <button
-                            type="button"
-                            id={`tile-${card.id}-rerun-btn`}
-                            className="tile-foot-rerun-btn"
-                            onClick={(e) => { e.stopPropagation(); card.footerAction.onClick?.(e); }}
-                            disabled={card.footerAction.loading}
-                          >
-                            {card.footerAction.loading ? '…' : card.footerAction.label}
-                          </button>
+                          <>
+                            {card.footerSecondaryAction ? (
+                              <button
+                                type="button"
+                                id={`tile-${card.id}-secondary-btn`}
+                                className="tile-foot-rerun-btn tile-foot-rerun-btn--secondary"
+                                onClick={(e) => { e.stopPropagation(); card.footerSecondaryAction.onClick?.(e); }}
+                                disabled={card.footerSecondaryAction.loading}
+                              >
+                                {card.footerSecondaryAction.loading ? '…' : card.footerSecondaryAction.label}
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              id={`tile-${card.id}-rerun-btn`}
+                              className="tile-foot-rerun-btn"
+                              onClick={(e) => { e.stopPropagation(); card.footerAction.onClick?.(e); }}
+                              disabled={card.footerAction.loading}
+                            >
+                              {card.footerAction.loading ? '…' : card.footerAction.label}
+                            </button>
+                          </>
                         );
                       }
                       const mStatus = moduleState?.[card.id]?.status ?? 'inactive';
@@ -14129,10 +14235,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               <button
                 type="button"
                 id="intake-modal-close"
-                onClick={adhocActive ? () => { if (!adhocRunning) closeAdhocTerminal(); } : dismissIntakeModal}
+                onClick={adhocActive ? closeAdhocTerminal : dismissIntakeModal}
                 aria-label="Close build terminal and return to dashboard"
                 data-tooltip-disabled="true"
-                style={adhocRunning ? { opacity: 0.5 } : undefined}
               >[ ✕ ]</button>
             </div>
 
@@ -14850,9 +14955,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     </div>
                   ) : activeTileModal.cardId === 'video-remix' && latestRemixVideoUrl ? (
                     // Modal shell mirrors the card face: the last generated remix
-                    // video, contained with native controls for audio toggle.
-                    // Wrapped in the style-guide preview pane (.preview-surface +
-                    // .toolbar); the video keeps its exact attributes/styling.
+                    // video, cover-filled (center-cropped) with native controls for
+                    // audio toggle — same ratio as the card-face shell. Inline cover
+                    // overrides the .preview-media `contain` (which still applies to
+                    // the SAVED ASSETS list previews). Wrapped in the style-guide
+                    // preview pane (.preview-surface); video keeps its attributes.
                     <div className="vrk-scope vrk-player-shell" onClick={(e) => e.stopPropagation()}>
                       <div className="preview-surface">
                         <div className="preview-media">
@@ -14866,7 +14973,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                             playsInline
                             controls
                             onClick={(e) => e.stopPropagation()}
-                            style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', background: '#000' }}
                           />
                         </div>
                       </div>
@@ -17524,23 +17631,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                  });
 	                  const buildRecipeAndRun = () => {
 	                    const recipe = {
-	                      sourceFolders: draft.selectedFolders,
-	                      output: { width: 720, height: 720, fps: 30, format: 'mp4', durationSeconds: 30 },
-	                      artist: draft.artist === 'random' ? null : draft.artist,
-	                      mixTitle: draft.mixTitle || null,
-	                      useTrax: draft.useTrax,
-	                      filter: draft.videoFilter && draft.videoFilter !== 'random'
-	                        ? { key: draft.videoFilter, intensity: draft.filterIntensity }
-	                        : { intensity: draft.filterIntensity },
-	                      overlay: draft.enableOverlay && draft.overlayEffect
-	                        ? { enabled: true, effect: draft.overlayEffect }
-	                        : { enabled: false },
-	                      logos: { top: draft.topLogo || null, end: draft.endLogo || null },
-	                      useArtistImage: draft.useArtistImage,
-	                      endCard: draft.endTextOverlay ? { text: draft.endTextOverlay } : null,
+	                      ...buildRemixRecipe(draft, draft.selectedFolders),
 	                      ...(videoOrderPayload ? { videoOrder: videoOrderPayload } : {}),
 	                    };
-	                    runVideoRemix({ recipe });
+	                    runVideoRemix({ recipe, count: draft.count });
 	                  };
 	                  return (
 	                    <div
@@ -17725,11 +17819,19 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                />
 	                              </label>
 	                            </div>
+	                            <div className="field" id="video-remix-count-field">
+	                              <span className="label">How many ({draft.count})</span>
+	                              <div className="segmented" role="group" aria-label="Number of remixes to generate">
+	                                {[1, 2, 3, 4, 5].map((n) => (
+	                                  <button key={n} type="button" className={draft.count === n ? 'is-active' : ''} onClick={() => updateRemixDraft('count', n)}>{n}</button>
+	                                ))}
+	                              </div>
+	                            </div>
 	                            {videoRemixError ? (
 	                              <p className="hint-danger">{videoRemixError}</p>
 	                            ) : null}
 	                            <button type="button" className="btn cta-pill-btn cta-primary-wide" onClick={buildRecipeAndRun} disabled={!canGenerate}>
-	                              <span className="cta-text">{videoRemixLoading ? 'Rendering…' : 'Generate Video'}</span>
+	                              <span className="cta-text">{videoRemixLoading ? 'Rendering…' : (draft.count > 1 ? `Generate ${draft.count} Videos` : 'Generate Video')}</span>
 	                              <span className="cta-icon">↗</span>
 	                            </button>
 	                          </section>
@@ -18124,6 +18226,15 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                  <span className="list-title">{asset.label || 'Branded remix'}</span>
 	                                  {url ? (
 	                                    <div className="order-actions">
+	                                      <button
+	                                        type="button"
+	                                        className="btn btn-outline"
+	                                        onClick={() => remixFromSavedAsset(asset)}
+	                                        disabled={videoRemixLoading}
+	                                        title="Render a new video with this one's settings"
+	                                      >
+	                                        {videoRemixLoading ? '…' : 'Remix'}
+	                                      </button>
 	                                      <button
 	                                        type="button"
 	                                        className="btn btn-outline"
@@ -22917,6 +23028,19 @@ export const dashboardCss = `
     /* CTAs with inline width:auto stay undersized vs sibling panels — normalize. */
     #conversation-intake-panel .mu-cta-primary,
     #business-model-panel .mu-cta-primary { width: 100% !important; min-width: 0 !important; }
+    /* Archive/Publishing (apk) table rows: 5-col grid (auto 1.6fr 1fr 0.7fr 1fr)
+       has no mobile collapse → guaranteed h-scroll on phones. Stack to one column
+       so each field sits full-width like the Video Remix rows. */
+    .apk-row, .apk-row--static { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+    .apk-row-name { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+    .apk-row-state, .apk-row-links { text-align: left; justify-content: flex-start; }
+    /* Long Arweave tx hashes / links must wrap, not push width. */
+    .apk-tx, .apk-estimate-line, .apk-result-row { overflow-wrap: anywhere; word-break: break-word; }
+    /* Market Signals metrics: 3-col → 2-col so values stay legible on narrow phones. */
+    .signals-sg .sg-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    /* Belt-and-suspenders: no scoped modal content escapes the card horizontally.
+       Targets the known card scopes only (not a blanket *) so desktop is untouched. */
+    .apk-scope, .signals-sg, .client-brain-card { max-width: 100%; overflow-x: hidden; }
   }
   .tile-detail-bento-label {
     display: block;
