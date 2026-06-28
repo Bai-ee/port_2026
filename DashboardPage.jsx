@@ -3767,17 +3767,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    }));
 	  }, []);
 
-	  const moveVideoRemixOrderItem = useCallback((index, direction) => {
-	    setVideoRemixVideoOrder((prev) => {
-	      const nextIndex = index + direction;
-	      if (nextIndex < 0 || nextIndex >= prev.items.length) return prev;
-	      const items = [...prev.items];
-	      const [item] = items.splice(index, 1);
-	      items.splice(nextIndex, 0, item);
-	      return { ...prev, items };
-	    });
-	  }, []);
-
 	  const clearVideoRemixOrder = useCallback(() => {
 	    setVideoRemixVideoOrder((prev) => ({ folder: prev.folder, items: [] }));
 	  }, []);
@@ -17936,8 +17925,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                                {item.url ? <video src={firstFrameThumbSrc(item.url)} muted playsInline preload="metadata" /> : <span className="order-slot-empty">Video</span>}
 	                                                <span className="order-slot-name">{item.name}</span>
 	                                                <div className="order-slot-controls">
-	                                                  <button type="button" className="mini-icon-btn" disabled={index === 0} onClick={() => moveVideoRemixOrderItem(index, -1)}>Left</button>
-	                                                  <button type="button" className="mini-icon-btn" disabled={index === orderItems.length - 1} onClick={() => moveVideoRemixOrderItem(index, 1)}>Right</button>
 	                                                  <button type="button" className="mini-icon-btn" onClick={() => removeVideoRemixOrderItem(index)} aria-label={`Remove ${item.name}`}><Trash2 size={12} /></button>
 	                                                </div>
 	                                              </>
@@ -18227,10 +18214,14 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                        key={folder.name}
 	                                        type="button"
 	                                        className={`folder-card${selected ? ' is-on' : ''}${previewing ? ' is-previewing' : ''}`}
+	                                        aria-pressed={previewing}
 	                                        onClick={() => loadVideoRemixFolderFiles(folder.name)}
 	                                      >
-	                                        <span className="folder-name">{folder.name}</span>
-	                                        <span className="folder-meta">{folder.count != null ? `${folder.count} files` : folder.type}</span>
+	                                        <span className="check" aria-hidden="true">{previewing ? '✓' : ''}</span>
+	                                        <span className="folder-card-body">
+	                                          <span className="folder-name">{folder.name}</span>
+	                                          <span className="folder-meta">{folder.count != null ? `${folder.count} files` : folder.type}{selected ? ' · in remix' : ''}</span>
+	                                        </span>
 	                                      </button>
 	                                    );
 	                                  })}
@@ -18300,8 +18291,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                                )}
 	                                                <span className="order-slot-name">{item.name}</span>
 	                                                <div className="order-slot-controls">
-	                                                  <button type="button" className="mini-icon-btn" disabled={index === 0} onClick={() => moveVideoRemixOrderItem(index, -1)}>Left</button>
-	                                                  <button type="button" className="mini-icon-btn" disabled={index === orderItems.length - 1} onClick={() => moveVideoRemixOrderItem(index, 1)}>Right</button>
 	                                                  <button type="button" className="mini-icon-btn" onClick={() => removeVideoRemixOrderItem(index)} aria-label={`Remove ${item.name}`}>
 	                                                    <Trash2 size={12} />
 	                                                  </button>
@@ -18458,13 +18447,24 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                        {modalTab === 'assets' && (
 	                          savedRemixes.length ? savedRemixes.map((asset) => {
 	                            const url = asset.downloadUrl || asset.url || null;
-	                            const fileName = safeDownloadName(`${client?.businessName || 'video-remix'}-${asset.jobId || asset.capturedAt || 'render'}.mp4`);
+	                            const fileName = safeDownloadName(`${client?.businessName || 'video-remix'}-${asset.jobId || asset.createdAt || asset.capturedAt || 'render'}.mp4`);
+	                            const savedTs = asset.createdAt || asset.capturedAt || null;
+	                            const savedWith = asset.createdWith || {};
+	                            const savedMeta = [
+	                              Array.isArray(asset.sourceFolders) && asset.sourceFolders.length ? asset.sourceFolders.join(', ') : null,
+	                              savedWith.artist ? `Artist: ${savedWith.artist}` : null,
+	                              savedWith.mix ? `Mix: ${savedWith.mix}` : null,
+	                              savedWith.filter ? `Filter: ${savedWith.filter}` : null,
+	                              savedWith.orderSegments ? `${savedWith.orderSegments} clips` : null,
+	                              asset.durationSeconds ? `${asset.durationSeconds}s` : null,
+	                            ].filter(Boolean);
 	                            return (
 	                              <article key={asset.storagePath || url || asset.jobId} className="list-card saved-remix-card">
 	                                <div className="list-head">
 	                                  <span className="list-title">{asset.label || 'Branded remix'}</span>
-	                                  <span className="list-body">{asset.capturedAt ? new Date(asset.capturedAt).toLocaleString() : 'Saved'}</span>
+	                                  <span className="list-body">{savedTs ? new Date(savedTs).toLocaleString() : 'Saved'}</span>
 	                                </div>
+	                                {savedMeta.length ? <p className="saved-remix-meta">{savedMeta.join(' · ')}</p> : null}
 	                                {url ? (
 	                                  <div className="preview-surface saved-remix-surface">
 	                                    <div className="preview-media">
@@ -30071,13 +30071,32 @@ export const dashboardCss = `
     border-color: rgba(42,36,32,0.24);
     transform: translateY(-1px);
   }
-  .vrk-scope .orientation-tile.is-on,
-  .vrk-scope .folder-card.is-on {
+  .vrk-scope .orientation-tile.is-on {
     border-color: rgba(42,36,32,0.38);
     box-shadow: inset 0 0 0 1px rgba(42,36,32,0.18);
   }
+  /* Folder browser cards mirror the REMIX-tab toggle-card selection language:
+     a left check badge, a filled "previewing" state, and an accent for folders
+     already pulled into the remix (is-on). */
+  .vrk-scope .folder-card {
+    grid-template-columns: auto minmax(0,1fr);
+    align-items: center;
+    min-height: 72px;
+  }
+  .vrk-scope .folder-card-body { min-width: 0; }
+  .vrk-scope .folder-card.is-on {
+    border-color: rgba(42,36,32,0.22);
+    background: var(--vrk-surface-strong);
+  }
   .vrk-scope .folder-card.is-previewing {
-    background: rgba(255,255,255,0.98);
+    border-color: rgba(17,109,255,0.5);
+    box-shadow: inset 0 0 0 1px rgba(17,109,255,0.32);
+    background: rgba(17,109,255,0.06);
+  }
+  .vrk-scope .folder-card.is-previewing .check {
+    background: var(--vrk-ink);
+    border-color: var(--vrk-ink);
+    color: #fff;
   }
   .vrk-scope .orientation-shape {
     display: block;
@@ -30260,7 +30279,7 @@ export const dashboardCss = `
   }
   .vrk-scope .order-row {
     display: grid;
-    grid-template-columns: repeat(6,minmax(0,1fr));
+    grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
     gap: 8px;
   }
   .vrk-scope .order-slot {
@@ -30308,7 +30327,7 @@ export const dashboardCss = `
   }
   .vrk-scope .order-slot-controls {
     display: grid;
-    grid-template-columns: 1fr 1fr auto;
+    grid-template-columns: 1fr;
     gap: 4px;
   }
   .vrk-scope .mini-icon-btn {
@@ -30437,6 +30456,11 @@ export const dashboardCss = `
      instead of producing ragged right edges. */
   .vrk-scope .saved-remix-surface { width: 100%; }
   .vrk-scope .saved-remix-surface .preview-media { min-height: 220px; }
+  .vrk-scope .saved-remix-meta {
+    margin: 4px 0 0;
+    color: var(--vrk-ink-muted);
+    font: 600 12px/1.45 var(--vrk-mono);
+  }
   .vrk-scope .saved-remix-actions {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));

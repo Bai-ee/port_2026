@@ -72,12 +72,22 @@ async function reconcileMediaJob(job, clientId) {
       downloadUrl: result.videoUrl,
       storagePath: null,
       contentType: 'video/mp4',
-      durationSeconds: 30,
+      durationSeconds: Number(job.recipe?.durationSeconds) || 30,
       sourceFolders: Array.isArray(job.recipe?.sourceFolders) ? job.recipe.sourceFolders : [],
       arweaveSourceUrl: null,
       jobId: job.jobId,
       editJobId: job.editJobId,
       createdAt: new Date().toISOString(),
+      // Provenance for the SAVED ASSETS metadata line: what produced this remix.
+      // recipeFull holds the raw draft (artist/mix/useTrax); recipe is the trimmed
+      // summary (filter key, manual-order segment count).
+      createdWith: {
+        artist: job.recipeFull?.artist || null,
+        mix: job.recipeFull?.useTrax ? 'Tracks' : (job.recipeFull?.mixTitle || null),
+        filter: job.recipe?.filter || job.recipeFull?.filter?.key || null,
+        orderSegments: Number(job.recipe?.manualOrderSegments)
+          || (Array.isArray(job.recipeFull?.videoOrder) ? job.recipeFull.videoOrder.length : 0),
+      },
     };
     await appendMediaCapture(clientId, capture);
     await mediaJobs.completeMediaJob(job.jobId, capture);
