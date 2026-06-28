@@ -411,9 +411,17 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
               </section>
 
               {saveStatus?.kind === 'error' && <p className="hint-danger">{saveStatus.msg}</p>}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', paddingTop: 4 }}>
-                <span className="hint">{saveStatus && saveStatus.kind !== 'error' ? saveStatus.msg : 'Saved settings apply to the next digest and the EMAIL PREVIEW (live).'}</span>
-                <button type="button" className="btn" style={{ background: '#2a2420', color: '#fff', borderColor: '#2a2420' }} onClick={save} disabled={saveStatus?.kind === 'pending'}>{saveStatus?.kind === 'pending' ? 'Saving…' : 'Save Config'}</button>
+              {sendStatus?.kind === 'error' && <p className="hint-danger">{sendStatus.msg}</p>}
+              <div id="email-digest-settings-actionbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', paddingTop: 4 }}>
+                <span className="hint">{
+                  sendStatus && sendStatus.kind !== 'error' ? sendStatus.msg
+                    : saveStatus && saveStatus.kind !== 'error' ? saveStatus.msg
+                      : 'Run & Send saves these settings, runs a fresh brief for every client, then emails the digest now.'
+                }</span>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button type="button" className="btn btn-outline" onClick={save} disabled={saveStatus?.kind === 'pending' || sendStatus?.kind === 'pending'}>{saveStatus?.kind === 'pending' ? 'Saving…' : 'Save Config'}</button>
+                  <button type="button" className="btn" style={{ background: '#2a2420', color: '#fff', borderColor: '#2a2420' }} onClick={runAndSend} disabled={sendStatus?.kind === 'pending' || saveStatus?.kind === 'pending'}>{sendStatus?.kind === 'pending' ? 'Sending…' : 'Run & Send'}</button>
+                </div>
               </div>
             </div>
           </div>
