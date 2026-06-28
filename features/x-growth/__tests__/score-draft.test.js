@@ -59,3 +59,34 @@ test('scores are all between 0 and 1', () => {
   }
   assert.ok(result.xGrowthScore >= 0 && result.xGrowthScore <= 1);
 });
+
+// --- Reply mode (context.kind === 'reply') ---------------------------------
+
+test('reply mode rewards a substantive insight reply without a question', () => {
+  const text = 'The reason this works is retention compounds — a 5% lift in week-4 retention roughly doubles LTV because the curve flattens higher.';
+  const post = scoreXPost(text);
+  const reply = scoreXPost(text, { kind: 'reply' });
+  // Substance-heavy reply must not be punished for lacking announcement/repost framing.
+  assert.ok(reply.xGrowthScore >= post.xGrowthScore - 0.02,
+    `reply mode should reward substance; reply=${reply.xGrowthScore} post=${post.xGrowthScore}`);
+  assert.ok(!reply.recommendations.some((r) => /shareable framing/i.test(r.action)),
+    'reply mode must not recommend repost/announcement framing');
+});
+
+test('reply mode penalises links harder than post mode and flags removal', () => {
+  const text = 'Great point — we wrote about exactly this here https://example.com/post';
+  const post = scoreXPost(text);
+  const reply = scoreXPost(text, { kind: 'reply' });
+  assert.ok(reply.xGrowthScore < post.xGrowthScore,
+    `a link should hurt a reply more than a post; reply=${reply.xGrowthScore} post=${post.xGrowthScore}`);
+  assert.ok(reply.recommendations.some((r) => /remove the link/i.test(r.action)),
+    'reply mode should recommend removing the link');
+  assert.ok(!reply.recommendations.some((r) => /first reply/i.test(r.action)),
+    'reply mode must not suggest moving the link to the first reply');
+});
+
+test('reply mode is backward-compatible — non-reply kind is unchanged', () => {
+  const text = 'We shipped a new feature today. What do you think?';
+  assert.strictEqual(scoreXPost(text).xGrowthScore, scoreXPost(text, {}).xGrowthScore);
+  assert.strictEqual(scoreXPost(text).xGrowthScore, scoreXPost(text, { kind: 'post' }).xGrowthScore);
+});

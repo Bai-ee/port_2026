@@ -95,6 +95,9 @@ function primaryActionForType(postType) {
  * @param {string} [context.postTypeHint] - Preferred post type
  * @param {string} [context.mediaType]    - 'video' | 'image' | 'none'
  * @param {string} [context.objective]    - x-growth objective id
+ * @param {string} [context.kind]         - 'reply' to score as a reply: re-weights
+ *                                           toward substance/credibility, away from
+ *                                           announcement framing, penalises links harder
  * @returns {Object} Score result
  */
 export function scoreXPost(text, context = {}) {
@@ -147,16 +150,32 @@ export function scoreXPost(text, context = {}) {
   if (mediaType === 'video') mediaBonus = 0.20;
   else if (mediaType === 'image') mediaBonus = 0.15;
 
-  // Composite xGrowthScore — weight positive signals, penalise neg feedback
-  const raw =
-    replyResult.score * 0.25 +
-    repostResult.score * 0.20 +
-    profileClickResult.score * 0.15 +
-    dwellResult.score * 0.15 +
-    topicAuthority * 0.10 +
-    mediaBonus * 0.15 -
-    negFeedbackRisk * 0.30 -
-    linkRisk * 0.10;
+  // Composite xGrowthScore — weight positive signals, penalise neg feedback.
+  // Reply mode re-weights toward substance and credibility (dwell + topic
+  // authority) and away from announcement/repost framing, and penalises links
+  // harder: links in replies are down-ranked with no "move to first reply" escape.
+  const isReply = String(context.kind || '') === 'reply';
+  const raw = isReply
+    ? (
+        replyResult.score * 0.20 +
+        dwellResult.score * 0.30 +
+        topicAuthority * 0.25 +
+        profileClickResult.score * 0.10 +
+        repostResult.score * 0.05 +
+        mediaBonus * 0.05 -
+        negFeedbackRisk * 0.30 -
+        linkRisk * 0.20
+      )
+    : (
+        replyResult.score * 0.25 +
+        repostResult.score * 0.20 +
+        profileClickResult.score * 0.15 +
+        dwellResult.score * 0.15 +
+        topicAuthority * 0.10 +
+        mediaBonus * 0.15 -
+        negFeedbackRisk * 0.30 -
+        linkRisk * 0.10
+      );
 
   const xGrowthScore = clamp01(raw);
 
@@ -170,17 +189,32 @@ export function scoreXPost(text, context = {}) {
 
   // Recommendations
   const recommendations = [];
-  if (replyResult.score < 0.40 && !/\?/.test(t)) {
-    recommendations.push({ priority: 'high', action: 'Add a question', reason: 'Raises P(reply) — high-weight positive signal' });
-  }
-  if (repostResult.score < 0.30) {
-    recommendations.push({ priority: 'medium', action: 'Add shareable framing', reason: 'Tip, announcement, or insight increases P(repost)' });
-  }
-  if (negFeedbackRisk > 0.20) {
-    recommendations.push({ priority: 'high', action: 'Remove hard-sell or engagement-bait language', reason: 'High P(not_interested) risk' });
-  }
-  if (hasLink && context.objective !== 'leads-or-calls') {
-    recommendations.push({ priority: 'medium', action: 'Move link to first reply', reason: 'Reduces linkRisk without losing CTA' });
+  if (isReply) {
+    // A reply earns reach through substance — a specific insight or a genuine
+    // question. Announcement/repost framing does not apply, and links in replies
+    // are suppressed with no first-reply escape hatch.
+    if (replyResult.score < 0.40 && topicAuthority < 0.35) {
+      recommendations.push({ priority: 'medium', action: 'Add a specific insight or a genuine question', reason: 'Thin reply — substance or a real question raises P(reply) and dwell' });
+    }
+    if (hasLink) {
+      recommendations.push({ priority: 'high', action: 'Remove the link from the reply', reason: 'Links in replies are down-ranked; reference the source in plain text instead' });
+    }
+    if (negFeedbackRisk > 0.20) {
+      recommendations.push({ priority: 'high', action: 'Remove hard-sell or engagement-bait language', reason: 'High P(not_interested) risk' });
+    }
+  } else {
+    if (replyResult.score < 0.40 && !/\?/.test(t)) {
+      recommendations.push({ priority: 'high', action: 'Add a question', reason: 'Raises P(reply) — high-weight positive signal' });
+    }
+    if (repostResult.score < 0.30) {
+      recommendations.push({ priority: 'medium', action: 'Add shareable framing', reason: 'Tip, announcement, or insight increases P(repost)' });
+    }
+    if (negFeedbackRisk > 0.20) {
+      recommendations.push({ priority: 'high', action: 'Remove hard-sell or engagement-bait language', reason: 'High P(not_interested) risk' });
+    }
+    if (hasLink && context.objective !== 'leads-or-calls') {
+      recommendations.push({ priority: 'medium', action: 'Move link to first reply', reason: 'Reduces linkRisk without losing CTA' });
+    }
   }
 
   const allReasons = [

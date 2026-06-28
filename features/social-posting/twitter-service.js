@@ -344,6 +344,12 @@ export async function generatePromoCopy(brand = {}, { clientBrainContext = '' } 
 export function runPostingAgents(content, context = {}) {
   const base = normalizePostText(content);
 
+  // A reply (carrying a replyTo target, or flagged kind:'reply') is scored and
+  // shaped differently from a standalone post: substance over announcement, no
+  // hashtags, links penalised harder.
+  const isReply = context.kind === 'reply'
+    || !!(context.replyTo && (context.replyTo.url || context.replyTo.author));
+
   // Strip existing hashtags before optimising (re-added from strategy only)
   const withoutTags = base.replace(/\s+#\w+/g, '').trim();
 
@@ -360,7 +366,11 @@ export function runPostingAgents(content, context = {}) {
     .slice(0, 2)
     .map((term) => `#${term.replace(/[^a-z0-9]/gi, '')}`);
   const currentTags = base.match(/#\w+/g) || [];
-  const tags = Array.from(new Set([...currentTags, ...strategyTags, ...kbTags])).slice(0, 3);
+  // Replies don't carry hashtags — they read as spammy on a reply and add nothing
+  // to reply distribution. Keep the reply text clean.
+  const tags = isReply
+    ? []
+    : Array.from(new Set([...currentTags, ...strategyTags, ...kbTags])).slice(0, 3);
 
   let optimized = withoutTags || base;
   if (optimized.length > 230) optimized = `${optimized.slice(0, 227).trim()}...`;
@@ -373,6 +383,7 @@ export function runPostingAgents(content, context = {}) {
     xScoring = scoreXPost(optimized, {
       mediaType: context.mediaType || 'none',
       objective: context.xGrowthObjective,
+      kind: isReply ? 'reply' : undefined,
     });
   } catch {
     // Non-fatal — scoring is advisory

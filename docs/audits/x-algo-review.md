@@ -52,6 +52,11 @@
 - **Confidence:** high
 - **Hypothesis:** Questions and direct conversation invitations meaningfully raise P(reply), which is a high-weight positive signal.
 
+### replyEarlyWindow (reply-side)
+- **Confidence:** medium
+- **Hypothesis:** Replying to a *young, accelerating* post (high engagement-velocity, still inside an early window of ~6h) rides that post's rising For-You distribution, so the reply itself is surfaced more widely than a reply on an old or stalled post. Velocity (engagement ÷ age) matters more than absolute engagement total.
+- **Applied in:** the `reply-targets` recipe ranks candidates on `velocityPerHour` + `replyWindowOpen` (computed in `app/api/dashboard/recipe-run`); `replyWindowHours = 6`.
+
 ### mediaBoost
 - **Confidence:** high
 - **Hypothesis:** Native video (MP4) and images increase P(video_view) and P(photo_expand) signals, boosting overall score.
@@ -92,6 +97,13 @@
 | `conversation-starter` | `reply` | `quote` |
 
 ---
+
+## Reply-side scoring (HITLOOP)
+
+The profile above scores **posts we author**. Replies are scored and ranked symmetrically:
+
+- **Reply-aware draft scoring** — `scoreXPost(text, { kind: 'reply' })` (`features/x-growth/score-draft.js`) re-weights toward substance (dwell + topic authority) and away from announcement/repost framing, and penalises links harder (no "move to first reply" escape on a reply). It runs at the single chokepoint `runPostingAgents` (`features/social-posting/twitter-service.js`), which detects a reply (a `replyTo` target or `kind:'reply'`), passes `kind:'reply'` to the scorer, and skips hashtag injection. Reply drafts created from the `reply-targets` skill (`create-reply-drafts` in `app/api/social-posting`) carry this score.
+- **Velocity ranking** — see `replyEarlyWindow` above. The `reply-targets` recipe prompt (`features/intelligence/analysis-recipes/reply-targets.md`) ranks on `velocityPerHour` + `replyWindowOpen` and drafts replies under explicit algorithm rules (substantive, no link, no bait).
 
 ## Human Review Checklist
 

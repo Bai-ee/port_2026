@@ -103,6 +103,26 @@ test('buildUseForContext scopes sections to the requested purpose', () => {
   assert.doesNotMatch(social, /Audience:/);  // audience not in socialPosts scope
 });
 
+test('buildUseForContext renders voice pillars + few-shot example posts', () => {
+  const brain = {
+    identity: { name: 'Acme' },
+    voice: {
+      toneSummary: 'direct, low fluff',
+      pillars: [{ name: 'Plainspoken', description: 'plain words', do: 'I shipped X', dont: 'excited to announce' }],
+      formattingRules: { short: '1-2 lines', emojis: 'none' },
+    },
+    content: { postExamples: [{ type: 'observation', label: 'hook', post: 'most AI strategy decks are a feature list with a robot on the cover.' }] },
+    sourceRefs: [normalizeSourceRef({ id: 'a', enabled: true })],
+  };
+
+  const ctx = buildUseForContext(brain, 'socialPosts');
+  assert.match(ctx, /Voice pillar — Plainspoken/);
+  assert.match(ctx, /do: I shipped X; avoid: excited to announce/);
+  assert.match(ctx, /Example posts \(imitate this voice/);
+  assert.match(ctx, /robot on the cover/);
+  assert.match(ctx, /short: 1-2 lines/);   // keyed formatting rules rendered
+});
+
 test('buildUseForContext returns empty when no enabled source allows the purpose', () => {
   const brain = {
     identity: { name: 'Acme' },

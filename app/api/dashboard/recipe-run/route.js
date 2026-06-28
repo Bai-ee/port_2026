@@ -8,6 +8,7 @@ const { getEffectiveClientContext } = require('../../../../api/_lib/client-provi
 const { listRecipes, getRecipe } = require('../../../../features/intelligence/analysis-recipes/recipes');
 const { runAnalysisRecipe } = require('../../../../features/intelligence/analysis-recipes/run-recipe');
 const { checkRateLimit, getClientIp } = require('../../../../api/_lib/rate-limit.cjs');
+const { loadClientBrainContext } = require('../../../../features/client-brain/store.cjs');
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -32,6 +33,49 @@ const MAX_RECIPES_PER_RUN = 3;
 const RATE_LIMIT_WINDOW_SECONDS = 60 * 60;
 const RATE_LIMIT_REQUESTS_PER_CLIENT = 6;
 const MAX_AGENT_DATA_CHARS = 80_000;
+
+// Reply-window + velocity signals for the reply-targets recipe. The biggest reply
+// lever in the X algorithm is engagement velocity inside the early-reply window:
+// replying to a young, accelerating post rides its rising For-You distribution.
+// We compute these from each candidate's publish time + engagement so the recipe
+// ranks on a real signal instead of treating recency as flat.
+const REPLY_WINDOW_HOURS = 6;
+const VELOCITY_AGE_FLOOR_HOURS = 0.25; // floor age so a brand-new post can't divide by ~0
+
+function pickPublishedAt(it) {
+  return it?.publishedAt || it?.created_at || it?.createdAt || it?.date || it?.timestamp || null;
+}
+
+function pickEngagement(it) {
+  if (!it || typeof it !== 'object') return 0;
+  if (Number.isFinite(it.engagementTotal)) return it.engagementTotal;
+  const fields = ['likes', 'replies', 'reposts', 'retweets', 'quotes', 'comments', 'upvotes', 'score'];
+  let sum = 0;
+  let any = false;
+  for (const f of fields) {
+    if (Number.isFinite(it[f])) { sum += it[f]; any = true; }
+  }
+  return any ? sum : 0;
+}
+
+// Add ageHours / velocityPerHour / replyWindowOpen to a candidate post. Items with
+// no parseable publish time are left untouched (the recipe treats a missing
+// velocity as unknown, not as a zero-priority signal).
+function withVelocity(it, nowMs) {
+  if (!it || typeof it !== 'object') return it;
+  const ts = (() => { const p = pickPublishedAt(it); const n = p ? Date.parse(p) : NaN; return n; })();
+  if (!Number.isFinite(ts)) return it;
+  const ageHours = Math.max(0, (nowMs - ts) / 3_600_000);
+  const engagementTotal = pickEngagement(it);
+  const velocityPerHour = Math.round((engagementTotal / Math.max(ageHours, VELOCITY_AGE_FLOOR_HOURS)) * 10) / 10;
+  return {
+    ...it,
+    ageHours: Math.round(ageHours * 10) / 10,
+    engagementTotal,
+    velocityPerHour,
+    replyWindowOpen: ageHours <= REPLY_WINDOW_HOURS,
+  };
+}
 
 async function resolveClient(request) {
   const decoded = await verifyRequestUser(makeReqShim(request));
@@ -116,22 +160,40 @@ export async function POST(request) {
     }
   }
 
-  // The reply candidate pool — built once, used for reply-pool recipes.
+  // The reply candidate pool — built once, used for reply-pool recipes. Each
+  // candidate post is enriched with engagement velocity + reply-window freshness
+  // (relative to nowMs) so the recipe ranks on the early-reply lever.
+  const nowMs = Date.now();
   const replyPool = {
-    watchlistMentions: Array.isArray(watchlistTimelines?.handles) ? watchlistTimelines.handles : [],
-    brandMentions: Array.isArray(agentData?.brandMentions) ? agentData.brandMentions : [],
-    redditSignals: Array.isArray(agentData?.redditSignals) ? agentData.redditSignals : [],
-    kolActivity: Array.isArray(agentData?.kolActivity) ? agentData.kolActivity : [],
+    generatedAt: new Date(nowMs).toISOString(),
+    replyWindowHours: REPLY_WINDOW_HOURS,
+    watchlistMentions: (Array.isArray(watchlistTimelines?.handles) ? watchlistTimelines.handles : [])
+      .map((h) => ({
+        ...h,
+        ownPosts: Array.isArray(h?.ownPosts) ? h.ownPosts.map((it) => withVelocity(it, nowMs)) : [],
+        mentions: Array.isArray(h?.mentions) ? h.mentions.map((it) => withVelocity(it, nowMs)) : [],
+      })),
+    brandMentions: (Array.isArray(agentData?.brandMentions) ? agentData.brandMentions : []).map((it) => withVelocity(it, nowMs)),
+    redditSignals: (Array.isArray(agentData?.redditSignals) ? agentData.redditSignals : []).map((it) => withVelocity(it, nowMs)),
+    kolActivity: (Array.isArray(agentData?.kolActivity) ? agentData.kolActivity : []).map((it) => withVelocity(it, nowMs)),
   };
   const contentFor = (recipeId) => (getRecipe(recipeId)?.contentKind === 'reply-pool' ? replyPool : agentData);
 
-  // Optional positioning context for grounding.
-  let context = '';
+  // Grounding context = positioning + the Client Brain voice (tone, pillars, and
+  // few-shot example posts). reply-targets drafts replies, so it needs the voice
+  // to sound like the operator, not just the positioning. Same single source
+  // (CLIENT_BRAIN.md) the post surfaces use — no separate voice logic here.
+  const contextParts = [];
   try {
     const cfgSnap = await fb.adminDb.collection('client_configs').doc(clientId).get();
     const pos = cfgSnap.exists ? cfgSnap.data()?.scoutConfig?.positioningContext : null;
-    if (pos) context = typeof pos === 'string' ? pos : JSON.stringify(pos);
+    if (pos) contextParts.push(typeof pos === 'string' ? pos : JSON.stringify(pos));
   } catch { /* non-fatal */ }
+  try {
+    const voiceContext = await loadClientBrainContext(clientId, { useFor: 'copy', maxChars: 2000 });
+    if (voiceContext) contextParts.push(voiceContext);
+  } catch { /* non-fatal — replies still run on positioning alone */ }
+  const context = contextParts.join('\n\n');
 
   const results = [];
   for (const recipeId of recipeIds) {

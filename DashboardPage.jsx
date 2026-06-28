@@ -6419,6 +6419,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 {t.url ? <p className="b-body mono" style={{ fontSize: 11, margin: '6px 0 0', color: 'var(--ink-soft)' }}><a className="b-link" href={t.url} target="_blank" rel="noopener noreferrer">↗ post</a></p> : null}
                 {t.why ? <div className="b-sowhat"><span className="lbl">Why</span>{t.why}</div> : null}
                 {t.suggestedReply ? <p className="b-body" style={{ margin: '10px 0 0' }}><strong>Draft reply:</strong> {t.suggestedReply}</p> : null}
+                {t.algoRationale ? <div className="b-sowhat rt-algo-read" data-section="reply-algo-read" style={{ marginTop: 10 }}><span className="lbl">Algorithm read</span>{t.algoRationale}</div> : null}
               </div>
             ))}
           </div>

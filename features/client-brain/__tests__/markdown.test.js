@@ -189,3 +189,80 @@ test('createClientBrainMarkdownTemplate returns a compilable draft', () => {
   assert.equal(brain.status, 'draft');
   assert.equal(brain.identity.name, 'Acme');
 });
+
+const VOICE_SAMPLE = `---
+clientId: bryan-balli
+status: approved
+---
+
+# Client Brain
+
+## Identity Intelligence
+
+### Name
+Bryan Balli
+
+### Positioning
+Human-in-the-loop creative systems partner.
+
+## Content Intelligence
+
+### Voice
+Direct, dry-witty, builder-to-builder. One idea per post.
+
+### Voice Pillars
+- name: Plainspoken | description: trade jargon for plain words | do: "I shipped X" | dont: "We're excited to announce X"
+- name: Specific | description: numbers over adjectives | do: "cut load to 1.2s" | dont: "blazing fast"
+
+### Example Posts
+- type: observation | label: hook style | post: most "AI strategy" decks are just a feature list with a robot on the cover.
+- the bottleneck: nobody owns the prompt. assign one person.
+
+### Creators I Emulate
+- @swyx
+- @levelsio
+
+### Preferred Words
+- shipped, built, cut, owns
+
+### Formatting Rules
+- short: 1-2 lines, no hashtags, lowercase ok
+- caps: never for emphasis
+- emojis: none
+
+### Do Not Say
+- revolutionary
+- game-changing
+`;
+
+test('compileClientBrainMarkdown parses the voice fidelity block', () => {
+  const brain = compileClientBrainMarkdown(VOICE_SAMPLE);
+
+  // Voice pillars -> voice.pillars [{name,description,do,dont}]
+  assert.equal(brain.voice.pillars.length, 2);
+  assert.equal(brain.voice.pillars[0].name, 'Plainspoken');
+  assert.equal(brain.voice.pillars[0].do, 'I shipped X');
+  assert.equal(brain.voice.pillars[0].dont, "We're excited to announce X");
+
+  // Example posts -> content.postExamples [{type,label,post}] (rich + bare bullet)
+  assert.equal(brain.content.postExamples.length, 2);
+  assert.equal(brain.content.postExamples[0].type, 'observation');
+  assert.equal(brain.content.postExamples[0].label, 'hook style');
+  assert.match(brain.content.postExamples[0].post, /robot on the cover/);
+  // bare bullet keeps the whole line (colon and all) as the post
+  assert.match(brain.content.postExamples[1].post, /the bottleneck: nobody owns the prompt/);
+
+  // Preferred words, keyed formatting rules, creators -> scribeInstructions
+  assert.ok(brain.voice.preferredWords.includes('shipped'));
+  assert.equal(brain.voice.formattingRules.short, '1-2 lines, no hashtags, lowercase ok');
+  assert.equal(brain.voice.formattingRules.emojis, 'none');
+  assert.match(brain.voice.scribeInstructions, /Emulate the voice of: @swyx, @levelsio/);
+});
+
+test('compileClientBrainMarkdown leaves voice fields empty when block is absent', () => {
+  const brain = compileClientBrainMarkdown(SAMPLE);
+  assert.deepEqual(brain.voice.pillars, []);
+  assert.deepEqual(brain.content.postExamples, []);
+  // no Formatting Rules section -> legacy generic array default preserved
+  assert.ok(Array.isArray(brain.voice.formattingRules));
+});

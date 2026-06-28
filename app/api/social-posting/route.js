@@ -95,6 +95,7 @@ export async function POST(request) {
     }
     const agentContext = {
       source: body.source || null,
+      replyTo: body.replyTo || null,
       knowledgeBaseContext,
     };
 
@@ -126,13 +127,18 @@ export async function POST(request) {
       for (const t of targets) {
         const content = String(t?.suggestedReply || '').trim().slice(0, 280);
         if (!content) { failed.push({ target: t?.url || t?.author || 'unknown', error: 'No suggested reply text.' }); continue; }
+        const replyTo = { author: t?.author, url: t?.url, text: t?.text, source: t?.source };
         try {
+          // Score the reply draft now (reply-aware) so the queued draft carries an
+          // xGrowthScore — mirroring how generated posts are scored at creation.
+          const { agents } = runPostingAgents(content, { source: 'reply-targets', replyTo });
           // eslint-disable-next-line no-await-in-loop
           const post = await createSocialPost(context.clientId, {
             content,
             source: 'reply-targets',
             status: 'draft',
-            replyTo: { author: t?.author, url: t?.url, text: t?.text, source: t?.source },
+            replyTo,
+            agents,
           });
           created.push(post);
         } catch (err) {

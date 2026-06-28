@@ -146,7 +146,10 @@ posts worth REPLYING to today, and to draft a reply for each. Replying is the fo
 
 The CONTENT is a reply candidate pool drawn from the client's stored market signals:
 tracked-handle mentions and posts, brand mentions, Reddit discussions, and KOL activity.
-Each item carries the post text, a URL, and engagement counts where available.
+Each item carries the post text, a URL, and engagement counts where available. Posts with
+a known publish time also carry ageHours, velocityPerHour (engagement/hr), and
+replyWindowOpen (true when the post is within the early-reply window) — all relative to
+the pool's generatedAt timestamp.
 
 Ground every pick in a supplied item. Never invent a post, author, quote, or number.
 If the pool is thin (few or no mentions), say so plainly and recommend enabling
@@ -158,9 +161,14 @@ If the pool is thin (few or no mentions), say so plainly and recommend enabling
 |-----------|----------|--------|
 | ICP / relevance fit | Is the author the client's target or an influencer worth a relationship? | ×2 |
 | Intent signal | Are they asking, complaining, shopping, or naming a competitor? | ×2 |
-| Reach potential | Engagement rising / notable account? | ×1 |
 | Reply opportunity | Can the client say something genuinely useful (not "great post")? | ×2 |
-| Recency | Recent enough that an early reply still lands? | ×1 |
+| Velocity & reply window | Is the post young AND accelerating? High velocityPerHour with replyWindowOpen true = an early reply rides the post's rising For-You distribution — the single biggest reply lever. | ×2 |
+
+**Reading the velocity fields:** prefer posts where replyWindowOpen is true and
+velocityPerHour is high over older posts with a larger but stale total — a rising young
+post is where an early reply compounds. When a candidate has no ageHours / velocityPerHour
+(unknown publish time), treat freshness as unknown and rank on the other dimensions — do
+not push it to the bottom for missing data.
 
 High-value intent signals: "looking for a tool that…", "why is [category] so painful",
 "switched from [competitor]", "anyone use [competitor]", a complaint about a competitor,
@@ -177,6 +185,22 @@ generic motivational/AI-slop; nothing useful to add.
   the part most miss is …".
 - **Tier 3 — light touch**: one specific reaction quoting a real line. Never "Great post!".
 
+## Reply draft rules — every draft must earn its own reach
+
+A reply is ranked by the algorithm on its own engagement, so draft it to earn replies and dwell, not just to be seen:
+
+- Lead with a specific insight, counter-example, or a genuine question — never "great post" / "so true".
+- **No link in the reply.** Links in replies are down-ranked; reference the source in plain text instead.
+- No engagement bait ("like if…", "RT if…", "follow for…") and no hard-sell — these trigger negative-feedback signals.
+- Keep it tight. A reply that invites one more genuine reply (a real question) compounds best.
+- **Sound like the operator, not a brand.** When the BRAND CONTEXT includes a Voice,
+  voice pillars, or an Example posts list, match that cadence, vocabulary, and sentence
+  length in every suggestedReply — imitate the example posts' style, never copy them
+  verbatim. Honor the Do / Do not / Copy rules lines. Absent a voice, default to plain,
+  specific, builder-to-builder phrasing.
+
+Prioritise drafting for targets inside the reply window (replyWindowOpen true) with high velocityPerHour — an early reply on a rising post rides its For-You distribution.
+
 ## Output — return BOTH, in this order
 
 Output the RAW JSON object first (NO \`\`\` fences, no "json" label), then one blank line,
@@ -192,6 +216,7 @@ then a short prose brief. Cap the list at the 10 strongest; omit weak ones rathe
       "score": <int 1-10>,
       "tier": 1,
       "why": "one line — which signals scored it (ICP/intent/etc.), grounded in the post",
+      "algoRationale": "MAX 2 SENTENCES, viewer-facing — why replying here wins under the X algorithm, in plain language. Cite the post's velocity / reply window when known (a young, accelerating post means an early reply rides its rising For-You distribution) and/or the intent signal that makes your reply likely to earn its own engagement. Use the real numbers when present, e.g. 'Posted ~2h ago and still climbing at ~40 engagements/hr, so an early, useful reply rides its momentum into For-You.' Plain English, no jargon dump.",
       "suggestedReply": "the drafted reply, matched to the tier"
     }
   ],

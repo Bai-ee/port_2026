@@ -127,7 +127,25 @@ function buildUseForContext(brain, useForInput) {
     lines.push(line('Voice', voice.toneSummary || voice.writingRules));
     lines.push(line('Do', voice.preferredWords));
     lines.push(line('Do not', [...(voice.bannedWords || []), ...doNot]));
-    lines.push(line('Copy rules', voice.formattingRules));
+    const fmt = voice.formattingRules && !Array.isArray(voice.formattingRules) && typeof voice.formattingRules === 'object'
+      ? Object.entries(voice.formattingRules).map(([k, v]) => `${k}: ${v}`)
+      : voice.formattingRules;
+    lines.push(line('Copy rules', fmt));
+    // Voice pillars as do/avoid guidance.
+    (Array.isArray(voice.pillars) ? voice.pillars : []).slice(0, 4).forEach((p) => {
+      const guide = [p.do ? `do: ${p.do}` : '', p.dont ? `avoid: ${p.dont}` : ''].filter(Boolean).join('; ');
+      lines.push(line(`Voice pillar — ${p.name || p.description}`, guide || p.description));
+    });
+    // Few-shot example posts — the strongest "sound like me" signal. Match the
+    // voice, never copy verbatim. Sourced from CLIENT_BRAIN.md > Example Posts.
+    const examples = (Array.isArray(content.postExamples) ? content.postExamples : [])
+      .map((e) => compact(typeof e === 'string' ? e : e.post, 220))
+      .filter(Boolean)
+      .slice(0, 4);
+    if (examples.length) {
+      lines.push('Example posts (imitate this voice, do not copy verbatim):');
+      examples.forEach((post) => lines.push(`- ${post}`));
+    }
   } else if (doNot.length) {
     lines.push(line('Do not', doNot));
   }
@@ -1411,7 +1429,13 @@ async function generateAndSaveClientBrain(clientId, { mode = 'deterministic' } =
   const sourceRefs = mergeSourceRefs(buildAutoSourceRefs(bundle), brain.sourceRefs || []);
   const fresh = buildClientBrainDraft({ clientId, bundle, sourceRefs });
   // Keep manual/seeded voice; the rebuild only fills previously-empty voice fields.
-  let draft = { ...fresh, voice: mergeVoice(brain.voice, fresh.voice) };
+  // Operator-authored post examples (content.postExamples, from CLIENT_BRAIN.md ->
+  // few_shot_examples) have no bundle producer, so a rebuild would zero them —
+  // preserve them the same way mergeVoice preserves voice fields.
+  const content = isEmptyValue(fresh.content?.postExamples) && !isEmptyValue(brain.content?.postExamples)
+    ? { ...fresh.content, postExamples: brain.content.postExamples }
+    : fresh.content;
+  let draft = { ...fresh, voice: mergeVoice(brain.voice, fresh.voice), content };
   if (mode === 'llm') {
     try {
       draft = await refineDraftWithModel(draft, sourceRefs);

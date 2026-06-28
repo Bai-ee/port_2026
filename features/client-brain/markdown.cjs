@@ -117,6 +117,72 @@ function listField(section, names, opts) {
   return cleanList(field(section, names), opts);
 }
 
+// Parse one bullet of "key: value | key: value" segments into an object. When a
+// `post:` segment is present it captures the rest of the line verbatim, so post
+// copy may itself contain ':' or '|'. Keys are normalized (Do Not -> do_not).
+function parsePipeFields(line) {
+  const text = String(line || '').replace(/^[-*]\s+/, '').trim();
+  if (!text) return {};
+  const out = {};
+  const postIdx = text.search(/\bpost:\s*/i);
+  const head = postIdx >= 0 ? text.slice(0, postIdx) : text;
+  if (postIdx >= 0) out.post = text.slice(postIdx).replace(/^[^:]*:\s*/, '').trim();
+  head.split('|').forEach((seg) => {
+    const m = seg.match(/^\s*([A-Za-z][A-Za-z\s]*?):\s*(.+?)\s*$/);
+    if (m) out[normalizeKey(m[1])] = m[2].replace(/^["']|["']$/g, '').trim();
+  });
+  return out;
+}
+
+// "### Example Posts" -> content.postExamples [{type,label,post}] -> few_shot_examples
+// in voice-resolver.js. Accepts rich bullets (`type: .. | label: .. | post: ..`)
+// or a bare post bullet (the whole line is the post, colons and all).
+function parsePostExamples(text, { maxItems = 12 } = {}) {
+  return String(text || '').split('\n')
+    .map((l) => l.trim())
+    .filter((l) => /^[-*]\s+/.test(l))
+    .map((line) => {
+      const f = parsePipeFields(line);
+      const structured = f.post != null || f.type != null || f.label != null;
+      const post = structured ? (f.post || '') : line.replace(/^[-*]\s+/, '');
+      return { type: f.type || 'example', label: f.label || '', post: compact(post.trim(), 600) };
+    })
+    .filter((e) => e.post)
+    .slice(0, maxItems);
+}
+
+// "### Voice Pillars" -> voice.pillars [{name,description,do,dont}].
+function parseVoicePillars(text, { maxItems = 8 } = {}) {
+  return String(text || '').split('\n')
+    .map((l) => l.trim())
+    .filter((l) => /^[-*]\s+/.test(l))
+    .map((line) => {
+      const f = parsePipeFields(line);
+      return {
+        name: f.name || '',
+        description: f.description || f.desc || '',
+        do: f.do || '',
+        dont: f.dont || f.do_not || f.avoid || '',
+      };
+    })
+    .filter((p) => p.name || p.description || p.do)
+    .slice(0, maxItems);
+}
+
+// "### Formatting Rules" -> keyed object {short, medium, caps, emojis, ...}.
+// voice-resolver maps these to short_posts/medium_posts/caps_usage/emojis.
+function parseKeyedRules(text) {
+  const out = {};
+  String(text || '').split('\n')
+    .map((l) => l.replace(/^[-*]\s+/, '').trim())
+    .filter(Boolean)
+    .forEach((line) => {
+      const m = line.match(/^([A-Za-z][A-Za-z\s_]*?):\s*(.+?)\s*$/);
+      if (m) out[normalizeKey(m[1])] = m[2].trim();
+    });
+  return out;
+}
+
 function normalizeAcquisition(meta = {}) {
   const acquisition = meta.acquisition && typeof meta.acquisition === 'object' ? meta.acquisition : {};
   const method = ACQUISITION_METHODS.has(acquisition.method) ? acquisition.method : (meta.method || 'manual');
@@ -286,6 +352,17 @@ function compileClientBrainMarkdown(markdown, { clientId = '' } = {}) {
   const voiceText = compact(field(contentSec, ['Voice', 'Tone', 'Writing Style']), 500);
   const doNotSay = listField(contentSec, ['Do Not Say', 'Banned Words'], { maxItems: 40 });
   const ctas = listField(contentSec, ['Calls To Action', 'CTAs'], { maxItems: 20 });
+  // Voice fidelity block — the fields that make suggestions "sound like me".
+  // Flow to voice-resolver.js (Scribe/Guardian) and the post/reply surfaces.
+  const voicePillars = parseVoicePillars(field(contentSec, ['Voice Pillars']));
+  const postExamples = parsePostExamples(field(contentSec, ['Example Posts', 'Example Post', 'Voice Examples', 'Post Examples']));
+  const preferredWords = listField(contentSec, ['Preferred Words', 'Preferred Vocabulary'], { maxItems: 40 });
+  const formattingRulesMap = parseKeyedRules(field(contentSec, ['Formatting Rules', 'Formatting']));
+  const creatorsToEmulate = listField(contentSec, ['Creators I Emulate', 'Creators To Emulate', 'Emulate'], { maxItems: 20 });
+  const scribeInstructions = [
+    voiceText,
+    creatorsToEmulate.length ? `Emulate the voice of: ${creatorsToEmulate.join(', ')}.` : '',
+  ].filter(Boolean).join(' ');
 
   const icpSegments = listField(opportunitySec, ['ICP Segments', 'ICP', 'Opportunity Targets'], { maxItems: 30 });
   const verticals = listField(opportunitySec, ['Verticals'], { maxItems: 30 });
@@ -329,21 +406,23 @@ function compileClientBrainMarkdown(markdown, { clientId = '' } = {}) {
   const voice = {
     toneSummary: voiceText,
     writingRules: voiceText ? [voiceText] : [],
-    preferredWords: [],
+    preferredWords,
     bannedWords: [...doNotSay, ...prohibitedClaims].slice(0, 40),
-    formattingRules: ['Keep claims source-backed.', 'Use approved Client Brain decisions as the source of truth.'],
+    formattingRules: Object.keys(formattingRulesMap).length
+      ? formattingRulesMap
+      : ['Keep claims source-backed.', 'Use approved Client Brain decisions as the source of truth.'],
     exampleGood: [],
     exampleBad: [],
-    pillars: [],
+    pillars: voicePillars,
     avoidPatterns: prohibitedClaims,
     instagramFormatting: {},
-    scribeInstructions: voiceText,
+    scribeInstructions: scribeInstructions || voiceText,
     dailyBriefVoice: {},
   };
   const content = {
     pillars: [...pillars, ...topicsToOwn].slice(0, 30),
     recurringSeries,
-    postExamples: [],
+    postExamples,
     linkedInStyle: '',
     twitterStyle: '',
     emailDigestStyle: '',
@@ -676,11 +755,29 @@ ${clientName}
 
 ### Voice
 
+### Voice Pillars
+- name:  | description:  | do:  | dont:
+
+### Example Posts
+- type: observation | label:  | post:
+
+### Creators I Emulate
+-
+
+### Preferred Words
+-
+
+### Formatting Rules
+- short:
+- medium:
+- caps:
+- emojis:
+
 ### Do Not Say
-- 
+-
 
 ### Calls To Action
-- 
+-
 
 ## Opportunity Intelligence
 
