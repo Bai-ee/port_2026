@@ -897,37 +897,33 @@ const CALLOUT_COLORS = {
   Pipeline:   { bg: '#eceef1', fg: '#4a5568' },
 };
 
-/** Video Remix "Post content" — 2 rows, each [video play-card | X post copy].
- *  Email-safe: the video column is a dark branded card (▶ + duration) LINKING to
- *  the MP4 (clients can't play video). Rows stack to 1 column on mobile via the
- *  .vp-col-* classes. Returns '' when there are no videos. */
-function buildVideoPostsSection(videoItems) {
-  const items = (Array.isArray(videoItems) ? videoItems : []).filter((v) => v && v.url).slice(0, 2);
-  if (!items.length) return '';
-  const rows = items.map((v) => {
-    const href = escapeHtml(String(v.url));
-    const secs = Number(v.duration) || 30;
-    const dur = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
-    const caption = v.caption
-      ? escapeHtml(v.caption)
-      : `<span style="color:${DT.light};">Promo post generates on send.</span>`;
-    const videoCard = `<a href="${href}" style="text-decoration:none;display:block;">
-      <div style="background:${DT.ink};border-radius:12px;text-align:center;padding:30px 12px;">
-        <span style="display:inline-block;width:46px;height:46px;line-height:46px;border-radius:50%;background:${DT.brand};background-image:${DT.grad};color:#fff;font-size:16px;">&#9654;</span>
-        <div style="margin-top:10px;font-family:${DT.fMono};font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,0.72);">${dur} &middot; Video</div>
-      </div>
-    </a>`;
-    const postCol = `<div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:${DT.light};margin:0 0 6px;">X &middot; Post</div>
-      <p style="font-family:${DT.fBody};font-size:13px;line-height:1.5;color:${DT.ink};margin:0 0 10px;">${caption}</p>
-      <a href="${href}" style="color:${DT.brand};font-family:${DT.fMono};font-size:11px;letter-spacing:.06em;text-transform:uppercase;">&rarr; View video</a>`;
-    return `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 14px;">
-      <tr>
-        <td class="vp-col-media" valign="top" width="42%" style="width:42%;vertical-align:top;">${videoCard}</td>
-        <td class="vp-col-text" valign="top" width="58%" style="width:58%;vertical-align:top;padding-left:14px;">${postCol}</td>
-      </tr>
-    </table>`;
-  }).join('');
-  return rows;
+/** ONE "Post content" row — [video play-card | X post copy]. Email-safe: the
+ *  video column is a dark branded card (▶ + duration) LINKING to the MP4 (clients
+ *  can't play video). Stacks to 1 column on mobile via the .vp-col-* classes.
+ *  `kind` labels the source (Remix / Promo). Returns '' when there's no video. */
+function buildVideoPostRow(item, kind = 'Video') {
+  if (!item || !item.url) return '';
+  const href = escapeHtml(String(item.url));
+  const secs = Number(item.duration) || 0;
+  const durLabel = secs > 0 ? `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')} &middot; ${escapeHtml(kind)}` : escapeHtml(kind);
+  const caption = item.caption
+    ? escapeHtml(item.caption)
+    : `<span style="color:${DT.light};">Promo post generates on send.</span>`;
+  const videoCard = `<a href="${href}" style="text-decoration:none;display:block;">
+    <div style="background:${DT.ink};border-radius:12px;text-align:center;padding:30px 12px;">
+      <span style="display:inline-block;width:46px;height:46px;line-height:46px;border-radius:50%;background:${DT.brand};background-image:${DT.grad};color:#fff;font-size:16px;">&#9654;</span>
+      <div style="margin-top:10px;font-family:${DT.fMono};font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,0.72);">${durLabel}</div>
+    </div>
+  </a>`;
+  const postCol = `<div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:${DT.light};margin:0 0 6px;">X &middot; Post</div>
+    <p style="font-family:${DT.fBody};font-size:13px;line-height:1.5;color:${DT.ink};margin:0 0 10px;">${caption}</p>
+    <a href="${href}" style="color:${DT.brand};font-family:${DT.fMono};font-size:11px;letter-spacing:.06em;text-transform:uppercase;">&rarr; View video</a>`;
+  return `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 4px;">
+    <tr>
+      <td class="vp-col-media" valign="top" width="42%" style="width:42%;vertical-align:top;">${videoCard}</td>
+      <td class="vp-col-text" valign="top" width="58%" style="width:58%;vertical-align:top;padding-left:14px;">${postCol}</td>
+    </tr>
+  </table>`;
 }
 
 /** LLM executive-summary card body (no section wrapper — composed under the TODAY
@@ -980,7 +976,14 @@ function buildStrategicParts(intel) {
 
   const oppRows = (intel.opportunities || []).length
     ? intel.opportunities.map((o) => `<tr>
-        <td style="${TD}">${escapeHtml(o.topic)}${o.windowHours ? ` <span style="color:${DT.light};font-family:${DT.fMono};font-size:11px;">${o.windowHours}h</span>` : ''}${linkBit(o.url)}<div style="margin-top:3px;color:${DT.soft};font-size:12px;">${escapeHtml(o.angle || '')}</div></td>
+        <td style="${TD}">${escapeHtml(o.topic)}${o.windowHours ? ` <span style="color:${DT.light};font-family:${DT.fMono};font-size:11px;">${o.windowHours}h</span>` : ''}${linkBit(o.url)}<div style="margin-top:3px;color:${DT.soft};font-size:12px;">${escapeHtml(o.angle || '')}</div>${
+          o.suggestedReply
+            ? `<div style="margin-top:8px;padding:10px 12px;background:${DT.brandTint};border-left:2px solid ${DT.brand};border-radius:8px;">
+                <div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:${DT.brand};margin-bottom:4px;">Suggested reply</div>
+                <div style="font-family:${DT.fBody};font-size:13px;line-height:1.5;color:${DT.ink};">${escapeHtml(o.suggestedReply)}</div>${o.url ? `<a href="${escapeHtml(o.url)}" style="display:inline-block;margin-top:6px;color:${DT.brand};font-family:${DT.fMono};font-size:10px;letter-spacing:.06em;text-transform:uppercase;">Read tweet &amp; reply &rarr;</a>` : ''}
+              </div>`
+            : ''
+        }</td>
       </tr>`).join('')
     : '';
 
@@ -1270,58 +1273,62 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
   // (a dSub for items under a brief header; a standalone section for top items).
   // The email renders each group's keys in the admin's saved `order` (shuffled
   // up/down within the group), gated by include[key].
+  // Every toggleable element is its OWN section with the established header
+  // (kicker + Doto title), like Weather / Happening on X. Empty body => no
+  // section (skips items with nothing to show — preview and sent skip alike).
+  const section = (kicker, title, body) => (body && String(body).trim()) ? dSection(kicker, title, body) : '';
   const RENDER = {
-    // Top of email (standalone sections)
+    // Top of email
     agenda: () => buildAgendaSection(agenda),
     weather: () => buildWeatherSection(briefs),
     // Executive Summary / TODAY
-    execSummary: () => buildSummaryBody(summary),
-    videoPosts: () => dSub('Post content', buildVideoPostsSection(videoItems)),
+    execSummary: () => section('Executive Summary', 'Today', buildSummaryBody(summary)),
+    // Post Content
+    videoPosts: () => section('Post Content', 'Video Remix', buildVideoPostRow(videoItems?.remix, 'Remix')),
+    videoPromo: () => section('Post Content', 'Video Promo', buildVideoPostRow(videoItems?.promo, 'Promo')),
     // Market Signals
-    humanBrief: () => dSub('Brief', sPart('humanBrief')),
-    opportunities: () => dSub('Post opportunities', sPart('opportunities')),
-    signals: () => dSub('Signals · KOLs / competitors / narratives', sPart('signals')),
-    watchlistAccounts: () => dSub('Watchlist · accounts (name-for-name)', sPart('watchlistAccounts')),
-    suggestedPosts: () => dSub('Suggested posts', sPart('suggestedPosts')),
-    planPreview: () => dSub('30-day plan preview', sPart('planPreview')),
-    watchlist: () => dSub('Happening on X', watchlistSections),
-    followerPosts: () => dSub('Follower posts', buildFollowerPostsSection(briefs)),
+    humanBrief: () => section('Market Signals', 'Brief', sPart('humanBrief')),
+    opportunities: () => section('Market Signals', 'Post Opportunities', sPart('opportunities')),
+    signals: () => section('Market Signals', 'Signals', sPart('signals')),
+    watchlistAccounts: () => section('Market Signals', 'Watchlist Accounts', sPart('watchlistAccounts')),
+    suggestedPosts: () => section('Market Signals', 'Suggested Posts', sPart('suggestedPosts')),
+    planPreview: () => section('Market Signals', '30-Day Plan', sPart('planPreview')),
+    watchlist: () => section('Market Signals', 'Happening on X', watchlistSections),
+    followerPosts: () => section('Market Signals', 'Follower Posts', buildFollowerPostsSection(briefs)),
     // Creative
-    creativeBrief: () => buildCreativeBriefSection(creative),
+    creativeBrief: () => section('Creative', 'Creative Brief', buildCreativeBriefSection(creative)),
     // Web Performance
-    ga4Traffic: () => dSub('Traffic', ga4TrafficInner),
-    topPages: () => dSub('Top pages', topPagesTable),
-    trafficSources: () => dSub('Sources', sourcesTable),
-    keyEvents: () => dSub('Key events', keyEventsInner),
-    homepage: () => dSub('Homepage', buildHomepageAnalyticsSection(homepage)),
+    ga4Traffic: () => section('Google Analytics', 'Traffic', ga4TrafficInner),
+    topPages: () => section('Analytics', 'Top Pages', topPagesTable),
+    trafficSources: () => section('Analytics', 'Sources', sourcesTable),
+    keyEvents: () => section('Analytics', 'Key Events', keyEventsInner),
+    homepage: () => section('Engagement', 'Homepage', buildHomepageAnalyticsSection(homepage)),
     // Platform
-    platformOverview: () => dSub('Overview', platformOverviewCells),
-    signups: () => dSub('New sign-ups', signupsTable),
-    dashboards: () => dSub('Dashboards', dashboardsTable),
-    pipeline: () => dSub('Pipeline status', pipelineInner),
+    platformOverview: () => section('Platform', 'Overview', platformOverviewCells),
+    signups: () => section('Firebase', 'New Sign-ups', signupsTable),
+    dashboards: () => section('Firebase', 'Dashboards', dashboardsTable),
+    pipeline: () => section('Firebase', 'Pipeline Status', pipelineInner),
     // Deployments
-    deployments: () => dSub('Deployments', deploymentsInner),
-    runtimeErrors: () => dSub('Runtime errors', errorInner),
+    deployments: () => section('Vercel', 'Deployments', deploymentsInner),
+    runtimeErrors: () => section('Vercel', 'Runtime Errors', errorInner),
   };
   const ord = Array.isArray(order) && order.length ? order : Object.keys(RENDER);
   const orderIdx = (k) => { const i = ord.indexOf(k); return i === -1 ? 999 : i; };
-  // Render a group's keys in saved order, gated by include[key].
+  // Render a group's keys (each its own section) in saved order, gated by include[key].
   const renderGroup = (keys) => [...keys]
     .sort((a, b) => orderIdx(a) - orderIdx(b))
     .filter((k) => include[k] !== false && RENDER[k])
-    .map((k) => RENDER[k]());
+    .map((k) => RENDER[k]())
+    .join('');
 
-  const topSections = renderGroup(['agenda', 'weather']).join('');
-  const todaySection = dBriefSection('Executive Summary', 'Today', renderGroup(['execSummary', 'videoPosts']));
-  const marketSignalsSection = dBriefSection('Market Signals', 'Happening Now',
-    renderGroup(['humanBrief', 'opportunities', 'signals', 'watchlistAccounts', 'suggestedPosts', 'planPreview', 'watchlist', 'followerPosts']));
-  const creativeSection = dBriefSection('Creative', 'Creative Brief', renderGroup(['creativeBrief']));
-  const webPerfSection = dBriefSection('Web Performance', 'Traffic & Engagement',
-    renderGroup(['ga4Traffic', 'topPages', 'trafficSources', 'keyEvents', 'homepage']));
-  const platformSection = dBriefSection('Platform', 'Platform',
-    renderGroup(['platformOverview', 'signups', 'dashboards', 'pipeline']));
-  const opsSection = dBriefSection('Deployments', 'Deployments & Errors',
-    renderGroup(['deployments', 'runtimeErrors']));
+  const topSections = renderGroup(['agenda', 'weather']);
+  const todaySection = renderGroup(['execSummary']);
+  const postContentSection = renderGroup(['videoPosts', 'videoPromo']);
+  const marketSignalsSection = renderGroup(['humanBrief', 'opportunities', 'signals', 'watchlistAccounts', 'suggestedPosts', 'planPreview', 'watchlist', 'followerPosts']);
+  const creativeSection = renderGroup(['creativeBrief']);
+  const webPerfSection = renderGroup(['ga4Traffic', 'topPages', 'trafficSources', 'keyEvents', 'homepage']);
+  const platformSection = renderGroup(['platformOverview', 'signups', 'dashboards', 'pipeline']);
+  const opsSection = renderGroup(['deployments', 'runtimeErrors']);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -1363,8 +1370,11 @@ a{text-decoration:none;}
           <!-- Top of email (agenda / weather, in saved order) -->
           ${topSections}
 
-          <!-- Executive Summary + Post content (TODAY), under weather -->
+          <!-- Executive Summary (TODAY), under weather -->
           ${todaySection}
+
+          <!-- Post Content (Video Remix + Video Promo) — own section -->
+          ${postContentSection}
 
           <!-- ── One headed section per brief (STAND UP) ── -->
           ${marketSignalsSection}
@@ -1602,10 +1612,10 @@ export async function GET(request) {
       // A sample hosted-brief URL so the CTA renders a realistic link in template mode.
       const sampleBriefUrl = appUrl('/briefs/sample-client/latest');
       const sampleContactUrl = 'https://calendly.com/your-human/intro';
-      const sampleVideoItems = [
-        { url: 'https://example.com/remix-1.mp4', duration: 30, caption: 'Stop scrolling — this 30s cut shows exactly how we turn raw clips into a launch-ready edit. Built for the feed. ▶ #creative' },
-        { url: 'https://example.com/remix-2.mp4', duration: 30, caption: 'New promo drop: the model-selection loop, visualized. Watch how the system ends the bottleneck in half a minute. #ai' },
-      ];
+      const sampleVideoItems = {
+        remix: { url: 'https://example.com/remix-1.mp4', duration: 30, caption: 'Stop scrolling — this 30s cut shows exactly how we turn raw clips into a launch-ready edit. Built for the feed. ▶ #creative' },
+        promo: { url: 'https://example.com/promo-1.mp4', duration: 22, caption: 'Your site, reimagined as a social-ready promo. Watch the 3D mockup walkthrough — then ship it. #promo' },
+      };
       const html = buildEmailHtml(ph.firebase, ph.vercel, ph.ga4, ph.agenda, ph.homepage, ts, ph.summary, ph.briefs, include, ph.creative, sampleBriefUrl, sampleContactUrl, sampleVideoItems, orderOverride || digestConfig.DEFAULT_ORDER);
       return json({ ok: true, template: true, placeholder: true, timestamp: new Date(ts).toISOString(), paragraph: ph.summary.paragraph, html });
     } catch (err) {
@@ -1639,16 +1649,24 @@ export async function GET(request) {
     // Executive Brief reflect data generated at send time — the same refresh the
     // scheduled cron's pre-digest worker does. A preview NEVER triggers it (cost).
     const isRealSend = isSendNow || (!isPreview && !isTemplate);
+    // Execution log returned to the Email Digest card's terminal so the admin can
+    // confirm what the send did (refresh per client, brief link, video, render,
+    // send). Only meaningful on a real send.
+    const sendLog = [];
+    const step = (type, text) => sendLog.push({ type, text });
     if (isRealSend && briefClientIds.length) {
+      step('info', `Refreshing ${briefClientIds.length} brief client${briefClientIds.length !== 1 ? 's' : ''}…`);
       try {
         const { refreshDigestClient } = await import('../../worker/pre-digest-refresh/route.js');
         for (const cid of briefClientIds) {
           const r = await refreshDigestClient(cid).catch((e) => ({ ok: false, error: e?.message }));
           logInfo('daily_digest_prerefresh', { clientId: cid, ok: Boolean(r?.ok), error: r?.ok ? undefined : (r?.scout?.error || r?.error) });
+          step(r?.ok ? 'success' : 'error', r?.ok ? `Refreshed brief · ${cid}` : `Brief refresh issue · ${cid}: ${r?.scout?.error || r?.error || 'error'}`);
         }
       } catch (err) {
         // Refresh unavailable — fall back to last-good data; never block the email.
         logWarn('daily_digest_prerefresh_unavailable', { error: err.message });
+        step('error', `Refresh unavailable: ${err.message}`);
       }
     }
 
@@ -1764,51 +1782,69 @@ export async function GET(request) {
     // paired with an LLM-written X promo post. Toggle: include.videoPosts.
     // Live preview + real send generate captions (Haiku); template uses the
     // placeholder layout (no cost).
-    let videoItems = [];
-    if (include.videoPosts !== false && homeClientId) {
+    // Two independent "Post content" rows, each its own toggle:
+    //   videoPosts  → latest Video Remix video (mediaCaptures, type video_remix)
+    //   videoPromo  → latest Video Promo video (studioCaptures, type studio_video)
+    const videoItems = { remix: null, promo: null };
+    const wantRemix = include.videoPosts !== false;
+    const wantPromo = include.videoPromo !== false;
+    if ((wantRemix || wantPromo) && homeClientId) {
       try {
-        // Reconcile any in-flight remix renders first (e.g. the one the
-        // pre-digest-video cron primed ~40 min ago) so a just-finished video
-        // lands in mediaCaptures before we read it.
-        try {
-          const mediaJobsLib = require('../../../../api/_lib/media-jobs.cjs');
-          const { reconcileMediaJob } = require('../../../../api/_lib/media-reconcile.cjs');
-          const inflight = await mediaJobsLib.listInFlightMediaJobs(20);
-          for (const job of inflight) {
-            if (job?.clientId !== homeClientId) continue;
-            try { await reconcileMediaJob(job, homeClientId); } catch { /* per-job best-effort */ }
-          }
-        } catch (e) {
-          logWarn('daily_digest_media_reconcile_failed', { error: e.message });
-        }
-        const dsSnap = await fb.adminDb.collection('dashboard_state').doc(homeClientId).get();
-        const caps = (dsSnap.data()?.mediaCaptures || [])
-          .filter((c) => c?.type === 'video_remix' && c?.downloadUrl)
-          .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
-          .slice(0, 2);
-        if (caps.length) {
-          let captions = [];
-          if (!isTemplate) {
-            let brain = '';
-            try {
-              const { loadClientBrainContext } = require('../../../../features/client-brain/store.cjs');
-              brain = await loadClientBrainContext(homeClientId, { useFor: 'emailDigest', maxChars: 1200 });
-            } catch { /* optional */ }
-            try {
-              captions = await briefSummary.generateVideoPromoPosts({ videos: caps, clientBrainContext: brain, config: digestCfg || {} });
-            } catch (e) {
-              logWarn('daily_digest_video_promo_failed', { error: e.message });
+        // Reconcile in-flight remix renders first (e.g. the one the pre-digest
+        // video cron primed) so a just-finished video lands before we read it.
+        if (wantRemix) {
+          try {
+            const mediaJobsLib = require('../../../../api/_lib/media-jobs.cjs');
+            const { reconcileMediaJob } = require('../../../../api/_lib/media-reconcile.cjs');
+            const inflight = await mediaJobsLib.listInFlightMediaJobs(20);
+            for (const job of inflight) {
+              if (job?.clientId !== homeClientId) continue;
+              try { await reconcileMediaJob(job, homeClientId); } catch { /* per-job best-effort */ }
             }
+          } catch (e) {
+            logWarn('daily_digest_media_reconcile_failed', { error: e.message });
           }
-          videoItems = caps.map((v, i) => ({
-            url: v.downloadUrl,
-            duration: v.durationSeconds || 30,
-            caption: captions[i] || '',
-          }));
         }
+        const ds = (await fb.adminDb.collection('dashboard_state').doc(homeClientId).get()).data() || {};
+        const remixCap = wantRemix ? (ds.mediaCaptures || [])
+          .filter((c) => c?.type === 'video_remix' && c?.downloadUrl)
+          .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0] : null;
+        const promoCap = wantPromo ? (ds.studioCaptures || [])
+          .filter((c) => c?.type === 'studio_video' && c?.downloadUrl)
+          .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0] : null;
+
+        // Caption the enabled videos (one Haiku call); skip on template (no cost).
+        const toCaption = [];
+        if (remixCap) toCaption.push(remixCap);
+        if (promoCap) toCaption.push(promoCap);
+        let captions = [];
+        if (!isTemplate && toCaption.length) {
+          let brain = '';
+          try {
+            const { loadClientBrainContext } = require('../../../../features/client-brain/store.cjs');
+            brain = await loadClientBrainContext(homeClientId, { useFor: 'emailDigest', maxChars: 1200 });
+          } catch { /* optional */ }
+          try {
+            captions = await briefSummary.generateVideoPromoPosts({
+              videos: toCaption.map((c) => ({ durationSeconds: c.durationSeconds, sourceFolders: c.sourceFolders })),
+              clientBrainContext: brain,
+              config: digestCfg || {},
+            });
+          } catch (e) {
+            logWarn('daily_digest_video_promo_failed', { error: e.message });
+          }
+        }
+        let ci = 0;
+        if (remixCap) videoItems.remix = { url: remixCap.downloadUrl, duration: remixCap.durationSeconds || 30, caption: captions[ci++] || '' };
+        if (promoCap) videoItems.promo = { url: promoCap.downloadUrl, duration: promoCap.durationSeconds || 0, caption: captions[ci++] || '' };
       } catch (e) {
         logWarn('daily_digest_video_posts_failed', { error: e.message });
       }
+    }
+
+    if (isRealSend && (wantRemix || wantPromo)) {
+      const n = (videoItems.remix ? 1 : 0) + (videoItems.promo ? 1 : 0);
+      step(n ? 'success' : 'info', n ? `Video · ${n} attached (remix:${videoItems.remix ? 'y' : 'n'} promo:${videoItems.promo ? 'y' : 'n'})` : 'No fresh video available yet');
     }
 
     const sessionStr = ga4.overview ? `, ${ga4.overview.sessions} session${ga4.overview.sessions !== 1 ? 's' : ''}` : '';
@@ -1837,8 +1873,13 @@ export async function GET(request) {
     const contactUrl = (contactUrlOverride != null
       ? contactUrlOverride
       : (digestCfg?.contactUrl || process.env.DIGEST_CONTACT_URL || process.env.CALENDLY_URL || '')).trim();
+    if (isRealSend) step('info', `Executive Brief · ${briefUrl || 'dashboard fallback'}`);
     const sectionOrder = orderOverride || digestCfg?.order || digestConfig.DEFAULT_ORDER;
     const html = buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, renderInclude, creative, briefUrl, contactUrl, videoItems, sectionOrder);
+    if (isRealSend) {
+      const onCount = digestConfig.INCLUDE_KEYS.filter((k) => include[k] !== false).length;
+      step('success', `Rendered email · ${onCount} section${onCount !== 1 ? 's' : ''} on`);
+    }
 
     // Preview mode (admin dashboard): build everything, send nothing.
     if (isPreview) {
@@ -1853,6 +1894,7 @@ export async function GET(request) {
     }
 
     const emailResult = await sendEmail(subject, html);
+    step(emailResult?.skipped ? 'info' : 'success', emailResult?.skipped ? `Email not sent: ${emailResult?.reason || 'no transport configured'}` : `Email sent → ${DIGEST_TO}`);
     logInfo('daily_digest_complete', {
       timestamp: new Date(timestamp).toISOString(),
       newUsers: firebase.newUsers,
@@ -1866,6 +1908,8 @@ export async function GET(request) {
       summary: summary?.paragraph || null,
       metrics: { firebase, vercel: { totalDeployments: vercel.totalDeployments, errorCount: vercel.errorLogs?.length || 0 }, ga4: { overview: ga4.overview, topPagesCount: ga4.topPages?.length, sourcesCount: ga4.trafficSources?.length, events: ga4.events, error: ga4.error || null }, agenda: { eventCount: agenda.events?.length || 0, error: agenda.error || null }, homepage: { totalEvents: homepage.totalEvents, byInteractionType: homepage.byInteractionType, topTargets: homepage.topTargets, error: homepage.error || null } },
       email: emailResult,
+      subject,
+      log: sendLog,
     });
   } catch (err) {
     logError('daily_digest_route_error', { error: err });

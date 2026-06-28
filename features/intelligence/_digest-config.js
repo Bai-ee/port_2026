@@ -15,7 +15,8 @@ const INCLUDE_KEYS = [
   'execBriefLink',    // "Open Executive Brief" CTA button (top + footer)
   'contactHuman',     // "Contact Your Human" CTA button (opens contactUrl / Calendly)
   'execSummary',      // LLM executive-summary paragraph
-  'videoPosts',       // Video Remix "Post content" rows (video + X promo post)
+  'videoPosts',       // Video Remix "Post content" row (video + X promo post)
+  'videoPromo',       // Video Promo (Mockup Studio) "Post content" row
   'agenda',           // Today's Agenda (calendar)
   'weather',          // Local weather forecast
   'followerPosts',    // 1 post from each followed handle
@@ -55,6 +56,7 @@ const DEFAULT_INCLUDE = {
   signups: true,
   // ── opt-in extras (off by default) ──
   videoPosts: false,
+  videoPromo: false,
   humanBrief: false,
   opportunities: false,
   signals: false,

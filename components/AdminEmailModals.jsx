@@ -11,7 +11,7 @@
 // the same kit the Video Remix modal uses. See
 // public/docs/dashboard-modal-component-style-guide.html.
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 async function authFetch(user, path, options = {}) {
   const token = await user.getIdToken();
@@ -43,7 +43,10 @@ const SECTION_GROUPS = [
   ]],
   ['Executive Summary', [
     ['execSummary', 'Executive summary', 'The “Today” callout summary', null],
-    ['videoPosts', 'Video Post Content', 'Latest 2 remix videos + X promo posts', 'video-remix'],
+  ]],
+  ['Post Content', [
+    ['videoPosts', 'Video Remix Post', 'Latest remix video + X promo post', 'video-remix'],
+    ['videoPromo', 'Video Promo Post', 'Latest Video Promo (mockup) + X post', null],
   ]],
   ['Call to action', [
     ['execBriefLink', 'Executive Brief link', 'The “Open Executive Brief” button', null],
@@ -155,6 +158,13 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
   const [previewError, setPreviewError] = useState('');
   const [preview, setPreview] = useState(null); // { html, paragraph, placeholder }
   const [sendStatus, setSendStatus] = useState(null);
+  // Run & Send terminal — same shell/CSS as the other cards' run terminals.
+  // Closeable + reopenable; lines persist so you can return to confirm the run.
+  const [termLines, setTermLines] = useState([]);
+  const [termOpen, setTermOpen] = useState(false);
+  const termRef = useRef(null);
+  const appendTerm = useCallback((type, text) => setTermLines((p) => [...p, { type, text }]), []);
+  useEffect(() => { if (termRef.current) termRef.current.scrollTop = termRef.current.scrollHeight; }, [termLines]);
 
   // Render the preview honoring the current (even unsaved) include toggles, so
   // flipping a section off in SETTINGS and tabbing over shows it drop out.
@@ -187,6 +197,8 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
   const runAndSend = useCallback(async () => {
     if (!user) return;
     if (typeof window !== 'undefined' && !window.confirm('Run a FRESH brief for every digest client, then send the email to the configured recipient now? Saves your current settings and runs the brief pipeline (LLM cost). ~1–2 min.')) return;
+    setTermOpen(true);
+    setTermLines([{ type: 'info', text: '▶ Run & Send — starting…' }]);
     setSendStatus({ kind: 'pending', msg: 'Saving settings…' });
     try {
       // Persist current toggles first so the send uses exactly what you configured
@@ -195,13 +207,19 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
         const saved = await authFetch(user, '/api/admin/digest-config', { method: 'POST', body: JSON.stringify(form) });
         if (saved?.config) setForm(saved.config);
       }
+      appendTerm('success', 'Saved config ✓');
+      appendTerm('info', 'Running fresh briefs & sending… (~1–2 min)');
       setSendStatus({ kind: 'pending', msg: 'Running fresh briefs & sending… (~1–2 min)' });
-      await authFetch(user, '/api/admin/daily-digest?send=1');
+      const res = await authFetch(user, '/api/admin/daily-digest?send=1');
+      (Array.isArray(res?.log) ? res.log : []).forEach((l) => appendTerm(l.type || 'info', l.text));
+      if (res?.subject) appendTerm('info', `Subject · ${res.subject}`);
+      appendTerm('success', 'Done ✓ — returned to confirm above');
       setSendStatus({ kind: 'ok', msg: 'Sent with fresh data.' });
     } catch (e) {
+      appendTerm('error', `Error: ${e.message}`);
       setSendStatus({ kind: 'error', msg: e.message });
     }
-  }, [user, form]);
+  }, [user, form, appendTerm]);
 
   useEffect(() => { loadSettings(); }, [loadSettings]);
 
@@ -484,10 +502,34 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
                       : 'Run & Send saves these settings, runs a fresh brief for every client, then emails the digest now.'
                 }</span>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  {termLines.length > 0 && !termOpen ? (
+                    <button type="button" className="btn btn-outline" onClick={() => setTermOpen(true)}>Terminal</button>
+                  ) : null}
                   <button type="button" className="btn btn-outline" onClick={save} disabled={saveStatus?.kind === 'pending' || sendStatus?.kind === 'pending'}>{saveStatus?.kind === 'pending' ? 'Saving…' : 'Save Config'}</button>
                   <button type="button" className="btn" style={{ background: '#2a2420', color: '#fff', borderColor: '#2a2420' }} onClick={runAndSend} disabled={sendStatus?.kind === 'pending' || saveStatus?.kind === 'pending'}>{sendStatus?.kind === 'pending' ? 'Sending…' : 'Run & Send'}</button>
                 </div>
               </div>
+
+              {termOpen && termLines.length > 0 ? (
+                <div id="intake-modal-terminal-col" style={{ marginTop: 14 }}>
+                  <div id="intake-modal-terminal-titlebar">
+                    <span id="intake-modal-terminal-title">digest.send</span>
+                    <button
+                      type="button"
+                      aria-label="Close terminal"
+                      onClick={() => setTermOpen(false)}
+                      style={{ marginLeft: 'auto', border: 0, background: 'none', color: 'inherit', cursor: 'pointer', font: '700 12px/1 var(--vrk-mono, monospace)', opacity: 0.7 }}
+                    >
+                      ✕ close
+                    </button>
+                  </div>
+                  <div id="intake-modal-terminal-embed" ref={termRef}>
+                    {termLines.map((line, i) => (
+                      <div key={`dt-${i}`} className={`term-line term-${line.type}`}>{line.text}</div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         )
