@@ -25,6 +25,7 @@ const INCLUDE_KEYS = [
   // Market Signals · Strategic-brief items (each individually toggled)
   'humanBrief',       // Human brief blurb
   'opportunities',    // Post opportunities (Conversation / angle)
+  'suggestedReplies', // Suggested replies (drafted reply per opportunity)
   'signals',          // KOLs / competitors / narratives
   'watchlistAccounts',// Watchlist accounts (name-for-name)
   'suggestedPosts',   // Suggested posts
@@ -59,6 +60,7 @@ const DEFAULT_INCLUDE = {
   videoPromo: false,
   humanBrief: false,
   opportunities: false,
+  suggestedReplies: false,
   signals: false,
   watchlistAccounts: false,
   suggestedPosts: false,
@@ -85,7 +87,7 @@ const LEGACY_INCLUDE_EXPANSION = {
   webStats: ['ga4Traffic', 'topPages', 'trafficSources', 'keyEvents', 'homepage'],
   platformStats: ['platformOverview', 'signups', 'dashboards', 'pipeline'],
   deployments: ['deployments', 'runtimeErrors'],
-  marketingBrief: ['humanBrief', 'opportunities', 'signals', 'watchlistAccounts', 'suggestedPosts', 'planPreview', 'watchlist'],
+  marketingBrief: ['humanBrief', 'opportunities', 'suggestedReplies', 'signals', 'watchlistAccounts', 'suggestedPosts', 'planPreview', 'watchlist'],
   creativeBrief: ['creativeBrief'],
 };
 
@@ -117,6 +119,35 @@ function normalizeOrder(value) {
   return out;
 }
 
+// Suggested-post platform registry — the SINGLE source of truth for which
+// platforms can appear in the email's Suggested Posts section (no own header,
+// just in/out). The marketing brief generates ALL platforms (for the Executive
+// Brief); this only filters what the EMAIL pulls in. Future-proofed: add a
+// platform here and it flows everywhere (config defaults, the route's content
+// mapping + hint matching + preview override, and the settings checkboxes).
+//   key     — stable id stored in config
+//   label   — UI/email label
+//   default — included in a NEW config (X only by default)
+//   fields  — intel.content keys whose drafts belong to this platform
+//   hints   — substrings matched against a post's platformHint
+const POST_PLATFORMS = [
+  { key: 'x',         label: 'X',             default: true,  fields: ['x_post'],                              hints: ['x', 'twitter'] },
+  { key: 'thread',    label: 'Thread opener', default: false, fields: ['x_thread_opener'],                     hints: ['thread'] },
+  { key: 'discord',   label: 'Discord',       default: false, fields: ['discord_announcement', 'discord_post'], hints: ['discord'] },
+  { key: 'reddit',    label: 'Reddit',        default: false, fields: ['reddit_post', 'reddit_announcement'],  hints: ['reddit'] },
+  { key: 'instagram', label: 'Instagram',     default: false, fields: ['instagram_post', 'instagram_caption'], hints: ['instagram', 'insta', 'ig'] },
+];
+const POST_PLATFORM_KEYS = POST_PLATFORMS.map((p) => p.key);
+const DEFAULT_POST_PLATFORMS = Object.fromEntries(POST_PLATFORMS.map((p) => [p.key, p.default]));
+function normalizePostPlatforms(value) {
+  const v = value && typeof value === 'object' ? value : {};
+  const out = {};
+  for (const p of POST_PLATFORMS) {
+    out[p.key] = typeof v[p.key] === 'boolean' ? v[p.key] : p.default;
+  }
+  return out;
+}
+
 const SCHEDULE_FREQUENCIES = ['daily', 'weekly', 'off'];
 const DEFAULT_SCHEDULE = {
   enabled: true,
@@ -136,6 +167,7 @@ const DEFAULTS = {
   includeClientIds: [],    // additional clients whose latest brief to fold in
   include: { ...DEFAULT_INCLUDE },
   order: [...DEFAULT_ORDER],
+  postPlatforms: { ...DEFAULT_POST_PLATFORMS },
   schedule: { ...DEFAULT_SCHEDULE },
   briefLinkMode: DEFAULT_BRIEF_LINK_MODE, // how the Executive Brief link resolves
   contactUrl: '',          // "Contact Your Human" CTA target (Calendly etc.); env DIGEST_CONTACT_URL is the fallback
@@ -205,6 +237,7 @@ async function getDigestConfig(clientId) {
     includeClientIds: cleanIdList(data.includeClientIds),
     include: normalizeInclude(data.include),
     order: normalizeOrder(data.order),
+    postPlatforms: normalizePostPlatforms(data.postPlatforms),
     schedule: normalizeSchedule(data.schedule),
     briefLinkMode: normalizeBriefLinkMode(data.briefLinkMode),
     contactUrl: typeof data.contactUrl === 'string' ? data.contactUrl : '',
@@ -224,6 +257,7 @@ async function saveDigestConfig(clientId, patch = {}) {
   if ('includeClientIds' in patch) next.includeClientIds = cleanIdList(patch.includeClientIds);
   if ('include' in patch) next.include = normalizeInclude(patch.include);
   if ('order' in patch) next.order = normalizeOrder(patch.order);
+  if ('postPlatforms' in patch) next.postPlatforms = normalizePostPlatforms(patch.postPlatforms);
   if ('schedule' in patch) next.schedule = normalizeSchedule(patch.schedule);
   if ('briefLinkMode' in patch) next.briefLinkMode = normalizeBriefLinkMode(patch.briefLinkMode);
   if (typeof patch.contactUrl === 'string') next.contactUrl = patch.contactUrl.trim().slice(0, 500);
@@ -327,6 +361,9 @@ module.exports = {
   DEFAULT_INCLUDE,
   ORDERABLE_KEYS,
   DEFAULT_ORDER,
+  POST_PLATFORMS,
+  POST_PLATFORM_KEYS,
+  DEFAULT_POST_PLATFORMS,
   BRIEF_LINK_MODES,
   getDigestConfig,
   saveDigestConfig,

@@ -55,6 +55,7 @@ const SECTION_GROUPS = [
   ['Market Signals brief', [
     ['humanBrief', 'Human Brief', 'The strategist’s opening blurb', 'signals'],
     ['opportunities', 'Post Opportunities', 'Conversation / angle to enter', 'signals'],
+    ['suggestedReplies', 'Suggested Replies', 'Drafted reply per opportunity', 'signals'],
     ['signals', 'Signals', 'KOLs, competitors, narratives', 'signals'],
     ['watchlistAccounts', 'Watchlist Accounts', 'Tracked accounts, name-for-name', 'signals'],
     ['suggestedPosts', 'Suggested Posts', 'Drafted posts for today', 'signals'],
@@ -87,6 +88,10 @@ const ALL_SECTION_KEYS = SECTION_GROUPS.flatMap(([, items]) => items.map(([k]) =
 // Groups whose cards can be shuffled up/down to set the email order. The CTA
 // group isn't part of the section flow, so it stays fixed.
 const NON_ORDERABLE_GROUPS = new Set(['Call to action']);
+// Display labels for suggested-post platforms; the list itself comes from the
+// server (form.postPlatforms keys), so adding a platform in _digest-config
+// surfaces a checkbox here automatically. Unknown keys fall back to capitalized.
+const PLATFORM_LABELS = { x: 'X', thread: 'Thread opener', discord: 'Discord', reddit: 'Reddit', instagram: 'Instagram' };
 
 // ── Email Digest: SETTINGS (params) + PREVIEW (rendered email + send) ─────────
 export function AdminEmailDigestView({ user, onOpenCard }) {
@@ -168,7 +173,7 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
 
   // Render the preview honoring the current (even unsaved) include toggles, so
   // flipping a section off in SETTINGS and tabbing over shows it drop out.
-  const loadPreview = useCallback(async (nextMode = 'template', includeFlags, contactUrl, order) => {
+  const loadPreview = useCallback(async (nextMode = 'template', includeFlags, contactUrl, order, postPlatforms) => {
     if (!user) return;
     setPreviewLoading(true);
     setPreviewError('');
@@ -185,6 +190,11 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
       if (nextMode === 'live' && contactUrl) path += `&contactUrl=${encodeURIComponent(contactUrl)}`;
       // Live preview honors the current (even unsaved) section order.
       if (nextMode === 'live' && Array.isArray(order) && order.length) path += `&order=${encodeURIComponent(order.join(','))}`;
+      // Live preview honors the current (even unsaved) suggested-post platforms.
+      if (nextMode === 'live' && postPlatforms) {
+        const on = Object.entries(postPlatforms).filter(([, v]) => v).map(([k]) => k).join(',');
+        path += `&posts=${encodeURIComponent(on)}`;
+      }
       const data = await authFetch(user, path);
       setPreview({ html: data.html || '', paragraph: data.paragraph || data.summary?.paragraph || '', placeholder: Boolean(data.placeholder) });
     } catch (e) {
@@ -226,7 +236,7 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
   // Reload the LIVE preview each time the PREVIEW tab is opened, so it reflects
   // the latest include toggles AND real data — i.e. what will actually send.
   useEffect(() => {
-    if (tab === 'preview') loadPreview('live', form?.include, form?.contactUrl, form?.order);
+    if (tab === 'preview') loadPreview('live', form?.include, form?.contactUrl, form?.order, form?.postPlatforms);
   }, [tab, form, loadPreview]);
 
   const isTemplate = previewMode === 'template';
@@ -366,6 +376,23 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
                     onChange={(e) => setForm((f) => ({ ...f, contactUrl: e.target.value }))}
                   />
                   <span className="hint">Where the “Contact Your Human” CTA points. Button only shows when this is set and its toggle is on. Falls back to the DIGEST_CONTACT_URL env var.</span>
+                </div>
+
+                <div className="field" style={{ display: 'grid', gap: 6 }}>
+                  <span className="label">Suggested-post platforms</span>
+                  <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+                    {Object.keys(form.postPlatforms || {}).map((k) => {
+                      const on = !!form.postPlatforms[k];
+                      const lbl = PLATFORM_LABELS[k] || (k.charAt(0).toUpperCase() + k.slice(1));
+                      return (
+                        <label key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
+                          <input type="checkbox" checked={on} onChange={() => setForm((f) => ({ ...f, postPlatforms: { ...(f.postPlatforms || {}), [k]: !on } }))} style={{ width: 16, minHeight: 16 }} />
+                          {lbl}
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <span className="hint">Which platforms’ drafted posts are included in the Suggested Posts section (no own header — just in or out).</span>
                 </div>
 
                 {SECTION_GROUPS.map(([groupLabel, items]) => {

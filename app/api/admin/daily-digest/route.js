@@ -968,23 +968,41 @@ function buildSummaryBody(summary) {
 // toggled on/off individually under the Market Signals brief header. Each value
 // is raw inner HTML (no dMini label — the label comes from the dSub wrapper);
 // '' when that item has no data.
-function buildStrategicParts(intel) {
+function buildStrategicParts(intel, postPlatforms = {}) {
   if (!intel) return {};
+  // Suggested-post platform filter: unset key => X on, everything else off.
+  const ppOn = (k) => (postPlatforms && postPlatforms[k] !== undefined) ? postPlatforms[k] !== false : (k === 'x');
+  // Map a post's platformHint → a registry platform key (default 'x').
+  const platformOf = (hint) => {
+    const h = String(hint || '').toLowerCase();
+    for (const plat of digestConfig.POST_PLATFORMS) {
+      if (plat.key === 'x') continue;
+      if ((plat.hints || []).some((x) => h.includes(x))) return plat.key;
+    }
+    return 'x';
+  };
 
   // Weather is its own toggled section (buildWeatherSection) — not rendered here.
   const linkBit = (url) => (url ? ` <a href="${escapeHtml(url)}" style="color:${DT.accent};font-family:${DT.fMono};font-size:11px;">↗</a>` : '');
 
   const oppRows = (intel.opportunities || []).length
     ? intel.opportunities.map((o) => `<tr>
-        <td style="${TD}">${escapeHtml(o.topic)}${o.windowHours ? ` <span style="color:${DT.light};font-family:${DT.fMono};font-size:11px;">${o.windowHours}h</span>` : ''}${linkBit(o.url)}<div style="margin-top:3px;color:${DT.soft};font-size:12px;">${escapeHtml(o.angle || '')}</div>${
-          o.suggestedReply
-            ? `<div style="margin-top:8px;padding:10px 12px;background:${DT.brandTint};border-left:2px solid ${DT.brand};border-radius:8px;">
-                <div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:${DT.brand};margin-bottom:4px;">Suggested reply</div>
-                <div style="font-family:${DT.fBody};font-size:13px;line-height:1.5;color:${DT.ink};">${escapeHtml(o.suggestedReply)}</div>${o.url ? `<a href="${escapeHtml(o.url)}" style="display:inline-block;margin-top:6px;color:${DT.brand};font-family:${DT.fMono};font-size:10px;letter-spacing:.06em;text-transform:uppercase;">Read tweet &amp; reply &rarr;</a>` : ''}
-              </div>`
-            : ''
-        }</td>
+        <td style="${TD}">${escapeHtml(o.topic)}${o.windowHours ? ` <span style="color:${DT.light};font-family:${DT.fMono};font-size:11px;">${o.windowHours}h</span>` : ''}${linkBit(o.url)}<div style="margin-top:3px;color:${DT.soft};font-size:12px;">${escapeHtml(o.angle || '')}</div></td>
       </tr>`).join('')
+    : '';
+
+  // Suggested Replies — own section. Quoted cards from opportunities that carry
+  // a drafted reply (read the tweet → ready response). Reads the brief's existing
+  // suggestedReply; no new generation.
+  const replyItems = (intel.opportunities || []).filter((o) => o.suggestedReply);
+  const repliesHtml = replyItems.length
+    ? replyItems.map((o) => `<div style="margin-bottom:14px;padding:14px 16px;background:${DT.brandTint};border-left:3px solid ${DT.brand};border-radius:12px;">
+        <div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:${DT.brand};margin-bottom:6px;">Reply${o.windowHours ? ` &middot; ${o.windowHours}h window` : ''}</div>
+        <div style="font-family:${DT.fBody};font-size:13px;font-weight:700;color:${DT.ink};margin-bottom:4px;">${escapeHtml(o.topic)}${linkBit(o.url)}</div>
+        ${o.angle ? `<div style="font-family:${DT.fBody};font-size:12px;line-height:1.5;color:${DT.soft};margin-bottom:8px;"><strong style="color:${DT.ink};">Why:</strong> ${escapeHtml(o.angle)}</div>` : ''}
+        <div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:${DT.light};margin-bottom:3px;">Suggested reply</div>
+        <div style="font-family:${DT.fBody};font-size:13px;line-height:1.55;color:${DT.ink};">${escapeHtml(o.suggestedReply)}</div>${o.url ? `<a href="${escapeHtml(o.url)}" style="display:inline-block;margin-top:8px;color:${DT.brand};font-family:${DT.fMono};font-size:10px;letter-spacing:.06em;text-transform:uppercase;">Read tweet &amp; reply &rarr;</a>` : ''}
+      </div>`).join('')
     : '';
 
   const signalRows = [
@@ -1018,13 +1036,17 @@ function buildStrategicParts(intel) {
     label: p.platformHint ? `Today · ${String(p.platformHint).toUpperCase()}` : `Today · Post ${index + 1}`,
     text: p.content,
     foot: [p.signalUsed ? `Signal: ${p.signalUsed}` : '', p.rationale || ''].filter(Boolean).join(' · '),
+    platform: platformOf(p.platformHint),
   }));
-  const postBlocks = [
-    ...strategyPostBlocks,
-    c.x_post && { label: 'X post', text: c.x_post },
-    c.x_thread_opener && { label: 'Thread opener', text: c.x_thread_opener },
-    c.discord_announcement && { label: 'Discord', text: c.discord_announcement },
-  ].filter(Boolean);
+  // Content drafts per platform, derived from the registry (each platform's
+  // first present content field). Add a platform in _digest-config and its
+  // drafts flow here automatically.
+  const contentBlocks = [];
+  for (const plat of digestConfig.POST_PLATFORMS) {
+    const field = (plat.fields || []).find((f) => c[f]);
+    if (field) contentBlocks.push({ label: plat.label, text: c[field], platform: plat.key });
+  }
+  const postBlocks = [...strategyPostBlocks, ...contentBlocks].filter((b) => ppOn(b.platform));
   const postsHtml = postBlocks.length
     ? postBlocks.map((p) => `<div style="margin-bottom:10px;padding:12px 14px;background:${DT.card};border:1px solid ${DT.line};border-radius:10px;">
         <div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:${DT.light};margin-bottom:6px;">${escapeHtml(p.label)}</div>
@@ -1045,6 +1067,7 @@ function buildStrategicParts(intel) {
       ? `<div style="background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:18px 20px;font-family:${DT.fBody};font-size:14px;line-height:1.6;color:${DT.ink};">${escapeHtml(intel.humanBrief)}</div>`
       : '',
     opportunities: oppRows ? dDataTable([{ label: 'Conversation / angle' }], oppRows) : '',
+    suggestedReplies: repliesHtml,
     signals: signalsHtml ? dDataTable([{ label: 'Type' }, { label: 'Finding' }], signalsHtml) : '',
     watchlistAccounts: watchlistHtml ? dDataTable([{ label: 'Account' }, { label: 'Activity this run' }], watchlistHtml) : '',
     suggestedPosts: postsHtml || '',
@@ -1144,7 +1167,7 @@ function buildCreativeBriefSection(creative) {
   return `${img}<p style="font-family:${DT.fBody};font-size:14px;line-height:1.62;color:${DT.ink};margin:0;">${text}</p>`;
 }
 
-function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, include = {}, creative = null, briefUrl = null, contactUrl = '', videoItems = [], order = []) {
+function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, include = {}, creative = null, briefUrl = null, contactUrl = '', videoItems = [], order = [], postPlatforms = {}) {
   // Fallback target when no hosted brief is resolved (briefLinkMode 'off' /
   // 'latest' with nothing published / 'fresh' run failed): the dashboard modal.
   const executiveBriefUrl = appUrl('/dashboard?open=brief');
@@ -1167,7 +1190,7 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
   const briefList = Array.isArray(briefs) ? briefs : [];
   // Strategic-brief items are now individually toggled. Aggregate each part
   // across all briefs so a single dSub renders that item from every client.
-  const strategicParts = briefList.map((b) => buildStrategicParts(b.intel));
+  const strategicParts = briefList.map((b) => buildStrategicParts(b.intel, postPlatforms));
   const sPart = (k) => strategicParts.map((p) => p[k]).filter(Boolean).join('');
   const watchlistSections = include.watchlist === false ? '' : briefList
     .map((b) => buildWatchlistBriefSection(b.intel?.watchlistAnalysis))
@@ -1289,6 +1312,7 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
     // Market Signals
     humanBrief: () => section('Market Signals', 'Brief', sPart('humanBrief')),
     opportunities: () => section('Market Signals', 'Post Opportunities', sPart('opportunities')),
+    suggestedReplies: () => section('Market Signals', 'Suggested Replies', sPart('suggestedReplies')),
     signals: () => section('Market Signals', 'Signals', sPart('signals')),
     watchlistAccounts: () => section('Market Signals', 'Watchlist Accounts', sPart('watchlistAccounts')),
     suggestedPosts: () => section('Market Signals', 'Suggested Posts', sPart('suggestedPosts')),
@@ -1324,7 +1348,7 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
   const topSections = renderGroup(['agenda', 'weather']);
   const todaySection = renderGroup(['execSummary']);
   const postContentSection = renderGroup(['videoPosts', 'videoPromo']);
-  const marketSignalsSection = renderGroup(['humanBrief', 'opportunities', 'signals', 'watchlistAccounts', 'suggestedPosts', 'planPreview', 'watchlist', 'followerPosts']);
+  const marketSignalsSection = renderGroup(['humanBrief', 'opportunities', 'suggestedReplies', 'signals', 'watchlistAccounts', 'suggestedPosts', 'planPreview', 'watchlist', 'followerPosts']);
   const creativeSection = renderGroup(['creativeBrief']);
   const webPerfSection = renderGroup(['ga4Traffic', 'topPages', 'trafficSources', 'keyEvents', 'homepage']);
   const platformSection = renderGroup(['platformOverview', 'signups', 'dashboards', 'pipeline']);
@@ -1536,6 +1560,10 @@ function buildPlaceholderData(timestamp) {
           today: { name: 'Today', short: 'Sunny', temp: 92, unit: 'F', wind: '8 mph' },
           threeDayLine: 'Sun 94° · Mon 90° · Tue 88°',
         },
+        opportunities: [
+          { topic: 'Anthropic “stop prompting agents” thread', angle: 'Live now — reply within hours to claim the systems-thinking positioning before competitors do.', windowHours: 3, suggestedReply: 'Exactly — you shouldn’t prompt your brand, you build the system that runs it. That’s the whole loop we ship at HITLOOP.', url: 'https://x.com/anthropic/status/1' },
+          { topic: '@0xCharlota Figma Make thread', angle: 'Genuine systems-thinking reply to her Figma thread — no pitch, just infrastructure talk.', windowHours: 96, suggestedReply: '“engineered, not designed” is the right frame. The missing piece is the contract between brief → output → next cycle.', url: 'https://x.com/0xCharlota/status/2' },
+        ],
         watchlist: [
           { handle: 'sample_handle', found: true, activity: [{ text: 'Just shipped a brand manual template built in Framer — feel, not ship.', url: 'https://x.com/sample_handle/status/1' }] },
           { handle: 'another_voice', found: true, activity: [{ text: 'Hot take: model selection is becoming a checkbox, not a differentiator.', url: 'https://x.com/another_voice/status/2' }] },
@@ -1587,6 +1615,17 @@ export async function GET(request) {
     ? String(url.searchParams.get('order') || '').split(',').map((s) => s.trim()).filter(Boolean)
     : null;
 
+  // Optional `posts` override (preview only): csv of ENABLED suggested-post
+  // platforms, so the live preview reflects the card's current platform toggles.
+  const postsOverride = (isPreview && url.searchParams.has('posts'))
+    ? (() => {
+        const on = new Set(String(url.searchParams.get('posts') || '').split(',').map((s) => s.trim()).filter(Boolean));
+        const out = {};
+        for (const k of digestConfig.POST_PLATFORM_KEYS) out[k] = on.has(k);
+        return out;
+      })()
+    : null;
+
   // Auth: cron/worker secret for the scheduled run; admin token for dashboard
   // preview / send-now actions.
   let adminOk = false;
@@ -1616,7 +1655,7 @@ export async function GET(request) {
         remix: { url: 'https://example.com/remix-1.mp4', duration: 30, caption: 'Stop scrolling — this 30s cut shows exactly how we turn raw clips into a launch-ready edit. Built for the feed. ▶ #creative' },
         promo: { url: 'https://example.com/promo-1.mp4', duration: 22, caption: 'Your site, reimagined as a social-ready promo. Watch the 3D mockup walkthrough — then ship it. #promo' },
       };
-      const html = buildEmailHtml(ph.firebase, ph.vercel, ph.ga4, ph.agenda, ph.homepage, ts, ph.summary, ph.briefs, include, ph.creative, sampleBriefUrl, sampleContactUrl, sampleVideoItems, orderOverride || digestConfig.DEFAULT_ORDER);
+      const html = buildEmailHtml(ph.firebase, ph.vercel, ph.ga4, ph.agenda, ph.homepage, ts, ph.summary, ph.briefs, include, ph.creative, sampleBriefUrl, sampleContactUrl, sampleVideoItems, orderOverride || digestConfig.DEFAULT_ORDER, postsOverride || digestConfig.DEFAULT_POST_PLATFORMS);
       return json({ ok: true, template: true, placeholder: true, timestamp: new Date(ts).toISOString(), paragraph: ph.summary.paragraph, html });
     } catch (err) {
       logError('daily_digest_template_error', { error: err.message });
@@ -1875,7 +1914,8 @@ export async function GET(request) {
       : (digestCfg?.contactUrl || process.env.DIGEST_CONTACT_URL || process.env.CALENDLY_URL || '')).trim();
     if (isRealSend) step('info', `Executive Brief · ${briefUrl || 'dashboard fallback'}`);
     const sectionOrder = orderOverride || digestCfg?.order || digestConfig.DEFAULT_ORDER;
-    const html = buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, renderInclude, creative, briefUrl, contactUrl, videoItems, sectionOrder);
+    const postPlatforms = postsOverride || digestCfg?.postPlatforms || {};
+    const html = buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, renderInclude, creative, briefUrl, contactUrl, videoItems, sectionOrder, postPlatforms);
     if (isRealSend) {
       const onCount = digestConfig.INCLUDE_KEYS.filter((k) => include[k] !== false).length;
       step('success', `Rendered email · ${onCount} section${onCount !== 1 ? 's' : ''} on`);
