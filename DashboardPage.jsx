@@ -74,7 +74,7 @@ const STANDARD_REMIX_DEFAULTS = {
   filterIntensity: 0.8,
   enableOverlay: false,
   overlayEffect: '',
-  topLogo: 'ue_logo_horiz.png',
+  topLogo: 'ue_barcode_white.png',
   endLogo: 'ue_square.png',
   useArtistImage: false,
   endTextOverlay: '',
@@ -1493,7 +1493,6 @@ const CUSTOM_DETAIL_CARD_IDS = new Set([
   'watchlist',
   'platform-search',
   'social-signals',
-  'brief-preview',
   'business-model',
   'strategy-30',
   'archive-publishing',
@@ -1503,7 +1502,7 @@ const CUSTOM_DETAIL_CARD_IDS = new Set([
 // generated results). Anything not listed here defaults to the eye (view) icon.
 const CARD_ACTION_EDIT = new Set([
   'brand-keywords', 'watchlist', 'scout-focus', 'platform-search', 'social-signals',
-  'conversation-intake', 'local-weather', 'business-model', 'brief-preview',
+  'conversation-intake', 'local-weather', 'business-model',
   'knowledge-base', 'client-brain', 'email-digest', 'industry', 'create-client',
   'social-media-posting', 'strategy-30', 'strategy-builder', 'mockup-studio',
   'video-remix', 'media-library',
@@ -1518,7 +1517,13 @@ const BRIEF_TYPE_BY_CARD = {
   'onboarding-brief': 'onboarding',
   'brief-marketing': 'marketing-director',
   'brief-strategy': 'social-media-manager',
-  'brief-creative': 'creative-director',
+  'brief-performance': 'website-developer',
+};
+
+const BRIEF_CARD_PREVIEW_TYPES = {
+  'onboarding-brief': 'onboarding',
+  'brief-marketing': 'marketing-director',
+  'brief-strategy': 'social-media-manager',
   'brief-performance': 'website-developer',
 };
 
@@ -2476,7 +2481,6 @@ const NON_ADMIN_UNLOCKED_CARD_IDS = new Set([
   'submit-custom-brief',
   'brief-marketing',
   'brief-strategy',
-  'brief-creative',
   'brief-performance',
   // Knowledge Officer lead cards — browsable/runnable without admin.
   'audit-summary',
@@ -2624,8 +2628,18 @@ function cleanTooltipText(value) {
     .trim();
 }
 
+// Close / dismiss ("X") controls are self-evident; a "Close" tooltip on every
+// modal X is noise. Suppress them regardless of aria-label or glyph.
+function isCloseControl(el) {
+  const aria = String(el.getAttribute('aria-label') || '').trim();
+  if (/^(close|dismiss)$/i.test(aria)) return true;
+  const glyph = String(el.innerText || el.textContent || '').trim();
+  return /^(✕|×|✖|⨯|X|x)$/.test(glyph);
+}
+
 function getElementTooltipText(el) {
   if (!el || el.getAttribute('aria-hidden') === 'true') return '';
+  if (isCloseControl(el)) return '';
 
   // The brief and other embedded previews render in iframes whose content is
   // self-evident; a hover tooltip echoing "… preview" adds nothing. Keep the
@@ -2791,9 +2805,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   const [showTierModal, setShowTierModal] = useState(false);
   // Payments/subscribe modal — opened by the content lock icons.
   const [showSubscribeModal, setShowSubscribeModal] = useState(false);
-  // Pay-per-run paywall — every on-demand brief run opens this ($5/run) and
-  // the run is kicked off only after payment succeeds. { briefKey, briefCardId, briefName }
-  const [runPaywall, setRunPaywall] = useState(null);
   // Free-tier cooldown modal — opened by the countdown time in the source bar.
   // Shows time left + reschedule picker, with subscribe / run-once options.
   const [showCooldownModal, setShowCooldownModal] = useState(false);
@@ -3243,6 +3254,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    const renderCount = Math.max(1, Math.min(VIDEO_REMIX_MAX_COUNT, Math.floor(Number(count) || 1)));
 	    const pendingClientId = client?.clientId || client?.id || bootstrap?.effectiveClientId;
 	    let pendingJobId = null;
+	    const batchJobIds = []; // every job id enqueued this run (primary + extras)
 	    setVideoRemixLoading(true);
 	    setVideoRemixError('');
 	    try {
@@ -3296,6 +3308,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	          const data = await enqueueOne();
 	          const jobId = data.jobId;
 	          pendingJobId = jobId;
+	          batchJobIds.push(jobId);
 	          writeVideoRemixPendingJob(pendingClientId, {
 	            jobId,
 	            editJobId: data.editJobId || null,
@@ -3305,7 +3318,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 
 	          let extraQueued = 0;
 	          for (let n = 1; n < renderCount; n += 1) {
-	            try { await enqueueOne(); extraQueued += 1; } catch { /* one extra failing shouldn't sink the batch */ }
+	            try { const ed = await enqueueOne(); if (ed?.jobId) batchJobIds.push(ed.jobId); extraQueued += 1; } catch { /* one extra failing shouldn't sink the batch */ }
 	          }
 
 	          // Optimistic pending so the card face flips to "Queued…" right away.
@@ -3362,6 +3375,44 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	            : { doneText: `video queued — it will appear here when the worker finishes${extraNote}`, videoUrl: null };
 	        },
 	      });
+
+	      // Multi-render sweep: the terminal only waits on the primary job. For a
+	      // batch (count > 1) the extras would otherwise only land on a manual
+	      // dashboard re-sync. Detached (not awaited, so loading clears) reconcile of
+	      // ALL batch jobs via action=jobs — which reconciles them server-side and
+	      // returns completed captures — until all are saved or a ~6min timeout.
+	      if (batchJobIds.length > 1) {
+	        (async () => {
+	          const captured = new Set();
+	          for (let i = 0; i < 36; i += 1) {
+	            if (cancelledRef.current) return;
+	            await new Promise((r) => setTimeout(r, 10000));
+	            let jobs = null;
+	            try {
+	              const token = await user.getIdToken();
+	              const res = await fetch(apiPath('/api/dashboard/media?action=jobs&type=video-remix'), {
+	                headers: { Authorization: `Bearer ${token}` },
+	                cache: 'no-store',
+	              });
+	              const d = await res.json().catch(() => ({}));
+	              jobs = Array.isArray(d.jobs) ? d.jobs : null;
+	            } catch { continue; }
+	            if (!jobs) continue;
+	            const fresh = jobs.filter((j) => batchJobIds.includes(j.jobId) && j.status === 'done' && j.output?.downloadUrl && !captured.has(j.jobId));
+	            if (fresh.length && !cancelledRef.current) {
+	              fresh.forEach((j) => captured.add(j.jobId));
+	              setBootstrap((prev) => {
+	                const dash = prev?.dashboardState || {};
+	                const cur = Array.isArray(dash.mediaCaptures) ? dash.mediaCaptures : [];
+	                const map = new Map(cur.map((c) => [c?.jobId || c?.storagePath || c?.downloadUrl, c]));
+	                fresh.forEach((j) => map.set(j.jobId, j.output));
+	                return { ...prev, dashboardState: { ...dash, mediaCaptures: Array.from(map.values()).filter(Boolean).slice(-40) } };
+	              });
+	            }
+	            if (captured.size >= batchJobIds.length) return; // whole batch saved
+	          }
+	        })();
+	      }
 	    } catch (err) {
 	      if (pendingJobId) writeVideoRemixPendingJob(pendingClientId, null);
 	      setVideoRemixError(err?.message || 'Video remix failed.');
@@ -3647,6 +3698,18 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	      }
 	    }
 	  }, [user, apiPath]);
+
+	  // On the REMIX (create) tab, when exactly one source folder is selected, auto-
+	  // load that folder's clips so the inline "Arrange clip order" builder can show
+	  // its thumbnails without the user hopping to the SOURCE MEDIA tab. Cached (5min).
+	  useEffect(() => {
+	    if (activeTileModal?.cardId !== 'video-remix' && activeTileModal?.cardId !== 'media-library') return;
+	    if (modalTab !== 'remix') return;
+	    const folders = videoRemixDraft.selectedFolders;
+	    if (!Array.isArray(folders) || folders.length !== 1) return;
+	    if (videoRemixFolderFiles.folder === folders[0]) return;
+	    loadVideoRemixFolderFiles(folders[0]).catch(() => {});
+	  }, [activeTileModal?.cardId, modalTab, videoRemixDraft.selectedFolders, videoRemixFolderFiles.folder, loadVideoRemixFolderFiles]);
 
 	  const addVideoRemixUploadFiles = useCallback((fileList) => {
 	    const files = Array.from(fileList || []);
@@ -4172,6 +4235,14 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   const [marketingBriefPreviewLoading, setMarketingBriefPreviewLoading] = useState(false);
   const [marketingBriefPreviewSettled, setMarketingBriefPreviewSettled] = useState(false);
   const [marketingBriefPreviewError, setMarketingBriefPreviewError] = useState('');
+  const [briefCardPreviewHtml, setBriefCardPreviewHtml] = useState({});
+  const [briefCardPreviewLoading, setBriefCardPreviewLoading] = useState({});
+  // Email Digest preview HTML for the card face + modal shell — mirrors the
+  // marketing-brief preview pattern. Live render (`?preview=1`) = exactly what
+  // will send under the saved include toggles. Admin-only card.
+  const [emailDigestPreviewHtml, setEmailDigestPreviewHtml] = useState('');
+  const [emailDigestPreviewLoading, setEmailDigestPreviewLoading] = useState(false);
+  const [emailDigestPreviewSettled, setEmailDigestPreviewSettled] = useState(false);
   // PAST BRIEFS tab — fetch + view a specific past brief run by runId.
   const [pastBriefView, setPastBriefView] = useState(null); // { runId, html } | { runId, loading: true }
   const openPastBrief = useCallback(async (runId) => {
@@ -4554,6 +4625,88 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     })();
     return () => { cancelled = true; };
   }, [user, apiPath, marketingBriefPreviewFetchKey, bootstrap?.dashboardState?.modules?.['marketing-brief']?.lastRunId]);
+
+  const briefCardPreviewFetchKey = [
+    bootstrap?.effectiveClientId || '',
+    bootstrap?.dashboardState?.marketingBrief?.generatedAtIso || '',
+    bootstrap?.dashboardState?.strategy30?.generatedAtIso || bootstrap?.dashboardState?.strategy30?.updatedAtIso || '',
+    bootstrap?.dashboardState?.moduleBriefs?.generatedAtIso || '',
+    bootstrap?.dashboardState?.modules?.['marketing-brief']?.lastRunId || '',
+  ].join(':');
+
+  useEffect(() => {
+    if (!user) {
+      setBriefCardPreviewHtml({});
+      setBriefCardPreviewLoading({});
+      return;
+    }
+    const dash = bootstrap?.dashboardState;
+    if (!dash?.marketingBrief) {
+      setBriefCardPreviewHtml({});
+      setBriefCardPreviewLoading({});
+      return;
+    }
+    let cancelled = false;
+    const cardEntries = Object.entries(BRIEF_CARD_PREVIEW_TYPES);
+    setBriefCardPreviewLoading(Object.fromEntries(cardEntries.map(([cardId]) => [cardId, true])));
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const results = await Promise.all(cardEntries.map(async ([cardId, briefKey]) => {
+          try {
+            const res = await fetch(apiPath(`/api/dashboard/brief-preview?brief=${encodeURIComponent(briefKey)}`), {
+              headers: { Authorization: `Bearer ${token}` },
+              cache: 'no-store',
+            });
+            if (!res.ok) return [cardId, ''];
+            const html = await res.text();
+            return [cardId, html ? html.replace('</head>', '<style>.cap-brief-email-cta-row{display:none !important}</style></head>') : ''];
+          } catch {
+            return [cardId, ''];
+          }
+        }));
+        if (!cancelled) setBriefCardPreviewHtml(Object.fromEntries(results));
+      } finally {
+        if (!cancelled) setBriefCardPreviewLoading({});
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user, apiPath, briefCardPreviewFetchKey]);
+
+  // Email Digest preview for the card face + modal shell. Live render
+  // (`?preview=1`) honors the saved include toggles server-side — same code
+  // path as a send, so the card shows exactly what will go out. Admin-only.
+  useEffect(() => {
+    if (!user || !isAdmin) {
+      setEmailDigestPreviewHtml('');
+      setEmailDigestPreviewLoading(false);
+      setEmailDigestPreviewSettled(true);
+      return;
+    }
+    let cancelled = false;
+    setEmailDigestPreviewLoading(true);
+    setEmailDigestPreviewSettled(false);
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch(apiPath('/api/admin/daily-digest?preview=1'), {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        });
+        if (!res.ok) throw new Error(`Digest preview failed with HTTP ${res.status}.`);
+        const data = await res.json();
+        if (!cancelled) setEmailDigestPreviewHtml(data?.html || '');
+      } catch {
+        // non-fatal — card/modal fall back to the empty placeholder
+      } finally {
+        if (!cancelled) {
+          setEmailDigestPreviewLoading(false);
+          setEmailDigestPreviewSettled(true);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user, apiPath, isAdmin]);
 
   useEffect(() => {
     if (typeof onInitialContentReady !== 'function') return;
@@ -7107,9 +7260,16 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     if (!card) return;
     const forceModal = Boolean(options.forceModal);
     const modalCardId = forceModal ? `${card.id}__description` : card.id;
-    // Creative Brief cards (STAND UP 'brief' + DELIVERABLES 'onboarding-brief')
-    // open the full-screen brief view — only on this explicit card click; the
-    // dashboard no longer auto-opens it on load.
+    // Creative Brief card owns the onboarding composition. After an Executive
+    // run, the "latest main brief" HTML becomes Executive, so prefer the named
+    // onboarding render when available and fall back to the first-run main render.
+    if (!forceModal && card.id === 'onboarding-brief' && briefCardPreviewHtml['onboarding-brief']) {
+      setNamedBriefView({ key: 'onboarding', html: briefCardPreviewHtml['onboarding-brief'] });
+      return;
+    }
+    // Creative Brief cards (legacy STAND UP 'brief' + first-run
+    // 'onboarding-brief') open the full-screen brief view — only on this
+    // explicit card click; the dashboard no longer auto-opens it on load.
     if (!forceModal && (card.id === 'brief' || card.id === 'onboarding-brief') && briefPreviewHtml) {
       setBriefFullScreen(true);
       return;
@@ -7151,7 +7311,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       moduleControls: card.moduleControls || null,
       leadgenStep: card.leadgenStep || null,
     });
-  }, [briefPreviewHtml, dashboardState?.marketingBrief, openNamedBriefPreview, isAdmin]);
+  }, [briefPreviewHtml, briefCardPreviewHtml, dashboardState?.marketingBrief, openNamedBriefPreview, isAdmin]);
 
   // Brief entitlements — locked flags on the brief rows follow the tier map
   // in brief-sections.cjs (one source of truth with the API gate); admins
@@ -8470,12 +8630,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     }
   }, [user, moduleRunLoading, doBootstrap, apiPath]);
 
-  // Every on-demand run goes through the $5 paywall first; runBriefProducers
-  // fires from the modal's onRunPaid once payment clears.
-  const openRunPaywall = useCallback((briefKey, briefCardId, briefName) => {
-    setRunPaywall({ briefKey, briefCardId, briefName });
-  }, []);
-
   const terminalLines = useMemo(
     () => buildTerminalLines(currentRun, dashboardState, latestRunStatus, client),
     [currentRun, dashboardState, latestRunStatus, client]
@@ -9316,7 +9470,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   const DETERMINISTIC_CARD_IDS = new Set([
     'audit-summary', 'brief', 'multi-device-view', 'social-preview',
     'business-model', 'seo-performance', 'agent-readiness', 'style-guide', 'design-evaluation', 'industry', 'visibility-snapshot', 'priority-signal',
-    'marketing-brief', 'brief-marketing', 'brief-creative', 'brief-strategy', 'brief-performance',
+    'marketing-brief', 'brief-marketing', 'brief-strategy', 'brief-performance',
   ]);
 
   // Marketing Director config cards — they hold settings, so their status dot
@@ -11007,11 +11161,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     {
       id: 'marketing-brief',
       category: 'brief',
-      number: 'DB',
-      label: 'DAILY STAND UP',
-      title: 'Daily Stand Up',
-      description: 'Continue with Daily Briefs from a team guided by a Human, bringing your digital strategy into one accessible email/dashboard.',
-      placeholderLabel: 'RUN\nDAILY\nSTAND UP',
+      number: 'EB',
+      label: 'EXECUTIVE BRIEF',
+      title: 'Executive Brief',
+      description: 'Pulls market insights, strategy, creative direction, website analysis, and operational signals into one Daily Stand Up document.',
+      placeholderLabel: 'RUN\nEXECUTIVE\nBRIEF',
       rows: [
         { key: 'mb-status', label: 'Status', value: marketingBriefStatus },
         { key: 'mb-custom-briefs', label: 'Custom briefs', value: customBriefsLoading ? 'Loading' : hasCustomBriefs ? `${customBriefCount} imported` : 'None imported' },
@@ -11028,7 +11182,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       footerLeft: hasDailyBriefData ? 'Live' : 'Configure Scout',
       footerRight: 'REVIEWED',
       footerAction: {
-        label: marketingBriefRunning ? '…' : hasMarketingBriefData ? 'Re-run' : 'Run Brief',
+        label: marketingBriefRunning ? '…' : hasMarketingBriefData ? 'RE-RUN' : 'RUN BRIEF',
         loading: marketingBriefRunning || marketingBriefSaving,
         onClick: runMarketingBrief,
       },
@@ -11061,7 +11215,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       footerLeft: creativeBriefReady ? 'Ready' : marketingBriefRunning ? 'Building…' : 'Run to build',
       footerRight: 'REVIEWED',
       footerAction: {
-        label: marketingBriefRunning ? '…' : creativeBriefReady ? 'Re-run' : 'Run Brief',
+        label: marketingBriefRunning ? '…' : creativeBriefReady ? 'RE-RUN' : 'RUN BRIEF',
         loading: marketingBriefRunning || marketingBriefSaving,
         onClick: runCreativeBrief,
       },
@@ -11144,7 +11298,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       // windows); today's post + 30-day campaign keep their stored values.
       ...(briefCardLocked('brief-marketing') ? {} : {
         footerAction: {
-          label: marketingBriefRunning ? '…' : 'Run Brief',
+          label: marketingBriefRunning ? '…' : 'RUN BRIEF',
           loading: marketingBriefRunning || marketingBriefSaving,
           onClick: () => runMarketingBrief('marketing-director'),
         },
@@ -11173,29 +11327,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       // signals (no fresh Scout sweep).
       ...(briefCardLocked('brief-strategy') ? {} : {
         footerAction: {
-          label: marketingBriefRunning ? '…' : 'Run Brief',
+          label: marketingBriefRunning ? '…' : 'RUN BRIEF',
           loading: marketingBriefRunning || marketingBriefSaving,
           onClick: () => runMarketingBrief('social-media-manager'),
-        },
-      }),
-    },
-    {
-      id: 'brief-creative',
-      category: 'brief',
-      locked: briefCardLocked('brief-creative'),
-      number: 'CD',
-      label: 'CREATIVE DIRECTOR',
-      title: 'Creative Brief',
-      description: 'Acts like a creative director: reviews the brand look, share preview, website visuals, and today\'s creative move.',
-      placeholderLabel: briefCardLocked('brief-creative') ? 'LOCK' : 'VIEW\nBRIEF',
-      rows: [{ key: 'status', label: 'Status', value: briefCardLocked('brief-creative') ? 'Coming soon' : 'Included in your plan — click to preview, Run to refresh.' }],
-      footerLeft: briefCardLocked('brief-creative') ? 'Locked' : 'Live',
-      footerRight: '',
-      ...(briefCardLocked('brief-creative') ? {} : {
-        footerAction: {
-          label: moduleRunLoading['brief-creative'] ? '…' : 'Run Brief',
-          loading: Boolean(moduleRunLoading['brief-creative']),
-          onClick: () => openRunPaywall('creative-director', 'brief-creative', 'Creative Brief'),
         },
       }),
     },
@@ -11213,33 +11347,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       footerRight: '',
       ...(briefCardLocked('brief-performance') ? {} : {
         footerAction: {
-          label: moduleRunLoading['brief-performance'] ? '…' : 'Run Brief',
+          label: moduleRunLoading['brief-performance'] ? '…' : 'RUN BRIEF',
           loading: Boolean(moduleRunLoading['brief-performance']),
-          onClick: () => openRunPaywall('website-developer', 'brief-performance', 'Website Developer Brief'),
+          onClick: () => runBriefProducers('website-developer', 'brief-performance'),
         },
       }),
-    },
-    {
-      id: 'brief-preview',
-      category: 'brief',
-      number: 'BP',
-      label: 'BRIEF PREVIEW',
-      title: 'Brief Preview (Pre-run)',
-      description: 'Previews what the research run will collect and lets you start the brief when the setup looks right.',
-      placeholderLabel: 'PREVIEW\nBRIEF',
-      rows: marketingBriefConfig
-        ? [
-            { key: 'bp-contract', label: 'Data contract', value: marketingBriefConfig.agentDataTemplate ? 'Custom' : 'Default' },
-            { key: 'bp-status', label: 'Brief status', value: marketingBriefStatus },
-          ]
-        : buildWorkNeededRows('Loading Scout config…'),
-      footerLeft: 'Run-ready',
-      footerRight: 'GROWTH',
-      footerAction: {
-        label: marketingBriefRunning ? '…' : 'Run Now',
-        loading: marketingBriefRunning || marketingBriefSaving,
-        onClick: runMarketingBrief,
-      },
     },
 
     // ── SOCIAL MEDIA MANAGER ────────────────────────────────────────────────
@@ -13235,6 +13347,30 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       srcDoc={marketingBriefPreviewHtml}
                       sandbox="allow-same-origin"
                     />
+                  ) : card.id === 'email-digest' && emailDigestPreviewHtml ? (
+                    <iframe
+                      key="email-digest-card-preview"
+                      className="tile-brief-preview"
+                      title="Email digest preview"
+                      srcDoc={emailDigestPreviewHtml}
+                      sandbox="allow-same-origin"
+                    />
+                  ) : card.id === 'email-digest' && (emailDigestPreviewLoading || !emailDigestPreviewSettled) ? (
+                    <div className="tile-brief-preview-loading" role="status" aria-label="Loading email digest">
+                      <div className="brief-loader-spinner" aria-hidden="true" />
+                    </div>
+                  ) : BRIEF_CARD_PREVIEW_TYPES[card.id] && briefCardPreviewHtml[card.id] ? (
+                    <iframe
+                      key={`${card.id}-${marketingBrief?.generatedAtIso || dashboardState?.moduleBriefs?.generatedAtIso || 'brief-card-preview'}`}
+                      className="tile-brief-preview"
+                      title={`${card.title} preview`}
+                      srcDoc={briefCardPreviewHtml[card.id]}
+                      sandbox="allow-same-origin"
+                    />
+                  ) : BRIEF_CARD_PREVIEW_TYPES[card.id] && briefCardPreviewLoading[card.id] ? (
+                    <div className="tile-brief-preview-loading" role="status" aria-label={`Loading ${card.title}`}>
+                      <div className="brief-loader-spinner" aria-hidden="true" />
+                    </div>
                   ) : card.id === 'knowledge-base' ? (
                     <div className="tile-brain-empty">
                       <span className="tile-empty-label">{card.title}</span>
@@ -14004,7 +14140,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                       </svg>
                                     </button>
                                   )}
-                                  {activeCapabilityFilter === 'brief' && !isRowLocked && !['brief-preview', 'submit-custom-brief'].includes(card.id) && (
+                                  {activeCapabilityFilter === 'brief' && !isRowLocked && card.id !== 'submit-custom-brief' && (
                                     <button
                                       type="button"
                                       className="cap-list-run"
@@ -14013,7 +14149,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                       disabled={isRowLocked || !card.footerAction}
                                       onClick={(e) => { e.stopPropagation(); if (!isRowLocked && card.footerAction?.onClick) card.footerAction.onClick(e); }}
                                     >
-                                      <span className="cap-list-action-label">Run</span>
+                                      <span className="cap-list-action-label">{card.footerAction?.loading ? '…' : (card.footerAction?.label || 'RUN BRIEF')}</span>
                                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                                         <path d="M21 12a9 9 0 1 1-2.64-6.36" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                                         <polyline points="21 3 21 8 16 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
@@ -14093,7 +14229,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             {[
               // { key: 'onboarding', label: 'Data Visualization',      sub: 'Capture & inspect',       icon: ClipboardList,         color: '#7b5fff' },
               { key: 'deliverables', label: 'Deliverables',          sub: 'What you walk away with',   icon: Images,                 color: '#14b8a6' },
-              { key: 'brief',      label: 'Daily Stand Up',          sub: 'Your active brief',        icon: ChartColumnIncreasing, color: '#2a2420' },
+              { key: 'brief',      label: 'Executive Brief',         sub: 'Daily stand up',          icon: ChartColumnIncreasing, color: '#2a2420' },
               { key: 'knowledge',  label: 'Knowledge Officer',       sub: 'Custom data & context',    icon: BrainIcon,             color: '#3b82f6' },
               { key: 'growth',     label: 'Marketing Director',      sub: 'SEO, signals & growth',    icon: Settings2,             color: '#10b981' },
               { key: 'content',    label: 'Creative Team',            sub: 'Design production',        icon: Workflow,               color: '#14b8a6' },
@@ -14446,17 +14582,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       {/* ── Tile detail modal ── */}
       {/* Payments / subscribe modal — triggered by content lock icons */}
       <SubscribeModal open={showSubscribeModal} onClose={() => setShowSubscribeModal(false)} defaultEmail={user?.email || ''} />
-      <SubscribeModal
-        open={Boolean(runPaywall)}
-        onClose={() => setRunPaywall(null)}
-        defaultEmail={user?.email || ''}
-        mode="run"
-        runBriefName={runPaywall?.briefName || ''}
-        runBriefKey={runPaywall?.briefKey || ''}
-        onRunPaid={() => {
-          if (runPaywall) runBriefProducers(runPaywall.briefKey, runPaywall.briefCardId);
-        }}
-      />
       {/* Free-tier cooldown modal — opened by the countdown time in the source
           bar. Frames time-left + reschedule, defaults to the Run-Once tab, and
           a paid one-off run kicks the executive brief (delivered + on dashboard). */}
@@ -15015,6 +15140,30 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     />
                   ) : (activeTileModal.cardId === 'marketing-brief' || activeTileModal.cardId === 'marketing-brief-doc') && (marketingBriefPreviewLoading || !marketingBriefPreviewSettled) ? (
                     <div className="tile-brief-preview-loading" role="status" aria-label="Loading brief">
+                      <div className="brief-loader-spinner" aria-hidden="true" />
+                    </div>
+                  ) : activeTileModal.cardId === 'email-digest' && emailDigestPreviewHtml ? (
+                    <iframe
+                      key="email-digest-modal-preview"
+                      className="tile-brief-preview"
+                      title="Email digest preview"
+                      srcDoc={emailDigestPreviewHtml}
+                      sandbox="allow-same-origin"
+                    />
+                  ) : activeTileModal.cardId === 'email-digest' && (emailDigestPreviewLoading || !emailDigestPreviewSettled) ? (
+                    <div className="tile-brief-preview-loading" role="status" aria-label="Loading email digest">
+                      <div className="brief-loader-spinner" aria-hidden="true" />
+                    </div>
+                  ) : BRIEF_CARD_PREVIEW_TYPES[activeTileModal.cardId] && briefCardPreviewHtml[activeTileModal.cardId] ? (
+                    <iframe
+                      key={`${activeTileModal.cardId}-${marketingBrief?.generatedAtIso || dashboardState?.moduleBriefs?.generatedAtIso || 'brief-modal-preview'}`}
+                      className="tile-brief-preview"
+                      title={`${activeTileModal.title} preview`}
+                      srcDoc={briefCardPreviewHtml[activeTileModal.cardId]}
+                      sandbox="allow-same-origin"
+                    />
+                  ) : BRIEF_CARD_PREVIEW_TYPES[activeTileModal.cardId] && briefCardPreviewLoading[activeTileModal.cardId] ? (
+                    <div className="tile-brief-preview-loading" role="status" aria-label={`Loading ${activeTileModal.title}`}>
                       <div className="brief-loader-spinner" aria-hidden="true" />
                     </div>
                   ) : activeTileModal.cardId === 'video-remix' && latestRemixVideoUrl ? (
@@ -16283,53 +16432,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
                       </div>
                     ) : null}
-                    </div>
-                  </div>
-                )}
-
-                {/* Brief Preview — Agent Data Contract + cost estimate + Run Now → populates the Executive Brief */}
-                {activeTileModal.cardId === 'brief-preview' && (
-                  <div id="brief-preview-panel" className="tile-detail-bento-cell">
-                    <div className="mu-tab-pane" style={{ padding: 18 }}>
-                      {!marketingBriefConfig ? (
-                        <p className="mu-notice">Loading Scout config…</p>
-                      ) : (
-                        <>
-                          <label className="mu-field">
-                            <span className="mu-label">Research output format</span>
-                            <textarea className="mu-textarea mu-code-textarea" value={marketingBriefConfig.agentDataTemplate || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), agentDataTemplate: e.target.value }))} rows={12} spellCheck={false} />
-                          </label>
-                          {(() => {
-                            const SEARCH_RATE = 0.045;
-                            const SYNTH_FLAT = 0.08;
-                            const customSearches = (marketingBriefConfig.searches || []).filter((s) => String(s?.query || '').trim()).length;
-                            const handles = String(marketingBriefConfig.kols || '').split(/[\n,]+/).map((s) => s.trim()).filter(Boolean).length;
-                            const watchlistSearches = (marketingBriefConfig.kolSearchMode === 'combined') ? (handles ? 1 : 0) : handles;
-                            const platformSearches = (marketingBriefConfig.sourcePlatforms || []).filter((p) => p !== 'web').length;
-                            const total = (customSearches + watchlistSearches + platformSearches) * SEARCH_RATE + SYNTH_FLAT;
-                            return (
-                              <div className="tile-detail-stat-row">
-                                <span className="tile-detail-stat-label">Est. run cost</span>
-                                <span className="tile-detail-stat-value">≈ ${total.toFixed(2)} · {customSearches + watchlistSearches + platformSearches} searches</span>
-                              </div>
-                            );
-                          })()}
-                          <div className="tile-detail-stat-row">
-                            <span className="tile-detail-stat-label">Brief status</span>
-                            <span className="tile-detail-stat-value">{marketingBriefStatus}</span>
-                          </div>
-                          {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
-                          <div className="mu-footer">
-                            <span />
-                            <div style={{ display: 'flex', gap: 8 }}>
-                              <button type="button" className="mu-btn-update" onClick={saveMarketingBriefConfig} disabled={marketingBriefSaving}>{marketingBriefSaving ? 'Saving…' : 'Save'}</button>
-                              <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 110 }} onClick={runMarketingBrief} disabled={marketingBriefRunning || marketingBriefSaving}>
-                                <span>{marketingBriefRunning ? 'Running…' : 'Run Now'}</span>
-                              </button>
-                            </div>
-                          </div>
-                        </>
-                      )}
                     </div>
                   </div>
                 )}
@@ -17808,6 +17910,65 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                  </div>
 	                                ) : null}
 	                              </div>
+	                              {/* Inline clip-order builder on the create screen: appears when a
+	                                  single source folder is selected. Fill all six slots to apply a
+	                                  manual order; leave empty to use the folder's default order. */}
+	                              {draft.selectedFolders.length === 1 ? (
+	                                <div className="field" id="video-remix-arrange-clips">
+	                                  <span className="label">Arrange clip order (optional)</span>
+	                                  <p className="hint">Tap up to six clips from <b>{draft.selectedFolders[0]}</b> to set the render order. Fill all six to apply; leave empty for the folder's default order.</p>
+	                                  <div className="order-builder">
+	                                    <div className="order-builder-head">
+	                                      <div><span className="label">Clip order row</span></div>
+	                                      <div className="order-actions">
+	                                        <span className="order-count">{orderFolder === videoRemixFolderFiles.folder ? orderItems.length : 0}/6</span>
+	                                        <button type="button" className="btn btn-outline" disabled={orderFolder !== videoRemixFolderFiles.folder || !orderItems.length} onClick={clearVideoRemixOrder}>Clear</button>
+	                                      </div>
+	                                    </div>
+	                                    <div className="order-row" aria-label="Selected video order">
+	                                      {Array.from({ length: 6 }, (_, index) => {
+	                                        const item = orderFolder === videoRemixFolderFiles.folder ? orderItems[index] : null;
+	                                        return (
+	                                          <div key={`remix-slot-${index}`} className={`order-slot${item ? ' is-filled' : ''}`}>
+	                                            <span className="order-slot-index">{index + 1}</span>
+	                                            {item ? (
+	                                              <>
+	                                                {item.url ? <video src={firstFrameThumbSrc(item.url)} muted playsInline preload="metadata" /> : <span className="order-slot-empty">Video</span>}
+	                                                <span className="order-slot-name">{item.name}</span>
+	                                                <div className="order-slot-controls">
+	                                                  <button type="button" className="mini-icon-btn" disabled={index === 0} onClick={() => moveVideoRemixOrderItem(index, -1)}>Left</button>
+	                                                  <button type="button" className="mini-icon-btn" disabled={index === orderItems.length - 1} onClick={() => moveVideoRemixOrderItem(index, 1)}>Right</button>
+	                                                  <button type="button" className="mini-icon-btn" onClick={() => removeVideoRemixOrderItem(index)} aria-label={`Remove ${item.name}`}><Trash2 size={12} /></button>
+	                                                </div>
+	                                              </>
+	                                            ) : <span className="order-slot-empty">Drop {index + 1}</span>}
+	                                          </div>
+	                                        );
+	                                      })}
+	                                    </div>
+	                                  </div>
+	                                  {videoRemixFolderFilesLoading ? (
+	                                    <div className="empty">Loading clips…</div>
+	                                  ) : videoRemixFolderFiles.folder === draft.selectedFolders[0] && videoRemixFolderFiles.files.some((file) => file.kind === 'video') ? (
+	                                    <div className="media-thumb-grid">
+	                                      {videoRemixFolderFiles.files.filter((file) => file.kind === 'video').map((file) => {
+	                                        const orderedIndex = orderFolder === videoRemixFolderFiles.folder ? orderItems.findIndex((item) => (item.fullPath || item.name) === (file.fullPath || file.name)) : -1;
+	                                        return (
+	                                          <button key={file.fullPath || file.name} type="button" className={`media-thumb${orderedIndex >= 0 ? ' is-ordered' : ''}`} onClick={() => addVideoRemixOrderItem(file, videoRemixFolderFiles.folder)} aria-label={`Add ${file.name} to clip order`}>
+	                                            <video src={firstFrameThumbSrc(file.url)} muted playsInline preload="metadata" />
+	                                            <span className="media-thumb-order-badge">{orderedIndex >= 0 ? orderedIndex + 1 : '+'}</span>
+	                                            <span className="media-thumb-name">{file.name}</span>
+	                                          </button>
+	                                        );
+	                                      })}
+	                                    </div>
+	                                  ) : (
+	                                    <div className="empty">No video clips in this folder to arrange.</div>
+	                                  )}
+	                                </div>
+	                              ) : draft.selectedFolders.length > 1 ? (
+	                                <p className="hint">Manual clip order needs a single folder — deselect extras to arrange clips.</p>
+	                              ) : null}
 	                              <label className="field">
 	                                <span className="label">Filter look</span>
 	                                <select value={draft.videoFilter} onChange={(e) => updateRemixDraft('videoFilter', e.target.value)}>
@@ -22704,6 +22865,9 @@ export const dashboardCss = `
   }
   /* ── Tile detail modal — bento layout ── */
   #tile-detail-modal-overlay {
+    /* Mobile width standard: ONE small gutter on phones so card content spans
+       nearly the full viewport. See docs/dashboard-ui/MOBILE-WIDTH-STANDARD.md. */
+    --mobile-gutter: 8px;
     position: fixed;
     inset: 0;
     background: rgba(255, 255, 255, 0.6);
@@ -23170,6 +23334,41 @@ export const dashboardCss = `
        in .tile-detail-tabbed-container (not .tile-detail-tab-content), so they
        keep min-width:auto and could grow past the card — pin them to 0/100%. */
     #email-digest-settings-shell, .tile-detail-tab-pane { min-width: 0; max-width: 100%; }
+  }
+  /* ── MOBILE WIDTH STANDARD (≤480px) ──────────────────────────────────────
+     The modal padding chain (overlay → bento cell → tab-content → inner
+     section/list cards) compounds to ~50px of wasted gutter on a 375px phone
+     (observed: tab-content 349px inside a 375px viewport, then inner sections
+     subtract more). Collapse the whole chain to ONE small gutter so content
+     spans nearly the full width. This is the canonical rule EVERY card inherits
+     because every card mounts inside these shared containers — new cards get it
+     for free as long as they use the standard containers and don't add their own
+     large horizontal padding on mobile. Authoritative spec + skill seed:
+     docs/dashboard-ui/MOBILE-WIDTH-STANDARD.md. Presentation-only; desktop
+     untouched. ─────────────────────────────────────────────────────────────── */
+  @media (max-width: 480px) {
+    #tile-detail-modal-overlay { padding: var(--mobile-gutter, 8px); }
+    #tile-detail-modal-header { padding: 12px 10px; }
+    /* Standard content containers → one small horizontal gutter, full width. */
+    .tile-detail-tab-content { padding: 12px var(--mobile-gutter, 8px); }
+    #tile-detail-bento-about { padding: 12px var(--mobile-gutter, 8px) 14px; }
+    #tile-detail-bento-data { padding: 12px var(--mobile-gutter, 8px) 14px; }
+    #tile-detail-bento-image-cell { padding: var(--mobile-gutter, 8px); }
+    /* Video Remix / vrk panels + nested section + list/upload cards. */
+    .vrk-scope .panel-body { padding: var(--mobile-gutter, 8px); gap: 10px; }
+    .vrk-scope .section { padding: 10px var(--mobile-gutter, 8px); }
+    .vrk-scope .list-card { padding: 10px var(--mobile-gutter, 8px); }
+    .vrk-scope .upload-row { padding: var(--mobile-gutter, 8px); }
+    .vrk-scope .order-status,
+    .vrk-scope .order-builder { padding: var(--mobile-gutter, 8px); }
+    /* Market Signals / Email Digest scoped section cards. */
+    .signals-sg .sg-section, .signals-sg .sg-card { padding-left: var(--mobile-gutter, 8px); padding-right: var(--mobile-gutter, 8px); }
+     /* Email Digest SETTINGS shell carries inline padding:16/gap:16 (it mounts
+       directly in .tile-detail-tabbed-container, not .tile-detail-tab-content),
+       so the standard never reached it — content sat in a ~313px strip on a
+       375px phone. Collapse to the single gutter so it maximizes width like the
+       other vrk cards. !important is required to beat the inline style. */
+    #email-digest-settings-shell { padding: var(--mobile-gutter, 8px) !important; gap: 12px !important; }
   }
   .tile-detail-bento-label {
     display: block;
