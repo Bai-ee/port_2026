@@ -33,16 +33,36 @@ async function authFetch(user, path, options = {}) {
 // rendered section in the digest's buildEmailHtml, so the EMAIL PREVIEW and the
 // sent email match. The 4th element opens the dashboard card that owns that
 // section's own settings (null = no card). Creative Brief is opt-in (off).
+// Grouped by the brief each section belongs to — mirrors the email's top-down
+// order (STAND UP: agenda/weather context → executive summary → one section per
+// brief). Each entry: [include key, card title, description, customize cardId].
 const SECTION_GROUPS = [
-  ['Brief', [
-    ['execBriefLink', 'Executive Brief link', 'The “Open Executive Brief” button', null],
-    ['execSummary', 'Executive summary', 'LLM opening paragraph', null],
-    ['marketingBrief', 'Strategic Brief', 'Opportunities, KOLs, competitors', 'signals'],
-    ['watchlist', 'Happening on X', 'Watchlist analysis', 'signals'],
-    ['creativeBrief', 'Creative Brief', 'Attach the client’s run brief', 'onboarding-brief'],
+  ['Top of email', [
     ['agenda', 'Calendar Agenda', 'Up to 5 days of events', 'calendar-connect'],
+    ['weather', 'Weather', 'Local forecast (today + 3-day)', null],
   ]],
-  ['Web analytics', [
+  ['Executive Summary', [
+    ['execSummary', 'Executive summary', 'The “Today” callout summary', null],
+    ['videoPosts', 'Video Post Content', 'Latest 2 remix videos + X promo posts', 'video-remix'],
+  ]],
+  ['Call to action', [
+    ['execBriefLink', 'Executive Brief link', 'The “Open Executive Brief” button', null],
+    ['contactHuman', 'Contact Your Human', 'CTA → your booking link (Calendly)', null],
+  ]],
+  ['Market Signals brief', [
+    ['humanBrief', 'Human Brief', 'The strategist’s opening blurb', 'signals'],
+    ['opportunities', 'Post Opportunities', 'Conversation / angle to enter', 'signals'],
+    ['signals', 'Signals', 'KOLs, competitors, narratives', 'signals'],
+    ['watchlistAccounts', 'Watchlist Accounts', 'Tracked accounts, name-for-name', 'signals'],
+    ['suggestedPosts', 'Suggested Posts', 'Drafted posts for today', 'signals'],
+    ['planPreview', '30-Day Plan', 'Upcoming scheduled posts', 'signals'],
+    ['watchlist', 'Happening on X', 'Watchlist analysis', 'signals'],
+    ['followerPosts', 'Follower Posts', '1 post from each followed handle', 'signals'],
+  ]],
+  ['Creative brief', [
+    ['creativeBrief', 'Creative cover', 'Creative assets of the day', 'onboarding-brief'],
+  ]],
+  ['Web Performance', [
     ['ga4Traffic', 'GA4 Traffic', 'Sessions, views, bounce', null],
     ['topPages', 'Top Pages', 'Most-viewed pages', null],
     ['trafficSources', 'Traffic Sources', 'Source / medium', null],
@@ -55,12 +75,15 @@ const SECTION_GROUPS = [
     ['dashboards', 'Dashboards', 'Recent brief runs', null],
     ['pipeline', 'Pipeline Status', 'Run status breakdown', null],
   ]],
-  ['Ops', [
+  ['Deployments', [
     ['deployments', 'Deployments', 'Vercel deploys', null],
     ['runtimeErrors', 'Runtime Errors', 'Vercel error logs', null],
   ]],
 ];
 const ALL_SECTION_KEYS = SECTION_GROUPS.flatMap(([, items]) => items.map(([k]) => k));
+// Groups whose cards can be shuffled up/down to set the email order. The CTA
+// group isn't part of the section flow, so it stays fixed.
+const NON_ORDERABLE_GROUPS = new Set(['Call to action']);
 
 // ── Email Digest: SETTINGS (params) + PREVIEW (rendered email + send) ─────────
 export function AdminEmailDigestView({ user, onOpenCard }) {
@@ -135,7 +158,7 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
 
   // Render the preview honoring the current (even unsaved) include toggles, so
   // flipping a section off in SETTINGS and tabbing over shows it drop out.
-  const loadPreview = useCallback(async (nextMode = 'template', includeFlags) => {
+  const loadPreview = useCallback(async (nextMode = 'template', includeFlags, contactUrl, order) => {
     if (!user) return;
     setPreviewLoading(true);
     setPreviewError('');
@@ -147,6 +170,11 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
         const on = Object.entries(includeFlags).filter(([, v]) => v !== false).map(([k]) => k).join(',');
         path += `&include=${encodeURIComponent(on)}`;
       }
+      // Live preview honors the typed (even unsaved) Calendly URL so the
+      // "Contact Your Human" button shows before saving (preview-only override).
+      if (nextMode === 'live' && contactUrl) path += `&contactUrl=${encodeURIComponent(contactUrl)}`;
+      // Live preview honors the current (even unsaved) section order.
+      if (nextMode === 'live' && Array.isArray(order) && order.length) path += `&order=${encodeURIComponent(order.join(','))}`;
       const data = await authFetch(user, path);
       setPreview({ html: data.html || '', paragraph: data.paragraph || data.summary?.paragraph || '', placeholder: Boolean(data.placeholder) });
     } catch (e) {
@@ -180,7 +208,7 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
   // Reload the LIVE preview each time the PREVIEW tab is opened, so it reflects
   // the latest include toggles AND real data — i.e. what will actually send.
   useEffect(() => {
-    if (tab === 'preview') loadPreview('live', form?.include);
+    if (tab === 'preview') loadPreview('live', form?.include, form?.contactUrl, form?.order);
   }, [tab, form, loadPreview]);
 
   const isTemplate = previewMode === 'template';
@@ -311,11 +339,40 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
                   <span className="hint">fresh = run a new brief on send (LLM cost) · latest = newest published brief · off = no hosted link. Requires the “Executive Brief link” toggle on.</span>
                 </div>
 
-                {SECTION_GROUPS.map(([groupLabel, items]) => (
+                <div className="field" style={{ display: 'grid', gap: 6 }}>
+                  <span className="label">Contact Your Human link (Calendly)</span>
+                  <input
+                    type="url"
+                    placeholder="https://calendly.com/your-human/intro"
+                    value={form.contactUrl || ''}
+                    onChange={(e) => setForm((f) => ({ ...f, contactUrl: e.target.value }))}
+                  />
+                  <span className="hint">Where the “Contact Your Human” CTA points. Button only shows when this is set and its toggle is on. Falls back to the DIGEST_CONTACT_URL env var.</span>
+                </div>
+
+                {SECTION_GROUPS.map(([groupLabel, items]) => {
+                  const orderable = !NON_ORDERABLE_GROUPS.has(groupLabel);
+                  const ord = Array.isArray(form.order) ? form.order : [];
+                  const oi = (k) => { const i = ord.indexOf(k); return i === -1 ? 999 : i; };
+                  // Cards shown in saved order (orderable groups); fixed otherwise.
+                  const ordered = orderable ? [...items].sort((a, b) => oi(a[0]) - oi(b[0])) : items;
+                  // Swap two keys' positions in form.order (move a card up/down within its group).
+                  const move = (key, dir) => setForm((f) => {
+                    const base = Array.isArray(f.order) && f.order.length ? [...f.order] : ALL_SECTION_KEYS.filter((k) => !['execBriefLink', 'contactHuman'].includes(k));
+                    const groupKeys = [...items].map(([k]) => k).sort((a, b) => base.indexOf(a) - base.indexOf(b));
+                    const gi = groupKeys.indexOf(key);
+                    const swapWith = groupKeys[gi + dir];
+                    if (!swapWith) return f;
+                    const ia = base.indexOf(key); const ib = base.indexOf(swapWith);
+                    if (ia === -1 || ib === -1) return f;
+                    [base[ia], base[ib]] = [base[ib], base[ia]];
+                    return { ...f, order: base };
+                  });
+                  return (
                   <div key={groupLabel} style={{ display: 'grid', gap: 8 }}>
                     <span className="label" style={{ marginTop: 4 }}>{groupLabel}</span>
-                    <div className="toggle-grid" role="group" aria-label={`${groupLabel} sections`}>
-                      {items.map(([key, title, desc, cardId]) => {
+                    <div className="toggle-grid" role="group" aria-label={`${groupLabel} sections`} style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+                      {ordered.map(([key, title, desc, cardId], idx) => {
                         const on = !!form.include?.[key];
                         const toggle = () => setForm((f) => ({ ...f, include: { ...(f.include || {}), [key]: !on } }));
                         return (
@@ -325,6 +382,7 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
                             tabIndex={0}
                             aria-pressed={on}
                             className={`toggle-card${on ? ' is-on' : ''}`}
+                            style={{ position: 'relative' }}
                             onClick={toggle}
                             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
                           >
@@ -342,12 +400,19 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
                                 </button>
                               ) : null}
                             </span>
+                            {orderable ? (
+                              <span style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4 }} onClick={(e) => e.stopPropagation()}>
+                                <button type="button" aria-label={`Move ${title} up`} disabled={idx === 0} onClick={(e) => { e.stopPropagation(); move(key, -1); }} style={{ width: 22, height: 22, lineHeight: '20px', textAlign: 'center', padding: 0, border: '1px solid rgba(42,36,32,0.18)', borderRadius: 6, background: 'rgba(255,255,255,0.7)', cursor: idx === 0 ? 'not-allowed' : 'pointer', opacity: idx === 0 ? 0.4 : 1, fontSize: 11 }}>↑</button>
+                                <button type="button" aria-label={`Move ${title} down`} disabled={idx === ordered.length - 1} onClick={(e) => { e.stopPropagation(); move(key, 1); }} style={{ width: 22, height: 22, lineHeight: '20px', textAlign: 'center', padding: 0, border: '1px solid rgba(42,36,32,0.18)', borderRadius: 6, background: 'rgba(255,255,255,0.7)', cursor: idx === ordered.length - 1 ? 'not-allowed' : 'pointer', opacity: idx === ordered.length - 1 ? 0.4 : 1, fontSize: 11 }}>↓</button>
+                              </span>
+                            ) : null}
                           </div>
                         );
                       })}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </section>
 
               <section className="section">
@@ -436,14 +501,6 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
               <div style={emptyWrap}><span style={emptyLabel}>Preview failed</span><span style={emptyBody}>{previewError}</span></div>
             ) : (
               <div className="tile-detail-tab-pane" style={{ padding: 0, height: '100%', overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
-                <div style={{
-                  flexShrink: 0, padding: '8px 12px', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase',
-                  color: preview?.placeholder ? 'var(--warning)' : 'var(--success)',
-                  background: preview?.placeholder ? 'rgba(212,168,67,0.12)' : 'rgba(74,158,92,0.12)',
-                  borderRadius: 6, marginBottom: 8,
-                }}>
-                  {preview?.placeholder ? 'Template preview · placeholder data — layout only; switch to live to see what sends' : 'Live preview · real data + your toggles — exactly what sends. Run & Send refreshes every brief first.'}
-                </div>
                 {preview?.html ? (
                   <iframe
                     title="Daily digest email"
@@ -455,21 +512,6 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
                 )}
               </div>
             )}
-          </div>
-          <div className="mb-config-actionbar">
-            <span className="mb-config-actionbar-note">
-              {sendStatus
-                ? (sendStatus.kind === 'error' ? `Error: ${sendStatus.msg}` : sendStatus.msg)
-                : (isTemplate ? 'Reviewing the layout with placeholder data — nothing is generated or sent.' : 'Showing real data + your toggles — this is what sends (nothing sent yet). Run & Send refreshes every brief first.')}
-            </span>
-            <div className="mb-config-actionbar-buttons">
-              {isTemplate ? (
-                <button type="button" className="mb-config-mini-btn" onClick={() => loadPreview('live', form?.include)} disabled={previewLoading}>Preview live data</button>
-              ) : (
-                <button type="button" className="mb-config-mini-btn" onClick={() => loadPreview('template', form?.include)} disabled={previewLoading}>Back to template</button>
-              )}
-              <button type="button" className="tile-foot-rerun-btn" onClick={runAndSend} disabled={sendStatus?.kind === 'pending'}>Run &amp; Send</button>
-            </div>
           </div>
         </>
       )}

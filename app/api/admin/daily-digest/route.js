@@ -670,6 +670,11 @@ const DT = {
   line: '#e7ddc8',
   dash: 'rgba(18,16,12,0.10)',
   accent: '#b8542e',
+  // Brand gradient (matches the dashboard primary-button / tab-underline:
+  // cyan → purple → pink) + solid/ tint fallbacks for the TODAY highlight.
+  grad: 'linear-gradient(135deg,#00c2e6 0%,#6a1aff 52%,#ff00b3 100%)',
+  brand: '#6a1aff',
+  brandTint: 'rgba(106,26,255,0.08)',
   fDisp: "'Doto','Space Mono','Courier New',monospace",
   fBody: "'Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif",
   fMono: "'Space Mono','Courier New',monospace",
@@ -697,6 +702,26 @@ function dSectionHead(kicker, title) {
 
 // Every section: top hairline divider + mono eyebrow + Doto display title + body
 function dSection(kicker, title, body) {
+  return `<div style="border-top:1px solid ${DT.line};padding-top:32px;margin-top:32px;">
+    ${dSectionHead(kicker, title)}
+    ${body}
+  </div>`;
+}
+
+// Sub-block inside a per-brief section: a small mono label + its content. Empty
+// content collapses to '' so a brief section only shows the items turned on.
+function dSub(label, html) {
+  if (!html || !String(html).trim()) return '';
+  return `<div style="margin:0 0 22px;">${dMini(label)}${html}</div>`;
+}
+
+// One headed section per brief (top hairline + kicker + Doto title), with its
+// data items as dSub blocks. Returns '' when every child sub-block is empty so
+// a fully-off brief produces no header. This is the "STAND UP" grammar — each
+// brief gets one section to voice its data.
+function dBriefSection(kicker, title, parts) {
+  const body = (Array.isArray(parts) ? parts : [parts]).filter((p) => p && String(p).trim()).join('');
+  if (!body.trim()) return '';
   return `<div style="border-top:1px solid ${DT.line};padding-top:32px;margin-top:32px;">
     ${dSectionHead(kicker, title)}
     ${body}
@@ -747,47 +772,90 @@ function buildAgendaSection(agenda) {
     return dSection('Schedule', 'Agenda', `<div style="background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:14px 16px;font-family:${DT.fBody};font-size:13px;color:${DT.light};">No events on the calendar for the next 5 days.</div>`);
   }
 
-  // Each day renders as a fixed-width card; the row scrolls horizontally where
-  // the client supports overflow-x (Apple Mail, most webmail). Gmail does not
-  // scroll — it clips to the email width, showing the first ~2 days.
+  // Swipe carousel: each day is a fixed-width card in a horizontally scrolling
+  // strip — conserves vertical space and shows all days. The strip is hard-
+  // contained (outer overflow:hidden + max-width:100%) so it NEVER widens the
+  // email body; only the strip scrolls. Today is first. Clients that strip
+  // overflow scroll (Gmail app) clip to width — showing today first, which is
+  // the intended graceful fallback. scroll-snap gives clean paging where supported.
   const dayCards = days.map((day) => {
     const evs = day.events || [];
     const rows = evs.length
       ? evs.map((ev, i) => `
         <div style="padding:10px 14px;${i ? `border-top:1px dashed ${DT.dash};` : ''}white-space:normal;font-family:${DT.fBody};font-size:13px;color:${DT.ink};">
-          <span style="display:block;font-family:${DT.fMono};font-size:10px;font-weight:700;letter-spacing:.04em;color:${DT.accent};margin-bottom:3px;">${escapeHtml(ev.timeLabel)}</span>
+          <span style="display:block;font-family:${DT.fMono};font-size:10px;font-weight:700;letter-spacing:.04em;color:${day.isToday ? DT.brand : DT.accent};margin-bottom:3px;">${escapeHtml(ev.timeLabel)}</span>
           ${escapeHtml(ev.summary)}${ev.location ? `<span style="display:block;margin-top:2px;font-size:11px;color:${DT.light};">${escapeHtml(ev.location)}</span>` : ''}
         </div>`).join('')
-      : `<div style="padding:20px 14px;white-space:normal;font-family:${DT.fBody};font-size:12px;color:${DT.light};">No events</div>`;
+      : `<div style="padding:14px;white-space:normal;font-family:${DT.fBody};font-size:12px;color:${DT.light};">No events</div>`;
 
-    return `<div style="display:inline-block;vertical-align:top;white-space:normal;width:230px;margin-right:12px;background:${DT.card};border:1px solid ${day.isToday ? DT.accent : DT.line};border-radius:14px;overflow:hidden;">
-      <div style="padding:11px 14px;border-bottom:1px solid ${DT.line};background:${day.isToday ? 'rgba(184,84,46,0.07)' : 'transparent'};">
-        ${day.isToday ? `<span style="display:inline-block;margin-right:7px;font-family:${DT.fMono};font-size:8px;font-weight:700;letter-spacing:.12em;color:#fff;background:${DT.accent};border-radius:4px;padding:2px 5px;vertical-align:middle;">TODAY</span>` : ''}<span style="font-family:${DT.fMono};font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${day.isToday ? DT.accent : DT.ink};">${escapeHtml(day.weekday)}</span><span style="font-family:${DT.fMono};font-size:10px;letter-spacing:.06em;color:${DT.light};"> &middot; ${escapeHtml(day.dateLabel)}</span>
+    return `<div style="display:inline-block;vertical-align:top;white-space:normal;font-size:13px;line-height:normal;width:260px;max-width:80%;margin-right:10px;scroll-snap-align:start;background:${DT.card};border:1px solid ${day.isToday ? DT.brand : DT.line};border-radius:14px;overflow:hidden;box-sizing:border-box;">
+      <div style="padding:11px 14px;border-bottom:1px solid ${DT.line};background:${day.isToday ? DT.brandTint : 'transparent'};">
+        ${day.isToday ? `<span style="display:inline-block;margin-right:7px;font-family:${DT.fMono};font-size:8px;font-weight:700;letter-spacing:.12em;color:#fff;background:${DT.brand};background-image:${DT.grad};border-radius:4px;padding:2px 5px;vertical-align:middle;">TODAY</span>` : ''}<span style="font-family:${DT.fMono};font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${day.isToday ? DT.brand : DT.ink};">${escapeHtml(day.weekday)}</span><span style="font-family:${DT.fMono};font-size:10px;letter-spacing:.06em;color:${DT.light};"> &middot; ${escapeHtml(day.dateLabel)}</span>
       </div>
       ${rows}
     </div>`;
   }).join('');
 
-  const hint = `<div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:${DT.light};margin:0 0 10px;">Scroll &rarr; up to 5 days</div>`;
-  const carousel = `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap;font-size:0;padding-bottom:6px;">${dayCards}</div>`;
+  const hint = `<div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:${DT.light};margin:0 0 10px;">Swipe &rarr; ${days.length} day${days.length !== 1 ? 's' : ''}</div>`;
+  const carousel = `<div style="max-width:100%;overflow:hidden;"><div style="overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap;font-size:0;line-height:0;padding-bottom:8px;scroll-snap-type:x mandatory;">${dayCards}</div></div>`;
 
-  const tomorrow = agenda.tomorrowSummary
-    ? `<div style="margin-top:16px;background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:16px 18px;">
-        ${dMini('Looking ahead &middot; Tomorrow')}
-        <p style="font-family:${DT.fBody};font-size:14px;line-height:1.55;color:${DT.soft};margin:0;">${escapeHtml(agenda.tomorrowSummary)}</p>
-      </div>`
-    : '';
-
-  return dSection('Schedule', 'Agenda', `${hint}${carousel}${tomorrow}`);
+  return dSection('Schedule', 'Agenda', `${hint}${carousel}`);
 }
 
+/** Standalone Weather section (its own toggle: include.weather). Reads the
+ *  weather from the first brief that carries it. Always renders a section so
+ *  preview and live stay in sync (empty state when no forecast). */
+function buildWeatherSection(briefs) {
+  const briefList = Array.isArray(briefs) ? briefs : [];
+  const w = briefList.map((b) => b?.intel?.weather).find((x) => x && x.today);
+  const body = w && w.today
+    ? `<div style="background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:16px 18px;">
+        <div style="font-family:${DT.fBody};font-size:15px;color:${DT.ink};"><strong>${escapeHtml(w.today.name)}:</strong> ${escapeHtml(w.today.short)} &middot; ${escapeHtml(String(w.today.temp))}&deg;${escapeHtml(w.today.unit)}${w.today.wind ? ` &middot; wind ${escapeHtml(w.today.wind)}` : ''}</div>
+        ${w.threeDayLine ? `<div style="margin-top:6px;font-family:${DT.fBody};font-size:12px;color:${DT.soft};">3-day: ${escapeHtml(w.threeDayLine)}</div>` : ''}
+      </div>`
+    : `<p style="font-family:${DT.fBody};font-size:13px;color:${DT.light};margin:0;">No forecast available for this run.</p>`;
+  return dSection(`Local Weather${w?.place ? ` &middot; ${escapeHtml(w.place)}` : ''}`, 'Weather', body);
+}
+
+/** Follower posts (own toggle: include.followerPosts). ONE post from each
+ *  followed handle (the first activity item), rendered in the "Conversation /
+ *  angle" grammar with an obvious "View post" link. Empty state for parity. */
+function buildFollowerPostsSection(briefs) {
+  const briefList = Array.isArray(briefs) ? briefs : [];
+  const seen = new Set();
+  const items = [];
+  for (const b of briefList) {
+    for (const w of (b?.intel?.watchlist || [])) {
+      const handle = String(w.handle || '').replace(/^@+/, '').trim();
+      if (!handle || seen.has(handle.toLowerCase())) continue;
+      const post = (w.found && Array.isArray(w.activity) && w.activity.length) ? w.activity[0] : null;
+      if (!post || !post.text) continue;
+      seen.add(handle.toLowerCase());
+      items.push({ handle, text: post.text, url: post.url || '' });
+    }
+  }
+  const rows = items.length
+    ? items.map((it) => `<tr>
+        <td style="${TD}">
+          <strong style="font-family:${DT.fMono};color:${DT.ink};">@${escapeHtml(it.handle)}</strong>${it.url ? ` <a href="${escapeHtml(it.url)}" style="color:${DT.accent};font-family:${DT.fMono};font-size:11px;letter-spacing:.06em;text-transform:uppercase;">&rarr; View post</a>` : ''}
+          <div style="margin-top:4px;color:${DT.soft};font-size:13px;line-height:1.5;">${escapeHtml(String(it.text).slice(0, 280))}</div>
+        </td>
+      </tr>`).join('')
+    : `<tr><td style="${TDempty}">No posts from followed handles this run.</td></tr>`;
+  // Inner table only — composed as the "Follower posts" sub-block under the
+  // Market Signals brief header by buildEmailHtml.
+  return dDataTable([{ label: 'Conversation / angle' }], rows);
+}
+
+// Inner content only — composed as the "Homepage" sub-block under the Web
+// Performance brief header by buildEmailHtml.
 function buildHomepageAnalyticsSection(homepage) {
   if (homepage.error) {
-    return dSection('Engagement', 'Homepage', `<p style="font-family:${DT.fBody};font-size:13px;color:${DT.accent};margin:0;">Unavailable: ${escapeHtml(homepage.error)}</p>`);
+    return `<p style="font-family:${DT.fBody};font-size:13px;color:${DT.accent};margin:0;">Unavailable: ${escapeHtml(homepage.error)}</p>`;
   }
 
   if (!homepage.totalEvents) {
-    return dSection('Engagement', 'Homepage', `<p style="font-family:${DT.fBody};font-size:13px;color:${DT.light};margin:0;">No interaction events in the last 24 hours.</p>`);
+    return `<p style="font-family:${DT.fBody};font-size:13px;color:${DT.light};margin:0;">No interaction events in the last 24 hours.</p>`;
   }
 
   const chips = homepage.byInteractionType
@@ -795,11 +863,11 @@ function buildHomepageAnalyticsSection(homepage) {
     .join('');
 
   const targetRows = homepage.topTargets.length
-    ? homepage.topTargets.map((item) => `<tr><td style="${TD}max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.name)}</td><td style="${TDnum}">${item.count}</td></tr>`).join('')
+    ? homepage.topTargets.map((item) => `<tr><td style="${TD}max-width:420px;word-break:break-word;overflow-wrap:anywhere;">${escapeHtml(item.name)}</td><td style="${TDnum}">${item.count}</td></tr>`).join('')
     : `<tr><td colspan="2" style="${TDempty}">No click targets recorded</td></tr>`;
 
   const outboundRows = homepage.outboundLinks.length
-    ? homepage.outboundLinks.map((item) => `<tr><td style="${TD}max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.name)}</td><td style="${TDnum}">${item.count}</td></tr>`).join('')
+    ? homepage.outboundLinks.map((item) => `<tr><td style="${TD}max-width:420px;word-break:break-word;overflow-wrap:anywhere;">${escapeHtml(item.name)}</td><td style="${TDnum}">${item.count}</td></tr>`).join('')
     : `<tr><td colspan="2" style="${TDempty}">No outbound clicks recorded</td></tr>`;
 
   const scrollChips = homepage.scrollDepths.length
@@ -810,49 +878,104 @@ function buildHomepageAnalyticsSection(homepage) {
     ? homepage.webVitals.map((item) => dChip(`${escapeHtml(item.name)} avg`, `${item.average}${item.poor ? ` &middot; poor ${item.poor}` : ''}`)).join('')
     : `<span style="font-family:${DT.fBody};font-size:13px;color:${DT.light};">No web vitals yet</span>`;
 
-  return dSection('Engagement', `Homepage <span style="font-family:${DT.fMono};font-size:14px;color:${DT.light};">(${homepage.totalEvents})</span>`,
-    `<div style="margin-bottom:16px;">${chips}</div>
+  return `<div style="margin-bottom:16px;">${chips}</div>
     <div style="margin-bottom:14px;">${dDataTable([{ label: 'Top clicks / fields' }, { label: 'Events', right: true }], targetRows)}</div>
     <div style="margin-bottom:14px;">${dDataTable([{ label: 'Outbound links' }, { label: 'Clicks', right: true }], outboundRows)}</div>
     <div style="margin-bottom:16px;">${dMini('Scroll depth')}${scrollChips}</div>
-    <div>${dMini('Web vitals')}${vitalChips}</div>`
-  );
+    <div>${dMini('Web vitals')}${vitalChips}</div>`;
 }
 
-/** LLM executive-summary block, rendered at the very top of the brief. */
-function buildSummarySection(summary) {
-  // Toggle-gated by the caller (include.execSummary). When on but no paragraph
-  // was generated (summary disabled or the LLM call failed), show an explicit
-  // empty state so the EMAIL PREVIEW and the sent email stay in sync.
+// Per-domain accent tints for the executive-summary callout cards. Email-safe
+// flat hex (no gradients): a soft tint background + a stronger ink for the tag
+// and the card's left rule, so each callout is scannable by category.
+const CALLOUT_COLORS = {
+  Platform:   { bg: '#f7ece8', fg: '#a8392a' },
+  Traffic:    { bg: '#e9f0f4', fg: '#2f5d7a' },
+  Calendar:   { bg: '#edf4ec', fg: '#2f6b3d' },
+  Strategy:   { bg: '#efeaf6', fg: '#5a3d8a' },
+  Engagement: { bg: '#f6f0e2', fg: '#8a6a1f' },
+  Pipeline:   { bg: '#eceef1', fg: '#4a5568' },
+};
+
+/** Video Remix "Post content" — 2 rows, each [video play-card | X post copy].
+ *  Email-safe: the video column is a dark branded card (▶ + duration) LINKING to
+ *  the MP4 (clients can't play video). Rows stack to 1 column on mobile via the
+ *  .vp-col-* classes. Returns '' when there are no videos. */
+function buildVideoPostsSection(videoItems) {
+  const items = (Array.isArray(videoItems) ? videoItems : []).filter((v) => v && v.url).slice(0, 2);
+  if (!items.length) return '';
+  const rows = items.map((v) => {
+    const href = escapeHtml(String(v.url));
+    const secs = Number(v.duration) || 30;
+    const dur = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+    const caption = v.caption
+      ? escapeHtml(v.caption)
+      : `<span style="color:${DT.light};">Promo post generates on send.</span>`;
+    const videoCard = `<a href="${href}" style="text-decoration:none;display:block;">
+      <div style="background:${DT.ink};border-radius:12px;text-align:center;padding:30px 12px;">
+        <span style="display:inline-block;width:46px;height:46px;line-height:46px;border-radius:50%;background:${DT.brand};background-image:${DT.grad};color:#fff;font-size:16px;">&#9654;</span>
+        <div style="margin-top:10px;font-family:${DT.fMono};font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,0.72);">${dur} &middot; Video</div>
+      </div>
+    </a>`;
+    const postCol = `<div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:${DT.light};margin:0 0 6px;">X &middot; Post</div>
+      <p style="font-family:${DT.fBody};font-size:13px;line-height:1.5;color:${DT.ink};margin:0 0 10px;">${caption}</p>
+      <a href="${href}" style="color:${DT.brand};font-family:${DT.fMono};font-size:11px;letter-spacing:.06em;text-transform:uppercase;">&rarr; View video</a>`;
+    return `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 14px;">
+      <tr>
+        <td class="vp-col-media" valign="top" width="42%" style="width:42%;vertical-align:top;">${videoCard}</td>
+        <td class="vp-col-text" valign="top" width="58%" style="width:58%;vertical-align:top;padding-left:14px;">${postCol}</td>
+      </tr>
+    </table>`;
+  }).join('');
+  return rows;
+}
+
+/** LLM executive-summary card body (no section wrapper — composed under the TODAY
+ *  header by buildEmailHtml). Per-domain callout cards when the model returned
+ *  structured callouts; falls back to the flat paragraph; empty state otherwise. */
+function buildSummaryBody(summary) {
+  const callouts = Array.isArray(summary?.callouts) ? summary.callouts : [];
+
+  // Structured callouts → marketing-director grammar: a warm report card with a
+  // mono eyebrow, a Doto headline, the lead as a pull-quote, then one labeled
+  // block per category (sec label + bold headline + line) — like the
+  // Overview / Suggested-action blocks in the watchlist brief.
+  // Same grammar as Weather: dSection header (hairline + kicker + Doto title)
+  // with the content in a cream card body below — no title-inside-card.
+  if (callouts.length) {
+    const lead = summary.lead
+      ? `<p style="font-family:${DT.fBody};font-weight:300;font-size:18px;line-height:1.35;border-left:3px solid ${DT.ink};padding:2px 0 2px 14px;margin:0 0 20px;color:${DT.ink};">${escapeHtml(summary.lead)}</p>`
+      : '';
+    const blocks = callouts.map((c, i) => {
+      const col = CALLOUT_COLORS[c.category] || CALLOUT_COLORS.Strategy;
+      const label = `<div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:${col.fg};margin:0 0 6px;">${escapeHtml(c.category)}</div>`;
+      return `<div style="${i ? `border-top:1px dashed ${DT.dash};padding-top:16px;` : ''}margin-bottom:16px;">
+        ${label}
+        ${c.headline ? `<div style="font-family:${DT.fBody};font-weight:700;font-size:16px;line-height:1.3;color:${DT.ink};margin-bottom:4px;">${escapeHtml(c.headline)}</div>` : ''}
+        ${c.line ? `<div style="font-family:${DT.fBody};font-size:14px;line-height:1.55;color:${DT.soft};">${escapeHtml(c.line)}</div>` : ''}
+      </div>`;
+    }).join('');
+    return `<div style="background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:20px;margin-bottom:18px;">${lead}${blocks}</div>`;
+  }
+
+  // Fallback: flat paragraph (or empty state). Toggle-gated by the caller
+  // (include.execSummary); empty state keeps preview == sent in sync.
   const text = summary && summary.paragraph
     ? escapeHtml(summary.paragraph).replace(/\n+/g, ' ')
     : '';
   const body = text || `<span style="color:${DT.light};">No executive summary generated for this run.</span>`;
-  return `<div style="margin-bottom:32px;">
-    ${dKicker('Today &middot; Executive Summary')}
-    <div style="background:${DT.card};border:1px solid ${DT.line};border-left:3px solid ${DT.accent};border-radius:14px;padding:20px 22px;font-family:${DT.fBody};font-size:15px;line-height:1.62;color:${DT.ink};">${body}</div>
-  </div>`;
+  return `<div style="background:${DT.card};border:1px solid ${DT.line};border-left:3px solid ${DT.accent};border-radius:14px;padding:20px 22px;margin-bottom:18px;font-family:${DT.fBody};font-size:15px;line-height:1.62;color:${DT.ink};">${body}</div>`;
 }
 
 /** Strategic brief block — mirrors the established daily brief's strategy. */
-function buildStrategicBriefSection(intel, clientName) {
-  if (!intel) return '';
-  const hasContent =
-    intel.opportunities?.length || intel.kols?.length || intel.competitors?.length ||
-    intel.narratives?.length || intel.humanBrief || intel.watchlist?.length || intel.weather?.today ||
-    intel.strategyBuilder?.today?.posts?.length || intel.strategyBuilder?.items?.length;
-  if (!hasContent) return '';
+// Returns the Strategic-brief items as SEPARATE named HTML parts so each can be
+// toggled on/off individually under the Market Signals brief header. Each value
+// is raw inner HTML (no dMini label — the label comes from the dSub wrapper);
+// '' when that item has no data.
+function buildStrategicParts(intel) {
+  if (!intel) return {};
 
-  const w = intel.weather;
-  const weatherHtml = w?.today
-    ? `<div style="margin-bottom:14px;">${dMini(`Local weather${w.place ? ` · ${escapeHtml(w.place)}` : ''}`)}
-        <div style="background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:16px 18px;">
-          <div style="font-family:${DT.fBody};font-size:14px;color:${DT.ink};"><strong>${escapeHtml(w.today.name)}:</strong> ${escapeHtml(w.today.short)} · ${escapeHtml(String(w.today.temp))}°${escapeHtml(w.today.unit)}${w.today.wind ? ` · wind ${escapeHtml(w.today.wind)}` : ''}</div>
-          ${w.threeDayLine ? `<div style="margin-top:6px;font-family:${DT.fBody};font-size:12px;color:${DT.soft};">3-day: ${escapeHtml(w.threeDayLine)}</div>` : ''}
-        </div>
-      </div>`
-    : '';
-
+  // Weather is its own toggled section (buildWeatherSection) — not rendered here.
   const linkBit = (url) => (url ? ` <a href="${escapeHtml(url)}" style="color:${DT.accent};font-family:${DT.fMono};font-size:11px;">↗</a>` : '');
 
   const oppRows = (intel.opportunities || []).length
@@ -907,23 +1030,23 @@ function buildStrategicBriefSection(intel, clientName) {
       </div>`).join('')
     : '';
   const planPreview = (intel.strategyBuilder?.items || []).slice(0, 7);
-  const planPreviewHtml = planPreview.length
-    ? `<div style="margin-top:14px;">${dMini('30-day plan preview')}${dDataTable([{ label: 'Date' }, { label: 'Post' }], planPreview.map((item) => `<tr>
+  const planTable = planPreview.length
+    ? dDataTable([{ label: 'Date' }, { label: 'Post' }], planPreview.map((item) => `<tr>
         <td style="${TD}width:120px;font-family:${DT.fMono};font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:${DT.light};vertical-align:top;">${escapeHtml(String(item.scheduledAt || '').slice(0, 10))}</td>
         <td style="${TD}"><strong>${escapeHtml(item.kind || 'post')}</strong><div style="margin-top:2px;color:${DT.soft};font-size:12px;">${escapeHtml(item.content || '')}</div></td>
-      </tr>`).join(''))}</div>`
+      </tr>`).join(''))
     : '';
 
-  return `<div style="margin-bottom:32px;">
-    ${dKicker(`Strategic Brief${clientName ? ` &middot; ${escapeHtml(clientName)}` : ''}`)}
-    ${intel.humanBrief ? `<div style="background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:18px 20px;margin-bottom:16px;font-family:${DT.fBody};font-size:14px;line-height:1.6;color:${DT.ink};">${escapeHtml(intel.humanBrief)}</div>` : ''}
-    ${weatherHtml}
-    ${oppRows ? `<div style="margin-bottom:14px;">${dMini('Post opportunities')}${dDataTable([{ label: 'Conversation / angle' }], oppRows)}</div>` : ''}
-    ${signalsHtml ? `<div style="margin-bottom:14px;">${dMini('Signals · KOLs / competitors / narratives')}${dDataTable([{ label: 'Type' }, { label: 'Finding' }], signalsHtml)}</div>` : ''}
-    ${watchlistHtml ? `<div style="margin-bottom:14px;">${dMini('Watchlist · accounts (name-for-name)')}${dDataTable([{ label: 'Account' }, { label: 'Activity this run' }], watchlistHtml)}</div>` : ''}
-    ${postsHtml ? `<div>${dMini('Suggested posts')}${postsHtml}</div>` : ''}
-    ${planPreviewHtml}
-  </div>`;
+  return {
+    humanBrief: intel.humanBrief
+      ? `<div style="background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:18px 20px;font-family:${DT.fBody};font-size:14px;line-height:1.6;color:${DT.ink};">${escapeHtml(intel.humanBrief)}</div>`
+      : '',
+    opportunities: oppRows ? dDataTable([{ label: 'Conversation / angle' }], oppRows) : '',
+    signals: signalsHtml ? dDataTable([{ label: 'Type' }, { label: 'Finding' }], signalsHtml) : '',
+    watchlistAccounts: watchlistHtml ? dDataTable([{ label: 'Account' }, { label: 'Activity this run' }], watchlistHtml) : '',
+    suggestedPosts: postsHtml || '',
+    planPreview: planTable,
+  };
 }
 
 /** Split a recipe analysis string into leading JSON + trailing prose. Ported
@@ -976,9 +1099,6 @@ function buildWatchlistBriefSection(analysisText) {
   const sec = (t) => `<div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:${DT.light};margin:0 0 6px;">${t}</div>`;
   const pull = (inner) => `<p style="font-family:${DT.fBody};font-weight:300;font-size:18px;line-height:1.3;border-left:3px solid ${DT.ink};padding:2px 0 2px 14px;margin:0;color:${DT.ink};">${inner}</p>`;
 
-  const eyebrow = `<div style="font-family:${DT.fMono};font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:${DT.light};margin:0 0 10px;"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${DT.ink};vertical-align:middle;margin-right:8px;"></span>Marketing Director &middot; Watchlist Brief${spotHandle ? ` &middot; spotlight @${escapeHtml(spotHandle)}` : ''}</div>`;
-  const headline = `<div style="font-family:${DT.fDisp};font-weight:900;font-size:30px;line-height:.95;letter-spacing:-.005em;text-transform:uppercase;color:${DT.ink};margin:0 0 12px;">Happening on X</div>`;
-
   const overviewHtml = data?.overview
     ? `<div style="margin-bottom:16px;">${sec('Overview')}${pull(boldHandles(data.overview))}</div>` : '';
   const actionHtml = data?.priorityAction
@@ -1004,17 +1124,9 @@ function buildWatchlistBriefSection(analysisText) {
   const proseFallback = (!data && prose)
     ? `<p style="font-family:${DT.fBody};font-size:13.5px;line-height:1.55;color:${DT.ink};margin:0;">${escapeHtml(prose).replace(/\n{2,}/g, '<br><br>').replace(/\n/g, '<br>')}</p>` : '';
 
-  const body = `${overviewHtml}${actionHtml}${handleCards}${spotlightHtml}${proseFallback}`;
-  if (!body.trim()) return '';
-
-  // kit-paper — warm-cream report card, matching the dashboard REPORT tab look.
-  return `<div style="margin-bottom:32px;">
-    <div style="border:1px solid ${DT.line};border-radius:14px;padding:20px;background:${DT.card};">
-      ${eyebrow}
-      ${headline}
-      ${body}
-    </div>
-  </div>`;
+  // Inner content only — composed as the "Happening on X" sub-block under the
+  // Market Signals brief header by buildEmailHtml.
+  return `${overviewHtml}${actionHtml}${handleCards}${spotlightHtml}${proseFallback}`;
 }
 
 /** Creative Brief attachment — inlines the run onboarding-brief summary + a hero
@@ -1025,21 +1137,35 @@ function buildCreativeBriefSection(creative) {
     ? `<img src="${escapeHtml(creative.image)}" alt="" style="width:100%;max-width:520px;border-radius:12px;border:1px solid ${DT.line};margin:0 0 14px;display:block;">`
     : '';
   const text = escapeHtml(creative.summary).replace(/\n{2,}/g, '<br><br>').replace(/\n/g, '<br>');
-  const body = `${img}<p style="font-family:${DT.fBody};font-size:14px;line-height:1.62;color:${DT.ink};margin:0;">${text}</p>`;
-  return dSection('Deliverable', `Creative Brief${creative.clientName ? ` &middot; ${escapeHtml(creative.clientName)}` : ''}`, body);
+  // Inner content only — composed under the Creative brief header by buildEmailHtml.
+  return `${img}<p style="font-family:${DT.fBody};font-size:14px;line-height:1.62;color:${DT.ink};margin:0;">${text}</p>`;
 }
 
-function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, include = {}, creative = null, briefUrl = null) {
+function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, include = {}, creative = null, briefUrl = null, contactUrl = '', videoItems = [], order = []) {
   // Fallback target when no hosted brief is resolved (briefLinkMode 'off' /
   // 'latest' with nothing published / 'fresh' run failed): the dashboard modal.
   const executiveBriefUrl = appUrl('/dashboard?open=brief');
   const briefLinkUrl = briefUrl || executiveBriefUrl;
+  // CTA row: primary "Open Executive Brief" + secondary "Contact Your Human"
+  // (mirrors the brief's "Meet with a Human" CTA). Contact defaults to the
+  // brief's Calendly when unconfigured, so the button shows whenever toggled on.
+  const showBrief = include.execBriefLink !== false;
+  const showContact = include.contactHuman !== false;
+  const contactHref = escapeHtml(String(contactUrl || '').trim() || 'https://calendly.com/bballi/30min');
+  const briefBtn = showBrief
+    ? `<a class="cta-btn" href="${escapeHtml(briefLinkUrl)}" style="display:inline-block;text-align:center;background:${DT.ink};color:${DT.card};font-family:${DT.fMono};font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border-radius:999px;padding:13px 18px;border:1px solid ${DT.ink};margin:0 8px 8px 0;">Open Executive Brief</a>`
+    : '';
+  const contactBtn = showContact
+    ? `<a class="cta-btn" href="${contactHref}" style="display:inline-block;text-align:center;background:${DT.card};color:${DT.ink};font-family:${DT.fMono};font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border-radius:999px;padding:13px 18px;border:1px solid ${DT.ink};margin:0 8px 8px 0;">Contact Your Human</a>`
+    : '';
+  const ctaRow = (showBrief || showContact)
+    ? `<div style="margin:18px 0 28px;">${briefBtn}${contactBtn}</div>`
+    : '';
   const briefList = Array.isArray(briefs) ? briefs : [];
-  // Strategic brief + watchlist are separate toggles, rendered as separate blocks.
-  const strategicSections = include.marketingBrief === false ? '' : briefList
-    .map((b) => buildStrategicBriefSection(b.intel, b.clientName))
-    .filter((s) => s && s.trim())
-    .join('');
+  // Strategic-brief items are now individually toggled. Aggregate each part
+  // across all briefs so a single dSub renders that item from every client.
+  const strategicParts = briefList.map((b) => buildStrategicParts(b.intel));
+  const sPart = (k) => strategicParts.map((p) => p[k]).filter(Boolean).join('');
   const watchlistSections = include.watchlist === false ? '' : briefList
     .map((b) => buildWatchlistBriefSection(b.intel?.watchlistAnalysis))
     .filter((s) => s && s.trim())
@@ -1080,7 +1206,7 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
         .map(
           (d) => `<tr>
           <td style="${TD}">${dStatusBadge(d.state)}</td>
-          <td style="${TDsub}max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(d.commit || '—')}</td>
+          <td style="${TDsub}max-width:300px;word-break:break-word;overflow-wrap:anywhere;">${escapeHtml(d.commit || '—')}</td>
           <td style="${TDsub}font-family:${DT.fMono};text-align:right;white-space:nowrap;">${new Date(d.created).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</td>
         </tr>`
         )
@@ -1094,13 +1220,108 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
   const errorRows = vercel.errorLogs?.length
     ? vercel.errorLogs.map((e) => `<tr>
             <td style="${TD}font-family:${DT.fMono};font-size:12px;">${escapeHtml(e.path)}</td>
-            <td style="${TDsub}max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(e.message)}</td>
+            <td style="${TDsub}max-width:300px;word-break:break-word;overflow-wrap:anywhere;">${escapeHtml(e.message)}</td>
             <td style="${TDnum}">${e.statusCode || '—'}</td>
           </tr>`).join('')
     : `<tr><td colspan="3" style="${TDempty}">No runtime errors in the last 24 hours</td></tr>`;
-  const errorSection = dSection('Runtime', `Errors${vercel.errorLogs?.length ? ` <span style="font-family:${DT.fMono};font-size:14px;color:${DT.accent};">(${vercel.errorLogs.length})</span>` : ''}`, dDataTable(
-    [{ label: 'Path' }, { label: 'Message' }, { label: 'Status', right: true }], errorRows
-  ));
+  const errorInner = dDataTable([{ label: 'Path' }, { label: 'Message' }, { label: 'Status', right: true }], errorRows);
+
+  // ── Inner pieces for the brief-grouped sections (each a dSub under a header) ──
+  const platformOverviewCells = dStatCells([
+    { num: firebase.newUsers, label: 'New sign-ups' },
+    { num: firebase.totalUsers, label: 'Total users' },
+    { num: firebase.recentRuns, label: 'Dashboards' },
+    { num: vercel.totalDeployments || 0, label: 'Deployments' },
+  ], 4);
+  const ga4TrafficInner = ga4.overview
+    ? `${dStatCells([
+        { num: ga4.overview.sessions, label: 'Sessions' },
+        { num: ga4.overview.pageViews, label: 'Page views' },
+        { num: ga4.overview.totalUsers, label: 'Visitors' },
+        { num: ga4.overview.newUsers, label: 'New' },
+        { num: `${ga4.overview.bounceRate}%`, label: 'Bounce' },
+      ], 5)}<div style="font-family:${DT.fMono};font-size:11px;color:${DT.soft};letter-spacing:.02em;">Avg session <strong style="color:${DT.ink};">${Math.floor(ga4.overview.avgSessionDuration / 60)}m ${ga4.overview.avgSessionDuration % 60}s</strong> &nbsp;&middot;&nbsp; Engaged <strong style="color:${DT.ink};">${ga4.overview.engagedSessions}</strong></div>`
+    : `<p style="font-family:${DT.fBody};font-size:13px;color:${ga4.error ? DT.accent : DT.light};margin:0;">${ga4.error ? `GA4 unavailable: ${escapeHtml(ga4.error)}` : 'No traffic recorded in the last 24 hours.'}</p>`;
+  const topPagesTable = dDataTable(
+    [{ label: 'Page' }, { label: 'Views', right: true }, { label: 'Users', right: true }],
+    ga4.topPages?.length ? ga4.topPages.map((p) => `<tr>
+      <td style="${TD}max-width:300px;word-break:break-word;overflow-wrap:anywhere;">${escapeHtml(p.path)}</td>
+      <td style="${TDnum}">${p.views}</td>
+      <td style="${TDnum}color:${DT.soft};font-weight:400;">${p.users}</td>
+    </tr>`).join('') : `<tr><td colspan="3" style="${TDempty}">No page data in the last 24 hours</td></tr>`
+  );
+  const sourcesTable = dDataTable(
+    [{ label: 'Source / Medium' }, { label: 'Sessions', right: true }, { label: 'Users', right: true }],
+    ga4.trafficSources?.length ? ga4.trafficSources.map((s) => `<tr>
+      <td style="${TD}">${escapeHtml(s.source)} <span style="color:${DT.light};">/ ${escapeHtml(s.medium)}</span></td>
+      <td style="${TDnum}">${s.sessions}</td>
+      <td style="${TDnum}color:${DT.soft};font-weight:400;">${s.users}</td>
+    </tr>`).join('') : `<tr><td colspan="3" style="${TDempty}">No traffic sources in the last 24 hours</td></tr>`
+  );
+  const keyEventsInner = Object.keys(ga4.events || {}).length
+    ? `<div>${Object.entries(ga4.events).map(([name, count]) => dChip(escapeHtml(name.replace(/_/g, ' ')), count)).join('')}</div>`
+    : `<span style="font-family:${DT.fBody};font-size:13px;color:${DT.light};">No key events in the last 24 hours</span>`;
+  const signupsTable = dDataTable([{ label: 'Email' }, { label: 'Website' }, { label: 'Time', right: true }], newUsersRows);
+  const dashboardsTable = dDataTable([{ label: 'Website' }, { label: 'Status' }, { label: 'Time', right: true }], recentRunsRows);
+  const pipelineInner = `<div style="margin-bottom:10px;">${statusBreakdown || `<span style="color:${DT.light};font-family:${DT.fBody};font-size:13px;">No pipeline data</span>`}</div><div style="font-family:${DT.fMono};font-size:11px;color:${DT.soft};letter-spacing:.02em;">Total runs <strong style="color:${DT.ink};">${firebase.totalRuns}</strong> &nbsp;&middot;&nbsp; Clients <strong style="color:${DT.ink};">${firebase.totalClients}</strong></div>`;
+  const deploymentsInner = `${vercel.errors ? `<p style="font-family:${DT.fBody};color:${DT.accent};font-size:12px;margin:0 0 10px;">Note: ${escapeHtml(vercel.errors)}</p>` : ''}${dDataTable([{ label: 'Status' }, { label: 'Commit' }, { label: 'Time', right: true }], deploymentsRows)}`;
+
+  // Per-section renderers, keyed by include key. Each returns its email block
+  // (a dSub for items under a brief header; a standalone section for top items).
+  // The email renders each group's keys in the admin's saved `order` (shuffled
+  // up/down within the group), gated by include[key].
+  const RENDER = {
+    // Top of email (standalone sections)
+    agenda: () => buildAgendaSection(agenda),
+    weather: () => buildWeatherSection(briefs),
+    // Executive Summary / TODAY
+    execSummary: () => buildSummaryBody(summary),
+    videoPosts: () => dSub('Post content', buildVideoPostsSection(videoItems)),
+    // Market Signals
+    humanBrief: () => dSub('Brief', sPart('humanBrief')),
+    opportunities: () => dSub('Post opportunities', sPart('opportunities')),
+    signals: () => dSub('Signals · KOLs / competitors / narratives', sPart('signals')),
+    watchlistAccounts: () => dSub('Watchlist · accounts (name-for-name)', sPart('watchlistAccounts')),
+    suggestedPosts: () => dSub('Suggested posts', sPart('suggestedPosts')),
+    planPreview: () => dSub('30-day plan preview', sPart('planPreview')),
+    watchlist: () => dSub('Happening on X', watchlistSections),
+    followerPosts: () => dSub('Follower posts', buildFollowerPostsSection(briefs)),
+    // Creative
+    creativeBrief: () => buildCreativeBriefSection(creative),
+    // Web Performance
+    ga4Traffic: () => dSub('Traffic', ga4TrafficInner),
+    topPages: () => dSub('Top pages', topPagesTable),
+    trafficSources: () => dSub('Sources', sourcesTable),
+    keyEvents: () => dSub('Key events', keyEventsInner),
+    homepage: () => dSub('Homepage', buildHomepageAnalyticsSection(homepage)),
+    // Platform
+    platformOverview: () => dSub('Overview', platformOverviewCells),
+    signups: () => dSub('New sign-ups', signupsTable),
+    dashboards: () => dSub('Dashboards', dashboardsTable),
+    pipeline: () => dSub('Pipeline status', pipelineInner),
+    // Deployments
+    deployments: () => dSub('Deployments', deploymentsInner),
+    runtimeErrors: () => dSub('Runtime errors', errorInner),
+  };
+  const ord = Array.isArray(order) && order.length ? order : Object.keys(RENDER);
+  const orderIdx = (k) => { const i = ord.indexOf(k); return i === -1 ? 999 : i; };
+  // Render a group's keys in saved order, gated by include[key].
+  const renderGroup = (keys) => [...keys]
+    .sort((a, b) => orderIdx(a) - orderIdx(b))
+    .filter((k) => include[k] !== false && RENDER[k])
+    .map((k) => RENDER[k]());
+
+  const topSections = renderGroup(['agenda', 'weather']).join('');
+  const todaySection = dBriefSection('Executive Summary', 'Today', renderGroup(['execSummary', 'videoPosts']));
+  const marketSignalsSection = dBriefSection('Market Signals', 'Happening Now',
+    renderGroup(['humanBrief', 'opportunities', 'signals', 'watchlistAccounts', 'suggestedPosts', 'planPreview', 'watchlist', 'followerPosts']));
+  const creativeSection = dBriefSection('Creative', 'Creative Brief', renderGroup(['creativeBrief']));
+  const webPerfSection = dBriefSection('Web Performance', 'Traffic & Engagement',
+    renderGroup(['ga4Traffic', 'topPages', 'trafficSources', 'keyEvents', 'homepage']));
+  const platformSection = dBriefSection('Platform', 'Platform',
+    renderGroup(['platformOverview', 'signups', 'dashboards', 'pipeline']));
+  const opsSection = dBriefSection('Deployments', 'Deployments & Errors',
+    renderGroup(['deployments', 'runtimeErrors']));
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -1115,116 +1336,52 @@ body{margin:0;padding:0;background:${DT.bg};}
 a{text-decoration:none;}
 @media only screen and (max-width:600px){
   .container{padding:24px 16px !important;}
-  .hero-title{font-size:62px !important;}
+  .hero-title{font-size:42px !important;}
   .sec-title{font-size:26px !important;}
+  .cta-btn{display:block !important;width:100% !important;margin:0 0 10px 0 !important;box-sizing:border-box !important;}
+  .vp-col-media,.vp-col-text{display:block !important;width:100% !important;padding-left:0 !important;}
+  .vp-col-media{margin-bottom:10px !important;}
 }
 </style>
 </head>
 <body style="margin:0;padding:0;background:${DT.bg};-webkit-font-smoothing:antialiased;">
   <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:${DT.bg};">
     <tr><td align="center" style="padding:0;">
-      <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px;width:100%;">
+      <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px;width:100%;table-layout:fixed;">
         <tr><td class="container" style="padding:40px 32px;">
 
           <!-- Hero -->
           <div style="padding-bottom:6px;">
             ${dKicker('HitLoop.agency &middot; Daily Digest')}
-            <div class="hero-title" style="font-family:${DT.fDisp};font-weight:900;font-size:74px;line-height:.82;letter-spacing:-.04em;text-transform:uppercase;color:${DT.ink};margin:6px 0 16px;">Daily<br>Digest</div>
+            <div class="hero-title" style="font-family:${DT.fDisp};font-weight:900;font-size:72px;font-size:clamp(34px,11.2vw,84px);line-height:.9;letter-spacing:-.04em;text-transform:uppercase;color:${DT.ink};margin:6px 0 16px;">Stand Up</div>
             <div style="font-family:${DT.fMono};font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:${DT.light};">${dateStr}</div>
           </div>
 
-          ${include.execBriefLink === false ? '' : `<div style="margin:18px 0 28px;">
-            <a href="${escapeHtml(briefLinkUrl)}" style="display:inline-block;background:${DT.ink};color:${DT.card};font-family:${DT.fMono};font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border-radius:999px;padding:13px 18px;border:1px solid ${DT.ink};">Open Executive Brief</a>
-          </div>`}
+          <!-- Top CTA row (Brief + Contact Your Human) -->
+          ${ctaRow}
 
-          <!-- Executive summary (LLM) -->
-          ${include.execSummary === false ? '' : buildSummarySection(summary)}
+          <!-- Top of email (agenda / weather, in saved order) -->
+          ${topSections}
 
-          <!-- Today's Agenda (calendar) — directly under the summary -->
-          ${include.agenda === false ? '' : buildAgendaSection(agenda)}
+          <!-- Executive Summary + Post content (TODAY), under weather -->
+          ${todaySection}
 
-          <!-- Strategic brief (mirrors established daily brief) -->
-          ${strategicSections}
+          <!-- ── One headed section per brief (STAND UP) ── -->
+          ${marketSignalsSection}
+          ${creativeSection}
+          ${webPerfSection}
+          ${platformSection}
+          ${opsSection}
 
-          <!-- "Happening on X" watchlist analysis -->
-          ${watchlistSections}
-
-          <!-- Creative Brief (attached run deliverable) -->
-          ${include.creativeBrief ? buildCreativeBriefSection(creative) : ''}
-
-          <!-- Platform Overview -->
-          ${include.platformOverview === false ? '' : dSection('Platform', 'Overview', dStatCells([
-            { num: firebase.newUsers, label: 'New sign-ups' },
-            { num: firebase.totalUsers, label: 'Total users' },
-            { num: firebase.recentRuns, label: 'Dashboards' },
-            { num: vercel.totalDeployments || 0, label: 'Deployments' },
-          ], 4))}
-
-          <!-- GA4 overview -->
-          ${include.ga4Traffic === false ? '' : dSection('Google Analytics', 'Traffic', ga4.overview
-            ? `${dStatCells([
-                { num: ga4.overview.sessions, label: 'Sessions' },
-                { num: ga4.overview.pageViews, label: 'Page views' },
-                { num: ga4.overview.totalUsers, label: 'Visitors' },
-                { num: ga4.overview.newUsers, label: 'New' },
-                { num: `${ga4.overview.bounceRate}%`, label: 'Bounce' },
-              ], 5)}<div style="font-family:${DT.fMono};font-size:11px;color:${DT.soft};letter-spacing:.02em;">Avg session <strong style="color:${DT.ink};">${Math.floor(ga4.overview.avgSessionDuration / 60)}m ${ga4.overview.avgSessionDuration % 60}s</strong> &nbsp;&middot;&nbsp; Engaged <strong style="color:${DT.ink};">${ga4.overview.engagedSessions}</strong></div>`
-            : `<p style="font-family:${DT.fBody};font-size:13px;color:${ga4.error ? DT.accent : DT.light};margin:0;">${ga4.error ? `GA4 unavailable: ${escapeHtml(ga4.error)}` : 'No traffic recorded in the last 24 hours.'}</p>`)}
-
-          <!-- Top pages -->
-          ${include.topPages === false ? '' : dSection('Analytics', 'Top Pages', dDataTable(
-            [{ label: 'Page' }, { label: 'Views', right: true }, { label: 'Users', right: true }],
-            ga4.topPages?.length ? ga4.topPages.map((p) => `<tr>
-              <td style="${TD}max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(p.path)}</td>
-              <td style="${TDnum}">${p.views}</td>
-              <td style="${TDnum}color:${DT.soft};font-weight:400;">${p.users}</td>
-            </tr>`).join('') : `<tr><td colspan="3" style="${TDempty}">No page data in the last 24 hours</td></tr>`
-          ))}
-
-          <!-- Traffic sources -->
-          ${include.trafficSources === false ? '' : dSection('Analytics', 'Sources', dDataTable(
-            [{ label: 'Source / Medium' }, { label: 'Sessions', right: true }, { label: 'Users', right: true }],
-            ga4.trafficSources?.length ? ga4.trafficSources.map((s) => `<tr>
-              <td style="${TD}">${escapeHtml(s.source)} <span style="color:${DT.light};">/ ${escapeHtml(s.medium)}</span></td>
-              <td style="${TDnum}">${s.sessions}</td>
-              <td style="${TDnum}color:${DT.soft};font-weight:400;">${s.users}</td>
-            </tr>`).join('') : `<tr><td colspan="3" style="${TDempty}">No traffic sources in the last 24 hours</td></tr>`
-          ))}
-
-          <!-- Key events -->
-          ${include.keyEvents === false ? '' : dSection('Analytics', 'Key Events',
-            Object.keys(ga4.events || {}).length
-              ? `<div>${Object.entries(ga4.events).map(([name, count]) => dChip(escapeHtml(name.replace(/_/g, ' ')), count)).join('')}</div>`
-              : `<span style="font-family:${DT.fBody};font-size:13px;color:${DT.light};">No key events in the last 24 hours</span>`
-          )}
-
-          <!-- Homepage interactions -->
-          ${include.homepage === false ? '' : buildHomepageAnalyticsSection(homepage)}
-
-          <!-- New sign-ups -->
-          ${include.signups === false ? '' : dSection('Firebase', 'New Sign-ups', dDataTable([{ label: 'Email' }, { label: 'Website' }, { label: 'Time', right: true }], newUsersRows))}
-
-          <!-- Dashboards -->
-          ${include.dashboards === false ? '' : dSection('Firebase', 'Dashboards', dDataTable([{ label: 'Website' }, { label: 'Status' }, { label: 'Time', right: true }], recentRunsRows))}
-
-          <!-- Pipeline status -->
-          ${include.pipeline === false ? '' : dSection('Firebase', 'Pipeline Status',
-            `<div style="margin-bottom:10px;">${statusBreakdown || `<span style="color:${DT.light};font-family:${DT.fBody};font-size:13px;">No pipeline data</span>`}</div><div style="font-family:${DT.fMono};font-size:11px;color:${DT.soft};letter-spacing:.02em;">Total runs <strong style="color:${DT.ink};">${firebase.totalRuns}</strong> &nbsp;&middot;&nbsp; Clients <strong style="color:${DT.ink};">${firebase.totalClients}</strong></div>`
-          )}
-
-          <!-- Deployments -->
-          ${include.deployments === false ? '' : dSection('Vercel', 'Deployments',
-            `${vercel.errors ? `<p style="font-family:${DT.fBody};color:${DT.accent};font-size:12px;margin:0 0 10px;">Note: ${escapeHtml(vercel.errors)}</p>` : ''}${dDataTable([{ label: 'Status' }, { label: 'Commit' }, { label: 'Time', right: true }], deploymentsRows)}`
-          )}
-
-          <!-- Runtime errors -->
-          ${include.runtimeErrors === false ? '' : errorSection}
+          <!-- Bottom CTA row (Brief + Contact Your Human) -->
+          ${ctaRow ? `<div style="border-top:1px solid ${DT.line};padding-top:28px;margin-top:32px;">${ctaRow}</div>` : ''}
 
           <!-- Footer -->
           <div style="border-top:1.5px solid ${DT.line};padding-top:22px;margin-top:32px;">
             <div style="font-family:${DT.fMono};font-size:10px;letter-spacing:.08em;color:${DT.light};margin-bottom:10px;">Generated ${new Date(timestamp).toLocaleTimeString('en-US')}</div>
             <div style="font-family:${DT.fMono};font-size:10px;letter-spacing:.06em;">
               <a href="${escapeHtml(briefLinkUrl)}" style="color:${DT.accent};">Executive Brief</a> &nbsp;&middot;&nbsp;
+              ${showContact ? `<a href="${contactHref}" style="color:${DT.accent};">Contact Your Human</a> &nbsp;&middot;&nbsp;` : ''}
               <a href="https://vercel.com/baiees-projects/port-2026" style="color:${DT.accent};">Vercel</a> &nbsp;&middot;&nbsp;
               <a href="https://console.firebase.google.com/project/human-in-the-loop-a1a19" style="color:${DT.accent};">Firebase</a> &nbsp;&middot;&nbsp;
               <a href="https://analytics.google.com" style="color:${DT.accent};">GA4</a>
@@ -1344,6 +1501,13 @@ function buildPlaceholderData(timestamp) {
     },
     summary: {
       paragraph: 'This is placeholder executive-summary text. When you run the digest, an AI-written recap of the day’s sign-ups, traffic, deployments, and strategic brief will appear here in this slot.',
+      lead: 'Claim the “Creative Systems Architect” positioning before competitors cement it — ship a short-form piece today.',
+      callouts: [
+        { category: 'Platform', headline: '52 users · 1 new signup', line: 'Three dashboards created in the last 24h; momentum is steady.' },
+        { category: 'Calendar', headline: 'Asa · 9 AM class', line: 'Creative movement class this morning — light operating day otherwise.' },
+        { category: 'Traffic', headline: '29 sessions · 59% bounce', line: 'Modest day; /dashboard is the strongest landing with high CTA engagement.' },
+        { category: 'Strategy', headline: 'Stake the narrative', line: 'Use @0xCharlota’s “feel not ship” framing as the tension your system resolves.' },
+      ],
     },
     creative: {
       clientName: 'Sample Client',
@@ -1357,6 +1521,15 @@ function buildPlaceholderData(timestamp) {
     briefs: [{
       clientName: 'Sample Client',
       intel: {
+        weather: {
+          place: 'Austin, TX',
+          today: { name: 'Today', short: 'Sunny', temp: 92, unit: 'F', wind: '8 mph' },
+          threeDayLine: 'Sun 94° · Mon 90° · Tue 88°',
+        },
+        watchlist: [
+          { handle: 'sample_handle', found: true, activity: [{ text: 'Just shipped a brand manual template built in Framer — feel, not ship.', url: 'https://x.com/sample_handle/status/1' }] },
+          { handle: 'another_voice', found: true, activity: [{ text: 'Hot take: model selection is becoming a checkbox, not a differentiator.', url: 'https://x.com/another_voice/status/2' }] },
+        ],
         watchlistAnalysis: JSON.stringify({
           overview: 'Placeholder watchlist read — @sample_handle is shipping launch teasers while @another_voice drives the category conversation. Real overview text fills in when you run Pull timelines in the dashboard.',
           priorityAction: 'Placeholder action — reply to @sample_handle’s launch thread within the hour to ride the engagement window.',
@@ -1392,6 +1565,18 @@ export async function GET(request) {
     return out;
   })();
 
+  // Optional `contactUrl` override (preview only) so the typed-but-unsaved
+  // Calendly URL appears in the live preview immediately, like include toggles.
+  const contactUrlOverride = (isPreview && url.searchParams.has('contactUrl'))
+    ? String(url.searchParams.get('contactUrl') || '').trim()
+    : null;
+
+  // Optional `order` override (preview only): comma-separated section keys, so
+  // the live preview reflects the admin's current (even unsaved) reordering.
+  const orderOverride = (isPreview && url.searchParams.has('order'))
+    ? String(url.searchParams.get('order') || '').split(',').map((s) => s.trim()).filter(Boolean)
+    : null;
+
   // Auth: cron/worker secret for the scheduled run; admin token for dashboard
   // preview / send-now actions.
   let adminOk = false;
@@ -1416,7 +1601,12 @@ export async function GET(request) {
       const include = includeOverride || { ...digestConfig.DEFAULT_INCLUDE };
       // A sample hosted-brief URL so the CTA renders a realistic link in template mode.
       const sampleBriefUrl = appUrl('/briefs/sample-client/latest');
-      const html = buildEmailHtml(ph.firebase, ph.vercel, ph.ga4, ph.agenda, ph.homepage, ts, ph.summary, ph.briefs, include, ph.creative, sampleBriefUrl);
+      const sampleContactUrl = 'https://calendly.com/your-human/intro';
+      const sampleVideoItems = [
+        { url: 'https://example.com/remix-1.mp4', duration: 30, caption: 'Stop scrolling — this 30s cut shows exactly how we turn raw clips into a launch-ready edit. Built for the feed. ▶ #creative' },
+        { url: 'https://example.com/remix-2.mp4', duration: 30, caption: 'New promo drop: the model-selection loop, visualized. Watch how the system ends the bottleneck in half a minute. #ai' },
+      ];
+      const html = buildEmailHtml(ph.firebase, ph.vercel, ph.ga4, ph.agenda, ph.homepage, ts, ph.summary, ph.briefs, include, ph.creative, sampleBriefUrl, sampleContactUrl, sampleVideoItems, orderOverride || digestConfig.DEFAULT_ORDER);
       return json({ ok: true, template: true, placeholder: true, timestamp: new Date(ts).toISOString(), paragraph: ph.summary.paragraph, html });
     } catch (err) {
       logError('daily_digest_template_error', { error: err.message });
@@ -1527,9 +1717,13 @@ export async function GET(request) {
       // Reuse the up-front list (recompute only if homeClientId was just resolved).
       const briefIds = briefClientIds.length ? briefClientIds : [...new Set([homeClientId, ...(cfg.includeClientIds || [])].filter(Boolean))];
 
-      // Strategic brief fetch powers BOTH the Strategic Brief block and the
-      // "Happening on X" watchlist block — fetch if either is enabled.
-      if (include.marketingBrief !== false || include.watchlist !== false) {
+      // The brief fetch powers every Market Signals item + weather + follower
+      // posts — fetch if ANY brief-derived section is enabled.
+      const needBrief = [
+        'humanBrief', 'opportunities', 'signals', 'watchlistAccounts', 'suggestedPosts',
+        'planPreview', 'watchlist', 'followerPosts', 'weather',
+      ].some((k) => include[k] !== false);
+      if (needBrief) {
         briefs = (await Promise.all(briefIds.map((cid) => briefIntel.getBriefForClient(cid)))).filter(Boolean);
       }
 
@@ -1566,6 +1760,43 @@ export async function GET(request) {
       logWarn('daily_digest_summary_failed', { error: err.message });
     }
 
+    // ── "Post content" block (TODAY section): latest 2 Video Remix videos, each
+    // paired with an LLM-written X promo post. Toggle: include.videoPosts.
+    // Live preview + real send generate captions (Haiku); template uses the
+    // placeholder layout (no cost).
+    let videoItems = [];
+    if (include.videoPosts !== false && homeClientId) {
+      try {
+        const dsSnap = await fb.adminDb.collection('dashboard_state').doc(homeClientId).get();
+        const caps = (dsSnap.data()?.mediaCaptures || [])
+          .filter((c) => c?.type === 'video_remix' && c?.downloadUrl)
+          .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+          .slice(0, 2);
+        if (caps.length) {
+          let captions = [];
+          if (!isTemplate) {
+            let brain = '';
+            try {
+              const { loadClientBrainContext } = require('../../../../features/client-brain/store.cjs');
+              brain = await loadClientBrainContext(homeClientId, { useFor: 'emailDigest', maxChars: 1200 });
+            } catch { /* optional */ }
+            try {
+              captions = await briefSummary.generateVideoPromoPosts({ videos: caps, clientBrainContext: brain, config: digestCfg || {} });
+            } catch (e) {
+              logWarn('daily_digest_video_promo_failed', { error: e.message });
+            }
+          }
+          videoItems = caps.map((v, i) => ({
+            url: v.downloadUrl,
+            duration: v.durationSeconds || 30,
+            caption: captions[i] || '',
+          }));
+        }
+      } catch (e) {
+        logWarn('daily_digest_video_posts_failed', { error: e.message });
+      }
+    }
+
     const sessionStr = ga4.overview ? `, ${ga4.overview.sessions} session${ga4.overview.sessions !== 1 ? 's' : ''}` : '';
     const subject = `HITLOOP Daily — ${firebase.newUsers} sign-up${firebase.newUsers !== 1 ? 's' : ''}, ${firebase.recentRuns} dashboard${firebase.recentRuns !== 1 ? 's' : ''}${sessionStr} · ${dateStr}`;
 
@@ -1589,7 +1820,11 @@ export async function GET(request) {
       }
     }
 
-    const html = buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, renderInclude, creative, briefUrl);
+    const contactUrl = (contactUrlOverride != null
+      ? contactUrlOverride
+      : (digestCfg?.contactUrl || process.env.DIGEST_CONTACT_URL || process.env.CALENDLY_URL || '')).trim();
+    const sectionOrder = orderOverride || digestCfg?.order || digestConfig.DEFAULT_ORDER;
+    const html = buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, renderInclude, creative, briefUrl, contactUrl, videoItems, sectionOrder);
 
     // Preview mode (admin dashboard): build everything, send nothing.
     if (isPreview) {

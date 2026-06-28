@@ -4,6 +4,8 @@
 
 > **The one-button run UX** (Generate Report / Update report only, the single streamed terminal, the Client Brain → search bridge, the REPORT Coverage strip, watchlist mentions routing, skill cap) is documented as-built in [`MARKET-SIGNALS-GENERATE-REPORT-FLOW.md`](./MARKET-SIGNALS-GENERATE-REPORT-FLOW.md). Read it before touching the card's run buttons or the REPORT render.
 
+> **The Run Briefs / Executive Brief card wiring** (Daily Stand Up renamed to Executive Brief, named brief preview cards, card footer run actions, removed duplicate Creative card) is documented in [`EXECUTIVE-BRIEFS-RUN-BRIEFS-WIRING.md`](./EXECUTIVE-BRIEFS-RUN-BRIEFS-WIRING.md). Read it before touching the Run Briefs bucket or `BRIEF_TYPE_BY_CARD`.
+
 This documents one connected system:
 1. **One scout engine** produces market signals.
 2. **One canonical projection** normalizes them for every consumer (email, executive brief).
@@ -80,6 +82,8 @@ Brief sections + compositions live in **`features/scout-intake/brief-sections.cj
 - `marketing-director` (label **"Market Brief"**) = **only** the scout-signal pages (`scout-found, market-signals, local-signals, viral-windows, watchlist, competitor-snapshot, local-weather`).
 
 So the same signal pages render standalone (Market Brief) and embedded (Executive Brief). The **Run Briefs bucket** already has a `brief-marketing` card that runs `scope=marketing-director` and previews this composition.
+
+The current card-level wiring is captured in [`EXECUTIVE-BRIEFS-RUN-BRIEFS-WIRING.md`](./EXECUTIVE-BRIEFS-RUN-BRIEFS-WIRING.md): `marketing-brief` is the Executive Brief card, `brief-marketing` is the standalone Market Brief, `brief-strategy` is the Strategy Brief, `onboarding-brief` is the Creative Brief, and `brief-performance` is the Website Developer Brief.
 
 ---
 

@@ -13,11 +13,21 @@ const fb = require('../../api/_lib/firebase-admin.cjs');
 // identically (no data-presence gating). Default ON (except creativeBrief).
 const INCLUDE_KEYS = [
   'execBriefLink',    // "Open Executive Brief" CTA button (top + footer)
+  'contactHuman',     // "Contact Your Human" CTA button (opens contactUrl / Calendly)
   'execSummary',      // LLM executive-summary paragraph
+  'videoPosts',       // Video Remix "Post content" rows (video + X promo post)
   'agenda',           // Today's Agenda (calendar)
-  'marketingBrief',   // Strategic Brief (opportunities / KOLs / competitors / narratives)
+  'weather',          // Local weather forecast
+  'followerPosts',    // 1 post from each followed handle
   'watchlist',        // "Happening on X" watchlist analysis
   'creativeBrief',    // Attached Creative Brief deliverable
+  // Market Signals · Strategic-brief items (each individually toggled)
+  'humanBrief',       // Human brief blurb
+  'opportunities',    // Post opportunities (Conversation / angle)
+  'signals',          // KOLs / competitors / narratives
+  'watchlistAccounts',// Watchlist accounts (name-for-name)
+  'suggestedPosts',   // Suggested posts
+  'planPreview',      // 30-day plan preview
   'platformOverview', // Platform Overview stat cells
   'ga4Traffic',       // GA4 Traffic overview
   'topPages',         // GA4 Top Pages
@@ -30,24 +40,39 @@ const INCLUDE_KEYS = [
   'deployments',      // Vercel Deployments
   'runtimeErrors',    // Vercel Runtime Errors
 ];
+// Tease-by-default: a NEW config shows only the short "tease" core (summary,
+// agenda, new sign-ups, both CTAs). Everything heavier is OFF — the full detail
+// lives in the linked Executive Brief; the admin opts each extra section in.
+// NOTE: only applies to brand-new / missing keys — existing saved configs keep
+// whatever they saved (normalizeInclude overlays saved keys on top of this).
 const DEFAULT_INCLUDE = {
   execBriefLink: true,
+  contactHuman: true,
   execSummary: true,
   agenda: true,
-  marketingBrief: true,
-  watchlist: true,
-  creativeBrief: false,
-  platformOverview: true,
-  ga4Traffic: true,
-  topPages: true,
-  trafficSources: true,
-  keyEvents: true,
-  homepage: true,
+  weather: true,
+  followerPosts: true,
   signups: true,
-  dashboards: true,
-  pipeline: true,
-  deployments: true,
-  runtimeErrors: true,
+  // ── opt-in extras (off by default) ──
+  videoPosts: false,
+  humanBrief: false,
+  opportunities: false,
+  signals: false,
+  watchlistAccounts: false,
+  suggestedPosts: false,
+  planPreview: false,
+  watchlist: false,
+  creativeBrief: false,
+  platformOverview: false,
+  ga4Traffic: false,
+  topPages: false,
+  trafficSources: false,
+  keyEvents: false,
+  homepage: false,
+  dashboards: false,
+  pipeline: false,
+  deployments: false,
+  runtimeErrors: false,
 };
 
 // Legacy coarse keys (the pre-granular schema). A saved doc using these expands
@@ -58,7 +83,7 @@ const LEGACY_INCLUDE_EXPANSION = {
   webStats: ['ga4Traffic', 'topPages', 'trafficSources', 'keyEvents', 'homepage'],
   platformStats: ['platformOverview', 'signups', 'dashboards', 'pipeline'],
   deployments: ['deployments', 'runtimeErrors'],
-  marketingBrief: ['marketingBrief', 'watchlist'],
+  marketingBrief: ['humanBrief', 'opportunities', 'signals', 'watchlistAccounts', 'suggestedPosts', 'planPreview', 'watchlist'],
   creativeBrief: ['creativeBrief'],
 };
 
@@ -72,6 +97,24 @@ const DEFAULT_BRIEF_LINK_MODE = 'fresh';
 // Send schedule. Enforcement (turning this into per-recipient cron dispatch) is
 // a later phase; for now these values are stored and surfaced, the existing
 // Vercel cron still fires the run.
+// Section order. The admin can shuffle sections up/down WITHIN their group; the
+// email renders each group's items in this saved order. CTAs (execBriefLink /
+// contactHuman) are not part of the section flow, so they're excluded.
+const ORDERABLE_KEYS = INCLUDE_KEYS.filter((k) => !['execBriefLink', 'contactHuman'].includes(k));
+const DEFAULT_ORDER = [...ORDERABLE_KEYS];
+
+function normalizeOrder(value) {
+  const seen = new Set();
+  const out = [];
+  if (Array.isArray(value)) {
+    for (const k of value) {
+      if (ORDERABLE_KEYS.includes(k) && !seen.has(k)) { seen.add(k); out.push(k); }
+    }
+  }
+  for (const k of ORDERABLE_KEYS) if (!seen.has(k)) out.push(k); // append any missing
+  return out;
+}
+
 const SCHEDULE_FREQUENCIES = ['daily', 'weekly', 'off'];
 const DEFAULT_SCHEDULE = {
   enabled: true,
@@ -90,8 +133,10 @@ const DEFAULTS = {
   homeClientId: null,      // brain + primary brief source (defaults to email-resolved client)
   includeClientIds: [],    // additional clients whose latest brief to fold in
   include: { ...DEFAULT_INCLUDE },
+  order: [...DEFAULT_ORDER],
   schedule: { ...DEFAULT_SCHEDULE },
   briefLinkMode: DEFAULT_BRIEF_LINK_MODE, // how the Executive Brief link resolves
+  contactUrl: '',          // "Contact Your Human" CTA target (Calendly etc.); env DIGEST_CONTACT_URL is the fallback
 };
 
 function clampInt(value, min, max, fallback) {
@@ -157,8 +202,10 @@ async function getDigestConfig(clientId) {
     homeClientId: data.homeClientId || null,
     includeClientIds: cleanIdList(data.includeClientIds),
     include: normalizeInclude(data.include),
+    order: normalizeOrder(data.order),
     schedule: normalizeSchedule(data.schedule),
     briefLinkMode: normalizeBriefLinkMode(data.briefLinkMode),
+    contactUrl: typeof data.contactUrl === 'string' ? data.contactUrl : '',
     updatedAt: data.updatedAt?.toDate?.()?.toISOString?.() || null,
   };
 }
@@ -174,8 +221,10 @@ async function saveDigestConfig(clientId, patch = {}) {
   if ('homeClientId' in patch) next.homeClientId = patch.homeClientId ? String(patch.homeClientId).trim() : null;
   if ('includeClientIds' in patch) next.includeClientIds = cleanIdList(patch.includeClientIds);
   if ('include' in patch) next.include = normalizeInclude(patch.include);
+  if ('order' in patch) next.order = normalizeOrder(patch.order);
   if ('schedule' in patch) next.schedule = normalizeSchedule(patch.schedule);
   if ('briefLinkMode' in patch) next.briefLinkMode = normalizeBriefLinkMode(patch.briefLinkMode);
+  if (typeof patch.contactUrl === 'string') next.contactUrl = patch.contactUrl.trim().slice(0, 500);
   next.updatedAt = fb.FieldValue.serverTimestamp();
   await configDocRef(clientId).set(next, { merge: true });
   return getDigestConfig(clientId);
@@ -274,6 +323,8 @@ module.exports = {
   DEFAULTS,
   INCLUDE_KEYS,
   DEFAULT_INCLUDE,
+  ORDERABLE_KEYS,
+  DEFAULT_ORDER,
   BRIEF_LINK_MODES,
   getDigestConfig,
   saveDigestConfig,
