@@ -1767,6 +1767,20 @@ export async function GET(request) {
     let videoItems = [];
     if (include.videoPosts !== false && homeClientId) {
       try {
+        // Reconcile any in-flight remix renders first (e.g. the one the
+        // pre-digest-video cron primed ~40 min ago) so a just-finished video
+        // lands in mediaCaptures before we read it.
+        try {
+          const mediaJobsLib = require('../../../../api/_lib/media-jobs.cjs');
+          const { reconcileMediaJob } = require('../../../../api/_lib/media-reconcile.cjs');
+          const inflight = await mediaJobsLib.listInFlightMediaJobs(20);
+          for (const job of inflight) {
+            if (job?.clientId !== homeClientId) continue;
+            try { await reconcileMediaJob(job, homeClientId); } catch { /* per-job best-effort */ }
+          }
+        } catch (e) {
+          logWarn('daily_digest_media_reconcile_failed', { error: e.message });
+        }
         const dsSnap = await fb.adminDb.collection('dashboard_state').doc(homeClientId).get();
         const caps = (dsSnap.data()?.mediaCaptures || [])
           .filter((c) => c?.type === 'video_remix' && c?.downloadUrl)
