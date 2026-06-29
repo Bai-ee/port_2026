@@ -208,7 +208,8 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
     if (!user) return;
     if (typeof window !== 'undefined' && !window.confirm('Generate fresh digest data first, then send the email to the configured recipient? Saves your current settings and runs the refresh worker (LLM cost).')) return;
     setTermOpen(true);
-    setTermLines([{ type: 'info', text: '▶ Generate & Send — refreshing every digest client, then emailing…' }]);
+    const freshnessToken = `digest-ui-${Date.now().toString(36)}`;
+    setTermLines([{ type: 'info', text: '▶ Generate & Send — refreshing every digest client, then emailing…' }, { type: 'info', text: `Freshness token · ${freshnessToken}` }]);
     setSendStatus({ kind: 'pending', msg: 'Saving settings…' });
     let refreshHeartbeat = null;
     try {
@@ -223,7 +224,7 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
         }
       }
       appendTerm('success', 'Saved config ✓');
-      appendTerm('info', 'Step 1/2 · Refreshing Scout, watchlist timelines, Strategy Builder, and Executive Summary…');
+      appendTerm('info', 'Step 1/2 · Refreshing site/creative modules, Scout, watchlist timelines, Strategy Builder, and Executive Summary…');
       const digestClientIds = [...new Set([
         savedConfig?.homeClientId || clientId,
         ...((savedConfig?.includeClientIds || []).filter(Boolean)),
@@ -241,7 +242,7 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
           }, 30000);
         }
         // eslint-disable-next-line no-await-in-loop
-        const refresh = await authFetch(user, `/api/worker/pre-digest-refresh?clientId=${encodeURIComponent(cid)}`, { method: 'POST', body: '{}' });
+        const refresh = await authFetch(user, `/api/worker/pre-digest-refresh?clientId=${encodeURIComponent(cid)}&freshnessToken=${encodeURIComponent(freshnessToken)}`, { method: 'POST', body: '{}' });
         if (refreshHeartbeat) {
           window.clearInterval(refreshHeartbeat);
           refreshHeartbeat = null;
@@ -249,12 +250,13 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
         refreshResults.push(...(Array.isArray(refresh?.results) ? refresh.results : []));
       }
       refreshResults.forEach((r) => {
+        const modules = r?.modules?.ok ? `modules ok${Array.isArray(r?.modules?.modules) ? ` (${r.modules.modules.filter((m) => m.ok).length}/${r.modules.modules.length})` : ''}` : `modules issue${r?.modules?.error ? `: ${r.modules.error}` : ''}`;
         const scout = r?.scout?.ok ? 'scout ok' : `scout issue${r?.scout?.error ? `: ${r.scout.error}` : ''}`;
         const watch = r?.watchlist?.ok ? `watchlist ok${Number.isFinite(r?.watchlist?.handles) ? ` (${r.watchlist.handles} handles)` : ''}` : (r?.watchlist?.skipped ? `watchlist skipped (${r.watchlist.skipped})` : `watchlist issue${r?.watchlist?.error ? `: ${r.watchlist.error}` : ''}`);
         const strategy = r?.strategy?.ok ? 'strategy ok' : `strategy issue${r?.strategy?.error ? `: ${r.strategy.error}` : ''}`;
         const executiveSummary = r?.executiveSummary?.ok ? 'executive summary ok' : `executive summary issue${r?.executiveSummary?.error ? `: ${r.executiveSummary.error}` : ''}`;
         const hasWatchlistWarning = Array.isArray(r?.warnings) && r.warnings.some((warning) => warning?.source === 'watchlist');
-        appendTerm(r?.ok ? (hasWatchlistWarning ? 'info' : 'success') : 'error', `Refresh · ${r?.clientId || 'client'} · ${scout} · ${watch} · ${strategy} · ${executiveSummary}`);
+        appendTerm(r?.ok ? (hasWatchlistWarning ? 'info' : 'success') : 'error', `Refresh · ${r?.clientId || 'client'} · ${modules} · ${scout} · ${watch} · ${strategy} · ${executiveSummary}`);
       });
       if (!refreshResults.length || refreshResults.some((r) => !r?.ok)) {
         appendTerm('error', 'Refresh did not complete cleanly. Email not sent; fix the refresh issue or send latest saved data from a separate fallback control.');
@@ -265,7 +267,7 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
 
       appendTerm('info', 'Step 2/2 · Rendering and sending email from saved data…');
       setSendStatus({ kind: 'pending', msg: 'Sending email from saved data…' });
-      const res = await authFetch(user, '/api/admin/daily-digest?send=1&skipRefresh=1');
+      const res = await authFetch(user, `/api/admin/daily-digest?send=1&skipRefresh=1&freshnessToken=${encodeURIComponent(freshnessToken)}`);
       (Array.isArray(res?.log) ? res.log : []).forEach((l) => appendTerm(l.type || 'info', l.text));
       if (res?.subject) appendTerm('info', `Subject · ${res.subject}`);
       appendTerm('success', 'Done ✓ — refreshed first, then sent');

@@ -51,7 +51,7 @@ async function getLatestPublishedBrief(clientId) {
 }
 
 /** Render the standalone Executive Brief HTML for a client from dashboard_state. */
-async function renderExecutiveBriefHtml(clientId, client) {
+async function renderExecutiveBriefHtml(clientId, client, { freshnessToken = '' } = {}) {
   // Dynamic import: the renderer is exported from the (ESM) brief-preview route.
   const mod = await import('../../app/api/dashboard/brief-preview/route.js');
   const render = mod.renderMarketingBriefHtml || mod.default?.renderMarketingBriefHtml;
@@ -103,6 +103,7 @@ async function renderExecutiveBriefHtml(clientId, client) {
     signalsCore: Array.isArray(dash.signals?.core) ? dash.signals.core : [],
     dashboardState: dash,
     coverSummary: freshExecutiveSummary,
+    freshnessToken,
     briefType: 'executive-daily',
   });
 }
@@ -151,7 +152,7 @@ async function publishBriefDoc({ clientId, client, html }) {
  *   false so it never publishes (just links the newest published brief).
  * @returns {Promise<string|null>} absolute URL, or null to use the caller's fallback.
  */
-async function resolveExecutiveBriefUrl({ clientId, mode = 'fresh', origin = '', allowFreshRun = false } = {}) {
+async function resolveExecutiveBriefUrl({ clientId, mode = 'fresh', origin = '', allowFreshRun = false, freshnessToken = '' } = {}) {
   if (!clientId || mode === 'off') return null;
   const base = String(origin || '').replace(/\/+$/, '');
   const abs = (path) => (path ? `${base}${path}` : null);
@@ -166,7 +167,7 @@ async function resolveExecutiveBriefUrl({ clientId, mode = 'fresh', origin = '',
   // publish it to today's hosted slug, overwriting any stale same-day content.
   if (mode === 'fresh' && allowFreshRun) {
     try {
-      const html = await renderExecutiveBriefHtml(clientId, client);
+      const html = await renderExecutiveBriefHtml(clientId, client, { freshnessToken });
       const path = await publishBriefDoc({ clientId, client, html });
       return abs(path);
     } catch {

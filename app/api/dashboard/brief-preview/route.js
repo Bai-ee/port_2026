@@ -142,7 +142,7 @@ function hostnameOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return String(url); }
 }
 
-function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [], weather = null, moduleBriefs = [], auditMockupUrl = null, studioVideoUrl = null, socialPreviewImageUrl = null, siteMeta = null, fullPageScreenshots = null, company = null, researchConfig = null, strategyData = null, signalsCore = [], socialQueue = [], briefType = DEFAULT_BRIEF_TYPE, coverSummary = null, previousRunAt = null, displayLabel = null, dashboardState = null }) {
+function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [], weather = null, moduleBriefs = [], auditMockupUrl = null, studioVideoUrl = null, socialPreviewImageUrl = null, siteMeta = null, fullPageScreenshots = null, company = null, researchConfig = null, strategyData = null, signalsCore = [], socialQueue = [], briefType = DEFAULT_BRIEF_TYPE, coverSummary = null, previousRunAt = null, displayLabel = null, dashboardState = null, freshnessToken = '' }) {
   const content = marketingBrief?.content || {};
   const agentData = marketingBrief?.scoutBrief?.agentData || {};
   // Single source of truth: every signal array is derived from the shared
@@ -327,6 +327,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
         timeZone: BRIEF_TZ, month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
       })
     : null;
+  const freshnessTokenText = String(freshnessToken || dashboardState?.digestFreshness?.token || '').trim();
 
   // ── Bento helpers — executive narrative boards. One number or one phrase
   // per tile; detail demoted to .foot. ──
@@ -854,6 +855,16 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
       ${failedPosts.map((p) => valRow('✗ Failed', `<span style="color:#b42318">${esc(postText(p) || 'Post failed to publish')}</span>`)).join('')}
     </div>
   </section>`;
+  const freshnessSection = freshnessTokenText ? `
+  <section class="page">
+    <div class="sec-num">FX</div>
+    ${kicker('Verification')}
+    <h2 class="headline">Freshness<br/>Token.</h2>
+    <div class="card">
+      ${valRow('Run token', esc(freshnessTokenText))}
+      ${dashboardState?.digestFreshness?.generatedAt ? valRow('Captured', esc(dashboardState.digestFreshness.generatedAt)) : ''}
+    </div>
+  </section>` : '';
 
   // ── Assembly — section id → rendered HTML, ordered by the named brief's
   // composition (features/scout-intake/brief-sections.cjs). Conditional
@@ -880,12 +891,16 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     'todays-move': todaysMoveSection,
     'campaign-30day': campaignSection,
     'post-schedule': postScheduleSection,
+    'freshness-token': freshnessSection,
   };
   const composition = getComposition(briefType);
   // Display label: caller may override (Onboarding vs Executive by run sequence);
   // named agent briefs fall back to the composition label.
   const briefLabel = displayLabel || composition.label;
-  const bodySections = composition.sections.map((id) => sectionHtmlById[id] || '').join('\n');
+  const bodySections = [
+    ...composition.sections.map((id) => sectionHtmlById[id] || ''),
+    freshnessSection,
+  ].join('\n');
 
   // Cover sub: the per-brief AI cover paragraph (briefSummaries) when present,
   // else the run headline. The executive JARVIS brief is multi-paragraph —
@@ -1949,6 +1964,7 @@ async function handleGet(request) {
     // Override the cover/title label for the main brief by run sequence.
     displayLabel: isMainBrief ? mainBriefLabel : null,
     dashboardState: dash,
+    freshnessToken: request.nextUrl?.searchParams?.get('freshnessToken') || '',
   });
 
   if (preferMarketingBrief) {

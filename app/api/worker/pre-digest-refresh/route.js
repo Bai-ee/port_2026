@@ -24,16 +24,23 @@ export const maxDuration = 300;
 const require = createRequire(import.meta.url);
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
 const { buildAuthRequestShim, getHeaderValue, safeSecretEquals, verifyAdminRequest } = require('../../../../api/_lib/auth.cjs');
-const { claimRun, completeRun, failRun, appendRunEvent } = require('../../../../api/_lib/run-lifecycle.cjs');
+const { claimRun, completeRun, failRun, appendRunEvent, updateModuleState } = require('../../../../api/_lib/run-lifecycle.cjs');
 const { logError, logInfo } = require('../../../../api/_lib/observability.cjs');
 const digestConfig = require('../../../../features/intelligence/_digest-config.js');
 const { runWatchlistPull } = require('../../../../features/scout-intake/watchlist-pull');
+const { buildModuleBriefs } = require('../../../../features/scout-intake/module-brief-builder.js');
+const { getDefaultModuleConfig } = require('../../../../features/scout-intake/module-registry');
+const { FALLBACK_BRIEF_SITE } = require('../../../../api/_lib/brief-fallback.cjs');
 
 import { generateStrategyPlan } from '../../../../features/strategy-builder/generate-plan.js';
 import { generateBriefSummaries } from '../../../../features/scout-intake/brief-summary-runner.mjs';
 
 function getPipeline() {
   return require('../../../../features/not-the-rug-brief/runtime');
+}
+
+function getIntakeRunner() {
+  return require('../../../../features/scout-intake/runner');
 }
 
 function json(body, status = 200) {
@@ -160,14 +167,141 @@ async function refreshStrategyPlan(clientId) {
   }
 }
 
-/** Regenerate the Executive Brief cover/final-analysis summary after Scout and
- *  Strategy Builder have both written fresh state. */
-async function refreshExecutiveSummary(clientId, runId = null) {
+/** Refresh website/creative module facts so the Executive Brief's site,
+ *  performance, and creative sections are captured in this run. */
+async function refreshSiteCreativeModules(clientId, freshnessToken = '') {
+  let clientConfig;
+  try {
+    const configRef = fb.adminDb.collection('client_configs').doc(clientId);
+    const configSnap = await configRef.get();
+    if (!configSnap.exists) return { ok: false, error: 'No client config.' };
+    clientConfig = configSnap.data() || {};
+    if (!clientConfig.moduleConfig) {
+      clientConfig.moduleConfig = getDefaultModuleConfig();
+      await configRef.set({ moduleConfig: clientConfig.moduleConfig, updatedAt: fb.FieldValue.serverTimestamp() }, { merge: true });
+    }
+  } catch (err) {
+    return { ok: false, error: `client config/module config failed: ${err.message}` };
+  }
+
+  const ownSiteUrl = clientConfig?.sourceInputs?.websiteUrl || clientConfig?.websiteUrl || null;
+  const websiteUrl = ownSiteUrl || FALLBACK_BRIEF_SITE;
+  const moduleIds = Array.from(new Set([
+    ...Object.entries(clientConfig.moduleConfig || {})
+      .filter(([, cfg]) => cfg?.enabled === true)
+      .map(([id]) => id),
+    'multi-device-view',
+    'seo-performance',
+    'agent-readiness',
+    'social-preview',
+    'style-guide',
+    'design-evaluation',
+  ]));
+  if (!moduleIds.length) return { ok: false, error: 'no modules configured' };
+
+  const runRef = fb.adminDb.collection('brief_runs').doc();
+  const runId = runRef.id;
+  const now = fb.FieldValue.serverTimestamp();
+  const payload = {
+    runId,
+    id: runId,
+    clientId,
+    requestedByUid: null,
+    trigger: 'pre-digest-modules',
+    source: 'cron',
+    status: 'running',
+    pipelineType: 'module-run',
+    moduleIds,
+    freshnessToken: freshnessToken || null,
+    attempts: 1,
+    workerLease: null,
+    startedAt: now,
+    completedAt: null,
+    error: null,
+    summary: null,
+    artifactRefs: [],
+    providerUsage: null,
+    moduleSnapshot: null,
+    sourceUrl: websiteUrl,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  try {
+    await Promise.all([
+      runRef.set(payload),
+      fb.adminDb.collection('clients').doc(clientId).collection('brief_runs').doc(runId).set(payload),
+    ]);
+  } catch (err) {
+    return { ok: false, runId, error: `module run doc create failed: ${err.message}` };
+  }
+
+  const onProgress = async (stage, label, extra = {}) => {
+    try {
+      await appendRunEvent(runId, clientId, {
+        stage: stage || 'progress',
+        progressLabel: label || '',
+        ...(extra || {}),
+      });
+    } catch { /* non-fatal */ }
+  };
+
+  try {
+    const { runModules } = getIntakeRunner();
+    const { results } = await runModules({ clientId, runId, websiteUrl, moduleIds, onProgress });
+    await updateModuleState(clientId, results, runId);
+    const moduleBriefs = buildModuleBriefs(results, { expectedIds: moduleIds });
+    if (moduleBriefs.length) {
+      await fb.adminDb.collection('dashboard_state').doc(clientId).set(
+        {
+          moduleBriefs: {
+            items: moduleBriefs,
+            generatedAtIso: new Date().toISOString(),
+            runId,
+          },
+          updatedAt: fb.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
+    const anyOk = results.some((r) => r.ok);
+    const artifactRefs = results.flatMap((r) => Array.isArray(r.artifacts) ? r.artifacts : []);
+    const warnings = results.flatMap((r) => Array.isArray(r.warnings) ? r.warnings : []);
+    const stageCosts = results.filter((r) => r?.runCostData).map((r) => ({ stage: r.cardId, ...r.runCostData }));
+    if (anyOk) {
+      await completeRun(runId, clientId, {
+        pipelineType: 'module-run',
+        pipelineRunId: runId,
+        artifactRefs,
+        warnings,
+        runCostData: stageCosts.length ? { stageCosts } : null,
+      });
+      return {
+        ok: true,
+        runId,
+        modules: results.map((r) => ({ moduleId: r.cardId, ok: Boolean(r.ok), error: r.errorMessage || null })),
+        generatedAt: new Date().toISOString(),
+      };
+    }
+    const err = new Error(results.map((r) => r.errorMessage).filter(Boolean).join('; ') || 'all modules failed');
+    err.stage = 'module';
+    await failRun(runId, clientId, err, 1);
+    return { ok: false, runId, error: err.message };
+  } catch (err) {
+    const runErr = new Error(err.message || 'module refresh threw');
+    runErr.stage = 'module';
+    try { await failRun(runId, clientId, runErr, 1); } catch { /* best effort */ }
+    return { ok: false, runId, error: runErr.message };
+  }
+}
+
+/** Regenerate brief cover/final-analysis summaries after fresh facts land. */
+async function refreshBriefSummaries(clientId, runId = null) {
   try {
     const result = await generateBriefSummaries({
       clientId,
       runId,
-      briefTypes: ['executive-daily'],
+      briefTypes: ['executive-daily', 'onboarding'],
     });
     return result.ok
       ? { ok: true, written: result.written || [] }
@@ -213,22 +347,40 @@ async function refreshWatchlist(clientId) {
 
 /** Refresh one client's scout brief + watchlist timelines + strategy plan.
  *  Sequential (strategy reads fresh scout). Never throws. */
-export async function refreshDigestClient(clientId) {
+export async function refreshDigestClient(clientId, { freshnessToken = '' } = {}) {
   if (!clientId) return { ok: false, error: 'no clientId' };
-  const scout = await refreshScoutBrief(clientId);
-  const watchlist = await refreshWatchlist(clientId);
+  const [modules, scout, watchlist] = await Promise.all([
+    refreshSiteCreativeModules(clientId, freshnessToken),
+    refreshScoutBrief(clientId),
+    refreshWatchlist(clientId),
+  ]);
   const strategy = await refreshStrategyPlan(clientId);
-  const executiveSummary = await refreshExecutiveSummary(clientId, scout?.runId || null);
+  const briefSummaries = await refreshBriefSummaries(clientId, scout?.runId || modules?.runId || null);
+  const digestFreshness = {
+    token: freshnessToken || null,
+    generatedAt: new Date().toISOString(),
+    modulesGeneratedAt: modules?.generatedAt || null,
+    scoutRunId: scout?.runId || null,
+    moduleRunId: modules?.runId || null,
+    strategyOk: Boolean(strategy?.ok),
+    summaries: briefSummaries?.written || [],
+  };
+  await fb.adminDb.collection('dashboard_state').doc(clientId).set(
+    { digestFreshness, updatedAt: fb.FieldValue.serverTimestamp() },
+    { merge: true }
+  ).catch(() => {});
   const watchlistWarning = !watchlist.ok && !watchlist.skipped
     ? (watchlist.error || 'watchlist pull failed')
     : null;
   return {
-    ok: scout.ok && strategy.ok && executiveSummary.ok,
+    ok: modules.ok && scout.ok && strategy.ok && briefSummaries.ok,
     clientId,
+    modules,
     scout,
     watchlist,
     strategy,
-    executiveSummary,
+    executiveSummary: briefSummaries,
+    digestFreshness,
     warnings: watchlistWarning ? [{ source: 'watchlist', message: watchlistWarning }] : [],
   };
 }
@@ -238,6 +390,7 @@ async function handle(request) {
   const REFRESH_RESPONSE_BUDGET_MS = 270_000;
   const url = new URL(request.url);
   const requestedClientId = String(url.searchParams.get('clientId') || '').trim();
+  const freshnessToken = String(url.searchParams.get('freshnessToken') || '').trim().slice(0, 160);
   const cronOk = hasValidCronSecret(request);
   let adminOk = false;
   if (!cronOk) {
@@ -290,10 +443,11 @@ async function handle(request) {
       break;
     }
     // eslint-disable-next-line no-await-in-loop
-    const result = await refreshDigestClient(clientId);
+    const result = await refreshDigestClient(clientId, { freshnessToken });
     results.push(result);
     logInfo('pre_digest_refresh_client_done', {
       clientId,
+      modulesOk: result.modules?.ok,
       scoutOk: result.scout?.ok,
       watchlistOk: result.watchlist?.ok,
       watchlistWarning: result.warnings?.find((warning) => warning.source === 'watchlist')?.message,
@@ -314,10 +468,12 @@ async function handle(request) {
     clientIds,
     complete,
     results,
+    modules: primary?.modules || null,
     scout: primary?.scout || null,
     watchlist: primary?.watchlist || null,
     strategy: primary?.strategy || null,
     executiveSummary: primary?.executiveSummary || null,
+    digestFreshness: primary?.digestFreshness || null,
   }, ok ? 200 : 207);
 }
 

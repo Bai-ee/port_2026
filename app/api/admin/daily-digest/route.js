@@ -1185,7 +1185,7 @@ function buildCreativeBriefSection(creative) {
   return `${img}${generatedAt}<p style="font-family:${DT.fBody};font-size:14px;line-height:1.62;color:${DT.ink};margin:0;">${text}</p>`;
 }
 
-function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, include = {}, creative = null, briefUrl = null, contactUrl = '', videoItems = [], order = [], postPlatforms = {}) {
+function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, include = {}, creative = null, briefUrl = null, contactUrl = '', videoItems = [], order = [], postPlatforms = {}, freshnessToken = '') {
   // Fallback target when no hosted brief is resolved (briefLinkMode 'off' /
   // 'latest' with nothing published / 'fresh' run failed): the dashboard modal.
   const executiveBriefUrl = appUrl('/dashboard?open=brief');
@@ -1371,6 +1371,10 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
   const webPerfSection = renderGroup(['ga4Traffic', 'topPages', 'trafficSources', 'keyEvents', 'homepage']);
   const platformSection = renderGroup(['platformOverview', 'signups', 'dashboards', 'pipeline']);
   const opsSection = renderGroup(['deployments', 'runtimeErrors']);
+  const freshnessTokenText = String(freshnessToken || '').trim();
+  const freshnessSection = freshnessTokenText
+    ? dSection('Verification', 'Freshness Token', `<div style="background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:16px 18px;font-family:${DT.fMono};font-size:12px;line-height:1.5;color:${DT.ink};word-break:break-word;">${escapeHtml(freshnessTokenText)}</div>`)
+    : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -1424,6 +1428,7 @@ a{text-decoration:none;}
           ${webPerfSection}
           ${platformSection}
           ${opsSection}
+          ${freshnessSection}
 
           <!-- Bottom CTA row (Brief + Contact Your Human) -->
           ${ctaRow ? `<div style="border-top:1px solid ${DT.line};padding-top:28px;margin-top:32px;">${ctaRow}</div>` : ''}
@@ -1431,6 +1436,7 @@ a{text-decoration:none;}
           <!-- Footer -->
           <div style="border-top:1.5px solid ${DT.line};padding-top:22px;margin-top:32px;">
             <div style="font-family:${DT.fMono};font-size:10px;letter-spacing:.08em;color:${DT.light};margin-bottom:10px;">Generated ${new Date(timestamp).toLocaleTimeString('en-US')}</div>
+            ${freshnessTokenText ? `<div style="font-family:${DT.fMono};font-size:10px;letter-spacing:.04em;color:${DT.light};margin-bottom:10px;">Freshness token ${escapeHtml(freshnessTokenText)}</div>` : ''}
             <div style="font-family:${DT.fMono};font-size:10px;letter-spacing:.06em;">
               <a href="${escapeHtml(briefLinkUrl)}" style="color:${DT.accent};">Executive Brief</a> &nbsp;&middot;&nbsp;
               ${showContact ? `<a href="${contactHref}" style="color:${DT.accent};">Contact Your Human</a> &nbsp;&middot;&nbsp;` : ''}
@@ -1684,6 +1690,8 @@ export async function GET(request) {
   const isPreview = previewParam === '1';
   const isTemplate = previewParam === 'template';
   const isSendNow = url.searchParams.get('send') === '1';
+  const freshnessToken = String(url.searchParams.get('freshnessToken') || '').trim().slice(0, 160);
+  const returnHtml = url.searchParams.get('returnHtml') === '1';
 
   // Optional `include` override (preview only): comma-separated list of the
   // section keys to turn ON, so the Email Digest card can preview the layout
@@ -1749,7 +1757,7 @@ export async function GET(request) {
         remix: { url: 'https://example.com/remix-1.mp4', duration: 30, caption: 'Stop scrolling — this 30s cut shows exactly how we turn raw clips into a launch-ready edit. Built for the feed. ▶ #creative' },
         promo: { url: 'https://example.com/promo-1.mp4', duration: 22, caption: 'Your site, reimagined as a social-ready promo. Watch the 3D mockup walkthrough — then ship it. #promo' },
       };
-      const html = buildEmailHtml(ph.firebase, ph.vercel, ph.ga4, ph.agenda, ph.homepage, ts, ph.summary, ph.briefs, include, ph.creative, sampleBriefUrl, sampleContactUrl, sampleVideoItems, orderOverride || digestConfig.DEFAULT_ORDER, postsOverride || digestConfig.DEFAULT_POST_PLATFORMS);
+      const html = buildEmailHtml(ph.firebase, ph.vercel, ph.ga4, ph.agenda, ph.homepage, ts, ph.summary, ph.briefs, include, ph.creative, sampleBriefUrl, sampleContactUrl, sampleVideoItems, orderOverride || digestConfig.DEFAULT_ORDER, postsOverride || digestConfig.DEFAULT_POST_PLATFORMS, freshnessToken);
       return json({ ok: true, template: true, placeholder: true, timestamp: new Date(ts).toISOString(), paragraph: ph.summary.paragraph, html });
     } catch (err) {
       logError('daily_digest_template_error', { error: err.message });
@@ -2008,6 +2016,7 @@ export async function GET(request) {
           mode: briefLinkMode,
           origin: appOrigin(),
           allowFreshRun: !isPreview, // preview tab never triggers a paid run
+          freshnessToken,
         });
       } catch (err) {
         logWarn('daily_digest_brief_link_failed', { error: err.message });
@@ -2020,7 +2029,7 @@ export async function GET(request) {
     if (isRealSend) step('info', `Executive Brief · ${briefUrl || 'dashboard fallback'}`);
     const sectionOrder = orderOverride || digestCfg?.order || digestConfig.DEFAULT_ORDER;
     const postPlatforms = postsOverride || digestCfg?.postPlatforms || {};
-    const html = buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, renderInclude, creative, briefUrl, contactUrl, videoItems, sectionOrder, postPlatforms);
+    const html = buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, renderInclude, creative, briefUrl, contactUrl, videoItems, sectionOrder, postPlatforms, freshnessToken);
     if (isRealSend) {
       const onCount = digestConfig.INCLUDE_KEYS.filter((k) => include[k] !== false).length;
       step('success', `Rendered email · ${onCount} section${onCount !== 1 ? 's' : ''} on`);
@@ -2035,6 +2044,7 @@ export async function GET(request) {
         paragraph: summary?.paragraph || '',
         summary,
         html,
+        freshnessToken,
       });
     }
 
@@ -2062,6 +2072,23 @@ export async function GET(request) {
       } : null,
       subject,
       log: sendLog,
+      freshnessToken,
+      html: returnHtml ? html : undefined,
+      freshness: {
+        token: freshnessToken || null,
+        emailContainsToken: freshnessToken ? html.includes(freshnessToken) : null,
+        briefUrl,
+        sources: {
+          firebasePulledAt: new Date(timestamp).toISOString(),
+          vercelPulledAt: new Date(timestamp).toISOString(),
+          ga4PulledAt: new Date(timestamp).toISOString(),
+          agendaPulledAt: new Date(timestamp).toISOString(),
+          homepagePulledAt: new Date(timestamp).toISOString(),
+          briefGeneratedAt: briefs[0]?.intel?.generatedAt || null,
+          strategyGeneratedAt: briefs[0]?.intel?.strategyBuilder?.generatedAt || null,
+          creativeGeneratedAt: creative?.generatedAt || null,
+        },
+      },
     });
   } catch (err) {
     logError('daily_digest_route_error', { error: err });
