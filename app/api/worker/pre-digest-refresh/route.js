@@ -27,6 +27,7 @@ const { getHeaderValue, safeSecretEquals } = require('../../../../api/_lib/auth.
 const { claimRun, completeRun, failRun, appendRunEvent } = require('../../../../api/_lib/run-lifecycle.cjs');
 const { logError, logInfo } = require('../../../../api/_lib/observability.cjs');
 const digestConfig = require('../../../../features/intelligence/_digest-config.js');
+const { runWatchlistPull } = require('../../../../features/scout-intake/watchlist-pull');
 
 import { generateStrategyPlan } from '../../../../features/strategy-builder/generate-plan.js';
 
@@ -158,15 +159,50 @@ async function refreshStrategyPlan(clientId) {
   }
 }
 
-/** Refresh one client's scout brief + strategy plan — the pre-digest refresh,
- *  callable directly from the daily-digest send path so Run & Send and the
- *  scheduled cron both produce fresh data before the email is built. Sequential
- *  (strategy reads fresh scout). Never throws. */
+/** Refresh the followed-handle X timelines so the digest's watchlist renders
+ *  fresh activity (the scout doesn't pull X, so without this the follows go
+ *  stale / empty). Best-effort: the X pull can be flaky and never blocks the
+ *  email — buildWatchlist falls back to whatever timelines already exist. */
+async function refreshWatchlist(clientId) {
+  try {
+    const cfgSnap = await fb.adminDb.collection('client_configs').doc(clientId).get();
+    const clientConfig = cfgSnap.exists ? cfgSnap.data() : {};
+    if (!(clientConfig?.marketingBriefConfig?.kols || []).length) return { ok: false, skipped: 'no-kols' };
+    const result = await runWatchlistPull({ clientId, clientConfig, detail: true });
+    if (!result?.ok) return { ok: false, error: result?.error || 'pull failed' };
+    const generatedAt = new Date().toISOString();
+    const compactItem = (it) => ({
+      author: it.author || '', text: String(it.text || '').slice(0, 600), url: it.url || '',
+      likes: it.likes || 0, replies: it.replies || 0, reposts: it.reposts || 0, publishedAt: it.publishedAt || null,
+    });
+    const handles = (result.handles || [])
+      .filter((h) => (h.ownPosts?.length || h.mentions?.length))
+      .map((h) => ({
+        handle: h.handle, engagementTotal: h.engagementTotal || 0,
+        ownPosts: (h.ownPosts || []).slice(0, 8).map(compactItem),
+        mentions: (h.mentions || []).slice(0, 12).map(compactItem),
+      }));
+    const patch = { marketingBrief: { watchlistTimelines: { handles, spotlight: result.spotlight || null, detail: true, generatedAt } } };
+    if (result?.analysis?.text) patch.marketingBrief.reportSnapshot = { watchlistAnalysis: { text: result.analysis.text, generatedAt } };
+    await fb.adminDb.collection('dashboard_state').doc(clientId).set(patch, { merge: true });
+    logInfo('pre_digest_watchlist_refresh', { clientId, handles: handles.length });
+    return { ok: true, handles: handles.length };
+  } catch (err) {
+    logError('pre_digest_watchlist_refresh_failed', { clientId, error: err.message });
+    return { ok: false, error: err.message };
+  }
+}
+
+/** Refresh one client's scout brief + watchlist timelines + strategy plan — the
+ *  pre-digest refresh, callable directly from the daily-digest send path so Run &
+ *  Send and the scheduled cron both produce fresh data before the email is built.
+ *  Sequential (strategy reads fresh scout). Never throws. */
 export async function refreshDigestClient(clientId) {
   if (!clientId) return { ok: false, error: 'no clientId' };
   const scout = await refreshScoutBrief(clientId);
+  const watchlist = await refreshWatchlist(clientId);
   const strategy = await refreshStrategyPlan(clientId);
-  return { ok: scout.ok && strategy.ok, clientId, scout, strategy };
+  return { ok: scout.ok && strategy.ok, clientId, scout, watchlist, strategy };
 }
 
 async function handle(request) {
