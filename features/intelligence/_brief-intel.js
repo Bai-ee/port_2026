@@ -308,7 +308,21 @@ async function getCreativeBriefForClient(clientId) {
     if (!snap.exists) return null;
     const data = snap.data() || {};
     const onboarding = data.briefSummaries?.onboarding || null;
-    const summary = String(onboarding?.summary || '').trim();
+    const moduleItems = arr(data.moduleBriefs?.items)
+      .filter((item) => item?.section === 'creative' && item.status !== 'failed' && item.status !== 'missing');
+    const moduleGeneratedAt = data.moduleBriefs?.generatedAtIso || null;
+    const onboardingMs = Date.parse(onboarding?.generatedAtIso || '');
+    const moduleMs = Date.parse(moduleGeneratedAt || '');
+    const moduleIsNewer = Number.isFinite(moduleMs) && (!Number.isFinite(onboardingMs) || moduleMs > onboardingMs + 5 * 60 * 1000);
+    let summary = String(onboarding?.summary || '').trim();
+    let generatedAt = onboarding?.generatedAtIso || null;
+    if (moduleIsNewer && moduleItems.length) {
+      summary = moduleItems
+        .slice(0, 4)
+        .map((item) => `${item.title || item.moduleId}: ${item.summaryLine || 'Captured in the latest creative module brief.'}`)
+        .join('\n');
+      generatedAt = moduleGeneratedAt;
+    }
     if (!summary) return null;
     let clientName = '';
     try {
@@ -318,7 +332,7 @@ async function getCreativeBriefForClient(clientId) {
     return {
       clientName,
       summary,
-      generatedAt: onboarding?.generatedAtIso || null,
+      generatedAt,
       image: data.artifacts?.homepageDeviceMockup?.downloadUrl || data.siteMeta?.ogImage || null,
     };
   } catch {

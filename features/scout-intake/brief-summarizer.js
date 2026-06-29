@@ -181,22 +181,30 @@ const SECTION_EVIDENCE = {
   },
 
   'todays-move'(data) {
+    const strategyToday = data.strategyData?.strategyBuilder?.today || null;
+    const strategyPost = arr(strategyToday?.posts).find((post) => str(post?.content));
     const content = data.marketingBrief?.content || {};
     return [
-      line('Draft post', content.x_post || content.primary_post || content.post, 300),
-      line('Angle', content.content_angle || content.angle, 160),
+      line('Draft post', strategyPost?.content || content.x_post || content.primary_post || content.post, 300),
+      line('Angle', strategyToday?.strategy_intent || strategyPost?.rationale || content.content_angle || content.angle, 180),
     ].filter(Boolean);
   },
 
   'campaign-30day'(data) {
     const s30 = data.strategyData?.strategy30 || null;
     const strat = data.strategyData?.strategy || null;
+    const strategyBuilder = data.strategyData?.strategyBuilder || null;
+    const strategyToday = strategyBuilder?.today || null;
+    const strategyPost = arr(strategyToday?.posts).find((post) => str(post?.content));
+    const strategyItems = arr(strategyBuilder?.items).filter((item) => str(item?.content));
     const angles = arr(strat?.contentAngles)
       .map((a) => a?.angle || a?.label || (typeof a === 'string' ? a : ''))
       .filter(Boolean);
     return [
-      s30?.today ? line('Today', [s30.today.angle, s30.today.post].filter(Boolean).join(' — '), 240) : '',
-      line('Posting approach', strat?.postStrategy?.approach, 200),
+      strategyPost ? line('Today', [strategyToday?.strategy_intent, strategyPost.content].filter(Boolean).join(' — '), 260) : '',
+      !strategyPost && s30?.today ? line('Today', [s30.today.angle, s30.today.post].filter(Boolean).join(' — '), 240) : '',
+      line('Posting approach', strategyToday?.strategy_intent || strat?.postStrategy?.approach, 220),
+      strategyItems.length ? line('Upcoming Strategy Builder posts', strategyItems.slice(0, 5).map((item) => item.content).join(' · '), 300) : '',
       line('Content angles', angles.slice(0, 5).join(' · '), 200),
     ].filter(Boolean);
   },

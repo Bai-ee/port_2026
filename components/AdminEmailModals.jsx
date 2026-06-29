@@ -223,7 +223,7 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
         }
       }
       appendTerm('success', 'Saved config ✓');
-      appendTerm('info', 'Step 1/2 · Refreshing Scout, watchlist timelines, and Strategy Builder…');
+      appendTerm('info', 'Step 1/2 · Refreshing Scout, watchlist timelines, Strategy Builder, and Executive Summary…');
       const digestClientIds = [...new Set([
         savedConfig?.homeClientId || clientId,
         ...((savedConfig?.includeClientIds || []).filter(Boolean)),
@@ -252,8 +252,9 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
         const scout = r?.scout?.ok ? 'scout ok' : `scout issue${r?.scout?.error ? `: ${r.scout.error}` : ''}`;
         const watch = r?.watchlist?.ok ? `watchlist ok${Number.isFinite(r?.watchlist?.handles) ? ` (${r.watchlist.handles} handles)` : ''}` : (r?.watchlist?.skipped ? `watchlist skipped (${r.watchlist.skipped})` : `watchlist issue${r?.watchlist?.error ? `: ${r.watchlist.error}` : ''}`);
         const strategy = r?.strategy?.ok ? 'strategy ok' : `strategy issue${r?.strategy?.error ? `: ${r.strategy.error}` : ''}`;
+        const executiveSummary = r?.executiveSummary?.ok ? 'executive summary ok' : `executive summary issue${r?.executiveSummary?.error ? `: ${r.executiveSummary.error}` : ''}`;
         const hasWatchlistWarning = Array.isArray(r?.warnings) && r.warnings.some((warning) => warning?.source === 'watchlist');
-        appendTerm(r?.ok ? (hasWatchlistWarning ? 'info' : 'success') : 'error', `Refresh · ${r?.clientId || 'client'} · ${scout} · ${watch} · ${strategy}`);
+        appendTerm(r?.ok ? (hasWatchlistWarning ? 'info' : 'success') : 'error', `Refresh · ${r?.clientId || 'client'} · ${scout} · ${watch} · ${strategy} · ${executiveSummary}`);
       });
       if (!refreshResults.length || refreshResults.some((r) => !r?.ok)) {
         appendTerm('error', 'Refresh did not complete cleanly. Email not sent; fix the refresh issue or send latest saved data from a separate fallback control.');

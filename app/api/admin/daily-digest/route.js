@@ -1177,9 +1177,12 @@ function buildCreativeBriefSection(creative) {
   const img = creative.image
     ? `<img src="${escapeHtml(creative.image)}" alt="" style="width:100%;max-width:520px;border-radius:12px;border:1px solid ${DT.line};margin:0 0 14px;display:block;">`
     : '';
+  const generatedAt = creative.generatedAt
+    ? `<div style="font-family:${DT.fMono};font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:${DT.light};margin:0 0 8px;">Latest creative module brief &middot; ${escapeHtml(new Date(creative.generatedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))}</div>`
+    : '';
   const text = escapeHtml(creative.summary).replace(/\n{2,}/g, '<br><br>').replace(/\n/g, '<br>');
   // Inner content only — composed under the Creative brief header by buildEmailHtml.
-  return `${img}<p style="font-family:${DT.fBody};font-size:14px;line-height:1.62;color:${DT.ink};margin:0;">${text}</p>`;
+  return `${img}${generatedAt}<p style="font-family:${DT.fBody};font-size:14px;line-height:1.62;color:${DT.ink};margin:0;">${text}</p>`;
 }
 
 function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, include = {}, creative = null, briefUrl = null, contactUrl = '', videoItems = [], order = [], postPlatforms = {}) {
@@ -1487,7 +1490,9 @@ function selectDigestSuggestedPost(briefs, homeClientId) {
   ];
   for (const brief of ordered) {
     const content = brief?.intel?.content || {};
-    const text = content.x_post || content.primary_post || content.post || '';
+    const strategyPost = (brief?.intel?.strategyBuilder?.today?.posts || [])
+      .find((post) => String(post?.content || '').trim());
+    const text = strategyPost?.content || content.x_post || content.primary_post || content.post || '';
     if (String(text || '').trim()) {
       return {
         clientId: brief.clientId || homeClientId,

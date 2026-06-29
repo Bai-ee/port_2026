@@ -30,6 +30,7 @@ const digestConfig = require('../../../../features/intelligence/_digest-config.j
 const { runWatchlistPull } = require('../../../../features/scout-intake/watchlist-pull');
 
 import { generateStrategyPlan } from '../../../../features/strategy-builder/generate-plan.js';
+import { generateBriefSummaries } from '../../../../features/scout-intake/brief-summary-runner.mjs';
 
 function getPipeline() {
   return require('../../../../features/not-the-rug-brief/runtime');
@@ -159,6 +160,23 @@ async function refreshStrategyPlan(clientId) {
   }
 }
 
+/** Regenerate the Executive Brief cover/final-analysis summary after Scout and
+ *  Strategy Builder have both written fresh state. */
+async function refreshExecutiveSummary(clientId, runId = null) {
+  try {
+    const result = await generateBriefSummaries({
+      clientId,
+      runId,
+      briefTypes: ['executive-daily'],
+    });
+    return result.ok
+      ? { ok: true, written: result.written || [] }
+      : { ok: false, error: (result.failed || []).length ? `summary failed: ${result.failed.join(', ')}` : 'summary generation failed' };
+  } catch (err) {
+    return { ok: false, error: err.message || 'summary generation threw' };
+  }
+}
+
 /** Refresh the followed-handle X timelines so the digest's watchlist renders
  *  fresh activity (the scout doesn't pull X, so without this the follows go
  *  stale / empty). Best-effort: the X pull can be flaky and never blocks the
@@ -200,15 +218,17 @@ export async function refreshDigestClient(clientId) {
   const scout = await refreshScoutBrief(clientId);
   const watchlist = await refreshWatchlist(clientId);
   const strategy = await refreshStrategyPlan(clientId);
+  const executiveSummary = await refreshExecutiveSummary(clientId, scout?.runId || null);
   const watchlistWarning = !watchlist.ok && !watchlist.skipped
     ? (watchlist.error || 'watchlist pull failed')
     : null;
   return {
-    ok: scout.ok && strategy.ok,
+    ok: scout.ok && strategy.ok && executiveSummary.ok,
     clientId,
     scout,
     watchlist,
     strategy,
+    executiveSummary,
     warnings: watchlistWarning ? [{ source: 'watchlist', message: watchlistWarning }] : [],
   };
 }
@@ -278,6 +298,7 @@ async function handle(request) {
       watchlistOk: result.watchlist?.ok,
       watchlistWarning: result.warnings?.find((warning) => warning.source === 'watchlist')?.message,
       strategyOk: result.strategy?.ok,
+      executiveSummaryOk: result.executiveSummary?.ok,
       ok: result.ok,
     });
   }
@@ -296,6 +317,7 @@ async function handle(request) {
     scout: primary?.scout || null,
     watchlist: primary?.watchlist || null,
     strategy: primary?.strategy || null,
+    executiveSummary: primary?.executiveSummary || null,
   }, ok ? 200 : 207);
 }
 

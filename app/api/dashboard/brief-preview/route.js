@@ -142,7 +142,7 @@ function hostnameOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return String(url); }
 }
 
-function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [], weather = null, moduleBriefs = [], auditMockupUrl = null, studioVideoUrl = null, socialPreviewImageUrl = null, siteMeta = null, fullPageScreenshots = null, company = null, researchConfig = null, strategyData = null, signalsCore = [], socialQueue = [], briefType = DEFAULT_BRIEF_TYPE, coverSummary = null, previousRunAt = null, displayLabel = null }) {
+function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [], weather = null, moduleBriefs = [], auditMockupUrl = null, studioVideoUrl = null, socialPreviewImageUrl = null, siteMeta = null, fullPageScreenshots = null, company = null, researchConfig = null, strategyData = null, signalsCore = [], socialQueue = [], briefType = DEFAULT_BRIEF_TYPE, coverSummary = null, previousRunAt = null, displayLabel = null, dashboardState = null }) {
   const content = marketingBrief?.content || {};
   const agentData = marketingBrief?.scoutBrief?.agentData || {};
   // Single source of truth: every signal array is derived from the shared
@@ -150,7 +150,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   // the same one the daily-digest email consumes, so the two surfaces never
   // drift on which fields exist or how they're named. `agentData` above is still
   // read raw for buildWatchlist's per-handle matching (see below).
-  const projected = projectBrief(marketingBrief) || {};
+  const projected = projectBrief(marketingBrief, dashboardState) || {};
   const opportunities = projected.opportunities || [];
   const kols = projected.kols || [];
   const trends = projected.narratives || [];
@@ -182,6 +182,10 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   const guardianText = guardian?.readyToPublish === undefined
     ? 'Needs review'
     : guardian.readyToPublish ? 'Ready to publish' : 'Needs review';
+  const strategyBuilderPlan = strategyData?.strategyBuilder || dashboardState?.strategyBuilder?.lastPlan || null;
+  const strategyBuilderToday = strategyBuilderPlan?.today || null;
+  const strategyBuilderTodayPosts = Array.isArray(strategyBuilderToday?.posts) ? strategyBuilderToday.posts : [];
+  const primaryStrategyPost = strategyBuilderTodayPosts.find((post) => String(post?.content || '').trim()) || null;
 
   // Coerce raw items into the row shape used by the renderer, then validate
   // each item.url at the boundary. Items whose url is missing or fails
@@ -305,9 +309,24 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     profileUrl: item.profileUrl || '',
     platform: item.source || '',
   }), Infinity);
-  const xPost = content.x_post || content.primary_post || content.post || '';
+  const xPost = primaryStrategyPost?.content || content.x_post || content.primary_post || content.post || '';
   const threadOpener = content.x_thread_opener || content.thread_opener || '';
-  const contentAngle = content.content_angle || content.angle || '';
+  const contentAngle = strategyBuilderToday?.strategy_intent || primaryStrategyPost?.rationale || content.content_angle || content.angle || '';
+  const todayGeneratedAt = strategyBuilderPlan?.generatedAt || generated;
+  const todayGeneratedDt = new Date(todayGeneratedAt);
+  const todayGeneratedLabel = Number.isNaN(todayGeneratedDt.getTime())
+    ? runTimestamp
+    : todayGeneratedDt.toLocaleString('en-US', {
+        timeZone: BRIEF_TZ, month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
+      });
+  const todayGuardianText = primaryStrategyPost ? 'Strategy Builder' : guardianText;
+  const moduleBriefsGeneratedAt = dashboardState?.moduleBriefs?.generatedAtIso || null;
+  const moduleBriefsGeneratedDt = moduleBriefsGeneratedAt ? new Date(moduleBriefsGeneratedAt) : null;
+  const moduleBriefsGeneratedLabel = moduleBriefsGeneratedDt && !Number.isNaN(moduleBriefsGeneratedDt.getTime())
+    ? moduleBriefsGeneratedDt.toLocaleString('en-US', {
+        timeZone: BRIEF_TZ, month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
+      })
+    : null;
 
   // ── Bento helpers — executive narrative boards. One number or one phrase
   // per tile; detail demoted to .foot. ──
@@ -427,10 +446,8 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   // SC · 30-Day Plan — today's move, plan config, weather hook, calendar.
   const s30 = strategyData?.strategy30 || null;
   const strat = strategyData?.strategy || null;
-  const strategyBuilder = strategyData?.strategyBuilder || null;
+  const strategyBuilder = strategyBuilderPlan;
   const strategyBuilderItems = Array.isArray(strategyBuilder?.items) ? strategyBuilder.items : [];
-  const strategyBuilderToday = strategyBuilder?.today || null;
-  const strategyBuilderTodayPosts = Array.isArray(strategyBuilderToday?.posts) ? strategyBuilderToday.posts : [];
   const strategyBuilderDays = (() => {
     const byDay = new Map();
     for (const item of strategyBuilderItems) {
@@ -628,7 +645,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
         title: DEFAULT_MODULE_TITLES[id],
         section: SECTION_BY_MODULE[id],
         status: 'missing',
-        summaryLine: 'Not captured this run — press RUN on the Executive Daily Brief card to refresh site data.',
+        summaryLine: 'Not captured in the latest site/creative module brief.',
         stats: [],
         highlights: [],
         findings: [],
@@ -694,6 +711,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     <h2 class="headline">Site<br/>Performance.</h2>
     ${screenshotStrip}
     <div class="card">
+      ${moduleBriefsGeneratedLabel ? valRow('Source freshness', esc(`Latest site module brief · ${moduleBriefsGeneratedLabel}`)) : ''}
       ${perfItems.map(renderAuditRow).join('')}
     </div>
   </section>` : '';
@@ -705,6 +723,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     <h2 class="headline">Creative<br/>System.</h2>
     ${mockupSrc ? `<div class="card" style="padding:0;overflow:hidden;margin-bottom:14px"><img src="${esc(mockupSrc)}" alt="Homepage rendered across devices" style="display:block;width:100%;height:auto"/></div>` : ''}
     <div class="card">
+      ${moduleBriefsGeneratedLabel ? valRow('Source freshness', esc(`Latest creative module brief · ${moduleBriefsGeneratedLabel}`)) : ''}
       ${creativeItems.map(renderAuditRow).join('')}
     </div>
   </section>` : '';
@@ -796,8 +815,8 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
         <div class="stat-row"><div class="k">Format</div><div class="v">X Post</div></div>
         ${threadOpener ? `<div class="stat-row"><div class="k">Thread Opener</div><div class="v">${linkify(threadOpener)}</div></div>` : ''}
         ${contentAngle ? `<div class="stat-row"><div class="k">Angle</div><div class="v">${esc(contentAngle)}</div></div>` : ''}
-        <div class="stat-row"><div class="k">Guardian</div><div class="v">${esc(guardianText)}</div></div>
-        <div class="stat-row"><div class="k">Generated</div><div class="v">${esc(runTimestamp)}</div></div>
+        <div class="stat-row"><div class="k">Guardian</div><div class="v">${esc(todayGuardianText)}</div></div>
+        <div class="stat-row"><div class="k">Generated</div><div class="v">${esc(todayGeneratedLabel)}</div></div>
       </div>
     </div>
   </section>`;
@@ -1910,12 +1929,26 @@ async function handleGet(request) {
     // Cover paragraph follows the same onboarding/executive split as the label:
     // the first brief shows the welcoming onboarding summary, later briefs the
     // JARVIS executive summary.
-    coverSummary: dash.briefSummaries?.[
-      isMainBrief ? (isOnboardingRun ? 'onboarding' : 'executive-daily') : resolveBriefType(briefType)
-    ]?.summary || null,
+    coverSummary: (() => {
+      const key = isMainBrief ? (isOnboardingRun ? 'onboarding' : 'executive-daily') : resolveBriefType(briefType);
+      const entry = dash.briefSummaries?.[key] || null;
+      if (!entry?.summary) return null;
+      if (key !== 'executive-daily') return entry.summary;
+      const coverMs = Date.parse(entry.generatedAtIso || '');
+      const briefMs = Date.parse(effectiveGeneratedAt || '');
+      const strategyMs = Date.parse(dash.strategyBuilder?.lastPlan?.generatedAt || '');
+      const freshnessFloor = Math.max(
+        Number.isFinite(briefMs) ? briefMs : 0,
+        Number.isFinite(strategyMs) ? strategyMs : 0
+      );
+      return Number.isFinite(coverMs) && coverMs >= Math.max(0, freshnessFloor - 5 * 60 * 1000)
+        ? entry.summary
+        : null;
+    })(),
     previousRunAt,
     // Override the cover/title label for the main brief by run sequence.
     displayLabel: isMainBrief ? mainBriefLabel : null,
+    dashboardState: dash,
   });
 
   if (preferMarketingBrief) {

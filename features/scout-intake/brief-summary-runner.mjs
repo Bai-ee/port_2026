@@ -81,7 +81,11 @@ export async function generateBriefSummaries({ clientId, runId, briefTypes = ALL
       brandTone: dash.snapshot?.brandTone || null,
     },
     researchConfig: clientConfig?.marketingBriefConfig || null,
-    strategyData: { strategy30: dash.strategy30 || null, strategy: dash.strategy || null },
+    strategyData: {
+      strategy30: dash.strategy30 || null,
+      strategy: dash.strategy || null,
+      strategyBuilder: dash.strategyBuilder?.lastPlan || null,
+    },
     signalsCore: Array.isArray(dash.signals?.core) ? dash.signals.core : [],
     socialQueue,
     moduleBriefs: dash.moduleBriefs?.items || [],

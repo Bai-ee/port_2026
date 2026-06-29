@@ -61,6 +61,14 @@ async function renderExecutiveBriefHtml(clientId, client) {
   const dash = dashSnap.exists ? dashSnap.data() || {} : {};
   const marketingBrief = dash.marketingBrief || null;
   if (!marketingBrief) throw new Error('no marketingBrief in dashboard_state');
+  const executiveSummary = dash.briefSummaries?.['executive-daily'] || null;
+  const freshFloorMs = Math.max(
+    tsToMs(marketingBrief.generatedAtIso),
+    tsToMs(dash.strategyBuilder?.lastPlan?.generatedAt)
+  );
+  const freshExecutiveSummary = tsToMs(executiveSummary?.generatedAtIso) >= Math.max(0, freshFloorMs - 5 * 60 * 1000)
+    ? executiveSummary.summary
+    : null;
 
   return render({
     marketingBrief,
@@ -70,7 +78,31 @@ async function renderExecutiveBriefHtml(clientId, client) {
     clientId,
     userEmail: process.env.DIGEST_EMAIL || '',
     tier: dash.tier || client?.tier || 'free',
-    strategyData: dash.strategy30 ? { strategy30: dash.strategy30 } : null,
+    moduleBriefs: dash.moduleBriefs?.items || [],
+    auditMockupUrl: dash.artifacts?.homepageDeviceMockup?.downloadUrl || null,
+    socialPreviewImageUrl: dash.siteMeta?.ogImage || null,
+    siteMeta: dash.siteMeta || null,
+    fullPageScreenshots: dash.artifacts?.fullPageScreenshots || null,
+    company: {
+      brandOverview: dash.snapshot?.brandOverview || null,
+      brandTone: dash.snapshot?.brandTone || null,
+      onboardingSummary: dash.onboardingAnswers
+        ? {
+            total: 10,
+            answeredCount: Object.values(dash.onboardingAnswers.answers || {}).filter((a) => a && !a.skipped && a.value != null).length,
+            completedAt: dash.onboardingAnswers.completedAt || null,
+          }
+        : null,
+      knowledgeBaseSources: dash.knowledgeBase?.sources || [],
+    },
+    strategyData: {
+      strategy30: dash.strategy30 || null,
+      strategy: dash.strategy || null,
+      strategyBuilder: dash.strategyBuilder?.lastPlan || null,
+    },
+    signalsCore: Array.isArray(dash.signals?.core) ? dash.signals.core : [],
+    dashboardState: dash,
+    coverSummary: freshExecutiveSummary,
     briefType: 'executive-daily',
   });
 }
