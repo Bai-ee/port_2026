@@ -223,14 +223,13 @@ async function handle(request) {
 
   logInfo('pre_digest_refresh_start', { clientId: homeClientId });
 
-  // Sequential — strategy generation must read the freshly persisted scout data.
-  const scout = await refreshScoutBrief(homeClientId);
-  const strategy = await refreshStrategyPlan(homeClientId);
+  // Use the single refresh path (scout → watchlist → strategy) so the scheduled
+  // cron and the inline Run & Send produce identical fresh data — including the
+  // followed-handle timelines — and can never drift apart again.
+  const { ok, scout, watchlist, strategy } = await refreshDigestClient(homeClientId);
+  logInfo('pre_digest_refresh_done', { clientId: homeClientId, scoutOk: scout?.ok, watchlistOk: watchlist?.ok, strategyOk: strategy?.ok });
 
-  const ok = scout.ok && strategy.ok;
-  logInfo('pre_digest_refresh_done', { clientId: homeClientId, scoutOk: scout.ok, strategyOk: strategy.ok });
-
-  return json({ ok, clientId: homeClientId, scout, strategy }, ok ? 200 : 207);
+  return json({ ok, clientId: homeClientId, scout, watchlist, strategy }, ok ? 200 : 207);
 }
 
 export async function GET(request) {
