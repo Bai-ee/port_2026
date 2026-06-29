@@ -208,33 +208,46 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
     if (!user) return;
     if (typeof window !== 'undefined' && !window.confirm('Generate fresh digest data first, then send the email to the configured recipient? Saves your current settings and runs the refresh worker (LLM cost).')) return;
     setTermOpen(true);
-    setTermLines([{ type: 'info', text: '▶ Generate & Send — starting…' }]);
+    setTermLines([{ type: 'info', text: '▶ Generate & Send — refreshing every digest client, then emailing…' }]);
     setSendStatus({ kind: 'pending', msg: 'Saving settings…' });
     let refreshHeartbeat = null;
     try {
       // Persist current toggles first so the send uses exactly what you configured
       // (the send reads saved config, not unsaved form state).
+      let savedConfig = form;
       if (form) {
         const saved = await authFetch(user, '/api/admin/digest-config', { method: 'POST', body: JSON.stringify(form) });
-        if (saved?.config) setForm(saved.config);
+        if (saved?.config) {
+          savedConfig = saved.config;
+          setForm(saved.config);
+        }
       }
       appendTerm('success', 'Saved config ✓');
       appendTerm('info', 'Step 1/2 · Refreshing Scout, watchlist timelines, and Strategy Builder…');
-      appendTerm('info', 'This can take a few minutes; the email will wait for this job to finish.');
-      setSendStatus({ kind: 'pending', msg: 'Refreshing digest data…' });
-      const refreshStartedAt = Date.now();
-      if (typeof window !== 'undefined') {
-        refreshHeartbeat = window.setInterval(() => {
-          const elapsed = Math.round((Date.now() - refreshStartedAt) / 1000);
-          appendTerm('info', `Refresh still running… ${elapsed}s elapsed`);
-        }, 30000);
+      const digestClientIds = [...new Set([
+        savedConfig?.homeClientId || clientId,
+        ...((savedConfig?.includeClientIds || []).filter(Boolean)),
+      ].filter(Boolean))];
+      appendTerm('info', `Refreshing ${digestClientIds.length} digest client${digestClientIds.length === 1 ? '' : 's'} one at a time: ${digestClientIds.join(', ')}`);
+      setSendStatus({ kind: 'pending', msg: `Refreshing ${digestClientIds.length} digest client${digestClientIds.length === 1 ? '' : 's'}…` });
+      const refreshResults = [];
+      for (const cid of digestClientIds) {
+        appendTerm('info', `Refresh started · ${cid}`);
+        const refreshStartedAt = Date.now();
+        if (typeof window !== 'undefined') {
+          refreshHeartbeat = window.setInterval(() => {
+            const elapsed = Math.round((Date.now() - refreshStartedAt) / 1000);
+            appendTerm('info', `Refresh still running · ${cid} · ${elapsed}s elapsed`);
+          }, 30000);
+        }
+        // eslint-disable-next-line no-await-in-loop
+        const refresh = await authFetch(user, `/api/worker/pre-digest-refresh?clientId=${encodeURIComponent(cid)}`, { method: 'POST', body: '{}' });
+        if (refreshHeartbeat) {
+          window.clearInterval(refreshHeartbeat);
+          refreshHeartbeat = null;
+        }
+        refreshResults.push(...(Array.isArray(refresh?.results) ? refresh.results : []));
       }
-      const refresh = await authFetch(user, '/api/worker/pre-digest-refresh', { method: 'POST', body: '{}' });
-      if (refreshHeartbeat) {
-        window.clearInterval(refreshHeartbeat);
-        refreshHeartbeat = null;
-      }
-      const refreshResults = Array.isArray(refresh?.results) ? refresh.results : [];
       refreshResults.forEach((r) => {
         const scout = r?.scout?.ok ? 'scout ok' : `scout issue${r?.scout?.error ? `: ${r.scout.error}` : ''}`;
         const watch = r?.watchlist?.ok ? `watchlist ok${Number.isFinite(r?.watchlist?.handles) ? ` (${r.watchlist.handles} handles)` : ''}` : (r?.watchlist?.skipped ? `watchlist skipped (${r.watchlist.skipped})` : `watchlist issue${r?.watchlist?.error ? `: ${r.watchlist.error}` : ''}`);
@@ -242,7 +255,7 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
         const hasWatchlistWarning = Array.isArray(r?.warnings) && r.warnings.some((warning) => warning?.source === 'watchlist');
         appendTerm(r?.ok ? (hasWatchlistWarning ? 'info' : 'success') : 'error', `Refresh · ${r?.clientId || 'client'} · ${scout} · ${watch} · ${strategy}`);
       });
-      if (!refresh?.ok) {
+      if (!refreshResults.length || refreshResults.some((r) => !r?.ok)) {
         appendTerm('error', 'Refresh did not complete cleanly. Email not sent; fix the refresh issue or send latest saved data from a separate fallback control.');
         setSendStatus({ kind: 'error', msg: 'Refresh failed; email not sent.' });
         return;

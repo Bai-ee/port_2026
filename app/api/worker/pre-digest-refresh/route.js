@@ -214,6 +214,10 @@ export async function refreshDigestClient(clientId) {
 }
 
 async function handle(request) {
+  const startedAtMs = Date.now();
+  const REFRESH_RESPONSE_BUDGET_MS = 270_000;
+  const url = new URL(request.url);
+  const requestedClientId = String(url.searchParams.get('clientId') || '').trim();
   const cronOk = hasValidCronSecret(request);
   let adminOk = false;
   if (!cronOk) {
@@ -234,7 +238,15 @@ async function handle(request) {
     const configClientId = await digestConfig.resolveDigestClientId();
     const cfg = await digestConfig.getDigestConfig(configClientId);
     homeClientId = cfg.homeClientId || configClientId;
-    clientIds = [...new Set([homeClientId, ...(cfg.includeClientIds || [])].filter(Boolean))];
+    const configuredClientIds = [...new Set([homeClientId, ...(cfg.includeClientIds || [])].filter(Boolean))];
+    if (requestedClientId) {
+      if (!configuredClientIds.includes(requestedClientId)) {
+        return json({ error: `Client ${requestedClientId} is not part of the digest config.` }, 400);
+      }
+      clientIds = [requestedClientId];
+    } else {
+      clientIds = configuredClientIds;
+    }
   } catch (err) {
     logError('pre_digest_refresh_client_resolve_error', { error: err.message });
     return json({ error: `Could not resolve digest home client: ${err.message}` }, 500);
@@ -248,6 +260,15 @@ async function handle(request) {
   // followed-handle timelines — and can never drift apart again.
   const results = [];
   for (const clientId of clientIds) {
+    if (!requestedClientId && results.length > 0 && Date.now() - startedAtMs > REFRESH_RESPONSE_BUDGET_MS) {
+      logError('pre_digest_refresh_budget_exhausted', {
+        clientId: homeClientId,
+        completed: results.length,
+        total: clientIds.length,
+        elapsedMs: Date.now() - startedAtMs,
+      });
+      break;
+    }
     // eslint-disable-next-line no-await-in-loop
     const result = await refreshDigestClient(clientId);
     results.push(result);
@@ -260,18 +281,21 @@ async function handle(request) {
       ok: result.ok,
     });
   }
-  const ok = results.every((result) => result.ok);
-  const home = results.find((result) => result.clientId === homeClientId) || null;
-  logInfo('pre_digest_refresh_done', { clientId: homeClientId, clients: clientIds.length, ok });
+  const complete = results.length === clientIds.length;
+  const ok = complete && results.every((result) => result.ok);
+  const primary = results.find((result) => result.clientId === homeClientId) || results[0] || null;
+  logInfo('pre_digest_refresh_done', { clientId: homeClientId, requestedClientId: requestedClientId || null, completed: results.length, clients: clientIds.length, ok });
 
   return json({
     ok,
     clientId: homeClientId,
+    requestedClientId: requestedClientId || null,
     clientIds,
+    complete,
     results,
-    scout: home?.scout || null,
-    watchlist: home?.watchlist || null,
-    strategy: home?.strategy || null,
+    scout: primary?.scout || null,
+    watchlist: primary?.watchlist || null,
+    strategy: primary?.strategy || null,
   }, ok ? 200 : 207);
 }
 
