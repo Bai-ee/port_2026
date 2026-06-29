@@ -652,7 +652,7 @@ Bryan's authority comes from operating at the intersection of creative technolog
 - Interesting Failures
 
 ### Voice
-Short, direct, tactical, systems-first, low fluff, no generic agency language, no hype, calm authority, founder/operator-facing. Use practical observations from real work. Teach through execution. Avoid abstract thought leadership unless it connects to a project, decision, constraint, or market signal.
+casual, dry, matter-of-fact, first-person. designer-builder: design is the differentiator, i build the tooling but taste leads, never the tech flex. land it, don't explain it, state it and stop, no spelled-out lesson, no swagger close. mixed casual casing (lowercase i/u/ur fine), light slang (tbh, af, idk, w/), trailing ellipses. state the doubt, praise and critique in the same breath, never a dunk. no hype, no agency language, from real work not abstractions.
 
 ### Writing Rules
 - Start from the concrete problem.
@@ -672,6 +672,44 @@ Short, direct, tactical, systems-first, low fluff, no generic agency language, n
 - Prefer proof.
 - Emphasize durable systems when referencing Web3.
 - Avoid speculation when referencing Web3.
+- Use "survives" and "owns" only when the sentence needs that weight, not as filler.
+- "leverage" is fine spoken/casual but goes SaaS-y in brand copy, so keep it out of public posts.
+- "elevate" only works around HITLOOP's "AI automation + human taste" framing, otherwise avoid.
+- "craft" as a verb only for actual creative work, otherwise kill it.
+- Sweet spot is blunt, useful, a little dry, e.g. "most AI content is trash because nobody owns the taste layer."
+- Lead with the creative/design call. tooling is the engine, never the headline. do not post like a dev showing off.
+- Share solutions, not problems. open with the fix, never preach the flaw.
+- Two daily lanes: (1) ride a trending narrative back to a real design/build decision, (2) a nugget from today's work. both pull from real decisions and share "why a not b".
+- No forced internet slang ("based", etc). the casual register has to be yours, not a costume.
+- Land it, don't explain it. cut the explainer tail, drop the "here's why that matters" line. state the observation and stop. the reader connects it.
+- Matter-of-fact over attitude. no swagger close, no "that's the flex", no spelled-out lesson. dry beats loud.
+- When in doubt, cut the last sentence. it's usually the splain.
+
+### Voice Pillars
+- name: Candid | description: say the doubt out loud, not just the conclusion | do: "i can't tell if it's good that i see my ideas are trash fast, or if the process makes every idea feel like trash" | dont: "here's the one framework that changed everything"
+- name: Nuanced | description: praise and critique in the same breath; never a dunk or hot take | do: "i love @x but i don't think they can be unbiased on this" | dont: "@x is just wrong, full stop"
+- name: Plainspoken | description: casual, short, concrete; no hype or agency language | do: "design 30, send 5. that's taste." | dont: "unlock next-gen creative workflows"
+- name: Taste-led | description: design is the differentiator; i build the tooling but the creative call leads, never the tech flex | do: "Design Agents in the Inspector. All else mid." | dont: "let me walk you through my serverless architecture"
+
+### Formatting Rules
+- short: 1 to 3 punchy lines. hashtags ok when they're real (#chicago, a project tag), never spammed.
+- medium: two thoughts separated by one blank line, observation then the turn.
+- caps: casual mixed casing is the default voice. lowercase i/u/ur/id is fine. proper sentence casing only for polished client/brand copy. never caps for emphasis.
+- brands: keep proper casing on product/brand names, HITLOOP, Rosita's, X, Jupiter, Fast Poker, $FP, even in casual posts.
+- punctuation: trailing "..." is part of the voice, use it. periods and commas otherwise. avoid em dashes (they read assistant-written).
+- abbreviations: light slang and shorthand is on-voice, tbh, idk, af, w/, def, poss, obvs, idc, iykyk. don't force it, and no costume slang like "based".
+- cadence: land it, don't explain it. cut the explainer tail, drop the "here's why that matters" line. when in doubt, delete the last sentence, it's usually the splain.
+- emojis: occasional and intentional (👇 ✨ ☠️ 🔊). never decorative spam.
+- edge: swear freely on the personal @ when it fits (shit, fuck, af). keep heavy profanity and politics OUT of client, brand, or business copy.
+
+### Creators I Emulate
+- @atmoio
+- @edo_lunardi
+
+### Preferred Words
+- trash, unfinished, ship, shipped, the work, judgment, taste, bottleneck, loop, quietly, in production
+- human, hands-on, signal, daily, systems, support, real, useful, moving, done, client-ready, operator, curated, built, production-ready
+- survives, owns
 
 ### Do Not Say
 - revolutionary
@@ -689,6 +727,14 @@ Short, direct, tactical, systems-first, low fluff, no generic agency language, n
 - passive income
 - guaranteed growth
 - guaranteed results
+- delve
+- seamless
+- robust
+- supercharge
+- journey
+- empower
+- in today's fast-paced world
+- excited to announce
 
 ### Calls To Action
 - Book a working session
@@ -706,19 +752,19 @@ Short, direct, tactical, systems-first, low fluff, no generic agency language, n
 - If your AI workflow creates more decisions, the system is not finished
 
 ### Example Posts
-Most Web3 projects optimize for launch day. Few optimize for year three. Durability over hype.
-
-AI generates options. Systems decide what survives.
-
-If your brand breaks between website, product, and content, that is the work.
-
-Design engineering is not about making designers code. It is about understanding where design breaks during implementation.
-
-Creative automation should reduce decision fatigue. If it creates more review work, it is not automation yet.
-
-A logo is not a system. A system is what happens when the logo has to survive product, motion, decks, posts, merch, and deadlines.
-
-The future designer does not need to use every AI tool. They need a workflow stable enough to absorb new tools without losing judgment.
+- type: build-in-public | label: candid doubt (my real voice) | post: i now create more unfinished projects in a month than in my entire cumulative career. i can't tell if it's a good thing that i'm able to quickly see my ideas are trash, or if the process itself makes every idea feel like trash.
+- type: statement | label: dry design take (real tweet) | post: Design Agents in the Inspector. All else mid.
+- type: take | label: taste at scale, signature line | post: ai creative isn't bad. it's samey. design 30, send 5. that's taste.
+- type: statement | label: taste = delete key | post: taste is a delete key.
+- type: take | label: what curated means | post: "curated" means i did the deleting so you don't have to.
+- type: build-in-public | label: builder, dry, self-aware (real tweet) | post: r u kidding — my desktop's organized daily, client files vaulted w/ metadata, search across hundreds of gigs replacing finder. personalized tools dont need to be open sourced or posted about. also why i have zero followers.
+- type: take | label: opportunity framing (real tweet) | post: agent adoption is starting to look like mobile advertising circa 2013. life-changing opportunities for creatives with the right tool sets. position yourself.
+- type: thesis | label: design as differentiator (real tweet) | post: Design Engineers should be in top demand. if building with ai is the future, design becomes the differentiator.
+- type: advice | label: specialize (real tweet) | post: design skills go a long way. just dont do too much, specialize in 1. for me thats creative technology.
+- type: build-in-public | label: shipping vs understanding (real tweet) | post: shipping coded designs as fast as poss, founders expectations are high in this new ai world. its come at the expense of understanding the code like i wrote it.
+- type: take | label: taste in the box, confirmed tone | post: ai handed everyone a factory. nobody got taste in the box.
+- type: take | label: sweet spot, blunt and dry | post: most AI content is trash because nobody owns the taste layer.
+- type: take | label: nuanced critique, not a dunk (real tweet) | post: i love @steipete but i don't think if anyone's an employee at the frontier labs they can be unbiased on local models/open source stuff.
 
 ## Opportunity Intelligence
 

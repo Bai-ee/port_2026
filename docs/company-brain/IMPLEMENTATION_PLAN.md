@@ -105,11 +105,14 @@ Prompt context consumers:
 
 | Consumer | Status | Path |
 |----------|--------|------|
-| Strategy Builder | wired | `loadClientBrainContext(..., { useFor:'socialPosts' })` |
-| Post Me generate-copy | wired | `loadClientBrainContext(..., { useFor:'socialPosts' })` |
+| Strategy Builder | wired | `loadClientBrainContext(..., { useFor:'socialPosts' })` — incl. few-shot example posts |
+| Post Me generate-copy | wired | `loadClientBrainContext(..., { useFor:'socialPosts' })` — incl. few-shot example posts |
+| Reply Targets (recipe-run) | wired | `loadClientBrainContext(..., { useFor:'copy' })` appended to the reply-targets recipe context — incl. few-shot |
 | Email Digest | wired | `loadClientBrainContext(..., { useFor:'emailDigest' })` |
 | Creative Brief / named covers | wired | `loadClientBrainContext(..., { useFor:'copy' })` |
 | Executive / Market Brief voice | wired | `resolveVoiceProfile(clientId)` |
+
+**Voice fidelity (sound-like-me):** the `voice`-scoped context now renders voice pillars + an `Example posts` few-shot block + keyed copy rules — not just a tone label. Authored once in `CLIENT_BRAIN.md > Content Intelligence` (Voice Pillars / Example Posts / Preferred Words / Formatting Rules / Creators I Emulate), it flows to every consumer above. Field map: [`CLIENT_BRAIN_MARKDOWN_STANDARD.md`](CLIENT_BRAIN_MARKDOWN_STANDARD.md) > Voice Fidelity block; read paths: [`DOWNSTREAM_CONTEXT_USAGE.md`](DOWNSTREAM_CONTEXT_USAGE.md). `content.postExamples` is preserved across Brain Generate (no bundle producer).
 
 Structured default consumers:
 
@@ -128,7 +131,7 @@ The card intentionally uses four tabs:
 - `SOURCES & GAPS` — source refs, generated/acquisition state, discovery intelligence, completion, and missing decisions.
 - `CONSUMERS` — context-pack preview/export and downstream consumer status.
 
-Tone belongs in `CLIENT_BRAIN.md` under `Content Intelligence` -> `Voice`. Supporting examples belong in `CONTENT_LIBRARY.md` or `CONVERSATION_INTELLIGENCE.md`. The visible voice editor remains a transitional compiled-field editor until dashboard edits compile back into `markdownSource`.
+Tone belongs in `CLIENT_BRAIN.md` under `Content Intelligence` -> `Voice` (one-paragraph summary) plus the voice-fidelity sub-sections — `Voice Pillars`, `Example Posts`, `Preferred Words`, `Formatting Rules`, `Creators I Emulate` — which compile into `voice.pillars` / `content.postExamples` (`few_shot_examples`) / `voice.preferredWords` / `voice.formattingRules` / `voice.scribeInstructions`. Deeper supporting examples belong in `CONTENT_LIBRARY.md` or `CONVERSATION_INTELLIGENCE.md`. The visible voice editor remains a transitional compiled-field editor until dashboard edits compile back into `markdownSource`. `brand-voice.json` is a legacy fallback only — not a parallel tone source.
 
 > **Client Brain card UI:** the card modal's CSS lives only in the `dashboardCss` template literal in `DashboardPage.jsx` (not the unimported `dashboard.css`). `.client-brain-card` must stay `min-height:100%` with `> * { flex: 0 0 auto }` — a fixed `height:100%` makes flex children shrink and their `overflow:visible` content collide across sections. See the run-flow doc §9.
 

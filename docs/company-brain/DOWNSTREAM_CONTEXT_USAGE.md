@@ -63,14 +63,29 @@ The executive/market brief uses structured voice instead of the context string:
 const voice = await resolveVoiceProfile(clientId);
 ```
 
-This reads the compiled brain via `readClientBrainDoc`, requires approval by default, and falls back to file voice when no approved voice exists.
+This reads the compiled brain via `readClientBrainDoc`, requires approval by default, and falls back to file voice when no approved voice exists. `resolveVoiceProfile` carries the full **`few_shot_examples`** (from `CLIENT_BRAIN.md > Example Posts`) — the strongest "sound like me" signal.
+
+### Few-shot reaches the text-pack consumers too
+
+`loadClientBrainContext` no longer emits only a tone summary. When the resolved `useFor`
+includes the `voice` section (`tone`, `copy`, `socialPosts`, `emailDigest`), the
+`CLIENT CONTEXT` string now also renders:
+
+- `Voice pillar — <name>: do: … ; avoid: …` lines (from `voice.pillars`)
+- an `Example posts (imitate this voice, do not copy verbatim):` block (top 4 from `content.postExamples`)
+- keyed `Copy rules` (from `voice.formattingRules`)
+
+So Strategy Builder, Post Me, and the reply-targets recipe imitate the operator's
+example posts — not just a tone label. One source: `CLIENT_BRAIN.md` (see
+`CLIENT_BRAIN_MARKDOWN_STANDARD.md > Voice Fidelity block`).
 
 ## Current Consumers
 
 | Consumer | Mode | Status |
 |----------|------|--------|
-| Strategy Builder | `loadClientBrainContext(..., { useFor:'socialPosts' })` | wired |
-| Post Me generate-copy | `loadClientBrainContext(..., { useFor:'socialPosts' })` | wired |
+| Strategy Builder | `loadClientBrainContext(..., { useFor:'socialPosts' })` — incl. few-shot | wired |
+| Post Me generate-copy | `loadClientBrainContext(..., { useFor:'socialPosts' })` — incl. few-shot | wired |
+| Reply Targets (recipe-run) | `loadClientBrainContext(..., { useFor:'copy' })` appended to recipe context — incl. few-shot | wired |
 | Email Digest | `loadClientBrainContext(..., { useFor:'emailDigest' })` | wired |
 | Creative Brief / named covers | `loadClientBrainContext(..., { useFor:'copy' })` | wired |
 | Executive / Market Brief | `resolveVoiceProfile(clientId)` | wired |

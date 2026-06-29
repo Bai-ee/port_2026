@@ -174,6 +174,27 @@ Human-in-the-loop creative systems partner for founders and teams building AI-in
 ### Voice
 Direct, precise, systems-minded, low-fluff.
 
+### Voice Pillars
+- name: Plainspoken | description: trade jargon for plain words | do: "I shipped X" | dont: "We're excited to announce X"
+- name: Specific | description: numbers and nouns over adjectives | do: "cut load to 1.2s" | dont: "blazing fast"
+
+### Example Posts
+- type: observation | label: hook style I like | post: most "AI strategy" decks are just a feature list with a robot on the cover. the strategy is the sequencing.
+- the bottleneck isn't the model, it's that nobody owns the prompt. assign one person.
+
+### Creators I Emulate
+- @swyx
+- @levelsio
+
+### Preferred Words
+- shipped, built, cut, owns, bottleneck
+
+### Formatting Rules
+- short: 1–2 lines, no hashtags, lowercase ok
+- medium: 3–4 short lines, one line break between ideas
+- caps: never for emphasis
+- emojis: none
+
 ### Do Not Say
 - revolutionary
 - game-changing
@@ -198,6 +219,31 @@ Direct, precise, systems-minded, low-fluff.
 ### Lead Gen Targets
 - Series A AI SaaS companies
 ```
+
+## Voice Fidelity block (Content Intelligence) — "sound like me"
+
+These optional `## Content Intelligence` sub-sections are the single source for tone
+across the whole system for a client. Author them once here; every copy/reply surface
+inherits them. All are optional — omit a section and the compiler leaves it empty, so
+behavior is unchanged (back-compat).
+
+| `CLIENT_BRAIN.md` section | Compiled field | Format | Consumed by |
+|---|---|---|---|
+| `### Voice` | `voice.toneSummary` (≤500 chars) | one paragraph | all voice consumers |
+| `### Voice Pillars` | `voice.pillars[] {name,description,do,dont}` | `name: .. \| description: .. \| do: .. \| dont: ..` per bullet | Scribe/Guardian (`voice_pillars`); posts/replies (do/avoid lines) |
+| `### Example Posts` | `content.postExamples[] {type,label,post}` → **`few_shot_examples`** | `type: .. \| label: .. \| post: ..`, **or a bare bullet** (whole line = the post) | Scribe/Guardian, Strategy Builder, Post Me, replies — the strongest "sound like me" lever |
+| `### Creators I Emulate` | appended to `voice.scribeInstructions` | one handle/name per bullet | Scribe/Guardian |
+| `### Preferred Words` | `voice.preferredWords[]` | comma or bullet list | rendered as `Do:` in context |
+| `### Formatting Rules` | `voice.formattingRules{}` (keyed) | `key: value` bullets — `short`/`medium`/`long`/`caps`/`emojis` | Scribe (`formatting_rules`), posts/replies (`Copy rules`) |
+| `### Do Not Say` | `voice.bannedWords[]` | bullet list | rendered as `Do not:` everywhere |
+
+**Two read paths, one source** (the compiled brain doc):
+- `resolveVoiceProfile()` (`features/not-the-rug-brief/voice-resolver.js`) → `brand-voice.json` shape **incl. `few_shot_examples`** → Scribe + Guardian.
+- `loadClientBrainContext({useFor})` (`features/client-brain/store.cjs`) → compact `CLIENT CONTEXT` text **now incl. an `Example posts (imitate this voice…)` block** → Strategy Builder, Post Me, Email Digest, and the reply-targets recipe (`recipe-run`).
+
+**Persistence note:** `content.postExamples` has no bundle producer, so a Brain **Generate** would zero it — `generateAndSaveClientBrain` (store.cjs) preserves it across regen the same way `mergeVoice` preserves `voice.*`. The durable home is always this Markdown; re-Inject after edits.
+
+**Legacy `brand-voice.json`** (`knowledge/{clientId}/`) is a **fallback only** — used when the approved brain has no voice content (`voice-resolver.js` precedence). Do not hand-author it as a parallel tone source.
 
 ## Decision Drivers
 
