@@ -206,10 +206,11 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
 
   const runAndSend = useCallback(async () => {
     if (!user) return;
-    if (typeof window !== 'undefined' && !window.confirm('Run a FRESH brief for every digest client, then send the email to the configured recipient now? Saves your current settings and runs the brief pipeline (LLM cost). ~1–2 min.')) return;
+    if (typeof window !== 'undefined' && !window.confirm('Generate fresh digest data first, then send the email to the configured recipient? Saves your current settings and runs the refresh worker (LLM cost).')) return;
     setTermOpen(true);
-    setTermLines([{ type: 'info', text: '▶ Run & Send — starting…' }]);
+    setTermLines([{ type: 'info', text: '▶ Generate & Send — starting…' }]);
     setSendStatus({ kind: 'pending', msg: 'Saving settings…' });
+    let refreshHeartbeat = null;
     try {
       // Persist current toggles first so the send uses exactly what you configured
       // (the send reads saved config, not unsaved form state).
@@ -218,14 +219,45 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
         if (saved?.config) setForm(saved.config);
       }
       appendTerm('success', 'Saved config ✓');
-      appendTerm('info', 'Running fresh briefs & sending… (~1–2 min)');
-      setSendStatus({ kind: 'pending', msg: 'Running fresh briefs & sending… (~1–2 min)' });
-      const res = await authFetch(user, '/api/admin/daily-digest?send=1');
+      appendTerm('info', 'Step 1/2 · Refreshing Scout, watchlist timelines, and Strategy Builder…');
+      appendTerm('info', 'This can take a few minutes; the email will wait for this job to finish.');
+      setSendStatus({ kind: 'pending', msg: 'Refreshing digest data…' });
+      const refreshStartedAt = Date.now();
+      if (typeof window !== 'undefined') {
+        refreshHeartbeat = window.setInterval(() => {
+          const elapsed = Math.round((Date.now() - refreshStartedAt) / 1000);
+          appendTerm('info', `Refresh still running… ${elapsed}s elapsed`);
+        }, 30000);
+      }
+      const refresh = await authFetch(user, '/api/worker/pre-digest-refresh', { method: 'POST', body: '{}' });
+      if (refreshHeartbeat) {
+        window.clearInterval(refreshHeartbeat);
+        refreshHeartbeat = null;
+      }
+      const refreshResults = Array.isArray(refresh?.results) ? refresh.results : [];
+      refreshResults.forEach((r) => {
+        const scout = r?.scout?.ok ? 'scout ok' : `scout issue${r?.scout?.error ? `: ${r.scout.error}` : ''}`;
+        const watch = r?.watchlist?.ok ? `watchlist ok${Number.isFinite(r?.watchlist?.handles) ? ` (${r.watchlist.handles} handles)` : ''}` : (r?.watchlist?.skipped ? `watchlist skipped (${r.watchlist.skipped})` : `watchlist issue${r?.watchlist?.error ? `: ${r.watchlist.error}` : ''}`);
+        const strategy = r?.strategy?.ok ? 'strategy ok' : `strategy issue${r?.strategy?.error ? `: ${r.strategy.error}` : ''}`;
+        const hasWatchlistWarning = Array.isArray(r?.warnings) && r.warnings.some((warning) => warning?.source === 'watchlist');
+        appendTerm(r?.ok ? (hasWatchlistWarning ? 'info' : 'success') : 'error', `Refresh · ${r?.clientId || 'client'} · ${scout} · ${watch} · ${strategy}`);
+      });
+      if (!refresh?.ok) {
+        appendTerm('error', 'Refresh did not complete cleanly. Email not sent; fix the refresh issue or send latest saved data from a separate fallback control.');
+        setSendStatus({ kind: 'error', msg: 'Refresh failed; email not sent.' });
+        return;
+      }
+      appendTerm('success', 'Fresh digest data saved ✓');
+
+      appendTerm('info', 'Step 2/2 · Rendering and sending email from saved data…');
+      setSendStatus({ kind: 'pending', msg: 'Sending email from saved data…' });
+      const res = await authFetch(user, '/api/admin/daily-digest?send=1&skipRefresh=1');
       (Array.isArray(res?.log) ? res.log : []).forEach((l) => appendTerm(l.type || 'info', l.text));
       if (res?.subject) appendTerm('info', `Subject · ${res.subject}`);
-      appendTerm('success', 'Done ✓ — returned to confirm above');
-      setSendStatus({ kind: 'ok', msg: 'Sent with fresh data.' });
+      appendTerm('success', 'Done ✓ — refreshed first, then sent');
+      setSendStatus({ kind: 'ok', msg: 'Sent with freshly saved data.' });
     } catch (e) {
+      if (refreshHeartbeat && typeof window !== 'undefined') window.clearInterval(refreshHeartbeat);
       appendTerm('error', `Error: ${e.message}`);
       setSendStatus({ kind: 'error', msg: e.message });
     }
@@ -540,21 +572,21 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
                 <span className="hint">{
                   sendStatus && sendStatus.kind !== 'error' ? sendStatus.msg
                     : saveStatus && saveStatus.kind !== 'error' ? saveStatus.msg
-                      : 'Run & Send saves these settings, runs a fresh brief for every client, then emails the digest now.'
+                      : 'Generate & Send saves settings, refreshes digest data, then emails from the saved result.'
                 }</span>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                   {termLines.length > 0 && !termOpen ? (
                     <button type="button" className="btn btn-outline" onClick={() => setTermOpen(true)}>Terminal</button>
                   ) : null}
                   <button type="button" className="btn btn-outline" onClick={save} disabled={saveStatus?.kind === 'pending' || sendStatus?.kind === 'pending'}>{saveStatus?.kind === 'pending' ? 'Saving…' : 'Save Config'}</button>
-                  <button type="button" className="btn" style={{ background: '#2a2420', color: '#fff', borderColor: '#2a2420' }} onClick={runAndSend} disabled={sendStatus?.kind === 'pending' || saveStatus?.kind === 'pending'}>{sendStatus?.kind === 'pending' ? 'Sending…' : 'Run & Send'}</button>
+                  <button type="button" className="btn" style={{ background: '#2a2420', color: '#fff', borderColor: '#2a2420' }} onClick={runAndSend} disabled={sendStatus?.kind === 'pending' || saveStatus?.kind === 'pending'}>{sendStatus?.kind === 'pending' ? 'Working…' : 'Generate & Send'}</button>
                 </div>
               </div>
 
               {termOpen && termLines.length > 0 ? (
                 <div id="intake-modal-terminal-col" style={{ marginTop: 14 }}>
                   <div id="intake-modal-terminal-titlebar">
-                    <span id="intake-modal-terminal-title">digest.send</span>
+                    <span id="intake-modal-terminal-title">digest.generate-send</span>
                     <button
                       type="button"
                       aria-label="Close terminal"

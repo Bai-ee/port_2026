@@ -23,7 +23,7 @@ export const maxDuration = 300;
 
 const require = createRequire(import.meta.url);
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
-const { getHeaderValue, safeSecretEquals } = require('../../../../api/_lib/auth.cjs');
+const { buildAuthRequestShim, getHeaderValue, safeSecretEquals, verifyAdminRequest } = require('../../../../api/_lib/auth.cjs');
 const { claimRun, completeRun, failRun, appendRunEvent } = require('../../../../api/_lib/run-lifecycle.cjs');
 const { logError, logInfo } = require('../../../../api/_lib/observability.cjs');
 const digestConfig = require('../../../../features/intelligence/_digest-config.js');
@@ -193,43 +193,86 @@ async function refreshWatchlist(clientId) {
   }
 }
 
-/** Refresh one client's scout brief + watchlist timelines + strategy plan — the
- *  pre-digest refresh, callable directly from the daily-digest send path so Run &
- *  Send and the scheduled cron both produce fresh data before the email is built.
+/** Refresh one client's scout brief + watchlist timelines + strategy plan.
  *  Sequential (strategy reads fresh scout). Never throws. */
 export async function refreshDigestClient(clientId) {
   if (!clientId) return { ok: false, error: 'no clientId' };
   const scout = await refreshScoutBrief(clientId);
   const watchlist = await refreshWatchlist(clientId);
   const strategy = await refreshStrategyPlan(clientId);
-  return { ok: scout.ok && strategy.ok, clientId, scout, watchlist, strategy };
+  const watchlistWarning = !watchlist.ok && !watchlist.skipped
+    ? (watchlist.error || 'watchlist pull failed')
+    : null;
+  return {
+    ok: scout.ok && strategy.ok,
+    clientId,
+    scout,
+    watchlist,
+    strategy,
+    warnings: watchlistWarning ? [{ source: 'watchlist', message: watchlistWarning }] : [],
+  };
 }
 
 async function handle(request) {
-  if (!hasValidCronSecret(request)) {
+  const cronOk = hasValidCronSecret(request);
+  let adminOk = false;
+  if (!cronOk) {
+    try {
+      await verifyAdminRequest(buildAuthRequestShim(request));
+      adminOk = true;
+    } catch {
+      adminOk = false;
+    }
+  }
+  if (!cronOk && !adminOk) {
     return json({ error: 'Unauthorized.' }, 401);
   }
 
   let homeClientId = null;
+  let clientIds = [];
   try {
     const configClientId = await digestConfig.resolveDigestClientId();
     const cfg = await digestConfig.getDigestConfig(configClientId);
     homeClientId = cfg.homeClientId || configClientId;
+    clientIds = [...new Set([homeClientId, ...(cfg.includeClientIds || [])].filter(Boolean))];
   } catch (err) {
     logError('pre_digest_refresh_client_resolve_error', { error: err.message });
     return json({ error: `Could not resolve digest home client: ${err.message}` }, 500);
   }
   if (!homeClientId) return json({ error: 'No digest home client configured.' }, 404);
 
-  logInfo('pre_digest_refresh_start', { clientId: homeClientId });
+  logInfo('pre_digest_refresh_start', { clientId: homeClientId, clients: clientIds.length });
 
   // Use the single refresh path (scout → watchlist → strategy) so the scheduled
-  // cron and the inline Run & Send produce identical fresh data — including the
+  // cron and manual Generate & Send produce identical fresh data — including
   // followed-handle timelines — and can never drift apart again.
-  const { ok, scout, watchlist, strategy } = await refreshDigestClient(homeClientId);
-  logInfo('pre_digest_refresh_done', { clientId: homeClientId, scoutOk: scout?.ok, watchlistOk: watchlist?.ok, strategyOk: strategy?.ok });
+  const results = [];
+  for (const clientId of clientIds) {
+    // eslint-disable-next-line no-await-in-loop
+    const result = await refreshDigestClient(clientId);
+    results.push(result);
+    logInfo('pre_digest_refresh_client_done', {
+      clientId,
+      scoutOk: result.scout?.ok,
+      watchlistOk: result.watchlist?.ok,
+      watchlistWarning: result.warnings?.find((warning) => warning.source === 'watchlist')?.message,
+      strategyOk: result.strategy?.ok,
+      ok: result.ok,
+    });
+  }
+  const ok = results.every((result) => result.ok);
+  const home = results.find((result) => result.clientId === homeClientId) || null;
+  logInfo('pre_digest_refresh_done', { clientId: homeClientId, clients: clientIds.length, ok });
 
-  return json({ ok, clientId: homeClientId, scout, watchlist, strategy }, ok ? 200 : 207);
+  return json({
+    ok,
+    clientId: homeClientId,
+    clientIds,
+    results,
+    scout: home?.scout || null,
+    watchlist: home?.watchlist || null,
+    strategy: home?.strategy || null,
+  }, ok ? 200 : 207);
 }
 
 export async function GET(request) {
