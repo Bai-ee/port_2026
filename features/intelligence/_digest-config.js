@@ -42,9 +42,10 @@ const INCLUDE_KEYS = [
   'deployments',      // Vercel Deployments
   'runtimeErrors',    // Vercel Runtime Errors
 ];
-// Tease-by-default: a NEW config shows only the short "tease" core (summary,
-// agenda, new sign-ups, both CTAs). Everything heavier is OFF — the full detail
-// lives in the linked Executive Brief; the admin opts each extra section in.
+// Tease-by-default: a NEW config shows the short "tease" core (summary, agenda,
+// new sign-ups, both CTAs) plus post-content video rows. Everything heavier is
+// OFF — the full detail lives in the linked Executive Brief; the admin opts each
+// extra section in.
 // NOTE: only applies to brand-new / missing keys — existing saved configs keep
 // whatever they saved (normalizeInclude overlays saved keys on top of this).
 const DEFAULT_INCLUDE = {
@@ -54,10 +55,10 @@ const DEFAULT_INCLUDE = {
   agenda: true,
   weather: true,
   followerPosts: true,
+  videoPosts: true,
+  videoPromo: true,
   signups: true,
   // ── opt-in extras (off by default) ──
-  videoPosts: false,
-  videoPromo: false,
   humanBrief: false,
   opportunities: false,
   suggestedReplies: false,
@@ -171,6 +172,7 @@ const DEFAULTS = {
   schedule: { ...DEFAULT_SCHEDULE },
   briefLinkMode: DEFAULT_BRIEF_LINK_MODE, // how the Executive Brief link resolves
   contactUrl: '',          // "Contact Your Human" CTA target (Calendly etc.); env DIGEST_CONTACT_URL is the fallback
+  autoPostX: true,         // on a REAL send, queue the suggested x_post to the social-posting system. Default ON (as-built); off = skip.
 };
 
 function clampInt(value, min, max, fallback) {
@@ -241,6 +243,7 @@ async function getDigestConfig(clientId) {
     schedule: normalizeSchedule(data.schedule),
     briefLinkMode: normalizeBriefLinkMode(data.briefLinkMode),
     contactUrl: typeof data.contactUrl === 'string' ? data.contactUrl : '',
+    autoPostX: data.autoPostX !== false,
     updatedAt: data.updatedAt?.toDate?.()?.toISOString?.() || null,
   };
 }
@@ -261,6 +264,7 @@ async function saveDigestConfig(clientId, patch = {}) {
   if ('schedule' in patch) next.schedule = normalizeSchedule(patch.schedule);
   if ('briefLinkMode' in patch) next.briefLinkMode = normalizeBriefLinkMode(patch.briefLinkMode);
   if (typeof patch.contactUrl === 'string') next.contactUrl = patch.contactUrl.trim().slice(0, 500);
+  if (typeof patch.autoPostX === 'boolean') next.autoPostX = patch.autoPostX;
   next.updatedAt = fb.FieldValue.serverTimestamp();
   await configDocRef(clientId).set(next, { merge: true });
   return getDigestConfig(clientId);

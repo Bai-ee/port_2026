@@ -1,11 +1,17 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
+import {
+  readSocialQueue,
+  runPostingAgents,
+  schedulePost,
+} from '../../../../features/social-posting/twitter-service.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 const require = createRequire(import.meta.url);
+const crypto = require('crypto');
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
 const { getHeaderValue, safeSecretEquals, buildAuthRequestShim, verifyAdminRequest } = require('../../../../api/_lib/auth.cjs');
 const { logError, logInfo, logWarn } = require('../../../../api/_lib/observability.cjs');
@@ -49,6 +55,8 @@ const DIGEST_EVENT_NAMES = [
 // to this calendar (share it with FIREBASE_ADMIN_CLIENT_EMAIL).
 const DIGEST_CALENDAR_ID = process.env.DIGEST_CALENDAR_ID || DIGEST_TO;
 const DIGEST_TIMEZONE = process.env.DIGEST_TIMEZONE || 'America/Chicago';
+const DIGEST_X_HANDLE = String(process.env.DIGEST_X_HANDLE || 'bai_ee').replace(/^@+/, '');
+const DIGEST_X_POST_DELAY_MINUTES = Math.max(1, Math.min(60, Number(process.env.DIGEST_X_POST_DELAY_MINUTES) || 2));
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -83,6 +91,10 @@ function escapeHtml(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function shortHash(value) {
+  return crypto.createHash('sha1').update(String(value || '')).digest('hex').slice(0, 10);
 }
 
 function incrementCounter(counter, key, amount = 1) {
@@ -940,7 +952,7 @@ function buildSummaryBody(summary) {
   // with the content in a cream card body below — no title-inside-card.
   if (callouts.length) {
     const lead = summary.lead
-      ? `<p style="font-family:${DT.fBody};font-weight:300;font-size:18px;line-height:1.35;border-left:3px solid ${DT.ink};padding:2px 0 2px 14px;margin:0 0 20px;color:${DT.ink};">${escapeHtml(summary.lead)}</p>`
+      ? `<p style="font-family:${DT.fBody};font-weight:300;font-size:18px;line-height:1.35;padding:0;margin:0 0 20px;color:${DT.ink};">${escapeHtml(summary.lead)}</p>`
       : '';
     const blocks = callouts.map((c, i) => {
       const col = CALLOUT_COLORS[c.category] || CALLOUT_COLORS.Strategy;
@@ -960,7 +972,7 @@ function buildSummaryBody(summary) {
     ? escapeHtml(summary.paragraph).replace(/\n+/g, ' ')
     : '';
   const body = text || `<span style="color:${DT.light};">No executive summary generated for this run.</span>`;
-  return `<div style="background:${DT.card};border:1px solid ${DT.line};border-left:3px solid ${DT.accent};border-radius:14px;padding:20px 22px;margin-bottom:18px;font-family:${DT.fBody};font-size:15px;line-height:1.62;color:${DT.ink};">${body}</div>`;
+  return `<div style="background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:20px 22px;margin-bottom:18px;font-family:${DT.fBody};font-size:15px;line-height:1.62;color:${DT.ink};">${body}</div>`;
 }
 
 /** Strategic brief block — mirrors the established daily brief's strategy. */
@@ -996,7 +1008,7 @@ function buildStrategicParts(intel, postPlatforms = {}) {
   // suggestedReply; no new generation.
   const replyItems = (intel.opportunities || []).filter((o) => o.suggestedReply);
   const repliesHtml = replyItems.length
-    ? replyItems.map((o) => `<div style="margin-bottom:14px;padding:14px 16px;background:${DT.brandTint};border-left:3px solid ${DT.brand};border-radius:12px;">
+    ? replyItems.map((o) => `<div style="margin-bottom:14px;padding:14px 16px;background:${DT.brandTint};border:1px solid ${DT.line};border-radius:12px;">
         <div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:${DT.brand};margin-bottom:6px;">Reply${o.windowHours ? ` &middot; ${o.windowHours}h window` : ''}</div>
         <div style="font-family:${DT.fBody};font-size:13px;font-weight:700;color:${DT.ink};margin-bottom:4px;">${escapeHtml(o.topic)}${linkBit(o.url)}</div>
         ${o.angle ? `<div style="font-family:${DT.fBody};font-size:12px;line-height:1.5;color:${DT.soft};margin-bottom:8px;"><strong style="color:${DT.ink};">Why:</strong> ${escapeHtml(o.angle)}</div>` : ''}
@@ -1123,7 +1135,7 @@ function buildWatchlistBriefSection(analysisText) {
   };
 
   const sec = (t) => `<div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:${DT.light};margin:0 0 6px;">${t}</div>`;
-  const pull = (inner) => `<p style="font-family:${DT.fBody};font-weight:300;font-size:18px;line-height:1.3;border-left:3px solid ${DT.ink};padding:2px 0 2px 14px;margin:0;color:${DT.ink};">${inner}</p>`;
+  const pull = (inner) => `<p style="font-family:${DT.fBody};font-weight:300;font-size:18px;line-height:1.3;padding:0;margin:0;color:${DT.ink};">${inner}</p>`;
 
   const overviewHtml = data?.overview
     ? `<div style="margin-bottom:16px;">${sec('Overview')}${pull(boldHandles(data.overview))}</div>` : '';
@@ -1460,6 +1472,80 @@ async function sendEmail(subject, html) {
   }
 
   return res.json();
+}
+
+// ── X auto-posting ──────────────────────────────────────────────────────────
+
+function selectDigestSuggestedPost(briefs, homeClientId) {
+  const briefList = Array.isArray(briefs) ? briefs : [];
+  const ordered = [
+    ...briefList.filter((b) => b?.clientId === homeClientId),
+    ...briefList.filter((b) => b?.clientId !== homeClientId),
+  ];
+  for (const brief of ordered) {
+    const content = brief?.intel?.content || {};
+    const text = content.x_post || content.primary_post || content.post || '';
+    if (String(text || '').trim()) {
+      return {
+        clientId: brief.clientId || homeClientId,
+        clientName: brief.clientName || brief.clientId || homeClientId,
+        text: String(text).trim(),
+      };
+    }
+  }
+  return null;
+}
+
+async function enqueueDigestSuggestedPost({ homeClientId, briefs, timestamp, step }) {
+  if (!homeClientId) return { ok: false, skipped: 'no-home-client' };
+  const selected = selectDigestSuggestedPost(briefs, homeClientId);
+  if (!selected?.text) return { ok: false, skipped: 'no-suggested-post' };
+
+  const dateKey = new Date(timestamp).toISOString().slice(0, 10);
+  const source = `daily-digest:${dateKey}:suggested-post`;
+  let existing = [];
+  try {
+    existing = await readSocialQueue(homeClientId);
+  } catch (err) {
+    logWarn('daily_digest_x_queue_read_failed', { clientId: homeClientId, error: err.message });
+  }
+  const duplicate = existing.find((post) => post?.source === source);
+  if (duplicate) {
+    step?.('info', `X post already queued · @${DIGEST_X_HANDLE}`);
+    return { ok: true, skipped: 'duplicate', post: duplicate };
+  }
+
+  const { optimized, agents } = runPostingAgents(selected.text, {
+    source,
+    xGrowthObjective: 'awareness',
+  });
+  const content = String(optimized || selected.text || '').trim();
+  if (!content) return { ok: false, skipped: 'empty-post' };
+
+  const scheduledAt = new Date(Date.now() + DIGEST_X_POST_DELAY_MINUTES * 60_000).toISOString();
+  const post = await schedulePost(homeClientId, {
+    content,
+    source,
+    scheduledAt,
+    agents,
+    xStrategy: {
+      source: 'daily-digest',
+      targetHandle: DIGEST_X_HANDLE,
+      sourceClientId: selected.clientId || homeClientId,
+      sourceClientName: selected.clientName || '',
+      dateKey,
+      contentHash: shortHash(content),
+    },
+  });
+  step?.('success', `X post queued · @${DIGEST_X_HANDLE} · ${new Date(scheduledAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`);
+  logInfo('daily_digest_x_post_queued', {
+    clientId: homeClientId,
+    targetHandle: DIGEST_X_HANDLE,
+    source,
+    postId: post.id,
+    scheduledAt,
+  });
+  return { ok: true, post };
 }
 
 // ── Placeholder data (template preview) ───────────────────────────────────────
@@ -1886,6 +1972,19 @@ export async function GET(request) {
       step(n ? 'success' : 'info', n ? `Video · ${n} attached (remix:${videoItems.remix ? 'y' : 'n'} promo:${videoItems.promo ? 'y' : 'n'})` : 'No fresh video available yet');
     }
 
+    let xPostResult = null;
+    if (isRealSend && digestCfg?.autoPostX !== false) {
+      try {
+        xPostResult = await enqueueDigestSuggestedPost({ homeClientId, briefs, timestamp, step });
+        if (xPostResult?.skipped && !['duplicate'].includes(xPostResult.skipped)) {
+          step('info', `X post skipped · ${xPostResult.skipped}`);
+        }
+      } catch (err) {
+        logWarn('daily_digest_x_post_enqueue_failed', { clientId: homeClientId, error: err.message });
+        step('error', `X post enqueue failed: ${err.message}`);
+      }
+    }
+
     const sessionStr = ga4.overview ? `, ${ga4.overview.sessions} session${ga4.overview.sessions !== 1 ? 's' : ''}` : '';
     const subject = `HITLOOP Daily — ${firebase.newUsers} sign-up${firebase.newUsers !== 1 ? 's' : ''}, ${firebase.recentRuns} dashboard${firebase.recentRuns !== 1 ? 's' : ''}${sessionStr} · ${dateStr}`;
 
@@ -1948,6 +2047,13 @@ export async function GET(request) {
       summary: summary?.paragraph || null,
       metrics: { firebase, vercel: { totalDeployments: vercel.totalDeployments, errorCount: vercel.errorLogs?.length || 0 }, ga4: { overview: ga4.overview, topPagesCount: ga4.topPages?.length, sourcesCount: ga4.trafficSources?.length, events: ga4.events, error: ga4.error || null }, agenda: { eventCount: agenda.events?.length || 0, error: agenda.error || null }, homepage: { totalEvents: homepage.totalEvents, byInteractionType: homepage.byInteractionType, topTargets: homepage.topTargets, error: homepage.error || null } },
       email: emailResult,
+      xPost: xPostResult ? {
+        ok: Boolean(xPostResult.ok),
+        skipped: xPostResult.skipped || null,
+        postId: xPostResult.post?.id || null,
+        source: xPostResult.post?.source || null,
+        scheduledAt: xPostResult.post?.scheduledAt || null,
+      } : null,
       subject,
       log: sendLog,
     });

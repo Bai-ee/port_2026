@@ -395,6 +395,20 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
                   <span className="hint">Which platforms’ drafted posts are included in the Suggested Posts section (no own header — just in or out).</span>
                 </div>
 
+                <div className="field" style={{ display: 'grid', gap: 6 }}>
+                  <span className="label">Auto-post to X on send</span>
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+                    <input
+                      type="checkbox"
+                      checked={form.autoPostX !== false}
+                      onChange={() => setForm((f) => ({ ...f, autoPostX: f.autoPostX === false }))}
+                      style={{ width: 16, minHeight: 16 }}
+                    />
+                    Queue the suggested X post on a real send
+                  </label>
+                  <span className="hint">On Run &amp; Send / the daily cron, the suggested x_post is queued to the social-posting system (published when “Post due” runs). Off = never queued. Previews never post.</span>
+                </div>
+
                 {SECTION_GROUPS.map(([groupLabel, items]) => {
                   const orderable = !NON_ORDERABLE_GROUPS.has(groupLabel);
                   const ord = Array.isArray(form.order) ? form.order : [];
