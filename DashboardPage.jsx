@@ -4064,6 +4064,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // One-shot guard for emailed dashboard deep links such as /dashboard?open=brief.
   // The HTML arrives async from /api/dashboard/brief-preview, so open after fetch.
   const deepLinkBriefOpenedRef = useRef(false);
+  // Guard for /dashboard?open=post-me deep links (from the email/brief "Post Me →").
+  const deepLinkPostMeOpenedRef = useRef(false);
   const runWasActiveRef = useRef(false);
   const prevRunIdRef = useRef(null);
   const terminalOutputRef = useRef(null);
@@ -4141,14 +4143,29 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   );
 
   useEffect(() => {
-    if (deepLinkBriefOpenedRef.current) return;
-    if (!briefPreviewHtml) return;
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search || '');
     const openTarget = String(params.get('open') || params.get('view') || '').toLowerCase();
+    // Post Me deep link (email/brief "Post Me →"): open the post-me card so the
+    // user can review + post. intakeCapabilityCards is always ready by the time
+    // any effect runs (it's computed during render).
+    if (openTarget === 'post-me' && !deepLinkPostMeOpenedRef.current) {
+      const targetCard = intakeCapabilityCards.find((c) => c.id === 'post-me');
+      if (targetCard) {
+        deepLinkPostMeOpenedRef.current = true;
+        setActiveCapabilityFilter('deliverables');
+        setActiveTileModal({ title: targetCard.title, description: targetCard.description, rows: targetCard.rows, cardId: targetCard.id, placeholderLabel: targetCard.placeholderLabel, number: targetCard.number, label: targetCard.label, isCapabilityCard: true, vizType: null, recommendation: null, analyzer: null, readinessBadge: null });
+      }
+      return;
+    }
+    if (deepLinkBriefOpenedRef.current) return;
+    if (!briefPreviewHtml) return;
     if (!['brief', 'executive', 'executive-brief'].includes(openTarget)) return;
     deepLinkBriefOpenedRef.current = true;
     setBriefFullScreen(true);
+    // deps: briefPreviewHtml only. intakeCapabilityCards is declared later in
+    // this component (TDZ — can't go in the deps array), but the callback runs
+    // post-render so it can read it; the effect re-runs when the brief loads.
   }, [briefPreviewHtml]);
 
   // Creative Brief card auto-scroll tease — once the preview iframe loads, slowly

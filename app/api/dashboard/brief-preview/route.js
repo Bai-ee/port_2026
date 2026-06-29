@@ -1055,7 +1055,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
       // quote beside the video mock (2-col, stacks on mobile). Primary action
       // downloads the video; secondary copies the caption (live iframe only —
       // inert but harmless in the PDF).
-      const postActions = `<div class="cb-post-actions">${ok(studioVideoUrl) ? `<a class="cb-cta cb-cta--solid" href="${esc(studioVideoUrl)}" download target="_blank" rel="noopener noreferrer">Download Video</a>` : ''}<button type="button" class="cb-cta cb-post-copy" data-copy="${esc(caption)}" onclick="(function(b){try{navigator.clipboard.writeText(b.dataset.copy);var t=b.textContent;b.textContent='Copied';setTimeout(function(){b.textContent=t},1600);}catch(e){}})(this)">Copy Caption</button></div>`;
+      const postActions = `<div class="cb-post-actions">${ok(studioVideoUrl) ? `<a class="cb-cta cb-cta--solid" href="${esc(studioVideoUrl)}" download target="_blank" rel="noopener noreferrer">Download Video</a>` : ''}<button type="button" class="cb-cta cb-post-copy" data-copy="${esc(caption)}" onclick="(function(b){try{navigator.clipboard.writeText(b.dataset.copy);var t=b.textContent;b.textContent='Copied';setTimeout(function(){b.textContent=t},1600);}catch(e){}})(this)">Copy Caption</button><a class="cb-cta cb-cta--solid" href="/dashboard?open=post-me" target="_top" rel="noopener">Post Me &rarr;</a></div>`;
       const featuredCopy = `<div class="cb-featured-copy"><blockquote class="cb-post-quote">${esc(caption)}</blockquote>${postActions}</div>`;
       // Deliverables ride underneath as a sub-category of the same page.
       const deliverablesBlock = deliverablesRow

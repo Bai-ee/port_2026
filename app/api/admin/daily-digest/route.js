@@ -996,6 +996,9 @@ function buildStrategicParts(intel, postPlatforms = {}) {
 
   // Weather is its own toggled section (buildWeatherSection) — not rendered here.
   const linkBit = (url) => (url ? ` <a href="${escapeHtml(url)}" style="color:${DT.accent};font-family:${DT.fMono};font-size:11px;">↗</a>` : '');
+  // "Post Me →" — opens the dashboard Post Me card (deep link) so the admin can
+  // review + post the draft. Emails can't POST directly, so this is a link.
+  const postMeLink = `<div style="margin-top:10px;"><a href="${appUrl('/dashboard?open=post-me')}" style="display:inline-block;color:${DT.brand};font-family:${DT.fMono};font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;">Post Me &rarr;</a></div>`;
 
   const oppRows = (intel.opportunities || []).length
     ? intel.opportunities.map((o) => `<tr>
@@ -1014,7 +1017,7 @@ function buildStrategicParts(intel, postPlatforms = {}) {
         ${o.angle ? `<div style="font-family:${DT.fBody};font-size:12px;line-height:1.5;color:${DT.soft};margin-bottom:8px;"><strong style="color:${DT.ink};">Why:</strong> ${escapeHtml(o.angle)}</div>` : ''}
         <div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:${DT.light};margin-bottom:3px;">Suggested reply</div>
         <div style="font-family:${DT.fBody};font-size:13px;line-height:1.55;color:${DT.ink};">${escapeHtml(o.suggestedReply)}</div>${o.url ? `<a href="${escapeHtml(o.url)}" style="display:inline-block;margin-top:8px;color:${DT.brand};font-family:${DT.fMono};font-size:10px;letter-spacing:.06em;text-transform:uppercase;">Read tweet &amp; reply &rarr;</a>` : ''}
-      </div>`).join('')
+      </div>`).join('') + postMeLink
     : '';
 
   const signalRows = [
@@ -1064,7 +1067,7 @@ function buildStrategicParts(intel, postPlatforms = {}) {
         <div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:${DT.light};margin-bottom:6px;">${escapeHtml(p.label)}</div>
         <div style="font-family:${DT.fBody};font-size:13px;color:${DT.ink};line-height:1.5;">${escapeHtml(p.text)}</div>
         ${p.foot ? `<div style="margin-top:6px;font-family:${DT.fBody};font-size:11px;color:${DT.soft};line-height:1.45;">${escapeHtml(p.foot)}</div>` : ''}
-      </div>`).join('')
+      </div>`).join('') + postMeLink
     : '';
   const planPreview = (intel.strategyBuilder?.items || []).slice(0, 7);
   const planTable = planPreview.length
