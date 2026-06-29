@@ -157,6 +157,7 @@ function projectBrief(marketingBrief, state = null) {
       items: strategyItems,
     } : null,
     _agentData: agentData, // raw, for per-handle watchlist matching (stripped before return)
+    _watchlistTimelines: marketingBrief?.watchlistTimelines || null, // real pulled X timelines (own posts + mentions); stripped before return
   };
 }
 
@@ -169,23 +170,42 @@ function normHandle(s) {
  * agentData. Returns one entry per handle — name-for-name — with the activity
  * found (or found:false when the account was quiet this run).
  */
-function buildWatchlist(kols, agentData) {
-  const handles = arr(kols).map((k) => String(k || '').trim()).filter(Boolean);
+function buildWatchlist(kols, agentData, watchlistTimelines) {
+  // The real pulled X timelines (own posts + mentions per handle) are the primary
+  // source: the scout doesn't pull X, so its kolActivity/brandMentions are usually
+  // empty for these handles. Fall back to scout matches only when a handle has no
+  // pulled timeline.
+  const tlHandles = arr(watchlistTimelines?.handles);
+  const tlByHandle = new Map();
+  for (const t of tlHandles) {
+    const key = normHandle(t.handle || t.username);
+    if (key) tlByHandle.set(key, t);
+  }
+  // Handle list: configured kols, else whatever the timeline pull actually covered.
+  let handles = arr(kols).map((k) => String(k || '').trim()).filter(Boolean);
+  if (!handles.length) handles = tlHandles.map((t) => String(t.handle || t.username || '').trim()).filter(Boolean);
   if (!handles.length) return [];
   const kolActivity = arr(agentData?.kolActivity);
   const mentions = arr(agentData?.brandMentions);
   return handles.map((handle) => {
     const h = normHandle(handle);
     const activity = [];
-    for (const k of kolActivity) {
-      const hay = `${normHandle(k.name)} ${String(k.content || '').toLowerCase()} ${String(k.url || '').toLowerCase()}`;
-      if (h && hay.includes(h)) activity.push({ text: k.content || k.summary || '', url: k.url || '', platform: k.platform || 'x' });
+    const tl = tlByHandle.get(h);
+    if (tl) {
+      for (const p of arr(tl.ownPosts)) activity.push({ text: p.text || p.content || '', url: p.url || '', platform: 'x' });
+      for (const m of arr(tl.mentions)) activity.push({ text: m.text || m.content || '', url: m.url || '', platform: 'x' });
     }
-    for (const m of mentions) {
-      const hay = `${normHandle(m.author)} ${String(m.content || '').toLowerCase()} ${String(m.url || '').toLowerCase()}`;
-      if (h && hay.includes(h)) activity.push({ text: m.content || '', url: m.url || '', platform: '' });
+    if (!activity.length) {
+      for (const k of kolActivity) {
+        const hay = `${normHandle(k.name)} ${String(k.content || '').toLowerCase()} ${String(k.url || '').toLowerCase()}`;
+        if (h && hay.includes(h)) activity.push({ text: k.content || k.summary || '', url: k.url || '', platform: k.platform || 'x' });
+      }
+      for (const m of mentions) {
+        const hay = `${normHandle(m.author)} ${String(m.content || '').toLowerCase()} ${String(m.url || '').toLowerCase()}`;
+        if (h && hay.includes(h)) activity.push({ text: m.content || '', url: m.url || '', platform: '' });
+      }
     }
-    return { handle, found: activity.length > 0, activity };
+    return { handle, found: activity.length > 0, activity: activity.filter((a) => a.text).slice(0, 6) };
   });
 }
 
@@ -264,8 +284,9 @@ async function getBriefForClient(clientId) {
   } catch {
     /* no config — empty watchlist */
   }
-  intel.watchlist = buildWatchlist(kols, intel._agentData);
+  intel.watchlist = buildWatchlist(kols, intel._agentData, intel._watchlistTimelines);
   delete intel._agentData;
+  delete intel._watchlistTimelines;
   try {
     intel.weather = await getClientWeather(clientId);
   } catch {
