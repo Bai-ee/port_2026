@@ -1784,12 +1784,30 @@ export async function GET(request) {
     const step = (type, text) => sendLog.push({ type, text });
     if (isRealSend && briefClientIds.length) {
       step('info', `Refreshing ${briefClientIds.length} brief client${briefClientIds.length !== 1 ? 's' : ''}…`);
+      // Time-box the inline brief refresh. A full refresh can exceed the 300s Vercel
+      // function cap and kill the request BEFORE sendEmail ever runs (the digest's
+      // "no email" failure). Cap the refresh phase and always proceed to the send;
+      // anything not refreshed in time falls back to the latest saved brief.
+      const REFRESH_BUDGET_MS = 180_000;
       try {
         const { refreshDigestClient } = await import('../../worker/pre-digest-refresh/route.js');
-        for (const cid of briefClientIds) {
-          const r = await refreshDigestClient(cid).catch((e) => ({ ok: false, error: e?.message }));
-          logInfo('daily_digest_prerefresh', { clientId: cid, ok: Boolean(r?.ok), error: r?.ok ? undefined : (r?.scout?.error || r?.error) });
-          step(r?.ok ? 'success' : 'error', r?.ok ? `Refreshed brief · ${cid}` : `Brief refresh issue · ${cid}: ${r?.scout?.error || r?.error || 'error'}`);
+        const refreshAll = (async () => {
+          for (const cid of briefClientIds) {
+            // eslint-disable-next-line no-await-in-loop
+            const r = await refreshDigestClient(cid).catch((e) => ({ ok: false, error: e?.message }));
+            logInfo('daily_digest_prerefresh', { clientId: cid, ok: Boolean(r?.ok), error: r?.ok ? undefined : (r?.scout?.error || r?.error) });
+            step(r?.ok ? 'success' : 'error', r?.ok ? `Refreshed brief · ${cid}` : `Brief refresh issue · ${cid}: ${r?.scout?.error || r?.error || 'error'}`);
+          }
+        })();
+        // Orphaned refresh work after a time-box must not reject unhandled.
+        refreshAll.catch(() => {});
+        const timedOut = await Promise.race([
+          refreshAll.then(() => false),
+          new Promise((resolve) => setTimeout(() => resolve(true), REFRESH_BUDGET_MS)),
+        ]);
+        if (timedOut) {
+          logWarn('daily_digest_prerefresh_timeboxed', { budgetMs: REFRESH_BUDGET_MS, clients: briefClientIds.length });
+          step('error', `Refresh exceeded ${Math.round(REFRESH_BUDGET_MS / 1000)}s — sending from the latest saved brief so the email still goes out.`);
         }
       } catch (err) {
         // Refresh unavailable — fall back to last-good data; never block the email.
