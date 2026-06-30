@@ -27,6 +27,8 @@ const { buildAuthRequestShim, getHeaderValue, safeSecretEquals, verifyAdminReque
 const { claimRun, completeRun, failRun, appendRunEvent, updateModuleState } = require('../../../../api/_lib/run-lifecycle.cjs');
 const { logError, logInfo } = require('../../../../api/_lib/observability.cjs');
 const digestConfig = require('../../../../features/intelligence/_digest-config.js');
+const { runAnalysisRecipe } = require('../../../../features/intelligence/analysis-recipes/run-recipe.js');
+const { loadClientBrainContext } = require('../../../../features/client-brain/store.cjs');
 const { runWatchlistPull } = require('../../../../features/scout-intake/watchlist-pull');
 const { buildModuleBriefs } = require('../../../../features/scout-intake/module-brief-builder.js');
 const { getDefaultModuleConfig } = require('../../../../features/scout-intake/module-registry');
@@ -61,9 +63,17 @@ function hasValidCronSecret(request) {
   return safeSecretEquals(provided, `Bearer ${cronSecret}`);
 }
 
+// How fresh a scout brief must be to skip a re-run. The daily cron fires ~24h
+// apart so it always refreshes; this only suppresses redundant full-scout runs
+// from repeated manual digest tests within the same window (the main cost
+// spike). Pass force=1 to the worker to override.
+const SCOUT_FRESH_WINDOW_MS = 6 * 60 * 60 * 1000;
+
 /** Scout-only marketing brief refresh for one client. Returns a status object;
- *  never throws — failures are reported so strategy generation still proceeds. */
-async function refreshScoutBrief(clientId) {
+ *  never throws — failures are reported so strategy generation still proceeds.
+ *  Skips the run (no LLM/web_search cost) when a successful scout brief is newer
+ *  than SCOUT_FRESH_WINDOW_MS, unless force is set. */
+async function refreshScoutBrief(clientId, { force = false, source = 'cron-scheduled', actorUid = null } = {}) {
   let clientConfig;
   try {
     const configSnap = await fb.adminDb.collection('client_configs').doc(clientId).get();
@@ -73,6 +83,22 @@ async function refreshScoutBrief(clientId) {
     return { ok: false, error: `client_configs read failed: ${err.message}` };
   }
 
+  if (!force) {
+    try {
+      const dsSnap = await fb.adminDb.collection('dashboard_state').doc(clientId).get();
+      const mb = dsSnap.exists ? (dsSnap.data()?.marketingBrief || {}) : {};
+      const stampMs = Date.parse(mb.generatedAtIso || mb?.scoutBrief?.timestamp || '');
+      if (Number.isFinite(stampMs)) {
+        const ageMs = Date.now() - stampMs;
+        if (ageMs >= 0 && ageMs < SCOUT_FRESH_WINDOW_MS) {
+          const ageMinutes = Math.round(ageMs / 60000);
+          logInfo('pre_digest_scout_skip_fresh', { clientId, ageMinutes });
+          return { ok: true, skipped: 'fresh', ageMinutes };
+        }
+      }
+    } catch { /* freshness read failed — fall through and refresh */ }
+  }
+
   const runRef = fb.adminDb.collection('brief_runs').doc();
   const runId = runRef.id;
   const now = fb.FieldValue.serverTimestamp();
@@ -80,9 +106,9 @@ async function refreshScoutBrief(clientId) {
     runId,
     id: runId,
     clientId,
-    requestedByUid: null,
+    requestedByUid: actorUid,
     trigger: 'pre-digest-refresh',
-    source: 'cron',
+    source,
     status: 'queued',
     pipelineType: 'scout-brief',
     scope: 'marketing-director',
@@ -169,7 +195,7 @@ async function refreshStrategyPlan(clientId) {
 
 /** Refresh website/creative module facts so the Executive Brief's site,
  *  performance, and creative sections are captured in this run. */
-async function refreshSiteCreativeModules(clientId, freshnessToken = '') {
+async function refreshSiteCreativeModules(clientId, freshnessToken = '', { source = 'cron-scheduled', actorUid = null } = {}) {
   let clientConfig;
   try {
     const configRef = fb.adminDb.collection('client_configs').doc(clientId);
@@ -206,9 +232,9 @@ async function refreshSiteCreativeModules(clientId, freshnessToken = '') {
     runId,
     id: runId,
     clientId,
-    requestedByUid: null,
+    requestedByUid: actorUid,
     trigger: 'pre-digest-modules',
-    source: 'cron',
+    source,
     status: 'running',
     pipelineType: 'module-run',
     moduleIds,
@@ -345,16 +371,71 @@ async function refreshWatchlist(clientId) {
   }
 }
 
+/** Run the reply-targets recipe over fresh watchlist + signal data and persist
+ *  the result to marketingBrief.reportSnapshot.digestRecipes so the email digest
+ *  can read it without re-running LLM calls. Non-blocking: never throws. */
+async function refreshReplyTargets(clientId) {
+  if (!clientId) return { ok: false, skipped: true };
+  try {
+    const snap = await fb.adminDb.collection('dashboard_state').doc(clientId).get();
+    const marketingBrief = snap.exists ? (snap.data()?.marketingBrief || {}) : {};
+    const agentData = marketingBrief?.scoutBrief?.agentData || null;
+    const watchlistTimelines = marketingBrief?.watchlistTimelines || null;
+    if (!agentData && !watchlistTimelines) return { ok: false, skipped: true, error: 'no signal data' };
+    const nowMs = Date.now();
+    const addVelocity = (it) => {
+      if (!it || typeof it !== 'object') return it;
+      const published = it.publishedAt || it.createdAt || it.date || null;
+      const ts = published ? Date.parse(published) : NaN;
+      if (!Number.isFinite(ts)) return it;
+      const ageHours = Math.max(0, (nowMs - ts) / 3_600_000);
+      const eng = (it.likes || 0) + (it.retweets || 0) + (it.replies || 0) + (it.engagement || 0);
+      return { ...it, ageHours: Math.round(ageHours * 10) / 10, velocityPerHour: Math.round((eng / Math.max(ageHours, 0.5)) * 10) / 10, replyWindowOpen: ageHours <= 6 };
+    };
+    const replyPool = {
+      generatedAt: new Date(nowMs).toISOString(),
+      replyWindowHours: 6,
+      watchlistMentions: (Array.isArray(watchlistTimelines?.handles) ? watchlistTimelines.handles : []).map((h) => ({
+        ...h,
+        ownPosts: Array.isArray(h?.ownPosts) ? h.ownPosts.map(addVelocity) : [],
+        mentions: Array.isArray(h?.mentions) ? h.mentions.map(addVelocity) : [],
+      })),
+      brandMentions: (Array.isArray(agentData?.brandMentions) ? agentData.brandMentions : []).map(addVelocity),
+      redditSignals: (Array.isArray(agentData?.redditSignals) ? agentData.redditSignals : []).map(addVelocity),
+      kolActivity: (Array.isArray(agentData?.kolActivity) ? agentData.kolActivity : []).map(addVelocity),
+    };
+    const contextParts = [];
+    try {
+      const voiceCtx = await loadClientBrainContext(clientId, { useFor: 'copy', maxChars: 2000 });
+      if (voiceCtx) contextParts.push(voiceCtx);
+    } catch { /* non-fatal */ }
+    const context = contextParts.join('\n\n');
+    const result = await runAnalysisRecipe({ recipeId: 'reply-targets', content: replyPool, context });
+    await fb.adminDb.collection('dashboard_state').doc(clientId).set(
+      { marketingBrief: { reportSnapshot: { digestRecipes: [result] } } },
+      { merge: true }
+    );
+    logInfo('pre_digest_reply_targets', { clientId, ok: result.ok, costUsd: result.costUsd });
+    return { ok: result.ok, recipeId: 'reply-targets', costUsd: result.costUsd };
+  } catch (err) {
+    logError('pre_digest_reply_targets_failed', { clientId, error: err.message });
+    return { ok: false, error: err.message };
+  }
+}
+
 /** Refresh one client's scout brief + watchlist timelines + strategy plan.
  *  Sequential (strategy reads fresh scout). Never throws. */
-export async function refreshDigestClient(clientId, { freshnessToken = '' } = {}) {
+export async function refreshDigestClient(clientId, { freshnessToken = '', force = false, source = 'cron-scheduled', actorUid = null } = {}) {
   if (!clientId) return { ok: false, error: 'no clientId' };
   const [modules, scout, watchlist] = await Promise.all([
-    refreshSiteCreativeModules(clientId, freshnessToken),
-    refreshScoutBrief(clientId),
+    refreshSiteCreativeModules(clientId, freshnessToken, { source, actorUid }),
+    refreshScoutBrief(clientId, { force, source, actorUid }),
     refreshWatchlist(clientId),
   ]);
-  const strategy = await refreshStrategyPlan(clientId);
+  const [strategy, replyTargets] = await Promise.all([
+    refreshStrategyPlan(clientId),
+    refreshReplyTargets(clientId), // needs fresh watchlist timelines already written above
+  ]);
   const briefSummaries = await refreshBriefSummaries(clientId, scout?.runId || modules?.runId || null);
   const digestFreshness = {
     token: freshnessToken || null,
@@ -379,6 +460,7 @@ export async function refreshDigestClient(clientId, { freshnessToken = '' } = {}
     scout,
     watchlist,
     strategy,
+    replyTargets,
     executiveSummary: briefSummaries,
     digestFreshness,
     warnings: watchlistWarning ? [{ source: 'watchlist', message: watchlistWarning }] : [],
@@ -391,12 +473,18 @@ async function handle(request) {
   const url = new URL(request.url);
   const requestedClientId = String(url.searchParams.get('clientId') || '').trim();
   const freshnessToken = String(url.searchParams.get('freshnessToken') || '').trim().slice(0, 160);
+  // force=1 (or forceScout=1) bypasses the scout freshness skip — use when you
+  // explicitly want a fresh full scout (the daily cron sends no params, so it
+  // gets the cost-saving skip when a brief is already <6h old).
+  const forceScout = url.searchParams.get('force') === '1' || url.searchParams.get('forceScout') === '1';
   const cronOk = hasValidCronSecret(request);
   let adminOk = false;
+  let actorUid = null;
   if (!cronOk) {
     try {
-      await verifyAdminRequest(buildAuthRequestShim(request));
+      const decoded = await verifyAdminRequest(buildAuthRequestShim(request));
       adminOk = true;
+      actorUid = decoded?.uid || null;
     } catch {
       adminOk = false;
     }
@@ -404,6 +492,10 @@ async function handle(request) {
   if (!cronOk && !adminOk) {
     return json({ error: 'Unauthorized.' }, 401);
   }
+  // Who fired this run — distinguishes the Vercel scheduled cron (valid
+  // CRON_SECRET) from a manual admin call, so the Operating Cost card can show
+  // attribution instead of everything reading "cron". Threaded into each run doc.
+  const triggerSource = cronOk ? 'cron-scheduled' : 'manual-admin';
 
   let homeClientId = null;
   let clientIds = [];
@@ -443,7 +535,7 @@ async function handle(request) {
       break;
     }
     // eslint-disable-next-line no-await-in-loop
-    const result = await refreshDigestClient(clientId, { freshnessToken });
+    const result = await refreshDigestClient(clientId, { freshnessToken, force: forceScout, source: triggerSource, actorUid });
     results.push(result);
     logInfo('pre_digest_refresh_client_done', {
       clientId,

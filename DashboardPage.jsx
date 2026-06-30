@@ -50,6 +50,7 @@ import { deriveFindings } from './features/scout-intake/derived-findings.mjs';
 import ModuleCardControls from './components/dashboard/ModuleCardControls';
 import SubscribeModal from './components/payments/SubscribeModal';
 import { AdminEmailDigestView, AdminCreateClientView } from './components/AdminEmailModals';
+import { AdminOperatingCostView } from './components/AdminCostView';
 import { CalendarConnectView } from './components/CalendarConnectModal';
 import { ContactCapabilitiesPanel } from './StackedSlidesSection';
 import { ROSITAS_GBP_REPORT } from './lib/gbpReputationReport';
@@ -1484,6 +1485,7 @@ const CUSTOM_DETAIL_CARD_IDS = new Set([
   'strategy-builder',
   'email-digest',
   'create-client',
+  'operating-cost',
   'local-weather',
   // Conversation Intake + Scout Config slice cards — single top panel only,
   // no generic REPORT/DATA container at the bottom.
@@ -3261,7 +3263,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	      await runWithTerminal({
 	        title: 'GENERATING VIDEO REMIX',
 	        brand: 'Video Remix',
-	        host: '',
+	        host: `${renderCount} clip${renderCount === 1 ? '' : 's'}`,
 	        stages: [
 	          { pfx: '[QUEUE]',    text: 'creating render job…' },
 	          { pfx: '[DISPATCH]', text: 'waking the EditVideos render worker…' },
@@ -3287,6 +3289,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	            }
 	            if (!folders || !folders.length) folders = ['uploads'];
 	            recipe = buildRemixRecipe(STANDARD_REMIX_DEFAULTS, folders);
+	            // Footer now names exactly what's rendering: N folders · look.
+	            const vrLook = recipe?.filter?.key ? String(recipe.filter.key).replace(/^look_/, '').replace(/_/g, ' ') : 'auto look';
+	            const vrFolders = Array.isArray(folders) ? folders.length : 0;
+	            setAdhocTerminal((t) => (t ? { ...t, host: `${vrFolders} source folder${vrFolders === 1 ? '' : 's'} · ${vrLook}` } : t));
 	          }
 
 	          // Enqueue one render job. Returns { jobId, editJobId } or throws.
@@ -5551,7 +5557,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       await runWithTerminal({
         title: 'PULLING WATCHLIST TIMELINES',
         brand: 'Watchlist',
-        host: '',
+        host: `${handles.length} handle${handles.length === 1 ? '' : 's'}`,
         stages: [
           { pfx: '[X]', text: 'connecting to X via last30days…' },
           ...handles.map((h) => ({ pfx: '[PULL]', text: `@${h} — recent activity…` })),
@@ -11287,6 +11293,27 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       footerLeft: 'Live',
       footerRight: 'ADMIN',
       readinessBadge: { tone: 'ok', label: 'Live' },
+    }, {
+      // Operating Cost — live per-run / per-client expense tracking. Reads
+      // brief_runs + usage_events via /api/admin/cost-report; modal body =
+      // AdminOperatingCostView (in CUSTOM_DETAIL_CARD_IDS). Read-only.
+      id: 'operating-cost',
+      category: 'admin',
+      number: 'OC',
+      label: 'OPERATING COST',
+      title: 'Operating Cost',
+      description: 'Live per-run and per-client expense breakdown — LLM token, image, and search spend from brief_runs + usage_events, plus fixed subscriptions and Anthropic account links.',
+      placeholderLabel: 'COST',
+      rows: [
+        { key: 'oc-scope',  label: 'Tracks',  value: 'Per run · per client · per stage' },
+        { key: 'oc-window', label: 'Window',  value: 'Selectable 7 / 30 / 90 days' },
+        { key: 'oc-source', label: 'Source',  value: 'brief_runs + usage_events (live)' },
+        { key: 'oc-manage', label: 'Manage',  value: 'Console deep links · spend limits' },
+        { key: 'oc-access', label: 'Access',  value: 'Admin only' },
+      ],
+      footerLeft: 'Live',
+      footerRight: 'ADMIN',
+      readinessBadge: { tone: 'ok', label: 'Live' },
     }] : []),
 
     {
@@ -13016,7 +13043,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               const _cardDownloads = getCardDownloads(card);
               const _mEnabled = moduleConfig ? (moduleConfig[card.id]?.enabled ?? false) : true;
               const _mStatus = moduleState?.[card.id]?.status ?? 'inactive';
-              const hasBothButtons = Boolean(card.moduleControls) && !(!_mEnabled && _mStatus === 'inactive');
+              // DELIVERABLES bucket normalizes every card to "click the body to open
+              // the modal" with a pointer cursor; the footer Run/Details buttons keep
+              // their own clicks via stopPropagation. So deliverables cards must NOT
+              // become --btns-only (which sets pointer-events:none + cursor:default on
+              // the body and early-returns the body click). Other buckets unchanged.
+              const hasBothButtons = Boolean(card.moduleControls) && !(!_mEnabled && _mStatus === 'inactive') && activeCapabilityFilter !== 'deliverables';
               // All client dashboard cards are now visible without legacy
               // modular-onboarding dimming; module buttons still control run state.
               const isDimmed = false;
@@ -13459,7 +13491,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                           position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
                           background: '#000', color: '#e7e9ea',
                           fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
-                          overflow: 'hidden', textAlign: 'left', cursor: 'default',
+                          overflow: 'hidden', textAlign: 'left', cursor: 'pointer',
                         }}>
                           {/* Header — avatar, name, handle, X logo */}
                           <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 9, padding: '11px 14px 6px' }}>
@@ -15342,6 +15374,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 {/* Admin · Create Client — website-less workspace */}
                 {activeTileModal.cardId === 'create-client' && (
                   <AdminCreateClientView user={user} />
+                )}
+
+                {/* Admin · Operating Cost — live per-run / per-client expense tracking */}
+                {activeTileModal.cardId === 'operating-cost' && (
+                  <AdminOperatingCostView user={user} />
                 )}
 
                 {/* Knowledge Officer · Google Calendar — per-client OAuth connection */}
@@ -21530,7 +21567,7 @@ export const dashboardCss = `
      to fit, with the creative held at its true 16:10 video ratio. */
   .tile-intake-placeholder-post-me {
     background: #000;
-    cursor: default;
+    cursor: pointer;
   }
   /* Card-shell download button — top-right of every card's image shell (card +
      list views). Glass disc; opens a fixed menu when a card has >1 asset. */
@@ -22469,13 +22506,12 @@ export const dashboardCss = `
   .tile-heading.tile-intake-heading {
     grid-area: auto;
     margin: 0;
-    font-weight: 500;
-    /* Sentence case: lowercase the whole title, re-cap only the first letter,
-       so Title-Case data ("Market Signals") reads "Market signals". */
-    text-transform: lowercase;
-  }
-  .tile-heading.tile-intake-heading::first-letter {
-    text-transform: uppercase;
+    /* Render the card.title exactly as authored (Title Case, e.g. "Video Promo",
+       "Multi-Device Mock"), bold 700, to match the modal header
+       (#tile-detail-modal-title). NO text-transform — a previous 'lowercase'
+       rule here was force-lowercasing titles to "Video promo". Brain cards
+       (.tile-intake-card--brain) still force uppercase via their own override. */
+    font-weight: 700;
   }
   /* Source Library + Client Brain (drag-drop cards) keep their names fully
      capitalized in the shell — overrides the global sentence-case above. */

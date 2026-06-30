@@ -6,7 +6,7 @@
 //   Method: two-stage pipeline via optimizer.js
 //
 // PIPELINE:
-//   Stage 1 (Sonnet + web_search): Execute 5 searches, collect raw results
+//   Stage 1 (Haiku + web_search): Execute capped searches, collect raw results
 //   Stage 2 (Haiku): Trim each result to signal only (~800 tokens each)
 //   Stage 3 (Sonnet): Write brief from compact ~5K context
 
@@ -466,10 +466,19 @@ function buildFallbackSearchPlan(config) {
   ];
 }
 
+// Hard cap on web_search tool uses per scout run. Each search injects raw page
+// content back into the model's context, so this is the dominant cost lever
+// (input tokens), not just the per-search surcharge. Lowering it cuts both.
+const MAX_SCOUT_SEARCHES = 3;
+
 function getResolvedSearchPlan(config) {
   return (config.scout?.searchPlan || []).length > 0
     ? config.scout.searchPlan
     : buildFallbackSearchPlan(config);
+}
+
+function getActiveSearchPlan(config) {
+  return getResolvedSearchPlan(config).slice(0, MAX_SCOUT_SEARCHES);
 }
 
 function buildStructuredContextBlock(config) {
@@ -511,13 +520,13 @@ Benchmarks (reference only, not current unless re-sourced):
 
 // ─── STAGE 1: Search execution ──────────────────────────────────────────────
 //
-// We use a MINIMAL prompt here — just enough for Claude to run the 5 searches
+// We use a MINIMAL prompt here — just enough for Claude to run the capped searches
 // and return structured raw results. No analysis, no brief writing.
 // This keeps Stage 1 output tokens low.
 
 function buildSearchPrompt(config, weatherReport = null, reviewReport = null, instagramReport = null, redditReport = null, last30daysContextBlock = '') {
   const freshnessDays = config.scout?.freshnessDays || 1;
-  const searchPlan = getResolvedSearchPlan(config);
+  const searchPlan = getActiveSearchPlan(config);
   const eventsContext = (config.upcomingEvents || [])
     .map((e) => `- ${e.event} on ${e.date} (${e.daysOut} days away)`)
     .join('\n');
@@ -950,23 +959,30 @@ async function runXScout(config = DEFAULT_CONFIG) {
       }
     }
 
-    // ── STAGE 1: Run 5 searches (Sonnet + web_search) ──────────────────────
-    console.log(`[${new Date().toISOString()}] XSCOUT: stage 1 — executing searches...`);
+    // ── STAGE 1: Run searches (Haiku + web_search) ─────────────────────────
+    // Haiku, not Sonnet: this stage only DRIVES the web_search tool and returns
+    // raw results (no analysis — see max_tokens cap). web_search results land in
+    // context as input tokens (~hundreds of K), so pricing them at Haiku's
+    // $1/MTok instead of Sonnet's $3/MTok is the single biggest cost cut.
+    // Synthesis (Stage 3) stays on Sonnet where reasoning quality matters.
+    const stage1SearchPlan = getActiveSearchPlan(config);
+    const stage1MaxSearches = stage1SearchPlan.length;
+    console.log(`[${new Date().toISOString()}] XSCOUT: stage 1 — executing up to ${stage1MaxSearches} searches (Haiku)...`);
 
     const stage1Response = await getAnthropicClient().messages.create({
-      model: MODELS.briefWrite, // Sonnet needed for web_search tool access
+      model: MODELS.search,      // Haiku — supports web_search; collects raw results only
       max_tokens: 4000,          // Low cap — we only need raw results, not analysis
       messages: [{
         role: 'user',
         content: buildSearchPrompt(config, weatherReport, reviewReport, instagramReport, redditReport, last30daysContextBlock),
       }],
-      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: getResolvedSearchPlan(config).length }],
+      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: stage1MaxSearches }],
     });
 
     const stage1InputTokens  = stage1Response.usage?.input_tokens  || 0;
     const stage1OutputTokens = stage1Response.usage?.output_tokens || 0;
-    logCostEstimate('Stage 1 (searches)', stage1InputTokens, stage1OutputTokens, MODELS.briefWrite);
-    const stage1Cost = computeStageCost('scout-search', stage1InputTokens, stage1OutputTokens, MODELS.briefWrite);
+    logCostEstimate('Stage 1 (searches)', stage1InputTokens, stage1OutputTokens, MODELS.search);
+    const stage1Cost = computeStageCost('scout-search', stage1InputTokens, stage1OutputTokens, MODELS.search);
 
     // Extract raw search results from Stage 1
     const searchResults = extractSearchResults(stage1Response.content);

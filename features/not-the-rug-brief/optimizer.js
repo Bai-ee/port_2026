@@ -5,10 +5,10 @@
 //   (HTML, boilerplate, full articles) were being dumped into a 115K-token
 //   Sonnet context. At 4 runs/day that's ~$51/month.
 //
-// THE FIX — two-stage pipeline:
-//   Stage 1: Haiku reads raw search dumps, extracts only signal (~$0.001)
-//   Stage 2: Sonnet writes the brief from clean 3K-token context (~$0.05)
-//   Result: ~75% cost reduction → ~$13/month
+// THE FIX:
+//   Stage 1: Haiku drives capped web_search calls and collects raw results
+//   Stage 2: Haiku trims raw dumps to signal only
+//   Stage 3: Sonnet writes the brief from clean compact context
 
 require('./load-env');
 const { getProvider } = require('./providers');
@@ -19,6 +19,7 @@ function getAnthropicClient() {
 
 // Model routing — use the cheapest model that can do the job
 const MODELS = {
+  search:       'claude-haiku-4-5-20251001', // Stage-1 web_search executor — Haiku supports web_search (verified 2026-06); stage only collects raw results, no analysis, so no Sonnet needed
   searchTrim:   'claude-haiku-4-5-20251001', // cheap, fast — just extracting signal
   briefWrite:   'claude-sonnet-4-6',          // quality matters for final output
   guardianCheck: 'claude-haiku-4-5-20251001', // just fact-checking vs verified claims
@@ -32,8 +33,8 @@ const MAX_TOKENS_PER_SEARCH = 800;
  * Stage 1: Use Haiku to extract signal from raw search results.
  * 
  * Instead of dumping full search HTML into Sonnet's context,
- * we ask Haiku to pull out only what's relevant. Haiku is 6x cheaper
- * than Sonnet for input and handles extraction tasks just fine.
+ * we ask Haiku to pull out only what's relevant. Haiku is cheaper
+ * than Sonnet for this extraction work.
  * 
  * @param {string} searchQuery - The original search query
  * @param {string} rawResults  - Raw text from web_search tool result
@@ -129,10 +130,12 @@ function estimateTokens(text) {
  * Helps track actual spend vs projected during optimization.
  */
 function logCostEstimate(label, inputTokens, outputTokens, model) {
+  // Rates mirror the canonical ledger (api/_lib/usage-logger.cjs RATES). Haiku 4.5
+  // is $1/$5 per MTok — the prior $0.80/$4 here was a stale Haiku-3.5 rate and
+  // under-counted Haiku spend.
   const pricing = {
-    'claude-haiku-4-5-20251001': { input: 0.80, output: 4.00 },
+    'claude-haiku-4-5-20251001': { input: 1.00, output: 5.00 },
     'claude-sonnet-4-6':         { input: 3.00, output: 15.00 },
-    'claude-sonnet-4-20250514':  { input: 3.00, output: 15.00 },
   };
   const p = pricing[model] || pricing['claude-sonnet-4-6'];
   const cost = (inputTokens * p.input / 1_000_000) + (outputTokens * p.output / 1_000_000);
@@ -145,10 +148,10 @@ function logCostEstimate(label, inputTokens, outputTokens, model) {
  * Use this instead of logCostEstimate when you need to persist cost data.
  */
 function computeStageCost(stage, inputTokens, outputTokens, model) {
+  // Rates mirror the canonical ledger (api/_lib/usage-logger.cjs RATES).
   const pricing = {
-    'claude-haiku-4-5-20251001': { input: 0.80, output: 4.00 },
+    'claude-haiku-4-5-20251001': { input: 1.00, output: 5.00 },
     'claude-sonnet-4-6':         { input: 3.00, output: 15.00 },
-    'claude-sonnet-4-20250514':  { input: 3.00, output: 15.00 },
   };
   const p = pricing[model] || pricing['claude-sonnet-4-6'];
   const estimatedUsd = (inputTokens * p.input / 1_000_000) + (outputTokens * p.output / 1_000_000);
