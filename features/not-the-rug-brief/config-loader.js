@@ -330,6 +330,7 @@ function buildRuntimeConfigFromFirestore(clientId, clientConfig) {
     : cleanList(marketingBriefConfig?.categoryTerms);
   const companyName = configuredBrandName || deriveCompanyName(hostname, clientId);
   const configuredKols = Array.isArray(marketingBriefConfig?.kols) ? marketingBriefConfig.kols.filter(Boolean) : [];
+  const configuredIgHandles = Array.isArray(marketingBriefConfig?.instagramHandles) ? marketingBriefConfig.instagramHandles.filter(Boolean) : [];
   const configuredCompetitors = Array.isArray(marketingBriefConfig?.competitors) ? marketingBriefConfig.competitors.filter(Boolean) : [];
   const configuredSourceFocus = String(marketingBriefConfig?.sourceFocus || '').trim();
   const configuredScoutInstructions = String(marketingBriefConfig?.scoutInstructions || '').trim();
@@ -366,6 +367,11 @@ function buildRuntimeConfigFromFirestore(clientId, clientConfig) {
       : []);
   // Clean X handle list for last30days --x-related (handles must NOT go in the topic).
   const cleanXHandles = configuredKols
+    .map((h) => String(h || '').trim().replace(/^@+/, ''))
+    .filter((h) => h.length >= 2)
+    .slice(0, 6);
+  // Clean Instagram creator handles for last30days --ig-creators (accounts to watch).
+  const cleanIgHandles = configuredIgHandles
     .map((h) => String(h || '').trim().replace(/^@+/, ''))
     .filter((h) => h.length >= 2)
     .slice(0, 6);
@@ -415,6 +421,7 @@ function buildRuntimeConfigFromFirestore(clientId, clientConfig) {
     competitors: configuredCompetitors,
     categoryTerms: resolvedCategoryTerms,
     kols: configuredKols,
+    instagramHandles: configuredIgHandles,
     upcomingEvents,
     customLocalSignals,
 
@@ -466,6 +473,7 @@ function buildRuntimeConfigFromFirestore(clientId, clientConfig) {
       // Social sources are sparse over 1 day — widen to at least a week.
       lookbackDays: Math.max(7, freshnessDays),
       xRelated: cleanXHandles.join(','),
+      igCreators: cleanIgHandles.join(','),
       subreddits: sourcePlatforms.includes('reddit') ? 'all' : '',
       brandTerms: [companyName, hostname].filter(Boolean),
       competitorNames: configuredCompetitors,

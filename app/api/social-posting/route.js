@@ -4,6 +4,7 @@ import {
   attachMediaToPost,
   createSocialPost,
   diagnoseTwitterAccess,
+  enhancePost,
   generatePromoCopy,
   getTwitterCredentialStatus,
   postNow,
@@ -11,7 +12,9 @@ import {
   readSocialQueue,
   runPostingAgents,
   schedulePost,
+  updateSocialPost,
 } from '../../../features/social-posting/twitter-service.js';
+import { scoreXPost } from '../../../features/x-growth/index.js';
 import {
   getKnowledgeBaseRuntimeContext,
 } from '../../../features/knowledge-base/pipeline-context.js';
@@ -84,6 +87,36 @@ export async function POST(request) {
 
   try {
     const action = body.action || 'draft';
+
+    // Lightweight, deterministic X-algo score — no LLM, no network, no KB fetch.
+    // Powers the Copywriter notepad's live score-as-you-type, so it must
+    // short-circuit before the (expensive) Knowledge Base retrieval below.
+    if (action === 'score') {
+      const score = scoreXPost(String(body.content || ''), {
+        mediaType: body.mediaType || 'none',
+        objective: body.objective || undefined,
+      });
+      return json({ ok: true, score });
+    }
+
+    // AI Enhance (Copywriter card) — two spelling-corrected rewrites: brand voice
+    // + best-for-X-algo. Uses Client Brain voice (not the KB retrieval below), so
+    // it short-circuits before the KB fetch. Each candidate carries its own score.
+    if (action === 'enhance') {
+      let clientBrainContext = '';
+      try {
+        const { loadClientBrainContext } = require('../../../features/client-brain/store.cjs');
+        clientBrainContext = await loadClientBrainContext(context.clientId, { useFor: 'socialPosts', maxChars: 1500 });
+      } catch { /* non-fatal — fall back to brand-only tone */ }
+      const { voice, algo } = await enhancePost(body.content, { clientBrainContext });
+      const scoreOf = (text) => scoreXPost(String(text || ''), { mediaType: body.mediaType || 'none' });
+      const candidates = [
+        { id: 'voice', label: 'Brand Voice', text: voice, score: scoreOf(voice) },
+        { id: 'algo', label: 'Best for X', text: algo, score: scoreOf(algo) },
+      ];
+      return json({ ok: true, candidates });
+    }
+
     let knowledgeBaseContext = null;
     if (body.content) {
       knowledgeBaseContext = await getKnowledgeBaseRuntimeContext({
@@ -162,6 +195,14 @@ export async function POST(request) {
     if (action === 'schedule') {
       const agents = body.agents || runPostingAgents(body.content, agentContext).agents;
       const post = await schedulePost(context.clientId, { ...body, agents });
+      return json({ ok: true, post });
+    }
+
+    // Edit a saved draft/scheduled post in place (Copywriter notepad). Re-scores
+    // via the same agents pass so the updated doc carries a fresh xGrowthScore.
+    if (action === 'update') {
+      const agents = body.agents || runPostingAgents(body.content, agentContext).agents;
+      const post = await updateSocialPost(context.clientId, body.postId, { ...body, agents });
       return json({ ok: true, post });
     }
 

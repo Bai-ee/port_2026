@@ -59,6 +59,14 @@ import { ROSITAS_GBP_REPORT } from './lib/gbpReputationReport';
 // onboarding summary (a single labeled string). Returns '' when absent.
 const CB_SUMMARY_LABELS = ['Headline', 'What This Site Is', "What's Missing", 'Biggest Risk', 'The Opportunity', 'Decision', 'Suggested Post'];
 const VIDEO_REMIX_FOLDER_FILE_CACHE_TTL_MS = 5 * 60 * 1000;
+// Folder previews page in small batches — a full folder (up to 120 files) as
+// mounted <video> thumbs is the main source of modal jank. "Load more" grows
+// the request limit; the server caps at 120 per listFolderMedia.
+const VIDEO_REMIX_FOLDER_PAGE_SIZE = 12;
+const VIDEO_REMIX_FOLDER_PAGE_STEP = 24;
+const VIDEO_REMIX_FOLDER_PAGE_MAX = 120;
+// SAVED ASSETS renders this many remix players initially (history holds 40).
+const SAVED_REMIX_PAGE_SIZE = 8;
 const VIDEO_REMIX_PENDING_STORAGE_PREFIX = 'video-remix-pending-job';
 // Max remixes a single Generate can fan out into (the multiplier control).
 const VIDEO_REMIX_MAX_COUNT = 5;
@@ -207,6 +215,33 @@ function firstFrameThumbSrc(url) {
   return /#t=/.test(url) ? url : `${url}#t=0.1`;
 }
 
+// List-thumbnail <video> that defers its metadata fetch until the element nears
+// the viewport. Mounting dozens of preload="metadata" videos at once (folder
+// previews, saved remixes) fires a metadata/range request + demuxer per file up
+// front — the main cause of the heavy modal open + scroll stutter. Until
+// visible, renders a src-less preload="none" video (thumb containers paint
+// their own dark background); on first intersection the real src loads and the
+// per-thumb observer disconnects.
+function LazyVideoThumb({ src, ...videoProps }) {
+  const [visible, setVisible] = useState(false);
+  const ref = useCallback((el) => {
+    if (!el) return undefined;
+    if (typeof IntersectionObserver === 'undefined') {
+      setVisible(true);
+      return undefined;
+    }
+    const obs = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setVisible(true);
+        obs.disconnect();
+      }
+    }, { rootMargin: '200px' });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+  return <video ref={ref} src={visible ? src : undefined} preload={visible ? 'metadata' : 'none'} {...videoProps} />;
+}
+
 function videoRemixPendingStorageKey(clientId) {
   return `${VIDEO_REMIX_PENDING_STORAGE_PREFIX}:${clientId || 'self'}`;
 }
@@ -311,6 +346,11 @@ const SocialPostingPanel = dynamic(() => import('./components/dashboard/SocialPo
   ssr: false,
 });
 
+const CopywriterCard = dynamic(() => import('./components/dashboard/CopywriterCard'), {
+  loading: () => null,
+  ssr: false,
+});
+
 const StrategyBuilderCard = dynamic(() => import('./components/dashboard/StrategyBuilderCard'), {
   loading: () => null,
   ssr: false,
@@ -379,10 +419,11 @@ const MARKETING_BRIEF_SOURCE_PLATFORMS = [
   { key: 'tiktok', label: 'TikTok', status: 'available', description: 'Checks short-form trends that may shape what your audience is watching right now.' },
   { key: 'hackernews', label: 'Hacker News', status: 'available', description: 'Reviews startup and technical discussions when they matter to the client category.' },
 ];
-// Web + X are the free defaults; Reddit is unlocked and default-on while we
-// troubleshoot its pipeline. Everything else stays locked behind an upgrade.
-const UNLOCKED_SOURCE_PLATFORMS = ['web', 'x', 'reddit'];
-const DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS = ['web', 'x', 'reddit'];
+// Web + X are the free defaults; Reddit and Instagram are unlocked and default-on
+// (both run on the last30days / ScrapeCreators engine). Everything else stays
+// locked behind an upgrade.
+const UNLOCKED_SOURCE_PLATFORMS = ['web', 'x', 'reddit', 'instagram'];
+const DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS = ['web', 'x', 'reddit', 'instagram'];
 // Analysis skills that read the live Watchlist X timelines (watchlistTimelines /
 // reply pool). When one of these is enabled, the report paths re-pull the current
 // handles first so the skill never analyzes a stale pull from old handles.
@@ -421,12 +462,13 @@ const WEB_SEARCH_SOURCES = [
   { key: 'devhunt',          label: 'DevHunt',               locked: true },
 ];
 
-// Social Media Signals (Media) card — X and Reddit feed the brief today; the
-// rest are locked until the social search layer ships.
+// Social Media Signals (Media) card — X, Reddit, and Instagram feed the brief
+// today (all on the last30days / ScrapeCreators engine); the rest are locked
+// until the social search layer ships.
 const SOCIAL_SIGNAL_SOURCES = [
   { key: 'x',         label: 'X / Twitter', locked: false, description: 'Finds timely conversations and reply windows a social manager could act on.' },
   { key: 'reddit',    label: 'Reddit',      locked: false, description: 'Finds questions, complaints, and recommendations that reveal what buyers care about.' },
-  { key: 'instagram', label: 'Instagram',   locked: true,  description: 'Reviews creator and brand posts for visual direction and social ideas.' },
+  { key: 'instagram', label: 'Instagram',   locked: false, description: 'Reviews creator and brand posts for visual direction and social ideas.' },
   { key: 'tiktok',    label: 'TikTok',      locked: true,  description: 'Checks short-form trends that could shape quick content ideas.' },
   { key: 'youtube',   label: 'YouTube',     locked: true,  description: 'Finds video topics and creator discussions worth learning from.' },
   { key: 'linkedin',  label: 'LinkedIn',    locked: true,  description: 'Looks for professional conversations, buyer pain points, and B2B signals.' },
@@ -1488,6 +1530,7 @@ const CUSTOM_DETAIL_CARD_IDS = new Set([
   'video-remix',
   'media-library',
   'client-site',
+  'copywriter',
   'social-media-posting',
   'strategy-builder',
   'email-digest',
@@ -1782,17 +1825,49 @@ function appendCacheBust(url, key) {
   return `${url}${joiner}v=${encodeURIComponent(String(key))}`;
 }
 
+// Pauses looping card-face videos while they are scrolled out of view — an
+// off-screen <video> keeps decoding (main-thread + GPU) and shows up as
+// dashboard scroll jank. Resumes only videos this observer paused, so a user's
+// manual pause via native controls is respected. One shared observer; the ref
+// callbacks return React 19 cleanups that unobserve on unmount.
+const offscreenVideoPauseObserver = typeof IntersectionObserver !== 'undefined'
+  ? new IntersectionObserver((entries) => {
+      entries.forEach(({ target, isIntersecting }) => {
+        if (isIntersecting) {
+          if (target.dataset.autoPausedOffscreen) {
+            delete target.dataset.autoPausedOffscreen;
+            const p = target.play?.();
+            if (p && typeof p.catch === 'function') p.catch(() => {});
+          }
+        } else if (!target.paused) {
+          target.dataset.autoPausedOffscreen = '1';
+          target.pause();
+        }
+      });
+    }, { rootMargin: '120px' })
+  : null;
+
+function observeOffscreenVideoPause(el) {
+  if (!el || !offscreenVideoPauseObserver) return undefined;
+  offscreenVideoPauseObserver.observe(el);
+  return () => offscreenVideoPauseObserver.unobserve(el);
+}
+
 // Stable ref for the Video Remix shell/modal players. Sets `muted` ONCE (so the
 // browser allows autoplay) and never again — passing React's reactive `muted`
 // prop would re-mute the element on every re-render, undoing a user's un-mute
 // via the native controls. Module-scope so the ref identity is stable and React
-// attaches it a single time per mounted element.
+// attaches it a single time per mounted element. Also registers the element
+// with the off-screen pause observer (cleanup returned per React 19 refs).
 function initRemixShellVideo(el) {
-  if (!el || el.dataset.remixInited) return;
-  el.dataset.remixInited = '1';
-  el.muted = true;
-  const p = el.play?.();
-  if (p && typeof p.catch === 'function') p.catch(() => {});
+  if (!el) return undefined;
+  if (!el.dataset.remixInited) {
+    el.dataset.remixInited = '1';
+    el.muted = true;
+    const p = el.play?.();
+    if (p && typeof p.catch === 'function') p.catch(() => {});
+  }
+  return observeOffscreenVideoPause(el);
 }
 
 function readPendingDashboardSignup() {
@@ -3031,8 +3106,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	  const [videoRemixOptions, setVideoRemixOptions] = useState({ filters: [], overlays: [], artists: [], logos: [] });
 	  const [videoRemixFolders, setVideoRemixFolders] = useState([]);
 	  const [videoRemixFolderDetails, setVideoRemixFolderDetails] = useState([]);
-	  const [videoRemixFolderFiles, setVideoRemixFolderFiles] = useState({ folder: '', files: [] });
+	  const [videoRemixFolderFiles, setVideoRemixFolderFiles] = useState({ folder: '', files: [], limit: 0 });
 	  const [videoRemixFolderFilesLoading, setVideoRemixFolderFilesLoading] = useState(false);
+	  // How many SAVED ASSETS remix players render before "Load more" (resets per modal open).
+	  const [savedRemixVisibleCount, setSavedRemixVisibleCount] = useState(SAVED_REMIX_PAGE_SIZE);
 	  const [videoRemixVideoOrder, setVideoRemixVideoOrder] = useState({ folder: '', items: [] });
 	  const [videoRemixUploadDraft, setVideoRemixUploadDraft] = useState({
 	    folderMode: 'existing',
@@ -3133,6 +3210,19 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    setAdhocTerminal(null);
 	  }, []);
 
+	  // Minimize (don't destroy) a running terminal so the render keeps going and a
+	  // persistent RUNNING pill can reopen it — standard terminal-UI practice, and
+	  // it makes the footer's "you can close and come back anytime" actually true.
+	  // The task() promise + poll loop are independent of this state, so minimizing
+	  // never cancels the render; on completion the (still-present) state flips to
+	  // done/error and the pill reflects it.
+	  const minimizeAdhocTerminal = useCallback(() => {
+	    setAdhocTerminal((t) => (t ? { ...t, open: false } : t));
+	  }, []);
+	  const reopenAdhocTerminal = useCallback(() => {
+	    setAdhocTerminal((t) => (t ? { ...t, open: true } : t));
+	  }, []);
+
 	  // Reusable: run a one-off async action while showing the SAME terminal/modal
 	  // UX the cards use. `stages` are cosmetic lines streamed while `task()` runs;
 	  // settles to ✓ on success or ✗ on error. `task` may resolve { doneText, videoUrl }.
@@ -3178,7 +3268,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	      ],
 	    });
 	    let i = 0;
+	    let manual = false; // set once the task drives real progress (advance())
+	    const stopTimer = () => { if (adhocTimerRef.current) { clearInterval(adhocTimerRef.current); adhocTimerRef.current = null; } };
 	    adhocTimerRef.current = setInterval(() => {
+	      if (manual) return; // real events took over — freeze the cosmetic timer
 	      if (i >= stages.length - 1) return; // hold on the last stage until task resolves
 	      i += 1;
 	      const s = stages[i];
@@ -3189,8 +3282,25 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	        return { ...t, lines };
 	      });
 	    }, 3500);
+	    // Real-progress channel for tasks that know their actual state (e.g. the
+	    // studio render polls a job). advance() settles the current active line and
+	    // opens a new one; note() appends a dim status line. The first advance()
+	    // stops the cosmetic timer so the terminal shows what's REALLY happening,
+	    // not a canned animation. Tasks that ignore this arg keep the timer.
+	    const advance = (pfx, text) => {
+	      manual = true; stopTimer();
+	      setAdhocTerminal((t) => {
+	        if (!t || t.status !== 'running') return t;
+	        const lines = settleActiveLine(t.lines.slice(), 'ok', '✓');
+	        lines.push({ type: 'active', prefix: pfx, text, cursor: true });
+	        return { ...t, lines };
+	      });
+	    };
+	    const note = (text) => setAdhocTerminal((t) => (
+	      t && t.status === 'running' ? { ...t, lines: [...t.lines, { type: 'dim', prefix: '', text }] } : t
+	    ));
 	    try {
-	      const result = await task();
+	      const result = await task({ advance, note });
 	      if (adhocTimerRef.current) { clearInterval(adhocTimerRef.current); adhocTimerRef.current = null; }
 	      setAdhocTerminal((t) => {
 	        if (!t) return t;
@@ -3234,7 +3344,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	          { pfx: '[ENCODE]', text: 'encoding WebM video…' },
 	          { pfx: '[SAVE]',   text: 'saving to your assets…' },
 	        ],
-	        task: async () => {
+	        task: async ({ advance, note }) => {
 	          const token = await user.getIdToken();
 	          const viewport = mockupStudioDraft.viewportId || 'desktop';
 	          const dims = MOCKUP_STUDIO_OUTPUT_BY_DEVICE[viewport] || MOCKUP_STUDIO_OUTPUT_BY_DEVICE.desktop;
@@ -3255,6 +3365,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 		          if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
 		          let capture = data?.capture || null;
 		          if (!capture && data?.jobId) {
+		            // Reflect the REAL render_jobs status, not a timer. Statuses:
+		            // queued (created) -> rendering (worker claimed) -> done | failed.
+		            // Encode + save happen server-side inside the 'rendering' phase.
+		            advance('[QUEUE]', 'queued — waiting for a GPU render slot…');
+		            let lastStatus = 'queued';
 		            for (let attempt = 0; attempt < 90; attempt += 1) {
 		              await new Promise((resolve) => setTimeout(resolve, 3000));
 		              const jobRes = await fetch(apiPath(`/api/dashboard/studio-render?jobId=${encodeURIComponent(data.jobId)}`), {
@@ -3263,14 +3378,22 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 		              const jobData = await jobRes.json().catch(() => ({}));
 		              if (!jobRes.ok) throw new Error(jobData?.error || `Render job poll failed (${jobRes.status})`);
 		              const job = jobData?.job || null;
-		              if (job?.status === 'done' && job.capture) {
+		              const status = job?.status || null;
+		              if (status && status !== lastStatus) {
+		                lastStatus = status;
+		                if (status === 'rendering') advance('[GPU]', 'rendering 3D scene, encoding & saving on the GPU…');
+		                else if (status === 'done') advance('[SAVE]', 'render complete — saving to your assets…');
+		                else if (status === 'queued') note('back in the queue — waiting for a slot…');
+		              }
+		              if (status === 'done' && job.capture) {
 		                capture = job.capture;
 		                break;
 		              }
-		              if (job?.status === 'failed') {
+		              if (status === 'failed') {
 		                throw new Error(job.error || 'Studio render failed.');
 		              }
 		            }
+		            if (!capture) note('still rendering — it will appear in your assets when ready');
 		          }
 		          if (capture) {
 		            setBootstrap((prev) => {
@@ -3713,21 +3836,24 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    return details;
 	  }, [user, apiPath]);
 
-	  const loadVideoRemixFolderFiles = useCallback(async (folderName) => {
+	  const loadVideoRemixFolderFiles = useCallback(async (folderName, limit = VIDEO_REMIX_FOLDER_PAGE_SIZE) => {
 	    if (!user || !folderName) return;
+	    const safeLimit = Math.min(VIDEO_REMIX_FOLDER_PAGE_MAX, Math.max(VIDEO_REMIX_FOLDER_PAGE_SIZE, Number(limit) || VIDEO_REMIX_FOLDER_PAGE_SIZE));
 	    const requestId = videoRemixFolderFilesRequestRef.current + 1;
 	    videoRemixFolderFilesRequestRef.current = requestId;
+	    // Cache stays keyed by folder name (upload/delete invalidation depends on
+	    // that); a cached entry only satisfies requests at or below its limit.
 	    const cached = videoRemixFolderFileCacheRef.current.get(folderName);
-	    if (cached && Date.now() - cached.at < VIDEO_REMIX_FOLDER_FILE_CACHE_TTL_MS) {
-	      setVideoRemixFolderFiles({ folder: cached.folder || folderName, files: cached.files || [] });
+	    if (cached && (cached.limit || 0) >= safeLimit && Date.now() - cached.at < VIDEO_REMIX_FOLDER_FILE_CACHE_TTL_MS) {
+	      setVideoRemixFolderFiles({ folder: cached.folder || folderName, files: cached.files || [], limit: cached.limit || safeLimit });
 	      setVideoRemixFolderFilesLoading(false);
 	      return;
 	    }
-	    setVideoRemixFolderFiles({ folder: folderName, files: cached?.files || [] });
+	    setVideoRemixFolderFiles({ folder: folderName, files: cached?.files || [], limit: cached?.limit || 0 });
 	    setVideoRemixFolderFilesLoading(true);
 	    try {
 	      const token = await user.getIdToken();
-	      const res = await fetch(apiPath(`/api/dashboard/media?action=folder-files&folder=${encodeURIComponent(folderName)}&limit=36`), {
+	      const res = await fetch(apiPath(`/api/dashboard/media?action=folder-files&folder=${encodeURIComponent(folderName)}&limit=${safeLimit}`), {
 	        headers: { Authorization: `Bearer ${token}` },
 	        cache: 'no-store',
 	      });
@@ -3737,6 +3863,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	      const nextPreview = {
 	        folder: data.folder || folderName,
 	        files: Array.isArray(data.files) ? data.files : [],
+	        limit: safeLimit,
 	      };
 	      videoRemixFolderFileCacheRef.current.set(folderName, { ...nextPreview, at: Date.now() });
 	      setVideoRemixFolderFiles(nextPreview);
@@ -3762,6 +3889,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    if (videoRemixFolderFiles.folder === folders[0]) return;
 	    loadVideoRemixFolderFiles(folders[0]).catch(() => {});
 	  }, [activeTileModal?.cardId, modalTab, videoRemixDraft.selectedFolders, videoRemixFolderFiles.folder, loadVideoRemixFolderFiles]);
+
+	  // Reset SAVED ASSETS pagination whenever a different card modal opens.
+	  useEffect(() => {
+	    setSavedRemixVisibleCount(SAVED_REMIX_PAGE_SIZE);
+	  }, [activeTileModal?.cardId]);
 
 	  const addVideoRemixUploadFiles = useCallback((fileList) => {
 	    const files = Array.from(fileList || []);
@@ -4053,6 +4185,16 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // Default to Data Visualization immediately so a slow/unavailable bootstrap
   // cannot leave the nav and card shell hidden.
   const [activeCapabilityFilter, setActiveCapabilityFilter] = useState('deliverables'); // default bucket: DELIVERABLES (onboarding gate)
+  // Scroll to the top of the page whenever the active bucket changes or a card
+  // modal opens, so a nav click always reveals the new cards from the top (and a
+  // modal opens in view). Lenis is excluded on /dashboard, so native window
+  // scroll is the correct target.
+  useEffect(() => {
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [activeCapabilityFilter]);
+  useEffect(() => {
+    if (activeTileModal && typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [activeTileModal]);
   const [activeStepIdx, setActiveStepIdx] = useState(0);
   const [capView, setCapView] = useState('grid'); // 'grid' | 'list' — default to card (grid) view
   const [dlAllBusy, setDlAllBusy] = useState(false); // DELIVERABLES "Download All" zip in progress
@@ -6214,6 +6356,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             {renderSgSourceRow('web', 'Web / News', 'Open web — market news, launches, pages your audience sees.')}
             {renderSgSourceRow('x', 'X / Twitter', 'Timely posts and reply windows a social manager could act on.')}
             {renderSgSourceRow('reddit', 'Reddit', 'Questions, complaints, and recommendations in real buyer language.')}
+            {renderSgSourceRow('instagram', 'Instagram', 'Reviews creator and brand posts for visual direction and social ideas.')}
           </div>
         </section>
 
@@ -6229,6 +6372,24 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             field: 'kols', offField: 'kolsOff', title: 'Watchlist & Competitors',
             addCard: { id: 'watchlist', category: 'growth', number: 'WL', label: 'WATCHLIST', title: 'Watchlist & Competitors', description: '', rows: [] },
           })}
+          {/* Instagram accounts to watch — feeds last30days --ig-creators (their reels)
+              merged with the Instagram topic search. Parallel to the X Watchlist. */}
+          <article className="sg-list" id="instagram-accounts-input">
+            <div className="sg-list-head">
+              <span className="sg-list-title">Instagram Accounts</span>
+              <span className="sg-chip">{splitMarketingBriefTerms(marketingBriefConfig?.instagramHandles).length} watched</span>
+            </div>
+            <input
+              className="sg-input"
+              type="text"
+              spellCheck={false}
+              placeholder="@handle, @another — IG accounts to watch"
+              value={Array.isArray(marketingBriefConfig?.instagramHandles) ? marketingBriefConfig.instagramHandles.join(', ') : (marketingBriefConfig?.instagramHandles || '')}
+              onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), instagramHandles: e.target.value }))}
+              style={{ marginTop: 6 }}
+            />
+            <p className="sg-hint" style={{ margin: '4px 0 0' }}>Feeds “Happening on Instagram” alongside the topic search (their reels + keyword search). Comma or newline separated.</p>
+          </article>
           <div className="sg-seg" role="group" aria-label="Watchlist search mode">
             <button type="button" className={mode === 'per-handle' ? 'is-active' : ''} onClick={() => setMode('per-handle')}>Per-handle</button>
             <button type="button" className={mode === 'combined' ? 'is-active' : ''} onClick={() => setMode('combined')}>Combined</button>
@@ -6551,6 +6712,192 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     );
   };
 
+  // Render the Reddit analysis skill as the same "What's happening" structure
+  // used by digest email/brief output: overview, suggested move, and threads.
+  const renderRedditAnalysisBlock = (res) => {
+    const { data, prose } = parseRecipeAnalysis(res.analysis);
+    const dq = data?.dataQuality || null;
+    const conf = dq?.overallConfidence;
+    const threads = Array.isArray(data?.threads) ? data.threads : (Array.isArray(data?.items) ? data.items : []);
+    const spotlight = data?.spotlight || null;
+    return (
+      <div className="kit-paper" key={`recipe-brief-${res.recipeId}`} id="recipe-brief-reddit-analysis">
+        <h2 className="b-headline">Happening on Reddit</h2>
+
+        {dq ? (
+          <div className="meta-grid" style={{ marginBottom: 18 }}>
+            <div className="meta-tile"><div className="k">Threads analyzed</div><div className="v">{dq.itemsAnalyzed != null ? dq.itemsAnalyzed : '—'}</div></div>
+            <div className="meta-tile"><div className="k">Confidence</div><div className="v">{conf || '—'}</div></div>
+            <div className="meta-tile"><div className="k">Cost</div><div className="v">{typeof res.costUsd === 'number' && res.costUsd > 0 ? `≈ $${res.costUsd.toFixed(3)}` : '—'}</div></div>
+          </div>
+        ) : null}
+
+        {data?.overview ? (
+          <>
+            <div className="b-sec">Overview</div>
+            <p className="pull" style={{ marginTop: 8, maxWidth: 'none' }}>{data.overview}</p>
+          </>
+        ) : null}
+
+        {data?.priorityAction ? (
+          <>
+            <div className="b-sec" style={{ marginTop: 22 }}>Suggested action</div>
+            <p className="pull" style={{ marginTop: 8, maxWidth: 'none' }}>{data.priorityAction}</p>
+          </>
+        ) : null}
+
+        {spotlight?.why ? (
+          <>
+            <div className="b-sec" style={{ marginTop: 22 }}>Thread to watch</div>
+            <div className="b-card">
+              <div className="b-theme-head">
+                <span className="b-handle-name">{spotlight.title || 'Reddit thread'}</span>
+                <span className="b-tags">
+                  {spotlight.subreddit ? <span className="dur">{spotlight.subreddit}</span> : null}
+                  {spotlight.url ? <a className="b-link" href={spotlight.url} target="_blank" rel="noopener noreferrer">source</a> : null}
+                </span>
+              </div>
+              <p className="b-body" style={{ margin: '10px 0 0' }}>{spotlight.why}</p>
+            </div>
+          </>
+        ) : null}
+
+        {threads.length ? (
+          <>
+            <div className="b-sec" style={{ marginTop: 22 }}>Threads</div>
+            <div className="b-stack">
+              {threads.map((t, i) => (
+                <div className="b-card" key={`reddit-thread-${i}`}>
+                  <div className="b-theme-head">
+                    <span className="b-handle-name">{t.title || 'Reddit signal'}</span>
+                    <span className="b-tags">
+                      {t.subreddit ? <span className="dur">{t.subreddit}</span> : null}
+                      {t.signalType ? <span className="status-tag">{t.signalType}</span> : null}
+                      {t.url ? <a className="b-link" href={t.url} target="_blank" rel="noopener noreferrer">source</a> : null}
+                    </span>
+                  </div>
+                  {t.summary ? <p className="b-body" style={{ margin: '10px 0 0' }}>{t.summary}</p> : null}
+                  {t.actionableTakeaway ? <div className="b-sowhat"><span className="lbl">So what</span>{t.actionableTakeaway}</div> : null}
+                </div>
+              ))}
+            </div>
+          </>
+        ) : null}
+
+        {Array.isArray(dq?.gaps) && dq.gaps.length ? (
+          <>
+            <div className="b-sec" style={{ marginTop: 22 }}>What we still don&apos;t know</div>
+            <div className="b-stack">
+              {dq.gaps.map((g, i) => (
+                <p className="b-body" key={`reddit-gap-${i}`} style={{ margin: 0 }}>• {g}</p>
+              ))}
+            </div>
+          </>
+        ) : null}
+
+        {prose ? (
+          <>
+            <div className="b-sec" style={{ marginTop: 22 }}>Summary</div>
+            <div style={{ marginTop: 4 }}>{renderProse(prose, 'prose-reddit-analysis')}</div>
+          </>
+        ) : null}
+      </div>
+    );
+  };
+
+  // Instagram mirror of renderRedditAnalysisBlock — same "Happening on …"
+  // structure, relabeled for IG accounts/posts.
+  const renderInstagramAnalysisBlock = (res) => {
+    const { data, prose } = parseRecipeAnalysis(res.analysis);
+    const dq = data?.dataQuality || null;
+    const conf = dq?.overallConfidence;
+    const threads = Array.isArray(data?.threads) ? data.threads : (Array.isArray(data?.items) ? data.items : []);
+    const spotlight = data?.spotlight || null;
+    return (
+      <div className="kit-paper" key={`recipe-brief-${res.recipeId}`} id="recipe-brief-instagram-analysis">
+        <h2 className="b-headline">Happening on Instagram</h2>
+
+        {dq ? (
+          <div className="meta-grid" style={{ marginBottom: 18 }}>
+            <div className="meta-tile"><div className="k">Posts analyzed</div><div className="v">{dq.itemsAnalyzed != null ? dq.itemsAnalyzed : '—'}</div></div>
+            <div className="meta-tile"><div className="k">Confidence</div><div className="v">{conf || '—'}</div></div>
+            <div className="meta-tile"><div className="k">Cost</div><div className="v">{typeof res.costUsd === 'number' && res.costUsd > 0 ? `≈ $${res.costUsd.toFixed(3)}` : '—'}</div></div>
+          </div>
+        ) : null}
+
+        {data?.overview ? (
+          <>
+            <div className="b-sec">Overview</div>
+            <p className="pull" style={{ marginTop: 8, maxWidth: 'none' }}>{data.overview}</p>
+          </>
+        ) : null}
+
+        {data?.priorityAction ? (
+          <>
+            <div className="b-sec" style={{ marginTop: 22 }}>Suggested action</div>
+            <p className="pull" style={{ marginTop: 8, maxWidth: 'none' }}>{data.priorityAction}</p>
+          </>
+        ) : null}
+
+        {spotlight?.why ? (
+          <>
+            <div className="b-sec" style={{ marginTop: 22 }}>Post to watch</div>
+            <div className="b-card">
+              <div className="b-theme-head">
+                <span className="b-handle-name">{spotlight.title || 'Instagram post'}</span>
+                <span className="b-tags">
+                  {spotlight.subreddit ? <span className="dur">{spotlight.subreddit}</span> : null}
+                  {spotlight.url ? <a className="b-link" href={spotlight.url} target="_blank" rel="noopener noreferrer">source</a> : null}
+                </span>
+              </div>
+              <p className="b-body" style={{ margin: '10px 0 0' }}>{spotlight.why}</p>
+            </div>
+          </>
+        ) : null}
+
+        {threads.length ? (
+          <>
+            <div className="b-sec" style={{ marginTop: 22 }}>Posts</div>
+            <div className="b-stack">
+              {threads.map((t, i) => (
+                <div className="b-card" key={`instagram-post-${i}`}>
+                  <div className="b-theme-head">
+                    <span className="b-handle-name">{t.title || 'Instagram signal'}</span>
+                    <span className="b-tags">
+                      {t.subreddit ? <span className="dur">{t.subreddit}</span> : null}
+                      {t.signalType ? <span className="status-tag">{t.signalType}</span> : null}
+                      {t.url ? <a className="b-link" href={t.url} target="_blank" rel="noopener noreferrer">source</a> : null}
+                    </span>
+                  </div>
+                  {t.summary ? <p className="b-body" style={{ margin: '10px 0 0' }}>{t.summary}</p> : null}
+                  {t.actionableTakeaway ? <div className="b-sowhat"><span className="lbl">So what</span>{t.actionableTakeaway}</div> : null}
+                </div>
+              ))}
+            </div>
+          </>
+        ) : null}
+
+        {Array.isArray(dq?.gaps) && dq.gaps.length ? (
+          <>
+            <div className="b-sec" style={{ marginTop: 22 }}>What we still don&apos;t know</div>
+            <div className="b-stack">
+              {dq.gaps.map((g, i) => (
+                <p className="b-body" key={`instagram-gap-${i}`} style={{ margin: 0 }}>• {g}</p>
+              ))}
+            </div>
+          </>
+        ) : null}
+
+        {prose ? (
+          <>
+            <div className="b-sec" style={{ marginTop: 22 }}>Summary</div>
+            <div style={{ marginTop: 4 }}>{renderProse(prose, 'prose-instagram-analysis')}</div>
+          </>
+        ) : null}
+      </div>
+    );
+  };
+
   // Render one recipe synthesis as a brief-kit paper (UI-kit components only —
   // b-eyebrow / b-headline / meta-grid / b-grid / b-card / stat-row / pull / dur).
   const renderRecipeBriefBlock = (res) => {
@@ -6762,7 +7109,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     );
     const reddit = scoutTestState?.reddit?.items || [];
     const web = scoutTestState?.web?.items || [];
-    const total = handleTotal + reddit.length + web.length;
+    const instagram = scoutTestState?.instagram?.items || [];
+    const total = handleTotal + reddit.length + web.length + instagram.length;
     const recipeResults = (recipeRun.results || []).filter((r) => r.ok && r.analysis);
     const gbpRep = (marketingBriefConfig?.gbpReputation?.enabled === true) ? ROSITAS_GBP_REPORT : null;
 
@@ -6893,7 +7241,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           ) : null}
 
           {gbpRep ? renderGbpReputationBlock(gbpRep) : null}
-          {recipeResults.map((res) => (res.recipeId === 'reply-targets' ? renderReplyTargetsBlock(res) : renderRecipeBriefBlock(res)))}
+          {recipeResults.map((res) => {
+            if (res.recipeId === 'reply-targets') return renderReplyTargetsBlock(res);
+            if (res.recipeId === 'reddit-analysis') return renderRedditAnalysisBlock(res);
+            if (res.recipeId === 'instagram-analysis') return renderInstagramAnalysisBlock(res);
+            return renderRecipeBriefBlock(res);
+          })}
         </div>
       </div>
     );
@@ -7181,7 +7534,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // ({_seconds}) shape that the rest of the dashboard consumes.
   useEffect(() => {
     const cid = client?.clientId || client?.id || bootstrap?.effectiveClientId;
-    if (!cid || !db || isImpersonating) return undefined;
+    // NOTE: intentionally NOT gated by isImpersonating. The merge below is fully
+    // scoped to `cid` (the effective/impersonated client's dashboard_state doc),
+    // so an admin who requests a render for a client they're viewing must still
+    // see the new studio capture land live in the card — without this the video
+    // renders + stores in Firestore but the card never re-reads until reload.
+    if (!cid || !db) return undefined;
     const ref = doc(db, 'dashboard_state', cid);
     const unsub = onSnapshot(
       ref,
@@ -7232,7 +7590,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       (err) => { if (process.env.NODE_ENV !== 'production') console.warn('[studio-captures] snapshot:', err?.message || err); },
     );
     return () => unsub();
-  }, [client?.clientId, client?.id, bootstrap?.effectiveClientId, isImpersonating]);
+  }, [client?.clientId, client?.id, bootstrap?.effectiveClientId]);
 
   const recentRuns = bootstrap.recentRuns || [];
   // The client's first scout-brief run is the Onboarding Brief; later ones are
@@ -7923,14 +8281,20 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // run is active. When active, the modal shows ad-hoc lines/title instead.
   const adhocActive = !showIntakeModal && Boolean(adhocTerminal?.open);
   const adhocRunning = adhocActive && adhocTerminal?.status === 'running';
+  // Minimized ad-hoc terminal (exists but closed) — surfaced through the SAME
+  // established "Running" chip as server/module runs, not a separate pill.
+  const adhocMinimized = Boolean(adhocTerminal && !adhocTerminal.open);
 
   // Auto-close the render terminal once it finishes. Brief delay so the final
   // "done" line + Open Video link stay readable. Errors stay open for retry.
+  // Only when the terminal is OPEN — if it finished while minimized, leave the
+  // READY pill up so the user can reopen and grab the video instead of it
+  // vanishing unseen.
   useEffect(() => {
-    if (adhocTerminal?.status !== 'done') return undefined;
+    if (adhocTerminal?.status !== 'done' || !adhocTerminal?.open) return undefined;
     const t = setTimeout(() => closeAdhocTerminal(), 4000);
     return () => clearTimeout(t);
-  }, [adhocTerminal?.status, closeAdhocTerminal]);
+  }, [adhocTerminal?.status, adhocTerminal?.open, closeAdhocTerminal]);
 
   // ── Intake modal dismissal persistence + background-run toast ───────────────
   // Closing the build terminal mid-run must survive a reload: persist the
@@ -8010,14 +8374,14 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   };
 
   useEffect(() => {
-    const anyModalOpen = showIntakeModal || showTierModal || showClientEditModal || showDeleteAccountModal || briefFullScreen || auditFullScreen || Boolean(deliverableView);
+    const anyModalOpen = showIntakeModal || showTierModal || showClientEditModal || showDeleteAccountModal || briefFullScreen || auditFullScreen || Boolean(deliverableView) || Boolean(adhocTerminal?.open);
     if (!anyModalOpen) {
       document.body.style.overflow = '';
       return undefined;
     }
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = ''; };
-  }, [showIntakeModal, showTierModal, showClientEditModal, showDeleteAccountModal, briefFullScreen, auditFullScreen, deliverableView]);
+  }, [showIntakeModal, showTierModal, showClientEditModal, showDeleteAccountModal, briefFullScreen, auditFullScreen, deliverableView, adhocTerminal?.open]);
 
   // First bootstrap resolved — latches true and never resets so later
   // refetches don't replay the entrance.
@@ -11485,6 +11849,23 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 
     // ── SOCIAL MEDIA MANAGER ────────────────────────────────────────────────
     {
+      id: 'copywriter',
+      category: 'social',
+      number: 'CW',
+      label: 'DRAFT',
+      title: 'Copywriter',
+      description: 'A quick notepad to draft tweets — save, score live against the X algorithm, edit, and schedule or post on the fly.',
+      placeholderLabel: 'QUICK\nDRAFTS',
+      rows: [
+        { key: 'cw-channel', label: 'Channel', value: 'X / Twitter' },
+        { key: 'cw-evaluate', label: 'Evaluate', value: 'Live X-algo score as you type' },
+        { key: 'cw-store', label: 'Saved To', value: 'Shared drafts (also in Schedule Posts)' },
+      ],
+      footerLeft: 'Ready',
+      footerRight: 'NOTEPAD',
+      readinessBadge: { tone: 'ok', label: 'Ready' },
+    },
+    {
       id: 'social-media-posting',
       category: 'social',
       number: 'XP',
@@ -11833,7 +12214,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           const sel = mc.sourcePlatforms || DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS;
           // Default-active cards: green whenever a source is enabled (defaults on).
           if (card.id === 'platform-search') return sel.includes('web') ? 'healthy' : 'critical';
-          if (card.id === 'social-signals')  return (sel.includes('x') || sel.includes('reddit')) ? 'healthy' : 'critical';
+          if (card.id === 'social-signals')  return (sel.includes('x') || sel.includes('reddit') || sel.includes('instagram')) ? 'healthy' : 'critical';
           // Content cards: green ONLY when the user saved the card (acknowledged) AND it has content.
           const ack = (mc.acknowledgedCards && typeof mc.acknowledgedCards === 'object') ? mc.acknowledgedCards : {};
           const hasContent = {
@@ -12404,6 +12785,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         key={latestStudioVideoUrl}
         className="tile-studio-video"
         src={latestStudioVideoUrl}
+        ref={observeOffscreenVideoPause}
         autoPlay
         muted
         loop
@@ -12468,7 +12850,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 // and autoplay/loop treatment as renderStudioVideoShell, so the
                 // mockup plays the actual video, not the OG-image poster. key
                 // re-mounts it when a newer render lands.
-                <video key={latestStudioVideoUrl} src={latestStudioVideoUrl} autoPlay muted loop playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
+                <video key={latestStudioVideoUrl} src={latestStudioVideoUrl} ref={observeOffscreenVideoPause} autoPlay muted loop playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
               ) : (
                 <img src={pmImg} alt={pmBiz} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
               )}
@@ -13009,17 +13391,22 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     {/* Background-run indicator — always rendered; spins when active, placeholder ring when idle */}
                     <>
                       <span className="cap-source-divider" aria-hidden="true" />
-                      {(isRunActive || moduleRunInFlight) ? (
+                      {(isRunActive || moduleRunInFlight || adhocMinimized) ? (
                         <button
                           type="button"
                           id="run-active-indicator-chip"
-                          onClick={reopenIntakeModal}
-                          title={latestRunStatus === 'queued' ? 'Run queued — click to open the build terminal' : 'Run in progress — click to open the build terminal'}
-                          aria-label="Open build terminal"
+                          data-status={adhocMinimized ? adhocTerminal.status : undefined}
+                          onClick={adhocMinimized ? reopenAdhocTerminal : reopenIntakeModal}
+                          title={adhocMinimized
+                            ? (adhocTerminal.status === 'running' ? 'Run in progress — click to reopen the terminal' : 'Click to reopen the terminal')
+                            : (latestRunStatus === 'queued' ? 'Run queued — click to open the build terminal' : 'Run in progress — click to open the build terminal')}
+                          aria-label={adhocMinimized ? 'Reopen render terminal' : 'Open build terminal'}
                         >
                           <span id="run-active-indicator-dot" aria-hidden="true" />
                           <span id="run-active-indicator-label">
-                            {latestRunStatus === 'queued' ? 'Queued' : 'Running'}
+                            {adhocMinimized
+                              ? (adhocTerminal.status === 'running' ? 'Running' : adhocTerminal.status === 'done' ? 'Done' : 'Failed')
+                              : (latestRunStatus === 'queued' ? 'Queued' : 'Running')}
                           </span>
                         </button>
                       ) : (
@@ -14651,9 +15038,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               borderRadius: '10px',
               boxSizing: 'border-box',
               ...internalPageGlassCardStyle,
-              background: 'rgba(255, 255, 255, 0.6)',
-              backdropFilter: 'blur(10px)',
-              WebkitBackdropFilter: 'blur(10px)',
+              background: 'rgba(255, 255, 255, 1)',
               boxShadow: '0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.1), 0px 20px 40px rgba(0, 0, 0, 0.15)',
               border: '1px solid rgba(255, 255, 255, 0.5)',
             }}
@@ -14669,8 +15054,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               <button
                 type="button"
                 id="intake-modal-close"
-                onClick={adhocActive ? closeAdhocTerminal : dismissIntakeModal}
-                aria-label="Close build terminal and return to dashboard"
+                onClick={adhocActive ? (adhocTerminal.status === 'running' ? minimizeAdhocTerminal : closeAdhocTerminal) : dismissIntakeModal}
+                aria-label={adhocActive && adhocTerminal.status === 'running' ? 'Minimize render terminal (render keeps running)' : 'Close build terminal and return to dashboard'}
                 data-tooltip-disabled="true"
               >[ ✕ ]</button>
             </div>
@@ -14788,6 +15173,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           </div>
         </div>
       ) : null}
+
+      {/* Minimized ad-hoc render terminal surfaces through the established
+          #run-active-indicator-chip "Running" UI in the coverage header (see
+          the capability header above) — no separate bottom pill. */}
 
       {bgRunToast ? (
         <div id="bg-run-toast" role="status" aria-live="polite">
@@ -15301,6 +15690,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         >
           <div
             id="tile-detail-modal-card"
+            data-tooltip-disabled="true"
             onClick={(e) => e.stopPropagation()}
           >
             {/* ── Header strip ── */}
@@ -15804,6 +16194,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 {activeTileModal.cardId === 'email-digest' && (
                   <AdminEmailDigestView
                     user={user}
+                    activeClientId={client?.clientId || client?.id || bootstrap?.effectiveClientId}
+                    runWithTerminal={runWithTerminal}
                     onOpenCard={(cardId) => {
                       const c = intakeCapabilityCards.find((x) => x.id === cardId);
                       if (c) openCapabilityCard(c);
@@ -17902,6 +18294,20 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   </div>
                 )}
 
+                {/* Copywriter card — quick tweet notepad + live score */}
+                {activeTileModal.cardId === 'copywriter' && (
+                  <div id="copywriter-modal-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
+                    <div className="tile-detail-tabs">
+                      <button type="button" className="tile-detail-tab tile-detail-tab--active">COPYWRITER</button>
+                    </div>
+                    <div className="tile-detail-tab-content">
+                      <div className="tile-detail-tab-pane">
+                        <CopywriterCard getIdToken={brandSystemGetIdToken} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Social Media Posting card — X composer + queue */}
                 {activeTileModal.cardId === 'social-media-posting' && (
                   <div id="social-posting-modal-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
@@ -18228,7 +18634,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                    ) : null}
 	                                  </div>
 	                                  {isVideo && asset.downloadUrl ? (
-	                                    <video src={asset.downloadUrl} controls muted playsInline preload="metadata" style={{ width: '100%', maxHeight: 260, borderRadius: 8, background: '#000' }} />
+	                                    <LazyVideoThumb src={asset.downloadUrl} controls muted playsInline style={{ width: '100%', maxHeight: 260, borderRadius: 8, background: '#000' }} />
 	                                  ) : asset.downloadUrl ? (
 	                                    <img src={asset.downloadUrl} alt={asset.label || 'Studio asset'} style={{ width: '100%', maxHeight: 260, objectFit: 'cover', borderRadius: 8, background: '#000' }} />
 	                                  ) : null}
@@ -18261,6 +18667,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                  const selectedArtist = artistList.find((a) => a.name === draft.artist) || null;
 	                  const artistMixes = selectedArtist && Array.isArray(selectedArtist.mixes) ? selectedArtist.mixes : [];
 	                  const canGenerate = !videoRemixLoading && draft.selectedFolders.length > 0;
+	                  // Folder preview paging: the last fetch filled its limit ⇒ more may exist.
+	                  const folderFilesLimit = videoRemixFolderFiles.limit || VIDEO_REMIX_FOLDER_PAGE_SIZE;
+	                  const folderFilesMaybeMore = videoRemixFolderFiles.files.length >= folderFilesLimit && folderFilesLimit < VIDEO_REMIX_FOLDER_PAGE_MAX;
+	                  const loadMoreFolderFiles = () => loadVideoRemixFolderFiles(videoRemixFolderFiles.folder, folderFilesLimit + VIDEO_REMIX_FOLDER_PAGE_STEP).catch(() => {});
 	                  const effectiveExistingFolder = videoRemixUploadDraft.existingFolder || folderDetailList[0]?.name || '';
 	                  const uploadTargetFolder = videoRemixUploadDraft.folderMode === 'new'
 	                    ? sanitizeVideoRemixFolderPreview(videoRemixUploadDraft.newFolderName)
@@ -18417,7 +18827,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                            <span className="order-slot-index">{index + 1}</span>
 	                                            {item ? (
 	                                              <>
-	                                                {item.url ? <video src={firstFrameThumbSrc(item.url)} muted playsInline preload="metadata" /> : <span className="order-slot-empty">Video</span>}
+	                                                {item.url ? <LazyVideoThumb src={firstFrameThumbSrc(item.url)} muted playsInline /> : <span className="order-slot-empty">Video</span>}
 	                                                <span className="order-slot-name">{item.name}</span>
 	                                                <div className="order-slot-controls">
 	                                                  <button type="button" className="mini-icon-btn" onClick={() => removeVideoRemixOrderItem(index)} aria-label={`Remove ${item.name}`}><Trash2 size={12} /></button>
@@ -18437,7 +18847,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                        const orderedIndex = orderFolder === videoRemixFolderFiles.folder ? orderItems.findIndex((item) => (item.fullPath || item.name) === (file.fullPath || file.name)) : -1;
 	                                        return (
 	                                          <button key={file.fullPath || file.name} type="button" className={`media-thumb${orderedIndex >= 0 ? ' is-ordered' : ''}`} onClick={() => addVideoRemixOrderItem(file, videoRemixFolderFiles.folder)} aria-label={`Add ${file.name} to clip order`}>
-	                                            <video src={firstFrameThumbSrc(file.url)} muted playsInline preload="metadata" />
+	                                            <LazyVideoThumb src={firstFrameThumbSrc(file.url)} muted playsInline />
 	                                            <span className="media-thumb-order-badge">{orderedIndex >= 0 ? orderedIndex + 1 : '+'}</span>
 	                                            <span className="media-thumb-name">{file.name}</span>
 	                                          </button>
@@ -18447,6 +18857,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                  ) : (
 	                                    <div className="empty">No video clips in this folder to arrange.</div>
 	                                  )}
+	                                  {!videoRemixFolderFilesLoading && videoRemixFolderFiles.folder === draft.selectedFolders[0] && folderFilesMaybeMore ? (
+	                                    <div id="remix-order-pool-load-more-row" style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
+	                                      <button type="button" className="btn btn-outline" onClick={loadMoreFolderFiles}>Load more clips</button>
+	                                    </div>
+	                                  ) : null}
 	                                </div>
 	                              ) : draft.selectedFolders.length > 1 ? (
 	                                <p className="hint">Manual clip order needs a single folder — deselect extras to arrange clips.</p>
@@ -18780,7 +19195,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                            {item ? (
 	                                              <>
 	                                                {item.url ? (
-	                                                  <video src={firstFrameThumbSrc(item.url)} muted playsInline preload="metadata" />
+	                                                  <LazyVideoThumb src={firstFrameThumbSrc(item.url)} muted playsInline />
 	                                                ) : (
 	                                                  <span className="order-slot-empty">Video</span>
 	                                                )}
@@ -18817,7 +19232,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                            aria-label={file.kind === 'video' ? `Add ${file.name} to clip order` : `${file.name} preview`}
 	                                          >
 	                                            {file.kind === 'video' ? (
-	                                              <video src={firstFrameThumbSrc(file.url)} muted playsInline preload="metadata" />
+	                                              <LazyVideoThumb src={firstFrameThumbSrc(file.url)} muted playsInline />
 	                                            ) : file.url ? (
 	                                              <img src={file.url} alt={file.name} loading="lazy" />
 	                                            ) : (
@@ -18835,6 +19250,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                  ) : (
 	                                    <div className="empty">No media files in this folder.</div>
 	                                  )}
+	                                  {!videoRemixFolderFilesLoading && folderFilesMaybeMore ? (
+	                                    <div id="source-media-load-more-row" style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
+	                                      <button type="button" className="btn btn-outline" onClick={loadMoreFolderFiles}>Load more files</button>
+	                                    </div>
+	                                  ) : null}
 	                                  {isAdmin && videoRemixFolderFiles.files.length ? (
 	                                    <div className="list-card" style={{ marginTop: 12 }}>
 	                                      <div className="list-head">
@@ -18850,7 +19270,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                          <div key={`cleanup-${file.fullPath || file.name}`} className="upload-row">
 	                                            {file.kind === 'video' && file.url ? (
 	                                              <span className="upload-kind upload-kind-thumb">
-	                                                <video src={firstFrameThumbSrc(file.url)} muted playsInline preload="metadata" />
+	                                                <LazyVideoThumb src={firstFrameThumbSrc(file.url)} muted playsInline />
 	                                              </span>
 	                                            ) : file.kind === 'image' && file.url ? (
 	                                              <span className="upload-kind upload-kind-thumb">
@@ -18940,19 +19360,42 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                          );
 	                        })()}
 	                        {modalTab === 'assets' && (
-	                          savedRemixes.length ? savedRemixes.map((asset) => {
+	                          savedRemixes.length ? <>
+	                          {savedRemixes.slice(0, savedRemixVisibleCount).map((asset) => {
 	                            const url = asset.downloadUrl || asset.url || null;
 	                            const fileName = safeDownloadName(`${client?.businessName || 'video-remix'}-${asset.jobId || asset.createdAt || asset.capturedAt || 'render'}.mp4`);
 	                            const savedTs = asset.createdAt || asset.capturedAt || null;
 	                            const savedWith = asset.createdWith || {};
-	                            const savedMeta = [
-	                              Array.isArray(asset.sourceFolders) && asset.sourceFolders.length ? asset.sourceFolders.join(', ') : null,
-	                              savedWith.artist ? `Artist: ${savedWith.artist}` : null,
-	                              savedWith.mix ? `Mix: ${savedWith.mix}` : null,
-	                              savedWith.filter ? `Filter: ${savedWith.filter}` : null,
-	                              savedWith.orderSegments ? `${savedWith.orderSegments} clips` : null,
-	                              asset.durationSeconds ? `${asset.durationSeconds}s` : null,
-	                            ].filter(Boolean);
+	                            // Full settings snapshot (createdWith.full) → list every
+	                            // property that was set so what-was-set vs what-rendered is
+	                            // auditable. Fields left null were auto-picked by the worker.
+	                            const swPct = savedWith.filterIntensity != null ? ` @${Math.round(savedWith.filterIntensity * 100)}%` : '';
+	                            const swFilter = savedWith.filter ? `${savedWith.filter}${swPct}` : 'auto';
+	                            const savedMeta = (savedWith.full
+	                              ? [
+	                                  Array.isArray(asset.sourceFolders) && asset.sourceFolders.length ? `Clips: ${asset.sourceFolders.join(', ')}` : null,
+	                                  Array.isArray(savedWith.clips) && savedWith.clips.length ? `Clip order: ${savedWith.clips.join(' → ')}` : (savedWith.orderSegments ? `Order: ${savedWith.orderSegments} manual` : null),
+	                                  `Filter: ${swFilter}`,
+	                                  `Overlay: ${savedWith.overlay || 'off'}`,
+	                                  `Artist: ${savedWith.artist || 'auto'}`,
+	                                  savedWith.mix ? `Mix: ${savedWith.mix}` : null,
+	                                  `Top logo: ${savedWith.topLogo || 'auto'}`,
+	                                  `End logo: ${savedWith.endLogo || 'auto'}`,
+	                                  savedWith.useArtistImage === true ? 'Artist image: on' : (savedWith.useArtistImage === false ? 'Artist image: off' : null),
+	                                  savedWith.endText ? `End text: “${savedWith.endText}”` : null,
+	                                  savedWith.audioUrl ? 'Audio: custom' : null,
+	                                  savedWith.output ? `Size: ${savedWith.output}` : null,
+	                                  `${asset.durationSeconds || savedWith.duration || 30}s`,
+	                                ]
+	                              : [
+	                                  Array.isArray(asset.sourceFolders) && asset.sourceFolders.length ? asset.sourceFolders.join(', ') : null,
+	                                  savedWith.artist ? `Artist: ${savedWith.artist}` : null,
+	                                  savedWith.mix ? `Mix: ${savedWith.mix}` : null,
+	                                  savedWith.filter ? `Filter: ${savedWith.filter}` : null,
+	                                  savedWith.orderSegments ? `${savedWith.orderSegments} clips` : null,
+	                                  asset.durationSeconds ? `${asset.durationSeconds}s` : null,
+	                                ]
+	                            ).filter(Boolean);
 	                            return (
 	                              <article key={asset.storagePath || url || asset.jobId} className="list-card saved-remix-card">
 	                                <div className="list-head">
@@ -18963,7 +19406,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                {url ? (
 	                                  <div className="preview-surface saved-remix-surface">
 	                                    <div className="preview-media">
-	                                      <video src={url} controls playsInline preload="metadata" />
+	                                      <LazyVideoThumb src={url} controls playsInline />
 	                                    </div>
 	                                  </div>
 	                                ) : null}
@@ -19005,7 +19448,15 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                ) : null}
 	                              </article>
 	                            );
-	                          }) : (
+	                          })}
+	                          {savedRemixes.length > savedRemixVisibleCount ? (
+	                            <div id="saved-remix-load-more-row" style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 2px' }}>
+	                              <button type="button" className="btn btn-outline" onClick={() => setSavedRemixVisibleCount((n) => n + SAVED_REMIX_PAGE_SIZE)}>
+	                                Load more ({savedRemixes.length - savedRemixVisibleCount} older)
+	                              </button>
+	                            </div>
+	                          ) : null}
+	                          </> : (
 	                            <div className="empty">No remixes yet. Use REMIX, then click Generate Video.</div>
 	                          )
 	                        )}
@@ -19839,7 +20290,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 <div id="scout-test-meta-band" style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column' }}>
                   {(activeTileModal.cardId === 'platform-search'
                     ? [['web', 'WEB']]
-                    : [['x', 'X / TWITTER'], ['reddit', 'REDDIT']]
+                    : [['x', 'X / TWITTER'], ['reddit', 'REDDIT'], ['instagram', 'INSTAGRAM']]
                   ).map(([k, lbl]) => renderScoutTestMetaRow(k, lbl))}
                 </div>
               ) : null}
@@ -27239,8 +27690,10 @@ export const dashboardCss = `
   @media (min-width: 1400px) {
     #capability-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   }
-  /* DELIVERABLES goes 3-across only on ultra-wide where the cards have room. */
+  /* Goes 3-across only on ultra-wide where the cards have room. Every bucket
+     (DELIVERABLES + the others) shares the same 3-across-vs-2 breakpoint. */
   @media (min-width: 1600px) {
+    .cap-step-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .cap-bucket-deliverables .cap-step-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   }
   @media (max-width: 1200px) {

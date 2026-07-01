@@ -30,6 +30,7 @@ async function authFetch(user, path, options = {}) {
 const usd = (n, dp = 2) => `$${(Number(n) || 0).toFixed(dp)}`;
 const tok = (n) => (Number(n) || 0).toLocaleString();
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) : '—');
+const fmtDay = (iso) => (iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—');
 const STATUS_LABEL = { tracked: 'Tracked', estimate: 'Estimate', 'not-instrumented': 'Not instrumented' };
 // Run source → short label. Legacy runs (pre-tagging) recorded a bare 'cron' for
 // both scheduled + manual, so show 'cron?' to flag the ambiguity honestly.
@@ -173,10 +174,10 @@ export function AdminOperatingCostView({ user }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const load = useCallback(async (d) => {
+  const load = useCallback(async (d, force = false) => {
     setLoading(true); setError('');
     try {
-      const res = await authFetch(user, `/api/admin/cost-report?days=${d}`);
+      const res = await authFetch(user, `/api/admin/cost-report?days=${d}${force ? '&refresh=1' : ''}`);
       setData(res);
     } catch (e) {
       setError(e.message || 'Failed to load cost report.');
@@ -190,6 +191,7 @@ export function AdminOperatingCostView({ user }) {
   const t = data?.totals || {};
   const a = data?.anthropic;
   const anthropicBreakdown = a?.byDescription || a?.byModel || [];
+  const sc = data?.scrapeCreators;
 
   return (
     <div className="tile-detail-tab-content">
@@ -257,6 +259,42 @@ export function AdminOperatingCostView({ user }) {
                 </div>
               ) : (
                 <p className="oc-note" style={{ margin: 0 }}>{a?.reason || 'Not connected.'}</p>
+              )}
+            </section>
+
+            {/* ── ScrapeCreators account (last30days scraper credits) ────────── */}
+            <section className="section" id="operating-cost-scrapecreators-section">
+              <div className="section-head">
+                <span className="index">SC</span>
+                <div>
+                  <h3>ScrapeCreators account</h3>
+                  <p>last30days social-scraper credits — the spend behind Reddit / Instagram / X signals.</p>
+                </div>
+                {sc?.available ? (
+                  <button type="button" className="oc-btn" onClick={() => load(days, true)} disabled={loading} title="Fetch live — bypasses the 1h cache (costs 2 credits)">{loading ? '…' : '↻ live'}</button>
+                ) : null}
+              </div>
+              {sc?.available ? (
+                <div>
+                  <div className="oc-metric-grid">
+                    <div className="oc-metric"><span className="oc-metric-value">{tok(sc.creditsRemaining)}</span><span className="oc-metric-label">Credits left</span></div>
+                    <div className="oc-metric"><span className="oc-metric-value">{tok(sc.creditsUsedInWindow)}</span><span className="oc-metric-label">Used {data.windowDays === 1 ? '24h' : `${data.windowDays}d`}</span></div>
+                    <div className="oc-metric"><span className="oc-metric-value">{tok(sc.requestsInWindow)}</span><span className="oc-metric-label">Requests</span></div>
+                    <div className="oc-metric"><span className="oc-metric-value">{usd(sc.estUsd)}</span><span className="oc-metric-label">Est spend</span></div>
+                  </div>
+                  <p className="oc-note" style={{ marginTop: 8 }}>
+                    {usd(sc.usdPerCredit, 4)}/credit · {sc.cached ? 'cached (≤1h)' : 'live'} · scraper credits only — last30days LLM planning not included
+                  </p>
+                  {sc.byDay?.length ? (
+                    <div className="oc-chip-row" style={{ marginTop: 8 }}>
+                      {sc.byDay.slice(0, 14).map((d) => (
+                        <span key={d.date} className="oc-chip">{fmtDay(d.date)} · {tok(d.credits)}c</span>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="oc-note" style={{ margin: 0 }}>{sc?.reason || 'Not connected.'}</p>
               )}
             </section>
 

@@ -280,8 +280,7 @@ export default function LeadgenModulePanel({
         style={{
           position: 'relative', zIndex: 2, width: '100%', maxWidth: '52rem',
           padding: 'clamp(1.25rem, 5vw, 2rem)', borderRadius: '10px', boxSizing: 'border-box',
-          background: 'rgba(255,255,255,0.6)', backdropFilter: 'blur(10px)',
-          WebkitBackdropFilter: 'blur(10px)',
+          background: 'rgba(255,255,255,1)',
           boxShadow: '0px 5px 10px rgba(0,0,0,0.1), 0px 15px 30px rgba(0,0,0,0.1), 0px 20px 40px rgba(0,0,0,0.15)',
           border: '1px solid rgba(255,255,255,0.5)',
         }}

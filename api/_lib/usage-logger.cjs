@@ -24,6 +24,9 @@ const RATES = {
   // intelligence PSI narrator.
   'claude-haiku-4-5-20251001':  { inputPerToken: 1.00 / 1_000_000, outputPerToken: 5.00  / 1_000_000 },
   'claude-sonnet-4-6':      { inputPerToken: 3.00 / 1_000_000, outputPerToken: 15.00 / 1_000_000 },
+  // Sonnet 4.5 (Sep 2025) — same family rate. Used by the external-scout
+  // web_search paths (reddit / reviews).
+  'claude-sonnet-4-5-20250929': { inputPerToken: 3.00 / 1_000_000, outputPerToken: 15.00 / 1_000_000 },
   // Older Sonnet 4 (May 2024 release) — same family rate. Used by brand-system vision
   // modules and the intelligence PSI narrator.
   'claude-sonnet-4-20250514': { inputPerToken: 3.00 / 1_000_000, outputPerToken: 15.00 / 1_000_000 },
@@ -81,6 +84,14 @@ function computeFlatCost({ model, calls = 1 } = {}) {
   const r = rateFor(model);
   if (!r?.perCall) return 0;
   return r.perCall * (Number(calls) || 0);
+}
+
+// Anthropic web_search tool surcharge — billed on TOP of tokens, $10 / 1k
+// searches. The exact count comes from response.usage.server_tool_use.
+const WEB_SEARCH_USD_PER_REQUEST = 10 / 1000;
+
+function webSearchRequests(response) {
+  return Number(response?.usage?.server_tool_use?.web_search_requests) || 0;
 }
 
 // ─── WRITER ──────────────────────────────────────────────────────────────────
@@ -154,6 +165,36 @@ async function logUsage(args = {}) {
   }
 }
 
+/**
+ * Convenience: log one Anthropic Messages call from its raw response. Captures
+ * token cost (via RATES) AND the web_search tool surcharge (from
+ * response.usage.server_tool_use) — the exact numbers, not an estimate — so a
+ * single line item reflects the true cost of a call that used web_search. Use
+ * this to instrument any Anthropic call that isn't already in stageCosts.
+ */
+async function logAnthropicCall({ module: moduleName, action = null, model, response, clientId = null, runId = null, metadata = {} } = {}) {
+  const usage = response?.usage || {};
+  const inputTokens = Number(usage.input_tokens) || 0;
+  const outputTokens = Number(usage.output_tokens) || 0;
+  const searches = webSearchRequests(response);
+  const searchCost = searches * WEB_SEARCH_USD_PER_REQUEST;
+  const costUsd = computeAnthropicCost({ model, inputTokens, outputTokens }) + searchCost;
+  return logUsage({
+    module: moduleName,
+    action,
+    provider: 'anthropic',
+    model,
+    inputTokens,
+    outputTokens,
+    costUsd,
+    clientId,
+    runId,
+    metadata: searches
+      ? { ...metadata, webSearchRequests: searches, webSearchSurchargeUsd: round4(searchCost) }
+      : metadata,
+  });
+}
+
 module.exports = {
   RATES,
   rateFor,
@@ -161,5 +202,8 @@ module.exports = {
   computeOpenAiTextCost,
   computeImageCost,
   computeFlatCost,
+  WEB_SEARCH_USD_PER_REQUEST,
+  webSearchRequests,
   logUsage,
+  logAnthropicCall,
 };

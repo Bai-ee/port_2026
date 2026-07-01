@@ -8,6 +8,7 @@
 
 const fb = require('../../api/_lib/firebase-admin.cjs');
 const { getClientWeather } = require('./_weather.js');
+const { collectRedditSignals, collectInstagramSignals } = require('./_platform-signals.js');
 
 function arr(v) {
   return Array.isArray(v) ? v : [];
@@ -116,8 +117,16 @@ function projectBrief(marketingBrief, state = null) {
       reach: m.reach || '',
       url: m.url || '',
     })),
-    redditSignals: arr(agentData.redditSignals).map((r) => ({
+    redditSignals: collectRedditSignals(marketingBrief).map((r) => ({
       title: r.title || 'Reddit signal',
+      subreddit: r.subreddit || '',
+      signalType: r.signalType || '',
+      summary: r.summary || '',
+      actionableTakeaway: r.actionableTakeaway || '',
+      url: r.url || '',
+    })),
+    instagramSignals: collectInstagramSignals(marketingBrief).map((r) => ({
+      title: r.title || 'Instagram signal',
       subreddit: r.subreddit || '',
       signalType: r.signalType || '',
       summary: r.summary || '',
@@ -137,6 +146,11 @@ function projectBrief(marketingBrief, state = null) {
     // REPORT tab (written by /api/dashboard/watchlist-pull). Raw recipe text;
     // the email parses + renders it in the brief-kit look.
     watchlistAnalysis: marketingBrief?.reportSnapshot?.watchlistAnalysis?.text || '',
+    // Platform-analysis slot for "Happening on Reddit". Same persisted
+    // reportSnapshot pattern as watchlistAnalysis; analyzer wiring fills this.
+    redditAnalysis: marketingBrief?.reportSnapshot?.redditAnalysis?.text || '',
+    // Platform-analysis slot for "Happening on Instagram". Same pattern as reddit.
+    instagramAnalysis: marketingBrief?.reportSnapshot?.instagramAnalysis?.text || '',
     // Reply-targets recipe output persisted by pre-digest-refresh. Array of
     // { ok, recipeId, analysis } — the email renders the reply-targets entry.
     digestRecipes: arr(marketingBrief?.reportSnapshot?.digestRecipes),

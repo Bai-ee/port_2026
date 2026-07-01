@@ -27,12 +27,17 @@ const { buildAuthRequestShim, getHeaderValue, safeSecretEquals, verifyAdminReque
 const { claimRun, completeRun, failRun, appendRunEvent, updateModuleState } = require('../../../../api/_lib/run-lifecycle.cjs');
 const { logError, logInfo } = require('../../../../api/_lib/observability.cjs');
 const digestConfig = require('../../../../features/intelligence/_digest-config.js');
+const { getMarketInsightPlatformState } = require('../../../../features/intelligence/_market-insight-platform-state.js');
 const { runAnalysisRecipe } = require('../../../../features/intelligence/analysis-recipes/run-recipe.js');
+const { getRecipe } = require('../../../../features/intelligence/analysis-recipes/recipes.js');
 const { loadClientBrainContext } = require('../../../../features/client-brain/store.cjs');
+const { logUsage } = require('../../../../api/_lib/usage-logger.cjs');
 const { runWatchlistPull } = require('../../../../features/scout-intake/watchlist-pull');
 const { buildModuleBriefs } = require('../../../../features/scout-intake/module-brief-builder.js');
 const { getDefaultModuleConfig } = require('../../../../features/scout-intake/module-registry');
 const { FALLBACK_BRIEF_SITE } = require('../../../../api/_lib/brief-fallback.cjs');
+const { collectRedditSignals, collectInstagramSignals } = require('../../../../features/intelligence/_platform-signals.js');
+const { searchReddit: scSearchReddit, searchInstagram: scSearchInstagram, hasApiKey: scHasApiKey } = require('../../../../features/scout-intake/external-scouts/scrapecreators-client.js');
 
 import { generateStrategyPlan } from '../../../../features/strategy-builder/generate-plan.js';
 import { generateBriefSummaries } from '../../../../features/scout-intake/brief-summary-runner.mjs';
@@ -47,6 +52,65 @@ function getIntakeRunner() {
 
 function json(body, status = 200) {
   return NextResponse.json(body, { status, headers: { 'cache-control': 'no-store' } });
+}
+
+function addVelocity(it, nowMs) {
+  if (!it || typeof it !== 'object') return it;
+  const published = it.publishedAt || it.createdAt || it.date || it.timestamp || null;
+  const ts = published ? Date.parse(published) : NaN;
+  if (!Number.isFinite(ts)) return it;
+  const ageHours = Math.max(0, (nowMs - ts) / 3_600_000);
+  const eng = (it.likes || 0) + (it.retweets || 0) + (it.reposts || 0) + (it.replies || 0) + (it.comments || 0) + (it.upvotes || 0) + (it.score || 0) + (it.engagement || 0);
+  return {
+    ...it,
+    ageHours: Math.round(ageHours * 10) / 10,
+    velocityPerHour: Math.round((eng / Math.max(ageHours, 0.5)) * 10) / 10,
+    replyWindowOpen: ageHours <= 6,
+  };
+}
+
+function buildRedditAnalysisContent(marketingBrief = {}, nowMs = Date.now()) {
+  const redditSignals = collectRedditSignals(marketingBrief).map((it) => addVelocity(it, nowMs));
+  return {
+    generatedAt: new Date(nowMs).toISOString(),
+    source: 'marketingBrief.scoutBrief.agentData.redditSignals + marketingBrief.reportSnapshot.platformTests.reddit',
+    redditSignals,
+    dataQuality: {
+      itemsAvailable: redditSignals.length,
+      note: redditSignals.length
+        ? 'Analyze only these supplied Reddit signals. Missing engagement or timestamps means freshness is unknown.'
+        : 'No Reddit signals are currently available in stored Market Insights data.',
+    },
+  };
+}
+
+function buildInstagramAnalysisContent(marketingBrief = {}, nowMs = Date.now()) {
+  const instagramSignals = collectInstagramSignals(marketingBrief).map((it) => addVelocity(it, nowMs));
+  return {
+    generatedAt: new Date(nowMs).toISOString(),
+    source: 'marketingBrief.scoutBrief.agentData.instagramSignals + marketingBrief.reportSnapshot.platformTests.instagram',
+    instagramSignals,
+    dataQuality: {
+      itemsAvailable: instagramSignals.length,
+      note: instagramSignals.length
+        ? 'Analyze only these supplied Instagram signals. Missing engagement or timestamps means freshness is unknown.'
+        : 'No Instagram signals are currently available in stored Market Insights data.',
+    },
+  };
+}
+
+async function logRecipeUsage({ clientId, recipeId, result, interactive = false }) {
+  if (!result?.costUsd) return;
+  const recipe = getRecipe(recipeId);
+  await logUsage({
+    module: 'market-insights',
+    action: `analysis.${recipeId}`,
+    provider: 'anthropic',
+    model: recipe?.model || 'claude-sonnet-4-5-20250929',
+    costUsd: result.costUsd,
+    clientId,
+    metadata: { recipeId, interactive },
+  }).catch(() => {});
 }
 
 /** Vercel cron sends CRON_SECRET as a Bearer token. Mirrors the daily-digest
@@ -381,28 +445,22 @@ async function refreshReplyTargets(clientId) {
     const marketingBrief = snap.exists ? (snap.data()?.marketingBrief || {}) : {};
     const agentData = marketingBrief?.scoutBrief?.agentData || null;
     const watchlistTimelines = marketingBrief?.watchlistTimelines || null;
-    if (!agentData && !watchlistTimelines) return { ok: false, skipped: true, error: 'no signal data' };
+    const redditSignals = collectRedditSignals(marketingBrief);
+    const instagramSignals = collectInstagramSignals(marketingBrief);
+    if (!agentData && !watchlistTimelines && !redditSignals.length && !instagramSignals.length) return { ok: false, skipped: true, error: 'no signal data' };
     const nowMs = Date.now();
-    const addVelocity = (it) => {
-      if (!it || typeof it !== 'object') return it;
-      const published = it.publishedAt || it.createdAt || it.date || null;
-      const ts = published ? Date.parse(published) : NaN;
-      if (!Number.isFinite(ts)) return it;
-      const ageHours = Math.max(0, (nowMs - ts) / 3_600_000);
-      const eng = (it.likes || 0) + (it.retweets || 0) + (it.replies || 0) + (it.engagement || 0);
-      return { ...it, ageHours: Math.round(ageHours * 10) / 10, velocityPerHour: Math.round((eng / Math.max(ageHours, 0.5)) * 10) / 10, replyWindowOpen: ageHours <= 6 };
-    };
     const replyPool = {
       generatedAt: new Date(nowMs).toISOString(),
       replyWindowHours: 6,
       watchlistMentions: (Array.isArray(watchlistTimelines?.handles) ? watchlistTimelines.handles : []).map((h) => ({
         ...h,
-        ownPosts: Array.isArray(h?.ownPosts) ? h.ownPosts.map(addVelocity) : [],
-        mentions: Array.isArray(h?.mentions) ? h.mentions.map(addVelocity) : [],
+        ownPosts: Array.isArray(h?.ownPosts) ? h.ownPosts.map((it) => addVelocity(it, nowMs)) : [],
+        mentions: Array.isArray(h?.mentions) ? h.mentions.map((it) => addVelocity(it, nowMs)) : [],
       })),
-      brandMentions: (Array.isArray(agentData?.brandMentions) ? agentData.brandMentions : []).map(addVelocity),
-      redditSignals: (Array.isArray(agentData?.redditSignals) ? agentData.redditSignals : []).map(addVelocity),
-      kolActivity: (Array.isArray(agentData?.kolActivity) ? agentData.kolActivity : []).map(addVelocity),
+      brandMentions: (Array.isArray(agentData?.brandMentions) ? agentData.brandMentions : []).map((it) => addVelocity(it, nowMs)),
+      redditSignals: redditSignals.map((it) => addVelocity(it, nowMs)),
+      instagramSignals: instagramSignals.map((it) => addVelocity(it, nowMs)),
+      kolActivity: (Array.isArray(agentData?.kolActivity) ? agentData.kolActivity : []).map((it) => addVelocity(it, nowMs)),
     };
     const contextParts = [];
     try {
@@ -411,6 +469,7 @@ async function refreshReplyTargets(clientId) {
     } catch { /* non-fatal */ }
     const context = contextParts.join('\n\n');
     const result = await runAnalysisRecipe({ recipeId: 'reply-targets', content: replyPool, context });
+    await logRecipeUsage({ clientId, recipeId: 'reply-targets', result });
     await fb.adminDb.collection('dashboard_state').doc(clientId).set(
       { marketingBrief: { reportSnapshot: { digestRecipes: [result] } } },
       { merge: true }
@@ -423,20 +482,159 @@ async function refreshReplyTargets(clientId) {
   }
 }
 
+/** Run the Reddit platform analysis over stored redditSignals and persist it to
+ *  marketingBrief.reportSnapshot.redditAnalysis so email/brief renderers can read
+ *  it without re-running LLM calls. Non-blocking: never throws. */
+async function refreshRedditAnalysis(clientId) {
+  if (!clientId) return { ok: false, skipped: true };
+  try {
+    const platformState = await getMarketInsightPlatformState(clientId);
+    if (platformState?.platformAvailability?.reddit === false) {
+      return { ok: false, skipped: true, reason: 'reddit-disabled' };
+    }
+    const snap = await fb.adminDb.collection('dashboard_state').doc(clientId).get();
+    const marketingBrief = snap.exists ? (snap.data()?.marketingBrief || {}) : {};
+    const redditSignals = collectRedditSignals(marketingBrief);
+    if (!redditSignals.length) return { ok: false, skipped: true, reason: 'no-reddit-signals' };
+
+    const generatedAt = new Date().toISOString();
+    const content = buildRedditAnalysisContent(marketingBrief, Date.now());
+    const contextParts = [];
+    try {
+      const voiceCtx = await loadClientBrainContext(clientId, { useFor: 'copy', maxChars: 1600 });
+      if (voiceCtx) contextParts.push(voiceCtx);
+    } catch { /* non-fatal */ }
+    const result = await runAnalysisRecipe({ recipeId: 'reddit-analysis', content, context: contextParts.join('\n\n') });
+    await logRecipeUsage({ clientId, recipeId: 'reddit-analysis', result });
+    if (result?.analysis) {
+      await fb.adminDb.collection('dashboard_state').doc(clientId).set(
+        { marketingBrief: { reportSnapshot: { redditAnalysis: { text: result.analysis, generatedAt } } } },
+        { merge: true }
+      );
+    }
+    logInfo('pre_digest_reddit_analysis', { clientId, ok: result.ok, costUsd: result.costUsd, signals: redditSignals.length });
+    return { ok: result.ok, recipeId: 'reddit-analysis', costUsd: result.costUsd, signals: redditSignals.length };
+  } catch (err) {
+    logError('pre_digest_reddit_analysis_failed', { clientId, error: err.message });
+    return { ok: false, error: err.message };
+  }
+}
+
+/** Instagram mirror of refreshRedditAnalysis. Runs the instagram-analysis recipe
+ *  over stored instagramSignals and persists reportSnapshot.instagramAnalysis. */
+async function refreshInstagramAnalysis(clientId) {
+  if (!clientId) return { ok: false, skipped: true };
+  try {
+    const platformState = await getMarketInsightPlatformState(clientId);
+    if (platformState?.platformAvailability?.instagram === false) {
+      return { ok: false, skipped: true, reason: 'instagram-disabled' };
+    }
+    const snap = await fb.adminDb.collection('dashboard_state').doc(clientId).get();
+    const marketingBrief = snap.exists ? (snap.data()?.marketingBrief || {}) : {};
+    const instagramSignals = collectInstagramSignals(marketingBrief);
+    if (!instagramSignals.length) return { ok: false, skipped: true, reason: 'no-instagram-signals' };
+
+    const generatedAt = new Date().toISOString();
+    const content = buildInstagramAnalysisContent(marketingBrief, Date.now());
+    const contextParts = [];
+    try {
+      const voiceCtx = await loadClientBrainContext(clientId, { useFor: 'copy', maxChars: 1600 });
+      if (voiceCtx) contextParts.push(voiceCtx);
+    } catch { /* non-fatal */ }
+    const result = await runAnalysisRecipe({ recipeId: 'instagram-analysis', content, context: contextParts.join('\n\n') });
+    await logRecipeUsage({ clientId, recipeId: 'instagram-analysis', result });
+    if (result?.analysis) {
+      await fb.adminDb.collection('dashboard_state').doc(clientId).set(
+        { marketingBrief: { reportSnapshot: { instagramAnalysis: { text: result.analysis, generatedAt } } } },
+        { merge: true }
+      );
+    }
+    logInfo('pre_digest_instagram_analysis', { clientId, ok: result.ok, costUsd: result.costUsd, signals: instagramSignals.length });
+    return { ok: result.ok, recipeId: 'instagram-analysis', costUsd: result.costUsd, signals: instagramSignals.length };
+  } catch (err) {
+    logError('pre_digest_instagram_analysis_failed', { clientId, error: err.message });
+    return { ok: false, error: err.message };
+  }
+}
+
+/** Pull fresh Reddit + Instagram signals via the direct ScrapeCreators Node client
+ *  and persist them to reportSnapshot.platformTests. This is the PRODUCTION source
+ *  for those platforms — the last30days subprocess can't run on Vercel, so this
+ *  Vercel-native HTTP client is what populates Reddit/Instagram for the cron. Runs
+ *  before the analysis/reply steps so collect*Signals see fresh data. Never throws. */
+async function refreshPlatformSignals(clientId) {
+  if (!clientId || !scHasApiKey()) return { ok: false, skipped: true, reason: 'no-key' };
+  try {
+    const cfgSnap = await fb.adminDb.collection('client_configs').doc(clientId).get();
+    const mbc = (cfgSnap.exists ? (cfgSnap.data() || {}) : {}).marketingBriefConfig || {};
+    const sources = new Set((Array.isArray(mbc.sourcePlatforms) ? mbc.sourcePlatforms : []).map((s) => String(s || '').toLowerCase()));
+    const brand = String(mbc.brandName || '').replace(/^["']+|["']+$/g, '').trim();
+    const cats = Array.isArray(mbc.categoryTerms) ? mbc.categoryTerms.filter(Boolean) : [];
+    const persist = async (platform, items, meta) => {
+      const entry = JSON.parse(JSON.stringify({
+        items: (items || []).slice(0, 20), count: (items || []).length, costUsd: 0, ms: null,
+        meta: meta || null, generatedAt: new Date().toISOString(),
+      }));
+      await fb.adminDb.collection('dashboard_state').doc(clientId).set(
+        { marketingBrief: { reportSnapshot: { platformTests: { [platform]: entry } } }, updatedAt: fb.FieldValue.serverTimestamp() },
+        { merge: true }
+      );
+    };
+    const out = {};
+    if (sources.has('reddit')) {
+      const r = await scSearchReddit({ queries: [brand, ...cats.slice(0, 2)].filter(Boolean), limit: 12 });
+      if (r.ok && r.items.length) await persist('reddit', r.items, r.meta);
+      out.reddit = r.ok ? r.items.length : `err:${r.error}`;
+    }
+    if (sources.has('instagram')) {
+      const creators = (Array.isArray(mbc.instagramHandles) ? mbc.instagramHandles : []).map((h) => String(h || '').replace(/^@+/, '')).filter((h) => h.length >= 2);
+      const ig = await scSearchInstagram({ queries: [brand, ...cats.slice(0, 1)].filter(Boolean), creators, limit: 12 });
+      if (ig.ok && ig.items.length) await persist('instagram', ig.items, ig.meta);
+      out.instagram = ig.ok ? ig.items.length : `err:${ig.error}`;
+    }
+    logInfo('pre_digest_platform_signals', { clientId, ...out });
+    return { ok: true, ...out };
+  } catch (err) {
+    logError('pre_digest_platform_signals_failed', { clientId, error: err.message });
+    return { ok: false, error: err.message };
+  }
+}
+
 /** Refresh one client's scout brief + watchlist timelines + strategy plan.
  *  Sequential (strategy reads fresh scout). Never throws. */
-export async function refreshDigestClient(clientId, { freshnessToken = '', force = false, source = 'cron-scheduled', actorUid = null } = {}) {
+export async function refreshDigestClient(clientId, { freshnessToken = '', force = false, source = 'cron-scheduled', actorUid = null, include = {}, briefLinkMode = 'fresh' } = {}) {
   if (!clientId) return { ok: false, error: 'no clientId' };
-  const [modules, scout, watchlist] = await Promise.all([
-    refreshSiteCreativeModules(clientId, freshnessToken, { source, actorUid }),
+  // Cost gate: only refresh the expensive brief compute a send will actually
+  // use. A fresh brief page (briefLinkMode 'fresh' + link shown) renders creative
+  // modules + executive summary, so those must run even when their own email
+  // sections are off. Otherwise each step is gated on the toggles that consume
+  // it — hidden creative/exec sections no longer pay the render/LLM cost.
+  const freshBriefWanted = include.execBriefLink !== false && briefLinkMode === 'fresh';
+  const creativeWanted = freshBriefWanted
+    || include.creativeBrief !== false
+    || include.videoPromo !== false
+    || include.videoPosts !== false;
+  const execSummaryWanted = freshBriefWanted || include.execSummary !== false;
+  const [modules, scout, watchlist, platformSignals] = await Promise.all([
+    creativeWanted
+      ? refreshSiteCreativeModules(clientId, freshnessToken, { source, actorUid })
+      : Promise.resolve({ ok: true, skipped: true, reason: 'creative-sections-off' }),
     refreshScoutBrief(clientId, { force, source, actorUid }),
     refreshWatchlist(clientId),
+    // Reddit/Instagram via the direct ScrapeCreators client → platformTests.
+    // Runs here so it completes before the analysis/reply steps read collect*Signals.
+    // This is what makes Reddit/IG populate in PRODUCTION (last30days can't run there).
+    refreshPlatformSignals(clientId),
   ]);
-  const [strategy, replyTargets] = await Promise.all([
+  const [strategy, replyTargets, redditAnalysis, instagramAnalysis] = await Promise.all([
     refreshStrategyPlan(clientId),
     refreshReplyTargets(clientId), // needs fresh watchlist timelines already written above
+    refreshRedditAnalysis(clientId),
+    refreshInstagramAnalysis(clientId),
   ]);
-  const briefSummaries = await refreshBriefSummaries(clientId, scout?.runId || modules?.runId || null);
+  const briefSummaries = execSummaryWanted
+    ? await refreshBriefSummaries(clientId, scout?.runId || modules?.runId || null)
+    : { ok: true, skipped: true, reason: 'exec-summary-off' };
   const digestFreshness = {
     token: freshnessToken || null,
     generatedAt: new Date().toISOString(),
@@ -445,6 +643,8 @@ export async function refreshDigestClient(clientId, { freshnessToken = '', force
     moduleRunId: modules?.runId || null,
     strategyOk: Boolean(strategy?.ok),
     summaries: briefSummaries?.written || [],
+    redditAnalysisOk: Boolean(redditAnalysis?.ok),
+    instagramAnalysisOk: Boolean(instagramAnalysis?.ok),
   };
   await fb.adminDb.collection('dashboard_state').doc(clientId).set(
     { digestFreshness, updatedAt: fb.FieldValue.serverTimestamp() },
@@ -461,6 +661,8 @@ export async function refreshDigestClient(clientId, { freshnessToken = '', force
     watchlist,
     strategy,
     replyTargets,
+    redditAnalysis,
+    instagramAnalysis,
     executiveSummary: briefSummaries,
     digestFreshness,
     warnings: watchlistWarning ? [{ source: 'watchlist', message: watchlistWarning }] : [],
@@ -499,15 +701,28 @@ async function handle(request) {
 
   let homeClientId = null;
   let clientIds = [];
+  // Digest include toggles + brief-link mode gate the expensive brief compute in
+  // refreshDigestClient (see cost gate there). Same saved config the send reads,
+  // so refreshed data == previewed == sent.
+  let digestInclude = {};
+  let digestBriefLinkMode = 'fresh';
   try {
     const configClientId = await digestConfig.resolveDigestClientId();
     const cfg = await digestConfig.getDigestConfig(configClientId);
     homeClientId = cfg.homeClientId || configClientId;
-    const configuredClientIds = [...new Set([homeClientId, ...(cfg.includeClientIds || [])].filter(Boolean))];
+    digestInclude = cfg.include || {};
+    digestBriefLinkMode = cfg.briefLinkMode || 'fresh';
+    // Opt-in only: the daily crawl runs for the home client plus every client
+    // whose Email Digest card has the daily toggle on — NOT a global
+    // includeClientIds fan-out. The one-time migration turns legacy daily-on
+    // configs OFF (except home) so this set starts as just the home client.
+    await digestConfig.ensureDailyOptInMigration(homeClientId);
+    const enrolledIds = await digestConfig.listCronEnrolledClientIds();
+    const configuredClientIds = [...new Set([homeClientId, ...enrolledIds].filter(Boolean))];
     if (requestedClientId) {
-      if (!configuredClientIds.includes(requestedClientId)) {
-        return json({ error: `Client ${requestedClientId} is not part of the digest config.` }, 400);
-      }
+      // Explicit admin target (Run & Send / per-client refresh) — allow any
+      // client, even one not enrolled in the daily cron. Only the scheduled cron
+      // path (no requestedClientId) is restricted to the enrolled set.
       clientIds = [requestedClientId];
     } else {
       clientIds = configuredClientIds;
@@ -535,16 +750,18 @@ async function handle(request) {
       break;
     }
     // eslint-disable-next-line no-await-in-loop
-    const result = await refreshDigestClient(clientId, { freshnessToken, force: forceScout, source: triggerSource, actorUid });
+    const result = await refreshDigestClient(clientId, { freshnessToken, force: forceScout, source: triggerSource, actorUid, include: digestInclude, briefLinkMode: digestBriefLinkMode });
     results.push(result);
     logInfo('pre_digest_refresh_client_done', {
       clientId,
       modulesOk: result.modules?.ok,
+      modulesSkipped: result.modules?.skipped || false,
       scoutOk: result.scout?.ok,
       watchlistOk: result.watchlist?.ok,
       watchlistWarning: result.warnings?.find((warning) => warning.source === 'watchlist')?.message,
       strategyOk: result.strategy?.ok,
       executiveSummaryOk: result.executiveSummary?.ok,
+      executiveSummarySkipped: result.executiveSummary?.skipped || false,
       ok: result.ok,
     });
   }

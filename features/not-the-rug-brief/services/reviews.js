@@ -3,6 +3,7 @@
 require('../load-env');
 const { getProvider } = require('../providers');
 const { MODELS } = require('../optimizer');
+const { logAnthropicCall } = require('../../../api/_lib/usage-logger.cjs');
 
 function getAnthropicClient() {
   return getProvider();
@@ -164,6 +165,9 @@ async function fetchReviewStatusViaWebSearch(config = {}, previousReport = null)
     }],
     tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: sources.length }],
   });
+
+  // Instrument this Sonnet + web_search call (token cost + web_search surcharge).
+  try { await logAnthropicCall({ module: 'scout-intake', action: 'reviews-web-search', model: MODELS.briefWrite, response, clientId: config.clientId }); } catch { /* best-effort */ }
 
   const fullText = response.content
     .filter((block) => block.type === 'text')

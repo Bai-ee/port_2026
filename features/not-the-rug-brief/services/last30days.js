@@ -107,6 +107,7 @@ function buildArgs(topic, clientConfig = {}) {
   if (l30.tiktokHashtags) args.push('--tiktok-hashtags', l30.tiktokHashtags);
   if (l30.xHandle)        args.push('--x-handle', l30.xHandle);
   if (l30.xRelated)       args.push('--x-related', l30.xRelated);
+  if (l30.igCreators)     args.push('--ig-creators', l30.igCreators);
 
   return args;
 }

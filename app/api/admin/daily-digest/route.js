@@ -17,6 +17,7 @@ const { getHeaderValue, safeSecretEquals, buildAuthRequestShim, verifyAdminReque
 const { logError, logInfo, logWarn } = require('../../../../api/_lib/observability.cjs');
 const briefSummary = require('../../../../features/intelligence/_brief-summary.js');
 const digestConfig = require('../../../../features/intelligence/_digest-config.js');
+const { getMarketInsightPlatformState } = require('../../../../features/intelligence/_market-insight-platform-state.js');
 const briefIntel = require('../../../../features/intelligence/_brief-intel.js');
 
 // ── Config ──────────────────────────────────────────────────────────────────
@@ -57,6 +58,8 @@ const DIGEST_CALENDAR_ID = process.env.DIGEST_CALENDAR_ID || DIGEST_TO;
 const DIGEST_TIMEZONE = process.env.DIGEST_TIMEZONE || 'America/Chicago';
 const DIGEST_X_HANDLE = String(process.env.DIGEST_X_HANDLE || 'bai_ee').replace(/^@+/, '');
 const DIGEST_X_POST_DELAY_MINUTES = Math.max(1, Math.min(60, Number(process.env.DIGEST_X_POST_DELAY_MINUTES) || 2));
+const COMPAT_INCLUDE_KEYS = ['redditAnalysis', 'instagramAnalysis', 'suggestedReplies'];
+const DIGEST_INCLUDE_KEYS = Array.from(new Set([...(digestConfig.INCLUDE_KEYS || []), ...COMPAT_INCLUDE_KEYS]));
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -69,6 +72,24 @@ function appOrigin() {
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '') ||
     'https://hitloop.agency';
   return String(raw).replace(/\/+$/, '');
+}
+
+function mergeCompatInclude(include = {}, rawInclude = {}) {
+  const next = { ...(include || {}) };
+  for (const key of COMPAT_INCLUDE_KEYS) {
+    if (typeof rawInclude?.[key] === 'boolean') next[key] = rawInclude[key];
+  }
+  return next;
+}
+
+async function readRawDigestInclude(clientId) {
+  if (!clientId) return {};
+  try {
+    const snap = await fb.adminDb.collection('digest_config').doc(clientId).get();
+    return snap.exists ? (snap.data()?.include || {}) : {};
+  } catch {
+    return {};
+  }
 }
 
 function appUrl(path = '/') {
@@ -1029,8 +1050,21 @@ function buildStrategicParts(intel, postPlatforms = {}) {
       if (rtProse) repliesHtml += `<div style="font-family:${DT.fBody};font-size:12px;line-height:1.6;color:${DT.soft};margin-top:12px;padding-top:12px;border-top:1px solid ${DT.line};">${escapeHtml(rtProse)}</div>`;
       repliesHtml += postMeLink;
     }
-  } else {
-    // Fallback: scout opportunities with a suggestedReply field
+  }
+  if (!repliesHtml && replyRecipe) {
+    // Prose fallback: the reply-targets recipe ran but didn't emit parseable
+    // replyTargets JSON (model returned prose). Render the fresh reply guidance
+    // rather than an empty card — mirrors the reddit/X sections' proseFallback.
+    // Strips any leading/trailing ``` fences the model may have wrapped it in.
+    const { data: rtData, prose: rtProse } = parseRecipeAnalysis(replyRecipe.analysis);
+    const raw = String(rtProse || (rtData ? '' : replyRecipe.analysis) || '').trim();
+    const cleaned = raw.replace(/^```[a-z]*\s*/i, '').replace(/```\s*$/, '').trim();
+    if (cleaned) {
+      repliesHtml = `<div style="font-family:${DT.fBody};font-size:13px;line-height:1.6;color:${DT.ink};margin-bottom:8px;">${escapeHtml(cleaned).replace(/\n{2,}/g, '<br><br>').replace(/\n/g, '<br>')}</div>` + postMeLink;
+    }
+  }
+  if (!repliesHtml) {
+    // Fallback: scout opportunities with a suggestedReply field.
     const replyItems = (intel.opportunities || []).filter((o) => o.suggestedReply);
     if (replyItems.length) {
       repliesHtml = replyItems.map((o) => `<div style="margin-bottom:14px;padding:14px 16px;background:${DT.brandTint};border:1px solid ${DT.line};border-radius:12px;">
@@ -1193,6 +1227,88 @@ function buildWatchlistBriefSection(analysisText) {
   return `${overviewHtml}${actionHtml}${handleCards}${spotlightHtml}${proseFallback}`;
 }
 
+/** "What's happening on Reddit" platform brief. Same persisted-analysis pattern
+ *  as Happening on X, but shaped around Reddit threads/items instead of handles. */
+function buildRedditBriefSection(analysisText) {
+  const { data, prose } = parseRecipeAnalysis(analysisText);
+  if (!data && !prose) return '';
+
+  const sec = (t) => `<div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:${DT.light};margin:0 0 6px;">${t}</div>`;
+  const pull = (inner) => `<p style="font-family:${DT.fBody};font-weight:300;font-size:18px;line-height:1.3;padding:0;margin:0;color:${DT.ink};">${inner}</p>`;
+  const link = (url) => url ? `<a href="${escapeHtml(url)}" style="color:${DT.accent};font-family:${DT.fMono};font-size:10px;letter-spacing:.08em;text-transform:uppercase;">Read thread &rarr;</a>` : '';
+
+  const overviewHtml = data?.overview
+    ? `<div style="margin-bottom:16px;">${sec('Overview')}${pull(escapeHtml(data.overview))}</div>` : '';
+  const actionHtml = data?.priorityAction
+    ? `<div style="margin-bottom:16px;">${sec('Suggested action')}${pull(escapeHtml(data.priorityAction))}</div>` : '';
+  const threads = Array.isArray(data?.threads) ? data.threads : (Array.isArray(data?.items) ? data.items : []);
+  const threadCards = threads.length
+    ? `<div style="margin-bottom:16px;">${sec('Threads to review')}<div style="font-size:0;line-height:0;">${threads.map((t) => {
+        const subreddit = t.subreddit ? String(t.subreddit).replace(/^r\//, '') : 'reddit';
+        const body = t.summary || t.why || t.opportunity || t.actionableTakeaway || '';
+        return `<div style="display:inline-block;vertical-align:top;width:48%;min-width:200px;margin:0 2% 10px 0;background:rgba(255,255,255,0.55);border:1px solid ${DT.line};border-radius:12px;padding:13px;box-sizing:border-box;">
+          <div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:${DT.light};margin-bottom:6px;">r/${escapeHtml(subreddit)}</div>
+          <div style="font-family:${DT.fDisp};font-weight:900;font-size:17px;line-height:1.05;text-transform:uppercase;color:${DT.ink};">${escapeHtml(t.title || 'Reddit thread')}</div>
+          ${body ? `<p style="font-family:${DT.fBody};font-size:13px;line-height:1.5;color:${DT.soft};margin:8px 0 0;">${escapeHtml(body)}</p>` : ''}
+          ${t.url ? `<div style="margin-top:10px;">${link(t.url)}</div>` : ''}
+        </div>`;
+      }).join('')}</div></div>` : '';
+
+  const spotlight = data?.spotlight;
+  const spotlightHtml = spotlight?.why
+    ? `<div style="background:${DT.ink};border-radius:14px;padding:16px 18px;margin-top:6px;">
+        <div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,0.6);margin-bottom:8px;">Spotlight${spotlight.subreddit ? ` &middot; r/${escapeHtml(String(spotlight.subreddit).replace(/^r\//, ''))}` : ''}</div>
+        <div style="font-family:${DT.fBody};font-weight:300;font-size:16px;line-height:1.3;color:#fff;">${escapeHtml(spotlight.why)}</div>
+        ${spotlight.url ? `<div style="margin-top:10px;">${link(spotlight.url)}</div>` : ''}
+      </div>` : '';
+
+  const proseFallback = (!data && prose)
+    ? `<p style="font-family:${DT.fBody};font-size:13.5px;line-height:1.55;color:${DT.ink};margin:0;">${escapeHtml(prose).replace(/\n{2,}/g, '<br><br>').replace(/\n/g, '<br>')}</p>` : '';
+
+  return `${overviewHtml}${actionHtml}${threadCards}${spotlightHtml}${proseFallback}`;
+}
+
+/** "Happening on Instagram" platform brief. Instagram mirror of buildRedditBriefSection
+ *  — same persisted-analysis JSON shape, relabeled for IG accounts/posts. */
+function buildInstagramBriefSection(analysisText) {
+  const { data, prose } = parseRecipeAnalysis(analysisText);
+  if (!data && !prose) return '';
+
+  const sec = (t) => `<div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:${DT.light};margin:0 0 6px;">${t}</div>`;
+  const pull = (inner) => `<p style="font-family:${DT.fBody};font-weight:300;font-size:18px;line-height:1.3;padding:0;margin:0;color:${DT.ink};">${inner}</p>`;
+  const link = (url) => url ? `<a href="${escapeHtml(url)}" style="color:${DT.accent};font-family:${DT.fMono};font-size:10px;letter-spacing:.08em;text-transform:uppercase;">View post &rarr;</a>` : '';
+
+  const overviewHtml = data?.overview
+    ? `<div style="margin-bottom:16px;">${sec('Overview')}${pull(escapeHtml(data.overview))}</div>` : '';
+  const actionHtml = data?.priorityAction
+    ? `<div style="margin-bottom:16px;">${sec('Suggested action')}${pull(escapeHtml(data.priorityAction))}</div>` : '';
+  const threads = Array.isArray(data?.threads) ? data.threads : (Array.isArray(data?.items) ? data.items : []);
+  const threadCards = threads.length
+    ? `<div style="margin-bottom:16px;">${sec('Posts to review')}<div style="font-size:0;line-height:0;">${threads.map((t) => {
+        const account = t.subreddit ? String(t.subreddit).replace(/^@/, '') : 'instagram';
+        const body = t.summary || t.why || t.opportunity || t.actionableTakeaway || '';
+        return `<div style="display:inline-block;vertical-align:top;width:48%;min-width:200px;margin:0 2% 10px 0;background:rgba(255,255,255,0.55);border:1px solid ${DT.line};border-radius:12px;padding:13px;box-sizing:border-box;">
+          <div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:${DT.light};margin-bottom:6px;">@${escapeHtml(account)}</div>
+          <div style="font-family:${DT.fDisp};font-weight:900;font-size:17px;line-height:1.05;text-transform:uppercase;color:${DT.ink};">${escapeHtml(t.title || 'Instagram post')}</div>
+          ${body ? `<p style="font-family:${DT.fBody};font-size:13px;line-height:1.5;color:${DT.soft};margin:8px 0 0;">${escapeHtml(body)}</p>` : ''}
+          ${t.url ? `<div style="margin-top:10px;">${link(t.url)}</div>` : ''}
+        </div>`;
+      }).join('')}</div></div>` : '';
+
+  const spotlight = data?.spotlight;
+  const spotlightHtml = spotlight?.why
+    ? `<div style="background:${DT.ink};border-radius:14px;padding:16px 18px;margin-top:6px;">
+        <div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,0.6);margin-bottom:8px;">Spotlight${spotlight.subreddit ? ` &middot; @${escapeHtml(String(spotlight.subreddit).replace(/^@/, ''))}` : ''}</div>
+        <div style="font-family:${DT.fBody};font-weight:300;font-size:16px;line-height:1.3;color:#fff;">${escapeHtml(spotlight.why)}</div>
+        ${spotlight.url ? `<div style="margin-top:10px;">${link(spotlight.url)}</div>` : ''}
+      </div>` : '';
+
+  const proseFallback = (!data && prose)
+    ? `<p style="font-family:${DT.fBody};font-size:13.5px;line-height:1.55;color:${DT.ink};margin:0;">${escapeHtml(prose).replace(/\n{2,}/g, '<br><br>').replace(/\n/g, '<br>')}</p>` : '';
+
+  return `${overviewHtml}${actionHtml}${threadCards}${spotlightHtml}${proseFallback}`;
+}
+
 /** Creative Brief attachment — inlines the run onboarding-brief summary + a hero
  *  image in the digest's warm-cream style. Returns '' when nothing has run. */
 function buildCreativeBriefSection(creative) {
@@ -1235,6 +1351,14 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
   const sPart = (k) => strategicParts.map((p) => p[k]).filter(Boolean).join('');
   const watchlistSections = include.watchlist === false ? '' : briefList
     .map((b) => buildWatchlistBriefSection(b.intel?.watchlistAnalysis))
+    .filter((s) => s && s.trim())
+    .join('');
+  const redditAnalysisSections = include.redditAnalysis === false ? '' : briefList
+    .map((b) => buildRedditBriefSection(b.intel?.redditAnalysis))
+    .filter((s) => s && s.trim())
+    .join('');
+  const instagramAnalysisSections = include.instagramAnalysis === false ? '' : briefList
+    .map((b) => buildInstagramBriefSection(b.intel?.instagramAnalysis))
     .filter((s) => s && s.trim())
     .join('');
   const dateStr = new Date(timestamp).toLocaleDateString('en-US', {
@@ -1341,6 +1465,7 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
   // (kicker + Doto title), like Weather / Happening on X. Empty body => no
   // section (skips items with nothing to show — preview and sent skip alike).
   const section = (kicker, title, body) => (body && String(body).trim()) ? dSection(kicker, title, body) : '';
+  const noDataBlock = (message) => `<div style="background:${DT.card};border:1px dashed ${DT.dash};border-radius:14px;padding:16px 18px;font-family:${DT.fBody};font-size:13px;line-height:1.55;color:${DT.soft};">${escapeHtml(message)}</div>`;
   const RENDER = {
     // Top of email
     agenda: () => buildAgendaSection(agenda),
@@ -1353,12 +1478,14 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
     // Market Signals
     humanBrief: () => section('Market Signals', 'Brief', sPart('humanBrief')),
     opportunities: () => section('Market Signals', 'Post Opportunities', sPart('opportunities')),
-    suggestedReplies: () => section('Market Signals', 'Suggested Replies', sPart('suggestedReplies')),
+    suggestedReplies: () => section('Market Signals', 'Suggested Replies', sPart('suggestedReplies') || noDataBlock('Suggested Replies is enabled, but no drafted replies were found in the current Market Signals data yet. Run Generate & Send after Market Insights has fresh opportunities or reply targets.')),
     signals: () => section('Market Signals', 'Signals', sPart('signals')),
     watchlistAccounts: () => section('Market Signals', 'Watchlist Accounts', sPart('watchlistAccounts')),
     suggestedPosts: () => section('Market Signals', 'Suggested Posts', sPart('suggestedPosts')),
     planPreview: () => section('Market Signals', '30-Day Plan', sPart('planPreview')),
     watchlist: () => section('Market Signals', 'Happening on X', watchlistSections),
+    redditAnalysis: () => section('Market Signals', 'Happening on Reddit', redditAnalysisSections || noDataBlock('Happening on Reddit is enabled, but no Reddit analysis has been saved for this client yet. Run Generate & Send with Reddit enabled in Market Insights so the Reddit analyzer can write this section.')),
+    instagramAnalysis: () => section('Market Signals', 'Happening on Instagram', instagramAnalysisSections || noDataBlock('Happening on Instagram is enabled, but no Instagram analysis has been saved for this client yet. Run Generate & Send with Instagram enabled in Market Insights so the Instagram analyzer can write this section.')),
     followerPosts: () => section('Market Signals', 'Follower Posts', buildFollowerPostsSection(briefs)),
     // Creative
     creativeBrief: () => section('Creative', 'Creative Brief', buildCreativeBriefSection(creative)),
@@ -1389,7 +1516,7 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
   const topSections = renderGroup(['agenda', 'weather']);
   const todaySection = renderGroup(['execSummary']);
   const postContentSection = renderGroup(['videoPosts', 'videoPromo']);
-  const marketSignalsSection = renderGroup(['humanBrief', 'opportunities', 'suggestedReplies', 'signals', 'watchlistAccounts', 'suggestedPosts', 'planPreview', 'watchlist', 'followerPosts']);
+  const marketSignalsSection = renderGroup(['humanBrief', 'opportunities', 'suggestedReplies', 'signals', 'watchlistAccounts', 'suggestedPosts', 'planPreview', 'watchlist', 'redditAnalysis', 'instagramAnalysis', 'followerPosts']);
   const creativeSection = renderGroup(['creativeBrief']);
   const webPerfSection = renderGroup(['ga4Traffic', 'topPages', 'trafficSources', 'keyEvents', 'homepage']);
   const platformSection = renderGroup(['platformOverview', 'signups', 'dashboards', 'pipeline']);
@@ -1479,7 +1606,7 @@ a{text-decoration:none;}
 
 // ── Email sender ────────────────────────────────────────────────────────────
 
-async function sendEmail(subject, html) {
+async function sendEmail(subject, html, to = DIGEST_TO) {
   if (!RESEND_API_KEY) {
     logWarn('daily_digest_email_skipped_missing_api_key');
     return { skipped: true, reason: 'RESEND_API_KEY not configured' };
@@ -1493,7 +1620,7 @@ async function sendEmail(subject, html) {
     },
     body: JSON.stringify({
       from: DIGEST_FROM,
-      to: [DIGEST_TO],
+      to: [to || DIGEST_TO],
       subject,
       html,
     }),
@@ -1700,6 +1827,15 @@ function buildPlaceholderData(timestamp) {
           ],
           spotlight: { handle: 'sample_handle', why: 'Placeholder spotlight — biggest engagement spike of the tracked set; their launch thread is the conversation to enter.' },
         }),
+        redditAnalysis: JSON.stringify({
+          overview: 'Placeholder Reddit read — indexed recommendation threads are clustering around trust, setup friction, and vendor comparisons. Real text fills in after the Reddit analyzer runs over Market Insights redditSignals.',
+          priorityAction: 'Placeholder action — join the highest-intent recommendation thread with a useful non-pitch answer and link only if the thread asks for examples.',
+          threads: [
+            { title: 'Looking for tools that remove manual content planning', subreddit: 'SaaS', summary: 'Buyers are asking for workflow proof, not generic AI claims.', url: 'https://www.reddit.com/r/SaaS/comments/sample' },
+            { title: 'How are teams keeping brand voice consistent?', subreddit: 'marketing', summary: 'The conversation is about process reliability and review loops.', url: 'https://www.reddit.com/r/marketing/comments/sample' },
+          ],
+          spotlight: { subreddit: 'SaaS', why: 'Best participation fit in the sample set because the thread is problem-led and close to purchase research.', url: 'https://www.reddit.com/r/SaaS/comments/sample' },
+        }),
       },
     }],
   };
@@ -1724,7 +1860,7 @@ export async function GET(request) {
     if (!url.searchParams.has('include')) return null;
     const on = new Set(String(url.searchParams.get('include') || '').split(',').map((s) => s.trim()).filter(Boolean));
     const out = {};
-    for (const k of digestConfig.INCLUDE_KEYS) out[k] = on.has(k);
+    for (const k of DIGEST_INCLUDE_KEYS) out[k] = on.has(k);
     return out;
   })();
 
@@ -1800,8 +1936,23 @@ export async function GET(request) {
     try {
       const configClientId = await digestConfig.resolveDigestClientId();
       digestCfg = await digestConfig.getDigestConfig(configClientId);
+      digestCfg = {
+        ...digestCfg,
+        include: mergeCompatInclude(digestCfg?.include, await readRawDigestInclude(configClientId)),
+      };
       homeClientId = digestCfg.homeClientId || configClientId;
     } catch { /* resolution failed — agenda falls back to the env calendar */ }
+
+    // Gate the SCHEDULED send by the daily-email toggle (schedule.enabled). The
+    // same switch that gates the refresh cron gates the send, so one toggle
+    // controls the whole daily pipeline for a client. Manual "Send Now"
+    // (isSendNow) and previews always bypass this; only the pure cron run is
+    // gated. If config resolution failed (digestCfg null) we don't block —
+    // preserve prior behavior rather than silently drop a legit send.
+    if (!isPreview && !isTemplate && !isSendNow && digestCfg && !digestConfig.isCronEnrolled(digestCfg.schedule)) {
+      logInfo('daily_digest_skipped_not_enrolled', { clientId: homeClientId });
+      return json({ ok: true, skipped: true, reason: 'Daily email is off for this client (schedule disabled).' });
+    }
 
     // All clients whose intelligence feeds this email: the home client + any
     // included clients. Computed up front so we can refresh them before reading.
@@ -1835,7 +1986,17 @@ export async function GET(request) {
     // Email Digest card aggregation toggles. These gate the collectors (to skip
     // their API cost) and the rendered sections. A preview `include` override
     // (the card's current, possibly-unsaved toggles) wins over the saved config.
-    const include = includeOverride || digestCfg?.include || { ...digestConfig.DEFAULT_INCLUDE };
+    let include = includeOverride || digestCfg?.include || { ...digestConfig.DEFAULT_INCLUDE };
+    try {
+      const marketState = await getMarketInsightPlatformState(homeClientId);
+      const available = marketState.platformAvailability || {};
+      include = {
+        ...include,
+        watchlist: available.x === false ? false : include.watchlist,
+        redditAnalysis: available.reddit === false ? false : include.redditAnalysis,
+        instagramAnalysis: available.instagram === false ? false : include.instagramAnalysis,
+      };
+    } catch { /* keep saved include if the config lookup fails */ }
 
     // Web Stats card settings (Website Developer bucket) — per-home-client GA4
     // property, tracked event list, and homepage block toggle. Empty values fall
@@ -1900,8 +2061,8 @@ export async function GET(request) {
       // The brief fetch powers every Market Signals item + weather + follower
       // posts — fetch if ANY brief-derived section is enabled.
       const needBrief = [
-        'humanBrief', 'opportunities', 'signals', 'watchlistAccounts', 'suggestedPosts',
-        'planPreview', 'watchlist', 'followerPosts', 'weather',
+        'humanBrief', 'opportunities', 'suggestedReplies', 'signals', 'watchlistAccounts', 'suggestedPosts',
+        'planPreview', 'watchlist', 'redditAnalysis', 'instagramAnalysis', 'followerPosts', 'weather',
       ].some((k) => include[k] !== false);
       if (needBrief) {
         briefs = (await Promise.all(briefIds.map((cid) => briefIntel.getBriefForClient(cid)))).filter(Boolean);
@@ -2056,6 +2217,18 @@ export async function GET(request) {
     if (isRealSend) {
       const onCount = digestConfig.INCLUDE_KEYS.filter((k) => include[k] !== false).length;
       step('success', `Rendered email · ${onCount} section${onCount !== 1 ? 's' : ''} on`);
+      const hasSuggestedReplies = html.includes('Suggested Replies');
+      const hasRedditAnalysis = html.includes('Happening on Reddit');
+      const hasInstagramAnalysis = html.includes('Happening on Instagram');
+      if (include.suggestedReplies !== false) {
+        step(hasSuggestedReplies ? 'success' : 'error', hasSuggestedReplies ? 'Verified section · Suggested Replies included in final email HTML' : 'Missing section · Suggested Replies was enabled but absent from final email HTML');
+      }
+      if (include.redditAnalysis !== false) {
+        step(hasRedditAnalysis ? 'success' : 'error', hasRedditAnalysis ? 'Verified section · Happening on Reddit included in final email HTML' : 'Missing section · Happening on Reddit was enabled but absent from final email HTML');
+      }
+      if (include.instagramAnalysis !== false) {
+        step(hasInstagramAnalysis ? 'success' : 'error', hasInstagramAnalysis ? 'Verified section · Happening on Instagram included in final email HTML' : 'Missing section · Happening on Instagram was enabled but absent from final email HTML');
+      }
     }
 
     // Preview mode (admin dashboard): build everything, send nothing.
@@ -2071,8 +2244,11 @@ export async function GET(request) {
       });
     }
 
-    const emailResult = await sendEmail(subject, html);
-    step(emailResult?.skipped ? 'info' : 'success', emailResult?.skipped ? `Email not sent: ${emailResult?.reason || 'no transport configured'}` : `Email sent → ${DIGEST_TO}`);
+    // Recipient: the client's configured recipientEmail, else the admin address.
+    // Blank recipientEmail means a client is never emailed — it goes to you.
+    const digestRecipient = (digestCfg?.recipientEmail || '').trim() || DIGEST_TO;
+    const emailResult = await sendEmail(subject, html, digestRecipient);
+    step(emailResult?.skipped ? 'info' : 'success', emailResult?.skipped ? `Email not sent: ${emailResult?.reason || 'no transport configured'}` : `Email sent → ${digestRecipient}`);
     logInfo('daily_digest_complete', {
       timestamp: new Date(timestamp).toISOString(),
       newUsers: firebase.newUsers,

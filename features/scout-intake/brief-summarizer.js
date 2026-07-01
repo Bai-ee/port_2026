@@ -25,6 +25,7 @@ const MAX_SCOUT_NARRATIVE_CHARS = 4000; // full narrative fed to the exec brief
 const MAX_DELTA_CHARS = 2500; // day-over-day "what changed" fed to the exec brief
 
 const { callAnthropic, extractAnthropicUsage } = require('./_anthropic-client');
+const { logAnthropicCall } = require('../../api/_lib/usage-logger.cjs');
 const { getComposition, resolveBriefType } = require('./brief-sections.cjs');
 
 // ── Evidence helpers ──────────────────────────────────────────────────────────
@@ -582,7 +583,11 @@ async function summarizeBriefCover(briefType, data = {}, { clientName = '', webs
     return { ok: false, summary: null, runCostData: null, error: err.message };
   }
 
-  const runCostData = extractAnthropicUsage(response, { model: (isExec || isCreative) ? EXEC_MODEL : SUMMARY_MODEL });
+  const summaryModel = (isExec || isCreative) ? EXEC_MODEL : SUMMARY_MODEL;
+  const runCostData = extractAnthropicUsage(response, { model: summaryModel });
+  // Instrument — brief-cover / exec summaries computed cost but were never logged
+  // (the runner writes summaries only). Now the Sonnet exec summaries show up.
+  try { await logAnthropicCall({ module: 'brief-summarizer', action: String(briefType || 'summary'), model: summaryModel, response }); } catch { /* best-effort */ }
   const summary = extractToolInput(response);
 
   if (!summary) {

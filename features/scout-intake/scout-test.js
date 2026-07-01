@@ -7,9 +7,9 @@
 // what the pipeline would actually search. Nothing is cached to Firestore.
 
 const { callAnthropic, extractAnthropicCostUsd } = require('./_anthropic-client');
-const { runRedditSerpSearch } = require('./external-scouts/reddit-serp-search');
 const { buildRuntimeConfigFromFirestore } = require('../not-the-rug-brief/config-loader');
 const { fetchLast30Days } = require('../not-the-rug-brief/services/last30days');
+const { searchReddit, searchInstagram } = require('./external-scouts/scrapecreators-client.js');
 const { normalizeSignals } = require('../not-the-rug-brief/normalize-last30days');
 
 const MODEL = 'claude-sonnet-4-5-20250929';
@@ -98,7 +98,7 @@ async function runWebSearchTest({ prompt }) {
  *
  * @param {object} input
  * @param {string} input.clientId
- * @param {'web'|'x'|'reddit'} input.platform
+ * @param {'web'|'x'|'reddit'|'instagram'} input.platform
  * @param {object} input.clientConfig  full client_configs doc (marketingBriefConfig + scoutConfig)
  * @returns {Promise<{ ok, platform, items, count, costUsd, ms, error }>}
  */
@@ -128,29 +128,34 @@ async function runScoutTest({ clientId, platform, clientConfig = {} }) {
 
   let result;
   if (platform === 'reddit') {
-    // Established reddit path: site:reddit.com via the config-loader reddit block
-    // (subreddits + mention/opportunity queries). Fall back to the company name
-    // so a sparse config still searches.
-    const baseReddit = cfg.reddit || clientConfig?.scoutConfig?.reddit || {};
-    const fallbackMentions = [companyName, ...(cfg.brandKeywords || [])].filter(Boolean).slice(0, 5);
-    // When there are no direct brand mentions on Reddit (common for newer/niche
-    // brands), category + competitor terms surface relevant community threads
-    // and buyer language the brand could participate in.
-    const fallbackOpps = [...(cfg.categoryTerms || []), ...(cfg.competitors || [])].filter(Boolean).slice(0, 4);
-    const redditConfig = {
-      ...baseReddit,
-      subreddits:         Array.isArray(baseReddit.subreddits) ? baseReddit.subreddits : [],
-      mentionQueries:     (Array.isArray(baseReddit.mentionQueries) && baseReddit.mentionQueries.length) ? baseReddit.mentionQueries : fallbackMentions,
-      opportunityQueries: (Array.isArray(baseReddit.opportunityQueries) && baseReddit.opportunityQueries.length) ? baseReddit.opportunityQueries : fallbackOpps,
+    // Reddit via the direct Node ScrapeCreators client — runs natively on Vercel
+    // (no Python subprocess). Same api.scrapecreators.com endpoints last30days used
+    // under the hood, so dev == prod and Test == brief.
+    const cleanBrand = String(companyName || '').replace(/^["']+|["']+$/g, '').trim();
+    const queries = [cleanBrand, ...(cfg.categoryTerms || []).slice(0, 2)].filter(Boolean);
+    const r = await searchReddit({ queries, limit: 10 });
+    result = {
+      ok: r.ok,
+      items: r.items || [],
+      cost: 0,
+      error: r.ok ? null : (r.error || 'ScrapeCreators returned no Reddit data.'),
+      meta: { ...(r.meta || {}), note: (r.ok && !(r.items || []).length) ? 'ScrapeCreators ran but returned no Reddit items for these queries.' : null },
     };
-    console.log('[scout-test] reddit cfg:', JSON.stringify({ subreddits: redditConfig.subreddits, mentionQueries: redditConfig.mentionQueries, opportunityQueries: redditConfig.opportunityQueries })); // TEMP DEBUG
-    const r = await runRedditSerpSearch({ clientId, redditConfig });
-    console.log('[scout-test] reddit result:', JSON.stringify({ ok: r.ok, error: r.error, mentions: r.report?.mentionCount, opps: r.report?.participationOpportunityCount })); // TEMP DEBUG
-    const items = (r.ok && r.report) ? [
-      ...(r.report.mentions || []).map((m) => ({ title: m.title, url: m.url || m.permalink || '', summary: m.summary || m.insight || '', tag: m.subreddit || 'mention' })),
-      ...(r.report.participationOpportunities || []).map((o) => ({ title: o.title, url: o.url || o.permalink || '', summary: o.summary || o.whyRelevant || '', tag: o.subreddit || 'opportunity' })),
-    ].filter((it) => it.title) : [];
-    result = { ok: r.ok, items, cost: r.cost || 0, error: r.error, meta: { ...(r.meta || {}), queriesTried: redditConfig.mentionQueries.concat(redditConfig.opportunityQueries) } };
+  } else if (platform === 'instagram') {
+    // Instagram via the direct Node ScrapeCreators client — topic reels/search +
+    // watched-account reels (marketingBriefConfig.instagramHandles), merged. Vercel-native.
+    const cleanBrand = String(companyName || '').replace(/^["']+|["']+$/g, '').trim();
+    const queries = [cleanBrand, ...(cfg.categoryTerms || []).slice(0, 1)].filter(Boolean);
+    const creators = (Array.isArray(cfg.instagramHandles) ? cfg.instagramHandles : [])
+      .map((h) => String(h || '').trim().replace(/^@+/, '')).filter((h) => h.length >= 2);
+    const r = await searchInstagram({ queries, creators, limit: 10 });
+    result = {
+      ok: r.ok,
+      items: r.items || [],
+      cost: 0,
+      error: r.ok ? null : (r.error || 'ScrapeCreators returned no Instagram data.'),
+      meta: { ...(r.meta || {}), note: (r.ok && !(r.items || []).length) ? 'ScrapeCreators ran but returned no Instagram items for these queries.' : null },
+    };
   } else if (platform === 'x') {
     // PRIMARY: real X timelines for the watchlist handles via the X API
     // (GET /2/users/:id/tweets). Most relevant + efficient — exact posts from the
@@ -172,7 +177,7 @@ async function runScoutTest({ clientId, platform, clientConfig = {} }) {
             meta: {
               source: 'X API · user timelines',
               handles: xHandles.map((h) => `@${h}`),
-              note: tl.errors.length ? `some handles failed: ${tl.errors.join('; ').slice(0, 160)}` : undefined,
+              note: tl.errors.length ? `some handles failed: ${tl.errors.join('; ').slice(0, 160)}` : null,
             },
           };
           xDone = true;
@@ -211,7 +216,7 @@ async function runScoutTest({ clientId, platform, clientConfig = {} }) {
           .slice(0, 10)
           .map((s) => ({ title: s.title, url: s.url, summary: s.body || '', tag: s.author || s.container || 'x' }))
           .filter((it) => it.title);
-        result = { ok: true, items, cost: 0, meta: { ...xMeta, note: items.length === 0 ? 'last30days ran but returned no X items for this topic/window.' : undefined } };
+        result = { ok: true, items, cost: 0, meta: { ...xMeta, note: items.length === 0 ? 'last30days ran but returned no X items for this topic/window.' : null } };
       }
     }
   } else {

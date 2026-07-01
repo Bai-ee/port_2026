@@ -9,6 +9,8 @@ const { listRecipes, getRecipe } = require('../../../../features/intelligence/an
 const { runAnalysisRecipe } = require('../../../../features/intelligence/analysis-recipes/run-recipe');
 const { checkRateLimit, getClientIp } = require('../../../../api/_lib/rate-limit.cjs');
 const { loadClientBrainContext } = require('../../../../features/client-brain/store.cjs');
+const { logUsage } = require('../../../../api/_lib/usage-logger.cjs');
+const { collectRedditSignals } = require('../../../../features/intelligence/_platform-signals.js');
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -27,9 +29,9 @@ function json(body, status = 200) {
   return NextResponse.json(body, { status, headers: { 'cache-control': 'no-store' } });
 }
 
-// Bound cost: at most this many recipes per Run. (3 = the full default skill set —
-// customer-research + watchlist-analysis + reply-targets — runs in one pass.)
-const MAX_RECIPES_PER_RUN = 3;
+// Bound cost: at most this many recipes per Run. (4 = customer-research +
+// watchlist-analysis + reddit-analysis + reply-targets in one pass.)
+const MAX_RECIPES_PER_RUN = 4;
 const RATE_LIMIT_WINDOW_SECONDS = 60 * 60;
 const RATE_LIMIT_REQUESTS_PER_CLIENT = 6;
 const MAX_AGENT_DATA_CHARS = 80_000;
@@ -74,6 +76,21 @@ function withVelocity(it, nowMs) {
     engagementTotal,
     velocityPerHour,
     replyWindowOpen: ageHours <= REPLY_WINDOW_HOURS,
+  };
+}
+
+function buildRedditAnalysisContent(marketingBrief = {}, nowMs = Date.now()) {
+  const redditSignals = collectRedditSignals(marketingBrief).map((it) => withVelocity(it, nowMs));
+  return {
+    generatedAt: new Date(nowMs).toISOString(),
+    source: 'marketingBrief.scoutBrief.agentData.redditSignals + marketingBrief.reportSnapshot.platformTests.reddit',
+    redditSignals,
+    dataQuality: {
+      itemsAvailable: redditSignals.length,
+      note: redditSignals.length
+        ? 'Analyze only these supplied Reddit signals. Missing engagement or timestamps means freshness is unknown.'
+        : 'No Reddit signals are currently available in stored Market Insights data.',
+    },
   };
 }
 
@@ -141,12 +158,17 @@ export async function POST(request) {
   const marketingBrief = stateSnap.exists ? (stateSnap.data()?.marketingBrief || {}) : {};
   const agentData = marketingBrief?.scoutBrief?.agentData || null;
   const watchlistTimelines = marketingBrief?.watchlistTimelines || null;
+  const redditSignals = collectRedditSignals(marketingBrief);
 
   // reply-pool recipes can run on watchlist data alone; agentData-recipes need it.
-  const needsAgentData = recipeIds.some((id) => getRecipe(id)?.contentKind !== 'reply-pool');
+  const needsAgentData = recipeIds.some((id) => !['reply-pool', 'reddit-signals'].includes(getRecipe(id)?.contentKind));
+  const needsRedditSignals = recipeIds.some((id) => getRecipe(id)?.contentKind === 'reddit-signals');
   const wantsReplyPool = recipeIds.some((id) => getRecipe(id)?.contentKind === 'reply-pool');
   if (needsAgentData && !agentData) {
     return json({ error: 'No stored market signals to analyze yet — run a brief (or refresh signals) first.' }, 409);
+  }
+  if (needsRedditSignals && !redditSignals.length) {
+    return json({ error: 'No Reddit signals to analyze yet — run a Reddit source test or refresh Market Signals with Reddit enabled first.' }, 409);
   }
   if (wantsReplyPool && !agentData && !watchlistTimelines) {
     return json({ error: 'No reply candidates yet — run a brief or pull the Watchlist (Mentions on) first.' }, 409);
@@ -174,10 +196,15 @@ export async function POST(request) {
         mentions: Array.isArray(h?.mentions) ? h.mentions.map((it) => withVelocity(it, nowMs)) : [],
       })),
     brandMentions: (Array.isArray(agentData?.brandMentions) ? agentData.brandMentions : []).map((it) => withVelocity(it, nowMs)),
-    redditSignals: (Array.isArray(agentData?.redditSignals) ? agentData.redditSignals : []).map((it) => withVelocity(it, nowMs)),
+    redditSignals: redditSignals.map((it) => withVelocity(it, nowMs)),
     kolActivity: (Array.isArray(agentData?.kolActivity) ? agentData.kolActivity : []).map((it) => withVelocity(it, nowMs)),
   };
-  const contentFor = (recipeId) => (getRecipe(recipeId)?.contentKind === 'reply-pool' ? replyPool : agentData);
+  const contentFor = (recipeId) => {
+    const kind = getRecipe(recipeId)?.contentKind;
+    if (kind === 'reply-pool') return replyPool;
+    if (kind === 'reddit-signals') return buildRedditAnalysisContent(marketingBrief, nowMs);
+    return agentData;
+  };
 
   // Grounding context = positioning + the Client Brain voice (tone, pillars, and
   // few-shot example posts). reply-targets drafts replies, so it needs the voice
@@ -200,9 +227,52 @@ export async function POST(request) {
     try {
       // eslint-disable-next-line no-await-in-loop
       const r = await runAnalysisRecipe({ recipeId, content: contentFor(recipeId), context });
+      const recipe = getRecipe(recipeId);
+      if (r?.costUsd) {
+        await logUsage({
+          module: 'market-insights',
+          action: `analysis.${recipeId}`,
+          provider: 'anthropic',
+          model: recipe?.model || 'claude-sonnet-4-5-20250929',
+          costUsd: r.costUsd,
+          clientId,
+          metadata: { recipeId, interactive: true },
+        }).catch(() => {});
+      }
       results.push(r);
     } catch (err) {
       results.push({ ok: false, recipeId, analysis: null, costUsd: 0, ms: 0, error: err.message || 'Recipe failed.' });
+    }
+  }
+
+  const successful = results.filter((r) => r?.ok && r?.analysis);
+  if (successful.length) {
+    const generatedAt = new Date().toISOString();
+    const reportSnapshot = {};
+    const existingRecipes = Array.isArray(marketingBrief?.reportSnapshot?.digestRecipes)
+      ? marketingBrief.reportSnapshot.digestRecipes
+      : [];
+    let nextDigestRecipes = existingRecipes;
+    for (const result of successful) {
+      if (result.recipeId === 'reddit-analysis') {
+        reportSnapshot.redditAnalysis = { text: result.analysis, generatedAt };
+      } else if (result.recipeId === 'instagram-analysis') {
+        reportSnapshot.instagramAnalysis = { text: result.analysis, generatedAt };
+      } else if (result.recipeId === 'watchlist-analysis') {
+        reportSnapshot.watchlistAnalysis = { text: result.analysis, generatedAt };
+      } else if (result.recipeId === 'reply-targets') {
+        nextDigestRecipes = [
+          ...nextDigestRecipes.filter((item) => item?.recipeId !== 'reply-targets'),
+          result,
+        ];
+      }
+    }
+    if (nextDigestRecipes !== existingRecipes) reportSnapshot.digestRecipes = nextDigestRecipes.slice(-6);
+    if (Object.keys(reportSnapshot).length) {
+      await fb.adminDb.collection('dashboard_state').doc(clientId).set({
+        marketingBrief: { reportSnapshot },
+        updatedAt: fb.FieldValue.serverTimestamp(),
+      }, { merge: true }).catch(() => {});
     }
   }
 

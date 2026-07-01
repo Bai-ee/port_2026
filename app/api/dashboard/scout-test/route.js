@@ -20,14 +20,15 @@ function json(body, status = 200) {
   return NextResponse.json(body, { status, headers: { 'cache-control': 'no-store' } });
 }
 
-const ALLOWED_PLATFORMS = new Set(['web', 'x', 'reddit']);
+const ALLOWED_PLATFORMS = new Set(['web', 'x', 'reddit', 'instagram']);
 
 /**
- * POST /api/dashboard/scout-test  { platform: 'web' | 'x' | 'reddit' }
+ * POST /api/dashboard/scout-test  { platform: 'web' | 'x' | 'reddit' | 'instagram' }
  *
  * Runs a single source's live search for the signed-in user's client and
- * returns sample results — WITHOUT running the full brief pipeline or writing
- * anything to Firestore. Used by the per-card "Test" action.
+ * returns sample results — WITHOUT running the full brief pipeline. Successful
+ * results are persisted as latest source-test evidence so downstream analyzers
+ * can use the same proven data the operator just saw.
  */
 export async function POST(request) {
   let decoded;
@@ -51,7 +52,7 @@ export async function POST(request) {
   try { body = await request.json(); } catch { /* empty body */ }
   const platform = String(body.platform || '').toLowerCase();
   if (!ALLOWED_PLATFORMS.has(platform)) {
-    return json({ error: `Unsupported platform "${platform}". Use web, x, or reddit.` }, 400);
+    return json({ error: `Unsupported platform "${platform}". Use web, x, reddit, or instagram.` }, 400);
   }
 
   const configSnap = await fb.adminDb.collection('client_configs').doc(clientId).get();
@@ -59,6 +60,29 @@ export async function POST(request) {
 
   try {
     const result = await runScoutTest({ clientId, platform, clientConfig });
+    if (result?.ok) {
+      // Firestore rejects `undefined` and `.set()` validates SYNCHRONOUSLY (so a
+      // trailing `.catch` would NOT catch it — it would 500 the whole test). Strip
+      // undefined via a JSON round-trip and wrap in a real try/catch so a persist
+      // hiccup can never break the test response. `updatedAt` stays outside the
+      // round-trip to preserve the serverTimestamp sentinel.
+      try {
+        const entry = JSON.parse(JSON.stringify({
+          items: Array.isArray(result.items) ? result.items.slice(0, 20) : [],
+          count: Number.isFinite(result.count) ? result.count : (Array.isArray(result.items) ? result.items.length : 0),
+          costUsd: Number.isFinite(result.costUsd) ? result.costUsd : 0,
+          ms: Number.isFinite(result.ms) ? result.ms : null,
+          meta: result.meta || null,
+          generatedAt: new Date().toISOString(),
+        }));
+        await fb.adminDb.collection('dashboard_state').doc(clientId).set({
+          marketingBrief: { reportSnapshot: { platformTests: { [platform]: entry } } },
+          updatedAt: fb.FieldValue.serverTimestamp(),
+        }, { merge: true });
+      } catch (persistErr) {
+        console.warn('[scout-test] platformTests persist skipped:', persistErr?.message || persistErr);
+      }
+    }
     return json(result); // 200 even on empty/ok:false so the UI can show the message
   } catch (err) {
     return json({ ok: false, platform, items: [], count: 0, error: err.message || 'Test search failed.' }, 500);

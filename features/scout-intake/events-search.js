@@ -12,6 +12,7 @@
 // can fold in alongside weather + local signals.
 
 const SEARCH_MODEL = 'claude-sonnet-4-6'; // web_search tool needs Sonnet
+const { logAnthropicCall } = require('../../api/_lib/usage-logger.cjs');
 
 function buildPrompt({ mode, zip, keywords }) {
   if (mode === 'local') {
@@ -84,6 +85,9 @@ async function searchEvents({ mode, zip = '', keywords = '', provider }) {
     messages: [{ role: 'user', content: `${buildPrompt({ mode, zip, keywords })}\n${OUTPUT_INSTRUCTION}` }],
     tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 4 }],
   });
+
+  // Instrument this Sonnet + web_search call (token cost + web_search surcharge).
+  try { await logAnthropicCall({ module: 'scout-intake', action: 'events-search', model: SEARCH_MODEL, response }); } catch { /* best-effort */ }
 
   const parsed = parseJsonLoose(extractText(response));
   if (!parsed) throw new Error('searchEvents: model did not return parseable JSON');

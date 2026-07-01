@@ -42,6 +42,17 @@ const FIXED_COSTS = [
 // request. EDIT to your plan's effective per-render cost. Always shown as (est).
 const BROWSERLESS_PER_REQUEST_USD = 0.003;
 
+// ── ScrapeCreators (last30days social-scraper backend) ────────────────────────
+// Credit-based; the API exposes credits but no $/credit. Set your plan's
+// effective rate (plan $ ÷ credits granted). Tune against your usage dashboard:
+// https://app.scrapecreators.com/ . Shown as an (est) — scraper credits only,
+// last30days LLM planning is a separate, not-yet-instrumented cost.
+const SCRAPECREATORS_USD_PER_CREDIT = 0.0012;
+const SCRAPECREATORS_API_BASE = 'https://api.scrapecreators.com';
+// Each usage call itself costs 1 credit — cache hourly so repeat card opens
+// don't burn credits.
+const SCRAPECREATORS_CACHE_TTL_MS = 60 * 60 * 1000;
+
 // Deep links to the Anthropic Console (account management lives there).
 const ACCOUNT_LINKS = [
   { label: 'Console · Cost',     url: 'https://platform.claude.com/settings/billing' },
@@ -92,14 +103,21 @@ function runStages(usage) {
 
 // Best-effort Anthropic org cost_report (dormant until an Admin key + team org
 // exist). Never throws — returns an availability flag the card renders.
-async function fetchAnthropicCost(startMs) {
+async function fetchAnthropicCost(windowDays) {
   const adminKey = process.env.ANTHROPIC_ADMIN_KEY;
   if (!adminKey) {
     return { available: false, reason: 'No ANTHROPIC_ADMIN_KEY set (Individual org cannot issue an Admin key — convert to a team org to enable).' };
   }
   try {
-    const startingAt = new Date(startMs).toISOString();
-    const endingAt = new Date().toISOString();
+    // cost_report buckets by UTC day and requires ending_at strictly AFTER
+    // starting_at at day resolution — raw sub-day timestamps 400 with "ending
+    // date must be after starting date". Align both to UTC midnight; the daily
+    // view = today only (start of today → start of tomorrow, exclusive end).
+    const DAY_MS = 86400_000;
+    const floorUtcDay = (ms) => { const d = new Date(ms); d.setUTCHours(0, 0, 0, 0); return d; };
+    const now = Date.now();
+    const startingAt = floorUtcDay(now - (Math.max(1, windowDays) - 1) * DAY_MS).toISOString();
+    const endingAt = floorUtcDay(now + DAY_MS).toISOString();
     const params = new URLSearchParams();
     params.set('starting_at', startingAt);
     params.set('ending_at', endingAt);
@@ -134,6 +152,85 @@ async function fetchAnthropicCost(startMs) {
   } catch (err) {
     return { available: false, reason: `cost_report fetch failed: ${err.message}` };
   }
+}
+
+// Live ScrapeCreators account usage (credit balance + per-day consumption).
+// Dormant until SCRAPECREATORS_API_KEY is set in the SERVER env — note that the
+// key currently lives only in ~/.config/last30days/.env (loaded into the python
+// subprocess), NOT process.env of this Next server. Never throws.
+async function fetchScrapeCreatorsRaw() {
+  const key = process.env.SCRAPECREATORS_API_KEY;
+  const headers = { 'x-api-key': key, 'content-type': 'application/json' };
+  const [balRes, dailyRes] = await Promise.all([
+    fetch(`${SCRAPECREATORS_API_BASE}/v1/account/credit-balance`, { headers }),
+    fetch(`${SCRAPECREATORS_API_BASE}/v1/account/get-daily-usage-count`, { headers }),
+  ]);
+  if (!balRes.ok) throw new Error(`credit-balance ${balRes.status}: ${(await balRes.text()).slice(0, 120)}`);
+  const bal = await balRes.json();
+  let byDay = [];
+  if (dailyRes.ok) {
+    const daily = await dailyRes.json();
+    if (Array.isArray(daily)) {
+      byDay = daily
+        .map((d) => ({ date: d.usage_date || null, credits: Number(d.total_credits) || 0, requests: Number(d.request_count) || 0 }))
+        .filter((d) => d.date);
+    }
+  }
+  return { creditCount: Number(bal?.creditCount) || 0, byDay };
+}
+
+async function fetchScrapeCreatorsUsage(cutoffMs, force = false) {
+  const key = process.env.SCRAPECREATORS_API_KEY;
+  if (!key) {
+    return { available: false, reason: 'No SCRAPECREATORS_API_KEY in the server env (it lives only in ~/.config/last30days/.env for the subprocess — add it to .env.local + Vercel to enable).' };
+  }
+
+  // Hourly Firestore cache — each usage call costs 1 credit. We cache the raw
+  // balance + full per-day array once, then compute any window locally.
+  // force=true (admin "live" refresh) bypasses the read but still rewrites cache.
+  let raw = null;
+  let cached = false;
+  if (!force) {
+    try {
+      const doc = await fb.adminDb.collection('scrapecreators_usage').doc('latest').get();
+      const d = doc.exists ? doc.data() : null;
+      if (d && d.fetchedAt && (Date.now() - Date.parse(d.fetchedAt)) < SCRAPECREATORS_CACHE_TTL_MS) {
+        raw = { creditCount: Number(d.creditCount) || 0, byDay: Array.isArray(d.byDay) ? d.byDay : [] };
+        cached = true;
+      }
+    } catch { /* cache optional */ }
+  }
+
+  if (!raw) {
+    try {
+      raw = await fetchScrapeCreatorsRaw();
+    } catch (err) {
+      return { available: false, reason: `ScrapeCreators fetch failed: ${err.message}` };
+    }
+    try {
+      await fb.adminDb.collection('scrapecreators_usage').doc('latest').set({
+        fetchedAt: new Date().toISOString(), creditCount: raw.creditCount, byDay: raw.byDay,
+      });
+    } catch { /* cache write optional */ }
+  }
+
+  const inWindow = (raw.byDay || []).filter((x) => {
+    const ms = Date.parse(x.date);
+    return ms && ms >= cutoffMs;
+  });
+  const creditsUsedInWindow = inWindow.reduce((s, x) => s + (Number(x.credits) || 0), 0);
+  const requestsInWindow = inWindow.reduce((s, x) => s + (Number(x.requests) || 0), 0);
+  return {
+    available: true,
+    cached,
+    creditsRemaining: raw.creditCount,
+    creditsUsedInWindow,
+    requestsInWindow,
+    usdPerCredit: SCRAPECREATORS_USD_PER_CREDIT,
+    estUsd: round4(creditsUsedInWindow * SCRAPECREATORS_USD_PER_CREDIT),
+    daysCovered: (raw.byDay || []).length,
+    byDay: inWindow.sort((a, b) => (b.date || '').localeCompare(a.date || '')),
+  };
 }
 
 async function handle(request) {
@@ -248,19 +345,24 @@ async function handle(request) {
     modules: Object.values(c.modules).map((m) => ({ ...m, usd: round4(m.usd) })).sort((a, b) => b.usd - a.usd),
   })).sort((a, b) => b.totalUsd - a.totalUsd);
 
-  const anthropic = await fetchAnthropicCost(cutoffMs);
+  const anthropic = await fetchAnthropicCost(windowDays);
+  const forceScRefresh = url.searchParams.get('refresh') === '1';
+  const scrapeCreators = await fetchScrapeCreatorsUsage(cutoffMs, forceScRefresh);
+  const scStatusNote = scrapeCreators.available
+    ? `${scrapeCreators.creditsUsedInWindow} credits × $${SCRAPECREATORS_USD_PER_CREDIT}/credit (scraper only; last30days LLM planning not incl.) — ${scrapeCreators.creditsRemaining} credits left${scrapeCreators.cached ? ' · cached' : ''}`
+    : (scrapeCreators.reason || 'External scraper cost — not logged locally');
 
   // Cost-source coverage — every known operating-cost stream + how completely we
   // capture it. status: 'tracked' (exact $) | 'estimate' | 'not-instrumented'.
   // Honest about what the per-client totals do and don't include.
   const sources = [
     { key: 'brief_runs',   label: 'Pipeline runs · Scout / Scribe / Guardian / modules', status: 'tracked',         usd: round2(runUsd),         note: 'Exact — brief_runs.providerUsage stage costs' },
-    { key: 'usage_events', label: 'Per-call · leadgen, brand-system, narrators',          status: 'tracked',         usd: round2(moduleUsd),      note: 'Exact — usage_events ledger' },
+    { key: 'usage_events', label: 'Per-call · leadgen, brand-system, narrators, strategy, summaries, external-scout', status: 'tracked', usd: round2(moduleUsd), note: 'Exact — usage_events ledger (now incl. Strategy Builder/Roller, exec summaries, external-scout web_search)' },
     { key: 'browserless',  label: 'Browserless · screenshot / PDF renders',               status: 'estimate',        usd: round2(browserlessUsd), note: `${browserlessReqs} render${browserlessReqs === 1 ? '' : 's'} × $${BROWSERLESS_PER_REQUEST_USD}/req — edit rate in route` },
-    { key: 'web_search',   label: 'Anthropic web_search surcharge',                       status: 'not-instrumented', usd: 0,                      note: '~$10 / 1k searches — only the Anthropic account block (admin key) sees it' },
-    { key: 'last30days',   label: 'last30days · social search',                           status: 'not-instrumented', usd: 0,                      note: 'External LLM + scraper cost — not logged locally' },
-    { key: 'recipes',      label: 'Analysis recipes + external-scout web_search',         status: 'not-instrumented', usd: 0,                      note: 'Computes cost but is not yet persisted to usage_events' },
-    { key: 'kb_summaries', label: 'Knowledge-base chat + brief summaries',                status: 'not-instrumented', usd: 0,                      note: 'LLM calls not yet routed through usage_events' },
+    { key: 'web_search',   label: 'Anthropic web_search surcharge',                       status: 'tracked',         usd: 0,                      note: 'Now captured per-call ($10/1k, exact count from usage.server_tool_use) for external-scout paths — folded into Per-call above. Scout stage-1 surcharge still only in stage-cost tokens.' },
+    { key: 'last30days',   label: 'last30days · social search (ScrapeCreators)',           status: scrapeCreators.available ? 'estimate' : 'not-instrumented', usd: scrapeCreators.available ? round2(scrapeCreators.estUsd) : 0, note: scStatusNote },
+    { key: 'recipes',      label: 'Analysis recipes',                                     status: 'tracked',         usd: 0,                      note: 'Logged to usage_events (recipe-run + pre-digest) — folded into Per-call above' },
+    { key: 'kb_summaries', label: 'Knowledge-base chat',                                  status: 'not-instrumented', usd: 0,                      note: 'KB chat LLM calls still not routed through usage_events (brief/exec summaries now are)' },
   ];
 
   return json({
@@ -271,7 +373,7 @@ async function handle(request) {
       trackedUsd: round2(runUsd + moduleUsd),
       runUsd: round2(runUsd),
       moduleUsd: round2(moduleUsd),
-      estimatedUsd: round2(browserlessUsd),
+      estimatedUsd: round2(browserlessUsd + (scrapeCreators.available ? scrapeCreators.estUsd : 0)),
       fixedMonthlyUsd: round2(FIXED_COSTS.reduce((s, f) => s + (f.monthlyUsd || 0), 0)),
     },
     byProvider: Object.entries(byProvider).map(([provider, usd]) => ({ provider, usd: round4(usd) })).sort((a, b) => b.usd - a.usd),
@@ -279,6 +381,7 @@ async function handle(request) {
     sources,
     fixed: FIXED_COSTS,
     anthropic,
+    scrapeCreators,
     accountLinks: ACCOUNT_LINKS,
     note: 'Tracked = exact LLM/image/search ($) from brief_runs + usage_events. Estimate = browserless. Not-instrumented sources are listed under Cost sources below.',
   });

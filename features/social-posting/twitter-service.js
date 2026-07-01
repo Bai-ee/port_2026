@@ -341,6 +341,54 @@ export async function generatePromoCopy(brand = {}, { clientBrainContext = '' } 
   }
 }
 
+// AI Enhance (Copywriter card) — turn one draft into TWO improved options via
+// Claude, both spelling/grammar-corrected: `voice` rewrites in the brand's
+// established voice (Client Brain), `algo` rewrites to score best on the X
+// algorithm. Mirrors generatePromoCopy's client/model. Always returns usable
+// text — on any failure both options fall back to the normalized original.
+export async function enhancePost(content, { clientBrainContext = '' } = {}) {
+  const base = normalizePostText(content).slice(0, 280);
+  const fallback = { voice: base, algo: base };
+  if (!base) return fallback;
+  try {
+    const { createAnthropicClient } = require('../not-the-rug-brief/anthropic-client.js');
+    const anthropic = createAnthropicClient();
+    const prompt = [
+      `Rewrite this X (Twitter) post as TWO improved options. First fix ALL spelling and grammar, then produce:`,
+      `- "voice": the post rewritten in the brand's established voice below. Preserve the author's meaning and intent. On-brand, natural, ≤280 characters.`,
+      `- "algo": the post rewritten to score best on the X algorithm — a strong hook, specific and substantive, invites replies, ≤280 characters. No engagement-bait ("like/RT if", "follow for"), no hashtag stuffing (at most 1, only if natural), no link-only CTA.`,
+      ``,
+      `Original post:`,
+      base,
+      ``,
+      `Brand voice to match for the "voice" option${clientBrainContext ? '' : ' (none provided — use a clear, confident first-person brand tone)'}:`,
+      clientBrainContext || '(none)',
+      ``,
+      `Rules: both options must be spelling/grammar-correct, ≤280 characters, no surrounding quotation marks, no emojis unless the original used them.`,
+      `Return ONLY minified JSON: {"voice":"...","algo":"..."}`,
+    ].join('\n');
+    const res = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 600,
+      system: 'You are a senior social media copy editor. Return only valid minified JSON, nothing else.',
+      messages: [{ role: 'user', content: prompt }],
+    });
+    let text = String(res?.content?.[0]?.text || '').trim();
+    // Strip ```json fences if present, then isolate the JSON object.
+    text = text.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start >= 0 && end > start) text = text.slice(start, end + 1);
+    const parsed = JSON.parse(text);
+    const clean = (v) => normalizePostText(String(v || '').replace(/^["']|["']$/g, '')).slice(0, 280);
+    const voice = clean(parsed.voice) || base;
+    const algo = clean(parsed.algo) || base;
+    return { voice, algo };
+  } catch {
+    return fallback;
+  }
+}
+
 export function runPostingAgents(content, context = {}) {
   const base = normalizePostText(content);
 
@@ -693,6 +741,73 @@ export async function attachMediaToPost(clientId, postId, payload) {
     ...post,
     ...media,
     agents,
+    updatedAt: new Date().toISOString(),
+  };
+  await savePost(updated);
+  return updated;
+}
+
+// Edit an existing post in place (content and/or schedule) and re-score, scoped
+// to the owning client. Used by the Copywriter notepad "update" action so editing
+// a saved draft patches the same doc instead of creating a duplicate. Already
+// posted/posting rows are locked — editing local text can't un-post them.
+export async function updateSocialPost(clientId, postId, payload = {}) {
+  if (!postId) {
+    const err = new Error('postId is required to update a post.');
+    err.status = 400;
+    throw err;
+  }
+  const post = await getPost(clientId, postId);
+  if (!post) {
+    const err = new Error('Post not found.');
+    err.status = 404;
+    throw err;
+  }
+  if (post.status === 'posted' || post.status === 'posting') {
+    const err = new Error('This post has already been published and can no longer be edited.');
+    err.status = 409;
+    throw err;
+  }
+
+  const content = normalizePostText(payload.content != null ? payload.content : post.content);
+  if (!content) {
+    const err = new Error('Post content is required.');
+    err.status = 400;
+    throw err;
+  }
+  if (content.length > 280) {
+    const err = new Error('X posts must be 280 characters or fewer.');
+    err.status = 400;
+    throw err;
+  }
+
+  // scheduledAt is only touched when the caller explicitly sends the field.
+  // '' or null clears the schedule (back to a plain draft); a valid time re-arms
+  // it (queued if already due, scheduled otherwise).
+  let scheduledAt = post.scheduledAt || null;
+  let status = post.status;
+  if (Object.prototype.hasOwnProperty.call(payload, 'scheduledAt')) {
+    if (!payload.scheduledAt) {
+      scheduledAt = null;
+      if (status === 'scheduled' || status === 'queued') status = 'draft';
+    } else {
+      const dt = new Date(payload.scheduledAt);
+      if (Number.isNaN(dt.getTime())) {
+        const err = new Error('A valid scheduled time is required.');
+        err.status = 400;
+        throw err;
+      }
+      scheduledAt = dt.toISOString();
+      status = dt.getTime() <= Date.now() ? 'queued' : 'scheduled';
+    }
+  }
+
+  const updated = {
+    ...post,
+    content,
+    scheduledAt,
+    status,
+    agents: payload.agents || post.agents || null,
     updatedAt: new Date().toISOString(),
   };
   await savePost(updated);

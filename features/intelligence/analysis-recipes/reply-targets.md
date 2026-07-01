@@ -77,10 +77,13 @@ A reply is ranked by the algorithm on its own engagement, so draft it to earn re
 
 Prioritise drafting for targets inside the reply window (`replyWindowOpen: true`) with high `velocityPerHour` — an early reply on a rising post rides its For-You distribution.
 
-## Output — return BOTH, in this order
+## Output — JSON FIRST, MANDATORY
 
-Output the RAW JSON object first (NO ``` fences, no "json" label), then one blank line,
-then a short prose brief. Cap the list at the 10 strongest; omit weak ones rather than fill.
+Your response MUST begin with the character `{` — the raw JSON object below, with NO text,
+NO ``` fences, and NO "json" label before it. This is non-negotiable: a response that starts
+with prose instead of `{` is invalid and cannot be rendered downstream. Cap the list at the
+10 strongest; omit weak ones rather than fill. After the closing `}`, add one blank line, then
+the short prose brief.
 
 {
   "replyTargets": [

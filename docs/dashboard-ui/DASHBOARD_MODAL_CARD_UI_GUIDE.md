@@ -266,6 +266,41 @@ Every tab should compose from these primitives:
 - App pane: two-column operational workflow using shared section cards.
 - Empty pane: centered mono kicker plus short plain-language body.
 
+## Run Terminal — minimize & reopen (RUNNING pill)
+
+Any terminal that streams a long-running job (ad-hoc render, Generate Report,
+brief run) MUST be reopenable after the user closes it. Closing a running
+terminal must never destroy it or orphan the job with no way back — the footer
+promises "you can close and come back anytime," so the UI has to honor it.
+
+Standard (as-built in `DashboardPage.jsx`, `adhocTerminal`):
+
+- **Close while running = minimize, not destroy.** The `[ ✕ ]` handler branches on
+  status: `running` → `minimizeAdhocTerminal` (sets `open:false`, keeps state and
+  the in-flight task); `done`/`error` → `closeAdhocTerminal` (state → `null`).
+- **The task is independent of the terminal.** Minimizing never cancels the render;
+  the `task()`/poll promise keeps running and, on completion, flips the (still
+  present) state to `done`/`error` so the pill updates.
+- **Persistent status pill.** When `adhocTerminal && !adhocTerminal.open`, render
+  `#adhoc-run-status-pill` (fixed, bottom-right, `z-index:1200`): a pulsing dot
+  (`status-dot-pulse` / `status-pulse` keyframe) + label (`RENDERING…` /
+  `Video ready · view` / `Render failed · view`). Click (`#adhoc-run-status-reopen`)
+  reopens the terminal; `#adhoc-run-status-dismiss` (✕) dismisses.
+- **Don't auto-dismiss an unseen result.** The `done` auto-close (4s) fires only
+  while the terminal is `open`; if it finished minimized, the READY pill stays up
+  until the user reopens (to grab the video) or dismisses it.
+
+Dot colors: running `#e8a25a`, done `#66b8a4`, error `#e06a5a`.
+
+**Show REAL progress, not a timer.** `runWithTerminal` passes a `{ advance, note }`
+channel to `task`. The cosmetic staged timer runs until the first `advance()`, then
+freezes so the terminal reflects the actual job. `runMockupStudioVideo` drives it off
+live `render_jobs` status (`queued` → `rendering` → `done`/`failed`). Tasks that
+ignore the arg keep the timer (backward-compatible). Prefer wiring real status for
+any run that polls a job — a canned animation that "completes" before the real work
+misleads (e.g. parking on `[SAVE]` while the GPU is still cold-starting). Full render
+context: `docs/features/studio/VIDEO_PROMO_VARIATION_ENGINE.md` §4.
+
 ## Shared Tokens To Enforce
 
 Use the shared internal card/glass surface as the base:

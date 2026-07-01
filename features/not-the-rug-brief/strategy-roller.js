@@ -15,6 +15,7 @@
 // in revisionNotes. Best-effort everywhere — failures never block the brief.
 
 const fb = require('../../api/_lib/firebase-admin.cjs');
+const { logAnthropicCall } = require('../../api/_lib/usage-logger.cjs');
 
 const STRATEGY_MODEL = 'claude-sonnet-4-6';
 const PLAN_DAYS = 30;
@@ -143,6 +144,8 @@ async function rollStrategy({ clientId, config, brief, provider }) {
     max_tokens: 4000,
     messages: [{ role: 'user', content: prompt }],
   });
+  // Instrument this Sonnet call — it runs on every full pipeline and was untracked.
+  try { await logAnthropicCall({ module: 'strategy-roller', action: 'roll', model: STRATEGY_MODEL, response, clientId }); } catch { /* best-effort */ }
   const text = (response?.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n');
   return normalize(parseJsonLoose(text), todayIso);
 }

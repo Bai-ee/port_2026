@@ -47,11 +47,22 @@ software). The service logs the backend per render — look for
   time → the scroll stopped short or jumped past sections as content loaded mid-scroll.)
 - **Frame rate.** Output is true CFR at `output.fps` — clamped **24–30, default 30**
   (`recipe.mjs` + `signup-video-recipe.cjs`), encoded H.264/AVC on the L4. The
-  **site** texture's temporal smoothness is bound by the screencast rate
-  (`everyNthFrame:2` in `render.mjs`), NOT by output fps: raising fps smooths the
-  camera move but not the scroll. To reduce scroll stutter, lower `everyNthFrame`
-  (→1 ≈ doubles captured site frames); the L4 tier has headroom for both that and
-  a higher output fps.
+  **site** texture's temporal smoothness is bound by the screencast rate, NOT by
+  output fps: raising fps smooths the camera move but not the scroll.
+- **Scroll twitch fix (2026-07-01): `everyNthFrame: 1`** (was 2) on
+  `Page.startScreencast` in `render.mjs`. `scene.mjs` (~line 176) maps each output
+  frame to the **nearest** captured site frame (`Math.floor`, no interpolation); if
+  captured frames < output frames (`fps×seconds`), each captured frame repeats for
+  several output frames → chunky "twitchy" scroll. `everyNthFrame:1` captures every
+  composited frame of the (already dense) rAF smooth-scroll so `playableCount ≥`
+  output frames and the mapping stays smooth to the bottom. The signup/locked
+  recipe was also bumped `seconds 8 → 10` (more capture time, calmer scroll). L4 has
+  headroom. **Changing this requires a Cloud Run redeploy** (`deploy-cloud-run.sh`).
+- ⚠️ **`siteSpeed` desyncs the scroll — do not use it to vary speed.** `scene.mjs`
+  scales frame playback by `SITE_SPEED`; any value ≠ 1 breaks scroll-to-bottom
+  (`<1` never reaches the last frame, `>1` wraps back to the top via `% playableCount`).
+  The Video Promo variation engine deliberately never sets it — see
+  `docs/features/studio/VIDEO_PROMO_VARIATION_ENGINE.md` §2.
 
 ## Env
 | var | default | notes |

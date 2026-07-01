@@ -78,16 +78,41 @@ async function reconcileMediaJob(job, clientId) {
       jobId: job.jobId,
       editJobId: job.editJobId,
       createdAt: new Date().toISOString(),
-      // Provenance for the SAVED ASSETS metadata line: what produced this remix.
-      // recipeFull holds the raw draft (artist/mix/useTrax); recipe is the trimmed
-      // summary (filter key, manual-order segment count).
-      createdWith: {
-        artist: job.recipeFull?.artist || null,
-        mix: job.recipeFull?.useTrax ? 'Tracks' : (job.recipeFull?.mixTitle || null),
-        filter: job.recipe?.filter || job.recipeFull?.filter?.key || null,
-        orderSegments: Number(job.recipe?.manualOrderSegments)
-          || (Array.isArray(job.recipeFull?.videoOrder) ? job.recipeFull.videoOrder.length : 0),
-      },
+      // Provenance for the SAVED ASSETS metadata line: the FULL set of settings
+      // that produced this remix, so the card can show set-vs-rendered detail.
+      // recipeFull is the validated recipe (validateRemixRecipe output); recipe is
+      // the trimmed summary. `full: true` marks the richer snapshot so the card can
+      // fall back to the legacy compact line for captures made before this change.
+      // A null field = not pinned by the operator → the EditVideos worker auto-picks
+      // it (random logo/audio/artist), which is exactly what troubleshooting needs.
+      createdWith: (() => {
+        const rf = job.recipeFull || {};
+        return {
+          full: true,
+          // legacy keys (kept for any existing reader)
+          artist: rf.artist || null,
+          mix: rf.useTrax ? 'Tracks' : (rf.mixTitle || null),
+          filter: rf.filter?.key || job.recipe?.filter || null,
+          orderSegments: Number(job.recipe?.manualOrderSegments)
+            || (Array.isArray(rf.videoOrder) ? rf.videoOrder.length : 0),
+          // The actual clip/image filenames when a manual order was set (auto mode
+          // leaves this null — the worker random-picks clips from the folders).
+          clips: Array.isArray(rf.videoOrder) && rf.videoOrder.length
+            ? rf.videoOrder.map((v) => v && v.videoName).filter(Boolean)
+            : null,
+          // full settings snapshot
+          useTrax: !!rf.useTrax,
+          filterIntensity: (rf.filter && rf.filter.intensity != null) ? Number(rf.filter.intensity) : null,
+          overlay: rf.overlay?.enabled ? (rf.overlay.effect || 'on') : null,
+          topLogo: rf.logos?.top || null,
+          endLogo: rf.logos?.end || null,
+          useArtistImage: (rf.useArtistImage != null) ? !!rf.useArtistImage : null,
+          endText: rf.endCard?.text || null,
+          audioUrl: rf.arweaveAudioUrl || null,
+          output: rf.output ? `${rf.output.width}x${rf.output.height}` : null,
+          duration: Number(rf.output?.durationSeconds) || Number(job.recipe?.durationSeconds) || 30,
+        };
+      })(),
     };
     await appendMediaCapture(clientId, capture);
     await mediaJobs.completeMediaJob(job.jobId, capture);

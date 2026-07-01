@@ -6,6 +6,10 @@
 // required from both the ESM route and the admin API route via createRequire.
 
 const fb = require('../../api/_lib/firebase-admin.cjs');
+const {
+  DEFAULT_MARKET_INSIGHT_SOURCE_PLATFORMS,
+  getMarketInsightPlatformState,
+} = require('./_market-insight-platform-state.js');
 
 // Aggregation toggles — EVERY rendered section of the email is individually
 // on/off here. Each key maps to exactly one section in the digest route's
@@ -21,6 +25,8 @@ const INCLUDE_KEYS = [
   'weather',          // Local weather forecast
   'followerPosts',    // 1 post from each followed handle
   'watchlist',        // "Happening on X" watchlist analysis
+  'redditAnalysis',   // "Happening on Reddit" platform analysis
+  'instagramAnalysis',// "Happening on Instagram" platform analysis
   'creativeBrief',    // Attached Creative Brief deliverable
   // Market Signals · Strategic-brief items (each individually toggled)
   'humanBrief',       // Human brief blurb
@@ -67,6 +73,8 @@ const DEFAULT_INCLUDE = {
   suggestedPosts: false,
   planPreview: false,
   watchlist: false,
+  redditAnalysis: false,
+  instagramAnalysis: false,
   creativeBrief: false,
   platformOverview: false,
   ga4Traffic: false,
@@ -88,7 +96,7 @@ const LEGACY_INCLUDE_EXPANSION = {
   webStats: ['ga4Traffic', 'topPages', 'trafficSources', 'keyEvents', 'homepage'],
   platformStats: ['platformOverview', 'signups', 'dashboards', 'pipeline'],
   deployments: ['deployments', 'runtimeErrors'],
-  marketingBrief: ['humanBrief', 'opportunities', 'suggestedReplies', 'signals', 'watchlistAccounts', 'suggestedPosts', 'planPreview', 'watchlist'],
+  marketingBrief: ['humanBrief', 'opportunities', 'suggestedReplies', 'signals', 'watchlistAccounts', 'suggestedPosts', 'planPreview', 'watchlist', 'redditAnalysis', 'instagramAnalysis'],
   creativeBrief: ['creativeBrief'],
 };
 
@@ -99,9 +107,12 @@ const LEGACY_INCLUDE_EXPANSION = {
 const BRIEF_LINK_MODES = ['fresh', 'latest', 'off'];
 const DEFAULT_BRIEF_LINK_MODE = 'fresh';
 
-// Send schedule. Enforcement (turning this into per-recipient cron dispatch) is
-// a later phase; for now these values are stored and surfaced, the existing
-// Vercel cron still fires the run.
+// Send schedule + daily opt-in. `schedule.enabled` is the master "daily email"
+// switch per client: the pre-digest refresh cron and the daily-digest send cron
+// BOTH only run for clients whose schedule is enrolled (see isCronEnrolled).
+// Default is OFF — a new client (signup) gets the one-time Creative Brief and
+// nothing daily until an admin turns this on from that client's Email Digest
+// card. `listCronEnrolledClientIds` is what the refresh cron loops over.
 // Section order. The admin can shuffle sections up/down WITHIN their group; the
 // email renders each group's items in this saved order. CTAs (execBriefLink /
 // contactHuman) are not part of the section flow, so they're excluded.
@@ -150,9 +161,11 @@ function normalizePostPlatforms(value) {
 }
 
 const SCHEDULE_FREQUENCIES = ['daily', 'weekly', 'off'];
+// Default OFF: opt-in only. A brand-new / missing config never enrolls in the
+// daily crons — the admin turns it on per client.
 const DEFAULT_SCHEDULE = {
-  enabled: true,
-  frequency: 'daily',          // 'daily' | 'weekly' | 'off'
+  enabled: false,
+  frequency: 'off',            // 'daily' | 'weekly' | 'off'
   sendHour: 7,                 // 0–23, in `timezone`
   weekday: 1,                  // 0–6 (Sun–Sat), used when frequency === 'weekly'
   timezone: 'America/Chicago',
@@ -173,6 +186,7 @@ const DEFAULTS = {
   briefLinkMode: DEFAULT_BRIEF_LINK_MODE, // how the Executive Brief link resolves
   contactUrl: '',          // "Contact Your Human" CTA target (Calendly etc.); env DIGEST_CONTACT_URL is the fallback
   autoPostX: true,         // on a REAL send, queue the suggested x_post to the social-posting system. Default ON (as-built); off = skip.
+  recipientEmail: '',      // where THIS client's daily email is sent. Blank = the admin address (DIGEST_EMAIL) — a client is never emailed until this is set.
 };
 
 function clampInt(value, min, max, fallback) {
@@ -210,7 +224,8 @@ function normalizeBriefLinkMode(value) {
 function normalizeSchedule(value) {
   const v = value && typeof value === 'object' ? value : {};
   return {
-    enabled: v.enabled !== false,
+    // Opt-in: absent/unknown → OFF (was default-on). Only an explicit true enrolls.
+    enabled: v.enabled === true,
     frequency: SCHEDULE_FREQUENCIES.includes(v.frequency) ? v.frequency : DEFAULT_SCHEDULE.frequency,
     sendHour: clampInt(v.sendHour, 0, 23, DEFAULT_SCHEDULE.sendHour),
     weekday: clampInt(v.weekday, 0, 6, DEFAULT_SCHEDULE.weekday),
@@ -218,6 +233,52 @@ function normalizeSchedule(value) {
       ? v.timezone.trim().slice(0, 64)
       : DEFAULT_SCHEDULE.timezone,
   };
+}
+
+// A client is enrolled in the daily crons only when its schedule is explicitly
+// on and not 'off'. This is the single gate both crons (refresh + send) honor.
+function isCronEnrolled(schedule) {
+  return Boolean(schedule) && schedule.enabled === true && schedule.frequency !== 'off';
+}
+
+// All clients currently enrolled in the daily crons (scans digest_config).
+async function listCronEnrolledClientIds() {
+  try {
+    const snap = await fb.adminDb.collection('digest_config').limit(500).get();
+    const ids = [];
+    snap.forEach((doc) => {
+      if (isCronEnrolled(normalizeSchedule(doc.data()?.schedule))) ids.push(doc.id);
+    });
+    return ids;
+  } catch {
+    return [];
+  }
+}
+
+// One-time, idempotent: with the opt-in default flip, every existing config that
+// was saved daily-on would otherwise auto-enroll. Turn them all OFF except the
+// home client, so daily runs become explicit opt-in. Guarded by a flag doc so it
+// runs once; re-enabling a client afterward via its card is never undone.
+async function ensureDailyOptInMigration(homeClientId) {
+  const flagRef = fb.adminDb.collection('system_flags').doc('digest_optin_v1');
+  try {
+    if ((await flagRef.get()).exists) return { migrated: false, alreadyDone: true };
+    const snap = await fb.adminDb.collection('digest_config').get();
+    const batch = fb.adminDb.batch();
+    let disabled = 0;
+    snap.forEach((doc) => {
+      if (doc.id === homeClientId) return; // home stays on
+      if (doc.data()?.schedule?.enabled === true) {
+        batch.set(doc.ref, { schedule: { enabled: false } }, { merge: true });
+        disabled++;
+      }
+    });
+    if (disabled > 0) await batch.commit();
+    await flagRef.set({ ranAt: fb.FieldValue.serverTimestamp(), homeClientId: homeClientId || null, disabled });
+    return { migrated: true, disabled };
+  } catch (err) {
+    return { migrated: false, error: err.message };
+  }
 }
 
 function configDocRef(clientId) {
@@ -244,6 +305,7 @@ async function getDigestConfig(clientId) {
     briefLinkMode: normalizeBriefLinkMode(data.briefLinkMode),
     contactUrl: typeof data.contactUrl === 'string' ? data.contactUrl : '',
     autoPostX: data.autoPostX !== false,
+    recipientEmail: typeof data.recipientEmail === 'string' ? data.recipientEmail : '',
     updatedAt: data.updatedAt?.toDate?.()?.toISOString?.() || null,
   };
 }
@@ -265,6 +327,7 @@ async function saveDigestConfig(clientId, patch = {}) {
   if ('briefLinkMode' in patch) next.briefLinkMode = normalizeBriefLinkMode(patch.briefLinkMode);
   if (typeof patch.contactUrl === 'string') next.contactUrl = patch.contactUrl.trim().slice(0, 500);
   if (typeof patch.autoPostX === 'boolean') next.autoPostX = patch.autoPostX;
+  if (typeof patch.recipientEmail === 'string') next.recipientEmail = patch.recipientEmail.trim().slice(0, 200);
   next.updatedAt = fb.FieldValue.serverTimestamp();
   await configDocRef(clientId).set(next, { merge: true });
   return getDigestConfig(clientId);
@@ -349,7 +412,7 @@ async function getRecentDocsText({ clientId, count = 5, maxChars = 8000 } = {}) 
 /** List clients for the email-settings pickers: [{ clientId, name, hasBrief }]. */
 async function listSelectableClients() {
   const snap = await fb.adminDb.collection('clients').orderBy('createdAt', 'desc').limit(100).get();
-  return snap.docs.map((d) => {
+  const clients = snap.docs.map((d) => {
     const data = d.data() || {};
     return {
       clientId: data.clientId || d.id,
@@ -357,6 +420,12 @@ async function listSelectableClients() {
       websiteUrl: data.websiteUrl || '',
     };
   });
+  const platformStates = await Promise.all(clients.map((c) => getMarketInsightPlatformState(c.clientId)));
+  return clients.map((c, index) => ({
+    ...c,
+    marketInsightSourcePlatforms: platformStates[index].sourcePlatforms,
+    platformAvailability: platformStates[index].platformAvailability,
+  }));
 }
 
 module.exports = {
@@ -368,9 +437,14 @@ module.exports = {
   POST_PLATFORMS,
   POST_PLATFORM_KEYS,
   DEFAULT_POST_PLATFORMS,
+  DEFAULT_MARKET_INSIGHT_SOURCE_PLATFORMS,
   BRIEF_LINK_MODES,
   getDigestConfig,
   saveDigestConfig,
+  isCronEnrolled,
+  listCronEnrolledClientIds,
+  ensureDailyOptInMigration,
+  getMarketInsightPlatformState,
   resolveDigestClientId,
   getRecentDocsText,
   listSelectableClients,

@@ -15,6 +15,20 @@ Brief link shipped** (§10).
 >   to a freshly-published hosted page (`briefLinkMode`). Previews never refresh/publish. See §10.
 > - **Preview = what sends.** EMAIL PREVIEW defaults to **live** mode; Run & Send **saves the
 >   settings first** so saved == previewed == sent.
+> - **Daily is opt-in per client.** The card is scoped to the **loaded dashboard client**
+>   (`activeClientId` → `digest-config?clientId=`). Its **Daily-email toggle** (`schedule.enabled`,
+>   default **OFF**) is the SOLE gate for BOTH crons — `pre-digest-refresh` (12:35 refresh/crawl)
+>   **and** `daily-digest` (13:00 send). The refresh cron loops `listCronEnrolledClientIds()`
+>   (home ∪ enabled), not a global `includeClientIds` fan-out; the send cron skips a non-enrolled
+>   client (Send Now + previews bypass). A one-time `system_flags/digest_optin_v1` migration turned
+>   legacy daily-on configs OFF except the home client. A per-client **`recipientEmail`** sets the
+>   send-to (blank = the admin `DIGEST_EMAIL`; a client is never emailed until it's set). New
+>   signups write no config → OFF → Creative Brief only. This is what fixed the ~$10/day leak
+>   (every client was being crawled daily) — cost visibility lives in
+>   [`OPERATING-COST-CARD.md`](OPERATING-COST-CARD.md).
+> - **⚠️ Pending:** per-client **send fan-out** (each enrolled client → its own email) is NOT built —
+>   the scheduled send still builds one email for the resolved client. `recipientEmail` is stored/honored
+>   for that single send; looping enrolled clients with their own recipients is the remaining refactor.
 
 > **Guiding principle.** The **Market Signals card** is the reference pattern for how we
 > build a brief: a control panel that toggles content on/off and produces a brief. The
@@ -200,6 +214,40 @@ so the tab renders the card's *current, even unsaved* toggles (`form.include`); 
 live preview and the sent email are byte-identical except for the fresh-run brief content (§10),
 which the preview deliberately skips (no cost).
 
+### 5b. Generate & Send run UX (as-built — shared global terminal)
+
+**Generate & Send** does NOT render its own inline terminal panel anymore (the old embedded
+`digest.generate-send` box was removed). It streams through the **shared global run terminal** —
+the same `#intake-modal-overlay` / `#intake-modal-card` terminal (driven by `adhocTerminal` state)
+that **every** card run uses (Mockup Video, Market Signals). The helper is
+**`runWithTerminal({ title, brand, host, stages, task })`** (`DashboardPage.jsx`, ~line 3183),
+**prop-drilled** into `AdminEmailDigestView` (`runWithTerminal` prop). Inside `runAndSend`
+(`components/AdminEmailModals.jsx`) the run body is the `task({ advance, note })` callback:
+`advance(pfx, text)` = settle the prior line ✓ + open a new phase line; `note(text)` = a dim status
+line. Step map: `[SAVE]` save config → `[STEP 1/2]` refresh worker per client (`advance` per client,
+30s heartbeat `note`s) → per-client result rows (`note`) → `[STEP 2/2]` render + send from saved
+data → `note` the send log + subject → `return { doneText }`. A refresh that doesn't complete
+cleanly **throws**, which settles the terminal to ✗.
+
+- **No confirm gate.** Clicking Generate & Send runs immediately (the old `window.confirm` was
+  removed). `sendStatus` still drives the button label (`Working…`) + the actionbar hint.
+- **Minimized run = the established chip, NOT a bottom pill.** Closing the terminal (`✕`) while the
+  run is still going **minimizes** it (`adhocTerminal.open = false`); the run keeps going. The
+  minimized state surfaces through the SAME **`#run-active-indicator-chip`** "Running" UI in the
+  dashboard coverage header (`DashboardPage.jsx` ~line 13173) that server/module runs use — its
+  condition is `isRunActive || moduleRunInFlight || adhocMinimized`
+  (`adhocMinimized = adhocTerminal && !adhocTerminal.open`, ~line 8084) and its click branches
+  `adhocMinimized ? reopenAdhocTerminal : reopenIntakeModal`. The old bottom-right floating
+  `#adhoc-run-status-pill` was **deleted**. ⚠️ This is a **shared** surface — the chip now backs
+  Mockup Video + Market Signals minimized runs too. The chip lives in the dashboard header, so it's
+  hidden behind an open tile modal (same as server runs) and visible once the modal is closed;
+  inside the digest modal the run status still shows in the actionbar hint.
+- **Background scroll is locked** while any terminal overlay is open. The `document.body`
+  `overflow:hidden` effect (`DashboardPage.jsx` ~line 8176) includes `Boolean(adhocTerminal?.open)`
+  alongside the other modals; the lock releases when the terminal closes or is minimized.
+- **Auto-close.** ~4s after a run reaches `done` (while open) the terminal auto-closes (standard for
+  all adhoc runs).
+
 ---
 
 ## 6. Phase order
@@ -243,6 +291,8 @@ which the preview deliberately skips (no cost).
 | Digest config admin API | `app/api/admin/digest-config/route.js` |
 | Web Stats settings API (P2a stage 1) | `app/api/dashboard/web-stats/config/route.js` → `client_configs/{clientId}.webStatsConfig` |
 | Email Digest card modal (the control surface) | `components/AdminEmailModals.jsx` → `AdminEmailDigestView`: **SETTINGS** tab (`.vrk-scope` kit). §03 now renders the **17 granular toggles grouped** (`SECTION_GROUPS` = Brief / Web analytics / Platform / Ops) as `.toggle-card`s + a **brief-link-mode** `.segmented` control (`fresh`/`latest`/`off`) + per-section **"Customize ↗"** (`onOpenCard` → signals / onboarding-brief / calendar-connect). EMAIL PREVIEW defaults to **live**; **Run & Send saves config first** then `?send=1`. |
+| Generate & Send run (streams the send through the shared terminal) | `components/AdminEmailModals.jsx` → `runAndSend` (uses the `runWithTerminal` prop). See **§5b**. |
+| Shared global run terminal + minimized-run chip + scroll lock (⚠️ shared by ALL adhoc runs) | `DashboardPage.jsx`: `runWithTerminal` (~3183) · `adhocMinimized` (~8084) · body scroll-lock effect (~8176) · `#run-active-indicator-chip` (~13173, condition `isRunActive \|\| moduleRunInFlight \|\| adhocMinimized`). The old `#adhoc-run-status-pill` was removed. See **§5b**. |
 | Hosted brief link resolver | `features/intelligence/_digest-brief-link.js` → `resolveExecutiveBriefUrl({clientId,mode,origin,allowFreshRun})` + `getLatestPublishedBrief`. Renders `renderMarketingBriefHtml` (dynamic-imported from brief-preview route) and writes a public `clients/{cid}/custom_briefs/{daily-YYYY-MM-DD}` doc + `brief_client_slugs` alias. |
 | Pre-digest fresh-run worker | `app/api/worker/pre-digest-refresh/route.js` → exports `refreshDigestClient(clientId)` (Scout-only brief + strategy regen → `completeRun` persists to `dashboard_state`). Called inline by the digest route on a real send; also a standalone cron-secret route. |
 | Shared strategy-plan core (used by the refresh) | `features/strategy-builder/generate-plan.js` → `generateStrategyPlan({clientId,clientConfig})` |

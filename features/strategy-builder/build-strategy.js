@@ -5,6 +5,7 @@
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const { createAnthropicClient } = require('../not-the-rug-brief/anthropic-client.js');
+const { logAnthropicCall } = require('../../api/_lib/usage-logger.cjs');
 
 import { buildPrompt, buildTodayPrompt } from './prompt.js';
 import { isValidPostType, isValidTargetAction } from '../x-growth/post-types.js';
@@ -100,6 +101,8 @@ export async function buildTodayStrategy(ctx) {
       system: 'You are a senior social strategist. Return only valid JSON. No markdown.',
       messages,
     });
+    // Instrument — Strategy Builder was fully untracked (cron, every client).
+    try { await logAnthropicCall({ module: 'strategy-builder', action: 'build-today', model: MODEL, response, clientId: ctx?.clientId || null }); } catch { /* best-effort */ }
     responseText = response?.content?.[0]?.text || '';
     const cleaned = responseText
       .replace(/^```(?:json)?\s*/i, '')
@@ -136,6 +139,9 @@ export async function buildStrategy(ctx, todayStrategy = null) {
         system: 'You are a senior social strategist. Return only valid JSON matching the PostPlan schema. No markdown, no explanation.',
         messages,
       });
+
+      // Instrument — the 30-day plan (max_tokens up to MAX_TOKENS) was untracked.
+      try { await logAnthropicCall({ module: 'strategy-builder', action: 'build-30day', model: MODEL, response, clientId: ctx?.clientId || null }); } catch { /* best-effort */ }
 
       responseText = response?.content?.[0]?.text || '';
 

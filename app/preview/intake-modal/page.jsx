@@ -103,9 +103,7 @@ export default function IntakeModalPreviewPage() {
           max-width: 52rem;
           padding: clamp(1.25rem, 5vw, 2rem);
           border-radius: 10px;
-          background: rgba(255, 255, 255, 0.6);
-          backdrop-filter: blur(10px);
-          -webkit-backdrop-filter: blur(10px);
+          background: rgba(255, 255, 255, 1);
           box-shadow: 0px 5px 10px rgba(0,0,0,0.1), 0px 15px 30px rgba(0,0,0,0.1), 0px 20px 40px rgba(0,0,0,0.15);
           border: 1px solid rgba(255, 255, 255, 0.5);
         }

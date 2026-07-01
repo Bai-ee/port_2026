@@ -263,6 +263,11 @@ export async function POST(request) {
       .map((item) => item.trim())
       .filter(Boolean)
       .slice(0, 20),
+    instagramHandles: (Array.isArray(body?.instagramHandles) ? body.instagramHandles.join('\n') : String(body?.instagramHandles || ''))
+      .split(/[\n,]+/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 20),
     competitors: String(body?.competitors || '')
       .split(/[\n,]+/)
       .map((item) => item.trim())

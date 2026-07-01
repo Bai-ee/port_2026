@@ -11,7 +11,7 @@
 // the same kit the Video Remix modal uses. See
 // public/docs/dashboard-modal-component-style-guide.html.
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 
 async function authFetch(user, path, options = {}) {
   const token = await user.getIdToken();
@@ -60,7 +60,9 @@ const SECTION_GROUPS = [
     ['watchlistAccounts', 'Watchlist Accounts', 'Tracked accounts, name-for-name', 'signals'],
     ['suggestedPosts', 'Suggested Posts', 'Drafted posts for today', 'signals'],
     ['planPreview', '30-Day Plan', 'Upcoming scheduled posts', 'signals'],
-    ['watchlist', 'Happening on X', 'Watchlist analysis', 'signals'],
+    ['watchlist', 'Happening on X', 'Watchlist analysis', 'signals', 'x'],
+    ['redditAnalysis', 'Happening on Reddit', 'Reddit platform analysis', 'signals', 'reddit'],
+    ['instagramAnalysis', 'Happening on Instagram', 'Instagram platform analysis', 'signals', 'instagram'],
     ['followerPosts', 'Follower Posts', '1 post from each followed handle', 'signals'],
   ]],
   ['Creative brief', [
@@ -92,9 +94,24 @@ const NON_ORDERABLE_GROUPS = new Set(['Call to action']);
 // server (form.postPlatforms keys), so adding a platform in _digest-config
 // surfaces a checkbox here automatically. Unknown keys fall back to capitalized.
 const PLATFORM_LABELS = { x: 'X', thread: 'Thread opener', discord: 'Discord', reddit: 'Reddit', instagram: 'Instagram' };
+const PLATFORM_SECTION_LABELS = { x: 'X', reddit: 'Reddit', instagram: 'Instagram' };
+
+function guardIncludeForAvailability(include = {}, availability = {}) {
+  const next = { ...(include || {}) };
+  if (availability.x === false) next.watchlist = false;
+  if (availability.reddit === false) next.redditAnalysis = false;
+  if (availability.instagram === false) next.instagramAnalysis = false;
+  return next;
+}
 
 // ── Email Digest: SETTINGS (params) + PREVIEW (rendered email + send) ─────────
-export function AdminEmailDigestView({ user, onOpenCard }) {
+export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, activeClientId }) {
+  // The card is scoped to the client loaded in the dashboard: every digest-config
+  // read/write carries this id so the Daily-email toggle + settings belong to the
+  // client you're viewing (falls back to the email-resolved admin client server-side).
+  const digestConfigGetPath = activeClientId
+    ? `/api/admin/digest-config?clientId=${encodeURIComponent(activeClientId)}`
+    : '/api/admin/digest-config';
   const [tab, setTab] = useState('settings'); // 'settings' | 'preview'
   const [clientsExpanded, setClientsExpanded] = useState(false); // "Include client briefs" collapsible — default collapsed
 
@@ -105,6 +122,8 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
   const [docs, setDocs] = useState([]);
   const [clientId, setClientId] = useState('');
   const [clients, setClients] = useState([]);
+  const [marketInsights, setMarketInsights] = useState({ sourcePlatforms: [], platformAvailability: {} });
+  const [ownerEmail, setOwnerEmail] = useState(''); // scoped client's signup email — recipient placeholder
   const [saveStatus, setSaveStatus] = useState(null);
   const [runState, setRunState] = useState({}); // { [clientId]: 'running' | 'done' | 'error: msg' }
 
@@ -113,17 +132,19 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
     setSettingsLoading(true);
     setSettingsError('');
     try {
-      const data = await authFetch(user, '/api/admin/digest-config');
+      const data = await authFetch(user, digestConfigGetPath);
       setForm(data.config || null);
       setDocs(data.docs || []);
       setClientId(data.clientId || '');
       setClients(data.clients || []);
+      setMarketInsights(data.marketInsights || { sourcePlatforms: [], platformAvailability: {} });
+      setOwnerEmail(data.ownerEmail || '');
     } catch (e) {
       setSettingsError(e.message);
     } finally {
       setSettingsLoading(false);
     }
-  }, [user]);
+  }, [user, digestConfigGetPath]);
 
   const toggleInclude = useCallback((cid) => {
     setForm((f) => {
@@ -143,17 +164,35 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
     }
   }, [user]);
 
+  const currentPlatformAvailability = useCallback((f = form) => {
+    const activeClientId = f?.homeClientId || clientId;
+    const selectedClient = clients.find((c) => c.clientId === activeClientId);
+    return selectedClient?.platformAvailability || marketInsights?.platformAvailability || {};
+  }, [clients, clientId, form, marketInsights]);
+
+  const currentSourcePlatforms = useCallback((f = form) => {
+    const activeClientId = f?.homeClientId || clientId;
+    const selectedClient = clients.find((c) => c.clientId === activeClientId);
+    return selectedClient?.marketInsightSourcePlatforms || marketInsights?.sourcePlatforms || [];
+  }, [clients, clientId, form, marketInsights]);
+
   const save = useCallback(async () => {
     if (!user || !form) return;
     setSaveStatus({ kind: 'pending', msg: 'Saving…' });
     try {
-      const data = await authFetch(user, '/api/admin/digest-config', { method: 'POST', body: JSON.stringify(form) });
+      const guardedForm = { ...form, clientId: activeClientId, include: guardIncludeForAvailability(form.include, currentPlatformAvailability(form)) };
+      const data = await authFetch(user, '/api/admin/digest-config', { method: 'POST', body: JSON.stringify(guardedForm) });
       setForm(data.config);
+      if (data.marketInsights) setMarketInsights(data.marketInsights);
       setSaveStatus({ kind: 'ok', msg: 'Saved.' });
     } catch (e) {
       setSaveStatus({ kind: 'error', msg: e.message });
     }
-  }, [user, form]);
+  }, [user, form, currentPlatformAvailability, activeClientId]);
+
+  // Master daily-email state for the loaded client — mirrors the server's
+  // isCronEnrolled gate (enabled AND a real cadence). Drives the ON/OFF toggle.
+  const dailyOn = form?.schedule?.enabled === true && (form?.schedule?.frequency || 'off') !== 'off';
 
   // ── Preview state (the rendered email) ──
   // Default to LIVE so the preview = exactly what sends (same route code path,
@@ -163,13 +202,9 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
   const [previewError, setPreviewError] = useState('');
   const [preview, setPreview] = useState(null); // { html, paragraph, placeholder }
   const [sendStatus, setSendStatus] = useState(null);
-  // Run & Send terminal — same shell/CSS as the other cards' run terminals.
-  // Closeable + reopenable; lines persist so you can return to confirm the run.
-  const [termLines, setTermLines] = useState([]);
-  const [termOpen, setTermOpen] = useState(false);
-  const termRef = useRef(null);
-  const appendTerm = useCallback((type, text) => setTermLines((p) => [...p, { type, text }]), []);
-  useEffect(() => { if (termRef.current) termRef.current.scrollTop = termRef.current.scrollHeight; }, [termLines]);
+  // Generate & Send streams through the shared global run terminal
+  // (DashboardPage `runWithTerminal` → the intake-modal terminal + RUNNING badge),
+  // the same UX every other card run uses.
 
   // Render the preview honoring the current (even unsaved) include toggles, so
   // flipping a section off in SETTINGS and tabbing over shows it drop out.
@@ -205,89 +240,102 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
   }, [user]);
 
   const runAndSend = useCallback(async () => {
-    if (!user) return;
-    if (typeof window !== 'undefined' && !window.confirm('Generate fresh digest data first, then send the email to the configured recipient? Saves your current settings and runs the refresh worker (LLM cost).')) return;
-    setTermOpen(true);
+    if (!user || typeof runWithTerminal !== 'function') return;
     const freshnessToken = `digest-ui-${Date.now().toString(36)}`;
-    setTermLines([{ type: 'info', text: '▶ Generate & Send — refreshing every digest client, then emailing…' }, { type: 'info', text: `Freshness token · ${freshnessToken}` }]);
     setSendStatus({ kind: 'pending', msg: 'Saving settings…' });
     let refreshHeartbeat = null;
+    // Stream through the shared global run terminal — same modal + minimize/reopen
+    // RUNNING badge every other card run uses. advance() = phase transition (settles
+    // the prior line ✓ + opens a new active line); note() = a dim status line.
     try {
-      // Persist current toggles first so the send uses exactly what you configured
-      // (the send reads saved config, not unsaved form state).
-      let savedConfig = form;
-      if (form) {
-        const saved = await authFetch(user, '/api/admin/digest-config', { method: 'POST', body: JSON.stringify(form) });
-        if (saved?.config) {
-          savedConfig = saved.config;
-          setForm(saved.config);
-        }
-      }
-      appendTerm('success', 'Saved config ✓');
-      appendTerm('info', 'Step 1/2 · Refreshing site/creative modules, Scout, watchlist timelines, Strategy Builder, and Executive Summary…');
-      const digestClientIds = [...new Set([
-        savedConfig?.homeClientId || clientId,
-        ...((savedConfig?.includeClientIds || []).filter(Boolean)),
-      ].filter(Boolean))];
-      appendTerm('info', `Refreshing ${digestClientIds.length} digest client${digestClientIds.length === 1 ? '' : 's'} one at a time: ${digestClientIds.join(', ')}`);
-      setSendStatus({ kind: 'pending', msg: `Refreshing ${digestClientIds.length} digest client${digestClientIds.length === 1 ? '' : 's'}…` });
-      const refreshResults = [];
-      for (const cid of digestClientIds) {
-        appendTerm('info', `Refresh started · ${cid}`);
-        const refreshStartedAt = Date.now();
-        if (typeof window !== 'undefined') {
-          refreshHeartbeat = window.setInterval(() => {
-            const elapsed = Math.round((Date.now() - refreshStartedAt) / 1000);
-            appendTerm('info', `Refresh still running · ${cid} · ${elapsed}s elapsed`);
-          }, 30000);
-        }
-        // eslint-disable-next-line no-await-in-loop
-        const refresh = await authFetch(user, `/api/worker/pre-digest-refresh?clientId=${encodeURIComponent(cid)}&freshnessToken=${encodeURIComponent(freshnessToken)}`, { method: 'POST', body: '{}' });
-        if (refreshHeartbeat) {
-          window.clearInterval(refreshHeartbeat);
-          refreshHeartbeat = null;
-        }
-        refreshResults.push(...(Array.isArray(refresh?.results) ? refresh.results : []));
-      }
-      refreshResults.forEach((r) => {
-        const modules = r?.modules?.ok ? `modules ok${Array.isArray(r?.modules?.modules) ? ` (${r.modules.modules.filter((m) => m.ok).length}/${r.modules.modules.length})` : ''}` : `modules issue${r?.modules?.error ? `: ${r.modules.error}` : ''}`;
-        const scout = r?.scout?.ok ? 'scout ok' : `scout issue${r?.scout?.error ? `: ${r.scout.error}` : ''}`;
-        const watch = r?.watchlist?.ok ? `watchlist ok${Number.isFinite(r?.watchlist?.handles) ? ` (${r.watchlist.handles} handles)` : ''}` : (r?.watchlist?.skipped ? `watchlist skipped (${r.watchlist.skipped})` : `watchlist issue${r?.watchlist?.error ? `: ${r.watchlist.error}` : ''}`);
-        const strategy = r?.strategy?.ok ? 'strategy ok' : `strategy issue${r?.strategy?.error ? `: ${r.strategy.error}` : ''}`;
-        const executiveSummary = r?.executiveSummary?.ok ? 'executive summary ok' : `executive summary issue${r?.executiveSummary?.error ? `: ${r.executiveSummary.error}` : ''}`;
-        const hasWatchlistWarning = Array.isArray(r?.warnings) && r.warnings.some((warning) => warning?.source === 'watchlist');
-        appendTerm(r?.ok ? (hasWatchlistWarning ? 'info' : 'success') : 'error', `Refresh · ${r?.clientId || 'client'} · ${modules} · ${scout} · ${watch} · ${strategy} · ${executiveSummary}`);
-      });
-      if (!refreshResults.length || refreshResults.some((r) => !r?.ok)) {
-        appendTerm('error', 'Refresh did not complete cleanly. Email not sent; fix the refresh issue or send latest saved data from a separate fallback control.');
-        setSendStatus({ kind: 'error', msg: 'Refresh failed; email not sent.' });
-        return;
-      }
-      appendTerm('success', 'Fresh digest data saved ✓');
+      await runWithTerminal({
+        title: 'GENERATE & SEND',
+        brand: 'Email digest',
+        host: freshnessToken,
+        stages: [{ pfx: '[SAVE]', text: 'saving your settings…' }],
+        task: async ({ advance, note }) => {
+          // Persist current toggles first so the send uses exactly what you configured
+          // (the send reads saved config, not unsaved form state).
+          let savedConfig = form;
+          if (form) {
+            const guardedForm = { ...form, clientId: activeClientId, include: guardIncludeForAvailability(form.include, currentPlatformAvailability(form)) };
+            const saved = await authFetch(user, '/api/admin/digest-config', { method: 'POST', body: JSON.stringify(guardedForm) });
+            if (saved?.config) {
+              savedConfig = saved.config;
+              setForm(saved.config);
+            }
+            if (saved?.marketInsights) setMarketInsights(saved.marketInsights);
+          }
+          note('Saved config ✓');
+          advance('[STEP 1/2]', 'Refreshing site/creative modules, Scout, watchlist timelines, Strategy Builder, and Executive Summary…');
+          const digestClientIds = [...new Set([
+            savedConfig?.homeClientId || clientId,
+            ...((savedConfig?.includeClientIds || []).filter(Boolean)),
+          ].filter(Boolean))];
+          note(`Refreshing ${digestClientIds.length} digest client${digestClientIds.length === 1 ? '' : 's'} one at a time: ${digestClientIds.join(', ')}`);
+          setSendStatus({ kind: 'pending', msg: `Refreshing ${digestClientIds.length} digest client${digestClientIds.length === 1 ? '' : 's'}…` });
+          const refreshResults = [];
+          for (const cid of digestClientIds) {
+            advance('[REFRESH]', `Refresh started · ${cid}`);
+            const refreshStartedAt = Date.now();
+            if (typeof window !== 'undefined') {
+              refreshHeartbeat = window.setInterval(() => {
+                const elapsed = Math.round((Date.now() - refreshStartedAt) / 1000);
+                note(`Refresh still running · ${cid} · ${elapsed}s elapsed`);
+              }, 30000);
+            }
+            // eslint-disable-next-line no-await-in-loop
+            const refresh = await authFetch(user, `/api/worker/pre-digest-refresh?clientId=${encodeURIComponent(cid)}&freshnessToken=${encodeURIComponent(freshnessToken)}&force=1`, { method: 'POST', body: '{}' });
+            if (refreshHeartbeat) {
+              window.clearInterval(refreshHeartbeat);
+              refreshHeartbeat = null;
+            }
+            refreshResults.push(...(Array.isArray(refresh?.results) ? refresh.results : []));
+          }
+          refreshResults.forEach((r) => {
+            const modules = r?.modules?.ok ? `modules ok${Array.isArray(r?.modules?.modules) ? ` (${r.modules.modules.filter((m) => m.ok).length}/${r.modules.modules.length})` : ''}` : `modules issue${r?.modules?.error ? `: ${r.modules.error}` : ''}`;
+            const scout = r?.scout?.ok ? 'scout ok' : `scout issue${r?.scout?.error ? `: ${r.scout.error}` : ''}`;
+            const watch = r?.watchlist?.ok ? `watchlist ok${Number.isFinite(r?.watchlist?.handles) ? ` (${r.watchlist.handles} handles)` : ''}` : (r?.watchlist?.skipped ? `watchlist skipped (${r.watchlist.skipped})` : `watchlist issue${r?.watchlist?.error ? `: ${r.watchlist.error}` : ''}`);
+            const reddit = r?.redditAnalysis?.ok ? `reddit analysis ok${Number.isFinite(r?.redditAnalysis?.signals) ? ` (${r.redditAnalysis.signals} signals)` : ''}` : (r?.redditAnalysis?.skipped ? `reddit analysis skipped (${r.redditAnalysis.reason || 'no data'})` : `reddit analysis issue${r?.redditAnalysis?.error ? `: ${r.redditAnalysis.error}` : ''}`);
+            const strategy = r?.strategy?.ok ? 'strategy ok' : `strategy issue${r?.strategy?.error ? `: ${r.strategy.error}` : ''}`;
+            const executiveSummary = r?.executiveSummary?.ok ? 'executive summary ok' : `executive summary issue${r?.executiveSummary?.error ? `: ${r.executiveSummary.error}` : ''}`;
+            note(`Refresh · ${r?.clientId || 'client'} · ${modules} · ${scout} · ${watch} · ${reddit} · ${strategy} · ${executiveSummary}`);
+          });
+          if (!refreshResults.length || refreshResults.some((r) => !r?.ok)) {
+            setSendStatus({ kind: 'error', msg: 'Refresh failed; email not sent.' });
+            throw new Error('Refresh did not complete cleanly. Email not sent; fix the refresh issue and try again.');
+          }
+          note('Fresh digest data saved ✓');
 
-      appendTerm('info', 'Step 2/2 · Rendering and sending email from saved data…');
-      setSendStatus({ kind: 'pending', msg: 'Sending email from saved data…' });
-      const res = await authFetch(user, `/api/admin/daily-digest?send=1&skipRefresh=1&freshnessToken=${encodeURIComponent(freshnessToken)}`);
-      (Array.isArray(res?.log) ? res.log : []).forEach((l) => appendTerm(l.type || 'info', l.text));
-      if (res?.subject) appendTerm('info', `Subject · ${res.subject}`);
-      appendTerm('success', 'Done ✓ — refreshed first, then sent');
-      setSendStatus({ kind: 'ok', msg: 'Sent with freshly saved data.' });
+          advance('[STEP 2/2]', 'Rendering and sending email from saved data…');
+          setSendStatus({ kind: 'pending', msg: 'Sending email from saved data…' });
+          const res = await authFetch(user, `/api/admin/daily-digest?send=1&skipRefresh=1&freshnessToken=${encodeURIComponent(freshnessToken)}`);
+          (Array.isArray(res?.log) ? res.log : []).forEach((l) => note(l.text));
+          if (res?.subject) note(`Subject · ${res.subject}`);
+          setSendStatus({ kind: 'ok', msg: 'Sent with freshly saved data.' });
+          return { doneText: 'Done ✓ — refreshed first, then sent' };
+        },
+      });
     } catch (e) {
       if (refreshHeartbeat && typeof window !== 'undefined') window.clearInterval(refreshHeartbeat);
-      appendTerm('error', `Error: ${e.message}`);
-      setSendStatus({ kind: 'error', msg: e.message });
+      // runWithTerminal already rendered the ✗ error line; only set the button
+      // status if the failing step didn't already set a specific message.
+      setSendStatus((s) => (s?.kind === 'error' ? s : { kind: 'error', msg: e.message }));
     }
-  }, [user, form, appendTerm]);
+  }, [user, form, runWithTerminal, currentPlatformAvailability, activeClientId]);
 
   useEffect(() => { loadSettings(); }, [loadSettings]);
 
   // Reload the LIVE preview each time the PREVIEW tab is opened, so it reflects
   // the latest include toggles AND real data — i.e. what will actually send.
   useEffect(() => {
-    if (tab === 'preview') loadPreview('live', form?.include, form?.contactUrl, form?.order, form?.postPlatforms);
-  }, [tab, form, loadPreview]);
+    if (tab === 'preview') loadPreview('live', guardIncludeForAvailability(form?.include, currentPlatformAvailability(form)), form?.contactUrl, form?.order, form?.postPlatforms);
+  }, [tab, form, loadPreview, currentPlatformAvailability]);
 
   const isTemplate = previewMode === 'template';
+  const platformAvailability = currentPlatformAvailability(form);
+  const sourcePlatforms = currentSourcePlatforms(form);
+  const effectiveInclude = guardIncludeForAvailability(form?.include, platformAvailability);
 
   return (
     <div className="tile-detail-bento-cell tile-detail-tabbed-container">
@@ -402,7 +450,7 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
                     <h3>Sections included in the email</h3>
                     <p>Every section of the email is on/off here. The EMAIL PREVIEW hides/shows exactly what the sent email will.</p>
                   </div>
-                  <span className="label">{ALL_SECTION_KEYS.filter((k) => form.include?.[k]).length}/{ALL_SECTION_KEYS.length} on</span>
+                  <span className="label">{ALL_SECTION_KEYS.filter((k) => effectiveInclude?.[k]).length}/{ALL_SECTION_KEYS.length} on</span>
                 </div>
 
                 <div className="field" style={{ display: 'grid', gap: 6 }}>
@@ -424,6 +472,21 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
                     onChange={(e) => setForm((f) => ({ ...f, contactUrl: e.target.value }))}
                   />
                   <span className="hint">Where the “Contact Your Human” CTA points. Button only shows when this is set and its toggle is on. Falls back to the DIGEST_CONTACT_URL env var.</span>
+                </div>
+
+                <div className="field" style={{ display: 'grid', gap: 6 }}>
+                  <span className="label">Market Insights platform gates</span>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {['x', 'reddit'].map((platform) => {
+                      const on = platformAvailability?.[platform] !== false;
+                      return (
+                        <span key={platform} className="label" style={{ margin: 0, color: on ? 'var(--vrk-ink, #2a2420)' : 'var(--vrk-ink-soft, #5a5346)', opacity: on ? 1 : 0.55 }}>
+                          {PLATFORM_SECTION_LABELS[platform] || platform}: {on ? 'on' : 'off'}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  <span className="hint">Platform “What&apos;s happening” sections are only toggleable when that source is enabled in Market Insights. Current sources: {sourcePlatforms.length ? sourcePlatforms.join(', ') : 'not loaded'}.</span>
                 </div>
 
                 <div className="field" style={{ display: 'grid', gap: 6 }}>
@@ -476,69 +539,95 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
                     return { ...f, order: base };
                   });
                   return (
-                  <div key={groupLabel} style={{ display: 'grid', gap: 8 }}>
-                    <span className="label" style={{ marginTop: 4 }}>{groupLabel}</span>
-                    <div className="toggle-grid" role="group" aria-label={`${groupLabel} sections`} style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-                      {ordered.map(([key, title, desc, cardId], idx) => {
-                        const on = !!form.include?.[key];
-                        const toggle = () => setForm((f) => ({ ...f, include: { ...(f.include || {}), [key]: !on } }));
-                        return (
-                          <div
-                            key={key}
-                            role="button"
-                            tabIndex={0}
-                            aria-pressed={on}
-                            className={`toggle-card${on ? ' is-on' : ''}`}
-                            style={{ position: 'relative' }}
-                            onClick={toggle}
-                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
-                          >
-                            <span className="check">{on ? '✓' : ''}</span>
-                            <span style={{ minWidth: 0 }}>
-                              <span className="toggle-title">{title}</span>
-                              <span className="toggle-desc">{desc}</span>
-                              {cardId && onOpenCard ? (
-                                <button
-                                  type="button"
-                                  onClick={(e) => { e.stopPropagation(); onOpenCard(cardId); }}
-                                  style={{ marginTop: 9, padding: 0, border: 0, background: 'none', cursor: 'pointer', font: '700 11px/1 var(--vrk-mono, monospace)', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--vrk-ink, #2a2420)' }}
-                                >
-                                  Customize ↗
-                                </button>
-                              ) : null}
-                            </span>
-                            {orderable ? (
-                              <span style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4 }} onClick={(e) => e.stopPropagation()}>
-                                <button type="button" aria-label={`Move ${title} up`} disabled={idx === 0} onClick={(e) => { e.stopPropagation(); move(key, -1); }} style={{ width: 22, height: 22, lineHeight: '20px', textAlign: 'center', padding: 0, border: '1px solid rgba(42,36,32,0.18)', borderRadius: 6, background: 'rgba(255,255,255,0.7)', cursor: idx === 0 ? 'not-allowed' : 'pointer', opacity: idx === 0 ? 0.4 : 1, fontSize: 11 }}>↑</button>
-                                <button type="button" aria-label={`Move ${title} down`} disabled={idx === ordered.length - 1} onClick={(e) => { e.stopPropagation(); move(key, 1); }} style={{ width: 22, height: 22, lineHeight: '20px', textAlign: 'center', padding: 0, border: '1px solid rgba(42,36,32,0.18)', borderRadius: 6, background: 'rgba(255,255,255,0.7)', cursor: idx === ordered.length - 1 ? 'not-allowed' : 'pointer', opacity: idx === ordered.length - 1 ? 0.4 : 1, fontSize: 11 }}>↓</button>
+                    <div key={groupLabel} style={{ display: 'grid', gap: 8 }}>
+                      <span className="label" style={{ marginTop: 4 }}>{groupLabel}</span>
+                      <div className="toggle-grid" role="group" aria-label={`${groupLabel} sections`} style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+                        {ordered.map(([key, title, desc, cardId, requiredPlatform], idx) => {
+                          const on = !!effectiveInclude?.[key];
+                          const platformEnabled = !requiredPlatform || platformAvailability?.[requiredPlatform] !== false;
+                          const disabled = !platformEnabled;
+                          const effectiveOn = on && !disabled;
+                          const toggle = () => {
+                            if (disabled) return;
+                            setForm((f) => ({ ...f, include: { ...(f.include || {}), [key]: !on } }));
+                          };
+                          return (
+                            <div
+                              key={key}
+                              role="button"
+                              tabIndex={disabled ? -1 : 0}
+                              aria-pressed={effectiveOn}
+                              aria-disabled={disabled}
+                              className={`toggle-card${effectiveOn ? ' is-on' : ''}`}
+                              style={{ position: 'relative', opacity: disabled ? 0.48 : 1, cursor: disabled ? 'not-allowed' : 'pointer' }}
+                              onClick={toggle}
+                              onKeyDown={(e) => { if (!disabled && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggle(); } }}
+                            >
+                              <span className="check">{effectiveOn ? '✓' : ''}</span>
+                              <span style={{ minWidth: 0 }}>
+                                <span className="toggle-title">{title}</span>
+                                <span className="toggle-desc">{disabled ? `Enable ${PLATFORM_SECTION_LABELS[requiredPlatform] || requiredPlatform} in Market Insights to use this section.` : desc}</span>
+                                {cardId && onOpenCard && !disabled ? (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); onOpenCard(cardId); }}
+                                    style={{ marginTop: 9, padding: 0, border: 0, background: 'none', cursor: 'pointer', font: '700 11px/1 var(--vrk-mono, monospace)', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--vrk-ink, #2a2420)' }}
+                                  >
+                                    Customize ↗
+                                  </button>
+                                ) : null}
                               </span>
-                            ) : null}
-                          </div>
-                        );
-                      })}
+                              {orderable ? (
+                                <span style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4 }} onClick={(e) => e.stopPropagation()}>
+                                  <button type="button" aria-label={`Move ${title} up`} disabled={disabled || idx === 0} onClick={(e) => { e.stopPropagation(); if (!disabled) move(key, -1); }} style={{ width: 22, height: 22, lineHeight: '20px', textAlign: 'center', padding: 0, border: '1px solid rgba(42,36,32,0.18)', borderRadius: 6, background: 'rgba(255,255,255,0.7)', cursor: disabled || idx === 0 ? 'not-allowed' : 'pointer', opacity: disabled || idx === 0 ? 0.4 : 1, fontSize: 11 }}>↑</button>
+                                  <button type="button" aria-label={`Move ${title} down`} disabled={disabled || idx === ordered.length - 1} onClick={(e) => { e.stopPropagation(); if (!disabled) move(key, 1); }} style={{ width: 22, height: 22, lineHeight: '20px', textAlign: 'center', padding: 0, border: '1px solid rgba(42,36,32,0.18)', borderRadius: 6, background: 'rgba(255,255,255,0.7)', cursor: disabled || idx === ordered.length - 1 ? 'not-allowed' : 'pointer', opacity: disabled || idx === ordered.length - 1 ? 0.4 : 1, fontSize: 11 }}>↓</button>
+                                </span>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
                   );
                 })}
               </section>
 
-              <section className="section">
+              <section className="section" id="digest-daily-schedule-section">
                 <div className="section-head">
                   <span className="index">04</span>
                   <div>
-                    <h3>Schedule</h3>
-                    <p>When the digest sends. Stored now; the daily cron still fires until per-recipient dispatch ships.</p>
+                    <h3>Daily email</h3>
+                    <p>Master switch for {clientId || 'this client'}. ON enrolls it in the daily refresh + send crons; OFF means no daily crawl, brief, or email (the signup Creative Brief still ships). Off by default — save to apply.</p>
                   </div>
-                  <span className="label">{form.schedule?.frequency || 'daily'}</span>
+                  <span className="label" style={dailyOn ? { color: 'var(--vrk-success, #285f3b)' } : undefined}>{dailyOn ? 'ON' : 'OFF'}</span>
                 </div>
                 <div className="field" style={{ display: 'grid', gap: 6 }}>
-                  <span className="label">Frequency</span>
-                  <div className="segmented" role="group" aria-label="Frequency">
-                    {['daily', 'weekly', 'off'].map((fq) => (
-                      <button key={fq} type="button" className={(form.schedule?.frequency || 'daily') === fq ? 'is-active' : ''} onClick={() => setForm((p) => ({ ...p, schedule: { ...(p.schedule || {}), frequency: fq } }))}>{fq}</button>
-                    ))}
+                  <span className="label">Daily email</span>
+                  <div className="segmented" role="group" aria-label="Daily email">
+                    <button type="button" className={dailyOn ? 'is-active' : ''} onClick={() => setForm((p) => ({ ...p, schedule: { ...(p.schedule || {}), enabled: true, frequency: (p.schedule?.frequency && p.schedule.frequency !== 'off') ? p.schedule.frequency : 'daily' } }))}>ON</button>
+                    <button type="button" className={!dailyOn ? 'is-active' : ''} onClick={() => setForm((p) => ({ ...p, schedule: { ...(p.schedule || {}), enabled: false, frequency: 'off' } }))}>OFF</button>
                   </div>
                 </div>
+                {dailyOn ? (
+                  <div className="field" style={{ display: 'grid', gap: 6 }}>
+                    <span className="label">Cadence</span>
+                    <div className="segmented" role="group" aria-label="Cadence">
+                      {['daily', 'weekly'].map((fq) => (
+                        <button key={fq} type="button" className={(form.schedule?.frequency || 'daily') === fq ? 'is-active' : ''} onClick={() => setForm((p) => ({ ...p, schedule: { ...(p.schedule || {}), frequency: fq } }))}>{fq}</button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                <label className="field" style={{ display: 'grid', gap: 6 }}>
+                  <span className="label">Recipient</span>
+                  <input
+                    type="email"
+                    value={form.recipientEmail || ''}
+                    placeholder={ownerEmail ? `${ownerEmail} (client's signup email)` : 'name@example.com — leave blank to send to the admin address'}
+                    onChange={(e) => setForm((p) => ({ ...p, recipientEmail: e.target.value }))}
+                  />
+                  <span className="oc-note" style={{ font: '500 11px/1.5 var(--vrk-mono, monospace)', opacity: 0.7 }}>Where this client&apos;s daily email is sent. Blank = the admin address (the client is never emailed until you set this).</span>
+                </label>
                 <div className="field-grid">
                   <label className="field" style={{ display: 'grid', gap: 6 }}>
                     <span className="label">Send hour (0–23)</span>
@@ -591,34 +680,10 @@ export function AdminEmailDigestView({ user, onOpenCard }) {
                       : 'Generate & Send saves settings, refreshes digest data, then emails from the saved result.'
                 }</span>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  {termLines.length > 0 && !termOpen ? (
-                    <button type="button" className="btn btn-outline" onClick={() => setTermOpen(true)}>Terminal</button>
-                  ) : null}
                   <button type="button" className="btn btn-outline" onClick={save} disabled={saveStatus?.kind === 'pending' || sendStatus?.kind === 'pending'}>{saveStatus?.kind === 'pending' ? 'Saving…' : 'Save Config'}</button>
                   <button type="button" className="btn" style={{ background: '#2a2420', color: '#fff', borderColor: '#2a2420' }} onClick={runAndSend} disabled={sendStatus?.kind === 'pending' || saveStatus?.kind === 'pending'}>{sendStatus?.kind === 'pending' ? 'Working…' : 'Generate & Send'}</button>
                 </div>
               </div>
-
-              {termOpen && termLines.length > 0 ? (
-                <div id="intake-modal-terminal-col" style={{ marginTop: 14 }}>
-                  <div id="intake-modal-terminal-titlebar">
-                    <span id="intake-modal-terminal-title">digest.generate-send</span>
-                    <button
-                      type="button"
-                      aria-label="Close terminal"
-                      onClick={() => setTermOpen(false)}
-                      style={{ marginLeft: 'auto', border: 0, background: 'none', color: 'inherit', cursor: 'pointer', font: '700 12px/1 var(--vrk-mono, monospace)', opacity: 0.7 }}
-                    >
-                      ✕ close
-                    </button>
-                  </div>
-                  <div id="intake-modal-terminal-embed" ref={termRef}>
-                    {termLines.map((line, i) => (
-                      <div key={`dt-${i}`} className={`term-line term-${line.type}`}>{line.text}</div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
             </div>
           </div>
         )

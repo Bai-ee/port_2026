@@ -1,6 +1,7 @@
 'use strict';
 
 const { callAnthropic, extractAnthropicCostUsd } = require('../_anthropic-client');
+const { logAnthropicCall } = require('../../../api/_lib/usage-logger.cjs');
 
 // reddit-web-search.js — Credential-free Reddit scout.
 //
@@ -107,6 +108,10 @@ async function runRedditWebSearch({ clientId, redditConfig }) {
     console.log('[reddit-web-search] blocks:', JSON.stringify(blockTypes));
     console.log('[reddit-web-search] text:', textJoined.slice(0, 1500));
   } catch { /* ignore */ }
+
+  // Instrument this Sonnet + web_search call (token cost + web_search surcharge)
+  // so it shows on the Operating Cost card — its cost was previously dropped.
+  try { await logAnthropicCall({ module: 'scout-intake', action: 'reddit-web-search', model: MODEL, response, clientId }); } catch { /* best-effort */ }
 
   const parsed = extractJson(response);
   const cost = extractCost(response);
