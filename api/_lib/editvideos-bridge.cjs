@@ -155,6 +155,12 @@ function mapRecipeToVideoJob(recipe = {}, { jobId } = {}) {
 
 // --- options discovery (filters/overlays static, artists/logos live) --------
 const FILTER_OPTIONS = [
+  // Phase 1 additive looks (2026-07-01) — keys must match worker VideoFilters.js.
+  { key: 'look_original', label: 'No Filter (Original)' },
+  { key: 'look_bright_airy', label: 'Bright & Airy (Hawaii)' },
+  { key: 'look_crisp_enhance', label: 'Crisp Enhance' },
+  { key: 'look_golden_warm', label: 'Golden Warm' },
+  { key: 'look_vivid_pop', label: 'Vivid Pop' },
   { key: 'look_hard_bw_street_doc', label: 'Hard B&W Street Doc' },
   { key: 'look_gritty_neon_club', label: 'Gritty Neon Club' },
   { key: 'look_faded_90s_tape', label: 'Faded 90s Tape' },
