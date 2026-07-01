@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const { callAnthropic } = require('../_anthropic-client.js');
 
-const VISION_MODEL = 'claude-sonnet-4-20250514';
+const VISION_MODEL = 'claude-sonnet-4-6';
 const VISION_MAX_TOKENS = 1500;
 const SYNTHESIS_MAX_TOKENS = 1000;
 

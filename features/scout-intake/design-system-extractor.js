@@ -14,10 +14,10 @@
 // The output is a DesignSystem object that gets merged into the intake result
 // via normalize.js and displayed in the dashboard.
 //
-// Model: claude-sonnet-4-20250514 (better reasoning for CSS analysis)
+// Model: claude-sonnet-4-6 (better reasoning for CSS analysis)
 // Typical cost per run: ~$0.01–$0.03
 
-const DESIGN_SYSTEM_MODEL = 'claude-sonnet-4-20250514';
+const DESIGN_SYSTEM_MODEL = 'claude-sonnet-4-6';
 const MAX_TOKENS = 4096;
 const FETCH_TIMEOUT_MS = 6000;
 const MAX_CSS_CHARS = 60000; // cap total CSS to avoid token blowout

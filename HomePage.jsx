@@ -368,7 +368,7 @@ const HomePage = () => {
             margin: 0,
           }}
         >
-          AI design engineering and client intelligence platforms by Bryan Balli, Chicago
+          Design, websites, content systems, and AI workflows by Bryan Balli. For founders and small teams who need senior creative execution without hiring a full agency or another full-time role.
         </h2>
       </section>
 

@@ -154,32 +154,32 @@ const SHELLS = {
 const CARDS = {
   'creative-brief': {
     title: 'Creative Brief',
-    desc: 'A visual audit of your site delivered as a Creative Brief that replaces traditional onboarding.',
+    desc: 'A quick visual audit of your brand, site, and content presence, delivered as a Creative Brief with practical fixes and a share-ready sample.',
     action: 'Open Brief',
   },
   'social-preview': {
     title: 'Social Preview',
-    desc: 'See how your site appears when shared across platforms.',
+    desc: 'Check how your brand appears when someone shares your link.',
     action: 'View',
   },
   'device-mockups': {
-    title: 'Device Mockups',
-    desc: 'See how your homepage loads across different devices.',
+    title: 'Device Views',
+    desc: 'See how your homepage holds up across desktop, tablet, and mobile.',
     action: 'View',
   },
   'full-page': {
     title: 'Full Page Views',
-    desc: 'See full-page screenshots to confirm content and consistency.',
+    desc: 'Review full-page captures that show layout, hierarchy, and content issues clearly.',
     action: 'View',
   },
   'video-post': {
     title: 'Video Mockup',
-    desc: 'Turn your site into a social-ready promo video, ready to post.',
+    desc: 'See your brand in motion with a short social-ready video built from your current site.',
     action: 'Run Video',
   },
   'post-me': {
-    title: 'Post Me',
-    desc: 'See your brand as a finished social post, ready to publish.',
+    title: 'Post Concept',
+    desc: 'Get a finished post concept shaped from the brief, ready to use or refine.',
     action: 'View',
   },
 };

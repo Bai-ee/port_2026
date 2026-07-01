@@ -61,7 +61,7 @@ const DEFAULT_INCLUDE = {
   // ── opt-in extras (off by default) ──
   humanBrief: false,
   opportunities: false,
-  suggestedReplies: false,
+  suggestedReplies: true,
   signals: false,
   watchlistAccounts: false,
   suggestedPosts: false,

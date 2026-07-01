@@ -137,6 +137,9 @@ function projectBrief(marketingBrief, state = null) {
     // REPORT tab (written by /api/dashboard/watchlist-pull). Raw recipe text;
     // the email parses + renders it in the brief-kit look.
     watchlistAnalysis: marketingBrief?.reportSnapshot?.watchlistAnalysis?.text || '',
+    // Reply-targets recipe output persisted by pre-digest-refresh. Array of
+    // { ok, recipeId, analysis } — the email renders the reply-targets entry.
+    digestRecipes: arr(marketingBrief?.reportSnapshot?.digestRecipes),
     strategyBuilder: strategyPlan ? {
       campaignId: strategyPlan.campaignId || '',
       generatedAt: strategyPlan.generatedAt || null,

@@ -77,12 +77,22 @@ gates — that was the exact bug that made analytics silently vanish from the re
 |---|---|---|---|---|
 | 1 | **Hero** (date) | — | static | always on |
 | 1b | **Open Executive Brief CTA** | freshly-published `/briefs/{slug}` (fallback `/dashboard?open=brief`) | brief-link resolver (§10) | `execBriefLink` |
-| 2 | **Executive Summary** (LLM paragraph) | `generateBriefSummary` (`_brief-summary.js`) | **LLM — Haiku** (`DIGEST_SUMMARY_MODEL`, dflt `claude-haiku-4-5`) | `execSummary` (render) + `summaryEnabled` (LLM spend) |
-> §2 also injects the **approved Client Brain** voice when present: the digest route loads `loadClientBrainContext(homeClientId, { useFor:'emailDigest' })` and passes it to `generateBriefSummary({ clientBrainContext })`. Absent/unapproved ⇒ `''` ⇒ summary reads exactly as before. See [`docs/company-brain/`](../company-brain/).
+| 1c | **"Contact Your Human" CTA** | `digestCfg.contactUrl` (env `DIGEST_CONTACT_URL` fallback) | static | `contactHuman` |
+| 2 | **Executive Summary** (LLM callouts) | `generateBriefSummary` (`_brief-summary.js`) | **LLM — Haiku** (`DIGEST_SUMMARY_MODEL`, dflt `claude-haiku-4-5`). Brain context via `loadClientBrainContext(homeClientId, { useFor:'emailDigest' })` — system prompt says "strictly follow Formatting Rules." | `execSummary` (render) + `summaryEnabled` (LLM spend) |
+| 2b | **Video Remix post content** (video card + X promo caption) | `media_jobs` (status `complete`) + `generateVideoPromoPosts` | `_brief-summary.js:generateVideoPromoPosts` — uses `loadClientBrainContext({ useFor:'copy' })` (voice + few-shot). System prompt bans em dashes + hashtags explicitly. | `videoPosts` |
+| 2c | **Mockup Studio video promo** | Mockup Studio render jobs | same generator as `videoPosts` | `videoPromo` |
 | 3 | **Today's Agenda** (5-day calendar) | `getCalendarAgenda` → Google Calendar API | Calendar card / OAuth | `agenda` |
-| 4 | **Strategic Brief** (opportunities, KOLs, competitors, narratives, posts, weather) | `getBriefForClient` → `projectBrief` (`_brief-intel.js:53`) | **Market Signals** (scout `agentData`) | `marketingBrief` |
-| 5 | **"Happening on X"** watchlist brief | `intel.watchlistAnalysis` (`reportSnapshot.watchlistAnalysis.text`) | watchlist-pull recipe | `watchlist` (own key now, was sub of #4) |
-| 4b | **Creative Brief** (attached run deliverable — cover summary + hero image) | `getCreativeBriefForClient` → `dashboard_state.briefSummaries.onboarding.summary` + `artifacts.homepageDeviceMockup`/`siteMeta.ogImage` | **Creative Brief card** (`onboarding-brief`) | `creativeBrief` (opt-in, **default off**) |
+| 3b | **Local weather forecast** | weather API | weather service | `weather` |
+| 3c | **Follower posts** (1 recent post per followed handle) | `intel.watchlist` built from `marketingBrief.watchlistTimelines` | `refreshWatchlist` in pre-digest worker | `followerPosts` |
+| 4 | **Human brief blurb** | `intel.humanBrief` (`scoutBrief.humanBrief`) | Market Signals scout narrative | `humanBrief` |
+| 4b | **Post opportunities** | `intel.opportunities` | Market Signals scout `viralOpportunities` | `opportunities` |
+| 4c | **Suggested Replies** (reply-pool targets with drafted copy) | `intel.digestRecipes[recipeId='reply-targets']` — populated to `marketingBrief.reportSnapshot.digestRecipes` by `refreshReplyTargets` in the pre-digest worker. Fallback: `intel.opportunities[].suggestedReply` if no recipe result. | reply-targets recipe (`features/intelligence/analysis-recipes/reply-targets.md`) run over `{watchlistMentions, brandMentions, redditSignals, kolActivity}` + `useFor:'copy'` voice context | `suggestedReplies` (**default ON**) |
+| 4d | **Signals** (KOLs / competitors / narratives) | `intel.kols`, `intel.competitors`, `intel.narratives` | Market Signals scout `agentData` | `signals` |
+| 4e | **Watchlist accounts** (name-for-name handle activity) | `intel.watchlist` built from `watchlistTimelines` | `refreshWatchlist` + `buildWatchlist` | `watchlistAccounts` |
+| 4f | **Suggested posts** (strategy posts of the day) | `intel.strategyBuilder.today.posts` + `intel.content` (Scribe-drafted copy) | strategy builder + Market Signals | `suggestedPosts` |
+| 4g | **30-day plan preview** | `intel.strategyBuilder.items` | strategy builder | `planPreview` |
+| 5 | **"Happening on X"** watchlist brief | `intel.watchlistAnalysis` (`reportSnapshot.watchlistAnalysis.text`) | watchlist-pull recipe | `watchlist` |
+| 5b | **Creative Brief** (attached run deliverable — cover summary + hero image) | `getCreativeBriefForClient` → `dashboard_state.briefSummaries.onboarding.summary` + `artifacts.homepageDeviceMockup`/`siteMeta.ogImage` | **Creative Brief card** (`onboarding-brief`) | `creativeBrief` (opt-in, **default off**) |
 | 6 | **Platform Overview** stats | `getFirebaseMetrics` | Firestore counts | `platformOverview` |
 | 7 | **GA4 Traffic** | `getGA4Metrics` → GA4 API | Web Stats card | `ga4Traffic` |
 | 7b | **Top Pages / Sources / Key Events** | `getGA4Metrics` | Web Stats card | `topPages` / `trafficSources` / `keyEvents` |
@@ -91,6 +101,8 @@ gates — that was the exact bug that made analytics silently vanish from the re
 | 10 | **Vercel Deployments** | `getVercelMetrics` → Vercel API | Vercel | `deployments` |
 | 10b | **Vercel Runtime Errors** | `getVercelMetrics` | Vercel | `runtimeErrors` |
 | 11 | **Footer** | — | static | always on |
+
+> **Voice / formatting note (rows 2, 2b, 4c).** Client Brain formatting rules (e.g. "avoid em dashes") are soft context — models follow them inconsistently when they appear only in the context block. The pattern to enforce hard rules: add an explicit line in the *system prompt* (not just the context block): "Strictly follow the Formatting Rules from brand context." `generateVideoPromoPosts` does this explicitly; apply the same to `generateBriefSummary` and `generateStrategyPlan` if voice drift recurs.
 
 > **Collector cost note.** Collectors are still skipped when none of their sections are on:
 > the route derives group flags (`needGA4 = ga4Traffic||topPages||trafficSources||keyEvents`,
@@ -259,25 +271,38 @@ which the preview deliberately skips (no cost).
 
 ## 9. Granular per-section toggles (as-built)
 
-Defined in `features/intelligence/_digest-config.js`. **17 keys, one per rendered section**
-(default ON except `creativeBrief`). The UI groups them (`SECTION_GROUPS` in
-`AdminEmailModals.jsx`); the route gates each `buildEmailHtml` section on exactly one key.
+Defined in `features/intelligence/_digest-config.js`. **28 keys, one per rendered section.**
+The UI groups them (`SECTION_GROUPS` in `AdminEmailModals.jsx`); the route gates each
+`buildEmailHtml` section on exactly one key.
 
 ```
-execBriefLink · execSummary · agenda · marketingBrief · watchlist · creativeBrief(false)
-ga4Traffic · topPages · trafficSources · keyEvents · homepage
-platformOverview · signups · dashboards · pipeline
-deployments · runtimeErrors
+CTAs (always-in-header, not in section flow):
+  execBriefLink · contactHuman
+
+Default ON (tease core):
+  execSummary · agenda · weather · followerPosts · videoPosts · videoPromo
+  signups · suggestedReplies
+
+Default OFF (opt-in extras — full detail lives in the linked Executive Brief):
+  humanBrief · opportunities · signals · watchlistAccounts
+  suggestedPosts · planPreview · watchlist · creativeBrief
+  platformOverview · ga4Traffic · topPages · trafficSources · keyEvents
+  homepage · dashboards · pipeline · deployments · runtimeErrors
 ```
 
-**Back-compat (critical).** Existing `digest_config` docs were written with the OLD 6 coarse
-keys. `normalizeInclude` (in `_digest-config.js`) handles both: it FIRST expands any legacy key
-via `LEGACY_INCLUDE_EXPANSION` (`calendar→[agenda]`, `webStats→[ga4Traffic,topPages,
-trafficSources,keyEvents,homepage]`, `platformStats→[platformOverview,signups,dashboards,
-pipeline]`, `deployments→[deployments,runtimeErrors]`, `marketingBrief→[marketingBrief,
-watchlist]`, `creativeBrief→[creativeBrief]`), THEN applies any granular keys on top (granular
-wins). So an un-migrated doc keeps working; a doc saved by the new UI is fully granular. ⚠️ If
-you add a new section, add its key to `INCLUDE_KEYS` + `DEFAULT_INCLUDE`, gate the section in
+**Back-compat (critical).** Existing `digest_config` docs written with the OLD 6 coarse keys
+still work. `normalizeInclude` expands legacy keys first via `LEGACY_INCLUDE_EXPANSION`:
+```
+calendar        → [agenda]
+webStats        → [ga4Traffic, topPages, trafficSources, keyEvents, homepage]
+platformStats   → [platformOverview, signups, dashboards, pipeline]
+deployments     → [deployments, runtimeErrors]
+marketingBrief  → [humanBrief, opportunities, suggestedReplies, signals,
+                    watchlistAccounts, suggestedPosts, planPreview, watchlist]
+creativeBrief   → [creativeBrief]
+```
+Granular keys present in the same saved doc override the legacy expansion. ⚠️ If you add a new
+section, add its key to `INCLUDE_KEYS` + `DEFAULT_INCLUDE`, gate the section in
 `buildEmailHtml`, parse it in the route's `includeOverride`, and add it to a `SECTION_GROUPS`
 group in the UI — and give it an empty-state (parity rule, §3).
 
@@ -300,13 +325,33 @@ renders*; `summaryEnabled` (separate field, §02 of the UI) controls whether the
 run FRESH first, so the email + the linked Executive Brief are legitimate at send time. A
 preview never spends money.
 
+**`refreshDigestClient` pipeline** (`app/api/worker/pre-digest-refresh/route.js`):
+
+The single exported function runs in three phases (sequential between phases; parallel within):
+
+```
+Phase 1 (parallel):
+  refreshSiteCreativeModules — module run (style-guide, seo-performance, etc.) → dashboard_state.moduleBriefs
+  refreshScoutBrief         — Scout-only marketing brief (~$0.10) → dashboard_state.marketingBrief.scoutBrief
+  refreshWatchlist          — pull X timelines for followed handles → marketingBrief.watchlistTimelines + reportSnapshot.watchlistAnalysis
+
+Phase 2 (parallel, needs phase-1 data):
+  refreshStrategyPlan       — regenerate strategyBuilder.lastPlan (reads fresh scout)
+  refreshReplyTargets       — run reply-targets recipe over {watchlistMentions, brandMentions, redditSignals, kolActivity}
+                              + useFor:'copy' brain context → marketingBrief.reportSnapshot.digestRecipes
+
+Phase 3 (sequential):
+  refreshBriefSummaries     — regenerate brief cover/analysis summaries (executive-daily + onboarding brief types)
+```
+
+Failures in any phase are logged and never block later phases or the email (which falls back to last-good data).
+
 **Flow** (`app/api/admin/daily-digest/route.js` GET, main `try`):
 1. Resolve `homeClientId` + `digestCfg`; compute `briefClientIds = [home, ...includeClientIds]`.
 2. **Fresh-run gate:** `isRealSend = isSendNow || (!isPreview && !isTemplate)`. On a real send,
    for each `briefClientIds`, `await refreshDigestClient(cid)` — dynamic-imported from
-   `app/api/worker/pre-digest-refresh/route.js`. That runs a **Scout-only** marketing brief
-   (`scope:'marketing-director'`, ~$0.10) + regenerates the strategy plan, and `completeRun`
-   persists both to `dashboard_state/{cid}`. Failures are logged, never block the email.
+   `app/api/worker/pre-digest-refresh/route.js`. Runs all 6 sub-refreshes above; persists
+   results to `dashboard_state/{cid}`. Failures are logged, never block the email.
 3. Collectors (GA4 / Vercel / Calendar / Firebase / homepage) run, gated by the group flags.
 4. Briefs are fetched from the (now fresh) `dashboard_state` via `getBriefForClient`.
 5. **Brief link:** if `execBriefLink` on and `briefLinkMode !== 'off'`,

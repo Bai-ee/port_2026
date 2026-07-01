@@ -152,7 +152,28 @@ function probeExpression(scroll) {
     const SEL=${JSON.stringify(sel)}, TXT=${JSON.stringify(txt)}, PCT=${pct == null ? 'null' : Number(pct)}, ALIGN=${JSON.stringify(align)};
     let el=SEL?document.querySelector(SEL):null, how=el?'selector':'none';
     if(!el && TXT){ const want=norm(TXT); let a=Infinity; for(const e of document.querySelectorAll('h1,h2,h3,h4,h5,h6,a,button,p,span,div,section,li')){ if(norm(e.textContent).includes(want)){const r=e.getBoundingClientRect(); if(r.width>0&&r.height>0&&r.width*r.height<a){a=r.width*r.height;el=e;}} } if(el)how='text'; }
-    if(!el){ const maxTop=Math.max(0,de.scrollHeight-innerHeight); const y=Math.round(maxTop*((PCT==null?55:PCT)/100)); window.scrollTo(0,0); return {y,how:'percent'}; }
+    if(!el){
+      // Scroll-to-end / percent target: pre-walk the whole document off-camera so
+      // lazy media + scroll-triggered sections load and the measured height is the
+      // FULL settled height. Without this, height is short at load time → the
+      // capture-time scroll stops short, and content loading mid-scroll makes the
+      // target jump (skipped sections). After pre-warm the height is stable, so a
+      // single fixed-target smooth scroll covers every section continuously.
+      let last=-1,stable=0;
+      for(let i=0;i<300;i++){
+        const h=de.scrollHeight, maxTop=Math.max(0,h-innerHeight);
+        window.scrollTo(0,Math.min(maxTop,Math.round((i+1)*innerHeight*0.85)));
+        await new Promise(rs=>requestAnimationFrame(rs));
+        const atBottom=(window.scrollY||de.scrollTop||0)+innerHeight>=h-2;
+        if(h===last){ if(atBottom && ++stable>=3) break; } else stable=0;
+        last=h;
+      }
+      await new Promise(rs=>setTimeout(rs,150));
+      const maxTop=Math.max(0,de.scrollHeight-innerHeight);
+      const y=Math.round(maxTop*((PCT==null?55:PCT)/100));
+      window.scrollTo(0,0);
+      return {y,how:'percent-prewarmed'};
+    }
     for(let i=0;i<600;i++){ const r=el.getBoundingClientRect(); const tgt=ALIGN==='top'?innerHeight*0.12:innerHeight/2; const off=(r.top+(ALIGN==='top'?0:r.height/2))-tgt; if(Math.abs(off)<6)break; window.scrollBy(0,Math.sign(off)*Math.min(400,Math.max(20,Math.abs(off)*0.5))); await new Promise(rs=>requestAnimationFrame(rs)); }
     const y=Math.round(window.scrollY||de.scrollTop||0); window.scrollTo(0,0); return {y,how};
   })()`;
@@ -448,11 +469,20 @@ export async function renderVideo(rawRecipe = {}) {
     }
 
     // Capture: load-in, then ONE smooth pre-measured scroll to the target.
-    await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 85, maxWidth: 1440, maxHeight: 900, everyNthFrame: 2 }, sessionId);
+    // everyNthFrame:1 grabs every composited frame of the smooth scroll — the
+    // scroll is already dense/uniform (rAF smoothstep), so under-sampling here was
+    // the source of the "twitchy" playback (scene.mjs maps output frames to the
+    // NEAREST captured frame; too few captured frames → each repeats for several
+    // output frames → visible chunky scroll). Capturing every frame keeps
+    // playableCount ≥ output frames so the 1:1 mapping stays smooth to the bottom.
+    await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 85, maxWidth: 1440, maxHeight: 900, everyNthFrame: 1 }, sessionId);
     if (recipe.scroll) {
       const startMs = Math.round(recipe.scroll.startAt * seconds * 1000);
       const arriveMs = Math.round(recipe.scroll.arriveAt * seconds * 1000);
       const durMs = Math.max(500, arriveMs - startMs);
+      // Single smooth scroll to the pre-measured target. For scroll-to-end the
+      // probe pre-warms the page so targetY is the FULL settled bottom — a fixed
+      // target means constant, continuous motion through every section (no jumps).
       await sleep(startMs);
       const smooth = `(()=>{const start=performance.now(),dur=${durMs},ty=${targetY},y0=window.scrollY||0;function step(now){let p=Math.min(1,(now-start)/dur);p=p*p*(3-2*p);window.scrollTo(0,Math.round(y0+(ty-y0)*p));if(p<1)requestAnimationFrame(step);}requestAnimationFrame(step);})()`;
       await cdp.send('Runtime.evaluate', { expression: smooth }, sessionId).catch(() => {});

@@ -17,6 +17,14 @@
       ]
     },
     {
+      "collectionGroup": "media_jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clientId", "order": "ASCENDING" },
+        { "fieldPath": "createdAtTs", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "render_jobs",
       "queryScope": "COLLECTION",
       "fields": [

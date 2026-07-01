@@ -308,7 +308,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
                 whiteSpace: 'pre',
               }}
             >
-              Assisted Digital Media
+              Creative Systems for Modern Businesses
             </span>
           </p>
         </div>

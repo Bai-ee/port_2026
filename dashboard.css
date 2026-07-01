@@ -651,6 +651,7 @@
     gap: 8px;
     border-radius: 1rem;
     min-width: 0;
+    overflow: visible;
   }
   .capability-nav-btn {
     display: flex;
@@ -1684,22 +1685,23 @@
     border: none;
     background: #fff;
   }
-  @keyframes briefSpin {
-    to { transform: rotate(360deg); }
-  }
   .brief-loader {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 14px;
   }
+  /* Comet-border loader — matches .cta-pill-btn; ring only, transparent center. */
   .brief-loader-spinner {
     width: 36px;
     height: 36px;
-    border: 3px solid rgba(42, 36, 32, 0.1);
-    border-top-color: rgba(42, 36, 32, 0.5);
+    --comet-ring: 3px;
     border-radius: 50%;
-    animation: briefSpin 0.8s linear infinite;
+    background: conic-gradient(from var(--cta-angle), transparent 0deg, transparent 180deg, hsla(185,100%,58%,0.12) 200deg, hsla(200,100%,62%,0.35) 225deg, hsla(225,100%,64%,0.6) 250deg, hsla(250,100%,66%,0.78) 275deg, hsla(275,100%,66%,0.88) 300deg, hsla(300,100%,68%,0.94) 322deg, hsla(320,80%,80%,0.97) 338deg, rgba(255,255,255,1) 350deg, transparent 358deg);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--comet-ring)), #000 calc(100% - var(--comet-ring)));
+    mask: radial-gradient(farthest-side, transparent calc(100% - var(--comet-ring)), #000 calc(100% - var(--comet-ring)));
+    animation: cta-border-spin 1.1s linear infinite;
+    pointer-events: none;
   }
   .tile-brief-preview-loading {
     width: 100%;
@@ -2340,6 +2342,8 @@
   .tile-intake-heading {
     grid-area: auto;
     margin: 0;
+    /* Title Case as authored, bold — no text-transform (no force-lowercase). */
+    font-weight: 700;
   }
   .tile-intake-source-line {
     display: block;
@@ -3587,11 +3591,14 @@
   }
   .sb-link-btn:hover { color: var(--text-primary); border-color: var(--text-disabled); }
   .sb-toggle-row-meta { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+  /* Comet-border loader — matches .cta-pill-btn; ring only, transparent center. */
   .sb-spinner {
-    width: 14px; height: 14px; border: 2px solid color-mix(in srgb, var(--text-primary) 30%, transparent);
-    border-top-color: var(--text-primary); border-radius: 50%; animation: sb-spin 0.7s linear infinite;
+    width: 14px; height: 14px; --comet-ring: 2px; border-radius: 50%;
+    background: conic-gradient(from var(--cta-angle), transparent 0deg, transparent 180deg, hsla(185,100%,58%,0.12) 200deg, hsla(200,100%,62%,0.35) 225deg, hsla(225,100%,64%,0.6) 250deg, hsla(250,100%,66%,0.78) 275deg, hsla(275,100%,66%,0.88) 300deg, hsla(300,100%,68%,0.94) 322deg, hsla(320,80%,80%,0.97) 338deg, rgba(255,255,255,1) 350deg, transparent 358deg);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--comet-ring)), #000 calc(100% - var(--comet-ring)));
+    mask: radial-gradient(farthest-side, transparent calc(100% - var(--comet-ring)), #000 calc(100% - var(--comet-ring)));
+    animation: cta-border-spin 1.1s linear infinite; pointer-events: none;
   }
-  @keyframes sb-spin { to { transform: rotate(360deg); } }
 
   /* ── Dashboard modal pilot: Strategy Builder ─────────────────────────────
      Scoped intentionally. Once approved, promote these primitives to the
@@ -6807,17 +6814,15 @@
       line-height: 1;
     }
     #run-active-indicator-label { display: none; }
+    /* Comet-border loader — matches .cta-pill-btn; ring only, transparent center. */
     #run-active-indicator-dot {
       width: 20px;
       height: 20px;
       flex-shrink: 0;
-      background: conic-gradient(hsl(185,100%,45%) 0%, hsl(262,100%,55%) 40%, hsl(314,100%,50%) 75%, hsl(185,100%,45%) 100%);
-      animation: run-indicator-spin 0.9s linear infinite;
+      background: conic-gradient(from var(--cta-angle), transparent 0deg, transparent 180deg, hsla(185,100%,58%,0.12) 200deg, hsla(200,100%,62%,0.35) 225deg, hsla(225,100%,64%,0.6) 250deg, hsla(250,100%,66%,0.78) 275deg, hsla(275,100%,66%,0.88) 300deg, hsla(300,100%,68%,0.94) 322deg, hsla(320,80%,80%,0.97) 338deg, rgba(255,255,255,1) 350deg, transparent 358deg);
+      animation: cta-border-spin 1.1s linear infinite;
       -webkit-mask: radial-gradient(circle, transparent 58%, black 59%);
       mask: radial-gradient(circle, transparent 58%, black 59%);
-    }
-    @keyframes run-indicator-spin {
-      to { transform: rotate(360deg); }
     }
   }
 
@@ -9076,6 +9081,26 @@
   .tile-open-modal-btn:active {
     transform: translateY(0);
     transition-duration: 80ms;
+  }
+
+  /* Deliverables bucket — action buttons color-shift only; no vertical lift on hover/active. */
+  .cap-bucket-deliverables .cap-list-run:hover:not(:disabled),
+  .cap-bucket-deliverables .cap-list-caret:hover,
+  .cap-bucket-deliverables .cap-list-lock-btn:hover,
+  .cap-bucket-deliverables .cap-list-run:active:not(:disabled),
+  .cap-bucket-deliverables .cap-list-caret:active,
+  .cap-bucket-deliverables .cap-list-lock-btn:active,
+  .cap-bucket-deliverables .tile-foot-rerun-btn:not(:disabled):hover,
+  .cap-bucket-deliverables .tile-foot-rerun-btn:not(:disabled):active,
+  .cap-bucket-deliverables .tile-view-details-btn:hover,
+  .cap-bucket-deliverables .tile:hover:not(:has(.tile-foot-rerun-btn:hover)) .tile-view-details-btn,
+  .cap-bucket-deliverables .tile-view-details-btn:active,
+  .cap-bucket-deliverables .tile-download-btn:hover,
+  .cap-bucket-deliverables .tile-download-btn:active,
+  .cap-bucket-deliverables .tile-open-modal-btn:hover,
+  .cap-bucket-deliverables .tile:hover .tile-open-modal-btn,
+  .cap-bucket-deliverables .tile-open-modal-btn:active {
+    transform: none;
   }
 
   /* Modal close button — add lift */

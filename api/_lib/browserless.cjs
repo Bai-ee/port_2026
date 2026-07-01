@@ -10,6 +10,7 @@ const DEFAULT_BASE_URL = 'https://production-sfo.browserless.io';
 const DEFAULT_REQUEST_TIMEOUT_MS = 45000;
 const DEFAULT_GOTO_TIMEOUT_MS = 15000;
 const DEFAULT_POST_LOAD_WAIT_MS = 4000;
+const BROWSERLESS_MAX_REQUEST_TIMEOUT_MS = 60000;
 const SCREENSHOT_VARIANTS = [
   // Viewport screenshots — used for the multi-device mockup composite
   {
@@ -269,7 +270,10 @@ async function captureScreenshotBufferOnce({ clientId, runId, targetUrl, variant
 
   // Give slow sites more time on retries — bump goto + request timeouts by 50% per attempt.
   const attemptMultiplier = 1 + 0.5 * (attempt - 1);
-  const effectiveRequestTimeoutMs = Math.round(config.requestTimeoutMs * attemptMultiplier);
+  const effectiveRequestTimeoutMs = Math.min(
+    BROWSERLESS_MAX_REQUEST_TIMEOUT_MS,
+    Math.round(config.requestTimeoutMs * attemptMultiplier)
+  );
   const effectiveGotoTimeoutMs = Math.round(config.gotoTimeoutMs * attemptMultiplier);
 
   const endpoint = buildEndpointUrl(
@@ -428,6 +432,7 @@ async function persistWebsiteScreenshotArtifact({
   try {
     const artifactRefs = [];
     const warnings = [];
+    const failedFullPageVariants = [];
 
     for (const [index, variant] of variants.entries()) {
       if (typeof onVariantProgress === 'function') {
@@ -476,6 +481,9 @@ async function persistWebsiteScreenshotArtifact({
 
       if (!screenshot.ok) {
         warnings.push(screenshot.warning);
+        if (variant?.fullPage) {
+          failedFullPageVariants.push(variant);
+        }
         if (typeof onVariantProgress === 'function') {
           try {
             await onVariantProgress({
@@ -545,6 +553,25 @@ async function persistWebsiteScreenshotArtifact({
           /* non-fatal progress hook */
         }
       }
+    }
+
+    for (const variant of failedFullPageVariants) {
+      if (artifactRefs.some((artifact) => artifact?.variant === variant.id)) continue;
+      const baseVariantId = String(variant.id || '').replace(/-full$/, '');
+      const baseArtifact = artifactRefs.find((artifact) => artifact?.variant === baseVariantId);
+      if (!baseArtifact) continue;
+      artifactRefs.push({
+        ...baseArtifact,
+        variant: variant.id,
+        viewportLabel: `${variant.label} (viewport fallback)`,
+        fallbackFromVariant: baseVariantId,
+        fullPageFallback: true,
+      });
+      warnings.push(buildWarning(
+        'full_page_viewport_fallback',
+        `${variant.label} capture fell back to the ${baseArtifact.viewportLabel || baseVariantId} viewport screenshot.`,
+        { variant: variant.id, fallbackFromVariant: baseVariantId }
+      ));
     }
 
     if (artifactRefs.length === 0) {

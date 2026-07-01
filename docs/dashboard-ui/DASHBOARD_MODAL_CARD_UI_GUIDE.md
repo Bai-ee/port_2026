@@ -19,6 +19,75 @@ Full-screen video/editor standard:
 - [VIDEO_STUDIO_UX_KIT.md](/Users/bballi/Documents/Repos/Bballi_Portfolio/docs/dashboard-ui/VIDEO_STUDIO_UX_KIT.md:1)
 - Use this for video-editor and motion-studio work. The modal card kit remains the standard for dashboard card detail tabs.
 
+## Two Modal Surfaces — pick one per card
+
+Every card that opens on click uses **exactly one of two surfaces**. Decide which before building. Do not invent a third pattern.
+
+Routing lives in one place: `openCapabilityCard` in [DashboardPage.jsx](/Users/bballi/Documents/Repos/Bballi_Portfolio/DashboardPage.jsx:7272). Read it before wiring a new card.
+
+### Surface A — Full-Screen Overlay (`#brief-fullscreen-overlay`)
+
+A calm, chrome-light viewer for **one finished thing**: a brief document, an image, or a video. No tabs, no controls, no editing. The client "sees it bigger" and can download/share. This is the **Creative Brief Preview** surface and the only surface non-admin clients ever see.
+
+One shared shell, reused by three React states (all render identical DOM ids):
+
+| State | What it shows | Body element |
+| --- | --- | --- |
+| `namedBriefView` | Creative Brief / named brief previews (the reference UI) | `#brief-fullscreen-iframe` (brief HTML) |
+| `briefFullScreen` | Legacy daily brief | `#brief-fullscreen-iframe` (brief HTML) |
+| `deliverableView` | Deliverable assets for clients (image/video) | `.deliverable-view-body` → `<img>` / `<video>` |
+
+Anatomy (do not rename these ids — they are the contract, and the CSS keys off them):
+
+```
+#brief-fullscreen-overlay            // fixed, dimmed (rgba(0,0,0,0.6)) + blur(8px) backdrop; click = close
+  #brief-fullscreen-container        // 90vw × 90vh white panel, radius 16px (.deliverable-view-container variant for assets)
+    #brief-fullscreen-actions        // top-right row
+      #brief-fullscreen-download     // ↓ Download (single asset, or Download PDF for briefs)
+      #brief-fullscreen-share        // ↗ Share (native share → fallback opens asset)
+      #brief-fullscreen-close        // [ ✕ ]
+    #brief-fullscreen-iframe         // brief HTML  — OR —
+    .deliverable-view-body           // asset body
+      .deliverable-view-video        // kind: 'video'
+      .deliverable-view-figure       // kind: 'image' (one per item)
+        .deliverable-view-img
+        .deliverable-view-cap → .deliverable-view-dl
+```
+
+Top-right action row is the standard: **Download · Share · Close**. Single-asset only shows Download + Share; multi-image bodies use per-figure `.deliverable-view-dl` links instead of a single top Download.
+
+Wire a card into Surface A by giving it a `deliverableAsset` payload (see any deliverables-bucket card def, e.g. [`post-me`](/Users/bballi/Documents/Repos/Bballi_Portfolio/DashboardPage.jsx:10468)):
+
+```js
+deliverableAsset: hasAsset ? {
+  title: 'Card Title',
+  kind: 'video' | 'image',
+  items: [{ src, label, filename }],   // single item = "see it bigger"; multiple = stacked figures
+} : null,
+```
+
+Non-admin + `deliverableAsset` present ⇒ click opens Surface A automatically. No per-card modal code.
+
+### Surface B — Tabbed Detail Modal (`#tile-detail-modal`, `activeTileModal`)
+
+The admin control surface: tabs, bento cells, config forms, run actions, data rows. Everything below in this guide (the tab contract, pane types, tokens) describes Surface B. **Admin-only** — clients never reach it.
+
+### Decision rule
+
+| Card produces… | Admin sees | Client (non-admin) sees |
+| --- | --- | --- |
+| A finished document only (Creative Brief) | A (overlay) | A (overlay) |
+| A pure asset, no admin controls worth a tabbed modal — **overlay for everyone** (multi-device-view, post-me) | A (overlay) | A (overlay) |
+| A client asset **but admins keep a richer modal** (mockup-studio / Video Promo, cross-device-images / Full Page Images, social-preview) | B (tabbed) | A (overlay, via `deliverableAsset`) |
+| Analysis/config only, no client asset (seo-performance, design-evaluation, local-weather, email-digest, brand-system, …) | B (tabbed) | nothing (no modal) |
+
+The overlay-for-everyone set is `OVERLAY_FOR_ALL_CARD_IDS` in [DashboardPage.jsx](/Users/bballi/Documents/Repos/Bballi_Portfolio/DashboardPage.jsx:2481). Add a card id there to give admins the overlay too; otherwise admins fall through to the tabbed modal.
+
+Practical test when adding a card:
+1. Is there a single finished asset/document a client should see bigger? → it needs a `deliverableAsset` (Surface A for clients).
+2. Does an admin need tabs/controls/run actions? → it needs a Surface B branch. If not, add the id to `OVERLAY_FOR_ALL_CARD_IDS` so admins get the overlay too.
+3. A card may have both (role-split is normal). It must never have a third, bespoke modal.
+
 ## UI Kit Coverage Audit
 
 Every unique UI/data pattern found in current dashboard card modal content now has a primitive represented in the UI kit:

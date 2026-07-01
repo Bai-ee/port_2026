@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarClock, Loader2, RefreshCw, Send, Sparkles, Wand2 } from 'lucide-react';
+import { CalendarClock, RefreshCw, Send, Sparkles, Wand2 } from 'lucide-react';
 
 function toDatetimeLocal(date) {
   const d = date ? new Date(date) : new Date(Date.now() + 30 * 60 * 1000);
@@ -154,13 +154,13 @@ export default function SocialPostingPanel({ getIdToken, sourceDraft, sourceLabe
           ) : null}
           <div className="sp-actions">
             <button type="button" onClick={() => runAction('optimize')} disabled={!canSubmit || !!busy}>
-              {busy === 'optimize' ? <Loader2 size={15} className="sp-spin" /> : <Wand2 size={15} />} Optimize
+              {busy === 'optimize' ? <span className="comet-spinner" style={{ width: 15, height: 15, ['--comet-ring']: '2px' }} aria-hidden="true" /> : <Wand2 size={15} />} Optimize
             </button>
             <button type="button" onClick={() => runAction('draft')} disabled={!canSubmit || !!busy}>
               Save Draft
             </button>
             <button type="button" className="sp-primary" onClick={() => runAction('post-now')} disabled={!canSubmit || !!busy || !credentialReady}>
-              {busy === 'post-now' ? <Loader2 size={15} className="sp-spin" /> : <Send size={15} />} Post Now
+              {busy === 'post-now' ? <span className="comet-spinner" style={{ width: 15, height: 15, ['--comet-ring']: '2px' }} aria-hidden="true" /> : <Send size={15} />} Post Now
             </button>
           </div>
           <div className="sp-schedule-row">
@@ -213,10 +213,10 @@ export default function SocialPostingPanel({ getIdToken, sourceDraft, sourceLabe
             <span>Queue</span>
             <div className="sp-queue-actions">
               <button type="button" className="sp-icon-btn" onClick={() => runAction('diagnose')} disabled={!!busy} aria-label="Check Twitter access">
-                {busy === 'diagnose' ? <Loader2 size={14} className="sp-spin" /> : <Sparkles size={14} />}
+                {busy === 'diagnose' ? <span className="comet-spinner" style={{ width: 14, height: 14, ['--comet-ring']: '2px' }} aria-hidden="true" /> : <Sparkles size={14} />}
               </button>
               <button type="button" className="sp-icon-btn" onClick={() => runAction('process-due')} disabled={!!busy} aria-label="Post due scheduled items">
-                {busy === 'process-due' ? <Loader2 size={14} className="sp-spin" /> : <RefreshCw size={14} />}
+                {busy === 'process-due' ? <span className="comet-spinner" style={{ width: 14, height: 14, ['--comet-ring']: '2px' }} aria-hidden="true" /> : <RefreshCw size={14} />}
               </button>
             </div>
           </div>
@@ -273,8 +273,6 @@ export default function SocialPostingPanel({ getIdToken, sourceDraft, sourceLabe
         .sp-post-failed { border-color: rgba(180,35,24,0.3); }
         .sp-icon-btn { min-height: 26px; width: 28px; padding: 0; }
         .sp-queue-actions { display: inline-flex; gap: 6px; }
-        .sp-spin { animation: sp-spin 0.8s linear infinite; }
-        @keyframes sp-spin { to { transform: rotate(360deg); } }
         @media (max-width: 760px) {
           .sp-grid { grid-template-columns: 1fr; }
           .sp-compose { grid-row: auto; }

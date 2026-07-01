@@ -13,6 +13,7 @@
 const fb = require('./firebase-admin.cjs');
 const { saveBufferArtifact } = require('./storage-artifacts.cjs');
 const renderJobs = require('./studio-render-jobs.cjs');
+const { varyRecipe } = require('./studio-recipe-variations.cjs');
 
 const MAX_VIDEO_BYTES = 40 * 1024 * 1024;
 const MAX_STORED_CAPTURES = 40;
@@ -36,6 +37,26 @@ async function appendCaptureRef(clientId, ref) {
     // to "Passed" via its live listener.
     tx.set(docRef, { studioCaptures: next, studioVideoPending: null }, { merge: true });
   });
+}
+
+// Per-client rotation counter for motion variants. Atomically read+increment
+// dashboard_state.studioVariantIndex so consecutive renders pick a different
+// variant. Best-effort — on failure we fall back to a time-seeded index so the
+// render still rotates (just not perfectly sequential) and never blocks.
+async function nextStudioVariantIndex(clientId) {
+  const docRef = fb.adminDb.collection('dashboard_state').doc(clientId);
+  try {
+    return await fb.adminDb.runTransaction(async (tx) => {
+      const snap = await tx.get(docRef);
+      const cur = Number(snap.data()?.studioVariantIndex);
+      const next = (Number.isFinite(cur) ? cur : -1) + 1;
+      tx.set(docRef, { studioVariantIndex: next }, { merge: true });
+      return next;
+    });
+  } catch (err) {
+    console.warn(`[studio-variation] counter failed for ${clientId}, using fallback: ${err?.message || err}`);
+    return Date.now();
+  }
 }
 
 async function fetchWithTimeout(url, options, timeoutMs) {
@@ -71,7 +92,11 @@ function buildLockedStudioRecipe(url) {
   return {
     url,
     preset: 'push-rotate-flat',
-    output: { seconds: 8, fps: 30, width: 1920, height: 1200 },
+    // 10s (was 8): a longer, calmer scroll spreads the same page over more output
+    // frames (smaller per-frame scroll delta) and gives the capture more time to
+    // collect frames — both reduce scroll twitch. Pairs with render.mjs
+    // everyNthFrame:1. Stays within the recipe.mjs 2–12s clamp.
+    output: { seconds: 10, fps: 30, width: 1920, height: 1200 },
     device: { viewport: 'desktop', backdrop: 'home', loop: true },
     environment: { mode: 'gradient', preset: 'studio', color: '#11141a', reflections: true },
     capture: { warmupMs: 1000 },
@@ -92,6 +117,21 @@ async function renderAndStoreStudioVideo({ clientId, recipe, postId = null, jobI
   const sourceUrl = String(recipe?.url || '').trim();
   if (!/^https?:\/\/\S+$/i.test(sourceUrl)) {
     return { ok: false, status: 400, error: 'A valid http(s) URL is required.', jobId: null };
+  }
+
+  // Rotate through motion variants so consecutive renders of the same template
+  // are noticeably different — reversed timeline / mirrored direction / speed /
+  // focus — while keeping the background, environment, device, and output
+  // identical. This is the single render chokepoint for every trigger (Video
+  // Promo card button, creative brief run, signup, social-post request), so one
+  // per-client counter rotates them all. Opt out with recipe.autoVary === false
+  // (e.g. an explicit hand-authored Studio shot that must render exactly).
+  let variantLabel = null;
+  if (recipe?.autoVary !== false) {
+    const variantIndex = await nextStudioVariantIndex(clientId);
+    const varied = varyRecipe(recipe, variantIndex);
+    recipe = varied.recipe;
+    variantLabel = varied.label;
   }
 
   // Metadata derived from the recipe for persistence (the service owns clamping).
@@ -198,13 +238,15 @@ async function renderAndStoreStudioVideo({ clientId, recipe, postId = null, jobI
         sourceUrl,
         renderMs,
         renderInfo,
+        variantLabel: variantLabel || '',
       },
     });
 
     const ref = {
       type: 'studio_video',
       variant: 'video',
-      label: 'Cloud GPU Mockup Video',
+      label: variantLabel ? `Cloud GPU Mockup Video · ${variantLabel}` : 'Cloud GPU Mockup Video',
+      variantLabel: variantLabel || null,
       viewportId,
       backdropId,
       templateId,

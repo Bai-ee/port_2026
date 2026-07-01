@@ -13,6 +13,11 @@ Local review URL when the dev server is running:
 
 - `/docs/dashboard-modal-component-style-guide.html`
 
+Two surfaces (decide first):
+
+- This HTML is the vocabulary for **Surface B — the tabbed detail modal** (`#tile-detail-modal`, admin).
+- The other surface is **Surface A — the full-screen overlay** (`#brief-fullscreen-overlay`): the Creative Brief Preview / deliverable asset viewer (document, image, or video; Download · Share · Close; the only surface clients see). Pattern, anatomy, and the per-card decision rule live in [DASHBOARD_MODAL_CARD_UI_GUIDE.md](/Users/bballi/Documents/Repos/Bballi_Portfolio/docs/dashboard-ui/DASHBOARD_MODAL_CARD_UI_GUIDE.md:1) → "Two Modal Surfaces".
+
 Purpose:
 
 - Iterate on the complete modal component vocabulary in one place before applying it across card modals.
@@ -34,6 +39,7 @@ Rules:
 
 Coverage:
 
+- `Overlay (Surface A)`: full-screen viewer shell, Download · Share · Close action row, brief-iframe body, single/stacked image body, video body. See the card UI guide for anatomy + `deliverableAsset` wiring.
 - `Buttons`: primary CTA, static gradient CTA, black-outline secondary, dark command, icon, destructive, source URL update/rerun.
 - `Fields`: input, select, textarea, code textarea, checkbox row, file drop, field action bar.
 - `Data`: stat rows, metric cards, chips, data table, audit/inventory rows.

@@ -1464,6 +1464,13 @@ const MOCKUP_STUDIO_OUTPUT_BY_DEVICE = {
 };
 const CUSTOM_DETAIL_CARD_IDS = new Set([
   'multi-device-view',
+  // Full Page Images — its DESKTOP/TABLET/MOBILE capture tabs are the whole
+  // detail panel; suppress the generic REPORT/SOLUTIONS/PROBLEMS/DATA tabs
+  // that were stacking below them.
+  'cross-device-images',
+  // Social Preview — a single visual DATA panel (share image + brand assets +
+  // metadata) replaces the generic REPORT/SOLUTIONS/PROBLEMS/DATA tabs.
+  'social-preview',
   'brief',
   'audit-summary',
   'survey-status',
@@ -1527,6 +1534,20 @@ const BRIEF_CARD_PREVIEW_TYPES = {
   'brief-marketing': 'marketing-director',
   'brief-strategy': 'social-media-manager',
   'brief-performance': 'website-developer',
+};
+
+// DELIVERABLES bucket — one uniform, length-matched blurb per card. On the
+// deliverables face every card renders its entry here (data-aware dynamic/scribe
+// copy is suppressed there), so the green-indicator grid reads at a single height.
+// Cards keep their live, data-aware copy in their home buckets. Budget: ~18-20
+// words / 2 lines, benefit-triplet voice. Single source of truth for this face.
+const DELIVERABLES_CARD_COPY = {
+  'onboarding-brief':    'Establishes the starting point. Bryan reviews your site, brand, content, and share presence so the first conversation starts with context, not guesswork.',
+  'mockup-studio':       'Turns your site into a short social-ready video, showing how your brand reads in motion and giving you content you can actually use.',
+  'multi-device-view':   'Renders your site across desktop, tablet, and mobile so layout issues, hierarchy problems, and first-impression gaps show up fast.',
+  'social-preview':      'Shows how your brand appears when shared, catches link preview issues, and helps your content travel cleaner across platforms.',
+  'cross-device-images': 'Captures your pages across key screen sizes and packages them into a visual reference set for review, handoff, and creative direction.',
+  'post-me':             'Builds a ready-to-share post from your brief and brand, shaped to sound human and make the strongest point clearly.',
 };
 
 const buildUnavailableDescription = (subject) => `Insufficient source evidence to determine ${subject} reliably.`;
@@ -2496,6 +2517,20 @@ const NON_ADMIN_UNLOCKED_CARD_IDS = new Set([
   'post-me',
 ]);
 
+// Asset cards that open the full-screen overlay (#brief-fullscreen-overlay) for
+// EVERYONE — admin and client alike. They're single finished creatives with no
+// admin controls worth a tabbed modal. Video Promo (mockup-studio) is NOT here:
+// non-admins get the overlay via the generic deliverableAsset path, but admins
+// keep the richer tile-detail modal (Open Studio, past renders, auto-run).
+const OVERLAY_FOR_ALL_CARD_IDS = new Set([
+  'multi-device-view',
+  'post-me',
+  // Full Page Images — open the full-screen asset viewer (brief-fullscreen shell)
+  // for admins too, with size-nav pills + vertical scroll, instead of the tabbed
+  // tile-detail modal. The tabbed render stays as a forceModal fallback.
+  'cross-device-images',
+]);
+
 // Launch onboarding gate: non-admins get only DELIVERABLES. Every other nav
 // bucket (incl. Daily Stand Up) is VISIBLE but disabled with a lock. Within
 // DELIVERABLES the cards tab (idx 0) is open. Admins bypass all of it.
@@ -2537,7 +2572,7 @@ const CAP_STEPS = {
   // DELIVERABLES bucket — the launch deliverable package. One tab grouping the
   // Creative Brief, Multi-Device Mockup, Social Preview, and Studio cards.
   deliverables: [
-    { id: 'onboarding-brief', label: 'DELIVERABLES' },
+    { id: 'onboarding-brief', label: 'DELIVERABLES', Icon: Images },
   ],
   content: [
     { id: 'visual-dna', label: 'INTAKE YOUR REFERENCES', Icon: Images },
@@ -2839,6 +2874,17 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // the same overlay pattern as the Creative Brief. Payload built on each card
   // (see deliverableAsset) and opened from openCapabilityCard.
   const [deliverableView, setDeliverableView] = useState(null);
+  // Which asset the top-right Download/Share act on in the full-screen viewer.
+  // Single-asset views keep 0 (unchanged). Multi-asset views (Full Page Images)
+  // drive it from the size-nav pills; reset to the first size on each open.
+  const [deliverableActiveIdx, setDeliverableActiveIdx] = useState(0);
+  useEffect(() => { setDeliverableActiveIdx(0); }, [deliverableView]);
+  const scrollToDeliverableFigure = useCallback((i) => {
+    setDeliverableActiveIdx(i);
+    if (typeof document === 'undefined') return;
+    const el = document.getElementById(`deliverable-figure-${i}`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
   const [modalTab, setModalTab] = useState('solutions');
   const [brandSystemBuildOpen, setBrandSystemBuildOpen] = useState(false);
   const [visualDnaProspect, setVisualDnaProspect] = useState(null);
@@ -4739,6 +4785,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // features/scout-intake/brief-sections.cjs via BRIEF_TYPE_BY_CARD.
   const [namedBriefView, setNamedBriefView] = useState(null); // { key, html } | { key, loading: true } | null
   const [namedBriefPdfBusy, setNamedBriefPdfBusy] = useState(false);
+  const [namedBriefShareBusy, setNamedBriefShareBusy] = useState(false);
+  const [namedBriefShareError, setNamedBriefShareError] = useState('');
   // Download the open brief as a PDF — re-renders the same composition through
   // the brief-preview route's ?format=pdf branch (Browserless), fetched with the
   // auth token then saved via a blob URL.
@@ -4767,8 +4815,51 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       setNamedBriefPdfBusy(false);
     }
   }, [user, apiPath, namedBriefPdfBusy]);
+  // Share the open brief as a LIVE public link — reuses the same hosted-brief
+  // path as the saved custom briefs: publish the brief HTML to a public
+  // custom_briefs doc (served deploy-free at /briefs/[clientId]/[briefSlug]),
+  // then open that live page in a new tab. Stable per-key slug so re-sharing
+  // overwrites the same page instead of piling up duplicates. addToClientBrain
+  // is off — sharing must not mutate Client Brain. Admin-only (the publish route
+  // is verifyAdminRequest), matching the rest of the shareable-brief tooling.
+  const shareNamedBrief = useCallback(async () => {
+    if (!user || namedBriefShareBusy) return;
+    const html = namedBriefView?.html;
+    if (!html) return;
+    const key = namedBriefView.key;
+    const shareTitle = key === 'onboarding' ? 'Creative Brief' : `${key} brief`;
+    const shareSlug = key === 'onboarding' ? 'creative-brief' : briefSlugify(`${key}-brief`);
+    setNamedBriefShareBusy(true);
+    setNamedBriefShareError('');
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(apiPath('/api/dashboard/custom-briefs'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({
+          title: shareTitle,
+          briefSlug: shareSlug,
+          html,
+          public: true,
+          addToClientBrain: false,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      const publicUrl = data?.brief?.publicUrl;
+      if (!res.ok || !publicUrl) {
+        throw new Error(data?.error || `Publish failed (HTTP ${res.status}).`);
+      }
+      if (typeof window !== 'undefined') window.open(publicUrl, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      setNamedBriefShareError(err instanceof Error ? err.message : 'Could not publish the share link.');
+    } finally {
+      setNamedBriefShareBusy(false);
+    }
+  }, [user, namedBriefShareBusy, namedBriefView, apiPath]);
   const openNamedBriefPreview = useCallback(async (key) => {
     if (!user) return;
+    setNamedBriefShareError('');
     setNamedBriefView({ key, loading: true });
     try {
       const token = await user.getIdToken();
@@ -5047,7 +5138,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       setModalTab(wanted);
       return;
     }
-    if (id === 'multi-device-view') { setModalTab('desktop'); return; }
+    if (id === 'cross-device-images') { setModalTab('desktop'); return; }
     // Reference via bootstrap here — `dashboardState` is declared later in the
     // component body (TDZ) so the direct name isn't safe at effect-definition time.
     if (id === 'survey-status') { setModalTab('chat'); return; }
@@ -5062,7 +5153,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     if (id === 'seo-performance') { setModalTab('report'); return; }
     if (id === 'agent-readiness') { setModalTab('report'); return; }
     if (id === 'design-evaluation' && bootstrap?.dashboardState?.analyzerOutputs?.['design-evaluation']) { setModalTab('report'); return; }
-    if (id === 'social-preview' && bootstrap?.dashboardState?.siteMeta) { setModalTab('report'); return; }
+    if (id === 'social-preview') { setModalTab('data'); return; }
     if (id === 'industry') { setModalTab('report'); return; }
 	    if (id === 'brand-system') { setModalTab('master-prompt'); return; }
 	    if (id === 'local-weather') { setModalTab('config'); return; }
@@ -7277,6 +7368,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     // run, the "latest main brief" HTML becomes Executive, so prefer the named
     // onboarding render when available and fall back to the first-run main render.
     if (!forceModal && card.id === 'onboarding-brief' && briefCardPreviewHtml['onboarding-brief']) {
+      setNamedBriefShareError('');
       setNamedBriefView({ key: 'onboarding', html: briefCardPreviewHtml['onboarding-brief'] });
       return;
     }
@@ -7291,12 +7383,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       openNamedBriefPreview(BRIEF_TYPE_BY_CARD[card.id]);
       return;
     }
-    // Deliverables-bucket cards (Video Post, Social Preview, Device Mockups,
-    // Full-Page Screenshots) open the shared full-screen asset viewer for
-    // CLIENTS — same pattern as the Creative Brief. Admins fall through to the
-    // richer tile-detail modal below (e.g. Studio auto-run settings, past
-    // renders, Open Studio), which clients don't get.
-    if (!forceModal && !isAdmin && card.deliverableAsset) {
+    // Full-screen asset viewer (#brief-fullscreen-overlay) — same shell as the
+    // Creative Brief. Non-admins get it for ANY deliverable card. Admins get it
+    // only for the overlay-for-all cards (Multi-Device Mock, Post Me); every
+    // other deliverable card (Video Promo, Social Preview, Full Page Images)
+    // keeps the richer tile-detail modal for admins.
+    if (!forceModal && card.deliverableAsset && (!isAdmin || OVERLAY_FOR_ALL_CARD_IDS.has(card.id))) {
       setDeliverableView(card.deliverableAsset);
       return;
     }
@@ -10385,14 +10477,14 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       deliverableAsset: multiDevicePreviewSrc ? {
         title: 'Multi-Device Mock',
         kind: 'image',
+        // Single hero image only — clients just see the mockup bigger. The
+        // per-device full-page captures live in the Full Page Images card
+        // (cross-device-images), not stacked here.
         items: [
           // Hero = the same image the tile shows (generated mockup, else the
           // device-mockup PNG, else the homepage screenshot fallback).
           { src: intakeMockupSrc || homepageDeviceMockupUrl || homepageScreenshotUrl || multiDevicePreviewSrc, label: 'Device mockup', filename: `${deliverableBizName}-device-mockup.png` },
-          deviceScreenshots.desktop && { src: deviceScreenshots.desktop, label: 'Desktop — full page', filename: `${deliverableBizName}-desktop-full.png` },
-          deviceScreenshots.tablet && { src: deviceScreenshots.tablet, label: 'Tablet — full page', filename: `${deliverableBizName}-tablet-full.png` },
-          deviceScreenshots.mobile && { src: deviceScreenshots.mobile, label: 'Mobile — full page', filename: `${deliverableBizName}-mobile-full.png` },
-        ].filter(Boolean),
+        ],
       } : null,
       moduleControls: { tech: ['browserless', 'firebase-storage', 'python-mockup'] },
     },
@@ -10467,10 +10559,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         // the promo video when X-ready, otherwise the social/static image.
         deliverableAsset: hasVideoAsset ? {
           title: 'Post Me',
+          cardId: 'post-me',
           kind: 'video',
           items: [{ src: latestStudioVideoUrl, filename: `${deliverableBizName}-post.mp4` }],
         } : (hasStaticAsset ? {
           title: 'Post Me',
+          cardId: 'post-me',
           kind: 'image',
           items: [{ src: siteMeta?.ogImage || multiDevicePreviewSrc, label: 'Social Post', filename: `${deliverableBizName}-post.png` }],
         } : null),
@@ -11226,7 +11320,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         { key: 'ob-video', label: 'Video post', value: cbVideoReady ? 'Ready' : 'Pending' },
       ],
       footerLeft: creativeBriefReady ? 'Ready' : marketingBriefRunning ? 'Building…' : 'Run to build',
-      footerRight: 'REVIEWED',
+      // Green/passed state reads ACTIVE; before it's built, keep REVIEWED.
+      footerRight: creativeBriefReady ? 'ACTIVE' : 'REVIEWED',
       footerAction: {
         label: marketingBriefRunning ? '…' : creativeBriefReady ? 'RE-RUN' : 'RUN BRIEF',
         loading: marketingBriefRunning || marketingBriefSaving,
@@ -12132,15 +12227,23 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               : 'Baseline ready',
         };
       }
-      if (card.id === 'social-preview' && built?.dominantSignal?.readiness) {
-        return {
-          tone: built.dominantSignal.readiness,
-          label: built.dominantSignal.readiness === 'critical'
-            ? 'Share preview issue'
-            : built.dominantSignal.readiness === 'partial'
-              ? 'Share gaps found'
-              : 'Share-ready',
-        };
+      if (card.id === 'social-preview') {
+        // Share-ready once the favicon and share image are both captured — match
+        // the other deliverable cards' green Passed badge rather than the
+        // analyzer's best-case "partial/healthy" signal.
+        if (Boolean(siteMeta?.ogImage) && Boolean(siteMeta?.favicon)) {
+          return { tone: 'ok', label: 'Passed' };
+        }
+        if (built?.dominantSignal?.readiness) {
+          return {
+            tone: built.dominantSignal.readiness,
+            label: built.dominantSignal.readiness === 'critical'
+              ? 'Share preview issue'
+              : built.dominantSignal.readiness === 'partial'
+                ? 'Share gaps found'
+                : 'Share-ready',
+          };
+        }
       }
       if (card.id === 'multi-device-view') {
         // Derive readiness from actual artifact presence so the badge matches
@@ -12222,6 +12325,14 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         const cbSummary = Boolean(dashboardState?.briefSummaries?.onboarding?.summary);
         if (cbMockup && cbScreens && cbVideo && cbSummary) return { tone: 'ok', label: 'Passed' };
       }
+      if (card.id === 'post-me') {
+        // Post-ready once there's a caption AND a creative to attach (the X-ready
+        // promo video or the static share image). Match the other deliverable
+        // cards' green Passed badge instead of the generic healthy fallthrough.
+        const pmHasCopy  = Boolean(buildPostMeCaption());
+        const pmHasAsset = Boolean(latestStudioVideoUrl) || Boolean(siteMeta?.ogImage || multiDevicePreviewSrc);
+        if (pmHasCopy && pmHasAsset) return { tone: 'ok', label: 'Passed' };
+      }
       if (!analyzer?.readiness) return null;
       return {
         tone: analyzer.readiness,
@@ -12235,11 +12346,15 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 
     return {
       ...card,
-      description:             baseDescription,
+      // DELIVERABLES face renders one uniform, length-matched blurb per card
+      // (DELIVERABLES_CARD_COPY) so the green-indicator grid reads at a single
+      // height; the data-aware dynamic/scribe copy is suppressed there. Cards
+      // keep their live copy in their home buckets (knowledge/website/content).
+      description:             (activeCapabilityFilter === 'deliverables' && DELIVERABLES_CARD_COPY[card.id]) || baseDescription,
       // Market Category owns its copy on the tile face too — suppress the
       // generic module/scribe short text so the face uses its description.
-      scribeShort:             card.id === 'industry' ? null : (DETERMINISTIC_CARD_IDS.has(card.id) ? null : (scribe?.short || null)),
-      dynamicShortDescription: card.id === 'industry' ? null : dynamicShortDescription,
+      scribeShort:             (activeCapabilityFilter === 'deliverables' || card.id === 'industry') ? null : (DETERMINISTIC_CARD_IDS.has(card.id) ? null : (scribe?.short || null)),
+      dynamicShortDescription: (activeCapabilityFilter === 'deliverables' || card.id === 'industry') ? null : dynamicShortDescription,
       recommendation:          scribe?.recommendation || null,
       readinessBadge,
       analyzer,
@@ -12251,6 +12366,138 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   const activeModuleCard = activeModuleCardId
     ? intakeCapabilityCards.find((c) => c.id === activeModuleCardId) || null
     : null;
+
+  // ── Deliverable shell visuals — SINGLE SOURCE OF TRUTH ──────────────────────
+  // Each deliverable card's face and its tile-detail modal image cell must show
+  // the SAME preview. These helpers render that visual once and are called from
+  // both places (card placeholder + modal image cell). `domId` is parameterized
+  // so the modal copy never collides with the card's DOM id while both are
+  // mounted. Return null when the underlying asset is missing; the caller then
+  // falls back to the empty-state label.
+  const renderCrossDeviceTrioShell = (domId = 'cross-device-trio-shell') => {
+    if (!(deviceScreenshots.desktop || deviceScreenshots.tablet || deviceScreenshots.mobile)) return null;
+    return (
+      <div className="cross-device-trio" id={domId}>
+        {deviceScreenshots.desktop && (
+          <span className="cross-device-frame cross-device-frame--desktop">
+            <img className="cross-device-img" src={deviceScreenshots.desktop} alt="Desktop full-page capture" loading="lazy" />
+          </span>
+        )}
+        {deviceScreenshots.tablet && (
+          <span className="cross-device-frame cross-device-frame--tablet">
+            <img className="cross-device-img" src={deviceScreenshots.tablet} alt="Tablet full-page capture" loading="lazy" />
+          </span>
+        )}
+        {deviceScreenshots.mobile && (
+          <span className="cross-device-frame cross-device-frame--mobile">
+            <img className="cross-device-img" src={deviceScreenshots.mobile} alt="Mobile full-page capture" loading="lazy" />
+          </span>
+        )}
+      </div>
+    );
+  };
+
+  const renderStudioVideoShell = () => {
+    if (!latestStudioVideoUrl) return null;
+    return (
+      <video
+        key={latestStudioVideoUrl}
+        className="tile-studio-video"
+        src={latestStudioVideoUrl}
+        autoPlay
+        muted
+        loop
+        playsInline
+      />
+    );
+  };
+
+  const renderPostMeShell = (domId = 'post-me-tile-mockup') => {
+    const pmBiz    = client?.businessName || brandOverview?.headline || 'Your Business';
+    const pmHandle = '@' + (client?.businessName || 'yourbrand').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 15);
+    const pmCopy   = buildPostMeCaption();
+    const pmUrl    = client?.websiteUrl || client?.website || '';
+    const pmClean  = pmUrl.replace(/^https?:\/\/(?:www\.)?/, '').replace(/\/$/, '');
+    const pmBody   = pmCopy.replace(pmUrl, '').replace(pmClean, '').replace(/\s+$/, '').trim();
+    const pmImg    = siteMeta?.ogImage || multiDevicePreviewSrc || null;
+    const pmHasVideo = Boolean(latestStudioVideoUrl);
+    const pmHasMedia = Boolean(latestStudioVideoUrl || pmImg);
+    // Avatar = the HITLoop profile image used in the app's modals.
+    const pmAvatar = '/img/profile2_400x400.png?v=1774582808';
+    const stop = (e) => { e.stopPropagation(); };
+    const statusMsg = postMeLoading ? 'Posting…'
+      : postMeResult?.ok ? (postMeResult.note || 'Posted to X')
+      : postMeResult?.error ? postMeResult.error : null;
+    return (
+      <div id={domId} style={{
+        position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+        // Shared shell field — the same warm glass gradient every other card
+        // shell uses (.tile-intake-placeholder). Light-mode X post reads on it.
+        background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.22)), linear-gradient(135deg, rgba(242, 186, 118, 0.2), rgba(246, 138, 177, 0.18) 50%, rgba(162, 141, 236, 0.18))',
+        color: '#0f1419',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
+        overflow: 'hidden', textAlign: 'left', cursor: 'pointer',
+      }}>
+        {/* Header — avatar, name, handle, X logo */}
+        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 9, padding: '11px 14px 6px' }}>
+          <img src={pmAvatar} alt={pmBiz}
+            style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0, objectFit: 'cover', background: '#e1e8ed', border: '1px solid rgba(0,0,0,0.12)', display: 'block' }} />
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden' }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#0f1419', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '52%' }}>{pmBiz}</span>
+            <svg width="15" height="15" viewBox="0 0 22 22" fill="#1d9bf0" style={{ flexShrink: 0 }}><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.469-.445-1.053-.751-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.469-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.22.878 1.69.47.444 1.055.75 1.69.88.635.13 1.294.08 1.902-.144.27.586.7 1.084 1.24 1.44.54.354 1.167.55 1.813.566.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.239 1.266.296 1.903.164.636-.132 1.22-.447 1.68-.907.46-.46.776-1.044.908-1.681s.075-1.299-.165-1.903c.586-.274 1.084-.705 1.439-1.246.354-.54.551-1.17.569-1.816zM9.662 14.85l-3.429-3.428 1.293-1.302 2.072 2.072 4.4-4.794 1.347 1.246z"/></svg>
+            <span style={{ fontSize: 13, color: '#536471', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pmHandle}</span>
+          </div>
+          {/* In-flow controls — reserve their own space so nothing collides. */}
+          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button type="button" title="Generate new copy" onClick={(e) => { stop(e); generatePostMeCopy(); }} disabled={postMeCopyLoading}
+              style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: 0, opacity: postMeCopyLoading ? 0.5 : 0.9 }}>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="#0f1419"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.742l7.722-8.831L1.534 2.25H8.08l4.259 5.631zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+            </button>
+          </div>
+        </div>
+        {/* Caption */}
+        <p style={{ flexShrink: 0, margin: 0, padding: '0 14px', fontSize: 13, lineHeight: 1.4, color: '#0f1419', whiteSpace: 'pre-wrap', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+          {pmBody}{pmClean && <span style={{ color: '#1d9bf0' }}>{' '}{pmClean}</span>}
+        </p>
+        {/* Creative — the focus. Holds true 16:10, shrinks to fit. */}
+        <div style={{ flex: 1, minHeight: 0, padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {pmHasMedia ? (
+            <div style={{ height: '100%', aspectRatio: '16 / 10', maxWidth: '100%', borderRadius: 14, overflow: 'hidden', position: 'relative', border: '1px solid rgba(0,0,0,0.12)' }}>
+              {pmHasVideo ? (
+                // The last Video Promo render (latestStudioVideoUrl) — same source
+                // and autoplay/loop treatment as renderStudioVideoShell, so the
+                // mockup plays the actual video, not the OG-image poster. key
+                // re-mounts it when a newer render lands.
+                <video key={latestStudioVideoUrl} src={latestStudioVideoUrl} autoPlay muted loop playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
+              ) : (
+                <img src={pmImg} alt={pmBiz} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+              )}
+            </div>
+          ) : (
+            <span style={{ fontSize: 12, color: '#536471' }}>Your creative will appear here</span>
+          )}
+        </div>
+        {/* Engagement bar — thin, muted */}
+        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 18px 11px' }}>
+          {[{path:'M1.751 10c0-4.42 3.584-8 8.005-8h.366a8.001 8.001 0 0 1 7.97 9.58l.001.02 1.024 1.024a1.07 1.07 0 0 1-.953 1.763L16.5 22.5l-2.836-2.837c-.33.1-.67.187-1.014.256A8 8 0 0 1 2.1 11.39 8 8 0 0 1 1.75 10Z',label:'4'},
+            {path:'M4.5 3.88l4.432 4.14-1.364 1.46L5.5 7.55V16c0 1.1.896 2 2 2H13v2H7.5a4 4 0 0 1-4-4V7.55L1.432 9.48.068 8.02 4.5 3.88zM16.5 6h-6V4h6a4 4 0 0 1 4 4v8.45l2.068-1.93 1.364 1.46-4.432 4.14-4.432-4.14 1.364-1.46 2.068 1.93V8c0-1.1-.896-2-2-2z',label:'1'},
+            {path:'M16.697 5.5c-1.222-.06-2.679.51-3.89 2.16l-.805 1.09-.806-1.09C9.984 6.01 8.526 5.44 7.304 5.5c-1.243.07-2.349.78-2.91 1.91-.552 1.12-.633 2.78.479 4.82 1.074 1.97 3.257 4.27 7.129 6.61 3.87-2.34 6.052-4.64 7.126-6.61 1.111-2.04 1.03-3.7.477-4.82z',label:'12'},
+            {path:'M8.75 21V3h2v18h-2zM13 21V8.5h2V21h-2zM4.5 21V13h2v8h-2zM17.5 21V11.5h2V21h-2z',label:'2.4K'},
+          ].map(({path,label}) => (
+            <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#536471', fontSize: 12 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d={path}/></svg>{label}
+            </span>
+          ))}
+        </div>
+        {/* Transient status toast — only while posting / after a result */}
+        {statusMsg && (
+          <div style={{ position: 'absolute', left: 12, right: 12, bottom: 10, background: 'rgba(0,0,0,0.82)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '6px 10px', fontSize: 11, lineHeight: 1.3, color: postMeResult?.error ? '#f87171' : '#4ade80' }}>
+            {String(statusMsg).slice(0, 110)}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -12655,11 +12902,16 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                             disabled={dlAllBusy}
                             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 2px', flexShrink: 0, background: 'none', border: 'none', cursor: dlAllBusy ? 'default' : 'pointer' }}
                           >
-                            {dlAllBusy ? (
-                              <span aria-hidden="true" style={{ width: 16, height: 16, borderRadius: '50%', background: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)', animation: 'run-indicator-pulse 1.4s ease-in-out infinite', flexShrink: 0 }} />
-                            ) : (
-                              <DownloadCloud size={22} strokeWidth={2} stroke="url(#coverage-grad)" aria-hidden="true" style={{ marginTop: 1 }} />
-                            )}
+                            {/* Fixed 22px icon slot — the spinner (16px) and the
+                                DownloadCloud (22px) share the same footprint so the
+                                DOWNLOAD text never shifts when the state flips. */}
+                            <span aria-hidden="true" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, flexShrink: 0, marginTop: 1 }}>
+                              {dlAllBusy ? (
+                                <span style={{ width: 16, height: 16, borderRadius: '50%', background: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)', animation: 'run-indicator-pulse 1.4s ease-in-out infinite', flexShrink: 0 }} />
+                              ) : (
+                                <DownloadCloud size={22} strokeWidth={2} stroke="url(#coverage-grad)" />
+                              )}
+                            </span>
                             <span className="dl-all-text dl-all-text--full" style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>DOWNLOAD</span>
                             <span className="dl-all-text dl-all-text--short" style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>DL</span>
                           </button>
@@ -12675,10 +12927,38 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       // Primary brand gradient for the value text (background-clip).
                       const GRAD = 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)';
                       return (
-                        <span
+                        <button
+                          type="button"
                           id="dashboard-coverage-chip"
-                          title="Data coverage and quality"
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 2px', flexShrink: 0, background: 'none', border: 'none', cursor: 'default' }}
+                          title="Open Data Quality"
+                          aria-label="Open Data Quality"
+                          onClick={() => {
+                            // Coverage chip → open the Data Coverage (audit-summary)
+                            // card modal directly. Non-admins never reach the generic
+                            // tile-detail modal via openCapabilityCard, so build the
+                            // payload here (mirrors openCapabilityCard) — everyone can
+                            // open the Data Coverage card from this chip.
+                            if (!auditCard) return;
+                            setActiveTileModal({
+                              title: auditCard.title,
+                              description: auditCard.description,
+                              dynamicShortDescription: auditCard.dynamicShortDescription || null,
+                              rows: auditCard.rows,
+                              cardId: auditCard.id,
+                              sourceCardId: auditCard.id,
+                              placeholderLabel: auditCard.placeholderLabel,
+                              number: auditCard.number,
+                              label: auditCard.label,
+                              isCapabilityCard: true,
+                              vizType: null,
+                              recommendation: auditCard.recommendation || null,
+                              analyzer: auditCard.analyzer || null,
+                              readinessBadge: auditCard.readinessBadge || null,
+                              moduleControls: auditCard.moduleControls || null,
+                              leadgenStep: auditCard.leadgenStep || null,
+                            });
+                          }}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 2px', flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer' }}
                         >
                           {/* Shared gradient def for sibling icon strokes (Download /
                               FileText reference url(#coverage-grad)). */}
@@ -12701,7 +12981,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                           <span className="cap-source-value" style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: GRAD, WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>
                             {pct}<span style={{ fontSize: 13 }}>%</span>
                           </span>
-                        </span>
+                        </button>
                       );
                     })()}
                     <span className="cap-source-divider" aria-hidden="true" />
@@ -12809,7 +13089,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 resolves; the card-stagger effect fades it out, cardsRevealed
                 unmounts it. */}
             {!cardsRevealed && (
-              <div id="capability-grid-spinner" role="status" aria-label="Loading dashboard cards">
+              <div id="capability-grid-spinner" role="status" aria-label="Loading dashboard cards" data-tooltip-disabled="true">
                 <div className="brief-loader-spinner" aria-hidden="true" />
               </div>
             )}
@@ -13274,27 +13554,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       })()}
                     </div>
                   ) : card.id === 'cross-device-images' ? (
-                    (deviceScreenshots.desktop || deviceScreenshots.tablet || deviceScreenshots.mobile) ? (
-                      <div className="cross-device-trio" id="cross-device-trio-shell">
-                        {deviceScreenshots.desktop && (
-                          <span className="cross-device-frame cross-device-frame--desktop">
-                            <img className="cross-device-img" src={deviceScreenshots.desktop} alt="Desktop full-page capture" loading="lazy" />
-                          </span>
-                        )}
-                        {deviceScreenshots.tablet && (
-                          <span className="cross-device-frame cross-device-frame--tablet">
-                            <img className="cross-device-img" src={deviceScreenshots.tablet} alt="Tablet full-page capture" loading="lazy" />
-                          </span>
-                        )}
-                        {deviceScreenshots.mobile && (
-                          <span className="cross-device-frame cross-device-frame--mobile">
-                            <img className="cross-device-img" src={deviceScreenshots.mobile} alt="Mobile full-page capture" loading="lazy" />
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="tile-empty-label">{"CAPTURE\nDEVICES"}</span>
-                    )
+                    // Single source: renderCrossDeviceTrioShell() — the modal mirrors it.
+                    renderCrossDeviceTrioShell() || <span className="tile-empty-label">{"CAPTURE\nDEVICES"}</span>
                   ) : card.id === 'multi-device-view' && multiDevicePreviewSrc ? (
                     <span className="tile-intake-mockup-wrap">
                       <img
@@ -13439,15 +13700,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     </div>
                   ) : card.id === 'mockup-studio' && latestStudioVideoUrl ? (
                     // Mockup Studio card always shows the last rendered video.
-                    <video
-                      key={latestStudioVideoUrl}
-                      className="tile-studio-video"
-                      src={latestStudioVideoUrl}
-                      autoPlay
-                      muted
-                      loop
-                      playsInline
-                    />
+                    // Single source: renderStudioVideoShell() — the modal mirrors it.
+                    renderStudioVideoShell()
                   ) : card.id === 'video-remix' && latestRemixVideoUrl ? (
                     // Video Remix card shell becomes the last generated remix video —
                     // cover (fills the whole shell, center-cropped) so it matches the
@@ -13467,95 +13721,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', background: '#000' }}
                     />
                   ) : card.id === 'post-me' ? (
-                    // Clean, authentic X post that fills the fixed shell. Just the
-                    // X UI — header, caption, the creative at true 16:10, engagement.
-                    // The one extra affordance is a subtle Regenerate icon (top-right).
-                    (() => {
-                      const pmBiz    = client?.businessName || brandOverview?.headline || 'Your Business';
-                      const pmHandle = '@' + (client?.businessName || 'yourbrand').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 15);
-                      const pmCopy   = buildPostMeCaption();
-                      const pmUrl    = client?.websiteUrl || client?.website || '';
-                      const pmClean  = pmUrl.replace(/^https?:\/\/(?:www\.)?/, '').replace(/\/$/, '');
-                      const pmBody   = pmCopy.replace(pmUrl, '').replace(pmClean, '').replace(/\s+$/, '').trim();
-                      const pmImg    = siteMeta?.ogImage || multiDevicePreviewSrc || null;
-                      const pmHasVideo = Boolean(latestStudioVideoUrl);
-                      const pmHasMedia = Boolean(latestStudioVideoUrl || pmImg);
-                      // Avatar = the HITLoop profile image used in the app's modals.
-                      const pmAvatar = '/img/profile2_400x400.png?v=1774582808';
-                      const stop = (e) => { e.stopPropagation(); };
-                      const statusMsg = postMeLoading ? 'Posting…'
-                        : postMeResult?.ok ? (postMeResult.note || 'Posted to X')
-                        : postMeResult?.error ? postMeResult.error : null;
-                      return (
-                        <div id="post-me-tile-mockup" style={{
-                          position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-                          background: '#000', color: '#e7e9ea',
-                          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
-                          overflow: 'hidden', textAlign: 'left', cursor: 'pointer',
-                        }}>
-                          {/* Header — avatar, name, handle, X logo */}
-                          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 9, padding: '11px 14px 6px' }}>
-                            <img src={pmAvatar} alt={pmBiz}
-                              style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0, objectFit: 'cover', background: '#15202b', border: '1px solid rgba(255,255,255,0.12)', display: 'block' }} />
-                            <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden' }}>
-                              <span style={{ fontSize: 14, fontWeight: 700, color: '#e7e9ea', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '52%' }}>{pmBiz}</span>
-                              <svg width="15" height="15" viewBox="0 0 22 22" fill="#1d9bf0" style={{ flexShrink: 0 }}><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.469-.445-1.053-.751-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.469-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.22.878 1.69.47.444 1.055.75 1.69.88.635.13 1.294.08 1.902-.144.27.586.7 1.084 1.24 1.44.54.354 1.167.55 1.813.566.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.239 1.266.296 1.903.164.636-.132 1.22-.447 1.68-.907.46-.46.776-1.044.908-1.681s.075-1.299-.165-1.903c.586-.274 1.084-.705 1.439-1.246.354-.54.551-1.17.569-1.816zM9.662 14.85l-3.429-3.428 1.293-1.302 2.072 2.072 4.4-4.794 1.347 1.246z"/></svg>
-                              <span style={{ fontSize: 13, color: '#71767b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pmHandle}</span>
-                            </div>
-                            {/* In-flow controls — reserve their own space so nothing collides. */}
-                            <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <button type="button" title="Generate new copy" onClick={(e) => { stop(e); generatePostMeCopy(); }} disabled={postMeCopyLoading}
-                                style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: 0, opacity: postMeCopyLoading ? 0.5 : 0.9 }}>
-                                <svg width="17" height="17" viewBox="0 0 24 24" fill="white"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.742l7.722-8.831L1.534 2.25H8.08l4.259 5.631zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-                              </button>
-                            </div>
-                          </div>
-                          {/* Caption */}
-                          <p style={{ flexShrink: 0, margin: 0, padding: '0 14px', fontSize: 13, lineHeight: 1.4, color: '#e7e9ea', whiteSpace: 'pre-wrap', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                            {pmBody}{pmClean && <span style={{ color: '#1d9bf0' }}>{' '}{pmClean}</span>}
-                          </p>
-                          {/* Creative — the focus. Holds true 16:10, shrinks to fit. */}
-                          <div style={{ flex: 1, minHeight: 0, padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            {pmHasMedia ? (
-                              <div style={{ height: '100%', aspectRatio: '16 / 10', maxWidth: '100%', borderRadius: 14, overflow: 'hidden', position: 'relative', border: '1px solid rgba(255,255,255,0.12)' }}>
-                                {pmHasVideo ? (
-                                  <video src={latestStudioVideoUrl} poster={pmImg || undefined} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
-                                ) : (
-                                  <img src={pmImg} alt={pmBiz} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                                )}
-                                {pmHasVideo && (
-                                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-                                    <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(0,0,0,0.5)', border: '2px solid rgba(255,255,255,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                      <svg width="15" height="15" viewBox="0 0 12 12" fill="white"><path d="M3 2l7 4-7 4V2z"/></svg>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <span style={{ fontSize: 12, color: '#71767b' }}>Your creative will appear here</span>
-                            )}
-                          </div>
-                          {/* Engagement bar — thin, muted */}
-                          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 18px 11px' }}>
-                            {[{path:'M1.751 10c0-4.42 3.584-8 8.005-8h.366a8.001 8.001 0 0 1 7.97 9.58l.001.02 1.024 1.024a1.07 1.07 0 0 1-.953 1.763L16.5 22.5l-2.836-2.837c-.33.1-.67.187-1.014.256A8 8 0 0 1 2.1 11.39 8 8 0 0 1 1.75 10Z',label:'4'},
-                              {path:'M4.5 3.88l4.432 4.14-1.364 1.46L5.5 7.55V16c0 1.1.896 2 2 2H13v2H7.5a4 4 0 0 1-4-4V7.55L1.432 9.48.068 8.02 4.5 3.88zM16.5 6h-6V4h6a4 4 0 0 1 4 4v8.45l2.068-1.93 1.364 1.46-4.432 4.14-4.432-4.14 1.364-1.46 2.068 1.93V8c0-1.1-.896-2-2-2z',label:'1'},
-                              {path:'M16.697 5.5c-1.222-.06-2.679.51-3.89 2.16l-.805 1.09-.806-1.09C9.984 6.01 8.526 5.44 7.304 5.5c-1.243.07-2.349.78-2.91 1.91-.552 1.12-.633 2.78.479 4.82 1.074 1.97 3.257 4.27 7.129 6.61 3.87-2.34 6.052-4.64 7.126-6.61 1.111-2.04 1.03-3.7.477-4.82z',label:'12'},
-                              {path:'M8.75 21V3h2v18h-2zM13 21V8.5h2V21h-2zM4.5 21V13h2v8h-2zM17.5 21V11.5h2V21h-2z',label:'2.4K'},
-                            ].map(({path,label}) => (
-                              <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#71767b', fontSize: 12 }}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d={path}/></svg>{label}
-                              </span>
-                            ))}
-                          </div>
-                          {/* Transient status toast — only while posting / after a result */}
-                          {statusMsg && (
-                            <div style={{ position: 'absolute', left: 12, right: 12, bottom: 10, background: 'rgba(0,0,0,0.82)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '6px 10px', fontSize: 11, lineHeight: 1.3, color: postMeResult?.error ? '#f87171' : '#4ade80' }}>
-                              {String(statusMsg).slice(0, 110)}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()
+                    // Clean, authentic X post that fills the fixed shell. Single
+                    // source: renderPostMeShell() — the modal image cell renders the
+                    // exact same mockup so the card face and modal stay identical.
+                    renderPostMeShell()
                   ) : card.id === 'social-preview' ? (
                     // No share image captured — the absence IS the finding.
                     <span className="tile-empty-label">{"SOCIAL\nPREVIEW\nMISSING"}</span>
@@ -13656,6 +13825,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                             else if (!hasMockup || !hasFullPages) s = 'partial';
                           }
                         }
+                        // social-preview: siteMeta from the main audit makes the
+                        // share preview ready even when no dedicated module run set
+                        // the status — show a green Active dot to match the pill.
+                        if (card.id === 'social-preview' && Boolean(siteMeta?.ogImage) && Boolean(siteMeta?.favicon)) {
+                          s = 'succeeded';
+                        }
                         const PARTIAL_META = { dot: '#f59e0b', label: 'Partial', glow: '0 0 5px 2px rgba(245,158,11,0.35)' };
                         const meta = s === 'partial' ? PARTIAL_META : (STATUS_DOT[s] ?? STATUS_DOT.inactive);
                         return (
@@ -13691,6 +13866,26 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         return (
                           <>
                             <span style={{ width: 6, height: 6, borderRadius: '50%', display: 'inline-block', background: dotColor, boxShadow: glow, flexShrink: 0 }} />
+                            {card.footerRight}
+                          </>
+                        );
+                      }
+                      // Creative Brief: the dot reflects whether the brief RAN,
+                      // not the generic footerLeft whitelist. Reviewed/passed =
+                      // green, actively building = amber, run failed = red,
+                      // never run = grey. (footerLeft is 'Ready' when passed,
+                      // which the whitelist below wrongly treats as needs-work.)
+                      if (card.id === 'onboarding-brief') {
+                        const meta = marketingBriefRunning
+                          ? { dot: '#f59e0b', glow: '0 0 5px 2px rgba(245,158,11,0.45)' }
+                          : creativeBriefReady
+                            ? { dot: '#22c55e', glow: '0 0 5px 2px rgba(34,197,94,0.45)' }
+                            : marketingBriefError
+                              ? { dot: '#ef4444', glow: '0 0 5px 2px rgba(239,68,68,0.45)' }
+                              : { dot: '#6b7280', glow: 'none' };
+                        return (
+                          <>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', display: 'inline-block', background: meta.dot, boxShadow: meta.glow, flexShrink: 0 }} />
                             {card.footerRight}
                           </>
                         );
@@ -14011,7 +14206,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         {_stepLocked
                           ? <Lock className="cap-step-icon" size={16} strokeWidth={2} aria-hidden="true" />
                           : (s.Icon && <s.Icon className="cap-step-icon" size={18} strokeWidth={2} aria-hidden="true" style={{ color: CAP_BUCKET_COLOR[activeCapabilityFilter] || 'currentColor' }} />)}
-                        <span className="cap-step-text">{activeCapabilityFilter === 'deliverables' ? '' : s.label}</span>
+                        <span className="cap-step-text">{s.label}</span>
                       </button>
                       );
                     })}
@@ -14248,7 +14443,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         {_stepLocked
                           ? <Lock className="cap-step-icon" size={16} strokeWidth={2} aria-hidden="true" />
                           : (s.Icon && <s.Icon className="cap-step-icon" size={18} strokeWidth={2} aria-hidden="true" style={{ color: CAP_BUCKET_COLOR[activeCapabilityFilter] || 'currentColor' }} />)}
-                        <span className="cap-step-text">{activeCapabilityFilter === 'deliverables' ? '' : s.label}</span>
+                        <span className="cap-step-text">{s.label}</span>
                       </button>
                       );
                     })}
@@ -14920,10 +15115,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       {namedBriefView && (
         <div id="brief-fullscreen-overlay" onClick={() => setNamedBriefView(null)}>
           <div id="brief-fullscreen-container" onClick={(e) => e.stopPropagation()}>
-            <span id="brief-fullscreen-title" aria-hidden="true">
-              <span className="bfs-title-full">CLIENT ACCESS</span>
-              <span className="bfs-title-mobile">ACCESS</span>
-            </span>
             <div id="brief-fullscreen-actions">
               {namedBriefView.html && (
                 <button
@@ -14933,12 +15124,28 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   disabled={namedBriefPdfBusy}
                 >{namedBriefPdfBusy ? '… PDF' : '↓ Download'}</button>
               )}
+              {isAdmin && namedBriefView.html && (
+                <button
+                  type="button"
+                  id="brief-fullscreen-share"
+                  onClick={shareNamedBrief}
+                  disabled={namedBriefShareBusy}
+                  title="Publish this brief to a public page and open the live link"
+                >{namedBriefShareBusy
+                  ? '… Sharing'
+                  : <><UpRightArrow style={{ marginRight: '0.2rem', opacity: 0.82 }} />Share</>}</button>
+              )}
               <button
                 type="button"
                 id="brief-fullscreen-close"
                 onClick={() => setNamedBriefView(null)}
               >[ ✕ ]</button>
             </div>
+            {namedBriefShareError && (
+              <div id="named-brief-share-error" style={{ position: 'absolute', top: 52, right: 12, maxWidth: 320, padding: '6px 10px', borderRadius: 8, background: 'rgba(180,35,24,0.12)', color: '#b42318', fontFamily: 'var(--font-mono)', fontSize: 11, lineHeight: 1.4, zIndex: 5 }}>
+                {namedBriefShareError}
+              </div>
+            )}
             {namedBriefView.html ? (
               <iframe
                 id="brief-fullscreen-iframe"
@@ -14959,29 +15166,91 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           same overlay shell as the Creative Brief (#brief-fullscreen-*). */}
       {deliverableView && (
         <div id="brief-fullscreen-overlay" onClick={() => setDeliverableView(null)}>
-          <div id="brief-fullscreen-container" className="deliverable-view-container" onClick={(e) => e.stopPropagation()}>
-            <span id="brief-fullscreen-title" aria-hidden="true">
-              <span className="bfs-title-full">CLIENT ACCESS</span>
-              <span className="bfs-title-mobile">ACCESS</span>
-            </span>
-            <div id="brief-fullscreen-actions">
-              {deliverableView.items.length === 1 && (
-                <a
-                  id="brief-fullscreen-download"
-                  href={deliverableView.items[0].src}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  download={deliverableView.items[0].filename}
-                >↓ Download</a>
-              )}
-              <button
-                type="button"
-                id="brief-fullscreen-close"
-                onClick={() => setDeliverableView(null)}
-              >[ ✕ ]</button>
-            </div>
+          <div id="brief-fullscreen-container" className={`deliverable-view-container${(deliverableView.kind !== 'video' && deliverableView.cardId !== 'post-me' && deliverableView.items.length > 1) ? ' has-size-nav' : ''}`} onClick={(e) => e.stopPropagation()}>
+            {(() => {
+              // Top-right Download/Share act on the SELECTED asset. Single-asset
+              // views (idx pinned at 0) behave exactly as before; multi-asset
+              // views (Full Page Images) follow the size-nav pills below.
+              const activeItem = deliverableView.items[deliverableActiveIdx] || deliverableView.items[0];
+              const showSizeNav = deliverableView.kind !== 'video'
+                && deliverableView.cardId !== 'post-me'
+                && deliverableView.items.length > 1;
+              return (
+                <>
+                  {showSizeNav && (
+                    <div id="deliverable-size-nav">
+                      {deliverableView.items.map((it, i) => (
+                        <button
+                          type="button"
+                          key={it.src || i}
+                          className={`deliverable-size-pill${i === deliverableActiveIdx ? ' is-active' : ''}`}
+                          onClick={() => scrollToDeliverableFigure(i)}
+                        >{(it.label || `Size ${i + 1}`).split('—')[0].trim()}</button>
+                      ))}
+                    </div>
+                  )}
+                  <div id="brief-fullscreen-actions">
+                    {activeItem && (
+                      <a
+                        id="brief-fullscreen-download"
+                        href={activeItem.src}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        download={activeItem.filename}
+                      >↓ Download</a>
+                    )}
+                    {activeItem && (
+                      <button
+                        type="button"
+                        id="brief-fullscreen-share"
+                        onClick={async () => {
+                          // Share the selected asset — native share sheet when
+                          // available (mobile), otherwise open it in a new tab so
+                          // it can be saved/forwarded.
+                          const src = activeItem.src;
+                          if (typeof navigator !== 'undefined' && navigator.share) {
+                            try { await navigator.share({ title: activeItem.label || deliverableView.title || 'Asset', url: src }); return; }
+                            catch { /* dismissed or unsupported — fall through to open */ }
+                          }
+                          if (typeof window !== 'undefined') window.open(src, '_blank', 'noopener,noreferrer');
+                        }}
+                      ><UpRightArrow style={{ marginRight: '0.2rem', opacity: 0.82 }} />Share</button>
+                    )}
+                    <button
+                      type="button"
+                      id="brief-fullscreen-close"
+                      onClick={() => setDeliverableView(null)}
+                    >[ ✕ ]</button>
+                  </div>
+                </>
+              );
+            })()}
             <div className="deliverable-view-body">
-              {deliverableView.kind === 'video' ? (
+              {deliverableView.cardId === 'post-me' ? (
+                // Mirror the card shell exactly — the full X-post mockup (caption,
+                // avatar, X chrome, creative), not the bare asset. Same renderer as
+                // the tile face so the modal content matches what the shell shows.
+                <div
+                  id="post-me-modal-shell"
+                  style={{
+                    position: 'relative',
+                    // Lock to the card-face rectangle: .tile-intake-placeholder is
+                    // aspect-ratio 1536/1024 (3:2). Same ratio at every size — the
+                    // width caps at the height-derived max so it always fits the
+                    // 90vh panel, and aspect-ratio derives the height. No height
+                    // clamp (that reshapes it): it only grows/shrinks, never
+                    // changing shape across breakpoints.
+                    aspectRatio: '1536 / 1024',
+                    width: 'min(100%, calc((90vh - 88px) * 1536 / 1024))',
+                    borderRadius: 16,
+                    overflow: 'hidden',
+                    border: '1px solid rgba(42, 36, 32, 0.1)',
+                    boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+                  }}
+                >
+                  {renderPostMeShell('post-me-modal-mockup')}
+                </div>
+              ) : deliverableView.kind === 'video' ? (
                 <video
                   className="deliverable-view-video"
                   src={deliverableView.items[0].src}
@@ -14992,19 +15261,28 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 />
               ) : (
                 deliverableView.items.map((it, i) => (
-                  <figure className="deliverable-view-figure" key={it.src || i}>
+                  <figure
+                    className={`deliverable-view-figure${i === deliverableActiveIdx && deliverableView.items.length > 1 ? ' is-active' : ''}`}
+                    id={`deliverable-figure-${i}`}
+                    key={it.src || i}
+                  >
                     <img className="deliverable-view-img" src={it.src} alt={it.label || deliverableView.title} />
-                    <figcaption className="deliverable-view-cap">
-                      <span>{it.label}</span>
-                      <a
-                        className="deliverable-view-dl"
-                        href={it.src}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        download={it.filename}
-                        onClick={(e) => e.stopPropagation()}
-                      >↓ Download</a>
-                    </figcaption>
+                    {/* Per-figure label + download only when there are multiple
+                        assets (Full Page Images). A single asset is fully served
+                        by the top-right Download · Share · Close row. */}
+                    {deliverableView.items.length > 1 && (
+                      <figcaption className="deliverable-view-cap">
+                        <span>{it.label}</span>
+                        <a
+                          className="deliverable-view-dl"
+                          href={it.src}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          download={it.filename}
+                          onClick={(e) => e.stopPropagation()}
+                        >↓ Download</a>
+                      </figcaption>
+                    )}
                   </figure>
                 ))
               )}
@@ -15132,6 +15410,15 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       <img id="bt-og-image" src={siteMeta.ogImage} alt={siteMeta.ogImageAlt || ''} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                       {siteMeta.favicon && <img id="bt-favicon" src={siteMeta.favicon} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
                     </div>
+                  ) : activeTileModal.cardId === 'cross-device-images' ? (
+                    // Mirror the card face — same full-page trio (distinct DOM id).
+                    renderCrossDeviceTrioShell('cross-device-trio-modal') || <span className="tile-empty-label">{activeTileModal.placeholderLabel}</span>
+                  ) : activeTileModal.cardId === 'mockup-studio' && latestStudioVideoUrl ? (
+                    // Mirror the card face — same last-rendered Studio video.
+                    renderStudioVideoShell()
+                  ) : activeTileModal.cardId === 'post-me' ? (
+                    // Mirror the card face — same X-post mockup (distinct DOM id).
+                    renderPostMeShell('post-me-modal-mockup')
                   ) : activeTileModal.cardId === 'audit-summary' ? (
                     renderAuditViz(activeTileModal.rows, moduleState)
                   ) : activeTileModal.cardId === 'client-brain' ? (
@@ -15243,14 +15530,43 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   <p id="tile-detail-bento-description">
                     {activeTileModal.readinessBadge && (
                       <span className={`tile-readiness-tag readiness-${activeTileModal.readinessBadge.tone}`}>
-                        STATUS: {activeTileModal.readinessBadge.label || 'NEEDS ATTENTION'}
+                        STATUS: {activeTileModal.cardId === 'audit-summary' ? 'Baseline mode' : (activeTileModal.readinessBadge.label || 'NEEDS ATTENTION')}
                       </span>
                     )}
                     {activeTileModal.readinessBadge ? ' ' : ''}
-                    {activeTileModal.cardId === 'audit-summary' && activeTileModal.dynamicShortDescription
-                      ? activeTileModal.dynamicShortDescription
+                    {activeTileModal.cardId === 'audit-summary'
+                      ? [
+                          'Data Coverage shows how much of the HITLOOP system is active.',
+                          'This first scan uses 40% of the available signal layer from your site, share presence, visible content, and public brand signals.',
+                          'Working with your Human unlocks the deeper layer: market signals, social signals, competitor activity, daily briefs, and clearer next steps.',
+                        ].map((para, i) => (
+                          <span key={i} style={{ display: i === 0 ? 'inline' : 'block', marginTop: i === 0 ? 0 : '0.85em' }}>{para}</span>
+                        ))
                       : activeTileModal.description}
                   </p>
+                  {activeTileModal.cardId === 'audit-summary' && (
+                    // Primary "Meet with a Human" CTA — the comet border (.cta-pill-btn
+                    // ::before) is gated to hover via #meet-human-modal-cta CSS.
+                    <a
+                      id="meet-human-modal-cta"
+                      className="cta-pill-btn"
+                      href="https://calendly.com/bballi/30min"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 18,
+                        width: 'fit-content', minHeight: 48, padding: '0 20px', borderRadius: 999,
+                        border: 'none', color: '#fff', fontFamily: 'var(--font-ui)', fontSize: 15,
+                        fontWeight: 700, textDecoration: 'none', cursor: 'pointer', overflow: 'hidden',
+                        background: 'linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)',
+                        boxShadow: '0 0 14px 3px rgba(0,200,228,0.22), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1)',
+                      }}
+                    >
+                      <img src="/img/profile2_400x400.png" alt="" width={26} height={26} style={{ position: 'relative', zIndex: 1, width: 26, height: 26, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', flexShrink: 0 }} />
+                      <span style={{ position: 'relative', zIndex: 1 }}>Meet with a Human</span>
+                      <UpRightArrow size={14} style={{ position: 'relative', zIndex: 1, opacity: 0.8 }} />
+                    </a>
+                  )}
                   {/* Run action — parity with the tile footer Run button. Closing
                       the modal lets the streaming terminal overlay surface, which
                       shows the per-stage breakdown for this module run. */}
@@ -15312,7 +15628,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               <div id="tile-detail-bento-content">
 
                 {/* Multi-device-view: custom DESKTOP/TABLET/MOBILE tabs */}
-                {activeTileModal.cardId === 'multi-device-view' ? (
+                {/* Full-page per-device captures — DESKTOP/TABLET/MOBILE tabs live on
+                    the Full Page Images card (cross-device-images). Multi-Device Mock
+                    is now a simple mockup viewer with no tabs. */}
+                {activeTileModal.cardId === 'cross-device-images' ? (
                   <div className="tile-detail-bento-cell tile-detail-tabbed-container">
                     <div className="tile-detail-tabs">
                       {[
@@ -15359,6 +15678,127 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     </div>
                   </div>
                 ) : null}
+
+                {/* Social Preview — single visual DATA tab: share image, brand
+                    assets (favicon · apple icon · theme swatch), and metadata. */}
+                {activeTileModal.cardId === 'social-preview' ? (() => {
+                  const assetCard   = { display: 'grid', gap: 8, justifyItems: 'center', padding: 12, border: '1px solid var(--border)', borderRadius: 10, background: 'rgba(255,255,255,0.6)' };
+                  const swatchFrame = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: 56, borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.9)', overflow: 'hidden' };
+                  const assetLbl    = { fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)', textAlign: 'center', wordBreak: 'break-all' };
+                  const missing     = { fontFamily: 'var(--font-mono)', fontSize: 12, color: 'rgba(42,36,32,0.4)' };
+                  const onImgErr    = (e) => { e.currentTarget.style.display = 'none'; };
+                  const cardMax     = 560;
+                  const domain = (() => {
+                    const raw = siteMeta?.canonical || client?.websiteUrl || client?.website || '';
+                    if (!raw) return siteMeta?.siteName || '';
+                    try { return new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`).hostname.replace(/^www\./, ''); }
+                    catch { return siteMeta?.siteName || raw; }
+                  })();
+                  const metaRows = [
+                    ['Title',       siteMeta?.title],
+                    ['Description', siteMeta?.description],
+                    ['Site Name',   siteMeta?.siteName],
+                    ['Image Alt',   siteMeta?.ogImageAlt],
+                    ['OG Type',     siteMeta?.type],
+                    ['Locale',      siteMeta?.locale],
+                    ['Canonical',   siteMeta?.canonical],
+                  ];
+                  return (
+                    <div className="tile-detail-bento-cell tile-detail-tabbed-container">
+                      <div className="tile-detail-tabs">
+                        <button type="button" className="tile-detail-tab tile-detail-tab--active" onClick={() => setModalTab('data')}>DATA</button>
+                      </div>
+                      <div className="tile-detail-tab-content">
+                        <div className="tile-detail-tab-pane" style={{ display: 'grid', gap: 18, padding: 16 }}>
+                          {siteMeta ? (
+                            <>
+                              {/* Share preview — framed like a link unfurl (image on
+                                  top, domain + title + description underneath) the way
+                                  it renders when posted to X / sent in a message. */}
+                              <div style={{ display: 'grid', gap: 8 }}>
+                                <div className="tile-detail-row-section-head">SHARE PREVIEW</div>
+                                {siteMeta.ogImage ? (
+                                  <div style={{ maxWidth: cardMax, border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden', background: 'rgba(255,255,255,0.72)', boxShadow: '0 4px 18px rgba(42,36,32,0.08)' }}>
+                                    <img src={siteMeta.ogImage} alt={siteMeta.ogImageAlt || 'Social share image'} style={{ display: 'block', width: '100%', aspectRatio: '1.91 / 1', objectFit: 'cover', background: 'rgba(0,0,0,0.03)' }} onError={onImgErr} />
+                                    <div style={{ display: 'grid', gap: 5, padding: '12px 14px' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                                        {siteMeta.favicon && <img src={siteMeta.favicon} alt="" style={{ width: 14, height: 14, borderRadius: 3, objectFit: 'contain', flexShrink: 0 }} onError={onImgErr} />}
+                                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{domain || 'your-domain.com'}</span>
+                                      </div>
+                                      <span style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.3, color: 'var(--text-display)' }}>{siteMeta.title || 'Untitled page'}</span>
+                                      {siteMeta.description && (
+                                        <span style={{ fontSize: 13, lineHeight: 1.5, color: 'var(--text-secondary)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{siteMeta.description}</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div style={{ padding: '28px 16px', border: '1px dashed var(--border)', borderRadius: 12, textAlign: 'center', ...assetLbl }}>NO OG IMAGE</div>
+                                )}
+                              </div>
+
+                              {/* Browser tab — favicon zoomed into an active tab + a
+                                  faux address bar, showing how it reads in the tab. */}
+                              <div style={{ display: 'grid', gap: 8 }}>
+                                <div className="tile-detail-row-section-head">IN A BROWSER TAB</div>
+                                <div style={{ maxWidth: cardMax, border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', background: 'rgba(42,36,32,0.05)' }}>
+                                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, padding: '10px 10px 0' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, maxWidth: 300, background: '#fff', border: '1px solid var(--border)', borderBottom: 'none', borderRadius: '10px 10px 0 0', padding: '10px 14px' }}>
+                                      {siteMeta.favicon
+                                        ? <img src={siteMeta.favicon} alt="" style={{ width: 22, height: 22, borderRadius: 5, objectFit: 'contain', flexShrink: 0 }} onError={onImgErr} />
+                                        : <span style={{ width: 22, height: 22, borderRadius: 5, background: 'rgba(42,36,32,0.12)', flexShrink: 0 }} />}
+                                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-display)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{siteMeta.title || domain || 'Your site'}</span>
+                                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', flexShrink: 0 }}>×</span>
+                                    </div>
+                                    <div style={{ width: 56, height: 22, borderRadius: '8px 8px 0 0', background: 'rgba(255,255,255,0.4)', border: '1px solid var(--border)', borderBottom: 'none', flexShrink: 0 }} />
+                                  </div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', borderTop: '1px solid var(--border)', padding: '9px 14px' }}>
+                                    <span style={{ width: 12, height: 12, borderRadius: 3, border: '1.5px solid var(--text-secondary)', opacity: 0.6, flexShrink: 0 }} />
+                                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{domain || 'your-domain.com'}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Brand assets — apple icon + theme swatch (favicon is
+                                  shown in the browser-tab mock above). */}
+                              <div style={{ display: 'grid', gap: 8 }}>
+                                <div className="tile-detail-row-section-head">BRAND ASSETS</div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 10, maxWidth: cardMax }}>
+                                  <div style={assetCard}>
+                                    <div style={swatchFrame}>
+                                      {siteMeta.appleTouchIcon ? <img src={siteMeta.appleTouchIcon} alt="" style={{ width: 36, height: 36, objectFit: 'contain', borderRadius: 8 }} onError={onImgErr} /> : <span style={missing}>—</span>}
+                                    </div>
+                                    <span style={assetLbl}>Apple Icon</span>
+                                  </div>
+                                  <div style={assetCard}>
+                                    <div style={{ ...swatchFrame, background: siteMeta.themeColor || 'rgba(255,255,255,0.9)' }}>
+                                      {!siteMeta.themeColor && <span style={missing}>—</span>}
+                                    </div>
+                                    <span style={assetLbl}>{siteMeta.themeColor || 'No theme color'}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Metadata */}
+                              <div style={{ display: 'grid', gap: 8 }}>
+                                <div className="tile-detail-row-section-head">METADATA</div>
+                                <div id="tile-detail-bento-rows">
+                                  {metaRows.map(([label, value]) => (
+                                    <div key={label} className={`tile-detail-stat-row${!value ? ' tile-detail-stat-row--flag' : ''}`}>
+                                      <span className="tile-detail-stat-label">{label}</span>
+                                      <span className="tile-detail-stat-value">{value || 'Not provided'}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <span className="tile-empty-label" style={{ padding: '40px 0' }}>{"NO\nSITE META"}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })() : null}
 
                 {/* Admin · Email Digest — SETTINGS (params) + EMAIL PREVIEW (send) */}
                 {activeTileModal.cardId === 'email-digest' && (
@@ -19258,11 +19698,17 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                 </div>
                                 <div className="adq-sc-footer-row">
                                   <span className={`tile-readiness-tag readiness-${tone}`}>{getToneLabel(ratio)}</span>
-                                  {openCard && (
+                                  {openCard && (isAdmin ? (
                                     <button type="button" className="adq-sc-open-btn" onClick={openCard} aria-label={`Open ${section.header.label}`}>
                                       View card <UpRightArrow size={10} />
                                     </button>
-                                  )}
+                                  ) : (
+                                    // Non-admin: card navigation is locked — show a lock,
+                                    // not the open arrow, so clients can't jump to it.
+                                    <span className="adq-sc-open-btn" style={{ cursor: 'default', opacity: 0.65 }} aria-label="Locked" title="Locked">
+                                      Locked <Lock size={10} strokeWidth={2} />
+                                    </span>
+                                  ))}
                                 </div>
                                 {auditRows.length > 0 && (
                                   <ul className="adq-field-rows">
@@ -20616,6 +21062,7 @@ export const dashboardCss = `
     flex-direction: column;
     gap: 8px;
     border-radius: 1rem;
+    overflow: visible;
   }
   .capability-nav-btn {
     display: flex;
@@ -20898,14 +21345,21 @@ export const dashboardCss = `
   @media (min-width: 901px) {
     .cap-bucket-deliverables .cap-step-seg--top.cap-step-seg--tabs {
       display: flex;
-      margin: 16px 0 12px;
+      /* No top margin: the gradient underline sits at the button's bottom, so any
+         top margin pushes the (centered) label below the band's true middle. Keep
+         the bottom margin for separation from the grid below the underline. */
+      margin: 0 0 12px;
       border-bottom: 1px solid rgba(42, 36, 32, 0.1);
     }
     .cap-bucket-deliverables .cap-step-seg--top.cap-step-seg--tabs > button {
       flex: 1;
       justify-content: center;
+      align-items: center;
       text-align: center;
       font-size: 0.78rem;
+      /* Taller tab so the vertically-centered icon + label read as centered in
+         the band, with the underline at the bottom edge. */
+      min-height: 56px;
       padding: 0 12px;
     }
   }
@@ -20915,6 +21369,40 @@ export const dashboardCss = `
   .cap-step-grid > .tile-intake-card {
     min-height: 470px;
     background: var(--surface);
+  }
+  /* ── Rounded corner cards ──────────────────────────────────────────────
+     #capability-grid clips to a 28px radius (overflow:hidden), but a card's
+     square corner can still read sharp against the rounded clip. Echo the
+     radius (minus the 1px border) on the OUTER corners of the corner cards so
+     they nest; inner/seam corners stay square. Selectors track the column
+     count per breakpoint (2-col default · 1-col ≤520/≤620 · 3-col ≥1600). */
+  /* Always-true corners: flow start = top-left, flow end = bottom-right. */
+  #capability-grid .cap-step-group:first-child .cap-step-grid > .tile-intake-card:first-child { border-top-left-radius: 27px; }
+  #capability-grid .cap-step-group:last-child  .cap-step-grid > .tile-intake-card:last-child  { border-bottom-right-radius: 27px; }
+  /* 2-col default: top-right = 2nd (or lone) card; bottom-left = left card of
+     the last row (even count → 2nd-last; odd → last, alone in the left col). */
+  #capability-grid .cap-step-group:first-child .cap-step-grid > .tile-intake-card:nth-child(2),
+  #capability-grid .cap-step-group:first-child .cap-step-grid > .tile-intake-card:first-child:last-child { border-top-right-radius: 27px; }
+  #capability-grid .cap-step-group:last-child  .cap-step-grid > .tile-intake-card:nth-last-child(2):nth-child(odd),
+  #capability-grid .cap-step-group:last-child  .cap-step-grid > .tile-intake-card:last-child:nth-child(odd) { border-bottom-left-radius: 27px; }
+  /* 1-col: each edge card rounds both of its corners; drop 2-col middle rounding. */
+  @media (max-width: 620px) {
+    .cap-bucket-deliverables #capability-grid .cap-step-grid > .tile-intake-card { border-top-right-radius: 0; border-bottom-left-radius: 0; }
+    .cap-bucket-deliverables #capability-grid .cap-step-group:first-child .cap-step-grid > .tile-intake-card:first-child { border-top-right-radius: 27px; }
+    .cap-bucket-deliverables #capability-grid .cap-step-group:last-child  .cap-step-grid > .tile-intake-card:last-child  { border-bottom-left-radius: 27px; }
+  }
+  @media (max-width: 520px) {
+    #capability-grid .cap-step-grid > .tile-intake-card { border-top-right-radius: 0; border-bottom-left-radius: 0; }
+    #capability-grid .cap-step-group:first-child .cap-step-grid > .tile-intake-card:first-child { border-top-right-radius: 27px; }
+    #capability-grid .cap-step-group:last-child  .cap-step-grid > .tile-intake-card:last-child  { border-bottom-left-radius: 27px; }
+  }
+  /* 3-col deliverables (ultra-wide): 2nd card is mid-top, not a corner — clear
+     the 2-col middle rounding; top-right = 3rd card. Bottom-left keeps to the
+     parent clip. */
+  @media (min-width: 1600px) {
+    .cap-bucket-deliverables #capability-grid .cap-step-grid > .tile-intake-card { border-top-right-radius: 0; border-bottom-left-radius: 0; }
+    .cap-bucket-deliverables #capability-grid .cap-step-group:first-child .cap-step-grid > .tile-intake-card:nth-child(3) { border-top-right-radius: 27px; }
+    .cap-bucket-deliverables #capability-grid .cap-step-group:last-child  .cap-step-grid > .tile-intake-card:last-child { border-bottom-right-radius: 27px; }
   }
   .tile {
     aspect-ratio: 16 / 9;
@@ -21566,7 +22054,8 @@ export const dashboardCss = `
   /* Post Me keeps the standard shell size; only its contents (the X post) shrink
      to fit, with the creative held at its true 16:10 video ratio. */
   .tile-intake-placeholder-post-me {
-    background: #000;
+    /* Inherits the shared warm glass gradient from .tile-intake-placeholder —
+       the light-mode X post (renderPostMeShell) sits on it, no black override. */
     cursor: pointer;
   }
   /* Card-shell download button — top-right of every card's image shell (card +
@@ -21810,22 +22299,23 @@ export const dashboardCss = `
     border: none;
     background: #fff;
   }
-  @keyframes briefSpin {
-    to { transform: rotate(360deg); }
-  }
   .brief-loader {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 14px;
   }
+  /* Comet-border loader — matches .cta-pill-btn; ring only, transparent center. */
   .brief-loader-spinner {
     width: 36px;
     height: 36px;
-    border: 3px solid rgba(42, 36, 32, 0.1);
-    border-top-color: rgba(42, 36, 32, 0.5);
+    --comet-ring: 3px;
     border-radius: 50%;
-    animation: briefSpin 0.8s linear infinite;
+    background: conic-gradient(from var(--cta-angle), transparent 0deg, transparent 180deg, hsla(185,100%,58%,0.12) 200deg, hsla(200,100%,62%,0.35) 225deg, hsla(225,100%,64%,0.6) 250deg, hsla(250,100%,66%,0.78) 275deg, hsla(275,100%,66%,0.88) 300deg, hsla(300,100%,68%,0.94) 322deg, hsla(320,80%,80%,0.97) 338deg, rgba(255,255,255,1) 350deg, transparent 358deg);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--comet-ring)), #000 calc(100% - var(--comet-ring)));
+    mask: radial-gradient(farthest-side, transparent calc(100% - var(--comet-ring)), #000 calc(100% - var(--comet-ring)));
+    animation: cta-border-spin 1.1s linear infinite;
+    pointer-events: none;
   }
   .tile-brief-preview-loading {
     width: 100%;
@@ -21903,6 +22393,9 @@ export const dashboardCss = `
     display: flex;
     flex-direction: column;
     align-items: center;
+    /* Center a single fitting asset both axes; the safe keyword falls back to
+       top-align (scrollable) when a tall multi-image stack overflows. */
+    justify-content: safe center;
     gap: 24px;
     padding: 56px 24px 32px;
   }
@@ -21916,6 +22409,74 @@ export const dashboardCss = `
     margin: 0;
     width: 100%;
     max-width: 1100px;
+    /* Clearance so size-nav pills / action row never cover a scrolled-to size. */
+    scroll-margin-top: 64px;
+  }
+  /* Full Page Images size-nav — jump-to pills mirroring the action-row look,
+     top-left opposite the Download · Share · Close row. */
+  #deliverable-size-nav {
+    position: absolute;
+    top: 12px;
+    left: 16px;
+    z-index: 10;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+  .deliverable-size-pill {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(42, 36, 32, 0.15);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    color: #2a2420;
+    text-transform: capitalize;
+  }
+  .deliverable-size-pill:hover,
+  .deliverable-size-pill.is-active {
+    background: #2a2420;
+    color: #fff;
+    border-color: #2a2420;
+  }
+  /* Mobile: the size-nav (top-left) and the Download·Share·Close row (top-right)
+     are both absolute at top:12px and collide at narrow widths. Keep the actions
+     on the top row; drop the size-nav to its own row below, spanning the width so
+     its pills wrap cleanly. Only the size-nav view gets the extra top clearance. */
+  @media (max-width: 480px) {
+    #brief-fullscreen-actions {
+      top: 10px;
+      right: 10px;
+      gap: 6px;
+    }
+    #brief-fullscreen-download,
+    #brief-fullscreen-share,
+    #brief-fullscreen-close,
+    .deliverable-size-pill {
+      padding: 5px 9px;
+      font-size: 11px;
+    }
+    #deliverable-size-nav {
+      top: 46px;
+      left: 10px;
+      right: 10px;
+      justify-content: flex-start;
+    }
+    .deliverable-view-container.has-size-nav .deliverable-view-body {
+      padding-top: 84px;
+    }
+    .deliverable-view-container.has-size-nav .deliverable-view-figure {
+      scroll-margin-top: 92px;
+    }
+  }
+  /* Active Full Page image — no ring/border; match the clean drop-shadow-only
+     treatment of the single Multi-Device image. The size-nav pills already
+     indicate which size is active. */
+  .deliverable-view-figure.is-active .deliverable-view-img {
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
   }
   .deliverable-view-img {
     display: block;
@@ -21942,6 +22503,24 @@ export const dashboardCss = `
   }
   .deliverable-view-dl:hover {
     border-bottom-color: #2a2420;
+  }
+  /* Single asset (Multi-Device Mock, Post Me image) — fill the overlay both
+     axes without skewing: drop the 1100px cap so it can fill the width, bound
+     the height to the 90vh panel minus body padding, and center it. The image
+     scales to whichever dimension binds first, aspect preserved, no scroll.
+     Multi-image bodies (Full Page Images) keep their stacked scroll + caps. */
+  .deliverable-view-figure:only-child {
+    max-width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .deliverable-view-figure:only-child .deliverable-view-img {
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: calc(90vh - 100px);
+    margin: 0;
   }
   .tile-brief-preview {
     position: absolute;
@@ -23875,11 +24454,14 @@ export const dashboardCss = `
   }
   .sb-link-btn:hover { color: var(--text-primary); border-color: var(--text-disabled); }
   .sb-toggle-row-meta { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+  /* Comet-border loader — matches .cta-pill-btn; ring only, transparent center. */
   .sb-spinner {
-    width: 14px; height: 14px; border: 2px solid color-mix(in srgb, var(--text-primary) 30%, transparent);
-    border-top-color: var(--text-primary); border-radius: 50%; animation: sb-spin 0.7s linear infinite;
+    width: 14px; height: 14px; --comet-ring: 2px; border-radius: 50%;
+    background: conic-gradient(from var(--cta-angle), transparent 0deg, transparent 180deg, hsla(185,100%,58%,0.12) 200deg, hsla(200,100%,62%,0.35) 225deg, hsla(225,100%,64%,0.6) 250deg, hsla(250,100%,66%,0.78) 275deg, hsla(275,100%,66%,0.88) 300deg, hsla(300,100%,68%,0.94) 322deg, hsla(320,80%,80%,0.97) 338deg, rgba(255,255,255,1) 350deg, transparent 358deg);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--comet-ring)), #000 calc(100% - var(--comet-ring)));
+    mask: radial-gradient(farthest-side, transparent calc(100% - var(--comet-ring)), #000 calc(100% - var(--comet-ring)));
+    animation: cta-border-spin 1.1s linear infinite; pointer-events: none;
   }
-  @keyframes sb-spin { to { transform: rotate(360deg); } }
 
   /* ── Dashboard modal pilot: Strategy Builder ─────────────────────────────
      Scoped intentionally. Once approved, promote these primitives to the
@@ -25489,6 +26071,10 @@ export const dashboardCss = `
     overflow: hidden;
     background: transparent;
   }
+  /* Data Coverage "Meet with a Human" CTA — comet border (from .cta-pill-btn
+     ::before) hidden until hover, then fades in and spins. */
+  #meet-human-modal-cta::before { opacity: 0; transition: opacity 160ms ease; }
+  #meet-human-modal-cta:hover::before { opacity: 1; }
   /* Field row source tag */
   .adq-fr-src {
     font-family: var(--font-mono);
@@ -25705,8 +26291,8 @@ export const dashboardCss = `
     flex-shrink: 0;
     display: block;
   }
-  .adq-fr-pip--ok   { background: #16a34a; }
-  .adq-fr-pip--miss { background: #dc2626; }
+  .adq-fr-pip--ok   { background: #285f3b; }
+  .adq-fr-pip--miss { background: #9f1f17; }
   .adq-fr-label {
     font-family: var(--font-ui);
     font-size: clamp(0.8rem, 1.1vw, 0.875rem);
@@ -25719,7 +26305,9 @@ export const dashboardCss = `
     white-space: nowrap;
   }
   .adq-fr--ok  .adq-fr-label { color: var(--text-display); }
-  .adq-fr--miss .adq-fr-label { color: #b91c1c; font-weight: 500; }
+  /* Style-guide alignment: missing rows keep neutral ink text (the MISSING chip
+     carries the status) instead of alarm-red, matching the modal guide. */
+  .adq-fr--miss .adq-fr-label { color: rgba(42,36,32,0.72); font-weight: 400; }
   .adq-fr--lock .adq-fr-label { color: rgba(42,36,32,0.38); }
   .adq-fr--lock .adq-fr-indicator { color: var(--text-secondary); }
   .adq-fr-badge {
@@ -25734,14 +26322,14 @@ export const dashboardCss = `
     white-space: nowrap;
   }
   .adq-fr-badge--ok {
-    color: #15803d;
-    background: rgba(22,163,74,0.1);
-    border: 1px solid rgba(22,163,74,0.25);
+    color: #285f3b;
+    background: rgba(40,95,59,0.08);
+    border: 1px solid rgba(40,95,59,0.3);
   }
   .adq-fr-badge--miss {
-    color: #b91c1c;
-    background: rgba(220,38,38,0.08);
-    border: 1px solid rgba(220,38,38,0.22);
+    color: #9f1f17;
+    background: rgba(159,31,23,0.06);
+    border: 1px solid rgba(159,31,23,0.24);
   }
   .adq-fr-upgrade {
     font-family: var(--font-mono);
@@ -26671,7 +27259,7 @@ export const dashboardCss = `
     #dashboard-source-cta-row { box-shadow: 0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4) !important; }
     /* Mobile: bucket nav returns as a horizontal, scrollable row of
        icon-only circles. Active item gets a gradient ring/circle; no text. */
-    #capability-nav-col { order: -1; display: flex; flex-direction: row; flex-wrap: nowrap; justify-content: space-between; align-items: center; gap: 16px; padding: 18px 14px; margin-bottom: 4px; width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+    #capability-nav-col { order: -1; display: flex; flex-direction: row; flex-wrap: nowrap; justify-content: space-between; align-items: center; gap: 16px; padding: 18px 14px; margin-bottom: 4px; width: 100%; max-width: 100%; min-width: 0; overflow: visible; }
     #capability-nav-col::-webkit-scrollbar { display: none; }
     #dashboard-source-band { margin-bottom: 0; }
     .capability-nav-btn { flex: 0 0 auto; width: 44px; height: 44px; max-width: none; min-width: 0; padding: 0; border-radius: 50%; flex-direction: row; align-items: center; justify-content: center; gap: 0; background: rgba(255, 255, 255, 1); }
@@ -26807,6 +27395,10 @@ export const dashboardCss = `
        stack columns vertically, show per-section label above each column.
        Exception: --tabs buckets keep their strip visible and interactive. */
     .cap-step-seg--top:not(.cap-step-seg--tabs) { display: none; }
+    /* Deliverables is a single-tab bucket — its tab strip is a redundant,
+       animated label on phones. Hide it here; the deliverable cards below
+       still render (one step, always active). Desktop keeps it (icon + label). */
+    .cap-bucket-deliverables .cap-step-seg--top.cap-step-seg--tabs { display: none; }
     /* Tab strip on mobile — horizontal scroll, all tabs visible */
     .cap-step-seg--top.cap-step-seg--tabs {
       display: flex;
@@ -27120,17 +27712,15 @@ export const dashboardCss = `
     /* Mobile: icons only in the source CTA row — hide the numeric/label values. */
     #dashboard-source-cta-row .cap-source-value,
     #dashboard-source-cta-row .dl-all-text { display: none; }
+    /* Comet-border loader — matches .cta-pill-btn; ring only, transparent center. */
     #run-active-indicator-dot {
       width: 20px;
       height: 20px;
       flex-shrink: 0;
-      background: conic-gradient(hsl(185,100%,45%) 0%, hsl(262,100%,55%) 40%, hsl(314,100%,50%) 75%, hsl(185,100%,45%) 100%);
-      animation: run-indicator-spin 0.9s linear infinite;
+      background: conic-gradient(from var(--cta-angle), transparent 0deg, transparent 180deg, hsla(185,100%,58%,0.12) 200deg, hsla(200,100%,62%,0.35) 225deg, hsla(225,100%,64%,0.6) 250deg, hsla(250,100%,66%,0.78) 275deg, hsla(275,100%,66%,0.88) 300deg, hsla(300,100%,68%,0.94) 322deg, hsla(320,80%,80%,0.97) 338deg, rgba(255,255,255,1) 350deg, transparent 358deg);
+      animation: cta-border-spin 1.1s linear infinite;
       -webkit-mask: radial-gradient(circle, transparent 58%, black 59%);
       mask: radial-gradient(circle, transparent 58%, black 59%);
-    }
-    @keyframes run-indicator-spin {
-      to { transform: rotate(360deg); }
     }
   }
 
@@ -27179,12 +27769,13 @@ export const dashboardCss = `
     gap: 0.1rem;
     max-height: 240px;
     overflow-y: auto;
+    color: var(--term-fg);
     scrollbar-width: thin;
-    scrollbar-color: rgba(255,255,255,0.08) transparent;
+    scrollbar-color: var(--term-scroll-thumb) transparent;
   }
   #intake-modal-terminal-embed::-webkit-scrollbar { width: 3px; }
   #intake-modal-terminal-embed::-webkit-scrollbar-track { background: transparent; }
-  #intake-modal-terminal-embed::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+  #intake-modal-terminal-embed::-webkit-scrollbar-thumb { background: var(--term-scroll-thumb); border-radius: 2px; }
   /* Log line */
   .term-line {
     display: grid;
@@ -27199,35 +27790,35 @@ export const dashboardCss = `
      over the message text (e.g. an unmapped stage → [LONG-STAGE-NAME]). */
   .term-pfx { text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; font-size: 0.64rem; letter-spacing: 0.02em; }
   .term-msg { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  /* One Dark palette — tuned for legibility on #1a1a1a background */
-  .term-system .term-pfx, .term-system .term-msg { color: #6b7280; }
-  .term-dim    .term-pfx, .term-dim    .term-msg { color: #6b7280; }
-  .term-info   .term-pfx { color: #7b8798; }
-  .term-info   .term-msg { color: #aab2bd; }
-  .term-fetch  .term-pfx { color: #56b6c2; }
-  .term-fetch  .term-msg { color: #aee0e3; }
-  .term-ok     .term-pfx { color: #98c379; }
-  .term-ok     .term-msg { color: #c8e1b4; }
-  .term-ai     .term-pfx { color: #c678dd; }
-  .term-ai     .term-msg { color: #e3b6f0; }
-  .term-build  .term-pfx { color: #e5c07b; }
-  .term-build  .term-msg { color: #f0d9a6; }
-  .term-error  .term-pfx { color: #e06c75; }
-  .term-error  .term-msg { color: #f1a6ac; }
-  .term-active .term-pfx { color: #61afef; }
-  .term-active .term-msg { color: #eaf0fa; font-weight: 700; }
-  .term-screen .term-pfx { color: #7b9eff; }
-  .term-screen .term-msg { color: #c5d3f7; }
-  .term-mock   .term-pfx { color: #ffb36b; }
-  .term-mock   .term-msg { color: #ffd4aa; }
-  .term-countdown .term-pfx { color: #ffd78a; }
-  .term-countdown .term-msg { color: #ffe3a6; font-weight: 700; font-size: 0.72rem; letter-spacing: 0.03em; }
+  /* Light palette — dark-on-light re-tune (tokens in colors.css) */
+  .term-system .term-pfx, .term-system .term-msg { color: var(--term-dim); }
+  .term-dim    .term-pfx, .term-dim    .term-msg { color: var(--term-dim); }
+  .term-info   .term-pfx { color: var(--term-info-pfx); }
+  .term-info   .term-msg { color: var(--term-info-msg); }
+  .term-fetch  .term-pfx { color: var(--term-fetch-pfx); }
+  .term-fetch  .term-msg { color: var(--term-fetch-msg); }
+  .term-ok     .term-pfx { color: var(--term-ok-pfx); }
+  .term-ok     .term-msg { color: var(--term-ok-msg); }
+  .term-ai     .term-pfx { color: var(--term-ai-pfx); }
+  .term-ai     .term-msg { color: var(--term-ai-msg); }
+  .term-build  .term-pfx { color: var(--term-build-pfx); }
+  .term-build  .term-msg { color: var(--term-build-msg); }
+  .term-error  .term-pfx { color: var(--term-error-pfx); }
+  .term-error  .term-msg { color: var(--term-error-msg); }
+  .term-active .term-pfx { color: var(--term-active-pfx); }
+  .term-active .term-msg { color: var(--term-active-msg); font-weight: 700; }
+  .term-screen .term-pfx { color: var(--term-screen-pfx); }
+  .term-screen .term-msg { color: var(--term-screen-msg); }
+  .term-mock   .term-pfx { color: var(--term-mock-pfx); }
+  .term-mock   .term-msg { color: var(--term-mock-msg); }
+  .term-countdown .term-pfx { color: var(--term-countdown-pfx); }
+  .term-countdown .term-msg { color: var(--term-countdown-msg); font-weight: 700; font-size: 0.72rem; letter-spacing: 0.03em; }
   /* Blinking block caret */
   .term-caret {
     display: inline-block;
     width: 0.45em;
     height: 0.95em;
-    background: #61afef;
+    background: var(--term-caret);
     vertical-align: text-bottom;
     margin-left: 2px;
     animation: blink 1s step-start infinite;
@@ -27561,10 +28152,10 @@ export const dashboardCss = `
   #intake-modal-terminal-col {
     min-width: 0;
     min-height: 0;
-    background: #1a1a1a;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-top: 1px solid rgba(255, 255, 255, 0.18);
-    box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.1), 0px 20px 40px rgba(0, 0, 0, 0.15);
+    background: var(--term-bg);
+    border: 1px solid var(--term-border);
+    border-top: 1px solid var(--term-border-top);
+    box-shadow: var(--term-shadow);
     border-radius: 10px;
     overflow: hidden;
     margin-top: 0.85rem;
@@ -27574,8 +28165,8 @@ export const dashboardCss = `
     align-items: center;
     gap: 0.4rem;
     padding: 0.5rem 0.75rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid var(--term-titlebar-border);
+    background: var(--term-titlebar-bg);
     flex-shrink: 0;
   }
   .term-win-dot {
@@ -27593,7 +28184,7 @@ export const dashboardCss = `
     font-family: "Space Mono", monospace;
     font-size: 0.62rem;
     letter-spacing: 0.08em;
-    color: rgba(255, 255, 255, 0.3);
+    color: var(--term-title-fg);
   }
   #intake-modal-card[data-with-survey="true"] #intake-modal-terminal-col {
     display: flex;
@@ -29397,6 +29988,26 @@ export const dashboardCss = `
     transition-duration: 80ms;
   }
 
+  /* Deliverables bucket — action buttons color-shift only; no vertical lift on hover/active. */
+  .cap-bucket-deliverables .cap-list-run:hover:not(:disabled),
+  .cap-bucket-deliverables .cap-list-caret:hover,
+  .cap-bucket-deliverables .cap-list-lock-btn:hover,
+  .cap-bucket-deliverables .cap-list-run:active:not(:disabled),
+  .cap-bucket-deliverables .cap-list-caret:active,
+  .cap-bucket-deliverables .cap-list-lock-btn:active,
+  .cap-bucket-deliverables .tile-foot-rerun-btn:not(:disabled):hover,
+  .cap-bucket-deliverables .tile-foot-rerun-btn:not(:disabled):active,
+  .cap-bucket-deliverables .tile-view-details-btn:hover,
+  .cap-bucket-deliverables .tile:hover:not(:has(.tile-foot-rerun-btn:hover)) .tile-view-details-btn,
+  .cap-bucket-deliverables .tile-view-details-btn:active,
+  .cap-bucket-deliverables .tile-download-btn:hover,
+  .cap-bucket-deliverables .tile-download-btn:active,
+  .cap-bucket-deliverables .tile-open-modal-btn:hover,
+  .cap-bucket-deliverables .tile:hover .tile-open-modal-btn,
+  .cap-bucket-deliverables .tile-open-modal-btn:active {
+    transform: none;
+  }
+
   /* Modal close button — add lift */
   #tile-detail-modal-close {
     transition: color var(--dur-base) ease, border-color var(--dur-base) ease, transform var(--dur-spring) var(--ease-spring);
@@ -29751,7 +30362,36 @@ export const dashboardCss = `
   .client-brain-card .cb-check input { margin: 0; accent-color: var(--sg-ink); }
   .client-brain-card .cb-generated-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .client-brain-card .cb-field-block { min-width: 0; padding: 14px; border: 1px solid var(--sg-line); border-radius: var(--sg-radius); background: rgba(255,255,255,0.74); }
-  .client-brain-card .cb-mini-list { display: grid; gap: 5px; margin: 8px 0 0; padding-left: 18px; color: var(--sg-ink-soft); font-size: 13px; line-height: 1.4; }
+  .client-brain-card .cb-mini-list { display: grid; gap: 5px; margin: 8px 0 0; padding-left: 0; list-style: none; color: var(--sg-ink-soft); font-size: 13px; line-height: 1.4; }
+  /* Native line-item list-card for the APPROVED BRAIN data — mirrors the
+     Operating Cost modal: one bordered card, mono keys stacked above their
+     value, dashed dividers between rows. Scoped to the approved section
+     (.cb-panel.cb-generated-grid) so the Consumers tab's nested
+     .cb-generated-grid and other .cb-field-block usages stay untouched. */
+  .client-brain-card .cb-panel.cb-generated-grid {
+    grid-template-columns: 1fr;
+    gap: 0;
+    padding: 0;
+    border: 1px solid var(--sg-line);
+    border-radius: var(--sg-radius);
+    background: rgba(255,255,255,0.6);
+    overflow: hidden;
+  }
+  .client-brain-card .cb-panel.cb-generated-grid > .cb-field-block {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    padding: 13px 15px;
+    border-bottom: 1px dashed var(--sg-line-soft);
+  }
+  .client-brain-card .cb-panel.cb-generated-grid > .cb-field-block:last-child { border-bottom: 0; }
+  .client-brain-card .cb-panel.cb-generated-grid > .cb-field-block > .mu-label {
+    display: block;
+    font: 700 10px/1.2 var(--sg-mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--sg-ink-muted);
+  }
   .client-brain-card .cb-copy-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .client-brain-card .cb-context-box { max-height: 280px; overflow: auto; white-space: pre-wrap; margin: 0; padding: 14px; border: 1px solid var(--sg-line); border-radius: var(--sg-radius); background: rgba(255,255,255,0.86); color: var(--sg-ink); font: 12.5px/1.5 var(--sg-mono); }
   .client-brain-card .cb-usage-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
@@ -30567,17 +31207,19 @@ export const dashboardCss = `
   .vrk-scope .saved-remix-actions .btn { width: 100%; min-width: 0; padding: 10px 8px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
   .vrk-scope .saved-remix-delete { color: var(--vrk-danger); border-color: rgba(214,69,69,0.5); }
   .vrk-scope .saved-remix-delete:hover:not(:disabled) { background: rgba(214,69,69,0.08); }
-  /* In-button loader: keeps the label, shows a spinning ring beside it. */
+  /* In-button loader: keeps the label, shows a comet ring beside it (matches .cta-pill-btn). */
   .vrk-scope .vrk-btn-spinner {
     width: 12px;
     height: 12px;
+    --comet-ring: 2px;
     flex-shrink: 0;
     border-radius: 50%;
-    border: 2px solid currentColor;
-    border-right-color: transparent;
-    animation: vrk-btn-spin 0.7s linear infinite;
+    background: conic-gradient(from var(--cta-angle), transparent 0deg, transparent 180deg, hsla(185,100%,58%,0.12) 200deg, hsla(200,100%,62%,0.35) 225deg, hsla(225,100%,64%,0.6) 250deg, hsla(250,100%,66%,0.78) 275deg, hsla(275,100%,66%,0.88) 300deg, hsla(300,100%,68%,0.94) 322deg, hsla(320,80%,80%,0.97) 338deg, rgba(255,255,255,1) 350deg, transparent 358deg);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--comet-ring)), #000 calc(100% - var(--comet-ring)));
+    mask: radial-gradient(farthest-side, transparent calc(100% - var(--comet-ring)), #000 calc(100% - var(--comet-ring)));
+    animation: cta-border-spin 1.1s linear infinite;
+    pointer-events: none;
   }
-  @keyframes vrk-btn-spin { to { transform: rotate(360deg); } }
   @media (max-width: 560px) {
     .vrk-scope .saved-remix-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }

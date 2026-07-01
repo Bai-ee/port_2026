@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Filter, Settings2, Radar, Play, Loader2, ChevronDown, Info, MapPin, Mail, Share2, Monitor, Gauge, Bot, Layers, Paintbrush, RotateCcw, Wand2, ExternalLink, Package, Send, Star, Images, LayoutDashboard } from 'lucide-react';
+import { Plus, Filter, Settings2, Radar, Play, ChevronDown, Info, MapPin, Mail, Share2, Monitor, Gauge, Bot, Layers, Paintbrush, RotateCcw, Wand2, ExternalLink, Package, Send, Star, Images, LayoutDashboard } from 'lucide-react';
 import UpRightArrow from '../UpRightArrow';
 import { collection, doc, onSnapshot, query as fsQuery, orderBy, limit, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../../firebase';
@@ -994,7 +994,7 @@ const stageCounts = useMemo(() => {
                                 title="Run all 4 analysis modules at once"
                               >
                                 {onboardBusy[p.placeId] ? (
-                                  <><Loader2 size={10} strokeWidth={2.4} className="leadgen-spin" /><span>Running…</span></>
+                                  <><span className="comet-spinner" style={{ width: 10, height: 10, ['--comet-ring']: '2px' }} aria-hidden="true" /><span>Running…</span></>
                                 ) : (
                                   <span>Run All</span>
                                 )}
@@ -1416,7 +1416,7 @@ const stageCounts = useMemo(() => {
                                   onClick={(e) => { e.stopPropagation(); handleMakeDashboard(p.placeId); }}
                                 >
                                   {dashboardBusy[p.placeId]
-                                    ? <><Loader2 size={10} strokeWidth={2.4} className="leadgen-spin" /><span>Making</span></>
+                                    ? <><span className="comet-spinner" style={{ width: 10, height: 10, ['--comet-ring']: '2px' }} aria-hidden="true" /><span>Making</span></>
                                     : p.dashboard?.clientId
                                       ? <><LayoutDashboard size={10} strokeWidth={2.4} /><span>Refresh</span></>
                                       : <><LayoutDashboard size={10} strokeWidth={2.4} /><span>Make</span></>}
@@ -1562,7 +1562,7 @@ const stageCounts = useMemo(() => {
                     title={c.enabled === false ? 'Campaign disabled' : 'Run discovery now'}
                   >
                     {busy ? (
-                      <Loader2 size={12} strokeWidth={2.4} className="leadgen-spin" />
+                      <span className="comet-spinner" style={{ width: 12, height: 12, ['--comet-ring']: '2px' }} aria-hidden="true" />
                     ) : (
                       <Play size={12} strokeWidth={2.4} />
                     )}
@@ -2598,8 +2598,6 @@ const stageCounts = useMemo(() => {
           padding: 5px 10px !important;
           font-size: 11px !important;
         }
-        :global(.leadgen-spin) { animation: leadgen-spin 0.9s linear infinite; }
-        @keyframes leadgen-spin { to { transform: rotate(360deg); } }
 
         /* ── Module launcher table ───────────────────────────────────── */
         .leadgen-module-table {

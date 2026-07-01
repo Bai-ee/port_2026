@@ -90,7 +90,7 @@ function imageFileName(value) {
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/^\.+|\.+$/g, '') || 'custom-brief-og-image';
-  return `${base.slice(0, 110)}.png`;
+  return `${base.slice(0, 110)}.jpg`;
 }
 
 function contentDispositionFileName(fileName) {
@@ -173,51 +173,76 @@ async function dotoHeadline(lines, {
 async function makeSvg(meta) {
   const fontFaces = await localFontFaces();
   const showSubhead = meta.hideOgSubhead !== true;
-  const titleLines = wrapText(String(meta.title || 'Custom Brief').toUpperCase(), showSubhead ? 20 : 23, showSubhead ? 3 : 4);
+  // Doc name = the big Doto headline; capped at 2 lines so the CLIENT/WEBSITE/
+  // DATE meta band always has room below.
+  const titleLines = wrapText(String(meta.title || 'Custom Brief').toUpperCase(), 22, 2);
   const subhead = showSubhead ? fittedSubhead(meta.description) : null;
-  const clientLines = wrapText(meta.clientName || 'Client', 32, 1);
   const ogLabel = String(meta.ogLabel || 'BRYAN BALLI').trim().toUpperCase() || 'BRYAN BALLI';
-  const titleSize = titleLines.length > 3 ? 70 : titleLines.length > 2 ? 80 : 94;
-  const titleY = showSubhead ? 236 : 220;
-  const titleLineHeight = titleLines.length > 2 ? 0.9 : 0.94;
+  const titleSize = titleLines.length > 1 ? 80 : 94;
+  const titleY = 236;
+  const titleLineHeight = 0.94;
   const contentLeft = 96;
   const contentRight = WIDTH - 96;
+
+  // Bottom meta band — CLIENT · WEBSITE · DATE as .brief-kit .meta-tile cards.
+  const tiles = [
+    { k: 'CLIENT', v: singleLineText(meta.clientName || '—', 24) },
+    { k: 'WEBSITE', v: singleLineText(meta.website || '—', 26) },
+    { k: 'DATE', v: (meta.dateLabel || '—') },
+  ];
+  const tileTop = 500;
+  const tileH = 82;
+  const tileGap = 18;
+  const bandW = contentRight - contentLeft;
+  const tileW = (bandW - tileGap * (tiles.length - 1)) / tiles.length;
+  const tilesSvg = tiles.map((tile, index) => {
+    const x = contentLeft + index * (tileW + tileGap);
+    return [
+      `<rect x="${x}" y="${tileTop}" width="${tileW}" height="${tileH}" rx="14" fill="rgba(255,255,255,0.55)" stroke="rgba(212,196,171,0.82)" stroke-width="1"/>`,
+      textLines([tile.k], { x: x + 18, y: tileTop + 30, size: 11, weight: 400, fill: '#5a5346', family: 'SpaceMonoLocal, monospace', className: 'og-tile-k' }),
+      textLines([tile.v], { x: x + 18, y: tileTop + 59, size: 18, weight: 500, fill: '#0a0a0a', family: 'SpaceGroteskLocal, system-ui, sans-serif', className: 'og-tile-v' }),
+    ].join('\n');
+  }).join('\n');
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
   <defs>
-    <linearGradient id="briefBg" x1="0" x2="1" y1="0" y2="1">
-      <stop offset="0" stop-color="#ffd3ca"/>
-      <stop offset="0.42" stop-color="#fffaf1"/>
-      <stop offset="1" stop-color="#e7d5ff"/>
+    <linearGradient id="briefPaper" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#fefdf9"/>
+      <stop offset="1" stop-color="#fbf8f0"/>
     </linearGradient>
-    <radialGradient id="cyanGlow" cx="14%" cy="8%" r="72%">
-      <stop offset="0" stop-color="#23c7f7" stop-opacity="0.32"/>
-      <stop offset="1" stop-color="#23c7f7" stop-opacity="0"/>
+    <radialGradient id="glowOrange" cx="0" cy="0" r="480" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff785a" stop-opacity="0.20"/>
+      <stop offset="0.65" stop-color="#ff785a" stop-opacity="0"/>
     </radialGradient>
-    <radialGradient id="pinkGlow" cx="90%" cy="14%" r="70%">
-      <stop offset="0" stop-color="#ef2bcf" stop-opacity="0.3"/>
-      <stop offset="1" stop-color="#ef2bcf" stop-opacity="0"/>
+    <radialGradient id="glowPurple" cx="${WIDTH}" cy="189" r="440" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#b05aff" stop-opacity="0.16"/>
+      <stop offset="0.65" stop-color="#b05aff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowGold" cx="240" cy="${HEIGHT}" r="470" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffb45a" stop-opacity="0.16"/>
+      <stop offset="0.65" stop-color="#ffb45a" stop-opacity="0"/>
     </radialGradient>
     <style>
       ${fontFaces}
       .og-title{font-family:DotoLocal,SpaceMonoLocal,monospace;font-weight:900;letter-spacing:0;}
       .og-label{font-family:SpaceMonoLocal,monospace;font-weight:700;letter-spacing:11px;text-transform:uppercase;}
-      .og-meta{font-family:SpaceMonoLocal,monospace;font-weight:400;letter-spacing:7px;text-transform:uppercase;}
+      .og-tile-k{font-family:SpaceMonoLocal,monospace;font-weight:400;letter-spacing:3px;text-transform:uppercase;}
+      .og-tile-v{font-family:SpaceGroteskLocal,system-ui,sans-serif;font-weight:500;letter-spacing:0;}
       .og-body{font-family:SpaceGroteskLocal,system-ui,sans-serif;font-weight:400;letter-spacing:0;}
     </style>
   </defs>
-  <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#briefBg)"/>
-  <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#cyanGlow)"/>
-  <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#pinkGlow)"/>
-  <path d="M${contentLeft} 150 H${contentRight}" stroke="#0a0a0a" stroke-opacity="0.14" stroke-width="2"/>
-  <path d="M${contentLeft} 486 H${contentRight}" stroke="#0a0a0a" stroke-opacity="0.12" stroke-width="2"/>
-  <circle cx="${contentLeft + 6}" cy="108" r="7" fill="#080808"/>
-  ${textLines([ogLabel], { x: contentLeft + 34, y: 116, size: 24, weight: 700, fill: '#4f4846', family: 'SpaceMonoLocal, monospace', className: 'og-label' })}
-  ${textLines([clientLines[0].toUpperCase()], { x: contentLeft, y: 548, size: 22, weight: 400, fill: '#5d5754', family: 'SpaceMonoLocal, monospace', className: 'og-meta' })}
-  ${textLines(['HITLOOP.AGENCY'], { x: contentRight, y: 548, size: 20, weight: 400, fill: '#5d5754', family: 'SpaceMonoLocal, monospace', className: 'og-meta', textAnchor: 'end' })}
-  ${await dotoHeadline(titleLines, { x: contentLeft, y: titleY, size: titleSize, fill: '#060606', lineHeight: titleLineHeight })}
-  ${subhead?.text ? textLines([subhead.text], { x: contentLeft, y: subhead.y, size: subhead.size, weight: 400, fill: '#393330', lineHeight: 1, family: 'SpaceGroteskLocal, system-ui, sans-serif', className: 'og-body' }) : ''}
+  <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#briefPaper)"/>
+  <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#glowOrange)"/>
+  <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#glowPurple)"/>
+  <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#glowGold)"/>
+  <path d="M${contentLeft} 150 H${contentRight}" stroke="#0a0a0a" stroke-opacity="0.10" stroke-width="2"/>
+  <path d="M${contentLeft} 468 H${contentRight}" stroke="#0a0a0a" stroke-opacity="0.10" stroke-width="2"/>
+  <circle cx="${contentLeft + 6}" cy="108" r="6" fill="#0a0a0a"/>
+  ${textLines([ogLabel], { x: contentLeft + 34, y: 116, size: 24, weight: 700, fill: '#5a5346', family: 'SpaceMonoLocal, monospace', className: 'og-label' })}
+  ${await dotoHeadline(titleLines, { x: contentLeft, y: titleY, size: titleSize, fill: '#0a0a0a', lineHeight: titleLineHeight })}
+  ${subhead?.text ? textLines([subhead.text], { x: contentLeft, y: subhead.y, size: subhead.size, weight: 400, fill: '#1a1a1a', lineHeight: 1, family: 'SpaceGroteskLocal, system-ui, sans-serif', className: 'og-body' }) : ''}
+  ${tilesSvg}
 </svg>`;
 }
 
@@ -241,13 +266,15 @@ export async function GET(request, context) {
     snapshotId: resolved.snapshot.id,
   });
 
-  const png = await sharp(Buffer.from(await makeSvg(meta))).png().toBuffer();
+  const jpg = await sharp(Buffer.from(await makeSvg(meta)))
+    .jpeg({ quality: 82, mozjpeg: true, chromaSubsampling: '4:4:4' })
+    .toBuffer();
   const shouldDownload = new URL(request.url).searchParams.get('download') === '1';
-  return new Response(png, {
+  return new Response(jpg, {
     status: 200,
     headers: {
-      'content-type': 'image/png',
-      'content-length': String(png.length),
+      'content-type': 'image/jpeg',
+      'content-length': String(jpg.length),
       'cache-control': 'public, max-age=3600, stale-while-revalidate=86400',
       ...(shouldDownload ? { 'content-disposition': contentDispositionFileName(`${meta.title || 'custom-brief'} OG Image`) } : {}),
     },

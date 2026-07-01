@@ -3,7 +3,7 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { resolveSubscriptionPriceId } = require('../../../api/_lib/subscription-prices.cjs');
+const { configuredSubscriptionTiers, resolveSubscriptionPriceId } = require('../../../api/_lib/subscription-prices.cjs');
 
 describe('subscription price resolver', () => {
   test('uses weekly-specific price before legacy fallback', () => {
@@ -48,5 +48,15 @@ describe('subscription price resolver', () => {
     assert.equal(resolveSubscriptionPriceId('daily', env).priceId, 'price_daily');
     assert.equal(resolveSubscriptionPriceId('continuous', env).priceId, 'price_continuous');
     assert.equal(resolveSubscriptionPriceId('studio', env).priceId, 'price_studio');
+  });
+
+  test('lists only tiers configured in the server environment', () => {
+    assert.deepEqual(
+      configuredSubscriptionTiers({
+        STRIPE_PRICE_ID: 'price_legacy',
+        STRIPE_PRICE_ID_DAILY: 'price_daily',
+      }),
+      ['weekly', 'daily']
+    );
   });
 });

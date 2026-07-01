@@ -696,11 +696,12 @@ export default function VideoRemixStudioPage() {
             .srt-line { display:grid; grid-template-columns:4.2rem 1fr; gap:.5em; font-family:${GLASS.mono}; font-size:.68rem; line-height:1.65; align-items:baseline; }
             .srt-pfx { text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; font-size:.64rem; letter-spacing:.02em; }
             .srt-msg { min-width:0; white-space:normal; overflow-wrap:anywhere; }
-            .srt-active .srt-pfx { color:#61afef; } .srt-active .srt-msg { color:#eaf0fa; font-weight:700; }
-            .srt-ok .srt-pfx { color:#98c379; } .srt-ok .srt-msg { color:#c8e1b4; }
-            .srt-error .srt-pfx { color:#e06c75; } .srt-error .srt-msg { color:#f1a6ac; }
-            .srt-dim .srt-pfx, .srt-dim .srt-msg { color:#6b7280; }
-            .srt-caret { display:inline-block; width:.45em; height:.95em; background:#61afef; vertical-align:text-bottom; margin-left:2px; animation:srt-blink 1s step-start infinite; }
+            .srt-line { color:var(--term-fg); }
+            .srt-active .srt-pfx { color:var(--term-active-pfx); } .srt-active .srt-msg { color:var(--term-active-msg); font-weight:700; }
+            .srt-ok .srt-pfx { color:var(--term-ok-pfx); } .srt-ok .srt-msg { color:var(--term-ok-msg); }
+            .srt-error .srt-pfx { color:var(--term-error-pfx); } .srt-error .srt-msg { color:var(--term-error-msg); }
+            .srt-dim .srt-pfx, .srt-dim .srt-msg { color:var(--term-dim); }
+            .srt-caret { display:inline-block; width:.45em; height:.95em; background:var(--term-caret); vertical-align:text-bottom; margin-left:2px; animation:srt-blink 1s step-start infinite; }
             @keyframes srt-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
             @keyframes srt-blink { 0%,100% { opacity:1; } 50% { opacity:0; } }
             @media (max-width: 920px) {
@@ -889,12 +890,12 @@ export default function VideoRemixStudioPage() {
                 {['a', 'b'].map((key) => <span key={key} aria-hidden={key === 'b' ? 'true' : undefined} style={{ margin: 0, flexShrink: 0, whiteSpace: 'nowrap', color: '#2a2420', fontSize: 'clamp(2rem, 8.5vw, 7rem)', lineHeight: 1, letterSpacing: '-0.04em', fontFamily: GLASS.display, fontWeight: 700 }}>{'RENDERING VIDEO REMIX . '.repeat(2)}</span>)}
               </div>
             </div>
-            <div style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)', borderTop: '1px solid rgba(255,255,255,0.18)', borderRadius: 10, overflow: 'hidden', boxShadow: '0px 5px 10px rgba(0,0,0,0.1), 0px 15px 30px rgba(0,0,0,0.1)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.75rem', borderBottom: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.02)' }}>
+            <div style={{ background: 'var(--term-bg)', border: '1px solid var(--term-border)', borderTop: '1px solid var(--term-border-top)', borderRadius: 10, overflow: 'hidden', boxShadow: 'var(--term-shadow)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--term-titlebar-border)', background: 'var(--term-titlebar-bg)' }}>
                 <span style={{ width: '0.52rem', height: '0.52rem', borderRadius: 999, background: 'rgba(255,95,86,0.65)' }} />
                 <span style={{ width: '0.52rem', height: '0.52rem', borderRadius: 999, background: 'rgba(255,189,46,0.65)' }} />
                 <span style={{ width: '0.52rem', height: '0.52rem', borderRadius: 999, background: 'rgba(39,201,63,0.65)' }} />
-                <span style={{ flex: 1, textAlign: 'center', fontFamily: GLASS.mono, fontSize: '0.62rem', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.3)' }}>remix.process</span>
+                <span style={{ flex: 1, textAlign: 'center', fontFamily: GLASS.mono, fontSize: '0.62rem', letterSpacing: '0.08em', color: 'var(--term-title-fg)' }}>remix.process</span>
               </div>
               <div ref={renderLogRef} style={{ padding: '0.7rem 0.85rem 0.8rem', height: '11rem', maxHeight: '40vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
                 {renderLog.map((line, index) => (
@@ -906,7 +907,7 @@ export default function VideoRemixStudioPage() {
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontFamily: GLASS.mono, fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.32)', marginTop: '0.9rem', borderTop: '1px solid rgba(212,196,171,0.4)', paddingTop: '0.7rem' }}>
-              <span>{renderPhase === 'failed' ? 'Render failed' : renderPhase === 'done' ? 'Render complete' : 'External worker'}</span>
+              <span>{`${draft.selectedFolders.length} folder${draft.selectedFolders.length === 1 ? '' : 's'} · ${draft.videoFilter === 'random' ? 'random look' : String(draft.videoFilter || '').replace(/^look_/, '').replace(/_/g, ' ')} · `}{renderPhase === 'failed' ? 'Render failed' : renderPhase === 'done' ? 'Render complete' : 'External worker'}</span>
               {renderPhase === 'done' && renderVideoUrl ? <a href={renderVideoUrl} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 'auto', textDecoration: 'underline', color: '#2a2420', fontFamily: GLASS.mono, fontSize: '0.72rem', textTransform: 'none', letterSpacing: 0 }}>Open Video <UpRightArrow style={{ marginLeft: '0.15rem', opacity: 0.82 }} /></a> : <span style={{ marginLeft: 'auto', textTransform: 'none', letterSpacing: '0.02em' }}>Safe metadata queue, no FFmpeg in Next.</span>}
             </div>
           </div>

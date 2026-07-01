@@ -30,7 +30,7 @@ const publicRoutes = [
 ];
 
 const privateRoutes = [
-  { path: '/dashboard', name: 'dashboard', expectedUrl: '/login?redirect=/dashboard', expectText: 'Sign in' },
+  { path: '/dashboard', name: 'dashboard', expectedUrl: '/login?redirect=%2Fdashboard', expectText: 'Sign in' },
   { path: '/dashboard/studio', name: 'dashboard-studio', expectedUrl: '/login?redirect=/dashboard/studio', expectText: 'Sign in' },
   { path: '/admin/control', name: 'admin-control', expectedUrl: '/login?redirect=/admin/control', expectText: 'Sign in' },
   { path: '/preview/brief', name: 'preview-brief', expectedUrl: '/login?redirect=/preview/brief', expectText: 'Sign in' },

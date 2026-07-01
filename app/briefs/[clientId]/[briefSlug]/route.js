@@ -34,6 +34,7 @@ function managedHeadTags(meta) {
     `<meta property="og:url" content="${esc(meta.publicUrl)}">`,
     `<meta property="og:image" content="${esc(meta.imageUrl)}">`,
     `<meta property="og:image:secure_url" content="${esc(meta.imageUrl)}">`,
+    `<meta property="og:image:type" content="image/jpeg">`,
     `<meta property="og:image:width" content="1200">`,
     `<meta property="og:image:height" content="630">`,
     `<meta property="og:image:alt" content="${esc(meta.imageAlt)}">`,

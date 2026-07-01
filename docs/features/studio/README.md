@@ -22,3 +22,7 @@ Status: active feature docs for the Studio render and mockup systems.
 - Studio render is a launch deliverable, but live Cloud Run env/service health is an ops fact and must be verified outside the repo.
 - GPU render hosting details belong in `STUDIO_RENDER_HOSTING.md`.
 - Static mockup template coordinate changes belong in `MOCKUP_CALIBRATION.md`.
+- **Scroll/capture + frame-rate behavior** (scroll-to-end page pre-warm, why the
+  scroll reaches the bottom without skipping, output fps 24–30 vs. the
+  `everyNthFrame` capture-rate stutter lever) lives in
+  `services/studio-render/README.md` → "Scroll & capture behavior".

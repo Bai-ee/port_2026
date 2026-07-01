@@ -1006,19 +1006,42 @@ function buildStrategicParts(intel, postPlatforms = {}) {
       </tr>`).join('')
     : '';
 
-  // Suggested Replies — own section. Quoted cards from opportunities that carry
-  // a drafted reply (read the tweet → ready response). Reads the brief's existing
-  // suggestedReply; no new generation.
-  const replyItems = (intel.opportunities || []).filter((o) => o.suggestedReply);
-  const repliesHtml = replyItems.length
-    ? replyItems.map((o) => `<div style="margin-bottom:14px;padding:14px 16px;background:${DT.brandTint};border:1px solid ${DT.line};border-radius:12px;">
+  // Suggested Replies — reads the reply-targets recipe output persisted by
+  // pre-digest-refresh (marketingBrief.reportSnapshot.digestRecipes). Falls back
+  // to scout opportunities with a suggestedReply field when no recipe result exists.
+  const replyRecipe = (intel.digestRecipes || []).find((r) => r?.recipeId === 'reply-targets' && r?.ok && r?.analysis);
+  let repliesHtml = '';
+  if (replyRecipe) {
+    const { data: rtData, prose: rtProse } = parseRecipeAnalysis(replyRecipe.analysis);
+    const targets = Array.isArray(rtData?.replyTargets) ? rtData.replyTargets.filter((t) => t?.suggestedReply) : [];
+    if (targets.length) {
+      repliesHtml = targets.map((t) => `<div style="margin-bottom:14px;padding:14px 16px;background:${DT.brandTint};border:1px solid ${DT.line};border-radius:12px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <span style="font-family:${DT.fMono};font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:${DT.brand};">Reply${t.tier ? ` &middot; Tier ${t.tier}` : ''}${t.score != null ? ` &middot; ${t.score}/10` : ''}</span>
+        </div>
+        <div style="font-family:${DT.fBody};font-size:13px;font-weight:700;color:${DT.ink};margin-bottom:4px;">${escapeHtml(t.author || '')}${t.url ? linkBit(t.url) : ''}</div>
+        ${t.text ? `<div style="font-family:${DT.fBody};font-size:12px;line-height:1.5;color:${DT.soft};margin-bottom:8px;font-style:italic;">&ldquo;${escapeHtml(String(t.text).slice(0, 200))}&rdquo;</div>` : ''}
+        ${t.why ? `<div style="font-family:${DT.fBody};font-size:12px;line-height:1.5;color:${DT.soft};margin-bottom:8px;"><strong style="color:${DT.ink};">Why:</strong> ${escapeHtml(t.why)}</div>` : ''}
+        <div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:${DT.light};margin-bottom:3px;">Draft reply</div>
+        <div style="font-family:${DT.fBody};font-size:13px;line-height:1.55;color:${DT.ink};">${escapeHtml(t.suggestedReply)}</div>
+        ${t.url ? `<a href="${escapeHtml(t.url)}" style="display:inline-block;margin-top:8px;color:${DT.brand};font-family:${DT.fMono};font-size:10px;letter-spacing:.06em;text-transform:uppercase;">Read post &amp; reply &rarr;</a>` : ''}
+      </div>`).join('');
+      if (rtProse) repliesHtml += `<div style="font-family:${DT.fBody};font-size:12px;line-height:1.6;color:${DT.soft};margin-top:12px;padding-top:12px;border-top:1px solid ${DT.line};">${escapeHtml(rtProse)}</div>`;
+      repliesHtml += postMeLink;
+    }
+  } else {
+    // Fallback: scout opportunities with a suggestedReply field
+    const replyItems = (intel.opportunities || []).filter((o) => o.suggestedReply);
+    if (replyItems.length) {
+      repliesHtml = replyItems.map((o) => `<div style="margin-bottom:14px;padding:14px 16px;background:${DT.brandTint};border:1px solid ${DT.line};border-radius:12px;">
         <div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:${DT.brand};margin-bottom:6px;">Reply${o.windowHours ? ` &middot; ${o.windowHours}h window` : ''}</div>
         <div style="font-family:${DT.fBody};font-size:13px;font-weight:700;color:${DT.ink};margin-bottom:4px;">${escapeHtml(o.topic)}${linkBit(o.url)}</div>
         ${o.angle ? `<div style="font-family:${DT.fBody};font-size:12px;line-height:1.5;color:${DT.soft};margin-bottom:8px;"><strong style="color:${DT.ink};">Why:</strong> ${escapeHtml(o.angle)}</div>` : ''}
         <div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:${DT.light};margin-bottom:3px;">Suggested reply</div>
         <div style="font-family:${DT.fBody};font-size:13px;line-height:1.55;color:${DT.ink};">${escapeHtml(o.suggestedReply)}</div>${o.url ? `<a href="${escapeHtml(o.url)}" style="display:inline-block;margin-top:8px;color:${DT.brand};font-family:${DT.fMono};font-size:10px;letter-spacing:.06em;text-transform:uppercase;">Read tweet &amp; reply &rarr;</a>` : ''}
-      </div>`).join('') + postMeLink
-    : '';
+      </div>`).join('') + postMeLink;
+    }
+  }
 
   const signalRows = [
     ...(intel.kols || []).map((k) => ({ tag: `KOL${k.platform ? ` · ${k.platform}` : ''}`, label: k.name, value: k.detail, url: k.url })),
@@ -1961,7 +1984,7 @@ export async function GET(request) {
           let brain = '';
           try {
             const { loadClientBrainContext } = require('../../../../features/client-brain/store.cjs');
-            brain = await loadClientBrainContext(homeClientId, { useFor: 'emailDigest', maxChars: 1200 });
+            brain = await loadClientBrainContext(homeClientId, { useFor: 'copy', maxChars: 1500 });
           } catch { /* optional */ }
           try {
             captions = await briefSummary.generateVideoPromoPosts({

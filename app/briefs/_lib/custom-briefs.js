@@ -171,6 +171,38 @@ export function briefOgLabel(brief) {
   return (label || 'BRYAN BALLI').slice(0, 80);
 }
 
+// Display domain for the OG share image / meta — protocol + www + trailing
+// slash stripped so it reads as a clean "rositastacos.com".
+export function briefWebsite(client) {
+  const raw = String(client?.websiteUrl || client?.website || '').trim();
+  if (!raw) return '';
+  return raw
+    .replace(/^https?:\/\//i, '')
+    .replace(/^www\./i, '')
+    .replace(/\/+$/, '')
+    .slice(0, 60);
+}
+
+// Firestore admin Timestamp | {_seconds} | epoch | ISO → Date, or null.
+function toDateSafe(value) {
+  if (!value) return null;
+  if (typeof value.toDate === 'function') { try { return value.toDate(); } catch { return null; } }
+  if (typeof value._seconds === 'number') return new Date(value._seconds * 1000);
+  if (typeof value.seconds === 'number') return new Date(value.seconds * 1000);
+  if (typeof value === 'number') return new Date(value);
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+const OG_MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
+// Publish/updated date for the OG image DATE tile — "JUN 30 2026" (UTC, mono).
+export function briefDateLabel(brief) {
+  const date = toDateSafe(brief?.updatedAt) || toDateSafe(brief?.importedAt) || toDateSafe(brief?.createdAt);
+  if (!date) return '';
+  return `${OG_MONTHS[date.getUTCMonth()]} ${date.getUTCDate()} ${date.getUTCFullYear()}`;
+}
+
 export function buildBriefOpenGraphMeta({ origin, clientId, client, brief, snapshotId }) {
   const clientName = clientDisplayName(client, clientId);
   const publicPath = publicBriefPath({ clientId, client, brief, snapshotId });
@@ -182,6 +214,8 @@ export function buildBriefOpenGraphMeta({ origin, clientId, client, brief, snaps
     title,
     description,
     clientName,
+    website: briefWebsite(client),
+    dateLabel: briefDateLabel(brief),
     publicPath,
     publicUrl,
     imageUrl,

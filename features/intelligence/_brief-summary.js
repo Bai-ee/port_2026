@@ -143,17 +143,18 @@ function parseCallouts(text) {
  */
 async function generateVideoPromoPosts({ videos = [], clientBrainContext = '', config = {} } = {}) {
   if (!Array.isArray(videos) || !videos.length) return [];
-  const tone = config.tone || 'concise, professional, direct';
   const list = videos
     .map((v, i) => `Video ${i + 1}: ${v.durationSeconds || 30}s clip${Array.isArray(v.sourceFolders) && v.sourceFolders.length ? `, scenes: ${v.sourceFolders.join(', ')}` : ''}.`)
     .join('\n');
+  const voiceInstruction = clientBrainContext
+    ? `If the Brand context includes Example posts, imitate that exact cadence, vocabulary, and sentence length — do NOT copy them verbatim. Honor any Do/Do not rules and the kill list. No em dashes. At most 1 hashtag, preferably none.`
+    : `Casual, dry, matter-of-fact. First person. State it and stop. No hype, no agency language, no em dashes, no hashtags.`;
   const system =
-    `You write short promo posts for X (Twitter) advertising a brand's short videos. ` +
+    `You write short X posts sharing a brand's short videos. ` +
     `Output ONLY valid JSON: {"posts":[{"caption": string}]} — one entry per video, in order. ` +
-    `Each caption ≤ 200 characters, hook-first, punchy, at most 2 hashtags, no markdown, no quotes around it. ` +
-    `Tone: ${tone}.` +
-    `${clientBrainContext ? ' Match the brand voice/positioning in the supplied context and avoid its do-not-use language.' : ''}`;
-  const user = `Write one X promo post per video below.\n\n${list}${clientBrainContext ? `\n\nBrand context:\n${clientBrainContext}` : ''}`;
+    `Each caption ≤ 200 characters. Hook first. No markdown, no quotes around it. ` +
+    voiceInstruction;
+  const user = `Write one X post per video below.\n\n${list}${clientBrainContext ? `\n\nBrand context:\n${clientBrainContext}` : ''}`;
 
   const response = await callAnthropic({
     model: SUMMARY_MODEL,

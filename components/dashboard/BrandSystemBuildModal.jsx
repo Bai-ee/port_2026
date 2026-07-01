@@ -46,6 +46,12 @@ export default function BrandSystemBuildModal({ open, onClose, getIdToken, onCom
     onComplete?.(finalResult);
   }, [onComplete]);
 
+  // Footer copy slot names what's running: the latest streamed step (truncated).
+  const latestStep = terminalLines.length ? String(terminalLines[terminalLines.length - 1].text || '').trim() : '';
+  const footerHost = phase === 'done' || !latestStep
+    ? 'brand-system'
+    : (latestStep.length > 48 ? `${latestStep.slice(0, 47)}…` : latestStep);
+
   const statusDotColor = phase === 'failed' ? '#D71921' : phase === 'done' ? '#4A9E5C' : '#D4A843';
   const statusPulse = phase === 'running' ? 'status-pulse 1.4s ease-in-out infinite' : 'none';
 
@@ -142,7 +148,7 @@ export default function BrandSystemBuildModal({ open, onClose, getIdToken, onCom
 
         {/* Footer */}
         <div id="intake-modal-footer">
-          <span id="intake-modal-footer-host">brand-system</span>
+          <span id="intake-modal-footer-host">{footerHost}</span>
           <button
             type="button"
             id="intake-modal-footer-cancel"

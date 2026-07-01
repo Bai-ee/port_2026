@@ -2902,14 +2902,15 @@ export default function StudioPage() {
             #studio-render-console .srt-line { display: grid; grid-template-columns: 4.2rem 1fr; gap: 0.5em; font-family: "Space Mono", monospace; font-size: 0.68rem; line-height: 1.65; align-items: baseline; }
             #studio-render-console .srt-pfx { text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; font-size: 0.64rem; letter-spacing: 0.02em; }
             #studio-render-console .srt-msg { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
-            #studio-render-console .srt-active .srt-pfx { color: #61afef; }
-            #studio-render-console .srt-active .srt-msg { color: #eaf0fa; font-weight: 700; }
-            #studio-render-console .srt-ok .srt-pfx { color: #98c379; }
-            #studio-render-console .srt-ok .srt-msg { color: #c8e1b4; }
-            #studio-render-console .srt-error .srt-pfx { color: #e06c75; }
-            #studio-render-console .srt-error .srt-msg { color: #f1a6ac; }
-            #studio-render-console .srt-dim .srt-pfx, #studio-render-console .srt-dim .srt-msg { color: #6b7280; }
-            #studio-render-console .srt-caret { display: inline-block; width: 0.45em; height: 0.95em; background: #61afef; vertical-align: text-bottom; margin-left: 2px; animation: srt-blink 1s step-start infinite; }
+            #studio-render-console .srt-line { color: var(--term-fg); }
+            #studio-render-console .srt-active .srt-pfx { color: var(--term-active-pfx); }
+            #studio-render-console .srt-active .srt-msg { color: var(--term-active-msg); font-weight: 700; }
+            #studio-render-console .srt-ok .srt-pfx { color: var(--term-ok-pfx); }
+            #studio-render-console .srt-ok .srt-msg { color: var(--term-ok-msg); }
+            #studio-render-console .srt-error .srt-pfx { color: var(--term-error-pfx); }
+            #studio-render-console .srt-error .srt-msg { color: var(--term-error-msg); }
+            #studio-render-console .srt-dim .srt-pfx, #studio-render-console .srt-dim .srt-msg { color: var(--term-dim); }
+            #studio-render-console .srt-caret { display: inline-block; width: 0.45em; height: 0.95em; background: var(--term-caret); vertical-align: text-bottom; margin-left: 2px; animation: srt-blink 1s step-start infinite; }
           `}</style>
 
           <div
@@ -2946,12 +2947,12 @@ export default function StudioPage() {
             </div>
 
             {/* Terminal */}
-            <div style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)', borderTop: '1px solid rgba(255,255,255,0.18)', borderRadius: 10, overflow: 'hidden', boxShadow: '0px 5px 10px rgba(0,0,0,0.1), 0px 15px 30px rgba(0,0,0,0.1)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.75rem', borderBottom: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.02)' }}>
+            <div style={{ background: 'var(--term-bg)', border: '1px solid var(--term-border)', borderTop: '1px solid var(--term-border-top)', borderRadius: 10, overflow: 'hidden', boxShadow: 'var(--term-shadow)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--term-titlebar-border)', background: 'var(--term-titlebar-bg)' }}>
                 <span style={{ width: '0.52rem', height: '0.52rem', borderRadius: 999, background: 'rgba(255,95,86,0.65)' }} />
                 <span style={{ width: '0.52rem', height: '0.52rem', borderRadius: 999, background: 'rgba(255,189,46,0.65)' }} />
                 <span style={{ width: '0.52rem', height: '0.52rem', borderRadius: 999, background: 'rgba(39,201,63,0.65)' }} />
-                <span style={{ flex: 1, textAlign: 'center', fontFamily: '"Space Mono", monospace', fontSize: '0.62rem', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.3)' }}>render.process</span>
+                <span style={{ flex: 1, textAlign: 'center', fontFamily: '"Space Mono", monospace', fontSize: '0.62rem', letterSpacing: '0.08em', color: 'var(--term-title-fg)' }}>render.process</span>
               </div>
               <div
                 ref={renderLogRef}

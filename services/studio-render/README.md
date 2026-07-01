@@ -34,6 +34,25 @@ software). The service logs the backend per render — look for
   → `200 video/mp4` (bytes), `x-render-info` header has frame/codec stats.
   Caps: seconds 2–10, move 0.5–8, fps 24–30. Concurrency `MAX_CONCURRENCY` (default 1).
 
+## Scroll & capture behavior
+- **Default site motion** when a recipe sets no `scroll`: `DEFAULT_SCROLL_TO_END`
+  (`recipe.mjs`) — hold the hero to `startAt` (0.25), then smooth-scroll to the
+  page **bottom** (`percent:100`) by `arriveAt` (1.0).
+- **Scroll-to-end is pre-warmed.** For a `percent` target with no selector/text,
+  the off-camera probe (`probeExpression` in `render.mjs`) first **pre-walks the
+  whole document** so lazy media + scroll-triggered sections load, then measures
+  the *full settled* height and resets to top (`how:'percent-prewarmed'`). Capture
+  then does ONE fixed-target smooth scroll → continuous motion through every
+  section, lands flush at the bottom. (Before this, the height was measured at load
+  time → the scroll stopped short or jumped past sections as content loaded mid-scroll.)
+- **Frame rate.** Output is true CFR at `output.fps` — clamped **24–30, default 30**
+  (`recipe.mjs` + `signup-video-recipe.cjs`), encoded H.264/AVC on the L4. The
+  **site** texture's temporal smoothness is bound by the screencast rate
+  (`everyNthFrame:2` in `render.mjs`), NOT by output fps: raising fps smooths the
+  camera move but not the scroll. To reduce scroll stutter, lower `everyNthFrame`
+  (→1 ≈ doubles captured site frames); the L4 tier has headroom for both that and
+  a higher output fps.
+
 ## Env
 | var | default | notes |
 |-----|---------|-------|

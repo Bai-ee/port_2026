@@ -77,7 +77,7 @@ export default function DashboardLoadingOverlay({
           />
         </div>
 
-        <div style={{ width: '100%', overflow: 'hidden', margin: '0 0 0.7rem' }}>
+        <div style={{ width: '100%', overflow: 'hidden', margin: '0 0 1.85rem' }}>
           <div className="loading-marquee-track">
             {['a', 'b'].map((k) => (
               <div key={k} aria-hidden={k === 'b' ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
@@ -104,9 +104,13 @@ export default function DashboardLoadingOverlay({
           </div>
         </div>
 
-        <p style={{ margin: 0, color: 'rgba(42,36,32,0.66)', lineHeight: 1.6, fontFamily: '"Space Grotesk", system-ui, sans-serif', textAlign: 'center' }}>
-          {isMobile ? 'Loading Dashboard' : 'Loading the latest dashboard state.'}
-        </p>
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <img
+            src="/img/sig.png"
+            alt="Signature"
+            style={{ height: 'clamp(1.6rem, 4.5vw, 2.4rem)', width: 'auto', objectFit: 'contain', display: 'block' }}
+          />
+        </div>
       </div>
     </div>
   );

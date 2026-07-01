@@ -195,6 +195,7 @@ const SubscribeModal = ({
   const [tierIndex, setTierIndex] = useState(DEFAULT_TIER_INDEX);
   const [activeTab, setActiveTab] = useState(mode === 'run' || cooldown ? 'run' : 'subscribe');
   const [scheduleAt, setScheduleAt] = useState('');
+  const [configuredTierIds, setConfiguredTierIds] = useState(null);
   const carouselRef = useRef(null);
   // Latest cooldown read without retriggering the open-reset effect every tick
   // (the parent re-renders this object each second as the countdown ticks).
@@ -245,6 +246,7 @@ const SubscribeModal = ({
       setLoading(false);
       setCryptoNotice('');
       setTierIndex(DEFAULT_TIER_INDEX);
+      setConfiguredTierIds(null);
     } else {
       const cd = cooldownRef.current;
       setActiveTab(mode === 'run' || cd ? 'run' : 'subscribe');
@@ -257,6 +259,26 @@ const SubscribeModal = ({
       }
     }
   }, [open, defaultEmail, mode]);
+
+  useEffect(() => {
+    if (!open || activeTab === 'run') return undefined;
+    let cancelled = false;
+    fetch('/api/payments/subscription-tiers', { cache: 'no-store' })
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (cancelled) return;
+        const tiers = Array.isArray(data?.tiers) ? data.tiers.filter(Boolean) : [];
+        setConfiguredTierIds(tiers.length ? new Set(tiers) : new Set(['weekly']));
+        setTierIndex(0);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setConfiguredTierIds(new Set(['weekly']));
+          setTierIndex(0);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [open, activeTab]);
 
   // Land on the default tier (Weekly) when the modal opens.
   useEffect(() => {
@@ -271,6 +293,11 @@ const SubscribeModal = ({
     return null;
   }
 
+  const subscriptionTiers = configuredTierIds
+    ? SUBSCRIPTION_TIERS.filter((tier) => configuredTierIds.has(tier.id))
+    : [SUBSCRIPTION_TIERS[DEFAULT_TIER_INDEX]];
+  const selectedTier = subscriptionTiers[Math.min(tierIndex, subscriptionTiers.length - 1)] || subscriptionTiers[0];
+
   // Carousel position == selected tier; whichever slide the user lands on is
   // what Continue to payment submits.
   const handleCarouselScroll = () => {
@@ -278,7 +305,7 @@ const SubscribeModal = ({
     if (!el || !el.clientWidth) return;
     const next = Math.max(
       0,
-      Math.min(SUBSCRIPTION_TIERS.length - 1, Math.round(el.scrollLeft / el.clientWidth)),
+      Math.min(subscriptionTiers.length - 1, Math.round(el.scrollLeft / el.clientWidth)),
     );
     if (next !== tierIndex) setTierIndex(next);
   };
@@ -300,7 +327,7 @@ const SubscribeModal = ({
       const res = await fetch('/api/payments/create-subscription', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, tier: SUBSCRIPTION_TIERS[tierIndex].id }),
+        body: JSON.stringify({ email, tier: selectedTier.id }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.clientSecret) {
@@ -466,8 +493,8 @@ const SubscribeModal = ({
                   type="button"
                   id="subscribe-tier-next"
                   className="subscribe-tier-nav"
-                  onClick={() => scrollToTier(Math.min(SUBSCRIPTION_TIERS.length - 1, tierIndex + 1))}
-                  disabled={tierIndex === SUBSCRIPTION_TIERS.length - 1}
+                  onClick={() => scrollToTier(Math.min(subscriptionTiers.length - 1, tierIndex + 1))}
+                  disabled={tierIndex === subscriptionTiers.length - 1}
                   aria-label="Next tier"
                 >›</button>
                 <div
@@ -476,7 +503,7 @@ const SubscribeModal = ({
                   ref={carouselRef}
                   onScroll={handleCarouselScroll}
                 >
-                  {SUBSCRIPTION_TIERS.map((tier) => (
+                  {subscriptionTiers.map((tier) => (
                     <div className="subscribe-tier-slide" key={tier.id}>
                       <div style={productPriceColStyle}>
                         <span style={tier.priceMain.length > 5 ? productPriceLongStyle : productPriceStyle}>
@@ -499,7 +526,7 @@ const SubscribeModal = ({
                   role="tablist"
                   aria-label="Pricing tiers"
                 >
-                  {SUBSCRIPTION_TIERS.map((tier, index) => (
+                  {subscriptionTiers.map((tier, index) => (
                     <button
                       key={tier.id}
                       type="button"
@@ -570,7 +597,7 @@ const SubscribeModal = ({
           ) : step === 'payment' && clientSecret ? (
             <Elements stripe={stripePromise} options={{ clientSecret, appearance: stripeAppearance }}>
               <PaymentStep
-                ctaLabel={isRunTab ? `Pay ${RUN_PRICE_LABEL} · Run Brief` : 'Subscribe · $5/mo'}
+                ctaLabel={isRunTab ? `Pay ${RUN_PRICE_LABEL} · Run Brief` : `Subscribe · ${selectedTier.priceMain}${selectedTier.priceUnit}`}
                 onSuccess={() => {
                   if (isRunTab) {
                     try { onRunPaid?.({ briefKey: runBriefKey, briefName: runBriefName }); } catch {}

@@ -2,6 +2,7 @@ import Script from 'next/script';
 import '../colors.css';
 import { AuthProvider } from '../AuthContext';
 import AnalyticsPageView from '../components/AnalyticsPageView';
+import SmoothScroll from '../components/SmoothScroll';
 
 const GA_ID = process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID;
 
@@ -145,6 +146,7 @@ export default function RootLayout({ children }) {
           MozOsxFontSmoothing: 'grayscale',
         }}
       >
+        <SmoothScroll />
         <AuthProvider>
           <AnalyticsPageView />
           {children}

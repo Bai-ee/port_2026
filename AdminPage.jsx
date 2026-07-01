@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from './AuthContext';
+import AdminOperatingCostView from './components/AdminCostView';
 
 // ── API helpers ────────────────────────────────────────────────────────────────
 
@@ -23,7 +24,7 @@ async function adminFetch(user, path, options = {}) {
 
 // ── AdminPage ──────────────────────────────────────────────────────────────────
 
-const TABS = ['CLIENTS', 'QUEUE', 'FAILED', 'INTELLIGENCE', 'DIGEST'];
+const TABS = ['CLIENTS', 'QUEUE', 'FAILED', 'INTELLIGENCE', 'COSTS', 'DIGEST'];
 
 const AdminPage = () => {
   const { user, signOutUser } = useAuth();
@@ -959,6 +960,16 @@ const AdminPage = () => {
             {!digestLoading && !digestForm && !digestError ? (
               <div className="admin-empty">No digest config.</div>
             ) : null}
+          </section>
+        ) : null}
+
+        {/* ── COSTS TAB ─────────────────────────────────────────────────── */}
+        {tab === 'COSTS' ? (
+          <section id="admin-costs-section">
+            <div className="section-head">
+              <span className="section-title">OPERATING COSTS</span>
+            </div>
+            <AdminOperatingCostView user={user} />
           </section>
         ) : null}
 

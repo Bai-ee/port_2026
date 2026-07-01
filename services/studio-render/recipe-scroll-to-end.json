@@ -1,0 +1,8 @@
+{
+  "url": "https://hitloop.agency",
+  "preset": "push-rotate-flat",
+  "output": { "seconds": 8, "fps": 30, "width": 1920, "height": 1200 },
+  "device": { "viewport": "desktop", "backdrop": "home", "loop": true },
+  "environment": { "mode": "gradient", "preset": "studio", "color": "#11141a", "reflections": true },
+  "capture": { "warmupMs": 1000 }
+}

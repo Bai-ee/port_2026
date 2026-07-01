@@ -2,7 +2,7 @@
 
 const { callAnthropic } = require('../_anthropic-client.js');
 
-const VISION_MODEL = 'claude-sonnet-4-20250514';
+const VISION_MODEL = 'claude-sonnet-4-6';
 const VISION_MAX_TOKENS = 2200;
 
 function buildImageBlock(img) {

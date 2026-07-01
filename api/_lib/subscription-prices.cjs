@@ -8,6 +8,12 @@ const SUBSCRIPTION_PRICE_ENV_BY_TIER = {
   studio: ['STRIPE_PRICE_ID_STUDIO'],
 };
 
+function configuredSubscriptionTiers(env = process.env) {
+  return Object.entries(SUBSCRIPTION_PRICE_ENV_BY_TIER)
+    .filter(([, envNames]) => envNames.some((name) => Boolean(env[name])))
+    .map(([tier]) => tier);
+}
+
 function resolveSubscriptionPriceId(tier, env = process.env) {
   const normalizedTier = String(tier || '').trim().toLowerCase();
   const envNames = SUBSCRIPTION_PRICE_ENV_BY_TIER[normalizedTier];
@@ -29,5 +35,6 @@ function resolveSubscriptionPriceId(tier, env = process.env) {
 
 module.exports = {
   SUBSCRIPTION_PRICE_ENV_BY_TIER,
+  configuredSubscriptionTiers,
   resolveSubscriptionPriceId,
 };

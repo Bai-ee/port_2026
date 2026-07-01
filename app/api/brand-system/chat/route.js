@@ -26,7 +26,7 @@ const { saveBufferArtifact } = require('../../../../api/_lib/storage-artifacts.c
 const { logUsage, computeAnthropicCost } = require('../../../../api/_lib/usage-logger.cjs');
 
 // Brand-system vision modules all use the same Sonnet 4 vision model.
-const VISION_MODEL = 'claude-sonnet-4-20250514';
+const VISION_MODEL = 'claude-sonnet-4-6';
 
 // Logs an Anthropic vision call to `usage_events`. `usage` is the
 // { inputTokens, outputTokens } object that each analyze* function returns.
