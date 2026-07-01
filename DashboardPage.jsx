@@ -27259,7 +27259,7 @@ export const dashboardCss = `
     #dashboard-source-cta-row { box-shadow: 0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4) !important; }
     /* Mobile: bucket nav returns as a horizontal, scrollable row of
        icon-only circles. Active item gets a gradient ring/circle; no text. */
-    #capability-nav-col { order: -1; display: flex; flex-direction: row; flex-wrap: nowrap; justify-content: space-between; align-items: center; gap: 16px; padding: 18px 14px; margin-bottom: 4px; width: 100%; max-width: 100%; min-width: 0; overflow: visible; }
+    #capability-nav-col { order: -1; display: flex; flex-direction: row; flex-wrap: nowrap; justify-content: space-between; align-items: center; gap: 16px; padding: 18px 14px; margin-bottom: 4px; width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; overflow-y: visible; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
     #capability-nav-col::-webkit-scrollbar { display: none; }
     #dashboard-source-band { margin-bottom: 0; }
     .capability-nav-btn { flex: 0 0 auto; width: 44px; height: 44px; max-width: none; min-width: 0; padding: 0; border-radius: 50%; flex-direction: row; align-items: center; justify-content: center; gap: 0; background: rgba(255, 255, 255, 1); }
