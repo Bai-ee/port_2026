@@ -1,6 +1,9 @@
 # Video Remix ⇄ EditVideos Bridge — as-built source of truth
 
 Status: **SHIPPED** (2026-06-24), proven end-to-end on `hitloop.agency`.
+Render-behavior additions (2026-07-01): 5 new filter looks, "None"=truly-nothing logos, pinned
+(deterministic) audio, bigger end logo, and a full set-vs-rendered settings snapshot on the card —
+all in [§ Render behavior](#render-behavior--filters-logos-audio-layout-editvideos-worker).
 Supersedes the implementation sections of [`docs/plans/EDITVIDEOS_TO_HITLOOP_CARDS_PLAN.md`](../plans/EDITVIDEOS_TO_HITLOOP_CARDS_PLAN.md) — that plan is historical; this doc is the truth.
 
 ## What it is
@@ -70,7 +73,7 @@ SOURCE MEDIA tab (Video Remix modal)
 
 - `media_jobs.jobId` (Hitloop) ⇄ `media_jobs.editJobId` == `videoJobs/{editJobId}` (EditVideos).
 - `dashboard_state.mediaCaptures[].jobId` links a capture back to its `media_jobs` doc.
-- Capture shape: `{ type:'video_remix', variant:'video', downloadUrl, durationSeconds:30, sourceFolders, jobId, editJobId, createdAt }`.
+- Capture shape: `{ type:'video_remix', variant:'video', downloadUrl, durationSeconds:30, sourceFolders, jobId, editJobId, createdAt, createdWith }`. `createdWith` (added 2026-07-01, marked `full:true`) is the full settings snapshot rendered on the SAVED ASSETS card — see [§ Render behavior](#render-behavior--filters-logos-audio-layout-editvideos-worker).
 
 ## Recipe → videoJobs mapping (`mapRecipeToVideoJob`)
 
@@ -79,9 +82,93 @@ SOURCE MEDIA tab (Video Remix modal)
 `topLogo`/`endLogo` (logos.top/end) · `useArtistImage` · `endTextOverlay` (endCard.text) ·
 `customEndMedia:null` · `videoOrder:null`.
 
-Options for the params tab come from `listOptions()`: 9 filters + 6 overlays (static, from EV
-`VideoFilters.js` / its UI), artists+mixes (live from EV `system/artists`), logos (live from EV
-bucket `logos/`).
+Options for the params tab come from `listOptions()`: **14 filters** (9 original + 5 added
+2026-07-01) + 6 overlays (static, mirror EV `VideoFilters.js`), artists+mixes (live from EV
+`system/artists`), logos (live from EV bucket `logos/`). See [§ Render behavior](#render-behavior--filters-logos-audio-layout-editvideos-worker)
+for the filter looks + how to add one.
+
+## Render behavior — filters, logos, audio, layout (EditVideos worker)
+
+⚠️ **How a video *looks* is decided in the EditVideos repo (`Bai-ee/arweave-video-generator`),
+not Hitloop.** Color looks, overlays, logos, audio pick, text layers, and layout all live in
+that repo's **worker**. Changing any of them = edit that repo and push it — the GitHub Action
+renders from committed **`main`** HEAD on dispatch/cron, so **a push deploys the change but does
+NOT itself trigger a render** (next enqueue/cron does). This is a nuance to the "DO NOT modify
+EditVideos" rule above: that rule is about the **queue/schema** (don't fork the `videoJobs`
+contract); the **render engine is where look/branding work happens** and is edited on purpose.
+
+Worker files (EditVideos repo):
+
+| File | Role |
+|---|---|
+| `worker/lib/VideoFilters.js` | `VIDEO_FILTERS` preset map (key → FFmpeg color chain) + `getFilter(key,intensity)`. |
+| `worker/lib/ArweaveVideoGenerator.js` | Composites the frame: top logo, end logo, text overlay, artist image, layers. |
+| `worker/lib/ArweaveAudioClient.js` | Selects the artist / mix / track audio. |
+| `worker/processor.js` | Job entry — reads the `videoJobs` doc, calls the generator. Output locked 720×720/30s. |
+| `.github/workflows/process-videos.yml` | The Action (cron `*/1` + `repository_dispatch`); **pins ffmpeg 6.1.3**. |
+
+### Filter looks (14 as of 2026-07-01)
+
+A look = an FFmpeg color chain in `VIDEO_FILTERS`. **To add one:** add a preset object in EV
+`VideoFilters.js` + a matching `{key,label}` row in Hitloop `editvideos-bridge.cjs`
+`FILTER_OPTIONS`; the params dropdown auto-renders from fetched `options.filters` (**no
+`DashboardPage.jsx` edit**). Ship the EV preset **first** so the key resolves (else the worker
+warns + falls back to B&W).
+
+- 9 originals (gritty neon / faded tape / hard B&W / camcorder / club cinematic / neon / zine /
+  pixel / sodium) **+ 5 added 2026-07-01:** `look_original` (**No Filter (Original)**),
+  `look_bright_airy` (**Bright & Airy / Hawaii**), `look_crisp_enhance`, `look_golden_warm`,
+  `look_vivid_pop`.
+- ⚠️ **B&W trap:** a null/empty `videoFilter` makes `VideoCompositor` apply a **default black &
+  white** (`hue=s=0`). "No Filter (original)" MUST be an explicit preset whose chain is
+  **scale/pad only** — never map it to null.
+- ⚠️ **Intensity doubles at 0.8:** Hitloop sends `filterIntensity:0.8`, and `applyFilterIntensity`
+  scales `eq`/`saturation`/`brightness`/`noise`/`vignette` deltas by `intensity/0.4` (**2× at
+  0.8**); `curves`/`colorbalance` are NOT scaled. Author looks to read right **at 0.8**.
+- Build chains from production-proven primitives (`scale`/`pad`/`eq`/`curves`/`unsharp`) and
+  **ffmpeg-dry-run each** (`ffmpeg -f lavfi -i testsrc=... -vf "<chain>" -frames:v 1 out.png`)
+  before pushing.
+
+### "None" means truly nothing (fixed 2026-07-01)
+
+The worker was built to **always brand** videos, so UI "None" meant *default*, not *off*. As-built now:
+- **Top logo None → skips the layer** (was: default `ue_barcode` logo — the barcode across the top).
+  Guarded `if (logoToLoad)` in `ArweaveVideoGenerator.js`.
+- **End logo None → already skips** (block gated `if (finalEndLogo && !endTextOverlay)`; the
+  `ue_square` default branch is **dead code**). **Overlay None → already off** (`if (enableOverlay)`).
+- ⚠️ **Still always-on** (out of scope by choice): the hardcoded **"Artist / Mix /
+  UndergroundExistence.info" text overlay** (~L729). ⚠️ A **custom-but-not-found** top logo still
+  falls back to the barcode (only "None" skips). ⚠️ `generateTextLayers` is **DEAD code** (never called).
+
+### Audio pinned for repeatability (fixed 2026-07-01)
+
+Unset artist/mix used to **random-pick each render** (the "inconsistent renders"). Now
+`ArweaveAudioClient.js` `getArtistMix`/`getArtistTrax` pick the **FIRST** artist/mix/track
+deterministically. ⚠️ The **in-track start offset** (`ArweaveAudioClient.js` ~L746) is **still
+random** — same mix, different 30s slice; pin it separately if byte-identical audio is required.
+
+### End logo size/placement (2026-07-01)
+
+End-logo layer = **72% of frame width** (was 35%), **centered both axes**
+(`ArweaveVideoGenerator.js`, end-logo block). Shared by all end logos (white/black variants).
+
+### Set-vs-rendered: the settings snapshot on the SAVED ASSETS card (2026-07-01)
+
+`media-reconcile.cjs` writes `capture.createdWith` (marked `full:true`) = the full validated-recipe
+snapshot: filter+intensity, overlay, top/end logo, artist, mix, `useArtistImage`, end text, custom
+audio, output size, duration, and the **manual clip filenames** (from `videoOrder`). The SAVED
+ASSETS card (`DashboardPage.jsx`, `saved-remix-meta`) renders every set field for troubleshooting;
+a **null field shows `auto`** (worker auto-picks — e.g. random logo/audio). Older captures (no
+`full`) keep the legacy compact line. Auto-mode source clips aren't named (worker random-picks them;
+only manual `videoOrder` names are known here).
+
+### Revert anchors (git tags)
+
+Each behavior change this session is one **isolated commit** — revert via `git revert <sha>`.
+- **EditVideos repo:** `pre-video-filters-phase1` (before the 5 looks) · `pre-logo-audio-fix`
+  (before top-logo None=skip + deterministic audio) · `pre-endlogo-size` (before end-logo resize).
+- **Hitloop repo:** `pre-video-filters-phase1` (before the `FILTER_OPTIONS` rows). The
+  `createdWith` snapshot shipped on `media-reconcile.cjs` (clean) + `DashboardPage.jsx`.
 
 ## Env vars (Hitloop — local `.env.local` + Vercel production)
 
@@ -116,6 +203,11 @@ gracefully if absent (job queues, no render). Rotating these in EditVideos requi
    state on poll-`done`, so the card flips to "Video ready" even under admin impersonation (listener
    off) or a cached bootstrap.
 7. Generated MP4 carries an `aac` audio track; it's served from the EV bucket via a signed URL.
+8. **Render look/branding lives in the EditVideos worker, not Hitloop.** Filter looks, logo/overlay
+   "None"=off behavior, audio pick, and layout are edited in the EV repo and deployed by push — see
+   [§ Render behavior](#render-behavior--filters-logos-audio-layout-editvideos-worker). Two traps
+   worth pre-loading: a **null filter renders black & white** (not "original"), and **"None" used to
+   mean "default branding"** (now fixed for logos, still true for the hardcoded UE.info text).
 
 ## How to extend
 
