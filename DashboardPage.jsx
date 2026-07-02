@@ -13744,7 +13744,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               // All client dashboard cards are now visible without legacy
               // modular-onboarding dimming; module buttons still control run state.
               const isDimmed = false;
-              const isLocked = (!isAdmin && !NON_ADMIN_UNLOCKED_CARD_IDS.has(card.id)) || card.locked || (activeCapabilityFilter === 'onboarding' && isCardLocked(card.id));
+              // Admins viewing any client bypass every card-level lock (data-gate
+              // `card.locked` + onboarding step lock). Non-admin logic unchanged.
+              const isLocked = !isAdmin && (!NON_ADMIN_UNLOCKED_CARD_IDS.has(card.id) || card.locked || (activeCapabilityFilter === 'onboarding' && isCardLocked(card.id)));
               // Unlocked but not yet run (enabled/disabled without a succeeded status) —
               // we want no card-level hover effect, only direct button hover.
               // Leadgen flow cards aren't tracked in moduleState — drive the

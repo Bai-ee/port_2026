@@ -109,40 +109,53 @@ async function fetchAnthropicCost(windowDays) {
     return { available: false, reason: 'No ANTHROPIC_ADMIN_KEY set (Individual org cannot issue an Admin key — convert to a team org to enable).' };
   }
   try {
-    // cost_report buckets by UTC day and requires ending_at strictly AFTER
-    // starting_at at day resolution — raw sub-day timestamps 400 with "ending
-    // date must be after starting date". Align both to UTC midnight; the daily
-    // view = today only (start of today → start of tomorrow, exclusive end).
+    // cost_report buckets by UTC day. Two constraints handled here:
+    //  1. It requires ending_at strictly AFTER starting_at at day resolution AND
+    //     clamps ending_at to now — so a start-of-TODAY → start-of-tomorrow range
+    //     collapses to start==end for the in-progress day and 400s ("ending date
+    //     must be after starting date"). Start N *full* days back (start ≤
+    //     yesterday) so the range always spans ≥1 closed day plus today-so-far.
+    //  2. Results paginate (has_more / next_page). A wide window returns only the
+    //     first page (~7 daily buckets), so 30D/90D undercount unless we follow
+    //     the cursor to the end.
     const DAY_MS = 86400_000;
     const floorUtcDay = (ms) => { const d = new Date(ms); d.setUTCHours(0, 0, 0, 0); return d; };
     const now = Date.now();
-    const startingAt = floorUtcDay(now - (Math.max(1, windowDays) - 1) * DAY_MS).toISOString();
+    const startingAt = floorUtcDay(now - Math.max(1, windowDays) * DAY_MS).toISOString();
     const endingAt = floorUtcDay(now + DAY_MS).toISOString();
-    const params = new URLSearchParams();
-    params.set('starting_at', startingAt);
-    params.set('ending_at', endingAt);
-    params.append('group_by[]', 'description');
-    const url = `https://api.anthropic.com/v1/organizations/cost_report?${params.toString()}`;
-    const res = await fetch(url, {
-      headers: { 'x-api-key': adminKey, 'anthropic-version': '2023-06-01' },
-    });
-    if (!res.ok) {
-      const t = await res.text();
-      return { available: false, reason: `cost_report ${res.status}: ${t.slice(0, 160)}` };
-    }
-    const data = await res.json();
-    const buckets = Array.isArray(data?.data) ? data.data : [];
+
     let total = 0;
     const byDescription = {};
-    for (const b of buckets) {
-      for (const item of (b.results || [])) {
-        // Anthropic reports cost amount as decimal strings in cents.
-        const amt = centsToUsd(item?.amount ?? item?.cost ?? item?.amount_cents ?? 0);
-        total += amt;
-        const parsed = item?.parsed_fields || item?.parsedFields || {};
-        const key = parsed.model || item?.description || item?.group || 'unknown';
-        byDescription[key] = (byDescription[key] || 0) + amt;
+    let page = null;
+    let guard = 0;
+    while (guard++ < 40) {
+      const params = new URLSearchParams();
+      params.set('starting_at', startingAt);
+      params.set('ending_at', endingAt);
+      params.append('group_by[]', 'description');
+      if (page) params.set('page', page);
+      const url = `https://api.anthropic.com/v1/organizations/cost_report?${params.toString()}`;
+      const res = await fetch(url, {
+        headers: { 'x-api-key': adminKey, 'anthropic-version': '2023-06-01' },
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        return { available: false, reason: `cost_report ${res.status}: ${t.slice(0, 160)}` };
       }
+      const data = await res.json();
+      const buckets = Array.isArray(data?.data) ? data.data : [];
+      for (const b of buckets) {
+        for (const item of (b.results || [])) {
+          // Anthropic reports cost amount as decimal strings in cents.
+          const amt = centsToUsd(item?.amount ?? item?.cost ?? item?.amount_cents ?? 0);
+          total += amt;
+          const parsed = item?.parsed_fields || item?.parsedFields || {};
+          const key = parsed.model || item?.description || item?.group || 'unknown';
+          byDescription[key] = (byDescription[key] || 0) + amt;
+        }
+      }
+      if (!data?.has_more || !data?.next_page) break;
+      page = data.next_page;
     }
     return {
       available: true,

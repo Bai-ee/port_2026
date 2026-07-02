@@ -24,6 +24,7 @@ const { fetchRedditSignals, buildRedditContextBlock } = require('./services/redd
 const { runRedditSerpSearch } = require('../scout-intake/external-scouts/reddit-serp-search');
 const { fetchLast30Days } = require('./services/last30days');
 const { normalizeSignals, mapToScoutFields, buildLast30DaysContextBlock, summarizeLast30DaysResult } = require('./normalize-last30days');
+const { WEB_SEARCH_USD_PER_REQUEST, webSearchRequests, logUsage } = require('../../api/_lib/usage-logger.cjs');
 
 function getAnthropicClient() {
   return getProvider();
@@ -983,6 +984,19 @@ async function runXScout(config = DEFAULT_CONFIG) {
     const stage1OutputTokens = stage1Response.usage?.output_tokens || 0;
     logCostEstimate('Stage 1 (searches)', stage1InputTokens, stage1OutputTokens, MODELS.search);
     const stage1Cost = computeStageCost('scout-search', stage1InputTokens, stage1OutputTokens, MODELS.search);
+    // Stage-1 TOKENS are in stageCosts above; the web_search SURCHARGE ($10/1k) is
+    // billed on top and invisible to token stage costs — log it as its own event.
+    try {
+      const searches = webSearchRequests(stage1Response);
+      if (searches > 0) {
+        await logUsage({
+          module: 'scout-intake', action: 'scout-search-surcharge', provider: 'anthropic',
+          model: MODELS.search, inputTokens: 0, outputTokens: 0,
+          costUsd: searches * WEB_SEARCH_USD_PER_REQUEST,
+          clientId: config.clientId || null, metadata: { webSearchRequests: searches },
+        });
+      }
+    } catch { /* best-effort */ }
 
     // Extract raw search results from Stage 1
     const searchResults = extractSearchResults(stage1Response.content);

@@ -654,7 +654,14 @@ export async function refreshDigestClient(clientId, { freshnessToken = '', force
     ? (watchlist.error || 'watchlist pull failed')
     : null;
   return {
+    // ok = every step clean (for logging/telemetry). sendable = the CORE content a
+    // worthwhile email needs (fresh scout signals + an executive summary). Creative
+    // modules, strategy (30-day plan / suggested posts — opt-in, default OFF), and
+    // watchlist are BONUS: if they fail, their sections show an empty-state, so they
+    // must NOT block the send. The send gate uses `sendable`, not `ok` — otherwise a
+    // client merely missing a category (strategy fails) kills an otherwise-good email.
     ok: modules.ok && scout.ok && strategy.ok && briefSummaries.ok,
+    sendable: scout.ok && briefSummaries.ok,
     clientId,
     modules,
     scout,

@@ -105,6 +105,7 @@ export async function generateBriefSummaries({ clientId, runId, briefTypes = ALL
   }
 
   const options = {
+    clientId, // so the summarizer's usage_events attribute to this client (not "unknown")
     clientName: clientConfig?.clientName || clientConfig?.sourceInputs?.clientName || '',
     websiteUrl: clientConfig?.sourceInputs?.websiteUrl || clientConfig?.websiteUrl || '',
     // Time-of-day salutation in the CLIENT's timezone (scout-config-generator

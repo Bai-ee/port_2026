@@ -6,6 +6,7 @@
 // schedule, and what's coming up. Network I/O (one Anthropic call) only.
 
 const { callAnthropic, extractAnthropicUsage } = require('../scout-intake/_anthropic-client.js');
+const { logAnthropicCall } = require('../../api/_lib/usage-logger.cjs');
 
 const SUMMARY_MODEL = process.env.DIGEST_SUMMARY_MODEL || 'claude-haiku-4-5-20251001';
 const MAX_OUTPUT_TOKENS = 600;
@@ -88,6 +89,8 @@ async function generateBriefSummary({ dateStr, agenda, ga4, firebase, homepage, 
     system,
     messages: [{ role: 'user', content: userContent }],
   });
+  // Instrument — daily-digest Haiku summary; runs on every real send, was untracked.
+  try { await logAnthropicCall({ module: 'digest', action: 'brief-summary', model: SUMMARY_MODEL, response }); } catch { /* best-effort */ }
 
   const raw = (response?.content || [])
     .filter((b) => b.type === 'text')
@@ -162,6 +165,8 @@ async function generateVideoPromoPosts({ videos = [], clientBrainContext = '', c
     system,
     messages: [{ role: 'user', content: user }],
   });
+  // Instrument — daily-digest video-promo copy Haiku call; was untracked.
+  try { await logAnthropicCall({ module: 'digest', action: 'video-promo-posts', model: SUMMARY_MODEL, response }); } catch { /* best-effort */ }
   const raw = (response?.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
   const start = raw.indexOf('{');
   const end = raw.lastIndexOf('}');

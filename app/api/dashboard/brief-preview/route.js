@@ -161,8 +161,12 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   const headline = projected.headline || 'Founder marketing brief';
   const scoutBrief = projected.humanBrief || 'No Scout brief text was stored for this run.';
   const guardian = marketingBrief?.guardianFlags || null;
-  const generated = generatedAt || marketingBrief?.generatedAtIso || new Date().toISOString();
-  const generatedDt = new Date(generated);
+  // Only show a run time if the brief was ACTUALLY produced by a run. A client
+  // that has never had a marketing run has no stored timestamp — do NOT fabricate
+  // `new Date()` (that made every un-run client look freshly generated "now").
+  const generatedIso = generatedAt || marketingBrief?.generatedAtIso || null;
+  const hasRealRun = Boolean(generatedIso);
+  const generatedDt = new Date(generatedIso || Date.now());
   const when = generatedDt.toISOString().slice(0, 10);
   const tierLabel = tier === 'paid' ? 'Recurring · Paid' : 'One-time · Free';
   // The cover h1 uses the run date+time as the editorial mark — not the long
@@ -170,14 +174,14 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   // under the brief name: MM/DD/YY, then the time beneath it. Pin to EST so the
   // date/time read the same regardless of server timezone (Vercel runs UTC).
   const BRIEF_TZ = 'America/New_York';
-  const headlineDateLines = [
+  const headlineDateLines = hasRealRun ? [
     generatedDt.toLocaleDateString('en-US', { timeZone: BRIEF_TZ, month: '2-digit', day: '2-digit', year: '2-digit' }),
     `${generatedDt.toLocaleString('en-US', { timeZone: BRIEF_TZ, hour: 'numeric', minute: '2-digit' })} EST`,
-  ].map(esc).join('<br/>');
-  const runTimestamp = generatedDt.toLocaleString('en-US', {
+  ].map(esc).join('<br/>') : esc('Not yet run');
+  const runTimestamp = hasRealRun ? generatedDt.toLocaleString('en-US', {
     timeZone: BRIEF_TZ, month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
-  });
-  const dateLine = when.replace(/-/g, ' · ');
+  }) : 'Not yet run';
+  const dateLine = hasRealRun ? when.replace(/-/g, ' · ') : 'not yet run';
   const brandUpper = String(clientName || 'BRIEF').toUpperCase();
   const guardianText = guardian?.readyToPublish === undefined
     ? 'Needs review'

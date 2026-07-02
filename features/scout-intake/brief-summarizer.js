@@ -494,7 +494,7 @@ function extractToolInput(response) {
  * @param {object} [options] - { clientName, websiteUrl, greeting }
  * @returns {Promise<{ ok: boolean, summary: string|null, runCostData: object|null, error: string|null }>}
  */
-async function summarizeBriefCover(briefType, data = {}, { clientName = '', websiteUrl = '', greeting = '', clientBrainContext = '' } = {}) {
+async function summarizeBriefCover(briefType, data = {}, { clientId = null, clientName = '', websiteUrl = '', greeting = '', clientBrainContext = '' } = {}) {
   const { label, evidenceText, sectionCount, briefType: resolved } = buildBriefSummaryEvidence(briefType, data);
 
   if (!sectionCount) {
@@ -587,7 +587,7 @@ async function summarizeBriefCover(briefType, data = {}, { clientName = '', webs
   const runCostData = extractAnthropicUsage(response, { model: summaryModel });
   // Instrument — brief-cover / exec summaries computed cost but were never logged
   // (the runner writes summaries only). Now the Sonnet exec summaries show up.
-  try { await logAnthropicCall({ module: 'brief-summarizer', action: String(briefType || 'summary'), model: summaryModel, response }); } catch { /* best-effort */ }
+  try { await logAnthropicCall({ module: 'brief-summarizer', action: String(briefType || 'summary'), model: summaryModel, response, clientId }); } catch { /* best-effort */ }
   const summary = extractToolInput(response);
 
   if (!summary) {

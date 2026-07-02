@@ -12,6 +12,7 @@
 // Returns { brandOverview } or null on total failure.
 
 const { callAnthropic } = require('./_anthropic-client');
+const { logAnthropicCall } = require('../../api/_lib/usage-logger.cjs');
 
 function str(v) {
   return typeof v === 'string' && v.trim() ? v.trim() : '';
@@ -155,6 +156,8 @@ Call fill_brand_overview with your findings.`;
     messages: [{ role: 'user', content: prompt }],
   });
 
+  // Instrument — runs in the daily brief worker + onboarding; was untracked.
+  try { await logAnthropicCall({ module: 'scout-intake', action: 'brand-overview', model: 'claude-haiku-4-5-20251001', response, clientId: ctx?.clientId || null }); } catch { /* best-effort */ }
   const toolUse = response.content?.find((b) => b.type === 'tool_use');
   if (!toolUse?.input) throw new Error('No tool_use block in synthesizer response.');
   return toolUse.input;

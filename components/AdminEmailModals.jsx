@@ -301,10 +301,18 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
             const executiveSummary = r?.executiveSummary?.ok ? 'executive summary ok' : `executive summary issue${r?.executiveSummary?.error ? `: ${r.executiveSummary.error}` : ''}`;
             note(`Refresh · ${r?.clientId || 'client'} · ${modules} · ${scout} · ${watch} · ${reddit} · ${strategy} · ${executiveSummary}`);
           });
-          if (!refreshResults.length || refreshResults.some((r) => !r?.ok)) {
+          // Gate on `sendable` (core: fresh scout signals + executive summary), NOT `ok`.
+          // Bonus steps (strategy/plan, creative modules, watchlist) that fail just render
+          // their section's empty-state — they must not block an otherwise-good email.
+          const sendableResults = refreshResults.filter((r) => r?.sendable);
+          if (!refreshResults.length || !sendableResults.length) {
             setSendStatus({ kind: 'error', msg: 'Refresh failed; email not sent.' });
-            throw new Error('Refresh did not complete cleanly. Email not sent; fix the refresh issue and try again.');
+            throw new Error('Refresh did not complete cleanly — scout signals or the executive summary failed. Email not sent; fix that and try again.');
           }
+          // Non-critical issues (e.g. "strategy issue: No category set") warn but don't block.
+          refreshResults
+            .filter((r) => r?.sendable && !r?.ok)
+            .forEach((r) => note(`⚠ Sending ${r?.clientId || 'client'} despite a non-critical issue above — that section shows its empty state.`));
           note('Fresh digest data saved ✓');
 
           advance('[STEP 2/2]', 'Rendering and sending email from saved data…');

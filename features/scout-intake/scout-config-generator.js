@@ -26,6 +26,7 @@
 
 const { getScoutConfig, saveScoutConfig } = require('./scout-config-store');
 const { callAnthropic, extractAnthropicUsage } = require('./_anthropic-client');
+const { logAnthropicCall } = require('../../api/_lib/usage-logger.cjs');
 
 const MODEL = 'claude-haiku-4-5-20251001';
 const MAX_TOKENS = 1400;
@@ -509,6 +510,8 @@ async function generateScoutConfig({ clientId, clientName, intakeResult, userCon
   }
 
   const runCostData = extractUsage(response);
+  // Instrument — runs in the daily brief worker + regenerate; was untracked.
+  try { await logAnthropicCall({ module: 'scout-intake', action: 'scout-config', model: MODEL, response, clientId }); } catch { /* best-effort */ }
   const raw = extractToolInput(response);
   if (!raw) {
     return { ok: false, scoutConfig: null, runCostData, error: 'Generator returned no tool_use content.' };

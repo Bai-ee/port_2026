@@ -7,6 +7,7 @@ const require = createRequire(import.meta.url);
 const { verifyRequestUser } = require('../../../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../../../api/_lib/client-provisioning.cjs');
 const { callAnthropic } = require('../../../../../features/scout-intake/_anthropic-client.js');
+const { logAnthropicCall } = require('../../../../../api/_lib/usage-logger.cjs');
 
 const MODEL = 'claude-haiku-4-5-20251001';
 
@@ -120,6 +121,9 @@ export async function POST(request) {
         },
       ],
     });
+
+    // Instrument — user-triggered KB chat was untracked.
+    try { await logAnthropicCall({ module: 'knowledge-base', action: 'chat', model: MODEL, response, clientId: context.clientId }); } catch { /* best-effort */ }
 
     return json({
       ok: true,
