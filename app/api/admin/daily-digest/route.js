@@ -1934,13 +1934,19 @@ export async function GET(request) {
     let homeClientId = null;
     let digestCfg = null;
     try {
-      const configClientId = await digestConfig.resolveDigestClientId();
+      // Explicit ?clientId= (the Email Digest card passes its active client) scopes
+      // the WHOLE send to that client — its digest config, briefs, stats, and
+      // recipient. Without it (the scheduled cron), fall back to the env-resolved
+      // admin client. Never mix: resolving by admin email while viewing another
+      // client's dashboard was the cross-client contamination path.
+      const requestedDigestClientId = String(url.searchParams.get('clientId') || '').trim();
+      const configClientId = requestedDigestClientId || await digestConfig.resolveDigestClientId();
       digestCfg = await digestConfig.getDigestConfig(configClientId);
       digestCfg = {
         ...digestCfg,
         include: mergeCompatInclude(digestCfg?.include, await readRawDigestInclude(configClientId)),
       };
-      homeClientId = digestCfg.homeClientId || configClientId;
+      homeClientId = (requestedDigestClientId ? configClientId : digestCfg.homeClientId) || configClientId;
     } catch { /* resolution failed — agenda falls back to the env calendar */ }
 
     // Gate the SCHEDULED send by the daily-email toggle (schedule.enabled). The
@@ -2184,7 +2190,16 @@ export async function GET(request) {
     }
 
     const sessionStr = ga4.overview ? `, ${ga4.overview.sessions} session${ga4.overview.sessions !== 1 ? 's' : ''}` : '';
-    const subject = `HITLOOP Daily — ${firebase.newUsers} sign-up${firebase.newUsers !== 1 ? 's' : ''}, ${firebase.recentRuns} dashboard${firebase.recentRuns !== 1 ? 's' : ''}${sessionStr} · ${dateStr}`;
+    // Subject carries the client's brand when the send is client-scoped, so two
+    // clients' digests are distinguishable in the same inbox. Falls back to the
+    // platform brand for the unscoped/legacy cron.
+    let subjectBrand = 'HITLOOP';
+    try {
+      const brandSnap = homeClientId ? await fb.adminDb.collection('client_configs').doc(homeClientId).get() : null;
+      const b = String(brandSnap?.data()?.marketingBriefConfig?.brandName || '').trim();
+      if (b) subjectBrand = b.toUpperCase();
+    } catch { /* keep platform brand */ }
+    const subject = `${subjectBrand} Daily — ${firebase.newUsers} sign-up${firebase.newUsers !== 1 ? 's' : ''}, ${firebase.recentRuns} dashboard${firebase.recentRuns !== 1 ? 's' : ''}${sessionStr} · ${dateStr}`;
 
     // Resolve the hosted Executive Brief link (run fresh / newest published /
     // off). Best-effort: any failure falls back to the dashboard link inside

@@ -215,7 +215,9 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
     setPreviewMode(nextMode);
     try {
       const param = nextMode === 'live' ? '1' : 'template';
-      let path = `/api/admin/daily-digest?preview=${param}`;
+      // Scope the preview to this card's client so preview == sent per client.
+      const previewClientId = form?.homeClientId || clientId || activeClientId || '';
+      let path = `/api/admin/daily-digest?preview=${param}${previewClientId ? `&clientId=${encodeURIComponent(previewClientId)}` : ''}`;
       if (includeFlags) {
         const on = Object.entries(includeFlags).filter(([, v]) => v !== false).map(([k]) => k).join(',');
         path += `&include=${encodeURIComponent(on)}`;
@@ -237,7 +239,7 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
     } finally {
       setPreviewLoading(false);
     }
-  }, [user]);
+  }, [user, form?.homeClientId, clientId, activeClientId]);
 
   const runAndSend = useCallback(async () => {
     if (!user || typeof runWithTerminal !== 'function') return;
@@ -317,7 +319,11 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
 
           advance('[STEP 2/2]', 'Rendering and sending email from saved data…');
           setSendStatus({ kind: 'pending', msg: 'Sending email from saved data…' });
-          const res = await authFetch(user, `/api/admin/daily-digest?send=1&skipRefresh=1&freshnessToken=${encodeURIComponent(freshnessToken)}`);
+          // Scope the send to THIS card's client (same anchor the refresh loop used) —
+          // without it the route falls back to the env-resolved admin client and a
+          // send from another client's dashboard emails the wrong digest.
+          const sendClientId = digestClientIds[0] || activeClientId || clientId || '';
+          const res = await authFetch(user, `/api/admin/daily-digest?send=1&skipRefresh=1&freshnessToken=${encodeURIComponent(freshnessToken)}${sendClientId ? `&clientId=${encodeURIComponent(sendClientId)}` : ''}`);
           (Array.isArray(res?.log) ? res.log : []).forEach((l) => note(l.text));
           if (res?.subject) note(`Subject · ${res.subject}`);
           setSendStatus({ kind: 'ok', msg: 'Sent with freshly saved data.' });

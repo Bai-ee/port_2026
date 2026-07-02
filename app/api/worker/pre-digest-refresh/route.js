@@ -706,31 +706,26 @@ async function handle(request) {
 
   let homeClientId = null;
   let clientIds = [];
-  // Digest include toggles + brief-link mode gate the expensive brief compute in
-  // refreshDigestClient (see cost gate there). Same saved config the send reads,
-  // so refreshed data == previewed == sent.
-  let digestInclude = {};
-  let digestBriefLinkMode = 'fresh';
   try {
-    const configClientId = await digestConfig.resolveDigestClientId();
-    const cfg = await digestConfig.getDigestConfig(configClientId);
-    homeClientId = cfg.homeClientId || configClientId;
-    digestInclude = cfg.include || {};
-    digestBriefLinkMode = cfg.briefLinkMode || 'fresh';
-    // Opt-in only: the daily crawl runs for the home client plus every client
-    // whose Email Digest card has the daily toggle on — NOT a global
-    // includeClientIds fan-out. The one-time migration turns legacy daily-on
-    // configs OFF (except home) so this set starts as just the home client.
-    await digestConfig.ensureDailyOptInMigration(homeClientId);
-    const enrolledIds = await digestConfig.listCronEnrolledClientIds();
-    const configuredClientIds = [...new Set([homeClientId, ...enrolledIds].filter(Boolean))];
     if (requestedClientId) {
-      // Explicit admin target (Run & Send / per-client refresh) — allow any
-      // client, even one not enrolled in the daily cron. Only the scheduled cron
-      // path (no requestedClientId) is restricted to the enrolled set.
+      // Explicit admin target (Run & Send / per-client refresh) — scope EVERYTHING
+      // to that client: it is its own home client. Allow any client, even one not
+      // enrolled in the daily cron. Never fall back to the env-resolved admin
+      // client here — that was the cross-client contamination path (a nottherug
+      // send refreshing with hitloop's digest config).
+      homeClientId = requestedClientId;
       clientIds = [requestedClientId];
     } else {
-      clientIds = configuredClientIds;
+      const configClientId = await digestConfig.resolveDigestClientId();
+      const cfg = await digestConfig.getDigestConfig(configClientId);
+      homeClientId = cfg.homeClientId || configClientId;
+      // Opt-in only: the daily crawl runs for the home client plus every client
+      // whose Email Digest card has the daily toggle on — NOT a global
+      // includeClientIds fan-out. The one-time migration turns legacy daily-on
+      // configs OFF (except home) so this set starts as just the home client.
+      await digestConfig.ensureDailyOptInMigration(homeClientId);
+      const enrolledIds = await digestConfig.listCronEnrolledClientIds();
+      clientIds = [...new Set([homeClientId, ...enrolledIds].filter(Boolean))];
     }
   } catch (err) {
     logError('pre_digest_refresh_client_resolve_error', { error: err.message });
@@ -755,7 +750,12 @@ async function handle(request) {
       break;
     }
     // eslint-disable-next-line no-await-in-loop
-    const result = await refreshDigestClient(clientId, { freshnessToken, force: forceScout, source: triggerSource, actorUid, include: digestInclude, briefLinkMode: digestBriefLinkMode });
+    // Per-client digest config: each client's OWN include toggles + brief-link
+    // mode gate its expensive compute (see cost gate in refreshDigestClient) —
+    // never another client's config. Defaults apply when the client has no doc.
+    // eslint-disable-next-line no-await-in-loop
+    const clientCfg = await digestConfig.getDigestConfig(clientId).catch(() => null);
+    const result = await refreshDigestClient(clientId, { freshnessToken, force: forceScout, source: triggerSource, actorUid, include: clientCfg?.include || {}, briefLinkMode: clientCfg?.briefLinkMode || 'fresh' });
     results.push(result);
     logInfo('pre_digest_refresh_client_done', {
       clientId,
