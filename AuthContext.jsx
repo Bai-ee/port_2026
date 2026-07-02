@@ -96,6 +96,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [adminReady, setAdminReady] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -149,10 +150,13 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     if (!user) {
       setIsAdmin(false);
+      setAdminReady(!loading);
       return undefined;
     }
 
     let cancelled = false;
+    setIsAdmin(false);
+    setAdminReady(false);
     (async () => {
       try {
         const token = await user.getIdToken();
@@ -166,13 +170,15 @@ export const AuthProvider = ({ children }) => {
         }
       } catch {
         if (!cancelled) setIsAdmin(false);
+      } finally {
+        if (!cancelled) setAdminReady(true);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, loading]);
 
   const value = useMemo(() => ({
     user,
@@ -180,6 +186,7 @@ export const AuthProvider = ({ children }) => {
     loading,
     isFirebaseConfigured,
     isAdmin,
+    adminReady,
     signUp: async ({ email, password, displayName, companyName, websiteUrl, ideaDescription }) => {
       if (!auth) {
         throw new Error('Firebase is not configured.');
@@ -294,7 +301,7 @@ export const AuthProvider = ({ children }) => {
       clearPendingDashboardSignup();
       await signOut(auth);
     },
-  }), [loading, user, userProfile, isAdmin]);
+  }), [loading, user, userProfile, isAdmin, adminReady]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

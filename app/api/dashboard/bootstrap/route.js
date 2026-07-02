@@ -40,7 +40,12 @@ export async function GET(request) {
   }
 
   try {
-    let bootstrap = await getDashboardBootstrap({ uid: decoded.uid, email: decoded.email, request });
+    let bootstrap = await getDashboardBootstrap({
+      uid: decoded.uid,
+      email: decoded.email,
+      request,
+      allowImpersonationFallback: true,
+    });
 
     // Auto-create a sample brief ONLY for the admin's OWN empty dashboard — never
     // while impersonating another client (effectiveClientId would be theirs), and
@@ -79,7 +84,12 @@ export async function GET(request) {
         );
 
         // Re-fetch bootstrap to include the new brief
-        bootstrap = await getDashboardBootstrap({ uid: decoded.uid, email: decoded.email, request });
+        bootstrap = await getDashboardBootstrap({
+          uid: decoded.uid,
+          email: decoded.email,
+          request,
+          allowImpersonationFallback: true,
+        });
       }
     }
 

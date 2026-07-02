@@ -133,7 +133,7 @@ async function canAdminAccessClient(email, clientId) {
   return clientSnap.exists;
 }
 
-async function getEffectiveClientContext({ uid, email, request, requestedClientId }) {
+async function getEffectiveClientContext({ uid, email, request, requestedClientId, allowImpersonationFallback = false }) {
   const userSnapshot = await fb.adminDb.collection('users').doc(uid).get();
   const userProfile = userSnapshot.exists ? userSnapshot.data() : null;
   const ownClientId = userProfile?.clientId || null;
@@ -154,12 +154,38 @@ async function getEffectiveClientContext({ uid, email, request, requestedClientI
 
   const adminAccess = await loadAdminAccess(email);
   if (!adminAccess.isAdmin) {
+    if (allowImpersonationFallback && ownClientId) {
+      return {
+        uid,
+        userProfile,
+        ownClientId,
+        clientId: ownClientId,
+        requestedClientId: requested,
+        impersonating: false,
+        ignoredRequestedClientId: requested,
+        isAdmin: false,
+        adminDashboards: [],
+      };
+    }
     const err = new Error('Forbidden: admin access required for dashboard impersonation.');
     err.status = 403;
     throw err;
   }
 
   if (!(await canAdminAccessClient(email, requested))) {
+    if (allowImpersonationFallback && ownClientId) {
+      return {
+        uid,
+        userProfile,
+        ownClientId,
+        clientId: ownClientId,
+        requestedClientId: requested,
+        impersonating: false,
+        ignoredRequestedClientId: requested,
+        isAdmin: true,
+        adminDashboards: await listAdminDashboards(email),
+      };
+    }
     const err = new Error('Forbidden: dashboard is not provisioned for this admin.');
     err.status = 403;
     throw err;
@@ -759,6 +785,7 @@ async function getDashboardBootstrap(input) {
     effectiveClientId: clientId,
     ownClientId,
     impersonating,
+    ignoredRequestedClientId: context.ignoredRequestedClientId || null,
     adminDashboards: context.adminDashboards.length
       ? context.adminDashboards
       : await listAdminDashboards(opts.email),

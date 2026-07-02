@@ -2910,7 +2910,7 @@ function GlassTooltipLayer() {
 // entranceReady: route-level signal that the loading overlay has finished its
 // fade — the dashboard entrance timeline holds hidden until it flips true.
 const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) => {
-  const { user, userProfile, signOutUser, isAdmin } = useAuth();
+  const { user, userProfile, signOutUser, isAdmin, adminReady } = useAuth();
   const [theme, setTheme] = useState('light');
   const [countdownHours, setCountdownHours] = useState(14);
   const [briefCooldownSeconds, setBriefCooldownSeconds] = useState(TIER_BRIEF_COOLDOWN_SECONDS);
@@ -2967,15 +2967,16 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // Stays true after first open so the modal stays mounted (chat history preserved).
   const [hasBrandSystemMounted, setHasBrandSystemMounted] = useState(false);
   const [impersonateId, setImpersonateId] = useState(() => readImpersonateClientId());
+  const activeImpersonateId = isAdmin ? impersonateId : null;
   const [clientSwitcherOpen, setClientSwitcherOpen] = useState(false);
   const [adminClientOptions, setAdminClientOptions] = useState([]);
 
-  const apiPath = useCallback((path) => withImpersonation(path, impersonateId), [impersonateId]);
+  const apiPath = useCallback((path) => withImpersonation(path, activeImpersonateId), [activeImpersonateId]);
   // Stable token getter for BrandSystemChat — re-binding when `user` changes only.
   const brandSystemGetIdToken = useCallback(() => {
     if (!user) return Promise.reject(new Error('No authenticated user.'));
     return user.getIdToken();
-  }, [user, impersonateId]);
+  }, [user]);
 
   // ── Quick-attach (paperclip + drag-and-drop on the card shell) ──
   // Shared by the Source Library (knowledge-base) and Client Brain (client-brain)
@@ -3037,6 +3038,16 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 
     return () => { cancelled = true; };
   }, [user, isAdmin]);
+
+  useEffect(() => {
+    if (!user) {
+      setImpersonateId(null);
+      return;
+    }
+    if (!adminReady || isAdmin || !impersonateId) return;
+    writeImpersonateClientId(null);
+    setImpersonateId(null);
+  }, [user, adminReady, isAdmin, impersonateId]);
 
   // Per-client leadgen flow (Prepare Brief / Generate Mockup / Generate Site).
   // Opened by clicking client-* cards in the Data Visualization bucket. Reuses
@@ -5392,14 +5403,14 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // Bootstrap fetch (stable reference)
   const doBootstrap = useCallback(() => {
     if (!user) return;
-    fetchDashboardBootstrap(user, impersonateId)
+    fetchDashboardBootstrap(user, activeImpersonateId)
       .then(applyBootstrapResponse)
       .catch((err) => {
         if (cancelledRef.current) return;
         const msg = err instanceof Error ? err.message : '';
         // Stale impersonateId from a previous admin session causes a 403 on fresh
         // signups. Clear it and retry as the signed-in user's own dashboard.
-        if (msg.includes('impersonation') && impersonateId) {
+        if (msg.includes('impersonation') && activeImpersonateId) {
           setImpersonateId(null);
           writeImpersonateClientId(null);
           fetchDashboardBootstrap(user, null).then(applyBootstrapResponse).catch(() => {});
@@ -5407,7 +5418,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         }
         setBootstrapError(msg || 'Could not load dashboard data.');
       });
-  }, [user, impersonateId, applyBootstrapResponse]);
+  }, [user, activeImpersonateId, applyBootstrapResponse]);
 
   // Optional scope ('marketing-director' | 'social-media-manager') runs a
   // pipeline slice for that agent brief. Callers wire it via an arrow —
@@ -5890,7 +5901,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       // Read the freshly-persisted signals so we can list each found item.
       let ad = {};
       try {
-        const fresh = await fetchDashboardBootstrap(user, impersonateId);
+        const fresh = await fetchDashboardBootstrap(user, activeImpersonateId);
         applyBootstrapResponse(fresh);
         ad = fresh?.dashboardState?.marketingBrief?.scoutBrief?.agentData || {};
       } catch { try { doBootstrap(); } catch { /* best-effort */ } }
@@ -5949,7 +5960,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     } finally {
       setMarketingBriefRunning(false);
     }
-  }, [user, marketingBriefConfig, marketingBriefRunning, clientBrainDefaults, saveMarketingBriefConfig, apiPath, doBootstrap, recipeCatalog, client, settleActiveLine, impersonateId, applyBootstrapResponse]);
+  }, [user, marketingBriefConfig, marketingBriefRunning, clientBrainDefaults, saveMarketingBriefConfig, apiPath, doBootstrap, recipeCatalog, client, settleActiveLine, activeImpersonateId, applyBootstrapResponse]);
 
   // Fast path: re-run the enabled Analysis Skills over the already-stored signals
   // (no new ~3-min search). Use when the signals are fresh but the REPORT didn't
@@ -5978,7 +5989,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       // Stored signal counts (no new search) for the first phase detail.
       let ad = {};
       try {
-        const fresh = await fetchDashboardBootstrap(user, impersonateId);
+        const fresh = await fetchDashboardBootstrap(user, activeImpersonateId);
         applyBootstrapResponse(fresh);
         ad = fresh?.dashboardState?.marketingBrief?.scoutBrief?.agentData || {};
       } catch { /* best-effort */ }
@@ -6030,7 +6041,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     } finally {
       setMarketingBriefRunning(false);
     }
-  }, [user, marketingBriefRunning, recipeRun.loading, marketingBriefConfig, recipeCatalog, client, apiPath, impersonateId, applyBootstrapResponse]);
+  }, [user, marketingBriefRunning, recipeRun.loading, marketingBriefConfig, recipeCatalog, client, apiPath, activeImpersonateId, applyBootstrapResponse]);
 
   // Shared row renderer for the Web Search + Platforms and Social Media Signals
   // cards: unlocked sources render as toggles, locked sources as Upgrade rows.
@@ -7418,12 +7429,26 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     }
     setBootstrapLoading(true);
     setBootstrapError('');
-    fetchDashboardBootstrap(user, impersonateId)
+    fetchDashboardBootstrap(user, activeImpersonateId)
       .then(applyBootstrapResponse)
-      .catch((err) => { if (!cancelledRef.current) setBootstrapError(err instanceof Error ? err.message : 'Could not load dashboard data.'); })
+      .catch((err) => {
+        if (cancelledRef.current) return;
+        const msg = err instanceof Error ? err.message : '';
+        if (msg.includes('impersonation') && activeImpersonateId) {
+          setImpersonateId(null);
+          writeImpersonateClientId(null);
+          fetchDashboardBootstrap(user, null)
+            .then(applyBootstrapResponse)
+            .catch((retryErr) => {
+              if (!cancelledRef.current) setBootstrapError(retryErr instanceof Error ? retryErr.message : 'Could not load dashboard data.');
+            });
+          return;
+        }
+        setBootstrapError(msg || 'Could not load dashboard data.');
+      })
       .finally(() => { if (!cancelledRef.current) setBootstrapLoading(false); });
     return () => { cancelledRef.current = true; };
-  }, [user, impersonateId, applyBootstrapResponse]);
+  }, [user, activeImpersonateId, applyBootstrapResponse]);
 
   useEffect(() => {
     if (!user) {
@@ -7437,7 +7462,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   }, [user, apiPath]);
 
   // ── Derived state ─────────────────────────────────────────────────────────
-  const isImpersonating = Boolean(bootstrap.impersonating || impersonateId);
+  const isImpersonating = Boolean(bootstrap.impersonating || activeImpersonateId);
   const adminDashboards = useMemo(() => {
     const byId = new Map();
     [...(bootstrap.adminDashboards || []), ...adminClientOptions].forEach((item) => {
@@ -8480,22 +8505,22 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   useEffect(() => {
     if (!user || !isRunActive) return undefined;
     const interval = setInterval(() => {
-      fetchDashboardBootstrap(user, impersonateId)
+      fetchDashboardBootstrap(user, activeImpersonateId)
         .then(applyBootstrapResponse)
         .catch(() => {});
     }, 4000);
     return () => clearInterval(interval);
-  }, [user, isRunActive, impersonateId, applyBootstrapResponse]);
+  }, [user, isRunActive, activeImpersonateId, applyBootstrapResponse]);
 
   useEffect(() => {
     if (!awaitingSignupProvision) return;
     const interval = setInterval(() => {
-      fetchDashboardBootstrap(user, impersonateId)
+      fetchDashboardBootstrap(user, activeImpersonateId)
         .then(applyBootstrapResponse)
         .catch(() => {});
     }, 2000);
     return () => clearInterval(interval);
-  }, [user, awaitingSignupProvision, impersonateId, applyBootstrapResponse]);
+  }, [user, awaitingSignupProvision, activeImpersonateId, applyBootstrapResponse]);
 
   useEffect(() => {
     if (!awaitingSignupProvision || hasClientWorkspace) return;
@@ -14999,7 +15024,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 readinessBadge: null,
               });
             };
-            fetchDashboardBootstrap(user, impersonateId)
+            fetchDashboardBootstrap(user, activeImpersonateId)
               .then((data) => {
                 applyBootstrapResponse(data);
                 openDetails();
