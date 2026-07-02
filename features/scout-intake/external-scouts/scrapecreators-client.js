@@ -124,9 +124,10 @@ async function searchReddit({ queries = [], limit = 12, timeframe = 'month', sor
   if (!terms.length) return { ok: false, items: [], error: 'no reddit queries', meta: { source: 'ScrapeCreators (Reddit)' } };
   const collected = [];
   const errors = [];
-  for (const query of terms) {
-    // eslint-disable-next-line no-await-in-loop
-    const r = await scGet('/v1/reddit/search', { query, sort, timeframe });
+  // Queries run concurrently — wall-clock = the slowest single call, not the sum
+  // (keeps the digest refresh well under the serverless timeout).
+  const results = await Promise.all(terms.map((query) => scGet('/v1/reddit/search', { query, sort, timeframe })));
+  for (const r of results) {
     if (!r.ok) { errors.push(r.error); continue; }
     const posts = (r.data && (r.data.posts || r.data.data)) || [];
     for (const p of posts) collected.push(normalizeRedditPost(p));
@@ -165,18 +166,15 @@ async function searchInstagram({ queries = [], creators = [], limit = 12, maxQue
   if (!terms.length && !handles.length) return { ok: false, items: [], error: 'no instagram queries or creators', meta: { source: 'ScrapeCreators (Instagram)' } };
   const collected = [];
   const errors = [];
-  for (const query of terms) {
-    // eslint-disable-next-line no-await-in-loop
-    const r = await scGet('/v2/instagram/reels/search', { query });
+  // Topic searches + creator-reel pulls all run concurrently — wall-clock = slowest
+  // single call, not the sum (keeps the digest refresh under the serverless timeout).
+  const [qResults, cResults] = await Promise.all([
+    Promise.all(terms.map((query) => scGet('/v2/instagram/reels/search', { query }))),
+    Promise.all(handles.map((handle) => scGet('/v1/instagram/user/reels', { handle }))),
+  ]);
+  for (const r of [...qResults, ...cResults]) {
     if (!r.ok) { errors.push(r.error); continue; }
     const reels = (r.data && (r.data.reels || r.data.items || r.data.data)) || [];
-    for (const reel of reels) collected.push(normalizeReel(reel));
-  }
-  for (const handle of handles) {
-    // eslint-disable-next-line no-await-in-loop
-    const r = await scGet('/v1/instagram/user/reels', { handle });
-    if (!r.ok) { errors.push(r.error); continue; }
-    const reels = (r.data && (r.data.items || r.data.reels || r.data.data)) || [];
     for (const reel of reels) collected.push(normalizeReel(reel));
   }
   const items = dedupeByUrl(collected.filter((it) => it.title), limit);

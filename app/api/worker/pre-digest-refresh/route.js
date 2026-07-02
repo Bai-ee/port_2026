@@ -580,18 +580,16 @@ async function refreshPlatformSignals(clientId) {
         { merge: true }
       );
     };
+    const creators = (Array.isArray(mbc.instagramHandles) ? mbc.instagramHandles : []).map((h) => String(h || '').replace(/^@+/, '')).filter((h) => h.length >= 2);
+    // Reddit + Instagram pulled concurrently (each already runs its own queries
+    // concurrently) so this whole step is ~one slow HTTP call, not the sum.
+    const [r, ig] = await Promise.all([
+      sources.has('reddit') ? scSearchReddit({ queries: [brand, ...cats.slice(0, 2)].filter(Boolean), limit: 12 }) : Promise.resolve(null),
+      sources.has('instagram') ? scSearchInstagram({ queries: [brand, ...cats.slice(0, 1)].filter(Boolean), creators, limit: 12 }) : Promise.resolve(null),
+    ]);
     const out = {};
-    if (sources.has('reddit')) {
-      const r = await scSearchReddit({ queries: [brand, ...cats.slice(0, 2)].filter(Boolean), limit: 12 });
-      if (r.ok && r.items.length) await persist('reddit', r.items, r.meta);
-      out.reddit = r.ok ? r.items.length : `err:${r.error}`;
-    }
-    if (sources.has('instagram')) {
-      const creators = (Array.isArray(mbc.instagramHandles) ? mbc.instagramHandles : []).map((h) => String(h || '').replace(/^@+/, '')).filter((h) => h.length >= 2);
-      const ig = await scSearchInstagram({ queries: [brand, ...cats.slice(0, 1)].filter(Boolean), creators, limit: 12 });
-      if (ig.ok && ig.items.length) await persist('instagram', ig.items, ig.meta);
-      out.instagram = ig.ok ? ig.items.length : `err:${ig.error}`;
-    }
+    if (r) { if (r.ok && r.items.length) await persist('reddit', r.items, r.meta); out.reddit = r.ok ? r.items.length : `err:${r.error}`; }
+    if (ig) { if (ig.ok && ig.items.length) await persist('instagram', ig.items, ig.meta); out.instagram = ig.ok ? ig.items.length : `err:${ig.error}`; }
     logInfo('pre_digest_platform_signals', { clientId, ...out });
     return { ok: true, ...out };
   } catch (err) {
