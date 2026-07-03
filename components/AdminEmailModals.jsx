@@ -277,22 +277,41 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
           note(`Refreshing ${digestClientIds.length} digest client${digestClientIds.length === 1 ? '' : 's'} one at a time: ${digestClientIds.join(', ')}`);
           setSendStatus({ kind: 'pending', msg: `Refreshing ${digestClientIds.length} digest client${digestClientIds.length === 1 ? '' : 's'}…` });
           const refreshResults = [];
+          // The full refresh (~5-6 min cold) exceeds Vercel's 300s function limit, so
+          // it runs as THREE sequential phase requests per client — each well under
+          // the ceiling. Real (non-'other-phase') steps merge into one result per
+          // client so the summary line + send gate below work unchanged.
+          const REFRESH_PHASES = [
+            ['modules', 'site/creative modules'],
+            ['signals', 'Scout, watchlist, reddit + Instagram signals'],
+            ['analysis', 'strategy, replies, platform analysis, executive summary'],
+          ];
+          const STEP_KEYS = ['modules', 'scout', 'watchlist', 'strategy', 'replyTargets', 'redditAnalysis', 'instagramAnalysis', 'executiveSummary'];
           for (const cid of digestClientIds) {
-            advance('[REFRESH]', `Refresh started · ${cid}`);
-            const refreshStartedAt = Date.now();
-            if (typeof window !== 'undefined') {
-              refreshHeartbeat = window.setInterval(() => {
-                const elapsed = Math.round((Date.now() - refreshStartedAt) / 1000);
-                note(`Refresh still running · ${cid} · ${elapsed}s elapsed`);
-              }, 30000);
+            const merged = { clientId: cid, ok: true, sendable: true };
+            for (const [phaseKey, phaseLabel] of REFRESH_PHASES) {
+              advance('[REFRESH]', `Refresh · ${cid} · ${phaseKey} — ${phaseLabel}…`);
+              const refreshStartedAt = Date.now();
+              if (typeof window !== 'undefined') {
+                refreshHeartbeat = window.setInterval(() => {
+                  const elapsed = Math.round((Date.now() - refreshStartedAt) / 1000);
+                  note(`Refresh (${phaseKey}) still running · ${cid} · ${elapsed}s elapsed`);
+                }, 30000);
+              }
+              // eslint-disable-next-line no-await-in-loop
+              const refresh = await authFetch(user, `/api/worker/pre-digest-refresh?clientId=${encodeURIComponent(cid)}&freshnessToken=${encodeURIComponent(freshnessToken)}&force=1&phase=${phaseKey}`, { method: 'POST', body: '{}' });
+              if (refreshHeartbeat) {
+                window.clearInterval(refreshHeartbeat);
+                refreshHeartbeat = null;
+              }
+              const r = (Array.isArray(refresh?.results) ? refresh.results : [])[0] || {};
+              merged.ok = merged.ok && r.ok !== false;
+              merged.sendable = merged.sendable && r.sendable !== false;
+              for (const k of STEP_KEYS) {
+                if (r[k] && r[k].reason !== 'other-phase') merged[k] = r[k];
+              }
             }
-            // eslint-disable-next-line no-await-in-loop
-            const refresh = await authFetch(user, `/api/worker/pre-digest-refresh?clientId=${encodeURIComponent(cid)}&freshnessToken=${encodeURIComponent(freshnessToken)}&force=1`, { method: 'POST', body: '{}' });
-            if (refreshHeartbeat) {
-              window.clearInterval(refreshHeartbeat);
-              refreshHeartbeat = null;
-            }
-            refreshResults.push(...(Array.isArray(refresh?.results) ? refresh.results : []));
+            refreshResults.push(merged);
           }
           refreshResults.forEach((r) => {
             const modules = r?.modules?.ok ? `modules ok${Array.isArray(r?.modules?.modules) ? ` (${r.modules.modules.filter((m) => m.ok).length}/${r.modules.modules.length})` : ''}` : `modules issue${r?.modules?.error ? `: ${r.modules.error}` : ''}`;

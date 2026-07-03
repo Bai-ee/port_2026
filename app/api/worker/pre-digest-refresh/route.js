@@ -600,8 +600,17 @@ async function refreshPlatformSignals(clientId) {
 
 /** Refresh one client's scout brief + watchlist timelines + strategy plan.
  *  Sequential (strategy reads fresh scout). Never throws. */
-export async function refreshDigestClient(clientId, { freshnessToken = '', force = false, source = 'cron-scheduled', actorUid = null, include = {}, briefLinkMode = 'fresh' } = {}) {
+export async function refreshDigestClient(clientId, { freshnessToken = '', force = false, source = 'cron-scheduled', actorUid = null, include = {}, briefLinkMode = 'fresh', phase = 'all' } = {}) {
   if (!clientId) return { ok: false, error: 'no clientId' };
+  // Phases: the FULL refresh (~5-6 min for a cold client) exceeds Vercel's 300s
+  // function ceiling, so the interactive Run & Send calls this route three times —
+  // phase=modules | signals | analysis — each comfortably under the limit. Steps
+  // outside the requested phase resolve to { ok:true, skipped:'other-phase' } so
+  // the ok/sendable math is unchanged. No phase (the cron) = everything, as before.
+  const wantModules = phase === 'all' || phase === 'modules';
+  const wantSignals = phase === 'all' || phase === 'signals';
+  const wantAnalysis = phase === 'all' || phase === 'analysis';
+  const phaseSkip = () => Promise.resolve({ ok: true, skipped: true, reason: 'other-phase' });
   // Cost gate: only refresh the expensive brief compute a send will actually
   // use. A fresh brief page (briefLinkMode 'fresh' + link shown) renders creative
   // modules + executive summary, so those must run even when their own email
@@ -614,25 +623,29 @@ export async function refreshDigestClient(clientId, { freshnessToken = '', force
     || include.videoPosts !== false;
   const execSummaryWanted = freshBriefWanted || include.execSummary !== false;
   const [modules, scout, watchlist, platformSignals] = await Promise.all([
-    creativeWanted
+    !wantModules ? phaseSkip() : (creativeWanted
       ? refreshSiteCreativeModules(clientId, freshnessToken, { source, actorUid })
-      : Promise.resolve({ ok: true, skipped: true, reason: 'creative-sections-off' }),
-    refreshScoutBrief(clientId, { force, source, actorUid }),
-    refreshWatchlist(clientId),
+      : Promise.resolve({ ok: true, skipped: true, reason: 'creative-sections-off' })),
+    wantSignals ? refreshScoutBrief(clientId, { force, source, actorUid }) : phaseSkip(),
+    wantSignals ? refreshWatchlist(clientId) : phaseSkip(),
     // Reddit/Instagram via the direct ScrapeCreators client → platformTests.
     // Runs here so it completes before the analysis/reply steps read collect*Signals.
     // This is what makes Reddit/IG populate in PRODUCTION (last30days can't run there).
-    refreshPlatformSignals(clientId),
+    wantSignals ? refreshPlatformSignals(clientId) : phaseSkip(),
   ]);
   const [strategy, replyTargets, redditAnalysis, instagramAnalysis] = await Promise.all([
-    refreshStrategyPlan(clientId),
-    refreshReplyTargets(clientId), // needs fresh watchlist timelines already written above
-    refreshRedditAnalysis(clientId),
-    refreshInstagramAnalysis(clientId),
+    wantAnalysis ? refreshStrategyPlan(clientId) : phaseSkip(),
+    wantAnalysis ? refreshReplyTargets(clientId) : phaseSkip(), // needs fresh watchlist timelines already written above
+    wantAnalysis ? refreshRedditAnalysis(clientId) : phaseSkip(),
+    wantAnalysis ? refreshInstagramAnalysis(clientId) : phaseSkip(),
   ]);
-  const briefSummaries = execSummaryWanted
-    ? await refreshBriefSummaries(clientId, scout?.runId || modules?.runId || null)
-    : { ok: true, skipped: true, reason: 'exec-summary-off' };
+  const briefSummaries = !wantAnalysis
+    ? { ok: true, skipped: true, reason: 'other-phase' }
+    : (execSummaryWanted
+      ? await refreshBriefSummaries(clientId, scout?.runId || modules?.runId || null)
+      : { ok: true, skipped: true, reason: 'exec-summary-off' });
+  // digestFreshness records the completed refresh — written by the final phase
+  // (analysis) or the unphased run, so partial phases don't stamp a full refresh.
   const digestFreshness = {
     token: freshnessToken || null,
     generatedAt: new Date().toISOString(),
@@ -644,10 +657,12 @@ export async function refreshDigestClient(clientId, { freshnessToken = '', force
     redditAnalysisOk: Boolean(redditAnalysis?.ok),
     instagramAnalysisOk: Boolean(instagramAnalysis?.ok),
   };
-  await fb.adminDb.collection('dashboard_state').doc(clientId).set(
-    { digestFreshness, updatedAt: fb.FieldValue.serverTimestamp() },
-    { merge: true }
-  ).catch(() => {});
+  if (wantAnalysis) {
+    await fb.adminDb.collection('dashboard_state').doc(clientId).set(
+      { digestFreshness, updatedAt: fb.FieldValue.serverTimestamp() },
+      { merge: true }
+    ).catch(() => {});
+  }
   const watchlistWarning = !watchlist.ok && !watchlist.skipped
     ? (watchlist.error || 'watchlist pull failed')
     : null;
@@ -660,6 +675,7 @@ export async function refreshDigestClient(clientId, { freshnessToken = '', force
     // client merely missing a category (strategy fails) kills an otherwise-good email.
     ok: modules.ok && scout.ok && strategy.ok && briefSummaries.ok,
     sendable: scout.ok && briefSummaries.ok,
+    phase,
     clientId,
     modules,
     scout,
@@ -684,6 +700,10 @@ async function handle(request) {
   // explicitly want a fresh full scout (the daily cron sends no params, so it
   // gets the cost-saving skip when a brief is already <6h old).
   const forceScout = url.searchParams.get('force') === '1' || url.searchParams.get('forceScout') === '1';
+  // phase=modules|signals|analysis splits the refresh across three sub-300s
+  // requests (the interactive Run & Send path). No/invalid phase = full refresh.
+  const rawPhase = String(url.searchParams.get('phase') || '').trim().toLowerCase();
+  const phase = ['modules', 'signals', 'analysis'].includes(rawPhase) ? rawPhase : 'all';
   const cronOk = hasValidCronSecret(request);
   let adminOk = false;
   let actorUid = null;
@@ -755,7 +775,7 @@ async function handle(request) {
     // never another client's config. Defaults apply when the client has no doc.
     // eslint-disable-next-line no-await-in-loop
     const clientCfg = await digestConfig.getDigestConfig(clientId).catch(() => null);
-    const result = await refreshDigestClient(clientId, { freshnessToken, force: forceScout, source: triggerSource, actorUid, include: clientCfg?.include || {}, briefLinkMode: clientCfg?.briefLinkMode || 'fresh' });
+    const result = await refreshDigestClient(clientId, { freshnessToken, force: forceScout, source: triggerSource, actorUid, include: clientCfg?.include || {}, briefLinkMode: clientCfg?.briefLinkMode || 'fresh', phase });
     results.push(result);
     logInfo('pre_digest_refresh_client_done', {
       clientId,
