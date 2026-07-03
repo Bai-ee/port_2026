@@ -201,6 +201,16 @@ export async function POST(request) {
     return json({ error: 'Invalid JSON body.' }, 400);
   }
 
+  // Stale-form guard: the dashboard sends the clientId its form was hydrated FOR.
+  // If it doesn't match the client this request resolves to (admin switched
+  // clients while the old form was still mounted), reject — otherwise one
+  // client's entire Scout config (kols, searches, sourceFocus…) gets written
+  // onto another. This exact race put hitloop's watchlist into nottherug.
+  const expectedClientId = String(body?.expectedClientId || '').trim();
+  if (expectedClientId && expectedClientId !== context.clientId) {
+    return json({ error: `Stale form: config was loaded for "${expectedClientId}" but this dashboard is now "${context.clientId}". Reopen the card and try again.` }, 409);
+  }
+
   const searches = normalizeSearches(body?.searches);
 
   let priorWeather = null;

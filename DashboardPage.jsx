@@ -4608,11 +4608,19 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     };
   }, [client, bootstrap?.dashboardState]);
 
+  // Which client the marketingBriefConfig form was hydrated FOR. Nulled on
+  // client switch; saves are blocked until the new client's config lands.
+  const marketingBriefConfigClientIdRef = useRef(null);
   useEffect(() => {
     if (!user || !client) return undefined;
     let cancelled = false;
     (async () => {
       setMarketingBriefLoading(true);
+      // Drop the previous client's form IMMEDIATELY on switch — a save firing
+      // while the old form is still in state would write that client's entire
+      // Scout config (kols, searches, sourceFocus…) onto the new client.
+      marketingBriefConfigClientIdRef.current = null;
+      setMarketingBriefConfig(null);
       try {
         const token = await user.getIdToken();
         const res = await fetch(apiPath('/api/dashboard/marketing-brief/config'), {
@@ -4622,6 +4630,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         const data = await res.json().catch(() => ({}));
         if (!cancelled) {
           setMarketingBriefConfig(hydrateMarketingBriefConfig(res.ok ? data.config : null));
+          if (res.ok) marketingBriefConfigClientIdRef.current = data.clientId || null;
           setClientBrainDefaults(res.ok ? (data.clientBrainDefaults || null) : null);
           setMarketingBriefError('');
         }
@@ -4653,6 +4662,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     // stale-closure race when saving immediately after setMarketingBriefConfig.
     const sourceConfig = (opts && typeof opts === 'object' && opts.override) ? opts.override : marketingBriefConfig;
     if (!user || !sourceConfig) return null;
+    // Cross-client guard: only save a form that finished hydrating for the
+    // current client. The ref is nulled on client switch and the server 409s a
+    // mismatched expectedClientId — both ends stop one client's config from
+    // being written onto another (the hitloop→nottherug contamination).
+    if (!marketingBriefConfigClientIdRef.current) return null;
     // opts.acknowledge = the card id the user is saving — marks it acknowledged
     // so its status dot greens (audit prefill alone never sets this).
     const acknowledgeCardId = (opts && typeof opts === 'object' && typeof opts.acknowledge === 'string') ? opts.acknowledge : null;
@@ -4666,6 +4680,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         .filter((k) => UNLOCKED_SOURCE_PLATFORMS.includes(k));
       const payload = {
         ...sourceConfig,
+        // The clientId this form was hydrated for — the route rejects (409) when
+        // it doesn't match the request's resolved client (stale-form guard).
+        expectedClientId: marketingBriefConfigClientIdRef.current,
         sourcePlatforms: filteredPlatforms.length ? filteredPlatforms : DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS,
         acknowledgedCards: {
           ...(sourceConfig.acknowledgedCards || {}),
@@ -5647,7 +5664,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // guard prevents a save loop.
   const lastSavedPlatformsRef = useRef(null);
   useEffect(() => {
-    if (!marketingBriefConfig) return;
+    // Client switch clears the form (null) — re-arm so the NEXT client's first
+    // load records its own baseline instead of diff-saving against the old one.
+    if (!marketingBriefConfig) { lastSavedPlatformsRef.current = null; return; }
     const key = JSON.stringify(marketingBriefConfig.sourcePlatforms || []);
     if (lastSavedPlatformsRef.current === null) { lastSavedPlatformsRef.current = key; return; }
     if (lastSavedPlatformsRef.current === key) return;
