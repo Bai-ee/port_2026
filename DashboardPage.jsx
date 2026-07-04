@@ -31489,6 +31489,15 @@ export const dashboardCss = `
     grid-template-columns: repeat(3,minmax(0,1fr));
     gap: 12px;
   }
+  /* Email Digest SETTINGS (#email-digest-settings-shell): 2-up section toggle
+     cards on desktop, single column ≤860px. Column count MUST live here (not
+     as an inline style on the grid) so the mobile collapse can win — the id
+     selector outranks the shared .vrk-scope ≤860px rule, so it needs its own
+     media override below. */
+  #email-digest-settings-shell .toggle-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @media (max-width: 860px) {
+    #email-digest-settings-shell .toggle-grid { grid-template-columns: 1fr; }
+  }
   .vrk-scope .toggle-card {
     display: grid;
     grid-template-columns: auto minmax(0,1fr);
@@ -32004,12 +32013,19 @@ export const dashboardCss = `
   /* Saved remix: full-width video with a clean action row beneath it. The
      actions fill the width evenly and wrap to a second row on narrow phones
      instead of producing ragged right edges. */
-  .vrk-scope .saved-remix-surface { width: 100%; }
+  /* min-width guards: the settings-snapshot meta line carries long unbreakable
+     mono strings (upload filenames) — without these the card's min-content
+     width exceeds a phone viewport and the whole card (video included) spills
+     past the right edge. */
+  .vrk-scope .saved-remix-card { min-width: 0; max-width: 100%; overflow: hidden; }
+  .vrk-scope .saved-remix-surface { width: 100%; max-width: 100%; }
   .vrk-scope .saved-remix-surface .preview-media { min-height: 220px; }
   .vrk-scope .saved-remix-meta {
     margin: 4px 0 0;
     color: var(--vrk-ink-muted);
     font: 600 12px/1.45 var(--vrk-mono);
+    overflow-wrap: anywhere;
+    min-width: 0;
   }
   .vrk-scope .saved-remix-actions {
     display: grid;

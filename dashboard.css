@@ -9915,6 +9915,14 @@
   gap: 12px;
 }
 
+/* Email Digest SETTINGS (#email-digest-settings-shell): 2-up section toggle
+   cards on desktop, single column ≤860px. Column count lives here (not inline)
+   so the mobile collapse can win. */
+#email-digest-settings-shell .toggle-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 860px) {
+  #email-digest-settings-shell .toggle-grid { grid-template-columns: 1fr; }
+}
+
 .vrk-scope .toggle-card {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);

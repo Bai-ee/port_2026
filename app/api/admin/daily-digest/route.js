@@ -867,13 +867,14 @@ function buildFollowerPostsSection(briefs) {
       items.push({ handle, text: post.text, url: post.url || '' });
     }
   }
-  const rows = items.length
-    ? items.map((it) => `<tr>
+  const shown = items.slice(0, EMAIL_CAPS.followerPosts);
+  const rows = shown.length
+    ? shown.map((it) => `<tr>
         <td style="${TD}">
           <strong style="font-family:${DT.fMono};color:${DT.ink};">@${escapeHtml(it.handle)}</strong>${it.url ? ` <a href="${escapeHtml(it.url)}" style="color:${DT.accent};font-family:${DT.fMono};font-size:11px;letter-spacing:.06em;text-transform:uppercase;">&rarr; View post</a>` : ''}
           <div style="margin-top:4px;color:${DT.soft};font-size:13px;line-height:1.5;">${escapeHtml(String(it.text).slice(0, 280))}</div>
         </td>
-      </tr>`).join('')
+      </tr>`).join('') + emailOverflowRow(items.length - shown.length, 'follower posts')
     : `<tr><td style="${TDempty}">No posts from followed handles this run.</td></tr>`;
   // Inner table only — composed as the "Follower posts" sub-block under the
   // Market Signals brief header by buildEmailHtml.
@@ -996,6 +997,33 @@ function buildSummaryBody(summary) {
   return `<div style="background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:20px 22px;margin-bottom:18px;font-family:${DT.fBody};font-size:15px;line-height:1.62;color:${DT.ink};">${body}</div>`;
 }
 
+// ── Email size caps ───────────────────────────────────────────────────────────
+// Gmail clips messages over ~102KB of encoded HTML and hides the rest behind
+// "View entire message" (2026-07-04 digest: 157KB — every section ordered after
+// Post Opportunities was invisible in the inbox even though it was sent). Each
+// cap trims a section's item count / text length in the EMAIL only; full detail
+// stays in the Executive Brief, and overflow rows link there. Keep the resulting
+// section sizes roughly in sync with EST_SECTION_KB in components/AdminEmailModals.jsx
+// (the SETTINGS-tab size estimator).
+const EMAIL_CAPS = {
+  signalsKolPerHandle: 1,  // KOL posts per handle in Signals
+  signalsKols: 5,
+  signalsCompetitors: 4,
+  signalsNarratives: 4,
+  signalsText: 240,        // finding/detail text per Signals row
+  opportunities: 6,
+  suggestedReplies: 3,
+  watchlistHandles: 10,    // handle rows in Watchlist Accounts
+  watchlistActivityPerHandle: 2,
+  followerPosts: 10,
+  analysisCards: 4,        // per-handle / thread / post cards in the Happening-on sections
+  analysisCardText: 300,
+};
+// Table row linking to the Executive Brief when a cap dropped items.
+const emailOverflowRow = (n, label, colspan = 1) => (n > 0
+  ? `<tr><td colspan="${colspan}" style="${TDempty}"><a href="${appUrl('/dashboard?open=brief')}" style="color:${DT.accent};font-family:${DT.fMono};font-size:11px;letter-spacing:.06em;text-transform:uppercase;">+${n} more ${label} in the Executive Brief &rarr;</a></td></tr>`
+  : '');
+
 /** Strategic brief block — mirrors the established daily brief's strategy. */
 // Returns the Strategic-brief items as SEPARATE named HTML parts so each can be
 // toggled on/off individually under the Market Signals brief header. Each value
@@ -1021,10 +1049,12 @@ function buildStrategicParts(intel, postPlatforms = {}) {
   // review + post the draft. Emails can't POST directly, so this is a link.
   const postMeLink = `<div style="margin-top:10px;"><a href="${appUrl('/dashboard?open=post-me')}" style="display:inline-block;color:${DT.brand};font-family:${DT.fMono};font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;">Post Me &rarr;</a></div>`;
 
-  const oppRows = (intel.opportunities || []).length
-    ? intel.opportunities.map((o) => `<tr>
+  const oppAll = intel.opportunities || [];
+  const oppItems = oppAll.slice(0, EMAIL_CAPS.opportunities);
+  const oppRows = oppItems.length
+    ? oppItems.map((o) => `<tr>
         <td style="${TD}">${escapeHtml(o.topic)}${o.windowHours ? ` <span style="color:${DT.light};font-family:${DT.fMono};font-size:11px;">${o.windowHours}h</span>` : ''}${linkBit(o.url)}<div style="margin-top:3px;color:${DT.soft};font-size:12px;">${escapeHtml(o.angle || '')}</div></td>
-      </tr>`).join('')
+      </tr>`).join('') + emailOverflowRow(oppAll.length - oppItems.length, 'opportunities')
     : '';
 
   // Suggested Replies — reads the reply-targets recipe output persisted by
@@ -1034,7 +1064,8 @@ function buildStrategicParts(intel, postPlatforms = {}) {
   let repliesHtml = '';
   if (replyRecipe) {
     const { data: rtData, prose: rtProse } = parseRecipeAnalysis(replyRecipe.analysis);
-    const targets = Array.isArray(rtData?.replyTargets) ? rtData.replyTargets.filter((t) => t?.suggestedReply) : [];
+    const targets = (Array.isArray(rtData?.replyTargets) ? rtData.replyTargets.filter((t) => t?.suggestedReply) : [])
+      .slice(0, EMAIL_CAPS.suggestedReplies);
     if (targets.length) {
       repliesHtml = targets.map((t) => `<div style="margin-bottom:14px;padding:14px 16px;background:${DT.brandTint};border:1px solid ${DT.line};border-radius:12px;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
@@ -1065,7 +1096,7 @@ function buildStrategicParts(intel, postPlatforms = {}) {
   }
   if (!repliesHtml) {
     // Fallback: scout opportunities with a suggestedReply field.
-    const replyItems = (intel.opportunities || []).filter((o) => o.suggestedReply);
+    const replyItems = (intel.opportunities || []).filter((o) => o.suggestedReply).slice(0, EMAIL_CAPS.suggestedReplies);
     if (replyItems.length) {
       repliesHtml = replyItems.map((o) => `<div style="margin-bottom:14px;padding:14px 16px;background:${DT.brandTint};border:1px solid ${DT.line};border-radius:12px;">
         <div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:${DT.brand};margin-bottom:6px;">Reply${o.windowHours ? ` &middot; ${o.windowHours}h window` : ''}</div>
@@ -1077,30 +1108,51 @@ function buildStrategicParts(intel, postPlatforms = {}) {
     }
   }
 
+  // Signals was the section that blew past Gmail's clip (40 full-text KOL posts
+  // ≈ 56KB on 2026-07-04): cap KOL posts per handle, cap competitors/narratives,
+  // slice row text, and link the remainder to the Executive Brief.
+  const kolAll = intel.kols || [];
+  const kolCounts = new Map();
+  const kols = kolAll.filter((k) => {
+    const name = String(k.name || '').toLowerCase();
+    const n = kolCounts.get(name) || 0;
+    if (n >= EMAIL_CAPS.signalsKolPerHandle) return false;
+    kolCounts.set(name, n + 1);
+    return true;
+  }).slice(0, EMAIL_CAPS.signalsKols);
+  const competitorsAll = intel.competitors || [];
+  const narrativesAll = intel.narratives || [];
+  const competitors = competitorsAll.slice(0, EMAIL_CAPS.signalsCompetitors);
+  const narratives = narrativesAll.slice(0, EMAIL_CAPS.signalsNarratives);
+  const signalsDropped = (kolAll.length - kols.length)
+    + (competitorsAll.length - competitors.length)
+    + (narrativesAll.length - narratives.length);
   const signalRows = [
-    ...(intel.kols || []).map((k) => ({ tag: `KOL${k.platform ? ` · ${k.platform}` : ''}`, label: k.name, value: k.detail, url: k.url })),
-    ...(intel.competitors || []).map((c) => ({ tag: `Competitor${c.impact ? ` · ${c.impact}` : ''}`, label: c.name, value: c.finding, url: c.url })),
-    ...(intel.narratives || []).map((n) => ({ tag: 'Narrative', label: n.trend, value: n.detail, url: n.url })),
+    ...kols.map((k) => ({ tag: `KOL${k.platform ? ` · ${k.platform}` : ''}`, label: k.name, value: k.detail, url: k.url })),
+    ...competitors.map((c) => ({ tag: `Competitor${c.impact ? ` · ${c.impact}` : ''}`, label: c.name, value: c.finding, url: c.url })),
+    ...narratives.map((n) => ({ tag: 'Narrative', label: n.trend, value: n.detail, url: n.url })),
   ];
   const signalsHtml = signalRows.length
     ? signalRows.map((s) => `<tr>
         <td style="${TD}width:120px;font-family:${DT.fMono};font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:${DT.light};vertical-align:top;">${escapeHtml(s.tag)}</td>
-        <td style="${TD}"><strong>${escapeHtml(s.label)}</strong>${linkBit(s.url)}<div style="margin-top:2px;color:${DT.soft};font-size:12px;">${escapeHtml(s.value || '')}</div></td>
-      </tr>`).join('')
+        <td style="${TD}"><strong>${escapeHtml(s.label)}</strong>${linkBit(s.url)}<div style="margin-top:2px;color:${DT.soft};font-size:12px;">${escapeHtml(String(s.value || '').slice(0, EMAIL_CAPS.signalsText))}</div></td>
+      </tr>`).join('') + emailOverflowRow(signalsDropped, 'signals', 2)
     : '';
 
   // Watchlist — every configured account, name-for-name, with its activity
   // this run (or a "quiet" note). Surfaces named accounts even when not
   // brand-specific, for narrative opportunities.
-  const watchlistHtml = (intel.watchlist || []).length
-    ? intel.watchlist.map((w) => `<tr>
+  const watchlistAll = intel.watchlist || [];
+  const watchlistShown = watchlistAll.slice(0, EMAIL_CAPS.watchlistHandles);
+  const watchlistHtml = watchlistShown.length
+    ? watchlistShown.map((w) => `<tr>
         <td style="${TD}width:150px;font-family:${DT.fMono};font-size:12px;font-weight:700;color:${DT.ink};vertical-align:top;">${escapeHtml(w.handle)}</td>
         <td style="${TD}">${
           w.found
-            ? w.activity.map((a) => `<div style="margin-bottom:4px;color:${DT.soft};font-size:12px;">${escapeHtml((a.text || '').slice(0, 240))}${linkBit(a.url)}</div>`).join('')
+            ? w.activity.slice(0, EMAIL_CAPS.watchlistActivityPerHandle).map((a) => `<div style="margin-bottom:4px;color:${DT.soft};font-size:12px;">${escapeHtml((a.text || '').slice(0, 240))}${linkBit(a.url)}</div>`).join('')
             : `<span style="color:${DT.light};font-size:12px;">No activity surfaced this run.</span>`
         }</td>
-      </tr>`).join('')
+      </tr>`).join('') + emailOverflowRow(watchlistAll.length - watchlistShown.length, 'accounts', 2)
     : '';
 
   const c = intel.content || {};
@@ -1202,7 +1254,7 @@ function buildWatchlistBriefSection(analysisText) {
   const actionHtml = data?.priorityAction
     ? `<div style="margin-bottom:16px;">${sec('Suggested action')}${pull(escapeHtml(data.priorityAction))}</div>` : '';
 
-  const handlesArr = Array.isArray(data?.handles) ? data.handles : [];
+  const handlesArr = (Array.isArray(data?.handles) ? data.handles : []).slice(0, EMAIL_CAPS.analysisCards);
   const handleCards = handlesArr.length
     ? `<div style="margin-bottom:16px;">${sec('Per handle')}<div style="font-size:0;line-height:0;">${handlesArr.map((h) => {
         const hh = escapeHtml(String(h.handle || '').replace(/^@+/, ''));
@@ -1241,11 +1293,11 @@ function buildRedditBriefSection(analysisText) {
     ? `<div style="margin-bottom:16px;">${sec('Overview')}${pull(escapeHtml(data.overview))}</div>` : '';
   const actionHtml = data?.priorityAction
     ? `<div style="margin-bottom:16px;">${sec('Suggested action')}${pull(escapeHtml(data.priorityAction))}</div>` : '';
-  const threads = Array.isArray(data?.threads) ? data.threads : (Array.isArray(data?.items) ? data.items : []);
+  const threads = (Array.isArray(data?.threads) ? data.threads : (Array.isArray(data?.items) ? data.items : [])).slice(0, EMAIL_CAPS.analysisCards);
   const threadCards = threads.length
     ? `<div style="margin-bottom:16px;">${sec('Threads to review')}<div style="font-size:0;line-height:0;">${threads.map((t) => {
         const subreddit = t.subreddit ? String(t.subreddit).replace(/^r\//, '') : 'reddit';
-        const body = t.summary || t.why || t.opportunity || t.actionableTakeaway || '';
+        const body = String(t.summary || t.why || t.opportunity || t.actionableTakeaway || '').slice(0, EMAIL_CAPS.analysisCardText);
         return `<div style="display:inline-block;vertical-align:top;width:48%;min-width:200px;margin:0 2% 10px 0;background:rgba(255,255,255,0.55);border:1px solid ${DT.line};border-radius:12px;padding:13px;box-sizing:border-box;">
           <div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:${DT.light};margin-bottom:6px;">r/${escapeHtml(subreddit)}</div>
           <div style="font-family:${DT.fDisp};font-weight:900;font-size:17px;line-height:1.05;text-transform:uppercase;color:${DT.ink};">${escapeHtml(t.title || 'Reddit thread')}</div>
@@ -1282,11 +1334,11 @@ function buildInstagramBriefSection(analysisText) {
     ? `<div style="margin-bottom:16px;">${sec('Overview')}${pull(escapeHtml(data.overview))}</div>` : '';
   const actionHtml = data?.priorityAction
     ? `<div style="margin-bottom:16px;">${sec('Suggested action')}${pull(escapeHtml(data.priorityAction))}</div>` : '';
-  const threads = Array.isArray(data?.threads) ? data.threads : (Array.isArray(data?.items) ? data.items : []);
+  const threads = (Array.isArray(data?.threads) ? data.threads : (Array.isArray(data?.items) ? data.items : [])).slice(0, EMAIL_CAPS.analysisCards);
   const threadCards = threads.length
     ? `<div style="margin-bottom:16px;">${sec('Posts to review')}<div style="font-size:0;line-height:0;">${threads.map((t) => {
         const account = t.subreddit ? String(t.subreddit).replace(/^@/, '') : 'instagram';
-        const body = t.summary || t.why || t.opportunity || t.actionableTakeaway || '';
+        const body = String(t.summary || t.why || t.opportunity || t.actionableTakeaway || '').slice(0, EMAIL_CAPS.analysisCardText);
         return `<div style="display:inline-block;vertical-align:top;width:48%;min-width:200px;margin:0 2% 10px 0;background:rgba(255,255,255,0.55);border:1px solid ${DT.line};border-radius:12px;padding:13px;box-sizing:border-box;">
           <div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:${DT.light};margin-bottom:6px;">@${escapeHtml(account)}</div>
           <div style="font-family:${DT.fDisp};font-weight:900;font-size:17px;line-height:1.05;text-transform:uppercase;color:${DT.ink};">${escapeHtml(t.title || 'Instagram post')}</div>
@@ -1526,7 +1578,7 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
     ? dSection('Verification', 'Freshness Token', `<div style="background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:16px 18px;font-family:${DT.fMono};font-size:12px;line-height:1.5;color:${DT.ink};word-break:break-word;">${escapeHtml(freshnessTokenText)}</div>`)
     : '';
 
-  return `<!DOCTYPE html>
+  const emailHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1602,6 +1654,9 @@ a{text-decoration:none;}
   </table>
 </body>
 </html>`;
+  // Strip template-literal indentation — pure whitespace to email clients, but
+  // ~10KB on a full email, and every KB counts against Gmail's ~102KB clip.
+  return emailHtml.replace(/\n[ \t]+/g, '\n');
 }
 
 // ── Email sender ────────────────────────────────────────────────────────────
@@ -1851,6 +1906,10 @@ export async function GET(request) {
   const isSendNow = url.searchParams.get('send') === '1';
   const freshnessToken = String(url.searchParams.get('freshnessToken') || '').trim().slice(0, 160);
   const returnHtml = url.searchParams.get('returnHtml') === '1';
+  // Preview-only `noLlm=1`: render from saved data with ZERO LLM calls (skips
+  // the executive summary + video captions). Free way to check email size and
+  // section presence for any client without generating anything.
+  const skipLlm = isPreview && url.searchParams.get('noLlm') === '1';
 
   // Optional `include` override (preview only): comma-separated list of the
   // section keys to turn ON, so the Email Digest card can preview the layout
@@ -2079,7 +2138,7 @@ export async function GET(request) {
         creative = await briefIntel.getCreativeBriefForClient(homeClientId);
       }
 
-      if (cfg.summaryEnabled) {
+      if (cfg.summaryEnabled && !skipLlm) {
         const { text: docsText } = await digestConfig.getRecentDocsText({
           clientId: homeClientId, count: cfg.recentDocsCount, maxChars: cfg.maxDocChars,
         });
@@ -2147,7 +2206,7 @@ export async function GET(request) {
         if (remixCap) toCaption.push(remixCap);
         if (promoCap) toCaption.push(promoCap);
         let captions = [];
-        if (!isTemplate && toCaption.length) {
+        if (!isTemplate && !skipLlm && toCaption.length) {
           let brain = '';
           try {
             const { loadClientBrainContext } = require('../../../../features/client-brain/store.cjs');
@@ -2229,9 +2288,17 @@ export async function GET(request) {
     const sectionOrder = orderOverride || digestCfg?.order || digestConfig.DEFAULT_ORDER;
     const postPlatforms = postsOverride || digestCfg?.postPlatforms || {};
     const html = buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, renderInclude, creative, briefUrl, contactUrl, videoItems, sectionOrder, postPlatforms, freshnessToken);
+    // Gmail clips messages past ~102KB of ENCODED body and hides the rest behind
+    // "View entire message" — quoted-printable inflation means ~80KB of raw HTML
+    // is the practical ceiling. Warn in the send terminal + prod logs when over.
+    const emailBytes = Buffer.byteLength(html, 'utf8');
+    const emailKb = Math.round(emailBytes / 1024);
+    const overClipRisk = emailBytes > 80 * 1024;
+    if (overClipRisk) logWarn('daily_digest_email_over_clip_size', { emailKb, clientId: homeClientId });
     if (isRealSend) {
       const onCount = digestConfig.INCLUDE_KEYS.filter((k) => include[k] !== false).length;
-      step('success', `Rendered email · ${onCount} section${onCount !== 1 ? 's' : ''} on`);
+      step('success', `Rendered email · ${onCount} section${onCount !== 1 ? 's' : ''} on · ~${emailKb} KB`);
+      if (overClipRisk) step('error', `Email is ~${emailKb} KB — Gmail clips near ~102KB, so bottom sections may be hidden behind "View entire message". Turn off heavy sections in SETTINGS.`);
       const hasSuggestedReplies = html.includes('Suggested Replies');
       const hasRedditAnalysis = html.includes('Happening on Reddit');
       const hasInstagramAnalysis = html.includes('Happening on Instagram');
@@ -2255,6 +2322,8 @@ export async function GET(request) {
         paragraph: summary?.paragraph || '',
         summary,
         html,
+        emailKb,
+        overClipRisk,
         freshnessToken,
       });
     }
@@ -2286,6 +2355,8 @@ export async function GET(request) {
       } : null,
       subject,
       log: sendLog,
+      emailKb,
+      overClipRisk,
       freshnessToken,
       html: returnHtml ? html : undefined,
       freshness: {

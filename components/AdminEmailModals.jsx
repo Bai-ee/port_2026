@@ -87,6 +87,37 @@ const SECTION_GROUPS = [
   ]],
 ];
 const ALL_SECTION_KEYS = SECTION_GROUPS.flatMap(([, items]) => items.map(([k]) => k));
+
+// ── Email size estimator ──────────────────────────────────────────────────────
+// Gmail clips emails past ~102KB and hides the rest behind "View entire
+// message" — on 2026-07-04 a 157KB digest lost every section after Post
+// Opportunities. Rough per-section KB weights (measured from real sends, with
+// the route's EMAIL_CAPS applied — keep loosely in sync with EMAIL_CAPS in
+// app/api/admin/daily-digest/route.js) so the admin sees clip risk while
+// toggling, before anything is sent.
+const EMAIL_BASE_KB = 4; // hero + CTA rows + footer + styles
+const EST_SECTION_KB = {
+  agenda: 8, weather: 2, execSummary: 5, videoPosts: 4, videoPromo: 4,
+  execBriefLink: 1, contactHuman: 1,
+  humanBrief: 2, opportunities: 7, suggestedReplies: 9, signals: 14,
+  watchlistAccounts: 9, suggestedPosts: 5, planPreview: 3, watchlist: 7,
+  redditAnalysis: 8, instagramAnalysis: 8, followerPosts: 7,
+  creativeBrief: 6,
+  ga4Traffic: 3, topPages: 2, trafficSources: 2, keyEvents: 1, homepage: 4,
+  platformOverview: 2, signups: 2, dashboards: 2, pipeline: 2,
+  deployments: 2, runtimeErrors: 2,
+};
+const GMAIL_CLIP_KB = 102;
+// Thresholds are in raw-HTML KB; Gmail clips at ~102KB of ENCODED body, and
+// encoding overhead (unicode-heavy days) eats the difference — so warn early.
+const EMAIL_WARN_KB = 65;
+const EMAIL_DANGER_KB = 80;
+function estimateEmailKb(include = {}) {
+  return ALL_SECTION_KEYS.reduce(
+    (kb, k) => kb + (include[k] ? (EST_SECTION_KB[k] || 2) : 0),
+    EMAIL_BASE_KB
+  );
+}
 // Groups whose cards can be shuffled up/down to set the email order. The CTA
 // group isn't part of the section flow, so it stays fixed.
 const NON_ORDERABLE_GROUPS = new Set(['Call to action']);
@@ -369,6 +400,9 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
   const platformAvailability = currentPlatformAvailability(form);
   const sourcePlatforms = currentSourcePlatforms(form);
   const effectiveInclude = guardIncludeForAvailability(form?.include, platformAvailability);
+  // Live clip-risk estimate for the current (possibly unsaved) toggle combo.
+  const estimatedEmailKb = estimateEmailKb(effectiveInclude);
+  const sizeTier = estimatedEmailKb >= EMAIL_DANGER_KB ? 'danger' : estimatedEmailKb >= EMAIL_WARN_KB ? 'warn' : 'ok';
 
   return (
     <div className="tile-detail-bento-cell tile-detail-tabbed-container">
@@ -483,7 +517,35 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
                     <h3>Sections included in the email</h3>
                     <p>Every section of the email is on/off here. The EMAIL PREVIEW hides/shows exactly what the sent email will.</p>
                   </div>
-                  <span className="label">{ALL_SECTION_KEYS.filter((k) => effectiveInclude?.[k]).length}/{ALL_SECTION_KEYS.length} on</span>
+                  <span className="label">{ALL_SECTION_KEYS.filter((k) => effectiveInclude?.[k]).length}/{ALL_SECTION_KEYS.length} on · ~{estimatedEmailKb} KB</span>
+                </div>
+
+                <div
+                  id="digest-size-estimate-banner"
+                  role="status"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 10,
+                    padding: '11px 14px',
+                    borderRadius: 10,
+                    fontSize: 12.5,
+                    lineHeight: 1.5,
+                    fontFamily: 'var(--vrk-body, inherit)',
+                    border: `1px solid ${sizeTier === 'danger' ? '#d9a79c' : sizeTier === 'warn' ? '#d9c58a' : 'rgba(42,36,32,0.14)'}`,
+                    background: sizeTier === 'danger' ? '#f7ece8' : sizeTier === 'warn' ? '#f6f0e2' : 'rgba(255,255,255,0.55)',
+                    color: sizeTier === 'danger' ? '#a8392a' : sizeTier === 'warn' ? '#8a6a1f' : 'var(--vrk-ink-soft, #5a5346)',
+                  }}
+                >
+                  <span aria-hidden="true" style={{ fontSize: 14, lineHeight: '18px' }}>{sizeTier === 'ok' ? '✓' : '⚠'}</span>
+                  <span>
+                    <strong>Estimated email size ~{estimatedEmailKb} KB.</strong>{' '}
+                    {sizeTier === 'ok'
+                      ? `Fits Gmail's ~${GMAIL_CLIP_KB} KB clip limit.`
+                      : sizeTier === 'warn'
+                        ? `Close to Gmail's ~${GMAIL_CLIP_KB} KB clip limit — on heavy news days the bottom sections may be cut off behind "View entire message". Consider turning off a heavy section.`
+                        : `Likely to exceed Gmail's ~${GMAIL_CLIP_KB} KB clip limit — the bottom sections will be hidden behind "View entire message". Turn off heavy sections (each card shows its ~KB weight).`}
+                  </span>
                 </div>
 
                 <div className="field" style={{ display: 'grid', gap: 6 }}>
@@ -574,7 +636,9 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
                   return (
                     <div key={groupLabel} style={{ display: 'grid', gap: 8 }}>
                       <span className="label" style={{ marginTop: 4 }}>{groupLabel}</span>
-                      <div className="toggle-grid" role="group" aria-label={`${groupLabel} sections`} style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+                      {/* Columns live in CSS (#email-digest-settings-shell .toggle-grid) —
+                          NOT inline — so the ≤860px single-column collapse can win on phones. */}
+                      <div className="toggle-grid" role="group" aria-label={`${groupLabel} sections`}>
                         {ordered.map(([key, title, desc, cardId, requiredPlatform], idx) => {
                           const on = !!effectiveInclude?.[key];
                           const platformEnabled = !requiredPlatform || platformAvailability?.[requiredPlatform] !== false;
@@ -599,7 +663,7 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
                               <span className="check">{effectiveOn ? '✓' : ''}</span>
                               <span style={{ minWidth: 0 }}>
                                 <span className="toggle-title">{title}</span>
-                                <span className="toggle-desc">{disabled ? `Enable ${PLATFORM_SECTION_LABELS[requiredPlatform] || requiredPlatform} in Market Insights to use this section.` : desc}</span>
+                                <span className="toggle-desc">{disabled ? `Enable ${PLATFORM_SECTION_LABELS[requiredPlatform] || requiredPlatform} in Market Insights to use this section.` : `${desc}${(EST_SECTION_KB[key] || 0) >= 7 ? ` · ~${EST_SECTION_KB[key]} KB` : ''}`}</span>
                                 {cardId && onOpenCard && !disabled ? (
                                   <button
                                     type="button"
