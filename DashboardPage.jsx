@@ -3354,6 +3354,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	  const [uiTeaserRenders, setUiTeaserRenders] = useState([]);
 	  const [uiTeaserRenderLoading, setUiTeaserRenderLoading] = useState(false);
 	  const [uiTeaserError, setUiTeaserError] = useState('');
+	  const [uiTeaserDeleteBusy, setUiTeaserDeleteBusy] = useState(''); // filename being deleted
 	  const uiTeaserVariationRef = useRef(0); // cycles UI_TEASER_VARIATIONS per run
 	  useEffect(() => {
 	    if (!isAdmin) return;
@@ -3408,6 +3409,21 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	      setUiTeaserRenderLoading(false);
 	    }
 	  }, [apiPath, uiTeaserRenderLoading, runWithTerminal]);
+	  const deleteUiTeaserRender = useCallback(async (file) => {
+	    if (!file || uiTeaserDeleteBusy) return;
+	    setUiTeaserDeleteBusy(file);
+	    setUiTeaserError('');
+	    try {
+	      const res = await fetch(apiPath(`/api/dashboard/ui-teaser?file=${encodeURIComponent(file)}`), { method: 'DELETE' });
+	      const data = await res.json().catch(() => ({}));
+	      if (!res.ok || !data?.ok) throw new Error(data?.error || 'delete failed');
+	      setUiTeaserRenders(data.renders || []);
+	    } catch (err) {
+	      setUiTeaserError(err?.message || 'delete failed');
+	    } finally {
+	      setUiTeaserDeleteBusy('');
+	    }
+	  }, [apiPath, uiTeaserDeleteBusy]);
 
 	  const runMockupStudioVideo = useCallback(async ({ sourceUrlOverride = null } = {}) => {
 	    if (!user || mockupStudioRenderLoading) return;
@@ -19778,6 +19794,16 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                            <div className="saved-remix-actions">
 	                              <a className="btn btn-outline" href={asset.url} download={asset.file}>Download</a>
 	                              <a className="btn btn-outline" href={asset.url} target="_blank" rel="noopener noreferrer">Open <span className="cta-icon">↗</span></a>
+	                              <button
+	                                type="button"
+	                                className="btn btn-outline saved-remix-delete"
+	                                onClick={() => deleteUiTeaserRender(asset.file)}
+	                                disabled={uiTeaserDeleteBusy === asset.file}
+	                                title="Delete this render from public/ui-teasers (permanent)"
+	                              >
+	                                {uiTeaserDeleteBusy === asset.file ? <span className="vrk-btn-spinner" aria-hidden="true" /> : null}
+	                                Delete
+	                              </button>
 	                            </div>
 	                          </article>
 	                        )) : (

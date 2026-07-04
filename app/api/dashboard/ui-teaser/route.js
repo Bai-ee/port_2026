@@ -45,6 +45,22 @@ export async function GET() {
   return json({ ok: true, variations: VARIATIONS, renders: listRenders() });
 }
 
+export async function DELETE(request) {
+  if (process.env.NODE_ENV === 'production') {
+    return json({ ok: false, error: 'UI Teaser assets live on the local machine only.' }, 501);
+  }
+  const file = new URL(request.url).searchParams.get('file') || '';
+  // Strict filename match — never a path. Covers both pre-camera filenames
+  // (ui-teaser-<variation>-s<seed>-<stamp>.mp4) and camera-tagged ones.
+  if (!/^ui-teaser-[a-z0-9-]+-s\d+-\d{8}-\d{6}\.mp4$/i.test(file)) {
+    return json({ ok: false, error: 'invalid file name' }, 400);
+  }
+  const target = path.join(OUT_DIR, file);
+  if (!fs.existsSync(target)) return json({ ok: false, error: 'file not found' }, 404);
+  fs.unlinkSync(target);
+  return json({ ok: true, renders: listRenders() });
+}
+
 export async function POST(request) {
   if (process.env.NODE_ENV === 'production') {
     return json({ ok: false, error: 'UI Teaser renders locally only — run the dashboard via `npm run dev` on a machine with Chrome + ffmpeg.' }, 501);
