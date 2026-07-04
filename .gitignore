@@ -10,6 +10,8 @@ yarn-debug.log*
 .env.*
 !.env.example
 public/img/port_videos/
+# Local UI Teaser renders (ui-teaser card / scripts/render-ui-teaser.mjs)
+public/ui-teasers/
 features/not-the-rug-brief/data/
 data/
 .vercel

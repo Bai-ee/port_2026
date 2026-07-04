@@ -15,6 +15,7 @@
     "scout:reddit": "node ./features/not-the-rug-brief/reddit.js --client not-the-rug",
     "review:x-algo": "node scripts/review-x-algo.mjs",
     "smoke:studio": "node scripts/smoke-studio.mjs",
+    "teaser": "node scripts/render-ui-teaser.mjs",
     "smoke:preview": "node scripts/smoke-preview.mjs",
     "smoke:routes": "node scripts/smoke-routes.mjs"
   },

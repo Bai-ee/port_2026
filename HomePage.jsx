@@ -118,6 +118,12 @@ const heroGradientStyle = {
 const HomePage = () => {
   const [params, setParams] = useState(HERO_PARAMS_START);
 
+  // UI Teaser clean mode (?teaser=1): strips all copy/nav for promo video capture —
+  // section backgrounds, the threejs canvas, and the header logo are all that remain.
+  // visibility (not display) so layout heights and ScrollTrigger geometry are untouched.
+  // Consumed by scripts/render-ui-teaser.mjs via the ui-teaser dashboard card.
+  const [teaserCleanMode, setTeaserCleanMode] = useState(false);
+
   const [canvasBackground, setCanvasBackground] = useState('#ffffff');
   const [textColor, setTextColor] = useState('#000000');
   const [activePageId, setActivePageId] = useState(null);
@@ -132,6 +138,11 @@ const HomePage = () => {
   const snapCanvasRef = useRef(false); // signals canvas to reset smoothedParamsRef on next frame
   const scatterCanvasRef = useRef(false); // signals canvas to re-scatter particles (replay load-in formation)
   const heroMaxProgressRef = useRef(0); // deepest scroll reached this cycle — gates the return-to-top replay
+
+  // Pre-paint so the copy never flashes into the recorded video.
+  useLayoutEffect(() => {
+    if (new URLSearchParams(window.location.search).has('teaser')) setTeaserCleanMode(true);
+  }, []);
 
   // Keep #content-section.marginTop = -peekHeight so the capabilitySectionStyle
   // borderTop always lands exactly at the 100dvh fold on page load.
@@ -165,6 +176,12 @@ const HomePage = () => {
   }, []);
 
   useLayoutEffect(() => {
+    // Teaser capture (?teaser=1): the loop's scatter/converge replay is
+    // load-in-only — returning to top must NOT break the loop apart again.
+    // Checked from the URL directly: this effect runs once on mount, before
+    // the teaserCleanMode state (set in the effect above) has re-rendered.
+    const isTeaserCapture = new URLSearchParams(window.location.search).has('teaser');
+
     const useSimpleScrollViewport =
       typeof window !== 'undefined' &&
       typeof window.matchMedia === 'function' &&
@@ -237,8 +254,9 @@ const HomePage = () => {
         paramsRef.current = userParamsRef.current;
         snapCanvasRef.current = true; // flush smoothedParamsRef drift accumulated from repeated scroll cycles
         setParams(userParamsRef.current);
-        // Only replay if the user actually scrolled through the hero (not a micro-scroll).
-        if (heroMaxProgressRef.current > 0.5) replayHeroEntrance();
+        // Only replay if the user actually scrolled through the hero (not a
+        // micro-scroll) — and never during teaser capture (load-in only).
+        if (!isTeaserCapture && heroMaxProgressRef.current > 0.5) replayHeroEntrance();
         heroMaxProgressRef.current = 0;
       },
       onToggle: (self) => {
@@ -331,6 +349,28 @@ const HomePage = () => {
           visibility: hidden;
         }
       `}</style>
+      {teaserCleanMode && (
+        <style id="ui-teaser-clean-style">{`
+          /* UI Teaser clean mode: copy + nav vanish, section backgrounds +
+             threejs canvas + header logo remain. !important beats GSAP's
+             inline autoAlpha so intro tweens can't fade the copy back in. */
+          /* #panel-hero-cta listed on its own: the pin behavior reparents it to
+             document.body, where the panel-children selector can't reach it. */
+          #hero-panel-top-left,
+          #founders-top-actions,
+          #panel-hero-cta,
+          #content-section [data-stack-panel] > *,
+          #section-break-spacer > * {
+            visibility: hidden !important;
+            pointer-events: none !important;
+          }
+          /* Pin the logo hard-left: the strip's default gutter is
+             max(10vw, centered-810px) which floats the brand ~29% in at 1920. */
+          #founders-top-strip-inner {
+            padding: 0 24px !important;
+          }
+        `}</style>
+      )}
       {/* <FontSelector /> */}
       {/* <LoopControls params={params} onParamsChange={setParams} backgroundColor={canvasBackground} onBackgroundChange={setCanvasBackground} textColor={textColor} onTextColorChange={setTextColor} /> */}
       {/* Hero Section */}
