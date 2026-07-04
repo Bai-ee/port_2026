@@ -102,23 +102,33 @@ async function listAdminDashboards(email) {
   const access = await loadAdminAccess(email);
   if (!access.isAdmin) return [];
 
+  // ONE collection read — reuse these docs directly. The old path then re-read
+  // every clients/{id} doc (pure duplicate) AND every dashboard_state/{id} doc
+  // (the big payload docs — ~941KB across 13 clients) just to derive a nav label,
+  // on EVERY getDashboardBootstrap. That 1+2N fan-out (×N large docs), multiplied
+  // by the several mount endpoints that call bootstrap, saturated the Admin SDK
+  // channel and made bootstrap/newsletter/ui-teaser all block ~18-28s in dev.
   const clientSnaps = await fb.adminDb.collection('clients').get();
-  const allClientIds = clientSnaps.docs.map((doc) => doc.id).filter(Boolean);
-  const uniqueIds = Array.from(new Set([...access.dashboardIds, ...allClientIds]));
+  const clientById = new Map(clientSnaps.docs.map((doc) => [doc.id, doc.data() || {}]));
+  const uniqueIds = Array.from(new Set([...access.dashboardIds, ...clientById.keys()]));
 
   const docs = await Promise.all(uniqueIds.map(async (clientId) => {
-    const [clientSnap, dashSnap] = await Promise.all([
-      fb.adminDb.collection('clients').doc(clientId).get(),
-      fb.adminDb.collection('dashboard_state').doc(clientId).get(),
-    ]);
-    const client = clientSnap.exists ? clientSnap.data() : null;
-    const dash = dashSnap.exists ? dashSnap.data() : null;
-    return {
-      clientId,
-      name: client?.companyName || client?.dashboardTitle || dash?.companyName || dash?.clientName || clientId,
-      websiteUrl: client?.websiteUrl || dash?.websiteUrl || null,
-      source: client?.source || dash?.source || null,
-    };
+    const client = clientById.get(clientId) || null;
+    let name = client?.companyName || client?.dashboardTitle || null;
+    let websiteUrl = client?.websiteUrl || null;
+    let source = client?.source || null;
+    // Fall back to dashboard_state ONLY when the client doc can't name the
+    // dashboard (rare — 12/13 clients carry a name in their client doc). This
+    // avoids reading the heavy dashboard_state doc for every client on every call
+    // while preserving labels for legacy/explicit-grant clients that need it.
+    if (!name) {
+      const dashSnap = await fb.adminDb.collection('dashboard_state').doc(clientId).get();
+      const dash = dashSnap.exists ? dashSnap.data() : null;
+      name = dash?.companyName || dash?.clientName || clientId;
+      websiteUrl = websiteUrl || dash?.websiteUrl || null;
+      source = source || dash?.source || null;
+    }
+    return { clientId, name, websiteUrl, source };
   }));
 
   return docs.sort((a, b) => String(a.name || a.clientId).localeCompare(String(b.name || b.clientId)));
@@ -693,7 +703,10 @@ async function getDashboardBootstrap(input) {
     // Earliest runs (asc) — used to identify the client's FIRST brief, which is
     // labeled the Onboarding Brief everywhere; later briefs are Executive.
     // Scanned in JS (single-field createdAt index) to avoid a composite index.
-    fb.adminDb.collection('clients').doc(clientId).collection('brief_runs').orderBy('createdAt', 'asc').limit(50).get(),
+    // .select('pipelineType') — this scan only reads pipelineType (below) to find
+    // the first scout-brief. WITHOUT select it pulls 50 FULL run docs (each fat with
+    // an archived briefSnapshot ~100KB → ~725KB) on every bootstrap for no reason.
+    fb.adminDb.collection('clients').doc(clientId).collection('brief_runs').orderBy('createdAt', 'asc').limit(50).select('pipelineType').get(),
   ]);
 
   const clientData = clientSnapshot.exists ? clientSnapshot.data() : null;
@@ -776,7 +789,10 @@ async function getDashboardBootstrap(input) {
     },
     client:         clientData,
     dashboardState,
-    recentRuns:     runsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+    // Strip the archived briefSnapshot (~100KB/doc, written by brief-preview's
+    // cache-on-read) — the client never reads it from recentRuns, so shipping 8
+    // fat copies (~849KB) in every bootstrap response is pure waste.
+    recentRuns:     runsSnapshot.docs.map((doc) => { const { briefSnapshot, ...rest } = doc.data(); return { id: doc.id, ...rest }; }),
     onboardingRunId,
     intelligence,
     moduleConfig,

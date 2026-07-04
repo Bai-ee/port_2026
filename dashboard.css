@@ -872,6 +872,9 @@
     justify-content: center;
     background: var(--surface);
   }
+  /* Fallback only — JS sets the exact fill-to-viewport height inline while the
+     loading overlay is present (measures the grid's top so the spinner centers in
+     the visible area and the empty box never runs past the fold). */
   #capability-grid:has(#capability-grid-spinner) {
     min-height: 280px;
   }
@@ -9501,7 +9504,8 @@
   overflow: hidden;
 }
 
-#video-remix-modal-tabs-container.vrk-scope {
+#video-remix-modal-tabs-container.vrk-scope,
+#ui-teaser-modal-tabs-container.vrk-scope {
   display: flex;
   flex: 1;
   flex-direction: column;

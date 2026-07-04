@@ -1528,6 +1528,7 @@ const CUSTOM_DETAIL_CARD_IDS = new Set([
   'client-mockup',
   'mockup-studio',
   'video-remix',
+  'ui-teaser',
   'media-library',
   'client-site',
   'copywriter',
@@ -1577,6 +1578,16 @@ const BRIEF_CARD_PREVIEW_TYPES = {
   'brief-marketing': 'marketing-director',
   'brief-strategy': 'social-media-manager',
   'brief-performance': 'website-developer',
+};
+// Which bucket(s) each brief card is visible in. The fleet preview fetch is gated
+// on these so we don't fire 3-4 concurrent full brief renders (~30s each on a
+// heavy client) for cards the user isn't even looking at — that contention was
+// what made the Creative Brief card crawl on the default Deliverables bucket.
+const BRIEF_CARD_PREVIEW_BUCKETS = {
+  'onboarding-brief': ['deliverables', 'brief'],
+  'brief-marketing': ['brief'],
+  'brief-strategy': ['brief'],
+  'brief-performance': ['brief'],
 };
 
 // DELIVERABLES bucket — one uniform, length-matched blurb per card. On the
@@ -2574,6 +2585,10 @@ function buildTerminalLines(run, dashboardState, latestRunStatus, client) {
 // Non-admin accounts: every tile is locked unless its card id is listed here.
 // Daily Briefs bucket is open except the pre-run preview ('brief') and the
 // Executive Brief ('marketing-brief'); named brief rows keep their own tier locks.
+// UI Teaser render variations — cycled per run by the ui-teaser card, seeded
+// jitter inside scripts/render-ui-teaser.mjs makes every render unique.
+const UI_TEASER_VARIATIONS = ['hero-hold', 'scroll-up', 'dive-loop'];
+
 const NON_ADMIN_UNLOCKED_CARD_IDS = new Set([
   'past-briefs',
   'submit-custom-brief',
@@ -3332,6 +3347,67 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	      throw err;
 	    }
 	  }, []);
+
+	  // UI Teaser — local 1-click clean-mode homepage promo renders (admin-only
+	  // card; POST spawns scripts/render-ui-teaser.mjs on this machine, 501 in
+	  // production). Below runWithTerminal because the run callback depends on it.
+	  const [uiTeaserRenders, setUiTeaserRenders] = useState([]);
+	  const [uiTeaserRenderLoading, setUiTeaserRenderLoading] = useState(false);
+	  const [uiTeaserError, setUiTeaserError] = useState('');
+	  const uiTeaserVariationRef = useRef(0); // cycles UI_TEASER_VARIATIONS per run
+	  useEffect(() => {
+	    if (!isAdmin) return;
+	    let cancelled = false;
+	    fetch(apiPath('/api/dashboard/ui-teaser'))
+	      .then((r) => r.json())
+	      .then((data) => { if (!cancelled && data?.ok) setUiTeaserRenders(data.renders || []); })
+	      .catch(() => {});
+	    return () => { cancelled = true; };
+	  }, [isAdmin, apiPath]);
+	  // Runs inside the established global run terminal (runWithTerminal /
+	  // adhocTerminal) like every other card render — cosmetic stages stream
+	  // while the single local POST does launch→capture→camera→encode (~40s).
+	  const runUiTeaserRender = useCallback(async (variationOverride) => {
+	    if (uiTeaserRenderLoading) return;
+	    setUiTeaserRenderLoading(true);
+	    setUiTeaserError('');
+	    const variation = UI_TEASER_VARIATIONS.includes(variationOverride)
+	      ? variationOverride
+	      : UI_TEASER_VARIATIONS[uiTeaserVariationRef.current % UI_TEASER_VARIATIONS.length];
+	    uiTeaserVariationRef.current += 1;
+	    try {
+	      await runWithTerminal({
+	        title: 'RENDERING UI TEASER',
+	        brand: 'UI teaser',
+	        host: typeof window !== 'undefined' ? window.location.host : 'localhost:3000',
+	        stages: [
+	          { pfx: '[LAUNCH]', text: 'starting headless GPU chromium…' },
+	          { pfx: '[LOAD]',   text: 'loading clean-mode homepage (?teaser=1) at 5K…' },
+	          { pfx: '[REC]',    text: `recording 15s "${variation}" scroll choreography…` },
+	          { pfx: '[CAM]',    text: 'cutting seeded zoom/pan camera from the 5K master…' },
+	          { pfx: '[ENCODE]', text: 'encoding mp4 at native crop resolution…' },
+	        ],
+	        task: async () => {
+	          const res = await fetch(apiPath('/api/dashboard/ui-teaser'), {
+	            method: 'POST',
+	            headers: { 'Content-Type': 'application/json' },
+	            body: JSON.stringify({ variation }),
+	          });
+	          const data = await res.json().catch(() => ({}));
+	          if (!res.ok || !data?.ok) throw new Error(data?.error || 'render failed');
+	          setUiTeaserRenders(data.renders || []);
+	          return {
+	            doneText: `saved ${String(data.url || '').split('/').pop() || 'teaser'}${data.out ? ` (${data.out})` : ''}`,
+	            videoUrl: data.url || null,
+	          };
+	        },
+	      });
+	    } catch (err) {
+	      setUiTeaserError(err?.message || 'render failed');
+	    } finally {
+	      setUiTeaserRenderLoading(false);
+	    }
+	  }, [apiPath, uiTeaserRenderLoading, runWithTerminal]);
 
 	  const runMockupStudioVideo = useCallback(async ({ sourceUrlOverride = null } = {}) => {
 	    if (!user || mockupStudioRenderLoading) return;
@@ -4256,6 +4332,37 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   const [bootstrapLoading, setBootstrapLoading] = useState(true);
   const [bootstrapError, setBootstrapError] = useState('');
   const cancelledRef = useRef(false);
+  // The grid loading overlay shows on the initial load AND during a client switch
+  // (bootstrapLoading after the first load = a switch; reseeds don't set it).
+  // Single source for both the overlay render and the fill-to-viewport sizing.
+  const showGridLoader = !cardsRevealed || (bootstrapLoading && initialBootstrapDone);
+  // While the overlay is up, CAP the grid at exactly its top-to-viewport-bottom
+  // height. Uses `height` (not min-height) because the real cards render UNDER the
+  // overlay and would otherwise stretch the box far past the fold — #capability-grid
+  // is overflow:hidden, so an explicit height clips them and the centered spinner
+  // lands mid-viewport. Measured (header height varies + animates in), re-measured
+  // on resize + any layout shift, cleared on card mount so the grid returns to CSS.
+  useLayoutEffect(() => {
+    const grid = capabilityGridRef.current;
+    if (!grid) return undefined;
+    if (!showGridLoader) { grid.style.height = ''; grid.style.minHeight = ''; return undefined; }
+    const size = () => {
+      const top = grid.getBoundingClientRect().top;
+      const h = `${Math.max(280, Math.round(window.innerHeight - top - 16))}px`;
+      if (grid.style.height !== h) grid.style.height = h; // guard avoids RO feedback loop
+    };
+    size();
+    window.addEventListener('resize', size);
+    let ro;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => size());
+      ro.observe(document.body);
+    }
+    return () => {
+      window.removeEventListener('resize', size);
+      if (ro) ro.disconnect();
+    };
+  }, [showGridLoader]);
   const prevRunStatusRef = useRef(null);
   const postSurveyRevealFiredRef = useRef(false);
   // Set when the onboarding-chain brief succeeds; once the reveal countdown
@@ -4875,7 +4982,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       return;
     }
     let cancelled = false;
-    const cardEntries = Object.entries(BRIEF_CARD_PREVIEW_TYPES);
+    // Only render previews for brief cards visible in the ACTIVE bucket — skip the
+    // rest so their ~30s renders don't compete with (and stall) the one the user is
+    // actually looking at. onboarding-brief (Creative Brief) shows on Deliverables.
+    const cardEntries = Object.entries(BRIEF_CARD_PREVIEW_TYPES)
+      .filter(([cardId]) => (BRIEF_CARD_PREVIEW_BUCKETS[cardId] || []).includes(activeCapabilityFilter));
+    if (!cardEntries.length) { setBriefCardPreviewHtml({}); setBriefCardPreviewLoading({}); return () => { cancelled = true; }; }
     setBriefCardPreviewLoading(Object.fromEntries(cardEntries.map(([cardId]) => [cardId, true])));
     (async () => {
       try {
@@ -4899,11 +5011,14 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       }
     })();
     return () => { cancelled = true; };
-  }, [user, apiPath, briefCardPreviewFetchKey]);
+  }, [user, apiPath, briefCardPreviewFetchKey, activeCapabilityFilter]);
 
-  // Email Digest preview for the card face + modal shell. Live render
-  // (`?preview=1`) honors the saved include toggles server-side — same code
-  // path as a send, so the card shows exactly what will go out. Admin-only.
+  // Email Digest preview for the card face + modal shell — the THUMBNAIL only.
+  // Uses the cheap `?preview=template` render (placeholder data, no collectors,
+  // no Haiku captions) so it never fires the ~30s live pipeline on dashboard
+  // mount (that starved bootstrap in dev + cost LLM $ on every admin load). The
+  // real, client-scoped live preview still loads on demand in the modal's
+  // PREVIEW tab via AdminEmailDigestView's own loadPreview. Admin-only.
   useEffect(() => {
     if (!user || !isAdmin) {
       setEmailDigestPreviewHtml('');
@@ -4917,7 +5032,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     (async () => {
       try {
         const token = await user.getIdToken();
-        const res = await fetch(apiPath('/api/admin/daily-digest?preview=1'), {
+        const res = await fetch(apiPath('/api/admin/daily-digest?preview=template'), {
           headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
         });
@@ -5237,8 +5352,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 
   // Fetch the newsletter HTML for the Newsletter tile's PREVIEW tab.
   // Loads the real newsletter if available, otherwise the generic template.
+  // Lazy: this render can take ~27s (real newsletter), and it's ONLY shown inside
+  // the Newsletter modal's PREVIEW tab (never on the card face), so gate it on the
+  // modal being open. On dashboard mount it did nothing but starve bootstrap in dev.
   useEffect(() => {
-    if (!user) return;
+    if (!user || activeTileModal?.cardId !== 'newsletter') return;
     let cancelled = false;
     (async () => {
       try {
@@ -5260,7 +5378,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       }
     })();
     return () => { cancelled = true; };
-  }, [user, apiPath, bootstrap?.dashboardState?.newsletter?.content?.hero_story]);
+  }, [user, apiPath, activeTileModal?.cardId, bootstrap?.dashboardState?.newsletter?.content?.hero_story]);
 
   // Clock tick
   useEffect(() => {
@@ -5329,6 +5447,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    if (id === 'local-weather') { setModalTab('config'); return; }
 	    if (id === 'mockup-studio') { setModalTab('setup'); return; }
 	    if (id === 'video-remix') { setModalTab('remix'); return; }
+	    if (id === 'ui-teaser') { setModalTab('render'); return; }
 	    if (id === 'media-library') { setModalTab('source'); return; }
 	    if (id === 'archive-publishing') { setModalTab('archive'); return; }
 	    setModalTab(CUSTOM_DETAIL_CARD_IDS.has(id) ? 'solutions' : 'report');
@@ -11077,6 +11196,51 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         },
       };
     })(),
+    // UI TEASER — admin-only local tool in the Creative Team bucket (next to
+    // Video Remix): 1-click 15s promo render of the portfolio homepage in
+    // clean mode (?teaser=1 — copy stripped; threejs + section backgrounds +
+    // header logo only). Each run cycles a scroll choreography variation and
+    // gets a seeded 5K virtual camera framing, so no two renders match.
+    // Renders on THIS machine (headless GPU Playwright, ~25s; POST 501s in
+    // prod), so the card is hidden from clients entirely rather than locked.
+    ...(isAdmin ? [(() => {
+      const latest = uiTeaserRenders[0] || null;
+      return {
+        id: 'ui-teaser',
+        category: 'content',
+        number: 'UT',
+        label: 'UI TEASER',
+        title: 'UI Teaser Video',
+        description: 'One-click 15s render of the homepage UI stripped to backgrounds, motion, and logo — social-ready teasers with a fresh scroll variation every run.',
+        placeholderLabel: uiTeaserRenderLoading ? 'RENDERING\n…' : latest ? 'TEASER\nREADY' : 'RENDER\nTEASER',
+        rows: latest
+          ? [
+              { key: 'ut-latest', label: 'Latest',   value: `${latest.variation} · seed ${latest.seed}` },
+              { key: 'ut-when',   label: 'Rendered', value: new Date(latest.createdAt).toLocaleString() },
+              { key: 'ut-count',  label: 'Library',  value: `${uiTeaserRenders.length} render${uiTeaserRenders.length !== 1 ? 's' : ''} in public/ui-teasers` },
+              { key: 'ut-action', label: 'Action',   value: uiTeaserError || 'RENDER cycles hero-hold → scroll-up → dive-loop (~25s, renders in the background).' },
+            ]
+          : [
+              { key: 'ut-what',   label: 'Output',     value: '15s · 1920×1080 MP4 · clean homepage (?teaser=1)' },
+              { key: 'ut-vars',   label: 'Variations', value: 'hero-hold · scroll-up · dive-loop (seeded, unique each run)' },
+              { key: 'ut-action', label: 'Action',     value: uiTeaserError || 'Click RENDER — records headless in the background, ~25s, then plays here.' },
+            ],
+        footerLeft: uiTeaserRenderLoading ? 'Rendering…' : uiTeaserError ? 'Error' : latest ? 'Ready' : 'Local tool',
+        footerRight: 'ACTIVE',
+        readinessBadge: latest ? { tone: 'ok', label: 'Passed' } : uiTeaserRenderLoading ? { tone: 'partial', label: 'Rendering…' } : null,
+        deliverableAsset: latest ? {
+          title: 'UI Teaser',
+          cardId: 'ui-teaser',
+          kind: 'video',
+          items: [{ src: latest.url, filename: latest.file }],
+        } : null,
+        footerAction: {
+          label: uiTeaserRenderLoading ? '…' : 'RENDER',
+          loading: uiTeaserRenderLoading,
+          onClick: () => runUiTeaserRender(),
+        },
+      };
+    })()] : []),
     (() => {
       const ap = dashboardState?.archivePublishing || {};
       const archivedCount = Array.isArray(ap.archivedAssets) ? ap.archivedAssets.length : 0;
@@ -13518,8 +13682,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           <div id="capability-grid" ref={capabilityGridRef} style={activeCapabilityFilter === 'leadgen' ? { display: 'none' } : undefined}>
             {/* Overlays the grid (chrome + hidden cards) while first bootstrap
                 resolves; the card-stagger effect fades it out, cardsRevealed
-                unmounts it. */}
-            {!cardsRevealed && (
+                unmounts it. ALSO shown during an admin client switch
+                (bootstrapLoading after the initial load = a switch, since reseeds
+                don't set it) so the new client's grid loads under the spinner
+                instead of showing the previous client's stale cards. */}
+            {showGridLoader && (
               <div id="capability-grid-spinner" role="status" aria-label="Loading dashboard cards" data-tooltip-disabled="true">
                 <div className="brief-loader-spinner" aria-hidden="true" />
               </div>
@@ -13634,7 +13801,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   if (activeCapabilityFilter === 'content') {
                     // Creative Director: intake → produce → ship.
                     // media-library anchors under INTAKE (visual-dna); video-remix under DESIGNER (client-brief).
-                    const order = ['visual-dna', 'media-library', 'brand-voice', 'style-guide', 'brand-system', 'client-brief', 'video-remix', 'client-mockup-creative'];
+                    const order = ['visual-dna', 'media-library', 'brand-voice', 'style-guide', 'brand-system', 'client-brief', 'video-remix', 'ui-teaser', 'client-mockup-creative'];
                     const ai = order.indexOf(a.id); const bi = order.indexOf(b.id);
                     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
                   }
@@ -14131,6 +14298,21 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     <div className="tile-brief-preview-loading" role="status" aria-label="Loading Creative Brief">
                       <div className="brief-loader-spinner" aria-hidden="true" />
                     </div>
+                  ) : card.id === 'ui-teaser' && uiTeaserRenders[0] ? (
+                    // UI Teaser card face plays the latest local render (silent mp4),
+                    // same shell treatment as Video Remix below.
+                    <video
+                      key={uiTeaserRenders[0].url}
+                      className="tile-studio-video"
+                      src={uiTeaserRenders[0].url}
+                      autoPlay
+                      muted
+                      loop
+                      playsInline
+                      controls
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', background: '#000' }}
+                    />
                   ) : card.id === 'mockup-studio' && latestStudioVideoUrl ? (
                     // Mockup Studio card always shows the last rendered video.
                     // Single source: renderStudioVideoShell() — the modal mirrors it.
@@ -15949,6 +16131,27 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                             controls
                             onClick={(e) => e.stopPropagation()}
                             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', background: '#000' }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ) : activeTileModal.cardId === 'ui-teaser' && uiTeaserRenders[0] ? (
+                    // UI Teaser modal mirrors the card face; contain (not cover) so
+                    // the full 1920×1080 promo frame is visible for review.
+                    <div className="vrk-scope vrk-player-shell" onClick={(e) => e.stopPropagation()}>
+                      <div className="preview-surface">
+                        <div className="preview-media">
+                          <video
+                            key={uiTeaserRenders[0].url}
+                            className="tile-studio-video"
+                            src={uiTeaserRenders[0].url}
+                            autoPlay
+                            muted
+                            loop
+                            playsInline
+                            controls
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', objectPosition: 'center', background: '#000' }}
                           />
                         </div>
                       </div>
@@ -19511,6 +19714,80 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                  );
 	                })()}
 
+	                {/* UI Teaser — render controls + saved teaser assets (local library) */}
+	                {activeTileModal.cardId === 'ui-teaser' && (
+	                  <div
+	                    id="ui-teaser-modal-tabs-container"
+	                    className="vrk-scope tile-detail-bento-cell panel"
+	                  >
+	                    <div className="tabs">
+	                      <button type="button" className={`tab${modalTab === 'render' ? ' is-active' : ''}`} onClick={() => setModalTab('render')}>RENDER</button>
+	                      <button type="button" className={`tab${modalTab === 'assets' ? ' is-active' : ''}`} onClick={() => setModalTab('assets')}>
+	                        <span className="tab-label-full">SAVED ASSETS</span>
+	                        <span className="tab-label-short">ASSETS</span>
+	                      </button>
+	                    </div>
+	                    <div className="panel-body">
+	                      {modalTab === 'render' && (
+	                        <section className="section">
+	                          <div className="section-head">
+	                            <span className="index">UT</span>
+	                            <div>
+	                              <h3>UI teaser render</h3>
+	                              <p>15s clean-mode capture of the homepage — backgrounds, threejs loop, and logo only — cut from a 4K master by a seeded zoom/pan camera, so every render frames the art differently. Renders locally in the background (~25s), then lands in SAVED ASSETS.</p>
+	                            </div>
+	                          </div>
+	                          <div id="ui-teaser-variation-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+	                            {UI_TEASER_VARIATIONS.map((v) => (
+	                              <button
+	                                key={v}
+	                                type="button"
+	                                className="btn btn-outline"
+	                                disabled={uiTeaserRenderLoading}
+	                                title={`Render a 15s teaser with the ${v} scroll choreography`}
+	                                onClick={() => runUiTeaserRender(v)}
+	                              >
+	                                {v}
+	                              </button>
+	                            ))}
+	                            <button type="button" className="btn" disabled={uiTeaserRenderLoading} onClick={() => runUiTeaserRender()}>
+	                              {uiTeaserRenderLoading ? <span className="vrk-btn-spinner" aria-hidden="true" /> : null}
+	                              {uiTeaserRenderLoading ? 'Rendering…' : 'Render next variation'}
+	                            </button>
+	                          </div>
+	                          {uiTeaserError ? <div className="empty" id="ui-teaser-render-error">{uiTeaserError}</div> : null}
+	                        </section>
+	                      )}
+	                      {modalTab === 'assets' && (
+	                        uiTeaserRenders.length ? uiTeaserRenders.map((asset) => (
+	                          <article key={asset.file} className="list-card saved-remix-card">
+	                            <div className="list-head">
+	                              <span className="list-title">{asset.variation}</span>
+	                              <span className="list-body">{asset.createdAt ? new Date(asset.createdAt).toLocaleString() : 'Saved'}</span>
+	                            </div>
+	                            <p className="saved-remix-meta">{[
+	                              asset.seed != null ? `Seed ${asset.seed}` : null,
+	                              asset.sizeBytes ? formatVideoRemixBytes(asset.sizeBytes) : null,
+	                              '15s · 1920×1080',
+	                            ].filter(Boolean).join(' · ')}</p>
+	                            <div className="preview-surface saved-remix-surface">
+	                              <div className="preview-media">
+	                                <LazyVideoThumb src={asset.url} controls playsInline />
+	                              </div>
+	                            </div>
+	                            <div className="saved-remix-actions">
+	                              <a className="btn btn-outline" href={asset.url} download={asset.file}>Download</a>
+	                              <a className="btn btn-outline" href={asset.url} target="_blank" rel="noopener noreferrer">Open <span className="cta-icon">↗</span></a>
+	                            </div>
+	                          </article>
+	                        )) : (
+	                          <div className="empty">No teasers yet. Use RENDER to capture the first one.</div>
+	                        )
+	                      )}
+	                    </div>
+	                  </div>
+	                )}
+
 	                {/* Archive / Publishing — Archive · Manifest · Website · ArNS · Cost */}
 	                {activeTileModal.cardId === 'archive-publishing' && (() => {
 	                  const ap = dashboardState?.archivePublishing || {};
@@ -21330,6 +21607,9 @@ export const dashboardCss = `
     z-index: 100;
     min-width: 238px;
     max-width: min(320px, 82vw);
+    max-height: min(60vh, 420px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     padding: 5px;
     border: 1px solid #000;
     background: rgba(255, 255, 255, 0.98);
@@ -21811,6 +22091,10 @@ export const dashboardCss = `
     justify-content: center;
     background: var(--surface);
   }
+  /* Fallback only. While the loading overlay is present (initial load + client
+     switch) JS sets the exact fill-to-viewport height inline (measures the grid's
+     top, since the header height varies by breakpoint) so the empty box never runs
+     past the fold and the centered spinner stays in view. Reverts on card mount. */
   #capability-grid:has(#capability-grid-spinner) {
     min-height: 280px;
   }
@@ -28019,7 +28303,9 @@ export const dashboardCss = `
     .founders-chat-label-short { display: inline; }
     #capability-section { padding-top: 0; }
     #reseed-url-group { display: none !important; }
-    #founders-hero-meta { width: 100%; max-width: 100%; overflow: hidden; }
+    /* overflow visible so the absolutely-positioned .client-switcher-menu can drop below this box
+       instead of being clipped; horizontal safety kept by width:100% + per-row .meta-row overflow. */
+    #founders-hero-meta { width: 100%; max-width: 100%; overflow: visible; }
     .meta-row { overflow: hidden; padding-top: 8px; padding-bottom: 8px; }
     #client-meta-row { overflow: visible; }
     .meta-row .value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
@@ -30959,7 +31245,8 @@ export const dashboardCss = `
     backdrop-filter: blur(22px);
     -webkit-backdrop-filter: blur(22px);
   }
-  #video-remix-modal-tabs-container.vrk-scope {
+  #video-remix-modal-tabs-container.vrk-scope,
+  #ui-teaser-modal-tabs-container.vrk-scope {
     display: flex;
     flex: 1;
     flex-direction: column;

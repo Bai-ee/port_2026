@@ -167,6 +167,11 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   const generatedIso = generatedAt || marketingBrief?.generatedAtIso || null;
   const hasRealRun = Boolean(generatedIso);
   const generatedDt = new Date(generatedIso || Date.now());
+  // Back-compat alias: `generatedIso` was renamed from `generated` (commit
+  // c95dd59); three later refs (footer, download date, today-plan fallback)
+  // still read `generated`. Keep it a real ISO string (never null) so those
+  // stay valid without touching the null-able `generatedIso`/hasRealRun logic.
+  const generated = generatedIso || generatedDt.toISOString();
   const when = generatedDt.toISOString().slice(0, 10);
   const tierLabel = tier === 'paid' ? 'Recurring · Paid' : 'One-time · Free';
   // The cover h1 uses the run date+time as the editorial mark — not the long
