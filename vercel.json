@@ -19,10 +19,6 @@
     {
       "path": "/api/worker/media-reconcile",
       "schedule": "30 13 * * *"
-    },
-    {
-      "path": "/api/worker/run-brief",
-      "schedule": "*/5 * * * *"
     }
   ]
 }
