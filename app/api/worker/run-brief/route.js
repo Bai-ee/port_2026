@@ -189,6 +189,12 @@ async function handleRunBrief(request, { parseBody = true, source = 'worker' } =
 
   const { clientId, attempts } = claimedRun;
   console.log(`[${new Date().toISOString()}] WORKER: claimed run ${runId} for client ${clientId} (attempt ${attempts})`);
+  if (source === 'cron-sweep') {
+    await appendRunEvent(runId, clientId, {
+      stage: 'worker-sweep',
+      progressLabel: 'Background checker picked this up — generation is continuing.',
+    }).catch(() => {});
+  }
 
   // Chained follow-up runs fail soft: full error in brief_runs, but no
   // dashboard errorState / client downgrade — the primary intake succeeded.
