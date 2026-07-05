@@ -22,14 +22,18 @@ if (process.env.NODE_ENV !== 'production') {
 const _fb = require('../../../../api/_lib/firebase-admin.cjs');
 const {
   buildAuthRequestShim,
+  getHeaderValue,
   hasValidWorkerSecret,
+  safeSecretEquals,
   verifyAdminRequest,
 } = require('../../../../api/_lib/auth.cjs');
 const {
   claimRun,
   completeRun,
   failRun,
+  findStaleRunningRuns,
   findNextQueuedRun,
+  requeueStaleRun,
   updateRunProgress,
   updateModuleState,
   appendRunEvent,
@@ -107,10 +111,40 @@ async function triggerStudioRenderWorker(request) {
 
 async function authorizeRequest(request) {
   if (hasValidWorkerSecret(buildAuthRequestShim(request))) return;
+  if (hasValidCronSecret(request)) return;
   await verifyAdminRequest(buildAuthRequestShim(request));
 }
 
-export async function POST(request) {
+function hasValidCronSecret(request) {
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) return false;
+  const provided = getHeaderValue(buildAuthRequestShim(request).headers, 'authorization');
+  return safeSecretEquals(provided, `Bearer ${cronSecret}`);
+}
+
+async function reclaimStaleRunsForSweep() {
+  const staleRuns = await findStaleRunningRuns({ limit: 10 });
+  const summary = { scanned: staleRuns.length, requeued: 0, errors: 0, runIds: [] };
+
+  for (const run of staleRuns) {
+    try {
+      await requeueStaleRun(run.id);
+      summary.requeued += 1;
+      summary.runIds.push(run.id);
+      await appendRunEvent(run.id, run.clientId, {
+        stage: 'worker-sweep',
+        progressLabel: 'Expired worker lease reclaimed; run queued for retry.',
+      }).catch(() => {});
+    } catch (err) {
+      summary.errors += 1;
+      console.warn(`[WORKER] stale reclaim failed for ${run.id}: ${err?.message}`);
+    }
+  }
+
+  return summary;
+}
+
+async function handleRunBrief(request, { parseBody = true, source = 'worker' } = {}) {
   // Step 1 — Auth
   try {
     await authorizeRequest(request);
@@ -121,17 +155,26 @@ export async function POST(request) {
   // Step 2 — Parse body
   let runId = null;
   try {
-    const body = await request.json().catch(() => ({}));
+    const body = parseBody ? await request.json().catch(() => ({})) : {};
     runId = body.runId ? String(body.runId).trim() : null;
   } catch {
     return json({ error: 'Invalid JSON body.' }, 400);
   }
 
+  let sweep = null;
+
   // Step 3 — Resolve runId
   if (!runId) {
+    try {
+      sweep = await reclaimStaleRunsForSweep();
+    } catch (err) {
+      console.warn(`[WORKER] stale sweep failed before queue claim: ${err?.message}`);
+      sweep = { scanned: 0, requeued: 0, errors: 1, runIds: [] };
+    }
+
     const nextRun = await findNextQueuedRun();
     if (!nextRun) {
-      return json({ ok: true, message: 'No queued runs found.' });
+      return json({ ok: true, claimed: false, source, sweep, message: 'No queued runs found.' });
     }
     runId = nextRun.id;
   }
@@ -663,6 +706,16 @@ export async function POST(request) {
     runId,
     clientId,
     status: 'succeeded',
+    source,
+    sweep,
     pipelineRunId: pipelineResult.pipelineRunId,
   });
+}
+
+export async function GET(request) {
+  return handleRunBrief(request, { parseBody: false, source: 'cron-sweep' });
+}
+
+export async function POST(request) {
+  return handleRunBrief(request, { parseBody: true, source: 'worker' });
 }

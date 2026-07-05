@@ -69,7 +69,7 @@ function triggerNext(request, delayMs = 0) {
   });
 }
 
-export async function POST(request) {
+async function handleRenderStudio(request) {
   try {
     await authorizeRequest(request);
   } catch {
@@ -116,4 +116,12 @@ export async function POST(request) {
 
   triggerNext(request);
   return json({ ok: true, claimed: true, jobId: job.id, capture: result.capture });
+}
+
+export async function GET(request) {
+  return handleRenderStudio(request);
+}
+
+export async function POST(request) {
+  return handleRenderStudio(request);
 }

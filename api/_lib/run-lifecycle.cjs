@@ -297,6 +297,14 @@ function buildDashboardProjection(clientId, pipelineResult, runId) {
   return base;
 }
 
+function timestampToMillis(value) {
+  if (!value) return null;
+  if (typeof value.toMillis === 'function') return value.toMillis();
+  if (typeof value.seconds === 'number') return value.seconds * 1000;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 /**
  * Mark a run as succeeded and write normalized output to Firestore.
  *
@@ -498,7 +506,7 @@ async function failRun(runId, clientId, error, attempts, details = {}) {
  * Reset a stale `running` run back to `queued` so a worker can reclaim it.
  *
  * Used when a worker crashes or times out without writing a final state.
- * Exposed here for Phase 5 admin control plane use — not called automatically.
+ * Used by the run-brief cron backstop and exposed for admin control plane use.
  *
  * Throws if:
  *   - run is not in `running` state
@@ -544,6 +552,44 @@ async function requeueStaleRun(runId) {
     { status: 'queued', workerLease: null, updatedAt: fb.FieldValue.serverTimestamp() },
     { merge: true }
   );
+}
+
+/**
+ * Find running runs whose worker lease has expired.
+ *
+ * Intentionally avoids an orderBy on workerLease.leaseExpiresAt so the backstop
+ * can run without a new composite index. The result set should be tiny in normal
+ * production because only active/stuck runs have status=running.
+ */
+async function findStaleRunningRuns({ limit = 25, nowMs = Date.now() } = {}) {
+  const snapshot = await fb.adminDb
+    .collection('brief_runs')
+    .where('status', '==', 'running')
+    .limit(Math.max(1, Math.min(Number(limit) || 25, 100)))
+    .get();
+
+  const stale = [];
+  snapshot.forEach((doc) => {
+    const run = doc.data() || {};
+    if ((run.attempts || 0) >= MAX_ATTEMPTS) return;
+
+    const leaseExpiresAtMs = timestampToMillis(run.workerLease?.leaseExpiresAt);
+    const startedAtMs = timestampToMillis(run.startedAt) || timestampToMillis(run.updatedAt);
+    const leaseExpired = leaseExpiresAtMs != null && leaseExpiresAtMs <= nowMs;
+    const missingLeaseExpired = leaseExpiresAtMs == null
+      && startedAtMs != null
+      && nowMs - startedAtMs >= LEASE_TIMEOUT_MS;
+
+    if (leaseExpired || missingLeaseExpired) {
+      stale.push({ id: doc.id, ...run });
+    }
+  });
+
+  return stale.sort((a, b) => {
+    const aCreated = timestampToMillis(a.createdAt) || 0;
+    const bCreated = timestampToMillis(b.createdAt) || 0;
+    return aCreated - bCreated;
+  });
 }
 
 // ── Admin requeue ─────────────────────────────────────────────────────────────
@@ -985,6 +1031,7 @@ module.exports = {
   cancelRun,
   requeueStaleRun,
   requeueRun,
+  findStaleRunningRuns,
   findNextQueuedRun,
   updateRunProgress,
   appendRunEvent,
