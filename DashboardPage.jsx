@@ -4421,6 +4421,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // Failure toast — surfaces a dismissible error when a module run fails, so the
   // user is told even if they closed the streaming terminal before it errored.
   const [runErrorToast, setRunErrorToast] = useState('');
+  // Weak-connection toast — centered at the top of the page when a bootstrap
+  // poll times out but cached state keeps the dashboard usable. Shown even
+  // while the onboarding terminal is open (it's a connection notice, not a
+  // dashboard failure).
+  const [weakConnectionToast, setWeakConnectionToast] = useState(false);
   const failedToastRunRef = useRef(null);
   const modalMarqueeTrackRef = useRef(null);
   const modalMarqueeOffsetRef = useRef(0);
@@ -4454,7 +4459,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     if (warning) {
       if (!staleWarnedRef.current) {
         staleWarnedRef.current = true;
-        setBootstrapError(warning);
+        // A timed-out poll with cached state = weak connection, not a broken
+        // dashboard — surface the neutral centered connection toast instead of
+        // the red error toast. Other warnings keep the error surface.
+        if (/timed out/i.test(warning)) setWeakConnectionToast(true);
+        else setBootstrapError(warning);
       }
     } else {
       staleWarnedRef.current = false;
@@ -8511,6 +8520,13 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     const t = setTimeout(() => setRunErrorToast(''), 8000);
     return () => clearTimeout(t);
   }, [runErrorToast]);
+
+  // Auto-dismiss the weak-connection notice after 6s.
+  useEffect(() => {
+    if (!weakConnectionToast) return undefined;
+    const t = setTimeout(() => setWeakConnectionToast(false), 6000);
+    return () => clearTimeout(t);
+  }, [weakConnectionToast]);
 
   // Auto-dismiss the transient "showing last loaded state" warning after 7s.
   // Hard load failures (no cache) keep their message until reload/dismiss.
@@ -15438,7 +15454,20 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         </div>
       ) : null}
 
-      {bootstrapError ? (
+      {/* Weak-connection notice — top-center, neutral. Not gated on the
+          terminal: a slow network during the build digest is exactly when it
+          should show. */}
+      {weakConnectionToast ? (
+        <div id="connection-weak-toast" role="status" aria-live="polite">
+          <span id="connection-weak-toast-dot" />
+          <span>Internet connection is not strong.</span>
+        </div>
+      ) : null}
+
+      {/* Suppressed while the onboarding/build terminal is open: transient
+          "timed out" warnings auto-dismiss unseen, hard failures stay in state
+          and surface here once the terminal closes. */}
+      {bootstrapError && !showIntakeModal ? (
         <div id="db-alert-toast" role="alert" aria-live="assertive">
           <span id="db-alert-toast-dot" />
           <span>{bootstrapError}</span>
@@ -28073,7 +28102,12 @@ export const dashboardCss = `
     .cap-bucket-deliverables .cap-step-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   }
   @media (max-width: 1200px) {
-    #founders-hero-shell { grid-template-columns: 1fr; gap: 32px; }
+    /* minmax(0, 1fr), not a bare 1fr — a bare 1fr track won't shrink below its
+       content's min-content width, which was forcing this whole column (and
+       every .meta-row inside it) wider than the viewport on phones, pushing
+       each row's trailing action button off-screen regardless of its own
+       overflow:hidden/ellipsis rules. */
+    #founders-hero-shell { grid-template-columns: minmax(0, 1fr); gap: 32px; }
     /* DELIVERABLES breaks from 3-across to 2x2 on medium and smaller. */
     .cap-bucket-deliverables .cap-step-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
@@ -28796,6 +28830,45 @@ export const dashboardCss = `
   #run-error-toast-close:hover { color: rgba(150, 22, 28, 0.95); }
   /* Offset the run-error toast so it never fully overlaps a bootstrap-error toast. */
   #run-error-toast { top: 4.5rem; }
+
+  /* Weak-connection notice — top-center, neutral amber (not the red error
+     styling). Own keyframes so the slide-in preserves the centering
+     translateX. */
+  #connection-weak-toast {
+    position: fixed;
+    top: 1rem;
+    left: 50%;
+    transform: translate(-50%, 0);
+    z-index: 10000;
+    max-width: min(24rem, calc(100vw - 2rem));
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.75rem 1rem;
+    border-radius: 10px;
+    background: rgba(255, 250, 240, 0.94);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(146, 104, 21, 0.32);
+    box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.12);
+    font-family: "Space Mono", monospace;
+    font-size: 0.72rem;
+    line-height: 1.4;
+    letter-spacing: 0.02em;
+    color: rgba(120, 86, 18, 0.92);
+    animation: connection-weak-toast-in 0.28s cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+  #connection-weak-toast-dot {
+    flex-shrink: 0;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 999px;
+    background: #c9930e;
+  }
+  @keyframes connection-weak-toast-in {
+    from { opacity: 0; transform: translate(-50%, -8px); }
+    to   { opacity: 1; transform: translate(-50%, 0); }
+  }
 
   #glass-tooltip {
     position: fixed;
