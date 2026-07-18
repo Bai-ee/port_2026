@@ -1733,7 +1733,13 @@
   }
   #brief-fullscreen-container {
     width: 90vw;
+    /* dvh (with vh fallback) — iOS Safari's vh includes the area under the
+       collapsed browser chrome, which pushed the centered container off the
+       top of the visible screen and hid the close button. max-height pins it
+       inside the overlay regardless. */
     height: 90vh;
+    height: 90dvh;
+    max-height: 100%;
     background: #fff;
     border-radius: 16px;
     overflow: hidden;
@@ -1787,6 +1793,14 @@
   @media (max-width: 480px) {
     #brief-fullscreen-title .bfs-title-full { display: none; }
     #brief-fullscreen-title .bfs-title-mobile { display: inline; }
+    /* MOBILE WIDTH STANDARD: the brief/asset viewer spans the viewport minus
+       a single 8px gutter per side, so the brief isn't shrunk twice. */
+    #brief-fullscreen-container {
+      width: calc(100vw - 16px);
+      height: calc(100vh - 16px);
+      height: calc(100dvh - 16px);
+      border-radius: 12px;
+    }
   }
   #brief-fullscreen-iframe {
     width: 100%;

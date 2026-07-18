@@ -23194,7 +23194,13 @@ export const dashboardCss = `
   }
   #brief-fullscreen-container {
     width: 90vw;
+    /* dvh (with vh fallback) — iOS Safari's vh includes the area under the
+       collapsed browser chrome, which pushed the centered container off the
+       top of the visible screen and hid the close button. max-height pins it
+       inside the overlay regardless. */
     height: 90vh;
+    height: 90dvh;
+    max-height: 100%;
     background: #fff;
     border-radius: 16px;
     overflow: hidden;
@@ -23297,6 +23303,14 @@ export const dashboardCss = `
      on the top row; drop the size-nav to its own row below, spanning the width so
      its pills wrap cleanly. Only the size-nav view gets the extra top clearance. */
   @media (max-width: 480px) {
+    /* MOBILE WIDTH STANDARD: the brief/asset viewer spans the viewport minus
+       a single 8px gutter per side, so the brief isn't shrunk twice. */
+    #brief-fullscreen-container {
+      width: calc(100vw - 16px);
+      height: calc(100vh - 16px);
+      height: calc(100dvh - 16px);
+      border-radius: 12px;
+    }
     #brief-fullscreen-actions {
       top: 10px;
       right: 10px;

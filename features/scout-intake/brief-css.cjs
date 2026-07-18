@@ -131,6 +131,10 @@ const BRIEF_CSS = `
      brief reads as a vertical breakdown on narrow screens. Presentation-only —
      targets the shared .k/.v/tile/flow classes used by every brief renderer. */
   @media(max-width:640px){
+    /* Tight gutter on narrow viewports (incl. the dashboard's brief iframe on
+       phones) — the desktop 8vw side margins left the brief content visibly
+       narrow inside the full-screen modal. */
+    :root{--gutter:clamp(12px,4vw,24px)}
     section.page{padding:clamp(40px,7vh,72px) var(--gutter) clamp(48px,8vh,96px)}
     .eyebrow{font-size:13px;gap:12px;margin-bottom:20px}
     .sub{font-size:clamp(19px,5.2vw,24px);line-height:1.4;margin-bottom:32px}
