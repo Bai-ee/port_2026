@@ -257,6 +257,7 @@ function CmoTableRows({ dailyBriefOpen, onToggleDaily, variant }) {
       <tr
         key={row.task}
         {...variantProps}
+        data-daily={isDaily || undefined}
         onClick={isDaily ? onToggleDaily : undefined}
         role={isDaily ? 'button' : undefined}
         aria-expanded={isDaily ? dailyBriefOpen : undefined}
@@ -1545,7 +1546,6 @@ const StackedSlidesSection = () => {
             align-self: center !important;
             padding: 0.5rem 3.75rem !important;
           }
-          #cmo-card-onboard-body { display: none; }
           #onboarding-table-section { border-top: none !important; }
           #footer-contact-cta {
             width: 100% !important;
@@ -1624,6 +1624,22 @@ const StackedSlidesSection = () => {
           /* Sub-row descriptions: clear the connector elbow arm (extends ~0.55rem into col 2) */
           #cmo-dashboard-table tbody tr[data-sub] td:nth-child(3) {
             padding-left: 1.1rem !important;
+          }
+          /* Daily Brief row has no description line anymore (chevron only) — keep the
+             chevron on the same grid row as the "Daily Brief" label instead of the
+             empty description row below it. */
+          #cmo-dashboard-table tbody tr[data-daily] {
+            grid-template-columns: 2rem 1fr auto !important;
+          }
+          #cmo-dashboard-table tbody tr[data-daily] td:nth-child(2) {
+            grid-row: 1 !important;
+          }
+          #cmo-dashboard-table tbody tr[data-daily] td:nth-child(3) {
+            grid-column: 3 !important;
+            grid-row: 1 !important;
+            display: flex !important;
+            align-items: center !important;
+            padding: 1.1rem 0.2rem 0.35rem 0 !important;
           }
           #cmo-dashboard-table .cmo-conn--last::before { bottom: calc(50% + 11px) !important; }
           .cmo-url-input-mobile .cmo-table-submit-label { display: none; }
