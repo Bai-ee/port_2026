@@ -195,14 +195,15 @@ const PORTFOLIO_IMAGES = [
 ];
 
 const CMO_TABLE_ROWS = [
-  { task: 'ONBOARD NOW',            value: 'So we are not starting from a blank page. I take a look at your site, the creative content, user-experience, and copy. ', bold: true },
-  { task: 'Creative Brief',         value: 'A visual read on your brand, site, and content presence, packaged as the starting point for the work.', sub: true },
-  { task: 'Website Scan',           value: 'A fast capture of how your site looks and loads today, so we can see what to fix first.', sub: true },
-  { task: 'Video Mockup',           value: 'See your brand in motion with a short social-ready video built from your current site.', sub: true },
-  { task: 'Device Views',           value: 'See how your homepage holds up across desktop, tablet, and mobile.', sub: true },
-  { task: 'Social Preview',         value: 'Check how your brand appears when someone shares your link.', sub: true },
-  { task: 'Post Concept',           value: 'Get a finished post concept shaped from the brief, ready to use or refine.', sub: true },
-  { task: 'Daily Brief',            value: 'After the baseline check, we can layer in the services that make sense for your business. Your Daily Brief gives you one email snapshot of what is happening across your site, content, marketing, creative, and competitive signals, plus how we are responding. Instead of checking multiple platforms, guessing what to post, or losing track of what needs attention, you get a clear daily read on the work. Working with me adds the part automation cannot handle on its own: decision making, taste, consistency, and knowing what is actually worth doing next.', bold: true },
+  { task: 'ONBOARD NOW',            value: "I take a look at your existing site design, features, and performance. ", bold: true },
+  { task: 'Creative Brief',         value: 'A downloadable document of your brand, website, and content.', sub: true },
+  { task: 'Website Scan',           value: "A fast review of your site's design, performance, user experience, and opportunities before making any changes.", sub: true },
+  { task: 'Ownership', value: "See what's portable, what's platform-dependent, and what you actually own before deciding to rebuild or migrate.", sub: true },
+  { task: 'Video Mockup',           value: 'See your brand in motion with a short social-ready video built from your current website.', sub: true },
+  { task: 'Device Views',           value: 'Preview your homepage across desktop, tablet, and mobile.', sub: true },
+  { task: 'Social Preview',         value: 'See how your brand appears when someone shares your website.', sub: true },
+  { task: 'Post Concept',           value: 'A finished post concept generated from your brief, ready to publish or refine.', sub: true },
+  { task: 'Daily Brief',            value: '', bold: true },
   { task: 'Marketing',              value: 'Track positioning, competitors, offers, and content openings, then turn that into useful next steps.', sub: true },
   { task: 'Creative',               value: 'Keep the look, voice, and direction consistent as new assets, posts, and campaigns get made.', sub: true },
   { task: 'Social Media',           value: 'Know what to post, when to post, and why, without rebuilding the plan every day.', sub: true },
@@ -211,7 +212,7 @@ const CMO_TABLE_ROWS = [
 ];
 
 // Maps deliverable table rows to their hard-coded HITLOOP hover preview card.
-// Rows not listed (Website Scan, Daily Brief + its director sub-rows) have no preview.
+// Rows not listed (Website Scan, Website Ownership Review, Daily Brief + its director sub-rows) have no preview.
 const TASK_TO_CARD = {
   'ONBOARD NOW': 'creative-brief',
   'Creative Brief': 'creative-brief',
@@ -244,13 +245,13 @@ const DAILY_BRIEF_INDEX = CMO_TABLE_ROWS.findIndex((r) => r.task === 'Daily Brie
 // Shared body for the deliverables table (desktop + mobile variants). The
 // "Daily Brief" row is a click-to-expand toggle, default collapsed: its rows
 // (everything after it) hide until opened, and its long description collapses
-// to a one-line prompt. variant only changes per-row hover/data attrs.
-function CmoTableRows({ dailyBriefOpen, onToggleDaily, variant, showRowCard, hideRowCard }) {
+// to a one-line prompt. Row hover is disabled (data-no-hover on every desktop row).
+function CmoTableRows({ dailyBriefOpen, onToggleDaily, variant }) {
   return CMO_TABLE_ROWS.map((row, ri, arr) => {
     if (ri > DAILY_BRIEF_INDEX && !dailyBriefOpen) return null;
     const isDaily = row.task === 'Daily Brief';
     const variantProps = variant === 'desktop'
-      ? { 'data-no-hover': (TASK_TO_CARD[row.task] && !isDaily) ? undefined : true, onMouseEnter: (e) => showRowCard?.(e, row.task), onMouseLeave: hideRowCard }
+      ? { 'data-no-hover': true }
       : { 'data-sub': row.sub || undefined, 'data-sublast': isSubLast(arr, ri) || undefined };
     return (
       <tr
@@ -264,8 +265,7 @@ function CmoTableRows({ dailyBriefOpen, onToggleDaily, variant, showRowCard, hid
         <td style={{ padding: '0.7rem 0.2rem', textAlign: 'center', verticalAlign: 'middle', position: 'relative' }}>{row.task === 'ONBOARD NOW' ? <Check size={18} strokeWidth={3} color="#16a34a" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? <BriefConnector first={isSubFirst(arr, ri)} last={isSubLast(arr, ri)} /> : <span className="cmo-arrow" aria-hidden="true"><Lock size={12} /></span>}</td>
         <td style={{ padding: row.sub ? '0.7rem 0.4rem 0.7rem 1.1rem' : '0.7rem 0.4rem', color: row.sub ? 'rgba(42,36,32,0.55)' : 'rgba(42,36,32,0.75)', fontWeight: row.bold ? 700 : (row.sub ? 400 : 500) }}>{row.task}</td>
         <td style={{ padding: '0.7rem 0.4rem 0.7rem 0.6rem', textAlign: 'left', color: row.sub ? 'rgba(42,36,32,0.48)' : 'rgba(42,36,32,0.65)', fontWeight: row.bold ? 700 : 400 }}>{isDaily ? (
-          <span style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
-            <span>{dailyBriefOpen ? row.value : <span style={{ fontStyle: 'italic', opacity: 0.7 }}>Ongoing services — click to expand</span>}</span>
+          <span style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', gap: 10 }}>
             <span style={{ display: 'inline-flex', flexShrink: 0, marginTop: 2, transition: 'transform 0.15s ease', transform: dailyBriefOpen ? 'rotate(180deg)' : 'none', color: 'rgba(42,36,32,0.5)' }} aria-hidden="true"><svg width="15" height="15" viewBox="0 0 12 12" fill="none"><polyline points="2,4 6,8 10,4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg></span>
           </span>
         ) : (row.sub ? `• ${row.value}` : row.value)}</td>
@@ -318,7 +318,7 @@ const AUTOMATION_CAPABILITIES = [
     previewImage: '/img/port/claire.webp',
     previewVideo: '/vid/ai_research.mov',
     title: 'SEO & Content Strategy',
-    body: 'Search visibility and structured content growth — the long game, built to compound over time.',
+    body: 'Search visibility and structured content growth: the long game, built to compound over time.',
   },
   {
     badge: 'EM',
@@ -336,7 +336,7 @@ const AUTOMATION_CAPABILITIES = [
     previewImage: '/img/port/frame_7.webp',
     previewVideo: '/vid/dashboard.mov',
     title: 'Daily Briefs',
-    body: 'Automated daily intelligence briefings that surface what matters — competitor moves, content opportunities, and operational signals — delivered to your dashboard every morning.',
+    body: 'Automated daily intelligence briefings that surface what matters: competitor moves, content opportunities, and operational signals, delivered to your dashboard every morning.',
   },
   {
     badge: 'AI',
@@ -353,7 +353,7 @@ const AUTOMATION_CAPABILITIES = [
     icon: 'blocks',
     previewImage: '/img/port/frame_3.webp',
     title: 'Blockchain',
-    body: 'Web3 product design, token UX, and smart contract interfaces — built for clarity in a space where trust is everything.',
+    body: 'Web3 product design, token UX, and smart contract interfaces, built for clarity in a space where trust is everything.',
   },
   {
     badge: 'GM',
@@ -443,7 +443,7 @@ const AUTOMATION_CAPABILITIES = [
     tablePreview: true,
     previewVideo: '/vid/dashboard.mov',
     title: "Onboard now, save time later.",
-    body: 'Onboard now to access your Brief and Dashboard.',
+    body: "Every website serves a different purpose, whether it's building an identity, publishing content, selling products, or helping people find your work. My goal is to retain the integrity of your brand and give you a system to own.",
   },
 ];
 
@@ -1689,7 +1689,7 @@ const StackedSlidesSection = () => {
           position: absolute;
           left: 50%;
           transform: translateX(-50%);
-          top: -0.95rem;
+          top: -0.55rem;
           color: #a39e93;
         }
         .cmo-arrow {
@@ -1967,8 +1967,8 @@ const StackedSlidesSection = () => {
                       <div id="panel-hero-text-row" style={{ ...textRowStyle, display: 'flex', alignItems: 'center', gap: 'clamp(0.5rem, 1.5vw, 1rem)', width: '100%' }}>
                         <div id="hero-url-input-row" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 1, minWidth: 0, height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                           <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
-                          <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
-                          <button className={urlIsValid ? 'cta-pill-btn cta-pill-btn--active' : undefined} onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaSecondaryStyle, flexShrink: 0, opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="hero-onboard-label">Get Your Creative Brief</span><UpRightArrow style={ctaIconStyle} /></button>
+                          <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
+                          <button className={urlIsValid ? 'cta-pill-btn cta-pill-btn--active' : undefined} onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaSecondaryStyle, flexShrink: 0, opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="hero-onboard-label">Get a Creative Brief</span><UpRightArrow style={ctaIconStyle} /></button>
                         </div>
                         <a
                           id="panel-hero-cta"
@@ -2068,22 +2068,23 @@ const StackedSlidesSection = () => {
                                   ) : null}
                                   <div style={capabilityContentStyle}>
                                     <h2 id="cmo-card-onboard-heading" style={{ ...capabilityCardTitleStyle, fontSize: 'clamp(1.6rem, 3.5vw, 5rem)', lineHeight: 0.9, marginBottom: '0.5rem', paddingTop: '20px', textAlign: 'center' }}>Start Here</h2>
-                                    {item.body && <p id="cmo-card-onboard-body" style={{ ...capabilityCardBodyStyle, maxWidth: 'none', textAlign: 'center' }}>{item.body}</p>}
+                                    {item.body && <p id="cmo-card-onboard-body" style={{ ...capabilityCardBodyStyle, maxWidth: 'none', textAlign: 'left' }}>{item.body}</p>}
                                     <div id="cmo-url-input-row" className="cmo-url-input-desktop" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.85rem', height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                                       <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
-                                      <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
-                                      <span id="cmo-dashboard-cta-hover-shell" style={{ display: 'inline-flex', flexShrink: 0, cursor: 'pointer' }}><button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'pointer', padding: '0.75rem 0.75rem' }}>Get Your Creative Brief<UpRightArrow style={ctaIconStyle} /></button></span>
+                                      <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
+                                      <span id="cmo-dashboard-cta-hover-shell" style={{ display: 'inline-flex', flexShrink: 0, cursor: 'pointer' }}><button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'pointer', padding: '0.75rem 0.75rem' }}>Get a Creative Brief<UpRightArrow style={ctaIconStyle} /></button></span>
                                     </div>
                                     <div className="cmo-table-inner" style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
                                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
                                         <colgroup><col style={{ width: '2rem' }} /><col style={{ width: '26%' }} /><col /></colgroup>
                                         <thead><tr><th aria-hidden="true" /><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Access</th><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>What you get</th></tr></thead>
-                                        <tbody><CmoTableRows dailyBriefOpen={dailyBriefOpen} onToggleDaily={() => setDailyBriefOpen((v) => !v)} variant="desktop" showRowCard={showRowCard} hideRowCard={hideRowCard} /></tbody>
+                                        <tbody><CmoTableRows dailyBriefOpen={dailyBriefOpen} onToggleDaily={() => setDailyBriefOpen((v) => !v)} variant="desktop" /></tbody>
                                       </table>
+                                    <p id="cmo-ongoing-services-label-desktop" style={{ margin: '0.5rem 0 0', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Ongoing Services</p>
                                     <blockquote id="cmo-quote-desktop" style={{ margin: 0, padding: 'clamp(1.5rem, 4vw, 3rem) 0', fontSize: 'clamp(0.9rem, 1.4vw, 1.15rem)', lineHeight: 1.55, color: 'rgba(42,36,32,0.72)', fontStyle: 'italic', fontFamily: "'Space Grotesk', system-ui, sans-serif", boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 'clamp(1.5rem, 3vw, 2.5rem)' }}>
                                       <Image src="/img/profile2_400x400.png" width={56} height={56} alt="" aria-hidden="true" style={{ width: 'clamp(2.5rem, 4vw, 3.5rem)', height: 'clamp(2.5rem, 4vw, 3.5rem)', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', flexShrink: 0, display: 'block' }} />
                                       <div style={{ flex: 1, minWidth: 0 }}>
-                                        <span style={{ display: 'block', margin: '0 0 0.65rem' }}>"HITLOOP is a hands-on creative service for businesses that need sharper design, better content, cleaner websites, and useful automation. The tools move fast, but the work still needs taste, direction, and a human who knows what good looks like."</span>
+                                        <span style={{ display: 'block', margin: '0 0 0.65rem' }}>"HITLOOP is a hands-on creative service focused on building websites around your goals, not a platform. Every recommendation preserves the integrity of your brand while minimizing unnecessary dependencies and maximizing long-term ownership."</span>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', fontStyle: 'normal' }}>
                                           <span style={quoteAttributionNameStyle}>Bryan Balli</span>
                                           <span style={{ color: 'rgba(42,36,32,0.3)', fontSize: '0.75rem' }}>·</span>
@@ -2096,18 +2097,19 @@ const StackedSlidesSection = () => {
                                   <div id="cmo-dashboard-table" className="cmo-table-outer" style={{ gridColumn: '1 / -1', marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
                                     <div className="cmo-url-input-mobile" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                                       <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
-                                      <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
-                                      <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="cmo-table-submit-label">Get Your Creative Brief</span><UpRightArrow className="cmo-table-submit-arrow" style={ctaIconStyle} /></button>
+                                      <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
+                                      <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="cmo-table-submit-label">Get a Creative Brief</span><UpRightArrow className="cmo-table-submit-arrow" style={ctaIconStyle} /></button>
                                     </div>
                                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
                                     <colgroup><col style={{ width: '2rem' }} /><col style={{ width: '26%' }} /><col /></colgroup>
                                       <thead><tr><th style={{ width: '1.5rem' }} /><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Get</th><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>What you get</th></tr></thead>
                                       <tbody><CmoTableRows dailyBriefOpen={dailyBriefOpen} onToggleDaily={() => setDailyBriefOpen((v) => !v)} variant="mobile" /></tbody>
                                     </table>
+                                    <p id="cmo-ongoing-services-label-mobile" style={{ margin: '0.5rem 0 0', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Ongoing Services</p>
                                     <blockquote id="cmo-quote-mobile" style={{ margin: 0, padding: 'clamp(1.5rem, 4vw, 3rem) 0', fontSize: 'clamp(0.9rem, 1.4vw, 1.15rem)', lineHeight: 1.55, color: 'rgba(42,36,32,0.72)', fontStyle: 'italic', fontFamily: "'Space Grotesk', system-ui, sans-serif", boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 'clamp(1.5rem, 3vw, 2.5rem)' }}>
                                       <Image src="/img/profile2_400x400.png" width={56} height={56} alt="" aria-hidden="true" style={{ width: 'clamp(2.5rem, 4vw, 3.5rem)', height: 'clamp(2.5rem, 4vw, 3.5rem)', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', flexShrink: 0, display: 'block' }} />
                                       <div style={{ flex: 1, minWidth: 0 }}>
-                                        <span style={{ display: 'block', margin: '0 0 0.65rem' }}>"HITLOOP is a hands-on creative service for businesses that need sharper design, better content, cleaner websites, and useful automation. The tools move fast, but the work still needs taste, direction, and a human who knows what good looks like."</span>
+                                        <span style={{ display: 'block', margin: '0 0 0.65rem' }}>"HITLOOP is a hands-on creative service focused on building websites around your goals, not a platform. Every recommendation preserves the integrity of your brand while minimizing unnecessary dependencies and maximizing long-term ownership."</span>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', fontStyle: 'normal' }}>
                                           <span style={quoteAttributionNameStyle}>Bryan Balli</span>
                                           <span style={{ color: 'rgba(42,36,32,0.3)', fontSize: '0.75rem' }}>·</span>
@@ -2274,8 +2276,8 @@ const StackedSlidesSection = () => {
                       <div id="footer-cta-input-row" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'clamp(0.5rem, 1.5vw, 1rem)', width: '100%', marginTop: 'clamp(1.25rem, 2.5vw, 2rem)', marginBottom: 0 }}>
                         <div id="footer-url-input-row" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 1, minWidth: 'min(100%, 18rem)', height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                           <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
-                          <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
-                          <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="footer-submit-label">Get Your Creative Brief</span><UpRightArrow style={ctaIconStyle} /></button>
+                          <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
+                          <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="footer-submit-label">Get a Creative Brief</span><UpRightArrow style={ctaIconStyle} /></button>
                         </div>
                         <a
                           id="footer-contact-cta"
@@ -2426,7 +2428,7 @@ const StackedSlidesSection = () => {
           onClick={() => setShowCmoModal(false)}
           role="dialog"
           aria-modal="true"
-          aria-label="Get Your Creative Brief"
+          aria-label="Get a Creative Brief"
         >
           <div id="cmo-auth-card" onClick={(e) => e.stopPropagation()}>
             <div id="cmo-auth-brand-row">
@@ -2459,7 +2461,7 @@ const StackedSlidesSection = () => {
                   id="cmo-modal-url-input"
                   value={homepageUrl}
                   onChange={handleHomepageUrlChange}
-                  placeholder="Enter website or email"
+                  placeholder="Enter your website or email"
                 />
                 <button
                   type="submit"

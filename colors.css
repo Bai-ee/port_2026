@@ -234,20 +234,28 @@ body.cmo-modal-open #founders-top-strip { display: none; }
   gap: 0.5rem;
 }
 #nav-scroll-top {
+  position: fixed;
+  bottom: clamp(16px, 4vw, 28px);
+  right: clamp(16px, 4vw, 28px);
+  z-index: 240;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.25rem;
-  background: none;
-  border: none;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: rgba(245, 241, 223, 0.85);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255,255,255,0.5);
+  box-shadow: 0 6px 20px rgba(42,36,32,0.18), 0 1px 4px rgba(42,36,32,0.08);
   color: #2a2420;
-  font-size: 1.4rem;
-  font-weight: 900;
-  line-height: 1;
   cursor: pointer;
+  transition: opacity 0.25s ease, transform 0.25s ease;
 }
 #nav-scroll-top:hover {
-  opacity: 0.6;
+  opacity: 0.85;
+  transform: translateY(-2px);
 }
 #founders-login-link,
 #founders-logout-link {
@@ -380,11 +388,9 @@ body.cmo-modal-open #founders-top-strip { display: none; }
 
 /* ── Nav scroll-top button states ──────────────────────────────────────────── */
 
-/* Settings icon is always visually inactive */
-/* Button is fully disabled while showing settings icon (arrow is display:none) */
+/* Bubble is only rendered while the arrow is shown (arrow is display:none => hide the bubble entirely) */
 #nav-scroll-top:has(#nav-scroll-top-arrow[style*="none"]) {
-  pointer-events: none;
-  cursor: default;
+  display: none;
 }
 
 /* Disable nav button entirely while reel is playing */
