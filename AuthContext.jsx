@@ -22,6 +22,32 @@ const PENDING_DASHBOARD_SIGNUP_KEY = 'pending-dashboard-signup';
 // account was deleted. Caller should route them into the Create Dashboard flow.
 export const NEW_USER_SIGNIN_ERROR = 'NEW_USER_SIGNIN';
 
+// Thrown when a blocklisted (previously deleted) email attempts to sign up
+// again. AuthPage surfaces it as the "Deleted Account, Contact Bryan." toast.
+export const DELETED_ACCOUNT_ERROR = 'DELETED_ACCOUNT';
+export const DELETED_ACCOUNT_MESSAGE = 'Deleted Account, Contact Bryan.';
+
+const throwDeletedAccountError = () => {
+  const err = new Error(DELETED_ACCOUNT_MESSAGE);
+  err.code = DELETED_ACCOUNT_ERROR;
+  throw err;
+};
+
+// Pre-signup blocklist check. Fail-open on network errors — the provision
+// route re-checks server-side and is the authority.
+const checkDeletedAccountBlock = async (email) => {
+  try {
+    const res = await fetch(
+      `/api/public/deleted-account-check?email=${encodeURIComponent(String(email || '').trim())}`,
+      { cache: 'no-store' }
+    );
+    const data = await res.json().catch(() => ({}));
+    return Boolean(data?.blocked);
+  } catch {
+    return false;
+  }
+};
+
 function isBrandNewAuthUser(fbUser) {
   const created = fbUser?.metadata?.creationTime;
   const lastSignIn = fbUser?.metadata?.lastSignInTime;
@@ -192,6 +218,12 @@ export const AuthProvider = ({ children }) => {
         throw new Error('Firebase is not configured.');
       }
 
+      // Blocklisted (deleted) emails are refused BEFORE the auth user is
+      // created, so the toast is immediate and no orphan identity is left.
+      if (await checkDeletedAccountBlock(email)) {
+        throwDeletedAccountError();
+      }
+
       const credential = await createUserWithEmailAndPassword(auth, email, password);
 
       try {
@@ -254,6 +286,15 @@ export const AuthProvider = ({ children }) => {
         err.code = NEW_USER_SIGNIN_ERROR;
         err.email = credential.user.email || '';
         throw err;
+      }
+
+      // Google signup path: the email is only known after the popup. A
+      // blocklisted (deleted) account is signed back out and refused before
+      // any profile/provision writes.
+      if (provisioningPayload && (await checkDeletedAccountBlock(credential.user.email))) {
+        await signOut(auth).catch(() => {});
+        clearPendingDashboardSignup();
+        throwDeletedAccountError();
       }
 
       const resolvedDisplayName = provisioningPayload?.displayName?.trim()

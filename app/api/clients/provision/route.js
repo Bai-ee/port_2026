@@ -6,6 +6,7 @@ const { buildAuthRequestShim, verifyRequestUser } = require('../../../../api/_li
 const { provisionClientForUser } = require('../../../../api/_lib/client-provisioning.cjs');
 const { logError, logInfo, logWarn } = require('../../../../api/_lib/observability.cjs');
 const { checkRateLimit, getClientIp } = require('../../../../api/_lib/rate-limit.cjs');
+const { DELETED_ACCOUNT_MESSAGE, isEmailBlocked } = require('../../../../api/_lib/deleted-accounts.cjs');
 
 function json(body, status = 200) {
   return NextResponse.json(body, {
@@ -23,6 +24,21 @@ export async function POST(request) {
       { error: err instanceof Error ? err.message : 'Unauthorized.' },
       401
     );
+  }
+
+  // Deleted-account emails may not sign up again (server-side authority;
+  // the client pre-check only provides the immediate toast). Fail-open on
+  // read errors so a blocklist outage never breaks normal signups.
+  try {
+    if (await isEmailBlocked(decoded.email)) {
+      logWarn('client_provision_blocked_deleted_email', { uid: decoded.uid });
+      return json({ error: DELETED_ACCOUNT_MESSAGE, code: 'DELETED_ACCOUNT' }, 403);
+    }
+  } catch (err) {
+    logWarn('client_provision_blocklist_check_failed', {
+      uid: decoded.uid,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   const ip = getClientIp(request);

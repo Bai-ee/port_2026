@@ -4,6 +4,7 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
 const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
+const { recordDeletedAccount } = require('../../../../api/_lib/deleted-accounts.cjs');
 
 function makeReqShim(request) {
   return {
@@ -61,6 +62,14 @@ export async function POST(request) {
     });
   } catch (err) {
     errors.push({ step: 'audit_log', message: err?.message || String(err) });
+  }
+
+  // 0b. Re-signup blocklist: bar this email from signing up again (the
+  // reusable test account is cleared instead — see deleted-accounts.cjs).
+  try {
+    await recordDeletedAccount({ email, uid, clientId });
+  } catch (err) {
+    errors.push({ step: 'resignup_blocklist', message: err?.message || String(err) });
   }
 
   // 1. Storage: delete everything under clients/{clientId}/
