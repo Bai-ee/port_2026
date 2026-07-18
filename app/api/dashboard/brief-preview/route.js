@@ -1244,7 +1244,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     pageBuilders['contact'] = () => {
       const contactParts = {
         'contact-block': `<div class="cb-contact-top">
-      <div class="cb-contact-lede">${pull("Your brief is built. Onboarding is complete. When you're ready to move from insight to execution, your Human is one click away. Here's what we bring to the table.")}${contactActions}</div>
+      <div class="cb-contact-lede">${pull("Your brief is built. Onboarding is complete. When you're ready to move from insight to execution, your Human is one click away.")}${contactActions}</div>
       ${sigBlock}
     </div>`,
         'services': `<div class="cb-sub-head" id="cb-services-head"><span>What We Offer</span><span class="cb-sub-head-meta">${SERVICES.length} services</span></div>
