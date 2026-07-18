@@ -21,6 +21,12 @@ const emptyWrap = { display: 'flex', flexDirection: 'column', alignItems: 'cente
 const emptyLabel = { fontFamily: 'var(--vrk-mono, monospace)', fontSize: 12, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--vrk-ink, #2a2420)' };
 const emptyBody = { fontSize: 13, color: 'var(--vrk-ink-soft, #5a5346)', maxWidth: 420 };
 
+// Element groups whose group key IS a page id in the 'pages' group — their
+// items only render when that parent page is on. Used to surface the
+// dependency in the UI (a child toggle can't bring content back while its
+// page is off — that read as "toggle doesn't work").
+const PAGE_CHILD_GROUPS = new Set(['intro-split', 'featured-post', 'website-status', 'contact']);
+
 export function CreativeBriefComposerView({ user }) {
   const [tab, setTab] = useState('settings'); // 'settings' | 'preview'
   const [loading, setLoading] = useState(true);
@@ -100,13 +106,15 @@ export function CreativeBriefComposerView({ user }) {
   };
 
   // Preview always reflects the SAVED config — save any dirty edits before
-  // (re)loading the iframe so preview == what a new signup gets.
+  // (re)loading the iframe so preview == what a new signup gets. Timestamp
+  // nonce: the sample route is CDN-cached (s-maxage + a day of SWR), so the
+  // bust key must be globally unique per refresh, never session-relative.
   const openPreview = async () => {
     if (dirty) {
       const ok = await save();
       if (!ok) return;
     }
-    setPreviewNonce((n) => n + 1);
+    setPreviewNonce(Date.now());
     setTab('preview');
   };
 
@@ -140,9 +148,19 @@ export function CreativeBriefComposerView({ user }) {
                 const ord = Array.isArray(form.order?.[group.key]) ? form.order[group.key] : [];
                 const oi = (id) => { const i = ord.indexOf(id); return i === -1 ? 999 : i; };
                 const ordered = [...(group.items || [])].sort((a, b) => oi(a.id) - oi(b.id));
+                // Child elements of a toggled-off page still save, but render
+                // nothing until the page is back on — say so instead of
+                // looking like a broken toggle.
+                const parentOff = PAGE_CHILD_GROUPS.has(group.key) && form.include?.[group.key] === false;
+                const parentLabel = parentOff
+                  ? (groups.find((g) => g.key === 'pages')?.items || []).find((i) => i.id === group.key)?.label || group.key
+                  : null;
                 return (
                   <div key={group.key} style={{ display: 'grid', gap: 8 }}>
-                    <span className="label" style={{ marginTop: 4 }}>{group.label}</span>
+                    <span className="label" style={{ marginTop: 4 }}>
+                      {group.label}
+                      {parentOff ? <span style={{ color: 'var(--danger, #9f1f17)', textTransform: 'none', letterSpacing: 0 }}> · hidden — its page “{parentLabel}” is OFF in Brief pages</span> : null}
+                    </span>
                     <div className="toggle-grid" role="group" aria-label={`${group.label} elements`}>
                       {ordered.map((item, idx) => {
                         const on = form.include?.[item.id] !== false;
@@ -153,14 +171,14 @@ export function CreativeBriefComposerView({ user }) {
                             tabIndex={0}
                             aria-pressed={on}
                             className={`toggle-card${on ? ' is-on' : ''}`}
-                            style={{ position: 'relative', cursor: 'pointer' }}
+                            style={{ position: 'relative', cursor: 'pointer', opacity: parentOff ? 0.55 : 1 }}
                             onClick={() => toggle(item.id)}
                             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(item.id); } }}
                           >
                             <span className="check">{on ? '✓' : ''}</span>
                             <span style={{ minWidth: 0 }}>
                               <span className="toggle-title">{item.label}</span>
-                              <span className="toggle-desc">{item.desc}</span>
+                              <span className="toggle-desc">{parentOff ? `Saved, but hidden until the “${parentLabel}” page is turned back on.` : item.desc}</span>
                             </span>
                             <span style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4 }} onClick={(e) => e.stopPropagation()}>
                               <button type="button" aria-label={`Move ${item.label} up`} disabled={idx === 0} onClick={(e) => { e.stopPropagation(); move(group.key, item.id, -1); }} style={{ width: 22, height: 22, lineHeight: '20px', textAlign: 'center', padding: 0, border: '1px solid rgba(42,36,32,0.18)', borderRadius: 6, background: 'rgba(255,255,255,0.7)', cursor: idx === 0 ? 'not-allowed' : 'pointer', opacity: idx === 0 ? 0.4 : 1, fontSize: 11 }}>↑</button>
@@ -195,7 +213,7 @@ export function CreativeBriefComposerView({ user }) {
             id="creative-brief-composer-preview"
             key={previewNonce}
             title="Creative Brief preview"
-            src={`/api/public/hitloop-creative-brief?v=${previewNonce}-${form ? Object.values(form.include || {}).filter(Boolean).length : 0}`}
+            src={`/api/public/hitloop-creative-brief?v=${previewNonce}`}
             style={{ width: '100%', flex: 1, minHeight: 560, border: '1px solid rgba(42,36,32,0.08)', borderRadius: 8, background: '#fff' }}
           />
         </div>
