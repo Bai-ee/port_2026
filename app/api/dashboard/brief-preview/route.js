@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url);
    Stateful singletons (firebase-admin, auth, client-provisioning) stay
    cached on purpose. */
 if (process.env.NODE_ENV !== 'production') {
-  const STALE_CJS = /(scout-intake[\\/](brief-sections\.cjs|brief-css\.cjs|brief-renderer\.js)|not-the-rug-brief[\\/]post-url-validator\.cjs|intelligence[\\/](_brief-intel|_weather)\.js)$/;
+  const STALE_CJS = /(scout-intake[\\/](brief-sections\.cjs|brief-css\.cjs|brief-renderer\.js|creative-brief-config\.cjs)|not-the-rug-brief[\\/]post-url-validator\.cjs|intelligence[\\/](_brief-intel|_weather)\.js)$/;
   for (const key of Object.keys(require.cache)) {
     if (STALE_CJS.test(key)) delete require.cache[key];
   }
@@ -25,6 +25,7 @@ const { validatePostUrl } = require('../../../../features/not-the-rug-brief/post
 const { buildWatchlist, projectBrief } = require('../../../../features/intelligence/_brief-intel.js');
 const { getClientWeather } = require('../../../../features/intelligence/_weather.js');
 const { getComposition, resolveBriefType, DEFAULT_BRIEF_TYPE, isBriefAllowed } = require('../../../../features/scout-intake/brief-sections.cjs');
+const { loadCreativeBriefConfig, defaultCreativeBriefConfig } = require('../../../../features/scout-intake/creative-brief-config.cjs');
 const { renderPdfBuffer } = require('../../../../api/_lib/browserless.cjs');
 
 function makeReqShim(request) {
@@ -142,7 +143,7 @@ function hostnameOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return String(url); }
 }
 
-function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [], weather = null, moduleBriefs = [], auditMockupUrl = null, studioVideoUrl = null, socialPreviewImageUrl = null, siteMeta = null, fullPageScreenshots = null, company = null, researchConfig = null, strategyData = null, signalsCore = [], socialQueue = [], briefType = DEFAULT_BRIEF_TYPE, coverSummary = null, previousRunAt = null, displayLabel = null, dashboardState = null, freshnessToken = '' }) {
+function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [], weather = null, moduleBriefs = [], auditMockupUrl = null, studioVideoUrl = null, socialPreviewImageUrl = null, siteMeta = null, fullPageScreenshots = null, company = null, researchConfig = null, strategyData = null, signalsCore = [], socialQueue = [], briefType = DEFAULT_BRIEF_TYPE, coverSummary = null, previousRunAt = null, displayLabel = null, dashboardState = null, freshnessToken = '', creativeBriefConfig = null }) {
   const content = marketingBrief?.content || {};
   const agentData = marketingBrief?.scoutBrief?.agentData || {};
   // Single source of truth: every signal array is derived from the shared
@@ -709,10 +710,17 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   // dedicated body mockup section is suppressed so it isn't shown twice (the
   // section stays in the composition for summary evidence).
   const _mockupBriefTypeEarly = resolveBriefType(briefType);
+  // Creative Brief composer config (admin card) — gates + orders the elements
+  // of the 'onboarding' brief only. Absent config = defaults = as-built output.
+  const _cbCfg = creativeBriefConfig || defaultCreativeBriefConfig();
+  const cbOn = (id) => _cbCfg.include?.[id] !== false;
+  const cbOrderOf = (group) => (Array.isArray(_cbCfg.order?.[group]) ? _cbCfg.order[group] : []);
   // Both Executive and Creative ('onboarding') keep the device mockup in the
   // cover's top-right corner. The Creative Brief ALSO leads with a hero asset +
-  // inline evidence inside the story.
-  const isCoverMockup = (_mockupBriefTypeEarly === 'executive-daily' || _mockupBriefTypeEarly === 'onboarding') && Boolean(mockupSrc);
+  // inline evidence inside the story. The composer's cover-mockup toggle gates
+  // it for the Creative Brief only (executive-daily unaffected).
+  const isCoverMockup = (_mockupBriefTypeEarly === 'executive-daily' || _mockupBriefTypeEarly === 'onboarding') && Boolean(mockupSrc)
+    && (_mockupBriefTypeEarly !== 'onboarding' || cbOn('cover-mockup'));
 
   const performanceBriefSection = perfItems.length ? `
   <section class="page">
@@ -968,7 +976,10 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     ${inner}
   </section>`;
     };
-    const pages = [];
+    // Pages build lazily via keyed builders so the composer config (cbOn /
+    // cbOrderOf) decides which render and in what order — sec-nums stay
+    // sequential because numbering happens at build time in final order.
+    const pageBuilders = {};
     // Per-section content components — each page gets a distinct visual form.
     const longParas = (s) => s.paras.filter((p) => p.length > 64);
     const shortParas = (s) => s.paras.filter((p) => p.length <= 64);
@@ -1036,7 +1047,6 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     // oversized label; the two columns stack on mobile.
     const hero = byLabel('Headline');
     const heroWord = (hero && hero.paras.length) ? hero.paras.join(' ') : '';
-    const splitNum = String((n += 1)).padStart(2, '0');
     const splitCol = (id, title, body) => `<div class="cb-split-col" id="${id}"><h2 class="headline">${title}</h2><div class="rule"></div>${body}</div>`;
     const ONBOARD_COPY = [
       'Most agencies start by asking questions. Hit Loop starts by doing the work.',
@@ -1052,17 +1062,24 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     </div>`;
     const systemCol = splitCol('cb-system', "You're<br/>Onboarded.", onboardBody);
     const insightCol = heroWord ? splitCol('cb-insight', 'Key<br/>Insight.', `<div class="bento">${bTile({ span: 's4', cls: 'ink', word: heroWord })}</div>`) : '';
-    pages.push(`
+    pageBuilders['intro-split'] = () => {
+      const cols = { 'onboarded-copy': systemCol, 'key-insight': insightCol };
+      const picked = cbOrderOf('intro-split').filter((id) => cbOn(id) && cols[id]).map((id) => cols[id]);
+      if (!picked.length) return '';
+      const splitNum = String((n += 1)).padStart(2, '0');
+      return `
   <section class="page cb-page" id="cb-intro-split">
     <div class="sec-num">${splitNum}</div>
     <div class="cb-deco" aria-hidden="true"></div>
-    <div class="cb-split${insightCol ? '' : ' cb-split--single'}">${systemCol}${insightCol}</div>
-  </section>`);
+    <div class="cb-split${picked.length === 1 ? ' cb-split--single' : ''}">${picked.join('')}</div>
+  </section>`;
+    };
 
     // FEATURED POST — the Suggested Post caption rendered as a real X / Share
     // Post card with the studio video front and center. Mirrors the dashboard
     // Post Me card UI (DashboardPage.jsx #post-me-tile-mockup).
     const featPost = byLabel('Suggested Post');
+    let featuredRowHtml = '';
     if (featPost && featPost.paras.length) {
       const handle = '@' + String(clientName || 'yourbrand').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 15);
       const site = hostnameOf(websiteUrl) || '';
@@ -1100,15 +1117,24 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
       // inert but harmless in the PDF).
       const postActions = `<div class="cb-post-actions">${ok(studioVideoUrl) ? `<a class="cb-cta cb-cta--solid" href="${esc(studioVideoUrl)}" download target="_blank" rel="noopener noreferrer">Download Video</a>` : ''}<button type="button" class="cb-cta cb-post-copy" data-copy="${esc(caption)}" onclick="(function(b){try{navigator.clipboard.writeText(b.dataset.copy);var t=b.textContent;b.textContent='Copied';setTimeout(function(){b.textContent=t},1600);}catch(e){}})(this)">Copy Caption</button><a class="cb-cta cb-cta--solid" href="/dashboard?open=post-me" target="_top" rel="noopener">Post Me &rarr;</a></div>`;
       const featuredCopy = `<div class="cb-featured-copy"><blockquote class="cb-post-quote">${esc(caption)}</blockquote>${postActions}</div>`;
-      // Deliverables ride underneath as a sub-category of the same page.
-      const deliverablesBlock = deliverablesRow
-        ? `<div class="cb-sub-head" id="cb-deliverables"><span>Deliverables</span><span class="cb-sub-head-meta">${deliverableAssets.length} assets</span></div>${deliverablesRow}`
-        : '';
-      pages.push(page('Featured<br/>Post.', `<div class="cb-featured-row">${featuredCopy}<div class="cb-featured-mock">${xCard}</div></div>${deliverablesBlock}`, 'cb-featured-post'));
-    } else if (deliverablesRow) {
-      // No Suggested Post caption this run — still surface deliverables alone.
-      pages.push(page('Deliverables.', deliverablesRow, 'cb-deliverables'));
+      featuredRowHtml = `<div class="cb-featured-row">${featuredCopy}<div class="cb-featured-mock">${xCard}</div></div>`;
     }
+    // Deliverables as a sub-head block when sharing the Featured Post page;
+    // plain grid on a standalone "Deliverables." page when the post is absent
+    // (no caption this run) or toggled off in the composer.
+    const deliverablesBlock = deliverablesRow
+      ? `<div class="cb-sub-head" id="cb-deliverables"><span>Deliverables</span><span class="cb-sub-head-meta">${deliverableAssets.length} assets</span></div>${deliverablesRow}`
+      : '';
+    pageBuilders['featured-post'] = () => {
+      const showPost = cbOn('post-card') && Boolean(featuredRowHtml);
+      const showDeliverables = cbOn('deliverables-grid') && Boolean(deliverablesRow);
+      if (!showPost && !showDeliverables) return '';
+      if (!showPost) return page('Deliverables.', deliverablesRow, 'cb-deliverables');
+      const parts = cbOrderOf('featured-post')
+        .map((el) => (el === 'post-card' && showPost ? featuredRowHtml : el === 'deliverables-grid' && showDeliverables ? deliverablesBlock : ''))
+        .filter(Boolean);
+      return page('Featured<br/>Post.', parts.join(''), 'cb-featured-post');
+    };
 
     // SITE AUDIT — one compact page. "What This Site Is" reads big at the top,
     // then every site-specific section is demoted to a sub-category (same inner
@@ -1159,20 +1185,35 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
       const list = `<ul class="cb-social-checks">${checks.map((c) => `<li class="cb-social-check ${c.val ? 'is-ok' : 'is-miss'}"><span class="cb-social-mark" aria-hidden="true">${c.val ? '✓' : '✗'}</span><span class="cb-social-label">${esc(c.label)}</span><span class="cb-social-status">${c.val ? 'Captured' : 'Missing'}</span></li>`).join('')}</ul>`;
       return `<div class="cb-social"><div class="cb-social-preview">${card}</div>${list}</div>`;
     })();
-    if (wtis || miss || risk || opp || dec || socialInner) {
+    pageBuilders['website-status'] = () => {
       // WTIS lead reads full-width across the page (not a narrow pull-quote).
       const wtisBig = (wtis && wtis.paras.length) ? wtis.paras.map((p) => `<p class="cb-wtis-lead">${esc(p)}</p>`).join('') : '';
-      const missSec = subSection("What's Missing", missInner, 'cb-whats-missing');
-      const riskSec = subSection('Biggest Risk', riskInner, 'cb-biggest-risk');
-      // What's Missing + Biggest Risk sit side by side, stacking on mobile.
-      const missRiskRow = (missSec || riskSec) ? `<div class="cb-audit-row">${missSec}${riskSec}</div>` : '';
-      const auditBody = `${wtisBig}
-      ${subSection('Social Share', socialInner, 'cb-social-share')}
-      ${missRiskRow}
-      ${subSection('The Opportunity', oppInner, 'cb-opportunity')}
-      ${subSection('The Decision', decInner, 'cb-decision')}`;
-      pages.push(page('Your Website<br/>Status.', auditBody, 'cb-what-this-site-is'));
-    }
+      const subs = {
+        'wtis-lead': wtisBig,
+        'social-share': subSection('Social Share', socialInner, 'cb-social-share'),
+        'whats-missing': subSection("What's Missing", missInner, 'cb-whats-missing'),
+        'biggest-risk': subSection('Biggest Risk', riskInner, 'cb-biggest-risk'),
+        'opportunity': subSection('The Opportunity', oppInner, 'cb-opportunity'),
+        'decision': subSection('The Decision', decInner, 'cb-decision'),
+      };
+      const ord = cbOrderOf('website-status').filter((id) => cbOn(id) && subs[id]);
+      // What's Missing + Biggest Risk pair side-by-side (as-built look) when
+      // adjacent in the configured order; separated, each reads full width.
+      const parts = [];
+      for (let i = 0; i < ord.length; i += 1) {
+        const id = ord[i];
+        const nxt = ord[i + 1];
+        const isPair = (id === 'whats-missing' && nxt === 'biggest-risk') || (id === 'biggest-risk' && nxt === 'whats-missing');
+        if (isPair) {
+          parts.push(`<div class="cb-audit-row">${subs[id]}${subs[nxt]}</div>`);
+          i += 1;
+        } else {
+          parts.push(subs[id]);
+        }
+      }
+      if (!parts.length) return '';
+      return page('Your Website<br/>Status.', parts.join('\n      '), 'cb-what-this-site-is');
+    };
 
     // CONTACT YOUR HUMAN — closing page in the same format as the rest of the
     // brief: a direct line to the human plus the services Hit Loop offers.
@@ -1200,13 +1241,19 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     // LinkedIn + X buttons that sit under the role line on every signature.
     const humanSocials = `<div class="cb-human-socials"><a href="${HUMAN.linkedin}" target="_blank" rel="noopener noreferrer">LinkedIn</a><a href="${HUMAN.x}" target="_blank" rel="noopener noreferrer">X</a></div>`;
     const sigBlock = `<div class="cb-contact-sig"><img class="cb-cover-sig" src="/img/sig.png" alt="Signature" /><div class="cb-human"><div class="cb-human-label">Your Human</div><div class="cb-human-name">Bryan Balli</div><div class="cb-human-role">Creative Lead @ HITLOOP</div>${humanSocials}</div></div>`;
-    const contactBody = `<div class="cb-contact-top">
+    pageBuilders['contact'] = () => {
+      const contactParts = {
+        'contact-block': `<div class="cb-contact-top">
       <div class="cb-contact-lede">${pull("Your brief is built. Onboarding is complete. When you're ready to move from insight to execution, your Human is one click away. Here's what we bring to the table.")}${contactActions}</div>
       ${sigBlock}
-    </div>
-      <div class="cb-sub-head" id="cb-services-head"><span>What We Offer</span><span class="cb-sub-head-meta">${SERVICES.length} services</span></div>
-      ${servicesGrid}`;
-    pages.push(page('Contact Your<br/>Human.', contactBody, 'cb-contact'));
+    </div>`,
+        'services': `<div class="cb-sub-head" id="cb-services-head"><span>What We Offer</span><span class="cb-sub-head-meta">${SERVICES.length} services</span></div>
+      ${servicesGrid}`,
+      };
+      const parts = cbOrderOf('contact').filter((id) => cbOn(id) && contactParts[id]).map((id) => contactParts[id]);
+      if (!parts.length) return '';
+      return page('Contact Your<br/>Human.', parts.join('\n      '), 'cb-contact');
+    };
 
     // Suggested Post now renders as the Featured Post X-card above (after Key
     // Insight) — no separate bottom page.
@@ -1250,8 +1297,10 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
           ? `<span class="cb-package-thumb"><video src="${esc(a.thumb)}" autoplay muted loop playsinline></video></span>`
           : `<span class="cb-package-thumb"><img src="${esc(a.thumb)}" alt="" /></span>`)
       : '<span class="cb-package-thumb cb-package-thumb--empty"></span>';
-    const coverHtml = `<div class="cb-handoff" id="brief-cover-handoff">
-      <div class="cb-handoff-sig">
+    // Cover handoff row assembles per the composer's cover group — signature
+    // and Deliverables Snapshot each toggle, and their order swaps the grid.
+    const coverParts = {
+      'cover-signature': `<div class="cb-handoff-sig">
         <img class="cb-cover-sig" src="/img/sig.png" alt="Signature" />
         <div class="cb-human" id="brief-cover-human">
           <div class="cb-human-label">Your Human</div>
@@ -1259,8 +1308,8 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
           <div class="cb-human-role">Creative Lead @ HITLOOP</div>
           ${humanSocials}
         </div>
-      </div>
-      <div class="cb-package" id="brief-cover-package">
+      </div>`,
+      'cover-deliverables': `<div class="cb-package" id="brief-cover-package">
         <div class="cb-package-label">Deliverables Snapshot</div>
         <ul class="cb-package-list">
           ${pkgItems.map((a) => {
@@ -1268,9 +1317,19 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
             return `<li>${pkgThumb(a)}<span class="cb-package-text">${esc(a.label)}</span>${href ? `<a class="cb-package-dl" href="${esc(href)}" download>↓ Download</a>` : ''}</li>`;
           }).join('')}
         </ul>
-      </div>
-    </div>`;
-    return { coverHtml, pages: pages.join('\n') };
+      </div>`,
+    };
+    const coverOrder = cbOrderOf('cover').filter((id) => coverParts[id] && cbOn(id));
+    const coverHtml = coverOrder.length
+      ? `<div class="cb-handoff" id="brief-cover-handoff">
+      ${coverOrder.map((id) => coverParts[id]).join('\n      ')}
+    </div>`
+      : '';
+    const orderedPages = cbOrderOf('pages')
+      .filter((id) => cbOn(id) && pageBuilders[id])
+      .map((id) => pageBuilders[id]())
+      .filter(Boolean);
+    return { coverHtml, pages: orderedPages.join('\n') };
   };
   const _creativeBrief = resolveBriefType(briefType) === 'onboarding'
     ? renderCreativeBriefSummary(coverSummary)
@@ -1930,10 +1989,14 @@ async function handleGet(request) {
       request.nextUrl?.searchParams?.get('type') === 'marketing' ||
       dash?.modules?.['marketing-brief']?.lastRunId === dash.latestRunId
     );
+  // Creative Brief composer config (admin card) — one global doc read; gates
+  // + orders the onboarding brief elements only. Defaults on any failure.
+  const creativeBriefConfig = await loadCreativeBriefConfig(fb.adminDb);
   // Surface render failures with the real message — a bare 500 from a
   // template crash is undiagnosable from the dashboard overlay.
   const renderMarketing = () => renderMarketingBriefHtml({
     marketingBrief: effectiveMarketingBrief,
+    creativeBriefConfig,
     watchlistKols,
     weather,
     ...cardRollup,

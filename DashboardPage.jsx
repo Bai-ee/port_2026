@@ -50,6 +50,7 @@ import { deriveFindings } from './features/scout-intake/derived-findings.mjs';
 import ModuleCardControls from './components/dashboard/ModuleCardControls';
 import SubscribeModal from './components/payments/SubscribeModal';
 import { AdminEmailDigestView, AdminCreateClientView } from './components/AdminEmailModals';
+import { CreativeBriefComposerView } from './components/dashboard/CreativeBriefComposerCard';
 import { AdminOperatingCostView } from './components/AdminCostView';
 import { CalendarConnectView } from './components/CalendarConnectModal';
 import { ContactCapabilitiesPanel } from './StackedSlidesSection';
@@ -1543,6 +1544,7 @@ const CUSTOM_DETAIL_CARD_IDS = new Set([
   'social-media-posting',
   'strategy-builder',
   'email-digest',
+  'creative-brief-composer',
   'create-client',
   'operating-cost',
   'local-weather',
@@ -1564,7 +1566,7 @@ const CUSTOM_DETAIL_CARD_IDS = new Set([
 const CARD_ACTION_EDIT = new Set([
   'brand-keywords', 'watchlist', 'scout-focus', 'platform-search', 'social-signals',
   'conversation-intake', 'local-weather', 'business-model',
-  'knowledge-base', 'client-brain', 'email-digest', 'industry', 'create-client',
+  'knowledge-base', 'client-brain', 'email-digest', 'creative-brief-composer', 'industry', 'create-client',
   'social-media-posting', 'strategy-30', 'strategy-builder', 'mockup-studio',
   'video-remix', 'media-library',
 ]);
@@ -11963,6 +11965,23 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       footerRight: 'ADMIN',
       readinessBadge: { tone: 'ok', label: 'Live' },
     }, {
+      id: 'creative-brief-composer',
+      category: 'admin',
+      number: 'BC',
+      label: 'BRIEF COMPOSER',
+      title: 'Brief Composer',
+      description: 'Organizes the new-signup Creative Brief: toggle every element on/off and reorder pages and blocks on the SETTINGS tab, then check the result on the BRIEF PREVIEW tab.',
+      placeholderLabel: 'BRIEF',
+      rows: [
+        { key: 'bc-settings', label: 'Settings tab', value: 'Cover · pages · per-page blocks' },
+        { key: 'bc-preview', label: 'Preview tab', value: 'Live onboarding brief render' },
+        { key: 'bc-scope', label: 'Applies to', value: 'Every Creative Brief render' },
+        { key: 'bc-access', label: 'Access', value: 'Admin only' },
+      ],
+      footerLeft: 'Live',
+      footerRight: 'ADMIN',
+      readinessBadge: { tone: 'ok', label: 'Live' },
+    }, {
       id: 'create-client',
       category: 'admin',
       number: 'NC',
@@ -16524,6 +16543,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       if (c) openCapabilityCard(c);
                     }}
                   />
+                )}
+
+                {/* Admin · Brief Composer — organize/toggle the new-signup Creative Brief */}
+                {activeTileModal.cardId === 'creative-brief-composer' && (
+                  <CreativeBriefComposerView user={user} />
                 )}
 
                 {/* Admin · Create Client — website-less workspace */}

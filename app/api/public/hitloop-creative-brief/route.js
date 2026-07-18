@@ -61,7 +61,13 @@ export async function GET() {
     // it dynamically so this public route stays decoupled from that route graph.
     const { renderMarketingBriefHtml } = await import('../../dashboard/brief-preview/route.js');
 
+    // Honor the Creative Brief composer config (admin card) here too, so the
+    // public sample matches what new signups get. Defaults on failure.
+    const { loadCreativeBriefConfig } = require('../../../../features/scout-intake/creative-brief-config.cjs');
+    const creativeBriefConfig = await loadCreativeBriefConfig(fb.adminDb);
+
     const html = renderMarketingBriefHtml({
+      creativeBriefConfig,
       marketingBrief: dash.marketingBrief || null,
       clientName: CLIENT_NAME,
       websiteUrl: dash.websiteUrl || 'https://hitloop.agency',
