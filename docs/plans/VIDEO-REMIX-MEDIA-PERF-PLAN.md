@@ -2,7 +2,7 @@
 
 Frozen plan for making the Video Remix card (and the shared card-face video shells) load and scroll fast. Backend/render contract is untouched throughout — this is a media-loading + UI-weight workstream.
 
-**Status: Phase 1 SHIPPED (2026-07-01, `DashboardPage.jsx` only, pending manual dev test). Phases 2–4 remaining.**
+**Status: Phase 1 SHIPPED (2026-07-01, `DashboardPage.jsx` only, pending manual dev test). Phase 2's `MediaThumb` extraction SHIPPED (2026-07-16) as part of the Media Library Workspace rebuild — see [`VIDEO-REMIX-EDITVIDEOS-BRIDGE.md` § Media Library workspace](../source-of-truth/VIDEO-REMIX-EDITVIDEOS-BRIDGE.md#media-library-workspace-index--posters); it lives in `components/dashboard/MediaLibraryCard.jsx`, not inline in `DashboardPage.jsx`, and covers real posters for *source folder media* via client-side capture at upload (not the server FFmpeg backfill this plan originally scoped for Phase 3 — see the Phase 3 note below). `content-visibility` (Phase 2 item 2) and remix-output posters (Phase 3, items 1–3) remain undone.**
 
 ## Diagnosis (verified in code)
 
@@ -28,16 +28,25 @@ Known accepted trade-offs:
 
 ## Phase 2 — shared thumb component + render skipping (UI-only)
 
-1. Extract a `MediaThumb` wrapper so sizing/badge/label markup stops being duplicated per grid (`LazyVideoThumb` unified loading; markup is still copy-pasted).
-2. `content-visibility: auto` + `contain-intrinsic-size` on long list rows (`.saved-remix-card`, `.upload-row`, `.media-thumb-grid` cells) in the `dashboardCss` const (⚠️ + keep `dashboard.css` mirror in sync). Skips layout/paint off-screen; complements Phase 1 lazy loading (CSS alone does NOT stop media fetches — `preload="none"` handling stays).
-3. Optional: unmount saved-remix `<video>` back to a placeholder when scrolled far away — frees decoder instances, not just paint.
+1. ~~Extract a `MediaThumb` wrapper so sizing/badge/label markup stops being duplicated per grid~~ **SHIPPED 2026-07-16** — `MediaThumb` (exported from `components/dashboard/MediaLibraryCard.jsx`) replaced the raw `LazyVideoThumb` calls at the video-remix source-clip sites (REMIX-tab order slots + clip pool, SOURCE-tab order slots + media grid + admin cleanup rows); it internally handles poster-vs-video-vs-fallback so those call sites no longer duplicate that branching. Saved-remix players and the mockup-studio player were NOT touched (they play the *rendered output*, not source clips — see Phase 3).
+2. `content-visibility: auto` + `contain-intrinsic-size` on long list rows (`.saved-remix-card`, `.upload-row`, `.media-thumb-grid` cells) in the `dashboardCss` const (⚠️ + keep `dashboard.css` mirror in sync). Skips layout/paint off-screen; complements Phase 1 lazy loading (CSS alone does NOT stop media fetches — `preload="none"` handling stays). **Not done.**
+3. Optional: unmount saved-remix `<video>` back to a placeholder when scrolled far away — frees decoder instances, not just paint. **Not done.**
 
 ## Phase 3 — real posters (cross-repo, biggest remaining visual win)
+
+**Source-folder media posters shipped a different way (2026-07-16):** captured **client-side** at
+upload time (`captureVideoPoster` in `MediaLibraryCard.jsx` — hidden `<video>` → seek → `<canvas>` →
+JPEG, no server involved) rather than server-side FFmpeg, since these are user-uploaded source clips,
+not EditVideos-rendered outputs. See [`VIDEO-REMIX-EDITVIDEOS-BRIDGE.md` § Media Library workspace](../source-of-truth/VIDEO-REMIX-EDITVIDEOS-BRIDGE.md#media-library-workspace-index--posters).
+Legacy source files uploaded before this shipped still have no poster (icon-tile fallback) — a
+backfill pass over them is a candidate future task but is not this plan's Phase 3 item 4 below,
+which is specifically about *rendered remix output* posters. The items below (rendered-output
+posters, i.e. the SAVED ASSETS / card-face video) remain **undone**:
 
 1. EditVideos worker (`Bai-ee/arweave-video-generator`) emits a JPEG poster beside each rendered MP4 (one FFmpeg `-frames:v 1` pass per render). Deployed by push in that repo.
 2. `api/_lib/media-reconcile.cjs` carries `posterUrl` into `mediaCaptures` next to `downloadUrl` (same signed-URL refresh path). Update SSOT [`VIDEO-REMIX-EDITVIDEOS-BRIDGE.md`](../source-of-truth/VIDEO-REMIX-EDITVIDEOS-BRIDGE.md) § Render behavior.
 3. UI: thumbs + card face become `<img src={posterUrl}>`; `<video>` mounts on play. Fixes the Phase-1 blank-thumb flash.
-4. Last slice: posters for **source folder** media + a backfill pass over existing files (worker-side; bigger scope, do only after remix posters prove out).
+4. Backfill pass over existing **source folder** media without a client-captured poster yet (worker-side; bigger scope, do only after remix-output posters prove out).
 
 ## Phase 4 — only if needed after Phase 3
 

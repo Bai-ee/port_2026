@@ -29,6 +29,7 @@ Anything here not linked from [`source-of-truth/SOURCE-OF-TRUTH.md`](source-of-t
 - Editorial Strategy Standard: [`features/editorial-strategy/EDITORIAL_STRATEGY_STANDARD.md`](features/editorial-strategy/EDITORIAL_STRATEGY_STANDARD.md)
 - HITLOOP Studio methodology: [`company-brain/HITLOOP_STUDIO_METHODOLOGY.md`](company-brain/HITLOOP_STUDIO_METHODOLOGY.md)
 - Marketing Brief / Market Signals: [`features/marketing-brief/README.md`](features/marketing-brief/README.md)
+- Not The Rug HITLOOP configuration / NTR email parity: [`source-of-truth/NOT-THE-RUG-HITLOOP-CONFIG.md`](source-of-truth/NOT-THE-RUG-HITLOOP-CONFIG.md)
 - Executive Brief / Run Briefs wiring: [`source-of-truth/EXECUTIVE-BRIEFS-RUN-BRIEFS-WIRING.md`](source-of-truth/EXECUTIVE-BRIEFS-RUN-BRIEFS-WIRING.md)
 - Editorial Strategy Engine: [`features/editorial-strategy/README.md`](features/editorial-strategy/README.md)
 - Strategy Builder Editorial Pack tracking: [`source-of-truth/STRATEGY-BUILDER-EDITORIAL-PACK.md`](source-of-truth/STRATEGY-BUILDER-EDITORIAL-PACK.md)

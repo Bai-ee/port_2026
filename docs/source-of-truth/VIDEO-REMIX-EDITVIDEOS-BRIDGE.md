@@ -4,6 +4,11 @@ Status: **SHIPPED** (2026-06-24), proven end-to-end on `hitloop.agency`.
 Render-behavior additions (2026-07-01): 5 new filter looks, "None"=truly-nothing logos, pinned
 (deterministic) audio, bigger end logo, and a full set-vs-rendered settings snapshot on the card —
 all in [§ Render behavior](#render-behavior--filters-logos-audio-layout-editvideos-worker).
+Media Library workspace (2026-07-16): the `media-library` card split off into its own
+management-only two-pane workspace (move/rename/delete folders, multi-select, drag-and-drop,
+upload) backed by a new `media_assets` Firestore index + client-captured poster thumbnails — see
+[§ Media Library workspace](#media-library-workspace-index--posters). `video-remix` keeps its
+existing build UI unchanged; it only gained the poster thumbnail fix.
 Supersedes the implementation sections of [`docs/plans/EDITVIDEOS_TO_HITLOOP_CARDS_PLAN.md`](../plans/EDITVIDEOS_TO_HITLOOP_CARDS_PLAN.md) — that plan is historical; this doc is the truth.
 
 ## What it is
@@ -48,19 +53,95 @@ SOURCE MEDIA tab (Video Remix modal)
   → Uploaded folder is selected in the REMIX tab's `sourceFolders`.
 ```
 
+## Daily email video recipe
+
+The daily email does **not** use the Video Remix UI/card params. The morning cron calls
+`app/api/worker/pre-digest-video/route.js`, which owns a code-only production recipe named
+`hitloop-daily-email-v1`.
+
+Current locked daily-email recipe:
+
+- Random artist + random mix from live EditVideos artist options.
+- Strict source folder: `skyline` only.
+- Six explicit skyline clips are randomly selected and pinned into `videoOrder` before enqueueing.
+  This avoids folder-only random renders that can become visually static after ~15s.
+- Filter: `look_hard_bw_street_doc` at `0.8`.
+- Top logo: `ue_barcode_white.png`.
+- End logo: `mixtapes_white_square.png`.
+- `useArtistImage: false`; the EditVideos worker treats artist image as a full 5s segment, not
+  a single last frame.
+
+Changing the daily email look should start in `DAILY_EMAIL_VIDEO_PRODUCTION` in that worker, not
+in the dashboard Video Remix UI.
+
 ## Files (Hitloop)
 
 | File | Role |
 |---|---|
 | `api/_lib/media-jobs.cjs` | `media_jobs` queue (lease/retry/orphan-reclaim, mirrors `studio-render-jobs.cjs`). `createMediaJob`, `getMediaJob`, `listMediaJobs`, `setMediaJobEditRef`, `listInFlightMediaJobs`, `completeMediaJob`, `failMediaJob`. |
-| `api/_lib/editvideos-bridge.cjs` | Named 2nd firebase-admin app `editvideos`. `mapRecipeToVideoJob`, `enqueueVideoJob`, `triggerWorker`, `getVideoJob`, `listSourceFolders`, `listSourceFoldersWithCounts`, `listFolderMedia`, `createUploadSession`, `listOptions` (artists/mixes/filters/overlays/logos, 60s cache). |
+| `api/_lib/editvideos-bridge.cjs` | Named 2nd firebase-admin app `editvideos`. `mapRecipeToVideoJob`, `enqueueVideoJob`, `triggerWorker`, `getVideoJob`, `listSourceFolders`, `listSourceFoldersWithCounts`, `listFolderMedia`, `signReadUrl`, `createUploadSession`, `listOptions` (artists/mixes/filters/overlays/logos, 60s cache), `moveSourceFiles`, `renameSourceFolder`, `deleteSourceFolder`, `listAllSourceFileRows`. |
+| `api/_lib/media-assets.cjs` | `media_assets` Firestore index (global, mirrors the bucket). `assetDocId`/`posterPathForSource` (pure), `upsertAssets`, `removeAssets`, `moveAssetDocs`, `ensureFolderDoc`/`removeFolderDoc`, `listIndexFolders`, `listIndexFolderFiles`, `syncIndexFromBucket`. See [§ Media Library workspace](#media-library-workspace-index--posters). |
 | `api/_lib/media-recipe.cjs` | `validateRemixRecipe` + folder allowlist (`sanitizeFolderName`). Output locked 720/30/30. Allows safe two-segment existing EV folders such as `assets/retro_dust`; new upload folders stay flat. |
 | `api/_lib/media-reconcile.cjs` | `reconcileMediaJob(job, clientId)` — EditVideos → Hitloop. |
-| `app/api/dashboard/media/route.js` | Metadata-only route. Actions: `create-video-remix`, `job` (reconciles), `jobs`, `folders`, `folder-files`, `create-upload-session`, `complete-upload`, `options`. |
+| `app/api/dashboard/media/route.js` | Metadata-only route. Actions: `create-video-remix`, `job` (reconciles), `jobs`, `folders`, `folder-files`, `create-upload-session`, `complete-upload`, `options`, `media-index` (GET), `move-media`/`rename-folder`/`delete-folder`/`create-folder` (admin-gated POST). |
 | `app/api/worker/media-reconcile/route.js` | Backstop sweep (worker-secret auth); also pingable by the EV Action. |
-| `DashboardPage.jsx` | `video-remix` card, `dashboard_state` listener (carries `mediaCaptures`/`mediaVideoPending`), `runVideoRemix`, REMIX params tab, SOURCE MEDIA upload tab, shell/modal `<video>` (`latestRemixVideoUrl`). |
+| `DashboardPage.jsx` | `video-remix` card (build UI, unchanged), `dashboard_state` listener (carries `mediaCaptures`/`mediaVideoPending`), `runVideoRemix`, REMIX params tab, SOURCE MEDIA upload tab, shell/modal `<video>` (`latestRemixVideoUrl`); imports `MediaThumb` for source-clip thumbnails. |
+| `components/dashboard/MediaLibraryCard.jsx` | The `media-library` card's workspace UI (mount branch at the old shared `video-remix`/`media-library` guard). Exports `MediaThumb` (poster → video-first-frame → icon-tile fallback), consumed by both this card and `video-remix`. |
 | `services/media-render/` | **Shelved** standalone FFmpeg worker (local fixtures only). Future client-scoped path. |
-| `api/_lib/__tests__/{media-jobs,media-recipe,editvideos-bridge}.test.js` | Unit tests (node:test + in-memory Firestore fake). Test glob includes `api/**/__tests__`. |
+| `api/_lib/__tests__/{media-jobs,media-recipe,media-assets,editvideos-bridge}.test.js` | Unit tests (node:test + in-memory Firestore fake). Test glob includes `api/**/__tests__`. |
+
+## Media Library workspace (index + posters)
+
+The `media-library` card used to be a text-swap clone of the `video-remix` modal (same shared JSX,
+one flag swapping two strings) — no move, no bulk move, no rename/delete folder, no multi-select.
+It is now its own **management-only** two-pane workspace: folder rail (left) + file grid (right),
+drag-and-drop move onto a folder, multi-select (click/shift-click) with a sticky selection bar as
+the non-DnD/touch fallback, rename/delete folders, create an empty folder, and upload. It never
+renders the clip-order row or "Use for Remix" — `video-remix` keeps that build UI, untouched,
+in its own branch of the old shared guard (`DashboardPage.jsx` — search `media-library-modal-panel`
+/ `activeTileModal.cardId === 'video-remix'`).
+
+**Firestore index, bucket stays truth.** A folder was (and still is) just a GCS path prefix in the
+shared EditVideos bucket — no folder record exists anywhere; today's flat folder scan
+(`discoverSourceFolderDetails`) doesn't scale to "list this folder's files" or "does this empty
+folder exist" without hitting the bucket every time. `media_assets` (a new, **global** — not
+per-client, matching the bucket's own shared model — Firestore collection, `api/_lib/media-assets.cjs`)
+mirrors bucket objects for fast listings/counts:
+
+- Doc id = `assetDocId(fullPath)` = base64url of the full object path (idempotent upserts).
+- Asset doc: `{ type:'asset', fullPath, folder, name, size, contentType, kind, posterPath, updated, syncedAt }`.
+  **Stores paths, never signed URLs** (they expire in an hour) — the route signs `url`/`posterUrl`
+  at read time (`signReadUrl` in the bridge) when returning `media-index`/`folder-files` rows.
+- Folder doc (`folder:<name>`): represents a folder with **zero files** — folder listings are the
+  union of asset-derived folders (counted) and folder-only docs (count 0). This is what makes empty
+  folders possible for the first time.
+- Mutations write the **bucket first** (source of truth), then reconcile the index; a bucket
+  `file.move()` (library does copy+delete) is not transactional, so move/rename/delete-folder
+  return per-file `{moved/deleted, failed}` results and an on-demand sweep
+  (`GET media-index?sync=1`, or automatically when the index reads empty) heals any drift via
+  `syncIndexFromBucket()` (diffs a fresh `listAllSourceFileRows()` bucket scan against the index).
+
+**Posters.** First-frame JPEGs are captured **client-side** at upload (`captureVideoPoster` in
+`MediaLibraryCard.jsx`: hidden `<video>` → seek ~0.1s → `<canvas>` → JPEG blob, max 480px wide,
+q0.7, 3s timeout) — no server transcode. They live at the deterministic path
+`.posters/<folder>/<fileName>.jpg` (`posterPathForSource`, appending `.jpg` to the full original
+name, never swapping the extension). `.posters` is in `EXCLUDED_FOLDERS` and — like every
+dot-prefixed bucket segment — was already excluded from folder discovery before this change.
+`create-upload-session` mints a second signed PUT for the poster when the client asks for one
+(`withPoster:true`, video files only); `complete-upload` records `posterPath` on the index doc.
+Move/rename/delete carry the poster sibling along (best-effort, ignore-missing — legacy files have
+none yet). `MediaThumb` (exported from `MediaLibraryCard.jsx`, imported by both cards) renders
+`posterUrl` when present, else a best-effort `<video>` first frame, else an icon-tile fallback —
+**never a black square**. Backfilling posters for existing `.mov`/HEVC files is deferred to a
+server-side (FFmpeg, cross-repo) job — see `docs/plans/VIDEO-REMIX-MEDIA-PERF-PLAN.md`.
+
+**Admin gating.** `move-media`/`rename-folder`/`delete-folder`/`create-folder` are admin-gated at
+the route (`ADMIN_MEDIA_MUTATIONS`, same pattern as `delete-source-media`). `media-index` (GET) is
+open to any authenticated user — a non-admin sees a read-only workspace (browse + preview only; the
+UI hides upload/move/rename/delete controls via the `isAdmin` prop, it isn't only a backend gate).
+Upload (`create-upload-session`/`complete-upload`) intentionally stays open to any client, same as
+today's `video-remix` upload flow, which shares those two actions — gating them would have broken
+`video-remix` uploads for non-admins.
 
 ## External (EditVideos) — DO NOT modify to ship Hitloop changes
 

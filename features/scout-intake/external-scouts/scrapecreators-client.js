@@ -98,6 +98,32 @@ function dedupeByUrl(items, limit) {
 }
 
 // ─── Reddit ─────────────────────────────────────────────────────────────────
+
+/** Build Reddit queries from the operator's Custom Query rows
+ *  (marketingBriefConfig.searches), brand-first, falling back to
+ *  brand + category terms when no usable custom rows exist.
+ *
+ *  Takes the RAW configured rows, never cfg.scout.searchPlan — the compiled
+ *  plan is never empty (it always carries auto BRAND/CATEGORY rows, watchlist
+ *  handles, and per-platform site: rows that would pollute Reddit and burn
+ *  credits). site: operators are stripped because the endpoint is already
+ *  Reddit-scoped; OR clusters stay one string (one credit each). */
+function redditQueriesFromCustomRows({ brand = '', categoryTerms = [], searches = [], max = 4 } = {}) {
+  const cleanBrand = str(brand).replace(/^["']+|["']+$/g, '').trim();
+  const stripSiteOps = (q) => str(q).replace(/\bsite:\S+/gi, '').replace(/\s+/g, ' ').trim();
+  const isUsable = (q) => q.replace(/[^a-z0-9]/gi, '').length >= 2;
+
+  const customQueries = (Array.isArray(searches) ? searches : [])
+    .map((row) => stripSiteOps(row?.query))
+    .filter(isUsable);
+
+  const chosen = customQueries.length
+    ? customQueries
+    : (Array.isArray(categoryTerms) ? categoryTerms : []).slice(0, 2);
+
+  return [...new Set([cleanBrand, ...chosen].filter(Boolean))].slice(0, max);
+}
+
 function normalizeRedditPost(post) {
   const permalink = str(post.permalink);
   let url = permalink ? `https://www.reddit.com${permalink}` : str(post.url);
@@ -182,4 +208,4 @@ async function searchInstagram({ queries = [], creators = [], limit = 12, maxQue
   return { ok: true, items, meta: { source: 'ScrapeCreators (Instagram)', queriesTried: terms, creators: handles, warnings: errors } };
 }
 
-module.exports = { searchReddit, searchInstagram, hasApiKey };
+module.exports = { searchReddit, searchInstagram, redditQueriesFromCustomRows, hasApiKey };

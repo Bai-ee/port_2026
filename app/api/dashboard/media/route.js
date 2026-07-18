@@ -6,6 +6,7 @@ const { verifyRequestUser, isAdminEmail } = require('../../../../api/_lib/auth.c
 const { getEffectiveClientContext } = require('../../../../api/_lib/client-provisioning.cjs');
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
 const mediaJobs = require('../../../../api/_lib/media-jobs.cjs');
+const mediaAssets = require('../../../../api/_lib/media-assets.cjs');
 const { validateRemixRecipe } = require('../../../../api/_lib/media-recipe.cjs');
 const {
   enqueueVideoJob,
@@ -19,6 +20,12 @@ const {
   getMediaUsage,
   deleteSourceFiles,
   deleteRenderedRemix,
+  moveSourceFiles,
+  renameSourceFolder,
+  deleteSourceFolder,
+  listAllSourceFileRows,
+  signReadUrl,
+  sanitizeNewFolderName,
   getArchiveManifest,
   getArchiveJob,
   normalizeArchiveSources,
@@ -71,7 +78,13 @@ async function requireAdmin(decoded) {
 }
 
 const ARCHIVE_MUTATIONS = new Set(['archive-to-arweave', 'deploy-website', 'update-arns']);
-const ADMIN_MEDIA_MUTATIONS = new Set(['delete-source-media', 'delete-remix']);
+// Media Library workspace mutations (move/rename/delete/create folder) are
+// admin-only — the workspace itself is a management-only surface; non-admins
+// get a read-only view (media-index GET stays open to any authenticated user).
+const ADMIN_MEDIA_MUTATIONS = new Set([
+  'delete-source-media', 'delete-remix',
+  'move-media', 'rename-folder', 'delete-folder', 'create-folder',
+]);
 
 // Remove a rendered-remix capture from dashboard_state.mediaCaptures so the
 // deleted video disappears from the card/modal. Transactional merge to avoid
@@ -134,7 +147,62 @@ export async function POST(request) {
       if (action === 'delete-source-media') {
         const files = Array.isArray(body?.files) ? body.files.slice(0, 25) : [];
         const result = await deleteSourceFiles(files);
+        await mediaAssets.removeAssets(result.deleted.map((d) => d.fullPath)).catch(() => {});
         return json({ ok: true, ...result });
+      }
+
+      // --- Media Library workspace: move / rename / delete / create folder ---
+      // Each writes the bucket first (source of truth), then reconciles the
+      // media_assets index; a failed index write never undoes the bucket op —
+      // the on-demand sweep (GET media-index?sync=1) heals any drift.
+      if (action === 'move-media') {
+        const files = Array.isArray(body?.files) ? body.files.slice(0, 25) : [];
+        const targetFolder = String(body?.targetFolder || '');
+        if (!files.length) return json({ error: 'files is required.' }, 400);
+        if (!targetFolder) return json({ error: 'targetFolder is required.' }, 400);
+        const result = await moveSourceFiles(files, targetFolder);
+        if (result.moved.length) {
+          await mediaAssets.moveAssetDocs(
+            result.moved.map((m) => ({ from: m.from, to: m.to, folder: targetFolder }))
+          ).catch(() => {});
+        }
+        const folders = await mediaAssets.listIndexFolders().catch(() => []);
+        return json({ ok: true, ...result, folders });
+      }
+
+      if (action === 'rename-folder') {
+        const folder = String(body?.folder || '');
+        const newName = String(body?.newName || '');
+        if (!folder || !newName) return json({ error: 'folder and newName are required.' }, 400);
+        const result = await renameSourceFolder(folder, newName);
+        if (result.moved.length) {
+          await mediaAssets.moveAssetDocs(
+            result.moved.map((m) => ({ from: m.from, to: m.to, folder: result.newFolder }))
+          ).catch(() => {});
+        }
+        await mediaAssets.removeFolderDoc(result.oldFolder).catch(() => {});
+        await mediaAssets.ensureFolderDoc(result.newFolder).catch(() => {});
+        const folders = await mediaAssets.listIndexFolders().catch(() => []);
+        return json({ ok: true, ...result, folders });
+      }
+
+      if (action === 'delete-folder') {
+        const folder = String(body?.folder || '');
+        if (!folder) return json({ error: 'folder is required.' }, 400);
+        const result = await deleteSourceFolder(folder);
+        if (result.deleted.length) {
+          await mediaAssets.removeAssets(result.deleted.map((d) => d.fullPath)).catch(() => {});
+        }
+        await mediaAssets.removeFolderDoc(folder).catch(() => {});
+        const folders = await mediaAssets.listIndexFolders().catch(() => []);
+        return json({ ok: true, ...result, folders });
+      }
+
+      if (action === 'create-folder') {
+        const name = sanitizeNewFolderName(String(body?.name || ''));
+        await mediaAssets.ensureFolderDoc(name);
+        const folders = await mediaAssets.listIndexFolders().catch(() => []);
+        return json({ ok: true, folder: name, folders });
       }
 
       // Hard-delete a rendered remix the operator does not approve: removes the
@@ -362,6 +430,27 @@ export async function POST(request) {
 
   if (action === 'complete-upload') {
     invalidateFolderCache();
+    // Optional body (sent by the Media Library workspace's own upload flow;
+    // the legacy video-remix upload flow sends none, which is fine — it never
+    // reads the index). When present, upsert the just-uploaded files directly
+    // instead of waiting for the next sweep.
+    let body = {};
+    try { body = await request.json(); } catch { body = {}; }
+    const folder = body?.folder ? String(body.folder) : null;
+    const files = Array.isArray(body?.files) ? body.files.slice(0, 25) : [];
+    if (folder && files.length) {
+      await mediaAssets.upsertAssets(files.map((f) => ({
+        fullPath: f.fullPath,
+        folder,
+        name: f.name,
+        size: f.size,
+        contentType: f.contentType,
+        kind: f.kind,
+        posterPath: f.posterPath || null,
+      }))).catch((err) => {
+        console.warn(`[media] index upsert on complete-upload failed: ${err?.message}`);
+      });
+    }
     return json({ ok: true });
   }
 
@@ -519,6 +608,43 @@ export async function GET(request) {
       } catch {
         // Bridge unconfigured — degrade to an empty list so the card falls back.
         return json({ ok: true, folders: [] });
+      }
+    }
+
+    // Media Library workspace's own folder/file listing — reads the Firestore
+    // index (fast, no bucket scan) instead of `folders`/`folder-files` above
+    // (which video-remix still uses, unchanged). Open to any authenticated
+    // user (read-only); sweeps the bucket into the index on first read or a
+    // forced ?sync=1, self-healing after a partial move/rename/delete.
+    if (action === 'media-index') {
+      try {
+        const folder = params.get('folder');
+        const forceSync = params.get('sync') === '1';
+        let folders = await mediaAssets.listIndexFolders();
+        let swept = null;
+        if (forceSync || folders.length === 0) {
+          try {
+            const bucketRows = await listAllSourceFileRows();
+            swept = await mediaAssets.syncIndexFromBucket(bucketRows);
+            folders = await mediaAssets.listIndexFolders();
+          } catch (syncErr) {
+            console.warn(`[media] index sync failed: ${syncErr?.message}`);
+          }
+        }
+        let files = null;
+        if (folder) {
+          const result = await mediaAssets.listIndexFolderFiles(folder);
+          // The index stores paths only (signed URLs expire in an hour) — sign
+          // a fresh read URL per file (and poster, when one exists) here.
+          files = await Promise.all(result.files.map(async (f) => ({
+            ...f,
+            url: await signReadUrl(f.fullPath),
+            posterUrl: f.posterPath ? await signReadUrl(f.posterPath) : null,
+          })));
+        }
+        return json({ ok: true, folders, files, swept });
+      } catch (err) {
+        return json({ error: err.message || 'Could not read the media index.' }, 500);
       }
     }
 

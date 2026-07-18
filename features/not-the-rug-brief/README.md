@@ -2,6 +2,10 @@
 
 Portable Not The Rug daily brief generator for embedding inside another repo.
 
+## HITLOOP live client
+
+For the active HITLOOP client (`nottherug-ten-QSMYxuuv`), do not rely on this package's static `clients.js` registry alone. Production runs read Firestore `client_configs/{clientId}` first, and the NTR email parity setup lives in [`../../docs/source-of-truth/NOT-THE-RUG-HITLOOP-CONFIG.md`](../../docs/source-of-truth/NOT-THE-RUG-HITLOOP-CONFIG.md). Read that doc before changing NTR Scout config, digest settings, Client Brain voice, or cutover scheduling.
+
 ## Included runtime
 
 - `index.js` — exported app-facing wrapper

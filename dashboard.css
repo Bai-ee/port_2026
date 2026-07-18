@@ -2852,8 +2852,14 @@
     flex: 1;
     min-height: 0;
   }
-  #tile-detail-bento-grid,
-  #tile-detail-bento-grid * {
+  /* Full-width variant (media-library): no left visual cell, one column.
+     The box-shadow kill below is scoped out so the workspace keeps its
+     kit hover/selection shadows. */
+  #tile-detail-bento-grid.tile-detail-bento-grid--full-content {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #tile-detail-bento-grid:not(.tile-detail-bento-grid--full-content),
+  #tile-detail-bento-grid:not(.tile-detail-bento-grid--full-content) * {
     box-shadow: none !important;
   }
   /* Image cell — chat with Bryan */
@@ -9531,6 +9537,11 @@
 
 .vrk-scope .panel-body {
   display: grid;
+  /* max-content rows: the panel has a definite height (flex:1 in the modal
+     column), so auto rows would be squeezed to fit it — overflow:hidden
+     cards (.saved-remix-card) collapse to their padding and clip their
+     content. Size rows to content and let the panel scroll instead. */
+  grid-auto-rows: max-content;
   flex: 1;
   gap: 16px;
   min-height: 0;

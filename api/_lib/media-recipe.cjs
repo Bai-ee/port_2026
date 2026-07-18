@@ -220,8 +220,14 @@ function validateRemixRecipe(input) {
   return recipe;
 }
 
+/** Whether an artist name would pass validateRemixRecipe's ARTIST_RE gate. */
+function isValidArtistName(name) {
+  return typeof name === 'string' && ARTIST_RE.test(name.trim());
+}
+
 module.exports = {
   sanitizeFolderName,
   validateRemixRecipe,
+  isValidArtistName,
   V1_OUTPUT,
 };

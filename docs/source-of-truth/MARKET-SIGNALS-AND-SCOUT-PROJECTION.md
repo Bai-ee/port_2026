@@ -6,6 +6,8 @@
 
 > **The Run Briefs / Executive Brief card wiring** (Daily Stand Up renamed to Executive Brief, named brief preview cards, card footer run actions, removed duplicate Creative card) is documented in [`EXECUTIVE-BRIEFS-RUN-BRIEFS-WIRING.md`](./EXECUTIVE-BRIEFS-RUN-BRIEFS-WIRING.md). Read it before touching the Run Briefs bucket or `BRIEF_TYPE_BY_CARD`.
 
+> **Not The Rug config / NTR email parity** is documented in [`NOT-THE-RUG-HITLOOP-CONFIG.md`](./NOT-THE-RUG-HITLOOP-CONFIG.md). Read it before changing `nottherug-ten-QSMYxuuv`, re-running `scripts/setup-nottherug-hitloop-config.cjs`, or enabling any NTR schedule. The NTR case depends on two separate stores: `client_configs` for Scout/search config and approved Client Brain for voice.
+
 This documents one connected system:
 1. **One scout engine** produces market signals.
 2. **One canonical projection** normalizes them for every consumer (email, executive brief).

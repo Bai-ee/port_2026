@@ -37,7 +37,7 @@ const { buildModuleBriefs } = require('../../../../features/scout-intake/module-
 const { getDefaultModuleConfig } = require('../../../../features/scout-intake/module-registry');
 const { FALLBACK_BRIEF_SITE } = require('../../../../api/_lib/brief-fallback.cjs');
 const { collectRedditSignals, collectInstagramSignals } = require('../../../../features/intelligence/_platform-signals.js');
-const { searchReddit: scSearchReddit, searchInstagram: scSearchInstagram, hasApiKey: scHasApiKey } = require('../../../../features/scout-intake/external-scouts/scrapecreators-client.js');
+const { searchReddit: scSearchReddit, searchInstagram: scSearchInstagram, redditQueriesFromCustomRows: scRedditQueries, hasApiKey: scHasApiKey } = require('../../../../features/scout-intake/external-scouts/scrapecreators-client.js');
 
 import { generateStrategyPlan } from '../../../../features/strategy-builder/generate-plan.js';
 import { generateBriefSummaries } from '../../../../features/scout-intake/brief-summary-runner.mjs';
@@ -468,14 +468,24 @@ async function refreshReplyTargets(clientId) {
       if (voiceCtx) contextParts.push(voiceCtx);
     } catch { /* non-fatal */ }
     const context = contextParts.join('\n\n');
+    const generatedAt = new Date().toISOString();
     const result = await runAnalysisRecipe({ recipeId: 'reply-targets', content: replyPool, context });
+    const stampedResult = {
+      ...result,
+      generatedAt,
+      inputGeneratedAt: replyPool.generatedAt,
+      sourceFreshness: {
+        scout: marketingBrief?.scoutBrief?.timestamp || marketingBrief?.generatedAtIso || null,
+        watchlist: watchlistTimelines?.generatedAt || null,
+      },
+    };
     await logRecipeUsage({ clientId, recipeId: 'reply-targets', result });
     await fb.adminDb.collection('dashboard_state').doc(clientId).set(
-      { marketingBrief: { reportSnapshot: { digestRecipes: [result] } } },
+      { marketingBrief: { reportSnapshot: { digestRecipes: [stampedResult] } } },
       { merge: true }
     );
-    logInfo('pre_digest_reply_targets', { clientId, ok: result.ok, costUsd: result.costUsd });
-    return { ok: result.ok, recipeId: 'reply-targets', costUsd: result.costUsd };
+    logInfo('pre_digest_reply_targets', { clientId, ok: result.ok, costUsd: result.costUsd, generatedAt });
+    return { ok: result.ok, recipeId: 'reply-targets', costUsd: result.costUsd, generatedAt };
   } catch (err) {
     logError('pre_digest_reply_targets_failed', { clientId, error: err.message });
     return { ok: false, error: err.message };
@@ -584,7 +594,7 @@ async function refreshPlatformSignals(clientId) {
     // Reddit + Instagram pulled concurrently (each already runs its own queries
     // concurrently) so this whole step is ~one slow HTTP call, not the sum.
     const [r, ig] = await Promise.all([
-      sources.has('reddit') ? scSearchReddit({ queries: [brand, ...cats.slice(0, 2)].filter(Boolean), limit: 12 }) : Promise.resolve(null),
+      sources.has('reddit') ? scSearchReddit({ queries: scRedditQueries({ brand, categoryTerms: cats, searches: mbc.searches }), limit: 12 }) : Promise.resolve(null),
       sources.has('instagram') ? scSearchInstagram({ queries: [brand, ...cats.slice(0, 1)].filter(Boolean), creators, limit: 12 }) : Promise.resolve(null),
     ]);
     const out = {};

@@ -37,7 +37,8 @@ Brief link shipped** (§10).
 > the Email Digest card only owns the **include-in-email toggle + schedule** for each feature.
 
 Related SSOT: [`MARKET-SIGNALS-AND-SCOUT-PROJECTION.md`](MARKET-SIGNALS-AND-SCOUT-PROJECTION.md) (the pattern being mirrored),
-[`CREATIVE-BRIEF-DELIVERABLES-WIRING.md`](CREATIVE-BRIEF-DELIVERABLES-WIRING.md) (the official brief standard).
+[`CREATIVE-BRIEF-DELIVERABLES-WIRING.md`](CREATIVE-BRIEF-DELIVERABLES-WIRING.md) (the official brief standard),
+[`NOT-THE-RUG-HITLOOP-CONFIG.md`](NOT-THE-RUG-HITLOOP-CONFIG.md) (NTR client/digest setup and cutover guardrails).
 
 ---
 

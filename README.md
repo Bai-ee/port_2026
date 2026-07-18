@@ -13,6 +13,7 @@ Supporting docs (all in [`docs/source-of-truth/`](docs/source-of-truth/), linked
 - [PRODUCTION-LAUNCH-CHECKLIST.md](docs/source-of-truth/PRODUCTION-LAUNCH-CHECKLIST.md) — scope, gates, env, blockers
 - [LAUNCH-DATA-PIPELINE.md](docs/source-of-truth/LAUNCH-DATA-PIPELINE.md) — signup→download pipeline
 - [CREATIVE-BRIEF-DELIVERABLES-WIRING.md](docs/source-of-truth/CREATIVE-BRIEF-DELIVERABLES-WIRING.md) — card wiring map
+- [NOT-THE-RUG-HITLOOP-CONFIG.md](docs/source-of-truth/NOT-THE-RUG-HITLOOP-CONFIG.md) — NTR client config + email parity handoff
 - [ADMIN-DASHBOARD-DATA-MAP.md](docs/source-of-truth/ADMIN-DASHBOARD-DATA-MAP.md) — admin telemetry
 - [PRODUCTION-READINESS-TRACKER.md](docs/source-of-truth/PRODUCTION-READINESS-TRACKER.md) — hardening status
 - [DOCS-ACCURACY-REPORT.md](docs/source-of-truth/DOCS-ACCURACY-REPORT.md) — doc-by-doc verdicts

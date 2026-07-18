@@ -42,6 +42,7 @@ class DocRef {
     this._map.set(this.id, applyWrite(prev, data, !!opts.merge));
   }
   async get() { return snapshot(this, this._map.get(this.id)); }
+  async delete() { this._map.delete(this.id); }
 }
 
 function snapshot(ref, data) {

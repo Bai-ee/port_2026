@@ -1,0 +1,166 @@
+{
+  "_README": "One entry per client, keyed by slug. Fill each field, then open case-study-template.html?client=<slug>. Image fields: leave \"\" for a labeled placeholder, or set a path/URL. metrics = 4 hero numbers. results.bars pct = 0-100 bar fill (relative, for visual weight only), val = the real figure shown on the right.",
+
+  "fernwood": {
+    "vol": "04", "industryTag": "Specialty Coffee", "year": "2026",
+    "client": "Fernwood\nRoasters",
+    "positioning": "How a single-origin roaster turned a quiet Instagram and an abandoned email list into a repeatable, always-on content engine — and a 3.4× lift in DTC subscription revenue.",
+    "heroImage": "",
+    "meta": [
+      { "k": "Client", "v": "Fernwood Roasters" },
+      { "k": "Industry", "v": "DTC Coffee · Retail" },
+      { "k": "Services", "v": "Brand voice · Social · Email · Video" },
+      { "k": "Engagement", "v": "6 months · Ongoing" }
+    ],
+    "metrics": [
+      { "num": "3.4×", "lbl": "DTC subscription revenue" },
+      { "num": "+112%", "lbl": "Instagram engagement rate" },
+      { "num": "28%", "lbl": "Email open rate (was 11%)" },
+      { "num": "40hrs", "lbl": "Content time saved / month" }
+    ],
+    "challenge": {
+      "title": "Great beans,\ninvisible brand.",
+      "body": [
+        "Fernwood roasted some of the best single-origin coffee in the region — but online, none of that came through. Posts went up whenever someone had a spare minute, and the 9,000-subscriber email list hadn't been mailed in four months.",
+        "They didn't need more tools. They needed a system: a consistent voice, a steady cadence, and a way to turn each roast into a week of content without hiring a full creative team."
+      ],
+      "tags": ["Inconsistent voice", "No cadence", "Dormant email list", "Zero video"],
+      "image": ""
+    },
+    "approach": {
+      "title": "One engine,\nfour channels.",
+      "steps": [
+        { "h": "Locked the brand voice", "p": "Built a Client Brain — voice pillars, preferred words, example posts — so every piece sounds like the brand." },
+        { "h": "Turned each drop into a content week", "p": "A single launch now produces a post, three clips, an email, and a story sequence — drafted, scored, and queued." },
+        { "h": "Revived the email list", "p": "Re-warmed dormant subscribers with a story-led weekly digest tied to what's new." },
+        { "h": "Added motion", "p": "Auto-generated short-form video from existing photography — no shoot required." }
+      ],
+      "images": ["", ""]
+    },
+    "results": {
+      "title": "Consistency\ncompounded.",
+      "compareLabel": "vs. prior 6 months",
+      "bars": [
+        { "name": "Subscription revenue", "pct": 100, "val": "+240%" },
+        { "name": "IG engagement", "pct": 88, "val": "+112%" },
+        { "name": "Email open rate", "pct": 72, "val": "11→28%" },
+        { "name": "Posting cadence", "pct": 95, "val": "2→14/wk" },
+        { "name": "Content hours saved", "pct": 80, "val": "~40/mo" }
+      ],
+      "body": [
+        "Within two months the brand was publishing every weekday across four channels on a fraction of the old effort.",
+        "Most importantly, the brand finally sounds like itself everywhere — consistent, warm, unmistakable."
+      ]
+    },
+    "quote": { "text": "We went from dreading the content calendar to watching it run itself. Same team, ten times the output — and it actually sounds like us.", "attr": "Maya Ellison · Founder, Fernwood Roasters" },
+    "gallery": ["Social post 1", "Short-form video still", "Email design", "Social post 2", "Lifestyle shot", "Brand system detail"]
+  },
+
+  "viva-acid": {
+    "vol": "01", "industryTag": "TODO — e.g. Music / Label", "year": "2026",
+    "client": "Viva\nAcid",
+    "positioning": "TODO — one sentence: who they are + the single biggest result you delivered.",
+    "heroImage": "",
+    "meta": [
+      { "k": "Client", "v": "Viva Acid" },
+      { "k": "Industry", "v": "TODO" },
+      { "k": "Services", "v": "TODO" },
+      { "k": "Engagement", "v": "TODO — duration / status" }
+    ],
+    "metrics": [
+      { "num": "TODO", "lbl": "Headline metric" },
+      { "num": "TODO", "lbl": "Metric 2" },
+      { "num": "TODO", "lbl": "Metric 3" },
+      { "num": "TODO", "lbl": "Metric 4" }
+    ],
+    "challenge": { "title": "TODO —\nshort punchy line.", "body": ["TODO — 2-3 sentences on the starting problem.", "TODO — what they needed."], "tags": ["TODO", "TODO", "TODO"], "image": "" },
+    "approach": { "title": "TODO —\nhow we solved it.", "steps": [ { "h": "TODO step 1", "p": "TODO" }, { "h": "TODO step 2", "p": "TODO" }, { "h": "TODO step 3", "p": "TODO" }, { "h": "TODO step 4", "p": "TODO" } ], "images": ["", ""] },
+    "results": { "title": "TODO —\nthe outcome.", "compareLabel": "vs. TODO baseline", "bars": [ { "name": "TODO", "pct": 100, "val": "TODO" }, { "name": "TODO", "pct": 80, "val": "TODO" }, { "name": "TODO", "pct": 70, "val": "TODO" } ], "body": ["TODO — what changed.", "TODO — the takeaway."] },
+    "quote": { "text": "TODO — client testimonial.", "attr": "TODO — Name · Role, Viva Acid" },
+    "gallery": ["Image 1", "Image 2", "Image 3", "Image 4", "Image 5", "Image 6"]
+  },
+
+  "critters-quest": {
+    "vol": "02", "industryTag": "TODO — Game / App", "year": "2026",
+    "client": "Critters\nQuest",
+    "positioning": "TODO — one sentence.",
+    "heroImage": "",
+    "meta": [ { "k": "Client", "v": "Critters Quest" }, { "k": "Industry", "v": "TODO" }, { "k": "Services", "v": "TODO" }, { "k": "Engagement", "v": "TODO" } ],
+    "metrics": [ { "num": "TODO", "lbl": "Metric 1" }, { "num": "TODO", "lbl": "Metric 2" }, { "num": "TODO", "lbl": "Metric 3" }, { "num": "TODO", "lbl": "Metric 4" } ],
+    "challenge": { "title": "TODO.", "body": ["TODO.", "TODO."], "tags": ["TODO", "TODO"], "image": "" },
+    "approach": { "title": "TODO.", "steps": [ { "h": "TODO", "p": "TODO" }, { "h": "TODO", "p": "TODO" }, { "h": "TODO", "p": "TODO" } ], "images": ["", ""] },
+    "results": { "title": "TODO.", "compareLabel": "vs. TODO", "bars": [ { "name": "TODO", "pct": 100, "val": "TODO" }, { "name": "TODO", "pct": 75, "val": "TODO" } ], "body": ["TODO.", "TODO."] },
+    "quote": { "text": "TODO.", "attr": "TODO · Critters Quest" },
+    "gallery": ["Image 1", "Image 2", "Image 3", "Image 4", "Image 5", "Image 6"]
+  },
+
+  "edit-trax": {
+    "vol": "03", "industryTag": "TODO", "year": "2026",
+    "client": "Edit\nTrax",
+    "positioning": "TODO — one sentence.",
+    "heroImage": "",
+    "meta": [ { "k": "Client", "v": "Edit Trax" }, { "k": "Industry", "v": "TODO" }, { "k": "Services", "v": "TODO" }, { "k": "Engagement", "v": "TODO" } ],
+    "metrics": [ { "num": "TODO", "lbl": "Metric 1" }, { "num": "TODO", "lbl": "Metric 2" }, { "num": "TODO", "lbl": "Metric 3" }, { "num": "TODO", "lbl": "Metric 4" } ],
+    "challenge": { "title": "TODO.", "body": ["TODO.", "TODO."], "tags": ["TODO", "TODO"], "image": "" },
+    "approach": { "title": "TODO.", "steps": [ { "h": "TODO", "p": "TODO" }, { "h": "TODO", "p": "TODO" }, { "h": "TODO", "p": "TODO" } ], "images": ["", ""] },
+    "results": { "title": "TODO.", "compareLabel": "vs. TODO", "bars": [ { "name": "TODO", "pct": 100, "val": "TODO" }, { "name": "TODO", "pct": 75, "val": "TODO" } ], "body": ["TODO.", "TODO."] },
+    "quote": { "text": "TODO.", "attr": "TODO · Edit Trax" },
+    "gallery": ["Image 1", "Image 2", "Image 3", "Image 4", "Image 5", "Image 6"]
+  },
+
+  "not-the-rug": {
+    "vol": "05", "industryTag": "TODO — Web3 / Brand", "year": "2026",
+    "client": "Not the\nRug",
+    "positioning": "TODO — one sentence.",
+    "heroImage": "",
+    "meta": [ { "k": "Client", "v": "Not the Rug" }, { "k": "Industry", "v": "TODO" }, { "k": "Services", "v": "TODO" }, { "k": "Engagement", "v": "TODO" } ],
+    "metrics": [ { "num": "TODO", "lbl": "Metric 1" }, { "num": "TODO", "lbl": "Metric 2" }, { "num": "TODO", "lbl": "Metric 3" }, { "num": "TODO", "lbl": "Metric 4" } ],
+    "challenge": { "title": "TODO.", "body": ["TODO.", "TODO."], "tags": ["TODO", "TODO"], "image": "" },
+    "approach": { "title": "TODO.", "steps": [ { "h": "TODO", "p": "TODO" }, { "h": "TODO", "p": "TODO" }, { "h": "TODO", "p": "TODO" } ], "images": ["", ""] },
+    "results": { "title": "TODO.", "compareLabel": "vs. TODO", "bars": [ { "name": "TODO", "pct": 100, "val": "TODO" }, { "name": "TODO", "pct": 75, "val": "TODO" } ], "body": ["TODO.", "TODO."] },
+    "quote": { "text": "TODO.", "attr": "TODO · Not the Rug" },
+    "gallery": ["Image 1", "Image 2", "Image 3", "Image 4", "Image 5", "Image 6"]
+  },
+
+  "passion-house": {
+    "vol": "06", "industryTag": "Specialty Coffee", "year": "2026",
+    "client": "Passion\nHouse",
+    "positioning": "TODO — one sentence.",
+    "heroImage": "",
+    "meta": [ { "k": "Client", "v": "Passion House Coffee" }, { "k": "Industry", "v": "Coffee · Wholesale + DTC" }, { "k": "Services", "v": "TODO" }, { "k": "Engagement", "v": "TODO" } ],
+    "metrics": [ { "num": "TODO", "lbl": "Metric 1" }, { "num": "TODO", "lbl": "Metric 2" }, { "num": "TODO", "lbl": "Metric 3" }, { "num": "TODO", "lbl": "Metric 4" } ],
+    "challenge": { "title": "TODO.", "body": ["TODO.", "TODO."], "tags": ["TODO", "TODO"], "image": "" },
+    "approach": { "title": "TODO.", "steps": [ { "h": "TODO", "p": "TODO" }, { "h": "TODO", "p": "TODO" }, { "h": "TODO", "p": "TODO" } ], "images": ["", ""] },
+    "results": { "title": "TODO.", "compareLabel": "vs. TODO", "bars": [ { "name": "TODO", "pct": 100, "val": "TODO" }, { "name": "TODO", "pct": 75, "val": "TODO" } ], "body": ["TODO.", "TODO."] },
+    "quote": { "text": "TODO.", "attr": "TODO · Passion House Coffee" },
+    "gallery": ["Image 1", "Image 2", "Image 3", "Image 4", "Image 5", "Image 6"]
+  },
+
+  "rositas": {
+    "vol": "07", "industryTag": "Restaurant · Local", "year": "2026",
+    "client": "Rosita's",
+    "positioning": "TODO — one sentence.",
+    "heroImage": "",
+    "meta": [ { "k": "Client", "v": "Rosita's Mexican Restaurant" }, { "k": "Industry", "v": "Restaurant · Local" }, { "k": "Services", "v": "TODO — Social · Reputation · Local SEO" }, { "k": "Engagement", "v": "TODO" } ],
+    "metrics": [ { "num": "TODO", "lbl": "Metric 1" }, { "num": "TODO", "lbl": "Metric 2" }, { "num": "TODO", "lbl": "Metric 3" }, { "num": "TODO", "lbl": "Metric 4" } ],
+    "challenge": { "title": "TODO.", "body": ["TODO.", "TODO."], "tags": ["TODO", "TODO"], "image": "" },
+    "approach": { "title": "TODO.", "steps": [ { "h": "TODO", "p": "TODO" }, { "h": "TODO", "p": "TODO" }, { "h": "TODO", "p": "TODO" } ], "images": ["", ""] },
+    "results": { "title": "TODO.", "compareLabel": "vs. TODO", "bars": [ { "name": "TODO", "pct": 100, "val": "TODO" }, { "name": "TODO", "pct": 75, "val": "TODO" } ], "body": ["TODO.", "TODO."] },
+    "quote": { "text": "TODO.", "attr": "TODO · Rosita's" },
+    "gallery": ["Image 1", "Image 2", "Image 3", "Image 4", "Image 5", "Image 6"]
+  },
+
+  "hitloop": {
+    "vol": "08", "industryTag": "AI Marketing Platform", "year": "2026",
+    "client": "HITLOOP",
+    "positioning": "TODO — the meta case study: how HITLOOP markets HITLOOP, and the growth it produced.",
+    "heroImage": "",
+    "meta": [ { "k": "Client", "v": "HITLOOP" }, { "k": "Industry", "v": "AI Marketing Platform" }, { "k": "Services", "v": "The full stack — dogfooded" }, { "k": "Engagement", "v": "Ongoing" } ],
+    "metrics": [ { "num": "TODO", "lbl": "Metric 1" }, { "num": "TODO", "lbl": "Metric 2" }, { "num": "TODO", "lbl": "Metric 3" }, { "num": "TODO", "lbl": "Metric 4" } ],
+    "challenge": { "title": "TODO.", "body": ["TODO.", "TODO."], "tags": ["TODO", "TODO"], "image": "" },
+    "approach": { "title": "TODO.", "steps": [ { "h": "TODO", "p": "TODO" }, { "h": "TODO", "p": "TODO" }, { "h": "TODO", "p": "TODO" } ], "images": ["", ""] },
+    "results": { "title": "TODO.", "compareLabel": "vs. TODO", "bars": [ { "name": "TODO", "pct": 100, "val": "TODO" }, { "name": "TODO", "pct": 75, "val": "TODO" } ], "body": ["TODO.", "TODO."] },
+    "quote": { "text": "TODO.", "attr": "TODO · HITLOOP" },
+    "gallery": ["Image 1", "Image 2", "Image 3", "Image 4", "Image 5", "Image 6"]
+  }
+}

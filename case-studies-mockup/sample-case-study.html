@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Case Study · Fernwood Roasters · HITLOOP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600&family=Doto:wght@400;700;900&family=Space+Grotesk:wght@300..700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f6f3ea;
+    --bg2:#efe9d6;
+    --ink:#0a0a0a;
+    --ink-soft:#5a5346;
+    --line:rgba(212,196,171,0.82);
+    --card:rgba(255,255,255,0.5);
+    --hl:rgba(255,255,255,0.65);
+    --brand:#116dff;
+    --grad:linear-gradient(92deg,#7a5cff 0%,#b14bff 38%,#ff4fa1 72%,#ff7a3a 100%);
+    --gutter:max(8vw, calc((100% - 1100px) / 2));
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:"Space Grotesk",system-ui,sans-serif;
+    color:var(--ink);
+    background:
+      radial-gradient(700px 420px at 0% 4%,    rgba(255,120,90,0.38) 0%, transparent 65%),
+      radial-gradient(620px 380px at 100% 16%, rgba(176,90,255,0.32) 0%, transparent 65%),
+      radial-gradient(700px 420px at 0% 30%,   rgba(255,90,160,0.32) 0%, transparent 65%),
+      radial-gradient(600px 380px at 100% 44%, rgba(90,140,255,0.30) 0%, transparent 65%),
+      radial-gradient(720px 440px at 0% 58%,   rgba(255,180,90,0.32) 0%, transparent 65%),
+      radial-gradient(620px 400px at 100% 72%, rgba(200,90,255,0.30) 0%, transparent 65%),
+      radial-gradient(660px 400px at 0% 86%,   rgba(120,200,255,0.28) 0%, transparent 65%),
+      radial-gradient(560px 360px at 100% 98%, rgba(255,120,160,0.28) 0%, transparent 65%),
+      linear-gradient(180deg, #fefdf9 0%, #fbf8f0 50%, #fdfaf2 100%);
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:"Space Mono",ui-monospace,monospace}
+  .doto{font-family:"Doto",monospace;letter-spacing:.02em}
+
+  /* HEADER */
+  .nav{
+    position:sticky; top:0; z-index:50;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:18px clamp(20px,4vw,40px);
+    background:rgba(246,243,234,0.72);
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    border-bottom:1px solid rgba(0,0,0,0.04);
+  }
+  .sig{font-family:"Caveat",cursive,serif;font-size:28px;font-weight:600;letter-spacing:-.02em;color:#111;text-decoration:none}
+  .nav-actions{display:flex;align-items:center;gap:6px}
+  .nav-link{font-family:"Space Grotesk",sans-serif;font-size:14px;color:#1a1a1a;text-decoration:none;padding:8px 14px}
+  .nav-cta{
+    display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:999px;color:#fff;
+    font-family:"Space Grotesk",sans-serif;font-size:14px;font-weight:500;text-decoration:none;background:var(--grad);
+    box-shadow:0 1px 0 rgba(255,255,255,0.35) inset, 0 8px 24px rgba(122,92,255,0.25);
+  }
+  .nav-cta .arr{display:inline-block;transform:translateY(-1px)}
+
+  /* PAGE SHELL */
+  section.page{
+    padding:clamp(48px,9vh,110px) var(--gutter) clamp(56px,9vh,120px);
+    border-bottom:1px solid rgba(0,0,0,0.05);
+    position:relative; overflow:hidden;
+  }
+  .eyebrow{
+    font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-soft);
+    display:flex;gap:18px;align-items:center;margin-bottom:24px;flex-wrap:wrap;
+  }
+  .eyebrow .dot{width:6px;height:6px;background:var(--ink);border-radius:50%}
+  .headline{
+    font-family:"Doto",monospace;font-weight:900;letter-spacing:-.01em;line-height:.92;
+    font-size:clamp(56px,11vw,150px);margin:0 0 20px;text-transform:uppercase;
+  }
+  .sub{
+    font-family:"Space Grotesk",sans-serif;font-weight:300;font-size:clamp(20px,2.4vw,32px);
+    line-height:1.25;color:#1a1a1a;max-width:56ch;margin:0 0 36px;
+  }
+  .rule{height:1px;background:rgba(0,0,0,.1);margin:28px 0}
+  .sec-title{font-family:"Doto",monospace;font-weight:900;text-transform:uppercase;font-size:clamp(34px,5vw,64px);line-height:1;margin:0 0 28px;letter-spacing:-.01em}
+  .sec-num{
+    position:absolute;top:24px;right:var(--gutter);
+    font-family:"Doto";font-weight:900;font-size:clamp(80px,14vw,220px);
+    color:transparent;-webkit-text-stroke:1.5px rgba(0,0,0,.10);pointer-events:none;user-select:none;
+  }
+
+  /* COVER META */
+  .meta{
+    display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px 40px;margin-top:8px;
+    border-top:1px solid rgba(0,0,0,.15);padding-top:24px;
+  }
+  @media(max-width:800px){.meta{grid-template-columns:1fr 1fr}}
+  .meta .k{font-family:"Space Mono",monospace;font-size:10px;letter-spacing:.25em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:6px}
+  .meta .v{font-family:"Space Grotesk";font-size:18px}
+
+  /* CARD */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:0 1px 0 var(--hl), inset 0 1px 0 rgba(255,255,255,0.4);padding:clamp(18px,2vw,28px)}
+
+  /* METRIC STRIP */
+  .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+  @media(max-width:800px){.metrics{grid-template-columns:1fr 1fr}}
+  .metric{border-radius:20px;border:1px solid var(--line);background:rgba(255,255,255,.5);padding:22px;display:flex;flex-direction:column;gap:8px;min-height:150px;justify-content:space-between}
+  .metric .num{font-family:"Doto";font-weight:900;font-size:clamp(40px,6vw,76px);line-height:.9;background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .metric .lbl{font-family:"Space Mono";font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft)}
+
+  /* IMAGE PLACEHOLDER */
+  .img-ph{
+    border-radius:18px;border:1px dashed rgba(0,0,0,.22);background:rgba(255,255,255,.32);
+    display:flex;align-items:center;justify-content:center;text-align:center;
+    font-family:"Space Mono";font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);
+    min-height:220px;padding:20px;position:relative;overflow:hidden;
+  }
+  .img-ph::after{content:"IMG";position:absolute;top:12px;left:14px;font-size:9px;letter-spacing:.3em;opacity:.5}
+  .cover-hero{min-height:300px}
+
+  /* TWO-COL */
+  .split{display:grid;grid-template-columns:1.15fr 1fr;gap:clamp(24px,4vw,60px);align-items:start}
+  @media(max-width:900px){.split{grid-template-columns:1fr}}
+  .body-copy{font-family:"Space Grotesk";font-weight:300;font-size:clamp(17px,1.5vw,20px);line-height:1.55;color:#1a1a1a;max-width:60ch}
+  .body-copy p{margin:0 0 18px}
+
+  /* APPROACH STEPS */
+  .steps{display:grid;gap:16px}
+  .step{display:grid;grid-template-columns:64px 1fr;gap:20px;align-items:start;padding:20px 0;border-bottom:1px dashed rgba(0,0,0,.15)}
+  .step:last-child{border-bottom:0}
+  .step .n{font-family:"Doto";font-weight:900;font-size:44px;line-height:1;color:transparent;-webkit-text-stroke:1.5px rgba(0,0,0,.28)}
+  .step h4{font-family:"Space Grotesk";font-weight:500;font-size:20px;margin:0 0 8px}
+  .step p{font-family:"Space Grotesk";font-weight:300;font-size:16px;line-height:1.5;margin:0;color:#333}
+
+  /* RESULTS BARS */
+  .bar-row{display:flex;align-items:center;gap:14px;margin:16px 0;font-family:"Space Mono";font-size:12px}
+  .bar-row .name{width:170px;text-transform:uppercase;letter-spacing:.16em;font-size:10px;color:var(--ink-soft)}
+  .bar{flex:1;height:12px;background:rgba(0,0,0,.06);border-radius:999px;overflow:hidden}
+  .bar > i{display:block;height:100%;background:var(--grad);border-radius:999px}
+  .bar-row .val{width:78px;text-align:right;font-weight:700}
+
+  /* PULL QUOTE */
+  .pull{font-family:"Space Grotesk";font-weight:300;font-size:clamp(26px,3.4vw,46px);line-height:1.2;border-left:4px solid var(--ink);padding:10px 0 10px 28px;max-width:24ch}
+  .quote-attr{font-family:"Space Mono";font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);margin-top:22px}
+
+  /* GALLERY */
+  .gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  @media(max-width:800px){.gallery{grid-template-columns:1fr 1fr}}
+
+  /* CTA */
+  .cta-band{text-align:center;padding:clamp(56px,10vh,120px) var(--gutter)}
+  .cta-pill{display:inline-flex;align-items:center;gap:10px;padding:16px 30px;border-radius:999px;color:#fff;font-family:"Space Grotesk";font-size:17px;font-weight:500;text-decoration:none;background:var(--grad);box-shadow:0 1px 0 rgba(255,255,255,0.35) inset, 0 10px 30px rgba(122,92,255,0.28)}
+
+  footer{padding:40px var(--gutter);font-family:"Space Mono";font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;border-top:1px solid rgba(0,0,0,.06)}
+
+  .tag{font-family:"Space Mono";font-size:10px;letter-spacing:.18em;text-transform:uppercase;padding:6px 12px;border-radius:999px;background:#fff;border:1px solid var(--line);color:var(--ink)}
+  .tag-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:22px}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <a class="sig" href="#">HITLOOP</a>
+  <div class="nav-actions">
+    <a class="nav-link" href="#">Work</a>
+    <a class="nav-link" href="#">Services</a>
+    <a class="nav-link" href="#">How it works</a>
+    <a class="nav-cta" href="#">Start a project <span class="arr">↗</span></a>
+  </div>
+</nav>
+
+<!-- COVER -->
+<section class="page cover">
+  <span class="sec-num">01</span>
+  <div class="eyebrow"><span>Case Study · Vol. 04</span><span class="dot"></span><span>Specialty Coffee</span><span class="dot"></span><span>2026</span></div>
+  <h1 class="headline">Fernwood<br>Roasters</h1>
+  <p class="sub">How a single-origin roaster turned a quiet Instagram and an abandoned email list into a repeatable, always-on content engine — and a 3.4× lift in DTC subscription revenue.</p>
+  <div class="img-ph cover-hero" style="margin:8px 0 36px">Hero image — brand shot / product / storefront · 16:9</div>
+  <div class="meta">
+    <div><div class="k">Client</div><div class="v">Fernwood Roasters</div></div>
+    <div><div class="k">Industry</div><div class="v">DTC Coffee · Retail</div></div>
+    <div><div class="k">Services</div><div class="v">Brand voice · Social · Email · Video</div></div>
+    <div><div class="k">Engagement</div><div class="v">6 months · Ongoing</div></div>
+  </div>
+</section>
+
+<!-- METRIC STRIP -->
+<section class="page" style="padding-top:clamp(40px,6vh,72px);padding-bottom:clamp(40px,6vh,72px)">
+  <div class="eyebrow"><span>The Numbers</span><span class="dot"></span><span>First 6 months</span></div>
+  <div class="metrics">
+    <div class="metric"><div class="num">3.4×</div><div class="lbl">DTC subscription revenue</div></div>
+    <div class="metric"><div class="num">+112%</div><div class="lbl">Instagram engagement rate</div></div>
+    <div class="metric"><div class="num">28%</div><div class="lbl">Email open rate (was 11%)</div></div>
+    <div class="metric"><div class="num">40hrs</div><div class="lbl">Content time saved / month</div></div>
+  </div>
+</section>
+
+<!-- CHALLENGE -->
+<section class="page">
+  <span class="sec-num">02</span>
+  <div class="split">
+    <div>
+      <div class="eyebrow"><span>The Challenge</span></div>
+      <h2 class="sec-title">Great beans,<br>invisible brand.</h2>
+      <div class="body-copy">
+        <p>Fernwood roasted some of the best single-origin coffee in the region — but online, none of that came through. Posts went up whenever someone had a spare minute, the voice drifted between playful and clinical, and the email list of 9,000 subscribers hadn't been mailed in four months.</p>
+        <p>They didn't need more tools. They needed a system: a consistent voice, a steady publishing cadence, and a way to turn each new roast into a week of content without hiring a full creative team.</p>
+      </div>
+      <div class="tag-row">
+        <span class="tag">Inconsistent voice</span>
+        <span class="tag">No cadence</span>
+        <span class="tag">Dormant email list</span>
+        <span class="tag">Zero video</span>
+      </div>
+    </div>
+    <div class="img-ph" style="min-height:340px">Before state — old feed / analytics screenshot · 4:5</div>
+  </div>
+</section>
+
+<!-- APPROACH -->
+<section class="page">
+  <span class="sec-num">03</span>
+  <div class="eyebrow"><span>The Approach</span></div>
+  <h2 class="sec-title">One engine,<br>four channels.</h2>
+  <div class="split">
+    <div class="steps">
+      <div class="step"><div class="n">01</div><div><h4>Locked the brand voice</h4><p>Built a Client Brain — voice pillars, preferred words, and example posts — so every piece of copy sounds like Fernwood, not like a template.</p></div></div>
+      <div class="step"><div class="n">02</div><div><h4>Turned each roast into a content week</h4><p>A single new bean now produces a launch post, three social clips, an email, and a story sequence — drafted, scored for the algorithm, and queued.</p></div></div>
+      <div class="step"><div class="n">03</div><div><h4>Revived the email list</h4><p>Re-warmed 9,000 dormant subscribers with a story-led weekly digest tied to what's fresh on the roaster.</p></div></div>
+      <div class="step"><div class="n">04</div><div><h4>Added motion</h4><p>Auto-generated short-form product videos from existing photography — no shoot required — feeding Reels and TikTok on a weekly beat.</p></div></div>
+    </div>
+    <div style="display:grid;gap:18px">
+      <div class="img-ph" style="min-height:200px">Approach visual — content calendar / system diagram</div>
+      <div class="img-ph" style="min-height:200px">Sample deliverables — post + email + video stills</div>
+    </div>
+  </div>
+</section>
+
+<!-- RESULTS -->
+<section class="page">
+  <span class="sec-num">04</span>
+  <div class="eyebrow"><span>The Results</span><span class="dot"></span><span>vs. prior 6 months</span></div>
+  <h2 class="sec-title">Consistency<br>compounded.</h2>
+  <div class="split">
+    <div class="card">
+      <div class="bar-row"><span class="name">Subscription revenue</span><span class="bar"><i style="width:100%"></i></span><span class="val">+240%</span></div>
+      <div class="bar-row"><span class="name">IG engagement</span><span class="bar"><i style="width:88%"></i></span><span class="val">+112%</span></div>
+      <div class="bar-row"><span class="name">Email open rate</span><span class="bar"><i style="width:72%"></i></span><span class="val">11→28%</span></div>
+      <div class="bar-row"><span class="name">Posting cadence</span><span class="bar"><i style="width:95%"></i></span><span class="val">2→14/wk</span></div>
+      <div class="bar-row"><span class="name">Content hours saved</span><span class="bar"><i style="width:80%"></i></span><span class="val">~40/mo</span></div>
+    </div>
+    <div class="body-copy">
+      <p>Within two months, Fernwood was publishing every weekday across four channels on a fraction of the old effort. The revived email list became the single biggest driver of subscription sign-ups.</p>
+      <p>Most importantly, the brand finally <em>sounds like itself</em> everywhere — consistent, warm, unmistakably Fernwood.</p>
+    </div>
+  </div>
+</section>
+
+<!-- QUOTE -->
+<section class="page" style="text-align:left">
+  <span class="sec-num">05</span>
+  <div class="eyebrow"><span>In Their Words</span></div>
+  <blockquote class="pull">"We went from dreading the content calendar to watching it run itself. Same team, ten times the output — and it actually sounds like us."</blockquote>
+  <div class="quote-attr">— Maya Ellison · Founder, Fernwood Roasters</div>
+</section>
+
+<!-- GALLERY -->
+<section class="page">
+  <div class="eyebrow"><span>Selected Work</span></div>
+  <div class="gallery">
+    <div class="img-ph">Social post 1</div>
+    <div class="img-ph">Short-form video still</div>
+    <div class="img-ph">Email design</div>
+    <div class="img-ph">Social post 2</div>
+    <div class="img-ph">Product / lifestyle shot</div>
+    <div class="img-ph">Brand system detail</div>
+  </div>
+</section>
+
+<!-- CTA -->
+<div class="cta-band">
+  <div class="eyebrow" style="justify-content:center"><span>Your brand, on autopilot</span></div>
+  <h2 class="sec-title" style="margin-bottom:24px">Want results<br>like these?</h2>
+  <a class="cta-pill" href="#">Start a project <span>↗</span></a>
+</div>
+
+<footer>
+  <span>HITLOOP · Case Study Vol. 04</span>
+  <span>Fernwood Roasters — Composite Sample</span>
+  <span>hitloop.studio</span>
+</footer>
+
+</body>
+</html>

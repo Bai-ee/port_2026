@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Case Study Template · HITLOOP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600&family=Doto:wght@400;700;900&family=Space+Grotesk:wght@300..700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0a0a0a;--ink-soft:#5a5346;--line:rgba(212,196,171,0.82);
+    --card:rgba(255,255,255,0.5);--hl:rgba(255,255,255,0.65);--brand:#116dff;
+    --grad:linear-gradient(92deg,#7a5cff 0%,#b14bff 38%,#ff4fa1 72%,#ff7a3a 100%);
+    --gutter:max(8vw, calc((100% - 1100px) / 2));
+  }
+  *{box-sizing:border-box} html,body{margin:0;padding:0}
+  body{font-family:"Space Grotesk",system-ui,sans-serif;color:var(--ink);
+    background:
+      radial-gradient(700px 420px at 0% 4%,rgba(255,120,90,0.38) 0%,transparent 65%),
+      radial-gradient(620px 380px at 100% 16%,rgba(176,90,255,0.32) 0%,transparent 65%),
+      radial-gradient(700px 420px at 0% 30%,rgba(255,90,160,0.32) 0%,transparent 65%),
+      radial-gradient(600px 380px at 100% 44%,rgba(90,140,255,0.30) 0%,transparent 65%),
+      radial-gradient(720px 440px at 0% 58%,rgba(255,180,90,0.32) 0%,transparent 65%),
+      radial-gradient(620px 400px at 100% 72%,rgba(200,90,255,0.30) 0%,transparent 65%),
+      radial-gradient(660px 400px at 0% 86%,rgba(120,200,255,0.28) 0%,transparent 65%),
+      radial-gradient(560px 360px at 100% 98%,rgba(255,120,160,0.28) 0%,transparent 65%),
+      linear-gradient(180deg,#fefdf9 0%,#fbf8f0 50%,#fdfaf2 100%);
+    -webkit-font-smoothing:antialiased;}
+  .nav{position:sticky;top:0;z-index:50;display:flex;align-items:center;justify-content:space-between;padding:18px clamp(20px,4vw,40px);background:rgba(246,243,234,0.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid rgba(0,0,0,0.04)}
+  .sig{font-family:"Caveat",cursive,serif;font-size:28px;font-weight:600;letter-spacing:-.02em;color:#111;text-decoration:none}
+  .nav-actions{display:flex;align-items:center;gap:6px}
+  .nav-link{font-family:"Space Grotesk";font-size:14px;color:#1a1a1a;text-decoration:none;padding:8px 14px}
+  .nav-cta{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:999px;color:#fff;font-family:"Space Grotesk";font-size:14px;font-weight:500;text-decoration:none;background:var(--grad);box-shadow:0 1px 0 rgba(255,255,255,0.35) inset,0 8px 24px rgba(122,92,255,0.25)}
+  section.page{padding:clamp(48px,9vh,110px) var(--gutter) clamp(56px,9vh,120px);border-bottom:1px solid rgba(0,0,0,0.05);position:relative;overflow:hidden}
+  .eyebrow{font-family:"Space Mono";font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-soft);display:flex;gap:18px;align-items:center;margin-bottom:24px;flex-wrap:wrap}
+  .eyebrow .dot{width:6px;height:6px;background:var(--ink);border-radius:50%}
+  .headline{font-family:"Doto";font-weight:900;letter-spacing:-.01em;line-height:.92;font-size:clamp(56px,11vw,150px);margin:0 0 20px;text-transform:uppercase}
+  .sub{font-family:"Space Grotesk";font-weight:300;font-size:clamp(20px,2.4vw,32px);line-height:1.25;color:#1a1a1a;max-width:56ch;margin:0 0 36px}
+  .sec-title{font-family:"Doto";font-weight:900;text-transform:uppercase;font-size:clamp(34px,5vw,64px);line-height:1;margin:0 0 28px;letter-spacing:-.01em}
+  .sec-num{position:absolute;top:24px;right:var(--gutter);font-family:"Doto";font-weight:900;font-size:clamp(80px,14vw,220px);color:transparent;-webkit-text-stroke:1.5px rgba(0,0,0,.10);pointer-events:none;user-select:none}
+  .meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px 40px;border-top:1px solid rgba(0,0,0,.15);padding-top:24px}
+  @media(max-width:800px){.meta{grid-template-columns:1fr 1fr}}
+  .meta .k{font-family:"Space Mono";font-size:10px;letter-spacing:.25em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:6px}
+  .meta .v{font-family:"Space Grotesk";font-size:18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:0 1px 0 var(--hl),inset 0 1px 0 rgba(255,255,255,0.4);padding:clamp(18px,2vw,28px)}
+  .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+  @media(max-width:800px){.metrics{grid-template-columns:1fr 1fr}}
+  .metric{border-radius:20px;border:1px solid var(--line);background:rgba(255,255,255,.5);padding:22px;display:flex;flex-direction:column;gap:8px;min-height:150px;justify-content:space-between}
+  .metric .num{font-family:"Doto";font-weight:900;font-size:clamp(40px,6vw,76px);line-height:.9;background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .metric .lbl{font-family:"Space Mono";font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft)}
+  .img-ph{border-radius:18px;border:1px dashed rgba(0,0,0,.22);background:rgba(255,255,255,.32);display:flex;align-items:center;justify-content:center;text-align:center;font-family:"Space Mono";font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);min-height:220px;padding:20px;position:relative;overflow:hidden;background-size:cover;background-position:center}
+  .split{display:grid;grid-template-columns:1.15fr 1fr;gap:clamp(24px,4vw,60px);align-items:start}
+  @media(max-width:900px){.split{grid-template-columns:1fr}}
+  .body-copy{font-family:"Space Grotesk";font-weight:300;font-size:clamp(17px,1.5vw,20px);line-height:1.55;color:#1a1a1a;max-width:60ch}
+  .body-copy p{margin:0 0 18px}
+  .steps{display:grid;gap:16px}
+  .step{display:grid;grid-template-columns:64px 1fr;gap:20px;align-items:start;padding:20px 0;border-bottom:1px dashed rgba(0,0,0,.15)}
+  .step:last-child{border-bottom:0}
+  .step .n{font-family:"Doto";font-weight:900;font-size:44px;line-height:1;color:transparent;-webkit-text-stroke:1.5px rgba(0,0,0,.28)}
+  .step h4{font-family:"Space Grotesk";font-weight:500;font-size:20px;margin:0 0 8px}
+  .step p{font-family:"Space Grotesk";font-weight:300;font-size:16px;line-height:1.5;margin:0;color:#333}
+  .bar-row{display:flex;align-items:center;gap:14px;margin:16px 0;font-family:"Space Mono";font-size:12px}
+  .bar-row .name{width:170px;text-transform:uppercase;letter-spacing:.16em;font-size:10px;color:var(--ink-soft)}
+  .bar{flex:1;height:12px;background:rgba(0,0,0,.06);border-radius:999px;overflow:hidden}
+  .bar > i{display:block;height:100%;background:var(--grad);border-radius:999px}
+  .bar-row .val{width:88px;text-align:right;font-weight:700}
+  .pull{font-family:"Space Grotesk";font-weight:300;font-size:clamp(26px,3.4vw,46px);line-height:1.2;border-left:4px solid var(--ink);padding:10px 0 10px 28px;max-width:24ch}
+  .quote-attr{font-family:"Space Mono";font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);margin-top:22px}
+  .gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  @media(max-width:800px){.gallery{grid-template-columns:1fr 1fr}}
+  .cta-band{text-align:center;padding:clamp(56px,10vh,120px) var(--gutter)}
+  .cta-pill{display:inline-flex;align-items:center;gap:10px;padding:16px 30px;border-radius:999px;color:#fff;font-family:"Space Grotesk";font-size:17px;font-weight:500;text-decoration:none;background:var(--grad);box-shadow:0 1px 0 rgba(255,255,255,0.35) inset,0 10px 30px rgba(122,92,255,0.28)}
+  footer{padding:40px var(--gutter);font-family:"Space Mono";font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;border-top:1px solid rgba(0,0,0,.06)}
+  .tag{font-family:"Space Mono";font-size:10px;letter-spacing:.18em;text-transform:uppercase;padding:6px 12px;border-radius:999px;background:#fff;border:1px solid var(--line);color:var(--ink)}
+  .tag-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:22px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+/* ============================================================
+   HITLOOP CASE STUDY — DATA-DRIVEN TEMPLATE
+   Fill the CASE object below (or load from case-studies-data.json)
+   and the page renders itself. Image fields: leave "" for a labeled
+   placeholder box, or set a URL/path to drop in the real image.
+   ============================================================ */
+const CASE = {
+  vol: "04",
+  industryTag: "Specialty Coffee",
+  year: "2026",
+  client: "Fernwood\nRoasters",           // \n = line break in the big headline
+  positioning: "How a single-origin roaster turned a quiet Instagram and an abandoned email list into a repeatable, always-on content engine — and a 3.4× lift in DTC subscription revenue.",
+  heroImage: "",                           // e.g. "images/fernwood-hero.jpg"
+  meta: [
+    { k: "Client",     v: "Fernwood Roasters" },
+    { k: "Industry",   v: "DTC Coffee · Retail" },
+    { k: "Services",   v: "Brand voice · Social · Email · Video" },
+    { k: "Engagement", v: "6 months · Ongoing" }
+  ],
+  metrics: [
+    { num: "3.4×",  lbl: "DTC subscription revenue" },
+    { num: "+112%", lbl: "Instagram engagement rate" },
+    { num: "28%",   lbl: "Email open rate (was 11%)" },
+    { num: "40hrs", lbl: "Content time saved / month" }
+  ],
+  challenge: {
+    title: "Great beans,\ninvisible brand.",
+    body: [
+      "Fernwood roasted some of the best single-origin coffee in the region — but online, none of that came through. Posts went up whenever someone had a spare minute, the voice drifted, and the 9,000-subscriber email list hadn't been mailed in four months.",
+      "They didn't need more tools. They needed a system: a consistent voice, a steady cadence, and a way to turn each roast into a week of content without hiring a full creative team."
+    ],
+    tags: ["Inconsistent voice", "No cadence", "Dormant email list", "Zero video"],
+    image: ""
+  },
+  approach: {
+    title: "One engine,\nfour channels.",
+    steps: [
+      { h: "Locked the brand voice", p: "Built a Client Brain — voice pillars, preferred words, example posts — so every piece sounds like the brand, not a template." },
+      { h: "Turned each drop into a content week", p: "A single launch now produces a post, three clips, an email, and a story sequence — drafted, scored, and queued." },
+      { h: "Revived the email list", p: "Re-warmed dormant subscribers with a story-led weekly digest tied to what's new." },
+      { h: "Added motion", p: "Auto-generated short-form video from existing photography — no shoot required — feeding Reels and TikTok weekly." }
+    ],
+    images: ["", ""]
+  },
+  results: {
+    title: "Consistency\ncompounded.",
+    compareLabel: "vs. prior 6 months",
+    bars: [
+      { name: "Subscription revenue", pct: 100, val: "+240%" },
+      { name: "IG engagement",        pct: 88,  val: "+112%" },
+      { name: "Email open rate",      pct: 72,  val: "11→28%" },
+      { name: "Posting cadence",      pct: 95,  val: "2→14/wk" },
+      { name: "Content hours saved",  pct: 80,  val: "~40/mo" }
+    ],
+    body: [
+      "Within two months the brand was publishing every weekday across four channels on a fraction of the old effort. The revived email list became the single biggest driver of sign-ups.",
+      "Most importantly, the brand finally sounds like itself everywhere — consistent, warm, unmistakable."
+    ]
+  },
+  quote: {
+    text: "We went from dreading the content calendar to watching it run itself. Same team, ten times the output — and it actually sounds like us.",
+    attr: "Maya Ellison · Founder, Fernwood Roasters"
+  },
+  gallery: ["Social post 1","Short-form video still","Email design","Social post 2","Lifestyle shot","Brand system detail"]
+};
+
+/* ---------------- renderer ---------------- */
+const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const nl  = s => esc(s).replace(/\n/g,"<br>");
+const img = (val,label,extra="") => val
+  ? `<div class="img-ph" style="background-image:url('${esc(val)}');border-style:solid;${extra}"></div>`
+  : `<div class="img-ph" style="${extra}">${esc(label)}</div>`;
+
+function render(c){
+  document.title = `Case Study · ${c.meta[0].v} · HITLOOP`;
+  document.getElementById('app').innerHTML = `
+  <nav class="nav">
+    <a class="sig" href="/">HITLOOP</a>
+    <div class="nav-actions">
+      <a class="nav-link" href="/work">Work</a>
+      <a class="nav-link" href="/services">Services</a>
+      <a class="nav-cta" href="/start">Start a project <span>↗</span></a>
+    </div>
+  </nav>
+
+  <section class="page">
+    <span class="sec-num">01</span>
+    <div class="eyebrow"><span>Case Study · Vol. ${esc(c.vol)}</span><span class="dot"></span><span>${esc(c.industryTag)}</span><span class="dot"></span><span>${esc(c.year)}</span></div>
+    <h1 class="headline">${nl(c.client)}</h1>
+    <p class="sub">${esc(c.positioning)}</p>
+    ${img(c.heroImage,"Hero image — brand / product / storefront · 16:9","min-height:300px;margin:8px 0 36px")}
+    <div class="meta">${c.meta.map(m=>`<div><div class="k">${esc(m.k)}</div><div class="v">${esc(m.v)}</div></div>`).join("")}</div>
+  </section>
+
+  <section class="page" style="padding-top:clamp(40px,6vh,72px);padding-bottom:clamp(40px,6vh,72px)">
+    <div class="eyebrow"><span>The Numbers</span></div>
+    <div class="metrics">${c.metrics.map(m=>`<div class="metric"><div class="num">${esc(m.num)}</div><div class="lbl">${esc(m.lbl)}</div></div>`).join("")}</div>
+  </section>
+
+  <section class="page">
+    <span class="sec-num">02</span>
+    <div class="split">
+      <div>
+        <div class="eyebrow"><span>The Challenge</span></div>
+        <h2 class="sec-title">${nl(c.challenge.title)}</h2>
+        <div class="body-copy">${c.challenge.body.map(p=>`<p>${esc(p)}</p>`).join("")}</div>
+        <div class="tag-row">${c.challenge.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>
+      </div>
+      ${img(c.challenge.image,"Before state — old feed / analytics · 4:5","min-height:340px")}
+    </div>
+  </section>
+
+  <section class="page">
+    <span class="sec-num">03</span>
+    <div class="eyebrow"><span>The Approach</span></div>
+    <h2 class="sec-title">${nl(c.approach.title)}</h2>
+    <div class="split">
+      <div class="steps">${c.approach.steps.map((s,i)=>`<div class="step"><div class="n">${String(i+1).padStart(2,'0')}</div><div><h4>${esc(s.h)}</h4><p>${esc(s.p)}</p></div></div>`).join("")}</div>
+      <div style="display:grid;gap:18px">${c.approach.images.map((v,i)=>img(v,i===0?"Approach visual — system / calendar":"Sample deliverables","min-height:200px")).join("")}</div>
+    </div>
+  </section>
+
+  <section class="page">
+    <span class="sec-num">04</span>
+    <div class="eyebrow"><span>The Results</span><span class="dot"></span><span>${esc(c.results.compareLabel)}</span></div>
+    <h2 class="sec-title">${nl(c.results.title)}</h2>
+    <div class="split">
+      <div class="card">${c.results.bars.map(b=>`<div class="bar-row"><span class="name">${esc(b.name)}</span><span class="bar"><i style="width:${b.pct}%"></i></span><span class="val">${esc(b.val)}</span></div>`).join("")}</div>
+      <div class="body-copy">${c.results.body.map(p=>`<p>${esc(p)}</p>`).join("")}</div>
+    </div>
+  </section>
+
+  <section class="page">
+    <span class="sec-num">05</span>
+    <div class="eyebrow"><span>In Their Words</span></div>
+    <blockquote class="pull">"${esc(c.quote.text)}"</blockquote>
+    <div class="quote-attr">— ${esc(c.quote.attr)}</div>
+  </section>
+
+  <section class="page">
+    <div class="eyebrow"><span>Selected Work</span></div>
+    <div class="gallery">${c.gallery.map(g=>img(typeof g==="string"&&/\.(jpg|jpeg|png|webp|gif)/i.test(g)?g:"", typeof g==="string"?g:"Image")).join("")}</div>
+  </section>
+
+  <div class="cta-band">
+    <div class="eyebrow" style="justify-content:center"><span>Your brand, on autopilot</span></div>
+    <h2 class="sec-title" style="margin-bottom:24px">Want results<br>like these?</h2>
+    <a class="cta-pill" href="/start">Start a project <span>↗</span></a>
+  </div>
+
+  <footer>
+    <span>HITLOOP · Case Study Vol. ${esc(c.vol)}</span>
+    <span>${esc(c.meta[0].v)}</span>
+    <span>hitloop.studio</span>
+  </footer>`;
+}
+
+/* Load external JSON if ?client=<id> is present, else render inline CASE.
+   Static file:// opening always uses the inline CASE (fetch is blocked). */
+(async function(){
+  const id = new URLSearchParams(location.search).get('client');
+  if(id){
+    try{
+      const data = await fetch('case-studies-data.json').then(r=>r.json());
+      if(data[id]) return render(data[id]);
+    }catch(e){ /* fall through to inline */ }
+  }
+  render(CASE);
+})();
+</script>
+</body>
+</html>

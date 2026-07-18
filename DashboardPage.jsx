@@ -54,6 +54,7 @@ import { AdminOperatingCostView } from './components/AdminCostView';
 import { CalendarConnectView } from './components/CalendarConnectModal';
 import { ContactCapabilitiesPanel } from './StackedSlidesSection';
 import { ROSITAS_GBP_REPORT } from './lib/gbpReputationReport';
+import { MediaThumb } from './components/dashboard/MediaLibraryCard';
 
 // Extract the "Suggested Post" caption the Creative Brief flow scribes into the
 // onboarding summary (a single labeled string). Returns '' when absent.
@@ -70,10 +71,12 @@ const SAVED_REMIX_PAGE_SIZE = 8;
 const VIDEO_REMIX_PENDING_STORAGE_PREFIX = 'video-remix-pending-job';
 // Max remixes a single Generate can fan out into (the multiplier control).
 const VIDEO_REMIX_MAX_COUNT = 5;
-// The original EditTrax/EditVideos house defaults: hard B&W look, no overlay
-// texture, UE white horizontal logo on top, UE square logo on the end card
-// (no artist-image end card). Shared by the params-tab draft AND the one-click
-// RUN REMIX path so both render the same branded baseline.
+// House defaults, kept in lockstep with the daily-email production recipe
+// (DAILY_EMAIL_VIDEO_PRODUCTION in app/api/worker/pre-digest-video/route.js):
+// hard B&W look @0.8, no overlay texture, UE barcode white logo on top,
+// mixtapes white square on the end card (no artist-image end card). Shared by
+// the params-tab draft AND the one-click RUN REMIX path so both render the
+// same branded baseline the email pipeline uses.
 const STANDARD_REMIX_DEFAULTS = {
   artist: 'random',
   mixTitle: '',
@@ -84,7 +87,7 @@ const STANDARD_REMIX_DEFAULTS = {
   enableOverlay: false,
   overlayEffect: '',
   topLogo: 'ue_barcode_white.png',
-  endLogo: 'ue_square.png',
+  endLogo: 'mixtapes_white_square.png',
   useArtistImage: false,
   endTextOverlay: '',
   count: 1,
@@ -347,6 +350,11 @@ const SocialPostingPanel = dynamic(() => import('./components/dashboard/SocialPo
 });
 
 const CopywriterCard = dynamic(() => import('./components/dashboard/CopywriterCard'), {
+  loading: () => null,
+  ssr: false,
+});
+
+const MediaLibraryCard = dynamic(() => import('./components/dashboard/MediaLibraryCard'), {
   loading: () => null,
   ssr: false,
 });
@@ -4040,6 +4048,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	            name: file.name,
 	            fullPath: file.fullPath || '',
 	            url: file.url || '',
+	            posterUrl: file.posterUrl || '',
 	            kind: 'video',
 	          },
 	        ],
@@ -15951,9 +15960,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             </div>
 
             {/* ── Bento grid ── */}
-            <div id="tile-detail-bento-grid">
+            {/* media-library is a full-width management workspace: it drops the
+                left visual/about cell and collapses the grid to one column. */}
+            <div id="tile-detail-bento-grid" className={activeTileModal.cardId === 'media-library' ? 'tile-detail-bento-grid--full-content' : undefined}>
 
               {/* Left — visual + about */}
+              {activeTileModal.cardId !== 'media-library' ? (
               <div id="tile-detail-bento-image-cell" className="tile-detail-bento-cell">
                 <div className={`tile-intake-placeholder tile-intake-placeholder-${activeTileModal.cardId || 'draft-post'} tile-detail-bento-placeholder`}>
                 {activeTileModal.cardId === 'style-guide' ? (
@@ -16278,6 +16290,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 </div>
 
               </div>
+              ) : null}
 
               {/* Right — content modules */}
               <div id="tile-detail-bento-content">
@@ -18915,9 +18928,24 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                  );
 	                })()}
 
-	                {/* Media Library / Video Remix — source media, params setup + saved video assets */}
-	                {(activeTileModal.cardId === 'video-remix' || activeTileModal.cardId === 'media-library') && (() => {
-	                  const isMediaLibraryCard = activeTileModal.cardId === 'media-library';
+	                {/* Media Library card — management-only workspace (folders,
+	                    move/rename/delete, upload) over the shared source bucket.
+	                    See docs/source-of-truth/VIDEO-REMIX-EDITVIDEOS-BRIDGE.md. */}
+	                {activeTileModal.cardId === 'media-library' && (
+	                  <div id="media-library-modal-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
+	                    <div className="tile-detail-tabs">
+	                      <button type="button" className="tile-detail-tab tile-detail-tab--active">MEDIA LIBRARY</button>
+	                    </div>
+	                    <div className="tile-detail-tab-content">
+	                      <div className="tile-detail-tab-pane">
+	                        <MediaLibraryCard getIdToken={brandSystemGetIdToken} isAdmin={isAdmin} />
+	                      </div>
+	                    </div>
+	                  </div>
+	                )}
+
+	                {/* Video Remix — build UI: params setup, source media, saved video assets */}
+	                {activeTileModal.cardId === 'video-remix' && (() => {
 	                  const mediaCaptures = Array.isArray(dashboardState?.mediaCaptures) ? dashboardState.mediaCaptures : [];
 	                  const savedRemixes = [...mediaCaptures].reverse().filter((item) => item?.type === 'video_remix');
 	                  const updateRemixDraft = (key, value) => setVideoRemixDraft((prev) => ({ ...prev, [key]: value }));
@@ -18991,8 +19019,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                            <div className="section-head">
 	                              <span className="index">VR</span>
 	                              <div>
-	                                <h3>{isMediaLibraryCard ? 'Remix-ready media catalog' : 'Video Remix setup'}</h3>
-	                                <p>{isMediaLibraryCard ? 'Browse reusable folders, audio, looks, overlays, logos, and end-card choices before rendering.' : 'Pick the audio, source clips, look, overlay, logos, and end-card, then render a fresh 720×720 cut off-platform.'}</p>
+	                                <h3>Video Remix setup</h3>
+	                                <p>Pick the audio, source clips, look, overlay, logos, and end-card, then render a fresh 720×720 cut off-platform.</p>
 	                              </div>
 	                              <a
 	                                className="btn btn-outline"
@@ -19092,7 +19120,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                            <span className="order-slot-index">{index + 1}</span>
 	                                            {item ? (
 	                                              <>
-	                                                {item.url ? <LazyVideoThumb src={firstFrameThumbSrc(item.url)} muted playsInline /> : <span className="order-slot-empty">Video</span>}
+	                                                <MediaThumb file={item} />
 	                                                <span className="order-slot-name">{item.name}</span>
 	                                                <div className="order-slot-controls">
 	                                                  <button type="button" className="mini-icon-btn" onClick={() => removeVideoRemixOrderItem(index)} aria-label={`Remove ${item.name}`}><Trash2 size={12} /></button>
@@ -19112,7 +19140,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                        const orderedIndex = orderFolder === videoRemixFolderFiles.folder ? orderItems.findIndex((item) => (item.fullPath || item.name) === (file.fullPath || file.name)) : -1;
 	                                        return (
 	                                          <button key={file.fullPath || file.name} type="button" className={`media-thumb${orderedIndex >= 0 ? ' is-ordered' : ''}`} onClick={() => addVideoRemixOrderItem(file, videoRemixFolderFiles.folder)} aria-label={`Add ${file.name} to clip order`}>
-	                                            <LazyVideoThumb src={firstFrameThumbSrc(file.url)} muted playsInline />
+	                                            <MediaThumb file={file} />
 	                                            <span className="media-thumb-order-badge">{orderedIndex >= 0 ? orderedIndex + 1 : '+'}</span>
 	                                            <span className="media-thumb-name">{file.name}</span>
 	                                          </button>
@@ -19459,11 +19487,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                            <span className="order-slot-index">{index + 1}</span>
 	                                            {item ? (
 	                                              <>
-	                                                {item.url ? (
-	                                                  <LazyVideoThumb src={firstFrameThumbSrc(item.url)} muted playsInline />
-	                                                ) : (
-	                                                  <span className="order-slot-empty">Video</span>
-	                                                )}
+	                                                <MediaThumb file={item} />
 	                                                <span className="order-slot-name">{item.name}</span>
 	                                                <div className="order-slot-controls">
 	                                                  <button type="button" className="mini-icon-btn" onClick={() => removeVideoRemixOrderItem(index)} aria-label={`Remove ${item.name}`}>
@@ -19496,13 +19520,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                            onClick={() => addVideoRemixOrderItem(file, videoRemixFolderFiles.folder)}
 	                                            aria-label={file.kind === 'video' ? `Add ${file.name} to clip order` : `${file.name} preview`}
 	                                          >
-	                                            {file.kind === 'video' ? (
-	                                              <LazyVideoThumb src={firstFrameThumbSrc(file.url)} muted playsInline />
-	                                            ) : file.url ? (
-	                                              <img src={file.url} alt={file.name} loading="lazy" />
-	                                            ) : (
-	                                              <span>{file.kind}</span>
-	                                            )}
+	                                            <MediaThumb file={file} />
 	                                            {file.kind === 'video' ? (
 	                                              <span className="media-thumb-order-badge">{orderedIndex >= 0 ? orderedIndex + 1 : '+'}</span>
 	                                            ) : null}
@@ -19533,13 +19551,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                      <div className="upload-queue" data-tooltip-disabled="true">
 	                                        {videoRemixFolderFiles.files.map((file) => (
 	                                          <div key={`cleanup-${file.fullPath || file.name}`} className="upload-row">
-	                                            {file.kind === 'video' && file.url ? (
+	                                            {file.url ? (
 	                                              <span className="upload-kind upload-kind-thumb">
-	                                                <LazyVideoThumb src={firstFrameThumbSrc(file.url)} muted playsInline />
-	                                              </span>
-	                                            ) : file.kind === 'image' && file.url ? (
-	                                              <span className="upload-kind upload-kind-thumb">
-	                                                <img src={file.url} alt="" />
+	                                                <MediaThumb file={file} />
 	                                              </span>
 	                                            ) : (
 	                                              <span className="upload-kind">{file.kind === 'image' ? 'IMG' : 'VID'}</span>
@@ -24419,8 +24433,14 @@ export const dashboardCss = `
     flex: 1;
     min-height: 0;
   }
-  #tile-detail-bento-grid,
-  #tile-detail-bento-grid * {
+  /* Full-width variant (media-library): no left visual cell, one column.
+     The box-shadow kill below is scoped out so the workspace keeps its
+     kit hover/selection shadows. */
+  #tile-detail-bento-grid.tile-detail-bento-grid--full-content {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #tile-detail-bento-grid:not(.tile-detail-bento-grid--full-content),
+  #tile-detail-bento-grid:not(.tile-detail-bento-grid--full-content) * {
     box-shadow: none !important;
   }
   /* Image cell — chat with Bryan */
@@ -31358,6 +31378,11 @@ export const dashboardCss = `
   }
   .vrk-scope .panel-body {
     display: grid;
+    /* max-content rows: the panel has a definite height (flex:1 in the modal
+       column), so auto rows would be squeezed to fit it — overflow:hidden
+       cards (.saved-remix-card) collapse to their padding and clip their
+       content. Size rows to content and let the panel scroll instead. */
+    grid-auto-rows: max-content;
     flex: 1;
     gap: 16px;
     min-height: 0;

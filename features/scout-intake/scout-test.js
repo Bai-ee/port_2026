@@ -9,7 +9,7 @@
 const { callAnthropic, extractAnthropicCostUsd } = require('./_anthropic-client');
 const { buildRuntimeConfigFromFirestore } = require('../not-the-rug-brief/config-loader');
 const { fetchLast30Days } = require('../not-the-rug-brief/services/last30days');
-const { searchReddit, searchInstagram } = require('./external-scouts/scrapecreators-client.js');
+const { searchReddit, searchInstagram, redditQueriesFromCustomRows } = require('./external-scouts/scrapecreators-client.js');
 const { normalizeSignals } = require('../not-the-rug-brief/normalize-last30days');
 
 const MODEL = 'claude-sonnet-4-5-20250929';
@@ -130,9 +130,13 @@ async function runScoutTest({ clientId, platform, clientConfig = {} }) {
   if (platform === 'reddit') {
     // Reddit via the direct Node ScrapeCreators client — runs natively on Vercel
     // (no Python subprocess). Same api.scrapecreators.com endpoints last30days used
-    // under the hood, so dev == prod and Test == brief.
-    const cleanBrand = String(companyName || '').replace(/^["']+|["']+$/g, '').trim();
-    const queries = [cleanBrand, ...(cfg.categoryTerms || []).slice(0, 2)].filter(Boolean);
+    // under the hood, so dev == prod and Test == brief. Queries come from the
+    // operator's Custom Query rows (brand-first), brand + category when none set.
+    const queries = redditQueriesFromCustomRows({
+      brand: companyName,
+      categoryTerms: cfg.categoryTerms,
+      searches: clientConfig?.marketingBriefConfig?.searches,
+    });
     const r = await searchReddit({ queries, limit: 10 });
     result = {
       ok: r.ok,

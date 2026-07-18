@@ -7,8 +7,9 @@ Status: active feature docs. The launch source of truth treats Executive / Marke
 1. `MARKETING_BRIEF_HANDOFF.md` — implementation handoff, data flow, config route, rendering, caveats, and next work.
 2. `../../source-of-truth/MARKET-SIGNALS-AND-SCOUT-PROJECTION.md` — canonical market-signal projection and Scout/Scribe/Guardian behavior.
 3. `../../source-of-truth/EXECUTIVE-BRIEFS-RUN-BRIEFS-WIRING.md` — Run Briefs card wiring, named previews, run actions, and Executive Brief breadcrumbs.
-4. `../../company-brain/DOWNSTREAM_CONTEXT_USAGE.md` — how Client Brain defaults and feedback promotion interact with this card.
-5. `../../company-brain/CLIENT_BRAIN_DECISION_ENGINE.md` — decision/default/override model behind Brain-seeded card settings.
+4. `../../source-of-truth/NOT-THE-RUG-HITLOOP-CONFIG.md` — NTR-specific HITLOOP client config, digest parity, and cutover guardrails.
+5. `../../company-brain/DOWNSTREAM_CONTEXT_USAGE.md` — how Client Brain defaults and feedback promotion interact with this card.
+6. `../../company-brain/CLIENT_BRAIN_DECISION_ENGINE.md` — decision/default/override model behind Brain-seeded card settings.
 
 ## Current Integration Points
 

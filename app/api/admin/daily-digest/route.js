@@ -1019,6 +1019,102 @@ const EMAIL_CAPS = {
   analysisCards: 4,        // per-handle / thread / post cards in the Happening-on sections
   analysisCardText: 300,
 };
+const REPLY_TARGET_MAX_AGE_MS = 26 * 60 * 60 * 1000;
+const STRATEGY_PLAN_MAX_AGE_MS = 26 * 60 * 60 * 1000;
+const VIDEO_CAPTURE_MAX_AGE_MS = 30 * 60 * 60 * 1000;
+
+function dateMs(value) {
+  if (!value) return NaN;
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') return Date.parse(value);
+  if (value?.toDate) return value.toDate().getTime();
+  if (Number.isFinite(value?.seconds)) return value.seconds * 1000;
+  return NaN;
+}
+
+function ageMs(value, nowMs = Date.now()) {
+  const ms = dateMs(value);
+  return Number.isFinite(ms) ? Math.max(0, nowMs - ms) : Infinity;
+}
+
+function isFreshWithin(value, maxAgeMs, nowMs = Date.now()) {
+  return ageMs(value, nowMs) <= maxAgeMs;
+}
+
+function digestRecipeGeneratedAt(recipe) {
+  return recipe?.generatedAt || recipe?.updatedAt || recipe?.completedAt || recipe?.createdAt || recipe?.inputGeneratedAt || null;
+}
+
+function isFreshReplyRecipe(recipe, nowMs = Date.now()) {
+  return Boolean(recipe?.recipeId === 'reply-targets' && recipe?.ok && recipe?.analysis) &&
+    isFreshWithin(digestRecipeGeneratedAt(recipe), REPLY_TARGET_MAX_AGE_MS, nowMs);
+}
+
+function staleReplyNotice(recipe) {
+  const stamp = digestRecipeGeneratedAt(recipe);
+  const label = stamp && Number.isFinite(dateMs(stamp))
+    ? new Date(dateMs(stamp)).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+    : 'unknown';
+  return `<div style="background:${DT.card};border:1px dashed ${DT.dash};border-radius:14px;padding:16px 18px;font-family:${DT.fBody};font-size:13px;line-height:1.55;color:${DT.soft};">Suggested Replies is enabled, but the latest reply-targets run is stale (${escapeHtml(label)}). Run Generate &amp; Send or wait for the next successful analysis refresh.</div>`;
+}
+
+function isFreshStrategyPlan(plan, nowMs = Date.now()) {
+  return Boolean(plan) && isFreshWithin(plan.generatedAt || plan.today?.date, STRATEGY_PLAN_MAX_AGE_MS, nowMs);
+}
+
+function staleStrategyNotice(plan) {
+  const stamp = plan?.generatedAt || plan?.today?.date || null;
+  const label = stamp && Number.isFinite(dateMs(stamp))
+    ? new Date(dateMs(stamp)).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+    : 'unknown';
+  return `<div style="background:${DT.card};border:1px dashed ${DT.dash};border-radius:14px;padding:16px 18px;font-family:${DT.fBody};font-size:13px;line-height:1.55;color:${DT.soft};">Strategy Builder output is stale (${escapeHtml(label)}). Suggested Posts and the 30-day plan are hidden until the next successful strategy refresh.</div>`;
+}
+
+function isFreshVideoCapture(capture, nowMs = Date.now()) {
+  return Boolean(capture?.downloadUrl) && isFreshWithin(capture.createdAt, VIDEO_CAPTURE_MAX_AGE_MS, nowMs);
+}
+
+async function probeVideoUrl(url) {
+  const target = String(url || '').trim();
+  if (!target) return { ok: false, reason: 'missing-url' };
+  const acceptableType = (value) => {
+    const type = String(value || '').toLowerCase();
+    return !type || type.includes('video/') || type.includes('octet-stream') || type.includes('binary');
+  };
+  try {
+    const head = await fetch(target, {
+      method: 'HEAD',
+      signal: AbortSignal.timeout(8_000),
+      cache: 'no-store',
+    });
+    if (head.ok && acceptableType(head.headers.get('content-type'))) {
+      return { ok: true, contentLength: head.headers.get('content-length') || null };
+    }
+    if (head.status && head.status !== 405 && head.status !== 403) {
+      return { ok: false, reason: `head-${head.status}` };
+    }
+  } catch { /* fall through to ranged GET */ }
+
+  try {
+    const res = await fetch(target, {
+      headers: { Range: 'bytes=0-1023' },
+      signal: AbortSignal.timeout(10_000),
+      cache: 'no-store',
+    });
+    if (!res.ok && res.status !== 206) return { ok: false, reason: `get-${res.status}` };
+    if (!acceptableType(res.headers.get('content-type'))) return { ok: false, reason: 'not-video' };
+    const chunk = await res.arrayBuffer().catch(() => null);
+    return chunk && chunk.byteLength > 0
+      ? { ok: true, contentLength: res.headers.get('content-length') || null }
+      : { ok: false, reason: 'empty-response' };
+  } catch (err) {
+    return { ok: false, reason: err.message || 'probe-failed' };
+  }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 // Table row linking to the Executive Brief when a cap dropped items.
 const emailOverflowRow = (n, label, colspan = 1) => (n > 0
   ? `<tr><td colspan="${colspan}" style="${TDempty}"><a href="${appUrl('/dashboard?open=brief')}" style="color:${DT.accent};font-family:${DT.fMono};font-size:11px;letter-spacing:.06em;text-transform:uppercase;">+${n} more ${label} in the Executive Brief &rarr;</a></td></tr>`
@@ -1057,11 +1153,15 @@ function buildStrategicParts(intel, postPlatforms = {}) {
       </tr>`).join('') + emailOverflowRow(oppAll.length - oppItems.length, 'opportunities')
     : '';
 
-  // Suggested Replies — reads the reply-targets recipe output persisted by
-  // pre-digest-refresh (marketingBrief.reportSnapshot.digestRecipes). Falls back
-  // to scout opportunities with a suggestedReply field when no recipe result exists.
-  const replyRecipe = (intel.digestRecipes || []).find((r) => r?.recipeId === 'reply-targets' && r?.ok && r?.analysis);
+  // Suggested Replies — reads only fresh reply-targets recipe output persisted by
+  // pre-digest-refresh (marketingBrief.reportSnapshot.digestRecipes). Stale or
+  // missing recipe output renders an explicit state instead of old replies.
+  const anyReplyRecipe = (intel.digestRecipes || []).find((r) => r?.recipeId === 'reply-targets' && r?.ok && r?.analysis);
+  const replyRecipe = isFreshReplyRecipe(anyReplyRecipe) ? anyReplyRecipe : null;
   let repliesHtml = '';
+  if (!replyRecipe && anyReplyRecipe) {
+    repliesHtml = staleReplyNotice(anyReplyRecipe);
+  }
   if (replyRecipe) {
     const { data: rtData, prose: rtProse } = parseRecipeAnalysis(replyRecipe.analysis);
     const targets = (Array.isArray(rtData?.replyTargets) ? rtData.replyTargets.filter((t) => t?.suggestedReply) : [])
@@ -1094,19 +1194,10 @@ function buildStrategicParts(intel, postPlatforms = {}) {
       repliesHtml = `<div style="font-family:${DT.fBody};font-size:13px;line-height:1.6;color:${DT.ink};margin-bottom:8px;">${escapeHtml(cleaned).replace(/\n{2,}/g, '<br><br>').replace(/\n/g, '<br>')}</div>` + postMeLink;
     }
   }
-  if (!repliesHtml) {
-    // Fallback: scout opportunities with a suggestedReply field.
-    const replyItems = (intel.opportunities || []).filter((o) => o.suggestedReply).slice(0, EMAIL_CAPS.suggestedReplies);
-    if (replyItems.length) {
-      repliesHtml = replyItems.map((o) => `<div style="margin-bottom:14px;padding:14px 16px;background:${DT.brandTint};border:1px solid ${DT.line};border-radius:12px;">
-        <div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:${DT.brand};margin-bottom:6px;">Reply${o.windowHours ? ` &middot; ${o.windowHours}h window` : ''}</div>
-        <div style="font-family:${DT.fBody};font-size:13px;font-weight:700;color:${DT.ink};margin-bottom:4px;">${escapeHtml(o.topic)}${linkBit(o.url)}</div>
-        ${o.angle ? `<div style="font-family:${DT.fBody};font-size:12px;line-height:1.5;color:${DT.soft};margin-bottom:8px;"><strong style="color:${DT.ink};">Why:</strong> ${escapeHtml(o.angle)}</div>` : ''}
-        <div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:${DT.light};margin-bottom:3px;">Suggested reply</div>
-        <div style="font-family:${DT.fBody};font-size:13px;line-height:1.55;color:${DT.ink};">${escapeHtml(o.suggestedReply)}</div>${o.url ? `<a href="${escapeHtml(o.url)}" style="display:inline-block;margin-top:8px;color:${DT.brand};font-family:${DT.fMono};font-size:10px;letter-spacing:.06em;text-transform:uppercase;">Read tweet &amp; reply &rarr;</a>` : ''}
-      </div>`).join('') + postMeLink;
-    }
-  }
+  // No fallback to scout opportunity text here. Reply suggestions are only safe
+  // for email when the dedicated reply-targets recipe ran recently; otherwise
+  // the section intentionally renders an empty/stale state instead of reusing
+  // old suggestedReply strings.
 
   // Signals was the section that blew past Gmail's clip (40 full-text KOL posts
   // ≈ 56KB on 2026-07-04): cap KOL posts per handle, cap competitors/narratives,
@@ -1156,7 +1247,11 @@ function buildStrategicParts(intel, postPlatforms = {}) {
     : '';
 
   const c = intel.content || {};
-  const strategyPostBlocks = (intel.strategyBuilder?.today?.posts || []).map((p, index) => ({
+  const strategyPlanFresh = isFreshStrategyPlan(intel.strategyBuilder);
+  const strategyStaleHtml = intel.strategyBuilder && !strategyPlanFresh
+    ? staleStrategyNotice(intel.strategyBuilder)
+    : '';
+  const strategyPostBlocks = (strategyPlanFresh ? (intel.strategyBuilder?.today?.posts || []) : []).map((p, index) => ({
     label: p.platformHint ? `Today · ${String(p.platformHint).toUpperCase()}` : `Today · Post ${index + 1}`,
     text: p.content,
     foot: [p.signalUsed ? `Signal: ${p.signalUsed}` : '', p.rationale || ''].filter(Boolean).join(' · '),
@@ -1178,7 +1273,7 @@ function buildStrategicParts(intel, postPlatforms = {}) {
         ${p.foot ? `<div style="margin-top:6px;font-family:${DT.fBody};font-size:11px;color:${DT.soft};line-height:1.45;">${escapeHtml(p.foot)}</div>` : ''}
       </div>`).join('') + postMeLink
     : '';
-  const planPreview = (intel.strategyBuilder?.items || []).slice(0, 7);
+  const planPreview = (strategyPlanFresh ? (intel.strategyBuilder?.items || []) : []).slice(0, 7);
   const planTable = planPreview.length
     ? dDataTable([{ label: 'Date' }, { label: 'Post' }], planPreview.map((item) => `<tr>
         <td style="${TD}width:120px;font-family:${DT.fMono};font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:${DT.light};vertical-align:top;">${escapeHtml(String(item.scheduledAt || '').slice(0, 10))}</td>
@@ -1194,8 +1289,8 @@ function buildStrategicParts(intel, postPlatforms = {}) {
     suggestedReplies: repliesHtml,
     signals: signalsHtml ? dDataTable([{ label: 'Type' }, { label: 'Finding' }], signalsHtml) : '',
     watchlistAccounts: watchlistHtml ? dDataTable([{ label: 'Account' }, { label: 'Activity this run' }], watchlistHtml) : '',
-    suggestedPosts: postsHtml || '',
-    planPreview: planTable,
+    suggestedPosts: strategyStaleHtml || postsHtml || '',
+    planPreview: strategyStaleHtml || planTable,
   };
 }
 
@@ -1376,7 +1471,7 @@ function buildCreativeBriefSection(creative) {
   return `${img}${generatedAt}<p style="font-family:${DT.fBody};font-size:14px;line-height:1.62;color:${DT.ink};margin:0;">${text}</p>`;
 }
 
-function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, include = {}, creative = null, briefUrl = null, contactUrl = '', videoItems = [], order = [], postPlatforms = {}, freshnessToken = '') {
+function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, include = {}, creative = null, briefUrl = null, contactUrl = '', videoItems = [], order = [], postPlatforms = {}, freshnessToken = '', videoStatus = {}) {
   // Fallback target when no hosted brief is resolved (briefLinkMode 'off' /
   // 'latest' with nothing published / 'fresh' run failed): the dashboard modal.
   const executiveBriefUrl = appUrl('/dashboard?open=brief');
@@ -1525,8 +1620,8 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
     // Executive Summary / TODAY
     execSummary: () => section('Executive Summary', 'Today', buildSummaryBody(summary)),
     // Post Content
-    videoPosts: () => section('Post Content', 'Video Remix', buildVideoPostRow(videoItems?.remix, 'Remix')),
-    videoPromo: () => section('Post Content', 'Video Promo', buildVideoPostRow(videoItems?.promo, 'Promo')),
+    videoPosts: () => section('Post Content', 'Video Remix', buildVideoPostRow(videoItems?.remix, 'Remix') || noDataBlock(videoStatus?.remix || 'Video Remix is enabled, but no fresh completed video was ready when this email rendered.')),
+    videoPromo: () => section('Post Content', 'Video Promo', buildVideoPostRow(videoItems?.promo, 'Promo') || noDataBlock(videoStatus?.promo || 'Video Promo is enabled, but no fresh completed video was ready when this email rendered.')),
     // Market Signals
     humanBrief: () => section('Market Signals', 'Brief', sPart('humanBrief')),
     opportunities: () => section('Market Signals', 'Post Opportunities', sPart('opportunities')),
@@ -2176,11 +2271,21 @@ export async function GET(request) {
     const videoItems = { remix: null, promo: null };
     const wantRemix = include.videoPosts !== false;
     const wantPromo = include.videoPromo !== false;
+    const videoStatus = { remix: null, promo: null };
     if ((wantRemix || wantPromo) && homeClientId) {
       try {
-        // Reconcile in-flight remix renders first (e.g. the one the pre-digest
-        // video cron primed) so a just-finished video lands before we read it.
-        if (wantRemix) {
+        const readLatestCaptures = async () => {
+          const ds = (await fb.adminDb.collection('dashboard_state').doc(homeClientId).get()).data() || {};
+          const latestFresh = (items, type) => (Array.isArray(items) ? items : [])
+            .filter((c) => c?.type === type && isFreshVideoCapture(c))
+            .sort((a, b) => dateMs(b.createdAt) - dateMs(a.createdAt))[0] || null;
+          return {
+            remix: wantRemix ? latestFresh(ds.mediaCaptures, 'video_remix') : null,
+            promo: wantPromo ? latestFresh(ds.studioCaptures, 'studio_video') : null,
+          };
+        };
+
+        const reconcileInFlight = async () => {
           try {
             const mediaJobsLib = require('../../../../api/_lib/media-jobs.cjs');
             const { reconcileMediaJob } = require('../../../../api/_lib/media-reconcile.cjs');
@@ -2192,14 +2297,45 @@ export async function GET(request) {
           } catch (e) {
             logWarn('daily_digest_media_reconcile_failed', { error: e.message });
           }
+        };
+
+        // Reconcile in-flight remix renders first (e.g. the one the pre-digest
+        // video cron primed) so a just-finished video lands before we read it.
+        // On real sends, wait briefly; on previews, keep it quick.
+        const deadline = Date.now() + (isRealSend ? 45_000 : 0);
+        let caps = { remix: null, promo: null };
+        do {
+          if (wantRemix) await reconcileInFlight();
+          caps = await readLatestCaptures();
+          if ((!wantRemix || caps.remix) && (!wantPromo || caps.promo)) break;
+          if (!isRealSend || Date.now() >= deadline) break;
+          await sleep(5_000);
+        } while (Date.now() < deadline);
+
+        let remixCap = caps.remix;
+        let promoCap = caps.promo;
+        if (remixCap) {
+          const probe = await probeVideoUrl(remixCap.downloadUrl);
+          if (!probe.ok) {
+            videoStatus.remix = `Video Remix link failed validation (${probe.reason || 'unknown'}).`;
+            remixCap = null;
+          } else {
+            videoStatus.remix = `ready · ${remixCap.createdAt || 'fresh capture'}`;
+          }
+        } else if (wantRemix) {
+          videoStatus.remix = 'Video Remix is still rendering or no fresh completed capture was found.';
         }
-        const ds = (await fb.adminDb.collection('dashboard_state').doc(homeClientId).get()).data() || {};
-        const remixCap = wantRemix ? (ds.mediaCaptures || [])
-          .filter((c) => c?.type === 'video_remix' && c?.downloadUrl)
-          .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0] : null;
-        const promoCap = wantPromo ? (ds.studioCaptures || [])
-          .filter((c) => c?.type === 'studio_video' && c?.downloadUrl)
-          .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0] : null;
+        if (promoCap) {
+          const probe = await probeVideoUrl(promoCap.downloadUrl);
+          if (!probe.ok) {
+            videoStatus.promo = `Video Promo link failed validation (${probe.reason || 'unknown'}).`;
+            promoCap = null;
+          } else {
+            videoStatus.promo = `ready · ${promoCap.createdAt || 'fresh capture'}`;
+          }
+        } else if (wantPromo) {
+          videoStatus.promo = 'Video Promo is still rendering or no fresh completed capture was found.';
+        }
 
         // Caption the enabled videos (one Haiku call); skip on template (no cost).
         const toCaption = [];
@@ -2233,6 +2369,8 @@ export async function GET(request) {
     if (isRealSend && (wantRemix || wantPromo)) {
       const n = (videoItems.remix ? 1 : 0) + (videoItems.promo ? 1 : 0);
       step(n ? 'success' : 'info', n ? `Video · ${n} attached (remix:${videoItems.remix ? 'y' : 'n'} promo:${videoItems.promo ? 'y' : 'n'})` : 'No fresh video available yet');
+      if (wantRemix && videoStatus.remix) step(videoItems.remix ? 'success' : 'error', `Video Remix · ${videoStatus.remix}`);
+      if (wantPromo && videoStatus.promo) step(videoItems.promo ? 'success' : 'error', `Video Promo · ${videoStatus.promo}`);
     }
 
     let xPostResult = null;
@@ -2287,7 +2425,7 @@ export async function GET(request) {
     if (isRealSend) step('info', `Executive Brief · ${briefUrl || 'dashboard fallback'}`);
     const sectionOrder = orderOverride || digestCfg?.order || digestConfig.DEFAULT_ORDER;
     const postPlatforms = postsOverride || digestCfg?.postPlatforms || {};
-    const html = buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, renderInclude, creative, briefUrl, contactUrl, videoItems, sectionOrder, postPlatforms, freshnessToken);
+    const html = buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, renderInclude, creative, briefUrl, contactUrl, videoItems, sectionOrder, postPlatforms, freshnessToken, videoStatus);
     // Gmail clips messages past ~102KB of ENCODED body and hides the rest behind
     // "View entire message" — quoted-printable inflation means ~80KB of raw HTML
     // is the practical ceiling. Warn in the send terminal + prod logs when over.

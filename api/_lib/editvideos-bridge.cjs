@@ -21,6 +21,7 @@ const { randomUUID } = require('crypto');
 const { cert, getApps, initializeApp } = require('firebase-admin/app');
 const { FieldValue, getFirestore } = require('firebase-admin/firestore');
 const { getStorage } = require('firebase-admin/storage');
+const { posterPathForSource, listIndexFolderFiles } = require('./media-assets.cjs');
 
 const APP_NAME = 'editvideos';
 const JOBS_COLLECTION = 'videoJobs';
@@ -34,7 +35,12 @@ const MAX_VIDEO_UPLOAD_BYTES = 500 * 1024 * 1024;
 const MAX_IMAGE_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 // Folders that are never valid source folders for a remix (case-insensitive).
-const EXCLUDED_FOLDERS = ['logos', 'paper_backgrounds', 'mixes', 'videos'];
+// '.posters' holds client-side-captured thumbnail JPEGs (media-assets.cjs
+// posterPathForSource) — never a real source/target folder. Belt-and-braces:
+// sanitizeNewFolderName already strips '.' from user input so this can never
+// be reached via the UI, but it documents the invariant and blocks any other
+// caller that skips sanitization.
+const EXCLUDED_FOLDERS = ['logos', 'paper_backgrounds', 'mixes', 'videos', '.posters'];
 const VIDEO_EXTENSIONS = new Set(['mov', 'mp4', 'm4v', 'avi', 'mkv', 'webm']);
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp']);
 const ORIENTATIONS = new Set(['auto', 'square', 'portrait', 'landscape']);
@@ -551,6 +557,26 @@ async function listSourceFoldersWithCounts() {
   return discoverSourceFolderDetails();
 }
 
+/**
+ * Sign a v4 read URL for a bucket object path. Used to sign at read time over
+ * paths stored in the media_assets index (never store signed URLs — they
+ * expire in an hour). Degrades to null so a missing/renamed object never
+ * breaks a listing.
+ */
+async function signReadUrl(fullPath) {
+  if (!fullPath) return null;
+  try {
+    const [url] = await bridgeBucket().file(String(fullPath)).getSignedUrl({
+      version: 'v4',
+      action: 'read',
+      expires: Date.now() + SIGNED_READ_TTL_MS,
+    });
+    return url;
+  } catch {
+    return null;
+  }
+}
+
 async function listFolderMedia(folderName, { limit = 60 } = {}) {
   const folder = sanitizeExistingFolderPath(folderName);
   const safeLimit = Math.max(1, Math.min(120, Number(limit) || 60));
@@ -564,6 +590,16 @@ async function listFolderMedia(folderName, { limit = 60 } = {}) {
     .filter((file) => isMediaFilePath(file.name))
     .slice(0, safeLimit);
 
+  // Poster paths come from the Firestore index (recorded at upload time), not
+  // a bucket probe — degrades to no posters if the index read fails.
+  let posterByPath = new Map();
+  try {
+    const indexed = await listIndexFolderFiles(folder, { limit: safeLimit });
+    posterByPath = new Map(indexed.files.filter((f) => f.posterPath).map((f) => [f.fullPath, f.posterPath]));
+  } catch {
+    posterByPath = new Map();
+  }
+
   const items = await Promise.all(mediaFiles.map(async (file) => {
     let readUrl = null;
     try {
@@ -575,6 +611,20 @@ async function listFolderMedia(folderName, { limit = 60 } = {}) {
       readUrl = url;
     } catch {
       readUrl = null;
+    }
+    let posterUrl = null;
+    const posterPath = posterByPath.get(file.name);
+    if (posterPath) {
+      try {
+        const [purl] = await bridgeBucket().file(posterPath).getSignedUrl({
+          version: 'v4',
+          action: 'read',
+          expires: Date.now() + SIGNED_READ_TTL_MS,
+        });
+        posterUrl = purl;
+      } catch {
+        posterUrl = null;
+      }
     }
     const metadata = file.metadata || {};
     const name = String(file.name).split('/').pop();
@@ -588,6 +638,7 @@ async function listFolderMedia(folderName, { limit = 60 } = {}) {
       kind: VIDEO_EXTENSIONS.has(ext) || contentType.startsWith('video/') ? 'video' : 'image',
       updated: metadata.updated || null,
       url: readUrl,
+      posterUrl,
     };
   }));
 
@@ -612,7 +663,7 @@ async function createUploadSession({ folderMode = 'existing', folderName, files 
   }
 
   const sessionId = randomUUID();
-  const prepared = files.map((file, index) => sanitizeUploadFile(file, index));
+  const prepared = files.map((file, index) => ({ ...sanitizeUploadFile(file, index), withPoster: !!file?.withPoster }));
   const uploads = await Promise.all(prepared.map(async (file) => {
     const storagePath = `${targetFolder}/${file.safeName}`;
     const bucketFile = bridgeBucket().file(storagePath);
@@ -622,6 +673,30 @@ async function createUploadSession({ folderMode = 'existing', folderName, files 
       expires: Date.now() + SIGNED_UPLOAD_TTL_MS,
       contentType: file.contentType,
     });
+
+    // Client-side poster capture (Media Library workspace upload): mint a
+    // second signed PUT for the deterministic .posters/<folder>/<name>.jpg
+    // sibling. Video-only; the client decides whether it managed to capture
+    // a frame and only PUTs to this URL when it has one.
+    let posterUpload = null;
+    if (file.withPoster && file.kind === 'video') {
+      const posterPath = posterPathForSource(storagePath);
+      if (posterPath) {
+        const [posterUploadUrl] = await bridgeBucket().file(posterPath).getSignedUrl({
+          version: 'v4',
+          action: 'write',
+          expires: Date.now() + SIGNED_UPLOAD_TTL_MS,
+          contentType: 'image/jpeg',
+        });
+        posterUpload = {
+          storagePath: posterPath,
+          uploadUrl: posterUploadUrl,
+          method: 'PUT',
+          headers: { 'content-type': 'image/jpeg' },
+        };
+      }
+    }
+
     return {
       id: randomUUID(),
       originalName: file.originalName,
@@ -633,6 +708,7 @@ async function createUploadSession({ folderMode = 'existing', folderName, files 
       uploadUrl,
       method: 'PUT',
       headers: { 'content-type': file.contentType },
+      posterUpload,
     };
   }));
 
@@ -686,6 +762,7 @@ async function deleteSourceFiles(files = []) {
     try {
       ref = normalizeSourceFileRef(row);
       await bucket.file(ref.fullPath).delete();
+      try { await bucket.file(posterPathForSource(ref.fullPath)).delete(); } catch { /* no poster to delete */ }
       deleted.push(ref);
     } catch (err) {
       const notFound = err?.code === 404 || String(err?.message || '').includes('No such object');
@@ -701,6 +778,173 @@ async function deleteSourceFiles(files = []) {
   }
   invalidateFolderCache();
   return { deleted, errors, status: errors.length ? (deleted.length ? 'partial' : 'failed') : 'done' };
+}
+
+// --- folder management (Media Library workspace: move / rename / delete) ---
+// Non-atomic by nature (GCS has no cross-object transaction): each op runs a
+// bounded-concurrency loop over the affected objects and reports per-file
+// results so the caller (route.js) can reconcile the media_assets index and
+// the UI can show partial-failure state. A stuck/dead worker never blocks a
+// retry — moving an already-moved file, or deleting an already-deleted one,
+// fails soft (404 is not an error here).
+const FOLDER_OP_CONCURRENCY = 5;
+
+async function mapWithConcurrency(items, limit, fn) {
+  const results = new Array(items.length);
+  let cursor = 0;
+  async function worker() {
+    while (cursor < items.length) {
+      const index = cursor++;
+      try {
+        results[index] = { ok: true, value: await fn(items[index], index) };
+      } catch (err) {
+        results[index] = { ok: false, error: err };
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+/**
+ * Move one or more source files into a different (existing) folder. Moves the
+ * poster sibling alongside each file, best-effort (ignore-missing — legacy
+ * files have no poster yet). Clears both bridge caches so the next read
+ * reflects the move.
+ * @returns {Promise<{moved:Array<{from:string,to:string}>, failed:Array<{path:string,error:string}>}>}
+ */
+async function moveSourceFiles(files = [], targetFolder) {
+  const target = sanitizeExistingFolderPath(targetFolder);
+  const refs = (Array.isArray(files) ? files : []).map((row) => normalizeSourceFileRef(row));
+  if (!refs.length) throw new Error('At least one file is required.');
+  const bucket = bridgeBucket();
+
+  const outcomes = await mapWithConcurrency(refs, FOLDER_OP_CONCURRENCY, async (ref) => {
+    const destPath = `${target}/${ref.fileName}`;
+    if (destPath !== ref.fullPath) {
+      await bucket.file(ref.fullPath).move(destPath);
+      const srcPoster = posterPathForSource(ref.fullPath);
+      const destPoster = posterPathForSource(destPath);
+      if (srcPoster && destPoster) {
+        try { await bucket.file(srcPoster).move(destPoster); } catch { /* no poster to move */ }
+      }
+    }
+    return { from: ref.fullPath, to: destPath };
+  });
+
+  const moved = [];
+  const failed = [];
+  outcomes.forEach((res, index) => {
+    if (res.ok) moved.push(res.value);
+    else failed.push({ path: refs[index].fullPath, error: res.error?.message || 'Move failed.' });
+  });
+  invalidateFolderCache();
+  return { moved, failed };
+}
+
+/**
+ * Rename a folder: moves every media file (+ poster sibling) from the old
+ * prefix to the new one. `newName` goes through sanitizeNewFolderName so a
+ * rename can never target a reserved/invalid name.
+ * @returns {Promise<{oldFolder:string, newFolder:string, moved:Array<{from:string,to:string}>, failed:Array<{path:string,error:string}>}>}
+ */
+async function renameSourceFolder(oldName, newName) {
+  const oldFolder = sanitizeExistingFolderPath(oldName);
+  const newFolder = sanitizeNewFolderName(newName);
+  const bucket = bridgeBucket();
+
+  const [files] = await bucket.getFiles({ prefix: `${oldFolder}/` });
+  const mediaFiles = files.filter((file) => isMediaFilePath(file.name));
+  let posterFiles = [];
+  try { [posterFiles] = await bucket.getFiles({ prefix: `.posters/${oldFolder}/` }); } catch { posterFiles = []; }
+
+  const moveUnderNewPrefix = (srcPrefix, destPrefix) => async (file) => {
+    const destPath = destPrefix + file.name.slice(srcPrefix.length);
+    await file.move(destPath);
+    return { from: file.name, to: destPath };
+  };
+
+  const fileOutcomes = await mapWithConcurrency(
+    mediaFiles, FOLDER_OP_CONCURRENCY, moveUnderNewPrefix(`${oldFolder}/`, `${newFolder}/`)
+  );
+  // Poster moves are best-effort — a failed poster move never fails the rename.
+  await mapWithConcurrency(
+    posterFiles, FOLDER_OP_CONCURRENCY, moveUnderNewPrefix(`.posters/${oldFolder}/`, `.posters/${newFolder}/`)
+  );
+
+  const moved = [];
+  const failed = [];
+  fileOutcomes.forEach((res, index) => {
+    if (res.ok) moved.push(res.value);
+    else failed.push({ path: mediaFiles[index].name, error: res.error?.message || 'Move failed.' });
+  });
+  invalidateFolderCache();
+  return { oldFolder, newFolder, moved, failed };
+}
+
+/**
+ * Delete every media file (+ poster sibling) under a folder prefix.
+ * @returns {Promise<{folder:string, deleted:Array<{fullPath:string}>, failed:Array<{fullPath:string,error:string}>}>}
+ */
+async function deleteSourceFolder(name) {
+  const folder = sanitizeExistingFolderPath(name);
+  const bucket = bridgeBucket();
+
+  const [files] = await bucket.getFiles({ prefix: `${folder}/` });
+  const mediaFiles = files.filter((file) => isMediaFilePath(file.name));
+  let posterFiles = [];
+  try { [posterFiles] = await bucket.getFiles({ prefix: `.posters/${folder}/` }); } catch { posterFiles = []; }
+  const targets = [...mediaFiles, ...posterFiles];
+
+  const outcomes = await mapWithConcurrency(targets, FOLDER_OP_CONCURRENCY, async (file) => {
+    await file.delete();
+    return { fullPath: file.name };
+  });
+
+  const deleted = [];
+  const failed = [];
+  outcomes.forEach((res, index) => {
+    const target = targets[index];
+    if (res.ok) {
+      deleted.push(res.value);
+    } else {
+      const notFound = res.error?.code === 404 || String(res.error?.message || '').includes('No such object');
+      if (notFound) deleted.push({ fullPath: target.name });
+      else failed.push({ fullPath: target.name, error: res.error?.message || 'Delete failed.' });
+    }
+  });
+  invalidateFolderCache();
+  return { folder, deleted: deleted.filter((d) => !d.fullPath.startsWith('.posters/')), failed };
+}
+
+/**
+ * Flat per-file rows for every real media object in the bucket (video/image,
+ * excluding posters/reserved folders) — the bucket-side input to
+ * media-assets.cjs's syncIndexFromBucket(). A raw scan; used only by the
+ * on-demand index sweep, not on the hot path.
+ * @returns {Promise<Array<{fullPath,folder,name,size,contentType,updated}>>}
+ */
+async function listAllSourceFileRows() {
+  const [files] = await bridgeBucket().getFiles();
+  const rows = [];
+  for (const file of files) {
+    if (file.name.endsWith('.keep')) continue;
+    if (!isMediaFilePath(file.name)) continue;
+    const parts = file.name.split('/');
+    if (parts.length < 2 || parts[0].startsWith('.')) continue;
+    const folder = parts.slice(0, -1).join('/');
+    if (isExcludedFolder(folder)) continue;
+    const metadata = file.metadata || {};
+    rows.push({
+      fullPath: file.name,
+      folder,
+      name: parts[parts.length - 1],
+      size: Number(metadata.size || 0),
+      contentType: metadata.contentType || '',
+      updated: metadata.updated || null,
+    });
+  }
+  return rows;
 }
 
 // Parse the storage object path out of an EditVideos rendered-video URL.
@@ -1110,6 +1354,7 @@ module.exports = {
   listSourceFolders,
   listSourceFoldersWithCounts,
   listFolderMedia,
+  signReadUrl,
   createUploadSession,
   getMediaUsage,
   deleteSourceFiles,
@@ -1118,6 +1363,12 @@ module.exports = {
   ensureUploadCors,
   invalidateFolderCache,
   listOptions,
+  // Media Library workspace (move/rename/delete folders + full-bucket rows)
+  moveSourceFiles,
+  renameSourceFolder,
+  deleteSourceFolder,
+  listAllSourceFileRows,
+  sanitizeNewFolderName,
   // archive / publishing
   costForBytes,
   summarizeArchiveCost,
