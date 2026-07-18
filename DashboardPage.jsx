@@ -4478,9 +4478,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   const [briefPreviewHtml, setBriefPreviewHtml] = useState('');
   const [briefPreviewLoading, setBriefPreviewLoading] = useState(true);
   // Shell/tile variant: injects a self-contained <style> that hides the gradient
-  // CTA in the small previews. Self-contained (not reliant on the API's CSS) so
-  // it works even on already-fetched/cached brief HTML. Full-screen open keeps
-  // the unmodified HTML (CTA shows).
+  // CTA. Self-contained (not reliant on the API's CSS) so it works even on
+  // already-fetched/cached brief HTML. Used by the small tile previews AND the
+  // full-screen modal (no CTA in the popup); the Share/standalone page keeps
+  // the unmodified HTML (CTA shows there).
   const briefShellHtml = useMemo(
     () => (briefPreviewHtml
       ? briefPreviewHtml.replace('</head>', '<style>.cap-brief-email-cta-row{display:none !important}</style></head>')
@@ -14736,14 +14737,27 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         </button>
                       );
                     })()}
+                    {/* Details stays locked for non-admins EXCEPT on unlocked
+                        cards that actually open for them (deliverable assets +
+                        brief views — openCapabilityCard no-ops on anything
+                        else for non-admins, so those keep the lock instead of
+                        a dead active button). */}
+                    {(() => {
+                      const nonAdminCanOpen = !isLocked && (
+                        Boolean(card.deliverableAsset)
+                        || card.id === 'brief' || card.id === 'onboarding-brief'
+                        || (card.category === 'brief' && Boolean(BRIEF_TYPE_BY_CARD[card.id]))
+                      );
+                      const detailsLocked = !isAdmin && !nonAdminCanOpen;
+                      return (
                     <button
                       type="button"
-                      className={`tile-view-details-btn${!isAdmin ? ' tile-view-details-btn--locked' : ''}`}
-                      disabled={!isAdmin}
-                      aria-disabled={!isAdmin || undefined}
-                      tabIndex={!isAdmin ? -1 : undefined}
-                      style={!isAdmin ? { pointerEvents: 'none' } : undefined}
-                      onClick={!isAdmin ? undefined : (e) => {
+                      className={`tile-view-details-btn${detailsLocked ? ' tile-view-details-btn--locked' : ''}`}
+                      disabled={detailsLocked}
+                      aria-disabled={detailsLocked || undefined}
+                      tabIndex={detailsLocked ? -1 : undefined}
+                      style={detailsLocked ? { pointerEvents: 'none' } : undefined}
+                      onClick={detailsLocked ? undefined : (e) => {
                         e.stopPropagation();
                         openCapabilityCard(
                           isLocked || isInactiveUnlocked ? { ...card, description: readableDescription } : card,
@@ -14751,8 +14765,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         );
                       }}
                     >
-                        Details <UpRightArrow style={{ marginLeft: '0.1rem', opacity: 0.82 }} />{!isAdmin && <Lock size={11} strokeWidth={2} aria-hidden="true" style={{ marginLeft: 4, verticalAlign: 'middle' }} />}
+                        Details <UpRightArrow style={{ marginLeft: '0.1rem', opacity: 0.82 }} />{detailsLocked && <Lock size={11} strokeWidth={2} aria-hidden="true" style={{ marginLeft: 4, verticalAlign: 'middle' }} />}
                     </button>
+                      );
+                    })()}
                   </span>
                 </div>
               </article>
@@ -15775,7 +15791,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             <iframe
               id="brief-fullscreen-iframe"
               title="Daily Brief"
-              srcDoc={briefPreviewHtml}
+              srcDoc={briefShellHtml}
               sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads"
             />
           </div>
