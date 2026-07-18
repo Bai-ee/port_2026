@@ -74,20 +74,88 @@ const CREATIVE_BRIEF_GROUPS = [
   },
 ];
 
+// ── Simple layout (v2) ────────────────────────────────────────────────────────
+// The redesigned "hyper simple" brief. Separate id namespace (sb-) so classic
+// toggles never collide, and a fresh install of this layout starts with ALL
+// content on. Items with hasHeading also register an `<id>:heading` include
+// (default on) so the section heading toggles independently of its content.
+// defaultOff items start off (spec removals) but stay available to re-enable.
+const SIMPLE_BRIEF_GROUPS = [
+  {
+    key: 'sb-header',
+    label: 'Header (cover)',
+    items: [
+      { id: 'sb-header-cta', label: 'Meet with a Human CTA', desc: 'The pinned gradient CTA at the top of the brief.' },
+      { id: 'sb-header-status', label: 'Onboarding complete status', desc: 'Small status label under the brief title.' },
+      { id: 'sb-header-weather', label: 'Weather line', desc: 'Local weather strip above the title.' },
+      { id: 'sb-header-mockup', label: 'Device mockup (top-right)', desc: 'The multi-device homepage mockup pinned to the cover.' },
+      { id: 'sb-header-contact-card', label: 'Your Human contact card', desc: 'Bryan Balli, Creative Lead — with LinkedIn / X links.' },
+      { id: 'sb-header-snapshot', label: 'Deliverables Snapshot list', desc: 'Cover list of assets (duplicates the Your Deliverables section).', defaultOff: true },
+      { id: 'sb-header-meta', label: 'Meta row (date · site · title · account)', desc: 'The four-column metadata strip.', defaultOff: true },
+      { id: 'sb-header-marquee', label: 'Brand letters marquee', desc: 'The oversized decorative brand letters.', defaultOff: true },
+    ],
+  },
+  {
+    key: 'sb-pages',
+    label: 'Brief sections',
+    items: [
+      { id: 'sb-deliverables', label: 'Your Deliverables', desc: 'D01–D06 asset cards, one download per card.', hasHeading: true },
+      { id: 'sb-key-insight', label: 'Key Insight', desc: 'The single most important read of the site.', hasHeading: true },
+      { id: 'sb-positioning', label: 'Current Positioning', desc: 'What the site is and who it serves.', hasHeading: true },
+      { id: 'sb-decision', label: 'The Decision', desc: 'The main strategic question, visually distinct.', hasHeading: true },
+      { id: 'sb-clarify', label: 'What to Clarify Next', desc: 'Short practical action list.', hasHeading: true },
+      { id: 'sb-featured-post', label: 'Featured Post', desc: 'Suggested Post as a real X card with the brand video.', hasHeading: true },
+      { id: 'sb-social-share', label: 'Social Share check', desc: 'Share-card preview + captured/missing tag checklist.', hasHeading: true },
+      { id: 'sb-risk', label: 'Biggest Risk', desc: 'The risk callout from the analysis.', hasHeading: true },
+      { id: 'sb-contact', label: 'Contact Your Human', desc: 'Closing contact section with Meet with Bryan CTA.', hasHeading: true },
+    ],
+  },
+  {
+    key: 'sb-deliverables',
+    label: 'Deliverable cards',
+    items: [
+      { id: 'sb-deliverables-intro', label: 'Supporting copy line', desc: '“Your site has been reviewed, captured, and prepared for sharing.”' },
+      { id: 'sb-d-video', label: 'D · Brand Video', desc: 'Your site in motion.' },
+      { id: 'sb-d-mockup', label: 'D · Device Mockup', desc: 'Homepage device mockup.' },
+      { id: 'sb-d-desktop', label: 'D · Desktop View', desc: 'Full desktop capture.' },
+      { id: 'sb-d-tablet', label: 'D · Tablet View', desc: 'Tablet capture.' },
+      { id: 'sb-d-mobile', label: 'D · Mobile View', desc: 'Mobile capture.' },
+      { id: 'sb-d-social', label: 'D · Social Preview', desc: 'Social sharing preview.' },
+    ],
+  },
+  {
+    key: 'sb-footer',
+    label: 'Footer',
+    items: [
+      { id: 'sb-footer-line', label: 'Brief title line', desc: '“<CLIENT> Creative Brief · Vol. 01”.' },
+      { id: 'sb-footer-generated', label: 'Generated date', desc: 'Short “Generated July 18, 2026” form (no long timestamp).' },
+      { id: 'sb-footer-client-id', label: 'Client id', desc: 'Raw internal client id.', defaultOff: true },
+    ],
+  },
+];
+
+const CREATIVE_BRIEF_LAYOUTS = ['classic', 'simple'];
+const ALL_GROUP_SETS = [CREATIVE_BRIEF_GROUPS, SIMPLE_BRIEF_GROUPS];
+
 const CONFIG_DOC_PATH = { collection: 'system_flags', doc: 'creative_brief_config' };
 
 function defaultCreativeBriefConfig() {
   const include = {};
   const order = {};
-  for (const group of CREATIVE_BRIEF_GROUPS) {
-    order[group.key] = group.items.map((i) => i.id);
-    for (const item of group.items) include[item.id] = true;
+  for (const groups of ALL_GROUP_SETS) {
+    for (const group of groups) {
+      order[group.key] = group.items.map((i) => i.id);
+      for (const item of group.items) {
+        include[item.id] = !item.defaultOff;
+        if (item.hasHeading) include[`${item.id}:heading`] = true;
+      }
+    }
   }
-  return { include, order };
+  return { layout: 'classic', include, order };
 }
 
 // Merge a raw stored doc onto defaults: unknown ids dropped, missing ids get
-// their default (on, default position appended in registry order).
+// their default (default position appended in registry order).
 function normalizeCreativeBriefConfig(raw) {
   const def = defaultCreativeBriefConfig();
   const include = { ...def.include };
@@ -97,12 +165,15 @@ function normalizeCreativeBriefConfig(raw) {
   }
   const order = {};
   const rawOrder = raw && typeof raw.order === 'object' ? raw.order : {};
-  for (const group of CREATIVE_BRIEF_GROUPS) {
-    const defIds = def.order[group.key];
-    const saved = Array.isArray(rawOrder[group.key]) ? rawOrder[group.key].filter((id) => defIds.includes(id)) : [];
-    order[group.key] = [...saved, ...defIds.filter((id) => !saved.includes(id))];
+  for (const groups of ALL_GROUP_SETS) {
+    for (const group of groups) {
+      const defIds = def.order[group.key];
+      const saved = Array.isArray(rawOrder[group.key]) ? rawOrder[group.key].filter((id) => defIds.includes(id)) : [];
+      order[group.key] = [...saved, ...defIds.filter((id) => !saved.includes(id))];
+    }
   }
-  return { include, order };
+  const layout = CREATIVE_BRIEF_LAYOUTS.includes(raw?.layout) ? raw.layout : def.layout;
+  return { layout, include, order };
 }
 
 // Read + normalize the stored config. Any failure returns defaults so the
@@ -118,6 +189,8 @@ async function loadCreativeBriefConfig(adminDb) {
 
 module.exports = {
   CREATIVE_BRIEF_GROUPS,
+  SIMPLE_BRIEF_GROUPS,
+  CREATIVE_BRIEF_LAYOUTS,
   CONFIG_DOC_PATH,
   defaultCreativeBriefConfig,
   normalizeCreativeBriefConfig,

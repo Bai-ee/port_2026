@@ -188,6 +188,10 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     timeZone: BRIEF_TZ, month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
   }) : 'Not yet run';
   const dateLine = hasRealRun ? when.replace(/-/g, ' · ') : 'not yet run';
+  // Simple layout uses the friendly "July 18, 2026" form in the header + footer.
+  const friendlyDate = hasRealRun
+    ? generatedDt.toLocaleDateString('en-US', { timeZone: BRIEF_TZ, month: 'long', day: 'numeric', year: 'numeric' })
+    : 'Not yet run';
   const brandUpper = String(clientName || 'BRIEF').toUpperCase();
   const guardianText = guardian?.readyToPublish === undefined
     ? 'Needs review'
@@ -715,12 +719,15 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   const _cbCfg = creativeBriefConfig || defaultCreativeBriefConfig();
   const cbOn = (id) => _cbCfg.include?.[id] !== false;
   const cbOrderOf = (group) => (Array.isArray(_cbCfg.order?.[group]) ? _cbCfg.order[group] : []);
+  // Simple layout (v2) applies to the onboarding Creative Brief only; every
+  // other brief type ignores the layout flag entirely.
+  const isSimpleOnboarding = _mockupBriefTypeEarly === 'onboarding' && _cbCfg.layout === 'simple';
   // Both Executive and Creative ('onboarding') keep the device mockup in the
   // cover's top-right corner. The Creative Brief ALSO leads with a hero asset +
   // inline evidence inside the story. The composer's cover-mockup toggle gates
   // it for the Creative Brief only (executive-daily unaffected).
   const isCoverMockup = (_mockupBriefTypeEarly === 'executive-daily' || _mockupBriefTypeEarly === 'onboarding') && Boolean(mockupSrc)
-    && (_mockupBriefTypeEarly !== 'onboarding' || cbOn('cover-mockup'));
+    && (_mockupBriefTypeEarly !== 'onboarding' || (isSimpleOnboarding ? cbOn('sb-header-mockup') : cbOn('cover-mockup')));
 
   const performanceBriefSection = perfItems.length ? `
   <section class="page">
@@ -935,7 +942,10 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   // Deliverables / Success / Decision Needed). Render it as styled sections —
   // eyebrow label + body paragraph(s) or bullet list — with varying type scale
   // and smooth vertical rhythm, instead of flat paragraphs.
-  const CB_LABELS = ['Headline', 'What This Site Is', "What's Missing", 'Biggest Risk', 'The Opportunity', 'Decision', 'Suggested Post'];
+  // Legacy labels + the Simple-layout (v2) labels the upgraded summarizer
+  // emits. Parser recognizes both; the simple builders prefer new labels and
+  // fall back to legacy so un-regenerated clients render fully.
+  const CB_LABELS = ['Headline', 'Key Insight', 'What This Site Is', 'Current Positioning', "What's Missing", 'Biggest Risk', 'The Opportunity', 'The Decision', 'Decision', 'What to Clarify Next', 'Suggested Post'];
   const renderCreativeBriefSummary = (textRaw) => {
     const sections = [];
     let cur = null;
@@ -1319,6 +1329,127 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
         </ul>
       </div>`,
     };
+    // ── Simple layout (v2) ────────────────────────────────────────────────
+    // Reassembles the SAME fragments into the hyper-simple structure: every
+    // section, its heading, and every deliverable card toggles independently
+    // (sb-* ids in creative-brief-config.cjs). Classic assembly below stays
+    // untouched — the composer's Layout switch A/Bs between them.
+    if (isSimpleOnboarding) {
+      let sn = 0;
+      const sbPage = (id, title, inner) => {
+        const num = String((sn += 1)).padStart(2, '0');
+        return `
+  <section class="page cb-page" id="${id}">
+    <div class="sec-num">${num}</div>
+    <div class="cb-deco" aria-hidden="true"></div>
+    ${cbOn(`${id}:heading`) && title ? `<h2 class="headline">${title}</h2>
+    <div class="rule"></div>` : ''}
+    ${inner}
+  </section>`;
+      };
+      // New-label preference with legacy fallback (works pre-regeneration).
+      const pick = (nu, old) => byLabel(nu) || byLabel(old) || null;
+      const insight = pick('Key Insight', 'Headline');
+      const positioning = pick('Current Positioning', 'What This Site Is');
+      const decisionSec = pick('The Decision', 'Decision');
+      const clarify = byLabel('What to Clarify Next');
+
+      // One label · one title · one short explanation · one download per card.
+      const SB_DELIVERABLE_COPY = {
+        'Video Post': { sbId: 'sb-d-video', label: 'Brand Video', title: 'Your site in motion', desc: 'A social-ready video showing how your brand, message, and homepage read in motion.', cta: 'Download video' },
+        'Device Mockup': { sbId: 'sb-d-mockup', label: 'Device Mockup', title: 'Homepage device mockup', desc: 'Your homepage presented in a polished device frame for decks, posts, and presentations.', cta: 'Download mockup' },
+        'Desktop View': { sbId: 'sb-d-desktop', label: 'Desktop View', title: 'Full desktop capture', desc: 'Review the complete page layout, hierarchy, and content at full width.', cta: 'Download desktop view' },
+        'Tablet View': { sbId: 'sb-d-tablet', label: 'Tablet View', title: 'Tablet capture', desc: 'Confirm that the layout, spacing, and content remain clear at medium screen sizes.', cta: 'Download tablet view' },
+        'Mobile View': { sbId: 'sb-d-mobile', label: 'Mobile View', title: 'Mobile capture', desc: 'Review the experience on the screen most visitors are likely to use.', cta: 'Download mobile view' },
+        'Social Preview': { sbId: 'sb-d-social', label: 'Social Preview', title: 'Social sharing preview', desc: 'See how the site appears when shared across social platforms and messaging apps.', cta: 'Download social preview' },
+      };
+      let dNum = 0;
+      const sbCells = cbOrderOf('sb-deliverables').map((sbId) => {
+        if (sbId === 'sb-deliverables-intro' || !cbOn(sbId)) return '';
+        const entry = Object.entries(SB_DELIVERABLE_COPY).find(([, v]) => v.sbId === sbId);
+        if (!entry) return '';
+        const [assetName, c] = entry;
+        const asset = deliverableAssets.find((a) => a.name === assetName);
+        if (!asset) return '';
+        const href = ok(asset.url) ? dlHref(asset.url, assetName, asset.type === 'video' ? 'video' : 'img') : null;
+        dNum += 1;
+        return `<div class="cb-deliverable" id="${c.sbId}">
+          <div class="cb-deliverable-idx">D${String(dNum).padStart(2, '0')} · ${esc(c.label)}</div>
+          <div class="cb-deliverable-media">${deliverableMedia(asset)}</div>
+          <div class="cb-deliverable-name">${esc(c.title)}</div>
+          <p class="cb-deliverable-desc">${esc(c.desc)}</p>
+          ${href ? `<div class="cb-post-actions"><a class="cb-cta cb-cta--solid" href="${esc(href)}" download>${esc(c.cta)}</a></div>` : ''}
+        </div>`;
+      }).filter(Boolean);
+
+      const sbBuilders = {
+        'sb-deliverables': () => {
+          if (!sbCells.length) return '';
+          const intro = cbOn('sb-deliverables-intro')
+            ? `<p class="sub">${esc('Your site has been reviewed, captured, and prepared for sharing. Download each asset below.')}</p>`
+            : '';
+          return sbPage('sb-deliverables', 'Your<br/>Deliverables.', `${intro}<div class="cb-deliverables-grid">${sbCells.join('')}</div>`);
+        },
+        'sb-key-insight': () => {
+          const paras = insight ? [...insight.paras, ...insight.bullets] : [];
+          if (!paras.length) return '';
+          const joined = paras.join(' ');
+          // A punchy one-liner keeps the ink bento tile; longer copy reads as
+          // plain paragraphs (2–3 sentence cap comes from the summarizer).
+          const body = joined.length <= 120
+            ? `<div class="bento">${bTile({ span: 's4', cls: 'ink', word: joined })}</div>`
+            : subFrom(paras);
+          return sbPage('sb-key-insight', 'Key<br/>Insight.', body);
+        },
+        'sb-positioning': () => {
+          const paras = positioning ? positioning.paras : [];
+          if (!paras.length) return '';
+          return sbPage('sb-positioning', 'Current<br/>Positioning.', paras.map((p) => `<p class="cb-wtis-lead">${esc(p)}</p>`).join(''));
+        },
+        'sb-decision': () => {
+          if (!decisionSec || !decisionSec.paras.length) return '';
+          const [q, ...rest] = decisionSec.paras;
+          const bullets = decisionSec.bullets || [];
+          return sbPage('sb-decision', 'The<br/>Decision.', `${pull(q)}${bullets.length ? gapList(bullets) : ''}${subFrom(rest.filter((p) => p.length > 0))}`);
+        },
+        'sb-clarify': () => {
+          let items = clarify ? [...clarify.bullets, ...clarify.paras] : [];
+          if (!items.length) {
+            // Legacy fallback: distill What's Missing + Opportunity bullets
+            // into the short practical list.
+            items = [...(miss ? [...miss.bullets, ...miss.paras] : []), ...(opp ? opp.bullets : [])].slice(0, 5);
+          }
+          if (!items.length) return '';
+          return sbPage('sb-clarify', 'What to<br/>Clarify Next.', gapList(items));
+        },
+        'sb-featured-post': () => (featuredRowHtml ? sbPage('sb-featured-post', 'Featured<br/>Post.', featuredRowHtml) : ''),
+        'sb-social-share': () => (socialInner ? sbPage('sb-social-share', 'Social<br/>Share.', socialInner) : ''),
+        'sb-risk': () => (riskInner ? sbPage('sb-risk', 'Biggest<br/>Risk.', riskInner) : ''),
+        'sb-contact': () => {
+          const actions = `<div class="cb-contact-actions"><a class="cb-cta cb-cta--solid" href="${HUMAN.calendly}" target="_blank" rel="noopener noreferrer">Meet with Bryan ↗</a><a class="cb-cta" href="mailto:${esc(HUMAN.email)}">Email HITLOOP</a></div>`;
+          const body = `<div class="cb-contact-top">
+      <div class="cb-contact-lede">${pull('Your brief is ready and onboarding is complete. When you are ready to move from insight to execution, Bryan is one click away.')}${actions}</div>
+      ${sigBlock}
+    </div>`;
+          return sbPage('sb-contact', 'Contact Your<br/>Human.', body);
+        },
+      };
+      const sbPagesHtml = cbOrderOf('sb-pages')
+        .filter((id) => cbOn(id) && sbBuilders[id])
+        .map((id) => sbBuilders[id]())
+        .filter(Boolean)
+        .join('\n');
+      const sbCoverParts = [];
+      if (cbOn('sb-header-contact-card')) sbCoverParts.push(coverParts['cover-signature']);
+      if (cbOn('sb-header-snapshot')) sbCoverParts.push(coverParts['cover-deliverables']);
+      const sbCoverHtml = sbCoverParts.length
+        ? `<div class="cb-handoff" id="brief-cover-handoff">
+      ${sbCoverParts.join('\n      ')}
+    </div>`
+        : '';
+      return { coverHtml: sbCoverHtml, pages: sbPagesHtml };
+    }
+
     const coverOrder = cbOrderOf('cover').filter((id) => coverParts[id] && cbOn(id));
     const coverHtml = coverOrder.length
       ? `<div class="cb-handoff" id="brief-cover-handoff">
@@ -1671,6 +1802,11 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   /* Mockup fills the right side: spans from 53% to the right gutter, so it
      grows with the page while the cover copy (capped at 48%) never reaches
      it — a clean ~5% gap regardless of --gutter. */
+  /* Simple layout: small status chip under the cover title. */
+  #sb-header-status{
+    display:inline-block;margin-top:14px;padding:5px 12px;border:1px solid rgba(0,0,0,.2);border-radius:999px;
+    font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft);
+  }
   #onboarding-cover-mockup{
     position:absolute;
     top:clamp(56px,10vh,130px);
@@ -1711,32 +1847,35 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     <div class="sec-num">00</div>
     ${isCoverMockup ? `<div id="onboarding-cover-mockup" aria-hidden="true"><img src="${esc(mockupSrc)}" alt="Homepage device mockup" /></div>` : ''}
     <div class="title-stack">
-      <div class="cap-brief-email-cta-row">
+      ${(!isSimpleOnboarding || cbOn('sb-header-cta')) ? `<div class="cap-brief-email-cta-row">
         <a id="brief-email-cta" class="cap-brief-email-cta" href="https://calendly.com/bballi/30min" target="_blank" rel="noopener noreferrer">
           <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" />
           Meet with a Human
           <span class="arrow" aria-hidden="true">↗</span>
         </a>
-      </div>
-      ${weather?.today ? `<div id="brief-cover-weather">${esc(`${weather.place || 'Local'} · ${weather.today.short} ${weather.today.temp}°${weather.today.unit}`)}${weather.days?.length > 1 ? esc(' · ' + weather.days.slice(1, 3).map((d) => `${d.name.slice(0, 3)} ${d.short.split(/\s+/).slice(0, 2).join(' ')} ${d.temp}°`).join(' · ')) : ''}</div>` : ''}
+      </div>` : ''}
+      ${weather?.today && (!isSimpleOnboarding || cbOn('sb-header-weather')) ? `<div id="brief-cover-weather">${esc(`${weather.place || 'Local'} · ${weather.today.short} ${weather.today.temp}°${weather.today.unit}`)}${weather.days?.length > 1 ? esc(' · ' + weather.days.slice(1, 3).map((d) => `${d.name.slice(0, 3)} ${d.short.split(/\s+/).slice(0, 2).join(' ')} ${d.temp}°`).join(' · ')) : ''}</div>` : ''}
       <div class="cover-brief-name">${esc(briefLabel)}</div>
-      <h1 class="headline">${headlineDateLines}</h1>
+      <h1 class="headline">${isSimpleOnboarding ? esc(friendlyDate) : headlineDateLines}</h1>
+      ${isSimpleOnboarding && cbOn('sb-header-status') ? '<div id="sb-header-status">Onboarding complete</div>' : ''}
     </div>
     ${coverSubHtml}
-    <div class="meta">
-      <div><div class="k">Date</div><div class="v">${esc(dateLine)}</div></div>
+    ${(!isSimpleOnboarding || cbOn('sb-header-meta')) ? `<div class="meta">
+      <div><div class="k">Date</div><div class="v">${esc(isSimpleOnboarding ? friendlyDate : dateLine)}</div></div>
       <div><div class="k">Site</div><div class="v">${esc(hostnameOf(websiteUrl) || '—')}</div></div>
       <div><div class="k">Brief Title</div><div class="v">${esc(briefLabel)}</div></div>
       <div><div class="k">Account</div><div class="v mono" style="font-size:13px">${esc(userEmail || '—')}</div></div>
-    </div>
-    <div class="marquee">${brandUpper.split('').map((ch) => `<span>${ch === ' ' ? '&nbsp;' : esc(ch)}</span>`).join('')}</div>
+    </div>` : ''}
+    ${(!isSimpleOnboarding || cbOn('sb-header-marquee')) ? `<div class="marquee">${brandUpper.split('').map((ch) => `<span>${ch === ' ' ? '&nbsp;' : esc(ch)}</span>`).join('')}</div>` : ''}
   </section>
 ${_creativeBrief ? _creativeBrief.pages : ''}
 ${bodySections}
   <footer>
-    <span>Generated · ${esc(new Date(generated).toISOString().slice(0, 19).replace('T', ' '))}</span>
+    ${isSimpleOnboarding ? `${cbOn('sb-footer-generated') ? `<span>Generated ${esc(friendlyDate)}</span>` : ''}
+    ${cbOn('sb-footer-client-id') && clientId ? `<span>Client · ${esc(clientId)}</span>` : ''}
+    ${cbOn('sb-footer-line') ? `<span>${esc(brandUpper)} Creative Brief · Vol. 01</span>` : ''}` : `<span>Generated · ${esc(new Date(generated).toISOString().slice(0, 19).replace('T', ' '))}</span>
     ${clientId ? `<span>Client · ${esc(clientId)}</span>` : ''}
-    <span>Marketing Brief · Vol. 01${clientName ? ' · ' + esc(clientName) : ''}</span>
+    <span>Marketing Brief · Vol. 01${clientName ? ' · ' + esc(clientName) : ''}</span>`}
   </footer>
 </body>
 </html>`;

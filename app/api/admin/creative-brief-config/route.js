@@ -16,6 +16,8 @@ const fb = require('../../../../api/_lib/firebase-admin.cjs');
 const { buildAuthRequestShim, verifyAdminRequest } = require('../../../../api/_lib/auth.cjs');
 const {
   CREATIVE_BRIEF_GROUPS,
+  SIMPLE_BRIEF_GROUPS,
+  CREATIVE_BRIEF_LAYOUTS,
   CONFIG_DOC_PATH,
   loadCreativeBriefConfig,
   normalizeCreativeBriefConfig,
@@ -32,7 +34,7 @@ export async function GET(request) {
     return json({ error: err instanceof Error ? err.message : 'Unauthorized.' }, 401);
   }
   const config = await loadCreativeBriefConfig(fb.adminDb);
-  return json({ config, groups: CREATIVE_BRIEF_GROUPS });
+  return json({ config, groups: CREATIVE_BRIEF_GROUPS, simpleGroups: SIMPLE_BRIEF_GROUPS, layouts: CREATIVE_BRIEF_LAYOUTS });
 }
 
 export async function POST(request) {

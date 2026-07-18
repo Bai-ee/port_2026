@@ -21,18 +21,19 @@ const emptyWrap = { display: 'flex', flexDirection: 'column', alignItems: 'cente
 const emptyLabel = { fontFamily: 'var(--vrk-mono, monospace)', fontSize: 12, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--vrk-ink, #2a2420)' };
 const emptyBody = { fontSize: 13, color: 'var(--vrk-ink-soft, #5a5346)', maxWidth: 420 };
 
-// Element groups whose group key IS a page id in the 'pages' group — their
-// items only render when that parent page is on. Used to surface the
-// dependency in the UI (a child toggle can't bring content back while its
-// page is off — that read as "toggle doesn't work").
-const PAGE_CHILD_GROUPS = new Set(['intro-split', 'featured-post', 'website-status', 'contact']);
+// A group whose key IS an item id inside the layout's page-list group
+// ('pages' / 'sb-pages') holds that page's child elements — they only render
+// while the parent page is on. Surfaced in the UI so a child toggle never
+// reads as broken while its page is off.
+const PAGE_LIST_KEYS = new Set(['pages', 'sb-pages']);
 
 export function CreativeBriefComposerView({ user }) {
   const [tab, setTab] = useState('settings'); // 'settings' | 'preview'
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [groups, setGroups] = useState([]);
-  const [form, setForm] = useState(null); // { include, order }
+  const [simpleGroups, setSimpleGroups] = useState([]);
+  const [form, setForm] = useState(null); // { layout, include, order }
   const [dirty, setDirty] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null); // { kind: 'pending'|'ok'|'error', msg }
   const [previewNonce, setPreviewNonce] = useState(0);
@@ -51,6 +52,7 @@ export function CreativeBriefComposerView({ user }) {
         if (!res.ok) throw new Error(data?.error || 'Could not load composer config.');
         if (cancelledRef.current) return;
         setGroups(Array.isArray(data.groups) ? data.groups : []);
+        setSimpleGroups(Array.isArray(data.simpleGroups) ? data.simpleGroups : []);
         setForm(data.config || null);
       } catch (err) {
         if (!cancelledRef.current) setLoadError(err instanceof Error ? err.message : 'Load failed.');
@@ -139,22 +141,34 @@ export function CreativeBriefComposerView({ user }) {
                 <span className="index">01</span>
                 <div>
                   <h3>Creative Brief content</h3>
-                  <p>What the new-signup Creative Brief renders, and in what order. Toggle any element off; ↑/↓ set its position within its group. Applies to every render of the brief (dashboard, PDF, published pages).</p>
+                  <p>What the new-signup Creative Brief renders, and in what order. Toggle any element off; ↑/↓ set its position within its group; the H chip toggles a section&apos;s heading. Applies to every render of the brief (dashboard, PDF, published pages).</p>
                 </div>
                 <span className="label">{dirty ? 'Unsaved' : 'Saved'}</span>
               </div>
 
-              {groups.map((group) => {
+              <div className="field" style={{ display: 'grid', gap: 6 }}>
+                <span className="label">Layout (A/B)</span>
+                <div className="segmented" role="group" aria-label="Brief layout">
+                  <button type="button" className={(form.layout || 'classic') === 'classic' ? 'is-active' : ''} onClick={() => { setForm((f) => ({ ...f, layout: 'classic' })); setDirty(true); }}>Classic</button>
+                  <button type="button" className={form.layout === 'simple' ? 'is-active' : ''} onClick={() => { setForm((f) => ({ ...f, layout: 'simple' })); setDirty(true); }}>Simple</button>
+                </div>
+                <span className="hint">Classic = the as-built brief. Simple = the streamlined structure (own toggles below — everything starts ON, spec-removed extras start OFF). Save applies the layout to every client&apos;s Creative Brief.</span>
+              </div>
+
+              {(form.layout === 'simple' ? simpleGroups : groups).map((group) => {
                 const ord = Array.isArray(form.order?.[group.key]) ? form.order[group.key] : [];
                 const oi = (id) => { const i = ord.indexOf(id); return i === -1 ? 999 : i; };
                 const ordered = [...(group.items || [])].sort((a, b) => oi(a.id) - oi(b.id));
                 // Child elements of a toggled-off page still save, but render
                 // nothing until the page is back on — say so instead of
                 // looking like a broken toggle.
-                const parentOff = PAGE_CHILD_GROUPS.has(group.key) && form.include?.[group.key] === false;
-                const parentLabel = parentOff
-                  ? (groups.find((g) => g.key === 'pages')?.items || []).find((i) => i.id === group.key)?.label || group.key
+                const activeGroups = form.layout === 'simple' ? simpleGroups : groups;
+                const pageList = activeGroups.find((g) => PAGE_LIST_KEYS.has(g.key));
+                const parentItem = group.key !== pageList?.key
+                  ? (pageList?.items || []).find((i) => i.id === group.key)
                   : null;
+                const parentOff = Boolean(parentItem) && form.include?.[group.key] === false;
+                const parentLabel = parentOff ? (parentItem?.label || group.key) : null;
                 return (
                   <div key={group.key} style={{ display: 'grid', gap: 8 }}>
                     <span className="label" style={{ marginTop: 4 }}>
@@ -179,6 +193,17 @@ export function CreativeBriefComposerView({ user }) {
                             <span style={{ minWidth: 0 }}>
                               <span className="toggle-title">{item.label}</span>
                               <span className="toggle-desc">{parentOff ? `Saved, but hidden until the “${parentLabel}” page is turned back on.` : item.desc}</span>
+                              {item.hasHeading ? (
+                                <button
+                                  type="button"
+                                  aria-pressed={form.include?.[`${item.id}:heading`] !== false}
+                                  title="Toggle this section's heading"
+                                  onClick={(e) => { e.stopPropagation(); toggle(`${item.id}:heading`); }}
+                                  style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, padding: '3px 8px', border: '1px solid rgba(42,36,32,0.18)', borderRadius: 999, background: form.include?.[`${item.id}:heading`] !== false ? 'rgba(42,36,32,0.08)' : 'rgba(255,255,255,0.7)', cursor: 'pointer', font: '700 10px/1 var(--vrk-mono, monospace)', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--vrk-ink, #2a2420)', opacity: form.include?.[`${item.id}:heading`] !== false ? 1 : 0.55 }}
+                                >
+                                  H · Heading {form.include?.[`${item.id}:heading`] !== false ? 'on' : 'off'}
+                                </button>
+                              ) : null}
                             </span>
                             <span style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4 }} onClick={(e) => e.stopPropagation()}>
                               <button type="button" aria-label={`Move ${item.label} up`} disabled={idx === 0} onClick={(e) => { e.stopPropagation(); move(group.key, item.id, -1); }} style={{ width: 22, height: 22, lineHeight: '20px', textAlign: 'center', padding: 0, border: '1px solid rgba(42,36,32,0.18)', borderRadius: 6, background: 'rgba(255,255,255,0.7)', cursor: idx === 0 ? 'not-allowed' : 'pointer', opacity: idx === 0 ? 0.4 : 1, fontSize: 11 }}>↑</button>
@@ -213,7 +238,7 @@ export function CreativeBriefComposerView({ user }) {
             id="creative-brief-composer-preview"
             key={previewNonce}
             title="Creative Brief preview"
-            src={`/api/public/hitloop-creative-brief?v=${previewNonce}`}
+            src={`/api/public/hitloop-creative-brief?v=${previewNonce}&layout=${form?.layout === 'simple' ? 'simple' : 'classic'}`}
             style={{ width: '100%', flex: 1, minHeight: 560, border: '1px solid rgba(42,36,32,0.08)', borderRadius: 8, background: '#fff' }}
           />
         </div>

@@ -37,7 +37,7 @@ function htmlResponse(body, status = 200) {
   });
 }
 
-export async function GET() {
+export async function GET(request) {
   try {
     const snap = await fb.adminDb.collection('dashboard_state').doc(CLIENT_ID).get();
     if (!snap.exists) {
@@ -63,8 +63,14 @@ export async function GET() {
 
     // Honor the Creative Brief composer config (admin card) here too, so the
     // public sample matches what new signups get. Defaults on failure.
+    // ?layout=classic|simple overrides the saved layout only (toggles/order
+    // stay saved-state) — lets the composer preview a layout before saving it.
     const { loadCreativeBriefConfig } = require('../../../../features/scout-intake/creative-brief-config.cjs');
-    const creativeBriefConfig = await loadCreativeBriefConfig(fb.adminDb);
+    let creativeBriefConfig = await loadCreativeBriefConfig(fb.adminDb);
+    const layoutOverride = new URL(request.url).searchParams.get('layout');
+    if (layoutOverride === 'classic' || layoutOverride === 'simple') {
+      creativeBriefConfig = { ...creativeBriefConfig, layout: layoutOverride };
+    }
 
     const html = renderMarketingBriefHtml({
       creativeBriefConfig,
