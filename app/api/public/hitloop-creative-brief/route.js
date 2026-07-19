@@ -107,7 +107,9 @@ export async function GET(request) {
     });
 
     if (fitMode) {
-      html = html.replace('</head>', '<style>section.page{min-height:min(100vh,860px) !important}</style></head>');
+      // Cap poster pages only — simple-layout sections (.sb-sec) are already
+      // content-height and must NOT be inflated to the cap.
+      html = html.replace('</head>', '<style>section.page:not(.sb-sec){min-height:min(100vh,860px) !important}</style></head>');
     }
 
     return htmlResponse(html);

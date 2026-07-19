@@ -1443,7 +1443,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
           return sbPage('sb-opportunity', 'The<br/>Opportunity.', `${leads}${sbNumList(items)}`);
         },
         'sb-onboarded': () => sbPage('sb-onboarded', 'You’re<br/>Onboarded.', `<p class="sb-lead">${esc(ONBOARD_COPY[0])}</p>${ONBOARD_COPY.slice(1).map((p) => `<p class="sub">${esc(p)}</p>`).join('')}`),
-        'sb-services': () => sbPage('sb-services', 'What We<br/>Offer.', servicesGrid),
+        'sb-services': () => sbPage('sb-services', 'What We<br/>Offer.', `<ol class="sb-numlist">${SERVICES.map((s, i) => `<li><span class="n">S${String(i + 1).padStart(2, '0')}</span><span class="d">—</span><span class="t"><span class="sb-dl-title">${esc(s.name)}</span><span class="sb-dl-desc">${esc(s.desc)}</span></span></li>`).join('')}</ol>`),
         'sb-featured-post': () => (featuredRowHtml ? sbPage('sb-featured-post', 'Featured<br/>Post.', featuredRowHtml) : ''),
         'sb-social-share': () => (socialInner ? sbPage('sb-social-share', 'Social<br/>Share.', socialInner) : ''),
         'sb-risk': () => (riskInner ? sbPage('sb-risk', 'Biggest<br/>Risk.', riskInner) : ''),
@@ -1830,16 +1830,32 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft);
   }
   /* ── Simple layout sections ─────────────────────────────────────────────
-     Compact document flow: no poster min-heights, no corner/pixel ornaments,
-     smaller single-line headings, calm lead text. Theme (fonts/colors)
-     unchanged; The Decision keeps the one visually-distinct treatment. */
+     Nothing-style flat document: warm off-white, no gradients or ornaments,
+     Space Mono ALL-CAPS label headers with hairline dividers, line-item
+     content. One Doto hero moment (the cover date); The Decision keeps the
+     single visually-distinct treatment. */
+  body.sb-body{background:#fbf9f4}
+  .sb-body .cap-brief-email-cta{background:#111;box-shadow:none}
+  .sb-body .cap-brief-email-cta::before{content:none;animation:none}
+  .sb-body .cb-deco{display:none !important}
+  .sb-body .cb-cover-sig,.sb-body img.cb-cover-sig{display:none}
   section.page.sb-sec{
     min-height:auto;display:block;
-    padding:clamp(30px,5vh,56px) var(--gutter) clamp(32px,5vh,60px);
+    padding:clamp(26px,4vh,48px) var(--gutter) clamp(28px,4vh,52px);
   }
   .sb-sec::before,.sb-sec::after{display:none}
-  .sb-sec h2.headline{font-size:clamp(24px,3.2vw,40px);margin:0}
-  .sb-sec .rule{margin:14px 0 22px}
+  /* Headers are labels, not posters: mono caps + divider. */
+  .sb-sec h2.headline{
+    font-family:"Space Mono",monospace;font-weight:700;
+    font-size:13px;letter-spacing:.24em;text-transform:uppercase;
+    color:var(--ink);margin:0;
+  }
+  .sb-sec .rule{margin:10px 0 20px;max-width:none}
+  /* Cover as a compact header block at every size (poster only in classic). */
+  section.page.cover--simple{
+    min-height:auto;display:block;
+    padding:clamp(44px,7vh,84px) var(--gutter) clamp(26px,4vh,44px);
+  }
   .sb-lead{
     font-family:"Space Grotesk",sans-serif;font-weight:300;
     font-size:clamp(18px,2vw,24px);line-height:1.5;color:var(--ink);
@@ -1875,10 +1891,8 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     .sb-dl-row{grid-template-columns:auto minmax(0,1fr) auto;gap:12px}
     .sb-dl-row .n{display:none}
   }
-  /* Cover stays a poster on desktop; on phones it collapses to content height
-     so the simple brief opens straight into substance. */
   @media(max-width:640px){
-    section.page.cover--simple{min-height:auto;padding-top:96px;padding-bottom:40px}
+    section.page.cover--simple{padding-top:92px}
   }
   #onboarding-cover-mockup{
     position:absolute;
@@ -1915,7 +1929,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   }
   </style>
 </head>
-<body>
+<body${isSimpleOnboarding ? ' class="sb-body"' : ''}>
   <section class="page cover${isCoverMockup ? ' cover--has-onboarding-mockup' : ''}${isSimpleOnboarding ? ' cover--simple' : ''}">
     ${isSimpleOnboarding ? '' : '<div class="sec-num">00</div>'}
     ${isCoverMockup ? `<div id="onboarding-cover-mockup" aria-hidden="true"><img src="${esc(mockupSrc)}" alt="Homepage device mockup" /></div>` : ''}
