@@ -8569,6 +8569,31 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     if (runningInBackground) setBgRunToast(true);
   };
 
+  // ── Post-signup reveal: open the Creative Brief modal first ────────────────
+  // When a signup build that ran THIS session completes and the terminal goes
+  // away, the new user lands straight in the Creative Brief popup (they can ✕
+  // out; the dashboard is behind it). Re-opening later = clicking the Creative
+  // Brief card / its Details button. Fires once per session; returning users
+  // (no run this session) never get an auto-open.
+  const autoOpenedBriefRef = useRef(false);
+  useEffect(() => {
+    if (autoOpenedBriefRef.current) return;
+    if (showIntakeModal) return;
+    if (!runWasActiveRef.current) return;
+    if (latestRunStatus !== 'succeeded') return;
+    const onboardingHtml = briefCardPreviewHtml['onboarding-brief'];
+    if (!onboardingHtml && !briefPreviewHtml) return; // brief HTML still loading — retry on next dep change
+    autoOpenedBriefRef.current = true;
+    // Same preference as clicking the Creative Brief card (openCapabilityCard):
+    // the named onboarding render when available, else the main brief view.
+    if (onboardingHtml) {
+      setNamedBriefShareError('');
+      setNamedBriefView({ key: 'onboarding', html: onboardingHtml });
+    } else {
+      setBriefFullScreen(true);
+    }
+  }, [showIntakeModal, latestRunStatus, briefPreviewHtml, briefCardPreviewHtml]);
+
   // Re-open the build terminal from the background-run chip. Clears the
   // persisted dismissal so showIntakeModal recomputes true (the restore effect
   // keys on intakeDismissKey, which is unchanged, so it won't re-dismiss).
