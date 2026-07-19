@@ -355,6 +355,11 @@ const CopywriterCard = dynamic(() => import('./components/dashboard/CopywriterCa
   ssr: false,
 });
 
+const XProfileCard = dynamic(() => import('./components/dashboard/XProfileCard'), {
+  loading: () => null,
+  ssr: false,
+});
+
 const MediaLibraryCard = dynamic(() => import('./components/dashboard/MediaLibraryCard'), {
   loading: () => null,
   ssr: false,
@@ -1542,6 +1547,7 @@ const CUSTOM_DETAIL_CARD_IDS = new Set([
   'client-site',
   'copywriter',
   'social-media-posting',
+  'x-profile',
   'strategy-builder',
   'email-digest',
   'creative-brief-composer',
@@ -12162,6 +12168,23 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       footerRight: 'LIVE',
       readinessBadge: { tone: 'ok', label: 'Ready' },
     },
+    ...(isAdmin ? [{
+      id: 'x-profile',
+      category: 'social',
+      number: 'XC',
+      label: 'ACCOUNT',
+      title: 'X Command Center',
+      description: 'Connects and manages the live @bai_ee X account — bookmarks into content, profile, engagement — every credit-metered action behind an explicit confirm.',
+      placeholderLabel: 'X\nACCOUNT',
+      rows: [
+        { key: 'xc-channel', label: 'Channel', value: 'X / Twitter — @bai_ee' },
+        { key: 'xc-auth', label: 'Auth', value: 'OAuth 2.0 user context (PKCE)' },
+        { key: 'xc-now', label: 'Now', value: 'Connect + verify bookmark access' },
+        { key: 'xc-access', label: 'Access', value: 'Admin only' },
+      ],
+      footerLeft: 'Phase 0',
+      footerRight: 'ADMIN',
+    }] : []),
 
     // ── DAILY BRIEFS ────────────────────────────────────────────────────────
     ...(isAdmin ? [{
@@ -18660,6 +18683,20 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     <div className="tile-detail-tab-content">
                       <div className="tile-detail-tab-pane">
                         <CopywriterCard getIdToken={brandSystemGetIdToken} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* X Command Center card — OAuth 2.0 connect + bookmark access proof */}
+                {activeTileModal.cardId === 'x-profile' && (
+                  <div id="x-profile-modal-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
+                    <div className="tile-detail-tabs">
+                      <button type="button" className="tile-detail-tab tile-detail-tab--active">X COMMAND CENTER</button>
+                    </div>
+                    <div className="tile-detail-tab-content">
+                      <div className="tile-detail-tab-pane">
+                        <XProfileCard getIdToken={brandSystemGetIdToken} />
                       </div>
                     </div>
                   </div>
