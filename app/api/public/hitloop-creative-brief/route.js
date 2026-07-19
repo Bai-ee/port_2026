@@ -81,7 +81,14 @@ export async function GET(request) {
       creativeBriefConfig = { ...creativeBriefConfig, layout: layoutOverride };
     }
 
-    const html = renderMarketingBriefHtml({
+    // ?fit=1 (composer preview only): the preview iframe is sized to its
+    // content height, which makes 100vh INSIDE the iframe equal the full
+    // document height — every poster page balloons and the measurement loop
+    // diverges (blank stretched preview). Cap page min-heights so the
+    // content-sized iframe converges; real brief renders are untouched.
+    const fitMode = new URL(request.url).searchParams.get('fit') === '1';
+
+    let html = renderMarketingBriefHtml({
       creativeBriefConfig,
       marketingBrief: dash.marketingBrief || null,
       clientName: CLIENT_NAME,
@@ -98,6 +105,10 @@ export async function GET(request) {
       coverSummary,
       displayLabel: 'Creative Brief',
     });
+
+    if (fitMode) {
+      html = html.replace('</head>', '<style>section.page{min-height:min(100vh,860px) !important}</style></head>');
+    }
 
     return htmlResponse(html);
   } catch (err) {

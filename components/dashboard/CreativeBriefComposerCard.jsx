@@ -47,7 +47,9 @@ export function CreativeBriefComposerView({ user }) {
     try {
       const doc = el?.contentDocument;
       const h = Math.max(doc?.documentElement?.scrollHeight || 0, doc?.body?.scrollHeight || 0);
-      if (h > 0 && !cancelledRef.current) setPreviewHeight(h);
+      // Sanity ceiling — a runaway measurement (vh feedback) must never wedge
+      // the modal; ?fit=1 on the preview URL keeps it convergent in practice.
+      if (h > 0 && h < 60000 && !cancelledRef.current) setPreviewHeight(h);
     } catch { /* cross-origin safety — same-origin in practice */ }
   }, []);
 
@@ -260,7 +262,7 @@ export function CreativeBriefComposerView({ user }) {
             id="creative-brief-composer-preview"
             key={previewNonce}
             title="Creative Brief preview"
-            src={`/api/public/hitloop-creative-brief?v=${previewNonce}&layout=${form?.layout === 'simple' ? 'simple' : 'classic'}`}
+            src={`/api/public/hitloop-creative-brief?v=${previewNonce}&layout=${form?.layout === 'simple' ? 'simple' : 'classic'}&fit=1`}
             onLoad={handlePreviewLoad}
             scrolling={previewHeight ? 'no' : 'auto'}
             style={{
