@@ -1,6 +1,6 @@
 # Load Performance Implementation Plan
 
-**Status:** APPROVED (scope: M1, D0, D1, M2)
+**Status:** EXECUTED — full approved scope shipped (M1 `83390739`, D0 `037a53ea`, D1 `7b3be4fc`, M2 `76bbe184`), 2026-07-18/19. Held for re-review: M3 (asset prune), decomposition Phases 2–5.
 **Created:** 2026-07-18
 **Approved:** 2026-07-18
 **Companion:** [`DASHBOARDPAGE-DECOMPOSITION-PLAN.md`](DASHBOARDPAGE-DECOMPOSITION-PLAN.md) (approved input to this plan)
@@ -50,11 +50,17 @@ Expected: the ~2 MB wasted warm-up fetch is eliminated, and the two video files 
 
 **Phase M2 — self-host fonts.** Replace the Google Fonts preload chain with `next/font` (Doto, Space Grotesk, Space Mono — all on Google Fonts, so `next/font/google` inlines + self-hosts automatically). Removes 2 origins from the critical path, kills FOUT risk. One-file change in `app/layout.jsx`. Verify: font rendering parity, no layout shift.
 
+**EXECUTED 2026-07-19** (`76bbe184`, `app/layout.jsx` only, +11/−38): the preconnect/preload/media-flip/noscript chain replaced with `next/font/google`, `display:'swap'`. Literal family names preserved in the generated `@font-face` (reviewer-verified in `document.fonts` — real names, not hashed), so the 150+ existing literal `font-family` references needed zero changes. Verified: 0 requests to fonts.googleapis/gstatic, self-hosted woff2 from `/_next/static/media/`, CLS 0, visual parity on live page. Known side-effect: `<html>` now inherits Space Mono as default family via the className stack (was browser serif) — only affects text with no explicit font-family.
+
 **Phase M3 — asset prune (hygiene, needs explicit deletion approval).** `reel.mp4` (37 MB), `interactive_ss_*.png`, superseded `port/*.png` where a referenced `.webp` exists. Grep-verify each is unreferenced before removal; move to external storage rather than delete if history matters. Shrinks repo + deploy, zero runtime effect.
 
 ### Track D — dashboard load (decomposition plan, adopted)
 
-Execute `DASHBOARDPAGE-DECOMPOSITION-PLAN.md` **Phase 0 + Phase 1 only**, per that plan's own recommendation. Answers to its reviewer questions:
+Execute `DASHBOARDPAGE-DECOMPOSITION-PLAN.md` **Phase 0 + Phase 1 only**, per that plan's own recommendation.
+
+**EXECUTED 2026-07-18** — D0 `037a53ea` (baselines in `docs/plans/decomposition-baselines/`), D1 `7b3be4fc` (11 split files under `styles/dashboard/`, DashboardPage.jsx 32.4k→21.3k lines, stale `dashboard.css` mirror deleted, harness repointed). Byte-gate result: concat matches baseline except ONE enumerated comment rewording — see the known-delta entry in `BASELINE-COMMANDS.md`. Cascade order reviewer-verified in the compiled CSSOM (all 11 file markers in import order); responsive parity captured at 375/768/1444 (`034976f4`). In-flight X Command Center work was split into its own commit (`26fb839f`) to keep D1 move-only pure.
+
+Answers to the decomposition plan's reviewer questions:
 
 1. **CSS target:** real `.css` files (browser caching + kills the mirror-drift bug class). Confirmed.
 2. **Screenshot tooling:** no visual-diff harness exists. Primary gate = the byte-compare CSS hash (mechanical); screenshots = manual captures via `app/preview/mobile-audit` at 375, plus 768/1440 manual. Do not build new tooling for this.

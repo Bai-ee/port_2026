@@ -1,6 +1,6 @@
 # DashboardPage.jsx Decomposition Plan
 
-**Status:** APPROVED (scope: Phase 0 + Phase 1 only)
+**Status:** Phase 0 + Phase 1 EXECUTED 2026-07-18 (D0 `037a53ea`, D1 `7b3be4fc` — DashboardPage.jsx 32.4k→21.3k lines, CSS now `styles/dashboard/*.css`, mirror deleted; byte-gate delta + parity evidence in `decomposition-baselines/BASELINE-COMMANDS.md`). Phases 2–4 NOT approved — re-review required. Phase 5 deferred.
 **Reviewer:** Fable
 **Implementer:** Sonnet
 **Author:** Opus (measurement + plan, no code changes made)
