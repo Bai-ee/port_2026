@@ -37,7 +37,26 @@ export function CreativeBriefComposerView({ user }) {
   const [dirty, setDirty] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null); // { kind: 'pending'|'ok'|'error', msg }
   const [previewNonce, setPreviewNonce] = useState(0);
+  // Measured height of the brief inside the preview iframe — sizing the iframe
+  // to its content kills the nested inner-scroll (the modal/page scrolls the
+  // whole brief instead, which is what you want on mobile).
+  const [previewHeight, setPreviewHeight] = useState(0);
   const cancelledRef = useRef(false);
+
+  const measurePreview = useCallback((el) => {
+    try {
+      const doc = el?.contentDocument;
+      const h = Math.max(doc?.documentElement?.scrollHeight || 0, doc?.body?.scrollHeight || 0);
+      if (h > 0 && !cancelledRef.current) setPreviewHeight(h);
+    } catch { /* cross-origin safety — same-origin in practice */ }
+  }, []);
+
+  const handlePreviewLoad = useCallback((e) => {
+    const el = e.currentTarget;
+    measurePreview(el);
+    // Fonts/images/videos land after load and grow the brief — re-measure.
+    [600, 1500, 3500].forEach((ms) => setTimeout(() => measurePreview(el), ms));
+  }, [measurePreview]);
 
   useEffect(() => {
     cancelledRef.current = false;
@@ -116,6 +135,7 @@ export function CreativeBriefComposerView({ user }) {
       const ok = await save();
       if (!ok) return;
     }
+    setPreviewHeight(0);
     setPreviewNonce(Date.now());
     setTab('preview');
   };
@@ -229,7 +249,7 @@ export function CreativeBriefComposerView({ user }) {
           </div>
         )
       ) : (
-        <div className="vrk-scope" id="creative-brief-composer-preview-shell" style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 16, flex: 1, minHeight: 0 }}>
+        <div className="vrk-scope" id="creative-brief-composer-preview-shell" style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 16, flex: '1 0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
             <span className="label">
               Previewing: <span style={{ color: 'var(--vrk-success, #285f3b)' }}>{form?.layout === 'simple' ? 'SIMPLE' : 'CLASSIC'} layout</span> · saved config · HITLOOP sample data (same template every signup gets)
@@ -241,7 +261,20 @@ export function CreativeBriefComposerView({ user }) {
             key={previewNonce}
             title="Creative Brief preview"
             src={`/api/public/hitloop-creative-brief?v=${previewNonce}&layout=${form?.layout === 'simple' ? 'simple' : 'classic'}`}
-            style={{ width: '100%', flex: 1, minHeight: 560, border: '1px solid rgba(42,36,32,0.08)', borderRadius: 8, background: '#fff' }}
+            onLoad={handlePreviewLoad}
+            scrolling={previewHeight ? 'no' : 'auto'}
+            style={{
+              width: '100%',
+              border: '1px solid rgba(42,36,32,0.08)',
+              borderRadius: 8,
+              background: '#fff',
+              // Content-sized: the surrounding page scrolls the whole brief —
+              // no nested iframe scroll. Falls back to a viewport-ish box
+              // until the first measurement lands.
+              ...(previewHeight
+                ? { height: previewHeight, flex: '0 0 auto', overflow: 'hidden' }
+                : { flex: 1, minHeight: 560 }),
+            }}
           />
         </div>
       )}

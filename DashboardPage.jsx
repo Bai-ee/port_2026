@@ -24930,7 +24930,12 @@ export const dashboardCss = `
     #creative-brief-composer-shell .section { padding: 12px 10px; }
     #creative-brief-composer-shell .section-head { grid-template-columns: minmax(0, 1fr) auto; }
     #creative-brief-composer-shell .section-head .index { display: none; }
-    #creative-brief-composer-preview-shell { padding: var(--mobile-gutter, 8px) !important; }
+    /* Preview: edge-to-edge brief — no horizontal padding, square full-bleed
+       iframe; the modal pane scrolls the content-sized iframe as one page. */
+    #creative-brief-composer-root { padding-left: 0 !important; padding-right: 0 !important; }
+    #creative-brief-composer-preview-shell { padding: var(--mobile-gutter, 8px) 0 !important; }
+    #creative-brief-composer-preview { border-left: 0 !important; border-right: 0 !important; border-radius: 0 !important; }
+    #creative-brief-composer-preview-shell > div:first-child { padding: 0 var(--mobile-gutter, 8px); }
   }
   .tile-detail-bento-label {
     display: block;
