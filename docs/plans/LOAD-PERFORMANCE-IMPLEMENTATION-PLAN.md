@@ -1,7 +1,8 @@
 # Load Performance Implementation Plan
 
-**Status:** DRAFT — awaiting approval
+**Status:** APPROVED (scope: M1, D0, D1, M2)
 **Created:** 2026-07-18
+**Approved:** 2026-07-18
 **Companion:** [`DASHBOARDPAGE-DECOMPOSITION-PLAN.md`](DASHBOARDPAGE-DECOMPOSITION-PLAN.md) (approved input to this plan)
 
 ---
@@ -24,9 +25,10 @@ The marketing site's load time is dominated by **media weight**, measured below.
 | # | Finding | Cost |
 |---|---|---|
 | 1 | `dashboard.mov` referenced as `previewVideo` on the homepage (`StackedSlidesSection.jsx:338,445`) | **18.7 MB**, QuickTime container (no guaranteed browser decode) |
-| 2 | Homepage peek cards render `ss1/ss2/ss3.png` at ~200 px height (`StackedSlidesSection.jsx:2031–2033`) | **5.5 MB** combined, full-res PNG |
-| 3 | `PRELOAD_ASSETS` eagerly decodes deliverable images on homepage mount (`StackedSlidesSection.jsx:626,1387`) incl. `hitloop-device-mockup.png` | **~2 MB** eager + points at a **3.4 MB** mp4 |
-| 4 | `dash.png` 630 KB; other homepage PNGs unoptimized; almost no `next/image` usage (raw `<img>` everywhere on home) | no srcset, no AVIF/WebP transform |
+| 2 | ~~Homepage peek cards render `ss1/ss2/ss3.png` at ~200 px height~~ — **correction:** these already render via `next/image` (`<Image fill sizes=...>`, `StackedSlidesSection.jsx:2061`). `next.config.mjs` has no `unoptimized` flag, so the default optimizer serves resized WebP/AVIF at request time. The "5.5 MB" figure was raw on-disk PNG size, not transferred bytes — not a real load-time cost. Source-file resize deferred to M3 (repo-weight hygiene only). | not a real bottleneck — no action in M1 |
+| 3 | `PRELOAD_ASSETS` warm-up (`StackedSlidesSection.jsx:626,1387`, pre-fix) — **correction:** it fetched raw `/img/...` originals via bare `<img src>`/`new Image()`, bypassing the optimizer entirely. The real `DeliverableHoverCard` renders those same assets through `next/image`, which requests a *different* (`/_next/image?...`) URL. So the warm-up populated a cache entry the real card never reads — pure waste, not "eager decode of the transformed image." Fixed by deleting the warm-up (dead code, zero benefit); see M1 execution notes. | **~2 MB** fetched and discarded every desktop mount, for zero cache benefit |
+| 3b | `hitloop-video.mp4` (referenced by the same hover cards) — **new finding, not in original scan:** 1920×1200 @ 6.8 Mbps for a ≤380px hover-card slot. | oversized for its render slot |
+| 4 | `dash.png` 630 KB — **correction:** dead code. Its only reference (`StackedSlidesSection.jsx:615`) is inside a commented-out disabled hover handler. Never fetched at runtime. No action taken. | not a real bottleneck |
 | 5 | Google Fonts loaded from external origins (`app/layout.jsx:104–136`), 3 families | 2 extra connections on the critical path |
 | 6 | DashboardPage chunk 1.08 MB (see above) | dashboard-route JS parse |
 | 7 | `public/img` = **836 MB** on disk; `reel.mp4` (37 MB) and `interactive_ss_*.png` (7.2 MB max) verified **unreferenced** | deploy/repo weight, not runtime — hygiene |
@@ -37,13 +39,14 @@ Two independent tracks. Track M (media) is the marketing-site win; Track D (deco
 
 ### Track M — marketing-site load (highest user-visible impact)
 
-**Phase M1 — homepage media diet.** Presentation-only, no logic/DOM-structure change.
-1. Re-encode `dashboard.mov` → H.264/AV1 `.mp4` sized for its preview slot (target ≤ 2 MB), update the two `previewVideo` refs. Keep `preload="none"`/lazy if not already.
-2. Resize + WebP-convert `ss1/ss2/ss3.png` for their rendered ~200 px card height (target ≤ 60 KB each; keep 2x for retina). Same for `dash.png` and `hitloop-device-mockup.png` (the existing `.webp` sibling is *larger* — regenerate at rendered size).
-3. Gate `PRELOAD_ASSETS` warm-up behind first user intent (scroll-near or hover) instead of mount, or shrink the assets it warms so eager stays cheap. Smallest-diff option preferred.
-4. Verify: homepage network waterfall before/after (DevTools, throttled Fast 4G), visual parity at 375/768/1440.
+**Phase M1 — homepage media diet.** Presentation-only, no logic/DOM-structure change. **EXECUTED 2026-07-18** (revised scope, per the bottleneck corrections above):
+1. Re-encoded `dashboard.mov` → H.264 `.mp4`, 640px wide (portrait), 30fps, CRF 23, audio stripped (source had none) — **18.7 MB → 1.22 MB**. Updated both `previewVideo` refs (`StackedSlidesSection.jsx:338,445`) to `/vid/dashboard.mp4`. Original `.mov` kept on disk, untouched.
+2. Deleted the broken `PRELOAD_ASSETS` warm-up entirely (the effect at `StackedSlidesSection.jsx:622-630` and the hidden-portal render at `:1372-1379`), plus the now-dead `PRELOAD_ASSETS` export in `DeliverableHoverCards.jsx` and its now-unused import. It was fetching the wrong (unoptimized) URLs — removing it is a pure ~2 MB/mount win with no loss of function.
+3. Re-encoded `hitloop-video.mp4` (item 3b) — 1920×1200 → 800px wide, CRF 23 — **3.41 MB → 1.02 MB**. Added `preload="none"` to both `<video>` tags in `DeliverableHoverCards.jsx` (video-post, post-me shells) as a defensive no-op (the component was already hover-mount-gated). Original kept as `hitloop-video.mp4.orig`.
+4. Dropped: `ss1/ss2/ss3.png` resize and `hitloop-device-mockup.png` resize — deferred to M3 (see corrected bottleneck #2 — `next/image` already handles the wire cost; resizing the source is a repo-weight hygiene move, not a load-time fix). `dash.png` untouched (dead code, bottleneck #4 correction).
+5. Verified: production build clean; both new asset URLs serve 200/correct mime via the dev server. **Not verified:** desktop-hover visual parity — this session's browser-automation viewport was capped at ~614px CSS width (extension panel constraint, resize had no effect), so the hover-card reveal could not be visually confirmed at desktop width. Mobile tap-to-expand path was reachable but the specific rows clicked didn't trigger a preview (informational-only rows, not wired to the hover-card system). **Recommend a manual desktop-hover + mobile-tap check before merge.**
 
-Expected: homepage transferred bytes drop from ~25 MB worst-case to low single-digit MB. This is the single biggest "no delay" lever in the repo.
+Expected: the ~2 MB wasted warm-up fetch is eliminated, and the two video files drop from 18.7+3.41=22.1 MB combined to 1.22+1.02=2.24 MB combined. `ss1/ss2/ss3`/`dash.png`/`hitloop-device-mockup.png` were not load-time contributors to begin with (see corrections above), so no further homepage-transferred-bytes win is expected from touching them.
 
 **Phase M2 — self-host fonts.** Replace the Google Fonts preload chain with `next/font` (Doto, Space Grotesk, Space Mono — all on Google Fonts, so `next/font/google` inlines + self-hosts automatically). Removes 2 origins from the critical path, kills FOUT risk. One-file change in `app/layout.jsx`. Verify: font rendering parity, no layout shift.
 
@@ -79,6 +82,6 @@ Phases 2–4 of the decomposition: re-review after Phase 1 lands (they are maint
 
 ## Recommended approval
 
-**Approve Phase M1 + M2 + Track D (Phase 0 + 1).** Hold M3 (deletions) and decomposition Phases 2–4 for re-review.
+**Approved 2026-07-18: Phase M1 (revised scope, executed) + M2 + Track D (Phase 0 + 1).** Hold M3 (deletions/hygiene resize) and decomposition Phases 2–4 for re-review.
 
-Suggested order: M1 → D0 → D1 → M2. M1 first because it is the largest user-visible win and independent of everything else.
+Order: M1 → D0 → D1 → M2. M1 executed first; D0 next.

@@ -9,7 +9,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { createSharedParticleGalleryRenderer } from './sharedParticleGalleryRenderer';
 import { BrainIcon } from './components/ui/brain';
 import SubscribeModal from './components/payments/SubscribeModal';
-import DeliverableHoverCard, { PRELOAD_ASSETS } from './components/home/DeliverableHoverCards';
+import DeliverableHoverCard from './components/home/DeliverableHoverCards';
 import UpRightArrow from './components/UpRightArrow';
 import {
   Bot,
@@ -335,7 +335,7 @@ const AUTOMATION_CAPABILITIES = [
     badgeColor: '#f59e0b',
     icon: 'chart',
     previewImage: '/img/port/frame_7.webp',
-    previewVideo: '/vid/dashboard.mov',
+    previewVideo: '/vid/dashboard.mp4',
     title: 'Daily Briefs',
     body: 'Automated daily intelligence briefings that surface what matters: competitor moves, content opportunities, and operational signals, delivered to your dashboard every morning.',
   },
@@ -442,7 +442,7 @@ const AUTOMATION_CAPABILITIES = [
     badgeColor: '#0ea5e9',
     icon: 'chart',
     tablePreview: true,
-    previewVideo: '/vid/dashboard.mov',
+    previewVideo: '/vid/dashboard.mp4',
     title: "Onboard now, save time later.",
     body: "Every website serves a different purpose, whether it's building an identity, publishing content, selling products, or helping people find your work. My goal is to retain the integrity of your brand and give you a system to own.",
   },
@@ -616,18 +616,6 @@ const StackedSlidesSection = () => {
   //   raf2(() => setHoverCards((prev) => prev.map((c) => (c.key === key ? { ...c, shown: true } : c))));
   //   cardTimer.current = setTimeout(() => { setHoverCards((prev) => prev.filter((c) => c.key === key)); cardTimer.current = null; }, 760);
   // };
-  // Warm lightweight hover-card images after idle on capable desktop links.
-  // Video and iframe previews wait for explicit hover intent so the homepage
-  // does not spend bandwidth/CPU on media the visitor may never open.
-  const [warmAssets, setWarmAssets] = useState(false);
-  useEffect(() => {
-    if (typeof window === 'undefined' || isTouchScrollDevice()) return;
-    if (window.navigator?.connection?.saveData) return;
-    PRELOAD_ASSETS.images.forEach((src) => { const img = new window.Image(); img.src = src; if (img.decode) img.decode().catch(() => {}); });
-    const idle = window.requestIdleCallback || ((cb) => setTimeout(cb, 1200));
-    const handle = idle(() => setWarmAssets(true));
-    return () => { (window.cancelIdleCallback || clearTimeout)(handle); };
-  }, []);
   const [showCmoModal, setShowCmoModal] = useState(false);
   const router = useRouter();
 
@@ -1381,14 +1369,6 @@ const StackedSlidesSection = () => {
 
   return (
     <section style={sectionStyle}>
-      {warmAssets && typeof document !== 'undefined'
-        ? createPortal(
-            <div aria-hidden="true" style={{ position: 'fixed', left: -99999, top: 0, width: 1, height: 1, overflow: 'hidden', opacity: 0, pointerEvents: 'none' }}>
-              {PRELOAD_ASSETS.images.map((src) => <img key={src} src={src} alt="" />)}
-            </div>,
-            document.body
-          )
-        : null}
       {hoverCards.length > 0 && typeof document !== 'undefined'
         ? createPortal(
             <>

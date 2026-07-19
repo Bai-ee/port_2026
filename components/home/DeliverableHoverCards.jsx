@@ -132,7 +132,7 @@ const SHELLS = {
   ),
   'video-post': (
     <div style={shellStyle}>
-      <video src={ASSETS.video} autoPlay muted loop playsInline style={imgCover} />
+      <video src={ASSETS.video} preload="none" autoPlay muted loop playsInline style={imgCover} />
     </div>
   ),
   'post-me': (
@@ -143,6 +143,7 @@ const SHELLS = {
       <Image src={ASSETS.postme} alt="HITLOOP social post" fill sizes="(max-width: 768px) 100vw, 50vw" style={{ objectFit: 'fill', display: 'block' }} />
       <video
         src={ASSETS.video}
+        preload="none"
         autoPlay muted loop playsInline
         style={{ position: 'absolute', left: '7.75%', top: '26.2%', width: '84.9%', height: '63.3%', objectFit: 'contain', display: 'block' }}
       />
@@ -229,10 +230,3 @@ export default function DeliverableHoverCard({ id, shown = true, rot = 3.2, offX
 }
 
 export const DELIVERABLE_CARD_IDS = Object.keys(CARDS);
-
-// Asset URLs to warm-cache before first hover so cards render without a flash.
-export const PRELOAD_ASSETS = {
-  images: [ASSETS.mockup, ASSETS.fullpage, ASSETS.social, ASSETS.postme],
-  video: ASSETS.video,
-  brief: ASSETS.brief,
-};
