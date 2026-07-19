@@ -1351,6 +1351,12 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
       const decisionSec = pick('The Decision', 'Decision');
       const clarify = byLabel('What to Clarify Next');
 
+      // The simple layout's canonical list format: `01 — line item`. Every
+      // dynamic multi-item block renders through this.
+      const sbNumList = (items) => (items.length
+        ? `<ol class="sb-numlist">${items.map((t, i) => `<li><span class="n">${String(i + 1).padStart(2, '0')}</span><span class="d">—</span><span class="t">${esc(t)}</span></li>`).join('')}</ol>`
+        : '');
+
       // One label · one title · one short explanation · one download per card.
       const SB_DELIVERABLE_COPY = {
         'Video Post': { sbId: 'sb-d-video', label: 'Brand Video', title: 'Your site in motion', desc: 'A social-ready video showing how your brand, message, and homepage read in motion.', cta: 'Download video' },
@@ -1360,6 +1366,8 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
         'Mobile View': { sbId: 'sb-d-mobile', label: 'Mobile View', title: 'Mobile capture', desc: 'Review the experience on the screen most visitors are likely to use.', cta: 'Download mobile view' },
         'Social Preview': { sbId: 'sb-d-social', label: 'Social Preview', title: 'Social sharing preview', desc: 'See how the site appears when shared across social platforms and messaging apps.', cta: 'Download social preview' },
       };
+      // Compact rows: thumbnail-size media next to the label/line item, one
+      // download per row — mirrors the numbered line-item language.
       let dNum = 0;
       const sbCells = cbOrderOf('sb-deliverables').map((sbId) => {
         if (sbId === 'sb-deliverables-intro' || !cbOn(sbId)) return '';
@@ -1370,12 +1378,19 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
         if (!asset) return '';
         const href = ok(asset.url) ? dlHref(asset.url, assetName, asset.type === 'video' ? 'video' : 'img') : null;
         dNum += 1;
-        return `<div class="cb-deliverable" id="${c.sbId}">
-          <div class="cb-deliverable-idx">D${String(dNum).padStart(2, '0')} · ${esc(c.label)}</div>
-          <div class="cb-deliverable-media">${deliverableMedia(asset)}</div>
-          <div class="cb-deliverable-name">${esc(c.title)}</div>
-          <p class="cb-deliverable-desc">${esc(c.desc)}</p>
-          ${href ? `<div class="cb-post-actions"><a class="cb-cta cb-cta--solid" href="${esc(href)}" download>${esc(c.cta)}</a></div>` : ''}
+        const thumb = ok(asset.url)
+          ? (asset.type === 'video'
+            ? `<video src="${esc(asset.url)}" autoplay muted loop playsinline></video>`
+            : `<img src="${esc(asset.url)}" alt="${esc(c.label)}"/>`)
+          : '';
+        return `<div class="sb-dl-row" id="${c.sbId}">
+          <span class="n">D${String(dNum).padStart(2, '0')}</span>
+          <span class="sb-dl-thumb${thumb ? '' : ' sb-dl-thumb--empty'}">${thumb}</span>
+          <span class="sb-dl-text">
+            <span class="sb-dl-title">${esc(c.title)}</span>
+            <span class="sb-dl-desc">${esc(c.desc)}</span>
+          </span>
+          ${href ? `<a class="cb-package-dl" href="${esc(href)}" download>↓ Download</a>` : `<span class="sb-dl-desc">${esc(asset.emptyLabel || 'Not available yet')}</span>`}
         </div>`;
       }).filter(Boolean);
 
@@ -1383,9 +1398,9 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
         'sb-deliverables': () => {
           if (!sbCells.length) return '';
           const intro = cbOn('sb-deliverables-intro')
-            ? `<p class="sub">${esc('Your site has been reviewed, captured, and prepared for sharing. Download each asset below.')}</p>`
+            ? `<p class="sb-lead">${esc('Your site has been reviewed, captured, and prepared for sharing. Download each asset below.')}</p>`
             : '';
-          return sbPage('sb-deliverables', 'Your<br/>Deliverables.', `${intro}<div class="cb-deliverables-grid">${sbCells.join('')}</div>`);
+          return sbPage('sb-deliverables', 'Your<br/>Deliverables.', `${intro}<div class="sb-dl-list">${sbCells.join('')}</div>`);
         },
         'sb-key-insight': () => {
           const paras = insight ? [...insight.paras, ...insight.bullets] : [];
@@ -1403,7 +1418,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
           if (!decisionSec || !decisionSec.paras.length) return '';
           const [q, ...rest] = decisionSec.paras;
           const bullets = decisionSec.bullets || [];
-          return sbPage('sb-decision', 'The<br/>Decision.', `${pull(q)}${bullets.length ? gapList(bullets) : ''}${subFrom(rest.filter((p) => p.length > 0))}`);
+          return sbPage('sb-decision', 'The<br/>Decision.', `${pull(q)}${sbNumList(bullets)}${rest.filter((p) => p.length > 0).map((p) => `<p class="sb-lead" style="margin-top:18px">${esc(p)}</p>`).join('')}`);
         },
         'sb-clarify': () => {
           let items = clarify ? [...clarify.bullets, ...clarify.paras] : [];
@@ -1413,8 +1428,22 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
             items = [...(miss ? [...miss.bullets, ...miss.paras] : []), ...(opp ? opp.bullets : [])].slice(0, 5);
           }
           if (!items.length) return '';
-          return sbPage('sb-clarify', 'What to<br/>Clarify Next.', gapList(items));
+          return sbPage('sb-clarify', 'What to<br/>Clarify Next.', sbNumList(items));
         },
+        'sb-missing': () => {
+          const items = miss ? [...miss.bullets, ...miss.paras] : [];
+          if (!items.length) return '';
+          return sbPage('sb-missing', 'What’s<br/>Missing.', sbNumList(items));
+        },
+        'sb-opportunity': () => {
+          if (!opp) return '';
+          const leads = longParas(opp).map((p) => `<p class="sb-lead">${esc(p)}</p>`).join('');
+          const items = [...shortParas(opp), ...opp.bullets];
+          if (!leads && !items.length) return '';
+          return sbPage('sb-opportunity', 'The<br/>Opportunity.', `${leads}${sbNumList(items)}`);
+        },
+        'sb-onboarded': () => sbPage('sb-onboarded', 'You’re<br/>Onboarded.', `<p class="sb-lead">${esc(ONBOARD_COPY[0])}</p>${ONBOARD_COPY.slice(1).map((p) => `<p class="sub">${esc(p)}</p>`).join('')}`),
+        'sb-services': () => sbPage('sb-services', 'What We<br/>Offer.', servicesGrid),
         'sb-featured-post': () => (featuredRowHtml ? sbPage('sb-featured-post', 'Featured<br/>Post.', featuredRowHtml) : ''),
         'sb-social-share': () => (socialInner ? sbPage('sb-social-share', 'Social<br/>Share.', socialInner) : ''),
         'sb-risk': () => (riskInner ? sbPage('sb-risk', 'Biggest<br/>Risk.', riskInner) : ''),
@@ -1815,6 +1844,36 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     font-family:"Space Grotesk",sans-serif;font-weight:300;
     font-size:clamp(18px,2vw,24px);line-height:1.5;color:var(--ink);
     margin:0 0 14px;max-width:62ch;
+  }
+  /* Simple layout canonical list: "01 — line item" rows with hairlines. */
+  .sb-numlist{list-style:none;margin:6px 0 0;padding:0;max-width:72ch}
+  .sb-numlist li{
+    display:grid;grid-template-columns:auto auto minmax(0,1fr);gap:14px;align-items:baseline;
+    padding:14px 0;border-bottom:1px solid rgba(0,0,0,.1);
+  }
+  .sb-numlist li:first-child{border-top:1px solid rgba(0,0,0,.1)}
+  .sb-numlist .n{font-family:"Space Mono",monospace;font-size:12px;letter-spacing:.08em;color:var(--ink-soft)}
+  .sb-numlist .d{color:var(--ink-soft)}
+  .sb-numlist .t{font-family:"Space Grotesk",sans-serif;font-weight:300;font-size:clamp(16px,1.6vw,20px);line-height:1.5;color:var(--ink)}
+  /* Deliverables as compact rows: thumbnail next to the label/line item. */
+  .sb-dl-list{display:flex;flex-direction:column;max-width:860px}
+  .sb-dl-row{
+    display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;gap:16px;align-items:center;
+    padding:12px 0;border-bottom:1px solid rgba(0,0,0,.1);
+  }
+  .sb-dl-row:first-child{border-top:1px solid rgba(0,0,0,.1)}
+  .sb-dl-row .n{font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.12em;color:var(--ink-soft)}
+  .sb-dl-thumb{
+    width:76px;height:50px;border:1px solid rgba(0,0,0,.12);border-radius:6px;overflow:hidden;
+    background:#fff;flex-shrink:0;display:block;
+  }
+  .sb-dl-thumb img,.sb-dl-thumb video{width:100%;height:100%;object-fit:cover;display:block}
+  .sb-dl-thumb--empty{background:repeating-linear-gradient(45deg,rgba(0,0,0,.04),rgba(0,0,0,.04) 6px,transparent 6px,transparent 12px)}
+  .sb-dl-title{display:block;font-family:"Space Grotesk",sans-serif;font-weight:500;font-size:16px;color:var(--ink)}
+  .sb-dl-desc{display:block;font-size:13px;color:var(--ink-soft);line-height:1.45;margin-top:2px}
+  @media(max-width:640px){
+    .sb-dl-row{grid-template-columns:auto minmax(0,1fr) auto;gap:12px}
+    .sb-dl-row .n{display:none}
   }
   /* Cover stays a poster on desktop; on phones it collapses to content height
      so the simple brief opens straight into substance. */
