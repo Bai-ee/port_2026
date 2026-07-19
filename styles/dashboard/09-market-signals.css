@@ -1,0 +1,241 @@
+  /* ── Market Signals modal — scoped style-guide components (.signals-sg) ──
+     Mirrors public/docs/dashboard-modal-component-style-guide.html. Scoped
+     under .signals-sg so the light-glass language stays isolated to the
+     Market Signals SOURCES / IN BRIEF tabs and never leaks elsewhere. */
+  .signals-sg {
+    --sg-ink: #2a2420; --sg-ink-soft: rgba(42,36,32,0.72); --sg-ink-muted: rgba(42,36,32,0.52);
+    --sg-line: rgba(42,36,32,0.12); --sg-line-soft: rgba(42,36,32,0.14);
+    --sg-surface-strong: rgba(255,255,255,0.78);
+    --sg-a: hsl(185,100%,45%); --sg-b: hsl(262,100%,55%); --sg-c: hsl(314,100%,50%);
+    --sg-success: #285f3b; --sg-warning: #67533d; --sg-danger: #9f1f17;
+    --sg-radius: 8px;
+    --sg-mono: "Space Mono", ui-monospace, monospace;
+    --sg-ui: "Space Grotesk", system-ui, sans-serif;
+    --sg-ease: cubic-bezier(0.34,1.56,0.64,1);
+    display: grid; gap: 14px; margin: -18px; padding: 18px;
+    color: var(--sg-ink); font-family: var(--sg-ui);
+    background: radial-gradient(circle at 88% 0%, rgba(0,173,181,0.06), transparent 22rem), linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%);
+  }
+  .signals-sg * { box-sizing: border-box; }
+  /* Signals tab pane inset — desktop keeps the prior 18px; mobile shrinks it
+     (see the modal mobile block) so sections fill more width. */
+  .signals-pane { padding: 18px; }
+  .signals-sg .sg-section { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--sg-line); border-radius: var(--sg-radius); background: var(--sg-surface-strong); box-shadow: 0 1px 0 rgba(255,255,255,0.72), inset 0 1px 0 rgba(255,255,255,0.35); }
+  .signals-sg .sg-head { display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 12px; align-items: start; }
+  .signals-sg .sg-index { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 28px; border: 1px solid var(--sg-line); border-radius: 6px; background: rgba(255,255,255,0.5); font-family: var(--sg-mono); font-size: 12px; color: var(--sg-ink-soft); }
+  .signals-sg .sg-head h3 { margin: 0; font-size: 18px; line-height: 1.25; color: var(--sg-ink); }
+  .signals-sg .sg-head p { margin: 4px 0 0; color: var(--sg-ink-soft); font-size: 13px; line-height: 1.5; }
+  .signals-sg .sg-label { display: block; color: var(--sg-ink-soft); font-size: 12px; font-weight: 700; font-family: var(--sg-mono); letter-spacing: 0.08em; text-transform: uppercase; }
+  .signals-sg .sg-hint { color: var(--sg-ink-muted); font-size: 12.5px; line-height: 1.5; }
+  .signals-sg .sg-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; min-height: 36px; padding: 0 15px; border: 1px solid var(--sg-line); border-radius: 999px; background: rgba(255,255,255,0.52); color: var(--sg-ink); font: 700 12px/1 var(--sg-mono); letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; box-shadow: inset 0 1px 0 rgba(255,255,255,0.5); transition: background 160ms ease, box-shadow 160ms ease, border-color 160ms ease, transform 220ms var(--sg-ease); }
+  .signals-sg .sg-btn:hover:not(:disabled) { background: rgba(255,255,255,0.82); border-color: rgba(42,36,32,0.18); box-shadow: 0 4px 14px rgba(42,36,32,0.08), inset 0 1px 0 rgba(255,255,255,0.5); transform: translateY(-1px); }
+  .signals-sg .sg-btn:active:not(:disabled) { transform: translateY(0); }
+  .signals-sg .sg-btn:disabled { cursor: not-allowed; opacity: 0.52; }
+  .signals-sg .sg-btn-outline { min-height: 34px; border: 1.5px solid #111; border-radius: 7px; background: #fff; color: #111; }
+  .signals-sg .sg-btn-outline:hover { background: #f7f7f7; border-color: #222; }
+  .signals-sg .sg-btn-danger { color: var(--sg-danger); border-color: rgba(159,31,23,0.24); background: rgba(159,31,23,0.04); }
+  .signals-sg .sg-btn-danger:hover { background: rgba(159,31,23,0.1); border-color: rgba(159,31,23,0.44); }
+  .signals-sg .sg-btn-on { color: var(--sg-success); border-color: rgba(40,95,59,0.4); background: rgba(40,95,59,0.1); }
+  .signals-sg .sg-btn-off { color: var(--sg-ink-muted); }
+  /* THE single primary button: gradient fill + comet border that animates on
+     hover only. Use at most one sg-cta per action row. Re-asserts its own
+     background on hover so the .sg-btn white-hover (both classes apply) can't
+     wash it out to white-on-white. */
+  .signals-sg .sg-cta { position: relative; isolation: isolate; overflow: hidden; min-height: 40px; padding: 0 18px; border: none; border-radius: 999px; color: #fff; font: 700 13px/1 var(--sg-ui); letter-spacing: 0.01em; text-transform: none; background: linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, var(--sg-a) 0%, var(--sg-b) 52%, var(--sg-c) 100%); box-shadow: 0 0 14px 3px rgba(0,200,228,0.22), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28); }
+  .signals-sg .sg-cta > * { position: relative; z-index: 1; }
+  .signals-sg .sg-cta::before { content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 2px; background: conic-gradient(from var(--cta-angle), transparent 0deg, transparent 180deg, hsla(185,100%,58%,0.12) 200deg, hsla(200,100%,62%,0.35) 225deg, hsla(225,100%,64%,0.6) 250deg, hsla(250,100%,66%,0.78) 275deg, hsla(275,100%,66%,0.88) 300deg, hsla(300,100%,68%,0.94) 322deg, hsla(320,80%,80%,0.97) 338deg, rgba(255,255,255,1) 350deg, transparent 358deg); -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; opacity: 0; transition: opacity 160ms ease; pointer-events: none; }
+  .signals-sg .sg-cta:hover:not(:disabled) { transform: translateY(-1px); background: linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, var(--sg-a) 0%, var(--sg-b) 52%, var(--sg-c) 100%); box-shadow: 0 0 26px 5px rgba(0,200,228,0.34), 0 4px 14px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.28); }
+  .signals-sg .sg-cta:hover:not(:disabled)::before { opacity: 1; animation: cta-border-spin 2.4s linear infinite; }
+  .signals-sg .sg-cta:disabled::before { display: none; }
+  .signals-sg .sg-source { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: center; min-height: 58px; padding: 8px 10px 8px 18px; border: 1px solid var(--sg-line); border-radius: 999px; background: rgba(255,255,255,0.68); box-shadow: 0 1px 0 rgba(255,255,255,0.8), inset 0 1px 0 rgba(255,255,255,0.6), 0 10px 26px rgba(42,36,32,0.06); transition: border-color 160ms ease, box-shadow 160ms ease; }
+  .signals-sg .sg-source:hover { border-color: rgba(42,36,32,0.22); box-shadow: 0 1px 0 rgba(255,255,255,0.8), inset 0 1px 0 rgba(255,255,255,0.6), 0 14px 34px rgba(42,36,32,0.1); }
+  .signals-sg .sg-source-value { display: flex; align-items: center; min-width: 0; gap: 12px; color: rgba(42,36,32,0.7); font: 400 16px/1.25 var(--sg-ui); }
+  .signals-sg .sg-source-value small { display: block; color: var(--sg-ink-muted); font: 400 11px/1.3 var(--sg-mono); margin-top: 3px; }
+  .signals-sg .sg-source-actions { display: flex; align-items: center; gap: 8px; }
+  /* Phones: keep the row horizontal so it uses the full width — text left,
+     actions pinned right. Smaller value font + tighter padding give the text
+     enough room to read on 2-3 lines (no one-word-per-line crush), and the
+     actions wrap rather than overflow if a row has three buttons. */
+  @media (max-width: 600px) {
+    /* Drop the desktop full-bleed coupling so every section is an equal,
+       centered, full-width card; the pane padding is the only inset. */
+    .signals-sg { margin: 0; padding: 0; }
+    .signals-pane { padding: 12px; }
+    /* Collapse the section header to ONE column so the index badge, title, and
+       "Run all" CTA each stack at the section's left edge — the h3 then aligns
+       with the row cards below instead of hanging right of the index column. */
+    .signals-sg .sg-head { grid-template-columns: 1fr; }
+    .signals-sg .sg-head .sg-index { justify-self: start; }
+    .signals-sg .sg-head .sg-cta { grid-column: 1 / -1; width: 100%; justify-self: stretch; }
+    /* Stack each source/skill pill: label over actions, squared off so wrapped
+       action buttons don't balloon a 999px pill vertically. */
+    .signals-sg .sg-source { grid-template-columns: 1fr; align-items: stretch; border-radius: 14px; padding: 10px 12px 10px 16px; gap: 8px; }
+    .signals-sg .sg-source-value { font-size: 14px; }
+    .signals-sg .sg-source-actions { flex-wrap: wrap; justify-content: flex-start; width: 100%; }
+  }
+  .signals-sg .sg-seg { display: flex; padding: 4px; border: 1px solid var(--sg-line); border-radius: 999px; background: rgba(255,255,255,0.96); box-shadow: inset 0 1px 0 rgba(255,255,255,0.45); }
+  .signals-sg .sg-seg button { flex: 1; min-height: 36px; border: 0; border-radius: 999px; background: transparent; color: var(--sg-ink-soft); font: 700 12px/1 var(--sg-mono); letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; transition: background 160ms ease, color 140ms ease; }
+  .signals-sg .sg-seg button:hover:not(.is-active) { background: rgba(42,36,32,0.06); color: var(--sg-ink); }
+  .signals-sg .sg-seg .is-active { background: var(--sg-ink); color: #fff; box-shadow: 0 3px 10px rgba(42,36,32,0.14); }
+  .signals-sg .sg-range { display: grid; gap: 7px; }
+  .signals-sg .sg-range input[type="range"] { width: 100%; min-height: 30px; padding: 0; accent-color: var(--sg-ink); background: transparent; border: 0; }
+  .signals-sg .sg-range-scale { display: flex; justify-content: space-between; color: var(--sg-ink-muted); font: 12px/1 var(--sg-mono); }
+  .signals-sg .sg-list { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--sg-line); border-radius: var(--sg-radius); background: var(--sg-surface-strong); }
+  .signals-sg .sg-list-head { display: flex; align-items: center; gap: 10px; }
+  .signals-sg .sg-list-title { flex: 1; color: var(--sg-ink); font-size: 14px; font-weight: 700; }
+  .signals-sg .sg-inv { display: grid; grid-template-columns: minmax(0,1fr) auto auto; gap: 10px; align-items: center; padding: 7px 4px; border-bottom: 1px solid var(--sg-line-soft); }
+  .signals-sg .sg-inv:last-child { border-bottom: 0; }
+  .signals-sg .sg-inv .name { min-width: 0; color: var(--sg-ink); font: 400 13px/1.3 var(--sg-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .signals-sg .sg-inv.is-off .name { color: var(--sg-ink-muted); }
+  .signals-sg .sg-chip { display: inline-flex; align-items: center; min-height: 28px; padding: 3px 10px; border: 1px solid var(--sg-line); border-radius: 999px; background: rgba(255,255,255,0.5); color: var(--sg-ink-soft); font: 400 12px/1 var(--sg-mono); letter-spacing: 0.04em; }
+  .signals-sg .sg-chip-success { color: var(--sg-success); border-color: rgba(40,95,59,0.3); background: rgba(40,95,59,0.08); }
+  .signals-sg .sg-metrics { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; }
+  .signals-sg .sg-metric { display: grid; gap: 5px; min-height: 70px; padding: 12px; border: 1px solid var(--sg-line); border-radius: var(--sg-radius); background: rgba(255,255,255,0.78); }
+  .signals-sg .sg-metric-value { color: var(--sg-ink); font: 700 24px/1 var(--sg-ui); font-variant-numeric: tabular-nums; }
+  .signals-sg .sg-metric-label { color: var(--sg-ink-muted); font: 700 10px/1.2 var(--sg-mono); letter-spacing: 0.08em; text-transform: uppercase; }
+  .signals-sg .sg-result { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--sg-line); border-radius: var(--sg-radius); background: rgba(255,255,255,0.76); transition: border-color 160ms ease, box-shadow 160ms ease, transform 220ms var(--sg-ease); }
+  .signals-sg .sg-result:hover { border-color: rgba(42,36,32,0.2); box-shadow: 0 4px 16px rgba(42,36,32,0.08); transform: translateY(-1px); }
+  .signals-sg .sg-result-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .signals-sg .sg-result-meta { display: flex; flex-wrap: wrap; gap: 6px; color: var(--sg-ink-muted); font: 10px/1.4 var(--sg-mono); letter-spacing: 0.06em; text-transform: uppercase; }
+  .signals-sg .sg-result-title { margin: 3px 0 0; color: var(--sg-ink); font-size: 15px; line-height: 1.3; font-weight: 700; }
+  .signals-sg .sg-result-body { margin: 0; color: var(--sg-ink-soft); font-size: 13px; line-height: 1.5; }
+  .signals-sg .sg-result a { font: 10px/1 var(--sg-mono); letter-spacing: 0.1em; text-transform: uppercase; color: #1d6fa8; text-decoration: underline; text-underline-offset: 3px; }
+  .signals-sg .sg-notice { border: 1px solid var(--sg-line); border-radius: var(--sg-radius); padding: 8px 12px; color: var(--sg-ink-soft); background: rgba(255,255,255,0.72); font-size: 13px; line-height: 1.45; }
+  .signals-sg .sg-notice-danger { border-color: rgba(159,31,23,0.22); background: rgba(159,31,23,0.05); color: var(--sg-danger); }
+  .signals-sg .sg-empty { display: grid; place-items: center; min-height: 150px; padding: 26px 16px; border: 1px dashed var(--sg-line); border-radius: var(--sg-radius); background: rgba(255,255,255,0.36); text-align: center; color: var(--sg-ink-soft); font-size: 14px; line-height: 1.5; }
+  .signals-sg .sg-input { width: 100%; min-height: 40px; border: 1px solid var(--sg-line); border-radius: var(--sg-radius); background: rgba(255,255,255,0.96); color: var(--sg-ink); padding: 8px 12px; font: 14px/1.4 var(--sg-mono); outline: none; box-shadow: inset 0 1px 0 rgba(255,255,255,0.55); }
+  .signals-sg .sg-input:focus { border-color: rgba(42,36,32,0.36); box-shadow: 0 0 0 3px rgba(42,36,32,0.08), inset 0 1px 0 rgba(255,255,255,0.65); }
+  .signals-sg .sg-input-zip { width: 84px; }
+  .signals-sg .sg-paper { background: #f4f1ea; border: 1px solid #e3ddd0; border-radius: 12px; padding: 24px; }
+  .signals-sg .sg-paper .kick { font: 700 10px/1 var(--sg-mono); letter-spacing: 0.26em; text-transform: uppercase; color: #a23d2c; }
+  .signals-sg .sg-paper h2 { font: 680 24px/1.05 var(--sg-ui); letter-spacing: -0.02em; margin: 6px 0 3px; color: #191919; }
+  .signals-sg .sg-paper .lede { color: #6b6256; font-size: 12.5px; margin: 0; }
+  .signals-sg .sg-paper .psec { font: 700 11px/1 var(--sg-mono); letter-spacing: 0.16em; text-transform: uppercase; color: #8a8073; margin: 22px 0 12px; border-top: 1px solid #ddd6c8; padding-top: 13px; }
+  .signals-sg .sg-paper .quotewall { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .signals-sg .sg-paper .qtile { background: #fff; border: 1px solid #e3ddd0; border-radius: 12px; padding: 14px 15px; }
+  .signals-sg .sg-paper .qtile .q { font: 540 14.5px/1.42 var(--sg-ui); color: #23211c; }
+  .signals-sg .sg-paper .qtile .who { display: flex; justify-content: space-between; gap: 8px; font: 11px/1 var(--sg-mono); color: #8a8073; margin-top: 9px; }
+  /* Flex column, content pinned to top. Flex (unlike an implicit 'auto' grid
+     column) keeps every child at the container's width, so a panel with wide
+     content can't stretch the shared tab bar — every tab renders identically. */
+  .client-brain-card { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 14px; min-height: 100%; color: var(--sg-ink); }
+  /* flex-shrink:0 is load-bearing: the card fills the scroll panel via min-height,
+     so without it the flex column squishes children below their content height and
+     overflow:visible content spills onto the next section (the tab collisions). */
+  .client-brain-card > * { min-width: 0; max-width: 100%; flex: 0 0 auto; }
+  .client-brain-card .cb-topbar { display: flex; flex-wrap: wrap; gap: 12px 14px; align-items: flex-start; justify-content: space-between; }
+  .client-brain-card .cb-topbar > div:first-child { min-width: 0; flex: 1 1 220px; }
+  .client-brain-card .cb-topbar h3 { margin: 2px 0 0; font-size: 22px; line-height: 1.15; color: var(--sg-ink); }
+  /* Action rows fill the full width and split evenly — no ragged right-aligned
+     clusters. Children stretch to equal widths and a uniform height. */
+  .client-brain-card .cb-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; flex: 1 1 100%; width: 100%; }
+  .client-brain-card .cb-actions > * { flex: 1 1 0; min-width: 0; }
+  .client-brain-card .cb-actions .sg-btn,
+  .client-brain-card .cb-actions .sg-cta { width: 100%; min-height: 40px; white-space: nowrap; }
+  .client-brain-card .cb-menu { flex: 1 1 0; min-width: 0; }
+  .client-brain-card .cb-menu > .sg-btn { width: 100%; }
+  /* Overflow menu for advanced/debug actions. */
+  .client-brain-card .cb-menu { position: relative; display: inline-flex; }
+  .client-brain-card .cb-menu-backdrop { position: fixed; inset: 0; z-index: 10; border: 0; padding: 0; background: transparent; cursor: default; }
+  /* Opens upward — the action row sits near the bottom of the editor. */
+  .client-brain-card .cb-menu-panel { position: absolute; bottom: calc(100% + 6px); right: 0; z-index: 11; display: grid; gap: 2px; min-width: 200px; padding: 6px; border: 1px solid var(--sg-line); border-radius: 10px; background: rgba(255,255,255,0.97); box-shadow: 0 12px 30px rgba(42,36,32,0.16); }
+  .client-brain-card .cb-menu-item { display: flex; align-items: center; width: 100%; min-height: 36px; padding: 8px 10px; border: 0; border-radius: 7px; background: transparent; color: var(--sg-ink); font: 700 12px/1 var(--sg-mono); letter-spacing: 0.04em; text-transform: uppercase; text-align: left; cursor: pointer; transition: background 0.14s ease; }
+  .client-brain-card .cb-menu-item:hover:not(:disabled) { background: rgba(42,36,32,0.06); }
+  .client-brain-card .cb-menu-item:disabled { opacity: 0.45; cursor: not-allowed; }
+  /* Upload is the prominent first-read primary in the top action row. */
+  .client-brain-card .cb-upload-cta { cursor: pointer; }
+  /* Source tab: thin meta strip above the bare Markdown editor. */
+  .client-brain-card .cb-source-meta-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .client-brain-card .cb-source-meta { color: var(--sg-ink-muted); font: 700 10px/1.2 var(--sg-mono); letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap; }
+  .client-brain-card .cb-source-field { padding: 0; border: 0; background: transparent; }
+  .client-brain-card .cb-source-foot { margin-top: 2px; }
+  @media (max-width: 600px) {
+    .client-brain-card .cb-source-meta { display: none; }
+  }
+  /* Brain Health: one compact strip of stat pills — no section header, no index. */
+  .client-brain-card .cb-health { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 14px; border: 1px solid var(--sg-line); border-radius: var(--sg-radius); background: rgba(255,255,255,0.6); }
+  .client-brain-card .cb-health-label { flex: 0 0 auto; }
+  .client-brain-card .cb-health-stats { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 auto; }
+  /* Pills stretch to fill the row — equal widths, centered content. */
+  .client-brain-card .cb-health-stat { flex: 1 1 0; justify-content: center; display: inline-flex; align-items: baseline; gap: 5px; padding: 4px 10px; border: 1px solid var(--sg-line-soft); border-radius: 999px; background: rgba(255,255,255,0.72); color: var(--sg-ink-muted); font: 700 10px/1.2 var(--sg-mono); letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap; min-width: 0; }
+  .client-brain-card .cb-health-stat strong { color: var(--sg-ink); font-size: 12px; font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0; }
+  .client-brain-card .cb-panel { display: grid; gap: 12px; min-width: 0; min-height: 0; }
+  .client-brain-card .cb-source-row { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--sg-line); border-radius: var(--sg-radius); background: rgba(255,255,255,0.76); }
+  .client-brain-card .cb-source-row--off { opacity: 0.6; }
+  .client-brain-card .cb-source-main { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: start; }
+  .client-brain-card .cb-source-main h4 { margin: 0; font-size: 15px; line-height: 1.25; color: var(--sg-ink); }
+  .client-brain-card .cb-source-main p,
+  .client-brain-card .cb-field-block p,
+  .client-brain-card .cb-muted { margin: 5px 0 0; color: var(--sg-ink-soft); font-size: 13px; line-height: 1.45; }
+  .client-brain-card .cb-chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .client-brain-card .cb-warning { margin: 0; color: var(--sg-danger); font-size: 12.5px; line-height: 1.45; }
+  .client-brain-card .cb-use-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+  .client-brain-card .cb-check { display: flex; align-items: center; gap: 6px; min-height: 30px; padding: 6px 8px; border: 1px solid var(--sg-line-soft); border-radius: 7px; background: rgba(255,255,255,0.54); color: var(--sg-ink-soft); font: 700 10px/1.2 var(--sg-mono); text-transform: uppercase; letter-spacing: 0.05em; }
+  .client-brain-card .cb-check input { margin: 0; accent-color: var(--sg-ink); }
+  .client-brain-card .cb-generated-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .client-brain-card .cb-field-block { min-width: 0; padding: 14px; border: 1px solid var(--sg-line); border-radius: var(--sg-radius); background: rgba(255,255,255,0.74); }
+  .client-brain-card .cb-mini-list { display: grid; gap: 5px; margin: 8px 0 0; padding-left: 0; list-style: none; color: var(--sg-ink-soft); font-size: 13px; line-height: 1.4; }
+  /* Native line-item list-card for the APPROVED BRAIN data — mirrors the
+     Operating Cost modal: one bordered card, mono keys stacked above their
+     value, dashed dividers between rows. Scoped to the approved section
+     (.cb-panel.cb-generated-grid) so the Consumers tab's nested
+     .cb-generated-grid and other .cb-field-block usages stay untouched. */
+  .client-brain-card .cb-panel.cb-generated-grid {
+    grid-template-columns: 1fr;
+    gap: 0;
+    padding: 0;
+    border: 1px solid var(--sg-line);
+    border-radius: var(--sg-radius);
+    background: rgba(255,255,255,0.6);
+    overflow: hidden;
+  }
+  .client-brain-card .cb-panel.cb-generated-grid > .cb-field-block {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    padding: 13px 15px;
+    border-bottom: 1px dashed var(--sg-line-soft);
+  }
+  .client-brain-card .cb-panel.cb-generated-grid > .cb-field-block:last-child { border-bottom: 0; }
+  .client-brain-card .cb-panel.cb-generated-grid > .cb-field-block > .mu-label {
+    display: block;
+    font: 700 10px/1.2 var(--sg-mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--sg-ink-muted);
+  }
+  .client-brain-card .cb-copy-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .client-brain-card .cb-context-box { max-height: 280px; overflow: auto; white-space: pre-wrap; margin: 0; padding: 14px; border: 1px solid var(--sg-line); border-radius: var(--sg-radius); background: rgba(255,255,255,0.86); color: var(--sg-ink); font: 12.5px/1.5 var(--sg-mono); }
+  .client-brain-card .cb-usage-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  /* Internal padding so content keeps consistent gutters and never clips the
+     rounded bento-cell corners (desktop + mobile). */
+  /* Reserve the scrollbar gutter so content width is constant across tabs —
+     otherwise short tabs (no scrollbar) render wider than long ones and the
+     flex tab bar visibly shifts as you navigate. */
+  #client-brain-modal-panel { padding: 18px 20px; box-sizing: border-box; scrollbar-gutter: stable; }
+  /* Tighter tab bar for this card: smaller gap + padding, packs the labels closer. */
+  .client-brain-card .tile-detail-tabs { gap: 6px; }
+  .client-brain-card .tile-detail-tab { padding: 9px 6px; letter-spacing: 0.05em; }
+  /* The gradient underline is the only active/focus indicator — drop the browser
+     focus-ring box (it reads as a bordered button on the wider tabs). Keyboard
+     focus still shows the underline, so this stays accessible. */
+  .client-brain-card .tile-detail-tab:focus { outline: none; }
+  .client-brain-card .tile-detail-tab:focus-visible::after { transform: scaleX(1); opacity: 1; }
+  .client-brain-card .cb-source-edit { display: flex; justify-content: flex-end; }
+  .client-brain-card .cb-edit-link {
+    display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
+    background: rgba(255,255,255,0.6); border: 1px solid var(--sg-line-soft); border-radius: 7px;
+    padding: 5px 10px; color: var(--sg-ink-soft); font: 700 10px/1 var(--sg-mono);
+    text-transform: uppercase; letter-spacing: 0.06em; transition: border-color 0.15s ease, color 0.15s ease;
+  }
+  .client-brain-card .cb-edit-link:hover { color: var(--sg-ink); border-color: var(--sg-ink-soft); }
+  .client-brain-card .cb-edit-link[disabled] { opacity: 0.4; cursor: default; }
+  .client-brain-card .cb-field-block .cb-edit-link { margin-top: 10px; }
+  @media (max-width: 820px) {
+    .client-brain-card .cb-generated-grid,
+    .client-brain-card .cb-usage-grid { grid-template-columns: 1fr; }
+    .client-brain-card .cb-actions > * { flex: 1 1 calc(50% - 4px); }
+    .client-brain-card .cb-use-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #client-brain-modal-panel { padding: 14px 14px; }
+  }
+

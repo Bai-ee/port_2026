@@ -1,0 +1,871 @@
+  /* ── SEO + Performance viz shell ── */
+  /* ── Audit Summary Viz ── */
+  #audit-viz-shell {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: clamp(8px, 3%, 18px) clamp(10px, 4%, 22px);
+    justify-content: center;
+    gap: 0;
+    container-type: size;
+  }
+  #audit-viz-quality {
+    flex-shrink: 0;
+    margin-top: clamp(6px, 2cqi, 14px);
+    padding: clamp(6px, 2cqi, 10px) clamp(8px, 2.5cqi, 14px);
+    border: 1px solid rgba(42, 36, 32, 0.1);
+    border-radius: clamp(6px, 2cqi, 10px);
+    background: rgba(255, 255, 255, 0.55);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .audit-quality-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .audit-quality-label {
+    font-family: var(--font-mono);
+    font-size: clamp(7px, 2.2cqi, 9px);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(42, 36, 32, 0.55);
+  }
+  .audit-quality-pct {
+    font-family: 'Doto', var(--font-mono);
+    font-weight: 900;
+    font-size: clamp(14px, 4cqi, 22px);
+    color: #2a2420;
+    line-height: 1;
+  }
+  .audit-quality-track {
+    height: clamp(4px, 1.2cqi, 6px);
+    background: rgba(42, 36, 32, 0.08);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .audit-quality-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #00cfff 0%, #7b5fff 50%, #ff3de8 100%);
+    transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  #audit-viz-ring-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-evenly;
+    flex: 1;
+    min-height: 0;
+  }
+  .audit-ring-cell {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 0 1 auto;
+    padding: clamp(6px, 2cqi, 12px);
+    border: 1px solid rgba(42, 36, 32, 0.1);
+    border-radius: clamp(8px, 2.5cqi, 14px);
+    background: rgba(255, 255, 255, 0.55);
+  }
+  .audit-ring-cell .seo-ring-svg {
+    width: clamp(44px, 22cqi, 78px);
+    height: clamp(44px, 22cqi, 78px);
+  }
+  .audit-ring-val {
+    position: absolute;
+    top: 46%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'Doto', var(--font-mono);
+    font-weight: 900;
+    font-size: clamp(12px, 5cqi, 22px);
+    line-height: 1;
+  }
+  .audit-ring-label {
+    font-family: var(--font-mono);
+    font-size: clamp(7px, 2.5cqi, 9px);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(42, 36, 32, 0.6);
+    margin-top: 3px;
+  }
+  #audit-viz-bars {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: clamp(4px, 1.5cqi, 8px) clamp(8px, 3cqi, 16px);
+    padding: clamp(4px, 1.5cqi, 10px) 0;
+    flex-shrink: 0;
+  }
+  .audit-bar-item {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .audit-bar-label {
+    font-family: var(--font-mono);
+    font-size: clamp(6px, 2cqi, 8px);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(42, 36, 32, 0.45);
+    white-space: nowrap;
+  }
+  .audit-bar-track {
+    width: 100%;
+    height: clamp(3px, 1cqi, 5px);
+    background: rgba(42, 36, 32, 0.08);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .audit-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #00cfff 0%, #7b5fff 50%, #ff3de8 100%);
+    transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  #seo-perf-viz-shell {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 0.4em;
+    padding: 6px;
+    box-sizing: border-box;
+    min-height: 0;
+    overflow: hidden;
+    container-type: size;
+    font-size: clamp(4px, min(3cqi, 3.5cqh), 12px);
+  }
+  .seo-grad-defs {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+  }
+  .seo-scores {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+    gap: 0.5em;
+    flex: 1 1 0%;
+    min-height: 0;
+    width: 100%;
+  }
+  .seo-score-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35em;
+    padding: 0.5em 0.3em;
+    background: rgba(255,255,255,0.55);
+    border: 1px solid rgba(212,196,171,0.82);
+    border-radius: 1.1em;
+    min-width: 0;
+    height: 100%;
+  }
+  .seo-ring-wrap {
+    position: relative;
+    width: clamp(3em, 8cqi, 5.5em);
+    height: clamp(3em, 8cqi, 5.5em);
+    flex-shrink: 0;
+  }
+  .seo-ring-wrap svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+    display: block;
+  }
+  .seo-ring-track {
+    fill: none;
+    stroke: rgba(0,0,0,0.07);
+    stroke-width: 5;
+    stroke-linecap: round;
+  }
+  .seo-ring-num {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Doto', var(--font-display), sans-serif;
+    font-weight: 900;
+    font-size: clamp(1.2em, 3.5cqi, 2em);
+    line-height: 1;
+  }
+  .seo-ring-num--grad {
+    background: linear-gradient(92deg, #00cfff, #7b5fff, #ff3de8);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .seo-ring-num--partial {
+    color: #ff3de8;
+  }
+  .seo-score-lbl {
+    font-family: 'Space Mono', var(--font-mono), monospace;
+    font-size: clamp(0.62em, 2cqi, 0.9em);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #5a5346;
+    text-align: center;
+    line-height: 1.2;
+  }
+  .seo-div {
+    display: none;
+  }
+  .seo-vitals {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35em;
+    flex: 1 1 0%;
+    min-height: 0;
+    justify-content: center;
+    width: 100%;
+  }
+  .seo-vital-row {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.2em;
+    flex: 1 1 0%;
+    min-height: 0;
+  }
+  .seo-vital-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5em;
+  }
+  .seo-vital-key {
+    font-family: 'Space Mono', var(--font-mono), monospace;
+    font-size: 0.72em;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: #0a0a0a;
+    font-weight: 700;
+  }
+  .seo-vital-val {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+  }
+  .seo-vital-n {
+    font-family: 'Doto', var(--font-display), sans-serif;
+    font-weight: 900;
+    font-size: 1.3em;
+    line-height: 1;
+    letter-spacing: 0;
+  }
+  .seo-vital-n--pink { color: #ff3de8; }
+  .seo-vital-n--cyan { color: #00cfff; }
+  .seo-vital-badge {
+    font-family: 'Space Mono', var(--font-mono), monospace;
+    font-size: 0.6em;
+    letter-spacing: 0.2em;
+    padding: 0.28em 0.7em;
+    border-radius: 999px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .seo-vital-badge--avg {
+    background: rgba(255,61,232,0.08);
+    color: #ff3de8;
+    border: 1px solid rgba(255,61,232,0.30);
+  }
+  .seo-vital-badge--fast {
+    background: rgba(0,207,255,0.08);
+    color: #00cfff;
+    border: 1px solid rgba(0,207,255,0.32);
+  }
+  .seo-vital-bar {
+    height: 0.5em;
+    border-radius: 999px;
+    background: rgba(0,0,0,0.07);
+    overflow: hidden;
+  }
+  .seo-vital-bar > i {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+  }
+  .seo-vital-bar > i.pink { background: linear-gradient(90deg, #ff3de8, #7b5fff); }
+  .seo-vital-bar > i.cyan { background: linear-gradient(90deg, #00cfff, #7b5fff); }
+  .seo-diag-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5em;
+    flex: 1 1 0%;
+    min-height: 0;
+    width: 100%;
+  }
+  .seo-diag-tile {
+    background: rgba(255,255,255,0.55);
+    border: 1px solid rgba(212,196,171,0.82);
+    border-radius: 1em;
+    padding: 0.5em 0.7em;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.25em;
+    min-width: 0;
+    height: 100%;
+  }
+  .seo-diag-num {
+    font-family: 'Doto', var(--font-display), sans-serif;
+    font-weight: 900;
+    font-size: clamp(2em, 8cqh, 4.5em);
+    line-height: 0.9;
+    background: linear-gradient(92deg, #00cfff, #7b5fff, #ff3de8);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .seo-diag-lbl {
+    font-family: 'Space Mono', var(--font-mono), monospace;
+    font-size: clamp(0.6em, 2.5cqh, 1em);
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: #5a5346;
+  }
+  .seo-diag-bar {
+    height: 0.4em;
+    border-radius: 999px;
+    background: rgba(0,0,0,0.07);
+    overflow: hidden;
+    margin-top: auto;
+  }
+  .seo-diag-bar > i {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #00cfff, #7b5fff, #ff3de8);
+  }
+  /* ── Agent Readiness card shell viz ──────────────────────────────────── */
+  #ar-viz-shell {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(4px, 1.5cqi, 10px);
+    padding: clamp(8px, 3%, 18px) clamp(10px, 4%, 22px);
+    box-sizing: border-box;
+    overflow: hidden;
+    container-type: size;
+  }
+  #ar-gauge-wrap {
+    position: relative;
+    width: clamp(90px, 86cqi, 200px);
+    flex-shrink: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(3px, 1cqi, 6px);
+  }
+  #ar-gauge-svg { width: 100%; display: block; }
+  #ar-gauge-score {
+    position: absolute;
+    top: 56%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'Doto', var(--font-mono);
+    font-weight: 900;
+    font-size: clamp(16px, 6.5cqi, 34px);
+    line-height: 1;
+    color: #2a2420;
+  }
+  #ar-verdict-pill {
+    font-family: var(--font-mono);
+    font-size: clamp(7px, 2.2cqi, 9px);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.3em 0.9em;
+    border-radius: 999px;
+    border: 1px solid rgba(42,36,32,0.1);
+    background: rgba(255,255,255,0.55);
+    color: rgba(42,36,32,0.6);
+    line-height: 1;
+  }
+  #ar-dim-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-evenly;
+    width: 100%;
+    flex-shrink: 0;
+    gap: clamp(3px, 1cqi, 8px);
+  }
+  .ar-dim-cell {
+    flex: 1 1 0%;
+    min-width: 0;
+    padding: clamp(4px, 1.5cqi, 10px) clamp(3px, 1cqi, 8px);
+  }
+  .ar-dim-cell .seo-ring-svg {
+    width: clamp(30px, 16cqi, 56px);
+    height: clamp(30px, 16cqi, 56px);
+  }
+  .ar-dim-cell .audit-ring-val {
+    font-size: clamp(9px, 3.5cqi, 17px);
+  }
+  .ar-dim-cell .audit-ring-label {
+    font-size: clamp(5px, 1.8cqi, 8px);
+  }
+  .ar-ring-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .ar-ring-val {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'Doto', var(--font-mono);
+    font-weight: 900;
+    font-size: clamp(9px, 3.5cqi, 17px);
+    line-height: 1;
+    color: #2a2420;
+    pointer-events: none;
+  }
+  .ar-dim-sub {
+    font-family: var(--font-mono);
+    font-size: clamp(5px, 1.6cqi, 7px);
+    color: rgba(42,36,32,0.45);
+    letter-spacing: 0.06em;
+    text-align: center;
+    margin-top: 1px;
+  }
+  .ar-dim-sub-icon-total {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    line-height: 1;
+  }
+  .ar-dim-sub-icon-total svg {
+    flex-shrink: 0;
+    vertical-align: middle;
+  }
+  /* ── Data Quality gauge overrides — compact X/Y display ─────────────── */
+  .dq-gauge-viz #ar-gauge-wrap {
+    width: clamp(113px, 73cqi, 227px);
+  }
+  .dq-gauge-viz #ar-verdict-pill {
+    font-size: clamp(11px, 3.4cqi, 15px);
+    padding: 0.45em 1.2em;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    position: relative;
+    top: -2px;
+  }
+  .dq-gauge-score {
+    font-family: 'Doto', var(--font-mono) !important;
+    font-size: clamp(28px, 10cqi, 48px) !important;
+    font-weight: 900 !important;
+    letter-spacing: -0.03em !important;
+  }
+  .dq-gauge-viz #ar-dim-row {
+    flex-wrap: nowrap;
+    justify-content: center;
+    gap: clamp(1px, 0.6cqi, 4px);
+  }
+  .dq-gauge-viz .ar-dim-cell {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: clamp(2px, 0.8cqi, 6px) clamp(1px, 0.4cqi, 4px);
+  }
+  .dq-gauge-viz .ar-dim-cell .seo-ring-svg {
+    width: clamp(20px, 9cqi, 40px);
+    height: clamp(20px, 9cqi, 40px);
+  }
+  .dq-gauge-viz .ar-ring-val {
+    font-family: var(--font-mono) !important;
+    font-size: clamp(7px, 2.6cqi, 12px) !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.02em !important;
+  }
+  .dq-gauge-viz .ar-dim-sub {
+    font-size: clamp(5px, 1.6cqi, 7px) !important;
+    letter-spacing: 0.04em !important;
+  }
+  .ar-ring-locked .ar-ring-val {
+    color: rgba(42,36,32,0.35) !important;
+  }
+  .ar-ring-locked .audit-ring-label {
+    color: rgba(42,36,32,0.4) !important;
+  }
+  .ar-ring-locked .ar-dim-sub {
+    color: rgba(42,36,32,0.3) !important;
+    font-style: italic;
+  }
+  /* ── end Agent Readiness viz ──────────────────────────────────────────── */
+  .spark-val { font-family: var(--font-mono); font-size: 24px; color: var(--text-display); line-height: 1; margin-bottom: 4px; }
+  .spark-val .unit, .countdown .unit, .countdown-meta, .chip { font-family: var(--font-mono); text-transform: uppercase; }
+  .spark-val .unit { font-size: 9px; color: var(--text-secondary); margin-left: 5px; letter-spacing: 0.08em; }
+  .spark-svg { width: 100%; height: 38px; display: block; margin: 2px 0 10px; }
+  .spark-grid { stroke: var(--border); }
+  .spark-line { stroke: var(--text-display); }
+  .spark-dot { fill: var(--text-display); }
+  .chips { display: flex; gap: 4px; }
+  .chip { border: 1px solid var(--border-visible); padding: 2px 9px; font-size: 9px; color: var(--text-secondary); border-radius: 999px; letter-spacing: 0.08em; }
+  .chip.on { color: var(--text-display); border-color: var(--text-display); }
+  .countdown { font-family: var(--font-display); font-size: clamp(60px, 7vw, 84px); line-height: 0.9; color: var(--text-display); letter-spacing: -0.02em; }
+  .countdown .unit { font-size: 13px; color: var(--text-secondary); margin-left: 6px; letter-spacing: 0.08em; }
+  .countdown-meta { font-size: 9px; color: var(--text-secondary); margin-top: 8px; letter-spacing: 0.08em; }
+  .stat-row { display: flex; justify-content: space-between; align-items: baseline; padding: 7px 0; border-bottom: 1px solid var(--border); }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-row .label { font-size: 9.5px; color: var(--text-secondary); letter-spacing: 0.08em; text-transform: uppercase; font-family: var(--font-mono); }
+  .stat-row .value { font-size: 12px; color: var(--text-display); font-family: var(--font-mono); }
+  .stat-row .value.warn { color: var(--warning); }
+  .deadline-row { margin-bottom: 10px; }
+  .deadline-head { display: flex; justify-content: space-between; font-size: 9px; margin-bottom: 4px; letter-spacing: 0.06em; text-transform: uppercase; }
+  .deadline-head .name { color: var(--text-secondary); }
+  .deadline-head .days { color: var(--text-display); }
+  .deadline-head .days.warn { color: var(--warning); }
+  .deadline-bar, .kw-bar, .delta-bar-before, .delta-bar-after { height: 3px; background: var(--border); position: relative; }
+  .deadline-bar > .fill, .kw-bar > .fill, .delta-bar-after > .fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--text-display); }
+  .deadline-bar > .fill.warn { background: var(--warning); }
+  .delta-bar-before > .fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--text-secondary); }
+  .mini-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+  .mini-table th { text-align: left; padding: 4px 6px 6px 0; color: var(--text-secondary); font-size: 8.5px; border-bottom: 1px solid var(--border-visible); letter-spacing: 0.08em; text-transform: uppercase; font-weight: 400; }
+  .mini-table td { padding: 7px 6px 7px 0; color: var(--text-display); border-bottom: 1px solid var(--border); }
+  .mini-table tr:last-child td { border-bottom: none; }
+  .num { text-align: right; padding-right: 0; }
+  .delta-up { color: var(--success); }
+  .delta-down { color: var(--accent); }
+  .pipeline { display: flex; align-items: center; width: 100%; padding: 4px 0; }
+  .pipe-stop { width: 10px; height: 10px; background: var(--border); border-radius: 999px; flex-shrink: 0; }
+  .pipe-stop.done { background: var(--text-display); }
+  .pipe-stop.active { width: 16px; height: 16px; background: var(--text-display); border: 3px solid var(--surface); outline: 1px solid var(--text-display); }
+  .pipe-line { flex: 1; height: 1px; background: var(--border); }
+  .pipe-line.done { background: var(--text-display); }
+  .pipe-labels { display: flex; justify-content: space-between; margin-top: 12px; font-family: var(--font-mono); font-size: 8.5px; color: var(--text-disabled); letter-spacing: 0.1em; text-transform: uppercase; }
+  .pipe-labels .active { color: var(--text-display); }
+  .delta-pair { margin-bottom: 10px; }
+  .delta-label { font-size: 9px; color: var(--text-secondary); margin-bottom: 4px; display: flex; justify-content: space-between; letter-spacing: 0.06em; text-transform: uppercase; }
+  .delta-label .pct { color: var(--success); }
+  .delta-bar-before { margin-bottom: 3px; }
+  .thread-row { display: grid; grid-template-columns: 68px 1fr auto; gap: 9px; padding: 6px 0; border-bottom: 1px solid var(--border); align-items: baseline; font-size: 9px; font-family: var(--font-mono); }
+  .thread-row:last-child { border-bottom: none; }
+  .thread-row .sub { color: var(--text-secondary); text-transform: uppercase; }
+  .thread-row .title { color: var(--text-display); font-family: var(--font-ui); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .thread-row .drafts { color: var(--warning); text-transform: uppercase; }
+  .thread-row .drafts.watch { color: var(--text-disabled); }
+  .kw-row { margin-bottom: 8px; }
+  .kw-head { display: flex; justify-content: space-between; font-size: 9px; color: var(--text-display); margin-bottom: 4px; letter-spacing: 0.06em; text-transform: uppercase; }
+  .kw-head .vol { color: var(--text-secondary); }
+
+  /* ── Responsive ── */
+  @media (min-width: 1400px) {
+    #capability-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  /* Goes 3-across only on ultra-wide where the cards have room. Every bucket
+     (DELIVERABLES + the others) shares the same 3-across-vs-2 breakpoint. */
+  @media (min-width: 1600px) {
+    .cap-step-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .cap-bucket-deliverables .cap-step-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  @media (max-width: 1200px) {
+    /* minmax(0, 1fr), not a bare 1fr — a bare 1fr track won't shrink below its
+       content's min-content width, which was forcing this whole column (and
+       every .meta-row inside it) wider than the viewport on phones, pushing
+       each row's trailing action button off-screen regardless of its own
+       overflow:hidden/ellipsis rules. */
+    #founders-hero-shell { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+    /* DELIVERABLES breaks from 3-across to 2x2 on medium and smaller. */
+    .cap-bucket-deliverables .cap-step-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 900px) {
+    #founders-shell { padding: 88px 24px 64px; } /* padding-top = nav height (64px) + 24px clearance */
+    #founders-top-strip-inner { padding: 0 24px; }
+    #dashboard-source-cta-row { width: 100%; }
+    #capability-section { padding-top: 0; }
+    #capability-section-shell { grid-template-columns: 1fr; gap: 8px; }
+    /* DELIVERABLES drops from 3-across to 2-across at this breakpoint. */
+    .cap-bucket-deliverables .cap-step-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #dashboard-source-cta-row { box-shadow: 0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4) !important; }
+    /* Mobile: bucket nav returns as a horizontal, scrollable row of
+       icon-only circles. Active item gets a gradient ring/circle; no text. */
+    #capability-nav-col { order: -1; display: flex; flex-direction: row; flex-wrap: nowrap; justify-content: space-between; align-items: center; gap: 16px; padding: 18px 14px; margin-bottom: 4px; width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; overflow-y: visible; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+    #capability-nav-col::-webkit-scrollbar { display: none; }
+    #dashboard-source-band { margin-bottom: 0; }
+    .capability-nav-btn { flex: 0 0 auto; width: 44px; height: 44px; max-width: none; min-width: 0; padding: 0; border-radius: 50%; flex-direction: row; align-items: center; justify-content: center; gap: 0; background: rgba(255, 255, 255, 1); }
+    .capability-nav-btn:hover { background: rgba(255, 255, 255, 1); box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.067), 0px 15px 30px rgba(0, 0, 0, 0.067), 0px 20px 40px rgba(0, 0, 0, 0.1); }
+    .capability-nav-btn::before { border-radius: 50%; }
+    .capability-nav-btn--active::before {
+      background: linear-gradient(180deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+      opacity: 1;
+    }
+    #capability-nav-col:hover .capability-nav-btn--active::before {
+      background: linear-gradient(180deg, rgba(228,228,228,0.9), transparent 62%);
+      opacity: 0.85;
+    }
+    #capability-nav-col:hover .capability-nav-btn--active:hover::before {
+      background: linear-gradient(180deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+      opacity: 1;
+    }
+    .capability-nav-btn-line { display: none; }
+    .capability-nav-btn-sub { display: none; }
+    .capability-nav-btn-label { display: none; }
+    .capability-nav-btn-label-full { display: none; }
+    .capability-nav-btn-label-short { display: none; }
+    .capability-nav-btn-content { display: inline-flex; align-items: center; justify-content: center; }
+    .capability-nav-btn-icon-wrap { display: inline-flex; align-items: center; justify-content: center; width: auto; height: auto; margin-left: 0; }
+    .capability-nav-btn-icon-wrap svg { width: clamp(18px, 5vw, 22px); height: clamp(18px, 5vw, 22px); }
+    /* Show every bucket on mobile (incl. Marketing Director / leadgen / admin) —
+       the scrollable pill row holds them all; matches desktop's full nav. */
+    #capability-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .tile-solution-actions { flex-direction: column; align-items: stretch; gap: 10px; }
+    .tile { aspect-ratio: auto; min-height: 230px; grid-template-areas: "num" "head" "desc" "viz" "foot"; grid-template-columns: 1fr; row-gap: 14px; }
+    .tile-description { }
+    #intake-identity-row { grid-template-columns: 1fr; gap: 16px; }
+    #audit-viz-bars .audit-bar-item:nth-child(n+3) { display: none; }
+  }
+  @media (max-width: 520px) {
+    #capability-grid { grid-template-columns: 1fr; grid-auto-rows: auto; }
+    .tile-intake-card { height: auto; min-height: unset; padding: 12px 14px; gap: 10px; }
+    /* Preserve the desktop shell aspect ratio on mobile — never shrink the
+       shell's height relative to its width. Remove the prior max-height cap
+       and the aspect-ratio: auto override that squashed the card on phones. */
+    .tile-intake-placeholder {
+      aspect-ratio: 1536 / 1024;
+      flex: none;
+      min-height: 0;
+      max-height: none;
+      overflow: hidden;
+    }
+    .tile-intake-placeholder-brief { border-radius: 0; border: none; box-shadow: none; }
+    .tile-brief-preview-wrap { border-radius: 0; }
+    .tile-brief-preview-wrap iframe { border-radius: 0; }
+    /* Contain the full brief to the padded column — the old negative-margin
+       full-bleed overshot the viewport (brief sits below the shell's 24px pad,
+       nested deeper than the hack assumed) and clipped off the right edge. */
+    .cap-brief-full { margin: 0 0 14px; width: 100%; max-width: 100%; }
+    .cap-brief-full-frame { border-radius: 12px; height: calc(100dvh - 180px); min-height: 0; max-width: 100%; }
+    .tile-intake-placeholder-audit-summary { flex: none; min-height: 220px; }
+    /* Keep the full copy at a readable size — no line-clamp, no hidden
+       source/timestamp line. */
+    .tile-intake-source-line { display: inline-block; font-size: 11px; }
+    .tile-intake-description {
+      font-size: 13px;
+      line-height: 1.45;
+      -webkit-line-clamp: unset;
+      display: block;
+      -webkit-box-orient: unset;
+      overflow: visible;
+    }
+    .tile-intake-heading { font-size: 16px; line-height: 1.25; }
+
+    /* ── Mobile collapsible cards ────────────────────────────────────────── */
+    /* Re-enable pointer events so all cards can be tapped to expand */
+    .tile.tile-intake-card--btns-only { pointer-events: auto; }
+    .tile-intake-card .tile-number {
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      min-height: 44px;
+      padding-top: 4px;
+      padding-bottom: 4px;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .tile-intake-card .tile-header-label {
+      color: var(--text-primary);
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .tile-mobile-chevron {
+      display: none;
+    }
+    .tile-mobile-chevron svg {
+      width: 11px;
+      height: 11px;
+      stroke: var(--text-secondary);
+      fill: none;
+      stroke-width: 2.2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      transition: stroke 0.18s ease;
+      transform: rotate(0deg);
+      transition: transform 0.22s ease;
+    }
+    .tile-intake-card--mobile-expanded .tile-mobile-chevron {
+      background: var(--surface-raised);
+    }
+    .tile-intake-card--mobile-expanded .tile-mobile-chevron svg {
+      transform: rotate(180deg);
+    }
+    /* Cards always show full content on mobile — no collapse by default */
+    .tile-intake-card .tile-intake-body {
+      flex-direction: column;
+    }
+
+    /* ── Mobile: tab system → vertical section labels ─────────────────── */
+    /* Grid view: each group's seg collapses to its own label only —
+       the active tab restyled as a static section header. */
+    .cap-step-seg {
+      margin: 12px 16px 4px;
+    }
+    .cap-step-seg > button { display: none; }
+    .cap-step-seg > button.is-active {
+      display: block;
+      flex: none;
+      min-height: 0;
+      padding: 8px 0 8px;
+      text-align: left;
+      cursor: default;
+      pointer-events: none;
+    }
+    .cap-step-seg > button.is-active::after { content: none; }
+    .cap-step-grid { grid-template-columns: 1fr; }
+    /* List view: hide column-header tab row (non-interactive headers),
+       stack columns vertically, show per-section label above each column.
+       Exception: --tabs buckets keep their strip visible and interactive. */
+    .cap-step-seg--top:not(.cap-step-seg--tabs) { display: none; }
+    /* Deliverables is a single-tab bucket — its tab strip is a redundant,
+       animated label on phones. Hide it here; the deliverable cards below
+       still render (one step, always active). Desktop keeps it (icon + label). */
+    .cap-bucket-deliverables .cap-step-seg--top.cap-step-seg--tabs { display: none; }
+    /* Tab strip on mobile — horizontal scroll, all tabs visible */
+    .cap-step-seg--top.cap-step-seg--tabs {
+      display: flex;
+      overflow-x: auto;
+      overflow-y: visible;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      flex-wrap: nowrap;
+      margin: 0;
+      border-bottom: 1px solid rgba(42,36,32,0.1);
+    }
+    .cap-step-seg--top.cap-step-seg--tabs::-webkit-scrollbar { display: none; }
+    .cap-step-seg--top.cap-step-seg--tabs > button {
+      display: inline-flex;
+      flex: 1;
+      min-width: 0;
+      pointer-events: auto;
+      cursor: pointer;
+      min-height: 44px;
+      font-size: 0.78rem;
+      padding: 0 12px;
+      justify-content: center;
+    }
+    .cap-step-seg--top.cap-step-seg--tabs > button.is-active { cursor: default; }
+    .cap-step-seg--top.cap-step-seg--tabs > button::after { content: ''; }
+    .cap-step-seg--top.cap-step-seg--tabs > button.is-active::after { content: ''; }
+    /* Re-assert over the mobile-expanded .tile-foot{display:flex} rule above */
+    .cap-list-row-main .tile-foot { display: contents; }
+    .cap-list-columns { grid-template-columns: 1fr !important; margin-left: 0; margin-right: 0; margin-bottom: 0; }
+    /* Stacked columns: divider moves from left edge to top edge */
+    .cap-list-col + .cap-list-col { border-left: 0; border-top: 1px solid rgba(42, 36, 32, 0.08); }
+    .cap-list-col-label { display: none; }
+  }
+  @media (max-width: 430px) {
+    .cap-step-seg--top.cap-step-seg--tabs > button .cap-step-text { display: none; }
+    .cap-step-seg--top.cap-step-seg--tabs > button { gap: 0; padding: 0 8px; }
+  }
+  @media (max-width: 380px) {
+    .cap-list-row-main {
+      gap: 6px;
+      padding-right: 8px;
+    }
+    .cap-list-row-main > .tile-intake-card {
+      padding-left: 12px;
+    }
+    .cap-list-run,
+    .cap-list-caret,
+    .cap-list-lock-btn {
+      width: 28px;
+      min-width: 28px;
+      min-height: 28px;
+      padding: 0;
+      gap: 0;
+    }
+    .cap-list-action-label {
+      display: none;
+    }
+    /* Email's up-and-out arrow drops on mobile — icon-only chips stay clean. */
+    .cap-past-brief-action .cap-past-brief-action-sub {
+      display: none;
+    }
+    .cap-past-brief-actions {
+      gap: 5px;
+    }
+  }
+  /* Past brief rows: two-row layout on mobile.
+     Row 1 = brief name (full width). Row 2 = timestamp + status + action chips (single line). */
+  @media (max-width: 768px) {
+    .cap-past-brief-row {
+      flex-wrap: wrap;
+      gap: 4px 8px;
+      padding: 12px 10px;
+      align-items: center;
+    }
+    .cap-past-brief-title {
+      flex: 0 0 100%;
+      font-family: var(--font-ui);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: var(--text-primary);
+      margin-bottom: 0;
+    }
+    .cap-past-brief-title-ts {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    .cap-past-brief-meta {
+      flex: 0 0 auto;
+      align-self: center;
+    }
+    .cap-past-brief-actions {
+      flex: 0 0 auto;
+      flex-shrink: 0;
+      align-self: center;
+    }
+  }
+  /* Chevron hidden above mobile breakpoint */
+  @media (min-width: 521px) {
+    .tile-mobile-chevron { display: none; }
+  }
+  @media (max-width: 620px) {
+    /* padding-top clears the fixed top strip (nav ~64px) with 24px breathing room; sides/bottom stay tight. */
+    #founders-shell { padding: 88px 12px 12px; }
+    /* Phones: DELIVERABLES stacks to a single card per row (was 2-across). */
+    .cap-bucket-deliverables .cap-step-grid { grid-template-columns: 1fr; }
+    #founders-hero-shell { gap: 16px; }
+    #founders-top-strip-inner {
+      gap: 8px;
+      padding: 0 12px;
+      min-height: 60px;
+      flex-wrap: nowrap;
+    }
+    #founders-top-actions { gap: 0.35rem; margin-left: auto; }
+    #founders-linkedin { font-size: 0.72rem; }
+    #founders-login-link { padding: 0.35rem 0.6rem; font-size: 0.75rem; }
+    #founders-chat-cta { padding: 0.35rem 0.6rem; font-size: 0.75rem; gap: 0.25rem; }
+    .founders-chat-label-full  { display: none; }
+    .founders-chat-label-short { display: inline; }
+    #capability-section { padding-top: 0; }
+    #reseed-url-group { display: none !important; }
+    /* overflow visible so the absolutely-positioned .client-switcher-menu can drop below this box
+       instead of being clipped; horizontal safety kept by width:100% + per-row .meta-row overflow. */
+    #founders-hero-meta { width: 100%; max-width: 100%; overflow: visible; }
+    .meta-row { overflow: hidden; padding-top: 8px; padding-bottom: 8px; }
+    #client-meta-row { overflow: visible; }
+    .meta-row .value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    #dashboard-source-band { margin-top: 0 !important; margin-bottom: 0 !important; }
+    .meta-row-source { padding-top: 8px !important; padding-bottom: 8px !important; }
+    #dashboard-source-cta-row { max-width: 100%; box-sizing: border-box; justify-content: space-between; gap: clamp(10px, 3vw, 20px); padding: 4px clamp(12px, 4vw, 24px); }
+    #run-idle-indicator-dot { width: 18px; height: 18px; flex-shrink: 0; background: conic-gradient(rgba(42,36,32,0.15) 0%, rgba(42,36,32,0.08) 100%); -webkit-mask: radial-gradient(circle, transparent 58%, black 59%); mask: radial-gradient(circle, transparent 58%, black 59%); border-radius: 50%; display: inline-block !important; }
+    #run-active-indicator-label { display: none; }
+    /* Card/line-item selector stays visible on mobile (was hidden). */
+    #dashboard-source-band { margin-bottom: 0; }
+    #reseed-run-btn { min-width: 0; }
+  }
+

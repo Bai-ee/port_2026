@@ -1,0 +1,867 @@
+  /* Video Remix modal kit. */
+  .vrk-scope {
+    --vrk-ink: #2a2420;
+    --vrk-ink-soft: rgba(42,36,32,0.72);
+    --vrk-ink-muted: rgba(42,36,32,0.52);
+    --vrk-line: rgba(42,36,32,0.12);
+    --vrk-surface: rgba(255,255,255,0.62);
+    --vrk-surface-strong: rgba(255,255,255,0.78);
+    --vrk-success: #285f3b;
+    --vrk-danger: #9f1f17;
+    --vrk-a: hsl(185,100%,45%);
+    --vrk-b: hsl(262,100%,55%);
+    --vrk-c: hsl(314,100%,50%);
+    --vrk-radius: 8px;
+    --vrk-cell-radius: 16px;
+    --vrk-ui: "Space Grotesk", system-ui, sans-serif;
+    --vrk-mono: "Space Mono", ui-monospace, monospace;
+    --vrk-ease: cubic-bezier(0.34,1.56,0.64,1);
+    color: var(--vrk-ink);
+    font-family: var(--vrk-ui);
+  }
+  .vrk-scope, .vrk-scope * { box-sizing: border-box; }
+  .vrk-scope.panel,
+  .vrk-scope .panel {
+    overflow: hidden;
+    border: 1px solid var(--vrk-line);
+    border-radius: var(--vrk-cell-radius);
+    background: var(--vrk-surface);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.7), inset 0 1px 0 rgba(255,255,255,0.35);
+    backdrop-filter: blur(22px);
+    -webkit-backdrop-filter: blur(22px);
+  }
+  #video-remix-modal-tabs-container.vrk-scope,
+  #ui-teaser-modal-tabs-container.vrk-scope {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
+  /* Archive / Publishing card modal (Knowledge Officer) */
+  #archive-publishing-modal-tabs-container.apk-scope {
+    display: flex; flex: 1; flex-direction: column; min-height: 0;
+    font: 13px/1.45 var(--vrk-mono, ui-monospace, monospace);
+    color: #1a1a1a;
+  }
+  .apk-scope * { box-sizing: border-box; }
+  .apk-tabs { display: flex; gap: 2px; flex-shrink: 0; border-bottom: 1px solid rgba(0,0,0,0.12); }
+  .apk-tab { flex: 1; min-height: 42px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #6b6b6b; cursor: pointer; font: 700 11px/1 var(--vrk-mono, monospace); letter-spacing: 0.08em; }
+  .apk-tab:hover:not(.is-active) { color: #111; background: rgba(0,0,0,0.04); }
+  .apk-tab.is-active { color: #111; border-bottom-color: #3b82f6; }
+  .apk-body { display: flex; flex-direction: column; gap: 12px; padding: 14px 4px; overflow-y: auto; }
+  .apk-seg { display: flex; gap: 6px; }
+  .apk-seg-btn { flex: 1; padding: 8px 10px; border: 1px solid rgba(0,0,0,0.16); border-radius: 6px; background: #fff; color: #444; cursor: pointer; font-size: 11px; font-weight: 600; }
+  .apk-seg-btn.is-active { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+  .apk-folder-row { display: flex; }
+  .apk-select { flex: 1; padding: 8px 10px; border: 1px solid rgba(0,0,0,0.16); border-radius: 6px; background: #fff; font-size: 12px; }
+  .apk-table { display: flex; flex-direction: column; border: 1px solid rgba(0,0,0,0.1); border-radius: 6px; overflow: hidden; }
+  .apk-row { display: grid; grid-template-columns: auto 1.6fr 1fr 0.7fr 1fr; gap: 8px; align-items: center; padding: 8px 10px; border-bottom: 1px solid rgba(0,0,0,0.06); cursor: pointer; }
+  .apk-row:last-child { border-bottom: 0; }
+  .apk-row--static { grid-template-columns: 1.6fr 1fr 0.7fr 0.8fr 1.2fr; cursor: default; }
+  .apk-row-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .apk-row-meta { color: #777; font-size: 11px; }
+  .apk-row-state { font-size: 11px; color: #555; text-align: right; }
+  .apk-status-confirmed { color: #15803d; }
+  .apk-status-failed { color: #b91c1c; }
+  .apk-status-pending_confirmation, .apk-status-uploading { color: #b45309; }
+  .apk-row-links { display: flex; gap: 8px; justify-content: flex-end; }
+  .apk-row-links a, .apk-link-btn { color: #3b82f6; background: none; border: 0; padding: 0; cursor: pointer; font-size: 11px; text-decoration: underline; }
+  .apk-actions { display: flex; flex-direction: column; gap: 8px; padding-top: 6px; border-top: 1px solid rgba(0,0,0,0.08); }
+  .apk-btn-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .apk-btn { padding: 8px 14px; border: 1px solid rgba(0,0,0,0.18); border-radius: 6px; background: #fff; color: #222; cursor: pointer; font-size: 12px; font-weight: 600; }
+  .apk-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .apk-btn--primary { background: #111; border-color: #111; color: #fff; }
+  .apk-btn--danger { background: #b91c1c; border-color: #b91c1c; color: #fff; }
+  .apk-estimate-line { font-size: 12px; color: #333; }
+  .apk-confirm-note { font-size: 11px; color: #b45309; font-weight: 600; }
+  .apk-empty { padding: 24px 10px; text-align: center; color: #888; font-size: 12px; }
+  .apk-error { padding: 8px 10px; background: rgba(185,28,28,0.08); color: #b91c1c; border-radius: 6px; font-size: 12px; }
+  .apk-note { font-size: 11px; color: #888; }
+  .apk-result { display: flex; flex-direction: column; gap: 4px; padding: 10px; background: rgba(0,0,0,0.03); border-radius: 6px; }
+  .apk-result-head { font-weight: 700; font-size: 12px; }
+  .apk-result-row { display: flex; gap: 10px; justify-content: space-between; align-items: center; font-size: 12px; }
+  .apk-result-row--err { color: #b91c1c; }
+  .apk-tx { font-family: var(--vrk-mono, monospace); color: #555; font-size: 11px; }
+  .vrk-scope .tabs {
+    display: flex;
+    flex-shrink: 0;
+    min-height: 48px;
+    border-bottom: 1px solid var(--vrk-line);
+    background: rgba(255,255,255,0.28);
+  }
+  .vrk-scope .tab {
+    flex: 1;
+    min-height: 48px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: var(--vrk-ink-soft);
+    cursor: pointer;
+    font: 700 12px/1 var(--vrk-mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    transition: color 160ms ease, background 140ms ease;
+  }
+  /* Tab labels: full on desktop, one-word on mobile so they never wrap. */
+  .vrk-scope .tab-label-short { display: none; }
+  @media (max-width: 560px) {
+    .vrk-scope .tab { letter-spacing: 0.04em; font-size: 11px; }
+    .vrk-scope .tab-label-full { display: none; }
+    .vrk-scope .tab-label-short { display: inline; }
+  }
+  .vrk-scope .tab:hover:not(.is-active) { color: var(--vrk-ink); background: rgba(255,255,255,0.38); }
+  .vrk-scope .tab.is-active {
+    color: var(--vrk-ink);
+    border-image: linear-gradient(90deg, var(--vrk-a), var(--vrk-b), var(--vrk-c)) 0 0 1 0;
+  }
+  .vrk-scope .panel-body {
+    display: grid;
+    /* max-content rows: the panel has a definite height (flex:1 in the modal
+       column), so auto rows would be squeezed to fit it — overflow:hidden
+       cards (.saved-remix-card) collapse to their padding and clip their
+       content. Size rows to content and let the panel scroll instead. */
+    grid-auto-rows: max-content;
+    flex: 1;
+    gap: 16px;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 16px;
+    overscroll-behavior: contain;
+  }
+  .vrk-scope .section {
+    display: grid;
+    gap: 14px;
+    padding: 16px;
+    border: 1px solid var(--vrk-line);
+    border-radius: var(--vrk-radius);
+    background: var(--vrk-surface-strong);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.72), inset 0 1px 0 rgba(255,255,255,0.35);
+  }
+  .vrk-scope .section-head {
+    display: grid;
+    grid-template-columns: auto minmax(0,1fr) auto;
+    gap: 12px;
+    align-items: start;
+  }
+  .vrk-scope .index {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 28px;
+    border: 1px solid var(--vrk-line);
+    border-radius: 6px;
+    background: rgba(255,255,255,0.5);
+    color: var(--vrk-ink-soft);
+    font: 700 12px/1 var(--vrk-mono);
+  }
+  .vrk-scope .section h3 {
+    margin: 0;
+    color: var(--vrk-ink);
+    font: 700 18px/1.25 var(--vrk-ui);
+    letter-spacing: 0;
+  }
+  .vrk-scope .section p {
+    margin: 5px 0 0;
+    color: var(--vrk-ink-soft);
+    font-size: 14px;
+    line-height: 1.55;
+  }
+  .vrk-scope .label {
+    display: block;
+    color: var(--vrk-ink-soft);
+    font: 700 12px/1.2 var(--vrk-mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .vrk-scope .field,
+  .vrk-scope .range-wrap {
+    display: grid;
+    gap: 7px;
+  }
+  .vrk-scope input,
+  .vrk-scope select,
+  .vrk-scope textarea {
+    width: 100%;
+    min-height: 54px;
+    border: 1px solid var(--vrk-line);
+    border-radius: var(--vrk-radius);
+    background: rgba(255,255,255,0.96);
+    color: var(--vrk-ink);
+    padding: 12px 16px;
+    font: 16px/1.45 var(--vrk-mono);
+    outline: none;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.55);
+  }
+  .vrk-scope input:focus,
+  .vrk-scope select:focus,
+  .vrk-scope textarea:focus {
+    border-color: rgba(42,36,32,0.36);
+    box-shadow: 0 0 0 3px rgba(42,36,32,0.08), inset 0 1px 0 rgba(255,255,255,0.65);
+  }
+  .vrk-scope input:disabled,
+  .vrk-scope select:disabled,
+  .vrk-scope .btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.52;
+  }
+  .vrk-scope input[type="range"] {
+    min-height: 32px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    accent-color: var(--vrk-ink);
+  }
+  .vrk-scope .range-scale {
+    display: flex;
+    justify-content: space-between;
+    color: var(--vrk-ink-muted);
+    font: 12px/1 var(--vrk-mono);
+  }
+  .vrk-scope .field-grid {
+    display: grid;
+    grid-template-columns: repeat(2,minmax(0,1fr));
+    gap: 12px;
+  }
+  .vrk-scope .segmented {
+    display: flex;
+    padding: 4px;
+    border: 1px solid var(--vrk-line);
+    border-radius: 999px;
+    background: rgba(255,255,255,0.96);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.45);
+  }
+  .vrk-scope .segmented button {
+    flex: 1;
+    min-height: 44px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--vrk-ink-soft);
+    font: 700 13px/1 var(--vrk-mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 160ms ease, color 140ms ease;
+  }
+  .vrk-scope .segmented button:hover:not(.is-active) { background: rgba(42,36,32,0.06); color: var(--vrk-ink); }
+  .vrk-scope .segmented .is-active { background: var(--vrk-ink); color: #fff; box-shadow: 0 3px 10px rgba(42,36,32,0.14); }
+  .vrk-scope .toggle-grid {
+    display: grid;
+    grid-template-columns: repeat(3,minmax(0,1fr));
+    gap: 12px;
+  }
+  /* Email Digest SETTINGS (#email-digest-settings-shell): 2-up section toggle
+     cards on desktop, single column ≤860px. Column count MUST live here (not
+     as an inline style on the grid) so the mobile collapse can win — the id
+     selector outranks the shared .vrk-scope ≤860px rule, so it needs its own
+     media override below. */
+  #email-digest-settings-shell .toggle-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @media (max-width: 860px) {
+    #email-digest-settings-shell .toggle-grid { grid-template-columns: 1fr; }
+  }
+  .vrk-scope .toggle-card {
+    display: grid;
+    grid-template-columns: auto minmax(0,1fr);
+    gap: 12px;
+    min-height: 72px;
+    padding: 14px;
+    border: 1px solid var(--vrk-line);
+    border-radius: var(--vrk-radius);
+    background: rgba(255,255,255,0.96);
+    color: var(--vrk-ink);
+    text-align: left;
+    cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.45);
+    transition: background 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 220ms var(--vrk-ease);
+  }
+  .vrk-scope .toggle-card:hover {
+    background: #fff;
+    border-color: rgba(42,36,32,0.22);
+    box-shadow: 0 3px 12px rgba(42,36,32,0.07), inset 0 1px 0 rgba(255,255,255,0.45);
+    transform: translateY(-1px);
+  }
+  .vrk-scope .toggle-card.is-on {
+    background: var(--vrk-surface-strong);
+    border-color: rgba(42,36,32,0.22);
+  }
+  .vrk-scope .check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: 1px solid rgba(42,36,32,0.18);
+    border-radius: 999px;
+    background: rgba(255,255,255,0.55);
+    color: var(--vrk-ink);
+    font: 700 12px/1 var(--vrk-mono);
+  }
+  .vrk-scope .is-on .check { background: var(--vrk-ink); border-color: var(--vrk-ink); color: #fff; }
+  .vrk-scope .toggle-title {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--vrk-ink);
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .vrk-scope .toggle-desc {
+    display: block;
+    margin-top: 5px;
+    color: var(--vrk-ink-muted);
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .vrk-scope .upload-drop {
+    display: grid;
+    grid-template-columns: auto minmax(0,1fr);
+    gap: 12px;
+    align-items: center;
+    min-height: 96px;
+    padding: 18px;
+    border: 1.5px dashed rgba(42,36,32,0.22);
+    border-radius: var(--vrk-radius);
+    background: rgba(255,255,255,0.58);
+    color: var(--vrk-ink);
+    text-align: left;
+    cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease, transform 220ms var(--vrk-ease);
+  }
+  .vrk-scope .upload-drop:hover {
+    background: rgba(255,255,255,0.9);
+    border-color: rgba(42,36,32,0.38);
+    transform: translateY(-1px);
+  }
+  .vrk-scope .upload-drop-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 999px;
+    background: var(--vrk-ink);
+    color: #fff;
+  }
+  .vrk-scope .upload-drop-title,
+  .vrk-scope .folder-name,
+  .vrk-scope .upload-name {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--vrk-ink);
+    font-weight: 700;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .vrk-scope .upload-drop-meta,
+  .vrk-scope .folder-meta,
+  .vrk-scope .upload-meta,
+  .vrk-scope .media-thumb-name {
+    display: block;
+    margin-top: 5px;
+    color: var(--vrk-ink-muted);
+    font: 12px/1.25 var(--vrk-mono);
+  }
+  .vrk-scope .orientation-grid,
+  .vrk-scope .folder-grid {
+    display: grid;
+    grid-template-columns: repeat(4,minmax(0,1fr));
+    gap: 10px;
+  }
+  .vrk-scope .orientation-tile,
+  .vrk-scope .folder-card {
+    display: grid;
+    gap: 10px;
+    min-height: 88px;
+    padding: 12px;
+    border: 1px solid var(--vrk-line);
+    border-radius: var(--vrk-radius);
+    background: rgba(255,255,255,0.86);
+    color: var(--vrk-ink);
+    text-align: left;
+    cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease, transform 220ms var(--vrk-ease);
+  }
+  .vrk-scope .orientation-tile:hover,
+  .vrk-scope .folder-card:hover {
+    background: #fff;
+    border-color: rgba(42,36,32,0.24);
+    transform: translateY(-1px);
+  }
+  .vrk-scope .orientation-tile.is-on {
+    border-color: rgba(42,36,32,0.38);
+    box-shadow: inset 0 0 0 1px rgba(42,36,32,0.18);
+  }
+  /* Folder browser cards mirror the REMIX-tab toggle-card selection language:
+     a left check badge, a filled "previewing" state, and an accent for folders
+     already pulled into the remix (is-on). */
+  .vrk-scope .folder-card {
+    grid-template-columns: auto minmax(0,1fr);
+    align-items: center;
+    min-height: 72px;
+  }
+  .vrk-scope .folder-card-body { min-width: 0; }
+  .vrk-scope .folder-card.is-on {
+    border-color: rgba(42,36,32,0.22);
+    background: var(--vrk-surface-strong);
+  }
+  .vrk-scope .folder-card.is-previewing {
+    border-color: rgba(17,109,255,0.5);
+    box-shadow: inset 0 0 0 1px rgba(17,109,255,0.32);
+    background: rgba(17,109,255,0.06);
+  }
+  .vrk-scope .folder-card.is-previewing .check {
+    background: var(--vrk-ink);
+    border-color: var(--vrk-ink);
+    color: #fff;
+  }
+  .vrk-scope .orientation-shape {
+    display: block;
+    border: 1px solid rgba(42,36,32,0.26);
+    border-radius: 4px;
+    background: linear-gradient(135deg, rgba(0,200,228,0.18), rgba(122,77,255,0.18));
+  }
+  .vrk-scope .orientation-auto { width: 34px; height: 34px; border-radius: 999px; }
+  .vrk-scope .orientation-square { width: 34px; height: 34px; }
+  .vrk-scope .orientation-portrait { width: 24px; height: 40px; }
+  .vrk-scope .orientation-landscape { width: 44px; height: 26px; }
+  .vrk-scope .upload-queue,
+  .vrk-scope .folder-preview {
+    display: grid;
+    gap: 8px;
+  }
+  .vrk-scope .upload-row {
+    display: grid;
+    grid-template-columns: auto minmax(0,1fr) minmax(90px,160px) auto;
+    gap: 10px;
+    align-items: center;
+    min-height: 62px;
+    padding: 10px;
+    border: 1px solid var(--vrk-line);
+    border-radius: var(--vrk-radius);
+    background: rgba(255,255,255,0.86);
+  }
+  .vrk-scope .upload-kind {
+    display: inline-grid;
+    place-items: center;
+    width: 42px;
+    height: 30px;
+    border-radius: 6px;
+    background: rgba(42,36,32,0.08);
+    color: var(--vrk-ink-soft);
+    font: 700 11px/1 var(--vrk-mono);
+  }
+  /* First-frame thumbnail variant of the kind box (manage/cleanup rows). */
+  .vrk-scope .upload-kind-thumb {
+    width: 48px;
+    height: 48px;
+    overflow: hidden;
+    background: #000;
+    padding: 0;
+  }
+  .vrk-scope .upload-kind-thumb video,
+  .vrk-scope .upload-kind-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    display: block;
+  }
+  .vrk-scope .upload-progress {
+    display: block;
+    height: 8px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(42,36,32,0.1);
+  }
+  .vrk-scope .upload-progress span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--vrk-a), var(--vrk-b), var(--vrk-c));
+    transition: width 180ms ease;
+  }
+  .vrk-scope .upload-remove {
+    min-height: 32px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+  .vrk-scope .media-thumb-grid {
+    display: grid;
+    grid-template-columns: repeat(4,minmax(0,1fr));
+    gap: 10px;
+  }
+  .vrk-scope .media-thumb {
+    position: relative;
+    appearance: none;
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+    overflow: hidden;
+    padding: 8px;
+    border: 1px solid var(--vrk-line);
+    border-radius: var(--vrk-radius);
+    background: rgba(255,255,255,0.82);
+    color: var(--vrk-ink);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+  }
+  .vrk-scope .media-thumb:hover:not(:disabled) {
+    border-color: rgba(42,36,32,0.34);
+    background: #fff;
+    box-shadow: inset 0 0 0 1px rgba(42,36,32,0.14);
+  }
+  .vrk-scope .media-thumb.is-ordered {
+    border-color: rgba(17,109,255,0.52);
+    box-shadow: inset 0 0 0 1px rgba(17,109,255,0.22);
+  }
+  .vrk-scope .media-thumb:disabled {
+    cursor: default;
+    color: var(--vrk-ink-soft);
+  }
+  .vrk-scope .media-thumb img,
+  .vrk-scope .media-thumb video {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+    border-radius: 6px;
+    background: #111;
+  }
+  .vrk-scope .media-thumb-order-badge {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    display: inline-grid;
+    place-items: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 7px;
+    border: 1px solid rgba(255,255,255,0.7);
+    border-radius: 999px;
+    background: rgba(17,17,17,0.82);
+    color: #fff;
+    font: 700 12px/1 var(--vrk-mono);
+  }
+  .vrk-scope .media-thumb-name,
+  .vrk-scope .order-slot-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .vrk-scope .media-thumb-meta,
+  .vrk-scope .order-count {
+    color: var(--vrk-ink-soft);
+    font: 700 11px/1 var(--vrk-mono);
+    text-transform: uppercase;
+  }
+  .vrk-scope .order-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  .vrk-scope .order-status,
+  .vrk-scope .order-builder {
+    display: grid;
+    gap: 10px;
+    padding: 10px;
+    border: 1px solid var(--vrk-line);
+    border-radius: var(--vrk-radius);
+    background: rgba(255,255,255,0.64);
+  }
+  .vrk-scope .order-status {
+    grid-template-columns: auto minmax(0,1fr) auto;
+    align-items: center;
+  }
+  .vrk-scope .order-status.is-ready {
+    border-color: rgba(17,109,255,0.36);
+    background: rgba(17,109,255,0.06);
+  }
+  .vrk-scope .order-status-title {
+    color: var(--vrk-ink);
+    font-weight: 800;
+  }
+  .vrk-scope .order-builder-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .vrk-scope .order-builder-head .hint {
+    margin: 4px 0 0;
+  }
+  .vrk-scope .order-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+    gap: 8px;
+  }
+  .vrk-scope .order-slot {
+    position: relative;
+    display: grid;
+    grid-template-rows: auto minmax(92px,1fr) auto auto;
+    gap: 6px;
+    min-width: 0;
+    min-height: 158px;
+    padding: 8px;
+    border: 1px dashed rgba(42,36,32,0.24);
+    border-radius: var(--vrk-radius);
+    background: rgba(255,255,255,0.52);
+  }
+  .vrk-scope .order-slot.is-filled {
+    border-style: solid;
+    background: rgba(255,255,255,0.9);
+  }
+  .vrk-scope .order-slot video {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+    border-radius: 6px;
+    background: #111;
+  }
+  .vrk-scope .order-slot-index {
+    display: inline-grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    background: rgba(42,36,32,0.08);
+    color: var(--vrk-ink);
+    font: 700 11px/1 var(--vrk-mono);
+  }
+  .vrk-scope .order-slot-empty {
+    display: grid;
+    place-items: center;
+    min-height: 92px;
+    border-radius: 6px;
+    background: rgba(42,36,32,0.05);
+    color: var(--vrk-ink-soft);
+    font: 700 11px/1 var(--vrk-mono);
+    text-transform: uppercase;
+  }
+  .vrk-scope .order-slot-controls {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .vrk-scope .mini-icon-btn {
+    display: inline-grid;
+    place-items: center;
+    min-height: 26px;
+    padding: 0 6px;
+    border: 1px solid var(--vrk-line);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--vrk-ink);
+    font: 700 10px/1 var(--vrk-mono);
+    cursor: pointer;
+  }
+  .vrk-scope .mini-icon-btn:disabled {
+    opacity: 0.42;
+    cursor: default;
+  }
+  .vrk-scope .btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    padding: 0 15px;
+    border: 1px solid var(--vrk-line);
+    border-radius: 999px;
+    background: rgba(255,255,255,0.52);
+    color: var(--vrk-ink);
+    font: 700 12px/1 var(--vrk-mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-decoration: none;
+    cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.5);
+    transition: background 160ms ease, box-shadow 160ms ease, border-color 160ms ease, transform 220ms var(--vrk-ease);
+  }
+  .vrk-scope .btn:hover:not(:disabled) {
+    background: rgba(255,255,255,0.82);
+    border-color: rgba(42,36,32,0.18);
+    box-shadow: 0 4px 14px rgba(42,36,32,0.08), inset 0 1px 0 rgba(255,255,255,0.5);
+    transform: translateY(-1px);
+  }
+  .vrk-scope .btn-outline {
+    min-height: 34px;
+    border: 1.5px solid #111;
+    border-radius: 7px;
+    background: #fff;
+    color: #111;
+    box-shadow: none;
+  }
+  .vrk-scope .cta-pill-btn {
+    isolation: isolate;
+    gap: 0.5rem;
+    min-height: 2.75rem;
+    border: 1px solid transparent;
+    color: #fff;
+    font-family: var(--vrk-ui);
+    font-size: 0.95rem;
+    letter-spacing: 0.01em;
+    text-transform: none;
+    overflow: hidden;
+    background: linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, var(--vrk-a) 0%, var(--vrk-b) 52%, var(--vrk-c) 100%);
+    box-shadow: 0 0 14px 3px rgba(0,200,228,0.22), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1);
+  }
+  .vrk-scope .cta-pill-btn::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 2px;
+    opacity: 0;
+    background: conic-gradient(from var(--vrk-cta-angle, 0deg), transparent 0deg, transparent 210deg, var(--vrk-a) 250deg, var(--vrk-b) 300deg, var(--vrk-c) 340deg, transparent 360deg);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    transition: opacity 160ms ease;
+  }
+  .vrk-scope .cta-pill-btn:hover:not(:disabled) {
+    background: linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, var(--vrk-a) 0%, var(--vrk-b) 52%, var(--vrk-c) 100%);
+    border-color: transparent;
+    box-shadow: 0 0 14px 3px rgba(0,200,228,0.22), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1);
+    transform: none;
+  }
+  .vrk-scope .cta-pill-btn:hover:not(:disabled)::before {
+    opacity: 1;
+    animation: vrk-cta-border-spin 1.8s linear infinite;
+  }
+  @property --vrk-cta-angle {
+    syntax: "<angle>";
+    inherits: false;
+    initial-value: 0deg;
+  }
+  @keyframes vrk-cta-border-spin {
+    to { --vrk-cta-angle: 360deg; }
+  }
+  .vrk-scope .cta-primary-wide {
+    width: 100%;
+    min-height: 52px;
+    padding: 0 24px;
+    font-size: 16px;
+    justify-self: stretch;
+  }
+  .vrk-scope .hint,
+  .vrk-scope .empty,
+  .vrk-scope .list-body {
+    color: var(--vrk-ink-soft);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .vrk-scope .hint-danger { color: var(--vrk-danger); font-size: 13px; line-height: 1.5; }
+  .vrk-scope .list-card {
+    display: grid;
+    gap: 8px;
+    padding: 12px 14px;
+    border: 1px solid var(--vrk-line);
+    border-radius: var(--vrk-radius);
+    background: var(--vrk-surface-strong);
+  }
+  .vrk-scope .list-head { display: flex; align-items: center; gap: 10px; }
+  .vrk-scope .list-title { flex: 1; color: var(--vrk-ink); font-size: 14px; font-weight: 700; line-height: 1.35; }
+  /* Saved remix: full-width video with a clean action row beneath it. The
+     actions fill the width evenly and wrap to a second row on narrow phones
+     instead of producing ragged right edges. */
+  /* min-width guards: the settings-snapshot meta line carries long unbreakable
+     mono strings (upload filenames) — without these the card's min-content
+     width exceeds a phone viewport and the whole card (video included) spills
+     past the right edge. */
+  .vrk-scope .saved-remix-card { min-width: 0; max-width: 100%; overflow: hidden; }
+  .vrk-scope .saved-remix-surface { width: 100%; max-width: 100%; }
+  .vrk-scope .saved-remix-surface .preview-media { min-height: 220px; }
+  .vrk-scope .saved-remix-meta {
+    margin: 4px 0 0;
+    color: var(--vrk-ink-muted);
+    font: 600 12px/1.45 var(--vrk-mono);
+    overflow-wrap: anywhere;
+    min-width: 0;
+  }
+  .vrk-scope .saved-remix-actions {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .vrk-scope .saved-remix-actions .btn { width: 100%; min-width: 0; padding: 10px 8px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+  .vrk-scope .saved-remix-delete { color: var(--vrk-danger); border-color: rgba(214,69,69,0.5); }
+  .vrk-scope .saved-remix-delete:hover:not(:disabled) { background: rgba(214,69,69,0.08); }
+  /* In-button loader: keeps the label, shows a comet ring beside it (matches .cta-pill-btn). */
+  .vrk-scope .vrk-btn-spinner {
+    width: 12px;
+    height: 12px;
+    --comet-ring: 2px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: conic-gradient(from var(--cta-angle), transparent 0deg, transparent 180deg, hsla(185,100%,58%,0.12) 200deg, hsla(200,100%,62%,0.35) 225deg, hsla(225,100%,64%,0.6) 250deg, hsla(250,100%,66%,0.78) 275deg, hsla(275,100%,66%,0.88) 300deg, hsla(300,100%,68%,0.94) 322deg, hsla(320,80%,80%,0.97) 338deg, rgba(255,255,255,1) 350deg, transparent 358deg);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--comet-ring)), #000 calc(100% - var(--comet-ring)));
+    mask: radial-gradient(farthest-side, transparent calc(100% - var(--comet-ring)), #000 calc(100% - var(--comet-ring)));
+    animation: cta-border-spin 1.1s linear infinite;
+    pointer-events: none;
+  }
+  @media (max-width: 560px) {
+    .vrk-scope .saved-remix-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  .vrk-scope .empty {
+    display: grid;
+    place-items: center;
+    min-height: 180px;
+    padding: 28px 16px;
+    border: 1px dashed var(--vrk-line);
+    border-radius: var(--vrk-radius);
+    background: rgba(255,255,255,0.36);
+    text-align: center;
+  }
+  .vrk-scope .toolbar { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--vrk-line); background: rgba(255,255,255,0.44); }
+  .vrk-scope .preview-surface { overflow: hidden; border: 1px solid var(--vrk-line); border-radius: var(--vrk-radius); background: rgba(255,255,255,0.86); }
+  .vrk-scope .preview-media {
+    display: grid;
+    place-items: center;
+    min-height: 190px;
+    background: linear-gradient(135deg, rgba(0,173,181,0.08), rgba(122,77,255,0.08)), rgba(255,255,255,0.9);
+  }
+  .vrk-scope .preview-media video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+  .vrk-scope.vrk-player-shell { position: absolute; inset: 0; display: flex; flex-direction: column; }
+  .vrk-scope.vrk-player-shell .preview-surface { flex: 1; display: flex; flex-direction: column; border: 0; border-radius: 0; background: #000; }
+  /* Player shell fills like the card face: relative+block so the absolutely
+     positioned video covers the whole surface (the base .preview-media grid
+     centering would otherwise let it sit short, showing a black bar). */
+  .vrk-scope.vrk-player-shell .preview-media { position: relative; display: block; flex: 1; min-height: 0; padding: 0; background: #000; }
+  @media (max-width: 860px) {
+    .vrk-scope .section-head { grid-template-columns: auto minmax(0,1fr); }
+    .vrk-scope .section-head .btn { grid-column: 1 / -1; }
+    .vrk-scope .toggle-grid { grid-template-columns: 1fr; }
+    .vrk-scope .field-grid,
+    .vrk-scope .orientation-grid,
+    .vrk-scope .folder-grid { grid-template-columns: 1fr; }
+    /* Keep clip thumbnails 2-up on mobile so the folder stays scannable
+       instead of one giant thumbnail per row. */
+    .vrk-scope .media-thumb-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    .vrk-scope .order-row { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    .vrk-scope .order-status,
+    .vrk-scope .order-builder-head { grid-template-columns: 1fr; display: grid; }
+    .vrk-scope .order-actions { justify-content: flex-start; }
+    .vrk-scope .upload-row { grid-template-columns: auto minmax(0,1fr); }
+    .vrk-scope .upload-progress,
+    .vrk-scope .upload-remove { grid-column: 1 / -1; }
+  }
+  /* Narrow phones: reclaim horizontal space so content sits flush to the
+     modal edges (less nested inset) and rows use the full width. */
+  @media (max-width: 560px) {
+    .vrk-scope .panel-body { padding: 10px; gap: 12px; }
+    .vrk-scope .section { padding: 12px; }
+  }
+

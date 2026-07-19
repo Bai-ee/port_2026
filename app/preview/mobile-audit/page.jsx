@@ -3,11 +3,11 @@
 // Dev-only, no-auth harness for visually iterating on mobile modal layout.
 // Reproduces the REAL modal shell chain (overlay → card → bento-grid →
 // content → tabbed-container → tab-content → signals-pane → signals-sg) with
-// the real dashboardCss, so 375px screenshots match production nesting.
+// the real dashboard stylesheet, so 375px screenshots match production nesting.
 // Not linked anywhere; safe to delete after the mobile-audit pass.
 
 import React from 'react';
-import { dashboardCss } from '../../../DashboardPage';
+import '../../../styles/dashboard/index.css';
 
 function SgSourceRow({ label, desc, on, withRun, withChevron }) {
   return (
@@ -27,7 +27,6 @@ function SgSourceRow({ label, desc, on, withRun, withChevron }) {
 export default function MobileAuditHarness() {
   return (
     <>
-      <style>{dashboardCss}</style>
       <div id="tile-detail-modal-overlay" style={{ position: 'static', display: 'flex', justifyContent: 'center' }}>
         <div id="tile-detail-modal-card">
           <div id="tile-detail-modal-header" className="tile-detail-bento-cell">

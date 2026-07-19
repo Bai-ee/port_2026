@@ -1,0 +1,450 @@
+  /* ── Tier modal ── */
+  #tier-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 360;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  #tier-modal-fullscreen {
+    width: 90vw;
+    height: 90vh;
+    background: #fff;
+    border-radius: 16px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.3);
+  }
+  #tier-modal-close {
+    position: absolute;
+    top: 12px;
+    right: 16px;
+    z-index: 10;
+    background: none;
+    border: 1px solid rgba(42, 36, 32, 0.1);
+    border-radius: 4px;
+    padding: 5px 10px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    color: var(--text-secondary);
+    line-height: 1;
+    transition: color 0.15s ease, border-color 0.15s ease;
+  }
+  #tier-modal-close:hover {
+    color: var(--text-display);
+    border-color: var(--text-secondary);
+  }
+  #tier-modal-iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: #fff;
+  }
+  #tier-modal-top {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  #tier-modal-brand-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    justify-content: space-between;
+  }
+  #tier-modal-eyebrow {
+    font-size: 0.82rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(42,36,32,0.44);
+    font-weight: 700;
+    font-family: "Space Mono", monospace;
+  }
+  #tier-modal-title-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+  #tier-modal-title {
+    margin: 0;
+    color: #2a2420;
+    font-size: clamp(2rem, 8.5vw, 4.5rem);
+    line-height: 1;
+    letter-spacing: -0.04em;
+    font-family: "Doto", "Space Mono", monospace;
+    font-weight: 700;
+  }
+  #tier-modal-summary {
+    margin: 0;
+    color: rgba(42,36,32,0.66);
+    line-height: 1.6;
+    font-family: "Space Grotesk", system-ui, sans-serif;
+  }
+  #tier-modal-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 1.25rem;
+  }
+  .tier-option-card {
+    padding: 16px;
+    border-radius: 1rem;
+    border: 1px solid rgba(212, 196, 171, 0.82);
+    background: rgba(255,255,255,0.52);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .tier-option-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: baseline;
+  }
+  .tier-option-label {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #2a2420;
+    letter-spacing: -0.03em;
+  }
+  .tier-option-price {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(42,36,32,0.56);
+  }
+  .tier-option-summary {
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.55;
+    color: rgba(42,36,32,0.68);
+  }
+  #tier-modal-footer {
+    font-family: "Space Mono", monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(42, 36, 32, 0.32);
+    margin-top: 1rem;
+    border-top: 1px solid rgba(212, 196, 171, 0.4);
+    padding-top: 0.75rem;
+  }
+  @media (max-width: 780px) {
+    #tier-modal-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 480px) {
+    #tier-modal-overlay { padding: 1rem; align-items: flex-start; padding-top: 1.5rem; }
+    #tier-modal-card { width: 100%; box-sizing: border-box; }
+  }
+
+  /* ── Account delete + client edit modals ── */
+  #client-edit-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.72);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+  }
+  #delete-account-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: clamp(1rem, 5vw, 2rem);
+  }
+  #client-edit-modal {
+    position: relative;
+    background: #14100c;
+    color: #e7d9c3;
+    border: 1px solid rgba(231, 217, 195, 0.18);
+    border-radius: 6px;
+    padding: 1.5rem 1.5rem 1.25rem;
+    max-width: 460px;
+    width: 100%;
+    font-family: var(--font-mono, monospace);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  }
+  #client-edit-modal-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: transparent;
+    border: none;
+    color: rgba(231, 217, 195, 0.6);
+    font-size: 11px;
+    cursor: pointer;
+    letter-spacing: 0.1em;
+  }
+  #client-edit-modal-close:hover { color: #e7d9c3; }
+  #client-edit-modal-title {
+    margin: 0 0 0.75rem;
+    font-size: 14px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #e7d9c3;
+  }
+  #client-edit-modal-body {
+    margin: 0 0 1rem;
+    font-size: 12px;
+    line-height: 1.5;
+    color: rgba(231, 217, 195, 0.7);
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+  #client-edit-label {
+    display: block;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(231, 217, 195, 0.65);
+    margin-bottom: 0.4rem;
+  }
+  #client-edit-input {
+    width: 100%;
+    box-sizing: border-box;
+    background: #0b0906;
+    border: 1px solid rgba(231, 217, 195, 0.18);
+    color: #e7d9c3;
+    padding: 0.55rem 0.7rem;
+    font-family: var(--font-mono, monospace);
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    border-radius: 3px;
+    outline: none;
+  }
+  #client-edit-input:focus { border-color: rgba(231, 217, 195, 0.5); }
+  #client-edit-modal-error {
+    margin: 0.6rem 0 0;
+    padding: 0.5rem 0.6rem;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    color: #f87171;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  #client-edit-modal-actions {
+    display: flex;
+    gap: 0.6rem;
+    justify-content: flex-end;
+    margin-top: 1.1rem;
+  }
+  #client-edit-modal-cancel,
+  #client-edit-modal-confirm {
+    font-family: var(--font-mono, monospace);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.55rem 0.9rem;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  }
+  #client-edit-modal-cancel {
+    background: transparent;
+    border: 1px solid rgba(231, 217, 195, 0.2);
+    color: rgba(231, 217, 195, 0.75);
+  }
+  #client-edit-modal-cancel:hover { color: #e7d9c3; border-color: rgba(231, 217, 195, 0.4); }
+  #client-edit-modal-confirm {
+    background: #e7d9c3;
+    border: 1px solid #e7d9c3;
+    color: #14100c;
+    font-weight: 600;
+  }
+  #client-edit-modal-confirm:hover:not(:disabled) { background: #fff; border-color: #fff; }
+  #client-edit-modal-confirm:disabled,
+  #client-edit-modal-cancel:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Delete modal — redesigned to match login screen design system */
+  #delete-account-modal {
+    position: relative;
+    width: 100%;
+    max-width: 30rem;
+    padding: clamp(1.25rem, 5vw, 2rem);
+    border-radius: 1.1rem;
+    box-sizing: border-box;
+    background: rgba(255, 252, 248, 0.94);
+    backdrop-filter: blur(28px);
+    -webkit-backdrop-filter: blur(28px);
+    border: 1px solid rgba(212, 196, 171, 0.82);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4), 0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.1), 0px 20px 40px rgba(0, 0, 0, 0.15);
+    font-family: var(--font-ui, "Space Grotesk", system-ui, sans-serif);
+    color: #2a2420;
+  }
+  #delete-account-brand-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    justify-content: space-between;
+  }
+  #delete-account-sig {
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(255,255,255,0.35);
+    display: block;
+  }
+  #delete-account-eyebrow {
+    font-size: 0.82rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(42, 36, 32, 0.44);
+    font-weight: 700;
+    font-family: var(--font-mono, monospace);
+  }
+  #delete-account-modal-close {
+    width: 2.4rem;
+    height: 2.4rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.34);
+    border: 1px solid rgba(42, 36, 32, 0.12);
+    color: rgba(42, 36, 32, 0.58);
+    font-size: 1.05rem;
+    font-family: var(--font-mono, monospace);
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+    flex-shrink: 0;
+  }
+  #delete-account-modal-close:hover {
+    background: rgba(255,255,255,1);
+    color: #2a2420;
+  }
+  #delete-account-modal-headline {
+    margin: 0 0 0.7rem;
+    color: #2a2420;
+    font-size: clamp(1.4rem, 4.5vw, 2.4rem);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    font-family: "Doto", "Space Mono", monospace;
+    font-weight: 700;
+    text-align: center;
+    white-space: nowrap;
+  }
+  #delete-account-modal-copy {
+    margin: 0 0 1.2rem;
+    color: rgba(42, 36, 32, 0.66);
+    line-height: 1.6;
+    font-family: var(--font-ui, "Space Grotesk", system-ui, sans-serif);
+    text-align: center;
+    font-size: 0.92rem;
+  }
+  #delete-account-confirm-label {
+    display: block;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(42, 36, 32, 0.55);
+    font-family: var(--font-mono, monospace);
+    margin-bottom: 0.4rem;
+  }
+  #delete-account-confirm-label strong { color: #8b1e1e; }
+  #delete-account-confirm-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.9rem 1rem;
+    border-radius: 0.95rem;
+    border: 1px solid rgba(42, 36, 32, 0.12);
+    background: rgba(255,255,255,0.72);
+    color: #2a2420;
+    font-family: var(--font-ui, "Space Grotesk", system-ui, sans-serif);
+    font-size: 1rem;
+    outline: none;
+    transition: border-color 0.2s ease;
+  }
+  #delete-account-confirm-input:focus { border-color: rgba(42, 36, 32, 0.35); }
+  #delete-account-modal-error {
+    margin: 0.6rem 0 0;
+    color: #8b1e1e;
+    font-size: 0.82rem;
+    font-family: var(--font-mono, monospace);
+    letter-spacing: 0.04em;
+    line-height: 1.4;
+  }
+  #delete-account-modal-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 1.4rem;
+  }
+  #delete-account-modal-confirm {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 3rem;
+    width: 100%;
+    border: none;
+    border-radius: 999px;
+    background: linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.95rem;
+    cursor: pointer;
+    font-family: var(--font-mono, monospace);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    line-height: 1;
+    transition: box-shadow 0.28s ease, transform 0.28s ease;
+  }
+  #delete-account-modal-confirm:hover:not(:disabled) {
+    box-shadow: 0px 5px 10px rgba(0,0,0,0.067), 0px 15px 30px rgba(0,0,0,0.067), 0px 20px 40px rgba(0,0,0,0.1);
+    transform: scale(1.012);
+  }
+  #delete-account-modal-confirm:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  #delete-account-modal-cancel {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.65rem;
+    min-height: 3rem;
+    width: 100%;
+    border-radius: 999px;
+    border: 1px solid rgba(42, 36, 32, 0.18);
+    background: rgba(255,255,255,0.92);
+    color: #3c3c3c;
+    font-weight: 500;
+    font-size: 0.9rem;
+    cursor: pointer;
+    font-family: var(--font-ui, "Space Grotesk", system-ui, sans-serif);
+    letter-spacing: 0.01em;
+    box-shadow: 0 1px 3px rgba(42,36,32,0.08);
+    line-height: 1;
+    transition: background 0.28s ease, box-shadow 0.28s ease, transform 0.28s ease;
+  }
+  #delete-account-modal-cancel:hover {
+    background: rgba(255,255,255,1);
+    box-shadow: 0px 5px 10px rgba(0,0,0,0.05), 0px 15px 30px rgba(0,0,0,0.05), 0px 20px 40px rgba(0,0,0,0.08);
+    transform: scale(1.012);
+  }
+  #delete-account-modal-cancel:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  /* ── Lamp effects ── */
+  .lamp {
+    box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 12%, transparent), 0 0 10px color-mix(in srgb, currentColor 55%, transparent);
+  }
+  .lamp-lg {
+    box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 12%, transparent), 0 0 14px color-mix(in srgb, currentColor 60%, transparent);
+  }
+  .stroke-lit {
+    filter: drop-shadow(0 0 3px color-mix(in srgb, currentColor 55%, transparent));
+  }
+

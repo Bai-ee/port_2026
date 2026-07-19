@@ -42,6 +42,8 @@ shasum -a 256 /tmp/dashboardCss.check.css
 
 **Phase 1 gate:** concatenating the split `styles/dashboard/*.css` files in import order MUST byte-match `dashboardCss.baseline.css` (same hash) before switching `DashboardPage.jsx` to import them. This is the plan's stated primary gate — mechanical, not a judgment call.
 
+**Known intentional delta (post-D1, reviewer-verified 2026-07-18):** the shipped split deviates from the baseline by exactly ONE comment — `10-video-remix.css` line ~10,123, where the original two-line comment ("Keep this inside dashboardCss because DashboardPage injects this string directly; external dashboard.css is not guaranteed here.") was shortened to "Video Remix modal kit." because its rationale died with the literal. Zero CSS-rule effect. Re-running the gate against the current tree therefore yields concat hash `2cfc01ad…` (≠ baseline `a4e26c68…`); a `diff` must show only this one comment change and nothing else. Any additional diff line = real regression.
+
 ## 3. Screenshot baselines
 
 **Captured this session:** `screenshots/mobile-audit_desktop-1299w.jpg` — `/preview/mobile-audit` (Market Signals modal shell, real `dashboardCss`) at ~1299px CSS width, the max viewport this session's browser-automation tooling could reach (window resize requests to both larger (1440/1581) and smaller (768) targets were silently clamped back to 1299×877 — an environment constraint, not a app bug).

@@ -1,0 +1,98 @@
+  /* ── Creative Brief kit (ported verbatim from
+     public/docs/dashboard-modal-component-style-guide.html → .brief-kit).
+     Used by the Market Signals REPORT tab. Self-contained: scopes its own
+     tokens so it doesn't inherit dashboard colors. ─────────────────────── */
+  .brief-kit {
+    --ink:#0a0a0a; --ink-soft:#5a5346;
+    --line:rgba(212,196,171,0.82); --card:rgba(255,255,255,0.5);
+    --hl:rgba(255,255,255,0.65); --brand:#116dff;
+    --grad:linear-gradient(92deg,#7a5cff 0%,#b14bff 38%,#ff4fa1 72%,#ff7a3a 100%);
+    --font-ui:"Space Grotesk", system-ui, sans-serif;
+    --font-mono:"Space Mono", ui-monospace, monospace;
+    color:var(--ink); font-family:var(--font-ui);
+  }
+  /* COMPACT report scope — sized for the in-modal Reports tab, not a full-page brief. */
+  .brief-kit .kit-paper {
+    border-radius:14px; border:1px solid var(--line);
+    padding:clamp(14px,1.6vw,20px);
+    background:
+      radial-gradient(520px 320px at 0% 0%, rgba(255,120,90,0.20) 0%, transparent 65%),
+      radial-gradient(460px 300px at 100% 30%, rgba(176,90,255,0.16) 0%, transparent 65%),
+      radial-gradient(520px 320px at 20% 100%, rgba(255,180,90,0.16) 0%, transparent 65%),
+      linear-gradient(180deg, #fefdf9 0%, #fbf8f0 100%);
+  }
+  .brief-kit .mono { font-family: var(--font-mono); }
+  .brief-kit .b-headline {
+    font-family:"Doto",monospace; font-weight:900; letter-spacing:-.01em;
+    line-height:.95; font-size:clamp(22px,2.8vw,34px); margin:0 0 10px;
+    text-transform:uppercase; color:var(--ink);
+  }
+  .brief-kit .b-sub {
+    font-family: var(--font-ui); font-weight:400;
+    font-size:clamp(13px,1.3vw,15px); line-height:1.35; color:#1a1a1a;
+    max-width:70ch; margin:0;
+  }
+  .brief-kit .b-body { font-family:var(--font-ui); font-size:13.5px; line-height:1.5; color:#1a1a1a; max-width:70ch; margin:0 0 8px; }
+  .brief-kit .b-rule{height:1px;background:rgba(0,0,0,.1);margin:14px 0;}
+  .brief-kit .b-card{
+    background:var(--card); border:1px solid var(--line); border-radius:12px;
+    box-shadow:0 1px 0 var(--hl), inset 0 1px 0 rgba(255,255,255,0.4);
+    padding:clamp(11px,1.3vw,15px);
+  }
+  .brief-kit .b-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:clamp(12px,1.6vw,20px);align-items:start;}
+  .brief-kit .stat-row{display:grid;grid-template-columns:92px 1fr;gap:12px;padding:7px 0;border-bottom:1px dashed rgba(0,0,0,.15);}
+  .brief-kit .stat-row:last-child{border-bottom:0;}
+  .brief-kit .stat-row .k{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);padding-top:3px;}
+  .brief-kit .stat-row .v{font-family:var(--font-ui);font-size:13.5px;line-height:1.4;color:var(--ink);}
+  .brief-kit .pull{
+    font-family:var(--font-ui); font-weight:300;
+    font-size:clamp(16px,1.9vw,21px); line-height:1.25;
+    padding:4px 0; max-width:36ch; margin:0; color:var(--ink);
+  }
+  .brief-kit .meta-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+  .brief-kit .meta-tile{background:rgba(255,255,255,.55);border:1px solid var(--line);border-radius:12px;padding:11px;}
+  .brief-kit .meta-tile .k{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:5px;}
+  .brief-kit .meta-tile .v{font-family:var(--font-ui);font-size:13.5px;word-break:break-word;color:var(--ink);}
+  .brief-kit .status-tag{display:inline-flex;align-items:center;gap:8px;font-family:var(--font-mono);font-size:10px;letter-spacing:.2em;text-transform:uppercase;padding:6px 12px;border-radius:999px;background:#fff;border:1px solid var(--line);color:#0a0a0a;}
+  .brief-kit .status-tag.warn{background:rgba(220,38,38,0.06);border-color:rgba(220,38,38,0.40);color:#dc2626;}
+  .brief-kit .status-tag.warn::before{content:"";width:6px;height:6px;border-radius:50%;background:#dc2626;box-shadow:0 0 0 3px rgba(220,38,38,0.15);}
+  .brief-kit .status-tag.ok{background:rgba(22,101,52,0.06);border-color:rgba(22,101,52,0.40);color:#166534;}
+  .brief-kit .dur-row{display:flex;flex-wrap:wrap;gap:6px;}
+  .brief-kit .dur{font-family:var(--font-mono);font-size:10.5px;padding:4px 9px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.5);color:var(--ink);}
+  .brief-kit .scores{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+  .brief-kit .score{border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.5);display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:10px 14px;}
+  .brief-kit .score .lbl{font-family:var(--font-mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft);}
+  .brief-kit .score .num{font-family:"Doto";font-weight:900;font-size:clamp(22px,2.6vw,30px);line-height:1;color:var(--ink);}
+  .brief-kit .b-link{font-family:var(--font-mono);font-size:11px;color:var(--brand);text-decoration:none;}
+  .brief-kit .b-link:hover{text-decoration:underline;}
+  .brief-kit .b-stack{display:flex;flex-direction:column;gap:10px;}
+  .brief-kit .b-sec{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft);margin:4px 0 2px;}
+  /* Per-source platform section — handle header, featured punch-out, bento bubbles. */
+  .brief-kit .b-handle-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:14px 0 8px;flex-wrap:wrap;}
+  .brief-kit .b-handle-name{font-family:"Doto",monospace;font-weight:900;font-size:clamp(15px,1.9vw,20px);text-transform:uppercase;line-height:1;}
+  .brief-kit .b-handle-meta{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.04em;color:var(--ink-soft);}
+  .brief-kit .b-handle-name.spot::after{content:"★";margin-left:6px;color:#ff7a3a;}
+  /* Theme module — scannable header row (name + confidence/intensity/frequency tags) + "so what" callout. */
+  .brief-kit .b-theme-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+  .brief-kit .b-tags{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+  .brief-kit .b-sowhat{margin-top:12px;padding:9px 12px;border-radius:10px;background:rgba(17,109,255,0.06);border:1px solid rgba(17,109,255,0.25);font-family:var(--font-ui);font-size:13px;line-height:1.45;color:var(--ink);}
+  .brief-kit .b-sowhat .lbl{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--brand);margin-right:8px;}
+  /* Per-handle module grid — fills full width, equal-height cards, footer pinned to bottom. */
+  .brief-kit .b-handle-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr));gap:10px;align-items:stretch;}
+  .brief-kit .b-handle-card{display:flex;flex-direction:column;}
+  .brief-kit .b-handle-foot{margin-top:auto;padding-top:10px;border-top:1px dashed rgba(0,0,0,.15);}
+  .brief-kit .b-bento{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,180px),1fr));gap:9px;}
+  .brief-kit .b-bubble{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:9px 11px;display:flex;flex-direction:column;gap:7px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.4);}
+  .brief-kit .b-bubble .txt{font-family:var(--font-ui);font-size:12.5px;line-height:1.38;color:var(--ink);}
+  /* Featured "punch-out" — most-popular post, black ground spanning the row. */
+  .brief-kit .b-feature{grid-column:1/-1;background:#0a0a0a;color:#fff;border-radius:14px;padding:clamp(13px,1.7vw,18px);display:flex;flex-direction:column;gap:9px;position:relative;overflow:hidden;}
+  .brief-kit .b-feature::before{content:"";position:absolute;inset:-40% -10% auto auto;width:60%;height:160%;background:radial-gradient(closest-side,rgba(176,90,255,0.35),transparent);pointer-events:none;}
+  .brief-kit .b-feature .lbl{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,0.6);position:relative;}
+  .brief-kit .b-feature .txt{font-family:var(--font-ui);font-weight:300;font-size:clamp(14px,1.6vw,18px);line-height:1.3;position:relative;}
+  .brief-kit .b-eng{display:flex;gap:11px;flex-wrap:wrap;align-items:center;font-family:var(--font-mono);font-size:10.5px;color:var(--ink-soft);position:relative;}
+  .brief-kit .b-eng span{display:inline-flex;gap:5px;align-items:center;}
+  .brief-kit .b-feature .b-eng{color:rgba(255,255,255,0.78);}
+  .brief-kit .b-feature .b-link{color:#fff;}
+  @media(max-width:900px){.brief-kit .b-grid{grid-template-columns:1fr}}
+  @media(max-width:800px){.brief-kit .meta-grid,.brief-kit .scores{grid-template-columns:1fr 1fr}}
+  @media(max-width:560px){.brief-kit .meta-grid,.brief-kit .scores{grid-template-columns:1fr}.brief-kit .b-bento{grid-template-columns:1fr}}

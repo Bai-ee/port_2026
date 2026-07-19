@@ -1,0 +1,16 @@
+/* Dashboard stylesheet — split from the former `dashboardCss` template
+   literal in DashboardPage.jsx (Phase 1, DASHBOARDPAGE-DECOMPOSITION-PLAN.md).
+   Import order here is load-bearing — it reproduces the original cascade
+   exactly. Do not reorder without re-running the byte-compare gate in
+   docs/plans/decomposition-baselines/BASELINE-COMMANDS.md. */
+@import './01-base.css';
+@import './02-style-guide-survey.css';
+@import './03-strategy-builder.css';
+@import './04-data-quality.css';
+@import './05-seo-performance.css';
+@import './06-intake-onboarding.css';
+@import './07-modals-misc.css';
+@import './08-ui-kit-interactions.css';
+@import './09-market-signals.css';
+@import './10-video-remix.css';
+@import './11-creative-brief.css';
