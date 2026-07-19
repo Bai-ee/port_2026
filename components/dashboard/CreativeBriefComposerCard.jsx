@@ -231,7 +231,9 @@ export function CreativeBriefComposerView({ user }) {
       ) : (
         <div className="vrk-scope" style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 16, flex: 1, minHeight: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <span className="label">Rendered with the saved config · HITLOOP sample data (same template every signup gets)</span>
+            <span className="label">
+              Previewing: <span style={{ color: 'var(--vrk-success, #285f3b)' }}>{form?.layout === 'simple' ? 'SIMPLE' : 'CLASSIC'} layout</span> · saved config · HITLOOP sample data (same template every signup gets)
+            </span>
             <button type="button" className="btn btn-outline" onClick={openPreview} disabled={saveStatus?.kind === 'pending'}>↻ Refresh</button>
           </div>
           <iframe

@@ -9,6 +9,15 @@
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
+
+/* Dev only: evict the stateless composer-config module so edits to it show
+   without a dev-server restart (same pattern as brief-preview's STALE_CJS). */
+if (process.env.NODE_ENV !== 'production') {
+  for (const key of Object.keys(require.cache)) {
+    if (/scout-intake[\\/]creative-brief-config\.cjs$/.test(key)) delete require.cache[key];
+  }
+}
+
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
 
 export const runtime = 'nodejs';
