@@ -88,10 +88,12 @@ function getAppClient() {
 }
 
 function tokensRef() {
+  loadEnv(); // firebase-admin needs FIREBASE_ADMIN_* before first use (CLI runs)
   return fb.adminDb.collection(FLAGS_COLLECTION).doc(TOKENS_DOC);
 }
 
 function pendingRef() {
+  loadEnv();
   return fb.adminDb.collection(FLAGS_COLLECTION).doc(PENDING_DOC);
 }
 

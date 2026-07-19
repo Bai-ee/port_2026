@@ -62,7 +62,7 @@ TWITTER_ACCESS_SECRET
 
 ## 2. Where the X API is called from
 
-There are exactly **two** X API surfaces. Do not add a third without reading this whole doc.
+There are exactly **three** X API surfaces (§2a app-runtime OAuth 1.0a, §2b CLI, §2d app-runtime OAuth 2.0). Do not add a fourth without reading this whole doc.
 
 ### 2a. App runtime — `features/social-posting/twitter-service.js`
 Backs the **Copywriter** and **Schedule Posts** cards.
@@ -84,6 +84,11 @@ The only **profile-mutating** script. Calls `v2.unfollow(sourceUserId, targetId)
 Market Signals / Scout read X through **ScrapeCreators** (`features/scout-intake/external-scouts/scrapecreators-client.js`), not the X API. ScrapeCreators credits are ~$0.0012/credit and *are* tracked in the Operating Cost card.
 
 > **Rule:** if you need to *read* X data, use the ScrapeCreators path. Only use the X API when you need to **write** as `@bai_ee`, or need something ScrapeCreators genuinely cannot provide.
+
+### 2d. App runtime — `features/social-posting/x-oauth.js` (OAuth 2.0 user context)
+Backs the **X Command Center** card (`x-profile`, admin-only, social bucket) — added 2026-07-19 because bookmarks are unreachable over OAuth 1.0a (and invisible to ScrapeCreators — they're private to the authed user). PKCE flow against the HitLoop app's OAuth 2.0 client (`X_OAUTH_CLIENT_ID` / `X_OAUTH_CLIENT_SECRET` / `X_OAUTH_REDIRECT_URI` env; tokens + in-flight PKCE state in Firestore `system_flags/x_oauth_tokens` / `x_oauth_pending`; refresh tokens rotate on use). Routes: `app/api/social-posting/x-oauth` (admin-gated status/start/disconnect/verify-bookmarks) + `…/x-oauth/callback` + alias `app/api/auth/twitter/callback` (matches the portal-registered prod callback). Connected as `@bai_ee` with all 11 scopes (tweet/users/bookmark/like/follows + offline.access) 2026-07-19; bookmark read access **verified live**.
+
+Hard-won portal facts: authorize codes expire in ~30s (never route them through human copy-paste — the prod callback completes server-side); X rejects `localhost`/`127.0.0.1` OAuth 2.0 callbacks in practice; editing the callback list can transiently break the whole allowlist ("Something went wrong" on authorize) — re-save a single clean prod entry to repair. `GET /2/usage/tweets` works app-only (request counts vs monthly cap); dollar spend remains console-only.
 
 ---
 
