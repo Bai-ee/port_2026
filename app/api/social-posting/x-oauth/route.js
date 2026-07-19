@@ -3,16 +3,26 @@ import { createRequire } from 'module';
 import {
   compactXOAuthError,
   disconnectXOAuth,
+  fetchBookmarksPage,
   getXOAuthStatus,
+  getXUsage,
+  loadXProfile,
+  readBookmarksCache,
+  removeBookmark,
+  runFollowAction,
+  runTweetAction,
   startXOAuthFlow,
+  updateXProfile,
   verifyBookmarkAccess,
 } from '../../../../features/social-posting/x-oauth.js';
+import { createSocialPost } from '../../../../features/social-posting/twitter-service.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const require = createRequire(import.meta.url);
 const { verifyRequestUser, isAdminEmail } = require('../../../../api/_lib/auth.cjs');
+const { getEffectiveClientContext } = require('../../../../api/_lib/client-provisioning.cjs');
 
 // X Command Center auth surface. Everything here is admin-only: the OAuth
 // tokens control the real @bai_ee account, and verify-bookmarks spends real,
@@ -90,6 +100,50 @@ export async function POST(request) {
       // call count before this action fires.
       const result = await verifyBookmarkAccess();
       return json({ ok: true, result });
+    }
+
+    // ── Command-center actions. Every metered action below is spend-gated in
+    // the UI (explicit confirm naming the call count before it fires).
+    if (action === 'usage') {
+      return json({ ok: true, usage: await getXUsage(), callsMade: 2 });
+    }
+    if (action === 'bookmarks-cached') {
+      return json({ ok: true, bookmarks: await readBookmarksCache(), callsMade: 0 });
+    }
+    if (action === 'bookmarks-fetch') {
+      const bookmarks = await fetchBookmarksPage({ cursor: body.cursor || null });
+      return json({ ok: true, bookmarks, callsMade: 1 });
+    }
+    if (action === 'bookmark-remove') {
+      const bookmarks = await removeBookmark(String(body.tweetId || ''));
+      return json({ ok: true, bookmarks, callsMade: 1 });
+    }
+    if (action === 'bookmark-to-draft') {
+      // Free: copies the cached bookmark into the shared social_posts queue so
+      // Copywriter / Schedule Posts can enhance, score, and publish it.
+      const cache = await readBookmarksCache();
+      const item = (cache.items || []).find((i) => i.id === String(body.tweetId || ''));
+      if (!item) return json({ error: 'Bookmark not found in the cached list — fetch bookmarks first.' }, 404);
+      const context = await getEffectiveClientContext({ uid: decoded.uid, email: decoded.email, request });
+      if (!context.clientId) return json({ error: 'No client workspace found for drafts.' }, 404);
+      const seed = (item.authorUsername ? `Riffing on @${item.authorUsername}:\n\n${item.text}` : item.text).slice(0, 280);
+      const post = await createSocialPost(context.clientId, { content: seed, source: 'x-bookmarks' });
+      return json({ ok: true, post, callsMade: 0 });
+    }
+    if (action === 'profile-load') {
+      return json({ ok: true, profile: await loadXProfile(), callsMade: 1 });
+    }
+    if (action === 'profile-update') {
+      const profile = await updateXProfile(body.fields || {});
+      return json({ ok: true, profile, callsMade: 1 });
+    }
+    if (action === 'tweet-action') {
+      const result = await runTweetAction({ op: body.op, tweetId: String(body.tweetId || ''), text: body.text || '' });
+      return json({ ok: true, result, callsMade: 1 });
+    }
+    if (action === 'follow-action') {
+      const result = await runFollowAction({ handle: body.handle, op: body.op });
+      return json({ ok: true, result, callsMade: 2 });
     }
     return json({ error: `Unknown action: ${action}` }, 400);
   } catch (err) {

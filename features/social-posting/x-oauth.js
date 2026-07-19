@@ -241,3 +241,162 @@ export async function verifyBookmarkAccess() {
     sample: first ? { id: first.id, text: String(first.text || '').slice(0, 140) } : null,
   };
 }
+
+// ── Command-center operations (all credit-metered unless noted) ──────────────
+
+const BOOKMARKS_CACHE_DOC = 'x_bookmarks_cache';
+
+function bookmarksCacheRef() {
+  loadEnv();
+  return fb.adminDb.collection(FLAGS_COLLECTION).doc(BOOKMARKS_CACHE_DOC);
+}
+
+// OAuth 1.0a client for the few operations that are v1.1-only (profile field
+// updates). Reuses the same TWITTER_* env keys as twitter-service.js.
+function getOAuth1Client() {
+  loadEnv();
+  const appKey = stripQuotes(process.env.TWITTER_API_KEY || '');
+  const appSecret = stripQuotes(process.env.TWITTER_API_SECRET || '');
+  const accessToken = stripQuotes(process.env.TWITTER_ACCESS_TOKEN || '');
+  const accessSecret = stripQuotes(process.env.TWITTER_ACCESS_SECRET || '');
+  if (!appKey || !appSecret || !accessToken || !accessSecret) {
+    const err = new Error('TWITTER_* OAuth 1.0a keys are not fully configured — profile updates need them.');
+    err.status = 503;
+    throw err;
+  }
+  return new TwitterApi({ appKey, appSecret, accessToken, accessSecret });
+}
+
+// App-only read of the project's monthly request usage. 2 HTTP calls (free
+// bearer mint + the usage meta endpoint) — reports request counts against the
+// monthly cap; dollar spend stays visible only in console.x.com.
+export async function getXUsage() {
+  loadEnv();
+  const key = stripQuotes(process.env.TWITTER_API_KEY || '');
+  const secret = stripQuotes(process.env.TWITTER_API_SECRET || '');
+  if (!key || !secret) {
+    const err = new Error('TWITTER_API_KEY/SECRET missing — cannot mint an app-only token for usage.');
+    err.status = 503;
+    throw err;
+  }
+  const basic = Buffer.from(`${key}:${secret}`).toString('base64');
+  const tokenRes = await fetch('https://api.twitter.com/oauth2/token', {
+    method: 'POST',
+    headers: { Authorization: `Basic ${basic}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'grant_type=client_credentials',
+  });
+  const tokenData = await tokenRes.json();
+  if (!tokenData.access_token) throw new Error(`App-only token mint failed (HTTP ${tokenRes.status}).`);
+  const usageRes = await fetch('https://api.twitter.com/2/usage/tweets', {
+    headers: { Authorization: `Bearer ${tokenData.access_token}` },
+  });
+  const usage = await usageRes.json();
+  if (!usageRes.ok) {
+    const err = new Error(usage?.detail || `Usage endpoint failed (HTTP ${usageRes.status}).`);
+    err.status = usageRes.status;
+    throw err;
+  }
+  return { ...usage.data, checkedAt: Date.now() };
+}
+
+export async function readBookmarksCache() {
+  const snap = await bookmarksCacheRef().get();
+  return snap.exists ? snap.data() : { items: [], nextToken: null, fetchedAt: null };
+}
+
+// One GET /2/users/:id/bookmarks page (metered). Fresh fetch replaces the
+// cache; passing the stored cursor appends the next page. Browsing the cache
+// afterwards is free.
+export async function fetchBookmarksPage({ cursor = null, max = 50 } = {}) {
+  const { client } = await getXOAuth2Client();
+  const opts = {
+    max_results: Math.min(Math.max(max, 10), 100),
+    expansions: ['author_id'],
+    'tweet.fields': ['created_at', 'public_metrics'],
+    'user.fields': ['username'],
+  };
+  if (cursor) opts.pagination_token = cursor;
+  const page = await client.v2.bookmarks(opts);
+  const users = new Map((page.includes?.users || []).map((u) => [u.id, u]));
+  const items = (page.tweets || []).map((t) => ({
+    id: t.id,
+    text: t.text || '',
+    createdAt: t.created_at || null,
+    authorId: t.author_id || null,
+    authorUsername: users.get(t.author_id)?.username || null,
+    metrics: t.public_metrics || null,
+  }));
+  const prev = cursor ? await readBookmarksCache() : { items: [] };
+  const seen = new Set(items.map((i) => i.id));
+  const merged = [...(prev.items || []).filter((i) => !seen.has(i.id)), ...items];
+  const cache = { items: merged, nextToken: page.meta?.next_token || null, fetchedAt: Date.now() };
+  await bookmarksCacheRef().set(cache);
+  return cache;
+}
+
+// DELETE /2/users/:id/bookmarks/:tweet_id (metered) + drop from cache.
+export async function removeBookmark(tweetId) {
+  const { client } = await getXOAuth2Client();
+  await client.v2.deleteBookmark(tweetId);
+  const cache = await readBookmarksCache();
+  const items = (cache.items || []).filter((i) => i.id !== tweetId);
+  await bookmarksCacheRef().set({ ...cache, items });
+  return { items, nextToken: cache.nextToken || null, fetchedAt: cache.fetchedAt || null };
+}
+
+// GET /2/users/me with profile fields (1 metered call).
+export async function loadXProfile() {
+  const { client } = await getXOAuth2Client();
+  const me = await client.v2.me({
+    'user.fields': ['description', 'location', 'url', 'public_metrics', 'profile_image_url', 'created_at', 'protected'],
+  });
+  return me?.data || null;
+}
+
+// v1.1 account/update_profile over OAuth 1.0a (1 metered call). Only sends
+// the fields provided — empty strings are legal (clears the field), undefined
+// fields stay untouched.
+export async function updateXProfile(fields = {}) {
+  const client = getOAuth1Client();
+  const payload = {};
+  for (const key of ['name', 'description', 'location', 'url']) {
+    if (typeof fields[key] === 'string') payload[key] = fields[key];
+  }
+  if (!Object.keys(payload).length) throw new Error('No profile fields provided.');
+  const res = await client.v1.updateAccountProfile(payload);
+  return { name: res?.name || null, description: res?.description || null, location: res?.location || null };
+}
+
+// Single-tweet engagement ops (1 metered call each; reply posts publicly).
+export async function runTweetAction({ op, tweetId, text = '' }) {
+  const { client, tokens } = await getXOAuth2Client();
+  const uid = tokens.userId;
+  switch (op) {
+    case 'like': return { done: await client.v2.like(uid, tweetId) };
+    case 'unlike': return { done: await client.v2.unlike(uid, tweetId) };
+    case 'repost': return { done: await client.v2.retweet(uid, tweetId) };
+    case 'unrepost': return { done: await client.v2.unretweet(uid, tweetId) };
+    case 'bookmark': return { done: await client.v2.bookmark(tweetId) };
+    case 'delete': return { done: await client.v2.deleteTweet(tweetId) };
+    case 'reply': {
+      if (!text.trim()) throw new Error('Reply text is empty.');
+      const posted = await client.v2.reply(text.trim(), tweetId);
+      return { done: posted, postedId: posted?.data?.id || null };
+    }
+    default: throw new Error(`Unknown tweet action: ${op}`);
+  }
+}
+
+// Follow/unfollow by handle: 1 lookup call + 1 write call = 2 metered calls.
+export async function runFollowAction({ handle, op }) {
+  const clean = String(handle || '').replace(/^@/, '').trim();
+  if (!clean) throw new Error('No handle provided.');
+  const { client, tokens } = await getXOAuth2Client();
+  const target = await client.v2.userByUsername(clean);
+  const targetId = target?.data?.id;
+  if (!targetId) throw new Error(`@${clean} not found.`);
+  if (op === 'follow') await client.v2.follow(tokens.userId, targetId);
+  else if (op === 'unfollow') await client.v2.unfollow(tokens.userId, targetId);
+  else throw new Error(`Unknown follow action: ${op}`);
+  return { targetId, username: target.data.username };
+}

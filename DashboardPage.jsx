@@ -12179,11 +12179,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       placeholderLabel: 'X\nACCOUNT',
       rows: [
         { key: 'xc-channel', label: 'Channel', value: 'X / Twitter — @bai_ee' },
-        { key: 'xc-auth', label: 'Auth', value: 'OAuth 2.0 user context (PKCE)' },
-        { key: 'xc-now', label: 'Now', value: 'Connect + verify bookmark access' },
-        { key: 'xc-access', label: 'Access', value: 'Admin only' },
+        { key: 'xc-surface', label: 'Controls', value: 'Bookmarks → content · profile · engagement · audience' },
+        { key: 'xc-monitor', label: 'Monitor', value: 'API usage meter vs monthly cap' },
+        { key: 'xc-gate', label: 'Spend gate', value: 'Every metered call confirms its cost first' },
       ],
-      footerLeft: 'Phase 0',
+      footerLeft: 'Live',
       footerRight: 'ADMIN',
     }] : []),
 
