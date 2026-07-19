@@ -1492,14 +1492,31 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
           const list = `<ol class="sb-numlist">${checks.map((c, i) => `<li><span class="n">${String(i + 1).padStart(2, '0')}</span><span class="d">—</span><span class="t"><span class="sb-dl-title">${esc(c.label)}</span><span class="sb-dl-desc${c.val ? '' : ' sb-status-miss'}">${c.val ? 'Captured' : 'Missing'}</span></span></li>`).join('')}</ol>`;
           return sbPage('sb-social-share', 'Social<br/>Share.', `${shareRow}${list}`);
         },
-        'sb-risk': () => (riskInner ? sbPage('sb-risk', 'Biggest<br/>Risk.', riskInner) : ''),
+        'sb-risk': () => {
+          // Simple-native: plain lead copy + numbered points (no alert box,
+          // no tag chips — those stay classic-only).
+          if (!risk) return '';
+          const leads = risk.paras.map((p) => `<p class="sb-lead">${esc(p)}</p>`).join('');
+          const items = sbNumList(risk.bullets || []);
+          if (!leads && !items) return '';
+          return sbPage('sb-risk', 'Biggest<br/>Risk.', `${leads}${items}`);
+        },
         'sb-contact': () => {
-          const actions = `<div class="cb-contact-actions"><a class="cb-cta cb-cta--solid" href="${HUMAN.calendly}" target="_blank" rel="noopener noreferrer">Meet with Bryan ↗</a><a class="cb-cta" href="mailto:${esc(HUMAN.email)}">Email HITLOOP</a></div>`;
-          const body = `<div class="cb-contact-top">
-      <div class="cb-contact-lede">${pull('Your brief is ready and onboarding is complete. When you are ready to move from insight to execution, Bryan is one click away.')}${actions}</div>
-      ${sigBlock}
-    </div>`;
-          return sbPage('sb-contact', 'Contact Your<br/>Human.', body);
+          // Simple-native: plain lead, contact identity as text lines, flat
+          // action row. No pull-quote (Decision owns it), no signature block.
+          const leadP = `<p class="sb-lead">${esc('Your brief is ready and onboarding is complete. When you are ready to move from insight to execution, Bryan is one click away.')}</p>`;
+          const ident = `<div class="sb-contact-ident">
+            <span class="sb-contact-label">Your Human</span>
+            <span class="sb-dl-title">Bryan Balli</span>
+            <span class="sb-dl-desc">Creative Lead, HITLOOP</span>
+          </div>`;
+          const actions = `<div class="sb-fp-actions">
+            <a class="cb-package-dl" href="${HUMAN.calendly}" target="_blank" rel="noopener noreferrer">Meet with Bryan ↗</a>
+            <a class="cb-package-dl sb-copy-btn" href="mailto:${esc(HUMAN.email)}">Email HITLOOP</a>
+            <a class="cb-package-dl sb-copy-btn" href="${HUMAN.linkedin}" target="_blank" rel="noopener noreferrer">LinkedIn</a>
+            <a class="cb-package-dl sb-copy-btn" href="${HUMAN.x}" target="_blank" rel="noopener noreferrer">X</a>
+          </div>`;
+          return sbPage('sb-contact', 'Contact Your<br/>Human.', `${leadP}${ident}${actions}`);
         },
       };
       const sbPagesHtml = cbOrderOf('sb-pages')
@@ -1941,6 +1958,9 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   .sb-fp-actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
   .sb-copy-btn{cursor:pointer;border:1px solid rgba(0,0,0,.2);background:transparent;color:var(--ink)}
   .sb-status-miss{color:#9f1f17}
+  /* Contact identity as plain text lines. */
+  .sb-contact-ident{display:grid;gap:3px;margin:18px 0 4px}
+  .sb-contact-label{font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft)}
   @media(max-width:640px){
     section.page.cover--simple{padding-top:92px}
   }
