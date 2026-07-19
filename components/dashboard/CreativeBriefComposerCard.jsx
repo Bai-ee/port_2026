@@ -229,7 +229,7 @@ export function CreativeBriefComposerView({ user }) {
           </div>
         )
       ) : (
-        <div className="vrk-scope" style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 16, flex: 1, minHeight: 0 }}>
+        <div className="vrk-scope" id="creative-brief-composer-preview-shell" style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 16, flex: 1, minHeight: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
             <span className="label">
               Previewing: <span style={{ color: 'var(--vrk-success, #285f3b)' }}>{form?.layout === 'simple' ? 'SIMPLE' : 'CLASSIC'} layout</span> · saved config · HITLOOP sample data (same template every signup gets)

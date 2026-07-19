@@ -24923,6 +24923,14 @@ export const dashboardCss = `
        375px phone. Collapse to the single gutter so it maximizes width like the
        other vrk cards. !important is required to beat the inline style. */
     #email-digest-settings-shell { padding: var(--mobile-gutter, 8px) !important; gap: 12px !important; }
+    /* Brief Composer: full-width settings on phones — collapse shell + section
+       padding to the single gutter and drop the decorative index chip so the
+       heading/body span the whole row. */
+    #creative-brief-composer-shell { padding: var(--mobile-gutter, 8px) !important; gap: 12px !important; }
+    #creative-brief-composer-shell .section { padding: 12px 10px; }
+    #creative-brief-composer-shell .section-head { grid-template-columns: minmax(0, 1fr) auto; }
+    #creative-brief-composer-shell .section-head .index { display: none; }
+    #creative-brief-composer-preview-shell { padding: var(--mobile-gutter, 8px) !important; }
   }
   .tile-detail-bento-label {
     display: block;
