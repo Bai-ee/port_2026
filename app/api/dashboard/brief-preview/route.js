@@ -1444,8 +1444,54 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
         },
         'sb-onboarded': () => sbPage('sb-onboarded', 'You’re<br/>Onboarded.', `<p class="sb-lead">${esc(ONBOARD_COPY[0])}</p>${ONBOARD_COPY.slice(1).map((p) => `<p class="sub">${esc(p)}</p>`).join('')}`),
         'sb-services': () => sbPage('sb-services', 'What We<br/>Offer.', `<ol class="sb-numlist">${SERVICES.map((s, i) => `<li><span class="n">S${String(i + 1).padStart(2, '0')}</span><span class="d">—</span><span class="t"><span class="sb-dl-title">${esc(s.name)}</span><span class="sb-dl-desc">${esc(s.desc)}</span></span></li>`).join('')}</ol>`),
-        'sb-featured-post': () => (featuredRowHtml ? sbPage('sb-featured-post', 'Featured<br/>Post.', featuredRowHtml) : ''),
-        'sb-social-share': () => (socialInner ? sbPage('sb-social-share', 'Social<br/>Share.', socialInner) : ''),
+        'sb-featured-post': () => {
+          // Simple-native: caption as lead text + a thumbnail row for the
+          // media + flat actions. No X-card mock (that stays classic-only).
+          if (!featPost || !featPost.paras.length) return '';
+          const caption = featPost.paras.join(' ');
+          const site = hostnameOf(websiteUrl) || '';
+          const mediaUrl = ok(studioVideoUrl) ? studioVideoUrl : ok(mockupSrc) ? mockupSrc : ok(socialPreviewImageUrl) ? socialPreviewImageUrl : null;
+          const isVideo = mediaUrl === studioVideoUrl;
+          const thumb = mediaUrl
+            ? (isVideo ? `<video src="${esc(mediaUrl)}" autoplay muted loop playsinline></video>` : `<img src="${esc(mediaUrl)}" alt="Featured media"/>`)
+            : '';
+          const href = mediaUrl && isVideo ? dlHref(mediaUrl, 'Featured Post Video', 'video') : null;
+          const mediaRow = mediaUrl ? `<div class="sb-dl-list"><div class="sb-dl-row" id="sb-featured-media">
+            <span class="n">FP</span>
+            <span class="sb-dl-thumb">${thumb}</span>
+            <span class="sb-dl-text"><span class="sb-dl-title">Ready-to-post caption + media</span><span class="sb-dl-desc">${esc(site || 'Post-ready creative for your channels.')}</span></span>
+            ${href ? `<a class="cb-package-dl" href="${esc(href)}" download>↓ Download</a>` : ''}
+          </div></div>` : '';
+          const actions = `<div class="sb-fp-actions">
+            <button type="button" class="cb-package-dl sb-copy-btn" data-copy="${esc(caption)}" onclick="(function(b){try{navigator.clipboard.writeText(b.dataset.copy);var t=b.textContent;b.textContent='Copied';setTimeout(function(){b.textContent=t},1600);}catch(e){}})(this)">Copy caption</button>
+            <a class="cb-package-dl" href="/dashboard?open=post-me" target="_top" rel="noopener">Post Me ↗</a>
+          </div>`;
+          return sbPage('sb-featured-post', 'Featured<br/>Post.', `<p class="sb-lead">${esc(caption)}</p>${mediaRow}${actions}`);
+        },
+        'sb-social-share': () => {
+          // Simple-native: share thumbnail row + numbered captured/missing
+          // checklist. No faux share-card (classic-only).
+          const sm = siteMeta || {};
+          if (!siteMeta && !socialPreviewImageUrl) return '';
+          const shareImg = socialPreviewImageUrl || sm.ogImage || null;
+          const host = hostnameOf(websiteUrl) || sm.siteName || '';
+          const shareRow = `<div class="sb-dl-list"><div class="sb-dl-row" id="sb-share-preview">
+            <span class="n">SP</span>
+            <span class="sb-dl-thumb${ok(shareImg) ? '' : ' sb-dl-thumb--empty'}">${ok(shareImg) ? `<img src="${esc(shareImg)}" alt="Share image"/>` : ''}</span>
+            <span class="sb-dl-text"><span class="sb-dl-title">${esc(sm.title || host || 'How your site shares')}</span><span class="sb-dl-desc">${esc(sm.description || (ok(shareImg) ? 'The card platforms show when your link is shared.' : 'No share image set.'))}</span></span>
+          </div></div>`;
+          const checks = [
+            { label: 'Share image (og:image)', val: sm.ogImage },
+            { label: 'Image alt text', val: sm.ogImageAlt },
+            { label: 'Title', val: sm.title },
+            { label: 'Description', val: sm.description },
+            { label: 'Site name', val: sm.siteName },
+            { label: 'Favicon', val: sm.favicon },
+            { label: 'Brand color', val: sm.themeColor },
+          ];
+          const list = `<ol class="sb-numlist">${checks.map((c, i) => `<li><span class="n">${String(i + 1).padStart(2, '0')}</span><span class="d">—</span><span class="t"><span class="sb-dl-title">${esc(c.label)}</span><span class="sb-dl-desc${c.val ? '' : ' sb-status-miss'}">${c.val ? 'Captured' : 'Missing'}</span></span></li>`).join('')}</ol>`;
+          return sbPage('sb-social-share', 'Social<br/>Share.', `${shareRow}${list}`);
+        },
         'sb-risk': () => (riskInner ? sbPage('sb-risk', 'Biggest<br/>Risk.', riskInner) : ''),
         'sb-contact': () => {
           const actions = `<div class="cb-contact-actions"><a class="cb-cta cb-cta--solid" href="${HUMAN.calendly}" target="_blank" rel="noopener noreferrer">Meet with Bryan ↗</a><a class="cb-cta" href="mailto:${esc(HUMAN.email)}">Email HITLOOP</a></div>`;
@@ -1891,6 +1937,10 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     .sb-dl-row{grid-template-columns:auto minmax(0,1fr) auto;gap:12px}
     .sb-dl-row .n{display:none}
   }
+  /* Featured Post flat actions + share checklist status. */
+  .sb-fp-actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+  .sb-copy-btn{cursor:pointer;border:1px solid rgba(0,0,0,.2);background:transparent;color:var(--ink)}
+  .sb-status-miss{color:#9f1f17}
   @media(max-width:640px){
     section.page.cover--simple{padding-top:92px}
   }
