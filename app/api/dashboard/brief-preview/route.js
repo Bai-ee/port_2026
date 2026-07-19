@@ -1335,18 +1335,15 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     // (sb-* ids in creative-brief-config.cjs). Classic assembly below stays
     // untouched — the composer's Layout switch A/Bs between them.
     if (isSimpleOnboarding) {
-      let sn = 0;
-      const sbPage = (id, title, inner) => {
-        const num = String((sn += 1)).padStart(2, '0');
-        return `
-  <section class="page cb-page" id="${id}">
-    <div class="sec-num">${num}</div>
-    <div class="cb-deco" aria-hidden="true"></div>
-    ${cbOn(`${id}:heading`) && title ? `<h2 class="headline">${title}</h2>
+      // Simple sections are compact document flow (`sb-sec` overrides in the
+      // route CSS): no sec-nums, no pixel deco, single-line smaller headings —
+      // the brief reads as one scannable page instead of poster spreads.
+      const sbPage = (id, title, inner) => `
+  <section class="page cb-page sb-sec" id="${id}">
+    ${cbOn(`${id}:heading`) && title ? `<h2 class="headline">${String(title).replace(/<br\s*\/?>/g, ' ')}</h2>
     <div class="rule"></div>` : ''}
     ${inner}
   </section>`;
-      };
       // New-label preference with legacy fallback (works pre-regeneration).
       const pick = (nu, old) => byLabel(nu) || byLabel(old) || null;
       const insight = pick('Key Insight', 'Headline');
@@ -1393,18 +1390,14 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
         'sb-key-insight': () => {
           const paras = insight ? [...insight.paras, ...insight.bullets] : [];
           if (!paras.length) return '';
-          const joined = paras.join(' ');
-          // A punchy one-liner keeps the ink bento tile; longer copy reads as
-          // plain paragraphs (2–3 sentence cap comes from the summarizer).
-          const body = joined.length <= 120
-            ? `<div class="bento">${bTile({ span: 's4', cls: 'ink', word: joined })}</div>`
-            : subFrom(paras);
-          return sbPage('sb-key-insight', 'Key<br/>Insight.', body);
+          // Plain oversized-but-readable lead text — the Decision section owns
+          // the single visually-distinct treatment in the simple layout.
+          return sbPage('sb-key-insight', 'Key<br/>Insight.', paras.map((p) => `<p class="sb-lead">${esc(p)}</p>`).join(''));
         },
         'sb-positioning': () => {
           const paras = positioning ? positioning.paras : [];
           if (!paras.length) return '';
-          return sbPage('sb-positioning', 'Current<br/>Positioning.', paras.map((p) => `<p class="cb-wtis-lead">${esc(p)}</p>`).join(''));
+          return sbPage('sb-positioning', 'Current<br/>Positioning.', paras.map((p) => `<p class="sb-lead">${esc(p)}</p>`).join(''));
         },
         'sb-decision': () => {
           if (!decisionSec || !decisionSec.paras.length) return '';
@@ -1807,6 +1800,27 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     display:inline-block;margin-top:14px;padding:5px 12px;border:1px solid rgba(0,0,0,.2);border-radius:999px;
     font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft);
   }
+  /* ── Simple layout sections ─────────────────────────────────────────────
+     Compact document flow: no poster min-heights, no corner/pixel ornaments,
+     smaller single-line headings, calm lead text. Theme (fonts/colors)
+     unchanged; The Decision keeps the one visually-distinct treatment. */
+  section.page.sb-sec{
+    min-height:auto;display:block;
+    padding:clamp(30px,5vh,56px) var(--gutter) clamp(32px,5vh,60px);
+  }
+  .sb-sec::before,.sb-sec::after{display:none}
+  .sb-sec h2.headline{font-size:clamp(24px,3.2vw,40px);margin:0}
+  .sb-sec .rule{margin:14px 0 22px}
+  .sb-lead{
+    font-family:"Space Grotesk",sans-serif;font-weight:300;
+    font-size:clamp(18px,2vw,24px);line-height:1.5;color:var(--ink);
+    margin:0 0 14px;max-width:62ch;
+  }
+  /* Cover stays a poster on desktop; on phones it collapses to content height
+     so the simple brief opens straight into substance. */
+  @media(max-width:640px){
+    section.page.cover--simple{min-height:auto;padding-top:96px;padding-bottom:40px}
+  }
   #onboarding-cover-mockup{
     position:absolute;
     top:clamp(56px,10vh,130px);
@@ -1843,8 +1857,8 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   </style>
 </head>
 <body>
-  <section class="page cover${isCoverMockup ? ' cover--has-onboarding-mockup' : ''}">
-    <div class="sec-num">00</div>
+  <section class="page cover${isCoverMockup ? ' cover--has-onboarding-mockup' : ''}${isSimpleOnboarding ? ' cover--simple' : ''}">
+    ${isSimpleOnboarding ? '' : '<div class="sec-num">00</div>'}
     ${isCoverMockup ? `<div id="onboarding-cover-mockup" aria-hidden="true"><img src="${esc(mockupSrc)}" alt="Homepage device mockup" /></div>` : ''}
     <div class="title-stack">
       ${(!isSimpleOnboarding || cbOn('sb-header-cta')) ? `<div class="cap-brief-email-cta-row">
