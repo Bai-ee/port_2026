@@ -1,8 +1,18 @@
 import Script from 'next/script';
+import { Doto, Space_Grotesk, Space_Mono } from 'next/font/google';
 import '../colors.css';
 import { AuthProvider } from '../AuthContext';
 import AnalyticsPageView from '../components/AnalyticsPageView';
 import SmoothScroll from '../components/SmoothScroll';
+
+// Self-hosted via next/font/google — preserves the literal family names
+// ("Doto" / "Space Grotesk" / "Space Mono") that every existing inline
+// style and dashboardCss rule already references, so nothing downstream
+// needs to change. display:swap + automatic metric-matched fallback faces
+// cover FOUT/CLS; no external Google Fonts origin on the critical path.
+const doto = Doto({ subsets: ['latin'], weight: ['400', '700', '900'], display: 'swap' });
+const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], weight: ['300', '400', '500', '700'], display: 'swap' });
+const spaceMono = Space_Mono({ subsets: ['latin'], weight: ['400', '700'], display: 'swap' });
 
 const GA_ID = process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID;
 
@@ -99,44 +109,7 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        {/* Non-render-blocking font load: preload the CSS, attach it as
-            media="print" (so it doesn't block first paint), then flip to
-            media="all" once loaded. display=swap covers FOIT. Literal font
-            family names are preserved, so all existing styles keep working.
-            <noscript> guarantees fonts for JS-disabled clients. */}
-        <link
-          rel="preload"
-          as="style"
-          href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700;900&family=Space+Grotesk:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap"
-        />
-        <link
-          id="gfont-css"
-          rel="stylesheet"
-          media="print"
-          href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700;900&family=Space+Grotesk:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap"
-          // The inline script below flips media print→all before hydration, so the
-          // client DOM intentionally differs from the SSR'd attribute. Suppress the
-          // expected hydration mismatch (fonts still load correctly).
-          suppressHydrationWarning
-        />
-        <script
-          dangerouslySetInnerHTML={{
-            __html:
-              "(function(){var l=document.getElementById('gfont-css');if(!l)return;if(l.sheet){l.media='all';}else{l.addEventListener('load',function(){l.media='all';});}})();",
-          }}
-        />
-        <noscript>
-          {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-          <link
-            rel="stylesheet"
-            href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700;900&family=Space+Grotesk:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap"
-          />
-        </noscript>
-      </head>
+    <html lang="en" className={`${doto.className} ${spaceGrotesk.className} ${spaceMono.className}`}>
       <body
         suppressHydrationWarning
         style={{
