@@ -1,10 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '../../../AuthContext';
-import AdminPage from '../../../AdminPage';
+
+// Loaded only once the visitor is confirmed admin — signed-out visitors
+// hitting this route otherwise download the full admin bundle before the
+// login redirect can even fire.
+const AdminPage = dynamic(() => import('../../../AdminPage'), { loading: () => null });
 
 export default function AdminControlRoute() {
   const { user, loading } = useAuth();

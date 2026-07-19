@@ -104,6 +104,12 @@ async function smokeRoute(browser, spec, kind) {
 
   const response = await page.goto(`${baseUrl}${spec.path}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForTimeout(2500);
+  if (kind === 'private') {
+    // Private-route redirects are client-side (Firebase auth must resolve first),
+    // so they land eventually, not within a fixed wait. Poll up to 15s instead of
+    // failing on a race — this was the source of flaky /admin/control results.
+    await page.waitForURL(`**${spec.expectedUrl}`, { timeout: 15000 }).catch(() => {});
+  }
   const bodyText = await page.locator('body').innerText().catch(() => '');
   const finalUrl = new URL(page.url());
   const overlay = await page.locator('[data-nextjs-dialog], .nextjs-portal').count();
