@@ -8569,31 +8569,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     if (runningInBackground) setBgRunToast(true);
   };
 
-  // ── Post-signup reveal: open the Creative Brief modal first ────────────────
-  // When a signup build that ran THIS session completes and the terminal goes
-  // away, the new user lands straight in the Creative Brief popup (they can ✕
-  // out; the dashboard is behind it). Re-opening later = clicking the Creative
-  // Brief card / its Details button. Fires once per session; returning users
-  // (no run this session) never get an auto-open.
-  const autoOpenedBriefRef = useRef(false);
-  useEffect(() => {
-    if (autoOpenedBriefRef.current) return;
-    if (showIntakeModal) return;
-    if (!runWasActiveRef.current) return;
-    if (latestRunStatus !== 'succeeded') return;
-    const onboardingHtml = briefCardPreviewHtml['onboarding-brief'];
-    if (!onboardingHtml && !briefPreviewHtml) return; // brief HTML still loading — retry on next dep change
-    autoOpenedBriefRef.current = true;
-    // Same preference as clicking the Creative Brief card (openCapabilityCard):
-    // the named onboarding render when available, else the main brief view.
-    if (onboardingHtml) {
-      setNamedBriefShareError('');
-      setNamedBriefView({ key: 'onboarding', html: onboardingHtml });
-    } else {
-      setBriefFullScreen(true);
-    }
-  }, [showIntakeModal, latestRunStatus, briefPreviewHtml, briefCardPreviewHtml]);
-
   // Re-open the build terminal from the background-run chip. Clears the
   // persisted dismissal so showIntakeModal recomputes true (the restore effect
   // keys on intakeDismissKey, which is unchanged, so it won't re-dismiss).
@@ -8888,9 +8863,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     }
   }, [surveyResolved, latestRunStatus, completionCountdown, activeRunIsIntake, onboardingChainPending, currentRunIsOnboardingChain]);
 
-  // Land the new onboard on the DELIVERABLES bucket once the chain-success
-  // countdown finishes and the brief HTML is in. The brief is NEVER auto-opened
-  // full-screen — it only opens on an explicit Creative Brief card click.
+  // Post-signup reveal: once the chain-success countdown finishes and the
+  // brief HTML is in, land the new onboard on the DELIVERABLES bucket AND open
+  // the Creative Brief popup first thing (named onboarding render preferred,
+  // main brief fallback — same preference as clicking the card). They ✕ out to
+  // the dashboard; re-opening later = the Creative Brief card / Details.
+  // One-shot per session; returning users never get an auto-open.
   useEffect(() => {
     if (!chainBriefRevealPendingRef.current) return;
     if (completionCountdown !== null) return;
@@ -8898,7 +8876,14 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     chainBriefRevealPendingRef.current = false;
     autoOpenedBriefRef.current = true;
     setActiveCapabilityFilter('deliverables');
-  }, [completionCountdown, briefPreviewHtml]);
+    const onboardingHtml = briefCardPreviewHtml['onboarding-brief'];
+    if (onboardingHtml) {
+      setNamedBriefShareError('');
+      setNamedBriefView({ key: 'onboarding', html: onboardingHtml });
+    } else {
+      setBriefFullScreen(true);
+    }
+  }, [completionCountdown, briefPreviewHtml, briefCardPreviewHtml]);
 
   // When a new brief_run starts (run ID changes from a prior non-null value),
   // reset survey resolution so the bento survey reappears alongside the fresh
