@@ -28,7 +28,6 @@
     background: var(--vrk-surface);
     box-shadow: 0 1px 0 rgba(255,255,255,0.7), inset 0 1px 0 rgba(255,255,255,0.35);
     backdrop-filter: blur(22px);
-    -webkit-backdrop-filter: blur(22px);
   }
   #video-remix-modal-tabs-container.vrk-scope,
   #ui-teaser-modal-tabs-container.vrk-scope {

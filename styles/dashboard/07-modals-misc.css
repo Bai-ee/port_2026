@@ -8,7 +8,6 @@
     justify-content: center;
     background: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
   }
   #tier-modal-fullscreen {
     width: 90vw;
@@ -160,7 +159,6 @@
     inset: 0;
     background: rgba(0, 0, 0, 0.45);
     backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
     z-index: 2000;
     display: flex;
     align-items: center;
@@ -279,7 +277,6 @@
     box-sizing: border-box;
     background: rgba(255, 252, 248, 0.94);
     backdrop-filter: blur(28px);
-    -webkit-backdrop-filter: blur(28px);
     border: 1px solid rgba(212, 196, 171, 0.82);
     box-shadow: 0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4), 0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.1), 0px 20px 40px rgba(0, 0, 0, 0.15);
     font-family: var(--font-ui, "Space Grotesk", system-ui, sans-serif);

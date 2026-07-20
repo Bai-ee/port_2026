@@ -67,5 +67,11 @@
   },
   "devDependencies": {
     "playwright": "^1.61.0"
-  }
+  },
+  "browserslist": [
+    "chrome >= 100",
+    "edge >= 100",
+    "firefox >= 115",
+    "safari >= 15.6"
+  ]
 }
