@@ -6,6 +6,8 @@ const { verifyRequestUser, isAdminEmail } = require('../../../../api/_lib/auth.c
 const { getEffectiveClientContext } = require('../../../../api/_lib/client-provisioning.cjs');
 const { validateUrl } = require('../../../../api/_lib/safe-fetch.cjs');
 const cloneJobs = require('../../../../api/_lib/clone-jobs.cjs');
+const cloneDemo = require('../../../../api/_lib/clone-demo.cjs');
+const editvideosBridge = require('../../../../api/_lib/editvideos-bridge.cjs');
 
 // Site Recreate — metadata-only route. It creates/reads clone_jobs records.
 // No fetch/parse/mirror of the target site ever happens in this Vercel
@@ -115,6 +117,89 @@ export async function POST(request) {
     }
   }
 
+  // Card content editor → hosted demo slot values. Writes are admin-gated
+  // like `create`; the job must belong to the caller's client.
+  if (action === 'save-slots') {
+    try {
+      await requireAdmin(decoded);
+      let body = {};
+      try { body = await request.json(); } catch { body = {}; }
+      const jobId = String(body?.jobId || '').trim();
+      const slug = String(body?.slug || '').trim();
+      const edits = Array.isArray(body?.edits) ? body.edits : [];
+      if (!jobId || !slug) return json({ error: 'jobId and slug are required.' }, 400);
+      if (!edits.length) return json({ error: 'No edits provided.' }, 400);
+      const job = await cloneJobs.getCloneJob(jobId, context.clientId);
+      if (!job) return json({ error: 'Job not found.' }, 404);
+      const result = await cloneDemo.saveClonePageSlots({ jobId, slug, edits });
+      return json({ ok: true, ...result });
+    } catch (err) {
+      return json({ error: err.message || 'Could not save edits.' }, err.status || 500);
+    }
+  }
+
+  // One-click "host my site" — records the request on the job; the hosting
+  // deploy (Turso db + cloud seed + Vercel build) runs via the admin CLI
+  // `deploy-cms.mjs --job <id>` (same executor model as the clone engine —
+  // a Vercel function cannot run npm/vercel builds). Card shows
+  // "provisioning" until job.cms.hostedUrl lands.
+  if (action === 'request-hosting') {
+    try {
+      await requireAdmin(decoded);
+      let body = {};
+      try { body = await request.json(); } catch { body = {}; }
+      const jobId = String(body?.jobId || '').trim();
+      const target = String(body?.target || 'vercel').trim();
+      if (!jobId) return json({ error: 'jobId is required.' }, 400);
+      if (!['vercel'].includes(target)) return json({ error: `Unsupported hosting target: ${target}.` }, 400);
+      const job = await cloneJobs.getCloneJob(jobId, context.clientId);
+      if (!job) return json({ error: 'Job not found.' }, 404);
+      if (!job.cms?.downloadUrl) return json({ error: 'Build the CMS first — no CMS on this job yet.' }, 400);
+      if (job.cms?.hostedUrl) return json({ ok: true, alreadyHosted: true, hostedUrl: job.cms.hostedUrl });
+      const hostRequest = { target, requestedAt: new Date().toISOString(), requestedBy: decoded.email || null };
+      await cloneJobs.updateJobFields(jobId, { hostRequest });
+      return json({ ok: true, hostRequest });
+    } catch (err) {
+      return json({ error: err.message || 'Could not request hosting.' }, err.status || 500);
+    }
+  }
+
+  // Launch the recreated static site on Arweave — wallet-funded + PERMANENT,
+  // so admin-gated with an estimate-first confirm in the card (Archive/
+  // Publishing pattern). Proxied to the EditVideos app; 503s cleanly until
+  // its deploy-external-site endpoint ships (see SITE-RECREATE-CARD.md).
+  if (action === 'arweave-deploy') {
+    try {
+      await requireAdmin(decoded);
+      let body = {};
+      try { body = await request.json(); } catch { body = {}; }
+      const jobId = String(body?.jobId || '').trim();
+      if (!jobId) return json({ error: 'jobId is required.' }, 400);
+      const job = await cloneJobs.getCloneJob(jobId, context.clientId);
+      if (!job) return json({ error: 'Job not found.' }, 404);
+      if (!job.zip?.downloadUrl) return json({ error: 'Job has no site zip yet — run the clone first.' }, 400);
+
+      const result = await editvideosBridge.deployExternalSite({
+        zipUrl: job.zip.downloadUrl,
+        siteId: jobId,
+      });
+      const arweave = {
+        status: 'deployed',
+        manifestId: result.manifestId || result.transactionId || null,
+        arweaveUrl: result.arweaveUrl
+          || (result.manifestId ? `https://arweave.net/${result.manifestId}` : null),
+        arnsUrl: result.arnsUrl || null,
+        fileCount: result.fileCount ?? null,
+        sizeBytes: result.sizeBytes ?? null,
+        deployedAt: new Date().toISOString(),
+      };
+      await cloneJobs.updateJobFields(jobId, { arweave });
+      return json({ ok: true, arweave });
+    } catch (err) {
+      return json({ error: err.message || 'Arweave deploy failed.' }, err.status || 500);
+    }
+  }
+
   return json({ error: `Unknown action: ${action || '(none)'}` }, 400);
 }
 
@@ -142,6 +227,32 @@ export async function GET(request) {
       const limit = Math.min(Number(url.searchParams.get('limit')) || 20, MAX_JOBS_PER_CLIENT);
       const jobs = await cloneJobs.listCloneJobs(context.clientId, { limit });
       return json({ ok: true, jobs });
+    }
+
+    // Cost estimate for launching the site on Arweave (read-only: live AR
+    // price × the mirror's byte total; no wallet touch).
+    if (action === 'arweave-estimate') {
+      const jobId = url.searchParams.get('jobId');
+      if (!jobId) return json({ error: 'jobId is required.' }, 400);
+      const job = await cloneJobs.getCloneJob(jobId, context.clientId);
+      if (!job) return json({ error: 'Job not found.' }, 404);
+      const sizeBytes = Number(job.totalBytes || job.zip?.bytes || 0);
+      const fileCount = Number(job.assetCount || 0) + (Array.isArray(job.pages) ? job.pages.length : 0);
+      const estimate = await editvideosBridge.estimateArchiveFiles([
+        { fileName: 'site', sizeBytes },
+      ]);
+      return json({ ok: true, estimate: { ...estimate, fileCount, sizeBytes } });
+    }
+
+    // Demo pages + slots for the card's content editor (reads open, matching
+    // status/list — the demo itself is public by capability URL anyway).
+    if (action === 'demo-pages') {
+      const jobId = url.searchParams.get('jobId');
+      if (!jobId) return json({ error: 'jobId is required.' }, 400);
+      const job = await cloneJobs.getCloneJob(jobId, context.clientId);
+      if (!job) return json({ error: 'Job not found.' }, 404);
+      const pages = await cloneDemo.listClonePages(jobId);
+      return json({ ok: true, pages });
     }
 
     return json({ error: `Unknown action: ${action}` }, 400);

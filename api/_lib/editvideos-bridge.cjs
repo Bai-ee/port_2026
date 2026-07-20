@@ -1250,6 +1250,49 @@ function requireApiBase() {
 }
 
 /**
+ * Deploy an EXTERNAL static site (a zip HITLOOP hosts, e.g. a Site Recreate
+ * mirror) to Arweave via the EditVideos app: it downloads the zip, unpacks,
+ * uploads every file wallet-funded, and creates an Arweave path manifest.
+ *
+ * ⚠️ OPTIONAL ENDPOINT — `/api/deploy-external-site` does not exist on the
+ * EditVideos side yet (contract documented in SITE-RECREATE-CARD.md § Arweave).
+ * Until it ships there, this degrades with a clear 503 exactly like
+ * updateArns does — the card shows "not enabled yet", never crashes.
+ *
+ * @param {{zipUrl:string, siteId?:string}} args
+ * @returns {Promise<object>} { manifestId, arweaveUrl, fileCount, sizeBytes, arnsUrl? }
+ */
+async function deployExternalSite({ zipUrl, siteId } = {}) {
+  if (!zipUrl) throw new Error('zipUrl is required to deploy an external site.');
+  const base = requireApiBase();
+  let res;
+  try {
+    res = await fetch(`${base}/api/deploy-external-site`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ zipUrl, siteId: siteId || null }),
+    });
+  } catch (err) {
+    const e = new Error(`EditVideos app unreachable: ${err.message}`);
+    e.status = 503;
+    throw e;
+  }
+  if (res.status === 404 || res.status === 501) {
+    const e = new Error('Arweave site launcher is not enabled yet — the EditVideos deploy-external-site endpoint is not deployed.');
+    e.status = 503;
+    throw e;
+  }
+  let data = null;
+  try { data = await res.json(); } catch { data = null; }
+  if (!res.ok || !data?.success) {
+    const err = new Error(data?.error || `Arweave site deploy failed (${res.status}).`);
+    err.status = res.status || 500;
+    throw err;
+  }
+  return data;
+}
+
+/**
  * Archive ONE Firebase file to Arweave via the EditVideos archive-upload API.
  * @param {{folder:string, fileName:string}} args
  * @returns {Promise<object>} the EditVideos JSON result (transactionId/arweaveUrl/...)
@@ -1383,6 +1426,7 @@ module.exports = {
   archiveFirebaseFile,
   estimateWebsiteDeploy,
   deployWebsite,
+  deployExternalSite,
   updateArns,
   editvideosApiBase,
   APP_NAME,

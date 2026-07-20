@@ -1056,4 +1056,10 @@ async function runModules({
   return { ok: results.every((r) => r.ok), results };
 }
 
-module.exports = { runIntakePipeline, buildIntelligenceBriefing, runModules };
+/** Card ids that have a real module runner. Anything else (custom cards like
+ *  `site-recreate`, `copywriter`, …) must never enter the module pipeline. */
+function knownModuleIds() {
+  return Object.keys(MODULE_RUNNERS);
+}
+
+module.exports = { runIntakePipeline, buildIntelligenceBriefing, runModules, knownModuleIds };

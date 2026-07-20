@@ -146,6 +146,103 @@ export default function SiteRecreateCard({ user, runWithTerminal }) {
     ? `${activeJob.verifyReport.pagesChecked ?? 0} pages · ${activeJob.assetCount ?? 0} assets · ${activeJob.verifyReport.consoleErrors ?? 0} errors`
     : null;
 
+  // ── Hosted demo content editor ─────────────────────────────────────────
+  const [demoPages, setDemoPages] = useState(null); // null = not loaded
+  const [demoEditSlug, setDemoEditSlug] = useState('home');
+  const [demoEdits, setDemoEdits] = useState({}); // key -> value (dirty only)
+  const [demoSaving, setDemoSaving] = useState(false);
+
+  useEffect(() => { setDemoPages(null); setDemoEdits({}); setDemoEditSlug('home'); }, [activeJobId]);
+
+  async function loadDemoPages() {
+    if (!user || !activeJob?.demo?.url) return;
+    try {
+      const data = await authFetch(user, `/api/dashboard/site-clone?action=demo-pages&jobId=${encodeURIComponent(activeJob.jobId)}`, { method: 'GET' });
+      setDemoPages(data.pages || []);
+    } catch (err) {
+      setNotice({ kind: 'error', text: err.message || 'Could not load demo content.' });
+    }
+  }
+
+  async function saveDemoEdits() {
+    const edits = Object.entries(demoEdits).map(([key, value]) => ({ key, value }));
+    if (!edits.length || !user || !activeJob) return;
+    setDemoSaving(true);
+    try {
+      await authFetch(user, '/api/dashboard/site-clone?action=save-slots', {
+        method: 'POST',
+        body: JSON.stringify({ jobId: activeJob.jobId, slug: demoEditSlug, edits }),
+      });
+      setDemoEdits({});
+      setDemoPages((prev) => (prev || []).map((p) => (p.slug === demoEditSlug
+        ? { ...p, slots: p.slots.map((s) => (demoEdits[s.key] != null ? { ...s, value: demoEdits[s.key] } : s)) }
+        : p)));
+      setNotice({ kind: 'ok', text: 'Saved — refresh the live demo to see your edits.' });
+    } catch (err) {
+      setNotice({ kind: 'error', text: err.message || 'Could not save edits.' });
+    } finally {
+      setDemoSaving(false);
+    }
+  }
+
+  const demoEditPage = (demoPages || []).find((p) => p.slug === demoEditSlug) || null;
+  const demoDirtyCount = Object.keys(demoEdits).length;
+
+  // ── One-click hosting (Vercel + Turso, provisioned by the admin CLI) ───
+  const [hostBusy, setHostBusy] = useState(false);
+  async function requestHosting() {
+    if (!user || !activeJob) return;
+    setHostBusy(true);
+    try {
+      await authFetch(user, '/api/dashboard/site-clone?action=request-hosting', {
+        method: 'POST',
+        body: JSON.stringify({ jobId: activeJob.jobId, target: 'vercel' }),
+      });
+      setNotice({ kind: 'ok', text: 'Hosting requested — the live site + admin links appear on this card when provisioning completes.' });
+      await loadJobs();
+    } catch (err) {
+      setNotice({ kind: 'error', text: err.message || 'Could not request hosting.' });
+    } finally {
+      setHostBusy(false);
+    }
+  }
+
+  // ── Arweave launch (permanent, wallet-funded — estimate-first) ─────────
+  const [arweaveEstimate, setArweaveEstimate] = useState(null);
+  const [arweaveBusy, setArweaveBusy] = useState(false);
+
+  useEffect(() => { setArweaveEstimate(null); }, [activeJobId]);
+
+  async function loadArweaveEstimate() {
+    if (!user || !activeJob) return;
+    setArweaveBusy(true);
+    try {
+      const data = await authFetch(user, `/api/dashboard/site-clone?action=arweave-estimate&jobId=${encodeURIComponent(activeJob.jobId)}`, { method: 'GET' });
+      setArweaveEstimate(data.estimate);
+    } catch (err) {
+      setNotice({ kind: 'error', text: err.message || 'Could not estimate Arweave cost.' });
+    } finally {
+      setArweaveBusy(false);
+    }
+  }
+
+  async function launchOnArweave() {
+    if (!user || !activeJob) return;
+    setArweaveBusy(true);
+    try {
+      await authFetch(user, '/api/dashboard/site-clone?action=arweave-deploy', {
+        method: 'POST',
+        body: JSON.stringify({ jobId: activeJob.jobId }),
+      });
+      setNotice({ kind: 'ok', text: 'Site launched on Arweave — permanent link below.' });
+      await loadJobs();
+    } catch (err) {
+      setNotice({ kind: 'error', text: err.message || 'Arweave launch failed.' });
+    } finally {
+      setArweaveBusy(false);
+    }
+  }
+
   return (
     <div id="site-recreate-card">
       {/* ── Submit ─────────────────────────────────────────────────── */}
@@ -213,20 +310,180 @@ export default function SiteRecreateCard({ user, runWithTerminal }) {
         )}
       </section>
 
+      {/* ── Live Demo — hosted, editable ───────────────────────────── */}
+      <section id="site-recreate-demo-panel" className="sr-panel">
+        <div className="sr-head">
+          <span className="sr-kicker">Live Demo — Your Site, Editable</span>
+          {activeJob?.demo?.url ? (
+            <a href={activeJob.demo.url} target="_blank" rel="noreferrer" className="sr-open-link">
+              <ExternalLink size={12} /> Open live demo
+            </a>
+          ) : null}
+        </div>
+        {!activeJob?.demo?.url ? (
+          <div className="sr-empty">No hosted demo yet — it appears here once a run completes.</div>
+        ) : (
+          <>
+            <p className="sr-sub">
+              Hosted at <a href={activeJob.demo.url} target="_blank" rel="noreferrer">{activeJob.demo.url}</a> — the exact recreated site,
+              {` ${activeJob.demo.slotCount || 0} editable pieces of content across ${activeJob.demo.pageCount || 0} pages.`}
+            </p>
+            {demoPages === null ? (
+              <button type="button" className="cta-pill-btn" id="site-recreate-demo-edit-btn" onClick={loadDemoPages}>
+                EDIT CONTENT
+              </button>
+            ) : (
+              <div id="site-recreate-demo-editor">
+                <div className="sr-demo-editor-controls">
+                  <select
+                    value={demoEditSlug}
+                    onChange={(e) => { setDemoEditSlug(e.target.value); setDemoEdits({}); }}
+                    aria-label="Page to edit"
+                  >
+                    {(demoPages || []).map((p) => (
+                      <option key={p.slug} value={p.slug}>{p.slug === 'home' ? 'Home' : p.title || p.slug}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="cta-pill-btn"
+                    disabled={!demoDirtyCount || demoSaving}
+                    onClick={saveDemoEdits}
+                  >
+                    {demoSaving ? 'SAVING…' : demoDirtyCount ? `SAVE ${demoDirtyCount} EDIT${demoDirtyCount > 1 ? 'S' : ''}` : 'SAVED'}
+                  </button>
+                </div>
+                <div className="sr-demo-slot-list">
+                  {(demoEditPage?.slots || []).filter((s) => s.kind === 'text').map((s) => (
+                    <label key={s.key} className="sr-demo-slot-row">
+                      <span className="sr-demo-slot-label">{s.label}</span>
+                      <textarea
+                        rows={Math.min(4, Math.max(1, Math.ceil(((demoEdits[s.key] ?? s.value) || '').length / 60)))}
+                        value={demoEdits[s.key] ?? s.value}
+                        onChange={(e) => setDemoEdits((prev) => ({ ...prev, [s.key]: e.target.value }))}
+                      />
+                    </label>
+                  ))}
+                </div>
+                <p className="sr-status-meta">Image swaps live in the downloadable CMS (Payload admin) — this editor covers text.</p>
+              </div>
+            )}
+          </>
+        )}
+      </section>
+
       {/* ── Download ───────────────────────────────────────────────── */}
       <section id="site-recreate-download-row" className="sr-panel">
         <div className="sr-head">
           <span className="sr-kicker">Download</span>
         </div>
-        {activeJob?.zip?.downloadUrl ? (
+        {activeJob?.zip?.downloadUrl || activeJob?.cms?.downloadUrl ? (
           <>
-            <a href={activeJob.zip.downloadUrl} className="sr-download-btn" download>
-              <Download size={14} /> Download Zip
-            </a>
+            {activeJob?.zip?.downloadUrl ? (
+              <a href={activeJob.zip.downloadUrl} className="sr-download-btn" download>
+                <Download size={14} /> Download Zip
+              </a>
+            ) : null}
+            {activeJob?.cms?.downloadUrl ? (
+              <a
+                id="site-recreate-cms-download-btn"
+                href={activeJob.cms.downloadUrl}
+                className="sr-download-btn sr-download-cms"
+                download
+              >
+                <Download size={14} /> Download CMS (editable)
+              </a>
+            ) : null}
+            {activeJob?.cms?.hostedUrl ? (
+              <p className="sr-verify-summary">
+                Hosted CMS live: <a href={activeJob.cms.hostedUrl} target="_blank" rel="noreferrer">{activeJob.cms.hostedUrl.replace(/^https?:\/\//, '')}</a>
+                {' · '}<a href={activeJob.cms.hostedAdminUrl || `${activeJob.cms.hostedUrl}/admin`} target="_blank" rel="noreferrer">open /admin</a>
+              </p>
+            ) : activeJob?.hostRequest ? (
+              <p className="sr-verify-summary">
+                Hosting requested ({formatDate(activeJob.hostRequest.requestedAt) || 'just now'}) — provisioning the live site + admin. The links appear here when it's up.
+              </p>
+            ) : activeJob?.cms?.downloadUrl ? (
+              <button
+                type="button"
+                id="site-recreate-host-vercel-btn"
+                className="cta-pill-btn"
+                disabled={hostBusy}
+                onClick={requestHosting}
+              >
+                {hostBusy ? 'REQUESTING…' : 'HOST LIVE — SITE + ADMIN'}
+              </button>
+            ) : null}
+            {activeJob?.cms?.downloadUrl ? (
+              <p className="sr-verify-summary">
+                Your exact site + WYSIWYG admin (Payload, Turso-ready) · {activeJob.cms.pageCount || 0} pages · {activeJob.cms.slotCount || 0} editable slots
+                {activeJob.cms.verified ? ' · verified' : ''} — unzip, then npm install · npm run seed · npm run dev (see README).
+              </p>
+            ) : null}
             {verifySummary ? <p className="sr-verify-summary">{verifySummary}</p> : null}
           </>
         ) : (
           <div className="sr-empty">No zip yet — it appears here once a run completes.</div>
+        )}
+      </section>
+
+      {/* ── Arweave — permanent hosting ────────────────────────────── */}
+      <section id="site-recreate-arweave-panel" className="sr-panel">
+        <div className="sr-head">
+          <span className="sr-kicker"><Globe size={13} /> Launch on Arweave</span>
+          {activeJob?.arweave?.arweaveUrl ? (
+            <a href={activeJob.arweave.arweaveUrl} target="_blank" rel="noreferrer" className="sr-open-link">
+              <ExternalLink size={12} /> View on Arweave
+            </a>
+          ) : null}
+        </div>
+        {activeJob?.arweave?.arweaveUrl ? (
+          <>
+            <p className="sr-sub">
+              Permanently hosted — deployed {formatDate(activeJob.arweave.deployedAt) || ''}.
+            </p>
+            <p className="sr-verify-summary">
+              Manifest: <a href={activeJob.arweave.arweaveUrl} target="_blank" rel="noreferrer">{activeJob.arweave.manifestId}</a>
+              {activeJob.arweave.arnsUrl ? <> · ArNS: <a href={activeJob.arweave.arnsUrl} target="_blank" rel="noreferrer">{activeJob.arweave.arnsUrl}</a></> : null}
+            </p>
+          </>
+        ) : !activeJob?.zip?.downloadUrl ? (
+          <div className="sr-empty">Available once a run completes — puts the recreated site on permanent decentralized storage.</div>
+        ) : (
+          <>
+            <p className="sr-sub">
+              Publish the recreated site to permanent, decentralized storage with a public manifest link.
+              Uploads are wallet-funded and <strong>cannot be deleted</strong>.
+            </p>
+            {!arweaveEstimate ? (
+              <button
+                type="button"
+                id="site-recreate-arweave-estimate-btn"
+                className="cta-pill-btn"
+                disabled={arweaveBusy}
+                onClick={loadArweaveEstimate}
+              >
+                {arweaveBusy ? 'ESTIMATING…' : 'ESTIMATE COST'}
+              </button>
+            ) : (
+              <>
+                <p className="sr-verify-summary">
+                  ≈ {(arweaveEstimate.sizeBytes / (1024 * 1024)).toFixed(1)}MB · {arweaveEstimate.fileCount || '—'} files ·
+                  {' '}{typeof arweaveEstimate.costAR === 'number' ? `${arweaveEstimate.costAR.toFixed(5)} AR` : '— AR'}
+                  {typeof arweaveEstimate.costUSD === 'number' ? ` (~$${arweaveEstimate.costUSD.toFixed(2)})` : ''}
+                </p>
+                <button
+                  type="button"
+                  id="site-recreate-arweave-launch-btn"
+                  className="cta-pill-btn"
+                  disabled={arweaveBusy}
+                  onClick={launchOnArweave}
+                >
+                  {arweaveBusy ? 'LAUNCHING…' : 'LAUNCH ON ARWEAVE — PERMANENT'}
+                </button>
+              </>
+            )}
+          </>
         )}
       </section>
 
@@ -293,7 +550,14 @@ export default function SiteRecreateCard({ user, runWithTerminal }) {
         .sr-preview-frame { width: 100%; height: 320px; border: 1px solid rgba(42,36,32,0.14); border-radius: 12px; background: #fff; }
         .sr-screenshot-strip { display: flex; gap: 10px; overflow-x: auto; }
         .sr-screenshot-strip img { height: 220px; border-radius: 10px; border: 1px solid rgba(42,36,32,0.14); }
-        .sr-download-btn { display: inline-flex; align-items: center; gap: 6px; }
+        .sr-download-btn { display: inline-flex; align-items: center; gap: 6px; margin-right: 10px; margin-bottom: 4px; }
+        .sr-download-cms { border: 1px solid rgba(42,36,32,0.24); }
+        .sr-demo-editor-controls { display: flex; align-items: center; gap: 10px; margin: 10px 0; flex-wrap: wrap; }
+        .sr-demo-editor-controls select { font-family: var(--font-mono); font-size: 12px; padding: 8px 10px; border: 1px solid rgba(42,36,32,0.2); border-radius: 10px; background: #fff; }
+        .sr-demo-slot-list { max-height: 340px; overflow: auto; display: grid; gap: 8px; border: 1px solid rgba(42,36,32,0.1); border-radius: 12px; padding: 10px; background: rgba(255,255,255,0.6); }
+        .sr-demo-slot-row { display: grid; gap: 3px; }
+        .sr-demo-slot-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.04em; color: rgba(42,36,32,0.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .sr-demo-slot-row textarea { font-size: 12px; padding: 6px 8px; border: 1px solid rgba(42,36,32,0.16); border-radius: 8px; resize: vertical; background: #fff; }
         .sr-verify-summary { margin: 10px 0 0; font-family: var(--font-mono); font-size: 11px; color: rgba(42,36,32,0.55); }
         .sr-upsell { background: rgba(42,36,32,0.03); }
         .sr-contact-btn { width: auto; }

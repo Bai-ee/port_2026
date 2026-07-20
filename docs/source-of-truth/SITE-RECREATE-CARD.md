@@ -145,10 +145,131 @@ Hard limits in `run-clone.mjs`: max 15 pages, max 150 MB total mirrored bytes, m
 
 **Not done / explicitly deferred:** an actual `gcloud run deploy` (real Cloud Run service, real spend, needs `GCP_PROJECT` + a generated `SITE_CLONE_SHARED_SECRET` + Firebase Admin creds as Cloud Run env vars); setting `SITE_CLONE_WORKER_URL`/`SITE_CLONE_SHARED_SECRET` in Vercel's env so the route's `triggerWorker` actually fires. Until both of those deliberate steps happen, the feature runs exactly as Phase 2/3 left it — admin submits, admin runs the CLI by hand.
 
+## Phase 5 — CMS layer (Payload 3 + Turso), as built 2026-07-20
+
+Plan: [`docs/plans/SITE-RECREATE-CMS-LAYER-PLAN.md`](../plans/SITE-RECREATE-CMS-LAYER-PLAN.md). Every
+completed clone job can gain a second deliverable — the **EXACT mirrored site with a Payload
+admin layered on** (Payload 3.86 + Next 15.4.11, libSQL local file / Turso via `.env`).
+
+**Model = exact-mirror overlay** (user-directed rework 2026-07-20; the first cut — a generic
+"blocks" rebuild with a new frontend — was rejected because it didn't look like the mirrored
+site): the mirrored HTML itself is the frontend template. `lib/overlay.mjs` `tokenizeSite`
+replaces every editable text node and `<img src>` with a `{{slot:<slug>-<n>}}` token and
+records a slot (key, kind `text|image`, original value, label); the render route re-injects
+current slot values per request. Theme CSS/JS/fonts/layout ship byte-identical.
+
+- `services/site-clone/lib/overlay.mjs` — tokenizer. Text slots ONLY for pure-text leaf
+  elements (no child elements — inline-markup nodes stay untouched rather than risk breaking
+  the theme); every local `<img>` becomes an image slot with a paired `{{slotset:…}}` so an
+  uploaded replacement disables the original `srcset`. Also rewrites (build-time):
+  `assets/…`→`/assets/…` (attrs, srcset entries, inline-style + `<style>` `url()`) and
+  internal links `pages-x.html`→`/x`, `index.html`→`/`. Cap 600 slots/page.
+- `services/site-clone/cms-template/` — pinned scaffold (Payload 3.86.0 family, next
+  15.4.11, react 19.1.0; `package.json.tpl` avoids tooling pickup; never `create-payload-app`).
+  Collections: `users`, `media` (replacement uploads), `pages` {title, slug, sourceFile,
+  `slots` array: key/kind/label(readOnly)/value(textarea)/srcset(hidden)/media(upload,
+  image-only condition)}. No globals. Frontend = ONE optional-catch-all **route handler**
+  `(frontend)/[[...path]]/route.ts`: reads `templates/<sourceFile>`, `payload.find` the page,
+  string-substitutes tokens (text HTML-escaped; image → media.url || original path; slotset →
+  '' when overridden else original). Dev on **:3100** (no clash with HITLOOP :3000).
+  `public/assets/` = the mirror's assets verbatim.
+- `services/site-clone/build-cms.mjs` — CLI:
+  `node --env-file=.env.local services/site-clone/build-cms.mjs --job <jobId> [--verify] [--no-upload]`
+  (or `--dir`+`--url` ad-hoc). tokenize → scaffold (preserves `node_modules` across rebuilds
+  via rename-aside) → copy assets → write `templates/*.html` + `seed-data/pages.json` →
+  optional **B7 gate**: install + seed + dev + `/` 200 + `/admin` 200/302/307 **+ exactness
+  assertions** (rendered home contains `/assets/` theme refs, a known original text slot
+  value, and ZERO unreplaced `{{slot` tokens) → zip after verify (ships pre-seeded DB;
+  `node_modules`/`.next` excluded) → Storage `clients/{clientId}/site-clone/{jobId}/cms.zip` →
+  `job.cms = {storagePath, downloadUrl, bytes, project, pageCount, slotCount, verified}`.
+- `lib/extract.mjs` still exists but the overlay only uses its `settings.siteName` (project
+  slug); its brand/blocks output is unused by the CMS now (keep — useful elsewhere).
+- Card: `#site-recreate-cms-download-btn` "Download CMS (editable)" + slot-count summary in
+  the Download panel whenever `job.cms.downloadUrl` exists.
+- Seeded admin login `admin@<project>.local` / `changeme123`; README covers editing flow,
+  reseed-restores-originals, and the Turso switch (`turso db create` → `DATABASE_URI` +
+  `DATABASE_AUTH_TOKEN` → `npm run seed`).
+- **Verified on the Rosita's job** (`clone_1784581513125_658b5190`): 11 pages, **593 editable
+  slots**, gate PASS incl. exactness assertions; :3100 screenshot matches the static mirror
+  (real Crave theme, logo, hero, Lobster Two). cms.zip 25.3MB on the job doc.
+- Not automated yet: the Cloud Run worker (`server.mjs`) does NOT run build-cms — CMS builds
+  are admin-CLI-only (add a `--cms` flag/second endpoint when Phase 4 deploys). Slot keys are
+  positional per rebuild (re-running build-cms re-keys and reseeds — edits don't survive a
+  re-clone; that's by design for now).
+
+### Phase 5b — HITLOOP-hosted live demo + in-card content editor (2026-07-20)
+
+The card's end state after a run: **open the recreated site at a hitloop URL and edit its
+content from the card** — no download needed for the demo. `build-cms.mjs --job` publishes the
+overlay INTO HITLOOP by default (`--no-demo` to skip):
+
+- `api/_lib/clone-demo.cjs` — publish + read + edit + render. Templates (tokenized HTML,
+  asset refs and image-slot values/srcsets rewritten to the job's **static Vercel preview
+  origin** — the demo hosts no assets itself; internal links prefixed to `/sites/{jobId}/…`)
+  → Storage `clients/{clientId}/site-clone/{jobId}/templates/`; slots → Firestore
+  **`clone_pages/{jobId}__{slug}`** (deterministic doc IDs, direct gets, NO queries — the
+  composite-index lesson). 60s in-memory template cache. `job.demo = {url, pageCount,
+  slotCount, publishedAt}`; `demo.url` has **no trailing slash** (Next 308s `/sites/x/`).
+- `app/sites/[jobId]/[[...path]]/route.js` — public GET (jobId = unguessable capability
+  token; `X-Robots-Tag: noindex`), renders template + current slot values. Same substitution
+  contract as the Payload project's route.
+- `app/api/dashboard/site-clone/route.js` — `demo-pages` (GET, open reads) + `save-slots`
+  (POST, **admin-gated**, client-scoped) actions.
+- Card `#site-recreate-demo-panel` — "Open live demo" link + EDIT CONTENT: page dropdown →
+  text-slot textareas (dirty-tracked) → SAVE n EDITS → `save-slots`; demo updates on refresh.
+  Text-only in the card editor; image swaps live in the downloadable Payload admin.
+- Verified on the Rosita's job: `/sites/clone_1784581513125_658b5190` 200 with real theme
+  (109 preview-origin asset refs, 0 leftover tokens, links prefixed); edit round-trip proven
+  (save → renders edited → restore).
+### Phase 5d — hosted CMS pilot (Vercel + Turso), tonysoccer 2026-07-20
+
+The public site+`/admin` answer. Pilot live: **https://tony-soccer-cms.vercel.app** (+`/admin`),
+Vercel project `tony-soccer-cms`, DB `tony-soccer` on Turso (org `hitloop`, group `default`,
+`aws-us-east-2`). Recipe (manual this once; automate as `deploy-cms.mjs` when repeated):
+1. Turso Platform API (`TURSO_API_TOKEN`/`TURSO_ORG` in `.env.local`): create group (⚠️ fresh
+   orgs have NO group; locations are `aws-*` names, old city codes like `ord` 400) → create DB
+   → mint DB token → `libsql://<Hostname>`.
+2. Seed cloud from the project dir: `DATABASE_URI=libsql://… DATABASE_AUTH_TOKEN=… npm run seed`
+   (env vars beat `.env` — the local file-DB setup stays intact).
+3. `vercel link --yes --project <name>` + `vercel env add` DATABASE_URI / DATABASE_AUTH_TOKEN /
+   PAYLOAD_SECRET (production) + `.vercelignore` (`*.db`, `.env`) → `vercel deploy --prod`.
+4. ⚠️ Two serverless traps, FIXED in the template: the render route must resolve templates via
+   `process.cwd()` (NOT `__dirname` — shifts in the prod bundle) and `next.config.mjs` needs
+   `outputFileTracingIncludes: {'/**': ['./templates/**']}` (fs-read paths aren't traced; first
+   deploy 500'd on both).
+5. Job doc gains `cms.hostedUrl`/`cms.hostedAdminUrl`; card shows "Hosted CMS live" + /admin
+   links in the Download panel.
+Known limit: admin image UPLOADS need a storage adapter (serverless disk) — text editing +
+existing images work; add @payloadcms/storage-vercel-blob (or S3) when clients need swaps.
+
+### Phase 5c — "Launch on Arweave" card option (wired 2026-07-20, endpoint pending)
+
+Card panel `#site-recreate-arweave-panel`: once a run has a zip — **ESTIMATE COST** (live AR
+price × mirror bytes, read-only) → **LAUNCH ON ARWEAVE — PERMANENT** (explicit confirm click)
+→ shows the manifest link (`https://arweave.net/<manifestId>`) + ArNS if returned, persisted
+as `job.arweave = {status, manifestId, arweaveUrl, arnsUrl, fileCount, sizeBytes, deployedAt}`.
+
+- Route actions: `arweave-estimate` (GET) + `arweave-deploy` (POST, **admin-gated** — wallet
+  spend + irreversible, Archive/Publishing estimate-first pattern).
+- Bridge: `editvideos-bridge.cjs` `deployExternalSite({zipUrl, siteId})` →
+  `POST {EDITVIDEOS_API_BASE}/api/deploy-external-site`. ⚠️ **That endpoint does NOT exist on
+  the EditVideos side yet** — contract: body `{zipUrl, siteId}`; EditVideos downloads the zip
+  (HITLOOP Storage URL), unpacks, wallet-funds per-file uploads, creates an Arweave **path
+  manifest**, responds `{success, manifestId, arweaveUrl, fileCount, sizeBytes, arnsUrl?}`.
+  Its `lib/WebsiteDeployer.js` already does all of this for the bundled microsite dir — the
+  new endpoint is that logic pointed at an unpacked zip. Until it ships (worker repo
+  `Bai-ee/arweave-video-generator`, deployed by push there), `deployExternalSite` degrades
+  503 with a clear message (`updateArns` pattern) — the card shows the error, never crashes.
+  `EDITVIDEOS_API_BASE` is also unset in local/Vercel env — both are required to go live.
+- Estimate verified locally: 34.6MB ≈ 0.0035 AR (~$0.01). Deploy verified to 503 cleanly.
+- Why only the static site: the live CMS/editor cannot run on Arweave (server + DB); the
+  workable hybrid (not built) is publishing static snapshots per edit with ArNS repointing.
+
 ## Phase status
 
 - **Phase 1 (card + job plumbing)** — shipped. Card renders, admin-gated create, `clone_jobs` doc appears, non-admin sees nothing (stricter than spec, see Admin gating above).
 - **Phase 2 (clone engine, local CLI)** — shipped, verified against the real Rosita's re-run (see above). Fidelity bar met.
 - **Phase 3 (delivery UX + publish)** — shipped. Card's preview/download/upsell panels were already built in Phase 1 (anticipating this data); `site-clone-publish.cjs` verified end-to-end for real, then torn down.
 - **Phase 4 (Cloud Run automation)** — shipped, code-verified locally; **not deployed** (a real `gcloud run deploy` is a deliberate infra-spend decision, not something to fire automatically). See below.
-- **Phase 5 (Payload layer)** and **Phase 6 (self-serve + DNS)** — explicitly out of scope per the plan; Phase 5 needs its own plan doc, Phase 6 has no concrete design yet.
+- **Phase 5 (CMS layer, Payload + Turso)** — shipped 2026-07-20, verified on the Rosita's job (see § Phase 5 above). CLI-only; not wired into the Cloud Run worker.
+- **Phase 6 (self-serve + DNS)** — out of scope, no concrete design yet.

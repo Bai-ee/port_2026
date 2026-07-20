@@ -15,9 +15,13 @@
     "customer_authentication",
     "shop-js/loader.init-shop-cart-sync",
     "perf-kit",
-    "checkouts/internal"
+    "checkouts/internal",
+    "/extensions/",
+    "cloudfront.net/apps/",
+    "uploadery",
+    "product-form"
   ],
   "commerceHrefPatterns": ["/cart", "/checkout", "/account", "/challenge"],
   "pageDiscovery": ["sitemap", "nav"],
-  "_note": "perf-kit + checkouts/internal added after the 2026-07 Rosita's re-run: Shopify's checkout-preload/perf scripts have moved since the runbook was authored (was shop-js/loader.init-shop-cart-sync only). Killlists drift as the platform updates — re-verify against a real site if the A6 gate starts failing on new checkout-web/perf-kit-style 404s."
+  "_note": "perf-kit + checkouts/internal added after the 2026-07 Rosita's re-run: Shopify's checkout-preload/perf scripts have moved since the runbook was authored (was shop-js/loader.init-shop-cart-sync only). /extensions/ (Shopify APP-extension scripts — Forms etc., never theme files; theme lives under /cdn/shop/t/), cloudfront.net/apps/ + uploadery (third-party app scripts that 401 offline) + product-form (the theme's add-to-cart custom element — its constructor does cart-element setAttribute that races/nulls once commerce is neutralized; verified culprit via the gate's stack reporting on tonysoccer.com) added after the tonysoccer.com run — app/cart machinery can't work in a static mirror. Killlists drift as the platform updates — re-verify against a real site if the A6 gate starts failing on new checkout-web/perf-kit-style 404s."
 }

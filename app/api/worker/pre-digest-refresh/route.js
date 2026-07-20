@@ -276,6 +276,11 @@ async function refreshSiteCreativeModules(clientId, freshnessToken = '', { sourc
 
   const ownSiteUrl = clientConfig?.sourceInputs?.websiteUrl || clientConfig?.websiteUrl || null;
   const websiteUrl = ownSiteUrl || FALLBACK_BRIEF_SITE;
+  // Only ids with a REGISTERED runner — moduleConfig can carry enabled flags
+  // for custom cards (a stray autoEnable once flipped site-recreate on, which
+  // has no runner and failed every nightly module run until filtered here).
+  const { knownModuleIds } = getIntakeRunner();
+  const runnable = new Set(knownModuleIds());
   const moduleIds = Array.from(new Set([
     ...Object.entries(clientConfig.moduleConfig || {})
       .filter(([, cfg]) => cfg?.enabled === true)
@@ -286,7 +291,7 @@ async function refreshSiteCreativeModules(clientId, freshnessToken = '', { sourc
     'social-preview',
     'style-guide',
     'design-evaluation',
-  ]));
+  ])).filter((id) => runnable.has(id));
   if (!moduleIds.length) return { ok: false, error: 'no modules configured' };
 
   const runRef = fb.adminDb.collection('brief_runs').doc();

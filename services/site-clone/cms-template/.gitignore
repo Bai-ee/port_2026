@@ -1,0 +1,6 @@
+node_modules/
+.next/
+*.db
+.env
+payload-types.ts
+next-env.d.ts

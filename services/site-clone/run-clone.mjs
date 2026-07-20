@@ -78,7 +78,15 @@ export async function runClone({ targetUrl, workDir, maxPages = MAX_PAGES, log =
 
   onBeforeVerify();
   log('verifyStatic: verifying (0 console errors, 0 HTTP errors required)…');
-  const verifyReport = await verifyStatic({ siteDir: workDir, pages: fixedPages });
+  let verifyReport = await verifyStatic({ siteDir: workDir, pages: fixedPages });
+  // Console-ONLY failures can be load-order races in heavy theme JS (seen on
+  // tonysoccer.com: a transient "setAttribute of null" that never reproduced
+  // on re-check). HTTP errors are deterministic — never retried. One retry,
+  // and only a clean second pass is accepted.
+  if (!verifyReport.pass && verifyReport.httpErrors === 0 && verifyReport.consoleErrors > 0) {
+    log(`verifyStatic: ${verifyReport.consoleErrors} console errors (0 http) — possible timing flake, retrying once…`);
+    verifyReport = await verifyStatic({ siteDir: workDir, pages: fixedPages });
+  }
   log(`verifyStatic: ${verifyReport.consoleErrors} console errors, ${verifyReport.httpErrors} http errors — ${verifyReport.pass ? 'PASS' : 'FAIL'}`);
 
   const pageRefs = fixedPages.map((p) => ({ path: p.path, localFile: p.file }));

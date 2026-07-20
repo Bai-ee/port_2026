@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url);
 const fb = require('../../../../../api/_lib/firebase-admin.cjs');
 const { verifyRequestUser } = require('../../../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../../../api/_lib/client-provisioning.cjs');
-const { runModules } = require('../../../../../features/scout-intake/runner');
+const { runModules, knownModuleIds } = require('../../../../../features/scout-intake/runner');
 const {
   updateModuleState,
   appendRunEvent,
@@ -77,6 +77,18 @@ export async function POST(request) {
 
   if (cardIds.length === 0) {
     return json({ error: 'cardIds must be a non-empty array.' }, 400);
+  }
+
+  // Guard: only card ids with a REGISTERED runner may enter the pipeline.
+  // Custom cards (site-recreate, copywriter, …) have their own routes; letting
+  // one in here creates a failed brief_run + a persistent dashboard errorState
+  // toast ("Initial setup encountered an issue") — bit us when a stray
+  // autoEnable click flipped moduleConfig['site-recreate'].enabled=true and
+  // every subsequent bulk run failed. Reject BEFORE any autoEnable flip.
+  const known = new Set(knownModuleIds());
+  const unknownCards = cardIds.filter((cardId) => !known.has(cardId));
+  if (unknownCards.length > 0) {
+    return json({ error: `Not a runnable module: ${unknownCards.join(', ')}.` }, 400);
   }
 
   const configSnap = await fb.adminDb.collection('client_configs').doc(clientId).get();

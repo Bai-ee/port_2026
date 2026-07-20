@@ -59,8 +59,18 @@ export async function verifyStatic({ siteDir, pages }) {
       const page = await context.newPage();
       const pageErrors = [];
       const pageHttpErrors = [];
-      page.on('console', (msg) => { if (msg.type() === 'error') pageErrors.push(msg.text()); });
-      page.on('pageerror', (err) => pageErrors.push(err.message));
+      // Location/stack included so a failing report names the actual script —
+      // without it, "setAttribute of null" style errors are undebuggable
+      // (learned on the tonysoccer.com run).
+      page.on('console', (msg) => {
+        if (msg.type() !== 'error') return;
+        const loc = msg.location();
+        pageErrors.push(`${msg.text()}${loc?.url ? ` [${loc.url}:${loc.lineNumber}]` : ''}`);
+      });
+      page.on('pageerror', (err) => {
+        const frame = String(err.stack || '').split('\n').find((l) => l.includes('http')) || '';
+        pageErrors.push(`${err.message}${frame ? ` [${frame.trim()}]` : ''}`);
+      });
       page.on('response', (res) => {
         const status = res.status();
         if (status >= 400) pageHttpErrors.push(`${status} ${res.url()}`);

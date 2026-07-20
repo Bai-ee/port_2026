@@ -288,16 +288,21 @@ async function getCloneJob(jobId, clientId) {
   return data;
 }
 
-/** List recent jobs for a client, newest first. */
+/** List recent jobs for a client, newest first. Sorted in memory — a
+ *  where+orderBy pair needs a Firestore composite index (FAILED_PRECONDITION
+ *  without one); per-client job counts are small, so fetch flat and sort. */
 async function listCloneJobs(clientId, { limit = 20 } = {}) {
   if (!clientId) return [];
   const snap = await ctx().adminDb
     .collection(COLLECTION)
     .where('clientId', '==', clientId)
-    .orderBy('createdAtTs', 'desc')
-    .limit(limit)
+    .limit(200)
     .get();
-  return snap.docs.map((doc) => doc.data());
+  const ts = (v) => (v && typeof v.toMillis === 'function' ? v.toMillis() : Number(v) || 0);
+  return snap.docs
+    .map((doc) => doc.data())
+    .sort((a, b) => ts(b.createdAtTs) - ts(a.createdAtTs))
+    .slice(0, limit);
 }
 
 module.exports = {
