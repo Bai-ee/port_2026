@@ -57,6 +57,11 @@ import { CalendarConnectView } from './components/CalendarConnectModal';
 import { ContactCapabilitiesPanel } from './StackedSlidesSection';
 import { ROSITAS_GBP_REPORT } from './lib/gbpReputationReport';
 import { MediaThumb } from './components/dashboard/MediaLibraryCard';
+import GbpReputationBlock from './components/dashboard/GbpReputationBlock';
+import { CrossDeviceTrioShell, StudioVideoShell } from './components/dashboard/DeliverableShellPreviews';
+import ScoutTestMetaRow from './components/dashboard/ScoutTestMetaRow';
+import MarketSignalsTermControl from './components/dashboard/MarketSignalsTermControl';
+import { ReplyTargetsBlock, RedditAnalysisBlock, InstagramAnalysisBlock, RecipeBriefBlock, WatchlistAnalysisBlock } from './components/dashboard/MarketSignalsReportBlocks';
 
 import { VIDEO_REMIX_FOLDER_FILE_CACHE_TTL_MS, VIDEO_REMIX_FOLDER_PAGE_SIZE, VIDEO_REMIX_FOLDER_PAGE_STEP, VIDEO_REMIX_FOLDER_PAGE_MAX, SAVED_REMIX_PAGE_SIZE, VIDEO_REMIX_MAX_COUNT, STANDARD_REMIX_DEFAULTS, buildRemixRecipe, sanitizeVideoRemixFolderPreview, formatVideoRemixBytes, readVideoRemixPendingJob, writeVideoRemixPendingJob, normalizeVideoRemixFolderDetails, uploadVideoRemixFileToSignedUrl } from './lib/dashboard/video-remix';
 import { parseBriefSuggestedPost, sanitizeBriefHtmlForStandalone, parseEstimateLineItems, buildDefaultEstimateBriefDraft, hydrateEstimateBriefDraft, buildEstimateBriefConfigPayload, briefSlugify, titlePdfFileName, withDownloadParam, buildCustomBriefStarterHtml } from './lib/dashboard/brief-drafts';
@@ -3594,44 +3599,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // so the light-glass component language stays isolated to this modal.
 
   // Generic per-item control for a string-list config field (handles, keywords,
-  // category terms): a list-card whose rows each have ON/OFF + remove. Disabled
-  // items are parked in `<field>Off` (a UI-only field the scout pipeline never
-  // reads), so toggling off excludes an item from the run without deleting it.
-  const renderTermControl = ({ field, offField, title, addCard, suffix = '' }) => {
-    const active = splitMarketingBriefTerms(marketingBriefConfig?.[field]);
-    const off = splitMarketingBriefTerms(marketingBriefConfig?.[offField]).filter((t) => !active.includes(t));
-    const toggle = (t) => setMarketingBriefConfig((prev) => {
-      const on = splitMarketingBriefTerms(prev?.[field]);
-      const o = splitMarketingBriefTerms(prev?.[offField]);
-      return on.includes(t)
-        ? { ...(prev || {}), [field]: on.filter((x) => x !== t).join('\n'), [offField]: [...o.filter((x) => x !== t), t].join('\n') }
-        : { ...(prev || {}), [field]: [...on, t].join('\n'), [offField]: o.filter((x) => x !== t).join('\n') };
-    });
-    const remove = (t) => setMarketingBriefConfig((prev) => ({
-      ...(prev || {}),
-      [field]: splitMarketingBriefTerms(prev?.[field]).filter((x) => x !== t).join('\n'),
-      [offField]: splitMarketingBriefTerms(prev?.[offField]).filter((x) => x !== t).join('\n'),
-    }));
-    const rows = [...active.map((t) => ({ t, on: true })), ...off.map((t) => ({ t, on: false }))];
-    return (
-      <article className="sg-list">
-        <div className="sg-list-head">
-          <span className="sg-list-title">{title}</span>
-          <span className="sg-chip">{active.length} on{off.length ? ` · ${off.length} off` : ''}{suffix}</span>
-          <button type="button" className="sg-btn" onClick={() => openCapabilityCard(addCard)}>+ Add</button>
-        </div>
-        {rows.length ? rows.map(({ t, on }) => (
-          <div key={t} className={`sg-inv${on ? '' : ' is-off'}`}>
-            <span className="name">{t}</span>
-            <button type="button" className={`sg-btn ${on ? 'sg-btn-on' : 'sg-btn-off'}`} style={{ minWidth: 52 }} onClick={() => toggle(t)}>{on ? 'ON' : 'OFF'}</button>
-            <button type="button" className="sg-btn sg-btn-danger" aria-label={`Remove ${t}`} style={{ minWidth: 38, padding: '0 10px' }} onClick={() => remove(t)}>×</button>
-          </div>
-        )) : (
-          <p className="sg-hint" style={{ margin: '4px 0 0' }}>Nothing yet — <strong>+ Add</strong> opens the card.</p>
-        )}
-      </article>
-    );
-  };
+  // category terms) — see components/dashboard/MarketSignalsTermControl.jsx.
 
   // One source pill (web / x / reddit) with a Run button + expandable raw
   // results. Built inline (not renderSourcePlatformRow) so the SOURCES tab gets
@@ -3814,10 +3782,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               <p>Per-item on/off + remove. Off items are parked (not deleted) and excluded from the run. This is exactly the input set a full Executive / Marketing Brief run uses.</p>
             </div>
           </div>
-          {renderTermControl({
-            field: 'kols', offField: 'kolsOff', title: 'Watchlist & Competitors',
-            addCard: { id: 'watchlist', category: 'growth', number: 'WL', label: 'WATCHLIST', title: 'Watchlist & Competitors', description: '', rows: [] },
-          })}
+          <MarketSignalsTermControl
+            field="kols" offField="kolsOff" title="Watchlist & Competitors"
+            addCard={{ id: 'watchlist', category: 'growth', number: 'WL', label: 'WATCHLIST', title: 'Watchlist & Competitors', description: '', rows: [] }}
+            marketingBriefConfig={marketingBriefConfig} setMarketingBriefConfig={setMarketingBriefConfig} openCapabilityCard={openCapabilityCard}
+          />
           {/* Instagram accounts to watch — feeds last30days --ig-creators (their reels)
               merged with the Instagram topic search. Parallel to the X Watchlist. */}
           <article className="sg-list" id="instagram-accounts-input">
@@ -3878,14 +3847,16 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             )}
           </article>
 
-          {renderTermControl({
-            field: 'brandKeywords', offField: 'brandKeywordsOff', title: 'Brand Keywords',
-            addCard: { id: 'brand-keywords', category: 'growth', number: 'SP', label: 'SEARCH PARAMETERS', title: 'Search Parameters', description: '', rows: [] },
-          })}
-          {renderTermControl({
-            field: 'categoryTerms', offField: 'categoryTermsOff', title: 'Category Terms',
-            addCard: { id: 'brand-keywords', category: 'growth', number: 'SP', label: 'SEARCH PARAMETERS', title: 'Search Parameters', description: '', rows: [] },
-          })}
+          <MarketSignalsTermControl
+            field="brandKeywords" offField="brandKeywordsOff" title="Brand Keywords"
+            addCard={{ id: 'brand-keywords', category: 'growth', number: 'SP', label: 'SEARCH PARAMETERS', title: 'Search Parameters', description: '', rows: [] }}
+            marketingBriefConfig={marketingBriefConfig} setMarketingBriefConfig={setMarketingBriefConfig} openCapabilityCard={openCapabilityCard}
+          />
+          <MarketSignalsTermControl
+            field="categoryTerms" offField="categoryTermsOff" title="Category Terms"
+            addCard={{ id: 'brand-keywords', category: 'growth', number: 'SP', label: 'SEARCH PARAMETERS', title: 'Search Parameters', description: '', rows: [] }}
+            marketingBriefConfig={marketingBriefConfig} setMarketingBriefConfig={setMarketingBriefConfig} openCapabilityCard={openCapabilityCard}
+          />
         </section>
 
         <section className="sg-section">
@@ -3991,555 +3962,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     );
   };
 
-  // GBP Reputation REPORT block — renders the deterministic reputation
-  // projection (Rosita's mock until live GBP OAuth lands). Read-only drafts.
-  const renderGbpReputationBlock = (rep) => {
-    if (!rep) return null;
-    const isDanger = rep.priorityAction?.severity === 'high';
-    return (
-      <div className="kit-paper" id="gbp-reputation-report-block">
-        {!rep.connected ? (
-          <>
-            <h2 className="b-headline">Connect Google Business Profile</h2>
-            <p className="b-sub">{rep.priorityAction?.reason || 'No live reputation data is available yet.'}</p>
-          </>
-        ) : (
-          <>
-            <h2 className="b-headline">{rep.locationName}</h2>
-            <p className="b-sub">{rep.ratingAverage} rating across {rep.reviewCount} reviews · {rep.unrepliedCount} need a reply{rep.negativeUnrepliedCount ? `, incl. ${rep.negativeUnrepliedCount} negative` : ''}.</p>
-            <div className="scores" style={{ margin: '12px 0' }}>
-              <div className="score"><div className="lbl">Rating</div><div className="num">{rep.ratingAverage}</div></div>
-              <div className="score"><div className="lbl">Need reply</div><div className="num">{rep.unrepliedCount}</div></div>
-              <div className="score"><div className="lbl">Negative</div><div className="num">{rep.negativeUnrepliedCount}</div></div>
-              <div className="score"><div className="lbl">SEO done</div><div className="num">{rep.seoChecklist.completed}/{rep.seoChecklist.total}</div></div>
-            </div>
-            <div className={`sg-notice ${isDanger ? 'sg-notice-danger' : 'sg-notice-muted'}`} style={{ margin: '8px 0 14px' }}>
-              <strong>First action:</strong> {rep.priorityAction.label} — {rep.priorityAction.reason}
-            </div>
-            {rep.suggestedReplies.length ? (
-              <>
-                <div className="b-sec">Reviews needing reply · draft responses</div>
-                <div className="b-stack">
-                  {rep.suggestedReplies.slice(0, 4).map((s, i) => (
-                    <div className="b-card" key={`gbp-reply-${i}`}>
-                      <div className="stat-row"><div className="k">{s.rating}★ · {s.reviewer}</div><div className="v" style={{ textTransform: 'uppercase', fontSize: 11, opacity: 0.7 }}>{s.sentiment}</div></div>
-                      <div className="stat-row"><div className="k">Draft</div><div className="v">{s.draft}</div></div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : null}
-            {rep.seoChecklist.priorityItems.length ? (
-              <>
-                <div className="b-sec" style={{ marginTop: 16 }}>Local SEO · next gaps</div>
-                <div className="b-stack">
-                  {rep.seoChecklist.priorityItems.map((it, i) => (
-                    <div className="b-bubble" key={`gbp-seo-${i}`}><div className="txt">{it.label} <span style={{ opacity: 0.6 }}>· {it.frequency}</span></div></div>
-                  ))}
-                </div>
-              </>
-            ) : null}
-          </>
-        )}
-      </div>
-    );
-  };
-
   // IN BRIEF tab — preview of how the SOURCES results land in the brief.
-  // Extract the leading JSON object + trailing prose from a recipe's analysis
-  // output (recipes emit "{...json...}\n\n<prose synthesis>").
-  const parseRecipeAnalysis = (text) => {
-    if (!text || typeof text !== 'string') return { data: null, prose: '' };
-    const start = text.indexOf('{');
-    if (start === -1) return { data: null, prose: text.trim() };
-    let depth = 0, end = -1, inStr = false, esc = false;
-    for (let i = start; i < text.length; i += 1) {
-      const c = text[i];
-      if (esc) { esc = false; continue; }
-      if (c === '\\' && inStr) { esc = true; continue; }
-      if (c === '"') { inStr = !inStr; continue; }
-      if (inStr) continue;
-      if (c === '{') depth += 1;
-      else if (c === '}') { depth -= 1; if (depth === 0) { end = i; break; } }
-    }
-    if (end === -1) return { data: null, prose: text.trim() };
-    let data = null;
-    try { data = JSON.parse(text.slice(start, end + 1)); } catch { data = null; }
-    return { data, prose: text.slice(end + 1).trim() };
-  };
-
-  // Render the recipe's trailing prose as clean brief copy — strips code fences,
-  // turns `## heading` into a section label, drops `---` rules, and renders
-  // `**bold**` inline. Prevents raw markdown tokens from leaking into the mock.
-  const renderProse = (text, keyPrefix) => {
-    if (!text) return null;
-    const cleaned = text.replace(/```[a-z]*\n?/gi, '').trim();
-    const inline = (s, k) => s.split(/(\*\*[^*]+\*\*)/g).map((p, i) => (
-      /^\*\*[^*]+\*\*$/.test(p)
-        ? <strong key={`${k}-b${i}`}>{p.slice(2, -2)}</strong>
-        : <React.Fragment key={`${k}-t${i}`}>{p}</React.Fragment>
-    ));
-    return cleaned.split(/\n{2,}/).map((raw, i) => {
-      const block = raw.trim();
-      const k = `${keyPrefix}-pb-${i}`;
-      if (!block || /^-{3,}$/.test(block)) return null;
-      if (/^#{1,6}\s/.test(block)) return <div key={k} className="b-sec">{block.replace(/^#{1,6}\s+/, '')}</div>;
-      const lines = block.split(/\n/).map((l) => l.trim()).filter((l) => l && !/^-{3,}$/.test(l));
-      return (
-        <p key={k} className="b-body">
-          {lines.map((l, j) => (
-            <React.Fragment key={`${k}-l${j}`}>{j ? <br /> : null}{inline(l.replace(/^#{1,6}\s+/, ''), `${k}-${j}`)}</React.Fragment>
-          ))}
-        </p>
-      );
-    });
-  };
-
-  // Render the Reply Targets skill — ranked posts worth replying to, each with a
-  // drafted reply, plus a one-click hand-off to Post Me (creates draft replies).
-  const renderReplyTargetsBlock = (res) => {
-    const { data, prose } = parseRecipeAnalysis(res.analysis);
-    const targets = Array.isArray(data?.replyTargets) ? data.replyTargets : [];
-    const tierLabel = (t) => (t === 1 ? 'Tier 1 · relationship' : t === 2 ? 'Tier 2 · visibility' : t === 3 ? 'Tier 3 · light touch' : '');
-    // Only targets with a drafted reply can become Post Me drafts.
-    const sendable = targets
-      .filter((t) => String(t?.suggestedReply || '').trim())
-      .map((t) => ({ author: t.author, url: t.url, text: t.text, source: t.source, suggestedReply: t.suggestedReply }));
-    return (
-      <div className="kit-paper" key={`recipe-brief-${res.recipeId}`} id="recipe-brief-reply-targets">
-        <h2 className="b-headline">Worth Replying To</h2>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', margin: '0 0 16px' }}>
-          <button
-            type="button"
-            className="sg-btn sg-cta"
-            disabled={replyDraftState.busy || !sendable.length}
-            onClick={() => sendReplyTargetsToPostMe(sendable)}
-          >
-            {replyDraftState.busy ? 'Sending…' : `Send ${sendable.length || ''} repl${sendable.length === 1 ? 'y' : 'ies'} to Post Me`}
-          </button>
-          {replyDraftState.msg ? <span className="sg-result-body" style={{ margin: 0 }}>{replyDraftState.msg}</span> : null}
-          {replyDraftState.error ? <span className="sg-notice sg-notice-danger" style={{ margin: 0 }}>{replyDraftState.error}</span> : null}
-        </div>
-
-        {data?.poolNote ? <div className="b-sowhat" style={{ marginBottom: 16 }}><span className="lbl">Pool</span>{data.poolNote}</div> : null}
-
-        {targets.length ? (
-          <div className="b-stack">
-            {targets.map((t, i) => (
-              <div className="b-card" key={`rt-${i}`}>
-                <div className="b-theme-head">
-                  <span className="b-handle-name">{t.author || 'unknown'}</span>
-                  <span className="b-tags">
-                    {t.score != null ? <span className="status-tag">{t.score}/10</span> : null}
-                    {t.tier ? <span className="dur">{tierLabel(t.tier)}</span> : null}
-                    {t.source ? <span className="dur">{t.source}</span> : null}
-                  </span>
-                </div>
-                {t.text ? <p className="pull" style={{ margin: '12px 0 0', maxWidth: 'none' }}>“{t.text}”</p> : null}
-                {t.url ? <p className="b-body mono" style={{ fontSize: 11, margin: '6px 0 0', color: 'var(--ink-soft)' }}><a className="b-link" href={t.url} target="_blank" rel="noopener noreferrer">↗ post</a></p> : null}
-                {t.why ? <div className="b-sowhat"><span className="lbl">Why</span>{t.why}</div> : null}
-                {t.suggestedReply ? <p className="b-body" style={{ margin: '10px 0 0' }}><strong>Draft reply:</strong> {t.suggestedReply}</p> : null}
-                {t.algoRationale ? <div className="b-sowhat rt-algo-read" data-section="reply-algo-read" style={{ marginTop: 10 }}><span className="lbl">Algorithm read</span>{t.algoRationale}</div> : null}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="b-body">No reply targets this run. Pull the Watchlist with <strong>Mentions</strong> on (or run a brief), then re-run this skill.</p>
-        )}
-
-        {prose ? (
-          <>
-            <div className="b-sec" style={{ marginTop: 22 }}>Today’s move</div>
-            <div style={{ marginTop: 4 }}>{renderProse(prose, 'prose-reply-targets')}</div>
-          </>
-        ) : null}
-      </div>
-    );
-  };
-
-  // Render the Reddit analysis skill as the same "What's happening" structure
-  // used by digest email/brief output: overview, suggested move, and threads.
-  const renderRedditAnalysisBlock = (res) => {
-    const { data, prose } = parseRecipeAnalysis(res.analysis);
-    const dq = data?.dataQuality || null;
-    const conf = dq?.overallConfidence;
-    const threads = Array.isArray(data?.threads) ? data.threads : (Array.isArray(data?.items) ? data.items : []);
-    const spotlight = data?.spotlight || null;
-    return (
-      <div className="kit-paper" key={`recipe-brief-${res.recipeId}`} id="recipe-brief-reddit-analysis">
-        <h2 className="b-headline">Happening on Reddit</h2>
-
-        {dq ? (
-          <div className="meta-grid" style={{ marginBottom: 18 }}>
-            <div className="meta-tile"><div className="k">Threads analyzed</div><div className="v">{dq.itemsAnalyzed != null ? dq.itemsAnalyzed : '—'}</div></div>
-            <div className="meta-tile"><div className="k">Confidence</div><div className="v">{conf || '—'}</div></div>
-            <div className="meta-tile"><div className="k">Cost</div><div className="v">{typeof res.costUsd === 'number' && res.costUsd > 0 ? `≈ $${res.costUsd.toFixed(3)}` : '—'}</div></div>
-          </div>
-        ) : null}
-
-        {data?.overview ? (
-          <>
-            <div className="b-sec">Overview</div>
-            <p className="pull" style={{ marginTop: 8, maxWidth: 'none' }}>{data.overview}</p>
-          </>
-        ) : null}
-
-        {data?.priorityAction ? (
-          <>
-            <div className="b-sec" style={{ marginTop: 22 }}>Suggested action</div>
-            <p className="pull" style={{ marginTop: 8, maxWidth: 'none' }}>{data.priorityAction}</p>
-          </>
-        ) : null}
-
-        {spotlight?.why ? (
-          <>
-            <div className="b-sec" style={{ marginTop: 22 }}>Thread to watch</div>
-            <div className="b-card">
-              <div className="b-theme-head">
-                <span className="b-handle-name">{spotlight.title || 'Reddit thread'}</span>
-                <span className="b-tags">
-                  {spotlight.subreddit ? <span className="dur">{spotlight.subreddit}</span> : null}
-                  {spotlight.url ? <a className="b-link" href={spotlight.url} target="_blank" rel="noopener noreferrer">source</a> : null}
-                </span>
-              </div>
-              <p className="b-body" style={{ margin: '10px 0 0' }}>{spotlight.why}</p>
-            </div>
-          </>
-        ) : null}
-
-        {threads.length ? (
-          <>
-            <div className="b-sec" style={{ marginTop: 22 }}>Threads</div>
-            <div className="b-stack">
-              {threads.map((t, i) => (
-                <div className="b-card" key={`reddit-thread-${i}`}>
-                  <div className="b-theme-head">
-                    <span className="b-handle-name">{t.title || 'Reddit signal'}</span>
-                    <span className="b-tags">
-                      {t.subreddit ? <span className="dur">{t.subreddit}</span> : null}
-                      {t.signalType ? <span className="status-tag">{t.signalType}</span> : null}
-                      {t.url ? <a className="b-link" href={t.url} target="_blank" rel="noopener noreferrer">source</a> : null}
-                    </span>
-                  </div>
-                  {t.summary ? <p className="b-body" style={{ margin: '10px 0 0' }}>{t.summary}</p> : null}
-                  {t.actionableTakeaway ? <div className="b-sowhat"><span className="lbl">So what</span>{t.actionableTakeaway}</div> : null}
-                </div>
-              ))}
-            </div>
-          </>
-        ) : null}
-
-        {Array.isArray(dq?.gaps) && dq.gaps.length ? (
-          <>
-            <div className="b-sec" style={{ marginTop: 22 }}>What we still don&apos;t know</div>
-            <div className="b-stack">
-              {dq.gaps.map((g, i) => (
-                <p className="b-body" key={`reddit-gap-${i}`} style={{ margin: 0 }}>• {g}</p>
-              ))}
-            </div>
-          </>
-        ) : null}
-
-        {prose ? (
-          <>
-            <div className="b-sec" style={{ marginTop: 22 }}>Summary</div>
-            <div style={{ marginTop: 4 }}>{renderProse(prose, 'prose-reddit-analysis')}</div>
-          </>
-        ) : null}
-      </div>
-    );
-  };
-
-  // Instagram mirror of renderRedditAnalysisBlock — same "Happening on …"
-  // structure, relabeled for IG accounts/posts.
-  const renderInstagramAnalysisBlock = (res) => {
-    const { data, prose } = parseRecipeAnalysis(res.analysis);
-    const dq = data?.dataQuality || null;
-    const conf = dq?.overallConfidence;
-    const threads = Array.isArray(data?.threads) ? data.threads : (Array.isArray(data?.items) ? data.items : []);
-    const spotlight = data?.spotlight || null;
-    return (
-      <div className="kit-paper" key={`recipe-brief-${res.recipeId}`} id="recipe-brief-instagram-analysis">
-        <h2 className="b-headline">Happening on Instagram</h2>
-
-        {dq ? (
-          <div className="meta-grid" style={{ marginBottom: 18 }}>
-            <div className="meta-tile"><div className="k">Posts analyzed</div><div className="v">{dq.itemsAnalyzed != null ? dq.itemsAnalyzed : '—'}</div></div>
-            <div className="meta-tile"><div className="k">Confidence</div><div className="v">{conf || '—'}</div></div>
-            <div className="meta-tile"><div className="k">Cost</div><div className="v">{typeof res.costUsd === 'number' && res.costUsd > 0 ? `≈ $${res.costUsd.toFixed(3)}` : '—'}</div></div>
-          </div>
-        ) : null}
-
-        {data?.overview ? (
-          <>
-            <div className="b-sec">Overview</div>
-            <p className="pull" style={{ marginTop: 8, maxWidth: 'none' }}>{data.overview}</p>
-          </>
-        ) : null}
-
-        {data?.priorityAction ? (
-          <>
-            <div className="b-sec" style={{ marginTop: 22 }}>Suggested action</div>
-            <p className="pull" style={{ marginTop: 8, maxWidth: 'none' }}>{data.priorityAction}</p>
-          </>
-        ) : null}
-
-        {spotlight?.why ? (
-          <>
-            <div className="b-sec" style={{ marginTop: 22 }}>Post to watch</div>
-            <div className="b-card">
-              <div className="b-theme-head">
-                <span className="b-handle-name">{spotlight.title || 'Instagram post'}</span>
-                <span className="b-tags">
-                  {spotlight.subreddit ? <span className="dur">{spotlight.subreddit}</span> : null}
-                  {spotlight.url ? <a className="b-link" href={spotlight.url} target="_blank" rel="noopener noreferrer">source</a> : null}
-                </span>
-              </div>
-              <p className="b-body" style={{ margin: '10px 0 0' }}>{spotlight.why}</p>
-            </div>
-          </>
-        ) : null}
-
-        {threads.length ? (
-          <>
-            <div className="b-sec" style={{ marginTop: 22 }}>Posts</div>
-            <div className="b-stack">
-              {threads.map((t, i) => (
-                <div className="b-card" key={`instagram-post-${i}`}>
-                  <div className="b-theme-head">
-                    <span className="b-handle-name">{t.title || 'Instagram signal'}</span>
-                    <span className="b-tags">
-                      {t.subreddit ? <span className="dur">{t.subreddit}</span> : null}
-                      {t.signalType ? <span className="status-tag">{t.signalType}</span> : null}
-                      {t.url ? <a className="b-link" href={t.url} target="_blank" rel="noopener noreferrer">source</a> : null}
-                    </span>
-                  </div>
-                  {t.summary ? <p className="b-body" style={{ margin: '10px 0 0' }}>{t.summary}</p> : null}
-                  {t.actionableTakeaway ? <div className="b-sowhat"><span className="lbl">So what</span>{t.actionableTakeaway}</div> : null}
-                </div>
-              ))}
-            </div>
-          </>
-        ) : null}
-
-        {Array.isArray(dq?.gaps) && dq.gaps.length ? (
-          <>
-            <div className="b-sec" style={{ marginTop: 22 }}>What we still don&apos;t know</div>
-            <div className="b-stack">
-              {dq.gaps.map((g, i) => (
-                <p className="b-body" key={`instagram-gap-${i}`} style={{ margin: 0 }}>• {g}</p>
-              ))}
-            </div>
-          </>
-        ) : null}
-
-        {prose ? (
-          <>
-            <div className="b-sec" style={{ marginTop: 22 }}>Summary</div>
-            <div style={{ marginTop: 4 }}>{renderProse(prose, 'prose-instagram-analysis')}</div>
-          </>
-        ) : null}
-      </div>
-    );
-  };
-
-  // Render one recipe synthesis as a brief-kit paper (UI-kit components only —
-  // b-eyebrow / b-headline / meta-grid / b-grid / b-card / stat-row / pull / dur).
-  const renderRecipeBriefBlock = (res) => {
-    const meta = recipeCatalog.find((r) => r.id === res.recipeId);
-    const { data, prose } = parseRecipeAnalysis(res.analysis);
-    const themes = Array.isArray(data?.themes) ? data.themes : [];
-    const jtbd = Array.isArray(data?.jobsToBeDone) ? data.jobsToBeDone : [];
-    const vocab = Array.isArray(data?.vocabulary) ? data.vocabulary : [];
-    const alternatives = Array.isArray(data?.alternatives) ? data.alternatives : [];
-    const contradictions = Array.isArray(data?.contradictions) ? data.contradictions : [];
-    const dq = data?.dataQuality || null;
-    const gaps = Array.isArray(dq?.gaps) ? dq.gaps : [];
-    const conf = dq?.overallConfidence;
-    const confClass = (c) => (c === 'low' ? ' warn' : c === 'high' ? ' ok' : '');
-    return (
-      <div className="kit-paper" key={`recipe-brief-${res.recipeId}`} id={`recipe-brief-${res.recipeId}`}>
-        <h2 className="b-headline">{meta?.label || 'Analysis'}</h2>
-
-        {dq ? (
-          <div className="meta-grid" style={{ marginBottom: 18 }}>
-            <div className="meta-tile"><div className="k">Signals analyzed</div><div className="v">{dq.itemsAnalyzed != null ? dq.itemsAnalyzed : '—'}</div></div>
-            <div className="meta-tile"><div className="k">Confidence</div><div className="v">{conf || '—'}</div></div>
-            <div className="meta-tile"><div className="k">Cost</div><div className="v">{typeof res.costUsd === 'number' && res.costUsd > 0 ? `≈ $${res.costUsd.toFixed(3)}` : '—'}</div></div>
-          </div>
-        ) : null}
-
-        {/* Summary first — the human TL;DR, then the structured pieces below. */}
-        {prose ? (
-          <>
-            <div className="b-sec">Summary</div>
-            <div style={{ marginTop: 4 }}>{renderProse(prose, `prose-${res.recipeId}`)}</div>
-          </>
-        ) : null}
-
-        {themes.length ? (
-          <>
-            <div className="b-sec" style={{ marginTop: 22 }}>Themes</div>
-            <div className="b-stack">
-              {themes.map((t, i) => {
-                const q = Array.isArray(t.quotes) ? t.quotes[0] : null;
-                return (
-                  <div className="b-card" key={`th-${res.recipeId}-${i}`}>
-                    <div className="b-theme-head">
-                      <span className="b-handle-name">{t.name}</span>
-                      <span className="b-tags">
-                        {t.confidence ? <span className={`status-tag${confClass(t.confidence)}`}>{t.confidence} conf</span> : null}
-                        {t.intensity ? <span className="dur">{t.intensity} intensity</span> : null}
-                        {t.frequency != null ? <span className="dur">{t.frequency}× seen</span> : null}
-                      </span>
-                    </div>
-                    {t.summary ? <p className="b-body" style={{ margin: '10px 0 0' }}>{t.summary}</p> : null}
-                    {q?.quote ? <p className="pull" style={{ margin: '12px 0 0', maxWidth: 'none' }}>“{q.quote}”</p> : null}
-                    {(q?.source || q?.url) ? (
-                      <p className="b-body mono" style={{ fontSize: 11, margin: '6px 0 0', color: 'var(--ink-soft)' }}>{q?.source || ''}{q?.url ? <> · <a className="b-link" href={q.url} target="_blank" rel="noopener noreferrer">↗ source</a></> : null}</p>
-                    ) : null}
-                    {t.implication ? <div className="b-sowhat"><span className="lbl">So what</span>{t.implication}</div> : null}
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        ) : null}
-
-        {jtbd.length ? (
-          <>
-            <div className="b-sec" style={{ marginTop: 22 }}>Jobs to be done</div>
-            <div className="b-stack">
-              {jtbd.map((j, i) => (
-                <div className="meta-grid" key={`jtbd-${res.recipeId}-${i}`}>
-                  <div className="meta-tile"><div className="k">Functional</div><div className="v">{j.functional || '—'}</div></div>
-                  <div className="meta-tile"><div className="k">Emotional</div><div className="v">{j.emotional || '—'}</div></div>
-                  <div className="meta-tile"><div className="k">Social</div><div className="v">{j.social || '—'}</div></div>
-                </div>
-              ))}
-            </div>
-          </>
-        ) : null}
-
-        {vocab.length ? (
-          <>
-            <div className="b-sec" style={{ marginTop: 22 }}>Customer vocabulary</div>
-            <div className="dur-row">
-              {vocab.slice(0, 18).map((v, i) => <span className="dur" key={`vc-${res.recipeId}-${i}`}>“{v}”</span>)}
-            </div>
-          </>
-        ) : null}
-
-        {alternatives.length ? (
-          <>
-            <div className="b-sec" style={{ marginTop: 22 }}>Alternatives considered</div>
-            <div className="dur-row">
-              {alternatives.map((v, i) => <span className="dur" key={`alt-${res.recipeId}-${i}`}>{v}</span>)}
-            </div>
-          </>
-        ) : null}
-
-        {contradictions.length ? (
-          <>
-            <div className="b-sec" style={{ marginTop: 22 }}>Contradictions</div>
-            <div className="b-stack">
-              {contradictions.map((c, i) => (
-                <div className="b-card" key={`con-${res.recipeId}-${i}`} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                  <span className="status-tag warn" style={{ flexShrink: 0 }}>flag</span>
-                  <p className="b-body" style={{ margin: 0 }}>{c}</p>
-                </div>
-              ))}
-            </div>
-          </>
-        ) : null}
-
-        {gaps.length ? (
-          <>
-            <div className="b-sec" style={{ marginTop: 22 }}>What we still don’t know</div>
-            <div className="b-stack">
-              {gaps.map((g, i) => (
-                <p className="b-body" key={`gap-${res.recipeId}-${i}`} style={{ margin: 0 }}>• {g}</p>
-              ))}
-            </div>
-          </>
-        ) : null}
-      </div>
-    );
-  };
-
-  // REPORT tab = the brief, built ENTIRELY from the brief-kit UI components
-  // (.brief-kit scope ported from dashboard-modal-component-style-guide.html).
-  // Top-of-report scribe — the overall read over the watchlist data.
-  const renderWatchlistAnalysisBlock = (a) => {
-    if (!a || !a.text) return null;
-    const { data, prose } = parseRecipeAnalysis(a.text);
-    const spot = data?.spotlight;
-    const spotHandle = spot?.handle ? String(spot.handle).replace(/^@+/, '') : '';
-    // Bold tracked handle names (with or without @) wherever they appear in free-form text.
-    const handleNames = Array.from(new Set(
-      (Array.isArray(data?.handles) ? data.handles : [])
-        .map((h) => String(h.handle || '').replace(/^@+/, '').trim())
-        .filter(Boolean)
-    ));
-    const boldHandles = (text) => {
-      if (!text || !handleNames.length) return text;
-      const escaped = handleNames.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-      const re = new RegExp(`(@?(?:${escaped.join('|')})\\b)`, 'gi');
-      return String(text).split(re).map((part, i) => {
-        const bare = part.replace(/^@+/, '');
-        return handleNames.some((n) => n.toLowerCase() === bare.toLowerCase())
-          ? <strong key={i}>{part}</strong>
-          : part;
-      });
-    };
-    return (
-      <div className="kit-paper" id="watchlist-analysis-block">
-        <h2 className="b-headline">Happening on X</h2>
-        {data?.overview ? (
-          <>
-            <div className="b-sec" style={{ marginTop: 4 }}>Overview</div>
-            <p className="pull" style={{ marginTop: 8, maxWidth: 'none' }}>{boldHandles(data.overview)}</p>
-          </>
-        ) : null}
-        {data?.priorityAction ? (
-          <>
-            <div className="b-sec" style={{ marginTop: 22 }}>Suggested action</div>
-            <p className="pull" style={{ marginTop: 8, maxWidth: 'none' }}>{data.priorityAction}</p>
-          </>
-        ) : null}
-        {Array.isArray(data?.handles) && data.handles.length ? (
-          <>
-            <div className="b-sec" style={{ marginTop: 18 }}>Per handle</div>
-            <div className="b-handle-grid">
-              {data.handles.map((h, i) => {
-                const hh = String(h.handle || '').replace(/^@+/, '');
-                return (
-                  <div className="b-card b-handle-card" key={`wla-${i}`}>
-                    <span className="b-handle-name">@{hh}</span>
-                    {h.posting ? <p className="b-body" style={{ margin: '8px 0 0' }}>{h.posting}</p> : null}
-                    {h.talkedAbout ? (
-                      <div className="b-handle-foot">
-                        <div className="b-sec">Talked about</div>
-                        <p className="b-body" style={{ margin: '3px 0 0' }}>{h.talkedAbout}</p>
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        ) : null}
-        {spot?.why ? (
-          <div className="b-feature" style={{ marginTop: 22 }}>
-            <div className="lbl">Spotlight · @{spotHandle}</div>
-            <div className="txt">{spot.why}</div>
-          </div>
-        ) : null}
-        {!data && prose ? renderProse(prose, 'wla') : null}
-      </div>
-    );
-  };
+  // parseRecipeAnalysis / Prose / ReplyTargetsBlock / RedditAnalysisBlock /
+  // InstagramAnalysisBlock / RecipeBriefBlock / WatchlistAnalysisBlock now
+  // live in components/dashboard/MarketSignalsReportBlocks.jsx.
 
   const renderSignalsBriefMock = () => {
     const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
@@ -4614,7 +4040,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             </div>
           ) : null}
 
-          {watchlistPull.analysis ? renderWatchlistAnalysisBlock(watchlistPull.analysis) : null}
+          {watchlistPull.analysis ? <WatchlistAnalysisBlock a={watchlistPull.analysis} /> : null}
 
           {total > 0 ? (
             <div className="kit-paper" id="signals-report-paper">
@@ -4686,12 +4112,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             </div>
           ) : null}
 
-          {gbpRep ? renderGbpReputationBlock(gbpRep) : null}
+          {gbpRep ? <GbpReputationBlock rep={gbpRep} /> : null}
           {recipeResults.map((res) => {
-            if (res.recipeId === 'reply-targets') return renderReplyTargetsBlock(res);
-            if (res.recipeId === 'reddit-analysis') return renderRedditAnalysisBlock(res);
-            if (res.recipeId === 'instagram-analysis') return renderInstagramAnalysisBlock(res);
-            return renderRecipeBriefBlock(res);
+            if (res.recipeId === 'reply-targets') return <ReplyTargetsBlock key={`recipe-brief-${res.recipeId}`} res={res} replyDraftState={replyDraftState} sendReplyTargetsToPostMe={sendReplyTargetsToPostMe} />;
+            if (res.recipeId === 'reddit-analysis') return <RedditAnalysisBlock key={`recipe-brief-${res.recipeId}`} res={res} />;
+            if (res.recipeId === 'instagram-analysis') return <InstagramAnalysisBlock key={`recipe-brief-${res.recipeId}`} res={res} />;
+            return <RecipeBriefBlock key={`recipe-brief-${res.recipeId}`} res={res} recipeCatalog={recipeCatalog} />;
           })}
         </div>
       </div>
@@ -4699,32 +4125,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   };
 
 
-  // Full-width debug meta row for a tested source. Rendered at the bento-grid
-  // level (#scout-test-meta-band) — outside the panel column — so it spans the
-  // full modal width. Returns null unless that source has an expanded result.
-  const renderScoutTestMetaRow = (pkey, label) => {
-    const test = scoutTestState[pkey];
-    if (!scoutTestExpanded[pkey] || !test || test.loading) return null;
-    const m = test.meta;
-    if (!m) return null;
-    const queries = (m.queriesTried || m.terms) || [];
-    const metaBits = [
-      m.source,
-      typeof test.ms === 'number' ? `${(test.ms / 1000).toFixed(1)}s` : null,
-      typeof m.queriesRun === 'number' ? `${m.queriesRun} live queries` : (queries.length ? `${queries.length} queries` : null),
-      m.status ? `status: ${m.status}` : null,
-      m.cached ? (m.stale ? 'cached (stale fallback)' : `cached ${Math.round((m.cacheAgeMs || 0) / 60000)}m ago`) : null,
-    ].filter(Boolean).join('  ·  ');
-    if (!metaBits) return null;
-    return (
-      <div key={pkey} id={`scout-test-meta-${pkey}`} className="meta-row" style={{ width: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 2, padding: '6px 12px', borderTop: '1px solid var(--border, #2a2420)' }}>
-        <span className="meta-row-source" style={{ width: '100%', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>{label}: {metaBits}</span>
-        {queries.length ? (
-          <span className="meta-row-queries" style={{ width: '100%', fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.5, wordBreak: 'break-word' }}>Queries: {queries.slice(0, 6).join('  ·  ')}</span>
-        ) : null}
-      </div>
-    );
-  };
+  // Full-width debug meta row for a tested source — see components/dashboard/ScoutTestMetaRow.jsx.
 
   const updateBrandSnapshotDraft = useCallback((path, value) => {
     setBrandSnapshotDraft((prev) => {
@@ -10311,45 +9712,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // so the modal copy never collides with the card's DOM id while both are
   // mounted. Return null when the underlying asset is missing; the caller then
   // falls back to the empty-state label.
-  const renderCrossDeviceTrioShell = (domId = 'cross-device-trio-shell') => {
-    if (!(deviceScreenshots.desktop || deviceScreenshots.tablet || deviceScreenshots.mobile)) return null;
-    return (
-      <div className="cross-device-trio" id={domId}>
-        {deviceScreenshots.desktop && (
-          <span className="cross-device-frame cross-device-frame--desktop">
-            <img className="cross-device-img" src={deviceScreenshots.desktop} alt="Desktop full-page capture" loading="lazy" />
-          </span>
-        )}
-        {deviceScreenshots.tablet && (
-          <span className="cross-device-frame cross-device-frame--tablet">
-            <img className="cross-device-img" src={deviceScreenshots.tablet} alt="Tablet full-page capture" loading="lazy" />
-          </span>
-        )}
-        {deviceScreenshots.mobile && (
-          <span className="cross-device-frame cross-device-frame--mobile">
-            <img className="cross-device-img" src={deviceScreenshots.mobile} alt="Mobile full-page capture" loading="lazy" />
-          </span>
-        )}
-      </div>
-    );
-  };
-
-  const renderStudioVideoShell = () => {
-    if (!latestStudioVideoUrl) return null;
-    return (
-      <video
-        key={latestStudioVideoUrl}
-        className="tile-studio-video"
-        src={latestStudioVideoUrl}
-        ref={observeOffscreenVideoPause}
-        autoPlay
-        muted
-        loop
-        playsInline
-      />
-    );
-  };
-
   const renderPostMeShell = (domId = 'post-me-tile-mockup') => {
     const pmBiz    = client?.businessName || brandOverview?.headline || 'Your Business';
     const pmHandle = '@' + (client?.businessName || 'yourbrand').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 15);
@@ -10403,7 +9765,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             <div style={{ height: '100%', aspectRatio: '16 / 10', maxWidth: '100%', borderRadius: 14, overflow: 'hidden', position: 'relative', border: '1px solid rgba(0,0,0,0.12)' }}>
               {pmHasVideo ? (
                 // The last Video Promo render (latestStudioVideoUrl) — same source
-                // and autoplay/loop treatment as renderStudioVideoShell, so the
+                // and autoplay/loop treatment as StudioVideoShell, so the
                 // mockup plays the actual video, not the OG-image poster. key
                 // re-mounts it when a newer render lands.
                 <video key={latestStudioVideoUrl} src={latestStudioVideoUrl} ref={observeOffscreenVideoPause} autoPlay muted loop playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
@@ -11501,8 +10863,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       })()}
                     </div>
                   ) : card.id === 'cross-device-images' ? (
-                    // Single source: renderCrossDeviceTrioShell() — the modal mirrors it.
-                    renderCrossDeviceTrioShell() || <span className="tile-empty-label">{"CAPTURE\nDEVICES"}</span>
+                    // Single source: CrossDeviceTrioShell() — the modal mirrors it.
+                    CrossDeviceTrioShell({ deviceScreenshots }) || <span className="tile-empty-label">{"CAPTURE\nDEVICES"}</span>
                   ) : card.id === 'multi-device-view' && multiDevicePreviewSrc ? (
                     <span className="tile-intake-mockup-wrap">
                       <img
@@ -11662,8 +11024,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     />
                   ) : card.id === 'mockup-studio' && latestStudioVideoUrl ? (
                     // Mockup Studio card always shows the last rendered video.
-                    // Single source: renderStudioVideoShell() — the modal mirrors it.
-                    renderStudioVideoShell()
+                    // Single source: StudioVideoShell — the modal mirrors it.
+                    <StudioVideoShell latestStudioVideoUrl={latestStudioVideoUrl} observeOffscreenVideoPause={observeOffscreenVideoPause} />
                   ) : card.id === 'video-remix' && latestRemixVideoUrl ? (
                     // Video Remix card shell becomes the last generated remix video —
                     // cover (fills the whole shell, center-cropped) so it matches the
@@ -13408,10 +12770,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     </div>
                   ) : activeTileModal.cardId === 'cross-device-images' ? (
                     // Mirror the card face — same full-page trio (distinct DOM id).
-                    renderCrossDeviceTrioShell('cross-device-trio-modal') || <span className="tile-empty-label">{activeTileModal.placeholderLabel}</span>
+                    CrossDeviceTrioShell({ domId: 'cross-device-trio-modal', deviceScreenshots }) || <span className="tile-empty-label">{activeTileModal.placeholderLabel}</span>
                   ) : activeTileModal.cardId === 'mockup-studio' && latestStudioVideoUrl ? (
                     // Mirror the card face — same last-rendered Studio video.
-                    renderStudioVideoShell()
+                    <StudioVideoShell latestStudioVideoUrl={latestStudioVideoUrl} observeOffscreenVideoPause={observeOffscreenVideoPause} />
                   ) : activeTileModal.cardId === 'post-me' ? (
                     // Mirror the card face — same X-post mockup (distinct DOM id).
                     renderPostMeShell('post-me-modal-mockup')
@@ -18023,7 +17385,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   {(activeTileModal.cardId === 'platform-search'
                     ? [['web', 'WEB']]
                     : [['x', 'X / TWITTER'], ['reddit', 'REDDIT'], ['instagram', 'INSTAGRAM']]
-                  ).map(([k, lbl]) => renderScoutTestMetaRow(k, lbl))}
+                  ).map(([k, lbl]) => <ScoutTestMetaRow key={k} pkey={k} label={lbl} scoutTestState={scoutTestState} scoutTestExpanded={scoutTestExpanded} />)}
                 </div>
               ) : null}
 
