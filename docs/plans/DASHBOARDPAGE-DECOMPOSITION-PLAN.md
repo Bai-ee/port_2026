@@ -1,6 +1,6 @@
 # DashboardPage.jsx Decomposition Plan
 
-**Status:** Phase 0 + Phase 1 EXECUTED 2026-07-18 (D0 `037a53ea`, D1 `7b3be4fc` — DashboardPage.jsx 32.4k→21.3k lines, CSS now `styles/dashboard/*.css`, mirror deleted; byte-gate delta + parity evidence in `decomposition-baselines/BASELINE-COMMANDS.md`). Phases 2–4 NOT approved — re-review required. Phase 5 deferred.
+**Status:** Phase 0 + Phase 1 EXECUTED 2026-07-18 (D0 `037a53ea`, D1 `7b3be4fc` — DashboardPage.jsx 32.4k→21.3k lines, CSS now `styles/dashboard/*.css`, mirror deleted; byte-gate delta + parity evidence in `decomposition-baselines/BASELINE-COMMANDS.md`). Phases 2–4 APPROVED 2026-07-19 (user directive: "continue with decomposition Phases 2–4"). Phase 2 EXECUTED 2026-07-20 — 133 module-scope symbols → 9 `lib/dashboard/` modules + `LazyVideoThumb`/`GlassTooltipLayer` components, 44 unit tests (branching-logic helpers), DashboardPage.jsx 21.3k→18.6k lines. Phase 5 deferred.
 **Reviewer:** Fable
 **Implementer:** Sonnet
 **Author:** Opus (measurement + plan, no code changes made)
