@@ -7692,6 +7692,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     // abuse surface, see docs/plans/SITE-RECREATE-AUTOMATION-PLAN.md Risk #1):
     // the card def itself is spread only for admins, so non-admins never see
     // even a locked tile for it, matching the x-profile admin-only pattern.
+    // No moduleControls — this card runs its own flow (SiteRecreateCard.jsx),
+    // not the scout-module runner pipeline. Setting moduleControls here
+    // previously made isInactiveUnlocked true for an unregistered module id,
+    // which routed tile clicks into the generic "unlock/RUN" quick-view
+    // instead of the real custom modal — see SITE-RECREATE-CARD.md.
     ...(isAdmin ? [{
       id: 'site-recreate',
       category: 'website',
@@ -7708,7 +7713,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       footerLeft: 'Ready',
       footerRight: 'BETA',
       readinessBadge: { tone: 'ok', label: 'Ready' },
-      moduleControls: { tech: ['site-clone-engine', 'playwright', 'sharp'] },
     }] : []),
     {
       id: 'multi-device-view',
