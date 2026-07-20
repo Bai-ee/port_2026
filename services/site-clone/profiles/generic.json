@@ -1,0 +1,9 @@
+{
+  "platform": "generic",
+  "detect": [],
+  "renderMode": "rendered",
+  "assetHosts": ["{origin}", "fonts.googleapis.com", "fonts.gstatic.com", "cdnjs.cloudflare.com"],
+  "commerceKilllist": [],
+  "commerceHrefPatterns": ["/cart", "/checkout", "/account"],
+  "pageDiscovery": ["sitemap", "nav"]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "site-clone-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Site Recreate clone engine. Local dev (Phase 2 CLI) resolves cheerio/sharp/playwright/firebase-admin from the repo root's node_modules — they are already root deps for other features (ai-seo-audit, GBP media, browserless/studio-render). This package.json exists so the standalone Cloud Run image (Phase 4) can npm install a self-contained node_modules matching those versions — see Dockerfile.",
+  "scripts": {
+    "start": "node server.mjs",
+    "clone:local": "node run-clone.mjs"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "firebase-admin": "^13.8.0",
+    "playwright": "^1.61.0",
+    "sharp": "^0.34.5"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

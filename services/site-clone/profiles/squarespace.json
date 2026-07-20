@@ -1,0 +1,10 @@
+{
+  "platform": "squarespace",
+  "detect": ["Static.SQUARESPACE_CONTEXT", "squarespace.com"],
+  "renderMode": "rendered",
+  "assetHosts": ["{origin}", "assets.squarespace.com", "images.squarespace-cdn.com", "static1.squarespace.com", "fonts.googleapis.com", "fonts.gstatic.com"],
+  "commerceKilllist": ["squarespace-analytics", "google-analytics", "googletagmanager", "facebook.net/en_US/fbevents"],
+  "commerceHrefPatterns": ["/cart", "/checkout"],
+  "pageDiscovery": ["sitemap", "nav"],
+  "_note": "Minimal — unproven fidelity, tune the killlist/asset hosts on the first real Squarespace target (see plan Risk #2)."
+}

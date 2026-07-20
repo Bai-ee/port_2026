@@ -62,3 +62,6 @@ ds-bundle/
 
 # Skills CLI install artifacts (local only)
 skills-lock.json
+
+# Site Recreate engine — local CLI run output (per-job recreated sites + zips)
+services/site-clone/.out/

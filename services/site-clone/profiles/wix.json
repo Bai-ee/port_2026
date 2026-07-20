@@ -1,0 +1,10 @@
+{
+  "platform": "wix",
+  "detect": ["wix.com", "thunderbolt", "wixstatic.com"],
+  "renderMode": "rendered",
+  "assetHosts": ["{origin}", "static.wixstatic.com", "static.parastorage.com"],
+  "commerceKilllist": ["thunderbolt/main", "bi-logger", "wix-bi", "google-analytics", "googletagmanager"],
+  "commerceHrefPatterns": ["/cart", "/checkout", "/account"],
+  "pageDiscovery": ["sitemap", "nav"],
+  "_note": "Minimal — unproven fidelity, tune the killlist/asset hosts on the first real Wix target (see plan Risk #2)."
+}

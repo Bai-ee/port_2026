@@ -108,6 +108,11 @@ const CopywriterCard = dynamic(() => import('./components/dashboard/CopywriterCa
   ssr: false,
 });
 
+const SiteRecreateCard = dynamic(() => import('./components/dashboard/SiteRecreateCard'), {
+  loading: () => null,
+  ssr: false,
+});
+
 const XProfileCard = dynamic(() => import('./components/dashboard/XProfileCard'), {
   loading: () => null,
   ssr: false,
@@ -7683,6 +7688,28 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       moduleControls: { tech: ['html-fetch', 'anthropic'] },
       analyzer: analyzerOutputs?.['design-evaluation'] || null,
     },
+    // Site Recreate — admin-only in v1 (cloning arbitrary sites is a legal/
+    // abuse surface, see docs/plans/SITE-RECREATE-AUTOMATION-PLAN.md Risk #1):
+    // the card def itself is spread only for admins, so non-admins never see
+    // even a locked tile for it, matching the x-profile admin-only pattern.
+    ...(isAdmin ? [{
+      id: 'site-recreate',
+      category: 'website',
+      number: 'SR',
+      label: 'SITE RECREATE',
+      title: 'Recreate My Site',
+      description: 'Submit a live site URL and get back an exact static recreation — live preview, downloadable zip, and a human handoff for DNS + hosting.',
+      placeholderLabel: 'RECREATE\nMY SITE',
+      rows: [
+        { key: 'sr-input', label: 'Input', value: 'Any Shopify / Squarespace / Wix / static site URL' },
+        { key: 'sr-output', label: 'Output', value: 'Static recreation + live preview + zip' },
+        { key: 'sr-gate', label: 'Verify Gate', value: '0 console errors, 0 broken links' },
+      ],
+      footerLeft: 'Ready',
+      footerRight: 'BETA',
+      readinessBadge: { tone: 'ok', label: 'Ready' },
+      moduleControls: { tech: ['site-clone-engine', 'playwright', 'sharp'] },
+    }] : []),
     {
       id: 'multi-device-view',
       category: 'website',
@@ -15298,6 +15325,20 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     <div className="tile-detail-tab-content">
                       <div className="tile-detail-tab-pane">
                         <CopywriterCard getIdToken={brandSystemGetIdToken} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Site Recreate card — clone a live site to a static preview + zip */}
+                {activeTileModal.cardId === 'site-recreate' && (
+                  <div id="site-recreate-modal-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
+                    <div className="tile-detail-tabs">
+                      <button type="button" className="tile-detail-tab tile-detail-tab--active">SITE RECREATE</button>
+                    </div>
+                    <div className="tile-detail-tab-content">
+                      <div className="tile-detail-tab-pane">
+                        <SiteRecreateCard user={user} runWithTerminal={runWithTerminal} />
                       </div>
                     </div>
                   </div>

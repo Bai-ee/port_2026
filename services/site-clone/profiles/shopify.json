@@ -1,0 +1,23 @@
+{
+  "platform": "shopify",
+  "detect": ["Shopify.theme", "cdn.shopify.com"],
+  "renderMode": "static",
+  "assetHosts": ["{origin}", "cdn.shopify.com", "cdnjs.cloudflare.com", "fonts.shopify*", "fonts.g*"],
+  "commerceKilllist": [
+    "trekkie",
+    "portable-wallets",
+    "shop_events_listener",
+    "monorail",
+    "shop-cart-sync",
+    "web-pixels-manager",
+    "shopifycloud/storefront",
+    "consent-tracking",
+    "customer_authentication",
+    "shop-js/loader.init-shop-cart-sync",
+    "perf-kit",
+    "checkouts/internal"
+  ],
+  "commerceHrefPatterns": ["/cart", "/checkout", "/account", "/challenge"],
+  "pageDiscovery": ["sitemap", "nav"],
+  "_note": "perf-kit + checkouts/internal added after the 2026-07 Rosita's re-run: Shopify's checkout-preload/perf scripts have moved since the runbook was authored (was shop-js/loader.init-shop-cart-sync only). Killlists drift as the platform updates — re-verify against a real site if the A6 gate starts failing on new checkout-web/perf-kit-style 404s."
+}
