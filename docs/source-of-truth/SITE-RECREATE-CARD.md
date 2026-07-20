@@ -242,6 +242,31 @@ Vercel project `tony-soccer-cms`, DB `tony-soccer` on Turso (org `hitloop`, grou
 Known limit: admin image UPLOADS need a storage adapter (serverless disk) — text editing +
 existing images work; add @payloadcms/storage-vercel-blob (or S3) when clients need swaps.
 
+### Phase 5e — change tracking + Arweave republish (2026-07-20)
+
+**Architecture decision (user-confirmed):** Payload can never run ON Arweave (server + DB vs
+permanent static storage). Model = ONE authoritative editing surface per site, Arweave gets
+static snapshots of it; ArNS repoints per publish, old manifests remain as free history.
+Publishing stays manual + estimate-first (permanent spend — no auto-publish on edits).
+
+- **Dirty flag = `job.contentUpdatedAt`**, stamped by BOTH editing surfaces:
+  - managed tier: `save-slots` (card editor) stamps it after every save.
+  - owned tier: the CMS template's `src/hooks/notify-hitloop.ts` (afterChange/afterDelete on
+    `pages` + `media`) POSTs `{jobId, secret}` to `site-clone?action=content-changed` — a
+    **pre-auth machine endpoint** (runs before `resolveContext`; authenticated by
+    `job.cms.webhookSecret`, minted per deploy by `deploy-cms.mjs`, delivered to the CMS as
+    `HITLOOP_CONTENT_WEBHOOK_URL/SECRET` + `HITLOOP_JOB_ID` Vercel env). Fire-and-forget —
+    a dead webhook never blocks a save. ⚠️ CMSes deployed BEFORE this feature (tony-soccer,
+    rositas first deploys) need ONE redeploy to pick up the hook; every new deploy has it.
+- **Card**: when `contentUpdatedAt > arweave.deployedAt`, the Arweave panel shows "content
+  changed since this publish" + ESTIMATE REPUBLISH → REPUBLISH (same estimate-first flow).
+- **Snapshot = the clone engine re-aimed** (`services/site-clone/snapshot-cms.mjs --job <id>`):
+  mirrors the AUTHORITATIVE origin (cms.hostedUrl, else the hitloop `/sites` demo), pulls
+  `/assets/*` + Payload `/api/media/file/*` (admin-uploaded replacements ride along), rewrites
+  refs local, **A6 gate**, uploads `snapshot.zip` → `job.snapshot{downloadUrl, origin, at,…}`.
+  `arweave-deploy` ships `job.snapshot.downloadUrl || job.zip.downloadUrl`, so a republish
+  carries the edits. Set `HITLOOP_PUBLIC_ORIGIN` to point snapshot/webhook at non-prod.
+
 ### Phase 5c — "Launch on Arweave" card option (wired 2026-07-20, endpoint pending)
 
 Card panel `#site-recreate-arweave-panel`: once a run has a zip — **ESTIMATE COST** (live AR

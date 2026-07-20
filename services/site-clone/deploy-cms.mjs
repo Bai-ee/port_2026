@@ -17,6 +17,7 @@
 // Requires on disk: .out/<jobId>/<project>-cms (build-cms.mjs output).
 
 import path from 'path';
+import { randomBytes } from 'crypto';
 import { readdir, readFile, writeFile } from 'fs/promises';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
@@ -119,10 +120,17 @@ export async function deployCms({ jobId, log = console.log }) {
   await run('npx', ['vercel', 'link', '--yes', '--project', projectName, '--token', vercelToken], { cwd: projectDir, label: 'vercel link' });
 
   const envSecret = (await readFile(path.join(projectDir, '.env'), 'utf8')).match(/^PAYLOAD_SECRET=(.*)$/m)?.[1] || '';
+  // Owned-tier change tracking: the CMS's afterChange hook posts to HITLOOP
+  // with this per-job secret (site-clone route `content-changed`).
+  const webhookSecret = randomBytes(24).toString('hex');
+  const webhookUrl = `${process.env.HITLOOP_PUBLIC_ORIGIN || 'https://hitloop.agency'}/api/dashboard/site-clone?action=content-changed`;
   const envPairs = [
     ['DATABASE_URI', db.url],
     ['DATABASE_AUTH_TOKEN', db.authToken],
     ['PAYLOAD_SECRET', envSecret],
+    ['HITLOOP_CONTENT_WEBHOOK_URL', webhookUrl],
+    ['HITLOOP_CONTENT_WEBHOOK_SECRET', webhookSecret],
+    ['HITLOOP_JOB_ID', jobId],
   ];
   for (const [key, value] of envPairs) {
     // `env add` fails if the var exists — remove first (ignore absence).
@@ -145,7 +153,7 @@ export async function deployCms({ jobId, log = console.log }) {
   const ok = site === 200 && admin === 200;
   log(`deployCms: ${hostedUrl} — site ${site}, /admin ${admin} — ${ok ? 'LIVE' : 'NOT VERIFIED'}`);
   if (!ok) throw new Error(`Hosted CMS did not verify (site ${site}, admin ${admin}).`);
-  return { hostedUrl, hostedAdminUrl: `${hostedUrl}/admin`, dbName, projectName };
+  return { hostedUrl, hostedAdminUrl: `${hostedUrl}/admin`, dbName, projectName, webhookSecret };
 }
 
 // ── CLI ────────────────────────────────────────────────────────────────────
@@ -164,7 +172,12 @@ if (isDirectRun) {
     if (!job) throw new Error(`Job ${jobId} not found.`);
     const result = await deployCms({ jobId, log });
     await cloneJobs.updateJobFields(jobId, {
-      cms: { ...(job.cms || {}), hostedUrl: result.hostedUrl, hostedAdminUrl: result.hostedAdminUrl },
+      cms: {
+        ...(job.cms || {}),
+        hostedUrl: result.hostedUrl,
+        hostedAdminUrl: result.hostedAdminUrl,
+        webhookSecret: result.webhookSecret,
+      },
       hostRequest: null,
     });
     console.log(`Done. Live: ${result.hostedUrl} · Admin: ${result.hostedAdminUrl}`);

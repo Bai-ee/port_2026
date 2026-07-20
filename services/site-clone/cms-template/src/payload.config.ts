@@ -15,6 +15,15 @@ import { sqliteAdapter } from '@payloadcms/db-sqlite';
 import { lexicalEditor } from '@payloadcms/richtext-lexical';
 import sharp from 'sharp';
 
+import { notifyHitloop } from './hooks/notify-hitloop';
+
+// Owned-tier change tracking: any pages/media save notifies HITLOOP (no-op
+// unless the hosting deploy set the webhook env).
+const contentChangeHooks = {
+  afterChange: [() => notifyHitloop()],
+  afterDelete: [() => notifyHitloop()],
+};
+
 const filename = fileURLToPath(import.meta.url);
 const dirname = path.dirname(filename);
 
@@ -30,6 +39,7 @@ export default buildConfig({
     {
       slug: 'media',
       admin: { description: 'Upload replacement images here, then pick them on a page\'s image slot.' },
+      hooks: contentChangeHooks,
       access: { read: () => true },
       upload: {
         staticDir: path.resolve(dirname, '../public/media'),
@@ -38,6 +48,7 @@ export default buildConfig({
     },
     {
       slug: 'pages',
+      hooks: contentChangeHooks,
       access: { read: () => true },
       admin: {
         useAsTitle: 'title',

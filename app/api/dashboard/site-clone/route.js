@@ -69,6 +69,30 @@ async function triggerWorker(jobId) {
 }
 
 export async function POST(request) {
+  const action = new URL(request.url).searchParams.get('action');
+
+  // Owned-tier dirty flag: the hosted Payload CMS's afterChange hook posts
+  // here on every content edit. Machine-to-machine — authenticated by the
+  // per-job webhook secret minted at deploy time (deploy-cms.mjs), NOT by a
+  // user token, so this runs BEFORE resolveContext.
+  if (action === 'content-changed') {
+    try {
+      let body = {};
+      try { body = await request.json(); } catch { body = {}; }
+      const jobId = String(body?.jobId || '').trim();
+      const secret = String(body?.secret || '').trim();
+      if (!jobId || !secret) return json({ error: 'jobId and secret are required.' }, 400);
+      const job = await cloneJobs.getCloneJob(jobId);
+      if (!job?.cms?.webhookSecret || job.cms.webhookSecret !== secret) {
+        return json({ error: 'Invalid webhook credentials.' }, 403);
+      }
+      await cloneJobs.updateJobFields(jobId, { contentUpdatedAt: new Date().toISOString() });
+      return json({ ok: true });
+    } catch (err) {
+      return json({ error: err.message || 'content-changed failed.' }, 500);
+    }
+  }
+
   let context;
   let decoded;
   try {
@@ -76,8 +100,6 @@ export async function POST(request) {
   } catch (err) {
     return json({ error: err.message || 'Unauthorized.' }, err.status || 401);
   }
-
-  const action = new URL(request.url).searchParams.get('action');
 
   if (action === 'create') {
     try {
@@ -132,6 +154,9 @@ export async function POST(request) {
       const job = await cloneJobs.getCloneJob(jobId, context.clientId);
       if (!job) return json({ error: 'Job not found.' }, 404);
       const result = await cloneDemo.saveClonePageSlots({ jobId, slug, edits });
+      // Managed-tier dirty flag: any content edit stamps the job so the card
+      // can show "changed since last Arweave publish" (SSOT §5e).
+      await cloneJobs.updateJobFields(jobId, { contentUpdatedAt: new Date().toISOString() });
       return json({ ok: true, ...result });
     } catch (err) {
       return json({ error: err.message || 'Could not save edits.' }, err.status || 500);
@@ -179,8 +204,12 @@ export async function POST(request) {
       if (!job) return json({ error: 'Job not found.' }, 404);
       if (!job.zip?.downloadUrl) return json({ error: 'Job has no site zip yet — run the clone first.' }, 400);
 
+      // Republish uses the freshest snapshot of the AUTHORITATIVE origin
+      // (snapshot-cms.mjs writes job.snapshot after content edits); first
+      // publish falls back to the original mirror zip.
+      const zipUrl = job.snapshot?.downloadUrl || job.zip.downloadUrl;
       const result = await editvideosBridge.deployExternalSite({
-        zipUrl: job.zip.downloadUrl,
+        zipUrl,
         siteId: jobId,
       });
       const arweave = {

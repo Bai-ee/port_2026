@@ -210,6 +210,13 @@ export default function SiteRecreateCard({ user, runWithTerminal }) {
   // ── Arweave launch (permanent, wallet-funded — estimate-first) ─────────
   const [arweaveEstimate, setArweaveEstimate] = useState(null);
   const [arweaveBusy, setArweaveBusy] = useState(false);
+  // Dirty = any content edit (card editor OR hosted Payload webhook) after
+  // the last permanent publish.
+  const arweaveContentDirty = Boolean(
+    activeJob?.arweave?.deployedAt
+    && activeJob?.contentUpdatedAt
+    && new Date(activeJob.contentUpdatedAt) > new Date(activeJob.arweave.deployedAt)
+  );
 
   useEffect(() => { setArweaveEstimate(null); }, [activeJobId]);
 
@@ -446,6 +453,23 @@ export default function SiteRecreateCard({ user, runWithTerminal }) {
               Manifest: <a href={activeJob.arweave.arweaveUrl} target="_blank" rel="noreferrer">{activeJob.arweave.manifestId}</a>
               {activeJob.arweave.arnsUrl ? <> · ArNS: <a href={activeJob.arweave.arnsUrl} target="_blank" rel="noreferrer">{activeJob.arweave.arnsUrl}</a></> : null}
             </p>
+            {arweaveContentDirty ? (
+              <>
+                <p className="sr-sub" id="site-recreate-arweave-dirty-note">
+                  <strong>Content has changed since this publish</strong> — the Arweave copy is a permanent
+                  snapshot of the older version. Republish to put the latest content on-chain.
+                </p>
+                {!arweaveEstimate ? (
+                  <button type="button" className="cta-pill-btn" disabled={arweaveBusy} onClick={loadArweaveEstimate}>
+                    {arweaveBusy ? 'ESTIMATING…' : 'ESTIMATE REPUBLISH'}
+                  </button>
+                ) : (
+                  <button type="button" className="cta-pill-btn" disabled={arweaveBusy} onClick={launchOnArweave}>
+                    {arweaveBusy ? 'PUBLISHING…' : 'REPUBLISH TO ARWEAVE — PERMANENT'}
+                  </button>
+                )}
+              </>
+            ) : null}
           </>
         ) : !activeJob?.zip?.downloadUrl ? (
           <div className="sr-empty">Available once a run completes — puts the recreated site on permanent decentralized storage.</div>
