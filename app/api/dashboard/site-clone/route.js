@@ -249,6 +249,12 @@ export async function GET(request) {
       if (!jobId) return json({ error: 'jobId is required.' }, 400);
       const job = await cloneJobs.getCloneJob(jobId, context.clientId);
       if (!job) return json({ error: 'Job not found.' }, 404);
+      // Self-heal: a job can sit `queued` if the create-time worker ping was
+      // lost (worker cold, env mid-deploy, transient network). The card polls
+      // status every few seconds anyway — re-ping the worker whenever we see
+      // a queued job. Idempotent: the worker's claim is atomic, double pings
+      // no-op, and this stays best-effort/bounded like triggerWorker itself.
+      if (job.status === 'queued') triggerWorker(jobId);
       return json({ ok: true, job });
     }
 
