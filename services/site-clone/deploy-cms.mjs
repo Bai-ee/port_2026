@@ -142,14 +142,26 @@ export async function deployCms({ jobId, log = console.log }) {
     await run('bash', ['-c', `npx vercel env rm ${key} production --yes --token '${vercelToken}' >/dev/null 2>&1; printf '%s' '${value.replace(/'/g, `'\\''`)}' | npx vercel env add ${key} production --token '${vercelToken}'`], { cwd: projectDir, label: `env ${key}` });
   }
 
-  // Best-effort Vercel Blob store for admin image uploads (serverless has no
-  // disk). If the CLI can't provision non-interactively, the CMS still works
-  // — uploads stay disabled until BLOB_READ_WRITE_TOKEN exists.
+  // Vercel Blob store for admin image uploads (serverless has no disk):
+  // create via CLI (409 = exists, fine), then CONNECT via the storage API —
+  // the connection is what injects BLOB_READ_WRITE_TOKEN into the project.
+  // Best-effort: a failure leaves uploads disabled, never blocks hosting.
   try {
-    await run('npx', ['vercel', 'blob', 'store', 'add', `${projectName}-media`, '--token', vercelToken], { cwd: projectDir, label: 'blob store add' });
-    log('deployCms: blob store provisioned');
+    await run('npx', ['vercel', 'blob', 'store', 'add', `${projectName}-media`, '--token', vercelToken], { cwd: projectDir, label: 'blob store add' }).catch(() => {});
+    const H = { Authorization: `Bearer ${vercelToken}`, 'Content-Type': 'application/json' };
+    const stores = (await fetch('https://api.vercel.com/v1/storage/stores', { headers: H }).then((r) => r.json())).stores || [];
+    const store = stores.find((s) => s.name === `${projectName}-media`);
+    const projectId = JSON.parse(await readFile(path.join(projectDir, '.vercel', 'project.json'), 'utf8')).projectId;
+    if (!store) throw new Error('store not found after create');
+    const conn = await fetch(`https://api.vercel.com/v1/storage/stores/${store.id}/connections`, {
+      method: 'POST',
+      headers: H,
+      body: JSON.stringify({ projectId, envVarEnvironments: ['production', 'preview', 'development'] }),
+    });
+    if (![200, 201, 409].includes(conn.status)) throw new Error(`connect ${conn.status}`);
+    log('deployCms: blob store provisioned + connected (image uploads enabled)');
   } catch (err) {
-    log(`deployCms: blob store not provisioned — image uploads disabled until BLOB_READ_WRITE_TOKEN is set (${String(err.message).slice(0, 120)})`);
+    log(`deployCms: blob store not fully provisioned — image uploads disabled (${String(err.message).slice(0, 120)})`);
   }
 
   log('deployCms: deploying to vercel (build takes a few minutes)…');

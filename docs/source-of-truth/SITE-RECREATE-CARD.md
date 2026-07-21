@@ -284,10 +284,13 @@ Publishing stays manual + estimate-first (permanent spend — no auto-publish on
   auto-trigger the worker; the admin CLI stays as fallback. ⚠️ deploy-cloud-run.sh was fixed
   live: `gcloud run deploy --dockerfile` is NOT a real flag — it now does Cloud Build with an
   explicit dockerfile + deploys by image; repo-root `.gcloudignore` keeps the upload small.
-- **Vercel Blob (image uploads)**: template plugin + per-project store creation are in;
-  ⚠️ the store→project CONNECTION can't be made with the current CLI-scoped token (storage
-  API 403s) — one dashboard click per project (Storage → `<project>-media` → Connect) then
-  redeploy activates uploads. Both hosted CMSes redeployed with the change-webhook env live.
+- **Vercel Blob (image uploads): FULLY AUTOMATED + PROVEN.** deploy-cms creates the store
+  (CLI) and CONNECTS it via `POST /v1/storage/stores/{id}/connections` (the connection is
+  what injects `BLOB_READ_WRITE_TOKEN`; the bare `/v1/storage/stores` API works with our
+  token — earlier 403s were teamId-scoping noise). Verified live on tony-soccer-cms:
+  REST login → PNG upload → served at `/api/media/file/…` 200 → deleted. Admin passwords on
+  both hosted CMSes ROTATED off `changeme123` (stored as `job.cms.adminEmail/adminPassword`,
+  shown in the card's Hosted-CMS line).
 - Turso gotcha #2: POSTing an existing group can 404 — deploy-cms now GETs
   `/groups/default` first. ⚠️ `.env.local` append trap: the file may lack a trailing
   newline — a blind `echo >>` glued onto `TURSO_ORG` once; use `printf '\n…'`.

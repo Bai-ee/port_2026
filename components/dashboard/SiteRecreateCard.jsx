@@ -405,6 +405,9 @@ export default function SiteRecreateCard({ user, runWithTerminal }) {
               <p className="sr-verify-summary">
                 Hosted CMS live: <a href={activeJob.cms.hostedUrl} target="_blank" rel="noreferrer">{activeJob.cms.hostedUrl.replace(/^https?:\/\//, '')}</a>
                 {' · '}<a href={activeJob.cms.hostedAdminUrl || `${activeJob.cms.hostedUrl}/admin`} target="_blank" rel="noreferrer">open /admin</a>
+                {activeJob.cms.adminEmail && activeJob.cms.adminPassword ? (
+                  <> · login {activeJob.cms.adminEmail} / <code>{activeJob.cms.adminPassword}</code></>
+                ) : null}
               </p>
             ) : activeJob?.hostRequest ? (
               <p className="sr-verify-summary">
