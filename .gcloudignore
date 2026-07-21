@@ -1,0 +1,16 @@
+# Cloud Build context for services/site-clone (built from repo root so
+# api/_lib/*.cjs ride along — see services/site-clone/Dockerfile).
+# Everything heavy/dev-only stays out of the upload.
+.git
+node_modules
+.next
+.vercel
+services/site-clone/.out
+services/studio-render
+services/media-render
+public
+ds-bundle
+docs
+brief-design-system-reference
+*.log
+.env*

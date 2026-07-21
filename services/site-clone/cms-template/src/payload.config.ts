@@ -13,6 +13,7 @@ import { fileURLToPath } from 'url';
 import { buildConfig } from 'payload';
 import { sqliteAdapter } from '@payloadcms/db-sqlite';
 import { lexicalEditor } from '@payloadcms/richtext-lexical';
+import { vercelBlobStorage } from '@payloadcms/storage-vercel-blob';
 import sharp from 'sharp';
 
 import { notifyHitloop } from './hooks/notify-hitloop';
@@ -81,6 +82,16 @@ export default buildConfig({
     },
   ],
   globals: [],
+  // Hosted (serverless) deploys have no writable disk — admin image uploads
+  // go to Vercel Blob when the token env exists (provisioned by
+  // deploy-cms.mjs). Local/downloaded runs keep plain disk storage.
+  plugins: [
+    vercelBlobStorage({
+      enabled: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+      collections: { media: true },
+      token: process.env.BLOB_READ_WRITE_TOKEN || '',
+    }),
+  ],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || 'dev-secret-change-me',
   typescript: { outputFile: path.resolve(dirname, 'payload-types.ts') },

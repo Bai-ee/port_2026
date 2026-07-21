@@ -13,6 +13,7 @@
     "@payloadcms/db-sqlite": "3.86.0",
     "@payloadcms/next": "3.86.0",
     "@payloadcms/richtext-lexical": "3.86.0",
+    "@payloadcms/storage-vercel-blob": "3.86.0",
     "@payloadcms/ui": "3.86.0",
     "cross-env": "^7.0.3",
     "graphql": "^16.9.0",

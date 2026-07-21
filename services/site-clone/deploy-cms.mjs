@@ -49,12 +49,17 @@ async function tursoFetch(pathname, options = {}) {
 
 /** Ensure group + database exist, mint a DB token. 409/exists are fine. */
 async function ensureTursoDatabase({ org, dbName, log }) {
-  const grp = await tursoFetch(`/organizations/${org}/groups`, {
-    method: 'POST',
-    body: JSON.stringify({ name: 'default', location: TURSO_LOCATION }),
-  });
-  if (![200, 409].includes(grp.status) && !String(grp.data?.error || '').includes('already exists')) {
-    throw new Error(`Turso group create failed (${grp.status}): ${grp.data?.error || 'unknown'}`);
+  // GET-first: POSTing an existing group returns non-obvious errors (seen:
+  // 404 on the second site's deploy) — only create when actually absent.
+  const existing = await tursoFetch(`/organizations/${org}/groups/default`);
+  if (existing.status !== 200) {
+    const grp = await tursoFetch(`/organizations/${org}/groups`, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'default', location: TURSO_LOCATION }),
+    });
+    if (![200, 409].includes(grp.status) && !String(grp.data?.error || '').includes('already exists')) {
+      throw new Error(`Turso group create failed (${grp.status}): ${grp.data?.error || 'unknown'}`);
+    }
   }
   const db = await tursoFetch(`/organizations/${org}/databases`, {
     method: 'POST',
@@ -135,6 +140,16 @@ export async function deployCms({ jobId, log = console.log }) {
   for (const [key, value] of envPairs) {
     // `env add` fails if the var exists — remove first (ignore absence).
     await run('bash', ['-c', `npx vercel env rm ${key} production --yes --token '${vercelToken}' >/dev/null 2>&1; printf '%s' '${value.replace(/'/g, `'\\''`)}' | npx vercel env add ${key} production --token '${vercelToken}'`], { cwd: projectDir, label: `env ${key}` });
+  }
+
+  // Best-effort Vercel Blob store for admin image uploads (serverless has no
+  // disk). If the CLI can't provision non-interactively, the CMS still works
+  // — uploads stay disabled until BLOB_READ_WRITE_TOKEN exists.
+  try {
+    await run('npx', ['vercel', 'blob', 'store', 'add', `${projectName}-media`, '--token', vercelToken], { cwd: projectDir, label: 'blob store add' });
+    log('deployCms: blob store provisioned');
+  } catch (err) {
+    log(`deployCms: blob store not provisioned — image uploads disabled until BLOB_READ_WRITE_TOKEN is set (${String(err.message).slice(0, 120)})`);
   }
 
   log('deployCms: deploying to vercel (build takes a few minutes)…');

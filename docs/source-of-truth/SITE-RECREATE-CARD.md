@@ -267,7 +267,32 @@ Publishing stays manual + estimate-first (permanent spend — no auto-publish on
   `arweave-deploy` ships `job.snapshot.downloadUrl || job.zip.downloadUrl`, so a republish
   carries the edits. Set `HITLOOP_PUBLIC_ORIGIN` to point snapshot/webhook at non-prod.
 
-### Phase 5c — "Launch on Arweave" card option (wired 2026-07-20, endpoint pending)
+### Phase 5f — everything live (2026-07-20, late)
+
+- **Arweave publish is LIVE.** The EditVideos side ships external-site mode **folded into
+  `/api/deploy-website`** (Hobby plan caps that project at 12 serverless functions — the
+  standalone endpoint broke the deploy). `zipUrl` in the body selects it; response carries
+  `external: true` and the bridge REQUIRES that marker (a stale EditVideos deploy would
+  otherwise deploy its own microsite and return the wrong manifest). First real publish:
+  Rosita's, 211 files, manifest `mqOYMaVC7aU_bUm4Rucyw8Alh_ifevZG_PgrELEYiZw` (gateway
+  propagation takes minutes-to-tens-of-minutes after upload — a 404/302 right after publish
+  is normal). `EDITVIDEOS_API_BASE=https://arweave-video-generator.vercel.app` set in
+  `.env.local` + HITLOOP Vercel prod env.
+- **Cloud Run worker DEPLOYED**: `https://site-clone-rhd5li5yca-uc.a.run.app` (project
+  human-in-the-loop-a1a19, us-central1, min 0/max 2). `SITE_CLONE_WORKER_URL` +
+  `SITE_CLONE_SHARED_SECRET` in `.env.local` + Vercel prod env → card submits now
+  auto-trigger the worker; the admin CLI stays as fallback. ⚠️ deploy-cloud-run.sh was fixed
+  live: `gcloud run deploy --dockerfile` is NOT a real flag — it now does Cloud Build with an
+  explicit dockerfile + deploys by image; repo-root `.gcloudignore` keeps the upload small.
+- **Vercel Blob (image uploads)**: template plugin + per-project store creation are in;
+  ⚠️ the store→project CONNECTION can't be made with the current CLI-scoped token (storage
+  API 403s) — one dashboard click per project (Storage → `<project>-media` → Connect) then
+  redeploy activates uploads. Both hosted CMSes redeployed with the change-webhook env live.
+- Turso gotcha #2: POSTing an existing group can 404 — deploy-cms now GETs
+  `/groups/default` first. ⚠️ `.env.local` append trap: the file may lack a trailing
+  newline — a blind `echo >>` glued onto `TURSO_ORG` once; use `printf '\n…'`.
+
+### Phase 5c — "Launch on Arweave" card option (wired 2026-07-20, endpoint pending → LIVE, see 5f)
 
 Card panel `#site-recreate-arweave-panel`: once a run has a zip — **ESTIMATE COST** (live AR
 price × mirror bytes, read-only) → **LAUNCH ON ARWEAVE — PERMANENT** (explicit confirm click)

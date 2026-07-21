@@ -1254,10 +1254,12 @@ function requireApiBase() {
  * mirror) to Arweave via the EditVideos app: it downloads the zip, unpacks,
  * uploads every file wallet-funded, and creates an Arweave path manifest.
  *
- * ⚠️ OPTIONAL ENDPOINT — `/api/deploy-external-site` does not exist on the
- * EditVideos side yet (contract documented in SITE-RECREATE-CARD.md § Arweave).
- * Until it ships there, this degrades with a clear 503 exactly like
- * updateArns does — the card shows "not enabled yet", never crashes.
+ * Shares `/api/deploy-website` (the Hobby plan caps EditVideos at 12
+ * serverless functions, so no standalone endpoint) — a `zipUrl` in the body
+ * selects external-site mode there. The response MUST carry `external: true`:
+ * a stale EditVideos deployment would ignore zipUrl and deploy ITS OWN
+ * microsite — the marker check turns that into a clear error instead of a
+ * silently wrong manifest.
  *
  * @param {{zipUrl:string, siteId?:string}} args
  * @returns {Promise<object>} { manifestId, arweaveUrl, fileCount, sizeBytes, arnsUrl? }
@@ -1267,7 +1269,7 @@ async function deployExternalSite({ zipUrl, siteId } = {}) {
   const base = requireApiBase();
   let res;
   try {
-    res = await fetch(`${base}/api/deploy-external-site`, {
+    res = await fetch(`${base}/api/deploy-website`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ zipUrl, siteId: siteId || null }),
@@ -1277,13 +1279,13 @@ async function deployExternalSite({ zipUrl, siteId } = {}) {
     e.status = 503;
     throw e;
   }
-  if (res.status === 404 || res.status === 501) {
-    const e = new Error('Arweave site launcher is not enabled yet — the EditVideos deploy-external-site endpoint is not deployed.');
+  let data = null;
+  try { data = await res.json(); } catch { data = null; }
+  if (data && data.external !== true) {
+    const e = new Error('EditVideos deployment predates external-site support — redeploy the EditVideos app.');
     e.status = 503;
     throw e;
   }
-  let data = null;
-  try { data = await res.json(); } catch { data = null; }
   if (!res.ok || !data?.success) {
     const err = new Error(data?.error || `Arweave site deploy failed (${res.status}).`);
     err.status = res.status || 500;

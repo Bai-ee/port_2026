@@ -39,10 +39,23 @@ gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudb
 # tokens. FIREBASE_ADMIN_PRIVATE_KEY as a plain env var mirrors studio-render's
 # all-env-vars approach; move it to Secret Manager (--set-secrets) as a later
 # hardening step if desired, once that secret actually exists.
+# `gcloud run deploy --source` cannot point at a non-root Dockerfile
+# (--dockerfile is not a real flag — learned on the first live deploy), so
+# build the image explicitly via Cloud Build, then deploy by image. The
+# repo-root .gcloudignore keeps node_modules/.out/etc out of the upload.
+IMAGE="${REGION}-docker.pkg.dev/${GCP_PROJECT}/cloud-run-source-deploy/${SERVICE_NAME}:$(date +%s)"
+cat > /tmp/site-clone-cloudbuild.yaml <<EOF
+steps:
+- name: gcr.io/cloud-builders/docker
+  args: ['build', '-f', 'services/site-clone/Dockerfile', '-t', '${IMAGE}', '.']
+images: ['${IMAGE}']
+EOF
+gcloud artifacts repositories create cloud-run-source-deploy --repository-format=docker --location="${REGION}" --quiet 2>/dev/null || true
+gcloud builds submit --config /tmp/site-clone-cloudbuild.yaml --quiet .
+
 gcloud run deploy "${SERVICE_NAME}" \
   --quiet \
-  --source . \
-  --dockerfile services/site-clone/Dockerfile \
+  --image "${IMAGE}" \
   --region "${REGION}" \
   --cpu 2 \
   --memory 2Gi \
