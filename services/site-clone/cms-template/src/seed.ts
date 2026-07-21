@@ -54,6 +54,7 @@ async function run() {
           label: s.label || '',
           value: s.value || '',
           srcset: s.srcset || '',
+          baseStyle: s.baseStyle || '',
         })),
       },
     });

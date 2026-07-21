@@ -104,6 +104,7 @@ async function publishCloneDemo({ jobId, clientId, pages, previewOrigin, log = (
           ? `${String(previewOrigin).replace(/\/$/, '')}${s.value}`
           : (s.value || ''),
         srcset: s.srcset ? pointSrcsetAt(s.srcset, previewOrigin) : '',
+        baseStyle: pointAssetsAt(s.baseStyle || '', previewOrigin),
       })),
       updatedAt: new Date().toISOString(),
     });
@@ -168,6 +169,11 @@ async function renderClonePage(jobId, slug) {
   for (const slot of page.slots || []) {
     const value = slot.kind === 'image' ? (slot.value || '') : escapeHtml(slot.value || '');
     html = html.split(`{{slot:${slot.key}}}`).join(value);
+    // Style hook: original inline style back (templates created before the
+    // style-token era simply have no {{slotstyle:…}} to replace — harmless).
+    html = html.split(`{{slotstyle:${slot.key}}}`).join(
+      String(slot.baseStyle || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+    );
     if (slot.kind === 'image') {
       html = html.split(`{{slotset:${slot.key}}}`).join(slot.srcset || '');
     }

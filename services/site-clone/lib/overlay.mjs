@@ -80,6 +80,15 @@ function tokenizePage({ html, slug, fileToSlug }) {
     return key;
   };
 
+  // Style hook: the element's style attribute becomes a per-slot token so the
+  // CMS can inject visual overrides (hide, size, fit, font, color) without
+  // touching the theme. The original inline style is preserved as baseStyle
+  // and re-emitted first at render time.
+  const addStyleHook = ($el, key, slot) => {
+    slot.baseStyle = $el.attr('style') || '';
+    $el.attr('style', `{{slotstyle:${key}}}`);
+  };
+
   // Text slots — pure-text leaf elements only.
   $('body *, head > title').each((_, el) => {
     if (slots.length >= MAX_SLOTS_PER_PAGE) return false;
@@ -92,6 +101,7 @@ function tokenizePage({ html, slug, fileToSlug }) {
     if (!text || text.length < 2 || text.includes('{{')) return;
     const key = addSlot('text', text, `${tag}: ${text.slice(0, 60)}`);
     $el.text(`{{slot:${key}}}`);
+    if (tag !== 'title') addStyleHook($el, key, slots[slots.length - 1]);
   });
 
   // Image slots — every local <img>, src + paired srcset token.
@@ -105,6 +115,7 @@ function tokenizePage({ html, slug, fileToSlug }) {
     const key = addSlot('image', src, `image: ${name}`, srcset ? { srcset } : {});
     $el.attr('src', `{{slot:${key}}}`);
     if (srcset) $el.attr('srcset', `{{slotset:${key}}}`);
+    addStyleHook($el, key, slots[slots.length - 1]);
   });
 
   const title = clean($('h1').first().text().replace(/{{slot:[^}]+}}/g, '')) // h1 may hold multiple tokens — strip ALL

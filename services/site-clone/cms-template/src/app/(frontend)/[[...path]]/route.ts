@@ -15,6 +15,24 @@ const TEMPLATES_DIR = path.join(process.cwd(), 'templates');
 
 const escapeHtml = (s: string) =>
   String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const escapeAttr = (s: string) => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+
+// Per-slot visual overrides → one inline style string (original theme style
+// first, overrides after so they win).
+function slotStyle(slot: any): string {
+  const parts = [slot.baseStyle || ''];
+  if (slot.hidden) parts.push('display:none !important');
+  if (slot.kind === 'image') {
+    if (slot.widthPx) parts.push(`width:${Number(slot.widthPx)}px`, 'height:auto');
+    if (slot.fit && slot.fit !== 'default') parts.push(`object-fit:${slot.fit}`);
+  } else {
+    if (slot.fontSizePx) parts.push(`font-size:${Number(slot.fontSizePx)}px`);
+    if (slot.textColor) parts.push(`color:${String(slot.textColor).replace(/[;{}]/g, '')}`);
+    if (slot.bold) parts.push('font-weight:700');
+  }
+  if (slot.customCss) parts.push(String(slot.customCss).replace(/[{}<>]/g, ''));
+  return parts.filter(Boolean).join(';');
+}
 
 export async function GET(
   _req: Request,
@@ -38,10 +56,13 @@ export async function GET(
       ? (mediaUrl || slot.value || '')
       : escapeHtml(slot.value || '');
     html = html.split(`{{slot:${slot.key}}}`).join(value);
+    html = html.split(`{{slotstyle:${slot.key}}}`).join(escapeAttr(slotStyle(slot)));
     if (slot.kind === 'image') {
       // Replacement uploaded → disable the original responsive srcset so the
       // browser actually uses the new src. Untouched → original srcset back.
-      html = html.split(`{{slotset:${slot.key}}}`).join(mediaUrl ? '' : (slot.srcset || ''));
+      // A width override also drops srcset — the browser would otherwise pick
+      // a responsive variant and ignore the requested size.
+      html = html.split(`{{slotset:${slot.key}}}`).join((mediaUrl || slot.widthPx) ? '' : (slot.srcset || ''));
     }
   }
 

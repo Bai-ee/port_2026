@@ -76,18 +76,69 @@ export default buildConfig({
         {
           name: 'slots',
           type: 'array',
-          admin: { description: 'Edit any value — the site updates immediately. Image slots: upload a replacement under "media", then select it.' },
+          admin: {
+            // Slot POSITION is fixed by the original theme's layout —
+            // reordering rows cannot move things on the site, so don't offer it.
+            isSortable: false,
+            description: 'Each slot is one piece of the original site, in page order (position is fixed by the design). Edit the value, adjust the style controls, save — the site updates immediately.',
+          },
           fields: [
             { name: 'key', type: 'text', required: true, admin: { hidden: true } },
             { name: 'kind', type: 'select', options: ['text', 'image'], required: true, admin: { hidden: true } },
             { name: 'label', type: 'text', admin: { readOnly: true } },
             { name: 'value', type: 'textarea' },
             { name: 'srcset', type: 'text', admin: { hidden: true } },
+            { name: 'baseStyle', type: 'text', admin: { hidden: true } },
             {
               name: 'media',
               type: 'upload',
               relationTo: 'media',
+              label: 'Replacement image',
               admin: { condition: (_data: any, siblingData: any) => siblingData?.kind === 'image' },
+            },
+            {
+              type: 'row',
+              fields: [
+                { name: 'hidden', type: 'checkbox', label: 'Hide on site' },
+                {
+                  name: 'widthPx',
+                  type: 'number',
+                  label: 'Width (px)',
+                  admin: { condition: (_d: any, s: any) => s?.kind === 'image', description: 'Blank = original size' },
+                },
+                {
+                  name: 'fit',
+                  type: 'select',
+                  label: 'Image fit',
+                  options: ['default', 'cover', 'contain'],
+                  defaultValue: 'default',
+                  admin: { condition: (_d: any, s: any) => s?.kind === 'image' },
+                },
+                {
+                  name: 'fontSizePx',
+                  type: 'number',
+                  label: 'Font size (px)',
+                  admin: { condition: (_d: any, s: any) => s?.kind === 'text' },
+                },
+                {
+                  name: 'textColor',
+                  type: 'text',
+                  label: 'Text color',
+                  admin: { condition: (_d: any, s: any) => s?.kind === 'text', description: 'Any CSS color, e.g. #e4571e' },
+                },
+                {
+                  name: 'bold',
+                  type: 'checkbox',
+                  label: 'Bold',
+                  admin: { condition: (_d: any, s: any) => s?.kind === 'text' },
+                },
+              ],
+            },
+            {
+              name: 'customCss',
+              type: 'text',
+              label: 'Custom CSS (advanced)',
+              admin: { description: 'Raw CSS declarations applied to this element, e.g. "margin-top: 40px; opacity: 0.8"' },
             },
           ],
         },
