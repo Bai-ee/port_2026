@@ -677,6 +677,18 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
       clothMat.map = tex;
       clothMat.needsUpdate = true; // program gains USE_MAP; onBeforeCompile re-runs with the same uniform objects
       setArtworkName(file.name);
+      // The map is MULTIPLIED by base color, and metal + zero-rough surfaces kill
+      // diffuse — a dark foil base renders any artwork near-invisible. Snap the
+      // material to an image-friendly base so the upload reads clearly; holo
+      // dials stay where the user set them.
+      setMat((m) => ({
+        ...m,
+        preset: '',
+        baseColor: '#ffffff',
+        metalness: Math.min(m.metalness, 0.12),
+        roughness: Math.max(m.roughness, 0.35),
+        bump: Math.min(m.bump, 0.35),
+      }));
     };
     img.src = URL.createObjectURL(file);
   }, []);
