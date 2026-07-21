@@ -136,6 +136,8 @@ export async function deployCms({ jobId, log = console.log }) {
     ['HITLOOP_CONTENT_WEBHOOK_URL', webhookUrl],
     ['HITLOOP_CONTENT_WEBHOOK_SECRET', webhookSecret],
     ['HITLOOP_JOB_ID', jobId],
+    // Live Preview pane target — the site's own public URL.
+    ['SITE_ORIGIN', `https://${projectName}.vercel.app`],
   ];
   for (const [key, value] of envPairs) {
     // `env add` fails if the var exists — remove first (ignore absence).

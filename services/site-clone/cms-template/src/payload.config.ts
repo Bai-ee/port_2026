@@ -29,7 +29,20 @@ const filename = fileURLToPath(import.meta.url);
 const dirname = path.dirname(filename);
 
 export default buildConfig({
-  admin: { user: 'users' },
+  admin: {
+    user: 'users',
+    // Live Preview: editing a page shows the REAL site alongside the fields.
+    // SITE_ORIGIN is set by the hosting deploy; local dev falls back to the
+    // dev server itself.
+    livePreview: {
+      url: ({ data }) => {
+        const origin = process.env.SITE_ORIGIN || 'http://localhost:3100';
+        const slug = data?.slug && data.slug !== 'home' ? `/${data.slug}` : '/';
+        return `${origin}${slug}`;
+      },
+      collections: ['pages'],
+    },
+  },
   collections: [
     {
       slug: 'users',
