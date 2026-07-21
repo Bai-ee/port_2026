@@ -335,6 +335,47 @@ export default function SiteRecreateCard({ user, runWithTerminal }) {
         )}
       </section>
 
+      {/* ── Primary actions — the two doors: the site, and its admin ── */}
+      {(() => {
+        const siteHref = activeJob?.cms?.hostedUrl || activeJob?.demo?.url || activeJob?.preview?.vercelUrl || null;
+        const adminHref = activeJob?.cms?.hostedAdminUrl
+          || (activeJob?.cms?.hostedUrl ? `${activeJob.cms.hostedUrl}/admin` : null);
+        if (!siteHref) return null;
+        return (
+          <section id="site-recreate-primary-actions" className="sr-panel sr-primary-actions">
+            <div className="sr-action-btn-row">
+              <a
+                id="site-recreate-view-site-btn"
+                className="cta-pill-btn sr-action-btn"
+                href={siteHref}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <ExternalLink size={15} /> VIEW LIVE SITE
+              </a>
+              {adminHref ? (
+                <a
+                  id="site-recreate-open-admin-btn"
+                  className="cta-pill-btn sr-action-btn sr-action-btn-admin"
+                  href={adminHref}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <ShieldCheck size={15} /> OPEN ADMIN
+                </a>
+              ) : (
+                <span className="sr-action-hint">Admin appears here after HOST LIVE (below).</span>
+              )}
+            </div>
+            {adminHref && activeJob?.cms?.adminEmail && activeJob?.cms?.adminPassword ? (
+              <p className="sr-verify-summary sr-action-creds">
+                Admin login: {activeJob.cms.adminEmail} / <code>{activeJob.cms.adminPassword}</code>
+              </p>
+            ) : null}
+          </section>
+        );
+      })()}
+
       {/* ── Live Demo — hosted, editable ───────────────────────────── */}
       <section id="site-recreate-demo-panel" className="sr-panel">
         <div className="sr-head">
@@ -597,6 +638,13 @@ export default function SiteRecreateCard({ user, runWithTerminal }) {
         .sr-screenshot-strip img { height: 220px; border-radius: 10px; border: 1px solid rgba(42,36,32,0.14); }
         .sr-download-btn { display: inline-flex; align-items: center; gap: 6px; margin-right: 10px; margin-bottom: 4px; }
         .sr-download-cms { border: 1px solid rgba(42,36,32,0.24); }
+        .sr-primary-actions { border-width: 2px; border-color: rgba(42,36,32,0.28); }
+        .sr-action-btn-row { display: flex; gap: 12px; flex-wrap: wrap; }
+        .sr-action-btn { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; padding: 12px 18px; }
+        .sr-action-btn-admin { background: #2a2420; color: #fff; border-color: #2a2420; }
+        .sr-action-btn-admin:hover { background: #443a33; }
+        .sr-action-hint { align-self: center; font-family: var(--font-mono); font-size: 11px; color: rgba(42,36,32,0.5); }
+        .sr-action-creds { margin-top: 10px; }
         .sr-demo-editor-controls { display: flex; align-items: center; gap: 10px; margin: 10px 0; flex-wrap: wrap; }
         .sr-demo-editor-controls select { font-family: var(--font-mono); font-size: 12px; padding: 8px 10px; border: 1px solid rgba(42,36,32,0.2); border-radius: 10px; background: #fff; }
         .sr-demo-slot-list { max-height: 340px; overflow: auto; display: grid; gap: 8px; border: 1px solid rgba(42,36,32,0.1); border-radius: 12px; padding: 10px; background: rgba(255,255,255,0.6); }
