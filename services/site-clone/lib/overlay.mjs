@@ -107,7 +107,7 @@ function tokenizePage({ html, slug, fileToSlug }) {
     if (srcset) $el.attr('srcset', `{{slotset:${key}}}`);
   });
 
-  const title = clean($('h1').first().text().replace(/{{slot:[^}]+}}/, '')) // h1 may be tokenized
+  const title = clean($('h1').first().text().replace(/{{slot:[^}]+}}/g, '')) // h1 may hold multiple tokens — strip ALL
     || slots.find((s) => s.label.startsWith('h1:'))?.value
     || slots.find((s) => s.label.startsWith('title:'))?.value
     || slug;
