@@ -1,0 +1,1066 @@
+'use client';
+
+// HoloCloth Studio — the PAPER/CLOTH mode of the Mockup Studio (?tool=cloth).
+// A verlet cloth simulator draped with a holographic-foil physical material:
+// upload artwork onto the fabric, dial foil/iridescence/sparkle, pick a
+// background, then export a still (PNG, optionally transparent) or a WebM
+// motion loop — all client-side, no server render. Built from scratch on the
+// repo's existing three/three-stdlib deps; shares the studio page's visual
+// language (GLASS tokens + RailCard) but is fully self-contained so the
+// fragile mockup-video code paths stay untouched.
+
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ChevronRight, Download, Palette, Image as ImageIcon, Wind, Layers,
+  Hand, Orbit, RotateCcw, Zap, Video, Camera,
+} from 'lucide-react';
+
+// ── UI tokens — mirror app/dashboard/studio/page.jsx GLASS/ui (kept local so
+// the page file needs no refactor; page files can't export shared helpers). ──
+const GLASS = {
+  bg: 'linear-gradient(180deg,#fefdf9 0%,#fbf8f0 60%,#fdfaf2 100%)',
+  accent: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)',
+  ink: '#1a1a1a',
+  inkSoft: '#444',
+  inkMute: '#8a8a8a',
+  hair: '#E4E4E4',
+  sans: '"Space Grotesk", system-ui, -apple-system, sans-serif',
+  mono: '"Space Mono", ui-monospace, monospace',
+};
+const ui = {
+  btn: (active = false) => ({
+    height: 40,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    background: active ? GLASS.ink : 'rgba(255,255,255,0.6)',
+    color: active ? '#fff' : GLASS.ink,
+    border: '1px solid ' + (active ? GLASS.ink : GLASS.hair),
+    boxShadow: active ? 'none' : '0 1px 2px rgba(0,0,0,0.04)',
+    borderRadius: 999, padding: '0 15px',
+    fontSize: 12, fontFamily: GLASS.sans, fontWeight: 600, letterSpacing: '0.01em',
+    cursor: 'pointer', whiteSpace: 'nowrap',
+    transition: 'background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease',
+  }),
+  cta: {
+    height: 40,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    background: GLASS.accent, color: '#fff', border: 'none', borderRadius: 999,
+    padding: '0 18px', fontSize: 12, fontFamily: GLASS.sans, fontWeight: 700,
+    letterSpacing: '0.01em', cursor: 'pointer', whiteSpace: 'nowrap',
+    boxShadow: '0 2px 8px rgba(140,70,255,0.25), inset 0 1px 0 rgba(255,255,255,0.3)',
+  },
+  label: {
+    fontSize: 9, fontFamily: GLASS.mono, letterSpacing: '0.12em',
+    textTransform: 'uppercase', color: GLASS.inkMute, fontWeight: 700,
+  },
+};
+
+// Rail card — same states as the mockup rail (ported from DashboardPage
+// .capability-nav-btn via page.jsx); class names match so the CSS below applies.
+function RailCard({ id, icon, title, subtitle, color, open, onToggle, badge, children, maxH = 2400 }) {
+  return (
+    <div id={id} className={'studio-rail-card' + (open ? ' studio-rail-card--active' : '')}>
+      <button
+        className="studio-rail-card-btn"
+        aria-expanded={open}
+        onClick={onToggle}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 12,
+          padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
+        }}
+      >
+        <span className="studio-rail-card-content" style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: 1, minWidth: 0 }}>
+          <span style={{ fontFamily: GLASS.sans, fontSize: 15, fontWeight: 500, color: GLASS.ink, lineHeight: 1.15, letterSpacing: '-0.01em' }}>{title}</span>
+          {subtitle ? <span style={{ ...ui.label, fontSize: 10, letterSpacing: '0.06em', color: GLASS.inkMute }}>{subtitle}</span> : null}
+        </span>
+        {badge}
+        <span className="studio-rail-card-icon" style={{ flexShrink: 0, color, display: 'flex', alignItems: 'center' }}>{icon}</span>
+        <span aria-hidden="true" style={{
+          flexShrink: 0, color: GLASS.inkMute, display: 'flex', alignItems: 'center',
+          transform: open ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.25s ease',
+        }}>
+          <ChevronRight size={16} strokeWidth={2.5} />
+        </span>
+      </button>
+      <div style={{ maxHeight: open ? maxH : 0, overflow: 'hidden', transition: 'max-height 0.35s cubic-bezier(0.4,0,0.2,1)' }}>
+        <div style={{ padding: '2px 16px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Labelled range slider — the studio rail's standard control row.
+function Slider({ label, min, max, step, value, onChange, fmt = (v) => v.toFixed(2), disabled = false }) {
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 3, opacity: disabled ? 0.4 : 1 }}>
+      <span style={{ ...ui.label, display: 'flex', justifyContent: 'space-between' }}>
+        {label}<span style={{ color: GLASS.ink }}>{fmt(value)}</span>
+      </span>
+      <input
+        type="range" min={min} max={max} step={step} value={value} disabled={disabled}
+        onChange={(e) => onChange(Number(e.target.value))}
+        style={{ width: '100%', accentColor: GLASS.ink }}
+      />
+    </label>
+  );
+}
+
+// ── Config ───────────────────────────────────────────────────────────────────
+const SETTINGS_KEY = 'holocloth-studio-defaults-v1';
+const loadSavedDefaults = () => {
+  if (typeof window === 'undefined') return {};
+  try { return JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || '{}') || {}; } catch { return {}; }
+};
+
+// Cloth sheet aspect presets — world units (camera sits ~2.6 away).
+const CLOTH_ASPECTS = {
+  portrait:  { w: 1.20, h: 1.60, label: 'Portrait' },
+  square:    { w: 1.42, h: 1.42, label: 'Square' },
+  landscape: { w: 1.72, h: 1.08, label: 'Landscape' },
+};
+// Perf → cloth grid density (longest edge segments) + renderer pixel-ratio cap.
+const PERF_LEVELS = {
+  high:   { segs: 56, pr: 2,   label: 'High' },
+  medium: { segs: 40, pr: 1.5, label: 'Medium' },
+  low:    { segs: 28, pr: 1,   label: 'Low' },
+};
+const PIN_MODES = [
+  { id: 'top-edge',     label: 'Top edge' },
+  { id: 'top-corners',  label: 'Top corners' },
+  { id: 'four-corners', label: '4 corners' },
+];
+const FINISHES = ['glossy', 'satin', 'matte'];
+
+// Default material state (mirrors a neutral "black cloth" starting point).
+const DEFAULT_MAT = {
+  preset: 'black-cloth', finish: 'glossy', baseColor: '#101114',
+  holoIntensity: 0.55, holoScale: 8, bandFreq: 0.35,
+  saturation: 0.6, hueShift: 0, sparkle: 0.25, specTint: 1,
+  iridescence: 0.35, roughness: 0.12, metalness: 0.35,
+  clearcoat: 0.5, coatRoughness: 0.08, sheen: 0.08,
+  bump: 0.79, bumpTiling: 3,
+};
+// Material presets — whole-material looks; picking one overwrites the sliders.
+const MATERIAL_PRESETS = {
+  'black-cloth': { label: 'Black Cloth', ...DEFAULT_MAT, preset: 'black-cloth', holoIntensity: 0, sparkle: 0, iridescence: 0, clearcoat: 0, roughness: 0 },
+  'holo-foil':   { label: 'Holo Foil',   ...DEFAULT_MAT, preset: 'holo-foil', baseColor: '#15151d', holoIntensity: 1, holoScale: 8, bandFreq: 0.42, saturation: 0.85, sparkle: 0.5, iridescence: 1, metalness: 0.9, roughness: 0.14, clearcoat: 0.65 },
+  'oil-slick':   { label: 'Oil Slick',   ...DEFAULT_MAT, preset: 'oil-slick', baseColor: '#05060a', holoIntensity: 0.45, bandFreq: 0.18, saturation: 0.7, sparkle: 0, iridescence: 1, metalness: 0.55, roughness: 0.08, clearcoat: 1, coatRoughness: 0.05 },
+  chrome:        { label: 'Chrome',      ...DEFAULT_MAT, preset: 'chrome', baseColor: '#cfd2d8', holoIntensity: 0.1, sparkle: 0, iridescence: 0.15, metalness: 1, roughness: 0.06, clearcoat: 0.3, bump: 0.25 },
+  silk:          { label: 'Silk',        ...DEFAULT_MAT, preset: 'silk', baseColor: '#2a1038', finish: 'satin', holoIntensity: 0.12, sparkle: 0, iridescence: 0.2, metalness: 0.1, roughness: 0.45, clearcoat: 0.1, sheen: 0.9, bump: 0.4 },
+  paper:         { label: 'Paper White', ...DEFAULT_MAT, preset: 'paper', baseColor: '#f4f1ea', finish: 'matte', holoIntensity: 0, sparkle: 0, iridescence: 0, metalness: 0, roughness: 0.85, clearcoat: 0, sheen: 0.15, bump: 0.55, bumpTiling: 4 },
+};
+const DEFAULT_PHYS = {
+  windStrength: 1.1, windSpeed: 1, gravity: 1.6,
+  damping: 0.985, stiffness: 0.85, pinMode: 'top-edge',
+};
+
+// The material sliders, in the order the reference panel lists them.
+const MATERIAL_SLIDERS = [
+  ['holoIntensity', 'HOLO INTENSITY', 0, 1, 0.01],
+  ['holoScale',     'HOLO SCALE',     1, 30, 1],
+  ['bandFreq',      'BAND FREQ',      0, 2, 0.01],
+  ['saturation',    'SATURATION',     0, 1, 0.01],
+  ['hueShift',      'HUE SHIFT',      0, 1, 0.01],
+  ['sparkle',       'SPARKLE',        0, 1, 0.01],
+  ['specTint',      'SPEC TINT',      0, 1, 0.01],
+  ['iridescence',   'IRIDESCENCE',    0, 1, 0.01],
+  ['roughness',     'ROUGHNESS',      0, 1, 0.01],
+  ['metalness',     'METALNESS',      0, 1, 0.01],
+  ['clearcoat',     'CLEARCOAT',      0, 1, 0.01],
+  ['coatRoughness', 'COAT ROUGHNESS', 0, 1, 0.01],
+  ['sheen',         'SHEEN',          0, 1, 0.01],
+  ['bump',          'BUMP',           0, 2, 0.01],
+  ['bumpTiling',    'BUMP TILING',    1, 12, 0.5],
+];
+
+const getSupportedVideoMimeType = () => {
+  if (typeof MediaRecorder === 'undefined') return '';
+  return [
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
+    'video/webm',
+  ].find((type) => MediaRecorder.isTypeSupported(type)) || '';
+};
+
+// Procedural paper-grain bump texture — default until the user uploads one.
+const makeGrainCanvas = () => {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 256;
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(256, 256);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const v = 118 + Math.floor(Math.random() * 60) + Math.floor(Math.random() * 60);
+    img.data[i] = v; img.data[i + 1] = v; img.data[i + 2] = v; img.data[i + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+};
+
+const downloadBlob = (blob, filename) => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+};
+
+// ── Holo shader injection — additive view-angle rainbow bands + glints on top
+// of MeshPhysicalMaterial, via onBeforeCompile (uniform objects live on the
+// world so slider changes update in place, no recompile). ──
+const HOLO_FRAG_PARS = `
+uniform float uHoloIntensity;
+uniform float uHoloScale;
+uniform float uBandFreq;
+uniform float uSatBoost;
+uniform float uHueShift;
+uniform float uSparkle;
+uniform float uTime;
+vec3 hcHue2Rgb(float h) {
+  float r = abs(h * 6.0 - 3.0) - 1.0;
+  float g = 2.0 - abs(h * 6.0 - 2.0);
+  float b = 2.0 - abs(h * 6.0 - 4.0);
+  return clamp(vec3(r, g, b), 0.0, 1.0);
+}
+float hcHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+`;
+const HOLO_FRAG_BODY = `
+#ifdef USE_UV
+if (uHoloIntensity > 0.001 || uSparkle > 0.001) {
+  vec3 hcN = normalize(normal);
+  vec3 hcV = normalize(vViewPosition);
+  float facing = clamp(dot(hcN, hcV), 0.0, 1.0);
+  float fres = pow(1.0 - facing, 1.4);
+  vec2 huv = vUv * uHoloScale;
+  float band  = sin((huv.x + huv.y) * 6.2831 * uBandFreq + facing * 14.0 + uTime * 0.4);
+  float band2 = sin(length(vUv - 0.5) * uHoloScale * uBandFreq * 6.2831 - facing * 9.0);
+  float hue = fract(uHueShift + facing * 1.15 + 0.22 * band + 0.13 * band2);
+  vec3 holoCol = mix(vec3(0.85), hcHue2Rgb(hue), clamp(0.35 + 0.65 * uSatBoost, 0.0, 1.0));
+  float holoAmt = uHoloIntensity * (0.22 + 0.78 * fres) * (0.55 + 0.45 * band);
+  float glint = 0.0;
+  if (uSparkle > 0.001) {
+    vec2 cell = floor(huv * 46.0);
+    float h = hcHash(cell);
+    float tw = pow(0.5 + 0.5 * sin(uTime * (1.5 + h * 4.0) + h * 40.0), 6.0);
+    glint = step(1.0 - uSparkle * 0.10, h) * tw * 5.0;
+  }
+  totalEmissiveRadiance += holoCol * max(holoAmt, 0.0) + holoCol * glint * max(uHoloIntensity, uSparkle * 0.4);
+}
+#endif
+`;
+
+export default function ClothStudio({ isNarrow = false, railW = 336 }) {
+  const stageRef = useRef(null);
+  const worldRef = useRef(null);
+  const [saved] = useState(loadSavedDefaults);
+  const [worldReady, setWorldReady] = useState(false);
+
+  // ── Control state ──
+  const [perf, setPerf] = useState(PERF_LEVELS[saved.perf] ? saved.perf : 'high');
+  const [mat, setMat] = useState(() => ({ ...DEFAULT_MAT, ...(saved.mat || {}) }));
+  const [phys, setPhys] = useState(() => ({ ...DEFAULT_PHYS, ...(saved.phys || {}) }));
+  const [clothAspect, setClothAspect] = useState(CLOTH_ASPECTS[saved.clothAspect] ? saved.clothAspect : 'portrait');
+  const [bgMode, setBgMode] = useState(['color', 'image', 'transparent'].includes(saved.bgMode) ? saved.bgMode : 'color');
+  const [bgColor, setBgColor] = useState(saved.bgColor || '#0a0a10');
+  const [bgImageEl, setBgImageEl] = useState(null);
+  const [envIntensity, setEnvIntensity] = useState(saved.envIntensity ?? 1);
+  const [videoSeconds, setVideoSeconds] = useState(saved.videoSeconds || 5);
+  const [touchMode, setTouchMode] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [status, setStatus] = useState('');
+  const [artworkName, setArtworkName] = useState('');
+  const [bumpName, setBumpName] = useState('');
+
+  // Panel disclosure — Material opens by default (it's the tool's heart).
+  const [materialOpen, setMaterialOpen] = useState(true);
+  const [physicsOpen, setPhysicsOpen] = useState(false);
+  const [imagesOpen, setImagesOpen] = useState(false);
+  const [backgroundOpen, setBackgroundOpen] = useState(false);
+  const [renderOpen, setRenderOpen] = useState(false);
+
+  const setMatKey = useCallback((key, val) => setMat((m) => ({ ...m, [key]: val, preset: '' })), []);
+  const setPhysKey = useCallback((key, val) => setPhys((p) => ({ ...p, [key]: val })), []);
+
+  // Persist current dials as next visit's defaults.
+  useEffect(() => {
+    const id = setTimeout(() => {
+      try {
+        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ perf, mat, phys, clothAspect, bgMode, bgColor, envIntensity, videoSeconds }));
+      } catch { /* non-critical */ }
+    }, 250);
+    return () => clearTimeout(id);
+  }, [perf, mat, phys, clothAspect, bgMode, bgColor, envIntensity, videoSeconds]);
+
+  // Latest control state, readable from the render loop without re-init.
+  const liveRef = useRef({});
+  liveRef.current = { phys, touchMode };
+
+  // ── World init — one scene per mount; controls mutate it in place. ──
+  useEffect(() => {
+    if (!stageRef.current) return undefined;
+    let disposed = false;
+    let raf = 0;
+    const stage = stageRef.current;
+
+    (async () => {
+      const THREE = await import('three');
+      const { OrbitControls, RoomEnvironment } = await import('three-stdlib');
+      if (disposed) return;
+
+      const w = stage.clientWidth || 800;
+      const h = stage.clientHeight || 600;
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(40, w / h, 0.05, 60);
+      camera.position.set(0, 0, 2.6);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, PERF_LEVELS[perf].pr));
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.0;
+      renderer.setSize(w, h, false);
+      Object.assign(renderer.domElement.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', borderRadius: '16px', touchAction: 'none', display: 'block' });
+      stage.appendChild(renderer.domElement);
+
+      // IBL — RoomEnvironment drives the foil reflections (same as mockup mode).
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+      const key = new THREE.DirectionalLight(0xffffff, 1.6);
+      key.position.set(1.5, 2, 2.5);
+      scene.add(key);
+      const rim = new THREE.DirectionalLight(0x88ffee, 0.6);
+      rim.position.set(-2, 0.5, -1.5);
+      scene.add(rim);
+
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.08;
+      controls.minDistance = 0.6;
+      controls.maxDistance = 8;
+      controls.target.set(0, 0, 0);
+
+      // Holo uniforms — shared object; slider effects mutate .value in place.
+      const holoUniforms = {
+        uHoloIntensity: { value: 0 }, uHoloScale: { value: 8 }, uBandFreq: { value: 0.35 },
+        uSatBoost: { value: 0.6 }, uHueShift: { value: 0 }, uSparkle: { value: 0 },
+        uTime: { value: 0 },
+      };
+
+      const bumpTex = new THREE.CanvasTexture(makeGrainCanvas());
+      bumpTex.wrapS = THREE.RepeatWrapping; bumpTex.wrapT = THREE.RepeatWrapping;
+
+      const clothMat = new THREE.MeshPhysicalMaterial({
+        color: 0x101114, side: THREE.DoubleSide,
+        roughness: 0.12, metalness: 0.35,
+        clearcoat: 0.5, clearcoatRoughness: 0.08,
+        sheen: 0.08, sheenRoughness: 0.5, sheenColor: new THREE.Color(0xffffff),
+        iridescence: 0.35, iridescenceIOR: 1.3, iridescenceThicknessRange: [120, 480],
+        bumpMap: bumpTex, bumpScale: 0.01,
+      });
+      clothMat.defines = { ...(clothMat.defines || {}), USE_UV: '' };
+      clothMat.onBeforeCompile = (shader) => {
+        Object.assign(shader.uniforms, holoUniforms);
+        shader.fragmentShader = shader.fragmentShader
+          .replace('#include <common>', '#include <common>\n' + HOLO_FRAG_PARS)
+          .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + HOLO_FRAG_BODY);
+      };
+
+      const world = {
+        THREE, scene, camera, renderer, controls, pmrem, clothMat, holoUniforms, bumpTex,
+        cloth: null, envIntensity: 1, bgTexture: null,
+        pointer: { active: false, x: 0, y: 0 },
+        raycaster: new THREE.Raycaster(),
+        clock: new THREE.Clock(),
+        recorder: null,
+      };
+      worldRef.current = world;
+
+      // ── Cloth build/rebuild — verlet particle grid on a PlaneGeometry whose
+      // position attribute IS the sim's current-position buffer. ──
+      world.buildCloth = (aspectId, perfId) => {
+        const { w: cw, h: ch } = CLOTH_ASPECTS[aspectId] || CLOTH_ASPECTS.portrait;
+        const base = PERF_LEVELS[perfId]?.segs || 56;
+        const longest = Math.max(cw, ch);
+        const segX = Math.max(12, Math.round(base * cw / longest));
+        const segY = Math.max(12, Math.round(base * ch / longest));
+
+        if (world.cloth) {
+          scene.remove(world.cloth.mesh);
+          world.cloth.geometry.dispose();
+        }
+
+        const geometry = new THREE.PlaneGeometry(cw, ch, segX, segY);
+        const pos = geometry.attributes.position;
+        const count = pos.count;
+        const prev = new Float32Array(count * 3);
+        const orig = new Float32Array(count * 3);
+        prev.set(pos.array); orig.set(pos.array);
+
+        const cols = segX + 1, rows = segY + 1;
+        const idx = (x, y) => y * cols + x;
+        const restX = cw / segX, restY = ch / segY;
+        const restD = Math.hypot(restX, restY);
+        const constraints = [];
+        for (let y = 0; y < rows; y += 1) {
+          for (let x = 0; x < cols; x += 1) {
+            if (x < cols - 1) constraints.push([idx(x, y), idx(x + 1, y), restX]);          // structural →
+            if (y < rows - 1) constraints.push([idx(x, y), idx(x, y + 1), restY]);          // structural ↓
+            if (x < cols - 1 && y < rows - 1) {
+              constraints.push([idx(x, y), idx(x + 1, y + 1), restD]);                      // shear ↘
+              constraints.push([idx(x + 1, y), idx(x, y + 1), restD]);                      // shear ↙
+            }
+            if (x < cols - 2) constraints.push([idx(x, y), idx(x + 2, y), restX * 2]);      // bend →
+            if (y < rows - 2) constraints.push([idx(x, y), idx(x, y + 2), restY * 2]);      // bend ↓
+          }
+        }
+
+        const mesh = new THREE.Mesh(geometry, clothMat);
+        scene.add(mesh);
+        world.cloth = { geometry, mesh, prev, orig, constraints, cols, rows, count, cw, ch };
+        world.applyPins(liveRef.current.phys.pinMode);
+      };
+
+      // Pin set — indices held to their original grid position each solve pass.
+      // PlaneGeometry rows run top (y=0) → bottom, so row 0 is the top edge.
+      world.applyPins = (pinMode) => {
+        const c = world.cloth; if (!c) return;
+        const pins = new Set();
+        const top = (x) => x;                                  // row 0
+        const bottom = (x) => (c.rows - 1) * c.cols + x;       // last row
+        if (pinMode === 'top-edge') { for (let x = 0; x < c.cols; x += 1) pins.add(top(x)); }
+        else if (pinMode === 'top-corners') { pins.add(top(0)); pins.add(top(c.cols - 1)); }
+        else { pins.add(top(0)); pins.add(top(c.cols - 1)); pins.add(bottom(0)); pins.add(bottom(c.cols - 1)); }
+        c.pins = pins;
+      };
+
+      world.resetCloth = () => {
+        const c = world.cloth; if (!c) return;
+        c.geometry.attributes.position.array.set(c.orig);
+        c.prev.set(c.orig);
+        c.geometry.attributes.position.needsUpdate = true;
+      };
+
+      // Poke — radial velocity impulse pushed away from the camera, centered on
+      // a random point of the sheet (verlet: velocity = pos - prev, so we move prev).
+      world.poke = (cx = null, cy = null, strength = 0.045) => {
+        const c = world.cloth; if (!c) return;
+        const arr = c.geometry.attributes.position.array;
+        const px = cx ?? (Math.random() - 0.5) * c.cw * 0.7;
+        const py = cy ?? (Math.random() - 0.5) * c.ch * 0.7;
+        const r = Math.max(c.cw, c.ch) * 0.22;
+        for (let i = 0; i < c.count; i += 1) {
+          const dx = arr[i * 3] - px, dy = arr[i * 3 + 1] - py;
+          const d = Math.hypot(dx, dy);
+          if (d < r && !c.pins?.has(i)) {
+            const f = (1 - d / r) * strength;
+            c.prev[i * 3 + 2] += f; // pos - prev grows negative-z → sheet billows away
+          }
+        }
+      };
+
+      world.buildCloth(clothAspect, perf);
+
+      // ── Pointer interaction (touch mode) — nearest-particle-to-ray push. ──
+      const ndc = new THREE.Vector2();
+      const rayPoint = new THREE.Vector3();
+      const pushCloth = (e) => {
+        const c = world.cloth; if (!c) return;
+        const rect = renderer.domElement.getBoundingClientRect();
+        ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+        world.raycaster.setFromCamera(ndc, camera);
+        const ray = world.raycaster.ray;
+        const arr = c.geometry.attributes.position.array;
+        const r = Math.max(c.cw, c.ch) * 0.14;
+        for (let i = 0; i < c.count; i += 1) {
+          rayPoint.set(arr[i * 3], arr[i * 3 + 1], arr[i * 3 + 2]);
+          const d = ray.distanceToPoint(rayPoint);
+          if (d < r && !c.pins?.has(i)) {
+            const f = (1 - d / r) * 0.02;
+            c.prev[i * 3] -= ray.direction.x * f;
+            c.prev[i * 3 + 1] -= ray.direction.y * f;
+            c.prev[i * 3 + 2] -= ray.direction.z * f;
+          }
+        }
+      };
+      const onPointerDown = (e) => { if (liveRef.current.touchMode) { world.pointer.active = true; pushCloth(e); } };
+      const onPointerMove = (e) => { if (liveRef.current.touchMode && world.pointer.active) pushCloth(e); };
+      const onPointerUp = () => { world.pointer.active = false; };
+      renderer.domElement.addEventListener('pointerdown', onPointerDown);
+      renderer.domElement.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', onPointerUp);
+
+      // ── Sim + render loop — fixed-step verlet, then constraint relaxation. ──
+      const DT = 1 / 60;
+      let accum = 0;
+      const step = (t) => {
+        const c = world.cloth; if (!c) return;
+        const p = liveRef.current.phys;
+        const arr = c.geometry.attributes.position.array;
+        const prev = c.prev;
+        const damp = p.damping;
+        const g = -p.gravity * 0.28;
+        const ws = p.windSpeed;
+        const gust = 0.5 + 0.5 * Math.sin(t * ws * 1.25);
+        const dt2 = DT * DT;
+
+        for (let i = 0; i < c.count; i += 1) {
+          if (c.pins?.has(i)) continue;
+          const ix = i * 3;
+          const x = arr[ix], y = arr[ix + 1], z = arr[ix + 2];
+          // wind — noise-ish field toward +z with lateral swirl
+          const wz = p.windStrength * 0.5 * (0.55 + 0.7 * gust) * (0.7 + 0.4 * Math.sin(x * 3.1 + t * ws * 2.1) * Math.cos(y * 2.4 + t * ws * 1.6));
+          const wx = p.windStrength * 0.12 * Math.sin(t * ws * 0.9 + y * 2.2);
+          const vx = (x - prev[ix]) * damp;
+          const vy = (y - prev[ix + 1]) * damp;
+          const vz = (z - prev[ix + 2]) * damp;
+          prev[ix] = x; prev[ix + 1] = y; prev[ix + 2] = z;
+          arr[ix] = x + vx + wx * dt2;
+          arr[ix + 1] = y + vy + g * dt2;
+          arr[ix + 2] = z + vz + wz * dt2;
+        }
+
+        const stiff = 0.5 * p.stiffness;
+        const iters = 5;
+        for (let it = 0; it < iters; it += 1) {
+          for (let ci = 0; ci < c.constraints.length; ci += 1) {
+            const [a, b, rest] = c.constraints[ci];
+            const ax = a * 3, bx = b * 3;
+            const dx = arr[bx] - arr[ax], dy = arr[bx + 1] - arr[ax + 1], dz = arr[bx + 2] - arr[ax + 2];
+            const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-6;
+            const diff = ((dist - rest) / dist) * stiff;
+            const ox = dx * diff, oy = dy * diff, oz = dz * diff;
+            arr[ax] += ox; arr[ax + 1] += oy; arr[ax + 2] += oz;
+            arr[bx] -= ox; arr[bx + 1] -= oy; arr[bx + 2] -= oz;
+          }
+          // Re-assert pins each pass so the solve can't drag them.
+          if (c.pins) for (const pi of c.pins) {
+            const ix = pi * 3;
+            arr[ix] = c.orig[ix]; arr[ix + 1] = c.orig[ix + 1]; arr[ix + 2] = c.orig[ix + 2];
+            prev[ix] = c.orig[ix]; prev[ix + 1] = c.orig[ix + 1]; prev[ix + 2] = c.orig[ix + 2];
+          }
+        }
+
+        c.geometry.attributes.position.needsUpdate = true;
+        c.geometry.computeVertexNormals();
+      };
+
+      const loop = () => {
+        if (disposed) return;
+        raf = requestAnimationFrame(loop);
+        const dt = Math.min(world.clock.getDelta(), 0.1);
+        accum += dt;
+        const t = world.clock.elapsedTime;
+        let steps = 0;
+        while (accum >= DT && steps < 3) { step(t); accum -= DT; steps += 1; }
+        if (steps === 3) accum = 0; // shed backlog after stalls instead of spiraling
+        holoUniforms.uTime.value = t;
+        controls.update();
+        renderer.render(scene, camera);
+      };
+      loop();
+
+      // Keep canvas sized to the stage.
+      const ro = new ResizeObserver(() => {
+        const nw = stage.clientWidth, nh = stage.clientHeight;
+        if (!nw || !nh) return;
+        camera.aspect = nw / nh;
+        camera.updateProjectionMatrix();
+        renderer.setSize(nw, nh, false);
+      });
+      ro.observe(stage);
+
+      world.cleanup = () => {
+        ro.disconnect();
+        renderer.domElement.removeEventListener('pointerdown', onPointerDown);
+        renderer.domElement.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('pointerup', onPointerUp);
+        try { world.recorder?.stop(); } catch { /* already stopped */ }
+        controls.dispose();
+        world.cloth?.geometry?.dispose();
+        clothMat.map?.dispose(); bumpTex.dispose();
+        world.bgTexture?.dispose();
+        pmrem.dispose();
+        renderer.dispose();
+        renderer.domElement.remove();
+      };
+
+      setWorldReady(true);
+    })();
+
+    return () => {
+      disposed = true;
+      if (raf) cancelAnimationFrame(raf);
+      setWorldReady(false);
+      worldRef.current?.cleanup?.();
+      worldRef.current = null;
+    };
+    // Built once per mount — every control below mutates the world in place.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Material dials → material props + holo uniforms (no recompiles). ──
+  useEffect(() => {
+    const world = worldRef.current;
+    if (!worldReady || !world?.clothMat) return;
+    const { THREE, clothMat: m, holoUniforms: u } = world;
+    let rough = mat.roughness, cc = mat.clearcoat;
+    if (mat.finish === 'matte') { rough = Math.max(rough, 0.7); cc *= 0.15; }
+    else if (mat.finish === 'satin') { rough = Math.min(1, rough + 0.28); cc *= 0.5; }
+    m.color.set(mat.baseColor);
+    m.roughness = rough;
+    m.metalness = mat.metalness;
+    m.clearcoat = cc;
+    m.clearcoatRoughness = mat.coatRoughness;
+    m.sheen = mat.sheen;
+    m.iridescence = mat.iridescence;
+    m.bumpScale = mat.bump * 0.014;
+    if (m.bumpMap) m.bumpMap.repeat.set(mat.bumpTiling, mat.bumpTiling);
+    const hueCol = new THREE.Color().setHSL(mat.hueShift % 1, 0.85, 0.62);
+    m.specularColor.set(0xffffff).lerp(hueCol, mat.specTint * Math.min(1, mat.holoIntensity * 1.5));
+    m.specularIntensity = 0.4 + 0.6 * mat.specTint;
+    m.envMapIntensity = envIntensity;
+    u.uHoloIntensity.value = mat.holoIntensity;
+    u.uHoloScale.value = mat.holoScale;
+    u.uBandFreq.value = mat.bandFreq;
+    u.uSatBoost.value = mat.saturation;
+    u.uHueShift.value = mat.hueShift;
+    u.uSparkle.value = mat.sparkle;
+  }, [mat, envIntensity, worldReady]);
+
+  // ── Physics dials → pins (the loop reads the rest live via liveRef). ──
+  useEffect(() => {
+    const world = worldRef.current;
+    if (!worldReady || !world?.cloth) return;
+    world.applyPins(phys.pinMode);
+  }, [phys.pinMode, worldReady]);
+
+  // ── Cloth shape / perf rebuild. ──
+  useEffect(() => {
+    const world = worldRef.current;
+    if (!worldReady || !world) return;
+    world.buildCloth(clothAspect, perf);
+    world.renderer.setPixelRatio(Math.min(window.devicePixelRatio, PERF_LEVELS[perf].pr));
+  }, [clothAspect, perf, worldReady]);
+
+  // ── Background. ──
+  useEffect(() => {
+    const world = worldRef.current;
+    if (!worldReady || !world) return;
+    const { THREE, scene } = world;
+    world.bgTexture?.dispose(); world.bgTexture = null;
+    if (bgMode === 'color') {
+      scene.background = new THREE.Color(bgColor);
+    } else if (bgMode === 'image' && bgImageEl) {
+      const tex = new THREE.Texture(bgImageEl);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.needsUpdate = true;
+      world.bgTexture = tex;
+      scene.background = tex;
+    } else {
+      scene.background = null; // transparent — checkerboard shows through the canvas
+    }
+  }, [bgMode, bgColor, bgImageEl, worldReady]);
+
+  // ── Uploads. ──
+  const onArtworkUpload = useCallback((file) => {
+    const world = worldRef.current;
+    if (!world || !file) return;
+    const img = new Image();
+    img.onload = () => {
+      const { THREE, clothMat } = world;
+      clothMat.map?.dispose();
+      const tex = new THREE.Texture(img);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = world.renderer.capabilities.getMaxAnisotropy();
+      tex.needsUpdate = true;
+      clothMat.map = tex;
+      clothMat.needsUpdate = true; // program gains USE_MAP; onBeforeCompile re-runs with the same uniform objects
+      setArtworkName(file.name);
+    };
+    img.src = URL.createObjectURL(file);
+  }, []);
+  const clearArtwork = useCallback(() => {
+    const world = worldRef.current;
+    if (!world) return;
+    world.clothMat.map?.dispose();
+    world.clothMat.map = null;
+    world.clothMat.needsUpdate = true;
+    setArtworkName('');
+  }, []);
+  const onBumpUpload = useCallback((file) => {
+    const world = worldRef.current;
+    if (!world || !file) return;
+    const img = new Image();
+    img.onload = () => {
+      const { THREE, clothMat } = world;
+      clothMat.bumpMap?.dispose();
+      const tex = new THREE.Texture(img);
+      tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
+      tex.needsUpdate = true;
+      clothMat.bumpMap = tex;
+      clothMat.needsUpdate = true;
+      setBumpName(file.name);
+      setMat((m) => ({ ...m })); // re-apply tiling to the new map
+    };
+    img.src = URL.createObjectURL(file);
+  }, []);
+  const onBgImageUpload = useCallback((file) => {
+    if (!file) return;
+    const img = new Image();
+    img.onload = () => { setBgImageEl(img); setBgMode('image'); };
+    img.src = URL.createObjectURL(file);
+  }, []);
+
+  // ── Exports. ──
+  const exportPng = useCallback((transparent = false) => {
+    const world = worldRef.current;
+    if (!world) return;
+    const { renderer, scene, camera } = world;
+    const prevBg = scene.background;
+    const prevPr = renderer.getPixelRatio();
+    const nw = stageRef.current?.clientWidth || renderer.domElement.clientWidth;
+    const nh = stageRef.current?.clientHeight || renderer.domElement.clientHeight;
+    try {
+      if (transparent) scene.background = null;
+      // Hi-res one-shot — bump the ratio, reallocate the buffer, render, snapshot.
+      renderer.setPixelRatio(Math.min((window.devicePixelRatio || 1) * 2, 4));
+      renderer.setSize(nw, nh, false);
+      renderer.render(scene, camera);
+      // toBlob captures the bitmap at call time, so restoring below is safe.
+      renderer.domElement.toBlob((blob) => {
+        if (blob) downloadBlob(blob, `holocloth-${Date.now()}${transparent ? '-transparent' : ''}.png`);
+        setStatus(transparent ? 'Exported transparent PNG.' : 'Exported PNG.');
+      }, 'image/png');
+    } finally {
+      scene.background = prevBg;
+      renderer.setPixelRatio(prevPr);
+      renderer.setSize(nw, nh, false);
+      renderer.render(scene, camera);
+    }
+  }, []);
+
+  const exportVideo = useCallback(() => {
+    const world = worldRef.current;
+    if (!world || recording) return;
+    const mime = getSupportedVideoMimeType();
+    if (!mime) { setStatus('Video capture unsupported in this browser — use Chrome for WebM export.'); return; }
+    const stream = world.renderer.domElement.captureStream(60);
+    const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 12_000_000 });
+    const chunks = [];
+    rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+    rec.onstop = () => {
+      world.recorder = null;
+      setRecording(false);
+      const blob = new Blob(chunks, { type: mime });
+      downloadBlob(blob, `holocloth-${Date.now()}.webm`);
+      setStatus(`Exported ${videoSeconds}s WebM motion loop.`);
+    };
+    world.recorder = rec;
+    setRecording(true);
+    setStatus(`Recording ${videoSeconds}s…`);
+    rec.start();
+    setTimeout(() => { try { rec.stop(); } catch { /* already stopped */ } }, videoSeconds * 1000);
+  }, [recording, videoSeconds]);
+
+  const applyPreset = useCallback((presetId) => {
+    const p = MATERIAL_PRESETS[presetId];
+    if (!p) return;
+    const { label, ...rest } = p;
+    setMat({ ...rest, preset: presetId });
+  }, []);
+
+  const uploadBtnStyle = { ...ui.btn(), width: '100%', cursor: 'pointer' };
+
+  return (
+    <>
+      {/* ── Board — the cloth canvas fills the area left of the rail. ── */}
+      <div
+        id="cloth-studio-board"
+        style={{
+          display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          ...(isNarrow
+            ? { position: 'relative', width: '100%', height: '46vh', flex: 'none' }
+            : { position: 'absolute', left: 0, top: 0, bottom: 0, right: railW }),
+        }}
+      >
+        <div id="cloth-studio-stage-area" style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: isNarrow ? 12 : '58px 24px 24px' }}>
+          <div
+            id="cloth-studio-stage-shell"
+            ref={stageRef}
+            style={{
+              position: 'relative', width: '100%', height: '100%',
+              borderRadius: 16, overflow: 'hidden',
+              border: '1px solid rgba(255,255,255,0.6)',
+              boxShadow: '0 18px 60px rgba(20,20,30,0.22), 0 2px 10px rgba(0,0,0,0.10)',
+              // Checkerboard reads as "transparent" whenever the scene has no background.
+              background: bgMode === 'transparent'
+                ? 'repeating-conic-gradient(#d8d8de 0% 25%, #f2f2f5 0% 50%) 0 0 / 24px 24px'
+                : '#0b0b0f',
+            }}
+          >
+            {/* Orbit ⇄ Touch-cloth toggle — mirrors the mockup board's mode button. */}
+            <button
+              id="cloth-studio-touch-toggle"
+              onClick={() => setTouchMode((v) => !v)}
+              title={touchMode ? 'Touch the cloth (drag pushes fabric)' : 'Orbit the camera'}
+              style={{
+                position: 'absolute', top: 10, right: 48, zIndex: 6,
+                width: 30, height: 30, borderRadius: '50%',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                border: 'none', cursor: 'pointer', color: '#fff',
+                background: touchMode ? 'rgba(99,102,241,0.85)' : 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)',
+              }}
+            >
+              {touchMode ? <Hand size={15} strokeWidth={2.5} /> : <Orbit size={16} strokeWidth={2.5} />}
+            </button>
+            {/* Poke — quick impulse without opening the Physics card. */}
+            <button
+              id="cloth-studio-poke-btn"
+              onClick={() => worldRef.current?.poke()}
+              title="Poke the cloth"
+              style={{
+                position: 'absolute', top: 10, right: 10, zIndex: 6,
+                width: 30, height: 30, borderRadius: '50%',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                border: 'none', cursor: 'pointer', color: '#fff',
+                background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)',
+              }}
+            >
+              <Zap size={15} strokeWidth={2.5} />
+            </button>
+            {recording ? (
+              <div style={{
+                position: 'absolute', top: 10, left: 10, zIndex: 6, pointerEvents: 'none',
+                ...ui.label, color: '#fff', background: 'rgba(220,38,38,0.85)',
+                padding: '4px 10px', borderRadius: 999, backdropFilter: 'blur(6px)',
+              }}>● REC</div>
+            ) : null}
+          </div>
+        </div>
+        {status ? (
+          <div id="cloth-studio-status-row" style={{ padding: '0 24px 12px', fontFamily: GLASS.sans, fontSize: 11, color: GLASS.inkMute, flexShrink: 0 }}>{status}</div>
+        ) : null}
+      </div>
+
+      {/* ── Right rail — HoloCloth control cards. ── */}
+      <div
+        id="cloth-studio-rail"
+        data-tooltip-disabled="true"
+        style={{
+          boxSizing: 'border-box', maxWidth: '100%',
+          display: 'flex', flexDirection: 'column', overflow: 'visible', background: 'transparent',
+          ...(isNarrow
+            ? { position: 'relative', width: '100%', flex: 1, minHeight: 0, padding: 12, overflowY: 'auto' }
+            : { position: 'absolute', top: 0, right: 0, bottom: 0, width: railW, padding: 14, zIndex: 10, overflowY: 'auto' }),
+        }}
+      >
+        {/* Rail-card states — same rules as the mockup rail (page.jsx renders its
+            copy only in mockup mode, so cloth mode carries its own). */}
+        <style id="cloth-rail-card-styles">{`
+          #cloth-studio-rail, #cloth-studio-rail * { box-sizing: border-box; }
+          .studio-rail-card {
+            position: relative; border-radius: 1rem; overflow: hidden;
+            background: rgba(255, 255, 255, 0.35);
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            box-shadow: 0px 0px 0px rgba(0,0,0,0), inset 0 1px 0 rgba(255,255,255,0.22);
+            transform: scale(1) translateY(0);
+            transition: background 0.55s cubic-bezier(0.16,1,0.3,1), box-shadow 0.55s cubic-bezier(0.16,1,0.3,1), transform 0.22s cubic-bezier(0.16,1,0.3,1);
+            will-change: transform;
+          }
+          @media (prefers-reduced-motion: reduce) { .studio-rail-card { transition: none; } }
+          .studio-rail-card::before {
+            content: ''; position: absolute; inset: 0; border-radius: 1rem; padding: 1px;
+            background: rgba(176,176,182,0.6);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor; mask-composite: exclude;
+            pointer-events: none; opacity: 0.85; transition: opacity 0.45s ease; z-index: 0;
+          }
+          .studio-rail-card:hover {
+            background: rgba(255,255,255,1);
+            box-shadow: 0px 6px 14px rgba(0,0,0,0.06), 0px 18px 36px rgba(0,0,0,0.06), 0px 28px 56px rgba(0,0,0,0.09), inset 0 1px 0 rgba(255,255,255,0.55);
+            transform: scale(1.02) translateY(-2px);
+            transition: background 0.32s cubic-bezier(0.16,1,0.3,1), box-shadow 0.32s cubic-bezier(0.16,1,0.3,1), transform 0.38s cubic-bezier(0.34,1.56,0.64,1);
+          }
+          .studio-rail-card:hover::before { background: linear-gradient(180deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%); opacity: 1; }
+          .studio-rail-card:hover .studio-rail-card-content { transform: translateX(5px); transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1); }
+          .studio-rail-card:hover .studio-rail-card-icon { transform: scale(1.12); transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1); }
+          .studio-rail-card--active {
+            background: rgba(255,255,255,1);
+            box-shadow: 0px 6px 14px rgba(0,0,0,0.06), 0px 18px 36px rgba(0,0,0,0.06), 0px 28px 56px rgba(0,0,0,0.09), inset 0 1px 0 rgba(255,255,255,0.55);
+            transition: background 0.32s cubic-bezier(0.16,1,0.3,1) 0.15s, box-shadow 0.32s cubic-bezier(0.16,1,0.3,1) 0.15s, transform 0.38s cubic-bezier(0.34,1.56,0.64,1) 0.15s;
+          }
+          .studio-rail-card--active::before { background: linear-gradient(180deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%); opacity: 1; }
+          .studio-rail-card-content { position: relative; z-index: 1; transform: translateX(0); transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1); }
+          .studio-rail-card-icon { transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1); }
+          .studio-rail-card-btn { position: relative; z-index: 1; }
+        `}</style>
+
+        <div id="cloth-studio-rail-inner" style={{ margin: 'auto 0', display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
+
+          {/* MATERIAL */}
+          <RailCard
+            id="cloth-material-panel" icon={<Layers size={18} strokeWidth={2} />} title="Material"
+            subtitle={MATERIAL_PRESETS[mat.preset]?.label || 'Custom'}
+            color="#8b5cf6" open={materialOpen} onToggle={() => setMaterialOpen((v) => !v)}
+          >
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <span style={ui.label}>PRESET</span>
+              <select
+                value={mat.preset || ''}
+                onChange={(e) => applyPreset(e.target.value)}
+                style={{ ...ui.btn(), appearance: 'none', width: '100%' }}
+              >
+                {!mat.preset ? <option value="">Custom…</option> : null}
+                {Object.entries(MATERIAL_PRESETS).map(([id, p]) => <option key={id} value={id}>{p.label}</option>)}
+              </select>
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <span style={ui.label}>FINISH</span>
+              <div style={{ display: 'flex', gap: 5 }}>
+                {FINISHES.map((f) => (
+                  <button key={f} style={{ ...ui.btn(mat.finish === f), height: 30, padding: '0 12px', fontSize: 10, flex: 1 }} onClick={() => setMatKey('finish', f)}>
+                    {f[0].toUpperCase() + f.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0' }}>
+              <input type="color" value={mat.baseColor} onChange={(e) => setMatKey('baseColor', e.target.value)} style={{ width: 44, height: 32, border: '1px solid ' + GLASS.hair, borderRadius: 8, background: 'none', cursor: 'pointer', padding: 0 }} />
+              <span style={ui.label}>Base color</span>
+              <span style={{ flex: 1 }} />
+              <span style={{ fontFamily: GLASS.mono, fontSize: 11, color: GLASS.inkSoft, textTransform: 'uppercase' }}>{mat.baseColor}</span>
+            </label>
+            {MATERIAL_SLIDERS.map(([key, label, min, max, step]) => (
+              <Slider
+                key={key} label={label} min={min} max={max} step={step} value={mat[key]}
+                onChange={(v) => setMatKey(key, v)}
+                fmt={(v) => (step >= 1 ? String(v) : v.toFixed(2))}
+              />
+            ))}
+            <label style={uploadBtnStyle}>
+              <Download size={14} strokeWidth={2.5} style={{ marginRight: 6, transform: 'rotate(180deg)' }} />
+              {bumpName ? 'Replace bump map' : 'Upload bump map'}
+              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => onBumpUpload(e.target.files?.[0])} />
+            </label>
+            {bumpName ? <span style={{ ...ui.label, color: GLASS.inkSoft }}>{bumpName}</span> : null}
+          </RailCard>
+
+          {/* PHYSICS */}
+          <RailCard
+            id="cloth-physics-panel" icon={<Wind size={18} strokeWidth={2} />} title="Physics"
+            subtitle={PIN_MODES.find((p) => p.id === phys.pinMode)?.label || 'Cloth sim'}
+            color="#14b8a6" open={physicsOpen} onToggle={() => setPhysicsOpen((v) => !v)}
+          >
+            <Slider label="WIND STRENGTH" min={0} max={3} step={0.05} value={phys.windStrength} onChange={(v) => setPhysKey('windStrength', v)} />
+            <Slider label="WIND SPEED" min={0.1} max={3} step={0.05} value={phys.windSpeed} onChange={(v) => setPhysKey('windSpeed', v)} />
+            <Slider label="GRAVITY" min={0} max={4} step={0.05} value={phys.gravity} onChange={(v) => setPhysKey('gravity', v)} />
+            <Slider label="DAMPING" min={0.9} max={0.998} step={0.001} value={phys.damping} onChange={(v) => setPhysKey('damping', v)} fmt={(v) => v.toFixed(3)} />
+            <Slider label="STIFFNESS" min={0.3} max={1} step={0.01} value={phys.stiffness} onChange={(v) => setPhysKey('stiffness', v)} />
+            <span style={{ ...ui.label, marginTop: 4 }}>PINS</span>
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+              {PIN_MODES.map((p) => (
+                <button key={p.id} style={{ ...ui.btn(phys.pinMode === p.id), height: 30, padding: '0 12px', fontSize: 10 }} onClick={() => setPhysKey('pinMode', p.id)}>{p.label}</button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+              <button style={{ ...ui.btn(), flex: 1 }} onClick={() => worldRef.current?.poke()}><Zap size={13} strokeWidth={2.5} style={{ marginRight: 5 }} />Poke</button>
+              <button style={{ ...ui.btn(), flex: 1 }} onClick={() => worldRef.current?.resetCloth()}><RotateCcw size={13} strokeWidth={2.5} style={{ marginRight: 5 }} />Reset cloth</button>
+            </div>
+          </RailCard>
+
+          {/* IMAGES */}
+          <RailCard
+            id="cloth-images-panel" icon={<ImageIcon size={18} strokeWidth={2} />} title="Images"
+            subtitle={artworkName || 'Artwork on the fabric'}
+            color="#f59e0b" open={imagesOpen} onToggle={() => setImagesOpen((v) => !v)}
+          >
+            <label style={uploadBtnStyle}>
+              <Download size={14} strokeWidth={2.5} style={{ marginRight: 6, transform: 'rotate(180deg)' }} />
+              {artworkName ? 'Replace artwork' : 'Upload artwork'}
+              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => onArtworkUpload(e.target.files?.[0])} />
+            </label>
+            {artworkName ? (
+              <button style={{ ...ui.btn(), width: '100%' }} onClick={clearArtwork}>Remove artwork</button>
+            ) : (
+              <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>Drop a poster, logo, or album art onto the fabric — it drapes and catches the holo sheen.</span>
+            )}
+            <span style={{ ...ui.label, marginTop: 4 }}>SHEET SHAPE</span>
+            <div style={{ display: 'flex', gap: 5 }}>
+              {Object.entries(CLOTH_ASPECTS).map(([id, a]) => (
+                <button key={id} style={{ ...ui.btn(clothAspect === id), height: 30, padding: '0 12px', fontSize: 10, flex: 1 }} onClick={() => setClothAspect(id)}>{a.label}</button>
+              ))}
+            </div>
+          </RailCard>
+
+          {/* BACKGROUND */}
+          <RailCard
+            id="cloth-background-panel" icon={<Palette size={18} strokeWidth={2} />} title="Background"
+            subtitle={{ color: 'Solid color', image: 'Custom image', transparent: 'Transparent' }[bgMode]}
+            color="#ec4899" open={backgroundOpen} onToggle={() => setBackgroundOpen((v) => !v)}
+          >
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+              {[['color', 'Color'], ['image', 'Image'], ['transparent', 'None']].map(([m, label]) => (
+                <button key={m} style={{ ...ui.btn(bgMode === m), height: 30, padding: '0 12px', fontSize: 10 }} onClick={() => setBgMode(m)}>{label}</button>
+              ))}
+            </div>
+            {bgMode === 'color' ? (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0' }}>
+                <input type="color" value={bgColor} onChange={(e) => setBgColor(e.target.value)} style={{ width: 44, height: 32, border: '1px solid ' + GLASS.hair, borderRadius: 8, background: 'none', cursor: 'pointer', padding: 0 }} />
+                <span style={ui.label}>Background color</span>
+                <span style={{ flex: 1 }} />
+                <span style={{ fontFamily: GLASS.mono, fontSize: 11, color: GLASS.inkSoft, textTransform: 'uppercase' }}>{bgColor}</span>
+              </label>
+            ) : null}
+            {bgMode === 'image' ? (
+              <label style={uploadBtnStyle}>
+                <Download size={14} strokeWidth={2.5} style={{ marginRight: 6, transform: 'rotate(180deg)' }} />
+                {bgImageEl ? 'Replace image' : 'Upload image'}
+                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => onBgImageUpload(e.target.files?.[0])} />
+              </label>
+            ) : null}
+            {bgMode === 'transparent' ? (
+              <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>Transparent scene — pairs with "Export PNG (no background)" for compositing.</span>
+            ) : null}
+            <Slider label="LIGHT INTENSITY" min={0} max={2.5} step={0.05} value={envIntensity} onChange={setEnvIntensity} fmt={(v) => `${Math.round(v * 100)}%`} />
+          </RailCard>
+
+          {/* RENDER / EXPORT */}
+          <RailCard
+            id="cloth-render-panel" icon={<Download size={18} strokeWidth={2} />} title="Render"
+            subtitle={`PNG · ${videoSeconds}s WebM`}
+            color="#10b981" open={renderOpen} onToggle={() => setRenderOpen((v) => !v)}
+            badge={recording ? (
+              <span style={{ ...ui.label, color: '#fff', background: '#dc2626', padding: '2px 8px', borderRadius: 999, fontSize: 10 }}>REC</span>
+            ) : null}
+          >
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <span style={ui.label}>PERFORMANCE</span>
+              <select value={perf} onChange={(e) => setPerf(e.target.value)} style={{ ...ui.btn(), appearance: 'none', width: '100%' }}>
+                {Object.entries(PERF_LEVELS).map(([id, p]) => <option key={id} value={id}>{p.label}</option>)}
+              </select>
+            </label>
+            <button style={{ ...ui.btn(), width: '100%' }} onClick={() => exportPng(false)}>
+              <Camera size={14} strokeWidth={2.5} style={{ marginRight: 6 }} />Export PNG
+            </button>
+            <button style={{ ...ui.btn(), width: '100%' }} onClick={() => exportPng(true)}>
+              <Camera size={14} strokeWidth={2.5} style={{ marginRight: 6 }} />Export PNG (no background)
+            </button>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 4 }}>
+              <span style={ui.label}>VIDEO LENGTH</span>
+              <select value={videoSeconds} onChange={(e) => setVideoSeconds(Number(e.target.value))} style={{ ...ui.btn(), appearance: 'none', width: '100%' }}>
+                {[3, 5, 8, 10, 15].map((s) => <option key={s} value={s}>{s}S</option>)}
+              </select>
+            </label>
+            <button style={{ ...ui.cta, width: '100%', opacity: recording ? 0.5 : 1 }} disabled={recording} onClick={exportVideo}>
+              <Video size={14} strokeWidth={2.5} style={{ marginRight: 6 }} />
+              {recording ? 'Recording…' : 'Export video (WebM)'}
+            </button>
+            <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>Records the live canvas — poke or touch the cloth while it runs for extra motion. Chrome exports WebM.</span>
+          </RailCard>
+
+        </div>
+      </div>
+    </>
+  );
+}

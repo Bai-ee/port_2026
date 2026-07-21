@@ -10,11 +10,16 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import gsap from 'gsap';
 import { SlidersHorizontal, Clapperboard, Images, ChevronRight, Monitor, Download, RefreshCw, Play, Square, RotateCcw, Orbit, MousePointer2, Smartphone, Tablet, RectangleHorizontal, RectangleVertical, Palette, Save } from 'lucide-react';
 import { useAuth } from '../../../AuthContext';
 import UpRightArrow from '../../../components/UpRightArrow';
 import GlassTooltipLayer from '../../../components/GlassTooltipLayer';
+
+// HOLO PAPER mode (?tool=cloth) — the cloth/foil simulator. Client-only and
+// lazy so the mockup-video path pays nothing for it.
+const ClothStudio = dynamic(() => import('./ClothStudio'), { ssr: false });
 
 const VIEWPORTS = {
   desktop: { width: 1440, height: 900,  bezel: 30, depth: 40, corner: 26, screenCorner: 14, camZ: 2700, label: 'DESKTOP' },
@@ -410,6 +415,20 @@ export default function StudioPage() {
   // Right-nav width — the canvas/board fills the viewport area to the LEFT of it.
   const RAIL_W = 336;
 
+  // Studio tool — MOCKUP VIDEO (existing scene) vs HOLO PAPER (?tool=cloth,
+  // the cloth/foil simulator). null until the mount effect reads the URL so
+  // neither world builds prematurely and SSR/client markup stay identical.
+  const [tool, setTool] = useState(null);
+  const switchTool = useCallback((next) => {
+    setTool(next);
+    try {
+      const url = new URL(window.location.href);
+      if (next === 'cloth') url.searchParams.set('tool', 'cloth');
+      else url.searchParams.delete('tool');
+      window.history.replaceState(null, '', url.toString());
+    } catch { /* URL update is cosmetic */ }
+  }, []);
+
   const stageRef = useRef(null);
   // Mutable three.js world — built once, mutated by handlers.
   const worldRef = useRef(null);
@@ -549,6 +568,7 @@ export default function StudioPage() {
 	    if (qTemplate && CAMERA_TEMPLATES.some((tpl) => tpl.id === qTemplate)) setTemplateId(qTemplate);
 	    autoVideoRequestedRef.current = params.get('autovideo') === '1';
 	    if (params.get('director') === '1') setDirectorOpen(true);
+	    setTool(params.get('tool') === 'cloth' ? 'cloth' : 'mockup');
 	  }, []);
 
   // Source the site from the account's established website (no manual input).
@@ -863,7 +883,9 @@ export default function StudioPage() {
 
   // ── Three.js world ────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!user || !stageRef.current) return;
+    // MOCKUP mode only — HOLO PAPER (?tool=cloth) mounts its own world in
+    // ClothStudio; building both would double GPU + iframe load for nothing.
+    if (tool !== 'mockup' || !user || !stageRef.current) return;
     let disposed = false;
     let raf = 0;
     const stage = stageRef.current;
@@ -1458,8 +1480,9 @@ export default function StudioPage() {
 	      worldRef.current?.cleanup?.();
 	      worldRef.current = null;
 	    };
-    // Built once per auth'd mount — viewport/backdrop/url changes mutate the world below.
-  }, [user]);
+    // Built once per auth'd mount (and per tool switch back to mockup) —
+    // viewport/backdrop/url changes mutate the world below.
+  }, [user, tool]);
 
   // ── World mutations from UI state ────────────────────────────────────────
   useEffect(() => {
@@ -2162,9 +2185,36 @@ export default function StudioPage() {
         <img src="/img/circle_logo.png" alt="Bryan Balli logo" width={663} height={552} style={{ height: 'clamp(2rem, 4vw, 2.8rem)', width: 'auto', display: 'block', mixBlendMode: 'darken' }} />
       </a>
 
+      {/* Tool switch — MOCKUP VIDEO (device scene) ⇄ HOLO PAPER (cloth sim). */}
+      {tool ? (
+        <div
+          id="studio-tool-toggle"
+          data-tooltip-disabled="true"
+          style={{
+            position: 'absolute', top: 18, left: '50%', transform: 'translateX(-50%)', zIndex: 30,
+            display: 'flex', gap: 4, padding: 4, borderRadius: 999,
+            ...GLASS.surface,
+          }}
+        >
+          {[['mockup', 'MOCKUP VIDEO'], ['cloth', 'HOLO PAPER']].map(([id, label]) => (
+            <button
+              key={id}
+              onClick={() => switchTool(id)}
+              style={{ ...ui.btn(tool === id), height: 30, padding: '0 14px', fontSize: 10 }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       {/* Body — the canvas/board (with the exportable artboard on it) + the right rail.
           Stacks vertically on narrow screens; the board sits above, the UI below. */}
       <div id="studio-main-row" style={{ flex: 1, position: 'relative', minHeight: 0, display: isNarrow ? 'flex' : 'block', flexDirection: isNarrow ? 'column' : undefined }}>
+        {tool === 'cloth' ? (
+          <ClothStudio isNarrow={isNarrow} railW={RAIL_W} />
+        ) : tool === 'mockup' ? (
+        <>
         {/* Canvas/board — the page bg shows through as the board surface. Desktop:
             fills the area LEFT of the nav. Mobile: full-width top block. */}
         <div
@@ -2877,6 +2927,8 @@ export default function StudioPage() {
 
           </div>
         </div>
+        </>
+        ) : null}
       </div>
 
       {/* ── Render console — client-side terminal, reuses the dashboard terminal's

@@ -7380,6 +7380,31 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         },
       };
     })(),
+    // HOLO PAPER — DESIGNER-group creative tool. Opens the Mockup Studio in its
+    // cloth mode (?tool=cloth): a holographic paper/cloth simulator — drape
+    // artwork over animated fabric, dial foil/iridescence/sparkle, add
+    // backgrounds, export PNG (transparent optional) or a WebM motion loop.
+    {
+      id: 'holo-cloth',
+      category: 'content',
+      number: 'HP',
+      label: 'HOLO PAPER',
+      title: 'Holo Paper Studio',
+      description: 'Interactive holographic paper simulator — drape your artwork over animated fabric, dial in foil, iridescence and sparkle, then export stills or motion loops.',
+      placeholderLabel: 'OPEN\nHOLO\nSTUDIO',
+      rows: [
+        { key: 'hp-tool',   label: 'Tool',   value: 'Cloth simulator + holographic foil material' },
+        { key: 'hp-input',  label: 'Input',  value: 'Upload artwork + bump maps, pick backgrounds' },
+        { key: 'hp-output', label: 'Output', value: 'PNG (transparent optional) or WebM motion loop' },
+        { key: 'hp-action', label: 'Action', value: 'Click OPEN STUDIO to launch the editor' },
+      ],
+      footerLeft: 'Ready',
+      footerRight: 'DESIGNER',
+      footerAction: {
+        label: 'OPEN STUDIO',
+        onClick: () => window.open('/dashboard/studio?tool=cloth', '_blank'),
+      },
+    },
     {
       id: 'style-guide',
       category: 'content',
@@ -10569,8 +10594,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   }
                   if (activeCapabilityFilter === 'content') {
                     // Creative Director: intake → produce → ship.
-                    // media-library anchors under INTAKE (visual-dna); video-remix under DESIGNER (client-brief).
-                    const order = ['visual-dna', 'media-library', 'brand-voice', 'style-guide', 'brand-system', 'client-brief', 'video-remix', 'ui-teaser', 'client-mockup-creative'];
+                    // media-library anchors under INTAKE (visual-dna); video-remix + holo-cloth under DESIGNER (client-brief).
+                    const order = ['visual-dna', 'media-library', 'brand-voice', 'style-guide', 'brand-system', 'client-brief', 'video-remix', 'holo-cloth', 'ui-teaser', 'client-mockup-creative'];
                     const ai = order.indexOf(a.id); const bi = order.indexOf(b.id);
                     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
                   }
