@@ -24,7 +24,14 @@ const ASSET_TAG_ATTRS = [
   ['video', 'poster'],
   ['audio', 'src'],
 ];
-const SRCSET_SELECTORS = ['img[srcset]', 'source[srcset]'];
+// link[imagesrcset]: Next.js hero-image preloads (`<link rel=preload
+// as=image imagesrcset=…>`) — missed originally, the un-rewritten optimizer
+// variants 404'd the A6 gate on taste-of-dekalb.
+const SRCSET_SELECTORS = [
+  ['img[srcset]', 'srcset'],
+  ['source[srcset]', 'srcset'],
+  ['link[imagesrcset]', 'imagesrcset'],
+];
 
 function normalizeUrl(raw, baseUrl) {
   if (!raw) return null;
@@ -145,9 +152,9 @@ export async function mirrorAssets({
       }
     }
 
-    for (const sel of SRCSET_SELECTORS) {
+    for (const [sel, attr] of SRCSET_SELECTORS) {
       for (const el of $(sel).toArray()) {
-        const raw = $(el).attr('srcset');
+        const raw = $(el).attr(attr);
         if (!raw) continue;
         const rewritten = [];
         for (const part of raw.split(',').map((s) => s.trim()).filter(Boolean)) {
@@ -157,7 +164,7 @@ export async function mirrorAssets({
           const entry = await downloadOnce(abs);
           rewritten.push(entry.ok ? [entry.localPath, descriptor].filter(Boolean).join(' ') : part);
         }
-        $(el).attr('srcset', rewritten.join(', '));
+        $(el).attr(attr, rewritten.join(', '));
       }
     }
 

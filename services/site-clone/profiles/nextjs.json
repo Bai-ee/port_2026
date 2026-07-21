@@ -1,0 +1,14 @@
+{
+  "platform": "nextjs",
+  "detect": ["__next_f", "/_next/static/"],
+  "renderMode": "rendered",
+  "assetHosts": ["{origin}", "fonts.g*", "cdnjs.cloudflare.com"],
+  "commerceKilllist": [
+    "/_next/static/",
+    "__next_f",
+    "next/script"
+  ],
+  "commerceHrefPatterns": ["/cart", "/checkout", "/account"],
+  "pageDiscovery": ["sitemap", "nav"],
+  "_note": "Next.js sites (taste-of-dekalb was the first): the mirror is the RENDERED DOM snapshot, and the Next hydration runtime must be stripped — left in place it re-renders client-side and constructs /_next/image optimizer URLs at runtime (dynamic endpoint, 404s offline; killed the A6 gate with variants the mirror never saw). Killing /_next/static/ scripts + __next_f inline chunks freezes the snapshot; CSS <link>s under /_next/static are untouched (killlist only strips <script>s). Interactivity is lost by design — same trade as neutralized Shopify carts."
+}

@@ -6,7 +6,8 @@ import path from 'path';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROFILES_DIR = path.join(__dirname, '..', 'profiles');
-const PROFILE_NAMES = ['shopify', 'squarespace', 'wix', 'generic'];
+// Detection order matters: specific platforms first, generic last (fallback).
+const PROFILE_NAMES = ['shopify', 'squarespace', 'wix', 'nextjs', 'generic'];
 
 let _cache = null;
 

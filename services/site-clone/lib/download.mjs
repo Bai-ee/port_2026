@@ -39,6 +39,12 @@ export async function downloadPages({ origin, pages, profile, homepageHtml, home
         const response = await page.goto(origin + p, { waitUntil: 'networkidle', timeout: 30_000 });
         const html = await page.content();
         results.push({ path: p, html, status: response ? response.status() : 0 });
+      } catch (err) {
+        // One bad path (a download link that slipped past discovery, a
+        // timeout on a heavy page) must not kill the whole run — record it
+        // as a skip; the homepage failing still fails the run downstream.
+        console.warn(`[download] skipping ${p}: ${err.message.split('\n')[0]}`);
+        if (p === '/') throw err;
       } finally {
         await page.close();
       }

@@ -45,6 +45,15 @@ async function discoverViaSitemap(origin) {
   return $('url > loc').map((_, el) => $(el).text().trim()).get();
 }
 
+// Only mirror HTML pages. A linked file (.ics calendar on taste-of-dekalb,
+// .pdf menus, images, archives) is a DOWNLOAD — Playwright's page.goto throws
+// "Download is starting" and it isn't a page either way.
+const NON_PAGE_EXT = /\.(ics|pdf|zip|gz|dmg|exe|jpe?g|png|gif|webp|svg|ico|mp[34]|webm|mov|avi|wav|css|js|json|xml|txt|csv|docx?|xlsx?|pptx?|woff2?|ttf)$/i;
+
+function isPagePath(pathname) {
+  return !NON_PAGE_EXT.test(String(pathname || '').split('?')[0]);
+}
+
 function parseNavLinks($, origin) {
   const links = new Set();
   $('a[href]').each((_, el) => {
@@ -53,6 +62,7 @@ function parseNavLinks($, origin) {
     try {
       const abs = new URL(href, origin);
       if (abs.origin !== origin) return;
+      if (!isPagePath(abs.pathname)) return;
       links.add(abs.pathname || '/');
     } catch { /* unparsable href — skip */ }
   });
@@ -79,7 +89,7 @@ export async function discoverPages({ targetUrl, maxPages = DEFAULT_MAX_PAGES })
   for (const loc of sitemapLocs) {
     try {
       const u = new URL(loc);
-      if (u.origin === origin) paths.push(u.pathname || '/');
+      if (u.origin === origin && isPagePath(u.pathname)) paths.push(u.pathname || '/');
     } catch { /* malformed loc — skip */ }
   }
 
