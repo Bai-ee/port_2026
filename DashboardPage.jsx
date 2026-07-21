@@ -4463,8 +4463,15 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // Executive Briefs. Server derives this in the bootstrap payload.
   const onboardingRunId = bootstrap.onboardingRunId || null;
   const displayProfile = bootstrap.userProfile || userProfile;
-  const currentRun = recentRuns[0] || null;
   const dashboardState = bootstrap.dashboardState;
+  // The server's latestRunId pointer is authoritative — run-lifecycle moves it
+  // on every start/finish, and admin repairs can point it PAST a dead failed
+  // run. Blindly taking recentRuns[0] (newest by createdAt) resurrected a
+  // repaired failure on every login ("Module run failed" zombie toast).
+  const currentRun = (dashboardState?.latestRunId
+    && recentRuns.find((r) => (r?.id || r?.runId) === dashboardState.latestRunId))
+    || recentRuns[0]
+    || null;
   const applyClientBrainToBootstrap = useCallback((brain) => {
     if (!brain) return;
     const sourceRefs = Array.isArray(brain.sourceRefs) ? brain.sourceRefs : [];
@@ -5174,7 +5181,14 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     if (window.sessionStorage.getItem(`intake-dismissed:${intakeDismissKey}`) === '1') {
       setIntakeModalDismissed(true);
     }
-  }, [intakeDismissKey]);
+    // Failed runs: the ack is DURABLE (localStorage). A failure is shown until
+    // the user closes it once — after that it must never come back for that
+    // runId, in any tab or session ("Module run failed" zombie).
+    if (latestRunStatus === 'failed'
+      && window.localStorage.getItem(`intake-failed-acked:${intakeDismissKey}`) === '1') {
+      setIntakeModalDismissed(true);
+    }
+  }, [intakeDismissKey, latestRunStatus]);
 
   useEffect(() => {
     if (!bgRunToast) return undefined;
@@ -5215,6 +5229,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   useEffect(() => {
     const rid = currentRun?.runId || currentRun?.id || null;
     if (!errorToastSeededRef.current) {
+      // Seed only once the FIRST bootstrap has resolved — seeding at mount
+      // (before runs load) made the async bootstrap's arrival look like a
+      // fresh failure and re-toasted an hours-old failed run on every login.
+      if (bootstrapLoading) return;
       errorToastSeededRef.current = true;
       if (latestRunStatus === 'failed' && rid) failedToastRunRef.current = rid;
       return;
@@ -5222,14 +5240,25 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     if (latestRunStatus !== 'failed') return;
     if (currentRun?.pipelineType !== 'module-run') return;
     if (!rid || failedToastRunRef.current === rid) return;
+    // Age guard: only failures from the last 10 minutes toast — anything older
+    // is history, not news, regardless of how it resurfaced.
+    const failedAtMs = Date.parse(
+      currentRun?.completedAt?.toDate?.() || currentRun?.completedAt || currentRun?.error?.failedAt || ''
+    ) || 0;
+    if (failedAtMs && Date.now() - failedAtMs > 10 * 60 * 1000) { failedToastRunRef.current = rid; return; }
     failedToastRunRef.current = rid;
     setRunErrorToast(dashboardState?.errorState?.message || 'Module run failed — please try again.');
-  }, [latestRunStatus, currentRun?.pipelineType, currentRun?.runId, currentRun?.id, dashboardState?.errorState?.message]);
+  }, [latestRunStatus, currentRun?.pipelineType, currentRun?.runId, currentRun?.id, dashboardState?.errorState?.message, bootstrapLoading]);
 
   const dismissIntakeModal = () => {
     const runningInBackground = isRunActive || awaitingSignupProvision;
     if (intakeDismissKey && typeof window !== 'undefined') {
       window.sessionStorage.setItem(`intake-dismissed:${intakeDismissKey}`, '1');
+      // Closing a FAILED run's terminal acknowledges it permanently —
+      // localStorage so it survives new sessions/tabs (never-zombie rule).
+      if (latestRunStatus === 'failed') {
+        window.localStorage.setItem(`intake-failed-acked:${intakeDismissKey}`, '1');
+      }
     }
     setIntakeModalDismissed(true);
     if (runningInBackground) setBgRunToast(true);

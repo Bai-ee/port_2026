@@ -102,6 +102,9 @@ export default function SiteRecreateCard({ user, runWithTerminal }) {
           let lastStatus = created.job?.status || 'queued';
           let lastLogCount = created.job?.log?.length || 0;
           let job = created.job || null;
+          const startedAt = Date.now();
+          let lastActivityAt = Date.now();
+          let queuedNoteShown = false;
 
           for (let attempt = 0; attempt < 300; attempt += 1) {
             // eslint-disable-next-line no-await-in-loop
@@ -113,12 +116,27 @@ export default function SiteRecreateCard({ user, runWithTerminal }) {
 
             if (job.status !== lastStatus) {
               lastStatus = job.status;
-              if (job.status === 'processing') advance('[CLONE]', 'recreating pages & mirroring assets…');
-              else if (job.status === 'verifying') advance('[VERIFY]', 'verifying zero console errors…');
+              lastActivityAt = Date.now();
+              if (job.status === 'processing') advance('[CLONE]', 'cloud worker picked up the job — downloading pages & mirroring every asset…');
+              else if (job.status === 'verifying') advance('[VERIFY]', 'loading every recreated page in a headless browser — 0 console errors, 0 broken requests required…');
             }
             const newLines = (job.log || []).slice(lastLogCount);
+            if (newLines.length) lastActivityAt = Date.now();
             newLines.forEach((l) => note(l.line));
             lastLogCount = (job.log || []).length;
+
+            // Never leave the user staring at a silent terminal: say what's
+            // happening (or that we're waiting) whenever nothing new arrives.
+            const quietFor = Date.now() - lastActivityAt;
+            const elapsedMin = Math.round((Date.now() - startedAt) / 60000);
+            if (job.status === 'queued' && quietFor > 15_000 && !queuedNoteShown) {
+              queuedNoteShown = true;
+              note('queued — waiting for the cloud worker to claim this job (usually a few seconds; an admin can also run it manually)…');
+            } else if (job.status !== 'queued' && quietFor > 25_000) {
+              lastActivityAt = Date.now();
+              const lastLine = (job.log || [])[lastLogCount - 1]?.line || 'working';
+              note(`still working (${elapsedMin}m elapsed) — last step: ${lastLine.slice(0, 90)}`);
+            }
 
             if (job.status === 'done') break;
             if (job.status === 'failed') throw new Error(job.error || 'Clone job failed.');
