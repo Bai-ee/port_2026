@@ -142,14 +142,34 @@ const DEFAULT_MAT = {
   bump: 0.79, bumpTiling: 3,
 };
 // Material presets — whole-material looks; picking one overwrites the sliders.
+// Optional non-mat keys per preset: `env` (light intensity) and `bg` (backdrop
+// color, switches Background to Color mode) so a preset carries its full
+// texture + lighting combination. `group` buckets the dropdown's optgroups.
 const MATERIAL_PRESETS = {
-  'black-cloth': { label: 'Black Cloth', ...DEFAULT_MAT, preset: 'black-cloth', holoIntensity: 0, sparkle: 0, iridescence: 0, clearcoat: 0, roughness: 0 },
-  'holo-foil':   { label: 'Holo Foil',   ...DEFAULT_MAT, preset: 'holo-foil', baseColor: '#15151d', holoIntensity: 1, holoScale: 8, bandFreq: 0.42, saturation: 0.85, sparkle: 0.5, iridescence: 1, metalness: 0.9, roughness: 0.14, clearcoat: 0.65 },
-  'oil-slick':   { label: 'Oil Slick',   ...DEFAULT_MAT, preset: 'oil-slick', baseColor: '#05060a', holoIntensity: 0.45, bandFreq: 0.18, saturation: 0.7, sparkle: 0, iridescence: 1, metalness: 0.55, roughness: 0.08, clearcoat: 1, coatRoughness: 0.05 },
-  chrome:        { label: 'Chrome',      ...DEFAULT_MAT, preset: 'chrome', baseColor: '#cfd2d8', holoIntensity: 0.1, sparkle: 0, iridescence: 0.15, metalness: 1, roughness: 0.06, clearcoat: 0.3, bump: 0.25 },
-  silk:          { label: 'Silk',        ...DEFAULT_MAT, preset: 'silk', baseColor: '#2a1038', finish: 'satin', holoIntensity: 0.12, sparkle: 0, iridescence: 0.2, metalness: 0.1, roughness: 0.45, clearcoat: 0.1, sheen: 0.9, bump: 0.4 },
-  paper:         { label: 'Paper White', ...DEFAULT_MAT, preset: 'paper', baseColor: '#f4f1ea', finish: 'matte', holoIntensity: 0, sparkle: 0, iridescence: 0, metalness: 0, roughness: 0.85, clearcoat: 0, sheen: 0.15, bump: 0.55, bumpTiling: 4 },
+  'black-cloth': { label: 'Black Cloth', group: 'CORE', ...DEFAULT_MAT, preset: 'black-cloth', holoIntensity: 0, sparkle: 0, iridescence: 0, clearcoat: 0, roughness: 0 },
+  'holo-foil':   { label: 'Holo Foil',   group: 'CORE', ...DEFAULT_MAT, preset: 'holo-foil', baseColor: '#15151d', holoIntensity: 1, holoScale: 8, bandFreq: 0.42, saturation: 0.85, sparkle: 0.5, iridescence: 1, metalness: 0.9, roughness: 0.14, clearcoat: 0.65 },
+  'oil-slick':   { label: 'Oil Slick',   group: 'CORE', ...DEFAULT_MAT, preset: 'oil-slick', baseColor: '#05060a', holoIntensity: 0.45, bandFreq: 0.18, saturation: 0.7, sparkle: 0, iridescence: 1, metalness: 0.55, roughness: 0.08, clearcoat: 1, coatRoughness: 0.05 },
+  chrome:        { label: 'Chrome',      group: 'CORE', ...DEFAULT_MAT, preset: 'chrome', baseColor: '#cfd2d8', holoIntensity: 0.1, sparkle: 0, iridescence: 0.15, metalness: 1, roughness: 0.06, clearcoat: 0.3, bump: 0.25 },
+  silk:          { label: 'Silk',        group: 'CORE', ...DEFAULT_MAT, preset: 'silk', baseColor: '#2a1038', finish: 'satin', holoIntensity: 0.12, sparkle: 0, iridescence: 0.2, metalness: 0.1, roughness: 0.45, clearcoat: 0.1, sheen: 0.9, bump: 0.4 },
+  paper:         { label: 'Paper White', group: 'CORE', ...DEFAULT_MAT, preset: 'paper', baseColor: '#f4f1ea', finish: 'matte', holoIntensity: 0, sparkle: 0, iridescence: 0, metalness: 0, roughness: 0.85, clearcoat: 0, sheen: 0.15, bump: 0.55, bumpTiling: 4 },
+
+  // ── Expressive looks — production-graded material + lighting combos,
+  //    ordered dramatic → bright. Each stays inside the existing dials. ──
+  'velvet-night': { label: 'Velvet Night', group: 'DRAMATIC', ...DEFAULT_MAT, preset: 'velvet-night', baseColor: '#1c0b2e', finish: 'matte', holoIntensity: 0.08, holoScale: 4, bandFreq: 0.1, saturation: 0.4, hueShift: 0.78, sparkle: 0.12, specTint: 0.6, iridescence: 0, metalness: 0, roughness: 0.9, clearcoat: 0, sheen: 1, bump: 0.5, bumpTiling: 5, env: 0.5, bg: '#07030d' },
+  'midnight-drama': { label: 'Midnight Drama', group: 'DRAMATIC', ...DEFAULT_MAT, preset: 'midnight-drama', baseColor: '#05070c', holoIntensity: 0.7, holoScale: 5, bandFreq: 0.12, saturation: 0.35, hueShift: 0.6, sparkle: 0.08, specTint: 1, iridescence: 0.6, metalness: 0.7, roughness: 0.05, clearcoat: 1, coatRoughness: 0.03, sheen: 0, bump: 0.2, env: 0.4, bg: '#020204' },
+  'neon-noir': { label: 'Neon Noir', group: 'DRAMATIC', ...DEFAULT_MAT, preset: 'neon-noir', baseColor: '#0d0416', holoIntensity: 1, holoScale: 12, bandFreq: 0.55, saturation: 1, hueShift: 0.83, sparkle: 0.35, specTint: 1, iridescence: 0.8, metalness: 0.85, roughness: 0.1, clearcoat: 0.7, coatRoughness: 0.05, bump: 0.3, env: 0.65, bg: '#0a0018' },
+  'gothic-pearl': { label: 'Gothic Pearl', group: 'DRAMATIC', ...DEFAULT_MAT, preset: 'gothic-pearl', baseColor: '#26262c', holoIntensity: 0.35, holoScale: 3, bandFreq: 0.08, saturation: 0.25, sparkle: 0, specTint: 0.8, iridescence: 1, metalness: 0.25, roughness: 0.3, clearcoat: 0.5, coatRoughness: 0.15, sheen: 0.6, bump: 0.45, env: 0.7, bg: '#101014' },
+  'acid-rave': { label: 'Acid Rave', group: 'EXPRESSIVE', ...DEFAULT_MAT, preset: 'acid-rave', baseColor: '#101408', holoIntensity: 1, holoScale: 18, bandFreq: 0.9, saturation: 1, hueShift: 0.28, sparkle: 0.8, specTint: 1, iridescence: 0.9, metalness: 0.8, roughness: 0.12, clearcoat: 0.8, coatRoughness: 0.04, bump: 0.35, bumpTiling: 6, env: 1.15, bg: '#0c1402' },
+  'solar-flare': { label: 'Solar Flare', group: 'EXPRESSIVE', ...DEFAULT_MAT, preset: 'solar-flare', baseColor: '#3a1204', holoIntensity: 0.9, holoScale: 7, bandFreq: 0.3, saturation: 0.95, hueShift: 0.06, sparkle: 0.45, specTint: 1, iridescence: 0.5, metalness: 0.9, roughness: 0.18, clearcoat: 0.5, bump: 0.4, env: 1.5, bg: '#180a02' },
+  'liquid-gold': { label: 'Liquid Gold', group: 'EXPRESSIVE', ...DEFAULT_MAT, preset: 'liquid-gold', baseColor: '#8a6118', holoIntensity: 0.25, holoScale: 4, bandFreq: 0.15, saturation: 0.6, hueShift: 0.11, sparkle: 0.25, specTint: 1, iridescence: 0.2, metalness: 1, roughness: 0.14, clearcoat: 0.6, coatRoughness: 0.08, bump: 0.5, bumpTiling: 5, env: 1.6, bg: '#131008' },
+  'chrome-storm': { label: 'Chrome Storm', group: 'EXPRESSIVE', ...DEFAULT_MAT, preset: 'chrome-storm', baseColor: '#b9bec9', holoIntensity: 0.3, holoScale: 6, bandFreq: 0.2, saturation: 0.5, sparkle: 0.15, specTint: 1, iridescence: 0.4, metalness: 1, roughness: 0.03, clearcoat: 1, coatRoughness: 0.02, bump: 0.15, env: 2, bg: '#15181f' },
+  'candy-gloss': { label: 'Candy Gloss', group: 'BRIGHT', ...DEFAULT_MAT, preset: 'candy-gloss', baseColor: '#f2a9c4', holoIntensity: 0.35, holoScale: 9, bandFreq: 0.3, saturation: 0.8, hueShift: 0.9, sparkle: 0.4, specTint: 0.9, iridescence: 0.55, metalness: 0.15, roughness: 0.1, clearcoat: 1, coatRoughness: 0.02, sheen: 0.2, bump: 0.2, env: 1.5, bg: '#fdeef4' },
+  glacier: { label: 'Glacier', group: 'BRIGHT', ...DEFAULT_MAT, preset: 'glacier', baseColor: '#dfeef5', holoIntensity: 0.4, holoScale: 6, bandFreq: 0.18, saturation: 0.45, hueShift: 0.55, sparkle: 0.5, specTint: 0.7, iridescence: 0.9, metalness: 0.35, roughness: 0.08, clearcoat: 0.9, coatRoughness: 0.04, sheen: 0.3, bump: 0.3, env: 1.9, bg: '#eef4f8' },
+  'pearl-daylight': { label: 'Pearl Daylight', group: 'BRIGHT', ...DEFAULT_MAT, preset: 'pearl-daylight', baseColor: '#f6f3ee', holoIntensity: 0.5, holoScale: 5, bandFreq: 0.14, saturation: 0.55, sparkle: 0.2, specTint: 0.6, iridescence: 1, metalness: 0.1, roughness: 0.22, clearcoat: 0.6, coatRoughness: 0.1, sheen: 0.5, bump: 0.35, env: 1.8, bg: '#f4f1ea' },
+  'studio-white': { label: 'Studio White', group: 'BRIGHT', ...DEFAULT_MAT, preset: 'studio-white', baseColor: '#ffffff', holoIntensity: 0.15, holoScale: 8, bandFreq: 0.2, saturation: 0.3, sparkle: 0.1, specTint: 0.5, iridescence: 0.25, metalness: 0.05, roughness: 0.4, clearcoat: 0.3, coatRoughness: 0.12, sheen: 0.25, bump: 0.3, env: 2.1, bg: '#fbfaf7' },
 };
+// Dropdown optgroup order.
+const PRESET_GROUPS = ['CORE', 'DRAMATIC', 'EXPRESSIVE', 'BRIGHT'];
 const DEFAULT_PHYS = {
   windStrength: 1.1, windSpeed: 1, gravity: 1.6,
   damping: 0.985, stiffness: 0.85, pinMode: 'top-edge',
@@ -778,8 +798,11 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   const applyPreset = useCallback((presetId) => {
     const p = MATERIAL_PRESETS[presetId];
     if (!p) return;
-    const { label, ...rest } = p;
+    // env/bg ride along as the preset's lighting combo; they're not mat keys.
+    const { label, group, env, bg, ...rest } = p;
     setMat({ ...rest, preset: presetId });
+    if (typeof env === 'number') setEnvIntensity(env);
+    if (bg) { setBgColor(bg); setBgMode('color'); }
   }, []);
 
   const uploadBtnStyle = { ...ui.btn(), width: '100%', cursor: 'pointer' };
@@ -924,7 +947,13 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
                 style={{ ...ui.btn(), appearance: 'none', width: '100%' }}
               >
                 {!mat.preset ? <option value="">Custom…</option> : null}
-                {Object.entries(MATERIAL_PRESETS).map(([id, p]) => <option key={id} value={id}>{p.label}</option>)}
+                {PRESET_GROUPS.map((g) => (
+                  <optgroup key={g} label={g}>
+                    {Object.entries(MATERIAL_PRESETS).filter(([, p]) => p.group === g).map(([id, p]) => (
+                      <option key={id} value={id}>{p.label}</option>
+                    ))}
+                  </optgroup>
+                ))}
               </select>
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
