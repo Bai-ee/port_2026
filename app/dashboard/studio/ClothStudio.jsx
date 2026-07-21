@@ -194,6 +194,146 @@ const MATERIAL_SLIDERS = [
   ['bumpTiling',    'BUMP TILING',    1, 12, 0.5],
 ];
 
+// ── Scene sets — full environments with depth: a graded + grained backdrop
+// texture, exponential fog, a themed light rig (key/rim recolor + optional
+// spotlight), and a shadow-catching ground so the sheet reads as standing on a
+// set rather than floating on a flat color. All procedural — no asset loads. ──
+const SCENE_PRESETS = {
+  thriller: {
+    label: 'Thriller Set',
+    backdrop: { type: 'radial', top: '#020204', bottom: '#0b0d12', glow: 'rgba(140,20,28,0.55)', glowAt: [0.5, 0.68], beam: 'rgba(190,205,255,0.16)', vignette: 0.85 },
+    fog: { color: '#05060a', density: 0.16 },
+    key: { color: '#cdd8ff', intensity: 2.2, pos: [1.2, 3, 2] },
+    rim: { color: '#ff2030', intensity: 1.7 },
+    spot: { color: '#b8c6ff', intensity: 30 },
+    ground: '#0a0a0c',
+    env: 0.35,
+  },
+  'smoke-stage': {
+    label: 'Smoke Stage',
+    backdrop: { type: 'radial', top: '#050507', bottom: '#0e0e12', glow: 'rgba(230,235,255,0.22)', glowAt: [0.5, 0.1], beam: 'rgba(255,255,255,0.2)', vignette: 0.8 },
+    fog: { color: '#0b0b10', density: 0.2 },
+    key: { color: '#ffffff', intensity: 2.6, pos: [0.4, 3.2, 1.6] },
+    rim: { color: '#4060ff', intensity: 1.1 },
+    spot: { color: '#ffffff', intensity: 45 },
+    ground: '#0c0c10',
+    env: 0.4,
+  },
+  'neon-alley': {
+    label: 'Neon Alley',
+    backdrop: { type: 'bars', top: '#05001a', bottom: '#12002e', bars: ['rgba(255,0,200,0.5)', 'rgba(0,229,255,0.45)', 'rgba(255,230,0,0.3)'], vignette: 0.7 },
+    fog: { color: '#0a0022', density: 0.12 },
+    key: { color: '#e0e5ff', intensity: 1.7, pos: [1.6, 2.2, 2.2] },
+    rim: { color: '#ff00c8', intensity: 2.2 },
+    spot: { color: '#00e5ff', intensity: 22 },
+    ground: '#08001c',
+    env: 0.55,
+  },
+  'deep-sea': {
+    label: 'Deep Sea',
+    backdrop: { type: 'radial', top: '#000508', bottom: '#012029', glow: 'rgba(30,180,190,0.3)', glowAt: [0.5, 0.2], vignette: 0.75 },
+    fog: { color: '#02222b', density: 0.18 },
+    key: { color: '#9ff5e0', intensity: 1.9, pos: [0.8, 3, 1.4] },
+    rim: { color: '#0aa9c2', intensity: 1.4 },
+    spot: { color: '#bffbef', intensity: 18 },
+    ground: '#02161c',
+    env: 0.5,
+  },
+  'retro-sunset': {
+    label: 'Retro Sunset',
+    backdrop: { type: 'sunset', top: '#2a0a4a', mid: '#8a1a6a', bottom: '#ff6a00', sun: 'rgba(255,214,140,0.9)', sunAt: [0.5, 0.62], vignette: 0.5 },
+    fog: { color: '#30104a', density: 0.06 },
+    key: { color: '#ffd9a0', intensity: 1.9, pos: [1.4, 1.8, 2.4] },
+    rim: { color: '#ff3d9a', intensity: 1.6 },
+    ground: '#1a0630',
+    env: 1.1,
+  },
+  'golden-hour': {
+    label: 'Golden Hour',
+    backdrop: { type: 'radial', top: '#ffdba8', bottom: '#c96a2a', glow: 'rgba(255,246,214,0.85)', glowAt: [0.42, 0.34], vignette: 0.35 },
+    fog: { color: '#e8b57d', density: 0.05 },
+    key: { color: '#fff1d4', intensity: 2.3, pos: [1.8, 1.6, 2.2] },
+    rim: { color: '#ff9d5c', intensity: 1 },
+    ground: '#b07840',
+    env: 1.6,
+  },
+  'candy-pop': {
+    label: 'Candy Pop',
+    backdrop: { type: 'radial', top: '#fff3fa', bottom: '#ffd1ec', glow: 'rgba(255,255,255,0.9)', glowAt: [0.5, 0.3], vignette: 0.15 },
+    key: { color: '#ffffff', intensity: 2.4, pos: [1.2, 2.4, 2.4] },
+    rim: { color: '#7dd8ff', intensity: 1.3 },
+    ground: '#ffe3f2',
+    env: 1.8,
+  },
+  'gallery-white': {
+    label: 'Gallery White',
+    backdrop: { type: 'radial', top: '#ffffff', bottom: '#e6e6ea', glow: 'rgba(255,255,255,1)', glowAt: [0.5, 0.25], vignette: 0.18 },
+    fog: { color: '#f0f0f2', density: 0.04 },
+    key: { color: '#ffffff', intensity: 2.2, pos: [1, 3, 2] },
+    rim: { color: '#dfe6ff', intensity: 0.8 },
+    ground: '#f2f2f4',
+    env: 2,
+  },
+};
+
+// Paint a scene's backdrop: base grade + glow/sun/bars + optional light beam +
+// film grain + vignette. Grain and vignette give the "texture + depth" read.
+const paintSceneBackdrop = (cfg) => {
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 1024;
+  const x = c.getContext('2d');
+  const grad = x.createLinearGradient(0, 0, 0, 1024);
+  if (cfg.type === 'sunset') {
+    grad.addColorStop(0, cfg.top); grad.addColorStop(0.55, cfg.mid); grad.addColorStop(1, cfg.bottom);
+  } else {
+    grad.addColorStop(0, cfg.top); grad.addColorStop(1, cfg.bottom);
+  }
+  x.fillStyle = grad; x.fillRect(0, 0, 1024, 1024);
+  if (cfg.type === 'sunset' && cfg.sun) {
+    const [sx, sy] = cfg.sunAt || [0.5, 0.6];
+    const sun = x.createRadialGradient(sx * 1024, sy * 1024, 20, sx * 1024, sy * 1024, 340);
+    sun.addColorStop(0, cfg.sun); sun.addColorStop(1, 'rgba(255,180,80,0)');
+    x.fillStyle = sun; x.fillRect(0, 0, 1024, 1024);
+  }
+  if (cfg.glow) {
+    const [gx, gy] = cfg.glowAt || [0.5, 0.4];
+    const g = x.createRadialGradient(gx * 1024, gy * 1024, 30, gx * 1024, gy * 1024, 700);
+    g.addColorStop(0, cfg.glow); g.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = g; x.fillRect(0, 0, 1024, 1024);
+  }
+  if (cfg.bars) {
+    cfg.bars.forEach((color, i) => {
+      const bx = 1024 * (0.18 + i * 0.3);
+      const bar = x.createLinearGradient(bx - 60, 0, bx + 60, 0);
+      bar.addColorStop(0, 'rgba(0,0,0,0)'); bar.addColorStop(0.5, color); bar.addColorStop(1, 'rgba(0,0,0,0)');
+      x.fillStyle = bar; x.fillRect(bx - 60, 0, 120, 1024);
+    });
+  }
+  if (cfg.beam) {
+    // Fake volumetric cone from the top — sells the spotlight.
+    const beam = x.createLinearGradient(0, 0, 0, 1024);
+    beam.addColorStop(0, cfg.beam); beam.addColorStop(1, 'rgba(255,255,255,0)');
+    x.fillStyle = beam;
+    x.beginPath();
+    x.moveTo(460, 0); x.lineTo(564, 0); x.lineTo(900, 1024); x.lineTo(124, 1024);
+    x.closePath(); x.fill();
+  }
+  // Film grain
+  x.globalAlpha = 0.05;
+  for (let i = 0; i < 4200; i += 1) {
+    x.fillStyle = Math.random() > 0.5 ? '#fff' : '#000';
+    x.fillRect(Math.random() * 1024, Math.random() * 1024, 1.4, 1.4);
+  }
+  x.globalAlpha = 1;
+  // Vignette
+  if (cfg.vignette) {
+    const v = x.createRadialGradient(512, 480, 300, 512, 512, 780);
+    v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, `rgba(0,0,0,${cfg.vignette})`);
+    x.fillStyle = v; x.fillRect(0, 0, 1024, 1024);
+  }
+  return c;
+};
+
 const getSupportedVideoMimeType = () => {
   if (typeof MediaRecorder === 'undefined') return '';
   return [
@@ -280,8 +420,9 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   const [mat, setMat] = useState(() => ({ ...DEFAULT_MAT, ...(saved.mat || {}) }));
   const [phys, setPhys] = useState(() => ({ ...DEFAULT_PHYS, ...(saved.phys || {}) }));
   const [clothAspect, setClothAspect] = useState(CLOTH_ASPECTS[saved.clothAspect] ? saved.clothAspect : 'portrait');
-  const [bgMode, setBgMode] = useState(['color', 'image', 'transparent'].includes(saved.bgMode) ? saved.bgMode : 'color');
+  const [bgMode, setBgMode] = useState(['scene', 'color', 'image', 'transparent'].includes(saved.bgMode) ? saved.bgMode : 'color');
   const [bgColor, setBgColor] = useState(saved.bgColor || '#0a0a10');
+  const [sceneId, setSceneId] = useState(SCENE_PRESETS[saved.sceneId] ? saved.sceneId : 'thriller');
   const [bgImageEl, setBgImageEl] = useState(null);
   const [envIntensity, setEnvIntensity] = useState(saved.envIntensity ?? 1);
   const [videoSeconds, setVideoSeconds] = useState(saved.videoSeconds || 5);
@@ -305,11 +446,11 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   useEffect(() => {
     const id = setTimeout(() => {
       try {
-        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ perf, mat, phys, clothAspect, bgMode, bgColor, envIntensity, videoSeconds }));
+        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ perf, mat, phys, clothAspect, bgMode, bgColor, sceneId, envIntensity, videoSeconds }));
       } catch { /* non-critical */ }
     }, 250);
     return () => clearTimeout(id);
-  }, [perf, mat, phys, clothAspect, bgMode, bgColor, envIntensity, videoSeconds]);
+  }, [perf, mat, phys, clothAspect, bgMode, bgColor, sceneId, envIntensity, videoSeconds]);
 
   // Latest control state, readable from the render loop without re-init.
   const liveRef = useRef({});
@@ -338,6 +479,10 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, PERF_LEVELS[perf].pr));
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.0;
+      // Shadows on from the start — scene sets drop the sheet's shadow on a
+      // ground plane; enabling later would force material recompiles.
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       renderer.setSize(w, h, false);
       Object.assign(renderer.domElement.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', borderRadius: '16px', touchAction: 'none', display: 'block' });
       stage.appendChild(renderer.domElement);
@@ -348,10 +493,34 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
 
       const key = new THREE.DirectionalLight(0xffffff, 1.6);
       key.position.set(1.5, 2, 2.5);
+      key.castShadow = true;
+      key.shadow.mapSize.set(1024, 1024);
+      key.shadow.bias = -0.0005;
+      key.shadow.normalBias = 0.02;
       scene.add(key);
       const rim = new THREE.DirectionalLight(0x88ffee, 0.6);
       rim.position.set(-2, 0.5, -1.5);
       scene.add(rim);
+      // Scene-set rig — a themed spotlight + shadow-catching floor, hidden
+      // until a Background "Scene" is active.
+      const spot = new THREE.SpotLight(0xffffff, 0);
+      spot.visible = false;
+      spot.position.set(0, 2.4, 1.1);
+      spot.angle = 0.55;
+      spot.penumbra = 0.7;
+      spot.decay = 1.2;
+      scene.add(spot);
+      spot.target.position.set(0, -0.2, 0);
+      scene.add(spot.target);
+      const ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(30, 30),
+        new THREE.MeshStandardMaterial({ color: 0x0a0a0c, roughness: 0.95, metalness: 0 })
+      );
+      ground.rotation.x = -Math.PI / 2;
+      ground.position.y = -1.15;
+      ground.receiveShadow = true;
+      ground.visible = false;
+      scene.add(ground);
 
       const controls = new OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true;
@@ -388,6 +557,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
 
       const world = {
         THREE, scene, camera, renderer, controls, pmrem, clothMat, holoUniforms, bumpTex,
+        keyLight: key, rimLight: rim, spot, ground,
         cloth: null, envIntensity: 1, bgTexture: null,
         pointer: { active: false, x: 0, y: 0 },
         raycaster: new THREE.Raycaster(),
@@ -436,6 +606,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
         }
 
         const mesh = new THREE.Mesh(geometry, clothMat);
+        mesh.castShadow = true; // scene sets catch this on the ground plane
         scene.add(mesh);
         world.cloth = { geometry, mesh, prev, orig, constraints, cols, rows, count, cw, ch };
         world.applyPins(liveRef.current.phys.pinMode);
@@ -599,6 +770,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
         controls.dispose();
         world.cloth?.geometry?.dispose();
         clothMat.map?.dispose(); bumpTex.dispose();
+        ground.geometry.dispose(); ground.material.dispose();
         world.bgTexture?.dispose();
         pmrem.dispose();
         renderer.dispose();
@@ -663,24 +835,60 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
     world.renderer.setPixelRatio(Math.min(window.devicePixelRatio, PERF_LEVELS[perf].pr));
   }, [clothAspect, perf, worldReady]);
 
-  // ── Background. ──
+  // ── Background — flat modes reset the rig; Scene mode dresses the set:
+  // backdrop texture, fog, themed key/rim, spotlight, shadow ground. ──
   useEffect(() => {
     const world = worldRef.current;
     if (!worldReady || !world) return;
     const { THREE, scene } = world;
     world.bgTexture?.dispose(); world.bgTexture = null;
-    if (bgMode === 'color') {
+    const resetRig = () => {
+      scene.fog = null;
+      world.keyLight.color.set(0xffffff); world.keyLight.intensity = 1.6; world.keyLight.position.set(1.5, 2, 2.5);
+      world.rimLight.color.set(0x88ffee); world.rimLight.intensity = 0.6;
+      world.spot.visible = false;
+      world.ground.visible = false;
+    };
+    if (bgMode === 'scene') {
+      const sc = SCENE_PRESETS[sceneId] || SCENE_PRESETS.thriller;
+      const tex = new THREE.CanvasTexture(paintSceneBackdrop(sc.backdrop));
+      tex.colorSpace = THREE.SRGBColorSpace;
+      world.bgTexture = tex;
+      scene.background = tex;
+      scene.fog = sc.fog ? new THREE.FogExp2(new THREE.Color(sc.fog.color).getHex(), sc.fog.density) : null;
+      world.keyLight.color.set(sc.key.color);
+      world.keyLight.intensity = sc.key.intensity;
+      if (sc.key.pos) world.keyLight.position.set(...sc.key.pos);
+      world.rimLight.color.set(sc.rim.color);
+      world.rimLight.intensity = sc.rim.intensity;
+      if (sc.spot) {
+        world.spot.visible = true;
+        world.spot.color.set(sc.spot.color);
+        world.spot.intensity = sc.spot.intensity;
+      } else {
+        world.spot.visible = false;
+      }
+      if (sc.ground) {
+        world.ground.visible = true;
+        world.ground.material.color.set(sc.ground);
+      } else {
+        world.ground.visible = false;
+      }
+    } else if (bgMode === 'color') {
+      resetRig();
       scene.background = new THREE.Color(bgColor);
     } else if (bgMode === 'image' && bgImageEl) {
+      resetRig();
       const tex = new THREE.Texture(bgImageEl);
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.needsUpdate = true;
       world.bgTexture = tex;
       scene.background = tex;
     } else {
+      resetRig();
       scene.background = null; // transparent — checkerboard shows through the canvas
     }
-  }, [bgMode, bgColor, bgImageEl, worldReady]);
+  }, [bgMode, bgColor, bgImageEl, sceneId, worldReady]);
 
   // ── Uploads. ──
   const onArtworkUpload = useCallback((file) => {
@@ -1037,14 +1245,47 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
           {/* BACKGROUND */}
           <RailCard
             id="cloth-background-panel" icon={<Palette size={18} strokeWidth={2} />} title="Background"
-            subtitle={{ color: 'Solid color', image: 'Custom image', transparent: 'Transparent' }[bgMode]}
+            subtitle={bgMode === 'scene'
+              ? (SCENE_PRESETS[sceneId]?.label || 'Scene set')
+              : { color: 'Solid color', image: 'Custom image', transparent: 'Transparent' }[bgMode]}
             color="#ec4899" open={backgroundOpen} onToggle={() => setBackgroundOpen((v) => !v)}
           >
             <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-              {[['color', 'Color'], ['image', 'Image'], ['transparent', 'None']].map(([m, label]) => (
-                <button key={m} style={{ ...ui.btn(bgMode === m), height: 30, padding: '0 12px', fontSize: 10 }} onClick={() => setBgMode(m)}>{label}</button>
+              {[['scene', 'Scene'], ['color', 'Color'], ['image', 'Image'], ['transparent', 'None']].map(([m, label]) => (
+                <button
+                  key={m}
+                  style={{ ...ui.btn(bgMode === m), height: 30, padding: '0 12px', fontSize: 10 }}
+                  onClick={() => {
+                    setBgMode(m);
+                    // Entering Scene mode adopts the active set's light level so
+                    // the set reads correctly without a second click.
+                    if (m === 'scene') {
+                      const env = SCENE_PRESETS[sceneId]?.env;
+                      if (typeof env === 'number') setEnvIntensity(env);
+                    }
+                  }}
+                >
+                  {label}
+                </button>
               ))}
             </div>
+            {bgMode === 'scene' ? (
+              <>
+                <span style={{ ...ui.label, marginTop: 4 }}>SET</span>
+                <div id="cloth-scene-set-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
+                  {Object.entries(SCENE_PRESETS).map(([id, sc]) => (
+                    <button
+                      key={id}
+                      style={{ ...ui.btn(sceneId === id), height: 30, padding: '0 8px', fontSize: 10 }}
+                      onClick={() => { setSceneId(id); if (typeof sc.env === 'number') setEnvIntensity(sc.env); }}
+                    >
+                      {sc.label}
+                    </button>
+                  ))}
+                </div>
+                <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>Full set dressing — graded backdrop, fog depth, themed lights, and a floor that catches the sheet's shadow.</span>
+              </>
+            ) : null}
             {bgMode === 'color' ? (
               <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0' }}>
                 <input type="color" value={bgColor} onChange={(e) => setBgColor(e.target.value)} style={{ width: 44, height: 32, border: '1px solid ' + GLASS.hair, borderRadius: 8, background: 'none', cursor: 'pointer', padding: 0 }} />
