@@ -187,7 +187,7 @@ const INITIAL_MAT = (() => {
 // REBOUND dials how fast (if at all) the sheet retracts to its rest pose —
 // at 0 it stays wherever you drag it.
 const DEFAULT_PHYS = {
-  gravity: 2.7, damping: 0.992, stiffness: 0.55, rebound: 0, pinMode: 'free-float',
+  gravity: 2.7, damping: 0.992, stiffness: 0.55, rebound: 0, rumple: 0.5, pinMode: 'free-float',
 };
 // Ambient animation — the blowing-in-the-wind idle (default ON, cranked for
 // dramatic motion). Turbulence scales the whole chaotic field.
@@ -438,6 +438,9 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   const [mat, setMat] = useState(() => ({ ...INITIAL_MAT, ...(saved.mat || {}) }));
   const [phys, setPhys] = useState(() => ({ ...DEFAULT_PHYS, ...(saved.phys || {}) }));
   const [anim, setAnim] = useState(() => ({ ...DEFAULT_ANIM, ...(saved.anim || {}) }));
+  // Camera freedom — which axes the orbit may rotate on, and whether pan
+  // (push-around) is allowed. Off locks that axis at its current angle.
+  const [cam, setCam] = useState(() => ({ rotX: true, rotY: true, pan: true, ...(saved.cam || {}) }));
   // 'auto' = sheet matches the loaded artwork's ratio (falls back to portrait
   // until an image provides one); the named presets force a shape.
   const [clothAspect, setClothAspect] = useState((CLOTH_ASPECTS[saved.clothAspect] || saved.clothAspect === 'auto') ? saved.clothAspect : 'auto');
@@ -468,11 +471,11 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   useEffect(() => {
     const id = setTimeout(() => {
       try {
-        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ perf, mat, phys, anim, clothAspect, artworkRatio, bgMode, bgColor, sceneId, envIntensity, videoSeconds }));
+        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ perf, mat, phys, anim, cam, clothAspect, artworkRatio, bgMode, bgColor, sceneId, envIntensity, videoSeconds }));
       } catch { /* non-critical */ }
     }, 250);
     return () => clearTimeout(id);
-  }, [perf, mat, phys, anim, clothAspect, artworkRatio, bgMode, bgColor, sceneId, envIntensity, videoSeconds]);
+  }, [perf, mat, phys, anim, cam, clothAspect, artworkRatio, bgMode, bgColor, sceneId, envIntensity, videoSeconds]);
 
   // Latest control state, readable from the render loop without re-init.
   const liveRef = useRef({});
@@ -561,24 +564,42 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
       const bumpTex = new THREE.CanvasTexture(makeGrainCanvas());
       bumpTex.wrapS = THREE.RepeatWrapping; bumpTex.wrapT = THREE.RepeatWrapping;
 
-      const clothMat = new THREE.MeshPhysicalMaterial({
-        color: 0x101114, side: THREE.DoubleSide,
-        roughness: 0.12, metalness: 0.35,
-        clearcoat: 0.5, clearcoatRoughness: 0.08,
-        sheen: 0.08, sheenRoughness: 0.5, sheenColor: new THREE.Color(0xffffff),
-        iridescence: 0.35, iridescenceIOR: 1.3, iridescenceThicknessRange: [120, 480],
-        bumpMap: bumpTex, bumpScale: 0.01,
-      });
-      clothMat.defines = { ...(clothMat.defines || {}), USE_UV: '' };
-      clothMat.onBeforeCompile = (shader) => {
-        Object.assign(shader.uniforms, holoUniforms);
-        shader.fragmentShader = shader.fragmentShader
-          .replace('#include <common>', '#include <common>\n' + HOLO_FRAG_PARS)
-          .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + HOLO_FRAG_BODY);
+      // Front/back material pair: the back face carries a horizontally
+      // MIRRORED copy of every map so artwork reads correctly from behind
+      // (a plain DoubleSide material shows backwards text on the back).
+      const backBumpTex = bumpTex.clone();
+      backBumpTex.needsUpdate = true;
+      const mkClothMaterial = (side, bump) => {
+        const m = new THREE.MeshPhysicalMaterial({
+          color: 0x101114, side,
+          roughness: 0.12, metalness: 0.35,
+          clearcoat: 0.5, clearcoatRoughness: 0.08,
+          sheen: 0.08, sheenRoughness: 0.5, sheenColor: new THREE.Color(0xffffff),
+          iridescence: 0.35, iridescenceIOR: 1.3, iridescenceThicknessRange: [120, 480],
+          bumpMap: bump, bumpScale: 0.01,
+        });
+        m.defines = { ...(m.defines || {}), USE_UV: '' };
+        m.onBeforeCompile = (shader) => {
+          Object.assign(shader.uniforms, holoUniforms);
+          shader.fragmentShader = shader.fragmentShader
+            .replace('#include <common>', '#include <common>\n' + HOLO_FRAG_PARS)
+            .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + HOLO_FRAG_BODY);
+        };
+        return m;
+      };
+      const clothMat = mkClothMaterial(THREE.FrontSide, bumpTex);
+      const clothBackMat = mkClothMaterial(THREE.BackSide, backBumpTex);
+      // Mirror any texture horizontally for the back face.
+      const mirrorTex = (tex) => {
+        const t = tex.clone();
+        t.wrapS = THREE.RepeatWrapping;
+        t.repeat.x = -1;
+        t.needsUpdate = true;
+        return t;
       };
 
       const world = {
-        THREE, scene, camera, renderer, controls, pmrem, clothMat, holoUniforms, bumpTex,
+        THREE, scene, camera, renderer, controls, pmrem, clothMat, clothBackMat, mirrorTex, holoUniforms, bumpTex,
         keyLight: key, rimLight: rim, spot, ground,
         cloth: null, envIntensity: 1, bgTexture: null,
         pointer: { active: false, x: 0, y: 0 },
@@ -608,6 +629,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
 
         if (world.cloth) {
           scene.remove(world.cloth.mesh);
+          scene.remove(world.cloth.meshBack);
           world.cloth.geometry.dispose();
         }
 
@@ -639,8 +661,13 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
         const mesh = new THREE.Mesh(geometry, clothMat);
         mesh.castShadow = true; // scene sets catch this on the ground plane
         scene.add(mesh);
-        world.cloth = { geometry, mesh, prev, orig, constraints, cols, rows, count, cw, ch };
+        // Back face — same sim geometry, mirrored-map material, so artwork
+        // reads correctly from behind.
+        const meshBack = new THREE.Mesh(geometry, clothBackMat);
+        scene.add(meshBack);
+        world.cloth = { geometry, mesh, meshBack, prev, orig, constraints, cols, rows, count, cw, ch };
         world.applyPins(liveRef.current.phys.pinMode);
+        world.applyRumple(liveRef.current.phys.rumple ?? 0.5);
       };
 
       // Pin set — indices held to their original grid position each solve pass.
@@ -657,11 +684,41 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
         c.pins = pins;
       };
 
+      // Opening crumple — a fixed multi-octave fold field over the rest pose,
+      // scaled by the RUMPLE slider. Deterministic (same folds every time) and
+      // seeded with zero velocity, so the sheet OPENS looking handled; the sim
+      // then settles the folds organically.
+      world.applyRumple = (amount) => {
+        const c = world.cloth; if (!c) return;
+        const arr = c.geometry.attributes.position.array;
+        const a = (amount ?? 0) * 0.22;
+        for (let i = 0; i < c.count; i += 1) {
+          const i3 = i * 3;
+          if (c.pins?.has(i)) {
+            arr[i3] = c.orig[i3]; arr[i3 + 1] = c.orig[i3 + 1]; arr[i3 + 2] = c.orig[i3 + 2];
+          } else {
+            const ox = c.orig[i3], oy = c.orig[i3 + 1];
+            arr[i3] = ox + a * 0.35 * Math.sin(oy * 4.1 + 2.2);
+            arr[i3 + 1] = oy + a * 0.3 * Math.cos(ox * 3.7 + 1.1);
+            arr[i3 + 2] = c.orig[i3 + 2] + a * (
+              0.55 * Math.sin(ox * 3.1 + 1.7) * Math.cos(oy * 2.3 + 0.6)
+              + 0.3 * Math.sin(ox * 6.7 + 4.2) * Math.cos(oy * 5.1 + 2.8)
+              + 0.2 * Math.sin(ox * 11.3 + 0.9) * Math.cos(oy * 9.7 + 5.5)
+            );
+          }
+          c.prev[i3] = arr[i3]; c.prev[i3 + 1] = arr[i3 + 1]; c.prev[i3 + 2] = arr[i3 + 2];
+        }
+        c.geometry.attributes.position.needsUpdate = true;
+        c.geometry.computeVertexNormals();
+      };
+
       world.resetCloth = () => {
         const c = world.cloth; if (!c) return;
         c.geometry.attributes.position.array.set(c.orig);
         c.prev.set(c.orig);
         c.geometry.attributes.position.needsUpdate = true;
+        // Reset lands on the default "handled" look, not a sterile flat sheet.
+        world.applyRumple(liveRef.current.phys.rumple ?? 0.5);
       };
 
       // Poke — radial velocity impulse pushed away from the camera, centered on
@@ -696,6 +753,8 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
           tex.needsUpdate = true;
           clothMat.map = tex;
           clothMat.needsUpdate = true;
+          clothBackMat.map = mirrorTex(tex); // back face mirrored so it reads right
+          clothBackMat.needsUpdate = true;
           setArtworkName('Default artwork');
           setArtworkRatio(img.width / img.height); // auto-shape picks this up
         };
@@ -717,7 +776,9 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
       const onPointerDown = (e) => {
         const c = world.cloth; if (!c) return;
         setRayFromEvent(e);
-        const hit = world.raycaster.intersectObject(c.mesh, false)[0];
+        // Both faces are grabbable — FrontSide/BackSide materials cull raycast
+        // hits per side, so test the pair.
+        const hit = world.raycaster.intersectObjects([c.mesh, c.meshBack], false)[0];
         if (!hit) return; // empty space → orbit
         const arr = c.geometry.attributes.position.array;
         // Tweezer pinch — tiny contact area; the rest of the sheet trails
@@ -900,6 +961,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
         controls.dispose();
         world.cloth?.geometry?.dispose();
         clothMat.map?.dispose(); bumpTex.dispose();
+        clothBackMat.map?.dispose(); clothBackMat.bumpMap?.dispose();
         ground.geometry.dispose(); ground.material.dispose();
         world.bgTexture?.dispose();
         pmrem.dispose();
@@ -921,27 +983,31 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Material dials → material props + holo uniforms (no recompiles). ──
+  // ── Material dials → material props + holo uniforms (no recompiles).
+  // Applied to BOTH faces; the back face's maps tile mirrored (-x repeat). ──
   useEffect(() => {
     const world = worldRef.current;
     if (!worldReady || !world?.clothMat) return;
-    const { THREE, clothMat: m, holoUniforms: u } = world;
+    const { THREE, holoUniforms: u } = world;
     let rough = mat.roughness, cc = mat.clearcoat;
     if (mat.finish === 'matte') { rough = Math.max(rough, 0.7); cc *= 0.15; }
     else if (mat.finish === 'satin') { rough = Math.min(1, rough + 0.28); cc *= 0.5; }
-    m.color.set(mat.baseColor);
-    m.roughness = rough;
-    m.metalness = mat.metalness;
-    m.clearcoat = cc;
-    m.clearcoatRoughness = mat.coatRoughness;
-    m.sheen = mat.sheen;
-    m.iridescence = mat.iridescence;
-    m.bumpScale = mat.bump * 0.014;
-    if (m.bumpMap) m.bumpMap.repeat.set(mat.bumpTiling, mat.bumpTiling);
     const hueCol = new THREE.Color().setHSL(mat.hueShift % 1, 0.85, 0.62);
-    m.specularColor.set(0xffffff).lerp(hueCol, mat.specTint * Math.min(1, mat.holoIntensity * 1.5));
-    m.specularIntensity = 0.4 + 0.6 * mat.specTint;
-    m.envMapIntensity = envIntensity;
+    [world.clothMat, world.clothBackMat].filter(Boolean).forEach((m) => {
+      const mirrored = m.side === THREE.BackSide;
+      m.color.set(mat.baseColor);
+      m.roughness = rough;
+      m.metalness = mat.metalness;
+      m.clearcoat = cc;
+      m.clearcoatRoughness = mat.coatRoughness;
+      m.sheen = mat.sheen;
+      m.iridescence = mat.iridescence;
+      m.bumpScale = mat.bump * 0.014;
+      if (m.bumpMap) m.bumpMap.repeat.set(mirrored ? -mat.bumpTiling : mat.bumpTiling, mat.bumpTiling);
+      m.specularColor.set(0xffffff).lerp(hueCol, mat.specTint * Math.min(1, mat.holoIntensity * 1.5));
+      m.specularIntensity = 0.4 + 0.6 * mat.specTint;
+      m.envMapIntensity = envIntensity;
+    });
     u.uHoloIntensity.value = mat.holoIntensity;
     u.uHoloScale.value = mat.holoScale;
     u.uBandFreq.value = mat.bandFreq;
@@ -956,6 +1022,27 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
     if (!worldReady || !world?.cloth) return;
     world.applyPins(phys.pinMode);
   }, [phys.pinMode, worldReady]);
+
+  // ── Rumple slider → re-seed the opening crumple at the new amount. ──
+  useEffect(() => {
+    const world = worldRef.current;
+    if (!worldReady || !world?.cloth) return;
+    world.applyRumple(phys.rumple ?? 0.5);
+  }, [phys.rumple, worldReady]);
+
+  // ── Camera freedom → OrbitControls. Disabling an axis clamps it at its
+  // current angle so the view doesn't jump; pan maps to enablePan. ──
+  useEffect(() => {
+    const world = worldRef.current;
+    if (!worldReady || !world?.controls) return;
+    const ctl = world.controls;
+    if (cam.rotY) { ctl.minAzimuthAngle = -Infinity; ctl.maxAzimuthAngle = Infinity; }
+    else { const a = ctl.getAzimuthalAngle(); ctl.minAzimuthAngle = a; ctl.maxAzimuthAngle = a; }
+    if (cam.rotX) { ctl.minPolarAngle = 0; ctl.maxPolarAngle = Math.PI; }
+    else { const p = ctl.getPolarAngle(); ctl.minPolarAngle = p; ctl.maxPolarAngle = p; }
+    ctl.enablePan = cam.pan;
+    ctl.enableRotate = cam.rotX || cam.rotY;
+  }, [cam, worldReady]);
 
   // ── Cloth shape / perf rebuild. ──
   useEffect(() => {
@@ -1026,14 +1113,17 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
     if (!world || !file) return;
     const img = new Image();
     img.onload = () => {
-      const { THREE, clothMat } = world;
+      const { THREE, clothMat, clothBackMat, mirrorTex } = world;
       clothMat.map?.dispose();
+      clothBackMat.map?.dispose();
       const tex = new THREE.Texture(img);
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.anisotropy = world.renderer.capabilities.getMaxAnisotropy();
       tex.needsUpdate = true;
       clothMat.map = tex;
       clothMat.needsUpdate = true; // program gains USE_MAP; onBeforeCompile re-runs with the same uniform objects
+      clothBackMat.map = mirrorTex(tex); // back face mirrored so it reads right
+      clothBackMat.needsUpdate = true;
       setArtworkName(file.name);
       // The map is MULTIPLIED by base color, and metal + zero-rough surfaces kill
       // diffuse — a dark foil base renders any artwork near-invisible. Snap the
@@ -1059,6 +1149,9 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
     world.clothMat.map?.dispose();
     world.clothMat.map = null;
     world.clothMat.needsUpdate = true;
+    world.clothBackMat.map?.dispose();
+    world.clothBackMat.map = null;
+    world.clothBackMat.needsUpdate = true;
     setArtworkName('');
     setArtworkRatio(null); // 'auto' falls back to portrait
   }, []);
@@ -1067,15 +1160,18 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
     if (!world || !file) return;
     const img = new Image();
     img.onload = () => {
-      const { THREE, clothMat } = world;
+      const { THREE, clothMat, clothBackMat, mirrorTex } = world;
       clothMat.bumpMap?.dispose();
+      clothBackMat.bumpMap?.dispose();
       const tex = new THREE.Texture(img);
       tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
       tex.needsUpdate = true;
       clothMat.bumpMap = tex;
       clothMat.needsUpdate = true;
+      clothBackMat.bumpMap = mirrorTex(tex);
+      clothBackMat.needsUpdate = true;
       setBumpName(file.name);
-      setMat((m) => ({ ...m })); // re-apply tiling to the new map
+      setMat((m) => ({ ...m })); // re-apply tiling to the new maps
     };
     img.src = URL.createObjectURL(file);
   }, []);
@@ -1340,11 +1436,15 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
             <Slider label="TURBULENCE" min={0} max={1} step={0.01} value={anim.turbulence} onChange={(v) => setAnim((a) => ({ ...a, turbulence: v }))} fmt={(v) => `${Math.round(v * 100)}%`} disabled={!anim.on} />
             <Slider label="SPEED" min={0.2} max={3} step={0.05} value={anim.speed} onChange={(v) => setAnim((a) => ({ ...a, speed: v }))} fmt={(v) => `${v.toFixed(2)}x`} disabled={!anim.on} />
             <Slider
-              label="REBOUND" min={0} max={1} step={0.01} value={phys.rebound ?? 0.18}
+              label="REBOUND" min={0} max={1} step={0.01} value={phys.rebound ?? 0}
               onChange={(v) => setPhysKey('rebound', v)} fmt={(v) => `${Math.round(v * 100)}%`}
               disabled={phys.pinMode !== 'free-float'}
             />
-            <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>Turbulence dials the chaos. Rebound sets how fast the sheet retracts to its original shape — at 0% it stays right where you throw it.</span>
+            <Slider
+              label="RUMPLE" min={0} max={1} step={0.01} value={phys.rumple ?? 0.5}
+              onChange={(v) => setPhysKey('rumple', v)} fmt={(v) => `${Math.round(v * 100)}%`}
+            />
+            <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>Turbulence dials the chaos. Rebound sets how fast the sheet retracts to its original shape — at 0% it stays right where you throw it. Rumple sets how "already handled" the sheet opens (and resets) looking.</span>
           </RailCard>
 
           {/* PHYSICS */}
@@ -1359,6 +1459,19 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
             <Slider label="GRAVITY" min={0} max={4} step={0.05} value={phys.gravity} onChange={(v) => setPhysKey('gravity', v)} disabled={phys.pinMode === 'free-float'} />
             <Slider label="DAMPING" min={0.9} max={0.998} step={0.001} value={phys.damping} onChange={(v) => setPhysKey('damping', v)} fmt={(v) => v.toFixed(3)} />
             <Slider label="STIFFNESS" min={0.3} max={1} step={0.01} value={phys.stiffness} onChange={(v) => setPhysKey('stiffness', v)} />
+            <span style={{ ...ui.label, marginTop: 4 }}>CAMERA AXES</span>
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+              {[['rotY', 'Orbit ↔'], ['rotX', 'Orbit ↕'], ['pan', 'Pan']].map(([k, label]) => (
+                <button
+                  key={k}
+                  title={`${label} ${cam[k] ? 'enabled' : 'locked'}`}
+                  style={{ ...ui.btn(cam[k]), height: 30, padding: '0 12px', fontSize: 10 }}
+                  onClick={() => setCam((c) => ({ ...c, [k]: !c[k] }))}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <span style={{ ...ui.label, marginTop: 4 }}>PINS</span>
             <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
               {PIN_MODES.map((p) => (
