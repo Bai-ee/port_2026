@@ -1,9 +1,29 @@
 # HOLO PAPER Studio — FX Completion Plan (implementer handoff)
 
-**Status:** Phase 1 approved to implement. Phase 2 is decision-gated — do not start it.
-**Target implementer:** Sonnet (implementer thread).
+**Status: PHASE 1 SHIPPED + EXTENDED — live on hitloop.agency 2026-07-22** (`c75a0321`, `60c1f86d`, `661183d9`).
+Read § "As built" before touching this file again. §7 Phase 2 remains decision-gated.
 **Date:** 2026-07-22
-**Owner file:** `app/dashboard/studio/ClothStudio.jsx` (2312 lines, self-contained, no sibling modules).
+**Owner file:** `app/dashboard/studio/ClothStudio.jsx` (self-contained, no sibling modules).
+
+---
+
+## As built (what actually shipped, vs this plan)
+
+Everything in §3–§4 landed, plus a follow-on round the user asked for after seeing it.
+
+**Delivered beyond the plan**
+- **12 graphic treatments** in the finish pass (halftone · pixel · posterize · 1-bit threshold · duotone · chromatic split · CRT scanlines · riso misregister · edge lines · solarize · cross-process · kaleidoscope), selected by `#define` + `material.needsUpdate` (recompile on change, no per-pixel branch chain), all running **display-space** through one shared `tap()` helper so multi-tap looks keep the tone map, sRGB encode, backdrop rule and vignette consistent.
+- **20 full-look presets** (`FX_PRESETS`, groups PRINT/PHOTO/DIGITAL/EXPERIMENTAL) + Randomize. Per the user's explicit call, a look also sets **material, environment HDRI, backdrop and light rig** through the existing setters; any hand-tweak drops to `Custom…`.
+- **Capture-frame carousel:** the HUD lays every crop out as a filmstrip (active centred + dimmed-around, neighbours ghosted), `#cloth-frame-carousel-{prev,next}-btn` on the canvas edges ease the strip across (350ms, HUD-only — the render path is untouched).
+- **Vignette is frame-shaped** (`uFrameCenter`/`uFrameHalf`): the falloff ellipse takes the active crop's aspect so exports carry a true vignette. Full canvas reproduces the old numbers exactly.
+
+**Corrections to this plan's analysis**
+- §3.3 was real, and worse than described: rendering into a target skips **both** the ACES tone map and the sRGB encode (three.cjs:20571/30071 — gated on `_currentRenderTarget === null`), so the finish pass owns both via the stock chunks and must stay **enabled** whenever the chain runs.
+- **New trap the plan missed:** tone-mapping every pixel greys a white backdrop to ~226, because three never tone maps the clear colour (`getUnlitUniformColorSpace` writes it linear into the target). Fixed with a shared `DepthTexture` across both composer buffers — depth 1.0 = untouched backdrop = encode only, no tone map.
+- Composer buffer is **HalfFloat**; EffectComposer's stock 8-bit *linear* target bands in the shadows and clips highlights before ACES sees them.
+- §3.1's weld is confirmed numerically (2457 → 2316 verts) but produced **no visible change** at the angles tested — see §8: the user's reported seam is most likely the petal-overlap intersections, still unaddressed.
+
+**Verification actually run:** vertex count · all 13 treatment options compiled with zero shader errors · FX-neutral vs FX-off pixel-identical incl. backdrop · 4 HDRIs 200 (dev + prod) · persistence across reload with `SETTINGS_KEY` unchanged · frame carousel + frame-shaped vignette · **PNG export carries FX** (halftone still: 29% dark / 43% light bimodal vs flat FX-off baseline, 3840×2160 crop) · **transparent PNG keeps real alpha and skips FX** (alphaMin 0) · MP4 export produces a valid `video/mp4` (content unjudgeable — a background tab throttles rAF, so automated recordings capture almost no frames) · `npm run build` clean.
 
 ---
 
