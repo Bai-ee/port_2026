@@ -2159,13 +2159,16 @@ export default function StudioPage() {
         <img src="/img/circle_logo.png" alt="Bryan Balli logo" width={663} height={552} style={{ height: 'clamp(2rem, 4vw, 2.8rem)', width: 'auto', display: 'block', mixBlendMode: 'darken' }} />
       </a>
 
-      {/* Tool switch — MOCKUP VIDEO (device scene) ⇄ HOLO PAPER (cloth sim). */}
+      {/* Tool switch — MOCKUP VIDEO (device scene) ⇄ HOLO PAPER (cloth sim).
+          Right-aligned to the canvas's right edge (the rail starts at RAIL_W)
+          so it never floats over the artwork. */}
       {tool ? (
         <div
           id="studio-tool-toggle"
           data-tooltip-disabled="true"
           style={{
-            position: 'absolute', top: 18, left: '50%', transform: 'translateX(-50%)', zIndex: 30,
+            position: 'absolute', top: 14, zIndex: 30,
+            ...(isNarrow ? { left: '50%', transform: 'translateX(-50%)' } : { right: RAIL_W + 24 }),
             display: 'flex', gap: 4, padding: 4, borderRadius: 999,
             ...GLASS.surface,
           }}
@@ -2209,7 +2212,7 @@ export default function StudioPage() {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               // Consistent ~50px top margin across breakpoints — pushes the centered
               // frame down so it never hugs the top edge.
-              containerType: 'size', overflow: 'visible', paddingTop: 50, boxSizing: 'border-box',
+              containerType: 'size', overflow: 'visible', paddingTop: 74, boxSizing: 'border-box',
               ...(isNarrow ? { height: mobileAreaH, flex: 'none' } : { flex: 1, minHeight: 0 }),
             }}
           >

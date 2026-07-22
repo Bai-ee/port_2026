@@ -1434,7 +1434,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
             : { position: 'absolute', left: 0, top: 0, bottom: 0, right: railW }),
         }}
       >
-        <div id="cloth-studio-stage-area" style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: isNarrow ? 12 : '58px 24px 24px' }}>
+        <div id="cloth-studio-stage-area" style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: isNarrow ? '68px 12px 12px' : '74px 24px 24px' }}>
           <div
             id="cloth-studio-stage-shell"
             ref={stageRef}
