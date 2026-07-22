@@ -12,7 +12,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ChevronRight, Download, Palette, Image as ImageIcon, Wind, Layers,
-  Hand, Orbit, RotateCcw, Zap, Video, Camera,
+  RotateCcw, Zap, Video, Camera,
 } from 'lucide-react';
 
 // ── UI tokens — mirror app/dashboard/studio/page.jsx GLASS/ui (kept local so
@@ -107,7 +107,9 @@ function Slider({ label, min, max, step, value, onChange, fmt = (v) => v.toFixed
 }
 
 // ── Config ───────────────────────────────────────────────────────────────────
-const SETTINGS_KEY = 'holocloth-studio-defaults-v1';
+// v2 — grab/fling interaction retuned the physics defaults; the version bump
+// discards v1 saves so everyone lands on the clothier feel.
+const SETTINGS_KEY = 'holocloth-studio-defaults-v2';
 const loadSavedDefaults = () => {
   if (typeof window === 'undefined') return {};
   try { return JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || '{}') || {}; } catch { return {}; }
@@ -170,9 +172,11 @@ const MATERIAL_PRESETS = {
 };
 // Dropdown optgroup order.
 const PRESET_GROUPS = ['CORE', 'DRAMATIC', 'EXPRESSIVE', 'BRIGHT'];
+// Clothier defaults: light wind (the grab is the show), floatier damping, and
+// looser constraints so the sheet stretches and swings like fabric.
 const DEFAULT_PHYS = {
-  windStrength: 1.1, windSpeed: 1, gravity: 1.6,
-  damping: 0.985, stiffness: 0.85, pinMode: 'top-edge',
+  windStrength: 0.5, windSpeed: 1, gravity: 1.7,
+  damping: 0.99, stiffness: 0.72, pinMode: 'top-edge',
 };
 
 // The material sliders, in the order the reference panel lists them.
@@ -426,7 +430,6 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   const [bgImageEl, setBgImageEl] = useState(null);
   const [envIntensity, setEnvIntensity] = useState(saved.envIntensity ?? 1);
   const [videoSeconds, setVideoSeconds] = useState(saved.videoSeconds || 5);
-  const [touchMode, setTouchMode] = useState(false);
   const [recording, setRecording] = useState(false);
   const [status, setStatus] = useState('');
   const [artworkName, setArtworkName] = useState('');
@@ -454,7 +457,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
 
   // Latest control state, readable from the render loop without re-init.
   const liveRef = useRef({});
-  liveRef.current = { phys, touchMode };
+  liveRef.current = { phys };
 
   // ── World init — one scene per mount; controls mutate it in place. ──
   useEffect(() => {
@@ -652,31 +655,59 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
 
       world.buildCloth(clothAspect, perf);
 
-      // ── Pointer interaction (touch mode) — nearest-particle-to-ray push. ──
+      // ── Grab interaction — pointerdown ON the sheet grabs a fabric patch and
+      // pins it to the pointer ray while dragging; verlet infers velocity from
+      // the drag, so a fast release FLINGS the cloth. Pointerdown on empty
+      // space falls through to OrbitControls as usual. ──
       const ndc = new THREE.Vector2();
-      const rayPoint = new THREE.Vector3();
-      const pushCloth = (e) => {
-        const c = world.cloth; if (!c) return;
+      const grab = { active: false, idx: null, w: null, off: null, dist: 0, target: new THREE.Vector3() };
+      world.grab = grab;
+      const setRayFromEvent = (e) => {
         const rect = renderer.domElement.getBoundingClientRect();
         ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
         world.raycaster.setFromCamera(ndc, camera);
-        const ray = world.raycaster.ray;
+      };
+      const onPointerDown = (e) => {
+        const c = world.cloth; if (!c) return;
+        setRayFromEvent(e);
+        const hit = world.raycaster.intersectObject(c.mesh, false)[0];
+        if (!hit) return; // empty space → orbit
         const arr = c.geometry.attributes.position.array;
-        const r = Math.max(c.cw, c.ch) * 0.14;
+        const r = Math.max(c.cw, c.ch) * 0.17;
+        const idx = []; const w = []; const off = [];
         for (let i = 0; i < c.count; i += 1) {
-          rayPoint.set(arr[i * 3], arr[i * 3 + 1], arr[i * 3 + 2]);
-          const d = ray.distanceToPoint(rayPoint);
-          if (d < r && !c.pins?.has(i)) {
-            const f = (1 - d / r) * 0.02;
-            c.prev[i * 3] -= ray.direction.x * f;
-            c.prev[i * 3 + 1] -= ray.direction.y * f;
-            c.prev[i * 3 + 2] -= ray.direction.z * f;
+          if (c.pins?.has(i)) continue;
+          const dx = arr[i * 3] - hit.point.x;
+          const dy = arr[i * 3 + 1] - hit.point.y;
+          const dz = arr[i * 3 + 2] - hit.point.z;
+          const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          if (d < r) {
+            const t = 1 - d / r;
+            idx.push(i); w.push(t * t * 0.95);
+            off.push(dx, dy, dz); // keep the patch's shape while held
           }
         }
+        if (!idx.length) return;
+        grab.active = true; grab.idx = idx; grab.w = w; grab.off = off;
+        grab.dist = hit.distance;
+        grab.target.copy(hit.point);
+        controls.enabled = false;
+        try { renderer.domElement.setPointerCapture(e.pointerId); } catch { /* older browsers */ }
       };
-      const onPointerDown = (e) => { if (liveRef.current.touchMode) { world.pointer.active = true; pushCloth(e); } };
-      const onPointerMove = (e) => { if (liveRef.current.touchMode && world.pointer.active) pushCloth(e); };
-      const onPointerUp = () => { world.pointer.active = false; };
+      const onPointerMove = (e) => {
+        if (!grab.active) return;
+        setRayFromEvent(e);
+        const ray = world.raycaster.ray;
+        // Drag on the sphere of the original hit distance — pointer maps 1:1.
+        grab.target.copy(ray.origin).addScaledVector(ray.direction, grab.dist);
+      };
+      const onPointerUp = (e) => {
+        if (grab.active) {
+          grab.active = false;
+          controls.enabled = true;
+          try { renderer.domElement.releasePointerCapture(e.pointerId); } catch { /* not captured */ }
+        }
+      };
       renderer.domElement.addEventListener('pointerdown', onPointerDown);
       renderer.domElement.addEventListener('pointermove', onPointerMove);
       window.addEventListener('pointerup', onPointerUp);
@@ -732,8 +763,25 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
           }
         }
 
+        // Grabbed patch chases the pointer target — positions move while prev
+        // lags, so verlet reads the drag as velocity: hold = pinned, fast
+        // release = fling. Applied after constraints so the hold stays firm.
+        const gb = world.grab;
+        if (gb?.active && gb.idx) {
+          for (let k = 0; k < gb.idx.length; k += 1) {
+            const ix = gb.idx[k] * 3;
+            const wgt = gb.w[k];
+            arr[ix] += (gb.target.x + gb.off[k * 3] - arr[ix]) * wgt;
+            arr[ix + 1] += (gb.target.y + gb.off[k * 3 + 1] - arr[ix + 1]) * wgt;
+            arr[ix + 2] += (gb.target.z + gb.off[k * 3 + 2] - arr[ix + 2]) * wgt;
+          }
+        }
+
         c.geometry.attributes.position.needsUpdate = true;
         c.geometry.computeVertexNormals();
+        // Raycast grabbing checks the bounding sphere first — keep it in sync
+        // with the deforming sheet or hits start missing once it billows.
+        c.geometry.computeBoundingSphere();
       };
 
       const loop = () => {
@@ -1042,21 +1090,17 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
                 : '#0b0b0f',
             }}
           >
-            {/* Orbit ⇄ Touch-cloth toggle — mirrors the mockup board's mode button. */}
-            <button
-              id="cloth-studio-touch-toggle"
-              onClick={() => setTouchMode((v) => !v)}
-              title={touchMode ? 'Touch the cloth (drag pushes fabric)' : 'Orbit the camera'}
+            {/* Grab is automatic — drag the sheet directly; empty space orbits. */}
+            <div
+              id="cloth-studio-drag-hint"
               style={{
-                position: 'absolute', top: 10, right: 48, zIndex: 6,
-                width: 30, height: 30, borderRadius: '50%',
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                border: 'none', cursor: 'pointer', color: '#fff',
-                background: touchMode ? 'rgba(99,102,241,0.85)' : 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)',
+                position: 'absolute', bottom: 10, left: 10, zIndex: 6, pointerEvents: 'none',
+                ...ui.label, color: '#fff', background: 'rgba(0,0,0,0.45)',
+                padding: '4px 10px', borderRadius: 999, backdropFilter: 'blur(6px)',
               }}
             >
-              {touchMode ? <Hand size={15} strokeWidth={2.5} /> : <Orbit size={16} strokeWidth={2.5} />}
-            </button>
+              GRAB &amp; FLING THE CLOTH · EMPTY SPACE ORBITS
+            </div>
             {/* Poke — quick impulse without opening the Physics card. */}
             <button
               id="cloth-studio-poke-btn"
