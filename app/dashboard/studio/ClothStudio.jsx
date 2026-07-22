@@ -110,9 +110,18 @@ function Slider({ label, min, max, step, value, onChange, fmt = (v) => v.toFixed
 // v8 — user-approved physics feel (damping 0.9, stiffness 0.85, rumple 0.79);
 // the bump discards older saves so the approved defaults actually land.
 const SETTINGS_KEY = 'holocloth-studio-defaults-v8';
-// Default artwork shipped with the tool (public/img). 404s silently if absent;
-// any user upload replaces it.
-const DEFAULT_ARTWORK_URL = '/img/holocloth-default-artwork.jpg';
+// Artwork library — built-in looks shipped with the tool + user uploads saved
+// per-browser (localStorage data URLs; no account needed on the public page).
+const BUILTIN_ARTWORKS = [
+  { id: 'brock',        label: 'Brock Electronics',  url: '/img/holocloth-artwork-flyer-2.jpg' },
+  { id: 'viva-program', label: 'Viva Program Flyer', url: '/img/holocloth-default-artwork.jpg' },
+];
+const DEFAULT_ARTWORK_ID = 'brock';
+const ARTWORK_LIB_KEY = 'holocloth-artwork-library-v1';
+const loadArtworkLib = () => {
+  if (typeof window === 'undefined') return [];
+  try { return JSON.parse(window.localStorage.getItem(ARTWORK_LIB_KEY) || '[]') || []; } catch { return []; }
+};
 const loadSavedDefaults = () => {
   if (typeof window === 'undefined') return {};
   try { return JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || '{}') || {}; } catch { return {}; }
@@ -445,6 +454,9 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   // until an image provides one); the named presets force a shape.
   const [clothAspect, setClothAspect] = useState((CLOTH_ASPECTS[saved.clothAspect] || saved.clothAspect === 'auto') ? saved.clothAspect : 'auto');
   const [artworkRatio, setArtworkRatio] = useState(saved.artworkRatio || null);
+  // Artwork library — which entry is on the sheet + the saved-upload list.
+  const [artworkId, setArtworkId] = useState(saved.artworkId || DEFAULT_ARTWORK_ID);
+  const [artworkLib, setArtworkLib] = useState(loadArtworkLib);
   const [bgMode, setBgMode] = useState(['scene', 'color', 'image', 'transparent'].includes(saved.bgMode) ? saved.bgMode : 'color');
   const [bgColor, setBgColor] = useState(saved.bgColor || '#000000');
   const [sceneId, setSceneId] = useState(SCENE_PRESETS[saved.sceneId] ? saved.sceneId : 'thriller');
@@ -471,11 +483,11 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   useEffect(() => {
     const id = setTimeout(() => {
       try {
-        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ perf, mat, phys, anim, cam, clothAspect, artworkRatio, bgMode, bgColor, sceneId, envIntensity, videoSeconds }));
+        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ perf, mat, phys, anim, cam, clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds }));
       } catch { /* non-critical */ }
     }, 250);
     return () => clearTimeout(id);
-  }, [perf, mat, phys, anim, cam, clothAspect, artworkRatio, bgMode, bgColor, sceneId, envIntensity, videoSeconds]);
+  }, [perf, mat, phys, anim, cam, clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds]);
 
   // Latest control state, readable from the render loop without re-init.
   const liveRef = useRef({});
@@ -741,9 +753,16 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
 
       world.buildCloth(clothAspect, perf, artworkRatio);
 
-      // Ship-with-the-tool default artwork — loads if the asset exists (404
-      // stays silent); any user upload replaces it.
+      // Opening artwork — resolve the saved selection against the built-ins,
+      // then the saved-upload library, then the shipped default. 404s/missing
+      // entries stay silent; any pick or upload replaces it.
       {
+        const savedId = saved.artworkId || DEFAULT_ARTWORK_ID;
+        const builtin = BUILTIN_ARTWORKS.find((a) => a.id === savedId);
+        const stored = !builtin ? loadArtworkLib().find((a) => a.id === savedId) : null;
+        const fallback = BUILTIN_ARTWORKS[0];
+        const src = builtin?.url || stored?.dataUrl || fallback.url;
+        const label = builtin?.label || stored?.label || fallback.label;
         const img = new Image();
         img.onload = () => {
           if (disposed || clothMat.map) return; // user beat us to an upload
@@ -755,10 +774,10 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
           clothMat.needsUpdate = true;
           clothBackMat.map = mirrorTex(tex); // back face mirrored so it reads right
           clothBackMat.needsUpdate = true;
-          setArtworkName('Default artwork');
+          setArtworkName(label);
           setArtworkRatio(img.width / img.height); // auto-shape picks this up
         };
-        img.src = DEFAULT_ARTWORK_URL;
+        img.src = src;
       }
 
       // ── Grab interaction — pointerdown ON the sheet grabs a fabric patch and
@@ -1107,28 +1126,48 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
     }
   }, [bgMode, bgColor, bgImageEl, sceneId, worldReady]);
 
-  // ── Uploads. ──
-  const onArtworkUpload = useCallback((file) => {
+  // ── Artwork library. ──
+  // Put a loaded image onto both faces (front normal, back mirrored).
+  const applyArtworkImage = useCallback((img, label) => {
     const world = worldRef.current;
-    if (!world || !file) return;
+    if (!world) return;
+    const { THREE, clothMat, clothBackMat, mirrorTex } = world;
+    clothMat.map?.dispose();
+    clothBackMat.map?.dispose();
+    const tex = new THREE.Texture(img);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = world.renderer.capabilities.getMaxAnisotropy();
+    tex.needsUpdate = true;
+    clothMat.map = tex;
+    clothMat.needsUpdate = true; // program gains USE_MAP; onBeforeCompile re-runs with the same uniform objects
+    clothBackMat.map = mirrorTex(tex); // back face mirrored so it reads right
+    clothBackMat.needsUpdate = true;
+    setArtworkName(label);
+    setArtworkRatio(img.width / img.height);
+    setClothAspect('auto');
+  }, []);
+
+  // Pick from the dropdown — built-ins by URL, saved uploads by data URL.
+  const selectArtwork = useCallback((id) => {
+    const builtin = BUILTIN_ARTWORKS.find((a) => a.id === id);
+    const stored = !builtin ? artworkLib.find((a) => a.id === id) : null;
+    const src = builtin?.url || stored?.dataUrl;
+    if (!src) return;
+    const img = new Image();
+    img.onload = () => applyArtworkImage(img, builtin?.label || stored?.label || 'Artwork');
+    img.src = src;
+    setArtworkId(id);
+  }, [artworkLib, applyArtworkImage]);
+
+  // Upload — applied to the sheet AND saved to this browser's library
+  // (resized data URL in localStorage; survives reloads, no account needed).
+  const onArtworkUpload = useCallback((file) => {
+    if (!file) return;
     const img = new Image();
     img.onload = () => {
-      const { THREE, clothMat, clothBackMat, mirrorTex } = world;
-      clothMat.map?.dispose();
-      clothBackMat.map?.dispose();
-      const tex = new THREE.Texture(img);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      tex.anisotropy = world.renderer.capabilities.getMaxAnisotropy();
-      tex.needsUpdate = true;
-      clothMat.map = tex;
-      clothMat.needsUpdate = true; // program gains USE_MAP; onBeforeCompile re-runs with the same uniform objects
-      clothBackMat.map = mirrorTex(tex); // back face mirrored so it reads right
-      clothBackMat.needsUpdate = true;
-      setArtworkName(file.name);
-      // The map is MULTIPLIED by base color, and metal + zero-rough surfaces kill
-      // diffuse — a dark foil base renders any artwork near-invisible. Snap the
-      // material to an image-friendly base so the upload reads clearly; holo
-      // dials stay where the user set them.
+      applyArtworkImage(img, file.name);
+      // The map is MULTIPLIED by base color, and metal + zero-rough surfaces
+      // kill diffuse — snap to an image-friendly base so the upload reads.
       setMat((m) => ({
         ...m,
         preset: '',
@@ -1137,12 +1176,33 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
         roughness: Math.max(m.roughness, 0.35),
         bump: Math.min(m.bump, 0.35),
       }));
-      // Sheet adapts to the upload's true proportions.
-      setArtworkRatio(img.width / img.height);
-      setClothAspect('auto');
+      // Save a resized copy into the library.
+      const scale = Math.min(1, 1600 / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * scale);
+      c.height = Math.round(img.height * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      const entry = { id: `saved-${img.width}x${img.height}-${file.size}-${file.name}`, label: file.name, dataUrl: c.toDataURL('image/jpeg', 0.82) };
+      setArtworkId(entry.id);
+      setArtworkLib((prev) => {
+        const next = [...prev.filter((a) => a.id !== entry.id), entry];
+        try { window.localStorage.setItem(ARTWORK_LIB_KEY, JSON.stringify(next)); }
+        catch { setStatus('Image applied, but too large to save in this browser’s library.'); return prev; }
+        return next;
+      });
     };
     img.src = URL.createObjectURL(file);
-  }, []);
+  }, [applyArtworkImage]);
+
+  // Remove a saved upload from the library; falls back to the default look.
+  const deleteSavedArtwork = useCallback((id) => {
+    setArtworkLib((prev) => {
+      const next = prev.filter((a) => a.id !== id);
+      try { window.localStorage.setItem(ARTWORK_LIB_KEY, JSON.stringify(next)); } catch { /* non-critical */ }
+      return next;
+    });
+    selectArtwork(DEFAULT_ARTWORK_ID);
+  }, [selectArtwork]);
   const clearArtwork = useCallback(() => {
     const world = worldRef.current;
     if (!world) return;
@@ -1153,6 +1213,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
     world.clothBackMat.map = null;
     world.clothBackMat.needsUpdate = true;
     setArtworkName('');
+    setArtworkId('');
     setArtworkRatio(null); // 'auto' falls back to portrait
   }, []);
   const onBumpUpload = useCallback((file) => {
@@ -1490,15 +1551,34 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
             subtitle={artworkName || 'Artwork on the fabric'}
             color="#f59e0b" open={imagesOpen} onToggle={() => setImagesOpen((v) => !v)}
           >
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <span style={ui.label}>ARTWORK</span>
+              <select
+                value={artworkId || ''}
+                onChange={(e) => selectArtwork(e.target.value)}
+                style={{ ...ui.btn(), appearance: 'none', width: '100%' }}
+              >
+                {!artworkId ? <option value="">None…</option> : null}
+                {BUILTIN_ARTWORKS.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
+                {artworkLib.length ? (
+                  <optgroup label="SAVED">
+                    {artworkLib.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
+                  </optgroup>
+                ) : null}
+              </select>
+            </label>
             <label style={uploadBtnStyle}>
               <Download size={14} strokeWidth={2.5} style={{ marginRight: 6, transform: 'rotate(180deg)' }} />
-              {artworkName ? 'Replace artwork' : 'Upload artwork'}
+              Upload &amp; save artwork
               <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => onArtworkUpload(e.target.files?.[0])} />
             </label>
+            {artworkLib.some((a) => a.id === artworkId) ? (
+              <button style={{ ...ui.btn(), width: '100%' }} onClick={() => deleteSavedArtwork(artworkId)}>Delete saved image</button>
+            ) : null}
             {artworkName ? (
               <button style={{ ...ui.btn(), width: '100%' }} onClick={clearArtwork}>Remove artwork</button>
             ) : (
-              <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>Drop a poster, logo, or album art onto the fabric — it drapes and catches the holo sheen.</span>
+              <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>Uploads go onto the fabric and into this browser's saved list.</span>
             )}
             <span style={{ ...ui.label, marginTop: 4 }}>SHEET SHAPE</span>
             <div style={{ display: 'flex', gap: 5 }}>

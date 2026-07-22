@@ -539,8 +539,12 @@ export default function StudioPage() {
   useEffect(() => { keyframesRef.current = keyframes; }, [keyframes]);
 
   useEffect(() => {
-    if (!loading && !user) router.replace('/login?redirect=/dashboard/studio');
-  }, [user, loading, router]);
+    // HOLO PAPER (?tool=cloth) is PUBLIC — no signup needed (fully client-side,
+    // no user data). Mockup mode still requires auth (client sites + captures).
+    // tool===null waits for the param read so an unauthenticated ?tool=cloth
+    // open never bounces to login.
+    if (!loading && !user && tool === 'mockup') router.replace('/login?redirect=/dashboard/studio');
+  }, [user, loading, tool, router]);
 
   // Debounced save — current settings become the defaults for the next visit.
   useEffect(() => {
