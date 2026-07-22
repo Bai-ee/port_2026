@@ -107,9 +107,9 @@ function Slider({ label, min, max, step, value, onChange, fmt = (v) => v.toFixed
 }
 
 // ── Config ───────────────────────────────────────────────────────────────────
-// v8 — user-approved physics feel (damping 0.9, stiffness 0.85, rumple 0.79);
+// v9 — user-approved opening material (white metallic-matte, full clearcoat);
 // the bump discards older saves so the approved defaults actually land.
-const SETTINGS_KEY = 'holocloth-studio-defaults-v8';
+const SETTINGS_KEY = 'holocloth-studio-defaults-v9';
 // Artwork library — built-in looks shipped with the tool + user uploads saved
 // per-browser (localStorage data URLs; no account needed on the public page).
 const BUILTIN_ARTWORKS = [
@@ -185,12 +185,16 @@ const MATERIAL_PRESETS = {
 };
 // Dropdown optgroup order.
 const PRESET_GROUPS = ['CORE', 'DRAMATIC', 'EXPRESSIVE', 'BRIGHT'];
-// Opening material state — the user-approved default look: the Paper White
-// flyer preset (matches how the shipped default artwork reads best).
-const INITIAL_MAT = (() => {
-  const { label, group, env, bg, ...rest } = MATERIAL_PRESETS.paper;
-  return rest;
-})();
+// Opening material state — the user-approved default look, read verbatim from
+// the approved session: bright metallic-matte sheet with heavy clearcoat.
+const INITIAL_MAT = {
+  preset: '', finish: 'matte', baseColor: '#ffffff',
+  holoIntensity: 0, holoScale: 11, bandFreq: 0.48,
+  saturation: 1, hueShift: 0, sparkle: 0, specTint: 1,
+  iridescence: 0, roughness: 0.85, metalness: 1,
+  clearcoat: 1, coatRoughness: 0.3, sheen: 0,
+  bump: 0.26, bumpTiling: 2.5,
+};
 // Extreme-cloth defaults: FLOATING mode is weightless (gravity applies to
 // pinned modes only), constraints run loose so throws crumple and fold, and
 // REBOUND dials how fast (if at all) the sheet retracts to its rest pose —
