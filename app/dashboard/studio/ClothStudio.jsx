@@ -13,6 +13,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ChevronRight, Download, Palette, Image as ImageIcon, Wind, Layers,
   RotateCcw, Zap, Video, Camera, SlidersHorizontal, Lightbulb, Disc, Focus,
+  Sparkles,
 } from 'lucide-react';
 
 // ── UI tokens — mirror app/dashboard/studio/page.jsx GLASS/ui (kept local so
@@ -226,6 +227,76 @@ const MATERIAL_SLIDERS = [
   ['bump',          'BUMP',           0, 2, 0.01],
   ['bumpTiling',    'BUMP TILING',    1, 12, 0.5],
 ];
+
+// ── Environment light — image-based lighting source. 'room' = the built-in
+// procedural studio; the rest are shipped CC0 HDRIs (Poly Haven) that give
+// reflections real-world richness instead of flat white boxes. ──
+const ENV_PRESETS = {
+  room:     { label: 'Studio (built-in)' },
+  sunset:   { label: 'Venice Sunset',  url: '/hdr/venice_sunset_1k.hdr' },
+  dusk:     { label: 'Desert Dusk',    url: '/hdr/qwantani_dusk_2_1k.hdr' },
+  hall:     { label: 'Dancing Hall',   url: '/hdr/dancing_hall_1k.hdr' },
+  night:    { label: 'Moonless Night', url: '/hdr/moonless_golf_1k.hdr' },
+};
+
+// ── Post FX — bloom glow + film grain + vignette, rendered through an
+// EffectComposer so recordings and PNGs carry the look. ──
+const DEFAULT_FX = { bloom: false, bloomStrength: 0.55, bloomThreshold: 0.8, grain: 0, vignette: 0 };
+// Tiny finishing pass: animated grain + radial vignette — and, critically, the
+// chain's OUTPUT pass. The composer renders the scene into a linear render
+// target, where three applies neither ACES tone mapping nor the sRGB encode
+// (both are gated on rendering straight to the screen). three-stdlib 2.36.1
+// ships no OutputPass, so this pass owns that final conversion via the stock
+// chunks — `#include`s are resolved for ShaderMaterial, and three's fragment
+// prefix defines toneMapping()/linearToOutputTexel() from the renderer's own
+// settings, so the FX path matches the direct-render path exactly. Both chunks
+// no-op automatically if this pass ever renders into a buffer instead of to
+// screen. Keep this pass ENABLED whenever the composer runs (see the loop).
+//
+// The depth buffer is the background mask: three never tone maps the backdrop
+// (the clear colour is written straight through, and background textures set
+// toneMapped=false), so tone mapping every pixel here would turn a pure-white
+// backdrop into ~226 grey the moment any effect switched on. Untouched pixels
+// keep depth 1.0, so they skip the tone map and get only the sRGB encode —
+// which reproduces the direct-render path exactly.
+const GRAIN_VIGNETTE_SHADER = {
+  uniforms: {
+    tDiffuse: { value: null },
+    tDepth: { value: null },
+    uGrain: { value: 0 },
+    uVignette: { value: 0 },
+    uTime: { value: 0 },
+  },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+  fragmentShader: `
+varying vec2 vUv;
+uniform sampler2D tDiffuse;
+uniform sampler2D tDepth;
+uniform float uGrain;
+uniform float uVignette;
+uniform float uTime;
+float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)) + uTime) * 43758.5453); }
+void main(){
+  vec4 c = texture2D(tDiffuse, vUv);
+  // depth 1.0 = nothing was drawn here, i.e. bare backdrop.
+  bool isBackdrop = texture2D(tDepth, vUv).x >= 0.999999;
+  // Vignette runs in linear light (before tone mapping) so the falloff rolls
+  // off like a real lens rather than crushing the shadows.
+  if (uVignette > 0.001) {
+    float d = distance(vUv, vec2(0.5));
+    c.rgb *= 1.0 - smoothstep(0.35, 0.72, d) * uVignette;
+  }
+  gl_FragColor = c;
+  #include <tonemapping_fragment>
+  if (isBackdrop) gl_FragColor.rgb = c.rgb; // backdrop is never tone mapped
+  #include <colorspace_fragment>
+  // Grain runs AFTER the encode — it is a display-space film artefact, and in
+  // linear space it would vanish from the highlights.
+  if (uGrain > 0.001) {
+    gl_FragColor.rgb += (hash(vUv * 1024.0) - 0.5) * uGrain * 0.25;
+  }
+}`,
+};
 
 // ── Glass form — abstract smooth refractive shell wrapped around the sheet
 // (transmission material genuinely refracts the flyer seen through it). ──
@@ -553,6 +624,12 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   const setShotKey = useCallback((key, val) => setShotCam((s) => ({ ...s, [key]: val })), []);
   const [hudOn, setHudOn] = useState(saved.hudOn ?? true);
   const [frameId, setFrameId] = useState(FRAME_PRESETS[saved.frameId] ? saved.frameId : 'off');
+  // Environment light (IBL) + post FX.
+  const [envId, setEnvId] = useState(ENV_PRESETS[saved.envId] ? saved.envId : 'room');
+  const [fx, setFx] = useState(() => ({ ...DEFAULT_FX, ...(saved.fx || {}) }));
+  const setFxKey = useCallback((key, val) => setFx((f) => ({ ...f, [key]: val })), []);
+  // Which HDRI is mid-fetch, so its button can say so (files are ~1.5MB).
+  const [envLoadingId, setEnvLoadingId] = useState(null);
   const applyLightTemplate = useCallback((tplId) => {
     if (!LIGHT_TEMPLATES[tplId]) return;
     setLightCans(cloneCans(tplId));
@@ -585,6 +662,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   const [backgroundOpen, setBackgroundOpen] = useState(false);
   const [lightingOpen, setLightingOpen] = useState(false);
   const [glassOpen, setGlassOpen] = useState(false);
+  const [fxOpen, setFxOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [renderOpen, setRenderOpen] = useState(false);
 
@@ -595,15 +673,15 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   useEffect(() => {
     const id = setTimeout(() => {
       try {
-        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ perf, mat, phys, anim, cam, lightCans, lightTemplate, glass, shotCam, hudOn, frameId, clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds, videoFormat }));
+        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ perf, mat, phys, anim, cam, lightCans, lightTemplate, glass, shotCam, hudOn, frameId, envId, fx, clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds, videoFormat }));
       } catch { /* non-critical */ }
     }, 250);
     return () => clearTimeout(id);
-  }, [perf, mat, phys, anim, cam, lightCans, lightTemplate, glass, shotCam, hudOn, frameId, clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds, videoFormat]);
+  }, [perf, mat, phys, anim, cam, lightCans, lightTemplate, glass, shotCam, hudOn, frameId, envId, fx, clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds, videoFormat]);
 
   // Latest control state, readable from the render loop without re-init.
   const liveRef = useRef({});
-  liveRef.current = { phys, anim, glass, shotCam, hudOn, frameId, lightCans };
+  liveRef.current = { phys, anim, glass, shotCam, hudOn, frameId, lightCans, fx };
 
   // ── World init — one scene per mount; controls mutate it in place. ──
   useEffect(() => {
@@ -614,7 +692,10 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
 
     (async () => {
       const THREE = await import('three');
-      const { OrbitControls, RoomEnvironment, mergeVertices } = await import('three-stdlib');
+      const {
+        OrbitControls, RoomEnvironment, RGBELoader, mergeVertices,
+        EffectComposer, RenderPass, ShaderPass, UnrealBloomPass,
+      } = await import('three-stdlib');
       if (disposed) return;
 
       const w = stage.clientWidth || 800;
@@ -636,9 +717,40 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
       Object.assign(renderer.domElement.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', borderRadius: '16px', touchAction: 'none', display: 'block' });
       stage.appendChild(renderer.domElement);
 
-      // IBL — RoomEnvironment drives the foil reflections (same as mockup mode).
+      // IBL — built-in RoomEnvironment by default; the Background card's
+      // ENVIRONMENT select swaps in shipped HDRIs (see world.setEnvironment).
       const pmrem = new THREE.PMREMGenerator(renderer);
-      scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+      const roomEnvTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+      scene.environment = roomEnvTex;
+      const hdriCache = {};
+      const rgbeLoader = new RGBELoader();
+      // onDone fires once the environment is actually live (immediately for the
+      // built-in room and cached HDRIs, after the ~1.5MB fetch otherwise, and
+      // on failure too) so the rail can show an honest pending state.
+      const setEnvironment = (id, onDone) => {
+        const done = () => { if (typeof onDone === 'function') onDone(); };
+        const preset = ENV_PRESETS[id];
+        if (!preset || !preset.url) { scene.environment = roomEnvTex; done(); return; }
+        if (hdriCache[id]) { scene.environment = hdriCache[id]; done(); return; }
+        rgbeLoader.load(
+          preset.url,
+          (hdr) => {
+            if (disposed) { hdr.dispose(); return; }
+            const envTex = pmrem.fromEquirectangular(hdr).texture;
+            hdr.dispose();
+            hdriCache[id] = envTex;
+            scene.environment = envTex;
+            done();
+          },
+          undefined,
+          (err) => {
+            console.warn('[holocloth] HDRI load failed', preset.url, err);
+            if (disposed) return;
+            scene.environment = roomEnvTex;
+            done();
+          }
+        );
+      };
 
       // Lighting cans — four positionable spotlights aimed at the sheet. The
       // Lighting card drives color/intensity/angle/height; can 1 casts the
@@ -735,6 +847,44 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
       shotCamera.position.set(0, 0, 3.2);
       const activeCamera = () => (liveRef.current.shotCam?.use ? shotCamera : camera);
 
+      // Post FX chain — bloom + grain/vignette; used only when any FX is on so
+      // the clean path stays cheap. Recordings capture whatever path renders.
+      // The chain is built at mount even when FX are off (construction is
+      // cheap; the render targets are the cost) so toggling an effect never
+      // stalls a frame. Its buffer is HALF-FLOAT on purpose: EffectComposer's
+      // stock target is 8-bit, and 8-bit *linear* light bands badly in the
+      // shadows and clips every highlight before ACES ever sees it.
+      const fxPixelRatio = renderer.getPixelRatio();
+      const fxTarget = new THREE.WebGLRenderTarget(w * fxPixelRatio, h * fxPixelRatio, {
+        type: THREE.HalfFloatType,
+        minFilter: THREE.LinearFilter,
+        magFilter: THREE.LinearFilter,
+        format: THREE.RGBAFormat,
+      });
+      // One depth texture shared by both composer buffers — the finish pass
+      // reads it to leave the backdrop out of the tone map, and sharing means
+      // it holds the scene depth whichever buffer the chain rendered into.
+      // three resizes it with the target, so the resize/perf/export paths that
+      // call composer.setSize() need no extra bookkeeping.
+      const fxDepth = new THREE.DepthTexture(w * fxPixelRatio, h * fxPixelRatio);
+      fxTarget.depthTexture = fxDepth;
+      const composer = new EffectComposer(renderer, fxTarget);
+      composer.renderTarget2.depthTexture?.dispose();
+      composer.renderTarget2.depthTexture = fxDepth;
+      composer.setPixelRatio(fxPixelRatio);
+      composer.setSize(w, h);
+      const renderPass = new RenderPass(scene, camera);
+      const bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), 0.55, 0.5, 0.8);
+      const finishPass = new ShaderPass(GRAIN_VIGNETTE_SHADER);
+      finishPass.uniforms.tDepth.value = fxDepth;
+      composer.addPass(renderPass);
+      composer.addPass(bloomPass);
+      composer.addPass(finishPass);
+      const fxActive = () => {
+        const f = liveRef.current.fx;
+        return Boolean(f && (f.bloom || f.grain > 0.001 || f.vignette > 0.001));
+      };
+
       const controls = new OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true;
       controls.dampingFactor = 0.08;
@@ -789,6 +939,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
       const world = {
         THREE, scene, camera, renderer, controls, pmrem, clothMat, clothBackMat, mirrorTex, holoUniforms, bumpTex,
         cans, ground, glassMesh, glassMat, shotCamera, activeCamera,
+        composer, renderPass, bloomPass, finishPass, fxActive, setEnvironment,
         cloth: null, envIntensity: 1, bgTexture: null,
         pointer: { active: false, x: 0, y: 0 },
         raycaster: new THREE.Raycaster(),
@@ -928,6 +1079,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
       };
 
       world.buildCloth(clothAspect, perf, artworkRatio);
+      setEnvironment(envId); // saved HDRI selection loads on open
 
       // Opening artwork — resolve the saved selection against the built-ins,
       // then the saved-upload library, then the shipped default. 404s/missing
@@ -1218,7 +1370,24 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
         }
         controls.update();
         const cam = activeCamera();
-        renderer.render(scene, cam);
+        if (fxActive()) {
+          const f = liveRef.current.fx;
+          renderPass.camera = cam;
+          bloomPass.enabled = Boolean(f.bloom);
+          bloomPass.strength = f.bloomStrength;
+          bloomPass.threshold = f.bloomThreshold;
+          // finishPass stays enabled even at grain 0 / vignette 0 — it carries
+          // the tone map + sRGB encode, and EffectComposer hands renderToScreen
+          // to the last ENABLED pass, so disabling it would let the bloom pass
+          // blit raw linear values to the canvas.
+          finishPass.enabled = true;
+          finishPass.uniforms.uGrain.value = f.grain;
+          finishPass.uniforms.uVignette.value = f.vignette;
+          finishPass.uniforms.uTime.value = t % 100;
+          composer.render();
+        } else {
+          renderer.render(scene, cam);
+        }
         drawHud(cam);
       };
       loop();
@@ -1232,6 +1401,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
         shotCamera.aspect = nw / nh;
         shotCamera.updateProjectionMatrix();
         renderer.setSize(nw, nh, false);
+        composer.setSize(nw, nh);
       });
       ro.observe(stage);
 
@@ -1248,6 +1418,11 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
         ground.geometry.dispose(); ground.material.dispose();
         petalGeos.forEach((g) => g.dispose()); glassMat.dispose();
         world.bgTexture?.dispose();
+        // FX chain — composer.dispose() only drops its two full-res buffers, so
+        // the passes go too; PMREM output textures are ours to free as well.
+        bloomPass.dispose(); finishPass.dispose(); composer.dispose(); fxDepth.dispose();
+        Object.values(hdriCache).forEach((t) => t.dispose());
+        roomEnvTex.dispose();
         pmrem.dispose();
         renderer.dispose();
         renderer.domElement.remove();
@@ -1314,6 +1489,14 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
     world.applyRumple(phys.rumple ?? 0.5);
   }, [phys.rumple, worldReady]);
 
+  // ── Environment light select → IBL swap (HDRIs cached after first load). ──
+  useEffect(() => {
+    const world = worldRef.current;
+    if (!worldReady || !world?.setEnvironment) return;
+    if (ENV_PRESETS[envId]?.url) setEnvLoadingId(envId);
+    world.setEnvironment(envId, () => setEnvLoadingId((cur) => (cur === envId ? null : cur)));
+  }, [envId, worldReady]);
+
   // ── Glass form dials → mesh + material (built once at init). ──
   useEffect(() => {
     const world = worldRef.current;
@@ -1376,7 +1559,9 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
     const world = worldRef.current;
     if (!worldReady || !world) return;
     world.buildCloth(clothAspect, perf, artworkRatio);
-    world.renderer.setPixelRatio(Math.min(window.devicePixelRatio, PERF_LEVELS[perf].pr));
+    const pr = Math.min(window.devicePixelRatio, PERF_LEVELS[perf].pr);
+    world.renderer.setPixelRatio(pr);
+    world.composer?.setPixelRatio(pr); // FX buffers follow the perf level too
   }, [clothAspect, perf, artworkRatio, worldReady]);
 
   // ── Background — flat modes reset the rig; Scene mode dresses the set:
@@ -1550,12 +1735,23 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
     const nw = stageRef.current?.clientWidth || renderer.domElement.clientWidth;
     const nh = stageRef.current?.clientHeight || renderer.domElement.clientHeight;
     const fr = FRAME_PRESETS[frameId];
+    const useFx = !transparent && world.fxActive?.();
     try {
       if (transparent) scene.background = null;
       // Hi-res one-shot — bump the ratio, reallocate the buffer, render, snapshot.
-      renderer.setPixelRatio(Math.min((window.devicePixelRatio || 1) * 2, 4));
+      const boost = Math.min((window.devicePixelRatio || 1) * 2, 4);
+      renderer.setPixelRatio(boost);
       renderer.setSize(nw, nh, false);
-      renderer.render(scene, cam);
+      if (useFx) {
+        // Bloom/grain/vignette belong in the still too (transparent skips FX —
+        // bloom composites against black and would kill the alpha).
+        world.composer.setPixelRatio(boost);
+        world.composer.setSize(nw, nh);
+        world.renderPass.camera = cam;
+        world.composer.render();
+      } else {
+        renderer.render(scene, cam);
+      }
       const suffix = `${fr?.slug ? `-${fr.slug}` : ''}${transparent ? '-transparent' : ''}`;
       if (fr && fr.w) {
         // Crop the capture frame at 2× platform-native resolution.
@@ -1580,6 +1776,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
       scene.background = prevBg;
       renderer.setPixelRatio(prevPr);
       renderer.setSize(nw, nh, false);
+      if (useFx) { world.composer.setPixelRatio(prevPr); world.composer.setSize(nw, nh); }
       renderer.render(scene, cam);
     }
   }, [frameId]);
@@ -1905,6 +2102,29 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
             <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>A smooth abstract shell around the flyer — the parts seen through it refract like real glass.</span>
           </RailCard>
 
+          {/* FX — post-processing finish; renders through the composer. */}
+          <RailCard
+            id="cloth-fx-panel" icon={<Sparkles size={18} strokeWidth={2} />} title="Effects"
+            subtitle={[
+              fx.bloom ? 'Bloom' : null,
+              fx.grain > 0.001 ? `grain ${Math.round(fx.grain * 100)}%` : null,
+              fx.vignette > 0.001 ? `vignette ${Math.round(fx.vignette * 100)}%` : null,
+            ].filter(Boolean).join(' · ') || 'Off'}
+            color="#a855f7" open={fxOpen} onToggle={() => setFxOpen((v) => !v)}
+          >
+            <span style={{ ...ui.label, color: GLASS.ink, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              BLOOM
+              <button style={{ ...ui.btn(fx.bloom), height: 28, padding: '0 12px', fontSize: 10 }} onClick={() => setFxKey('bloom', !fx.bloom)}>
+                {fx.bloom ? 'On' : 'Off'}
+              </button>
+            </span>
+            <Slider label="BLOOM STRENGTH" min={0} max={2} step={0.05} value={fx.bloomStrength} onChange={(v) => setFxKey('bloomStrength', v)} fmt={(v) => `${v.toFixed(2)}x`} disabled={!fx.bloom} />
+            <Slider label="BLOOM THRESHOLD" min={0} max={1} step={0.01} value={fx.bloomThreshold} onChange={(v) => setFxKey('bloomThreshold', v)} fmt={(v) => `${Math.round(v * 100)}%`} disabled={!fx.bloom} />
+            <Slider label="FILM GRAIN" min={0} max={1} step={0.01} value={fx.grain} onChange={(v) => setFxKey('grain', v)} fmt={(v) => `${Math.round(v * 100)}%`} />
+            <Slider label="VIGNETTE" min={0} max={1} step={0.01} value={fx.vignette} onChange={(v) => setFxKey('vignette', v)} fmt={(v) => `${Math.round(v * 100)}%`} />
+            <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>Camera finish on the whole picture: bloom makes bright highlights glow (threshold sets how bright something must be before it does), grain adds film texture, vignette darkens the corners. Everything here is captured in PNG exports and video recordings — except the transparent PNG, which skips them to keep real alpha.</span>
+          </RailCard>
+
           {/* ANIMATE — ambient wind idle; the sheet billows but never drifts. */}
           <RailCard
             id="cloth-animate-panel" icon={<Wind size={18} strokeWidth={2} />} title="Animate"
@@ -2021,9 +2241,12 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
           {/* BACKGROUND */}
           <RailCard
             id="cloth-background-panel" icon={<Palette size={18} strokeWidth={2} />} title="Background"
-            subtitle={bgMode === 'scene'
-              ? (SCENE_PRESETS[sceneId]?.label || 'Scene set')
-              : { color: 'Solid color', image: 'Custom image', transparent: 'Transparent' }[bgMode]}
+            subtitle={[
+              bgMode === 'scene'
+                ? (SCENE_PRESETS[sceneId]?.label || 'Scene set')
+                : { color: 'Solid color', image: 'Custom image', transparent: 'Transparent' }[bgMode],
+              envId !== 'room' ? ENV_PRESETS[envId]?.label : null,
+            ].filter(Boolean).join(' · ')}
             color="#ec4899" open={backgroundOpen} onToggle={() => setBackgroundOpen((v) => !v)}
           >
             <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
@@ -2081,6 +2304,19 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
             {bgMode === 'transparent' ? (
               <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>Transparent scene — pairs with "Export PNG (no background)" for compositing.</span>
             ) : null}
+            <span style={{ ...ui.label, marginTop: 4 }}>ENVIRONMENT LIGHT</span>
+            <div id="cloth-env-select-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
+              {Object.entries(ENV_PRESETS).map(([id, env]) => (
+                <button
+                  key={id}
+                  style={{ ...ui.btn(envId === id), height: 30, padding: '0 8px', fontSize: 10 }}
+                  onClick={() => setEnvId(id)}
+                >
+                  {envLoadingId === id ? 'Loading…' : env.label}
+                </button>
+              ))}
+            </div>
+            <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>This is the light the artwork and the glass reflect — a real place instead of a white box. It does not change what you see behind the sheet; that is the Background above.</span>
             <Slider label="LIGHT INTENSITY" min={0} max={2.5} step={0.05} value={envIntensity} onChange={setEnvIntensity} fmt={(v) => `${Math.round(v * 100)}%`} />
           </RailCard>
 
