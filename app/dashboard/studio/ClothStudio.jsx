@@ -12,7 +12,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ChevronRight, Download, Palette, Image as ImageIcon, Wind, Layers,
-  RotateCcw, Zap, Video, Camera, SlidersHorizontal, Lightbulb,
+  RotateCcw, Zap, Video, Camera, SlidersHorizontal, Lightbulb, Disc, Focus,
 } from 'lucide-react';
 
 // ── UI tokens — mirror app/dashboard/studio/page.jsx GLASS/ui (kept local so
@@ -226,6 +226,31 @@ const MATERIAL_SLIDERS = [
   ['bump',          'BUMP',           0, 2, 0.01],
   ['bumpTiling',    'BUMP TILING',    1, 12, 0.5],
 ];
+
+// ── Glass form — abstract smooth refractive shell wrapped around the sheet
+// (transmission material genuinely refracts the flyer seen through it). ──
+const DEFAULT_GLASS = { on: false, scale: 1, rotate: true, rotSpeed: 0.4, tint: '#ffffff', clarity: 0.06 };
+
+// ── Shot camera — a second, positionable camera; USE SHOT CAM renders through
+// it while the orbit view waits underneath. ──
+const DEFAULT_SHOTCAM = { use: false, az: 24, el: 12, dist: 3.2, fov: 40 };
+
+// ── Social capture frames — labeled platform crops drawn on the HUD; video +
+// PNG exports record the crop at native platform resolution. ──
+const FRAME_PRESETS = {
+  off:       { label: 'Off — full canvas' },
+  square:    { w: 1080, h: 1080, slug: 'square',    label: '1:1 SQUARE · IG / FB POST' },
+  portrait:  { w: 1080, h: 1350, slug: 'portrait',  label: '4:5 PORTRAIT · IG FEED' },
+  vertical:  { w: 1080, h: 1920, slug: 'vertical',  label: '9:16 VERTICAL · REELS / STORIES / TIKTOK / SHORTS' },
+  landscape: { w: 1920, h: 1080, slug: 'landscape', label: '16:9 LANDSCAPE · YOUTUBE / X' },
+};
+// Largest centered rect of the given aspect that fits the canvas (CSS px).
+const computeFrameRect = (cw, ch, aspect) => {
+  let w = cw * 0.92;
+  let h = w / aspect;
+  if (h > ch * 0.92) { h = ch * 0.92; w = h * aspect; }
+  return { x: (cw - w) / 2, y: (ch - h) / 2, w, h };
+};
 
 // ── Lighting cans — four positionable stage lights around the sheet. Each can
 // aims at center from (angle around stage, height angle) at a fixed throw; the
@@ -501,6 +526,7 @@ if (uHoloIntensity > 0.001 || uSparkle > 0.001) {
 export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   const stageRef = useRef(null);
   const worldRef = useRef(null);
+  const hudCanvasRef = useRef(null);
   const [saved] = useState(loadSavedDefaults);
   const [worldReady, setWorldReady] = useState(false);
 
@@ -520,6 +546,13 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
     setLightCans((prev) => prev.map((c, ix) => (ix === i ? { ...c, [key]: val } : c)));
     setLightTemplate('');
   }, []);
+  // Glass form, shot camera, HUD overlay, capture frame.
+  const [glass, setGlass] = useState(() => ({ ...DEFAULT_GLASS, ...(saved.glass || {}) }));
+  const setGlassKey = useCallback((key, val) => setGlass((g) => ({ ...g, [key]: val })), []);
+  const [shotCam, setShotCam] = useState(() => ({ ...DEFAULT_SHOTCAM, ...(saved.shotCam || {}) }));
+  const setShotKey = useCallback((key, val) => setShotCam((s) => ({ ...s, [key]: val })), []);
+  const [hudOn, setHudOn] = useState(saved.hudOn ?? true);
+  const [frameId, setFrameId] = useState(FRAME_PRESETS[saved.frameId] ? saved.frameId : 'off');
   const applyLightTemplate = useCallback((tplId) => {
     if (!LIGHT_TEMPLATES[tplId]) return;
     setLightCans(cloneCans(tplId));
@@ -551,6 +584,8 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   const [imagesOpen, setImagesOpen] = useState(false);
   const [backgroundOpen, setBackgroundOpen] = useState(false);
   const [lightingOpen, setLightingOpen] = useState(false);
+  const [glassOpen, setGlassOpen] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const [renderOpen, setRenderOpen] = useState(false);
 
   const setMatKey = useCallback((key, val) => setMat((m) => ({ ...m, [key]: val, preset: '' })), []);
@@ -560,15 +595,15 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   useEffect(() => {
     const id = setTimeout(() => {
       try {
-        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ perf, mat, phys, anim, cam, lightCans, lightTemplate, clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds, videoFormat }));
+        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ perf, mat, phys, anim, cam, lightCans, lightTemplate, glass, shotCam, hudOn, frameId, clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds, videoFormat }));
       } catch { /* non-critical */ }
     }, 250);
     return () => clearTimeout(id);
-  }, [perf, mat, phys, anim, cam, lightCans, lightTemplate, clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds, videoFormat]);
+  }, [perf, mat, phys, anim, cam, lightCans, lightTemplate, glass, shotCam, hudOn, frameId, clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds, videoFormat]);
 
   // Latest control state, readable from the render loop without re-init.
   const liveRef = useRef({});
-  liveRef.current = { phys, anim };
+  liveRef.current = { phys, anim, glass, shotCam, hudOn, frameId, lightCans };
 
   // ── World init — one scene per mount; controls mutate it in place. ──
   useEffect(() => {
@@ -635,6 +670,34 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
       ground.visible = false;
       scene.add(ground);
 
+      // Glass form — smooth undulating torus shell around the sheet; the
+      // transmission material refracts whatever shows through it.
+      const glassGeo = new THREE.TorusGeometry(1.18, 0.34, 72, 180);
+      {
+        const gp = glassGeo.attributes.position;
+        for (let i = 0; i < gp.count; i += 1) {
+          const gx = gp.getX(i), gy = gp.getY(i), gz = gp.getZ(i);
+          const wob = 0.07 * Math.sin(gx * 2.6 + gy * 1.9) * Math.cos(gz * 3.4)
+            + 0.045 * Math.sin(gy * 4.3 + 1.4) * Math.cos(gx * 3.1 + 0.6);
+          gp.setXYZ(i, gx * (1 + wob), gy * (1 + wob), gz + wob * 0.6);
+        }
+        glassGeo.computeVertexNormals();
+      }
+      const glassMat = new THREE.MeshPhysicalMaterial({
+        transmission: 1, thickness: 0.5, ior: 1.45,
+        roughness: 0.06, metalness: 0,
+        clearcoat: 1, clearcoatRoughness: 0.05,
+        attenuationColor: new THREE.Color(0xffffff), attenuationDistance: 1.6,
+      });
+      const glassMesh = new THREE.Mesh(glassGeo, glassMat);
+      glassMesh.visible = false;
+      scene.add(glassMesh);
+
+      // Shot camera — positionable second camera; USE SHOT CAM renders it.
+      const shotCamera = new THREE.PerspectiveCamera(40, w / h, 0.05, 60);
+      shotCamera.position.set(0, 0, 3.2);
+      const activeCamera = () => (liveRef.current.shotCam?.use ? shotCamera : camera);
+
       const controls = new OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true;
       controls.dampingFactor = 0.08;
@@ -688,7 +751,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
 
       const world = {
         THREE, scene, camera, renderer, controls, pmrem, clothMat, clothBackMat, mirrorTex, holoUniforms, bumpTex,
-        cans, ground,
+        cans, ground, glassMesh, glassMat, shotCamera, activeCamera,
         cloth: null, envIntensity: 1, bgTexture: null,
         pointer: { active: false, x: 0, y: 0 },
         raycaster: new THREE.Raycaster(),
@@ -866,7 +929,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
       const setRayFromEvent = (e) => {
         const rect = renderer.domElement.getBoundingClientRect();
         ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
-        world.raycaster.setFromCamera(ndc, camera);
+        world.raycaster.setFromCamera(ndc, activeCamera()); // grabbing works in shot-cam view too
       };
       const onPointerDown = (e) => {
         const c = world.cloth; if (!c) return;
@@ -1022,6 +1085,84 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
         c.geometry.computeBoundingSphere();
       };
 
+      // ── HUD — 2D overlay canvas: light-can + shot-cam markers as lines/dots,
+      // plus the social capture frame with its platform label. ──
+      const projV = new THREE.Vector3();
+      const drawHud = (activeCam) => {
+        const hc = hudCanvasRef.current;
+        if (!hc) return;
+        const cw = hc.clientWidth, chh = hc.clientHeight;
+        if (!cw || !chh) return;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        if (hc.width !== Math.round(cw * dpr) || hc.height !== Math.round(chh * dpr)) {
+          hc.width = Math.round(cw * dpr); hc.height = Math.round(chh * dpr);
+        }
+        const g2 = hc.getContext('2d');
+        g2.setTransform(dpr, 0, 0, dpr, 0, 0);
+        g2.clearRect(0, 0, cw, chh);
+        const live = liveRef.current;
+        const proj = (v3) => {
+          projV.copy(v3).project(activeCam);
+          return { x: (projV.x * 0.5 + 0.5) * cw, y: (-projV.y * 0.5 + 0.5) * chh, front: projV.z < 1 };
+        };
+        if (live.hudOn) {
+          const cx = proj(new THREE.Vector3(0, 0, 0));
+          g2.font = '700 9px "Space Mono", monospace';
+          // Light cans — colored dot + line to stage center.
+          world.cans.forEach((can, i) => {
+            if (!can.visible) return;
+            const p = proj(can.position);
+            if (!p.front) return;
+            g2.strokeStyle = '#' + can.color.getHexString();
+            g2.globalAlpha = 0.55;
+            g2.setLineDash([4, 4]);
+            g2.beginPath(); g2.moveTo(p.x, p.y); g2.lineTo(cx.x, cx.y); g2.stroke();
+            g2.setLineDash([]);
+            g2.globalAlpha = 1;
+            g2.fillStyle = '#' + can.color.getHexString();
+            g2.beginPath(); g2.arc(p.x, p.y, 7, 0, Math.PI * 2); g2.fill();
+            g2.fillStyle = '#000';
+            g2.fillText(String(i + 1), p.x - 2.5, p.y + 3);
+          });
+          // Shot camera — wedge marker (hidden while looking through it).
+          if (!live.shotCam?.use) {
+            const p = proj(shotCamera.position);
+            if (p.front) {
+              g2.strokeStyle = '#ffffff';
+              g2.globalAlpha = 0.5;
+              g2.setLineDash([2, 5]);
+              g2.beginPath(); g2.moveTo(p.x, p.y); g2.lineTo(cx.x, cx.y); g2.stroke();
+              g2.setLineDash([]);
+              g2.globalAlpha = 1;
+              g2.fillStyle = '#ffffff';
+              g2.beginPath();
+              g2.moveTo(p.x, p.y - 7); g2.lineTo(p.x + 9, p.y); g2.lineTo(p.x, p.y + 7); g2.closePath(); g2.fill();
+              g2.fillText('CAM', p.x + 12, p.y + 3);
+            }
+          } else {
+            g2.fillStyle = 'rgba(236,72,153,0.9)';
+            g2.font = '700 10px "Space Mono", monospace';
+            g2.fillText('SHOT CAM LIVE', 12, 20);
+          }
+        }
+        // Capture frame — dim outside, stroke + label the platform crop.
+        const fr = FRAME_PRESETS[live.frameId];
+        if (fr && fr.w) {
+          const r = computeFrameRect(cw, chh, fr.w / fr.h);
+          g2.fillStyle = 'rgba(0,0,0,0.45)';
+          g2.fillRect(0, 0, cw, r.y);
+          g2.fillRect(0, r.y + r.h, cw, chh - r.y - r.h);
+          g2.fillRect(0, r.y, r.x, r.h);
+          g2.fillRect(r.x + r.w, r.y, cw - r.x - r.w, r.h);
+          g2.strokeStyle = 'rgba(255,255,255,0.9)';
+          g2.lineWidth = 1.5;
+          g2.strokeRect(r.x, r.y, r.w, r.h);
+          g2.font = '700 9px "Space Mono", monospace';
+          g2.fillStyle = 'rgba(255,255,255,0.9)';
+          g2.fillText(`${fr.label} · ${fr.w}×${fr.h}`, r.x + 8, r.y + 16);
+        }
+      };
+
       const loop = () => {
         if (disposed) return;
         raf = requestAnimationFrame(loop);
@@ -1032,8 +1173,16 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
         while (accum >= DT && steps < 3) { step(t); accum -= DT; steps += 1; }
         if (steps === 3) accum = 0; // shed backlog after stalls instead of spiraling
         holoUniforms.uTime.value = t;
+        // Glass auto-rotate — slow ring spin + gentle tumble.
+        const gl = liveRef.current.glass;
+        if (glassMesh.visible && gl?.rotate) {
+          glassMesh.rotation.z += gl.rotSpeed * 0.5 * dt;
+          glassMesh.rotation.x += gl.rotSpeed * 0.17 * dt;
+        }
         controls.update();
-        renderer.render(scene, camera);
+        const cam = activeCamera();
+        renderer.render(scene, cam);
+        drawHud(cam);
       };
       loop();
 
@@ -1043,6 +1192,8 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
         if (!nw || !nh) return;
         camera.aspect = nw / nh;
         camera.updateProjectionMatrix();
+        shotCamera.aspect = nw / nh;
+        shotCamera.updateProjectionMatrix();
         renderer.setSize(nw, nh, false);
       });
       ro.observe(stage);
@@ -1058,6 +1209,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
         clothMat.map?.dispose(); bumpTex.dispose();
         clothBackMat.map?.dispose(); clothBackMat.bumpMap?.dispose();
         ground.geometry.dispose(); ground.material.dispose();
+        glassGeo.dispose(); glassMat.dispose();
         world.bgTexture?.dispose();
         pmrem.dispose();
         renderer.dispose();
@@ -1124,6 +1276,30 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
     if (!worldReady || !world?.cloth) return;
     world.applyRumple(phys.rumple ?? 0.5);
   }, [phys.rumple, worldReady]);
+
+  // ── Glass form dials → mesh + material (built once at init). ──
+  useEffect(() => {
+    const world = worldRef.current;
+    if (!worldReady || !world?.glassMesh) return;
+    world.glassMesh.visible = glass.on;
+    world.glassMesh.scale.setScalar(glass.scale || 1);
+    world.glassMat.roughness = glass.clarity;
+    world.glassMat.attenuationColor.set(glass.tint);
+    world.glassMat.color.set('#ffffff');
+  }, [glass, worldReady]);
+
+  // ── Shot camera dials → position/fov; using it pauses orbit control. ──
+  useEffect(() => {
+    const world = worldRef.current;
+    if (!worldReady || !world?.shotCamera) return;
+    const DEG = Math.PI / 180;
+    const az = shotCam.az * DEG, el = shotCam.el * DEG, R = shotCam.dist;
+    world.shotCamera.position.set(R * Math.cos(el) * Math.sin(az), R * Math.sin(el), R * Math.cos(el) * Math.cos(az));
+    world.shotCamera.lookAt(0, 0, 0);
+    world.shotCamera.fov = shotCam.fov;
+    world.shotCamera.updateProjectionMatrix();
+    world.controls.enabled = !shotCam.use;
+  }, [shotCam, worldReady]);
 
   // ── Lighting cans → spotlights. Position from stage angle (az, 0 = front)
   // + height angle at a fixed throw; slider intensity maps to candela. ──
@@ -1330,36 +1506,78 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   const exportPng = useCallback((transparent = false) => {
     const world = worldRef.current;
     if (!world) return;
-    const { renderer, scene, camera } = world;
+    const { renderer, scene } = world;
+    const cam = world.activeCamera();
     const prevBg = scene.background;
     const prevPr = renderer.getPixelRatio();
     const nw = stageRef.current?.clientWidth || renderer.domElement.clientWidth;
     const nh = stageRef.current?.clientHeight || renderer.domElement.clientHeight;
+    const fr = FRAME_PRESETS[frameId];
     try {
       if (transparent) scene.background = null;
       // Hi-res one-shot — bump the ratio, reallocate the buffer, render, snapshot.
       renderer.setPixelRatio(Math.min((window.devicePixelRatio || 1) * 2, 4));
       renderer.setSize(nw, nh, false);
-      renderer.render(scene, camera);
-      // toBlob captures the bitmap at call time, so restoring below is safe.
-      renderer.domElement.toBlob((blob) => {
-        if (blob) downloadBlob(blob, `holocloth-${Date.now()}${transparent ? '-transparent' : ''}.png`);
-        setStatus(transparent ? 'Exported transparent PNG.' : 'Exported PNG.');
-      }, 'image/png');
+      renderer.render(scene, cam);
+      const suffix = `${fr?.slug ? `-${fr.slug}` : ''}${transparent ? '-transparent' : ''}`;
+      if (fr && fr.w) {
+        // Crop the capture frame at 2× platform-native resolution.
+        const src = renderer.domElement;
+        const r = computeFrameRect(nw, nh, fr.w / fr.h);
+        const sx = src.width / nw, sy = src.height / nh;
+        const off = document.createElement('canvas');
+        off.width = fr.w * 2; off.height = fr.h * 2;
+        off.getContext('2d').drawImage(src, r.x * sx, r.y * sy, r.w * sx, r.h * sy, 0, 0, off.width, off.height);
+        off.toBlob((blob) => {
+          if (blob) downloadBlob(blob, `holocloth-${Date.now()}${suffix}.png`);
+          setStatus(`Exported ${fr.label} PNG.`);
+        }, 'image/png');
+      } else {
+        // toBlob captures the bitmap at call time, so restoring below is safe.
+        renderer.domElement.toBlob((blob) => {
+          if (blob) downloadBlob(blob, `holocloth-${Date.now()}${suffix}.png`);
+          setStatus(transparent ? 'Exported transparent PNG.' : 'Exported PNG.');
+        }, 'image/png');
+      }
     } finally {
       scene.background = prevBg;
       renderer.setPixelRatio(prevPr);
       renderer.setSize(nw, nh, false);
-      renderer.render(scene, camera);
+      renderer.render(scene, cam);
     }
-  }, []);
+  }, [frameId]);
 
   const exportVideo = useCallback(() => {
     const world = worldRef.current;
     if (!world || recording) return;
+    // Capture frame active → record from an offscreen canvas at platform-native
+    // resolution, copying the crop from the live GL canvas each frame.
+    const fr = FRAME_PRESETS[frameId];
+    let frameCopier = null;
+    const makeSource = () => {
+      if (!fr || !fr.w) return world.renderer.domElement;
+      const src = world.renderer.domElement;
+      const off = document.createElement('canvas');
+      off.width = fr.w; off.height = fr.h;
+      const octx = off.getContext('2d');
+      let copying = true;
+      const copy = () => {
+        if (!copying) return;
+        const cw = src.clientWidth, chh = src.clientHeight;
+        if (cw && chh) {
+          const r = computeFrameRect(cw, chh, fr.w / fr.h);
+          const sx = src.width / cw, sy = src.height / chh;
+          octx.drawImage(src, r.x * sx, r.y * sy, r.w * sx, r.h * sy, 0, 0, fr.w, fr.h);
+        }
+        requestAnimationFrame(copy);
+      };
+      copy();
+      frameCopier = () => { copying = false; };
+      return off;
+    };
     const startRecording = (fmt, mime, isRetry = false) => {
       const fmtLabel = VIDEO_FORMATS[fmt].label;
-      const stream = world.renderer.domElement.captureStream(60);
+      const stream = makeSource().captureStream(60);
       let rec;
       try {
         rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 12_000_000 });
@@ -1375,6 +1593,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
       rec.onerror = (e) => console.warn('[holocloth] recorder error', mime, e.error || e);
       rec.onstop = () => {
         world.recorder = null;
+        frameCopier?.();
         const total = chunks.reduce((s, b) => s + b.size, 0);
         console.warn('[holocloth] recording stopped', { mime, chunks: chunks.length, total });
         // Some Chrome builds report MP4 as supported but encode nothing —
@@ -1386,8 +1605,8 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
         setRecording(false);
         if (!total) { setStatus('Recording produced no data in this browser.'); return; }
         const blob = new Blob(chunks, { type: mime });
-        downloadBlob(blob, `holocloth-${Date.now()}.${VIDEO_FORMATS[fmt].ext}`);
-        setStatus(`Exported ${videoSeconds}s ${fmtLabel} motion loop.`);
+        downloadBlob(blob, `holocloth-${Date.now()}${fr?.slug ? `-${fr.slug}` : ''}.${VIDEO_FORMATS[fmt].ext}`);
+        setStatus(`Exported ${videoSeconds}s ${fmtLabel}${fr?.w ? ` · ${fr.w}×${fr.h}` : ''} motion loop.`);
       };
       world.recorder = rec;
       setRecording(true);
@@ -1408,7 +1627,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
     if (!mime) { fmt = fmt === 'mp4' ? 'webm' : 'mp4'; mime = supportedMimeFor(fmt); }
     if (!mime) { setStatus('Video capture unsupported in this browser.'); return; }
     startRecording(fmt, mime);
-  }, [recording, videoSeconds, videoFormat]);
+  }, [recording, videoSeconds, videoFormat, frameId]);
 
   const applyPreset = useCallback((presetId) => {
     const p = MATERIAL_PRESETS[presetId];
@@ -1449,6 +1668,12 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
                 : '#0b0b0f',
             }}
           >
+            {/* HUD overlay — light/cam markers + capture frame; pointer-through. */}
+            <canvas
+              id="cloth-studio-hud"
+              ref={hudCanvasRef}
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 5 }}
+            />
             {/* Grab is automatic — drag the sheet directly; empty space orbits. */}
             <div
               id="cloth-studio-drag-hint"
@@ -1596,6 +1821,36 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
               <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => onBumpUpload(e.target.files?.[0])} />
             </label>
             {bumpName ? <span style={{ ...ui.label, color: GLASS.inkSoft }}>{bumpName}</span> : null}
+          </RailCard>
+
+          {/* GLASS — refractive shell wrapped around the sheet. */}
+          <RailCard
+            id="cloth-glass-panel" icon={<Disc size={18} strokeWidth={2} />} title="Glass"
+            subtitle={glass.on ? `On · ${glass.scale.toFixed(2)}x${glass.rotate ? ' · rotating' : ''}` : 'Off'}
+            color="#38bdf8" open={glassOpen} onToggle={() => setGlassOpen((v) => !v)}
+          >
+            <span style={{ ...ui.label, color: GLASS.ink, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              GLASS FORM
+              <button style={{ ...ui.btn(glass.on), height: 28, padding: '0 12px', fontSize: 10 }} onClick={() => setGlassKey('on', !glass.on)}>
+                {glass.on ? 'On' : 'Off'}
+              </button>
+            </span>
+            <Slider label="SCALE" min={0.4} max={2.2} step={0.02} value={glass.scale} onChange={(v) => setGlassKey('scale', v)} fmt={(v) => `${v.toFixed(2)}x`} disabled={!glass.on} />
+            <span style={{ ...ui.label, color: GLASS.ink, display: 'flex', alignItems: 'center', justifyContent: 'space-between', opacity: glass.on ? 1 : 0.4 }}>
+              AUTO ROTATE
+              <button style={{ ...ui.btn(glass.rotate), height: 28, padding: '0 12px', fontSize: 10 }} disabled={!glass.on} onClick={() => setGlassKey('rotate', !glass.rotate)}>
+                {glass.rotate ? 'On' : 'Off'}
+              </button>
+            </span>
+            <Slider label="ROTATE SPEED" min={0.05} max={2} step={0.05} value={glass.rotSpeed} onChange={(v) => setGlassKey('rotSpeed', v)} fmt={(v) => `${v.toFixed(2)}x`} disabled={!glass.on || !glass.rotate} />
+            <Slider label="CLARITY" min={0} max={0.4} step={0.01} value={glass.clarity} onChange={(v) => setGlassKey('clarity', v)} fmt={(v) => v.toFixed(2)} disabled={!glass.on} />
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, opacity: glass.on ? 1 : 0.4 }}>
+              <input type="color" value={glass.tint} disabled={!glass.on} onChange={(e) => setGlassKey('tint', e.target.value)} style={{ width: 44, height: 28, border: '1px solid ' + GLASS.hair, borderRadius: 8, background: 'none', cursor: 'pointer', padding: 0 }} />
+              <span style={ui.label}>Tint</span>
+              <span style={{ flex: 1 }} />
+              <span style={{ fontFamily: GLASS.mono, fontSize: 11, color: GLASS.inkSoft, textTransform: 'uppercase' }}>{glass.tint}</span>
+            </label>
+            <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>A smooth abstract shell around the flyer — the parts seen through it refract like real glass.</span>
           </RailCard>
 
           {/* ANIMATE — ambient wind idle; the sheet billows but never drifts. */}
@@ -1817,6 +2072,31 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
             <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>Angle walks the can around the stage (0° = front); height raises it toward overhead or drops it below the floor. Scene sets swap in a matching rig — tweak from there.</span>
           </RailCard>
 
+          {/* CAMERA — positionable shot cam + HUD overlay. */}
+          <RailCard
+            id="cloth-camera-panel" icon={<Focus size={18} strokeWidth={2} />} title="Camera"
+            subtitle={shotCam.use ? 'Shot cam live' : 'Orbit view'}
+            color="#ec4899" open={cameraOpen} onToggle={() => setCameraOpen((v) => !v)}
+          >
+            <span style={{ ...ui.label, color: GLASS.ink, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              USE SHOT CAM
+              <button style={{ ...ui.btn(shotCam.use), height: 28, padding: '0 12px', fontSize: 10 }} onClick={() => setShotKey('use', !shotCam.use)}>
+                {shotCam.use ? 'On' : 'Off'}
+              </button>
+            </span>
+            <Slider label="ANGLE" min={-180} max={180} step={5} value={shotCam.az} onChange={(v) => setShotKey('az', v)} fmt={(v) => `${v}°`} />
+            <Slider label="HEIGHT" min={-80} max={85} step={5} value={shotCam.el} onChange={(v) => setShotKey('el', v)} fmt={(v) => `${v}°`} />
+            <Slider label="DISTANCE" min={1.2} max={8} step={0.1} value={shotCam.dist} onChange={(v) => setShotKey('dist', v)} fmt={(v) => v.toFixed(1)} />
+            <Slider label="FOV" min={20} max={90} step={1} value={shotCam.fov} onChange={(v) => setShotKey('fov', v)} fmt={(v) => `${v}°`} />
+            <span style={{ ...ui.label, color: GLASS.ink, display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+              HUD OVERLAY
+              <button style={{ ...ui.btn(hudOn), height: 28, padding: '0 12px', fontSize: 10 }} onClick={() => setHudOn((v) => !v)}>
+                {hudOn ? 'On' : 'Off'}
+              </button>
+            </span>
+            <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>HUD draws each light can (numbered dot + line to stage) and the shot cam wedge over the canvas. Shot cam takes over rendering while On — orbit resumes when Off.</span>
+          </RailCard>
+
           {/* RENDER / EXPORT */}
           <RailCard
             id="cloth-render-panel" icon={<Download size={18} strokeWidth={2} />} title="Render"
@@ -1830,6 +2110,12 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
               <span style={ui.label}>PERFORMANCE</span>
               <select value={perf} onChange={(e) => setPerf(e.target.value)} style={{ ...ui.btn(), appearance: 'none', width: '100%' }}>
                 {Object.entries(PERF_LEVELS).map(([id, p]) => <option key={id} value={id}>{p.label}</option>)}
+              </select>
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <span style={ui.label}>CAPTURE FRAME</span>
+              <select value={frameId} onChange={(e) => setFrameId(e.target.value)} style={{ ...ui.btn(), appearance: 'none', width: '100%' }}>
+                {Object.entries(FRAME_PRESETS).map(([id, f]) => <option key={id} value={id}>{f.label}</option>)}
               </select>
             </label>
             <button style={{ ...ui.btn(), width: '100%' }} onClick={() => exportPng(false)}>
