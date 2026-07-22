@@ -107,9 +107,9 @@ function Slider({ label, min, max, step, value, onChange, fmt = (v) => v.toFixed
 }
 
 // ── Config ───────────────────────────────────────────────────────────────────
-// v6 — rebound defaults to 0 (the sheet stays where you leave it) and the
-// grab is a tweezer pinch; the bump discards older saves so it lands.
-const SETTINGS_KEY = 'holocloth-studio-defaults-v6';
+// v7 — user-approved physics feel (damping 0.9, stiffness 0.85); the bump
+// discards older saves so the approved defaults actually land.
+const SETTINGS_KEY = 'holocloth-studio-defaults-v7';
 // Default artwork shipped with the tool (public/img). 404s silently if absent;
 // any user upload replaces it.
 const DEFAULT_ARTWORK_URL = '/img/holocloth-default-artwork.jpg';
@@ -187,7 +187,7 @@ const INITIAL_MAT = (() => {
 // REBOUND dials how fast (if at all) the sheet retracts to its rest pose —
 // at 0 it stays wherever you drag it.
 const DEFAULT_PHYS = {
-  gravity: 2.7, damping: 0.992, stiffness: 0.55, rebound: 0, rumple: 0.5, pinMode: 'free-float',
+  gravity: 2.7, damping: 0.9, stiffness: 0.85, rebound: 0, rumple: 0.5, pinMode: 'free-float',
 };
 // Ambient animation — the blowing-in-the-wind idle (default ON, cranked for
 // dramatic motion). Turbulence scales the whole chaotic field.
