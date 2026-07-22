@@ -12,7 +12,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ChevronRight, Download, Palette, Image as ImageIcon, Wind, Layers,
-  RotateCcw, Zap, Video, Camera,
+  RotateCcw, Zap, Video, Camera, SlidersHorizontal,
 } from 'lucide-react';
 
 // ── UI tokens — mirror app/dashboard/studio/page.jsx GLASS/ui (kept local so
@@ -107,10 +107,9 @@ function Slider({ label, min, max, step, value, onChange, fmt = (v) => v.toFixed
 }
 
 // ── Config ───────────────────────────────────────────────────────────────────
-// v3 — defaults rebased on the user-approved look (Paper White flyer, heavy
-// gravity, black backdrop, 65% light); the bump discards older saves so the
-// approved defaults actually land.
-const SETTINGS_KEY = 'holocloth-studio-defaults-v3';
+// v4 — floating pins + ambient Animate bucket became the defaults; the bump
+// discards older saves so the approved defaults actually land.
+const SETTINGS_KEY = 'holocloth-studio-defaults-v4';
 // Default artwork shipped with the tool (public/img). 404s silently if absent;
 // any user upload replaces it.
 const DEFAULT_ARTWORK_URL = '/img/holocloth-default-artwork.jpg';
@@ -132,6 +131,7 @@ const PERF_LEVELS = {
   low:    { segs: 28, pr: 1,   label: 'Low' },
 };
 const PIN_MODES = [
+  { id: 'free-float',   label: 'Floating' },
   { id: 'top-edge',     label: 'Top edge' },
   { id: 'top-corners',  label: 'Top corners' },
   { id: 'four-corners', label: '4 corners' },
@@ -182,13 +182,16 @@ const INITIAL_MAT = (() => {
   const { label, group, env, bg, ...rest } = MATERIAL_PRESETS.paper;
   return rest;
 })();
-// Clothier defaults: light wind (the grab is the show), floatier damping,
-// looser constraints so the sheet stretches and swings like fabric, and the
-// user-approved heavier gravity.
+// Clothier defaults: floatier damping, looser constraints so the sheet
+// stretches and swings like fabric, the user-approved heavier gravity, and
+// FLOATING pins — no visible anchors; a soft spring holds the sheet in place.
 const DEFAULT_PHYS = {
-  windStrength: 0.5, windSpeed: 1, gravity: 2.7,
-  damping: 0.99, stiffness: 0.72, pinMode: 'top-edge',
+  gravity: 2.7, damping: 0.99, stiffness: 0.72, pinMode: 'free-float',
 };
+// Ambient animation — the slow "blowing in the wind" idle (default ON). The
+// turbulence slider scales the whole chaotic field; the anchor spring keeps
+// the sheet in place no matter how hard it blows.
+const DEFAULT_ANIM = { on: true, turbulence: 0.35, speed: 1 };
 
 // The material sliders, in the order the reference panel lists them.
 const MATERIAL_SLIDERS = [
@@ -434,6 +437,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   const [perf, setPerf] = useState(PERF_LEVELS[saved.perf] ? saved.perf : 'high');
   const [mat, setMat] = useState(() => ({ ...INITIAL_MAT, ...(saved.mat || {}) }));
   const [phys, setPhys] = useState(() => ({ ...DEFAULT_PHYS, ...(saved.phys || {}) }));
+  const [anim, setAnim] = useState(() => ({ ...DEFAULT_ANIM, ...(saved.anim || {}) }));
   // 'auto' = sheet matches the loaded artwork's ratio (falls back to portrait
   // until an image provides one); the named presets force a shape.
   const [clothAspect, setClothAspect] = useState((CLOTH_ASPECTS[saved.clothAspect] || saved.clothAspect === 'auto') ? saved.clothAspect : 'auto');
@@ -451,6 +455,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
 
   // Panel disclosure — Material opens by default (it's the tool's heart).
   const [materialOpen, setMaterialOpen] = useState(true);
+  const [animOpen, setAnimOpen] = useState(false);
   const [physicsOpen, setPhysicsOpen] = useState(false);
   const [imagesOpen, setImagesOpen] = useState(false);
   const [backgroundOpen, setBackgroundOpen] = useState(false);
@@ -463,15 +468,15 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   useEffect(() => {
     const id = setTimeout(() => {
       try {
-        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ perf, mat, phys, clothAspect, artworkRatio, bgMode, bgColor, sceneId, envIntensity, videoSeconds }));
+        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ perf, mat, phys, anim, clothAspect, artworkRatio, bgMode, bgColor, sceneId, envIntensity, videoSeconds }));
       } catch { /* non-critical */ }
     }, 250);
     return () => clearTimeout(id);
-  }, [perf, mat, phys, clothAspect, artworkRatio, bgMode, bgColor, sceneId, envIntensity, videoSeconds]);
+  }, [perf, mat, phys, anim, clothAspect, artworkRatio, bgMode, bgColor, sceneId, envIntensity, videoSeconds]);
 
   // Latest control state, readable from the render loop without re-init.
   const liveRef = useRef({});
-  liveRef.current = { phys };
+  liveRef.current = { phys, anim };
 
   // ── World init — one scene per mount; controls mutate it in place. ──
   useEffect(() => {
@@ -645,7 +650,8 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
         const pins = new Set();
         const top = (x) => x;                                  // row 0
         const bottom = (x) => (c.rows - 1) * c.cols + x;       // last row
-        if (pinMode === 'top-edge') { for (let x = 0; x < c.cols; x += 1) pins.add(top(x)); }
+        if (pinMode === 'free-float') { /* no pins — the anchor spring holds it */ }
+        else if (pinMode === 'top-edge') { for (let x = 0; x < c.cols; x += 1) pins.add(top(x)); }
         else if (pinMode === 'top-corners') { pins.add(top(0)); pins.add(top(c.cols - 1)); }
         else { pins.add(top(0)); pins.add(top(c.cols - 1)); pins.add(bottom(0)); pins.add(bottom(c.cols - 1)); }
         c.pins = pins;
@@ -759,11 +765,15 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
       const step = (t) => {
         const c = world.cloth; if (!c) return;
         const p = liveRef.current.phys;
+        const a = liveRef.current.anim;
         const arr = c.geometry.attributes.position.array;
         const prev = c.prev;
         const damp = p.damping;
         const g = -p.gravity * 0.28;
-        const ws = p.windSpeed;
+        // Ambient animation — multi-octave turbulence field, scaled by the
+        // TURBULENCE slider; OFF zeroes the wind entirely.
+        const amp = a.on ? a.turbulence * 2.4 : 0;
+        const ws = a.speed || 1;
         const gust = 0.5 + 0.5 * Math.sin(t * ws * 1.25);
         const dt2 = DT * DT;
 
@@ -771,15 +781,19 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
           if (c.pins?.has(i)) continue;
           const ix = i * 3;
           const x = arr[ix], y = arr[ix + 1], z = arr[ix + 2];
-          // wind — noise-ish field toward +z with lateral swirl
-          const wz = p.windStrength * 0.5 * (0.55 + 0.7 * gust) * (0.7 + 0.4 * Math.sin(x * 3.1 + t * ws * 2.1) * Math.cos(y * 2.4 + t * ws * 1.6));
-          const wx = p.windStrength * 0.12 * Math.sin(t * ws * 0.9 + y * 2.2);
+          // two spatial octaves toward +z, lateral swirl on x, gentle lift on y
+          const wz = amp * (0.45 + 0.55 * gust) * (
+            0.7 * Math.sin(x * 2.3 + t * ws * 1.7) * Math.cos(y * 1.9 + t * ws * 1.3)
+            + 0.35 * Math.sin(x * 5.1 - t * ws * 2.3) * Math.cos(y * 4.3 + t * ws * 1.9)
+          );
+          const wx = amp * 0.3 * Math.sin(t * ws * 0.8 + y * 2.6) * Math.cos(x * 1.7 + t * ws * 0.6);
+          const wy = amp * 0.18 * Math.sin(t * ws * 0.7 + x * 2.1);
           const vx = (x - prev[ix]) * damp;
           const vy = (y - prev[ix + 1]) * damp;
           const vz = (z - prev[ix + 2]) * damp;
           prev[ix] = x; prev[ix + 1] = y; prev[ix + 2] = z;
           arr[ix] = x + vx + wx * dt2;
-          arr[ix + 1] = y + vy + g * dt2;
+          arr[ix + 1] = y + vy + (g + wy) * dt2;
           arr[ix + 2] = z + vz + wz * dt2;
         }
 
@@ -815,6 +829,20 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
             arr[ix] += (gb.target.x + gb.off[k * 3] - arr[ix]) * wgt;
             arr[ix + 1] += (gb.target.y + gb.off[k * 3 + 1] - arr[ix + 1]) * wgt;
             arr[ix + 2] += (gb.target.z + gb.off[k * 3 + 2] - arr[ix + 2]) * wgt;
+          }
+        }
+
+        // Floating mode — no pins; a soft spring toward the rest pose holds the
+        // sheet in place against gravity, turbulence, and flings. Weak enough
+        // that billow and throws read naturally, strong enough that it always
+        // comes home.
+        if (p.pinMode === 'free-float') {
+          const k = 0.008;
+          for (let i = 0; i < c.count; i += 1) {
+            const ix3 = i * 3;
+            arr[ix3] += (c.orig[ix3] - arr[ix3]) * k;
+            arr[ix3 + 1] += (c.orig[ix3 + 1] - arr[ix3 + 1]) * k;
+            arr[ix3 + 2] += (c.orig[ix3 + 2] - arr[ix3 + 2]) * k;
           }
         }
 
@@ -1284,14 +1312,29 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
             {bumpName ? <span style={{ ...ui.label, color: GLASS.inkSoft }}>{bumpName}</span> : null}
           </RailCard>
 
+          {/* ANIMATE — ambient wind idle; the sheet billows but never drifts. */}
+          <RailCard
+            id="cloth-animate-panel" icon={<Wind size={18} strokeWidth={2} />} title="Animate"
+            subtitle={anim.on ? `Blowing · ${Math.round(anim.turbulence * 100)}% turbulence` : 'Off'}
+            color="#0ea5e9" open={animOpen} onToggle={() => setAnimOpen((v) => !v)}
+          >
+            <span style={{ ...ui.label, color: GLASS.ink, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              AUTO ANIMATE
+              <button style={{ ...ui.btn(anim.on), height: 28, padding: '0 12px', fontSize: 10 }} onClick={() => setAnim((a) => ({ ...a, on: !a.on }))}>
+                {anim.on ? 'On' : 'Off'}
+              </button>
+            </span>
+            <Slider label="TURBULENCE" min={0} max={1} step={0.01} value={anim.turbulence} onChange={(v) => setAnim((a) => ({ ...a, turbulence: v }))} fmt={(v) => `${Math.round(v * 100)}%`} disabled={!anim.on} />
+            <Slider label="SPEED" min={0.2} max={3} step={0.05} value={anim.speed} onChange={(v) => setAnim((a) => ({ ...a, speed: v }))} fmt={(v) => `${v.toFixed(2)}x`} disabled={!anim.on} />
+            <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>Slow wind billow by default — turbulence dials the chaos; the sheet always stays in place.</span>
+          </RailCard>
+
           {/* PHYSICS */}
           <RailCard
-            id="cloth-physics-panel" icon={<Wind size={18} strokeWidth={2} />} title="Physics"
+            id="cloth-physics-panel" icon={<SlidersHorizontal size={18} strokeWidth={2} />} title="Physics"
             subtitle={PIN_MODES.find((p) => p.id === phys.pinMode)?.label || 'Cloth sim'}
             color="#14b8a6" open={physicsOpen} onToggle={() => setPhysicsOpen((v) => !v)}
           >
-            <Slider label="WIND STRENGTH" min={0} max={3} step={0.05} value={phys.windStrength} onChange={(v) => setPhysKey('windStrength', v)} />
-            <Slider label="WIND SPEED" min={0.1} max={3} step={0.05} value={phys.windSpeed} onChange={(v) => setPhysKey('windSpeed', v)} />
             <Slider label="GRAVITY" min={0} max={4} step={0.05} value={phys.gravity} onChange={(v) => setPhysKey('gravity', v)} />
             <Slider label="DAMPING" min={0.9} max={0.998} step={0.001} value={phys.damping} onChange={(v) => setPhysKey('damping', v)} fmt={(v) => v.toFixed(3)} />
             <Slider label="STIFFNESS" min={0.3} max={1} step={0.01} value={phys.stiffness} onChange={(v) => setPhysKey('stiffness', v)} />
