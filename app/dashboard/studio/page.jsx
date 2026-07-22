@@ -538,13 +538,8 @@ export default function StudioPage() {
 
   useEffect(() => { keyframesRef.current = keyframes; }, [keyframes]);
 
-  useEffect(() => {
-    // HOLO PAPER (?tool=cloth) is PUBLIC — no signup needed (fully client-side,
-    // no user data). Mockup mode still requires auth (client sites + captures).
-    // tool===null waits for the param read so an unauthenticated ?tool=cloth
-    // open never bounces to login.
-    if (!loading && !user && tool === 'mockup') router.replace('/login?redirect=/dashboard/studio');
-  }, [user, loading, tool, router]);
+  // The whole Studio is PUBLIC — no login redirect. Cloud render/capture calls
+  // are the only authed surface; authedFetch raises a friendly error for them.
 
   // Debounced save — current settings become the defaults for the next visit.
   useEffect(() => {
@@ -583,7 +578,13 @@ export default function StudioPage() {
   // is the operator's profile, so an admin opening the studio for another client
   // would otherwise preview their OWN site (e.g. hitloop) instead of the client's.
   useEffect(() => {
-    if (loadedUrl || !user) return undefined;
+    if (loadedUrl) return undefined;
+    // Public (logged-out) visitors preview this app's own homepage — the
+    // client-site lookup below needs an account.
+    if (!user) {
+      if (!loading && typeof window !== 'undefined') setLoadedUrl(`${window.location.origin}/`);
+      return undefined;
+    }
     const normalize = (s) => (/^https?:\/\//i.test(s) ? s : `https://${s}`);
     let cancelled = false;
     (async () => {
@@ -609,9 +610,12 @@ export default function StudioPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [user, userProfile, loadedUrl]);
+  }, [user, userProfile, loadedUrl, loading]);
 
   const authedFetch = useCallback(async (path, init = {}) => {
+    // Public visitors can play with the scene; cloud render/capture needs an
+    // account. Callers catch this and show it as status text.
+    if (!user) throw new Error('Sign in to render or save — the live studio is free to play with.');
     const token = await user.getIdToken();
     return fetch(path, {
       ...init,
@@ -889,7 +893,7 @@ export default function StudioPage() {
   useEffect(() => {
     // MOCKUP mode only — HOLO PAPER (?tool=cloth) mounts its own world in
     // ClothStudio; building both would double GPU + iframe load for nothing.
-    if (tool !== 'mockup' || !user || !stageRef.current) return;
+    if (tool !== 'mockup' || !stageRef.current) return;
     let disposed = false;
     let raf = 0;
     const stage = stageRef.current;
@@ -2115,45 +2119,11 @@ export default function StudioPage() {
   }, [worldReady, loadedUrl, busy, dirRendering, user, generateCloudVideo]);
 
   // While auth resolves, render nothing — no "Opening Studio" gate flash before
-  // the Studio mounts. Only block once fully resolved AND signed out.
+  // the Studio mounts. The Studio itself is PUBLIC (no sign-in wall): the cloth
+  // tool is fully client-side, and mockup mode works logged-out on this app's
+  // own homepage — only the cloud render/capture APIs require an account, and
+  // those surface a sign-in message when called without one.
   if (loading) return null;
-  if (!user) {
-    const loginHref = '/login?redirect=/dashboard/studio';
-    return (
-      <main style={{
-        minHeight: '100dvh',
-        display: 'grid',
-        placeItems: 'center',
-        padding: 24,
-        background: GLASS.bg,
-        color: GLASS.ink,
-        fontFamily: GLASS.sans,
-      }}>
-        <section style={{
-          width: 'min(100%, 420px)',
-          display: 'grid',
-          gap: 16,
-          textAlign: 'center',
-          ...GLASS.surface,
-          borderRadius: 12,
-          padding: 24,
-        }}>
-          <span style={{ ...ui.label, color: GLASS.inkMute }}>
-            Mockup Studio
-          </span>
-          <h1 style={{ margin: 0, fontSize: 24, lineHeight: 1.15, letterSpacing: 0 }}>
-            Sign in to open Studio
-          </h1>
-          <p style={{ margin: 0, color: GLASS.inkSoft, fontSize: 14, lineHeight: 1.55 }}>
-            Video renders are attached to your client workspace, so Studio requires a signed-in account.
-          </p>
-          <a href={loginHref} style={{ ...ui.navCta, textDecoration: 'none', margin: '0 auto' }}>
-            Sign in
-          </a>
-        </section>
-      </main>
-    );
-  }
 
   // Exportable artboard — the live 3D canvas IS the exported frame (WYSIWYG), so its
   // box matches the selected output format's aspect ratio. It's sized in pure CSS
