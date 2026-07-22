@@ -107,9 +107,9 @@ function Slider({ label, min, max, step, value, onChange, fmt = (v) => v.toFixed
 }
 
 // ── Config ───────────────────────────────────────────────────────────────────
-// v5 — extreme-cloth defaults (weightless floating, loose crumple, rebound
-// control); the bump discards older saves so the new feel actually lands.
-const SETTINGS_KEY = 'holocloth-studio-defaults-v5';
+// v6 — rebound defaults to 0 (the sheet stays where you leave it) and the
+// grab is a tweezer pinch; the bump discards older saves so it lands.
+const SETTINGS_KEY = 'holocloth-studio-defaults-v6';
 // Default artwork shipped with the tool (public/img). 404s silently if absent;
 // any user upload replaces it.
 const DEFAULT_ARTWORK_URL = '/img/holocloth-default-artwork.jpg';
@@ -187,7 +187,7 @@ const INITIAL_MAT = (() => {
 // REBOUND dials how fast (if at all) the sheet retracts to its rest pose —
 // at 0 it stays wherever you drag it.
 const DEFAULT_PHYS = {
-  gravity: 2.7, damping: 0.992, stiffness: 0.55, rebound: 0.18, pinMode: 'free-float',
+  gravity: 2.7, damping: 0.992, stiffness: 0.55, rebound: 0, pinMode: 'free-float',
 };
 // Ambient animation — the blowing-in-the-wind idle (default ON, cranked for
 // dramatic motion). Turbulence scales the whole chaotic field.
@@ -720,19 +720,29 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
         const hit = world.raycaster.intersectObject(c.mesh, false)[0];
         if (!hit) return; // empty space → orbit
         const arr = c.geometry.attributes.position.array;
-        const r = Math.max(c.cw, c.ch) * 0.17;
+        // Tweezer pinch — tiny contact area; the rest of the sheet trails
+        // through the constraints instead of moving as a rigid patch.
+        const r = Math.max(c.cw, c.ch) * 0.055;
         const idx = []; const w = []; const off = [];
+        let nearest = -1; let nearestD = Infinity;
         for (let i = 0; i < c.count; i += 1) {
           if (c.pins?.has(i)) continue;
           const dx = arr[i * 3] - hit.point.x;
           const dy = arr[i * 3 + 1] - hit.point.y;
           const dz = arr[i * 3 + 2] - hit.point.z;
           const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          if (d < nearestD) { nearestD = d; nearest = i; }
           if (d < r) {
             const t = 1 - d / r;
             idx.push(i); w.push(t * t * 0.95);
-            off.push(dx, dy, dz); // keep the patch's shape while held
+            off.push(dx, dy, dz); // keep the pinch's shape while held
           }
+        }
+        // Coarse grids can miss the tiny radius between vertices — always
+        // pinch at least the nearest particle.
+        if (!idx.length && nearest >= 0) {
+          idx.push(nearest); w.push(0.95);
+          off.push(arr[nearest * 3] - hit.point.x, arr[nearest * 3 + 1] - hit.point.y, arr[nearest * 3 + 2] - hit.point.z);
         }
         if (!idx.length) return;
         grab.active = true; grab.idx = idx; grab.w = w; grab.off = off;
