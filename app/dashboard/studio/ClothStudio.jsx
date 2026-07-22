@@ -107,9 +107,9 @@ function Slider({ label, min, max, step, value, onChange, fmt = (v) => v.toFixed
 }
 
 // ── Config ───────────────────────────────────────────────────────────────────
-// v4 — floating pins + ambient Animate bucket became the defaults; the bump
-// discards older saves so the approved defaults actually land.
-const SETTINGS_KEY = 'holocloth-studio-defaults-v4';
+// v5 — extreme-cloth defaults (weightless floating, loose crumple, rebound
+// control); the bump discards older saves so the new feel actually lands.
+const SETTINGS_KEY = 'holocloth-studio-defaults-v5';
 // Default artwork shipped with the tool (public/img). 404s silently if absent;
 // any user upload replaces it.
 const DEFAULT_ARTWORK_URL = '/img/holocloth-default-artwork.jpg';
@@ -182,16 +182,16 @@ const INITIAL_MAT = (() => {
   const { label, group, env, bg, ...rest } = MATERIAL_PRESETS.paper;
   return rest;
 })();
-// Clothier defaults: floatier damping, looser constraints so the sheet
-// stretches and swings like fabric, the user-approved heavier gravity, and
-// FLOATING pins — no visible anchors; a soft spring holds the sheet in place.
+// Extreme-cloth defaults: FLOATING mode is weightless (gravity applies to
+// pinned modes only), constraints run loose so throws crumple and fold, and
+// REBOUND dials how fast (if at all) the sheet retracts to its rest pose —
+// at 0 it stays wherever you drag it.
 const DEFAULT_PHYS = {
-  gravity: 2.7, damping: 0.99, stiffness: 0.72, pinMode: 'free-float',
+  gravity: 2.7, damping: 0.992, stiffness: 0.55, rebound: 0.18, pinMode: 'free-float',
 };
-// Ambient animation — the slow "blowing in the wind" idle (default ON). The
-// turbulence slider scales the whole chaotic field; the anchor spring keeps
-// the sheet in place no matter how hard it blows.
-const DEFAULT_ANIM = { on: true, turbulence: 0.35, speed: 1 };
+// Ambient animation — the blowing-in-the-wind idle (default ON, cranked for
+// dramatic motion). Turbulence scales the whole chaotic field.
+const DEFAULT_ANIM = { on: true, turbulence: 0.6, speed: 1 };
 
 // The material sliders, in the order the reference panel lists them.
 const MATERIAL_SLIDERS = [
@@ -769,7 +769,9 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
         const arr = c.geometry.attributes.position.array;
         const prev = c.prev;
         const damp = p.damping;
-        const g = -p.gravity * 0.28;
+        // Floating mode is weightless — the crumpled sheet hangs in space like
+        // the reference; gravity only pulls when the sheet is pinned.
+        const g = p.pinMode === 'free-float' ? 0 : -p.gravity * 0.28;
         // Ambient animation — multi-octave turbulence field, scaled by the
         // TURBULENCE slider; OFF zeroes the wind entirely.
         const amp = a.on ? a.turbulence * 2.4 : 0;
@@ -832,17 +834,18 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
           }
         }
 
-        // Floating mode — no pins; a soft spring toward the rest pose holds the
-        // sheet in place against gravity, turbulence, and flings. Weak enough
-        // that billow and throws read naturally, strong enough that it always
-        // comes home.
+        // Floating mode — REBOUND scales the spring toward the rest pose.
+        // 0 = no retraction: the sheet stays wherever it was dragged, holding
+        // its crumple; higher values pull it home faster.
         if (p.pinMode === 'free-float') {
-          const k = 0.008;
-          for (let i = 0; i < c.count; i += 1) {
-            const ix3 = i * 3;
-            arr[ix3] += (c.orig[ix3] - arr[ix3]) * k;
-            arr[ix3 + 1] += (c.orig[ix3 + 1] - arr[ix3 + 1]) * k;
-            arr[ix3 + 2] += (c.orig[ix3 + 2] - arr[ix3 + 2]) * k;
+          const k = (p.rebound ?? 0.18) * 0.02;
+          if (k > 0) {
+            for (let i = 0; i < c.count; i += 1) {
+              const ix3 = i * 3;
+              arr[ix3] += (c.orig[ix3] - arr[ix3]) * k;
+              arr[ix3 + 1] += (c.orig[ix3 + 1] - arr[ix3 + 1]) * k;
+              arr[ix3 + 2] += (c.orig[ix3 + 2] - arr[ix3 + 2]) * k;
+            }
           }
         }
 
@@ -1326,7 +1329,12 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
             </span>
             <Slider label="TURBULENCE" min={0} max={1} step={0.01} value={anim.turbulence} onChange={(v) => setAnim((a) => ({ ...a, turbulence: v }))} fmt={(v) => `${Math.round(v * 100)}%`} disabled={!anim.on} />
             <Slider label="SPEED" min={0.2} max={3} step={0.05} value={anim.speed} onChange={(v) => setAnim((a) => ({ ...a, speed: v }))} fmt={(v) => `${v.toFixed(2)}x`} disabled={!anim.on} />
-            <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>Slow wind billow by default — turbulence dials the chaos; the sheet always stays in place.</span>
+            <Slider
+              label="REBOUND" min={0} max={1} step={0.01} value={phys.rebound ?? 0.18}
+              onChange={(v) => setPhysKey('rebound', v)} fmt={(v) => `${Math.round(v * 100)}%`}
+              disabled={phys.pinMode !== 'free-float'}
+            />
+            <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>Turbulence dials the chaos. Rebound sets how fast the sheet retracts to its original shape — at 0% it stays right where you throw it.</span>
           </RailCard>
 
           {/* PHYSICS */}
@@ -1335,7 +1343,10 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
             subtitle={PIN_MODES.find((p) => p.id === phys.pinMode)?.label || 'Cloth sim'}
             color="#14b8a6" open={physicsOpen} onToggle={() => setPhysicsOpen((v) => !v)}
           >
-            <Slider label="GRAVITY" min={0} max={4} step={0.05} value={phys.gravity} onChange={(v) => setPhysKey('gravity', v)} />
+            {phys.pinMode === 'free-float' ? (
+              <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>Floating mode is weightless — gravity applies when the sheet is pinned.</span>
+            ) : null}
+            <Slider label="GRAVITY" min={0} max={4} step={0.05} value={phys.gravity} onChange={(v) => setPhysKey('gravity', v)} disabled={phys.pinMode === 'free-float'} />
             <Slider label="DAMPING" min={0.9} max={0.998} step={0.001} value={phys.damping} onChange={(v) => setPhysKey('damping', v)} fmt={(v) => v.toFixed(3)} />
             <Slider label="STIFFNESS" min={0.3} max={1} step={0.01} value={phys.stiffness} onChange={(v) => setPhysKey('stiffness', v)} />
             <span style={{ ...ui.label, marginTop: 4 }}>PINS</span>
