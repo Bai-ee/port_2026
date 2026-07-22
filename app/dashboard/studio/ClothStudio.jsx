@@ -11,9 +11,9 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ChevronRight, Download, Palette, Image as ImageIcon, Wind, Layers,
+  ChevronRight, ChevronLeft, Download, Palette, Image as ImageIcon, Wind, Layers,
   RotateCcw, Zap, Video, Camera, SlidersHorizontal, Lightbulb, Disc, Focus,
-  Sparkles,
+  Sparkles, Shuffle,
 } from 'lucide-react';
 
 // ── UI tokens — mirror app/dashboard/studio/page.jsx GLASS/ui (kept local so
@@ -241,7 +241,13 @@ const ENV_PRESETS = {
 
 // ── Post FX — bloom glow + film grain + vignette, rendered through an
 // EffectComposer so recordings and PNGs carry the look. ──
-const DEFAULT_FX = { bloom: false, bloomStrength: 0.55, bloomThreshold: 0.8, grain: 0, vignette: 0 };
+const DEFAULT_FX = {
+  bloom: false, bloomStrength: 0.55, bloomThreshold: 0.8, grain: 0, vignette: 0,
+  // Graphic treatment — one display-space look at a time. t1/t2/t3 are the
+  // generic param slots; what each means is declared per treatment in
+  // TREATMENTS below. colA/colB are the ink/paper (or shadow/highlight) pair.
+  treatment: 'none', t1: 8, t2: 45, t3: 1, colA: '#101014', colB: '#f4f1ea',
+};
 // Tiny finishing pass: animated grain + radial vignette — and, critically, the
 // chain's OUTPUT pass. The composer renders the scene into a linear render
 // target, where three applies neither ACES tone mapping nor the sRGB encode
@@ -263,9 +269,21 @@ const GRAIN_VIGNETTE_SHADER = {
   uniforms: {
     tDiffuse: { value: null },
     tDepth: { value: null },
+    uRes: { value: null },
+    uT1: { value: 0 },
+    uT2: { value: 0 },
+    uT3: { value: 0 },
+    uColA: { value: null },
+    uColB: { value: null },
     uGrain: { value: 0 },
     uVignette: { value: 0 },
     uTime: { value: 0 },
+    // Active capture frame in UV space — the vignette is shaped to the frame
+    // being exported, not to the canvas, so the crop carries a true falloff.
+    // Full canvas (frame off) = centre 0.5, half 0.5, which reproduces the
+    // plain radial vignette exactly.
+    uFrameCenter: { value: null },
+    uFrameHalf: { value: null },
   },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
   fragmentShader: `
@@ -275,26 +293,148 @@ uniform sampler2D tDepth;
 uniform float uGrain;
 uniform float uVignette;
 uniform float uTime;
+uniform vec2 uFrameCenter;
+uniform vec2 uFrameHalf;
+uniform vec2 uRes;
+uniform float uT1;
+uniform float uT2;
+uniform float uT3;
+uniform vec3 uColA;
+uniform vec3 uColB;
+
 float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)) + uTime) * 43758.5453); }
-void main(){
-  vec4 c = texture2D(tDiffuse, vUv);
-  // depth 1.0 = nothing was drawn here, i.e. bare backdrop.
-  bool isBackdrop = texture2D(tDepth, vUv).x >= 0.999999;
-  // Vignette runs in linear light (before tone mapping) so the falloff rolls
-  // off like a real lens rather than crushing the shadows.
+float hashS(vec2 p){ return fract(sin(dot(p, vec2(269.5,183.3))) * 43758.5453); }
+float luma(vec3 c){ return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
+// 4x4 ordered dither, built from the 2x2 Bayer matrix by the usual recursion
+// (GLSL ES 1.0 can't index an array with a computed index).
+float bayer2(vec2 c){ return c.y < 0.5 ? (c.x < 0.5 ? 0.0 : 2.0) : (c.x < 0.5 ? 3.0 : 1.0); }
+float bayer4(vec2 p){
+  vec2 q = floor(mod(p, 4.0));
+  return (4.0 * bayer2(floor(q * 0.5)) + bayer2(mod(q, 2.0)) + 0.5) / 16.0;
+}
+
+// One source sample, brought all the way to display space: vignette (linear
+// light, shaped to the capture frame), then tone map + sRGB encode — except on
+// the bare backdrop, which three never tone maps. Every treatment resamples
+// through this so multi-tap looks stay consistent with the untouched pixel.
+vec4 tap(vec2 uv){
+  vec4 s = texture2D(tDiffuse, uv);
   if (uVignette > 0.001) {
-    float d = distance(vUv, vec2(0.5));
-    c.rgb *= 1.0 - smoothstep(0.35, 0.72, d) * uVignette;
+    // Frame space: ±1 at the frame edges, so d matches the old full-canvas
+    // numbers (0.5 edge-centre, 0.707 corner) whatever the crop's aspect is.
+    vec2 q = (uv - uFrameCenter) / max(uFrameHalf, vec2(0.0001));
+    s.rgb *= 1.0 - smoothstep(0.35, 0.72, length(q) * 0.5) * uVignette;
   }
-  gl_FragColor = c;
-  #include <tonemapping_fragment>
-  if (isBackdrop) gl_FragColor.rgb = c.rgb; // backdrop is never tone mapped
-  #include <colorspace_fragment>
-  // Grain runs AFTER the encode — it is a display-space film artefact, and in
-  // linear space it would vanish from the highlights.
-  if (uGrain > 0.001) {
-    gl_FragColor.rgb += (hash(vUv * 1024.0) - 0.5) * uGrain * 0.25;
-  }
+  vec3 c = s.rgb;
+  #if defined( TONE_MAPPING )
+    if (texture2D(tDepth, uv).x < 0.999999) c = toneMapping(c);
+  #endif
+  return vec4(linearToOutputTexel(vec4(c, 1.0)).rgb, s.a);
+}
+
+void main(){
+  vec4 base = tap(vUv);
+  vec3 col = base.rgb;
+
+  #ifdef FX_HALFTONE
+    float ang = radians(uT2);
+    mat2 rot = mat2(cos(ang), -sin(ang), sin(ang), cos(ang));
+    mat2 rotI = mat2(cos(ang), sin(ang), -sin(ang), cos(ang));
+    vec2 cell = (rot * (vUv * uRes)) / max(uT1, 1.0);
+    vec3 src = tap((rotI * ((floor(cell) + 0.5) * max(uT1, 1.0))) / uRes).rgb;
+    float radius = sqrt(clamp(1.0 - luma(src), 0.0, 1.0)) * 0.72;
+    float d = length(fract(cell) - 0.5);
+    col = mix(src, mix(uColB, uColA, smoothstep(radius + 0.04, radius - 0.04, d)), uT3);
+  #endif
+
+  #ifdef FX_PIXEL
+    float bs = max(uT1, 1.0);
+    vec3 src = tap((floor(vUv * uRes / bs) + 0.5) * bs / uRes).rgb;
+    float levels = max(2.0, uT2);
+    col = floor(src * levels + 0.5) / levels;
+  #endif
+
+  #ifdef FX_POSTER
+    float levels = max(2.0, uT1);
+    float dth = (bayer4(vUv * uRes) - 0.5) * uT2 / levels;
+    col = floor((base.rgb + dth) * levels + 0.5) / levels;
+  #endif
+
+  #ifdef FX_THRESHOLD
+    float th = uT1 + (bayer4(vUv * uRes) - 0.5) * uT2;
+    col = mix(uColA, uColB, step(th, luma(base.rgb)));
+  #endif
+
+  #ifdef FX_DUOTONE
+    float l = pow(clamp(luma(base.rgb), 0.0, 1.0), max(uT2, 0.05));
+    col = mix(base.rgb, mix(uColA, uColB, smoothstep(0.0, 1.0, l)), uT1);
+  #endif
+
+  #ifdef FX_CHROMA
+    vec2 dir = vUv - uFrameCenter;
+    float amt = (uT1 / max(uRes.x, 1.0)) * (1.0 + pow(length(dir) * 2.0, max(uT2, 0.1)) * 6.0);
+    col.r = tap(vUv + dir * amt).r;
+    col.b = tap(vUv - dir * amt).b;
+  #endif
+
+  #ifdef FX_SCANLINE
+    float lines = max(uT1, 1.0);
+    float s = sin((vUv.y + uTime * 0.02 * uT3) * lines * 6.28318);
+    col = base.rgb * (1.0 - uT2 * 0.55 * (0.5 + 0.5 * s));
+    float m = mod(vUv.x * uRes.x, 3.0);
+    vec3 mask = vec3(m < 1.0 ? 1.18 : 0.88, (m >= 1.0 && m < 2.0) ? 1.18 : 0.88, m >= 2.0 ? 1.18 : 0.88);
+    col *= mix(vec3(1.0), mask, uT2);
+  #endif
+
+  #ifdef FX_RISO
+    float o = uT1 / max(uRes.x, 1.0);
+    float i1 = 1.0 - luma(tap(vUv + vec2(o, o * 0.6)).rgb);
+    float i2 = 1.0 - luma(tap(vUv - vec2(o * 0.8, o * 0.4)).rgb);
+    col = vec3(0.96, 0.94, 0.88);
+    col = mix(col, uColA, clamp(i1 * 0.95, 0.0, 1.0));
+    col = mix(col, uColB, clamp(i2 * 0.6, 0.0, 1.0));
+    col *= 1.0 - uT2 * 0.3 * hashS(floor(vUv * uRes / 2.0));
+  #endif
+
+  #ifdef FX_EDGES
+    vec2 t = 1.0 / uRes;
+    float l00 = luma(tap(vUv + vec2(-t.x, -t.y)).rgb);
+    float l10 = luma(tap(vUv + vec2(0.0, -t.y)).rgb);
+    float l20 = luma(tap(vUv + vec2(t.x, -t.y)).rgb);
+    float l01 = luma(tap(vUv + vec2(-t.x, 0.0)).rgb);
+    float l21 = luma(tap(vUv + vec2(t.x, 0.0)).rgb);
+    float l02 = luma(tap(vUv + vec2(-t.x, t.y)).rgb);
+    float l12 = luma(tap(vUv + vec2(0.0, t.y)).rgb);
+    float l22 = luma(tap(vUv + vec2(t.x, t.y)).rgb);
+    float gx = (l20 + 2.0 * l21 + l22) - (l00 + 2.0 * l01 + l02);
+    float gy = (l02 + 2.0 * l12 + l22) - (l00 + 2.0 * l10 + l20);
+    float e = clamp(length(vec2(gx, gy)) * uT1 * 4.0, 0.0, 1.0);
+    col = mix(mix(uColB, base.rgb, uT2), uColA, e);
+  #endif
+
+  #ifdef FX_SOLARIZE
+    col = mix(base.rgb, abs(base.rgb - uT1) / max(1.0 - uT1, 0.01), uT2);
+  #endif
+
+  #ifdef FX_CROSSPROC
+    vec3 c2 = clamp((base.rgb - 0.5) * (1.0 + uT2) + 0.5, 0.0, 1.0);
+    vec3 tint = mix(uColA, uColB, luma(c2));
+    col = mix(c2, clamp(c2 * tint * 1.7, 0.0, 1.0), uT1);
+  #endif
+
+  #ifdef FX_MIRROR
+    float aspect = uRes.x / max(uRes.y, 1.0);
+    vec2 p = (vUv - uFrameCenter) * vec2(aspect, 1.0);
+    float span = 6.28318 / max(2.0, floor(uT1));
+    float a = abs(mod(atan(p.y, p.x) + span * 0.5, span) - span * 0.5) + uT2;
+    vec2 q = vec2(cos(a), sin(a)) * length(p) / vec2(aspect, 1.0);
+    col = tap(clamp(q + uFrameCenter, vec2(0.001), vec2(0.999))).rgb;
+  #endif
+
+  // Grain last — a display-space film artefact; in linear light it would
+  // vanish from the highlights.
+  if (uGrain > 0.001) col += (hash(vUv * 1024.0) - 0.5) * uGrain * 0.25;
+  gl_FragColor = vec4(col, base.a);
 }`,
 };
 
@@ -322,6 +462,17 @@ const computeFrameRect = (cw, ch, aspect) => {
   if (h > ch * 0.92) { h = ch * 0.92; w = h * aspect; }
   return { x: (cw - w) / 2, y: (ch - h) / 2, w, h };
 };
+// Carousel order — the HUD lays these out in a row and slides the active one
+// to canvas center; the left/right canvas tabs step through it.
+const FRAME_IDS = Object.keys(FRAME_PRESETS);
+// Footprint of a frame on the canvas; 'off' occupies the whole safe area.
+const frameFootprint = (id, cw, ch) => {
+  const f = FRAME_PRESETS[id];
+  if (!f || !f.w) return { w: cw * 0.92, h: ch * 0.92 };
+  const r = computeFrameRect(cw, ch, f.w / f.h);
+  return { w: r.w, h: r.h };
+};
+const FRAME_GAP = 26; // px between neighbouring frames in the filmstrip
 
 // ── Lighting cans — four positionable stage lights around the sheet. Each can
 // aims at center from (angle around stage, height angle) at a fixed throw; the
@@ -457,6 +608,127 @@ const SCENE_PRESETS = {
     env: 2,
   },
 };
+
+// ── Graphic treatments — one display-space look at a time, compiled into the
+// finish pass by #define (switching is user-rare, frames are hot). `params`
+// declares what the generic t1/t2/t3 slots mean for each look; `colors` names
+// the ink/paper pair when the look uses one. ──
+const pct = (v) => `${Math.round(v * 100)}%`;
+const px = (v) => `${Math.round(v)}px`;
+const deg = (v) => `${Math.round(v)}°`;
+const num = (v) => String(Math.round(v));
+const x2 = (v) => v.toFixed(2);
+const TREATMENTS = {
+  none:      { label: 'None', define: null, params: [] },
+  halftone:  { label: 'Halftone', define: 'FX_HALFTONE', colors: ['Ink', 'Paper'], params: [
+    ['t1', 'DOT SIZE', 3, 30, 0.5, px], ['t2', 'SCREEN ANGLE', 0, 90, 1, deg], ['t3', 'BLEND', 0, 1, 0.01, pct]] },
+  pixel:     { label: 'Pixel Blocks', define: 'FX_PIXEL', params: [
+    ['t1', 'BLOCK SIZE', 2, 40, 1, px], ['t2', 'COLOR STEPS', 2, 16, 1, num]] },
+  poster:    { label: 'Posterize', define: 'FX_POSTER', params: [
+    ['t1', 'LEVELS', 2, 12, 1, num], ['t2', 'DITHER', 0, 1, 0.01, pct]] },
+  threshold: { label: '1-Bit Threshold', define: 'FX_THRESHOLD', colors: ['Dark', 'Light'], params: [
+    ['t1', 'THRESHOLD', 0, 1, 0.01, pct], ['t2', 'DITHER', 0, 1, 0.01, pct]] },
+  duotone:   { label: 'Duotone', define: 'FX_DUOTONE', colors: ['Shadow', 'Highlight'], params: [
+    ['t1', 'BLEND', 0, 1, 0.01, pct], ['t2', 'TONE CURVE', 0.2, 3, 0.05, x2]] },
+  chroma:    { label: 'Chromatic Split', define: 'FX_CHROMA', params: [
+    ['t1', 'SPLIT', 0, 40, 0.5, px], ['t2', 'FALLOFF', 0.2, 4, 0.1, x2]] },
+  scanline:  { label: 'CRT Scanlines', define: 'FX_SCANLINE', params: [
+    ['t1', 'LINE COUNT', 60, 1200, 10, num], ['t2', 'STRENGTH', 0, 1, 0.01, pct], ['t3', 'ROLL', 0, 3, 0.05, x2]] },
+  riso:      { label: 'Riso Misregister', define: 'FX_RISO', colors: ['Ink 1', 'Ink 2'], params: [
+    ['t1', 'MISREGISTER', 0, 30, 0.5, px], ['t2', 'PAPER GRAIN', 0, 1, 0.01, pct]] },
+  edges:     { label: 'Edge Lines', define: 'FX_EDGES', colors: ['Line', 'Paper'], params: [
+    ['t1', 'LINE STRENGTH', 0, 2, 0.02, x2], ['t2', 'KEEP IMAGE', 0, 1, 0.01, pct]] },
+  solarize:  { label: 'Solarize', define: 'FX_SOLARIZE', params: [
+    ['t1', 'PIVOT', 0, 1, 0.01, pct], ['t2', 'AMOUNT', 0, 1, 0.01, pct]] },
+  crossproc: { label: 'Cross Process', define: 'FX_CROSSPROC', colors: ['Shadow tint', 'Highlight tint'], params: [
+    ['t1', 'AMOUNT', 0, 1, 0.01, pct], ['t2', 'CONTRAST', 0, 1.5, 0.02, x2]] },
+  mirror:    { label: 'Kaleidoscope', define: 'FX_MIRROR', params: [
+    ['t1', 'SEGMENTS', 2, 12, 1, num], ['t2', 'SPIN', 0, 6.28, 0.05, x2]] },
+};
+
+// Material fields only — MATERIAL_PRESETS entries also carry label/group/env/bg
+// that the material state has no business holding.
+const matFrom = (id, over = {}) => {
+  const src = MATERIAL_PRESETS[id] || DEFAULT_MAT;
+  const out = { ...DEFAULT_MAT };
+  Object.keys(DEFAULT_MAT).forEach((k) => { if (src[k] !== undefined) out[k] = src[k]; });
+  return { ...out, ...over, preset: '' };
+};
+
+// ── FX presets — complete looks. Each one drives the whole stage: treatment +
+// bloom/grain/vignette, the material dials, environment light, backdrop and
+// light rig. Picking one overwrites the Material / Background / Lighting cards
+// (that is the point); nudging any dial afterwards drops back to Custom. ──
+const FX_PRESETS = {
+  // ── PRINT ──
+  'halftone-press': { label: 'Halftone Press', group: 'PRINT',
+    fx: { treatment: 'halftone', t1: 9, t2: 22, t3: 1, colA: '#111114', colB: '#f2efe6', bloom: false, bloomStrength: 0.4, bloomThreshold: 0.85, grain: 0.14, vignette: 0.28 },
+    mat: matFrom('paper'), envId: 'room', bg: { mode: 'color', color: '#f2efe6' }, envIntensity: 1.7, lights: 'studio' },
+  'newsprint-1bit': { label: 'Newsprint 1-Bit', group: 'PRINT',
+    fx: { treatment: 'threshold', t1: 0.46, t2: 0.34, t3: 1, colA: '#141414', colB: '#efece2', bloom: false, bloomStrength: 0.4, bloomThreshold: 0.8, grain: 0.2, vignette: 0.2 },
+    mat: matFrom('paper', { roughness: 0.95, bump: 0.7 }), envId: 'room', bg: { mode: 'color', color: '#efece2' }, envIntensity: 1.9, lights: 'top-wash' },
+  'riso-duotone': { label: 'Riso Duotone', group: 'PRINT',
+    fx: { treatment: 'riso', t1: 11, t2: 0.55, t3: 1, colA: '#ff4d8d', colB: '#2f5cff', bloom: false, bloomStrength: 0.4, bloomThreshold: 0.8, grain: 0.12, vignette: 0.18 },
+    mat: matFrom('paper', { baseColor: '#f7f4ec' }), envId: 'room', bg: { mode: 'color', color: '#f6f2e8' }, envIntensity: 1.8, lights: 'studio' },
+  'screenprint-lines': { label: 'Screenprint Lines', group: 'PRINT',
+    fx: { treatment: 'edges', t1: 1.1, t2: 0.12, t3: 1, colA: '#0f0f14', colB: '#f5f2ea', bloom: false, bloomStrength: 0.4, bloomThreshold: 0.8, grain: 0.1, vignette: 0.15 },
+    mat: matFrom('chrome'), envId: 'hall', bg: { mode: 'color', color: '#f5f2ea' }, envIntensity: 1.4, lights: 'studio' },
+  'xerox-blowout': { label: 'Xerox Blowout', group: 'PRINT',
+    fx: { treatment: 'threshold', t1: 0.62, t2: 0.75, t3: 1, colA: '#000000', colB: '#ffffff', bloom: true, bloomStrength: 0.7, bloomThreshold: 0.7, grain: 0.35, vignette: 0.4 },
+    mat: matFrom('chrome-storm'), envId: 'night', bg: { mode: 'color', color: '#0a0a0c' }, envIntensity: 1.2, lights: 'single-spot' },
+
+  // ── PHOTO ──
+  'cinema-bloom': { label: 'Cinema Bloom', group: 'PHOTO',
+    fx: { treatment: 'none', t1: 8, t2: 45, t3: 1, colA: '#101014', colB: '#f4f1ea', bloom: true, bloomStrength: 0.95, bloomThreshold: 0.62, grain: 0.16, vignette: 0.5 },
+    mat: matFrom('midnight-drama'), envId: 'sunset', bg: { scene: 'thriller' }, envIntensity: 0.9, lights: 'single-spot' },
+  'cross-process': { label: 'Cross Process', group: 'PHOTO',
+    fx: { treatment: 'crossproc', t1: 0.75, t2: 0.6, t3: 1, colA: '#12324a', colB: '#ffd9a0', bloom: true, bloomStrength: 0.45, bloomThreshold: 0.75, grain: 0.2, vignette: 0.35 },
+    mat: matFrom('liquid-gold'), envId: 'dusk', bg: { scene: 'golden-hour' }, envIntensity: 1.5, lights: 'studio' },
+  'faded-archive': { label: 'Faded Archive', group: 'PHOTO',
+    fx: { treatment: 'duotone', t1: 0.8, t2: 0.85, t3: 1, colA: '#3a2b1e', colB: '#efe2c6', bloom: false, bloomStrength: 0.4, bloomThreshold: 0.8, grain: 0.3, vignette: 0.45 },
+    mat: matFrom('silk', { baseColor: '#6b5b46' }), envId: 'sunset', bg: { scene: 'retro-sunset' }, envIntensity: 1.3, lights: 'top-wash' },
+  'night-neon': { label: 'Night Neon', group: 'PHOTO',
+    fx: { treatment: 'chroma', t1: 14, t2: 1.8, t3: 1, colA: '#101014', colB: '#f4f1ea', bloom: true, bloomStrength: 1.1, bloomThreshold: 0.55, grain: 0.22, vignette: 0.5 },
+    mat: matFrom('neon-noir'), envId: 'night', bg: { scene: 'neon-alley' }, envIntensity: 0.8, lights: 'neon-cross' },
+  'studio-clean': { label: 'Studio Clean', group: 'PHOTO',
+    fx: { treatment: 'none', t1: 8, t2: 45, t3: 1, colA: '#101014', colB: '#f4f1ea', bloom: true, bloomStrength: 0.3, bloomThreshold: 0.9, grain: 0.04, vignette: 0.12 },
+    mat: matFrom('studio-white'), envId: 'hall', bg: { mode: 'color', color: '#fbfaf7' }, envIntensity: 2.1, lights: 'studio' },
+
+  // ── DIGITAL ──
+  'crt-broadcast': { label: 'CRT Broadcast', group: 'DIGITAL',
+    fx: { treatment: 'scanline', t1: 420, t2: 0.6, t3: 1.2, colA: '#101014', colB: '#f4f1ea', bloom: true, bloomStrength: 0.8, bloomThreshold: 0.6, grain: 0.25, vignette: 0.55 },
+    mat: matFrom('chrome-storm'), envId: 'night', bg: { scene: 'deep-sea' }, envIntensity: 1.4, lights: 'neon-cross' },
+  'pixel-console': { label: 'Pixel Console', group: 'DIGITAL',
+    fx: { treatment: 'pixel', t1: 10, t2: 6, t3: 1, colA: '#101014', colB: '#f4f1ea', bloom: false, bloomStrength: 0.4, bloomThreshold: 0.8, grain: 0, vignette: 0.2 },
+    mat: matFrom('candy-gloss'), envId: 'room', bg: { scene: 'candy-pop' }, envIntensity: 1.5, lights: 'studio' },
+  'chromatic-glitch': { label: 'Chromatic Glitch', group: 'DIGITAL',
+    fx: { treatment: 'chroma', t1: 30, t2: 3.2, t3: 1, colA: '#101014', colB: '#f4f1ea', bloom: true, bloomStrength: 0.9, bloomThreshold: 0.5, grain: 0.4, vignette: 0.45 },
+    mat: matFrom('oil-slick'), envId: 'night', bg: { mode: 'color', color: '#05060a' }, envIntensity: 1.1, lights: 'fire-ice' },
+  'vapor-grid': { label: 'Vapor Grid', group: 'DIGITAL',
+    fx: { treatment: 'duotone', t1: 0.9, t2: 0.7, t3: 1, colA: '#2a0a4a', colB: '#00e5ff', bloom: true, bloomStrength: 0.85, bloomThreshold: 0.6, grain: 0.15, vignette: 0.4 },
+    mat: matFrom('holo-foil'), envId: 'dusk', bg: { scene: 'neon-alley' }, envIntensity: 1.2, lights: 'neon-cross' },
+  'data-mosh': { label: 'Data Mosh', group: 'DIGITAL',
+    fx: { treatment: 'pixel', t1: 26, t2: 3, t3: 1, colA: '#101014', colB: '#f4f1ea', bloom: true, bloomStrength: 1.2, bloomThreshold: 0.45, grain: 0.3, vignette: 0.3 },
+    mat: matFrom('acid-rave'), envId: 'night', bg: { mode: 'color', color: '#0c1402' }, envIntensity: 1.3, lights: 'neon-cross' },
+
+  // ── EXPERIMENTAL ──
+  'solar-burn': { label: 'Solar Flare Burn', group: 'EXPERIMENTAL',
+    fx: { treatment: 'solarize', t1: 0.42, t2: 0.8, t3: 1, colA: '#101014', colB: '#f4f1ea', bloom: true, bloomStrength: 1.0, bloomThreshold: 0.5, grain: 0.2, vignette: 0.35 },
+    mat: matFrom('solar-flare'), envId: 'sunset', bg: { scene: 'golden-hour' }, envIntensity: 1.7, lights: 'fire-ice' },
+  'kaleido-cathedral': { label: 'Kaleido Cathedral', group: 'EXPERIMENTAL',
+    fx: { treatment: 'mirror', t1: 6, t2: 0.4, t3: 1, colA: '#101014', colB: '#f4f1ea', bloom: true, bloomStrength: 0.7, bloomThreshold: 0.65, grain: 0.1, vignette: 0.5 },
+    mat: matFrom('gothic-pearl'), envId: 'hall', bg: { scene: 'smoke-stage' }, envIntensity: 1.6, lights: 'top-wash' },
+  'acid-posterize': { label: 'Acid Posterize', group: 'EXPERIMENTAL',
+    fx: { treatment: 'poster', t1: 4, t2: 0.7, t3: 1, colA: '#101014', colB: '#f4f1ea', bloom: true, bloomStrength: 0.6, bloomThreshold: 0.6, grain: 0.12, vignette: 0.3 },
+    mat: matFrom('acid-rave'), envId: 'dusk', bg: { mode: 'color', color: '#0c1402' }, envIntensity: 1.5, lights: 'neon-cross' },
+  'blueprint-cyanotype': { label: 'Blueprint Cyanotype', group: 'EXPERIMENTAL',
+    fx: { treatment: 'duotone', t1: 1, t2: 1.6, t3: 1, colA: '#08284f', colB: '#dbe9f7', bloom: false, bloomStrength: 0.4, bloomThreshold: 0.8, grain: 0.26, vignette: 0.35 },
+    mat: matFrom('paper', { baseColor: '#cfd8e6' }), envId: 'night', bg: { mode: 'color', color: '#0a2246' }, envIntensity: 1.6, lights: 'top-wash' },
+  'chrome-emboss': { label: 'Chrome Emboss', group: 'EXPERIMENTAL',
+    fx: { treatment: 'edges', t1: 0.7, t2: 0.85, t3: 1, colA: '#ffffff', colB: '#0b0b10', bloom: true, bloomStrength: 0.5, bloomThreshold: 0.7, grain: 0.08, vignette: 0.4 },
+    mat: matFrom('chrome-storm'), envId: 'hall', bg: { mode: 'color', color: '#15181f' }, envIntensity: 2, lights: 'fire-ice' },
+};
+const FX_PRESET_GROUPS = ['PRINT', 'PHOTO', 'DIGITAL', 'EXPERIMENTAL'];
 
 // Paint a scene's backdrop: base grade + glow/sun/bars + optional light beam +
 // film grain + vignette. Grain and vignette give the "texture + depth" read.
@@ -627,7 +899,12 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   // Environment light (IBL) + post FX.
   const [envId, setEnvId] = useState(ENV_PRESETS[saved.envId] ? saved.envId : 'room');
   const [fx, setFx] = useState(() => ({ ...DEFAULT_FX, ...(saved.fx || {}) }));
-  const setFxKey = useCallback((key, val) => setFx((f) => ({ ...f, [key]: val })), []);
+  // Which full look is loaded; any hand-tweak drops it back to Custom.
+  const [fxPresetId, setFxPresetId] = useState(FX_PRESETS[saved.fxPresetId] ? saved.fxPresetId : '');
+  const setFxKey = useCallback((key, val) => {
+    setFx((f) => ({ ...f, [key]: val }));
+    setFxPresetId('');
+  }, []);
   // Which HDRI is mid-fetch, so its button can say so (files are ~1.5MB).
   const [envLoadingId, setEnvLoadingId] = useState(null);
   const applyLightTemplate = useCallback((tplId) => {
@@ -673,11 +950,11 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   useEffect(() => {
     const id = setTimeout(() => {
       try {
-        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ perf, mat, phys, anim, cam, lightCans, lightTemplate, glass, shotCam, hudOn, frameId, envId, fx, clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds, videoFormat }));
+        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ perf, mat, phys, anim, cam, lightCans, lightTemplate, glass, shotCam, hudOn, frameId, envId, fx, fxPresetId, clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds, videoFormat }));
       } catch { /* non-critical */ }
     }, 250);
     return () => clearTimeout(id);
-  }, [perf, mat, phys, anim, cam, lightCans, lightTemplate, glass, shotCam, hudOn, frameId, envId, fx, clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds, videoFormat]);
+  }, [perf, mat, phys, anim, cam, lightCans, lightTemplate, glass, shotCam, hudOn, frameId, envId, fx, fxPresetId, clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds, videoFormat]);
 
   // Latest control state, readable from the render loop without re-init.
   const liveRef = useRef({});
@@ -877,12 +1154,34 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
       const bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), 0.55, 0.5, 0.8);
       const finishPass = new ShaderPass(GRAIN_VIGNETTE_SHADER);
       finishPass.uniforms.tDepth.value = fxDepth;
+      finishPass.uniforms.uFrameCenter.value = new THREE.Vector2(0.5, 0.5);
+      finishPass.uniforms.uFrameHalf.value = new THREE.Vector2(0.5, 0.5);
+      finishPass.uniforms.uRes.value = new THREE.Vector2(w, h);
+      finishPass.uniforms.uColA.value = new THREE.Color(DEFAULT_FX.colA);
+      finishPass.uniforms.uColB.value = new THREE.Color(DEFAULT_FX.colB);
+      // Shape the vignette to whatever crop is active. Called from the loop at
+      // canvas size and from exportPng at export size — same aspect, so the
+      // still and the live view agree.
+      const syncFrameUniforms = (widthPx, heightPx) => {
+        const fr = FRAME_PRESETS[liveRef.current.frameId];
+        if (!fr || !fr.w || !widthPx || !heightPx) {
+          finishPass.uniforms.uFrameCenter.value.set(0.5, 0.5);
+          finishPass.uniforms.uFrameHalf.value.set(0.5, 0.5);
+          return;
+        }
+        const r = computeFrameRect(widthPx, heightPx, fr.w / fr.h);
+        finishPass.uniforms.uFrameCenter.value.set(
+          (r.x + r.w / 2) / widthPx,
+          1 - (r.y + r.h / 2) / heightPx
+        );
+        finishPass.uniforms.uFrameHalf.value.set((r.w / 2) / widthPx, (r.h / 2) / heightPx);
+      };
       composer.addPass(renderPass);
       composer.addPass(bloomPass);
       composer.addPass(finishPass);
       const fxActive = () => {
         const f = liveRef.current.fx;
-        return Boolean(f && (f.bloom || f.grain > 0.001 || f.vignette > 0.001));
+        return Boolean(f && (f.bloom || f.grain > 0.001 || f.vignette > 0.001 || (f.treatment && f.treatment !== 'none')));
       };
 
       const controls = new OrbitControls(camera, renderer.domElement);
@@ -939,7 +1238,10 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
       const world = {
         THREE, scene, camera, renderer, controls, pmrem, clothMat, clothBackMat, mirrorTex, holoUniforms, bumpTex,
         cans, ground, glassMesh, glassMat, shotCamera, activeCamera,
-        composer, renderPass, bloomPass, finishPass, fxActive, setEnvironment,
+        composer, renderPass, bloomPass, finishPass, fxActive, setEnvironment, syncFrameUniforms,
+        // Capture-frame carousel: the HUD lays the frames out in a row and
+        // eases `from` → `to` so switching crops slides instead of snapping.
+        frameSlide: { from: FRAME_IDS.indexOf(liveRef.current.frameId || 'off'), to: FRAME_IDS.indexOf(liveRef.current.frameId || 'off'), t: 1 },
         cloth: null, envIntensity: 1, bgTexture: null,
         pointer: { active: false, x: 0, y: 0 },
         raycaster: new THREE.Raycaster(),
@@ -1334,22 +1636,56 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
             g2.fillText('SHOT CAM LIVE', 12, 20);
           }
         }
-        // Capture frame — dim outside, stroke + label the platform crop.
-        const fr = FRAME_PRESETS[live.frameId];
-        if (fr && fr.w) {
-          const r = computeFrameRect(cw, chh, fr.w / fr.h);
+        // Capture frames — a filmstrip: every crop laid out in a row, the
+        // active one centred (dim outside it), its neighbours ghosted either
+        // side. Switching crops eases the whole strip across.
+        const slide = world.frameSlide;
+        const eased = 1 - Math.pow(1 - Math.min(1, Math.max(0, slide.t)), 3); // easeOutCubic
+        const idxF = slide.from + (slide.to - slide.from) * eased;
+        const sizes = FRAME_IDS.map((id) => frameFootprint(id, cw, chh));
+        // Row layout, then translate so the fractional active index sits centre.
+        const centers = [];
+        let cursor = 0;
+        FRAME_IDS.forEach((id, i) => {
+          cursor += (i === 0 ? sizes[i].w / 2 : sizes[i - 1].w / 2 + FRAME_GAP + sizes[i].w / 2);
+          centers[i] = cursor;
+        });
+        const lo = Math.floor(idxF), hi = Math.min(FRAME_IDS.length - 1, lo + 1);
+        const focusCenter = centers[lo] + (centers[hi] - centers[lo]) * (idxF - lo);
+        const shift = cw / 2 - focusCenter;
+        const activeIdx = slide.to;
+        const activeRect = {
+          x: centers[activeIdx] + shift - sizes[activeIdx].w / 2,
+          y: (chh - sizes[activeIdx].h) / 2,
+          w: sizes[activeIdx].w, h: sizes[activeIdx].h,
+        };
+        // Dim everything outside the active crop (skipped while frame is off).
+        if (FRAME_PRESETS[live.frameId]?.w) {
+          const r = activeRect;
           g2.fillStyle = 'rgba(0,0,0,0.45)';
           g2.fillRect(0, 0, cw, r.y);
           g2.fillRect(0, r.y + r.h, cw, chh - r.y - r.h);
           g2.fillRect(0, r.y, r.x, r.h);
           g2.fillRect(r.x + r.w, r.y, cw - r.x - r.w, r.h);
-          g2.strokeStyle = 'rgba(255,255,255,0.9)';
-          g2.lineWidth = 1.5;
-          g2.strokeRect(r.x, r.y, r.w, r.h);
-          g2.font = '700 9px "Space Mono", monospace';
-          g2.fillStyle = 'rgba(255,255,255,0.9)';
-          g2.fillText(`${fr.label} · ${fr.w}×${fr.h}`, r.x + 8, r.y + 16);
         }
+        g2.font = '700 9px "Space Mono", monospace';
+        FRAME_IDS.forEach((id, i) => {
+          const isActive = i === activeIdx;
+          const size = sizes[i];
+          const x = centers[i] + shift - size.w / 2;
+          const y = (chh - size.h) / 2;
+          if (x > cw || x + size.w < 0) return; // off-canvas
+          const f = FRAME_PRESETS[id];
+          g2.globalAlpha = isActive ? 1 : 0.42;
+          g2.strokeStyle = 'rgba(255,255,255,0.9)';
+          g2.lineWidth = isActive ? 1.5 : 1;
+          g2.setLineDash(isActive ? [] : [5, 5]);
+          g2.strokeRect(x, y, size.w, size.h);
+          g2.setLineDash([]);
+          g2.fillStyle = 'rgba(255,255,255,0.9)';
+          g2.fillText(f.w ? `${f.label} · ${f.w}×${f.h}` : f.label, x + 8, y + 16);
+          g2.globalAlpha = 1;
+        });
       };
 
       const loop = () => {
@@ -1369,9 +1705,11 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
           glassMesh.rotation.x += gl.rotSpeed * 0.17 * dt;
         }
         controls.update();
+        if (world.frameSlide.t < 1) world.frameSlide.t = Math.min(1, world.frameSlide.t + dt / 0.35);
         const cam = activeCamera();
         if (fxActive()) {
           const f = liveRef.current.fx;
+          syncFrameUniforms(renderer.domElement.clientWidth, renderer.domElement.clientHeight);
           renderPass.camera = cam;
           bloomPass.enabled = Boolean(f.bloom);
           bloomPass.strength = f.bloomStrength;
@@ -1384,6 +1722,15 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
           finishPass.uniforms.uGrain.value = f.grain;
           finishPass.uniforms.uVignette.value = f.vignette;
           finishPass.uniforms.uTime.value = t % 100;
+          finishPass.uniforms.uT1.value = f.t1;
+          finishPass.uniforms.uT2.value = f.t2;
+          finishPass.uniforms.uT3.value = f.t3;
+          // Treatments run in display space, so the ink/paper colours must stay
+          // as authored — setStyle with the working space skips the usual
+          // sRGB→linear conversion that would wash them out.
+          finishPass.uniforms.uColA.value.setStyle(f.colA, THREE.LinearSRGBColorSpace);
+          finishPass.uniforms.uColB.value.setStyle(f.colB, THREE.LinearSRGBColorSpace);
+          finishPass.uniforms.uRes.value.set(renderer.domElement.width, renderer.domElement.height);
           composer.render();
         } else {
           renderer.render(scene, cam);
@@ -1488,6 +1835,86 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
     if (!worldReady || !world?.cloth) return;
     world.applyRumple(phys.rumple ?? 0.5);
   }, [phys.rumple, worldReady]);
+
+  // ── Treatment → recompile the finish pass with that look's #define. Rare
+  // (user-driven) so a recompile beats branching every pixel every frame. ──
+  useEffect(() => {
+    const world = worldRef.current;
+    if (!worldReady || !world?.finishPass) return;
+    const def = TREATMENTS[fx.treatment]?.define;
+    const m = world.finishPass.material;
+    m.defines = def ? { [def]: '' } : {};
+    m.needsUpdate = true;
+  }, [fx.treatment, worldReady]);
+
+  // Switching treatment reuses the generic t1/t2/t3 slots, so clamp them into
+  // the new look's ranges — otherwise a 420-line scanline count arrives as a
+  // 420px halftone dot and the screen goes blank.
+  const setTreatment = useCallback((id) => {
+    setFx((f) => {
+      const next = { ...f, treatment: id };
+      (TREATMENTS[id]?.params || []).forEach(([key, , min, max]) => {
+        next[key] = Math.min(max, Math.max(min, f[key]));
+      });
+      return next;
+    });
+    setFxPresetId('');
+  }, []);
+
+  // Apply a full look — treatment + film + material + environment + backdrop +
+  // light rig. Everything routes through the normal setters, so the Material /
+  // Background / Lighting cards stay the owners of their own state.
+  const applyFxPreset = useCallback((id) => {
+    const p = FX_PRESETS[id];
+    if (!p) return;
+    setFx({ ...DEFAULT_FX, ...p.fx });
+    setFxPresetId(id);
+    if (p.mat) setMat({ ...p.mat });
+    if (p.envId) setEnvId(p.envId);
+    if (typeof p.envIntensity === 'number') setEnvIntensity(p.envIntensity);
+    if (p.bg?.scene) { setSceneId(p.bg.scene); setBgMode('scene'); }
+    else if (p.bg?.mode === 'color') { setBgColor(p.bg.color); setBgMode('color'); }
+    if (p.lights) applyLightTemplate(p.lights);
+  }, [applyLightTemplate]);
+
+  // Randomize — a preset, then jitter its numbers so no two rolls match.
+  const randomizeFx = useCallback(() => {
+    const ids = Object.keys(FX_PRESETS);
+    const id = ids[Math.floor(Math.random() * ids.length)];
+    applyFxPreset(id);
+    const spec = TREATMENTS[FX_PRESETS[id].fx.treatment];
+    setFx((f) => {
+      const next = { ...f };
+      (spec?.params || []).forEach(([key, , min, max, step]) => {
+        const spread = (max - min) * 0.28;
+        const raw = Math.min(max, Math.max(min, f[key] + (Math.random() * 2 - 1) * spread));
+        next[key] = step >= 1 ? Math.round(raw / step) * step : Math.round(raw / step) * step;
+      });
+      next.grain = Math.min(1, Math.max(0, f.grain + (Math.random() - 0.5) * 0.2));
+      next.vignette = Math.min(1, Math.max(0, f.vignette + (Math.random() - 0.5) * 0.25));
+      if (f.bloom) next.bloomStrength = Math.min(2, Math.max(0.1, f.bloomStrength + (Math.random() - 0.5) * 0.5));
+      return next;
+    });
+    setFxPresetId(id);
+  }, [applyFxPreset]);
+
+  // ── Capture frame → start the HUD filmstrip slide from wherever it was. ──
+  useEffect(() => {
+    const world = worldRef.current;
+    if (!worldReady || !world?.frameSlide) return;
+    const to = FRAME_IDS.indexOf(frameId);
+    const s = world.frameSlide;
+    const eased = 1 - Math.pow(1 - Math.min(1, Math.max(0, s.t)), 3);
+    world.frameSlide = { from: s.from + (s.to - s.from) * eased, to, t: 0 };
+  }, [frameId, worldReady]);
+
+  // Step the carousel one crop left/right (no wrap — the ends are the ends).
+  const stepFrame = useCallback((dir) => {
+    setFrameId((cur) => {
+      const i = FRAME_IDS.indexOf(cur);
+      return FRAME_IDS[Math.min(FRAME_IDS.length - 1, Math.max(0, i + dir))] || cur;
+    });
+  }, []);
 
   // ── Environment light select → IBL swap (HDRIs cached after first load). ──
   useEffect(() => {
@@ -1747,6 +2174,11 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
         // bloom composites against black and would kill the alpha).
         world.composer.setPixelRatio(boost);
         world.composer.setSize(nw, nh);
+        world.syncFrameUniforms?.(nw, nh); // vignette shaped to the crop being written
+        // uRes deliberately keeps the live-canvas value here: treatment pitch
+        // (dots, blocks, scanlines) is defined in preview pixels, so the boosted
+        // export renders the same pattern at higher fidelity instead of
+        // shrinking it to half size.
         world.renderPass.camera = cam;
         world.composer.render();
       } else {
@@ -1908,6 +2340,32 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
               ref={hudCanvasRef}
               style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 5 }}
             />
+            {/* Capture-frame carousel — steps the HUD filmstrip; the Render
+                card's CAPTURE FRAME select drives the same state. */}
+            {[['prev', -1, <ChevronLeft key="l" size={16} strokeWidth={2.5} />], ['next', 1, <ChevronRight key="r" size={16} strokeWidth={2.5} />]].map(([slug, dir, icon]) => {
+              const i = FRAME_IDS.indexOf(frameId);
+              const atEnd = dir < 0 ? i <= 0 : i >= FRAME_IDS.length - 1;
+              return (
+                <button
+                  key={slug}
+                  id={`cloth-frame-carousel-${slug}-btn`}
+                  onClick={() => stepFrame(dir)}
+                  disabled={atEnd}
+                  title={dir < 0 ? 'Previous capture frame' : 'Next capture frame'}
+                  style={{
+                    position: 'absolute', top: '50%', transform: 'translateY(-50%)',
+                    ...(dir < 0 ? { left: 10 } : { right: 10 }),
+                    zIndex: 6, width: 34, height: 34, borderRadius: '50%',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    border: 'none', cursor: atEnd ? 'default' : 'pointer', color: '#fff',
+                    background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)',
+                    opacity: atEnd ? 0.25 : 1, transition: 'opacity 0.2s ease',
+                  }}
+                >
+                  {icon}
+                </button>
+              );
+            })}
             {/* Grab is automatic — drag the sheet directly; empty space orbits. */}
             <div
               id="cloth-studio-drag-hint"
@@ -2105,13 +2563,66 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
           {/* FX — post-processing finish; renders through the composer. */}
           <RailCard
             id="cloth-fx-panel" icon={<Sparkles size={18} strokeWidth={2} />} title="Effects"
-            subtitle={[
+            subtitle={FX_PRESETS[fxPresetId]?.label || [
+              TREATMENTS[fx.treatment]?.define ? TREATMENTS[fx.treatment].label : null,
               fx.bloom ? 'Bloom' : null,
               fx.grain > 0.001 ? `grain ${Math.round(fx.grain * 100)}%` : null,
               fx.vignette > 0.001 ? `vignette ${Math.round(fx.vignette * 100)}%` : null,
             ].filter(Boolean).join(' · ') || 'Off'}
             color="#a855f7" open={fxOpen} onToggle={() => setFxOpen((v) => !v)}
+            maxH={3200}
           >
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <span style={ui.label}>LOOK</span>
+              <select
+                value={fxPresetId}
+                onChange={(e) => applyFxPreset(e.target.value)}
+                style={{ ...ui.btn(), appearance: 'none', width: '100%' }}
+              >
+                {!fxPresetId ? <option value="">Custom…</option> : null}
+                {FX_PRESET_GROUPS.map((g) => (
+                  <optgroup key={g} label={g}>
+                    {Object.entries(FX_PRESETS).filter(([, p]) => p.group === g).map(([id, p]) => (
+                      <option key={id} value={id}>{p.label}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </label>
+            <button id="cloth-fx-randomize-btn" style={{ ...ui.btn(), width: '100%' }} onClick={randomizeFx}>
+              <Shuffle size={13} strokeWidth={2.5} style={{ marginRight: 6 }} />Randomize look
+            </button>
+            <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>A look sets the whole stage — treatment, film, material, environment light, backdrop and light rig. Tweak anything after and it becomes Custom.</span>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 4 }}>
+              <span style={ui.label}>TREATMENT</span>
+              <select
+                value={fx.treatment}
+                onChange={(e) => setTreatment(e.target.value)}
+                style={{ ...ui.btn(), appearance: 'none', width: '100%' }}
+              >
+                {Object.entries(TREATMENTS).map(([id, t]) => <option key={id} value={id}>{t.label}</option>)}
+              </select>
+            </label>
+            {(TREATMENTS[fx.treatment]?.params || []).map(([key, label, min, max, step, fmt]) => (
+              <Slider
+                key={key} label={label} min={min} max={max} step={step}
+                value={fx[key]} onChange={(v) => setFxKey(key, v)} fmt={fmt}
+              />
+            ))}
+            {TREATMENTS[fx.treatment]?.colors ? (
+              <div id="cloth-fx-ink-row" style={{ display: 'flex', gap: 8 }}>
+                {[['colA', TREATMENTS[fx.treatment].colors[0]], ['colB', TREATMENTS[fx.treatment].colors[1]]].map(([key, label]) => (
+                  <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+                    <input
+                      type="color" value={fx[key]} onChange={(e) => setFxKey(key, e.target.value)}
+                      style={{ width: 40, height: 28, border: '1px solid ' + GLASS.hair, borderRadius: 8, background: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}
+                    />
+                    <span style={{ ...ui.label, overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+                  </label>
+                ))}
+              </div>
+            ) : null}
+            <span style={{ ...ui.label, marginTop: 4 }}>FILM</span>
             <span style={{ ...ui.label, color: GLASS.ink, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               BLOOM
               <button style={{ ...ui.btn(fx.bloom), height: 28, padding: '0 12px', fontSize: 10 }} onClick={() => setFxKey('bloom', !fx.bloom)}>
@@ -2122,7 +2633,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
             <Slider label="BLOOM THRESHOLD" min={0} max={1} step={0.01} value={fx.bloomThreshold} onChange={(v) => setFxKey('bloomThreshold', v)} fmt={(v) => `${Math.round(v * 100)}%`} disabled={!fx.bloom} />
             <Slider label="FILM GRAIN" min={0} max={1} step={0.01} value={fx.grain} onChange={(v) => setFxKey('grain', v)} fmt={(v) => `${Math.round(v * 100)}%`} />
             <Slider label="VIGNETTE" min={0} max={1} step={0.01} value={fx.vignette} onChange={(v) => setFxKey('vignette', v)} fmt={(v) => `${Math.round(v * 100)}%`} />
-            <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>Camera finish on the whole picture: bloom makes bright highlights glow (threshold sets how bright something must be before it does), grain adds film texture, vignette darkens the corners. Everything here is captured in PNG exports and video recordings — except the transparent PNG, which skips them to keep real alpha.</span>
+            <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>Camera finish on the whole picture: bloom makes bright highlights glow (threshold sets how bright something must be before it does), grain adds film texture, vignette darkens the corners of the active capture frame. Everything here is captured in PNG exports and video recordings — except the transparent PNG, which skips them to keep real alpha.</span>
           </RailCard>
 
           {/* ANIMATE — ambient wind idle; the sheet billows but never drifts. */}
