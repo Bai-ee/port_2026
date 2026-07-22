@@ -434,7 +434,10 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   const [perf, setPerf] = useState(PERF_LEVELS[saved.perf] ? saved.perf : 'high');
   const [mat, setMat] = useState(() => ({ ...INITIAL_MAT, ...(saved.mat || {}) }));
   const [phys, setPhys] = useState(() => ({ ...DEFAULT_PHYS, ...(saved.phys || {}) }));
-  const [clothAspect, setClothAspect] = useState(CLOTH_ASPECTS[saved.clothAspect] ? saved.clothAspect : 'portrait');
+  // 'auto' = sheet matches the loaded artwork's ratio (falls back to portrait
+  // until an image provides one); the named presets force a shape.
+  const [clothAspect, setClothAspect] = useState((CLOTH_ASPECTS[saved.clothAspect] || saved.clothAspect === 'auto') ? saved.clothAspect : 'auto');
+  const [artworkRatio, setArtworkRatio] = useState(saved.artworkRatio || null);
   const [bgMode, setBgMode] = useState(['scene', 'color', 'image', 'transparent'].includes(saved.bgMode) ? saved.bgMode : 'color');
   const [bgColor, setBgColor] = useState(saved.bgColor || '#000000');
   const [sceneId, setSceneId] = useState(SCENE_PRESETS[saved.sceneId] ? saved.sceneId : 'thriller');
@@ -460,11 +463,11 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   useEffect(() => {
     const id = setTimeout(() => {
       try {
-        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ perf, mat, phys, clothAspect, bgMode, bgColor, sceneId, envIntensity, videoSeconds }));
+        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ perf, mat, phys, clothAspect, artworkRatio, bgMode, bgColor, sceneId, envIntensity, videoSeconds }));
       } catch { /* non-critical */ }
     }, 250);
     return () => clearTimeout(id);
-  }, [perf, mat, phys, clothAspect, bgMode, bgColor, sceneId, envIntensity, videoSeconds]);
+  }, [perf, mat, phys, clothAspect, artworkRatio, bgMode, bgColor, sceneId, envIntensity, videoSeconds]);
 
   // Latest control state, readable from the render loop without re-init.
   const liveRef = useRef({});
@@ -582,8 +585,17 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
 
       // ── Cloth build/rebuild — verlet particle grid on a PlaneGeometry whose
       // position attribute IS the sim's current-position buffer. ──
-      world.buildCloth = (aspectId, perfId) => {
-        const { w: cw, h: ch } = CLOTH_ASPECTS[aspectId] || CLOTH_ASPECTS.portrait;
+      world.buildCloth = (aspectId, perfId, ratio = null) => {
+        // 'auto': match the artwork's w/h at roughly constant sheet area, so
+        // any upload keeps its true proportions without dwarfing the frame.
+        let cw; let ch;
+        if (aspectId === 'auto' && ratio) {
+          const r = Math.min(2.6, Math.max(0.38, ratio));
+          ch = Math.sqrt(1.92 / r);
+          cw = ch * r;
+        } else {
+          ({ w: cw, h: ch } = CLOTH_ASPECTS[aspectId] || CLOTH_ASPECTS.portrait);
+        }
         const base = PERF_LEVELS[perfId]?.segs || 56;
         const longest = Math.max(cw, ch);
         const segX = Math.max(12, Math.round(base * cw / longest));
@@ -664,7 +676,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
         }
       };
 
-      world.buildCloth(clothAspect, perf);
+      world.buildCloth(clothAspect, perf, artworkRatio);
 
       // Ship-with-the-tool default artwork — loads if the asset exists (404
       // stays silent); any user upload replaces it.
@@ -679,6 +691,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
           clothMat.map = tex;
           clothMat.needsUpdate = true;
           setArtworkName('Default artwork');
+          setArtworkRatio(img.width / img.height); // auto-shape picks this up
         };
         img.src = DEFAULT_ARTWORK_URL;
       }
@@ -907,9 +920,9 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   useEffect(() => {
     const world = worldRef.current;
     if (!worldReady || !world) return;
-    world.buildCloth(clothAspect, perf);
+    world.buildCloth(clothAspect, perf, artworkRatio);
     world.renderer.setPixelRatio(Math.min(window.devicePixelRatio, PERF_LEVELS[perf].pr));
-  }, [clothAspect, perf, worldReady]);
+  }, [clothAspect, perf, artworkRatio, worldReady]);
 
   // ── Background — flat modes reset the rig; Scene mode dresses the set:
   // backdrop texture, fog, themed key/rim, spotlight, shadow ground. ──
@@ -993,6 +1006,9 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
         roughness: Math.max(m.roughness, 0.35),
         bump: Math.min(m.bump, 0.35),
       }));
+      // Sheet adapts to the upload's true proportions.
+      setArtworkRatio(img.width / img.height);
+      setClothAspect('auto');
     };
     img.src = URL.createObjectURL(file);
   }, []);
@@ -1003,6 +1019,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
     world.clothMat.map = null;
     world.clothMat.needsUpdate = true;
     setArtworkName('');
+    setArtworkRatio(null); // 'auto' falls back to portrait
   }, []);
   const onBumpUpload = useCallback((file) => {
     const world = worldRef.current;
@@ -1308,6 +1325,13 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
             )}
             <span style={{ ...ui.label, marginTop: 4 }}>SHEET SHAPE</span>
             <div style={{ display: 'flex', gap: 5 }}>
+              <button
+                title="Match the artwork's proportions"
+                style={{ ...ui.btn(clothAspect === 'auto'), height: 30, padding: '0 12px', fontSize: 10, flex: 1 }}
+                onClick={() => setClothAspect('auto')}
+              >
+                Auto
+              </button>
               {Object.entries(CLOTH_ASPECTS).map(([id, a]) => (
                 <button key={id} style={{ ...ui.btn(clothAspect === id), height: 30, padding: '0 12px', fontSize: 10, flex: 1 }} onClick={() => setClothAspect(id)}>{a.label}</button>
               ))}
