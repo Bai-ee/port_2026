@@ -113,7 +113,7 @@ function Slider({ label, min, max, step, value, onChange, fmt = (v) => v.toFixed
 const SETTINGS_KEY = 'holocloth-studio-defaults-v3';
 // Default artwork shipped with the tool (public/img). 404s silently if absent;
 // any user upload replaces it.
-const DEFAULT_ARTWORK_URL = '/img/holocloth-default-artwork.png';
+const DEFAULT_ARTWORK_URL = '/img/holocloth-default-artwork.jpg';
 const loadSavedDefaults = () => {
   if (typeof window === 'undefined') return {};
   try { return JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || '{}') || {}; } catch { return {}; }
