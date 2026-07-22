@@ -134,10 +134,12 @@ const CLOTH_ASPECTS = {
   landscape: { w: 1.72, h: 1.08, label: 'Landscape' },
 };
 // Perf → cloth grid density (longest edge segments) + renderer pixel-ratio cap.
+// High is dense enough that tight metallic speculars stop revealing the grid
+// facets ("visible squares") at closeup; drop to Medium/Low on weaker GPUs.
 const PERF_LEVELS = {
-  high:   { segs: 56, pr: 2,   label: 'High' },
-  medium: { segs: 40, pr: 1.5, label: 'Medium' },
-  low:    { segs: 28, pr: 1,   label: 'Low' },
+  high:   { segs: 88, pr: 2,   label: 'High' },
+  medium: { segs: 60, pr: 1.5, label: 'Medium' },
+  low:    { segs: 36, pr: 1,   label: 'Low' },
 };
 const PIN_MODES = [
   { id: 'free-float',   label: 'Floating' },
