@@ -107,9 +107,13 @@ function Slider({ label, min, max, step, value, onChange, fmt = (v) => v.toFixed
 }
 
 // ── Config ───────────────────────────────────────────────────────────────────
-// v2 — grab/fling interaction retuned the physics defaults; the version bump
-// discards v1 saves so everyone lands on the clothier feel.
-const SETTINGS_KEY = 'holocloth-studio-defaults-v2';
+// v3 — defaults rebased on the user-approved look (Paper White flyer, heavy
+// gravity, black backdrop, 65% light); the bump discards older saves so the
+// approved defaults actually land.
+const SETTINGS_KEY = 'holocloth-studio-defaults-v3';
+// Default artwork shipped with the tool (public/img). 404s silently if absent;
+// any user upload replaces it.
+const DEFAULT_ARTWORK_URL = '/img/holocloth-default-artwork.png';
 const loadSavedDefaults = () => {
   if (typeof window === 'undefined') return {};
   try { return JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || '{}') || {}; } catch { return {}; }
@@ -172,10 +176,17 @@ const MATERIAL_PRESETS = {
 };
 // Dropdown optgroup order.
 const PRESET_GROUPS = ['CORE', 'DRAMATIC', 'EXPRESSIVE', 'BRIGHT'];
-// Clothier defaults: light wind (the grab is the show), floatier damping, and
-// looser constraints so the sheet stretches and swings like fabric.
+// Opening material state — the user-approved default look: the Paper White
+// flyer preset (matches how the shipped default artwork reads best).
+const INITIAL_MAT = (() => {
+  const { label, group, env, bg, ...rest } = MATERIAL_PRESETS.paper;
+  return rest;
+})();
+// Clothier defaults: light wind (the grab is the show), floatier damping,
+// looser constraints so the sheet stretches and swings like fabric, and the
+// user-approved heavier gravity.
 const DEFAULT_PHYS = {
-  windStrength: 0.5, windSpeed: 1, gravity: 1.7,
+  windStrength: 0.5, windSpeed: 1, gravity: 2.7,
   damping: 0.99, stiffness: 0.72, pinMode: 'top-edge',
 };
 
@@ -421,14 +432,14 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
 
   // ── Control state ──
   const [perf, setPerf] = useState(PERF_LEVELS[saved.perf] ? saved.perf : 'high');
-  const [mat, setMat] = useState(() => ({ ...DEFAULT_MAT, ...(saved.mat || {}) }));
+  const [mat, setMat] = useState(() => ({ ...INITIAL_MAT, ...(saved.mat || {}) }));
   const [phys, setPhys] = useState(() => ({ ...DEFAULT_PHYS, ...(saved.phys || {}) }));
   const [clothAspect, setClothAspect] = useState(CLOTH_ASPECTS[saved.clothAspect] ? saved.clothAspect : 'portrait');
   const [bgMode, setBgMode] = useState(['scene', 'color', 'image', 'transparent'].includes(saved.bgMode) ? saved.bgMode : 'color');
-  const [bgColor, setBgColor] = useState(saved.bgColor || '#0a0a10');
+  const [bgColor, setBgColor] = useState(saved.bgColor || '#000000');
   const [sceneId, setSceneId] = useState(SCENE_PRESETS[saved.sceneId] ? saved.sceneId : 'thriller');
   const [bgImageEl, setBgImageEl] = useState(null);
-  const [envIntensity, setEnvIntensity] = useState(saved.envIntensity ?? 1);
+  const [envIntensity, setEnvIntensity] = useState(saved.envIntensity ?? 0.65);
   const [videoSeconds, setVideoSeconds] = useState(saved.videoSeconds || 5);
   const [recording, setRecording] = useState(false);
   const [status, setStatus] = useState('');
@@ -654,6 +665,23 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
       };
 
       world.buildCloth(clothAspect, perf);
+
+      // Ship-with-the-tool default artwork — loads if the asset exists (404
+      // stays silent); any user upload replaces it.
+      {
+        const img = new Image();
+        img.onload = () => {
+          if (disposed || clothMat.map) return; // user beat us to an upload
+          const tex = new THREE.Texture(img);
+          tex.colorSpace = THREE.SRGBColorSpace;
+          tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+          tex.needsUpdate = true;
+          clothMat.map = tex;
+          clothMat.needsUpdate = true;
+          setArtworkName('Default artwork');
+        };
+        img.src = DEFAULT_ARTWORK_URL;
+      }
 
       // ── Grab interaction — pointerdown ON the sheet grabs a fabric patch and
       // pins it to the pointer ray while dragging; verlet infers velocity from
