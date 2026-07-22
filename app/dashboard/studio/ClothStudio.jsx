@@ -1710,6 +1710,21 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
             >
               GRAB &amp; FLING THE CLOTH · EMPTY SPACE ORBITS
             </div>
+            {/* Reset cloth — back to the rumpled rest pose, next to Poke. */}
+            <button
+              id="cloth-studio-reset-btn"
+              onClick={() => worldRef.current?.resetCloth()}
+              title="Reset cloth"
+              style={{
+                position: 'absolute', top: 10, right: 48, zIndex: 6,
+                width: 30, height: 30, borderRadius: '50%',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                border: 'none', cursor: 'pointer', color: '#fff',
+                background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)',
+              }}
+            >
+              <RotateCcw size={15} strokeWidth={2.5} />
+            </button>
             {/* Poke — quick impulse without opening the Physics card. */}
             <button
               id="cloth-studio-poke-btn"
