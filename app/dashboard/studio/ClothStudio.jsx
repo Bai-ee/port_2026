@@ -12,7 +12,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ChevronRight, Download, Palette, Image as ImageIcon, Wind, Layers,
-  RotateCcw, Zap, Video, Camera, SlidersHorizontal,
+  RotateCcw, Zap, Video, Camera, SlidersHorizontal, Lightbulb,
 } from 'lucide-react';
 
 // ── UI tokens — mirror app/dashboard/studio/page.jsx GLASS/ui (kept local so
@@ -225,6 +225,51 @@ const MATERIAL_SLIDERS = [
   ['bumpTiling',    'BUMP TILING',    1, 12, 0.5],
 ];
 
+// ── Lighting cans — four positionable stage lights around the sheet. Each can
+// aims at center from (angle around stage, height angle) at a fixed throw; the
+// slider intensity maps to physical spotlight candela below. Templates are
+// whole-rig looks; scene sets apply a matching template (still tweakable). ──
+const CAN_LABELS = ['CAN 1 · KEY', 'CAN 2 · FILL', 'CAN 3 · RIM', 'CAN 4 · BACK'];
+const LIGHT_TEMPLATES = {
+  studio: { label: 'Studio Classic', cans: [
+    { on: true,  color: '#ffffff', intensity: 1.6, az: 35,   el: 40 },
+    { on: true,  color: '#88ffee', intensity: 0.6, az: -140, el: 15 },
+    { on: false, color: '#ffffff', intensity: 1,   az: -35,  el: 20 },
+    { on: false, color: '#ffffff', intensity: 1,   az: 180,  el: 60 },
+  ] },
+  'single-spot': { label: 'Single Spot', cans: [
+    { on: true,  color: '#cdd8ff', intensity: 2.4, az: 8,    el: 62 },
+    { on: false, color: '#ff2030', intensity: 1.2, az: -120, el: 10 },
+    { on: false, color: '#ffffff', intensity: 1,   az: 120,  el: 20 },
+    { on: false, color: '#ffffff', intensity: 1,   az: 180,  el: 55 },
+  ] },
+  'neon-cross': { label: 'Neon Cross', cans: [
+    { on: true,  color: '#ff00c8', intensity: 1.8, az: -70,  el: 12 },
+    { on: true,  color: '#00e5ff', intensity: 1.8, az: 70,   el: 12 },
+    { on: true,  color: '#ffffff', intensity: 0.7, az: 180,  el: 45 },
+    { on: false, color: '#ffe600', intensity: 1,   az: 0,    el: -35 },
+  ] },
+  'fire-ice': { label: 'Fire & Ice', cans: [
+    { on: true,  color: '#ff9d3c', intensity: 2,   az: -60,  el: 22 },
+    { on: true,  color: '#7fc4ff', intensity: 1.6, az: 65,   el: 28 },
+    { on: true,  color: '#ffffff', intensity: 0.5, az: 180,  el: 60 },
+    { on: false, color: '#ffffff', intensity: 1,   az: 0,    el: -30 },
+  ] },
+  'top-wash': { label: 'Top Wash', cans: [
+    { on: true,  color: '#f2f6ff', intensity: 2.2, az: 0,    el: 78 },
+    { on: true,  color: '#4060ff', intensity: 0.6, az: -150, el: 8 },
+    { on: false, color: '#ffffff', intensity: 1,   az: 150,  el: 8 },
+    { on: false, color: '#ffffff', intensity: 1,   az: 0,    el: -40 },
+  ] },
+  'club-floor': { label: 'Club Floor', cans: [
+    { on: true,  color: '#ff00c8', intensity: 1.8, az: -40,  el: -45 },
+    { on: true,  color: '#00e5ff', intensity: 1.8, az: 40,   el: -45 },
+    { on: true,  color: '#ffffff', intensity: 0.5, az: 180,  el: 65 },
+    { on: false, color: '#ffe600', intensity: 1,   az: 0,    el: 0 },
+  ] },
+};
+const cloneCans = (tplId) => (LIGHT_TEMPLATES[tplId] || LIGHT_TEMPLATES.studio).cans.map((c) => ({ ...c }));
+
 // ── Scene sets — full environments with depth: a graded + grained backdrop
 // texture, exponential fog, a themed light rig (key/rim recolor + optional
 // spotlight), and a shadow-catching ground so the sheet reads as standing on a
@@ -232,6 +277,7 @@ const MATERIAL_SLIDERS = [
 const SCENE_PRESETS = {
   thriller: {
     label: 'Thriller Set',
+    lights: 'single-spot',
     backdrop: { type: 'radial', top: '#020204', bottom: '#0b0d12', glow: 'rgba(140,20,28,0.55)', glowAt: [0.5, 0.68], beam: 'rgba(190,205,255,0.16)', vignette: 0.85 },
     fog: { color: '#05060a', density: 0.16 },
     key: { color: '#cdd8ff', intensity: 2.2, pos: [1.2, 3, 2] },
@@ -242,6 +288,7 @@ const SCENE_PRESETS = {
   },
   'smoke-stage': {
     label: 'Smoke Stage',
+    lights: 'top-wash',
     backdrop: { type: 'radial', top: '#050507', bottom: '#0e0e12', glow: 'rgba(230,235,255,0.22)', glowAt: [0.5, 0.1], beam: 'rgba(255,255,255,0.2)', vignette: 0.8 },
     fog: { color: '#0b0b10', density: 0.2 },
     key: { color: '#ffffff', intensity: 2.6, pos: [0.4, 3.2, 1.6] },
@@ -252,6 +299,7 @@ const SCENE_PRESETS = {
   },
   'neon-alley': {
     label: 'Neon Alley',
+    lights: 'neon-cross',
     backdrop: { type: 'bars', top: '#05001a', bottom: '#12002e', bars: ['rgba(255,0,200,0.5)', 'rgba(0,229,255,0.45)', 'rgba(255,230,0,0.3)'], vignette: 0.7 },
     fog: { color: '#0a0022', density: 0.12 },
     key: { color: '#e0e5ff', intensity: 1.7, pos: [1.6, 2.2, 2.2] },
@@ -262,6 +310,7 @@ const SCENE_PRESETS = {
   },
   'deep-sea': {
     label: 'Deep Sea',
+    lights: 'top-wash',
     backdrop: { type: 'radial', top: '#000508', bottom: '#012029', glow: 'rgba(30,180,190,0.3)', glowAt: [0.5, 0.2], vignette: 0.75 },
     fog: { color: '#02222b', density: 0.18 },
     key: { color: '#9ff5e0', intensity: 1.9, pos: [0.8, 3, 1.4] },
@@ -272,6 +321,7 @@ const SCENE_PRESETS = {
   },
   'retro-sunset': {
     label: 'Retro Sunset',
+    lights: 'fire-ice',
     backdrop: { type: 'sunset', top: '#2a0a4a', mid: '#8a1a6a', bottom: '#ff6a00', sun: 'rgba(255,214,140,0.9)', sunAt: [0.5, 0.62], vignette: 0.5 },
     fog: { color: '#30104a', density: 0.06 },
     key: { color: '#ffd9a0', intensity: 1.9, pos: [1.4, 1.8, 2.4] },
@@ -281,6 +331,7 @@ const SCENE_PRESETS = {
   },
   'golden-hour': {
     label: 'Golden Hour',
+    lights: 'studio',
     backdrop: { type: 'radial', top: '#ffdba8', bottom: '#c96a2a', glow: 'rgba(255,246,214,0.85)', glowAt: [0.42, 0.34], vignette: 0.35 },
     fog: { color: '#e8b57d', density: 0.05 },
     key: { color: '#fff1d4', intensity: 2.3, pos: [1.8, 1.6, 2.2] },
@@ -290,6 +341,7 @@ const SCENE_PRESETS = {
   },
   'candy-pop': {
     label: 'Candy Pop',
+    lights: 'neon-cross',
     backdrop: { type: 'radial', top: '#fff3fa', bottom: '#ffd1ec', glow: 'rgba(255,255,255,0.9)', glowAt: [0.5, 0.3], vignette: 0.15 },
     key: { color: '#ffffff', intensity: 2.4, pos: [1.2, 2.4, 2.4] },
     rim: { color: '#7dd8ff', intensity: 1.3 },
@@ -298,6 +350,7 @@ const SCENE_PRESETS = {
   },
   'gallery-white': {
     label: 'Gallery White',
+    lights: 'studio',
     backdrop: { type: 'radial', top: '#ffffff', bottom: '#e6e6ea', glow: 'rgba(255,255,255,1)', glowAt: [0.5, 0.25], vignette: 0.18 },
     fog: { color: '#f0f0f2', density: 0.04 },
     key: { color: '#ffffff', intensity: 2.2, pos: [1, 3, 2] },
@@ -457,6 +510,19 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   // Camera freedom — which axes the orbit may rotate on, and whether pan
   // (push-around) is allowed. Off locks that axis at its current angle.
   const [cam, setCam] = useState(() => ({ rotX: true, rotY: true, pan: true, ...(saved.cam || {}) }));
+  // Lighting cans — [{on,color,intensity,az,el}×4]; template select tracks the
+  // last applied rig ('' once hand-tweaked).
+  const [lightCans, setLightCans] = useState(() => (Array.isArray(saved.lightCans) && saved.lightCans.length === 4 ? saved.lightCans : cloneCans('studio')));
+  const [lightTemplate, setLightTemplate] = useState(saved.lightTemplate ?? 'studio');
+  const setCanKey = useCallback((i, key, val) => {
+    setLightCans((prev) => prev.map((c, ix) => (ix === i ? { ...c, [key]: val } : c)));
+    setLightTemplate('');
+  }, []);
+  const applyLightTemplate = useCallback((tplId) => {
+    if (!LIGHT_TEMPLATES[tplId]) return;
+    setLightCans(cloneCans(tplId));
+    setLightTemplate(tplId);
+  }, []);
   // 'auto' = sheet matches the loaded artwork's ratio (falls back to portrait
   // until an image provides one); the named presets force a shape.
   const [clothAspect, setClothAspect] = useState((CLOTH_ASPECTS[saved.clothAspect] || saved.clothAspect === 'auto') ? saved.clothAspect : 'auto');
@@ -482,6 +548,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   const [physicsOpen, setPhysicsOpen] = useState(false);
   const [imagesOpen, setImagesOpen] = useState(false);
   const [backgroundOpen, setBackgroundOpen] = useState(false);
+  const [lightingOpen, setLightingOpen] = useState(false);
   const [renderOpen, setRenderOpen] = useState(false);
 
   const setMatKey = useCallback((key, val) => setMat((m) => ({ ...m, [key]: val, preset: '' })), []);
@@ -491,11 +558,11 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   useEffect(() => {
     const id = setTimeout(() => {
       try {
-        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ perf, mat, phys, anim, cam, clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds, videoFormat }));
+        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ perf, mat, phys, anim, cam, lightCans, lightTemplate, clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds, videoFormat }));
       } catch { /* non-critical */ }
     }, 250);
     return () => clearTimeout(id);
-  }, [perf, mat, phys, anim, cam, clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds, videoFormat]);
+  }, [perf, mat, phys, anim, cam, lightCans, lightTemplate, clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds, videoFormat]);
 
   // Latest control state, readable from the render loop without re-init.
   const liveRef = useRef({});
@@ -536,27 +603,26 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
       const pmrem = new THREE.PMREMGenerator(renderer);
       scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
-      const key = new THREE.DirectionalLight(0xffffff, 1.6);
-      key.position.set(1.5, 2, 2.5);
-      key.castShadow = true;
-      key.shadow.mapSize.set(1024, 1024);
-      key.shadow.bias = -0.0005;
-      key.shadow.normalBias = 0.02;
-      scene.add(key);
-      const rim = new THREE.DirectionalLight(0x88ffee, 0.6);
-      rim.position.set(-2, 0.5, -1.5);
-      scene.add(rim);
-      // Scene-set rig — a themed spotlight + shadow-catching floor, hidden
-      // until a Background "Scene" is active.
-      const spot = new THREE.SpotLight(0xffffff, 0);
-      spot.visible = false;
-      spot.position.set(0, 2.4, 1.1);
-      spot.angle = 0.55;
-      spot.penumbra = 0.7;
-      spot.decay = 1.2;
-      scene.add(spot);
-      spot.target.position.set(0, -0.2, 0);
-      scene.add(spot.target);
+      // Lighting cans — four positionable spotlights aimed at the sheet. The
+      // Lighting card drives color/intensity/angle/height; can 1 casts the
+      // sheet's shadow onto scene-set floors.
+      const cans = Array.from({ length: 4 }, (_, i) => {
+        const can = new THREE.SpotLight(0xffffff, 0);
+        can.visible = false;
+        can.angle = 0.7;
+        can.penumbra = 0.7;
+        can.decay = 1.1;
+        if (i === 0) {
+          can.castShadow = true;
+          can.shadow.mapSize.set(1024, 1024);
+          can.shadow.bias = -0.0005;
+          can.shadow.normalBias = 0.02;
+        }
+        scene.add(can);
+        can.target.position.set(0, 0, 0);
+        scene.add(can.target);
+        return can;
+      });
       const ground = new THREE.Mesh(
         new THREE.PlaneGeometry(30, 30),
         new THREE.MeshStandardMaterial({ color: 0x0a0a0c, roughness: 0.95, metalness: 0 })
@@ -620,7 +686,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
 
       const world = {
         THREE, scene, camera, renderer, controls, pmrem, clothMat, clothBackMat, mirrorTex, holoUniforms, bumpTex,
-        keyLight: key, rimLight: rim, spot, ground,
+        cans, ground,
         cloth: null, envIntensity: 1, bgTexture: null,
         pointer: { active: false, x: 0, y: 0 },
         raycaster: new THREE.Raycaster(),
@@ -1057,6 +1123,25 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
     world.applyRumple(phys.rumple ?? 0.5);
   }, [phys.rumple, worldReady]);
 
+  // ── Lighting cans → spotlights. Position from stage angle (az, 0 = front)
+  // + height angle at a fixed throw; slider intensity maps to candela. ──
+  useEffect(() => {
+    const world = worldRef.current;
+    if (!worldReady || !world?.cans) return;
+    const R = 2.8;
+    const DEG = Math.PI / 180;
+    lightCans.forEach((c, i) => {
+      const can = world.cans[i];
+      if (!can) return;
+      can.visible = Boolean(c.on) && c.intensity > 0;
+      can.color.set(c.color);
+      can.intensity = c.intensity * 14;
+      const az = (c.az || 0) * DEG;
+      const el = (c.el || 0) * DEG;
+      can.position.set(R * Math.cos(el) * Math.sin(az), R * Math.sin(el), R * Math.cos(el) * Math.cos(az));
+    });
+  }, [lightCans, worldReady]);
+
   // ── Camera freedom → OrbitControls. Disabling an axis clamps it at its
   // current angle so the view doesn't jump; pan maps to enablePan. ──
   useEffect(() => {
@@ -1086,11 +1171,11 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
     if (!worldReady || !world) return;
     const { THREE, scene } = world;
     world.bgTexture?.dispose(); world.bgTexture = null;
+    // Lights are owned by the Lighting card (cans) — the scene only dresses
+    // backdrop, fog, and floor; scene CLICK handlers apply the matching can
+    // template so it stays user-tweakable afterwards.
     const resetRig = () => {
       scene.fog = null;
-      world.keyLight.color.set(0xffffff); world.keyLight.intensity = 1.6; world.keyLight.position.set(1.5, 2, 2.5);
-      world.rimLight.color.set(0x88ffee); world.rimLight.intensity = 0.6;
-      world.spot.visible = false;
       world.ground.visible = false;
     };
     if (bgMode === 'scene') {
@@ -1100,18 +1185,6 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
       world.bgTexture = tex;
       scene.background = tex;
       scene.fog = sc.fog ? new THREE.FogExp2(new THREE.Color(sc.fog.color).getHex(), sc.fog.density) : null;
-      world.keyLight.color.set(sc.key.color);
-      world.keyLight.intensity = sc.key.intensity;
-      if (sc.key.pos) world.keyLight.position.set(...sc.key.pos);
-      world.rimLight.color.set(sc.rim.color);
-      world.rimLight.intensity = sc.rim.intensity;
-      if (sc.spot) {
-        world.spot.visible = true;
-        world.spot.color.set(sc.spot.color);
-        world.spot.intensity = sc.spot.intensity;
-      } else {
-        world.spot.visible = false;
-      }
       if (sc.ground) {
         world.ground.visible = true;
         world.ground.material.color.set(sc.ground);
@@ -1651,11 +1724,12 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
                   style={{ ...ui.btn(bgMode === m), height: 30, padding: '0 12px', fontSize: 10 }}
                   onClick={() => {
                     setBgMode(m);
-                    // Entering Scene mode adopts the active set's light level so
-                    // the set reads correctly without a second click.
+                    // Entering Scene mode adopts the active set's light level +
+                    // can rig so the set reads correctly without a second click.
                     if (m === 'scene') {
-                      const env = SCENE_PRESETS[sceneId]?.env;
-                      if (typeof env === 'number') setEnvIntensity(env);
+                      const sc = SCENE_PRESETS[sceneId];
+                      if (typeof sc?.env === 'number') setEnvIntensity(sc.env);
+                      if (sc?.lights) applyLightTemplate(sc.lights);
                     }
                   }}
                 >
@@ -1671,7 +1745,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
                     <button
                       key={id}
                       style={{ ...ui.btn(sceneId === id), height: 30, padding: '0 8px', fontSize: 10 }}
-                      onClick={() => { setSceneId(id); if (typeof sc.env === 'number') setEnvIntensity(sc.env); }}
+                      onClick={() => { setSceneId(id); if (typeof sc.env === 'number') setEnvIntensity(sc.env); if (sc.lights) applyLightTemplate(sc.lights); }}
                     >
                       {sc.label}
                     </button>
@@ -1699,6 +1773,46 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
               <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>Transparent scene — pairs with "Export PNG (no background)" for compositing.</span>
             ) : null}
             <Slider label="LIGHT INTENSITY" min={0} max={2.5} step={0.05} value={envIntensity} onChange={setEnvIntensity} fmt={(v) => `${Math.round(v * 100)}%`} />
+          </RailCard>
+
+          {/* LIGHTING — four positionable stage cans + rig templates. */}
+          <RailCard
+            id="cloth-lighting-panel" icon={<Lightbulb size={18} strokeWidth={2} />} title="Lighting"
+            subtitle={LIGHT_TEMPLATES[lightTemplate]?.label || 'Custom rig'}
+            color="#eab308" open={lightingOpen} onToggle={() => setLightingOpen((v) => !v)}
+            maxH={3200}
+          >
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <span style={ui.label}>TEMPLATE</span>
+              <select
+                value={lightTemplate || ''}
+                onChange={(e) => applyLightTemplate(e.target.value)}
+                style={{ ...ui.btn(), appearance: 'none', width: '100%' }}
+              >
+                {!lightTemplate ? <option value="">Custom…</option> : null}
+                {Object.entries(LIGHT_TEMPLATES).map(([id, t]) => <option key={id} value={id}>{t.label}</option>)}
+              </select>
+            </label>
+            {lightCans.map((c, i) => (
+              <div key={i} id={`cloth-light-can-${i + 1}-block`} style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 8, borderTop: '1px solid ' + GLASS.hair }}>
+                <span style={{ ...ui.label, color: GLASS.ink, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  {CAN_LABELS[i]}
+                  <button style={{ ...ui.btn(c.on), height: 26, padding: '0 12px', fontSize: 10 }} onClick={() => setCanKey(i, 'on', !c.on)}>
+                    {c.on ? 'On' : 'Off'}
+                  </button>
+                </span>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, opacity: c.on ? 1 : 0.4 }}>
+                  <input type="color" value={c.color} disabled={!c.on} onChange={(e) => setCanKey(i, 'color', e.target.value)} style={{ width: 44, height: 28, border: '1px solid ' + GLASS.hair, borderRadius: 8, background: 'none', cursor: 'pointer', padding: 0 }} />
+                  <span style={ui.label}>Color</span>
+                  <span style={{ flex: 1 }} />
+                  <span style={{ fontFamily: GLASS.mono, fontSize: 11, color: GLASS.inkSoft, textTransform: 'uppercase' }}>{c.color}</span>
+                </label>
+                <Slider label="INTENSITY" min={0} max={3} step={0.05} value={c.intensity} onChange={(v) => setCanKey(i, 'intensity', v)} disabled={!c.on} />
+                <Slider label="ANGLE" min={-180} max={180} step={5} value={c.az} onChange={(v) => setCanKey(i, 'az', v)} fmt={(v) => `${v}°`} disabled={!c.on} />
+                <Slider label="HEIGHT" min={-80} max={85} step={5} value={c.el} onChange={(v) => setCanKey(i, 'el', v)} fmt={(v) => `${v}°`} disabled={!c.on} />
+              </div>
+            ))}
+            <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>Angle walks the can around the stage (0° = front); height raises it toward overhead or drops it below the floor. Scene sets swap in a matching rig — tweak from there.</span>
           </RailCard>
 
           {/* RENDER / EXPORT */}
