@@ -670,26 +670,51 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
       ground.visible = false;
       scene.add(ground);
 
-      // Glass form — smooth undulating torus shell around the sheet; the
-      // transmission material refracts whatever shows through it.
-      const glassGeo = new THREE.TorusGeometry(1.18, 0.34, 72, 180);
-      {
-        const gp = glassGeo.attributes.position;
+      // Glass form — a sphere of overlapping tapered glass crescents ("orange
+      // peel" blades): each petal is a partial torus arc whose cross-section
+      // stretches across the sphere surface and tapers to sharp tips, giving
+      // the sculptural wrapped-shell look; transmission refracts the flyer.
+      const makePetalGeo = (R, tube, arc) => {
+        const g = new THREE.TorusGeometry(R, tube, 26, 90, arc);
+        const gp = g.attributes.position;
         for (let i = 0; i < gp.count; i += 1) {
-          const gx = gp.getX(i), gy = gp.getY(i), gz = gp.getZ(i);
-          const wob = 0.07 * Math.sin(gx * 2.6 + gy * 1.9) * Math.cos(gz * 3.4)
-            + 0.045 * Math.sin(gy * 4.3 + 1.4) * Math.cos(gx * 3.1 + 0.6);
-          gp.setXYZ(i, gx * (1 + wob), gy * (1 + wob), gz + wob * 0.6);
+          const x = gp.getX(i), y = gp.getY(i), z = gp.getZ(i);
+          let theta = Math.atan2(y, x);
+          if (theta < 0) theta += Math.PI * 2;
+          const tt = Math.min(Math.max(theta / arc, 0), 1);
+          const taper = Math.pow(Math.sin(tt * Math.PI), 0.65); // sharp tips
+          const cx = R * Math.cos(theta), cy = R * Math.sin(theta);
+          const ox = (x - cx) * 0.5 * taper;
+          const oy = (y - cy) * 0.5 * taper;
+          const oz = z * 2.3 * taper; // wide across the sphere → blade shell
+          gp.setXYZ(i, cx + ox, cy + oy, oz);
         }
-        glassGeo.computeVertexNormals();
-      }
+        g.computeVertexNormals();
+        return g;
+      };
       const glassMat = new THREE.MeshPhysicalMaterial({
-        transmission: 1, thickness: 0.5, ior: 1.45,
-        roughness: 0.06, metalness: 0,
-        clearcoat: 1, clearcoatRoughness: 0.05,
-        attenuationColor: new THREE.Color(0xffffff), attenuationDistance: 1.6,
+        transmission: 1, thickness: 0.7, ior: 1.5,
+        roughness: 0.03, metalness: 0,
+        clearcoat: 1, clearcoatRoughness: 0.04,
+        attenuationColor: new THREE.Color(0xffffff), attenuationDistance: 1.8,
+        side: THREE.DoubleSide,
       });
-      const glassMesh = new THREE.Mesh(glassGeo, glassMat);
+      const PETALS = [
+        { R: 1.02, tube: 0.20, arc: 4.3, rot: [0, 0, 0] },
+        { R: 1.06, tube: 0.18, arc: 3.7, rot: [1.15, 0.42, 0.55] },
+        { R: 0.99, tube: 0.21, arc: 4.5, rot: [2.2, 1.3, 0.95] },
+        { R: 1.08, tube: 0.17, arc: 3.4, rot: [0.6, 2.35, 1.8] },
+        { R: 1.03, tube: 0.19, arc: 4.0, rot: [1.75, 0.9, 2.6] },
+      ];
+      const petalGeos = [];
+      const glassMesh = new THREE.Group(); // effects treat it as one object
+      PETALS.forEach(({ R, tube, arc, rot }) => {
+        const geo = makePetalGeo(R, tube, arc);
+        petalGeos.push(geo);
+        const m = new THREE.Mesh(geo, glassMat);
+        m.rotation.set(rot[0], rot[1], rot[2]);
+        glassMesh.add(m);
+      });
       glassMesh.visible = false;
       scene.add(glassMesh);
 
@@ -1209,7 +1234,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
         clothMat.map?.dispose(); bumpTex.dispose();
         clothBackMat.map?.dispose(); clothBackMat.bumpMap?.dispose();
         ground.geometry.dispose(); ground.material.dispose();
-        glassGeo.dispose(); glassMat.dispose();
+        petalGeos.forEach((g) => g.dispose()); glassMat.dispose();
         world.bgTexture?.dispose();
         pmrem.dispose();
         renderer.dispose();
