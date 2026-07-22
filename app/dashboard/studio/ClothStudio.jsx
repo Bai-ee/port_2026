@@ -614,7 +614,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
 
     (async () => {
       const THREE = await import('three');
-      const { OrbitControls, RoomEnvironment } = await import('three-stdlib');
+      const { OrbitControls, RoomEnvironment, mergeVertices } = await import('three-stdlib');
       if (disposed) return;
 
       const w = stage.clientWidth || 800;
@@ -675,7 +675,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
       // stretches across the sphere surface and tapers to sharp tips, giving
       // the sculptural wrapped-shell look; transmission refracts the flyer.
       const makePetalGeo = (R, tube, arc) => {
-        const g = new THREE.TorusGeometry(R, tube, 26, 90, arc);
+        let g = new THREE.TorusGeometry(R, tube, 26, 90, arc);
         const gp = g.attributes.position;
         for (let i = 0; i < gp.count; i += 1) {
           const x = gp.getX(i), y = gp.getY(i), z = gp.getZ(i);
@@ -689,6 +689,18 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
           const oz = z * 2.3 * taper; // wide across the sphere → blade shell
           gp.setXYZ(i, cx + ox, cy + oy, oz);
         }
+        // Weld the tube's duplicated UV-seam vertices (and the collapsed tips)
+        // BEFORE normals — split verts get split normals and read as a hard
+        // seam line down the blade otherwise.
+        //
+        // mergeVertices hashes EVERY attribute, so the seam ring (same position,
+        // u=0 vs u=1) never matches and nothing welds. Drop uv + the stale
+        // normals first so the merge is position-only. Safe: glassMat is a
+        // transmission material with no maps at all, so nothing reads these UVs
+        // — do not "restore" them.
+        g.deleteAttribute('uv');
+        g.deleteAttribute('normal');
+        g = mergeVertices(g, 1e-4);
         g.computeVertexNormals();
         return g;
       };
