@@ -365,13 +365,16 @@ const paintSceneBackdrop = (cfg) => {
   return c;
 };
 
-const getSupportedVideoMimeType = () => {
+// Video export containers — MP4 records natively in modern Chrome + Safari;
+// WebM covers everything else. Export falls back automatically if the chosen
+// container isn't supported by this browser's MediaRecorder.
+const VIDEO_FORMATS = {
+  mp4:  { label: 'MP4',  ext: 'mp4',  mimes: ['video/mp4;codecs=avc1.640028', 'video/mp4;codecs=avc1', 'video/mp4'] },
+  webm: { label: 'WebM', ext: 'webm', mimes: ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'] },
+};
+const supportedMimeFor = (fmt) => {
   if (typeof MediaRecorder === 'undefined') return '';
-  return [
-    'video/webm;codecs=vp9',
-    'video/webm;codecs=vp8',
-    'video/webm',
-  ].find((type) => MediaRecorder.isTypeSupported(type)) || '';
+  return (VIDEO_FORMATS[fmt]?.mimes || []).find((type) => MediaRecorder.isTypeSupported(type)) || '';
 };
 
 // Procedural paper-grain bump texture — default until the user uploads one.
@@ -467,6 +470,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   const [bgImageEl, setBgImageEl] = useState(null);
   const [envIntensity, setEnvIntensity] = useState(saved.envIntensity ?? 0.65);
   const [videoSeconds, setVideoSeconds] = useState(saved.videoSeconds || 5);
+  const [videoFormat, setVideoFormat] = useState(VIDEO_FORMATS[saved.videoFormat] ? saved.videoFormat : 'mp4');
   const [recording, setRecording] = useState(false);
   const [status, setStatus] = useState('');
   const [artworkName, setArtworkName] = useState('');
@@ -487,11 +491,11 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   useEffect(() => {
     const id = setTimeout(() => {
       try {
-        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ perf, mat, phys, anim, cam, clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds }));
+        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ perf, mat, phys, anim, cam, clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds, videoFormat }));
       } catch { /* non-critical */ }
     }, 250);
     return () => clearTimeout(id);
-  }, [perf, mat, phys, anim, cam, clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds]);
+  }, [perf, mat, phys, anim, cam, clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds, videoFormat]);
 
   // Latest control state, readable from the render loop without re-init.
   const liveRef = useRef({});
@@ -1278,25 +1282,58 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   const exportVideo = useCallback(() => {
     const world = worldRef.current;
     if (!world || recording) return;
-    const mime = getSupportedVideoMimeType();
-    if (!mime) { setStatus('Video capture unsupported in this browser — use Chrome for WebM export.'); return; }
-    const stream = world.renderer.domElement.captureStream(60);
-    const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 12_000_000 });
-    const chunks = [];
-    rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
-    rec.onstop = () => {
-      world.recorder = null;
-      setRecording(false);
-      const blob = new Blob(chunks, { type: mime });
-      downloadBlob(blob, `holocloth-${Date.now()}.webm`);
-      setStatus(`Exported ${videoSeconds}s WebM motion loop.`);
+    const startRecording = (fmt, mime, isRetry = false) => {
+      const fmtLabel = VIDEO_FORMATS[fmt].label;
+      const stream = world.renderer.domElement.captureStream(60);
+      let rec;
+      try {
+        rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 12_000_000 });
+      } catch (err) {
+        console.warn('[holocloth] MediaRecorder ctor failed', mime, err);
+        if (fmt === 'mp4' && !isRetry) { const wm = supportedMimeFor('webm'); if (wm) { startRecording('webm', wm, true); return; } }
+        setRecording(false);
+        setStatus('Video capture unsupported in this browser.');
+        return;
+      }
+      const chunks = [];
+      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      rec.onerror = (e) => console.warn('[holocloth] recorder error', mime, e.error || e);
+      rec.onstop = () => {
+        world.recorder = null;
+        const total = chunks.reduce((s, b) => s + b.size, 0);
+        console.warn('[holocloth] recording stopped', { mime, chunks: chunks.length, total });
+        // Some Chrome builds report MP4 as supported but encode nothing —
+        // detect the empty result and re-record as WebM instead of saving 0B.
+        if (!total && fmt === 'mp4' && !isRetry) {
+          const wm = supportedMimeFor('webm');
+          if (wm) { setStatus('MP4 encoder produced no data here — re-recording as WebM…'); startRecording('webm', wm, true); return; }
+        }
+        setRecording(false);
+        if (!total) { setStatus('Recording produced no data in this browser.'); return; }
+        const blob = new Blob(chunks, { type: mime });
+        downloadBlob(blob, `holocloth-${Date.now()}.${VIDEO_FORMATS[fmt].ext}`);
+        setStatus(`Exported ${videoSeconds}s ${fmtLabel} motion loop.`);
+      };
+      world.recorder = rec;
+      setRecording(true);
+      setStatus(`Recording ${videoSeconds}s ${fmtLabel}…`);
+      console.warn('[holocloth] recording started', { mime, isRetry });
+      try {
+        rec.start(500); // timeslice — Chrome's MP4 muxer only flushes data periodically
+      } catch (err) {
+        // Some builds reject timeslice for this container — record in one shot.
+        console.warn('[holocloth] start(timeslice) rejected, retrying start()', err);
+        rec.start();
+      }
+      setTimeout(() => { try { rec.stop(); } catch { /* already stopped */ } }, videoSeconds * 1000);
     };
-    world.recorder = rec;
-    setRecording(true);
-    setStatus(`Recording ${videoSeconds}s…`);
-    rec.start();
-    setTimeout(() => { try { rec.stop(); } catch { /* already stopped */ } }, videoSeconds * 1000);
-  }, [recording, videoSeconds]);
+    // Chosen container first; fall back to the other if unsupported here.
+    let fmt = videoFormat;
+    let mime = supportedMimeFor(fmt);
+    if (!mime) { fmt = fmt === 'mp4' ? 'webm' : 'mp4'; mime = supportedMimeFor(fmt); }
+    if (!mime) { setStatus('Video capture unsupported in this browser.'); return; }
+    startRecording(fmt, mime);
+  }, [recording, videoSeconds, videoFormat]);
 
   const applyPreset = useCallback((presetId) => {
     const p = MATERIAL_PRESETS[presetId];
@@ -1667,7 +1704,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
           {/* RENDER / EXPORT */}
           <RailCard
             id="cloth-render-panel" icon={<Download size={18} strokeWidth={2} />} title="Render"
-            subtitle={`PNG · ${videoSeconds}s WebM`}
+            subtitle={`PNG · ${videoSeconds}s ${VIDEO_FORMATS[videoFormat]?.label || 'MP4'}`}
             color="#10b981" open={renderOpen} onToggle={() => setRenderOpen((v) => !v)}
             badge={recording ? (
               <span style={{ ...ui.label, color: '#fff', background: '#dc2626', padding: '2px 8px', borderRadius: 999, fontSize: 10 }}>REC</span>
@@ -1686,6 +1723,14 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
               <Camera size={14} strokeWidth={2.5} style={{ marginRight: 6 }} />Export PNG (no background)
             </button>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 4 }}>
+              <span style={ui.label}>VIDEO FORMAT</span>
+              <div style={{ display: 'flex', gap: 5 }}>
+                {Object.entries(VIDEO_FORMATS).map(([f, cfg]) => (
+                  <button key={f} style={{ ...ui.btn(videoFormat === f), height: 30, padding: '0 12px', fontSize: 10, flex: 1 }} onClick={() => setVideoFormat(f)}>{cfg.label}</button>
+                ))}
+              </div>
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <span style={ui.label}>VIDEO LENGTH</span>
               <select value={videoSeconds} onChange={(e) => setVideoSeconds(Number(e.target.value))} style={{ ...ui.btn(), appearance: 'none', width: '100%' }}>
                 {[3, 5, 8, 10, 15].map((s) => <option key={s} value={s}>{s}S</option>)}
@@ -1693,9 +1738,9 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
             </label>
             <button style={{ ...ui.cta, width: '100%', opacity: recording ? 0.5 : 1 }} disabled={recording} onClick={exportVideo}>
               <Video size={14} strokeWidth={2.5} style={{ marginRight: 6 }} />
-              {recording ? 'Recording…' : 'Export video (WebM)'}
+              {recording ? 'Recording…' : `Export video (${VIDEO_FORMATS[videoFormat]?.label || 'MP4'})`}
             </button>
-            <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>Records the live canvas — poke or touch the cloth while it runs for extra motion. Chrome exports WebM.</span>
+            <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>Records the live canvas — grab or poke the cloth while it runs for extra motion. MP4 records natively in Chrome and Safari; WebM covers other browsers (auto-fallback either way).</span>
           </RailCard>
 
         </div>
